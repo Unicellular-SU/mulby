@@ -100,6 +100,13 @@ export interface PluginAPI {
     dirname: (path: string) => string
     basename: (path: string, ext?: string) => string
   }
+  http: {
+    request: (options: HttpRequestOptions) => Promise<HttpResponse>
+    get: (url: string, headers?: Record<string, string>) => Promise<HttpResponse>
+    post: (url: string, body?: string | object, headers?: Record<string, string>) => Promise<HttpResponse>
+    put: (url: string, body?: string | object, headers?: Record<string, string>) => Promise<HttpResponse>
+    delete: (url: string, headers?: Record<string, string>) => Promise<HttpResponse>
+  }
 }
 
 // 插件状态配置
@@ -120,4 +127,21 @@ export interface FileStat {
   isDirectory: boolean
   createdAt: number
   modifiedAt: number
+}
+
+// HTTP 请求选项
+export interface HttpRequestOptions {
+  url: string
+  method?: 'GET' | 'POST' | 'PUT' | 'DELETE' | 'PATCH' | 'HEAD'
+  headers?: Record<string, string>
+  body?: string | object
+  timeout?: number
+}
+
+// HTTP 响应
+export interface HttpResponse {
+  status: number
+  statusText: string
+  headers: Record<string, string>
+  data: string
 }

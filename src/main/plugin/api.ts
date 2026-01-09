@@ -1,9 +1,11 @@
 import { clipboard, Notification } from 'electron'
 import { PluginStorage } from './storage'
 import { PluginFilesystem } from './filesystem'
+import { PluginHttp, HttpRequestOptions } from './http'
 
 const pluginStorage = new PluginStorage()
 const pluginFilesystem = new PluginFilesystem()
+const pluginHttp = new PluginHttp()
 
 // 创建插件可用的 API 上下文
 export function createPluginAPI(pluginName: string) {
@@ -44,6 +46,13 @@ export function createPluginAPI(pluginName: string) {
       join: (...paths: string[]) => pluginFilesystem.join(...paths),
       dirname: (path: string) => pluginFilesystem.dirname(path),
       basename: (path: string, ext?: string) => pluginFilesystem.basename(path, ext)
+    },
+    http: {
+      request: (options: HttpRequestOptions) => pluginHttp.request(options),
+      get: (url: string, headers?: Record<string, string>) => pluginHttp.get(url, headers),
+      post: (url: string, body?: string | object, headers?: Record<string, string>) => pluginHttp.post(url, body, headers),
+      put: (url: string, body?: string | object, headers?: Record<string, string>) => pluginHttp.put(url, body, headers),
+      delete: (url: string, headers?: Record<string, string>) => pluginHttp.delete(url, headers)
     }
   }
 }
