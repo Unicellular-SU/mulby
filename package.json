@@ -2,7 +2,6 @@
   "name": "intools",
   "version": "0.1.0",
   "description": "跨平台插件式效率工具箱",
-  "type": "module",
   "main": "dist/main/index.js",
   "scripts": {
     "dev": "vite",
