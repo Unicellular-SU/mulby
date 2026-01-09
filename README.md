@@ -22,10 +22,27 @@ InTools 是一款面向开发者和效率用户的跨平台桌面应用，通过
 - [API 接口参考](./docs/api-reference.md)
 - [UI/UX 设计规范](./docs/ui-design.md)
 - [项目路线图](./docs/roadmap.md)
+- [开发任务跟踪](./docs/TASKS.md)
 
 ## 快速开始
 
-（开发中）
+```bash
+# 安装依赖
+npm install
+
+# 开发模式
+npm run electron:dev
+
+# 构建
+npm run electron:build
+```
+
+## 快捷键
+
+| 快捷键 | 功能 |
+|--------|------|
+| Alt+Space | 唤起/隐藏窗口 |
+| Esc | 关闭窗口 |
 
 ## 许可证
 
