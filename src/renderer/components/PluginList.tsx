@@ -32,7 +32,7 @@ function PluginList({ query }: PluginListProps) {
           }
           break
         case 'Escape':
-          window.electronAPI.window.hide()
+          window.intools.window.hide()
           break
       }
     }
@@ -42,15 +42,15 @@ function PluginList({ query }: PluginListProps) {
   }, [results, selectedIndex])
 
   const loadPlugins = async () => {
-    const result = await window.electronAPI.plugin.search(query)
+    const result = await window.intools.plugin.search(query)
     setResults(result)
     setSelectedIndex(0)
   }
 
   const handleRun = async (item: SearchResultItem) => {
-    const result = await window.electronAPI.plugin.run(item.pluginName, item.featureCode, query)
+    const result = await window.intools.plugin.run(item.pluginName, item.featureCode, query)
     if (result.success) {
-      window.electronAPI.window.hide()
+      window.intools.window.hide()
     } else {
       console.error('Plugin error:', result.error)
     }

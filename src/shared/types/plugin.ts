@@ -39,6 +39,7 @@ export interface PluginManifest {
   displayName: string
   description: string
   main: string
+  ui?: string  // UI 文件路径（可选）
   features: PluginFeature[]
 }
 

@@ -16,6 +16,7 @@ program
   .command('create <name>')
   .description('创建新插件项目')
   .option('-t, --template <template>', '模板类型', 'basic')
+  .option('-u, --ui <type>', 'UI 类型: html | react')
   .action(create)
 
 program

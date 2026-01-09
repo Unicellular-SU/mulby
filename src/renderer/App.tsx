@@ -10,7 +10,7 @@ function App() {
   // 调整窗口高度
   useEffect(() => {
     const height = showList ? 300 : 62
-    window.electronAPI.window.setSize(680, height)
+    window.intools.window.setSize(680, height)
   }, [showList])
 
   const handleQueryChange = (value: string) => {
@@ -25,11 +25,11 @@ function App() {
 
     const file = e.dataTransfer.files[0]
     if (file?.path?.endsWith('.inplugin')) {
-      const result = await window.electronAPI.plugin.install(file.path)
+      const result = await window.intools.plugin.install(file.path)
       if (result.success) {
-        window.electronAPI.notification.show(`插件 ${result.pluginName} 安装成功`)
+        window.intools.notification.show(`插件 ${result.pluginName} 安装成功`)
       } else {
-        window.electronAPI.notification.show(result.error || '安装失败', 'error')
+        window.intools.notification.show(result.error || '安装失败', 'error')
       }
     }
   }

@@ -1,9 +1,10 @@
 {
   "name": "base64-codec",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "displayName": "Base64 编解码",
   "description": "Base64 编码和解码",
   "main": "main.js",
+  "ui": "ui/index.html",
   "features": [
     {
       "code": "encode",

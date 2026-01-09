@@ -1,6 +1,6 @@
 import { contextBridge, ipcRenderer } from 'electron'
 
-contextBridge.exposeInMainWorld('electronAPI', {
+contextBridge.exposeInMainWorld('intools', {
   // 窗口控制
   window: {
     hide: () => ipcRenderer.send('window:hide'),
@@ -35,5 +35,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
     enable: (name: string) => ipcRenderer.invoke('plugin:enable', name),
     disable: (name: string) => ipcRenderer.invoke('plugin:disable', name),
     uninstall: (name: string) => ipcRenderer.invoke('plugin:uninstall', name)
+  },
+
+  // 插件窗口事件
+  onPluginInit: (callback: (data: { pluginName: string; featureCode: string; input: string }) => void) => {
+    ipcRenderer.on('plugin:init', (_, data) => callback(data))
   }
 })

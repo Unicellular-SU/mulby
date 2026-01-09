@@ -4,6 +4,7 @@ import { existsSync, rmSync } from 'fs'
 import { PluginLoader } from './loader'
 import { PluginRunner } from './runner'
 import { PluginStateManager } from './state'
+import { PluginWindowManager } from './window'
 import { Plugin, PluginFeature } from '../../shared/types/plugin'
 
 // 搜索结果项
@@ -17,9 +18,11 @@ export class PluginManager {
   private plugins: Map<string, Plugin> = new Map()
   private runners: Map<string, PluginRunner> = new Map()
   private stateManager: PluginStateManager
+  private windowManager: PluginWindowManager
 
   constructor() {
     this.stateManager = new PluginStateManager()
+    this.windowManager = new PluginWindowManager()
   }
 
   // 初始化：加载所有插件
@@ -109,7 +112,7 @@ export class PluginManager {
   }
 
   // 执行插件
-  async run(name: string, featureCode: string, input?: string): Promise<{ success: boolean; error?: string }> {
+  async run(name: string, featureCode: string, input?: string): Promise<{ success: boolean; hasUI?: boolean; error?: string }> {
     const plugin = this.plugins.get(name)
     if (!plugin) {
       return { success: false, error: 'Plugin not found' }
@@ -118,6 +121,13 @@ export class PluginManager {
       return { success: false, error: 'Plugin is disabled' }
     }
 
+    // 如果插件有 UI，打开 UI 窗口
+    if (plugin.manifest.ui) {
+      const win = this.windowManager.openWindow(plugin, featureCode, input)
+      return { success: !!win, hasUI: true }
+    }
+
+    // 无 UI 插件，直接执行
     try {
       const runner = this.getRunner(plugin)
       await runner.run(featureCode, input)
