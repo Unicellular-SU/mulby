@@ -85,6 +85,21 @@ export interface PluginAPI {
     clear: () => void
     keys: () => string[]
   }
+  filesystem: {
+    readFile: (path: string, encoding?: 'utf-8' | 'base64') => string | Buffer
+    writeFile: (path: string, data: string | Buffer, encoding?: 'utf-8' | 'base64') => void
+    exists: (path: string) => boolean
+    unlink: (path: string) => void
+    readdir: (path: string) => string[]
+    mkdir: (path: string) => void
+    stat: (path: string) => FileStat | null
+    copy: (src: string, dest: string) => void
+    move: (src: string, dest: string) => void
+    extname: (path: string) => string
+    join: (...paths: string[]) => string
+    dirname: (path: string) => string
+    basename: (path: string, ext?: string) => string
+  }
 }
 
 // 插件状态配置
@@ -94,4 +109,15 @@ export interface PluginStateConfig {
     installedAt?: number
     updatedAt?: number
   }
+}
+
+// 文件信息
+export interface FileStat {
+  name: string
+  path: string
+  size: number
+  isFile: boolean
+  isDirectory: boolean
+  createdAt: number
+  modifiedAt: number
 }
