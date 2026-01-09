@@ -3,6 +3,7 @@ import { Command } from 'commander'
 import { create } from './commands/create'
 import { build } from './commands/build'
 import { pack } from './commands/pack'
+import { dev } from './commands/dev'
 
 const program = new Command()
 
@@ -26,5 +27,10 @@ program
   .command('pack')
   .description('打包成 .inplugin 文件')
   .action(pack)
+
+program
+  .command('dev')
+  .description('开发模式（热重载）')
+  .action(dev)
 
 program.parse()

@@ -48,6 +48,7 @@ export interface ElectronAPI {
     getAll: () => Promise<PluginInfo[]>
     search: (query: string) => Promise<SearchResultItem[]>
     run: (name: string, featureCode: string, input?: string) => Promise<{ success: boolean; error?: string }>
+    install: (filePath: string) => Promise<{ success: boolean; pluginName?: string; error?: string }>
   }
 }
 

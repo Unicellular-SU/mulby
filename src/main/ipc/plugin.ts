@@ -1,7 +1,9 @@
 import { ipcMain } from 'electron'
 import { PluginManager } from '../plugin'
+import { PluginInstaller } from '../plugin/installer'
 
 export function registerPluginHandlers(manager: PluginManager) {
+  const installer = new PluginInstaller()
   // 获取所有插件
   ipcMain.handle('plugin:getAll', () => {
     return manager.getAll().map(p => ({
@@ -27,5 +29,14 @@ export function registerPluginHandlers(manager: PluginManager) {
   // 执行插件
   ipcMain.handle('plugin:run', async (_, name: string, featureCode: string, input?: string) => {
     return manager.run(name, featureCode, input)
+  })
+
+  // 安装插件
+  ipcMain.handle('plugin:install', async (_, filePath: string) => {
+    const result = await installer.install(filePath)
+    if (result.success) {
+      manager.init() // 重新加载插件
+    }
+    return result
   })
 }

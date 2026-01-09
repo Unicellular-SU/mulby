@@ -5,6 +5,7 @@ import PluginList from './components/PluginList'
 function App() {
   const [query, setQuery] = useState('')
   const [showList, setShowList] = useState(false)
+  const [isDragging, setIsDragging] = useState(false)
 
   // 调整窗口高度
   useEffect(() => {
@@ -17,10 +18,32 @@ function App() {
     setShowList(value.length > 0)
   }
 
+  // 拖拽安装插件
+  const handleDrop = async (e: React.DragEvent) => {
+    e.preventDefault()
+    setIsDragging(false)
+
+    const file = e.dataTransfer.files[0]
+    if (file?.path?.endsWith('.inplugin')) {
+      const result = await window.electronAPI.plugin.install(file.path)
+      if (result.success) {
+        window.electronAPI.notification.show(`插件 ${result.pluginName} 安装成功`)
+      } else {
+        window.electronAPI.notification.show(result.error || '安装失败', 'error')
+      }
+    }
+  }
+
   return (
-    <div className="app">
+    <div
+      className={`app ${isDragging ? 'dragging' : ''}`}
+      onDragOver={(e) => { e.preventDefault(); setIsDragging(true) }}
+      onDragLeave={() => setIsDragging(false)}
+      onDrop={handleDrop}
+    >
       <SearchInput value={query} onChange={handleQueryChange} />
       {showList && <PluginList query={query} />}
+      {isDragging && <div className="drop-hint">拖放 .inplugin 文件安装插件</div>}
     </div>
   )
 }

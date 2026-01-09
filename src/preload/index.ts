@@ -30,6 +30,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     getAll: () => ipcRenderer.invoke('plugin:getAll'),
     search: (query: string) => ipcRenderer.invoke('plugin:search', query),
     run: (name: string, featureCode: string, input?: string) =>
-      ipcRenderer.invoke('plugin:run', name, featureCode, input)
+      ipcRenderer.invoke('plugin:run', name, featureCode, input),
+    install: (filePath: string) => ipcRenderer.invoke('plugin:install', filePath)
   }
 })
