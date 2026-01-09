@@ -1,0 +1,13 @@
+{
+  "name": "timestamp-converter",
+  "version": "1.0.0",
+  "displayName": "时间戳转换",
+  "description": "时间戳与日期互转",
+  "runtime": "nodejs",
+  "main": "main.js",
+  "permissions": ["clipboard", "notification"],
+  "triggers": [
+    { "type": "keyword", "value": "ts", "description": "时间戳转换" },
+    { "type": "keyword", "value": "time", "description": "时间转换" }
+  ]
+}

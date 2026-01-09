@@ -1,0 +1,13 @@
+{
+  "name": "base64-codec",
+  "version": "1.0.0",
+  "displayName": "Base64 编解码",
+  "description": "Base64 编码和解码",
+  "runtime": "nodejs",
+  "main": "main.js",
+  "permissions": ["clipboard", "notification"],
+  "triggers": [
+    { "type": "keyword", "value": "b64", "description": "Base64" },
+    { "type": "keyword", "value": "base64", "description": "Base64" }
+  ]
+}

@@ -1,8 +1,10 @@
 import { app, BrowserWindow, globalShortcut } from 'electron'
 import { join } from 'path'
 import { registerAllHandlers } from './ipc'
+import { PluginManager } from './plugin'
 
 let mainWindow: BrowserWindow | null = null
+const pluginManager = new PluginManager()
 
 function getMainWindow() {
   return mainWindow
@@ -45,8 +47,11 @@ function toggleWindow() {
 app.whenReady().then(() => {
   createWindow()
 
+  // 初始化插件管理器
+  pluginManager.init()
+
   // 注册 IPC 处理器
-  registerAllHandlers(getMainWindow)
+  registerAllHandlers(getMainWindow, pluginManager)
 
   // 注册全局快捷键
   globalShortcut.register('Alt+Space', toggleWindow)

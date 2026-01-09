@@ -1,0 +1,12 @@
+{
+  "name": "json-formatter",
+  "version": "1.0.0",
+  "displayName": "JSON 格式化",
+  "description": "格式化或压缩 JSON 数据",
+  "runtime": "nodejs",
+  "main": "main.js",
+  "permissions": ["clipboard", "notification"],
+  "triggers": [
+    { "type": "keyword", "value": "json", "description": "JSON 格式化" }
+  ]
+}

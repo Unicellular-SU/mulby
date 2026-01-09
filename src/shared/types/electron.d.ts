@@ -6,6 +6,15 @@ export interface FileInfo {
   isDirectory: boolean
 }
 
+export interface PluginInfo {
+  name: string
+  displayName: string
+  description: string
+  icon?: string
+  triggers: { type: string; value: string | string[]; description?: string }[]
+  enabled: boolean
+}
+
 export interface ElectronAPI {
   window: {
     hide: () => void
@@ -22,6 +31,10 @@ export interface ElectronAPI {
   }
   notification: {
     show: (message: string, type?: string) => void
+  }
+  plugin: {
+    getAll: () => Promise<PluginInfo[]>
+    search: (query: string) => Promise<PluginInfo[]>
   }
 }
 

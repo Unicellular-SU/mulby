@@ -23,5 +23,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
   notification: {
     show: (message: string, type?: string) =>
       ipcRenderer.send('notification:show', message, type)
+  },
+
+  // 插件
+  plugin: {
+    getAll: () => ipcRenderer.invoke('plugin:getAll'),
+    search: (query: string) => ipcRenderer.invoke('plugin:search', query)
   }
 })
