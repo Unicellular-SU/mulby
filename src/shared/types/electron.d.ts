@@ -35,6 +35,7 @@ export interface ElectronAPI {
   plugin: {
     getAll: () => Promise<PluginInfo[]>
     search: (query: string) => Promise<PluginInfo[]>
+    run: (name: string) => Promise<{ success: boolean; error?: string }>
   }
 }
 

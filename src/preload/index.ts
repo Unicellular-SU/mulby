@@ -28,6 +28,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // 插件
   plugin: {
     getAll: () => ipcRenderer.invoke('plugin:getAll'),
-    search: (query: string) => ipcRenderer.invoke('plugin:search', query)
+    search: (query: string) => ipcRenderer.invoke('plugin:search', query),
+    run: (name: string) => ipcRenderer.invoke('plugin:run', name)
   }
 })

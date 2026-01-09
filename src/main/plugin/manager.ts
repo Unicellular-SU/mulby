@@ -1,24 +1,33 @@
 import { app } from 'electron'
 import { join } from 'path'
+import { existsSync } from 'fs'
 import { PluginLoader } from './loader'
+import { PluginRunner } from './runner'
 import { Plugin } from '../../shared/types/plugin'
 
 export class PluginManager {
-  private loader: PluginLoader
   private plugins: Map<string, Plugin> = new Map()
 
-  constructor() {
-    const pluginsDir = join(app.getPath('userData'), 'plugins')
-    this.loader = new PluginLoader(pluginsDir)
-  }
+  constructor() {}
 
   // 初始化：加载所有插件
   init() {
-    const plugins = this.loader.loadAll()
-    for (const plugin of plugins) {
-      this.plugins.set(plugin.manifest.name, plugin)
+    // 用户数据目录的插件
+    const userPluginsDir = join(app.getPath('userData'), 'plugins')
+    // 开发目录的插件（项目根目录）
+    const devPluginsDir = join(process.cwd(), 'plugins')
+
+    const dirs = [userPluginsDir, devPluginsDir].filter(d => existsSync(d))
+
+    for (const dir of dirs) {
+      const loader = new PluginLoader(dir)
+      const plugins = loader.loadAll()
+      for (const plugin of plugins) {
+        this.plugins.set(plugin.manifest.name, plugin)
+      }
     }
-    console.log(`Loaded ${this.plugins.size} plugins`)
+
+    console.log(`Loaded ${this.plugins.size} plugins from: ${dirs.join(', ')}`)
   }
 
   // 获取所有插件
@@ -48,5 +57,22 @@ export class PluginManager {
       }
       return false
     })
+  }
+
+  // 执行插件
+  async run(name: string): Promise<{ success: boolean; error?: string }> {
+    const plugin = this.plugins.get(name)
+    if (!plugin) {
+      return { success: false, error: 'Plugin not found' }
+    }
+
+    try {
+      const runner = new PluginRunner(plugin)
+      await runner.run()
+      return { success: true }
+    } catch (err) {
+      const error = err instanceof Error ? err.message : 'Unknown error'
+      return { success: false, error }
+    }
   }
 }

@@ -25,4 +25,9 @@ export function registerPluginHandlers(manager: PluginManager) {
       enabled: p.enabled
     }))
   })
+
+  // 执行插件
+  ipcMain.handle('plugin:run', async (_, name: string) => {
+    return manager.run(name)
+  })
 }
