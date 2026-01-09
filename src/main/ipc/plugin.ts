@@ -35,8 +35,23 @@ export function registerPluginHandlers(manager: PluginManager) {
   ipcMain.handle('plugin:install', async (_, filePath: string) => {
     const result = await installer.install(filePath)
     if (result.success) {
-      manager.init() // 重新加载插件
+      await manager.init() // 重新加载插件
     }
     return result
+  })
+
+  // 启用插件
+  ipcMain.handle('plugin:enable', async (_, name: string) => {
+    return manager.enable(name)
+  })
+
+  // 禁用插件
+  ipcMain.handle('plugin:disable', async (_, name: string) => {
+    return manager.disable(name)
+  })
+
+  // 卸载插件
+  ipcMain.handle('plugin:uninstall', async (_, name: string) => {
+    return manager.uninstall(name)
   })
 }

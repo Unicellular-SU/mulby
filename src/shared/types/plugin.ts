@@ -48,3 +48,43 @@ export interface Plugin {
   path: string
   enabled: boolean
 }
+
+// 插件生命周期钩子
+export interface PluginLifecycleHooks {
+  onLoad?: () => void | Promise<void>
+  onUnload?: () => void | Promise<void>
+  onEnable?: () => void | Promise<void>
+  onDisable?: () => void | Promise<void>
+}
+
+// 插件模块导出
+export interface PluginModule extends PluginLifecycleHooks {
+  run: (context: PluginContext) => void | Promise<void>
+}
+
+// 插件执行上下文
+export interface PluginContext {
+  api: PluginAPI
+  featureCode: string
+  input: string
+}
+
+// 插件 API 类型
+export interface PluginAPI {
+  clipboard: {
+    readText: () => string
+    writeText: (text: string) => Promise<void>
+  }
+  notification: {
+    show: (message: string, type?: string) => void
+  }
+}
+
+// 插件状态配置
+export interface PluginStateConfig {
+  [pluginName: string]: {
+    enabled: boolean
+    installedAt?: number
+    updatedAt?: number
+  }
+}

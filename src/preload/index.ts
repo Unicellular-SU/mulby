@@ -31,6 +31,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
     search: (query: string) => ipcRenderer.invoke('plugin:search', query),
     run: (name: string, featureCode: string, input?: string) =>
       ipcRenderer.invoke('plugin:run', name, featureCode, input),
-    install: (filePath: string) => ipcRenderer.invoke('plugin:install', filePath)
+    install: (filePath: string) => ipcRenderer.invoke('plugin:install', filePath),
+    enable: (name: string) => ipcRenderer.invoke('plugin:enable', name),
+    disable: (name: string) => ipcRenderer.invoke('plugin:disable', name),
+    uninstall: (name: string) => ipcRenderer.invoke('plugin:uninstall', name)
   }
 })

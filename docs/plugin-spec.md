@@ -113,6 +113,122 @@ module.exports = {
 
 ---
 
+## 插件生命周期
+
+插件在 InTools 中有完整的生命周期管理，开发者可以通过钩子函数在特定时机执行代码。
+
+### 生命周期状态
+
+```
+安装 → 加载(onLoad) → 启用(onEnable) ⇄ 禁用(onDisable) → 卸载(onUnload)
+```
+
+| 状态 | 说明 |
+|------|------|
+| loaded | 插件已加载，manifest 已读取 |
+| enabled | 插件已启用，可被搜索和执行 |
+| disabled | 插件已禁用，不参与搜索但保留在系统中 |
+
+### 生命周期钩子
+
+| 钩子 | 触发时机 | 用途 |
+|------|----------|------|
+| onLoad | 插件加载时 | 初始化资源、注册服务 |
+| onUnload | 插件卸载时 | 清理资源、保存状态 |
+| onEnable | 插件启用时 | 恢复服务、重新注册 |
+| onDisable | 插件禁用时 | 暂停服务、释放资源 |
+
+### 钩子函数示例
+
+```javascript
+module.exports = {
+  // 插件加载时调用
+  onLoad() {
+    console.log('插件已加载');
+    // 初始化资源，如建立连接、加载配置
+  },
+
+  // 插件卸载时调用
+  onUnload() {
+    console.log('插件即将卸载');
+    // 清理资源，如关闭连接、保存数据
+  },
+
+  // 插件启用时调用
+  onEnable() {
+    console.log('插件已启用');
+  },
+
+  // 插件禁用时调用
+  onDisable() {
+    console.log('插件已禁用');
+  },
+
+  // 主执行函数
+  async run(context) {
+    // 插件主逻辑
+  }
+};
+```
+
+### 完整生命周期示例
+
+```javascript
+const { storage, notification } = require('@intools/sdk');
+
+let cache = null;
+let timer = null;
+
+module.exports = {
+  async onLoad() {
+    // 加载缓存数据
+    cache = await storage.get('cache') || {};
+    console.log('缓存已加载');
+  },
+
+  onEnable() {
+    // 启动定时任务
+    timer = setInterval(() => {
+      console.log('定时任务运行中...');
+    }, 60000);
+  },
+
+  onDisable() {
+    // 停止定时任务
+    if (timer) {
+      clearInterval(timer);
+      timer = null;
+    }
+  },
+
+  async onUnload() {
+    // 保存缓存数据
+    await storage.set('cache', cache);
+    console.log('缓存已保存');
+  },
+
+  async run(context) {
+    // 使用缓存执行操作
+    const result = processWithCache(context.input, cache);
+    notification.show('处理完成');
+  }
+};
+
+function processWithCache(input, cache) {
+  // 处理逻辑
+  return input;
+}
+```
+
+### 注意事项
+
+1. **钩子函数可选**：所有生命周期钩子都是可选的，只需实现需要的钩子
+2. **支持异步**：钩子函数可以是 async 函数，系统会等待其完成
+3. **错误处理**：钩子中的错误不会阻止插件加载，但会记录到日志
+4. **状态持久化**：插件的启用/禁用状态会自动保存，重启后恢复
+
+---
+
 ## 插件模板
 
 ### 模板 A：无 UI 插件 (Node.js)

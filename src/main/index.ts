@@ -44,11 +44,11 @@ function toggleWindow() {
   }
 }
 
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
   createWindow()
 
   // 初始化插件管理器
-  pluginManager.init()
+  await pluginManager.init()
 
   // 注册 IPC 处理器
   registerAllHandlers(getMainWindow, pluginManager)
