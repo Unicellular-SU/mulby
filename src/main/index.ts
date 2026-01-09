@@ -1,7 +1,12 @@
 import { app, BrowserWindow, globalShortcut } from 'electron'
 import { join } from 'path'
+import { registerAllHandlers } from './ipc'
 
 let mainWindow: BrowserWindow | null = null
+
+function getMainWindow() {
+  return mainWindow
+}
 
 function createWindow() {
   mainWindow = new BrowserWindow({
@@ -39,6 +44,9 @@ function toggleWindow() {
 
 app.whenReady().then(() => {
   createWindow()
+
+  // 注册 IPC 处理器
+  registerAllHandlers(getMainWindow)
 
   // 注册全局快捷键
   globalShortcut.register('Alt+Space', toggleWindow)
