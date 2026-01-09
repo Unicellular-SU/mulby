@@ -40,7 +40,7 @@ export class PluginRunner {
   // 执行插件
   async run(featureCode: string, input?: string): Promise<void> {
     const pluginModule = this.loadModule()
-    const api = createPluginAPI()
+    const api = createPluginAPI(this.plugin.manifest.name)
     const context = { api, featureCode, input: input || '' }
 
     try {

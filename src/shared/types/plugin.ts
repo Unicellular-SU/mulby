@@ -78,6 +78,13 @@ export interface PluginAPI {
   notification: {
     show: (message: string, type?: string) => void
   }
+  storage: {
+    get: (key: string) => unknown
+    set: (key: string, value: unknown) => void
+    remove: (key: string) => void
+    clear: () => void
+    keys: () => string[]
+  }
 }
 
 // 插件状态配置
