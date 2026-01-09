@@ -6,12 +6,24 @@ export interface FileInfo {
   isDirectory: boolean
 }
 
+// 搜索结果项（功能入口）
+export interface SearchResultItem {
+  pluginName: string
+  displayName: string
+  featureCode: string
+  featureExplain: string
+  matchType: 'keyword' | 'regex'
+}
+
 export interface PluginInfo {
   name: string
   displayName: string
   description: string
-  icon?: string
-  triggers: { type: string; value: string | string[]; description?: string }[]
+  features: {
+    code: string
+    explain: string
+    cmds: { type: string; value?: string; match?: string; exts?: string[] }[]
+  }[]
   enabled: boolean
 }
 
@@ -34,8 +46,8 @@ export interface ElectronAPI {
   }
   plugin: {
     getAll: () => Promise<PluginInfo[]>
-    search: (query: string) => Promise<PluginInfo[]>
-    run: (name: string) => Promise<{ success: boolean; error?: string }>
+    search: (query: string) => Promise<SearchResultItem[]>
+    run: (name: string, featureCode: string, input?: string) => Promise<{ success: boolean; error?: string }>
   }
 }
 

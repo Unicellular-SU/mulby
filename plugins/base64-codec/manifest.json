@@ -3,11 +3,23 @@
   "version": "1.0.0",
   "displayName": "Base64 编解码",
   "description": "Base64 编码和解码",
-  "runtime": "nodejs",
   "main": "main.js",
-  "permissions": ["clipboard", "notification"],
-  "triggers": [
-    { "type": "keyword", "value": "b64", "description": "Base64" },
-    { "type": "keyword", "value": "base64", "description": "Base64" }
+  "features": [
+    {
+      "code": "encode",
+      "explain": "Base64 编码",
+      "cmds": [
+        { "type": "keyword", "value": "b64" },
+        { "type": "keyword", "value": "base64" }
+      ]
+    },
+    {
+      "code": "decode",
+      "explain": "Base64 解码",
+      "cmds": [
+        { "type": "keyword", "value": "b64d" },
+        { "type": "regex", "match": "^[A-Za-z0-9+/]{10,}={0,2}$", "explain": "检测到 Base64" }
+      ]
+    }
   ]
 }

@@ -1,12 +1,25 @@
 {
   "name": "json-formatter",
   "version": "1.0.0",
-  "displayName": "JSON 格式化",
-  "description": "格式化或压缩 JSON 数据",
-  "runtime": "nodejs",
+  "displayName": "JSON 工具箱",
+  "description": "JSON 格式化、压缩、校验等功能",
   "main": "main.js",
-  "permissions": ["clipboard", "notification"],
-  "triggers": [
-    { "type": "keyword", "value": "json", "description": "JSON 格式化" }
+  "features": [
+    {
+      "code": "format",
+      "explain": "格式化 JSON",
+      "cmds": [
+        { "type": "keyword", "value": "json" },
+        { "type": "keyword", "value": "格式化" },
+        { "type": "regex", "match": "^\\s*[{\\[]", "explain": "检测到 JSON" }
+      ]
+    },
+    {
+      "code": "minify",
+      "explain": "压缩 JSON",
+      "cmds": [
+        { "type": "keyword", "value": "json压缩" }
+      ]
+    }
   ]
 }

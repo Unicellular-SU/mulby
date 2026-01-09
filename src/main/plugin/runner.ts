@@ -13,12 +13,12 @@ export class PluginRunner {
   }
 
   // 执行插件
-  async run(): Promise<void> {
+  async run(featureCode: string, input?: string): Promise<void> {
     const mainPath = join(this.plugin.path, this.plugin.manifest.main)
     const code = readFileSync(mainPath, 'utf-8')
 
     const api = createPluginAPI()
-    const context = { api, text: '' }
+    const context = { api, featureCode, input: input || '' }
 
     this.vm = new VM({
       timeout: 5000,

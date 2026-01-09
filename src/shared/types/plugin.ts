@@ -1,8 +1,35 @@
-// 插件触发器类型
-export interface PluginTrigger {
-  type: 'keyword' | 'regex' | 'file'
-  value: string | string[]
-  description?: string
+// 命令类型
+export interface CmdKeyword {
+  type: 'keyword'
+  value: string
+}
+
+export interface CmdRegex {
+  type: 'regex'
+  match: string
+  explain?: string
+}
+
+export interface CmdFiles {
+  type: 'files'
+  exts: string[]
+}
+
+export interface CmdImg {
+  type: 'img'
+}
+
+export interface CmdOver {
+  type: 'over'
+}
+
+export type PluginCmd = CmdKeyword | CmdRegex | CmdFiles | CmdImg | CmdOver
+
+// 功能入口
+export interface PluginFeature {
+  code: string
+  explain: string
+  cmds: PluginCmd[]
 }
 
 // 插件清单
@@ -11,14 +38,8 @@ export interface PluginManifest {
   version: string
   displayName: string
   description: string
-  author?: string
-  runtime: 'nodejs' | 'python'
   main: string
-  ui?: string
-  icon?: string
-  permissions: string[]
-  triggers: PluginTrigger[]
-  shortcut?: string
+  features: PluginFeature[]
 }
 
 // 插件实例

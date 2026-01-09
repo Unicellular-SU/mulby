@@ -1,12 +1,12 @@
-import { useState, useEffect, useCallback } from 'react'
-import { PluginInfo } from '../../shared/types/electron'
+import { useState, useEffect } from 'react'
+import { SearchResultItem } from '../../shared/types/electron'
 
 interface PluginListProps {
   query: string
 }
 
 function PluginList({ query }: PluginListProps) {
-  const [plugins, setPlugins] = useState<PluginInfo[]>([])
+  const [results, setResults] = useState<SearchResultItem[]>([])
   const [selectedIndex, setSelectedIndex] = useState(0)
 
   useEffect(() => {
@@ -23,12 +23,12 @@ function PluginList({ query }: PluginListProps) {
           break
         case 'ArrowDown':
           e.preventDefault()
-          setSelectedIndex(i => Math.min(plugins.length - 1, i + 1))
+          setSelectedIndex(i => Math.min(results.length - 1, i + 1))
           break
         case 'Enter':
           e.preventDefault()
-          if (plugins[selectedIndex]) {
-            handleRun(plugins[selectedIndex].name)
+          if (results[selectedIndex]) {
+            handleRun(results[selectedIndex])
           }
           break
         case 'Escape':
@@ -39,18 +39,16 @@ function PluginList({ query }: PluginListProps) {
 
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [plugins, selectedIndex])
+  }, [results, selectedIndex])
 
   const loadPlugins = async () => {
-    const result = query
-      ? await window.electronAPI.plugin.search(query)
-      : await window.electronAPI.plugin.getAll()
-    setPlugins(result)
+    const result = await window.electronAPI.plugin.search(query)
+    setResults(result)
     setSelectedIndex(0)
   }
 
-  const handleRun = async (name: string) => {
-    const result = await window.electronAPI.plugin.run(name)
+  const handleRun = async (item: SearchResultItem) => {
+    const result = await window.electronAPI.plugin.run(item.pluginName, item.featureCode, query)
     if (result.success) {
       window.electronAPI.window.hide()
     } else {
@@ -60,14 +58,14 @@ function PluginList({ query }: PluginListProps) {
 
   return (
     <div className="plugin-list">
-      {plugins.map((plugin, index) => (
+      {results.map((item, index) => (
         <div
-          key={plugin.name}
+          key={`${item.pluginName}-${item.featureCode}`}
           className={`plugin-item ${index === selectedIndex ? 'selected' : ''}`}
-          onClick={() => handleRun(plugin.name)}
+          onClick={() => handleRun(item)}
         >
-          <span className="plugin-name">{plugin.displayName}</span>
-          <span className="plugin-keyword">{plugin.triggers[0]?.value}</span>
+          <span className="plugin-name">{item.displayName}</span>
+          <span className="plugin-keyword">{item.featureExplain}</span>
         </div>
       ))}
     </div>

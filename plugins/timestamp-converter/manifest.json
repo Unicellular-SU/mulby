@@ -3,11 +3,24 @@
   "version": "1.0.0",
   "displayName": "时间戳转换",
   "description": "时间戳与日期互转",
-  "runtime": "nodejs",
   "main": "main.js",
-  "permissions": ["clipboard", "notification"],
-  "triggers": [
-    { "type": "keyword", "value": "ts", "description": "时间戳转换" },
-    { "type": "keyword", "value": "time", "description": "时间转换" }
+  "features": [
+    {
+      "code": "toDate",
+      "explain": "时间戳转日期",
+      "cmds": [
+        { "type": "keyword", "value": "ts" },
+        { "type": "keyword", "value": "时间戳" },
+        { "type": "regex", "match": "^\\d{10,13}$", "explain": "检测到时间戳" }
+      ]
+    },
+    {
+      "code": "toTimestamp",
+      "explain": "日期转时间戳",
+      "cmds": [
+        { "type": "keyword", "value": "time" },
+        { "type": "keyword", "value": "日期转换" }
+      ]
+    }
   ]
 }

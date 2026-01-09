@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect } from 'react'
 import SearchInput from './components/SearchInput'
 import PluginList from './components/PluginList'
 

@@ -60,13 +60,13 @@ export class PluginLoader {
 
   // 验证 manifest 格式
   private validateManifest(manifest: PluginManifest): boolean {
-    const required = ['name', 'version', 'displayName', 'runtime', 'main', 'triggers']
+    const required = ['name', 'version', 'displayName', 'main', 'features']
     for (const field of required) {
       if (!(field in manifest)) {
         return false
       }
     }
-    if (!['nodejs', 'python'].includes(manifest.runtime)) {
+    if (!Array.isArray(manifest.features) || manifest.features.length === 0) {
       return false
     }
     return true

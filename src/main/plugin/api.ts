@@ -11,7 +11,7 @@ export function createPluginAPI() {
       }
     },
     notification: {
-      show: (message: string, type?: string) => {
+      show: (message: string, _type?: string) => {
         new Notification({
           title: 'InTools',
           body: message
