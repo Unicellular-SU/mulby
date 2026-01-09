@@ -9,16 +9,29 @@
       "code": "encode",
       "explain": "Base64 编码",
       "cmds": [
-        { "type": "keyword", "value": "b64" },
-        { "type": "keyword", "value": "base64" }
+        {
+          "type": "keyword",
+          "value": "b64"
+        },
+        {
+          "type": "keyword",
+          "value": "base64"
+        }
       ]
     },
     {
       "code": "decode",
       "explain": "Base64 解码",
       "cmds": [
-        { "type": "keyword", "value": "b64d" },
-        { "type": "regex", "match": "^[A-Za-z0-9+/]{10,}={0,2}$", "explain": "检测到 Base64" }
+        {
+          "type": "keyword",
+          "value": "b64d"
+        },
+        {
+          "type": "regex",
+          "match": "^[A-Za-z0-9+/]{2,}={0,2}$",
+          "explain": "检测到 Base64"
+        }
       ]
     }
   ]
