@@ -1,4 +1,6 @@
-import { clipboard, Notification } from 'electron'
+import { clipboard, Notification, nativeImage } from 'electron'
+import { statSync } from 'fs'
+import { basename } from 'path'
 import { PluginStorage } from './storage'
 import { PluginFilesystem } from './filesystem'
 import { PluginHttp, HttpRequestOptions } from './http'
@@ -15,6 +17,60 @@ export function createPluginAPI(pluginName: string) {
       writeText: (text: string) => {
         clipboard.writeText(text)
         return Promise.resolve()
+      },
+      readImage: () => {
+        const image = clipboard.readImage()
+        if (image.isEmpty()) return null
+        return image.toPNG()
+      },
+      writeImage: (buffer: Buffer) => {
+        const image = nativeImage.createFromBuffer(buffer)
+        clipboard.writeImage(image)
+      },
+      readFiles: () => {
+        // macOS: 通过 file URL 读取
+        if (process.platform === 'darwin') {
+          const rawFiles = clipboard.read('public.file-url')
+          if (rawFiles) {
+            const filePath = decodeURIComponent(rawFiles.replace('file://', ''))
+            try {
+              const stats = statSync(filePath)
+              return [{
+                path: filePath,
+                name: basename(filePath),
+                size: stats.size,
+                isDirectory: stats.isDirectory()
+              }]
+            } catch {
+              return []
+            }
+          }
+        }
+        // Windows/Linux: 通过 buffer 读取
+        const rawFilePaths = clipboard.readBuffer('FileNameW')
+        if (rawFilePaths && rawFilePaths.length > 0) {
+          const paths = rawFilePaths.toString('ucs2').replace(/\0+$/, '').split('\0')
+          return paths.filter(p => p).map(filePath => {
+            try {
+              const stats = statSync(filePath)
+              return {
+                path: filePath,
+                name: basename(filePath),
+                size: stats.size,
+                isDirectory: stats.isDirectory()
+              }
+            } catch {
+              return null
+            }
+          }).filter((item): item is NonNullable<typeof item> => item !== null)
+        }
+        return []
+      },
+      getFormat: () => {
+        if (clipboard.availableFormats().some(f => f.includes('image'))) return 'image'
+        if (clipboard.availableFormats().some(f => f.includes('file'))) return 'files'
+        if (clipboard.readText()) return 'text'
+        return 'empty'
       }
     },
     notification: {

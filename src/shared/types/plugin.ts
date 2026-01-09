@@ -69,11 +69,23 @@ export interface PluginContext {
   input: string
 }
 
+// 剪贴板文件信息
+export interface ClipboardFileInfo {
+  path: string
+  name: string
+  size: number
+  isDirectory: boolean
+}
+
 // 插件 API 类型
 export interface PluginAPI {
   clipboard: {
     readText: () => string
     writeText: (text: string) => Promise<void>
+    readImage: () => Buffer | null
+    writeImage: (buffer: Buffer) => void
+    readFiles: () => ClipboardFileInfo[]
+    getFormat: () => 'text' | 'image' | 'files' | 'empty'
   }
   notification: {
     show: (message: string, type?: string) => void
