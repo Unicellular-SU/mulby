@@ -14,6 +14,18 @@ contextBridge.exposeInMainWorld('intools', {
     getMode: () => ipcRenderer.invoke('plugin:getMode')
   },
 
+  // 主题
+  theme: {
+    get: () => ipcRenderer.invoke('theme:get'),
+    set: (mode: 'light' | 'dark' | 'system') => ipcRenderer.invoke('theme:set', mode),
+    getActual: () => ipcRenderer.invoke('theme:getActual')
+  },
+
+  // 主题变化事件
+  onThemeChange: (callback: (theme: 'light' | 'dark') => void) => {
+    ipcRenderer.on('theme:changed', (_, theme) => callback(theme))
+  },
+
   // 剪贴板
   clipboard: {
     readText: () => ipcRenderer.invoke('clipboard:readText'),

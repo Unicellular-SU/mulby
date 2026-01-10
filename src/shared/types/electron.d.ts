@@ -27,6 +27,13 @@ export interface PluginInfo {
   enabled: boolean
 }
 
+export type ThemeMode = 'light' | 'dark' | 'system'
+
+export interface ThemeInfo {
+  mode: ThemeMode
+  actual: 'light' | 'dark'
+}
+
 export interface ElectronAPI {
   window: {
     hide: () => void
@@ -37,6 +44,12 @@ export interface ElectronAPI {
     setAlwaysOnTop: (flag: boolean) => void
     getMode: () => Promise<'attached' | 'detached'>
   }
+  theme: {
+    get: () => Promise<ThemeInfo>
+    set: (mode: ThemeMode) => Promise<ThemeInfo>
+    getActual: () => Promise<'light' | 'dark'>
+  }
+  onThemeChange: (callback: (theme: 'light' | 'dark') => void) => void
   clipboard: {
     readText: () => Promise<string>
     writeText: (text: string) => Promise<void>

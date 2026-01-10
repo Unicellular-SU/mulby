@@ -30,6 +30,11 @@ export class PluginWindowManager {
     return this.attachedPlugin
   }
 
+  // 是否有附着的插件
+  hasAttachedPlugin(): boolean {
+    return this.attachedPlugin !== null
+  }
+
   // 附着插件到主窗口
   attachPlugin(plugin: Plugin, featureCode: string, input?: string): boolean {
     if (!plugin.manifest.ui) return false

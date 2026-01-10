@@ -16,6 +16,18 @@ function App() {
   const [showList, setShowList] = useState(false)
   const [pluginInfo, setPluginInfo] = useState<PluginInfo | null>(null)
   const [isDragging, setIsDragging] = useState(false)
+  const [theme, setTheme] = useState<'light' | 'dark'>('light')
+
+  // 初始化主题
+  useEffect(() => {
+    window.intools.theme.getActual().then(setTheme)
+    window.intools.onThemeChange(setTheme)
+  }, [])
+
+  // 应用主题到 document
+  useEffect(() => {
+    document.documentElement.classList.toggle('dark', theme === 'dark')
+  }, [theme])
 
   // 调整窗口高度
   useEffect(() => {
@@ -75,7 +87,7 @@ function App() {
     >
       <SearchInput value={query} onChange={handleQueryChange} />
       {showList && !pluginInfo && <PluginList query={query} />}
-      {pluginInfo && <PluginContainer plugin={pluginInfo} onClose={handlePluginClose} />}
+      {pluginInfo && <PluginContainer plugin={pluginInfo} theme={theme} onClose={handlePluginClose} />}
       {isDragging && <div className="drop-hint">拖放 .inplugin 文件安装插件</div>}
     </div>
   )

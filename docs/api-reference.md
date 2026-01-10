@@ -393,3 +393,157 @@ filesystem.dirname('/path/to/file.txt');  // '/path/to'
 filesystem.basename('/path/to/file.txt');  // 'file.txt'
 filesystem.basename('/path/to/file.txt', '.txt');  // 'file'
 ```
+
+## 7. 主题 API (theme)
+
+主题 API 允许插件获取和跟随主程序的主题设置，实现视觉一致性。
+
+### 7.1 get()
+获取当前主题信息。
+
+```javascript
+const themeInfo = await window.intools.theme.get();
+// 返回: { mode: 'system', actual: 'dark' }
+```
+
+**返回值**: `ThemeInfo`
+
+```typescript
+interface ThemeInfo {
+  mode: 'light' | 'dark' | 'system';  // 用户设置的主题模式
+  actual: 'light' | 'dark';            // 实际应用的主题
+}
+```
+
+### 7.2 set(mode)
+设置主题模式。
+
+```javascript
+await window.intools.theme.set('dark');   // 设置为暗色主题
+await window.intools.theme.set('light');  // 设置为亮色主题
+await window.intools.theme.set('system'); // 跟随系统主题
+```
+
+**参数**:
+- `mode` ('light' | 'dark' | 'system') - 主题模式
+
+**返回值**: `ThemeInfo` - 更新后的主题信息
+
+### 7.3 getActual()
+获取实际应用的主题（解析 system 后的结果）。
+
+```javascript
+const theme = await window.intools.theme.getActual();
+// 返回: 'light' 或 'dark'
+```
+
+**返回值**: `'light' | 'dark'`
+
+### 7.4 onThemeChange(callback)
+监听主题变化事件。
+
+```javascript
+window.intools.onThemeChange((theme) => {
+  console.log('主题已变更为:', theme);
+  document.documentElement.classList.toggle('dark', theme === 'dark');
+});
+```
+
+**参数**:
+- `callback` ((theme: 'light' | 'dark') => void) - 主题变化回调函数
+
+### 7.5 插件中使用主题
+
+#### 方式一：通过 URL 参数获取初始主题
+
+插件 UI 加载时，主程序会通过 URL 参数传递当前主题：
+
+```javascript
+// 在插件 UI 中获取初始主题
+function getInitialTheme() {
+  const params = new URLSearchParams(window.location.search);
+  return params.get('theme') || 'light';  // 'light' 或 'dark'
+}
+```
+
+#### 方式二：监听主题变化消息
+
+当主程序主题变化时，会通过 IPC 消息通知插件：
+
+```javascript
+// 在插件 UI 中监听主题变化
+const { ipcRenderer } = window.require('electron');
+ipcRenderer.on('theme:changed', (_, theme) => {
+  document.documentElement.classList.toggle('dark', theme === 'dark');
+});
+```
+
+### 7.6 完整示例
+
+#### 插件 CSS（使用 CSS 变量支持主题）
+
+```css
+:root {
+  --bg-primary: #ffffff;
+  --bg-secondary: #f3f4f6;
+  --text-primary: #1f2937;
+  --text-secondary: #6b7280;
+  --border: #d1d5db;
+  --accent: #3B82F6;
+}
+
+.dark {
+  --bg-primary: #1e1e1e;
+  --bg-secondary: #2d2d2d;
+  --text-primary: #e0e0e0;
+  --text-secondary: #999999;
+  --border: #3d3d3d;
+  --accent: #3B82F6;
+}
+
+body {
+  background: var(--bg-primary);
+  color: var(--text-primary);
+}
+
+.card {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+}
+```
+
+#### 插件 React 组件
+
+```tsx
+import { useState, useEffect } from 'react';
+
+function getInitialTheme(): 'light' | 'dark' {
+  const params = new URLSearchParams(window.location.search);
+  return (params.get('theme') as 'light' | 'dark') || 'light';
+}
+
+export default function App() {
+  const [theme, setTheme] = useState<'light' | 'dark'>(getInitialTheme);
+
+  // 应用主题到 document
+  useEffect(() => {
+    document.documentElement.classList.toggle('dark', theme === 'dark');
+  }, [theme]);
+
+  // 监听主题变化
+  useEffect(() => {
+    const { ipcRenderer } = window.require?.('electron') || {};
+    if (ipcRenderer) {
+      ipcRenderer.on('theme:changed', (_, newTheme: 'light' | 'dark') => {
+        setTheme(newTheme);
+      });
+    }
+  }, []);
+
+  return (
+    <div className="app">
+      <p>当前主题: {theme}</p>
+    </div>
+  );
+}
+```

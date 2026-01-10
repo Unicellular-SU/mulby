@@ -26,6 +26,11 @@ interface IntoolsWindow {
   center(): void
 }
 
+interface IntoolsTheme {
+  get(): Promise<{ mode: 'light' | 'dark' | 'system'; actual: 'light' | 'dark' }>
+  getActual(): Promise<'light' | 'dark'>
+}
+
 interface PluginInitData {
   pluginName: string
   featureCode: string
@@ -36,7 +41,9 @@ interface IntoolsAPI {
   clipboard: IntoolsClipboard
   notification: IntoolsNotification
   window: IntoolsWindow
+  theme?: IntoolsTheme
   onPluginInit(callback: (data: PluginInitData) => void): void
+  onThemeChange?(callback: (theme: 'light' | 'dark') => void): void
 }
 
 declare global {

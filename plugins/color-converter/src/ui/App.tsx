@@ -7,6 +7,12 @@ interface ColorState {
   hsl: { h: number; s: number; l: number }
 }
 
+// 从 URL 获取初始主题
+function getInitialTheme(): 'light' | 'dark' {
+  const params = new URLSearchParams(window.location.search)
+  return (params.get('theme') as 'light' | 'dark') || 'light'
+}
+
 export default function App() {
   const [color, setColor] = useState<ColorState>({
     hex: '#3B82F6',
@@ -15,6 +21,22 @@ export default function App() {
   })
   const [activeTab, setActiveTab] = useState<'hex' | 'rgb' | 'hsl'>('hex')
   const [copied, setCopied] = useState<string | null>(null)
+  const [theme, setTheme] = useState<'light' | 'dark'>(getInitialTheme)
+
+  // 应用主题到 document
+  useEffect(() => {
+    document.documentElement.classList.toggle('dark', theme === 'dark')
+  }, [theme])
+
+  // 监听主题变化消息
+  useEffect(() => {
+    const { ipcRenderer } = window.require?.('electron') || {}
+    if (ipcRenderer) {
+      ipcRenderer.on('theme:changed', (_: unknown, newTheme: 'light' | 'dark') => {
+        setTheme(newTheme)
+      })
+    }
+  }, [])
 
   useEffect(() => {
     window.intools?.onPluginInit?.((data) => {
