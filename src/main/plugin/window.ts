@@ -145,7 +145,8 @@ export class PluginWindowManager {
     if (!existsSync(uiPath)) return null
 
     // 根据当前主题设置窗口背景色，避免重载时闪白
-    const isDark = this.themeManager?.getActualTheme() === 'dark'
+    const currentTheme = this.themeManager?.getActualTheme() || 'dark'
+    const isDark = currentTheme === 'dark'
     const backgroundColor = isDark ? '#1e293b' : '#ffffff'
 
     const win = new BrowserWindow({
@@ -168,8 +169,7 @@ export class PluginWindowManager {
 
     win.once('ready-to-show', async () => {
       // 注入自定义标题栏
-      const theme = this.themeManager?.getActualTheme() || 'dark'
-      await injectCustomTitleBar(win, plugin.manifest.displayName, theme)
+      await injectCustomTitleBar(win, plugin.manifest.displayName, currentTheme)
       win.show()
       win.webContents.send('plugin:init', {
         pluginName: plugin.manifest.name,
