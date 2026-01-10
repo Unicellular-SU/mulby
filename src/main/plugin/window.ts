@@ -1,4 +1,4 @@
-import { BrowserWindow } from 'electron'
+import { BrowserWindow, app, Menu } from 'electron'
 import { join } from 'path'
 import { existsSync } from 'fs'
 import { Plugin } from '../../shared/types/plugin'
@@ -20,6 +20,46 @@ export class PluginWindowManager {
   private mainWindow: BrowserWindow | null = null
   private attachedPlugin: AttachedPlugin | null = null
   private detachedWindows: Map<number, DetachedWindowInfo> = new Map()
+  private dockVisible = false
+
+  // 更新 macOS Dock 图标显示状态
+  private async updateDockVisibility(): Promise<void> {
+    if (process.platform !== 'darwin' || !app.dock) return
+
+    const shouldShow = this.detachedWindows.size > 0
+
+    if (shouldShow && !this.dockVisible) {
+      this.dockVisible = true
+      await app.dock.show()
+      this.updateDockMenu()
+    } else if (shouldShow && this.dockVisible) {
+      this.updateDockMenu()
+    } else if (!shouldShow && this.dockVisible) {
+      this.dockVisible = false
+      app.dock.setMenu(Menu.buildFromTemplate([]))
+      app.dock.hide()
+    }
+  }
+
+  // 更新 Dock 右键菜单
+  private updateDockMenu(): void {
+    if (process.platform !== 'darwin' || !app.dock) return
+
+    const menuItems = Array.from(this.detachedWindows.values())
+      .filter(info => !info.window.isDestroyed())
+      .map(info => ({
+        label: info.plugin.manifest.displayName,
+        click: () => {
+          if (!info.window.isDestroyed()) {
+            info.window.show()
+            info.window.focus()
+          }
+        }
+      }))
+
+    const menu = Menu.buildFromTemplate(menuItems)
+    app.dock.setMenu(menu)
+  }
 
   setMainWindow(win: BrowserWindow) {
     this.mainWindow = win
@@ -131,8 +171,13 @@ export class PluginWindowManager {
       input: input || ''
     })
 
+    // 显示 Dock 图标
+    this.updateDockVisibility()
+
     win.on('closed', () => {
       this.detachedWindows.delete(windowId)
+      // 检查是否需要隐藏 Dock 图标
+      this.updateDockVisibility()
     })
 
     return win

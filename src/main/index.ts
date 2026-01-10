@@ -58,6 +58,11 @@ function toggleWindow() {
 }
 
 app.whenReady().then(async () => {
+  // macOS: 默认隐藏 Dock 图标，只有独立窗口时才显示
+  if (process.platform === 'darwin' && app.dock) {
+    app.dock.hide()
+  }
+
   createWindow()
 
   // 设置主窗口到插件窗口管理器
