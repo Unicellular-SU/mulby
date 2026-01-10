@@ -30,12 +30,9 @@ export default function App() {
 
   // 监听主题变化消息
   useEffect(() => {
-    const { ipcRenderer } = window.require?.('electron') || {}
-    if (ipcRenderer) {
-      ipcRenderer.on('theme:changed', (_: unknown, newTheme: 'light' | 'dark') => {
-        setTheme(newTheme)
-      })
-    }
+    window.intools?.onThemeChange?.((newTheme: 'light' | 'dark') => {
+      setTheme(newTheme)
+    })
   }, [])
 
   useEffect(() => {

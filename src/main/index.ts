@@ -80,6 +80,9 @@ app.whenReady().then(async () => {
   // 设置主窗口到插件窗口管理器
   pluginWindowManager.setMainWindow(mainWindow!)
 
+  // 设置主题管理器到插件窗口管理器
+  pluginWindowManager.setThemeManager(themeManager)
+
   // 注册主窗口到主题管理器
   themeManager.registerWindow(mainWindow!)
 

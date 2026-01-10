@@ -2,6 +2,7 @@ import { BrowserWindow, app, Menu } from 'electron'
 import { join } from 'path'
 import { existsSync } from 'fs'
 import { Plugin } from '../../shared/types/plugin'
+import { ThemeManager } from '../theme'
 
 interface AttachedPlugin {
   plugin: Plugin
@@ -18,6 +19,7 @@ interface DetachedWindowInfo {
 
 export class PluginWindowManager {
   private mainWindow: BrowserWindow | null = null
+  private themeManager: ThemeManager | null = null
   private attachedPlugin: AttachedPlugin | null = null
   private detachedWindows: Map<number, DetachedWindowInfo> = new Map()
   private dockVisible = false
@@ -63,6 +65,10 @@ export class PluginWindowManager {
 
   setMainWindow(win: BrowserWindow) {
     this.mainWindow = win
+  }
+
+  setThemeManager(manager: ThemeManager) {
+    this.themeManager = manager
   }
 
   // 获取附着的插件信息
@@ -161,7 +167,16 @@ export class PluginWindowManager {
         input: input || '',
         mode: 'detached'
       })
+      // 发送初始主题
+      if (this.themeManager) {
+        win.webContents.send('theme:changed', this.themeManager.getActualTheme())
+      }
     })
+
+    // 注册窗口到主题管理器
+    if (this.themeManager) {
+      this.themeManager.registerWindow(win)
+    }
 
     const windowId = win.id
     this.detachedWindows.set(windowId, {
