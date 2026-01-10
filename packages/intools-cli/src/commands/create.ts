@@ -521,6 +521,121 @@ interface IntoolsPlugin {
   uninstall(name: string): Promise<any>
 }
 
+// Screen API 类型
+interface DisplayInfo {
+  id: number
+  label: string
+  bounds: { x: number; y: number; width: number; height: number }
+  workArea: { x: number; y: number; width: number; height: number }
+  scaleFactor: number
+  rotation: number
+  isPrimary: boolean
+}
+
+interface CaptureSource {
+  id: string
+  name: string
+  thumbnailDataUrl: string
+  displayId?: string
+  appIconDataUrl?: string
+}
+
+interface IntoolsScreen {
+  getAllDisplays(): Promise<DisplayInfo[]>
+  getPrimaryDisplay(): Promise<DisplayInfo>
+  getDisplayNearestPoint(point: { x: number; y: number }): Promise<DisplayInfo>
+  getCursorScreenPoint(): Promise<{ x: number; y: number }>
+  getSources(options?: { types?: ('screen' | 'window')[]; thumbnailSize?: { width: number; height: number } }): Promise<CaptureSource[]>
+  capture(options?: { sourceId?: string; format?: 'png' | 'jpeg'; quality?: number }): Promise<ArrayBuffer>
+  captureRegion(region: { x: number; y: number; width: number; height: number }, options?: { format?: 'png' | 'jpeg'; quality?: number }): Promise<ArrayBuffer>
+  getMediaStreamConstraints(options: { sourceId: string; audio?: boolean; frameRate?: number }): Promise<object>
+}
+
+// Shell API 类型
+interface IntoolsShell {
+  openPath(path: string): Promise<string>
+  openExternal(url: string): Promise<void>
+  showItemInFolder(path: string): Promise<void>
+  openFolder(path: string): Promise<string>
+  trashItem(path: string): Promise<void>
+  beep(): Promise<void>
+}
+
+// Dialog API 类型
+interface IntoolsDialog {
+  showOpenDialog(options?: {
+    title?: string
+    defaultPath?: string
+    buttonLabel?: string
+    filters?: { name: string; extensions: string[] }[]
+    properties?: ('openFile' | 'openDirectory' | 'multiSelections' | 'showHiddenFiles')[]
+  }): Promise<string[]>
+  showSaveDialog(options?: {
+    title?: string
+    defaultPath?: string
+    buttonLabel?: string
+    filters?: { name: string; extensions: string[] }[]
+  }): Promise<string | null>
+  showMessageBox(options: {
+    type?: 'none' | 'info' | 'error' | 'question' | 'warning'
+    title?: string
+    message: string
+    detail?: string
+    buttons?: string[]
+    defaultId?: number
+    cancelId?: number
+  }): Promise<{ response: number; checkboxChecked: boolean }>
+  showErrorBox(title: string, content: string): Promise<void>
+}
+
+// System API 类型
+interface SystemInfo {
+  platform: string
+  arch: string
+  hostname: string
+  username: string
+  homedir: string
+  tmpdir: string
+  cpus: number
+  totalmem: number
+  freemem: number
+  uptime: number
+  osVersion: string
+  osRelease: string
+}
+
+interface AppInfo {
+  name: string
+  version: string
+  locale: string
+  isPackaged: boolean
+  userDataPath: string
+}
+
+interface IntoolsSystem {
+  getSystemInfo(): Promise<SystemInfo>
+  getAppInfo(): Promise<AppInfo>
+  getPath(name: 'home' | 'appData' | 'userData' | 'temp' | 'desktop' | 'documents' | 'downloads' | 'music' | 'pictures' | 'videos'): Promise<string>
+  getEnv(name: string): Promise<string | undefined>
+  getIdleTime(): Promise<number>
+}
+
+// GlobalShortcut API 类型
+interface IntoolsShortcut {
+  register(accelerator: string): Promise<boolean>
+  unregister(accelerator: string): Promise<void>
+  unregisterAll(): Promise<void>
+  isRegistered(accelerator: string): Promise<boolean>
+  onTriggered(callback: (accelerator: string) => void): void
+}
+
+// Security API 类型
+interface IntoolsSecurity {
+  isEncryptionAvailable(): Promise<boolean>
+  encryptString(plainText: string): Promise<ArrayBuffer>
+  decryptString(encrypted: ArrayBuffer): Promise<string>
+}
+
 interface PluginInitData {
   pluginName: string
   featureCode: string
@@ -533,6 +648,12 @@ interface IntoolsAPI {
   window: IntoolsWindow
   plugin: IntoolsPlugin
   theme?: IntoolsTheme
+  screen: IntoolsScreen
+  shell: IntoolsShell
+  dialog: IntoolsDialog
+  system: IntoolsSystem
+  shortcut: IntoolsShortcut
+  security: IntoolsSecurity
   onPluginInit(callback: (data: PluginInitData) => void): void
   onThemeChange?(callback: (theme: 'light' | 'dark') => void): void
 }
