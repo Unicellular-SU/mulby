@@ -14,7 +14,7 @@ interface PluginInfo {
 
 function App() {
   const [query, setQuery] = useState('')
-  const [showList, setShowList] = useState(false)
+  const [resultCount, setResultCount] = useState(0)
   const [pluginInfo, setPluginInfo] = useState<PluginInfo | null>(null)
   const [isDragging, setIsDragging] = useState(false)
   const [theme, setTheme] = useState<'light' | 'dark'>('light')
@@ -32,20 +32,25 @@ function App() {
 
   // 调整窗口高度
   useEffect(() => {
-    let height = 62
+    const SEARCH_BOX_HEIGHT = 62
+    const PLUGIN_ITEM_HEIGHT = 40
+    const BORDER_HEIGHT = 1
+
+    let height = SEARCH_BOX_HEIGHT
     if (pluginInfo) {
       height = 700
-    } else if (showList) {
-      height = 300
+    } else if (query.length > 0 && resultCount > 0) {
+      // 根据结果数量动态计算高度，最多显示 8 个
+      const visibleCount = Math.min(resultCount, 8)
+      height = SEARCH_BOX_HEIGHT + BORDER_HEIGHT + visibleCount * PLUGIN_ITEM_HEIGHT
     }
     window.intools.window.setSize(680, height)
-  }, [showList, pluginInfo])
+  }, [query, resultCount, pluginInfo])
 
   // 监听插件附着事件
   useEffect(() => {
     window.intools.onPluginAttach((data) => {
       setPluginInfo(data)
-      setShowList(false)
     })
 
     window.intools.onPluginDetached(() => {
@@ -60,7 +65,9 @@ function App() {
       setPluginInfo(null)
     }
     setQuery(value)
-    setShowList(value.length > 0)
+    if (value.length === 0) {
+      setResultCount(0)
+    }
   }
 
   // 拖拽安装插件
@@ -92,7 +99,9 @@ function App() {
       onDrop={handleDrop}
     >
       <SearchInput value={query} onChange={handleQueryChange} />
-      {showList && !pluginInfo && <PluginList query={query} />}
+      {query.length > 0 && !pluginInfo && (
+        <PluginList query={query} onResultsChange={setResultCount} />
+      )}
       {pluginInfo && <PluginContainer plugin={pluginInfo} theme={theme} onClose={handlePluginClose} />}
       {isDragging && <div className="drop-hint">拖放 .inplugin 文件安装插件</div>}
     </div>

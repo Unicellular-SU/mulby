@@ -3,9 +3,10 @@ import { SearchResultItem } from '../../shared/types/electron'
 
 interface PluginListProps {
   query: string
+  onResultsChange?: (count: number) => void
 }
 
-function PluginList({ query }: PluginListProps) {
+function PluginList({ query, onResultsChange }: PluginListProps) {
   const [results, setResults] = useState<SearchResultItem[]>([])
   const [selectedIndex, setSelectedIndex] = useState(0)
 
@@ -45,6 +46,7 @@ function PluginList({ query }: PluginListProps) {
     const result = await window.intools.plugin.search(query)
     setResults(result)
     setSelectedIndex(0)
+    onResultsChange?.(result.length)
   }
 
   const handleRun = async (item: SearchResultItem) => {
