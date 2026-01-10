@@ -13,6 +13,10 @@ export interface SearchResultItem {
   featureCode: string
   featureExplain: string
   matchType: 'keyword' | 'regex'
+  icon?: {
+    type: 'url' | 'svg' | 'data-url'
+    value: string
+  }
 }
 
 export interface PluginInfo {

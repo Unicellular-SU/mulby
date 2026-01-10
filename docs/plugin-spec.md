@@ -77,7 +77,7 @@ my-plugin/
   "runtime": "nodejs",
   "main": "main.js",
   "ui": "ui/index.html",
-  "icon": "icon.png",
+  "icon": "<svg viewBox=\"0 0 24 24\" fill=\"currentColor\"><path d=\"...\"/></svg>",
   "permissions": ["clipboard", "notification"],
   "triggers": [],
   "shortcut": "CmdOrCtrl+Shift+X",
@@ -96,9 +96,38 @@ my-plugin/
 | runtime | string | 是 | `nodejs` 或 `python` |
 | main | string | 是 | 入口文件路径 |
 | ui | string | 否 | UI 文件路径（有界面时必填） |
+| icon | string/object | 否 | 插件图标（见下方说明） |
 | permissions | array | 否 | 所需权限 |
 | triggers | array | 是 | 触发条件 |
 | shortcut | string | 否 | 全局快捷键 |
+
+---
+
+## 插件图标 (icon)
+
+插件图标支持三种格式：本地文件、URL、内联 SVG。
+
+### 格式说明
+
+| 格式 | 示例 | 说明 |
+|------|------|------|
+| 本地文件 | `"icon": "icon.png"` | 插件目录下的图片文件 |
+| URL | `"icon": "https://example.com/icon.png"` | 远程图片链接 |
+| 内联 SVG | `"icon": "<svg>...</svg>"` | SVG 字符串（推荐 AI 生成） |
+
+### 内联 SVG 示例
+
+```json
+{
+  "name": "json-formatter",
+  "icon": "<svg viewBox=\"0 0 24 24\" fill=\"currentColor\"><path d=\"M5 3h2v2H5v5a2 2 0 01-2 2 2 2 0 012 2v5h2v2H5c-1.1 0-2-.9-2-2v-4a2 2 0 00-2-2H0v-2h1a2 2 0 002-2V5a2 2 0 012-2zm14 0a2 2 0 012 2v4a2 2 0 002 2h1v2h-1a2 2 0 00-2 2v4a2 2 0 01-2 2h-2v-2h2v-5a2 2 0 012-2 2 2 0 01-2-2V5h-2V3h2z\"/></svg>"
+}
+```
+
+### 默认行为
+
+- 未设置 `icon` 时，自动加载插件目录下的 `icon.png`
+- 若无图标文件，显示默认占位图标
 
 ---
 
@@ -639,9 +668,35 @@ ui.on('translate', async ({ text, from, to }) => {
 1. **name** 使用小写字母和连字符
 2. **triggers** 至少包含一个 keyword 类型
 3. **permissions** 只申请必要的权限
-4. 代码使用 async/await 风格
-5. 错误处理使用 try/catch
-6. 操作完成后发送 notification
+4. **icon** 使用内联 SVG 生成图标（见下方说明）
+5. 代码使用 async/await 风格
+6. 错误处理使用 try/catch
+7. 操作完成后发送 notification
+
+### 图标生成指南
+
+AI 生成插件时，应使用内联 SVG 作为图标。SVG 图标应：
+
+1. 使用 `viewBox="0 0 24 24"` 标准尺寸
+2. 使用 `fill="currentColor"` 以适应主题
+3. 图标应简洁、易识别，与插件功能相关
+4. 避免使用复杂渐变或滤镜
+
+**示例：为不同类型插件生成图标**
+
+```json
+// JSON 工具 - 花括号图标
+"icon": "<svg viewBox=\"0 0 24 24\" fill=\"currentColor\"><path d=\"M5 3h2v2H5v5a2 2 0 01-2 2 2 2 0 012 2v5h2v2H5c-1.1 0-2-.9-2-2v-4a2 2 0 00-2-2H0v-2h1a2 2 0 002-2V5a2 2 0 012-2zm14 0a2 2 0 012 2v4a2 2 0 002 2h1v2h-1a2 2 0 00-2 2v4a2 2 0 01-2 2h-2v-2h2v-5a2 2 0 012-2 2 2 0 01-2-2V5h-2V3h2z\"/></svg>"
+
+// 时间戳 - 时钟图标
+"icon": "<svg viewBox=\"0 0 24 24\" fill=\"currentColor\"><path d=\"M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10 10-4.5 10-10S17.5 2 12 2zm0 18c-4.4 0-8-3.6-8-8s3.6-8 8-8 8 3.6 8 8-3.6 8-8 8zm.5-13H11v6l5.2 3.2.8-1.3-4.5-2.7V7z\"/></svg>"
+
+// 翻译 - 语言图标
+"icon": "<svg viewBox=\"0 0 24 24\" fill=\"currentColor\"><path d=\"M12.87 15.07l-2.54-2.51.03-.03A17.52 17.52 0 0014.07 6H17V4h-7V2H8v2H1v2h11.17C11.5 7.92 10.44 9.75 9 11.35 8.07 10.32 7.3 9.19 6.69 8h-2c.73 1.63 1.73 3.17 2.98 4.56l-5.09 5.02L4 19l5-5 3.11 3.11.76-2.04zM18.5 10h-2L12 22h2l1.12-3h4.75L21 22h2l-4.5-12zm-2.62 7l1.62-4.33L19.12 17h-3.24z\"/></svg>"
+
+// Base64 - 编码图标
+"icon": "<svg viewBox=\"0 0 24 24\" fill=\"currentColor\"><path d=\"M3 5v14h18V5H3zm16 12H5V7h14v10zM7 9h4v2H7v-2zm0 4h4v2H7v-2zm6-4h4v2h-4v-2zm0 4h4v2h-4v-2z\"/></svg>"
+```
 
 ### 示例提示词
 

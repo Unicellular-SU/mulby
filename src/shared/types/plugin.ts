@@ -1,3 +1,30 @@
+// 图标类型
+export interface IconUrl {
+  type: 'url'
+  value: string
+}
+
+export interface IconSvg {
+  type: 'svg'
+  value: string
+}
+
+export interface IconFile {
+  type: 'file'
+  value?: string  // 相对路径，默认为 'icon.png'
+}
+
+export type PluginIconObject = IconUrl | IconSvg | IconFile
+
+// 支持简写：字符串会自动解析为对应类型
+export type PluginIcon = PluginIconObject | string
+
+// 解析后的图标数据（传递给渲染进程）
+export interface ResolvedIcon {
+  type: 'url' | 'svg' | 'data-url'
+  value: string
+}
+
 // 命令类型
 export interface CmdKeyword {
   type: 'keyword'
@@ -40,6 +67,7 @@ export interface PluginManifest {
   description: string
   main: string
   ui?: string  // UI 文件路径（可选）
+  icon?: PluginIcon  // 插件图标（可选）
   features: PluginFeature[]
 }
 
@@ -48,6 +76,7 @@ export interface Plugin {
   manifest: PluginManifest
   path: string
   enabled: boolean
+  resolvedIcon?: ResolvedIcon  // 解析后的图标数据
 }
 
 // 插件生命周期钩子

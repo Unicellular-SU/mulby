@@ -1,6 +1,6 @@
 import { readFileSync, existsSync, readdirSync } from 'fs'
 import { join } from 'path'
-import { PluginManifest, Plugin } from '../../shared/types/plugin'
+import { PluginManifest, Plugin, PluginIcon, ResolvedIcon } from '../../shared/types/plugin'
 
 export class PluginLoader {
   private pluginsDir: string
@@ -47,10 +47,13 @@ export class PluginLoader {
         return null
       }
 
+      const resolvedIcon = this.resolveIcon(manifest.icon, pluginPath)
+
       return {
         manifest,
         path: pluginPath,
-        enabled: true
+        enabled: true,
+        resolvedIcon
       }
     } catch (err) {
       console.error(`Failed to load plugin from ${pluginPath}:`, err)
@@ -70,5 +73,60 @@ export class PluginLoader {
       return false
     }
     return true
+  }
+
+  // 解析图标
+  private resolveIcon(icon: PluginIcon | undefined, pluginPath: string): ResolvedIcon | undefined {
+    if (!icon) {
+      // 尝试加载默认图标
+      return this.loadIconFile(join(pluginPath, 'icon.png'))
+    }
+
+    // 字符串简写形式
+    if (typeof icon === 'string') {
+      return this.resolveIconString(icon, pluginPath)
+    }
+
+    // 对象形式
+    switch (icon.type) {
+      case 'url':
+        return { type: 'url', value: icon.value }
+      case 'svg':
+        return { type: 'svg', value: icon.value }
+      case 'file':
+        return this.loadIconFile(join(pluginPath, icon.value || 'icon.png'))
+      default:
+        return undefined
+    }
+  }
+
+  // 解析字符串形式的图标
+  private resolveIconString(icon: string, pluginPath: string): ResolvedIcon | undefined {
+    // URL 形式
+    if (icon.startsWith('http://') || icon.startsWith('https://')) {
+      return { type: 'url', value: icon }
+    }
+    // SVG 形式
+    if (icon.trim().startsWith('<svg')) {
+      return { type: 'svg', value: icon }
+    }
+    // 文件路径形式
+    return this.loadIconFile(join(pluginPath, icon))
+  }
+
+  // 加载本地图标文件并转换为 data URL
+  private loadIconFile(filePath: string): ResolvedIcon | undefined {
+    if (!existsSync(filePath)) {
+      return undefined
+    }
+    try {
+      const buffer = readFileSync(filePath)
+      const ext = filePath.split('.').pop()?.toLowerCase() || 'png'
+      const mimeType = ext === 'svg' ? 'image/svg+xml' : `image/${ext}`
+      const base64 = buffer.toString('base64')
+      return { type: 'data-url', value: `data:${mimeType};base64,${base64}` }
+    } catch {
+      return undefined
+    }
   }
 }

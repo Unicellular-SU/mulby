@@ -44,6 +44,8 @@
 | version | string | 是 | 版本号 |
 | displayName | string | 是 | 显示名称 |
 | main | string | 是 | 入口文件 |
+| ui | string | 否 | UI 文件路径 |
+| icon | string/object | 否 | 插件图标 |
 | features | array | 是 | 功能入口列表 |
 
 ### Feature 字段
@@ -61,3 +63,38 @@
 | files | 文件类型 | exts: [".json", ".txt"] |
 | img | 图片 | - |
 | over | 选中文本 | - |
+
+### Icon 字段
+
+插件图标支持三种格式，可使用字符串简写或对象形式。
+
+#### 字符串简写
+
+```json
+// 本地文件
+"icon": "icon.png"
+
+// URL
+"icon": "https://example.com/icon.png"
+
+// 内联 SVG
+"icon": "<svg viewBox=\"0 0 24 24\">...</svg>"
+```
+
+#### 对象形式
+
+```json
+// 本地文件
+"icon": { "type": "file", "value": "assets/logo.png" }
+
+// URL
+"icon": { "type": "url", "value": "https://example.com/icon.png" }
+
+// SVG
+"icon": { "type": "svg", "value": "<svg>...</svg>" }
+```
+
+#### 默认行为
+
+- 未设置 `icon` 时，自动尝试加载插件目录下的 `icon.png`
+- 若无图标文件，显示默认占位图标

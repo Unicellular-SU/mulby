@@ -22,7 +22,8 @@ export function registerPluginHandlers(manager: PluginManager) {
       displayName: result.plugin.manifest.displayName,
       featureCode: result.feature.code,
       featureExplain: result.feature.explain,
-      matchType: result.matchType
+      matchType: result.matchType,
+      icon: result.plugin.resolvedIcon
     }))
   })
 
