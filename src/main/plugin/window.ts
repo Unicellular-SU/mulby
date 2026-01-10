@@ -3,6 +3,7 @@ import { join } from 'path'
 import { existsSync } from 'fs'
 import { Plugin } from '../../shared/types/plugin'
 import { ThemeManager } from '../theme'
+import { injectCustomTitleBar } from './titlebar'
 
 interface AttachedPlugin {
   plugin: Plugin
@@ -149,6 +150,7 @@ export class PluginWindowManager {
       minWidth: 300,
       minHeight: 200,
       show: false,
+      frame: false,
       title: plugin.manifest.displayName,
       webPreferences: {
         preload: join(__dirname, '../preload/index.js'),
@@ -159,7 +161,9 @@ export class PluginWindowManager {
 
     win.loadFile(uiPath)
 
-    win.once('ready-to-show', () => {
+    win.once('ready-to-show', async () => {
+      // 注入自定义标题栏
+      await injectCustomTitleBar(win, plugin.manifest.displayName)
       win.show()
       win.webContents.send('plugin:init', {
         pluginName: plugin.manifest.name,
@@ -170,6 +174,29 @@ export class PluginWindowManager {
       // 发送初始主题
       if (this.themeManager) {
         win.webContents.send('theme:changed', this.themeManager.getActualTheme())
+      }
+    })
+
+    // 监听窗口状态变化，通知渲染进程
+    win.on('maximize', () => {
+      win.webContents.send('window:stateChanged', { isMaximized: true })
+    })
+    win.on('unmaximize', () => {
+      win.webContents.send('window:stateChanged', { isMaximized: false })
+    })
+
+    // 监听页面重载，重新注入标题栏
+    win.webContents.on('did-finish-load', async () => {
+      // 检查标题栏是否已存在，避免首次加载时重复注入
+      const hasTitleBar = await win.webContents.executeJavaScript(
+        'document.getElementById("intools-titlebar") !== null'
+      )
+      if (!hasTitleBar) {
+        await injectCustomTitleBar(win, plugin.manifest.displayName)
+        // 重新发送主题
+        if (this.themeManager) {
+          win.webContents.send('theme:changed', this.themeManager.getActualTheme())
+        }
       }
     })
 

@@ -11,7 +11,12 @@ contextBridge.exposeInMainWorld('intools', {
     detach: () => ipcRenderer.send('plugin:detach'),
     close: () => ipcRenderer.send('plugin:close'),
     setAlwaysOnTop: (flag: boolean) => ipcRenderer.send('window:alwaysOnTop', flag),
-    getMode: () => ipcRenderer.invoke('plugin:getMode')
+    getMode: () => ipcRenderer.invoke('plugin:getMode'),
+    // 独立窗口标题栏控制
+    minimize: () => ipcRenderer.send('window:minimize'),
+    maximize: () => ipcRenderer.send('window:maximize'),
+    getState: () => ipcRenderer.invoke('window:getState'),
+    reload: () => ipcRenderer.send('plugin:reload')
   },
 
   // 主题
@@ -24,6 +29,11 @@ contextBridge.exposeInMainWorld('intools', {
   // 主题变化事件
   onThemeChange: (callback: (theme: 'light' | 'dark') => void) => {
     ipcRenderer.on('theme:changed', (_, theme) => callback(theme))
+  },
+
+  // 窗口状态变化事件
+  onWindowStateChange: (callback: (state: { isMaximized: boolean }) => void) => {
+    ipcRenderer.on('window:stateChanged', (_, state) => callback(state))
   },
 
   // 剪贴板

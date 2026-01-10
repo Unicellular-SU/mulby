@@ -55,4 +55,33 @@ export function registerWindowHandlers(
     const mainWin = getMainWindow()
     return win === mainWin ? 'attached' : 'detached'
   })
+
+  // 最小化窗口
+  ipcMain.on('window:minimize', (event) => {
+    const win = BrowserWindow.fromWebContents(event.sender)
+    win?.minimize()
+  })
+
+  // 最大化/还原窗口
+  ipcMain.on('window:maximize', (event) => {
+    const win = BrowserWindow.fromWebContents(event.sender)
+    if (win) {
+      win.isMaximized() ? win.unmaximize() : win.maximize()
+    }
+  })
+
+  // 获取窗口状态
+  ipcMain.handle('window:getState', (event) => {
+    const win = BrowserWindow.fromWebContents(event.sender)
+    return {
+      isMaximized: win?.isMaximized() ?? false,
+      isAlwaysOnTop: win?.isAlwaysOnTop() ?? false
+    }
+  })
+
+  // 重新加载插件
+  ipcMain.on('plugin:reload', (event) => {
+    const win = BrowserWindow.fromWebContents(event.sender)
+    win?.webContents.reload()
+  })
 }
