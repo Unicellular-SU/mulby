@@ -18,11 +18,15 @@ export class PluginManager {
   private plugins: Map<string, Plugin> = new Map()
   private runners: Map<string, PluginRunner> = new Map()
   private stateManager: PluginStateManager
-  private windowManager: PluginWindowManager
+  private windowManager: PluginWindowManager | null = null
 
   constructor() {
     this.stateManager = new PluginStateManager()
-    this.windowManager = new PluginWindowManager()
+  }
+
+  // 设置窗口管理器
+  setWindowManager(windowManager: PluginWindowManager) {
+    this.windowManager = windowManager
   }
 
   // 初始化：加载所有插件
@@ -123,8 +127,11 @@ export class PluginManager {
 
     // 如果插件有 UI，打开 UI 窗口
     if (plugin.manifest.ui) {
-      const win = this.windowManager.openWindow(plugin, featureCode, input)
-      return { success: !!win, hasUI: true }
+      if (!this.windowManager) {
+        return { success: false, error: 'Window manager not initialized' }
+      }
+      const success = this.windowManager.attachPlugin(plugin, featureCode, input)
+      return { success, hasUI: true }
     }
 
     // 无 UI 插件，直接执行

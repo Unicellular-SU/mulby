@@ -46,7 +46,7 @@ body {
   align-items: center;
   padding: 12px 16px;
   gap: 12px;
-  -webkit-app-region: no-drag;
+  -webkit-app-region: drag;
 }
 
 .search-icon {
@@ -63,6 +63,7 @@ body {
   font-size: 18px;
   background: transparent;
   color: var(--text-primary);
+  -webkit-app-region: no-drag;
 }
 
 .search-input::placeholder {
@@ -100,4 +101,68 @@ body {
 .plugin-keyword {
   color: var(--text-secondary);
   font-size: 12px;
+}
+
+/* Plugin Container */
+.plugin-container {
+  border-top: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  height: 338px;
+  -webkit-app-region: no-drag;
+}
+
+.plugin-header {
+  display: flex;
+  align-items: center;
+  padding: 8px 12px;
+  background: var(--bg-secondary);
+  gap: 8px;
+}
+
+.plugin-title {
+  flex: 1;
+  font-size: 13px;
+  color: var(--text-primary);
+  text-align: center;
+}
+
+.detach-btn {
+  padding: 4px 8px;
+  font-size: 12px;
+  background: var(--accent);
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.detach-btn:hover {
+  opacity: 0.9;
+}
+
+.close-btn {
+  width: 24px;
+  height: 24px;
+  font-size: 16px;
+  background: transparent;
+  color: var(--text-secondary);
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.close-btn:hover {
+  background: rgba(239, 68, 68, 0.1);
+  color: #ef4444;
+}
+
+.plugin-content {
+  flex: 1;
+  overflow: hidden;
+}
+
+.plugin-content webview {
+  width: 100%;
+  height: 100%;
 }

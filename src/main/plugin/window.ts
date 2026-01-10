@@ -3,34 +3,101 @@ import { join } from 'path'
 import { existsSync } from 'fs'
 import { Plugin } from '../../shared/types/plugin'
 
+interface AttachedPlugin {
+  plugin: Plugin
+  featureCode: string
+  input: string
+}
+
+interface DetachedWindowInfo {
+  window: BrowserWindow
+  plugin: Plugin
+  featureCode: string
+  input: string
+}
+
 export class PluginWindowManager {
-  private windows: Map<string, BrowserWindow> = new Map()
+  private mainWindow: BrowserWindow | null = null
+  private attachedPlugin: AttachedPlugin | null = null
+  private detachedWindows: Map<number, DetachedWindowInfo> = new Map()
 
-  // 打开插件 UI 窗口
-  openWindow(plugin: Plugin, featureCode: string, input?: string): BrowserWindow | null {
-    const uiPath = plugin.manifest.ui
-    if (!uiPath) return null
+  setMainWindow(win: BrowserWindow) {
+    this.mainWindow = win
+  }
 
-    const fullPath = join(plugin.path, uiPath)
-    if (!existsSync(fullPath)) {
-      console.error(`Plugin UI file not found: ${fullPath}`)
-      return null
+  // 获取附着的插件信息
+  getAttachedPlugin(): AttachedPlugin | null {
+    return this.attachedPlugin
+  }
+
+  // 附着插件到主窗口
+  attachPlugin(plugin: Plugin, featureCode: string, input?: string): boolean {
+    if (!plugin.manifest.ui) return false
+
+    const uiPath = join(plugin.path, plugin.manifest.ui)
+    if (!existsSync(uiPath)) {
+      console.error(`Plugin UI not found: ${uiPath}`)
+      return false
     }
 
-    // 如果窗口已存在，聚焦并返回
-    const existingWindow = this.windows.get(plugin.manifest.name)
-    if (existingWindow && !existingWindow.isDestroyed()) {
-      existingWindow.focus()
-      return existingWindow
+    // 关闭之前附着的插件
+    this.closeAttached()
+
+    this.attachedPlugin = {
+      plugin,
+      featureCode,
+      input: input || ''
     }
 
-    // 创建新窗口
+    // 通知渲染进程加载插件
+    this.mainWindow?.webContents.send('plugin:attach', {
+      pluginName: plugin.manifest.name,
+      displayName: plugin.manifest.displayName,
+      featureCode,
+      input: input || '',
+      uiPath
+    })
+
+    return true
+  }
+
+  // 关闭附着的插件
+  closeAttached(): void {
+    if (this.attachedPlugin) {
+      this.attachedPlugin = null
+      this.mainWindow?.webContents.send('plugin:detached')
+    }
+  }
+
+  // 分离当前附着的插件为独立窗口
+  detachCurrent(): BrowserWindow | null {
+    if (!this.attachedPlugin) return null
+
+    const { plugin, featureCode, input } = this.attachedPlugin
+    this.attachedPlugin = null
+    this.mainWindow?.webContents.send('plugin:detached')
+
+    return this.createDetachedWindow(plugin, featureCode, input)
+  }
+
+  // 创建独立窗口
+  createDetachedWindow(
+    plugin: Plugin,
+    featureCode: string,
+    input?: string
+  ): BrowserWindow | null {
+    if (!plugin.manifest.ui) return null
+
+    const uiPath = join(plugin.path, plugin.manifest.ui)
+    if (!existsSync(uiPath)) return null
+
     const win = new BrowserWindow({
       width: 500,
       height: 400,
-      frame: false,
-      resizable: true,
+      minWidth: 300,
+      minHeight: 200,
       show: false,
+      title: plugin.manifest.displayName,
       webPreferences: {
         preload: join(__dirname, '../preload/index.js'),
         contextIsolation: true,
@@ -38,53 +105,64 @@ export class PluginWindowManager {
       }
     })
 
-    // 加载 UI 文件
-    win.loadFile(fullPath)
+    win.loadFile(uiPath)
 
-    // 窗口准备好后显示并发送初始数据
     win.once('ready-to-show', () => {
       win.show()
       win.webContents.send('plugin:init', {
         pluginName: plugin.manifest.name,
         featureCode,
-        input: input || ''
+        input: input || '',
+        mode: 'detached'
       })
     })
 
-    // 窗口关闭时清理
-    win.on('closed', () => {
-      this.windows.delete(plugin.manifest.name)
+    const windowId = win.id
+    this.detachedWindows.set(windowId, {
+      window: win,
+      plugin,
+      featureCode,
+      input: input || ''
     })
 
-    this.windows.set(plugin.manifest.name, win)
+    win.on('closed', () => {
+      this.detachedWindows.delete(windowId)
+    })
+
     return win
   }
 
-  // 关闭插件窗口
-  closeWindow(pluginName: string): void {
-    const win = this.windows.get(pluginName)
-    if (win && !win.isDestroyed()) {
-      win.close()
+  // 关闭指定独立窗口
+  closeDetached(windowId: number): void {
+    const info = this.detachedWindows.get(windowId)
+    if (info && !info.window.isDestroyed()) {
+      info.window.close()
     }
-    this.windows.delete(pluginName)
   }
 
-  // 获取插件窗口
-  getWindow(pluginName: string): BrowserWindow | null {
-    const win = this.windows.get(pluginName)
-    if (win && !win.isDestroyed()) {
-      return win
-    }
-    return null
+  // 获取所有独立窗口
+  getAllDetachedWindows(): BrowserWindow[] {
+    return Array.from(this.detachedWindows.values())
+      .map(info => info.window)
+      .filter(win => !win.isDestroyed())
   }
 
-  // 关闭所有插件窗口
+  // 关闭所有窗口
   closeAll(): void {
-    for (const win of this.windows.values()) {
-      if (!win.isDestroyed()) {
-        win.close()
+    this.closeAttached()
+    for (const info of this.detachedWindows.values()) {
+      if (!info.window.isDestroyed()) {
+        info.window.close()
       }
     }
-    this.windows.clear()
+    this.detachedWindows.clear()
+  }
+
+  // 设置窗口置顶
+  setAlwaysOnTop(windowId: number, flag: boolean): void {
+    const info = this.detachedWindows.get(windowId)
+    if (info && !info.window.isDestroyed()) {
+      info.window.setAlwaysOnTop(flag)
+    }
   }
 }

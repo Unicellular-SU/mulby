@@ -2,9 +2,11 @@ import { app, BrowserWindow, globalShortcut } from 'electron'
 import { join } from 'path'
 import { registerAllHandlers } from './ipc'
 import { PluginManager } from './plugin'
+import { PluginWindowManager } from './plugin/window'
 
 let mainWindow: BrowserWindow | null = null
 const pluginManager = new PluginManager()
+const pluginWindowManager = new PluginWindowManager()
 
 function getMainWindow() {
   return mainWindow
@@ -23,7 +25,8 @@ function createWindow() {
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
       contextIsolation: true,
-      nodeIntegration: false
+      nodeIntegration: false,
+      webviewTag: true
     }
   })
 
@@ -47,11 +50,17 @@ function toggleWindow() {
 app.whenReady().then(async () => {
   createWindow()
 
+  // 设置主窗口到插件窗口管理器
+  pluginWindowManager.setMainWindow(mainWindow!)
+
+  // 设置窗口管理器到插件管理器
+  pluginManager.setWindowManager(pluginWindowManager)
+
   // 初始化插件管理器
   await pluginManager.init()
 
   // 注册 IPC 处理器
-  registerAllHandlers(getMainWindow, pluginManager)
+  registerAllHandlers(getMainWindow, pluginManager, pluginWindowManager)
 
   // 注册全局快捷键
   globalShortcut.register('Alt+Space', toggleWindow)

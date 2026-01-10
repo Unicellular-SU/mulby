@@ -50,7 +50,10 @@ function PluginList({ query }: PluginListProps) {
   const handleRun = async (item: SearchResultItem) => {
     const result = await window.intools.plugin.run(item.pluginName, item.featureCode, query)
     if (result.success) {
-      window.intools.window.hide()
+      // 有 UI 的插件不隐藏窗口，会显示在附着区域
+      if (!result.hasUI) {
+        window.intools.window.hide()
+      }
     } else {
       console.error('Plugin error:', result.error)
     }

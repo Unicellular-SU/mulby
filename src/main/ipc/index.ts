@@ -4,13 +4,15 @@ import { registerNotificationHandlers } from './notification'
 import { registerWindowHandlers } from './window'
 import { registerPluginHandlers } from './plugin'
 import { PluginManager } from '../plugin'
+import { PluginWindowManager } from '../plugin/window'
 
 export function registerAllHandlers(
   getMainWindow: () => BrowserWindow | null,
-  pluginManager: PluginManager
+  pluginManager: PluginManager,
+  pluginWindowManager: PluginWindowManager
 ) {
   registerClipboardHandlers()
   registerNotificationHandlers()
-  registerWindowHandlers(getMainWindow)
+  registerWindowHandlers(getMainWindow, pluginWindowManager)
   registerPluginHandlers(pluginManager)
 }

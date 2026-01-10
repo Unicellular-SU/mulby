@@ -6,7 +6,12 @@ contextBridge.exposeInMainWorld('intools', {
     hide: () => ipcRenderer.send('window:hide'),
     setSize: (width: number, height: number) =>
       ipcRenderer.send('window:setSize', width, height),
-    center: () => ipcRenderer.send('window:center')
+    center: () => ipcRenderer.send('window:center'),
+    // 插件窗口控制
+    detach: () => ipcRenderer.send('plugin:detach'),
+    close: () => ipcRenderer.send('plugin:close'),
+    setAlwaysOnTop: (flag: boolean) => ipcRenderer.send('window:alwaysOnTop', flag),
+    getMode: () => ipcRenderer.invoke('plugin:getMode')
   },
 
   // 剪贴板
@@ -38,7 +43,17 @@ contextBridge.exposeInMainWorld('intools', {
   },
 
   // 插件窗口事件
-  onPluginInit: (callback: (data: { pluginName: string; featureCode: string; input: string }) => void) => {
+  onPluginInit: (callback: (data: { pluginName: string; featureCode: string; input: string; mode?: string }) => void) => {
     ipcRenderer.on('plugin:init', (_, data) => callback(data))
+  },
+
+  // 插件附着事件（主窗口使用）
+  onPluginAttach: (callback: (data: { pluginName: string; displayName: string; featureCode: string; input: string; uiPath: string }) => void) => {
+    ipcRenderer.on('plugin:attach', (_, data) => callback(data))
+  },
+
+  // 插件分离事件（主窗口使用）
+  onPluginDetached: (callback: () => void) => {
+    ipcRenderer.on('plugin:detached', () => callback())
   }
 })
