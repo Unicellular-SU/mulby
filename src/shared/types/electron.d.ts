@@ -71,7 +71,7 @@ export interface ElectronAPI {
     uninstall: (name: string) => Promise<{ success: boolean; error?: string }>
   }
   onPluginInit: (callback: (data: { pluginName: string; featureCode: string; input: string; mode?: string }) => void) => void
-  onPluginAttach: (callback: (data: { pluginName: string; displayName: string; featureCode: string; input: string; uiPath: string }) => void) => void
+  onPluginAttach: (callback: (data: { pluginName: string; displayName: string; featureCode: string; input: string; uiPath: string; preloadPath: string }) => void) => void
   onPluginDetached: (callback: () => void) => void
 }
 

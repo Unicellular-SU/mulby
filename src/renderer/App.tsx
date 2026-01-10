@@ -54,6 +54,11 @@ function App() {
   }, [])
 
   const handleQueryChange = (value: string) => {
+    // 如果有附着的插件，先关闭它
+    if (pluginInfo) {
+      window.intools.window.close()
+      setPluginInfo(null)
+    }
     setQuery(value)
     setShowList(value.length > 0)
   }
