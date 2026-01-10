@@ -15,10 +15,9 @@ export function registerWindowHandlers(
   ipcMain.on('window:setSize', (_, width: number, height: number) => {
     const win = getMainWindow()
     if (win) {
-      // macOS 上需要临时启用 resizable 才能动态调整大小
-      win.setResizable(true)
+      // 直接调整大小，无需切换 resizable 状态
+      // setSize 在 macOS 上对无边框窗口也有效
       win.setSize(width, height)
-      win.setResizable(false)
     }
   })
 
