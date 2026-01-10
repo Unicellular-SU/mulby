@@ -6,40 +6,61 @@
 
 ## 快速入门
 
-### 最小插件结构
+### 使用 CLI 创建插件（推荐）
+
+```bash
+# 创建 React 插件（默认）
+intools create my-plugin
+
+# 创建基础插件（无 UI）
+intools create my-plugin --template basic
+
+# 进入目录并安装依赖
+cd my-plugin
+npm install
+
+# 开发模式（热重载）
+npm run dev
+
+# 构建
+npm run build
+
+# 打包发布
+npm run pack
+```
+
+### React 插件项目结构（默认）
+
+```
+my-plugin/
+├── package.json          # npm 配置
+├── manifest.json         # 插件配置
+├── tsconfig.json         # TypeScript 配置
+├── vite.config.ts        # Vite 配置
+├── src/
+│   ├── main.ts           # 后端逻辑（沙箱运行）
+│   ├── types/
+│   │   └── intools.d.ts  # API 类型定义
+│   └── ui/               # React UI 源码
+│       ├── index.html
+│       ├── main.tsx
+│       ├── App.tsx
+│       └── styles.css
+├── dist/                 # 后端构建输出
+│   └── main.js
+└── ui/                   # UI 构建输出
+    ├── index.html
+    └── assets/
+```
+
+### 基础插件结构（无 UI）
 
 ```
 my-plugin/
 ├── manifest.json   # 必需：插件配置
-└── main.js         # 必需：入口文件
-```
-
-### 30 秒创建一个插件
-
-**manifest.json**
-```json
-{
-  "name": "hello-world",
-  "version": "1.0.0",
-  "displayName": "Hello World",
-  "description": "一个简单的示例插件",
-  "runtime": "nodejs",
-  "main": "main.js",
-  "triggers": [
-    { "type": "keyword", "value": "hello" }
-  ]
-}
-```
-
-**main.js**
-```javascript
-const { notification } = require('@intools/sdk');
-
-module.exports = {
-  async run(context) {
-    notification.show('Hello, InTools!');
-  }
-};
+├── package.json    # npm 配置
+└── src/
+    └── main.ts     # 入口文件
 ```
 
 ---
@@ -231,7 +252,46 @@ function processWithCache(input, cache) {
 
 ## 插件模板
 
-### 模板 A：无 UI 插件 (Node.js)
+### 模板 A：React 插件（推荐）
+
+适用于：需要精美 UI、复杂交互、使用第三方库
+
+```bash
+intools create my-plugin
+```
+
+**src/ui/App.tsx**
+```tsx
+import { useEffect, useState } from 'react'
+
+export default function App() {
+  const [input, setInput] = useState('')
+  const [output, setOutput] = useState('')
+
+  useEffect(() => {
+    window.intools?.onPluginInit?.((data) => {
+      if (data.input) setInput(data.input)
+    })
+  }, [])
+
+  const handleProcess = async () => {
+    const result = input.toUpperCase()
+    setOutput(result)
+    await window.intools?.clipboard?.writeText(result)
+    window.intools?.notification?.show('已复制到剪贴板')
+  }
+
+  return (
+    <div className="app">
+      <textarea value={input} onChange={(e) => setInput(e.target.value)} />
+      <button onClick={handleProcess}>处理</button>
+      <textarea value={output} readOnly />
+    </div>
+  )
+}
+```
+
+### 模板 B：无 UI 插件
 
 适用于：剪贴板处理、格式转换、快速计算
 

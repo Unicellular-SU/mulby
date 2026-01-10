@@ -1,0 +1,20 @@
+{
+  "name": "color-converter",
+  "version": "1.0.0",
+  "displayName": "颜色转换器",
+  "description": "HEX、RGB、HSL 颜色格式互转，支持颜色预览和取色",
+  "main": "dist/main.js",
+  "ui": "ui/index.html",
+  "features": [
+    {
+      "code": "main",
+      "explain": "颜色转换",
+      "cmds": [
+        { "type": "keyword", "value": "color" },
+        { "type": "keyword", "value": "颜色" },
+        { "type": "regex", "match": "^#[0-9a-fA-F]{3,8}$", "explain": "检测到 HEX 颜色" },
+        { "type": "regex", "match": "^rgb\\(", "explain": "检测到 RGB 颜色" }
+      ]
+    }
+  ]
+}

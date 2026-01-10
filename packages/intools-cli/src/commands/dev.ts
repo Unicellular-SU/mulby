@@ -2,6 +2,9 @@ import * as fs from 'fs-extra'
 import * as path from 'path'
 import * as esbuild from 'esbuild'
 import chalk from 'chalk'
+import { spawn, ChildProcess } from 'child_process'
+
+let viteProcess: ChildProcess | null = null
 
 export async function dev() {
   const cwd = process.cwd()
@@ -12,18 +15,35 @@ export async function dev() {
     process.exit(1)
   }
 
+  const manifest = fs.readJsonSync(manifestPath)
+  const hasUI = !!manifest.ui
   const entryPoint = path.join(cwd, 'src/main.ts')
-  if (!fs.existsSync(entryPoint)) {
-    console.log(chalk.red('错误: 未找到 src/main.ts'))
-    process.exit(1)
-  }
-
-  fs.ensureDirSync(path.join(cwd, 'dist'))
 
   console.log(chalk.blue('启动开发模式...'))
-  console.log(chalk.gray('监听文件变化中，按 Ctrl+C 退出'))
   console.log()
 
+  // 确保 dist 目录存在
+  fs.ensureDirSync(path.join(cwd, 'dist'))
+
+  // 1. 启动后端监听
+  if (fs.existsSync(entryPoint)) {
+    await startBackendWatch(cwd, entryPoint)
+  }
+
+  // 2. 启动 UI 开发服务器（如果有）
+  if (hasUI) {
+    await startViteDevServer(cwd)
+  }
+
+  console.log()
+  console.log(chalk.gray('按 Ctrl+C 退出'))
+
+  // 处理退出
+  process.on('SIGINT', cleanup)
+  process.on('SIGTERM', cleanup)
+}
+
+async function startBackendWatch(cwd: string, entryPoint: string) {
   const ctx = await esbuild.context({
     entryPoints: [entryPoint],
     bundle: true,
@@ -33,24 +53,48 @@ export async function dev() {
   })
 
   await ctx.watch()
-  console.log(chalk.green('✓ 首次构建完成'))
+  console.log(chalk.green('✓ 后端监听已启动'))
 
   // 监听文件变化并输出日志
   const chokidar = await import('chokidar')
-  const watcher = chokidar.watch(['src/**/*', 'manifest.json'], {
+  const watcher = chokidar.watch(['src/main.ts', 'src/**/*.ts'], {
     cwd,
-    ignoreInitial: true
+    ignoreInitial: true,
+    ignored: ['src/ui/**']
   })
 
   watcher.on('change', (file) => {
-    console.log(chalk.yellow(`文件变化: ${file}`))
+    console.log(chalk.yellow(`[后端] 文件变化: ${file}`))
+  })
+}
+
+async function startViteDevServer(cwd: string) {
+  const viteConfig = path.join(cwd, 'vite.config.ts')
+
+  if (!fs.existsSync(viteConfig)) {
+    console.log(chalk.yellow('跳过 UI 开发服务器: 未找到 vite.config.ts'))
+    return
+  }
+
+  console.log(chalk.blue('启动 Vite 开发服务器...'))
+
+  viteProcess = spawn('npx', ['vite', '--host'], {
+    cwd,
+    stdio: 'inherit',
+    shell: true
   })
 
-  // 保持进程运行
-  process.on('SIGINT', async () => {
-    console.log(chalk.blue('\n停止开发模式'))
-    await ctx.dispose()
-    watcher.close()
-    process.exit(0)
+  viteProcess.on('error', (err) => {
+    console.log(chalk.red('Vite 启动失败:'), err)
   })
+}
+
+function cleanup() {
+  console.log(chalk.blue('\n停止开发模式...'))
+
+  if (viteProcess) {
+    viteProcess.kill()
+  }
+
+  process.exit(0)
 }
