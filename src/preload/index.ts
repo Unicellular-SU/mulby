@@ -78,5 +78,89 @@ contextBridge.exposeInMainWorld('intools', {
   // 插件分离事件（主窗口使用）
   onPluginDetached: (callback: () => void) => {
     ipcRenderer.on('plugin:detached', () => callback())
+  },
+
+  // 屏幕 API
+  screen: {
+    getAllDisplays: () => ipcRenderer.invoke('screen:getAllDisplays'),
+    getPrimaryDisplay: () => ipcRenderer.invoke('screen:getPrimaryDisplay'),
+    getDisplayNearestPoint: (point: { x: number; y: number }) =>
+      ipcRenderer.invoke('screen:getDisplayNearestPoint', point),
+    getCursorScreenPoint: () => ipcRenderer.invoke('screen:getCursorScreenPoint'),
+    getSources: (options?: { types?: ('screen' | 'window')[]; thumbnailSize?: { width: number; height: number } }) =>
+      ipcRenderer.invoke('screen:getSources', options),
+    capture: (options?: { sourceId?: string; format?: 'png' | 'jpeg'; quality?: number }) =>
+      ipcRenderer.invoke('screen:capture', options),
+    captureRegion: (
+      region: { x: number; y: number; width: number; height: number },
+      options?: { format?: 'png' | 'jpeg'; quality?: number }
+    ) => ipcRenderer.invoke('screen:captureRegion', region, options),
+    getMediaStreamConstraints: (options: { sourceId: string; audio?: boolean; frameRate?: number }) =>
+      ipcRenderer.invoke('screen:getMediaStreamConstraints', options)
+  },
+
+  // Shell API
+  shell: {
+    openPath: (path: string) => ipcRenderer.invoke('shell:openPath', path),
+    openExternal: (url: string) => ipcRenderer.invoke('shell:openExternal', url),
+    showItemInFolder: (path: string) => ipcRenderer.invoke('shell:showItemInFolder', path),
+    openFolder: (path: string) => ipcRenderer.invoke('shell:openFolder', path),
+    trashItem: (path: string) => ipcRenderer.invoke('shell:trashItem', path),
+    beep: () => ipcRenderer.invoke('shell:beep')
+  },
+
+  // Dialog API
+  dialog: {
+    showOpenDialog: (options?: {
+      title?: string
+      defaultPath?: string
+      buttonLabel?: string
+      filters?: { name: string; extensions: string[] }[]
+      properties?: ('openFile' | 'openDirectory' | 'multiSelections' | 'showHiddenFiles')[]
+    }) => ipcRenderer.invoke('dialog:showOpenDialog', options),
+    showSaveDialog: (options?: {
+      title?: string
+      defaultPath?: string
+      buttonLabel?: string
+      filters?: { name: string; extensions: string[] }[]
+    }) => ipcRenderer.invoke('dialog:showSaveDialog', options),
+    showMessageBox: (options: {
+      type?: 'none' | 'info' | 'error' | 'question' | 'warning'
+      title?: string
+      message: string
+      detail?: string
+      buttons?: string[]
+      defaultId?: number
+      cancelId?: number
+    }) => ipcRenderer.invoke('dialog:showMessageBox', options),
+    showErrorBox: (title: string, content: string) =>
+      ipcRenderer.invoke('dialog:showErrorBox', title, content)
+  },
+
+  // System API
+  system: {
+    getSystemInfo: () => ipcRenderer.invoke('system:getSystemInfo'),
+    getAppInfo: () => ipcRenderer.invoke('system:getAppInfo'),
+    getPath: (name: string) => ipcRenderer.invoke('system:getPath', name),
+    getEnv: (name: string) => ipcRenderer.invoke('system:getEnv', name),
+    getIdleTime: () => ipcRenderer.invoke('system:getIdleTime')
+  },
+
+  // GlobalShortcut API
+  shortcut: {
+    register: (accelerator: string) => ipcRenderer.invoke('shortcut:register', accelerator),
+    unregister: (accelerator: string) => ipcRenderer.invoke('shortcut:unregister', accelerator),
+    unregisterAll: () => ipcRenderer.invoke('shortcut:unregisterAll'),
+    isRegistered: (accelerator: string) => ipcRenderer.invoke('shortcut:isRegistered', accelerator),
+    onTriggered: (callback: (accelerator: string) => void) => {
+      ipcRenderer.on('shortcut:triggered', (_, accelerator) => callback(accelerator))
+    }
+  },
+
+  // Security API
+  security: {
+    isEncryptionAvailable: () => ipcRenderer.invoke('security:isEncryptionAvailable'),
+    encryptString: (plainText: string) => ipcRenderer.invoke('security:encryptString', plainText),
+    decryptString: (encrypted: Buffer) => ipcRenderer.invoke('security:decryptString', encrypted)
   }
 })

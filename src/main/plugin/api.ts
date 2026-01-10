@@ -4,6 +4,12 @@ import { basename } from 'path'
 import { PluginStorage } from './storage'
 import { PluginFilesystem } from './filesystem'
 import { PluginHttp, HttpRequestOptions } from './http'
+import { pluginScreen, CaptureOptions, ScreenshotOptions, RecordingOptions } from './screen'
+import { pluginShell } from './shell'
+import { pluginDialog, OpenDialogOptions, SaveDialogOptions, MessageBoxOptions } from './dialog'
+import { pluginSystem } from './system'
+import { createPluginGlobalShortcut } from './shortcut'
+import { createPluginSecurity } from './security'
 
 const pluginStorage = new PluginStorage()
 const pluginFilesystem = new PluginFilesystem()
@@ -109,7 +115,43 @@ export function createPluginAPI(pluginName: string) {
       post: (url: string, body?: string | object, headers?: Record<string, string>) => pluginHttp.post(url, body, headers),
       put: (url: string, body?: string | object, headers?: Record<string, string>) => pluginHttp.put(url, body, headers),
       delete: (url: string, headers?: Record<string, string>) => pluginHttp.delete(url, headers)
-    }
+    },
+    screen: {
+      getAllDisplays: () => pluginScreen.getAllDisplays(),
+      getPrimaryDisplay: () => pluginScreen.getPrimaryDisplay(),
+      getDisplayNearestPoint: (point: { x: number; y: number }) => pluginScreen.getDisplayNearestPoint(point),
+      getCursorScreenPoint: () => pluginScreen.getCursorScreenPoint(),
+      getSources: (options?: CaptureOptions) => pluginScreen.getSources(options),
+      capture: (options?: ScreenshotOptions) => pluginScreen.captureScreen(options),
+      captureRegion: (
+        region: { x: number; y: number; width: number; height: number },
+        options?: Omit<ScreenshotOptions, 'sourceId'>
+      ) => pluginScreen.captureRegion(region, options),
+      getMediaStreamConstraints: (options: RecordingOptions) => pluginScreen.getMediaStreamConstraints(options)
+    },
+    shell: {
+      openPath: (path: string) => pluginShell.openPath(path),
+      openExternal: (url: string) => pluginShell.openExternal(url),
+      showItemInFolder: (path: string) => pluginShell.showItemInFolder(path),
+      openFolder: (path: string) => pluginShell.openFolder(path),
+      trashItem: (path: string) => pluginShell.trashItem(path),
+      beep: () => pluginShell.beep()
+    },
+    dialog: {
+      showOpenDialog: (options?: OpenDialogOptions) => pluginDialog.showOpenDialog(options),
+      showSaveDialog: (options?: SaveDialogOptions) => pluginDialog.showSaveDialog(options),
+      showMessageBox: (options: MessageBoxOptions) => pluginDialog.showMessageBox(options),
+      showErrorBox: (title: string, content: string) => pluginDialog.showErrorBox(title, content)
+    },
+    system: {
+      getSystemInfo: () => pluginSystem.getSystemInfo(),
+      getAppInfo: () => pluginSystem.getAppInfo(),
+      getPath: (name: 'home' | 'appData' | 'userData' | 'temp' | 'desktop' | 'documents' | 'downloads' | 'music' | 'pictures' | 'videos') => pluginSystem.getPath(name),
+      getEnv: (name: string) => pluginSystem.getEnv(name),
+      getIdleTime: () => pluginSystem.getIdleTime()
+    },
+    shortcut: createPluginGlobalShortcut(pluginName),
+    security: createPluginSecurity()
   }
 }
 

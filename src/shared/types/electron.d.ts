@@ -38,6 +38,92 @@ export interface ThemeInfo {
   actual: 'light' | 'dark'
 }
 
+// Screen API 类型
+export interface DisplayInfo {
+  id: number
+  label: string
+  bounds: { x: number; y: number; width: number; height: number }
+  workArea: { x: number; y: number; width: number; height: number }
+  scaleFactor: number
+  rotation: number
+  isPrimary: boolean
+}
+
+export interface CaptureSource {
+  id: string
+  name: string
+  thumbnailDataUrl: string
+  displayId?: string
+  appIconDataUrl?: string
+}
+
+export interface CaptureOptions {
+  types?: ('screen' | 'window')[]
+  thumbnailSize?: { width: number; height: number }
+}
+
+export interface ScreenshotOptions {
+  sourceId?: string
+  format?: 'png' | 'jpeg'
+  quality?: number
+}
+
+export interface RecordingOptions {
+  sourceId: string
+  audio?: boolean
+  frameRate?: number
+}
+
+// Dialog API 类型
+export interface OpenDialogOptions {
+  title?: string
+  defaultPath?: string
+  buttonLabel?: string
+  filters?: { name: string; extensions: string[] }[]
+  properties?: ('openFile' | 'openDirectory' | 'multiSelections' | 'showHiddenFiles')[]
+}
+
+export interface SaveDialogOptions {
+  title?: string
+  defaultPath?: string
+  buttonLabel?: string
+  filters?: { name: string; extensions: string[] }[]
+}
+
+export interface MessageBoxOptions {
+  type?: 'none' | 'info' | 'error' | 'question' | 'warning'
+  title?: string
+  message: string
+  detail?: string
+  buttons?: string[]
+  defaultId?: number
+  cancelId?: number
+}
+
+// System API 类型
+export interface SystemInfo {
+  platform: string
+  arch: string
+  hostname: string
+  username: string
+  homedir: string
+  tmpdir: string
+  cpus: number
+  totalmem: number
+  freemem: number
+  uptime: number
+  osVersion: string
+  osRelease: string
+}
+
+export interface AppInfo {
+  name: string
+  version: string
+  locale: string
+  isPackaged: boolean
+  userDataPath: string
+}
+
 export interface ElectronAPI {
   window: {
     hide: () => void
@@ -78,6 +164,52 @@ export interface ElectronAPI {
   onPluginInit: (callback: (data: { pluginName: string; featureCode: string; input: string; mode?: string }) => void) => void
   onPluginAttach: (callback: (data: { pluginName: string; displayName: string; featureCode: string; input: string; uiPath: string; preloadPath: string }) => void) => void
   onPluginDetached: (callback: () => void) => void
+  screen: {
+    getAllDisplays: () => Promise<DisplayInfo[]>
+    getPrimaryDisplay: () => Promise<DisplayInfo>
+    getDisplayNearestPoint: (point: { x: number; y: number }) => Promise<DisplayInfo>
+    getCursorScreenPoint: () => Promise<{ x: number; y: number }>
+    getSources: (options?: CaptureOptions) => Promise<CaptureSource[]>
+    capture: (options?: ScreenshotOptions) => Promise<Buffer>
+    captureRegion: (
+      region: { x: number; y: number; width: number; height: number },
+      options?: Omit<ScreenshotOptions, 'sourceId'>
+    ) => Promise<Buffer>
+    getMediaStreamConstraints: (options: RecordingOptions) => Promise<object>
+  }
+  shell: {
+    openPath: (path: string) => Promise<string>
+    openExternal: (url: string) => Promise<void>
+    showItemInFolder: (path: string) => Promise<void>
+    openFolder: (path: string) => Promise<string>
+    trashItem: (path: string) => Promise<void>
+    beep: () => Promise<void>
+  }
+  dialog: {
+    showOpenDialog: (options?: OpenDialogOptions) => Promise<string[]>
+    showSaveDialog: (options?: SaveDialogOptions) => Promise<string | null>
+    showMessageBox: (options: MessageBoxOptions) => Promise<{ response: number; checkboxChecked: boolean }>
+    showErrorBox: (title: string, content: string) => Promise<void>
+  }
+  system: {
+    getSystemInfo: () => Promise<SystemInfo>
+    getAppInfo: () => Promise<AppInfo>
+    getPath: (name: 'home' | 'appData' | 'userData' | 'temp' | 'desktop' | 'documents' | 'downloads' | 'music' | 'pictures' | 'videos') => Promise<string>
+    getEnv: (name: string) => Promise<string | undefined>
+    getIdleTime: () => Promise<number>
+  }
+  shortcut: {
+    register: (accelerator: string) => Promise<boolean>
+    unregister: (accelerator: string) => Promise<void>
+    unregisterAll: () => Promise<void>
+    isRegistered: (accelerator: string) => Promise<boolean>
+    onTriggered: (callback: (accelerator: string) => void) => void
+  }
+  security: {
+    isEncryptionAvailable: () => Promise<boolean>
+    encryptString: (plainText: string) => Promise<Buffer>
+    decryptString: (encrypted: Buffer) => Promise<string>
+  }
 }
 
 declare global {
