@@ -34,7 +34,7 @@ function App() {
   useEffect(() => {
     let height = 62
     if (pluginInfo) {
-      height = 400
+      height = 700
     } else if (showList) {
       height = 300
     }

@@ -12,7 +12,12 @@ export function registerWindowHandlers(
 
   ipcMain.on('window:setSize', (_, width: number, height: number) => {
     const win = getMainWindow()
-    win?.setSize(width, height)
+    if (win) {
+      // macOS 上需要临时启用 resizable 才能动态调整大小
+      win.setResizable(true)
+      win.setSize(width, height)
+      win.setResizable(false)
+    }
   })
 
   ipcMain.on('window:center', () => {

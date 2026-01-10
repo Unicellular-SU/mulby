@@ -85,7 +85,6 @@ function PluginContainer({ plugin, theme, onClose }: PluginContainerProps) {
           aria-label="在独立窗口中打开"
         >
           <ExternalLinkIcon />
-          <span>独立</span>
         </button>
         <span className="plugin-title">{plugin.displayName}</span>
         <button

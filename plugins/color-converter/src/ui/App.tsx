@@ -88,7 +88,6 @@ export default function App() {
 
   return (
     <div className="app">
-      <div className="titlebar">颜色转换器</div>
       <div className="container">
         <div className="preview-section">
           <div className="color-preview" style={{ backgroundColor: color.hex }}>
@@ -177,14 +176,16 @@ export default function App() {
                     max="360"
                     value={color.hsl.h}
                     onChange={(e) => handleHslChange('h', parseInt(e.target.value))}
-                    style={{ background: `linear-gradient(to right,
+                    style={{
+                      background: `linear-gradient(to right,
                       hsl(0, ${color.hsl.s}%, ${color.hsl.l}%),
                       hsl(60, ${color.hsl.s}%, ${color.hsl.l}%),
                       hsl(120, ${color.hsl.s}%, ${color.hsl.l}%),
                       hsl(180, ${color.hsl.s}%, ${color.hsl.l}%),
                       hsl(240, ${color.hsl.s}%, ${color.hsl.l}%),
                       hsl(300, ${color.hsl.s}%, ${color.hsl.l}%),
-                      hsl(360, ${color.hsl.s}%, ${color.hsl.l}%))` }}
+                      hsl(360, ${color.hsl.s}%, ${color.hsl.l}%))`
+                    }}
                   />
                   <span className="value">{color.hsl.h}°</span>
                 </div>
