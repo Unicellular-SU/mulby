@@ -210,6 +210,32 @@ export interface ElectronAPI {
     encryptString: (plainText: string) => Promise<Buffer>
     decryptString: (encrypted: Buffer) => Promise<string>
   }
+  media: {
+    getAccessStatus: (mediaType: 'microphone' | 'camera') => Promise<'not-determined' | 'granted' | 'denied' | 'restricted' | 'unknown'>
+    askForAccess: (mediaType: 'microphone' | 'camera') => Promise<boolean>
+    hasCameraAccess: () => Promise<boolean>
+    hasMicrophoneAccess: () => Promise<boolean>
+  }
+  power: {
+    getSystemIdleTime: () => Promise<number>
+    getSystemIdleState: (idleThreshold: number) => Promise<'active' | 'idle' | 'locked' | 'unknown'>
+    isOnBatteryPower: () => Promise<boolean>
+    getCurrentThermalState: () => Promise<'unknown' | 'nominal' | 'fair' | 'serious' | 'critical'>
+    onSuspend: (callback: () => void) => void
+    onResume: (callback: () => void) => void
+    onAC: (callback: () => void) => void
+    onBattery: (callback: () => void) => void
+    onLockScreen: (callback: () => void) => void
+    onUnlockScreen: (callback: () => void) => void
+  }
+  tray: {
+    create: (options: { icon: string; tooltip?: string; title?: string }) => Promise<boolean>
+    destroy: () => Promise<void>
+    setIcon: (icon: string) => Promise<void>
+    setTooltip: (tooltip: string) => Promise<void>
+    setTitle: (title: string) => Promise<void>
+    exists: () => Promise<boolean>
+  }
 }
 
 declare global {

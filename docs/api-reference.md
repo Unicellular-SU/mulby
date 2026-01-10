@@ -1220,3 +1220,231 @@ module.exports = {
   }
 };
 ```
+
+## 14. Media API (media)
+
+Media API 提供摄像头和麦克风的权限管理，支持 macOS、Windows 和 Linux。
+
+### 14.1 getAccessStatus(mediaType)
+获取媒体访问权限状态。
+
+```javascript
+const status = await media.getAccessStatus('camera');
+// macOS 返回: 'not-determined' | 'granted' | 'denied' | 'restricted' | 'unknown'
+// Windows/Linux 返回: 'granted'
+```
+
+**参数**:
+- `mediaType` ('microphone' | 'camera') - 媒体类型
+
+**返回值**: `string` - 权限状态
+
+**跨平台说明**:
+- macOS: 返回实际权限状态
+- Windows/Linux: 始终返回 'granted'（权限由浏览器在使用时处理）
+
+### 14.2 askForAccess(mediaType)
+请求媒体访问权限。
+
+```javascript
+const granted = await media.askForAccess('microphone');
+if (granted) {
+  // 可以使用麦克风
+}
+```
+
+**参数**:
+- `mediaType` ('microphone' | 'camera') - 媒体类型
+
+**返回值**: `boolean` - 是否获得权限
+
+### 14.3 hasCameraAccess()
+检查是否有摄像头权限。
+
+```javascript
+if (await media.hasCameraAccess()) {
+  // 可以使用摄像头
+}
+```
+
+**返回值**: `boolean`
+
+### 14.4 hasMicrophoneAccess()
+检查是否有麦克风权限。
+
+```javascript
+if (await media.hasMicrophoneAccess()) {
+  // 可以使用麦克风
+}
+```
+
+**返回值**: `boolean`
+
+### 14.5 在插件 UI 中使用摄像头/麦克风
+
+权限检查后，在插件 UI 中使用标准 Web API：
+
+```javascript
+// 检查权限
+const hasCamera = await window.intools.media.hasCameraAccess();
+if (!hasCamera) {
+  await window.intools.media.askForAccess('camera');
+}
+
+// 使用 Web API 获取媒体流
+const stream = await navigator.mediaDevices.getUserMedia({
+  video: true,
+  audio: true
+});
+
+// 显示视频
+const video = document.querySelector('video');
+video.srcObject = stream;
+```
+
+## 15. Power API (power)
+
+Power API 提供电源和系统状态监控，支持 macOS、Windows 和 Linux。
+
+### 15.1 getSystemIdleTime()
+获取系统空闲时间。
+
+```javascript
+const idleSeconds = await power.getSystemIdleTime();
+console.log(`系统已空闲 ${idleSeconds} 秒`);
+```
+
+**返回值**: `number` - 空闲时间（秒）
+
+### 15.2 getSystemIdleState(idleThreshold)
+获取系统空闲状态。
+
+```javascript
+const state = await power.getSystemIdleState(60);
+// 返回: 'active' | 'idle' | 'locked' | 'unknown'
+```
+
+**参数**:
+- `idleThreshold` (number) - 空闲阈值（秒）
+
+**返回值**: `string` - 空闲状态
+
+### 15.3 isOnBatteryPower()
+检查是否使用电池供电。
+
+```javascript
+if (await power.isOnBatteryPower()) {
+  console.log('当前使用电池供电');
+}
+```
+
+**返回值**: `boolean`
+
+### 15.4 getCurrentThermalState()
+获取当前热状态（仅 macOS）。
+
+```javascript
+const thermal = await power.getCurrentThermalState();
+// macOS 返回: 'unknown' | 'nominal' | 'fair' | 'serious' | 'critical'
+// Windows/Linux 返回: 'unknown'
+```
+
+**返回值**: `string`
+
+### 15.5 事件监听
+
+```javascript
+// 系统休眠
+window.intools.power.onSuspend(() => {
+  console.log('系统即将休眠');
+});
+
+// 系统唤醒
+window.intools.power.onResume(() => {
+  console.log('系统已唤醒');
+});
+
+// 切换到交流电
+window.intools.power.onAC(() => {
+  console.log('已连接电源');
+});
+
+// 切换到电池
+window.intools.power.onBattery(() => {
+  console.log('已切换到电池供电');
+});
+
+// 屏幕锁定
+window.intools.power.onLockScreen(() => {
+  console.log('屏幕已锁定');
+});
+
+// 屏幕解锁
+window.intools.power.onUnlockScreen(() => {
+  console.log('屏幕已解锁');
+});
+```
+
+## 16. Tray API (tray)
+
+Tray API 提供系统托盘功能，支持 macOS、Windows 和 Linux。
+
+### 16.1 create(options)
+创建系统托盘图标。
+
+```javascript
+const success = await tray.create({
+  icon: '/path/to/icon.png',  // 或 base64 data URL
+  tooltip: '我的插件',
+  title: '状态'  // 仅 macOS
+});
+```
+
+**参数** (TrayOptions):
+- `icon` (string) - 图标路径或 base64 data URL
+- `tooltip` (string, 可选) - 鼠标悬停提示
+- `title` (string, 可选) - 托盘标题（仅 macOS）
+
+**返回值**: `boolean` - 是否创建成功
+
+### 16.2 destroy()
+销毁托盘图标。
+
+```javascript
+await tray.destroy();
+```
+
+### 16.3 setIcon(icon)
+更新托盘图标。
+
+```javascript
+await tray.setIcon('/path/to/new-icon.png');
+```
+
+**参数**:
+- `icon` (string) - 图标路径或 base64 data URL
+
+### 16.4 setTooltip(tooltip)
+设置鼠标悬停提示。
+
+```javascript
+await tray.setTooltip('新的提示文字');
+```
+
+### 16.5 setTitle(title)
+设置托盘标题（仅 macOS）。
+
+```javascript
+await tray.setTitle('运行中');
+```
+
+### 16.6 exists()
+检查托盘是否存在。
+
+```javascript
+if (await tray.exists()) {
+  console.log('托盘已创建');
+}
+```
+
+**返回值**: `boolean`

@@ -10,6 +10,9 @@ import { pluginDialog, OpenDialogOptions, SaveDialogOptions, MessageBoxOptions }
 import { pluginSystem } from './system'
 import { createPluginGlobalShortcut } from './shortcut'
 import { createPluginSecurity } from './security'
+import { pluginMedia } from './media'
+import { pluginPowerMonitor } from './power'
+import { createPluginTray } from './tray'
 
 const pluginStorage = new PluginStorage()
 const pluginFilesystem = new PluginFilesystem()
@@ -151,7 +154,20 @@ export function createPluginAPI(pluginName: string) {
       getIdleTime: () => pluginSystem.getIdleTime()
     },
     shortcut: createPluginGlobalShortcut(pluginName),
-    security: createPluginSecurity()
+    security: createPluginSecurity(),
+    media: {
+      getAccessStatus: (mediaType: 'microphone' | 'camera') => pluginMedia.getMediaAccessStatus(mediaType),
+      askForAccess: (mediaType: 'microphone' | 'camera') => pluginMedia.askForMediaAccess(mediaType),
+      hasCameraAccess: () => pluginMedia.hasCameraAccess(),
+      hasMicrophoneAccess: () => pluginMedia.hasMicrophoneAccess()
+    },
+    power: {
+      getSystemIdleTime: () => pluginPowerMonitor.getSystemIdleTime(),
+      getSystemIdleState: (idleThreshold: number) => pluginPowerMonitor.getSystemIdleState(idleThreshold),
+      isOnBatteryPower: () => pluginPowerMonitor.isOnBatteryPower(),
+      getCurrentThermalState: () => pluginPowerMonitor.getCurrentThermalState()
+    },
+    tray: createPluginTray(pluginName)
   }
 }
 

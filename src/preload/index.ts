@@ -162,5 +162,53 @@ contextBridge.exposeInMainWorld('intools', {
     isEncryptionAvailable: () => ipcRenderer.invoke('security:isEncryptionAvailable'),
     encryptString: (plainText: string) => ipcRenderer.invoke('security:encryptString', plainText),
     decryptString: (encrypted: Buffer) => ipcRenderer.invoke('security:decryptString', encrypted)
+  },
+
+  // Media API
+  media: {
+    getAccessStatus: (mediaType: 'microphone' | 'camera') =>
+      ipcRenderer.invoke('media:getAccessStatus', mediaType),
+    askForAccess: (mediaType: 'microphone' | 'camera') =>
+      ipcRenderer.invoke('media:askForAccess', mediaType),
+    hasCameraAccess: () => ipcRenderer.invoke('media:hasCameraAccess'),
+    hasMicrophoneAccess: () => ipcRenderer.invoke('media:hasMicrophoneAccess')
+  },
+
+  // Power API
+  power: {
+    getSystemIdleTime: () => ipcRenderer.invoke('power:getSystemIdleTime'),
+    getSystemIdleState: (idleThreshold: number) =>
+      ipcRenderer.invoke('power:getSystemIdleState', idleThreshold),
+    isOnBatteryPower: () => ipcRenderer.invoke('power:isOnBatteryPower'),
+    getCurrentThermalState: () => ipcRenderer.invoke('power:getCurrentThermalState'),
+    onSuspend: (callback: () => void) => {
+      ipcRenderer.on('power:suspend', () => callback())
+    },
+    onResume: (callback: () => void) => {
+      ipcRenderer.on('power:resume', () => callback())
+    },
+    onAC: (callback: () => void) => {
+      ipcRenderer.on('power:on-ac', () => callback())
+    },
+    onBattery: (callback: () => void) => {
+      ipcRenderer.on('power:on-battery', () => callback())
+    },
+    onLockScreen: (callback: () => void) => {
+      ipcRenderer.on('power:lock-screen', () => callback())
+    },
+    onUnlockScreen: (callback: () => void) => {
+      ipcRenderer.on('power:unlock-screen', () => callback())
+    }
+  },
+
+  // Tray API
+  tray: {
+    create: (options: { icon: string; tooltip?: string; title?: string }) =>
+      ipcRenderer.invoke('tray:create', options),
+    destroy: () => ipcRenderer.invoke('tray:destroy'),
+    setIcon: (icon: string) => ipcRenderer.invoke('tray:setIcon', icon),
+    setTooltip: (tooltip: string) => ipcRenderer.invoke('tray:setTooltip', tooltip),
+    setTitle: (title: string) => ipcRenderer.invoke('tray:setTitle', title),
+    exists: () => ipcRenderer.invoke('tray:exists')
   }
 })

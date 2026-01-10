@@ -10,6 +10,9 @@ import { registerDialogHandlers } from './dialog'
 import { registerSystemHandlers } from './system'
 import { registerGlobalShortcutHandlers } from './shortcut'
 import { registerSecurityHandlers } from './security'
+import { registerMediaHandlers } from './media'
+import { registerPowerMonitorHandlers } from './power'
+import { registerTrayHandlers } from './tray'
 import { PluginManager } from '../plugin'
 import { PluginWindowManager } from '../plugin/window'
 import { ThemeManager } from '../theme'
@@ -31,4 +34,7 @@ export function registerAllHandlers(
   registerSystemHandlers()
   registerGlobalShortcutHandlers()
   registerSecurityHandlers()
+  registerMediaHandlers()
+  registerPowerMonitorHandlers()
+  registerTrayHandlers()
 }

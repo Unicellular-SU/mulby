@@ -636,6 +636,38 @@ interface IntoolsSecurity {
   decryptString(encrypted: ArrayBuffer): Promise<string>
 }
 
+// Media API 类型
+interface IntoolsMedia {
+  getAccessStatus(mediaType: 'microphone' | 'camera'): Promise<'not-determined' | 'granted' | 'denied' | 'restricted' | 'unknown'>
+  askForAccess(mediaType: 'microphone' | 'camera'): Promise<boolean>
+  hasCameraAccess(): Promise<boolean>
+  hasMicrophoneAccess(): Promise<boolean>
+}
+
+// Power API 类型
+interface IntoolsPower {
+  getSystemIdleTime(): Promise<number>
+  getSystemIdleState(idleThreshold: number): Promise<'active' | 'idle' | 'locked' | 'unknown'>
+  isOnBatteryPower(): Promise<boolean>
+  getCurrentThermalState(): Promise<'unknown' | 'nominal' | 'fair' | 'serious' | 'critical'>
+  onSuspend(callback: () => void): void
+  onResume(callback: () => void): void
+  onAC(callback: () => void): void
+  onBattery(callback: () => void): void
+  onLockScreen(callback: () => void): void
+  onUnlockScreen(callback: () => void): void
+}
+
+// Tray API 类型
+interface IntoolsTray {
+  create(options: { icon: string; tooltip?: string; title?: string }): Promise<boolean>
+  destroy(): Promise<void>
+  setIcon(icon: string): Promise<void>
+  setTooltip(tooltip: string): Promise<void>
+  setTitle(title: string): Promise<void>
+  exists(): Promise<boolean>
+}
+
 interface PluginInitData {
   pluginName: string
   featureCode: string
@@ -654,6 +686,9 @@ interface IntoolsAPI {
   system: IntoolsSystem
   shortcut: IntoolsShortcut
   security: IntoolsSecurity
+  media: IntoolsMedia
+  power: IntoolsPower
+  tray: IntoolsTray
   onPluginInit(callback: (data: PluginInitData) => void): void
   onThemeChange?(callback: (theme: 'light' | 'dark') => void): void
 }
