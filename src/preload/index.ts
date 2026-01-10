@@ -210,5 +210,76 @@ contextBridge.exposeInMainWorld('intools', {
     setTooltip: (tooltip: string) => ipcRenderer.invoke('tray:setTooltip', tooltip),
     setTitle: (title: string) => ipcRenderer.invoke('tray:setTitle', title),
     exists: () => ipcRenderer.invoke('tray:exists')
+  },
+
+  // Network API
+  network: {
+    isOnline: () => ipcRenderer.invoke('network:isOnline'),
+    onOnline: (callback: () => void) => {
+      window.addEventListener('online', callback)
+    },
+    onOffline: (callback: () => void) => {
+      window.addEventListener('offline', callback)
+    }
+  },
+
+  // Menu API
+  menu: {
+    showContextMenu: (items: {
+      label: string
+      type?: 'normal' | 'separator' | 'checkbox' | 'radio'
+      checked?: boolean
+      enabled?: boolean
+      id?: string
+      submenu?: any[]
+    }[]) => ipcRenderer.invoke('menu:showContextMenu', items)
+  },
+
+  // Geolocation API
+  geolocation: {
+    getAccessStatus: () => ipcRenderer.invoke('geolocation:getAccessStatus'),
+    getCurrentPosition: () => {
+      return new Promise((resolve, reject) => {
+        navigator.geolocation.getCurrentPosition(
+          (pos) => resolve({
+            latitude: pos.coords.latitude,
+            longitude: pos.coords.longitude,
+            accuracy: pos.coords.accuracy,
+            altitude: pos.coords.altitude,
+            altitudeAccuracy: pos.coords.altitudeAccuracy,
+            heading: pos.coords.heading,
+            speed: pos.coords.speed,
+            timestamp: pos.timestamp
+          }),
+          (err) => reject(err)
+        )
+      })
+    }
+  },
+
+  // TTS API
+  tts: {
+    speak: (text: string, options?: { lang?: string; rate?: number; pitch?: number; volume?: number }) => {
+      return new Promise<void>((resolve, reject) => {
+        const utterance = new SpeechSynthesisUtterance(text)
+        if (options?.lang) utterance.lang = options.lang
+        if (options?.rate) utterance.rate = options.rate
+        if (options?.pitch) utterance.pitch = options.pitch
+        if (options?.volume) utterance.volume = options.volume
+        utterance.onend = () => resolve()
+        utterance.onerror = (e) => reject(e)
+        speechSynthesis.speak(utterance)
+      })
+    },
+    stop: () => speechSynthesis.cancel(),
+    pause: () => speechSynthesis.pause(),
+    resume: () => speechSynthesis.resume(),
+    getVoices: () => speechSynthesis.getVoices().map(v => ({
+      name: v.name,
+      lang: v.lang,
+      default: v.default,
+      localService: v.localService
+    })),
+    isSpeaking: () => speechSynthesis.speaking
   }
 })

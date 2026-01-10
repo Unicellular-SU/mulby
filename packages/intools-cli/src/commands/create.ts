@@ -668,6 +668,50 @@ interface IntoolsTray {
   exists(): Promise<boolean>
 }
 
+// Network API 类型
+interface IntoolsNetwork {
+  isOnline(): Promise<boolean>
+  onOnline(callback: () => void): void
+  onOffline(callback: () => void): void
+}
+
+// Menu API 类型
+interface IntoolsMenu {
+  showContextMenu(items: {
+    label: string
+    type?: 'normal' | 'separator' | 'checkbox' | 'radio'
+    checked?: boolean
+    enabled?: boolean
+    id?: string
+    submenu?: any[]
+  }[]): Promise<string | null>
+}
+
+// Geolocation API 类型
+interface IntoolsGeolocation {
+  getAccessStatus(): Promise<'not-determined' | 'granted' | 'denied' | 'restricted' | 'unknown'>
+  getCurrentPosition(): Promise<{
+    latitude: number
+    longitude: number
+    accuracy: number
+    altitude?: number | null
+    altitudeAccuracy?: number | null
+    heading?: number | null
+    speed?: number | null
+    timestamp: number
+  }>
+}
+
+// TTS API 类型
+interface IntoolsTTS {
+  speak(text: string, options?: { lang?: string; rate?: number; pitch?: number; volume?: number }): Promise<void>
+  stop(): void
+  pause(): void
+  resume(): void
+  getVoices(): { name: string; lang: string; default: boolean; localService: boolean }[]
+  isSpeaking(): boolean
+}
+
 interface PluginInitData {
   pluginName: string
   featureCode: string
@@ -689,6 +733,10 @@ interface IntoolsAPI {
   media: IntoolsMedia
   power: IntoolsPower
   tray: IntoolsTray
+  network: IntoolsNetwork
+  menu: IntoolsMenu
+  geolocation: IntoolsGeolocation
+  tts: IntoolsTTS
   onPluginInit(callback: (data: PluginInitData) => void): void
   onThemeChange?(callback: (theme: 'light' | 'dark') => void): void
 }

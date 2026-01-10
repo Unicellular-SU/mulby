@@ -236,6 +236,42 @@ export interface ElectronAPI {
     setTitle: (title: string) => Promise<void>
     exists: () => Promise<boolean>
   }
+  network: {
+    isOnline: () => Promise<boolean>
+    onOnline: (callback: () => void) => void
+    onOffline: (callback: () => void) => void
+  }
+  menu: {
+    showContextMenu: (items: {
+      label: string
+      type?: 'normal' | 'separator' | 'checkbox' | 'radio'
+      checked?: boolean
+      enabled?: boolean
+      id?: string
+      submenu?: any[]
+    }[]) => Promise<string | null>
+  }
+  geolocation: {
+    getAccessStatus: () => Promise<'not-determined' | 'granted' | 'denied' | 'restricted' | 'unknown'>
+    getCurrentPosition: () => Promise<{
+      latitude: number
+      longitude: number
+      accuracy: number
+      altitude?: number | null
+      altitudeAccuracy?: number | null
+      heading?: number | null
+      speed?: number | null
+      timestamp: number
+    }>
+  }
+  tts: {
+    speak: (text: string, options?: { lang?: string; rate?: number; pitch?: number; volume?: number }) => Promise<void>
+    stop: () => void
+    pause: () => void
+    resume: () => void
+    getVoices: () => { name: string; lang: string; default: boolean; localService: boolean }[]
+    isSpeaking: () => boolean
+  }
 }
 
 declare global {

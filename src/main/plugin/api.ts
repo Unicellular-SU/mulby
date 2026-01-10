@@ -13,6 +13,7 @@ import { createPluginSecurity } from './security'
 import { pluginMedia } from './media'
 import { pluginPowerMonitor } from './power'
 import { createPluginTray } from './tray'
+import { pluginNetwork } from './network'
 
 const pluginStorage = new PluginStorage()
 const pluginFilesystem = new PluginFilesystem()
@@ -167,7 +168,10 @@ export function createPluginAPI(pluginName: string) {
       isOnBatteryPower: () => pluginPowerMonitor.isOnBatteryPower(),
       getCurrentThermalState: () => pluginPowerMonitor.getCurrentThermalState()
     },
-    tray: createPluginTray(pluginName)
+    tray: createPluginTray(pluginName),
+    network: {
+      isOnline: () => pluginNetwork.isOnline()
+    }
   }
 }
 

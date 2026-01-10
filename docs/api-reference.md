@@ -1448,3 +1448,169 @@ if (await tray.exists()) {
 ```
 
 **返回值**: `boolean`
+
+## 17. Network API (network)
+
+Network API 提供网络状态监控，支持 macOS、Windows 和 Linux。
+
+### 17.1 isOnline()
+检查当前是否在线。
+
+```javascript
+if (await network.isOnline()) {
+  console.log('网络已连接');
+}
+```
+
+**返回值**: `boolean`
+
+### 17.2 onOnline(callback)
+监听网络恢复事件。
+
+```javascript
+window.intools.network.onOnline(() => {
+  console.log('网络已恢复');
+});
+```
+
+### 17.3 onOffline(callback)
+监听网络断开事件。
+
+```javascript
+window.intools.network.onOffline(() => {
+  console.log('网络已断开');
+});
+```
+
+## 18. Menu API (menu)
+
+Menu API 提供原生右键菜单功能，支持 macOS、Windows 和 Linux。
+
+### 18.1 showContextMenu(items)
+显示上下文菜单。
+
+```javascript
+const selectedId = await menu.showContextMenu([
+  { label: '复制', id: 'copy' },
+  { label: '粘贴', id: 'paste' },
+  { type: 'separator' },
+  { label: '设置', id: 'settings', submenu: [
+    { label: '选项1', id: 'opt1' },
+    { label: '选项2', id: 'opt2' }
+  ]}
+]);
+
+if (selectedId === 'copy') {
+  // 处理复制
+}
+```
+
+**参数** (MenuItemOptions[]):
+- `label` (string) - 菜单项文字
+- `type` ('normal' | 'separator' | 'checkbox' | 'radio', 可选)
+- `checked` (boolean, 可选) - checkbox/radio 选中状态
+- `enabled` (boolean, 可选) - 是否启用，默认 true
+- `id` (string, 可选) - 菜单项标识
+- `submenu` (MenuItemOptions[], 可选) - 子菜单
+
+**返回值**: `string | null` - 选中的菜单项 id，取消返回 null
+
+## 19. Geolocation API (geolocation)
+
+Geolocation API 提供地理位置功能，支持 macOS、Windows 和 Linux。
+
+### 19.1 getAccessStatus()
+获取位置权限状态。
+
+```javascript
+const status = await geolocation.getAccessStatus();
+// macOS 返回实际状态，Windows/Linux 返回 'granted'
+```
+
+**返回值**: `string`
+
+### 19.2 getCurrentPosition()
+获取当前位置。
+
+```javascript
+try {
+  const pos = await geolocation.getCurrentPosition();
+  console.log(`纬度: ${pos.latitude}, 经度: ${pos.longitude}`);
+} catch (err) {
+  console.error('获取位置失败:', err);
+}
+```
+
+**返回值**: `GeolocationPosition`
+
+```typescript
+interface GeolocationPosition {
+  latitude: number      // 纬度
+  longitude: number     // 经度
+  accuracy: number      // 精度（米）
+  altitude?: number     // 海拔
+  altitudeAccuracy?: number
+  heading?: number      // 方向
+  speed?: number        // 速度
+  timestamp: number     // 时间戳
+}
+```
+
+## 20. TTS API (tts)
+
+TTS API 提供语音合成功能，使用 Web Speech API，支持 macOS、Windows 和 Linux。
+
+### 20.1 speak(text, options?)
+朗读文本。
+
+```javascript
+await tts.speak('你好，世界');
+
+// 带选项
+await tts.speak('Hello World', {
+  lang: 'en-US',
+  rate: 1.2,
+  pitch: 1.0,
+  volume: 0.8
+});
+```
+
+**参数**:
+- `text` (string) - 要朗读的文本
+- `options` (可选):
+  - `lang` (string) - 语言代码，如 'zh-CN', 'en-US'
+  - `rate` (number) - 语速 0.1-10，默认 1
+  - `pitch` (number) - 音调 0-2，默认 1
+  - `volume` (number) - 音量 0-1，默认 1
+
+### 20.2 stop()
+停止朗读。
+
+```javascript
+tts.stop();
+```
+
+### 20.3 pause() / resume()
+暂停和恢复朗读。
+
+```javascript
+tts.pause();
+tts.resume();
+```
+
+### 20.4 getVoices()
+获取可用语音列表。
+
+```javascript
+const voices = tts.getVoices();
+// [{ name: 'Samantha', lang: 'en-US', default: true, localService: true }, ...]
+```
+
+### 20.5 isSpeaking()
+检查是否正在朗读。
+
+```javascript
+if (tts.isSpeaking()) {
+  console.log('正在朗读中');
+}
+```
