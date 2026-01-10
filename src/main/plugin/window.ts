@@ -60,7 +60,8 @@ export class PluginWindowManager {
       displayName: plugin.manifest.displayName,
       featureCode,
       input: input || '',
-      uiPath
+      uiPath,
+      preloadPath: join(__dirname, '../preload/index.js')
     })
 
     return true

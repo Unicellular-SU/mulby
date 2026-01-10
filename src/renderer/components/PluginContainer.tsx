@@ -6,6 +6,7 @@ interface PluginInfo {
   featureCode: string
   input: string
   uiPath: string
+  preloadPath: string
 }
 
 interface PluginContainerProps {
@@ -17,12 +18,19 @@ interface PluginContainerProps {
 function PluginContainer({ plugin, theme, onClose }: PluginContainerProps) {
   const webviewRef = useRef<Electron.WebviewTag>(null)
 
-  // 当主题变化时通知 webview
+  // 当 webview 准备好时，发送初始化数据和主题
   useEffect(() => {
     const webview = webviewRef.current
     if (webview) {
       webview.addEventListener('dom-ready', () => {
         webview.send('theme:changed', theme)
+        // 发送插件初始化数据，包含用户输入
+        webview.send('plugin:init', {
+          pluginName: plugin.pluginName,
+          featureCode: plugin.featureCode,
+          input: plugin.input,
+          mode: 'attached'
+        })
       })
     }
   }, [])
@@ -66,6 +74,7 @@ function PluginContainer({ plugin, theme, onClose }: PluginContainerProps) {
         <webview
           ref={webviewRef}
           src={uiUrl}
+          preload={`file://${plugin.preloadPath}`}
           style={{ width: '100%', height: '100%' }}
         />
       </div>

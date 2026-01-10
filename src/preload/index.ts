@@ -60,7 +60,7 @@ contextBridge.exposeInMainWorld('intools', {
   },
 
   // 插件附着事件（主窗口使用）
-  onPluginAttach: (callback: (data: { pluginName: string; displayName: string; featureCode: string; input: string; uiPath: string }) => void) => {
+  onPluginAttach: (callback: (data: { pluginName: string; displayName: string; featureCode: string; input: string; uiPath: string; preloadPath: string }) => void) => {
     ipcRenderer.on('plugin:attach', (_, data) => callback(data))
   },
 

@@ -9,6 +9,7 @@ interface PluginInfo {
   featureCode: string
   input: string
   uiPath: string
+  preloadPath: string
 }
 
 function App() {
