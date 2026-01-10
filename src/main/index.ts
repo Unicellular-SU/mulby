@@ -1,4 +1,4 @@
-import { app, BrowserWindow, globalShortcut } from 'electron'
+import { app, BrowserWindow, globalShortcut, screen } from 'electron'
 import { join } from 'path'
 import { registerAllHandlers } from './ipc'
 import { PluginManager } from './plugin'
@@ -52,6 +52,18 @@ function toggleWindow() {
   if (mainWindow.isVisible()) {
     mainWindow.hide()
   } else {
+    // 获取当前鼠标所在的显示器
+    const cursorPoint = screen.getCursorScreenPoint()
+    const display = screen.getDisplayNearestPoint(cursorPoint)
+    const { width: screenWidth, height: screenHeight } = display.workAreaSize
+    const { x: screenX, y: screenY } = display.workArea
+
+    // 计算窗口位置：水平居中，垂直方向在屏幕 1/5 处
+    const windowBounds = mainWindow.getBounds()
+    const x = screenX + Math.round((screenWidth - windowBounds.width) / 2)
+    const y = screenY + Math.round(screenHeight / 5)
+
+    mainWindow.setPosition(x, y)
     mainWindow.show()
     mainWindow.focus()
   }
