@@ -16,7 +16,7 @@ export function registerAllHandlers(
 ) {
   registerClipboardHandlers()
   registerNotificationHandlers()
-  registerWindowHandlers(getMainWindow, pluginWindowManager)
+  registerWindowHandlers(getMainWindow, pluginWindowManager, themeManager)
   registerPluginHandlers(pluginManager)
   registerThemeHandlers(themeManager)
 }

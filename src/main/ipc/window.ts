@@ -1,9 +1,11 @@
 import { ipcMain, BrowserWindow } from 'electron'
 import { PluginWindowManager } from '../plugin/window'
+import { ThemeManager } from '../theme'
 
 export function registerWindowHandlers(
   getMainWindow: () => BrowserWindow | null,
-  pluginWindowManager: PluginWindowManager
+  pluginWindowManager: PluginWindowManager,
+  themeManager: ThemeManager
 ) {
   ipcMain.on('window:hide', () => {
     const win = getMainWindow()
@@ -82,6 +84,24 @@ export function registerWindowHandlers(
   // 重新加载插件
   ipcMain.on('plugin:reload', (event) => {
     const win = BrowserWindow.fromWebContents(event.sender)
-    win?.webContents.reload()
+    if (win) {
+      // 重载前设置背景色并隐藏窗口内容，避免闪白
+      const isDark = themeManager.getActualTheme() === 'dark'
+      const bgColor = isDark ? '#1e293b' : '#ffffff'
+      win.setBackgroundColor(bgColor)
+      win.setOpacity(0)
+
+      // 监听加载完成事件
+      const onFinishLoad = () => {
+        // 延迟一点再显示，确保页面完全渲染
+        setTimeout(() => {
+          win.setOpacity(1)
+        }, 50)
+        win.webContents.removeListener('did-finish-load', onFinishLoad)
+      }
+      win.webContents.on('did-finish-load', onFinishLoad)
+
+      win.webContents.reload()
+    }
   })
 }

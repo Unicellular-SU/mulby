@@ -1,4 +1,4 @@
-import { useRef, useEffect } from 'react'
+import { useRef, useEffect, useState } from 'react'
 
 interface PluginInfo {
   pluginName: string
@@ -31,8 +31,18 @@ const CloseIcon = () => (
   </svg>
 )
 
+const ReloadIcon = () => (
+  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
+    <path d="M3 3v5h5" />
+    <path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16" />
+    <path d="M16 21h5v-5" />
+  </svg>
+)
+
 function PluginContainer({ plugin, theme, onClose }: PluginContainerProps) {
   const webviewRef = useRef<Electron.WebviewTag>(null)
+  const [isReloading, setIsReloading] = useState(false)
 
   // 当 webview 准备好时，发送初始化数据和主题
   useEffect(() => {
@@ -67,6 +77,19 @@ function PluginContainer({ plugin, theme, onClose }: PluginContainerProps) {
     window.intools.window.detach()
   }
 
+  const handleReload = () => {
+    const webview = webviewRef.current
+    if (webview) {
+      setIsReloading(true)
+      const onFinishLoad = () => {
+        setIsReloading(false)
+        webview.removeEventListener('did-finish-load', onFinishLoad)
+      }
+      webview.addEventListener('did-finish-load', onFinishLoad)
+      webview.reload()
+    }
+  }
+
   const handleClose = () => {
     window.intools.window.close()
     onClose()
@@ -88,6 +111,14 @@ function PluginContainer({ plugin, theme, onClose }: PluginContainerProps) {
         </button>
         <span className="plugin-title">{plugin.displayName}</span>
         <button
+          className="reload-btn"
+          onClick={handleReload}
+          title="重新加载"
+          aria-label="重新加载插件"
+        >
+          <ReloadIcon />
+        </button>
+        <button
           className="close-btn"
           onClick={handleClose}
           title="关闭"
@@ -97,11 +128,25 @@ function PluginContainer({ plugin, theme, onClose }: PluginContainerProps) {
         </button>
       </div>
       <div className="plugin-content">
+        {isReloading && (
+          <div
+            className="reload-overlay"
+            style={{
+              backgroundColor: theme === 'dark' ? '#1e293b' : '#ffffff'
+            }}
+          >
+            <div className="reload-spinner" />
+          </div>
+        )}
         <webview
           ref={webviewRef}
           src={uiUrl}
           preload={`file://${plugin.preloadPath}`}
-          style={{ width: '100%', height: '100%' }}
+          style={{
+            width: '100%',
+            height: '100%',
+            backgroundColor: theme === 'dark' ? '#1e293b' : '#ffffff'
+          }}
         />
       </div>
     </div>

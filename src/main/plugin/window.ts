@@ -144,6 +144,10 @@ export class PluginWindowManager {
     const uiPath = join(plugin.path, plugin.manifest.ui)
     if (!existsSync(uiPath)) return null
 
+    // 根据当前主题设置窗口背景色，避免重载时闪白
+    const isDark = this.themeManager?.getActualTheme() === 'dark'
+    const backgroundColor = isDark ? '#1e293b' : '#ffffff'
+
     const win = new BrowserWindow({
       width: 500,
       height: 400,
@@ -151,6 +155,7 @@ export class PluginWindowManager {
       minHeight: 200,
       show: false,
       frame: false,
+      backgroundColor,
       title: plugin.manifest.displayName,
       webPreferences: {
         preload: join(__dirname, '../preload/index.js'),
