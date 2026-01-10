@@ -168,7 +168,8 @@ export class PluginWindowManager {
 
     win.once('ready-to-show', async () => {
       // 注入自定义标题栏
-      await injectCustomTitleBar(win, plugin.manifest.displayName)
+      const theme = this.themeManager?.getActualTheme() || 'dark'
+      await injectCustomTitleBar(win, plugin.manifest.displayName, theme)
       win.show()
       win.webContents.send('plugin:init', {
         pluginName: plugin.manifest.name,
@@ -197,11 +198,8 @@ export class PluginWindowManager {
         'document.getElementById("intools-titlebar") !== null'
       )
       if (!hasTitleBar) {
-        await injectCustomTitleBar(win, plugin.manifest.displayName)
-        // 重新发送主题
-        if (this.themeManager) {
-          win.webContents.send('theme:changed', this.themeManager.getActualTheme())
-        }
+        const theme = this.themeManager?.getActualTheme() || 'dark'
+        await injectCustomTitleBar(win, plugin.manifest.displayName, theme)
       }
     })
 

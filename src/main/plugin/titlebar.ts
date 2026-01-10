@@ -294,7 +294,8 @@ function applyTheme(theme) {
  */
 export async function injectCustomTitleBar(
   win: BrowserWindow,
-  title: string
+  title: string,
+  theme: 'light' | 'dark' = 'dark'
 ): Promise<void> {
   const css = getTitleBarCSS()
   const html = getTitleBarHTML(title)
@@ -303,10 +304,14 @@ export async function injectCustomTitleBar(
   // 注入 CSS
   await win.webContents.insertCSS(css)
 
-  // 注入 HTML 和 JS
+  // 注入 HTML 和 JS，同时立即应用主题
   const escapedHtml = html.replace(/`/g, '\\`').replace(/\$/g, '\\$')
   await win.webContents.executeJavaScript(`
     (function() {
+      // 立即应用主题类
+      document.documentElement.classList.toggle('dark', '${theme}' === 'dark');
+      document.documentElement.classList.toggle('light', '${theme}' === 'light');
+
       ${js}
       var titleBarHTML = \`${escapedHtml}\`;
       document.body.insertAdjacentHTML('afterbegin', titleBarHTML);
