@@ -13,7 +13,7 @@ function PluginIcon({ icon }: { icon?: SearchResultItem['icon'] }) {
     return (
       <div className="plugin-icon plugin-icon-default">
         <svg viewBox="0 0 24 24" fill="currentColor" width="20" height="20">
-          <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z"/>
+          <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z" />
         </svg>
       </div>
     )
@@ -40,21 +40,41 @@ function PluginList({ query, onResultsChange }: PluginListProps) {
   const [results, setResults] = useState<SearchResultItem[]>([])
   const [selectedIndex, setSelectedIndex] = useState(0)
 
+  // Grid 配置
+  const COLUMNS = 6
+  const MAX_ITEMS = 24 // 4行 × 6列
+
   useEffect(() => {
     loadPlugins()
   }, [query])
 
-  // 键盘导航
+  // 键盘导航 - 支持四向移动
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      const maxIndex = Math.min(results.length, MAX_ITEMS) - 1
+
       switch (e.key) {
         case 'ArrowUp':
           e.preventDefault()
-          setSelectedIndex(i => Math.max(0, i - 1))
+          setSelectedIndex(i => {
+            const newIndex = i - COLUMNS
+            return newIndex >= 0 ? newIndex : i
+          })
           break
         case 'ArrowDown':
           e.preventDefault()
-          setSelectedIndex(i => Math.min(results.length - 1, i + 1))
+          setSelectedIndex(i => {
+            const newIndex = i + COLUMNS
+            return newIndex <= maxIndex ? newIndex : i
+          })
+          break
+        case 'ArrowLeft':
+          e.preventDefault()
+          setSelectedIndex(i => Math.max(0, i - 1))
+          break
+        case 'ArrowRight':
+          e.preventDefault()
+          setSelectedIndex(i => Math.min(maxIndex, i + 1))
           break
         case 'Enter':
           e.preventDefault()
@@ -91,17 +111,24 @@ function PluginList({ query, onResultsChange }: PluginListProps) {
     }
   }
 
+  // 只显示最多 MAX_ITEMS 个结果
+  const displayResults = results.slice(0, MAX_ITEMS)
+
+  // 没有结果时不渲染任何内容
+  if (displayResults.length === 0) {
+    return null
+  }
+
   return (
-    <div className="plugin-list">
-      {results.map((item, index) => (
+    <div className="plugin-grid">
+      {displayResults.map((item, index) => (
         <div
           key={`${item.pluginName}-${item.featureCode}`}
-          className={`plugin-item ${index === selectedIndex ? 'selected' : ''}`}
+          className={`plugin-card ${index === selectedIndex ? 'selected' : ''}`}
           onClick={() => handleRun(item)}
         >
           <PluginIcon icon={item.icon} />
-          <span className="plugin-name">{item.displayName}</span>
-          <span className="plugin-keyword">{item.featureExplain}</span>
+          <span className="plugin-card-name">{item.displayName}</span>
         </div>
       ))}
     </div>

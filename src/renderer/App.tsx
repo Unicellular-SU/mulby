@@ -33,16 +33,22 @@ function App() {
   // 调整窗口高度
   useEffect(() => {
     const SEARCH_BOX_HEIGHT = 62
-    const PLUGIN_ITEM_HEIGHT = 40
     const BORDER_HEIGHT = 1
+    const GRID_GAP = 12
+    const CARD_HEIGHT = 88
+    const GRID_PADDING = 16
+    const COLUMNS = 6
+    const MAX_ITEMS = 24 // 4行 × 6列
 
     let height = SEARCH_BOX_HEIGHT
     if (pluginInfo) {
       height = 700
     } else if (query.length > 0 && resultCount > 0) {
-      // 根据结果数量动态计算高度，最多显示 8 个
-      const visibleCount = Math.min(resultCount, 8)
-      height = SEARCH_BOX_HEIGHT + BORDER_HEIGHT + visibleCount * PLUGIN_ITEM_HEIGHT
+      // 根据结果数量动态计算高度，最多显示 4 行
+      const visibleCount = Math.min(resultCount, MAX_ITEMS)
+      const rows = Math.ceil(visibleCount / COLUMNS)
+      height = SEARCH_BOX_HEIGHT + BORDER_HEIGHT + GRID_PADDING * 2 +
+        rows * CARD_HEIGHT + (rows - 1) * GRID_GAP
     }
     window.intools.window.setSize(680, height)
   }, [query, resultCount, pluginInfo])
