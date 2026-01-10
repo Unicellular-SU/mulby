@@ -454,26 +454,23 @@ window.intools.onThemeChange((theme) => {
 
 ### 7.5 插件中使用主题
 
-#### 方式一：通过 URL 参数获取初始主题
+#### 获取初始主题
 
-插件 UI 加载时，主程序会通过 URL 参数传递当前主题：
+插件 UI 加载时，可通过 URL 参数获取当前主题（仅附着模式）：
 
 ```javascript
-// 在插件 UI 中获取初始主题
 function getInitialTheme() {
   const params = new URLSearchParams(window.location.search);
-  return params.get('theme') || 'light';  // 'light' 或 'dark'
+  return params.get('theme') || 'light';
 }
 ```
 
-#### 方式二：监听主题变化消息
+#### 监听主题变化（推荐）
 
-当主程序主题变化时，会通过 IPC 消息通知插件：
+使用 `window.intools.onThemeChange` 监听主题变化，适用于附着模式和独立窗口模式：
 
 ```javascript
-// 在插件 UI 中监听主题变化
-const { ipcRenderer } = window.require('electron');
-ipcRenderer.on('theme:changed', (_, theme) => {
+window.intools?.onThemeChange?.((theme) => {
   document.documentElement.classList.toggle('dark', theme === 'dark');
 });
 ```
@@ -532,12 +529,9 @@ export default function App() {
 
   // 监听主题变化
   useEffect(() => {
-    const { ipcRenderer } = window.require?.('electron') || {};
-    if (ipcRenderer) {
-      ipcRenderer.on('theme:changed', (_, newTheme: 'light' | 'dark') => {
-        setTheme(newTheme);
-      });
-    }
+    window.intools?.onThemeChange?.((newTheme: 'light' | 'dark') => {
+      setTheme(newTheme);
+    });
   }, []);
 
   return (

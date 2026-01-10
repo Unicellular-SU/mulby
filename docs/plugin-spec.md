@@ -264,10 +264,28 @@ intools create my-plugin
 ```tsx
 import { useEffect, useState } from 'react'
 
+// 获取初始主题
+function getInitialTheme(): 'light' | 'dark' {
+  const params = new URLSearchParams(window.location.search)
+  return (params.get('theme') as 'light' | 'dark') || 'light'
+}
+
 export default function App() {
   const [input, setInput] = useState('')
   const [output, setOutput] = useState('')
+  const [theme, setTheme] = useState<'light' | 'dark'>(getInitialTheme)
 
+  // 应用主题
+  useEffect(() => {
+    document.documentElement.classList.toggle('dark', theme === 'dark')
+  }, [theme])
+
+  // 监听主题变化
+  useEffect(() => {
+    window.intools?.onThemeChange?.((newTheme) => setTheme(newTheme))
+  }, [])
+
+  // 接收插件初始化数据
   useEffect(() => {
     window.intools?.onPluginInit?.((data) => {
       if (data.input) setInput(data.input)
