@@ -5,6 +5,7 @@
   "description": "Base64 编码和解码",
   "main": "main.js",
   "ui": "ui/index.html",
+  "icon": "<svg viewBox=\"0 0 24 24\" fill=\"currentColor\"><path d=\"M12 3L2 12h3v8h6v-6h2v6h6v-8h3L12 3zm0 2.84L18.16 11H17v8h-2v-6H9v6H7v-8H5.84L12 5.84z\"/></svg>",
   "features": [
     {
       "code": "encode",

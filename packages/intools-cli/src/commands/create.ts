@@ -2,6 +2,11 @@ import * as fs from 'fs-extra'
 import * as path from 'path'
 import chalk from 'chalk'
 
+// 获取 CLI 包的 assets 目录路径
+function getAssetsDir(): string {
+  return path.resolve(__dirname, '../../assets')
+}
+
 interface CreateOptions {
   template: 'react' | 'basic'
 }
@@ -42,6 +47,9 @@ async function createBasicProject(targetDir: string, name: string) {
   fs.mkdirSync(targetDir, { recursive: true })
   fs.mkdirSync(path.join(targetDir, 'src'))
 
+  // 复制默认图标
+  copyDefaultIcon(targetDir)
+
   // manifest.json
   const manifest = {
     name,
@@ -49,6 +57,7 @@ async function createBasicProject(targetDir: string, name: string) {
     displayName: name,
     description: '插件描述',
     main: 'dist/main.js',
+    icon: 'icon.png',
     features: [
       {
         code: 'main',
@@ -105,6 +114,9 @@ async function createReactProject(targetDir: string, name: string) {
   fs.mkdirSync(path.join(targetDir, 'src'))
   fs.mkdirSync(path.join(targetDir, 'src/ui'))
 
+  // 0. 复制默认图标
+  copyDefaultIcon(targetDir)
+
   // 1. manifest.json
   createReactManifest(targetDir, name)
 
@@ -135,6 +147,7 @@ function createReactManifest(targetDir: string, name: string) {
     description: '插件描述',
     main: 'dist/main.js',
     ui: 'ui/index.html',
+    icon: 'icon.png',
     features: [
       {
         code: 'main',
@@ -527,4 +540,17 @@ export {}
 `
   fs.writeFileSync(path.join(targetDir, 'src/types/intools.d.ts'), typesDts)
   console.log(chalk.green('  ✓ src/types/intools.d.ts'))
+}
+
+// ============================================
+// 复制默认图标
+// ============================================
+function copyDefaultIcon(targetDir: string) {
+  const defaultIconPath = path.join(getAssetsDir(), 'default-icon.png')
+  const targetIconPath = path.join(targetDir, 'icon.png')
+
+  if (fs.existsSync(defaultIconPath)) {
+    fs.copyFileSync(defaultIconPath, targetIconPath)
+    console.log(chalk.green('  ✓ icon.png'))
+  }
 }
