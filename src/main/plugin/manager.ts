@@ -102,7 +102,7 @@ export class PluginManager {
                 results.push({ plugin, feature, matchType: 'regex' })
                 break
               }
-            } catch {}
+            } catch { }
           }
           if (cmd.type === 'keyword' && cmd.value.toLowerCase().includes(q)) {
             results.push({ plugin, feature, matchType: 'keyword' })
@@ -223,5 +223,22 @@ export class PluginManager {
       const error = err instanceof Error ? err.message : '卸载失败'
       return { success: false, error }
     }
+  }
+
+  // 获取插件 README
+  getReadme(name: string): string | null {
+    const plugin = this.plugins.get(name)
+    if (!plugin) return null
+
+    const readmePath = join(plugin.path, 'README.md')
+    if (existsSync(readmePath)) {
+      try {
+        return require('fs').readFileSync(readmePath, 'utf-8')
+      } catch (err) {
+        console.error(`Failed to read README for plugin ${name}:`, err)
+        return null
+      }
+    }
+    return null
   }
 }

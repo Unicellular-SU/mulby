@@ -62,6 +62,12 @@ async function createArchive(
       archive.directory(uiDir, 'ui')
     }
 
+    // 添加 README.md（如果存在）
+    const readmePath = path.join(cwd, 'README.md')
+    if (fs.existsSync(readmePath)) {
+      archive.file(readmePath, { name: 'README.md' })
+    }
+
     archive.finalize()
   })
 }

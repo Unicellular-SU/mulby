@@ -4,6 +4,7 @@ import { SearchResultItem } from '../../shared/types/electron'
 interface PluginListProps {
   query: string
   onResultsChange?: (count: number) => void
+  onShowDetails?: (pluginName: string) => void
 }
 
 // 插件图标组件
@@ -36,7 +37,7 @@ function PluginIcon({ icon }: { icon?: SearchResultItem['icon'] }) {
   )
 }
 
-function PluginList({ query, onResultsChange }: PluginListProps) {
+function PluginList({ query, onResultsChange, onShowDetails }: PluginListProps) {
   const [results, setResults] = useState<SearchResultItem[]>([])
   const [selectedIndex, setSelectedIndex] = useState(0)
 
@@ -82,6 +83,14 @@ function PluginList({ query, onResultsChange }: PluginListProps) {
             handleRun(results[selectedIndex])
           }
           break
+        case 'i':
+          if (e.metaKey || e.ctrlKey) {
+            e.preventDefault()
+            if (results[selectedIndex]) {
+              onShowDetails?.(results[selectedIndex].pluginName)
+            }
+          }
+          break
         case 'Escape':
           window.intools.window.hide()
           break
@@ -90,7 +99,7 @@ function PluginList({ query, onResultsChange }: PluginListProps) {
 
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [results, selectedIndex])
+  }, [results, selectedIndex, onShowDetails]) // Added onShowDetails to deps
 
   const loadPlugins = async () => {
     const result = await window.intools.plugin.search(query)
@@ -126,6 +135,10 @@ function PluginList({ query, onResultsChange }: PluginListProps) {
           key={`${item.pluginName}-${item.featureCode}`}
           className={`plugin-card ${index === selectedIndex ? 'selected' : ''}`}
           onClick={() => handleRun(item)}
+          onContextMenu={(e) => {
+            e.preventDefault()
+            onShowDetails?.(item.pluginName)
+          }}
         >
           <PluginIcon icon={item.icon} />
           <span className="plugin-card-name">{item.displayName}</span>

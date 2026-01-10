@@ -73,6 +73,7 @@ export interface ElectronAPI {
     enable: (name: string) => Promise<{ success: boolean; error?: string }>
     disable: (name: string) => Promise<{ success: boolean; error?: string }>
     uninstall: (name: string) => Promise<{ success: boolean; error?: string }>
+    getReadme: (name: string) => Promise<string | null>
   }
   onPluginInit: (callback: (data: { pluginName: string; featureCode: string; input: string; mode?: string }) => void) => void
   onPluginAttach: (callback: (data: { pluginName: string; displayName: string; featureCode: string; input: string; uiPath: string; preloadPath: string }) => void) => void
@@ -85,4 +86,4 @@ declare global {
   }
 }
 
-export {}
+export { }

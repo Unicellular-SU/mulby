@@ -55,4 +55,9 @@ export function registerPluginHandlers(manager: PluginManager) {
   ipcMain.handle('plugin:uninstall', async (_, name: string) => {
     return manager.uninstall(name)
   })
+
+  // 获取插件文档
+  ipcMain.handle('plugin:getReadme', async (_, name: string) => {
+    return manager.getReadme(name)
+  })
 }

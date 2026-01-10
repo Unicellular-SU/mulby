@@ -34,6 +34,10 @@ body {
   -webkit-app-region: drag;
 }
 
+.no-drag {
+  -webkit-app-region: no-drag;
+}
+
 .app {
   background: var(--bg-primary);
   border-radius: 12px;

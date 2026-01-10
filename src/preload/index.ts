@@ -61,7 +61,8 @@ contextBridge.exposeInMainWorld('intools', {
     install: (filePath: string) => ipcRenderer.invoke('plugin:install', filePath),
     enable: (name: string) => ipcRenderer.invoke('plugin:enable', name),
     disable: (name: string) => ipcRenderer.invoke('plugin:disable', name),
-    uninstall: (name: string) => ipcRenderer.invoke('plugin:uninstall', name)
+    uninstall: (name: string) => ipcRenderer.invoke('plugin:uninstall', name),
+    getReadme: (name: string) => ipcRenderer.invoke('plugin:getReadme', name)
   },
 
   // 插件窗口事件

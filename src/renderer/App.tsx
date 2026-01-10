@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import SearchInput from './components/SearchInput'
 import PluginList from './components/PluginList'
 import PluginContainer from './components/PluginContainer'
+import PluginDetails from './components/PluginDetails'
 
 interface PluginInfo {
   pluginName: string
@@ -16,6 +17,7 @@ function App() {
   const [query, setQuery] = useState('')
   const [resultCount, setResultCount] = useState(0)
   const [pluginInfo, setPluginInfo] = useState<PluginInfo | null>(null)
+  const [detailsPluginName, setDetailsPluginName] = useState<string | null>(null)
   const [isDragging, setIsDragging] = useState(false)
   const [theme, setTheme] = useState<'light' | 'dark'>('light')
 
@@ -41,7 +43,7 @@ function App() {
     const MAX_ITEMS = 24 // 4行 × 6列
 
     let height = SEARCH_BOX_HEIGHT
-    if (pluginInfo) {
+    if (pluginInfo || detailsPluginName) {
       height = 700
     } else if (query.length > 0 && resultCount > 0) {
       // 根据结果数量动态计算高度，最多显示 4 行
@@ -51,7 +53,7 @@ function App() {
         rows * CARD_HEIGHT + (rows - 1) * GRID_GAP
     }
     window.intools.window.setSize(680, height)
-  }, [query, resultCount, pluginInfo])
+  }, [query, resultCount, pluginInfo, detailsPluginName])
 
   // 监听插件附着事件
   useEffect(() => {
@@ -73,6 +75,7 @@ function App() {
     setQuery(value)
     if (value.length === 0) {
       setResultCount(0)
+      setDetailsPluginName(null)
     }
   }
 
@@ -97,6 +100,17 @@ function App() {
     setQuery('')
   }
 
+  if (detailsPluginName) {
+    return (
+      <div className={`app ${isDragging ? 'dragging' : ''}`}>
+        <PluginDetails
+          pluginName={detailsPluginName}
+          onBack={() => setDetailsPluginName(null)}
+        />
+      </div>
+    )
+  }
+
   return (
     <div
       className={`app ${isDragging ? 'dragging' : ''}`}
@@ -106,7 +120,11 @@ function App() {
     >
       <SearchInput value={query} onChange={handleQueryChange} />
       {query.length > 0 && !pluginInfo && (
-        <PluginList query={query} onResultsChange={setResultCount} />
+        <PluginList
+          query={query}
+          onResultsChange={setResultCount}
+          onShowDetails={setDetailsPluginName}
+        />
       )}
       {pluginInfo && <PluginContainer plugin={pluginInfo} theme={theme} onClose={handlePluginClose} />}
       {isDragging && <div className="drop-hint">拖放 .inplugin 文件安装插件</div>}
