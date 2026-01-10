@@ -44,9 +44,13 @@ body {
 .search-box {
   display: flex;
   align-items: center;
-  padding: 12px 16px;
+  padding: 14px 18px;
   gap: 12px;
   -webkit-app-region: drag;
+  background: var(--bg-primary);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  transition: background-color 0.2s ease-out;
 }
 
 .search-icon {
@@ -60,14 +64,21 @@ body {
   flex: 1;
   border: none;
   outline: none;
-  font-size: 18px;
+  font-size: 17px;
+  font-weight: 400;
   background: transparent;
   color: var(--text-primary);
   -webkit-app-region: no-drag;
+  transition: color 0.2s ease-out;
 }
 
 .search-input::placeholder {
   color: var(--text-secondary);
+  opacity: 0.8;
+}
+
+.search-input:focus::placeholder {
+  opacity: 0.5;
 }
 
 .plugin-list {
@@ -115,9 +126,12 @@ body {
 .plugin-header {
   display: flex;
   align-items: center;
-  padding: 8px 12px;
+  padding: 10px 14px;
   background: var(--bg-secondary);
-  gap: 8px;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border-bottom: 1px solid var(--border);
+  gap: 10px;
 }
 
 .plugin-title {
@@ -128,33 +142,50 @@ body {
 }
 
 .detach-btn {
-  padding: 4px 8px;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 10px;
   font-size: 12px;
+  font-weight: 500;
   background: var(--accent);
   color: white;
   border: none;
-  border-radius: 4px;
+  border-radius: 6px;
   cursor: pointer;
+  transition: all 0.2s ease-out;
 }
 
 .detach-btn:hover {
-  opacity: 0.9;
+  filter: brightness(1.1);
+  transform: translateY(-1px);
+}
+
+.detach-btn:active {
+  transform: translateY(0);
 }
 
 .close-btn {
-  width: 24px;
-  height: 24px;
-  font-size: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
   background: transparent;
   color: var(--text-secondary);
   border: none;
-  border-radius: 4px;
+  border-radius: 6px;
   cursor: pointer;
+  transition: all 0.2s ease-out;
 }
 
 .close-btn:hover {
-  background: rgba(239, 68, 68, 0.1);
+  background: rgba(239, 68, 68, 0.15);
   color: #ef4444;
+}
+
+.close-btn:active {
+  background: rgba(239, 68, 68, 0.25);
 }
 
 .plugin-content {
@@ -165,4 +196,26 @@ body {
 .plugin-content webview {
   width: 100%;
   height: 100%;
+}
+
+/* Focus states for accessibility */
+.detach-btn:focus-visible,
+.close-btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* Reduced motion support */
+@media (prefers-reduced-motion: reduce) {
+  .detach-btn,
+  .close-btn,
+  .search-input,
+  .search-box,
+  .plugin-item {
+    transition: none;
+  }
+
+  .detach-btn:hover {
+    transform: none;
+  }
 }

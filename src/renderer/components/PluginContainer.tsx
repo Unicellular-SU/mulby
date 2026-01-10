@@ -15,6 +15,22 @@ interface PluginContainerProps {
   onClose: () => void
 }
 
+// SVG Icons - Using Lucide-style icons
+const ExternalLinkIcon = () => (
+  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
+    <polyline points="15 3 21 3 21 9" />
+    <line x1="10" y1="14" x2="21" y2="3" />
+  </svg>
+)
+
+const CloseIcon = () => (
+  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <line x1="18" y1="6" x2="6" y2="18" />
+    <line x1="6" y1="6" x2="18" y2="18" />
+  </svg>
+)
+
 function PluginContainer({ plugin, theme, onClose }: PluginContainerProps) {
   const webviewRef = useRef<Electron.WebviewTag>(null)
 
@@ -62,12 +78,23 @@ function PluginContainer({ plugin, theme, onClose }: PluginContainerProps) {
   return (
     <div className="plugin-container">
       <div className="plugin-header">
-        <button className="detach-btn" onClick={handleDetach} title="独立窗口">
-          📌 独立
+        <button
+          className="detach-btn"
+          onClick={handleDetach}
+          title="独立窗口"
+          aria-label="在独立窗口中打开"
+        >
+          <ExternalLinkIcon />
+          <span>独立</span>
         </button>
         <span className="plugin-title">{plugin.displayName}</span>
-        <button className="close-btn" onClick={handleClose} title="关闭">
-          ×
+        <button
+          className="close-btn"
+          onClick={handleClose}
+          title="关闭"
+          aria-label="关闭插件"
+        >
+          <CloseIcon />
         </button>
       </div>
       <div className="plugin-content">
