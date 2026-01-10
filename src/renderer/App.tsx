@@ -35,7 +35,7 @@ function App() {
     const SEARCH_BOX_HEIGHT = 62
     const BORDER_HEIGHT = 1
     const GRID_GAP = 12
-    const CARD_HEIGHT = 88
+    const CARD_HEIGHT = 100 // 图标40 + 名称14 + explain12 + padding24 + gap6*2
     const GRID_PADDING = 16
     const COLUMNS = 6
     const MAX_ITEMS = 24 // 4行 × 6列

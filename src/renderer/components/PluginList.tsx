@@ -129,6 +129,7 @@ function PluginList({ query, onResultsChange }: PluginListProps) {
         >
           <PluginIcon icon={item.icon} />
           <span className="plugin-card-name">{item.displayName}</span>
+          <span className="plugin-card-explain">{item.featureExplain}</span>
         </div>
       ))}
     </div>
