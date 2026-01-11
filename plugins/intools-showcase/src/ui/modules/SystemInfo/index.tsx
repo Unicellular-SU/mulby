@@ -33,6 +33,7 @@ interface Position {
 }
 
 export function SystemInfoModule() {
+    console.log('[SystemInfo] Render')
     const { system, power, network, geolocation } = useIntools()
     const notify = useNotification()
 
@@ -47,49 +48,65 @@ export function SystemInfoModule() {
     const [loading, setLoading] = useState(true)
 
     const loadData = useCallback(async () => {
+        console.log('[SystemInfo] loadData start')
         setLoading(true)
         try {
             // System Info
+            console.log('[SystemInfo] fetching system info...')
             const sysInfo = await system.getSystemInfo()
+            console.log('[SystemInfo] got system info', sysInfo)
             if (sysInfo) setSystemInfo(sysInfo)
 
             // App Info
+            console.log('[SystemInfo] fetching app info...')
             const app = await system.getAppInfo()
+            console.log('[SystemInfo] got app info', app)
             if (app) setAppInfo(app)
 
             // System Paths
+            console.log('[SystemInfo] fetching paths...')
             const pathNames: ('desktop' | 'downloads' | 'documents' | 'pictures' | 'music' | 'videos' | 'temp')[] = ['desktop', 'downloads', 'documents', 'pictures', 'music', 'videos', 'temp']
             const pathResults: Record<string, string> = {}
             for (const name of pathNames) {
                 const path = await system.getPath(name)
                 if (path) pathResults[name] = path
             }
+            console.log('[SystemInfo] got paths', pathResults)
             setPaths(pathResults)
 
             // Network Status
+            console.log('[SystemInfo] fetching network status...')
             const online = await network.isOnline()
+            console.log('[SystemInfo] got online status', online)
             setIsOnline(online ?? null)
 
             // Power Status
+            console.log('[SystemInfo] fetching power status...')
             const battery = await power.isOnBatteryPower()
+            console.log('[SystemInfo] got battery status', battery)
             setIsOnBattery(battery ?? null)
 
             const thermal = await power.getCurrentThermalState()
+            console.log('[SystemInfo] got thermal state', thermal)
             setThermalState(thermal ?? null)
 
             // Idle Time
             const idle = await power.getSystemIdleTime()
+            console.log('[SystemInfo] got idle time', idle)
             setIdleTime(idle ?? null)
 
         } catch (error) {
+            console.error('[SystemInfo] Error loading data:', error)
             notify.error('加载系统信息失败')
             console.error(error)
         } finally {
+            console.log('[SystemInfo] loadData finished')
             setLoading(false)
         }
     }, [system, power, network, notify])
 
     useEffect(() => {
+        console.log('[SystemInfo] Effect trigger loadData')
         loadData()
     }, [loadData])
 

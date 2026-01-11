@@ -171,6 +171,8 @@ export class PluginWindowManager {
       // 注入自定义标题栏
       await injectCustomTitleBar(win, plugin.manifest.displayName, currentTheme)
       win.show()
+      // TODO: 自动开启开发者工具，后面要根据开关启用和关闭
+      win.webContents.openDevTools({ mode: 'detach' })
       win.webContents.send('plugin:init', {
         pluginName: plugin.manifest.name,
         featureCode,

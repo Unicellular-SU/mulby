@@ -7,13 +7,6 @@ interface SidebarProps {
 
 const modules = [
     { id: 'sysinfo', icon: '📊', label: '系统信息' },
-    { id: 'clipboard', icon: '📋', label: '剪贴板' },
-    { id: 'files', icon: '📁', label: '文件管理' },
-    { id: 'network', icon: '🌐', label: '网络与HTTP' },
-    { id: 'screen', icon: '🖥️', label: '屏幕与捕获' },
-    { id: 'media', icon: '🔊', label: '媒体与音频' },
-    { id: 'settings', icon: '⚙️', label: '高级设置' },
-    { id: 'security', icon: '🔐', label: '安全与存储' },
 ]
 
 export function Sidebar({ activeModule, onModuleChange }: SidebarProps) {

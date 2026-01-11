@@ -49,6 +49,8 @@ function PluginContainer({ plugin, theme, onClose }: PluginContainerProps) {
     const webview = webviewRef.current
     if (webview) {
       webview.addEventListener('dom-ready', () => {
+        // TODO: 自动开启开发者工具，后面要根据开关启用和关闭
+        webview.openDevTools()
         webview.send('theme:changed', theme)
         // 发送插件初始化数据，包含用户输入
         webview.send('plugin:init', {

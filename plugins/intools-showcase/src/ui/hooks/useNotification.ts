@@ -1,4 +1,4 @@
-import { useCallback } from 'react'
+import { useCallback, useMemo } from 'react'
 
 type NotificationType = 'info' | 'success' | 'warning' | 'error'
 
@@ -26,11 +26,11 @@ export function useNotification() {
         show(message, 'info')
     }, [show])
 
-    return {
+    return useMemo(() => ({
         show,
         success,
         error,
         warning,
         info,
-    }
+    }), [show, success, error, warning, info])
 }

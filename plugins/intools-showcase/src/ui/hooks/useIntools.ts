@@ -1,8 +1,10 @@
+import { useMemo } from 'react'
+
 /**
  * InTools API Hook - 统一访问各 API
  */
 export function useIntools() {
-    return {
+    return useMemo(() => ({
         // Clipboard API
         clipboard: {
             readText: () => window.intools?.clipboard?.readText(),
@@ -193,5 +195,5 @@ export function useIntools() {
             set: (mode: 'light' | 'dark' | 'system') => window.intools?.theme?.set(mode),
             getActual: () => window.intools?.theme?.getActual(),
         },
-    }
+    }), [])
 }
