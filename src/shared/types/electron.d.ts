@@ -162,7 +162,7 @@ export interface ElectronAPI {
     getReadme: (name: string) => Promise<string | null>
   }
   onPluginInit: (callback: (data: { pluginName: string; featureCode: string; input: string; mode?: string }) => void) => void
-  onPluginAttach: (callback: (data: { pluginName: string; displayName: string; featureCode: string; input: string; uiPath: string; preloadPath: string }) => void) => void
+  onPluginAttach: (callback: (data: { pluginName: string; displayName: string; featureCode: string; input: string; mode: 'panel' }) => void) => void
   onPluginDetached: (callback: () => void) => void
   screen: {
     getAllDisplays: () => Promise<DisplayInfo[]>

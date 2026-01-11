@@ -1,23 +1,21 @@
 import { useState, useEffect } from 'react'
 import SearchInput from './components/SearchInput'
 import PluginList from './components/PluginList'
-import PluginContainer from './components/PluginContainer'
 import PluginDetails from './components/PluginDetails'
 
+// 插件附着信息（Panel 模式）
 interface PluginInfo {
   pluginName: string
   displayName: string
   featureCode: string
   input: string
-  uiPath: string
-  preloadPath: string
-  mode?: 'panel' | 'webview' // Panel 模式不需要渲染 WebView
+  mode: 'panel'
 }
 
 function App() {
   const [query, setQuery] = useState('')
   const [resultCount, setResultCount] = useState(0)
-  const [pluginInfo, setPluginInfo] = useState<PluginInfo | null>(null)
+  const [pluginOpen, setPluginOpen] = useState(false) // 仅用于跟踪插件是否打开
   const [detailsPluginName, setDetailsPluginName] = useState<string | null>(null)
   const [isDragging, setIsDragging] = useState(false)
   const [theme, setTheme] = useState<'light' | 'dark'>('light')
@@ -45,12 +43,12 @@ function App() {
 
     let height = SEARCH_BOX_HEIGHT
 
-    // Panel 模式：插件 UI 在独立窗口中，主窗口只保持搜索框高度
-    if (pluginInfo && pluginInfo.mode === 'panel') {
-      height = SEARCH_BOX_HEIGHT
-    } else if (pluginInfo || detailsPluginName) {
-      // WebView 模式：插件 UI 嵌入主窗口
+    if (detailsPluginName) {
+      // 插件详情页
       height = 700
+    } else if (pluginOpen) {
+      // 插件面板打开时，主窗口只保持搜索框高度（插件 UI 在独立的 Panel 窗口中）
+      height = SEARCH_BOX_HEIGHT
     } else if (query.length > 0 && resultCount > 0) {
       // 根据结果数量动态计算高度，最多显示 4 行
       const visibleCount = Math.min(resultCount, MAX_ITEMS)
@@ -59,24 +57,24 @@ function App() {
         rows * CARD_HEIGHT + (rows - 1) * GRID_GAP
     }
     window.intools.window.setSize(680, height)
-  }, [query, resultCount, pluginInfo, detailsPluginName])
+  }, [query, resultCount, pluginOpen, detailsPluginName])
 
   // 监听插件附着事件
   useEffect(() => {
-    window.intools.onPluginAttach((data) => {
-      setPluginInfo(data)
+    window.intools.onPluginAttach((_data: PluginInfo) => {
+      setPluginOpen(true)
     })
 
     window.intools.onPluginDetached(() => {
-      setPluginInfo(null)
+      setPluginOpen(false)
     })
   }, [])
 
   const handleQueryChange = (value: string) => {
     // 如果有附着的插件，先关闭它
-    if (pluginInfo) {
+    if (pluginOpen) {
       window.intools.window.close()
-      setPluginInfo(null)
+      setPluginOpen(false)
     }
     setQuery(value)
     if (value.length === 0) {
@@ -101,11 +99,6 @@ function App() {
     }
   }
 
-  const handlePluginClose = () => {
-    setPluginInfo(null)
-    setQuery('')
-  }
-
   if (detailsPluginName) {
     return (
       <div className={`app ${isDragging ? 'dragging' : ''}`}>
@@ -125,16 +118,12 @@ function App() {
       onDrop={handleDrop}
     >
       <SearchInput value={query} onChange={handleQueryChange} />
-      {query.length > 0 && !pluginInfo && (
+      {query.length > 0 && !pluginOpen && (
         <PluginList
           query={query}
           onResultsChange={setResultCount}
           onShowDetails={setDetailsPluginName}
         />
-      )}
-      {/* 只在 WebView 模式下渲染 PluginContainer（Panel 模式有独立窗口） */}
-      {pluginInfo && pluginInfo.mode !== 'panel' && pluginInfo.uiPath && (
-        <PluginContainer plugin={pluginInfo} theme={theme} onClose={handlePluginClose} />
       )}
       {isDragging && <div className="drop-hint">拖放 .inplugin 文件安装插件</div>}
     </div>

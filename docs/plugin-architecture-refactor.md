@@ -17,9 +17,10 @@
 | 决策项 | 选择 | 说明 |
 |--------|------|------|
 | 模式转换触发 | 点击"弹出"按钮 | 不支持拖拽自动升级 |
-| WebView 回退 | ✅ 保留 | 作为 fallback 方案 |
+| WebView 回退 | ❌ 已移除 | 完全使用 Panel 模式 |
 | 面板默认高度 | 550px | 可根据内容调整 |
 | 窗口跟随方式 | 最佳实践 | 保证移动时无割裂感 |
+| 工具栏设计 | Shadow DOM | 样式完全隔离，不受插件影响 |
 
 ---
 
@@ -104,17 +105,16 @@ const panelConfig = {
 
 | 文件路径 | 变更内容 |
 |----------|----------|
-| `src/main/plugin/window.ts` | 重构为统一窗口管理，集成 Panel 模式 |
-| `src/main/index.ts` | 更新窗口初始化逻辑 |
-| `src/renderer/App.tsx` | 移除 webview 渲染逻辑（保留 fallback） |
-| `src/renderer/components/PluginContainer.tsx` | 保留作为 fallback |
-| `src/preload/index.ts` | 添加速率限制包装 |
+| `src/main/plugin/window.ts` | 重构为统一窗口管理，移除 WebView 模式 |
+| `src/renderer/App.tsx` | 移除 WebView/PluginContainer 渲染逻辑 |
+| `src/shared/types/electron.d.ts` | 更新 onPluginAttach 类型定义 |
+| `src/preload/index.ts` | 添加速率限制包装（待完成） |
 
-### 保留文件 (Fallback)
+### 删除文件
 
 | 文件路径 | 说明 |
 |----------|------|
-| `src/renderer/components/PluginContainer.tsx` | WebView 容器，作为回退方案 |
+| `src/renderer/components/PluginContainer.tsx` | WebView 容器，已不再需要 |
 
 ---
 
@@ -129,14 +129,15 @@ const panelConfig = {
 | 实现 Panel → Window 转换 | ✅ 已完成 | 2026-01-11 |
 | 测试崩溃隔离效果 | ⬜ 待测试 | |
 
-### 第二阶段：集成与 Fallback (预计 1-2 天)
+### 第二阶段：移除 WebView 模式 (已完成)
 
 | 任务 | 状态 | 完成日期 |
 |------|------|----------|
-| 更新 `PluginWindowManager` | ⬜ 待开始 | |
-| 添加 Panel/WebView 切换逻辑 | ⬜ 待开始 | |
-| 更新 App.tsx 渲染逻辑 | ⬜ 待开始 | |
-| 保留 WebView fallback | ⬜ 待开始 | |
+| 更新 `PluginWindowManager` | ✅ 已完成 | 2026-01-11 |
+| 移除 WebView 模式代码 | ✅ 已完成 | 2026-01-11 |
+| 更新 App.tsx 渲染逻辑 | ✅ 已完成 | 2026-01-11 |
+| 删除 PluginContainer.tsx | ✅ 已完成 | 2026-01-11 |
+| 更新类型定义 | ✅ 已完成 | 2026-01-11 |
 
 ### 第三阶段：UtilityProcess 后端 (预计 3-4 天)
 
@@ -164,7 +165,7 @@ const panelConfig = {
 1. **面板跟随**: 移动搜索框，面板无缝跟随
 2. **模式转换**: 点击弹出按钮，面板变为独立窗口
 3. **崩溃隔离**: 插件崩溃不影响主窗口
-4. **Fallback**: WebView 模式正常工作
+4. **工具栏隔离**: Shadow DOM 确保工具栏样式不受插件影响
 
 ### 性能测试
 
@@ -186,6 +187,8 @@ const panelConfig = {
 |------|------|----------|
 | 2026-01-11 | v1.0 | 初始设计文档创建 |
 | 2026-01-11 | v1.1 | 完成 Phase 1: 创建 PluginPanelWindow 类，实现位置同步和模式转换 |
+| 2026-01-11 | v1.2 | 优化工具栏: 移到底部中央，使用 Shadow DOM 隔离样式 |
+| 2026-01-11 | v1.3 | 完成 Phase 2: 完全移除 WebView 模式，统一使用 Panel 窗口 |
 
 ---
 
