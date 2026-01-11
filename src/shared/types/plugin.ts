@@ -61,6 +61,7 @@ export interface PluginFeature {
 
 // 插件清单
 export interface PluginManifest {
+  id?: string  // 唯一标识符（推荐格式：@scope/name 或 com.example.name）
   name: string
   version: string
   displayName: string
@@ -73,6 +74,7 @@ export interface PluginManifest {
 
 // 插件实例
 export interface Plugin {
+  id: string  // 解析后的唯一标识符（优先使用 manifest.id，否则使用 manifest.name）
   manifest: PluginManifest
   path: string
   enabled: boolean

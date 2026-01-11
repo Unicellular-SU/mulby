@@ -7,6 +7,7 @@ export function registerPluginHandlers(manager: PluginManager) {
   // 获取所有插件
   ipcMain.handle('plugin:getAll', () => {
     return manager.getAll().map(p => ({
+      id: p.id,
       name: p.manifest.name,
       displayName: p.manifest.displayName,
       description: p.manifest.description,
@@ -18,6 +19,7 @@ export function registerPluginHandlers(manager: PluginManager) {
   // 搜索插件（返回匹配的功能入口）
   ipcMain.handle('plugin:search', (_, query: string) => {
     return manager.search(query).map(result => ({
+      pluginId: result.plugin.id,
       pluginName: result.plugin.manifest.name,
       displayName: result.plugin.manifest.displayName,
       featureCode: result.feature.code,

@@ -124,7 +124,7 @@ export class PluginWindowManager {
 
     // 通知渲染进程插件已打开（用于隐藏列表和调整窗口高度）
     this.mainWindow?.webContents.send('plugin:attach', {
-      pluginName: plugin.manifest.name,
+      pluginName: plugin.id,
       displayName: plugin.manifest.displayName,
       featureCode,
       input: input || '',
@@ -227,7 +227,7 @@ export class PluginWindowManager {
       // TODO: 自动开启开发者工具，后面要根据开关启用和关闭
       win.webContents.openDevTools({ mode: 'detach' })
       win.webContents.send('plugin:init', {
-        pluginName: plugin.manifest.name,
+        pluginName: plugin.id,
         featureCode,
         input: input || '',
         mode: 'detached'

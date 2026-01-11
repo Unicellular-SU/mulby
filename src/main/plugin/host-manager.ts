@@ -74,7 +74,7 @@ export class PluginHostManager extends EventEmitter {
    * 为插件创建 Host 进程
    */
   async createHost(plugin: Plugin): Promise<boolean> {
-    const pluginName = plugin.manifest.name
+    const pluginName = plugin.id
 
     // 如果已存在，先销毁
     if (this.hosts.has(pluginName)) {
@@ -191,7 +191,7 @@ export class PluginHostManager extends EventEmitter {
     const [namespace, method] = api.split('.')
 
     try {
-      const pluginApi = createPluginAPI(plugin.manifest.name)
+      const pluginApi = createPluginAPI(plugin.id)
       const apiNamespace = pluginApi[namespace as keyof typeof pluginApi]
 
       if (!apiNamespace || typeof apiNamespace !== 'object') {
@@ -310,7 +310,7 @@ export class PluginHostManager extends EventEmitter {
    * 初始化插件
    */
   async initPlugin(plugin: Plugin): Promise<boolean> {
-    const pluginName = plugin.manifest.name
+    const pluginName = plugin.id
 
     // 确保 Host 存在
     let host = this.hosts.get(pluginName)
@@ -327,7 +327,7 @@ export class PluginHostManager extends EventEmitter {
         id: generateRequestId(),
         type: 'init',
         payload: {
-          pluginName: plugin.manifest.name,
+          pluginName: plugin.id,
           pluginPath: plugin.path,
           mainFile: plugin.manifest.main
         }
@@ -343,7 +343,7 @@ export class PluginHostManager extends EventEmitter {
    * 执行插件
    */
   async runPlugin(plugin: Plugin, featureCode: string, input: string): Promise<void> {
-    const pluginName = plugin.manifest.name
+    const pluginName = plugin.id
 
     // 确保插件已初始化
     if (!this.hosts.has(pluginName)) {
@@ -367,7 +367,7 @@ export class PluginHostManager extends EventEmitter {
     plugin: Plugin,
     hookName: 'onLoad' | 'onUnload' | 'onEnable' | 'onDisable'
   ): Promise<void> {
-    const pluginName = plugin.manifest.name
+    const pluginName = plugin.id
 
     // 确保插件已初始化
     if (!this.hosts.has(pluginName)) {

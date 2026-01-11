@@ -49,7 +49,11 @@ export class PluginLoader {
 
       const resolvedIcon = this.resolveIcon(manifest.icon, pluginPath)
 
+      // 解析插件 ID：优先使用 manifest.id，否则使用 manifest.name
+      const id = manifest.id || manifest.name
+
       return {
+        id,
         manifest,
         path: pluginPath,
         enabled: true,

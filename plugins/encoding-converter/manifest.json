@@ -1,4 +1,5 @@
 {
+  "id": "@intools/encoding-converter",
   "name": "encoding-converter",
   "version": "1.0.0",
   "displayName": "Encoding Converter",

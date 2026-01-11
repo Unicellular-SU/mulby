@@ -1,4 +1,5 @@
 {
+  "id": "@intools/showcase",
   "name": "intools-showcase",
   "version": "1.0.0",
   "displayName": "InTools 功能展示",

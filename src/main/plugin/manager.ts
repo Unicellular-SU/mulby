@@ -51,11 +51,23 @@ export class PluginManager {
       const loader = new PluginLoader(dir)
       const plugins = loader.loadAll()
       for (const plugin of plugins) {
+        // 检测 ID 冲突
+        if (this.plugins.has(plugin.id)) {
+          const existing = this.plugins.get(plugin.id)!
+          console.warn(
+            `[PluginManager] ID conflict detected: "${plugin.id}"\n` +
+            `  - Existing: ${existing.path}\n` +
+            `  - Skipped:  ${plugin.path}\n` +
+            `  Consider adding unique "id" field to manifest.json`
+          )
+          continue  // 跳过冲突的插件
+        }
+
         // 应用持久化的状态
-        const state = this.stateManager.getPluginState(plugin.manifest.name)
+        const state = this.stateManager.getPluginState(plugin.id)
         plugin.enabled = state.enabled
 
-        this.plugins.set(plugin.manifest.name, plugin)
+        this.plugins.set(plugin.id, plugin)
         // 注意：不在这里调用 onLoad 钩子
         // UtilityProcess 采用懒加载，只有在插件首次运行时才创建
       }
@@ -159,10 +171,10 @@ export class PluginManager {
 
   // 获取或创建 PluginRunner
   private getRunner(plugin: Plugin): PluginRunner {
-    let runner = this.runners.get(plugin.manifest.name)
+    let runner = this.runners.get(plugin.id)
     if (!runner) {
       runner = new PluginRunner(plugin)
-      this.runners.set(plugin.manifest.name, runner)
+      this.runners.set(plugin.id, runner)
     }
     return runner
   }
@@ -177,7 +189,7 @@ export class PluginManager {
         await runner.callHook(hookName)
       }
     } catch (err) {
-      console.error(`Failed to call ${hookName} for plugin ${plugin.manifest.name}:`, err)
+      console.error(`Failed to call ${hookName} for plugin ${plugin.id}:`, err)
     }
   }
 

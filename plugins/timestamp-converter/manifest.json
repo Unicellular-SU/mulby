@@ -1,4 +1,5 @@
 {
+  "id": "@intools/timestamp-converter",
   "name": "timestamp-converter",
   "version": "1.0.0",
   "displayName": "时间戳转换",

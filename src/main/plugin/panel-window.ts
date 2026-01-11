@@ -300,7 +300,7 @@ export class PluginPanelWindow {
 
             // 发送初始化数据
             this.panelWindow.webContents.send('plugin:init', {
-                pluginName: plugin.manifest.name,
+                pluginName: plugin.id,
                 featureCode,
                 input,
                 mode: 'panel'
@@ -489,7 +489,7 @@ export class PluginPanelWindow {
 
             // 发送初始化数据（模式变更为 detached）
             independentWindow.webContents.send('plugin:init', {
-                pluginName: plugin.manifest.name,
+                pluginName: plugin.id,
                 featureCode,
                 input,
                 mode: 'detached'

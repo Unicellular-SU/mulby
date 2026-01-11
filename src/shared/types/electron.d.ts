@@ -8,6 +8,7 @@ export interface FileInfo {
 
 // 搜索结果项（功能入口）
 export interface SearchResultItem {
+  pluginId: string
   pluginName: string
   displayName: string
   featureCode: string
@@ -20,6 +21,7 @@ export interface SearchResultItem {
 }
 
 export interface PluginInfo {
+  id: string
   name: string
   displayName: string
   description: string

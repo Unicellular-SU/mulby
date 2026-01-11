@@ -1,4 +1,5 @@
 {
+  "id": "@intools/color-converter",
   "name": "color-converter",
   "version": "1.0.0",
   "displayName": "颜色转换器",

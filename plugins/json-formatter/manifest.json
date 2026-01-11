@@ -1,4 +1,5 @@
 {
+  "id": "@intools/json-formatter",
   "name": "json-formatter",
   "version": "1.0.0",
   "displayName": "JSON 工具箱",

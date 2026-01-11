@@ -109,7 +109,7 @@ function PluginList({ query, onResultsChange, onShowDetails }: PluginListProps) 
   }
 
   const handleRun = async (item: SearchResultItem) => {
-    const result = await window.intools.plugin.run(item.pluginName, item.featureCode, query)
+    const result = await window.intools.plugin.run(item.pluginId, item.featureCode, query)
     if (result.success) {
       // 有 UI 的插件不隐藏窗口，会显示在附着区域
       if (!result.hasUI) {
