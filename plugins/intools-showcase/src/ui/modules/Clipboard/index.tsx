@@ -25,18 +25,18 @@ export function ClipboardModule() {
     const readClipboard = useCallback(async () => {
         setLoading(true)
         try {
-            const fmt = clipboard.getFormat()
+            const fmt = await clipboard.getFormat()
             setFormat(fmt || 'empty')
 
             switch (fmt) {
                 case 'text':
-                    const text = clipboard.readText()
+                    const text = await clipboard.readText()
                     setTextContent(text || '')
                     setImageData(null)
                     setFiles([])
                     break
                 case 'image':
-                    const img = clipboard.readImage()
+                    const img = await clipboard.readImage()
                     if (img) {
                         // Convert Buffer to base64 data URL
                         const base64 = btoa(
@@ -48,7 +48,7 @@ export function ClipboardModule() {
                     setFiles([])
                     break
                 case 'files':
-                    const fileList = clipboard.readFiles()
+                    const fileList = await clipboard.readFiles()
                     setFiles(fileList || [])
                     setTextContent('')
                     setImageData(null)
