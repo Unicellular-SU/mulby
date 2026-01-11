@@ -11,6 +11,7 @@ interface PluginInfo {
   input: string
   uiPath: string
   preloadPath: string
+  mode?: 'panel' | 'webview' // Panel 模式不需要渲染 WebView
 }
 
 function App() {
@@ -43,7 +44,12 @@ function App() {
     const MAX_ITEMS = 24 // 4行 × 6列
 
     let height = SEARCH_BOX_HEIGHT
-    if (pluginInfo || detailsPluginName) {
+
+    // Panel 模式：插件 UI 在独立窗口中，主窗口只保持搜索框高度
+    if (pluginInfo && pluginInfo.mode === 'panel') {
+      height = SEARCH_BOX_HEIGHT
+    } else if (pluginInfo || detailsPluginName) {
+      // WebView 模式：插件 UI 嵌入主窗口
       height = 700
     } else if (query.length > 0 && resultCount > 0) {
       // 根据结果数量动态计算高度，最多显示 4 行
@@ -126,7 +132,10 @@ function App() {
           onShowDetails={setDetailsPluginName}
         />
       )}
-      {pluginInfo && <PluginContainer plugin={pluginInfo} theme={theme} onClose={handlePluginClose} />}
+      {/* 只在 WebView 模式下渲染 PluginContainer（Panel 模式有独立窗口） */}
+      {pluginInfo && pluginInfo.mode !== 'panel' && pluginInfo.uiPath && (
+        <PluginContainer plugin={pluginInfo} theme={theme} onClose={handlePluginClose} />
+      )}
       {isDragging && <div className="drop-hint">拖放 .inplugin 文件安装插件</div>}
     </div>
   )

@@ -4,6 +4,7 @@ import { existsSync } from 'fs'
 import { Plugin } from '../../shared/types/plugin'
 import { ThemeManager } from '../theme'
 import { injectCustomTitleBar } from './titlebar'
+import { PluginPanelWindow } from './panel-window'
 
 interface AttachedPlugin {
   plugin: Plugin
@@ -18,12 +19,21 @@ interface DetachedWindowInfo {
   input: string
 }
 
+// 插件窗口模式
+export type PluginWindowMode = 'panel' | 'webview'
+
 export class PluginWindowManager {
   private mainWindow: BrowserWindow | null = null
   private themeManager: ThemeManager | null = null
   private attachedPlugin: AttachedPlugin | null = null
   private detachedWindows: Map<number, DetachedWindowInfo> = new Map()
   private dockVisible = false
+
+  // 新增：面板窗口管理器
+  private panelWindow: PluginPanelWindow | null = null
+
+  // 窗口模式配置：'panel' 使用独立窗口跟随，'webview' 使用传统 webview
+  private windowMode: PluginWindowMode = 'panel'
 
   // 更新 macOS Dock 图标显示状态
   private async updateDockVisibility(): Promise<void> {
@@ -66,10 +76,24 @@ export class PluginWindowManager {
 
   setMainWindow(win: BrowserWindow) {
     this.mainWindow = win
+    // 初始化面板窗口管理器
+    this.panelWindow = new PluginPanelWindow(win)
   }
 
   setThemeManager(manager: ThemeManager) {
     this.themeManager = manager
+    // 同时设置到面板窗口管理器
+    this.panelWindow?.setThemeManager(manager)
+  }
+
+  // 设置窗口模式
+  setWindowMode(mode: PluginWindowMode) {
+    this.windowMode = mode
+  }
+
+  // 获取当前窗口模式
+  getWindowMode(): PluginWindowMode {
+    return this.windowMode
   }
 
   // 获取附着的插件信息
@@ -77,8 +101,13 @@ export class PluginWindowManager {
     return this.attachedPlugin
   }
 
-  // 是否有附着的插件
+  // 是否有附着的插件（Panel 模式或 WebView 模式）
   hasAttachedPlugin(): boolean {
+    // Panel 模式：检查面板是否打开
+    if (this.panelWindow?.isOpen()) {
+      return true
+    }
+    // WebView 模式：检查 attachedPlugin 状态
     return this.attachedPlugin !== null
   }
 
@@ -101,23 +130,60 @@ export class PluginWindowManager {
       input: input || ''
     }
 
+    // 根据窗口模式选择不同的附着方式
+    if (this.windowMode === 'panel' && this.panelWindow) {
+      // 使用 Panel 模式（独立窗口跟随）
+      const panelWin = this.panelWindow.createPanel(plugin, featureCode, input || '')
+      if (panelWin) {
+        // Panel 模式也通知渲染进程，让它隐藏列表并调整窗口高度
+        // 但不发送 uiPath，这样渲染进程不会显示 WebView
+        this.mainWindow?.webContents.send('plugin:attach', {
+          pluginName: plugin.manifest.name,
+          displayName: plugin.manifest.displayName,
+          featureCode,
+          input: input || '',
+          uiPath: '', // 空路径表示不需要 WebView
+          preloadPath: '',
+          mode: 'panel' // 标识为 Panel 模式
+        })
+      } else {
+        console.error('[PluginWindowManager] Failed to create panel window, falling back to webview')
+        // Fallback to webview mode
+        this.attachPluginAsWebView(plugin, featureCode, input || '')
+      }
+    } else {
+      // 使用 WebView 模式（传统附着）
+      this.attachPluginAsWebView(plugin, featureCode, input || '')
+    }
+
+    return true
+  }
+
+  // WebView 附着模式（Fallback）
+  private attachPluginAsWebView(plugin: Plugin, featureCode: string, input: string): void {
+    const uiPath = join(plugin.path, plugin.manifest.ui!)
     // 通知渲染进程加载插件
     this.mainWindow?.webContents.send('plugin:attach', {
       pluginName: plugin.manifest.name,
       displayName: plugin.manifest.displayName,
       featureCode,
-      input: input || '',
+      input,
       uiPath,
       preloadPath: join(__dirname, '../preload/index.js')
     })
-
-    return true
   }
 
   // 关闭附着的插件
   closeAttached(): void {
     if (this.attachedPlugin) {
       this.attachedPlugin = null
+
+      // 关闭 Panel 窗口（如果正在使用）
+      if (this.panelWindow?.isOpen()) {
+        this.panelWindow.close()
+      }
+
+      // 通知渲染进程（WebView 模式）
       this.mainWindow?.webContents.send('plugin:detached')
     }
   }
@@ -128,8 +194,32 @@ export class PluginWindowManager {
 
     const { plugin, featureCode, input } = this.attachedPlugin
     this.attachedPlugin = null
-    this.mainWindow?.webContents.send('plugin:detached')
 
+    // 如果是 Panel 模式，使用 promoteToWindow
+    if (this.panelWindow?.isOpen()) {
+      const win = this.panelWindow.promoteToWindow()
+      if (win) {
+        // 注册到 detachedWindows
+        const windowId = win.id
+        this.detachedWindows.set(windowId, {
+          window: win,
+          plugin,
+          featureCode,
+          input
+        })
+        this.updateDockVisibility()
+
+        win.on('closed', () => {
+          this.detachedWindows.delete(windowId)
+          this.updateDockVisibility()
+        })
+
+        return win
+      }
+    }
+
+    // WebView 模式的分离逻辑
+    this.mainWindow?.webContents.send('plugin:detached')
     return this.createDetachedWindow(plugin, featureCode, input)
   }
 
@@ -262,5 +352,20 @@ export class PluginWindowManager {
     if (info && !info.window.isDestroyed()) {
       info.window.setAlwaysOnTop(flag)
     }
+  }
+
+  // 获取面板窗口管理器
+  getPanelWindow(): PluginPanelWindow | null {
+    return this.panelWindow
+  }
+
+  // 隐藏面板窗口（但不关闭）
+  hidePanelWindow(): void {
+    this.panelWindow?.hide()
+  }
+
+  // 显示面板窗口
+  showPanelWindow(): void {
+    this.panelWindow?.show()
   }
 }
