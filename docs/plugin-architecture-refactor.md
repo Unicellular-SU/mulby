@@ -98,17 +98,20 @@ const panelConfig = {
 |----------|------|
 | `src/main/plugin/panel-window.ts` | 跟随面板窗口管理 |
 | `src/main/plugin/host-manager.ts` | UtilityProcess 插件宿主管理 |
-| `src/main/plugin/host-worker.js` | 插件宿主工作进程 |
-| `src/preload/rate-limiter.ts` | IPC 速率限制器 |
+| `src/main/plugin/host-worker.ts` | 插件宿主工作进程 |
+| `src/main/plugin/host-protocol.ts` | Host 通信协议定义 |
+| `src/main/plugin/watchdog.ts` | Watchdog 监控模块 |
+| `src/main/ipc/host.ts` | Host IPC 处理器 |
 
 ### 修改文件
 
 | 文件路径 | 变更内容 |
 |----------|----------|
 | `src/main/plugin/window.ts` | 重构为统一窗口管理，移除 WebView 模式 |
-| `src/renderer/App.tsx` | 移除 WebView/PluginContainer 渲染逻辑 |
-| `src/shared/types/electron.d.ts` | 更新 onPluginAttach 类型定义 |
-| `src/preload/index.ts` | 添加速率限制包装（待完成） |
+| `src/main/plugin/manager.ts` | 集成 HostManager，支持 UtilityProcess 执行 |
+| `src/main/ipc/index.ts` | 注册 Host IPC 处理器 |
+| `src/preload/index.ts` | 添加 host API |
+| `vite.config.ts` | 添加 host-worker 编译入口 |
 
 ### 删除文件
 
@@ -139,22 +142,23 @@ const panelConfig = {
 | 删除 PluginContainer.tsx | ✅ 已完成 | 2026-01-11 |
 | 更新类型定义 | ✅ 已完成 | 2026-01-11 |
 
-### 第三阶段：UtilityProcess 后端 (预计 3-4 天)
+### 第三阶段：UtilityProcess 后端 (已完成)
 
 | 任务 | 状态 | 完成日期 |
 |------|------|----------|
-| 创建 `PluginHostManager` | ⬜ 待开始 | |
-| 实现 Plugin Host Worker | ⬜ 待开始 | |
-| 迁移高风险 API | ⬜ 待开始 | |
-| 建立窗口 ↔ Host 通信 | ⬜ 待开始 | |
+| 创建 `PluginHostManager` | ✅ 已完成 | 2026-01-11 |
+| 实现 Plugin Host Worker | ✅ 已完成 | 2026-01-11 |
+| 迁移高风险 API | ✅ 已完成 | 2026-01-11 |
+| 建立窗口 ↔ Host 通信 | ✅ 已完成 | 2026-01-11 |
+| 添加 Watchdog 监控 | ✅ 已完成 | 2026-01-11 |
 
 ### 第四阶段：安全加固 (预计 1-2 天)
 
 | 任务 | 状态 | 完成日期 |
 |------|------|----------|
-| 实现 IPC 速率限制 | ⬜ 待开始 | |
-| 添加 Watchdog 监控 | ⬜ 待开始 | |
-| 测试恶意插件防护 | ⬜ 待开始 | |
+| 实现 IPC 速率限制 | ✅ 已完成 | 2026-01-11 |
+| 添加 Watchdog 监控 | ✅ 已完成 | 2026-01-11 |
+| 测试恶意插件防护 | ⬜ 待测试 | |
 
 ---
 
@@ -189,6 +193,7 @@ const panelConfig = {
 | 2026-01-11 | v1.1 | 完成 Phase 1: 创建 PluginPanelWindow 类，实现位置同步和模式转换 |
 | 2026-01-11 | v1.2 | 优化工具栏: 移到底部中央，使用 Shadow DOM 隔离样式 |
 | 2026-01-11 | v1.3 | 完成 Phase 2: 完全移除 WebView 模式，统一使用 Panel 窗口 |
+| 2026-01-11 | v1.4 | 完成 Phase 3: UtilityProcess 后端，实现完全进程隔离 |
 
 ---
 

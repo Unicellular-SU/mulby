@@ -16,6 +16,7 @@ import { registerTrayHandlers } from './tray'
 import { registerNetworkHandlers } from './network'
 import { registerMenuHandlers } from './menu'
 import { registerGeolocationHandlers } from './geolocation'
+import { registerHostHandlers } from './host'
 import { PluginManager } from '../plugin'
 import { PluginWindowManager } from '../plugin/window'
 import { ThemeManager } from '../theme'
@@ -43,4 +44,5 @@ export function registerAllHandlers(
   registerNetworkHandlers()
   registerMenuHandlers()
   registerGeolocationHandlers()
+  registerHostHandlers(pluginManager)
 }

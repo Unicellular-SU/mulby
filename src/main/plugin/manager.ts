@@ -5,6 +5,7 @@ import { PluginLoader } from './loader'
 import { PluginRunner } from './runner'
 import { PluginStateManager } from './state'
 import { PluginWindowManager } from './window'
+import { PluginHostManager } from './host-manager'
 import { Plugin, PluginFeature } from '../../shared/types/plugin'
 
 // 搜索结果项
@@ -19,9 +20,13 @@ export class PluginManager {
   private runners: Map<string, PluginRunner> = new Map()
   private stateManager: PluginStateManager
   private windowManager: PluginWindowManager | null = null
+  private hostManager: PluginHostManager
+  private useUtilityProcess: boolean = true  // 是否使用 UtilityProcess
+  private initializedPlugins: Set<string> = new Set()  // 已初始化的插件（懒加载跟踪）
 
   constructor() {
     this.stateManager = new PluginStateManager()
+    this.hostManager = new PluginHostManager()
   }
 
   // 设置窗口管理器
@@ -51,11 +56,8 @@ export class PluginManager {
         plugin.enabled = state.enabled
 
         this.plugins.set(plugin.manifest.name, plugin)
-
-        // 调用 onLoad 钩子
-        if (plugin.enabled) {
-          await this.callPluginHook(plugin, 'onLoad')
-        }
+        // 注意：不在这里调用 onLoad 钩子
+        // UtilityProcess 采用懒加载，只有在插件首次运行时才创建
       }
     }
 
@@ -125,6 +127,12 @@ export class PluginManager {
       return { success: false, error: 'Plugin is disabled' }
     }
 
+    // 懒加载：首次运行时调用 onLoad 钩子
+    if (!this.initializedPlugins.has(name)) {
+      await this.callPluginHook(plugin, 'onLoad')
+      this.initializedPlugins.add(name)
+    }
+
     // 如果插件有 UI，打开 UI 窗口
     if (plugin.manifest.ui) {
       if (!this.windowManager) {
@@ -134,10 +142,14 @@ export class PluginManager {
       return { success, hasUI: true }
     }
 
-    // 无 UI 插件，直接执行
+    // 无 UI 插件，使用 UtilityProcess 或 VM2 执行
     try {
-      const runner = this.getRunner(plugin)
-      await runner.run(featureCode, input)
+      if (this.useUtilityProcess) {
+        await this.hostManager.runPlugin(plugin, featureCode, input || '')
+      } else {
+        const runner = this.getRunner(plugin)
+        await runner.run(featureCode, input)
+      }
       return { success: true }
     } catch (err) {
       const error = err instanceof Error ? err.message : 'Unknown error'
@@ -158,8 +170,12 @@ export class PluginManager {
   // 调用插件生命周期钩子
   private async callPluginHook(plugin: Plugin, hookName: 'onLoad' | 'onUnload' | 'onEnable' | 'onDisable'): Promise<void> {
     try {
-      const runner = this.getRunner(plugin)
-      await runner.callHook(hookName)
+      if (this.useUtilityProcess) {
+        await this.hostManager.callHook(plugin, hookName)
+      } else {
+        const runner = this.getRunner(plugin)
+        await runner.callHook(hookName)
+      }
     } catch (err) {
       console.error(`Failed to call ${hookName} for plugin ${plugin.manifest.name}:`, err)
     }
@@ -177,7 +193,11 @@ export class PluginManager {
 
     plugin.enabled = true
     this.stateManager.setEnabled(name, true)
-    await this.callPluginHook(plugin, 'onEnable')
+
+    // 只有已初始化的插件才调用 onEnable 钩子
+    if (this.initializedPlugins.has(name)) {
+      await this.callPluginHook(plugin, 'onEnable')
+    }
 
     return { success: true }
   }
@@ -192,7 +212,16 @@ export class PluginManager {
       return { success: true }
     }
 
-    await this.callPluginHook(plugin, 'onDisable')
+    // 只有已初始化的插件才调用钩子
+    if (this.initializedPlugins.has(name)) {
+      await this.callPluginHook(plugin, 'onDisable')
+      // 销毁 Host 进程
+      if (this.useUtilityProcess) {
+        await this.hostManager.destroyHost(name)
+      }
+      this.initializedPlugins.delete(name)
+    }
+
     plugin.enabled = false
     this.stateManager.setEnabled(name, false)
 
@@ -207,8 +236,14 @@ export class PluginManager {
     }
 
     try {
-      // 调用 onUnload 钩子
-      await this.callPluginHook(plugin, 'onUnload')
+      // 只有已初始化的插件才调用钩子和销毁 Host
+      if (this.initializedPlugins.has(name)) {
+        await this.callPluginHook(plugin, 'onUnload')
+        if (this.useUtilityProcess) {
+          await this.hostManager.destroyHost(name)
+        }
+        this.initializedPlugins.delete(name)
+      }
 
       // 删除插件文件
       rmSync(plugin.path, { recursive: true, force: true })
@@ -240,5 +275,21 @@ export class PluginManager {
       }
     }
     return null
+  }
+
+  // 获取 HostManager 实例
+  getHostManager(): PluginHostManager {
+    return this.hostManager
+  }
+
+  // 销毁所有资源
+  async destroy(): Promise<void> {
+    // 销毁所有 Host 进程
+    await this.hostManager.destroyAll()
+
+    // 清理内存
+    this.plugins.clear()
+    this.runners.clear()
+    this.initializedPlugins.clear()
   }
 }

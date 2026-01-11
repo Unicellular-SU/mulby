@@ -25,6 +25,17 @@ export default defineConfig({
             outDir: 'dist/preload'
           }
         }
+      },
+      {
+        entry: 'src/main/plugin/host-worker.ts',
+        vite: {
+          build: {
+            outDir: 'dist/worker',
+            rollupOptions: {
+              external: ['electron', 'vm2']
+            }
+          }
+        }
       }
     ])
   ],

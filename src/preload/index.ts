@@ -281,5 +281,15 @@ contextBridge.exposeInMainWorld('intools', {
       localService: v.localService
     })),
     isSpeaking: () => speechSynthesis.speaking
+  },
+
+  // Plugin Host API（插件 UI 与后端通信）
+  host: {
+    invoke: (pluginName: string, method: string, ...args: unknown[]) =>
+      ipcRenderer.invoke('host:invoke', pluginName, method, ...args),
+    status: (pluginName: string) =>
+      ipcRenderer.invoke('host:status', pluginName),
+    restart: (pluginName: string) =>
+      ipcRenderer.invoke('host:restart', pluginName)
   }
 })
