@@ -111,14 +111,40 @@ export function SystemInfoModule() {
     }, [loadData])
 
     const handleGetLocation = async () => {
+        console.log('[SystemInfo] handleGetLocation called')
         try {
+            // 先检查权限状态
+            const status = await geolocation.getAccessStatus()
+            console.log('[SystemInfo] Geolocation access status:', status)
+
+            if (status === 'denied' || status === 'restricted') {
+                notify.error('位置权限被拒绝，请在系统设置中开启')
+                // 打开系统设置
+                await geolocation.openSettings()
+                return
+            }
+
+            if (status === 'not-determined') {
+                // 请求权限
+                const newStatus = await geolocation.requestAccess()
+                console.log('[SystemInfo] Permission request result:', newStatus)
+                if (newStatus !== 'granted') {
+                    notify.error('位置权限未授权')
+                    return
+                }
+            }
+
+            // 获取位置
+            console.log('[SystemInfo] Getting current position...')
             const pos = await geolocation.getCurrentPosition()
+            console.log('[SystemInfo] Got position:', pos)
             if (pos) {
                 setPosition(pos)
                 notify.success('位置获取成功')
             }
         } catch (error) {
-            notify.error('获取位置失败')
+            console.error('[SystemInfo] Error getting location:', error)
+            notify.error('获取位置失败: ' + (error instanceof Error ? error.message : String(error)))
         }
     }
 

@@ -1,45 +1,54 @@
-# 进展文档
+# 权限管理器实现进度
 
-## 2026-01-11: 创建 intools-cli README 文档
+> **更新时间**: 2026-01-11
+> **状态**: ✅ 已完成
 
-### 完成内容
+## 完成内容
 
-创建了完整的 `/packages/intools-cli/README.md` 文档，结合以下参考文档：
-- `docs/api-reference.md` - API 接口参考
-- `docs/manifest-v2.md` - Manifest 规范
-- `docs/plugin-spec.md` - 插件开发规范
-- `docs/plugin-packaging.md` - 打包说明
+### 核心模块
+- [x] `src/main/plugin/permission-manager.ts` (310 行)
+  - 跨平台权限管理器
+  - macOS: `node-mac-permissions` 集成
+  - Windows/Linux: `session.setPermissionRequestHandler`
 
-### README 包含章节
+### 地理位置模块
+- [x] `src/main/plugin/geolocation.ts` - 重构使用权限管理器
+- [x] `src/main/ipc/geolocation.ts` - 新增 IPC 端点
+- [x] `src/preload/index.ts` - 暴露新 API
 
-1. **安装** - 全局安装和项目依赖安装方式
-2. **快速开始** - 5 分钟创建第一个插件的步骤
-3. **命令参考**
-   - `intools create <name>` - 创建插件项目
-   - `intools dev` - 开发模式
-   - `intools build` - 构建插件
-   - `intools pack` - 打包发布
-4. **插件开发指南**
-   - 项目结构（React 和 Basic 模板）
-   - manifest.json 配置详解
-   - features 和 cmds 配置
-   - 图标配置
-   - 开发模式使用
-   - 第三方库使用方法
-5. **插件 API**
-   - 剪贴板 API
-   - 通知 API
-   - 存储 API
-   - 网络 API
-   - 窗口 API
-   - 文件系统 API
-6. **插件 UI**
-   - UI 中访问 API
-   - 主题适配
-7. **生命周期钩子** - onLoad/onUnload/onEnable/onDisable
-8. **构建与打包** - 构建流程和打包格式说明
-9. **完整示例**
-   - JSON 格式化插件（无 UI）
-   - 翻译插件（带 UI）
-10. **常见问题** - FAQ
-11. **相关文档** - 链接到其他参考文档
+### 类型定义
+- [x] `src/shared/types/electron.d.ts` - 更新 geolocation 类型
+
+### 构建配置
+- [x] `package.json` - 添加 `node-mac-permissions`，electron-builder 配置
+- [x] `resources/Info.plist` - macOS 权限描述
+
+### 插件集成
+- [x] `plugins/intools-showcase/src/types/intools.d.ts`
+- [x] `plugins/intools-showcase/src/ui/hooks/useIntools.ts`
+- [x] `plugins/intools-showcase/src/ui/modules/SystemInfo/index.tsx`
+
+### 文档
+- [x] `docs/api-reference.md` - 更新 Geolocation API 文档
+
+## 新增 API
+
+```typescript
+geolocation.getAccessStatus()   // 获取权限状态
+geolocation.requestAccess()     // 请求权限
+geolocation.canGetPosition()    // 能否获取位置
+geolocation.openSettings()      // 打开系统设置
+geolocation.getCurrentPosition() // 获取当前位置
+```
+
+## 测试方法
+
+1. 运行 `npm run electron:dev`
+2. 打开 intools-showcase 插件
+3. 进入"系统信息"模块
+4. 点击"获取位置"按钮
+5. 观察终端日志和系统权限弹窗
+
+## 依赖项
+
+- `node-mac-permissions@^2.5.0` (macOS 权限检查)

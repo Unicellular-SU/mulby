@@ -129,6 +129,9 @@ export function useIntools() {
         // Geolocation API
         geolocation: {
             getAccessStatus: () => window.intools?.geolocation?.getAccessStatus(),
+            requestAccess: () => window.intools?.geolocation?.requestAccess(),
+            canGetPosition: () => window.intools?.geolocation?.canGetPosition(),
+            openSettings: () => window.intools?.geolocation?.openSettings(),
             getCurrentPosition: () => window.intools?.geolocation?.getCurrentPosition(),
         },
 

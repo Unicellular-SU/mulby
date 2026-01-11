@@ -1,9 +1,49 @@
 import { ipcMain } from 'electron'
+import log from 'electron-log'
 import { pluginGeolocation } from '../plugin/geolocation'
 
 export function registerGeolocationHandlers() {
+  log.info('[IPC] Registering geolocation handlers')
+
   // 获取位置权限状态
   ipcMain.handle('geolocation:getAccessStatus', () => {
-    return pluginGeolocation.getAccessStatus()
+    log.info('[IPC] geolocation:getAccessStatus called')
+    const status = pluginGeolocation.getAccessStatus()
+    log.info(`[IPC] geolocation:getAccessStatus result: ${status}`)
+    return status
+  })
+
+  // 请求位置权限
+  ipcMain.handle('geolocation:requestAccess', async () => {
+    log.info('[IPC] geolocation:requestAccess called')
+    const result = await pluginGeolocation.requestAccess()
+    log.info(`[IPC] geolocation:requestAccess result: ${result}`)
+    return result
+  })
+
+  // 检查是否可以获取位置
+  ipcMain.handle('geolocation:canGetPosition', () => {
+    log.info('[IPC] geolocation:canGetPosition called')
+    return pluginGeolocation.canGetPosition()
+  })
+
+  // 打开系统位置设置
+  ipcMain.handle('geolocation:openSettings', () => {
+    log.info('[IPC] geolocation:openSettings called')
+    pluginGeolocation.openSettings()
+  })
+
+  // 获取当前位置（使用主进程 IP 地理定位，避免 Google 服务问题）
+  ipcMain.handle('geolocation:getCurrentPosition', async () => {
+    log.info('[IPC] geolocation:getCurrentPosition called')
+    try {
+      const position = await pluginGeolocation.getCurrentPosition()
+      log.info('[IPC] geolocation:getCurrentPosition result:', position)
+      return position
+    } catch (error) {
+      log.error('[IPC] geolocation:getCurrentPosition error:', error)
+      throw error
+    }
   })
 }
+

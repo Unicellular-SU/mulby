@@ -236,24 +236,15 @@ contextBridge.exposeInMainWorld('intools', {
   },
 
   // Geolocation API
+  // 注意: 使用主进程 IP 定位来绕过 Google 服务在中国被屏蔽的问题
   geolocation: {
     getAccessStatus: () => ipcRenderer.invoke('geolocation:getAccessStatus'),
+    requestAccess: () => ipcRenderer.invoke('geolocation:requestAccess'),
+    canGetPosition: () => ipcRenderer.invoke('geolocation:canGetPosition'),
+    openSettings: () => ipcRenderer.invoke('geolocation:openSettings'),
     getCurrentPosition: () => {
-      return new Promise((resolve, reject) => {
-        navigator.geolocation.getCurrentPosition(
-          (pos) => resolve({
-            latitude: pos.coords.latitude,
-            longitude: pos.coords.longitude,
-            accuracy: pos.coords.accuracy,
-            altitude: pos.coords.altitude,
-            altitudeAccuracy: pos.coords.altitudeAccuracy,
-            heading: pos.coords.heading,
-            speed: pos.coords.speed,
-            timestamp: pos.timestamp
-          }),
-          (err) => reject(err)
-        )
-      })
+      console.log('[Geolocation] getCurrentPosition called (using IPC)')
+      return ipcRenderer.invoke('geolocation:getCurrentPosition')
     }
   },
 

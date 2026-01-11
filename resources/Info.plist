@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>NSLocationWhenInUseUsageDescription</key>
+    <string>InTools 需要访问您的位置以提供位置相关功能（如地图定位、天气查询等）</string>
+    
+    <key>NSLocationUsageDescription</key>
+    <string>InTools 需要访问您的位置以提供位置相关功能</string>
+    
+    <key>NSCameraUsageDescription</key>
+    <string>插件可能需要访问摄像头以提供拍照、视频等功能</string>
+    
+    <key>NSMicrophoneUsageDescription</key>
+    <string>插件可能需要访问麦克风以提供录音、语音识别等功能</string>
+    
+    <key>NSAppleEventsUsageDescription</key>
+    <string>InTools 需要控制其他应用以提供自动化功能</string>
+</dict>
+</plist>

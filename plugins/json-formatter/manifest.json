@@ -11,16 +11,38 @@
       "code": "format",
       "explain": "格式化 JSON",
       "cmds": [
-        { "type": "keyword", "value": "json" },
-        { "type": "keyword", "value": "格式化" },
-        { "type": "regex", "match": "^\\s*[{\\[]", "explain": "检测到 JSON" }
+        {
+          "type": "keyword",
+          "value": "json"
+        },
+        {
+          "type": "keyword",
+          "value": "格式化"
+        },
+        {
+          "type": "regex",
+          "match": "^\\s*[{\\[]",
+          "explain": "检测到 JSON"
+        }
       ]
     },
     {
       "code": "minify",
       "explain": "压缩 JSON",
       "cmds": [
-        { "type": "keyword", "value": "json压缩" }
+        {
+          "type": "keyword",
+          "value": "json压缩"
+        },
+        {
+          "type": "keyword",
+          "value": "json minify"
+        },
+        {
+          "type": "regex",
+          "match": "^\\s*[{\\[]",
+          "explain": "检测到 JSON"
+        }
       ]
     }
   ]

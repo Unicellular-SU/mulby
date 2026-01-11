@@ -255,6 +255,9 @@ export interface ElectronAPI {
   }
   geolocation: {
     getAccessStatus: () => Promise<'not-determined' | 'granted' | 'denied' | 'restricted' | 'unknown'>
+    requestAccess: () => Promise<'not-determined' | 'granted' | 'denied' | 'restricted' | 'unknown'>
+    canGetPosition: () => Promise<boolean>
+    openSettings: () => Promise<void>
     getCurrentPosition: () => Promise<{
       latitude: number
       longitude: number
