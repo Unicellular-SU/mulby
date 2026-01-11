@@ -14,6 +14,7 @@ import { registerMediaHandlers } from './media'
 import { registerPowerMonitorHandlers } from './power'
 import { registerTrayHandlers } from './tray'
 import { registerNetworkHandlers } from './network'
+import { registerHttpHandlers } from './http'
 import { registerMenuHandlers } from './menu'
 import { registerGeolocationHandlers } from './geolocation'
 import { registerHostHandlers } from './host'
@@ -42,6 +43,7 @@ export function registerAllHandlers(
   registerPowerMonitorHandlers()
   registerTrayHandlers()
   registerNetworkHandlers()
+  registerHttpHandlers()
   registerMenuHandlers()
   registerGeolocationHandlers()
   registerHostHandlers(pluginManager)

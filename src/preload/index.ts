@@ -212,6 +212,15 @@ contextBridge.exposeInMainWorld('intools', {
     exists: () => ipcRenderer.invoke('tray:exists')
   },
 
+  // HTTP API
+  http: {
+    request: (options: any) => ipcRenderer.invoke('http:request', options),
+    get: (url: string, headers?: Record<string, string>) => ipcRenderer.invoke('http:get', url, headers),
+    post: (url: string, body?: any, headers?: Record<string, string>) => ipcRenderer.invoke('http:post', url, body, headers),
+    put: (url: string, body?: any, headers?: Record<string, string>) => ipcRenderer.invoke('http:put', url, body, headers),
+    delete: (url: string, headers?: Record<string, string>) => ipcRenderer.invoke('http:delete', url, headers)
+  },
+
   // Network API
   network: {
     isOnline: () => ipcRenderer.invoke('network:isOnline'),
