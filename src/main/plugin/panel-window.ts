@@ -5,35 +5,54 @@ import { ThemeManager } from '../theme'
 import { injectCustomTitleBar } from './titlebar'
 
 /**
- * 生成面板工具栏的 CSS
+ * 生成面板工具栏的代码（使用 Shadow DOM 隔离样式）
+ * 
+ * 设计要点：
+ * 1. 使用 Shadow DOM 完全隔离样式，不受插件 CSS 影响
+ * 2. 位于窗口底部中央，避免遮挡插件右上角按钮
+ * 3. 鼠标靠近底部时显示，远离时隐藏
  */
-function getPanelToolbarCSS(theme: 'light' | 'dark'): string {
+function getPanelToolbarInjectionCode(theme: 'light' | 'dark'): string {
     const isDark = theme === 'dark'
-    return `
-        #intools-panel-toolbar {
-            position: fixed;
-            top: 8px;
-            right: 8px;
-            z-index: 99999;
+
+    // 所有样式都在 Shadow DOM 内部，不会被插件 CSS 污染
+    const css = `
+        :host {
+            all: initial;
+            position: fixed !important;
+            bottom: 12px !important;
+            left: 50% !important;
+            transform: translateX(-50%) !important;
+            z-index: 2147483647 !important;
+            display: block !important;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif !important;
+        }
+        .toolbar {
             display: flex;
-            gap: 4px;
-            padding: 4px;
-            background: ${isDark ? 'rgba(30, 41, 59, 0.9)' : 'rgba(255, 255, 255, 0.9)'};
-            border-radius: 6px;
-            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
-            backdrop-filter: blur(8px);
+            gap: 6px;
+            padding: 6px 10px;
+            background: ${isDark ? 'rgba(30, 41, 59, 0.95)' : 'rgba(255, 255, 255, 0.95)'};
+            border-radius: 20px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid ${isDark ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.1)'};
             opacity: 0;
-            transition: opacity 0.2s ease;
+            transform: translateY(10px);
+            transition: opacity 0.2s ease, transform 0.2s ease;
+            pointer-events: none;
         }
-        #intools-panel-toolbar:hover,
-        #intools-panel-toolbar.visible {
+        .toolbar.visible {
             opacity: 1;
+            transform: translateY(0);
+            pointer-events: auto;
         }
-        .intools-panel-btn {
-            width: 28px;
-            height: 28px;
-            border: none;
-            border-radius: 4px;
+        .btn {
+            all: unset;
+            box-sizing: border-box;
+            width: 32px;
+            height: 32px;
+            border-radius: 8px;
             background: transparent;
             cursor: pointer;
             display: flex;
@@ -42,74 +61,126 @@ function getPanelToolbarCSS(theme: 'light' | 'dark'): string {
             color: ${isDark ? '#94a3b8' : '#64748b'};
             transition: all 0.15s ease;
         }
-        .intools-panel-btn:hover {
-            background: ${isDark ? 'rgba(148, 163, 184, 0.15)' : 'rgba(100, 116, 139, 0.1)'};
-            color: ${isDark ? '#e2e8f0' : '#334155'};
+        .btn:hover {
+            background: ${isDark ? 'rgba(148, 163, 184, 0.2)' : 'rgba(100, 116, 139, 0.15)'};
+            color: ${isDark ? '#f1f5f9' : '#1e293b'};
         }
-        .intools-panel-btn svg {
-            width: 16px;
-            height: 16px;
+        .btn:active {
+            transform: scale(0.92);
+        }
+        .btn svg {
+            width: 18px;
+            height: 18px;
+            stroke-width: 2;
+        }
+        .divider {
+            width: 1px;
+            background: ${isDark ? 'rgba(255, 255, 255, 0.15)' : 'rgba(0, 0, 0, 0.1)'};
+            margin: 4px 2px;
         }
     `
-}
 
-/**
- * 生成面板工具栏的 HTML
- */
-function getPanelToolbarHTML(): string {
-    return `
-        <div id="intools-panel-toolbar">
-            <button class="intools-panel-btn" id="intools-detach-btn" title="弹出为独立窗口">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    const html = `
+        <div class="toolbar">
+            <button class="btn" id="detach-btn" title="弹出为独立窗口">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
                     <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>
                     <polyline points="15 3 21 3 21 9"/>
                     <line x1="10" y1="14" x2="21" y2="3"/>
                 </svg>
             </button>
-            <button class="intools-panel-btn" id="intools-close-btn" title="关闭">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <div class="divider"></div>
+            <button class="btn" id="close-btn" title="关闭">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
                     <line x1="18" y1="6" x2="6" y2="18"/>
                     <line x1="6" y1="6" x2="18" y2="18"/>
                 </svg>
             </button>
         </div>
     `
-}
 
-/**
- * 生成面板工具栏的 JavaScript
- */
-function getPanelToolbarJS(): string {
     return `
         (function() {
-            const toolbar = document.getElementById('intools-panel-toolbar');
+            // 移除已存在的工具栏
+            document.getElementById('intools-panel-toolbar-host')?.remove();
+            
+            // 创建 Shadow DOM 宿主元素
+            const host = document.createElement('div');
+            host.id = 'intools-panel-toolbar-host';
+            host.style.cssText = 'all: initial !important; display: block !important;';
+            document.body.appendChild(host);
+            
+            // 创建 Shadow DOM（closed 模式防止外部访问）
+            const shadow = host.attachShadow({ mode: 'closed' });
+            
+            // 注入样式
+            const style = document.createElement('style');
+            style.textContent = ${JSON.stringify(css)};
+            shadow.appendChild(style);
+            
+            // 注入 HTML
+            const container = document.createElement('div');
+            container.innerHTML = ${JSON.stringify(html)};
+            shadow.appendChild(container.firstElementChild);
+            
+            // 获取工具栏元素
+            const toolbar = shadow.querySelector('.toolbar');
             if (!toolbar) return;
             
-            // 鼠标进入窗口时显示工具栏
+            // 检测区域：底部 80px 范围内显示工具栏
+            let isNearBottom = false;
             let hideTimeout = null;
-            document.addEventListener('mouseenter', () => {
+            
+            const showToolbar = () => {
                 toolbar.classList.add('visible');
-                if (hideTimeout) clearTimeout(hideTimeout);
-            });
-            document.addEventListener('mouseleave', () => {
+                if (hideTimeout) {
+                    clearTimeout(hideTimeout);
+                    hideTimeout = null;
+                }
+            };
+            
+            const hideToolbar = () => {
                 hideTimeout = setTimeout(() => {
                     toolbar.classList.remove('visible');
-                }, 1000);
+                }, 800);
+            };
+            
+            // 鼠标移动检测
+            document.addEventListener('mousemove', (e) => {
+                const windowHeight = window.innerHeight;
+                const distanceFromBottom = windowHeight - e.clientY;
+                
+                if (distanceFromBottom < 80) {
+                    if (!isNearBottom) {
+                        isNearBottom = true;
+                        showToolbar();
+                    }
+                } else {
+                    if (isNearBottom) {
+                        isNearBottom = false;
+                        hideToolbar();
+                    }
+                }
             });
             
-            // 初始显示3秒后隐藏
-            toolbar.classList.add('visible');
-            setTimeout(() => {
-                toolbar.classList.remove('visible');
-            }, 3000);
+            // 鼠标在工具栏上时保持显示
+            toolbar.addEventListener('mouseenter', showToolbar);
+            toolbar.addEventListener('mouseleave', () => {
+                if (!isNearBottom) hideToolbar();
+            });
             
-            // 弹出按钮
-            document.getElementById('intools-detach-btn')?.addEventListener('click', () => {
+            // 初始显示 2.5 秒
+            showToolbar();
+            setTimeout(() => {
+                if (!isNearBottom) hideToolbar();
+            }, 2500);
+            
+            // 按钮事件
+            shadow.getElementById('detach-btn')?.addEventListener('click', () => {
                 window.intools?.window?.detach?.();
             });
             
-            // 关闭按钮
-            document.getElementById('intools-close-btn')?.addEventListener('click', () => {
+            shadow.getElementById('close-btn')?.addEventListener('click', () => {
                 window.intools?.window?.close?.();
             });
         })();
@@ -117,34 +188,11 @@ function getPanelToolbarJS(): string {
 }
 
 /**
- * 注入面板工具栏到窗口
+ * 注入面板工具栏到窗口（使用 Shadow DOM 隔离）
  */
 async function injectPanelToolbar(win: BrowserWindow, theme: 'light' | 'dark'): Promise<void> {
-    const css = getPanelToolbarCSS(theme)
-    const html = getPanelToolbarHTML()
-    const js = getPanelToolbarJS()
-
-    await win.webContents.executeJavaScript(`
-        (function() {
-            // 如果已存在则移除
-            document.getElementById('intools-panel-toolbar')?.remove();
-            document.getElementById('intools-panel-toolbar-style')?.remove();
-            
-            // 注入 CSS
-            const style = document.createElement('style');
-            style.id = 'intools-panel-toolbar-style';
-            style.textContent = ${JSON.stringify(css)};
-            document.head.appendChild(style);
-            
-            // 注入 HTML
-            const container = document.createElement('div');
-            container.innerHTML = ${JSON.stringify(html)};
-            document.body.appendChild(container.firstElementChild);
-            
-            // 执行 JS
-            ${js}
-        })();
-    `)
+    const code = getPanelToolbarInjectionCode(theme)
+    await win.webContents.executeJavaScript(code)
 }
 
 /**
