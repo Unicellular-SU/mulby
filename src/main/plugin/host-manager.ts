@@ -22,6 +22,7 @@ interface PluginHost {
   process: UtilityProcess
   pluginName: string
   ready: boolean
+  activeRequests: number  // 活跃请求计数器
   pendingRequests: Map<string, {
     resolve: (value: unknown) => void
     reject: (error: Error) => void
@@ -90,14 +91,15 @@ export class PluginHostManager extends EventEmitter {
         process: child,
         pluginName,
         ready: false,
+        activeRequests: 0,
         pendingRequests: new Map()
       }
 
       this.hosts.set(pluginName, host)
       this.setupHostListeners(host, plugin)
 
-      // 注册 Watchdog 监控
-      this.watchdog.registerHost(pluginName)
+      // 注意：不在这里注册 Watchdog，而是在执行请求时注册
+      // 这样只有在插件活跃执行期间才会检测心跳
 
       // 等待 ready 信号
       return await this.waitForReady(pluginName)
@@ -268,14 +270,35 @@ export class PluginHostManager extends EventEmitter {
         return
       }
 
+      // 增加活跃请求计数，首次时注册 Watchdog
+      if (host.activeRequests === 0) {
+        this.watchdog.registerHost(pluginName)
+      }
+      host.activeRequests++
+
+      const cleanup = () => {
+        host.activeRequests--
+        // 没有活跃请求时注销 Watchdog
+        if (host.activeRequests === 0) {
+          this.watchdog.unregisterHost(pluginName)
+        }
+      }
+
       const timeout = setTimeout(() => {
         host.pendingRequests.delete(request.id)
+        cleanup()
         reject(new Error(`Request timeout: ${request.type}`))
       }, REQUEST_TIMEOUT)
 
       host.pendingRequests.set(request.id, {
-        resolve: resolve as (value: unknown) => void,
-        reject,
+        resolve: (value: unknown) => {
+          cleanup()
+          resolve(value as T)
+        },
+        reject: (error: Error) => {
+          cleanup()
+          reject(error)
+        },
         timeout
       })
 
