@@ -1,4 +1,4 @@
-import React from 'react'
+
 
 interface SidebarProps {
     activeModule: string
@@ -7,6 +7,13 @@ interface SidebarProps {
 
 const modules = [
     { id: 'sysinfo', icon: '📊', label: '系统信息' },
+    { id: 'clipboard', icon: '📋', label: '剪贴板' },
+    { id: 'filemanager', icon: '📁', label: '文件管理' },
+    { id: 'network', icon: '🌐', label: '网络' },
+    { id: 'screen', icon: '🖥️', label: '屏幕' },
+    { id: 'media', icon: '🎵', label: '媒体' },
+    { id: 'settings', icon: '⚙️', label: '设置' },
+    { id: 'security', icon: '🔐', label: '安全' },
 ]
 
 export function Sidebar({ activeModule, onModuleChange }: SidebarProps) {

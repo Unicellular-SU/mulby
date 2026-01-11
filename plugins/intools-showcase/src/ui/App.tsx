@@ -3,15 +3,29 @@ import { Sidebar } from './components'
 import { useTheme } from './hooks'
 import {
   SystemInfoModule,
+  ClipboardModule,
+  FileManagerModule,
+  NetworkModule,
+  ScreenModule,
+  MediaModule,
+  SettingsModule,
+  SecurityModule,
 } from './modules'
 
 console.log('[App] Module imports loaded')
 
-type ModuleId = 'sysinfo'
+type ModuleId = 'sysinfo' | 'clipboard' | 'filemanager' | 'network' | 'screen' | 'media' | 'settings' | 'security'
 
 // 模块映射
 const moduleComponents: Record<ModuleId, React.FC> = {
   sysinfo: SystemInfoModule,
+  clipboard: ClipboardModule,
+  filemanager: FileManagerModule,
+  network: NetworkModule,
+  screen: ScreenModule,
+  media: MediaModule,
+  settings: SettingsModule,
+  security: SecurityModule,
 }
 
 // 从 URL 参数或插件初始化数据获取默认模块
@@ -42,9 +56,8 @@ export default function App() {
 
   const handleModuleChange = (id: string) => {
     console.log('[App] handleModuleChange:', id)
-    // 如果 id 不是 sysinfo，我们也不切换，或者 Sidebar 已经限制了
-    if (id === 'sysinfo') {
-      setActiveModule('sysinfo')
+    if (id in moduleComponents) {
+      setActiveModule(id as ModuleId)
     }
   }
 
