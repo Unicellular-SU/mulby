@@ -21,8 +21,10 @@ export function registerClipboardHandlers() {
   })
 
   // 写入图片
-  ipcMain.handle('clipboard:writeImage', (_, buffer: Buffer) => {
-    const image = nativeImage.createFromBuffer(buffer)
+  ipcMain.handle('clipboard:writeImage', (_, buffer: any) => {
+    // 确保 buffer 是 Node Buffer
+    const nodeBuffer = Buffer.from(buffer)
+    const image = nativeImage.createFromBuffer(nodeBuffer)
     clipboard.writeImage(image)
   })
 
