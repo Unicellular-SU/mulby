@@ -91,9 +91,6 @@ function PluginList({ query, onResultsChange, onShowDetails }: PluginListProps) 
             }
           }
           break
-        case 'Escape':
-          window.intools.window.hide()
-          break
       }
     }
 

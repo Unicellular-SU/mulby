@@ -70,6 +70,28 @@ function App() {
     })
   }, [])
 
+  // ESC 键分级退出处理
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.preventDefault()
+        if (pluginOpen) {
+          // 1. 优先关闭插件
+          window.intools.window.close()
+        } else if (query.length > 0) {
+          // 2. 清空搜索框
+          setQuery('')
+          setResultCount(0)
+        } else {
+          // 3. 隐藏窗口
+          window.intools.window.hide()
+        }
+      }
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [pluginOpen, query])
+
   const handleQueryChange = (value: string) => {
     // 如果有附着的插件，先关闭它
     if (pluginOpen) {

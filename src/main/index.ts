@@ -10,6 +10,9 @@ const pluginManager = new PluginManager()
 const pluginWindowManager = new PluginWindowManager()
 const themeManager = new ThemeManager()
 
+// 用于防止 show/focus 过程中的 blur 误触发
+let ignoringBlur = false
+
 function getMainWindow() {
   return mainWindow
 }
@@ -32,12 +35,21 @@ function createWindow() {
     }
   })
 
-  // 失焦隐藏（类似 Spotlight/uTools 的交互）
+  // 失焦隐藏（类似 uTools 的交互）
   mainWindow.on('blur', () => {
-    // 只有在没有附着插件时才隐藏
-    if (!pluginWindowManager.hasAttachedPlugin()) {
+    if (ignoringBlur) return
+
+    // 延迟检查，让焦点转移完成
+    setTimeout(() => {
+      // 如果焦点转移到了面板窗口，不隐藏
+      const panelWin = pluginWindowManager.getPanelWindow()?.getWindow()
+      if (panelWin && panelWin.isFocused()) {
+        return
+      }
+      // 焦点转移到其他地方，隐藏主窗口和面板
+      pluginWindowManager.hidePanelWindow()
       mainWindow?.hide()
-    }
+    }, 50)
   })
 
   if (process.env.VITE_DEV_SERVER_URL) {
@@ -50,6 +62,7 @@ function createWindow() {
 function toggleWindow() {
   if (!mainWindow) return
   if (mainWindow.isVisible()) {
+    pluginWindowManager.hidePanelWindow()
     mainWindow.hide()
   } else {
     // 获取当前鼠标所在的显示器
@@ -64,8 +77,18 @@ function toggleWindow() {
     const y = screenY + Math.round(screenHeight / 5)
 
     mainWindow.setPosition(x, y)
+
+    // 临时忽略 blur 事件，防止 show/focus 过程中误触发
+    ignoringBlur = true
     mainWindow.show()
     mainWindow.focus()
+    // 恢复之前隐藏的面板
+    pluginWindowManager.showPanelWindow()
+
+    // 延迟恢复 blur 监听（确保窗口完全获得焦点）
+    setTimeout(() => {
+      ignoringBlur = false
+    }, 100)
   }
 }
 

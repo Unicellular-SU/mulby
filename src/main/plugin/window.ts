@@ -146,6 +146,9 @@ export class PluginWindowManager {
 
       // 通知渲染进程
       this.mainWindow?.webContents.send('plugin:detached')
+
+      // 关闭插件后聚焦主窗口，使搜索框获得焦点
+      this.mainWindow?.focus()
     }
   }
 

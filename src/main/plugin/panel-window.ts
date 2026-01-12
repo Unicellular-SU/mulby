@@ -317,6 +317,23 @@ export class PluginPanelWindow {
             // 面板获得焦点是正常的
         })
 
+        // 面板失焦时检查焦点去向
+        this.panelWindow.on('blur', () => {
+            setTimeout(() => {
+                // 如果焦点回到了主窗口，不隐藏
+                if (this.mainWindow.isFocused()) {
+                    return
+                }
+                // 如果面板仍然有焦点（误触发），不隐藏
+                if (this.panelWindow && !this.panelWindow.isDestroyed() && this.panelWindow.isFocused()) {
+                    return
+                }
+                // 焦点转移到其他地方，隐藏所有
+                this.hide()
+                this.mainWindow.hide()
+            }, 50)
+        })
+
         // 监听渲染进程崩溃
         this.panelWindow.webContents.on('render-process-gone', (_event, details) => {
             console.error('[PanelWindow] Render process gone:', details.reason)
