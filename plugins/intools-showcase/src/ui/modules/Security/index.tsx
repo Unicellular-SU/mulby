@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react'
+import React, { useState, useEffect, useCallback, useRef } from 'react'
 import { PageHeader, Card, Button, StatusBadge, CodeBlock } from '../../components'
 import { useIntools, useNotification } from '../../hooks'
 
@@ -15,6 +15,7 @@ export function SecurityModule() {
     const [storageValue, setStorageValue] = useState('')
     const [storedData, setStoredData] = useState<Record<string, unknown>>({})
     const [loading, setLoading] = useState(false)
+    const storageFormRef = useRef<HTMLDivElement>(null)
 
     const checkEncryption = useCallback(async () => {
         try {
@@ -255,9 +256,8 @@ export function SecurityModule() {
                     </div>
                 </Card>
 
-                {/* Storage */}
                 <Card title="数据存储" icon="💾">
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--spacing-md)' }}>
+                    <div ref={storageFormRef} style={{ display: 'flex', flexDirection: 'column', gap: 'var(--spacing-md)' }}>
                         <div className="grid grid-2">
                             <div className="input-group">
                                 <label className="input-label">键名</label>
@@ -353,6 +353,8 @@ export function SecurityModule() {
                                             onClick={() => {
                                                 setStorageKey(key)
                                                 setStorageValue(typeof value === 'string' ? value : JSON.stringify(value, null, 2))
+                                                storageFormRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+                                                notify.info('已加载到上方编辑区')
                                             }}
                                         >
                                             编辑
