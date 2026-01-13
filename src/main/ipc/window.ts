@@ -7,13 +7,15 @@ export function registerWindowHandlers(
   pluginWindowManager: PluginWindowManager,
   themeManager: ThemeManager
 ) {
-  ipcMain.on('window:hide', () => {
-    const win = getMainWindow()
+  ipcMain.on('window:hide', (event) => {
+    // 使用发送者窗口而非主窗口，以支持面板和独立窗口模式
+    const win = BrowserWindow.fromWebContents(event.sender)
     win?.hide()
   })
 
-  ipcMain.on('window:setSize', (_, width: number, height: number) => {
-    const win = getMainWindow()
+  ipcMain.on('window:setSize', (event, width: number, height: number) => {
+    // 使用发送者窗口而非主窗口，以支持面板和独立窗口模式
+    const win = BrowserWindow.fromWebContents(event.sender)
     if (win) {
       // 直接调整大小，无需切换 resizable 状态
       // setSize 在 macOS 上对无边框窗口也有效
@@ -21,8 +23,8 @@ export function registerWindowHandlers(
     }
   })
 
-  ipcMain.on('window:center', () => {
-    const win = getMainWindow()
+  ipcMain.on('window:center', (event) => {
+    const win = BrowserWindow.fromWebContents(event.sender)
     win?.center()
   })
 
