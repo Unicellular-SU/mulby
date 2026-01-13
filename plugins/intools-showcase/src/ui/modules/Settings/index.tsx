@@ -22,7 +22,7 @@ export function SettingsModule() {
     const loadThemeInfo = useCallback(async () => {
         try {
             const info = await window.intools?.theme?.get()
-            setThemeInfo(info)
+            setThemeInfo(info ?? null)
         } catch (error) {
             console.error('Failed to get theme info:', error)
         }

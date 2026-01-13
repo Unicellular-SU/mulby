@@ -67,7 +67,8 @@
     },
     "asarUnpack": [
       "node_modules/electron-get-location/**/*",
-      "node_modules/better-sqlite3/**/*"
+      "node_modules/better-sqlite3/**/*",
+      "node_modules/node-mac-permissions/**/*"
     ],
     "win": {
       "target": [
