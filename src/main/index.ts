@@ -13,6 +13,23 @@ const themeManager = new ThemeManager()
 // 用于防止 show/focus 过程中的 blur 误触发
 let ignoringBlur = false
 
+// 单实例锁：确保只有一个应用实例运行
+const gotTheLock = app.requestSingleInstanceLock()
+if (!gotTheLock) {
+  app.quit()
+} else {
+  // 当第二个实例启动时，聚焦到已有窗口
+  app.on('second-instance', () => {
+    if (mainWindow) {
+      if (!mainWindow.isVisible()) {
+        toggleWindow()
+      } else {
+        mainWindow.focus()
+      }
+    }
+  })
+}
+
 function getMainWindow() {
   return mainWindow
 }
@@ -25,8 +42,8 @@ function createWindow() {
     frame: false,
     resizable: false,
     skipTaskbar: true,
-    alwaysOnTop: true,
     transparent: true,
+    type: 'panel', // macOS 上 panel 类型有助于浮动在全屏应用之上
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
       contextIsolation: true,
@@ -34,6 +51,14 @@ function createWindow() {
       webviewTag: true
     }
   })
+
+  // macOS: 设置窗口在所有工作区可见，并使用 floating 级别置顶
+  if (process.platform === 'darwin') {
+    mainWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true })
+    mainWindow.setAlwaysOnTop(true, 'floating')
+  } else {
+    mainWindow.setAlwaysOnTop(true)
+  }
 
   // 失焦隐藏（类似 uTools 的交互）
   mainWindow.on('blur', () => {
@@ -60,7 +85,7 @@ function createWindow() {
 }
 
 function toggleWindow() {
-  if (!mainWindow) return
+  if (!mainWindow || mainWindow.isDestroyed()) return
   if (mainWindow.isVisible()) {
     pluginWindowManager.hidePanelWindow()
     mainWindow.hide()
@@ -80,8 +105,10 @@ function toggleWindow() {
 
     // 临时忽略 blur 事件，防止 show/focus 过程中误触发
     ignoringBlur = true
+
     mainWindow.show()
     mainWindow.focus()
+
     // 恢复之前隐藏的面板
     pluginWindowManager.showPanelWindow()
 
