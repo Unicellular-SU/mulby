@@ -179,6 +179,13 @@ contextBridge.exposeInMainWorld('intools', {
     decryptString: (encrypted: Buffer) => ipcRenderer.invoke('security:decryptString', encrypted)
   },
 
+  // Storage API
+  storage: {
+    get: (key: string) => ipcRenderer.invoke('storage:get', key),
+    set: (key: string, value: unknown) => ipcRenderer.invoke('storage:set', key, value),
+    remove: (key: string) => ipcRenderer.invoke('storage:remove', key)
+  },
+
   // Media API
   media: {
     getAccessStatus: (mediaType: 'microphone' | 'camera') =>
