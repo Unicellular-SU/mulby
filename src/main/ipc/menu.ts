@@ -11,8 +11,6 @@ export function registerMenuHandlers() {
       pluginNativeMenu.showContextMenu(items, win, (id) => {
         resolve(id)
       })
-      // 菜单关闭时如果没有选择，返回 null
-      setTimeout(() => resolve(null), 100)
     })
   })
 }
