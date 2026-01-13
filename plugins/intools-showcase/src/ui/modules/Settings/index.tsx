@@ -159,6 +159,8 @@ export function SettingsModule() {
         }
     }, [tray, notify])
 
+    const [isChecked, setIsChecked] = useState(true)
+
     const handleContextMenu = useCallback(async (e: React.MouseEvent) => {
         e.preventDefault()
         try {
@@ -174,16 +176,22 @@ export function SettingsModule() {
                 },
                 { type: 'separator' },
                 { label: '禁用项', id: 'disabled', enabled: false },
-                { label: '复选框', id: 'checkbox', type: 'checkbox', checked: true },
+                { label: '复选框', id: 'checkbox', type: 'checkbox', checked: isChecked },
             ])
 
             if (selectedId) {
-                notify.info(`你选择了: ${selectedId}`)
+                // 如果点击的是复选框，切换状态
+                if (selectedId === 'checkbox') {
+                    setIsChecked(prev => !prev)
+                    notify.success(`复选框已${!isChecked ? '选中' : '取消'}`)
+                } else {
+                    notify.info(`你选择了: ${selectedId}`)
+                }
             }
         } catch (error) {
             notify.error('显示菜单失败')
         }
-    }, [menu, notify])
+    }, [menu, notify, isChecked])
 
     const presetSizes = [
         { label: '小', width: 600, height: 400 },
