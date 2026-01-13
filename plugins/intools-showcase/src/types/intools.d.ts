@@ -238,9 +238,9 @@ interface IntoolsTTS {
 
 // Storage API 类型
 interface IntoolsStorage {
-  get(key: string): Promise<unknown>
-  set(key: string, value: unknown): Promise<void>
-  remove(key: string): Promise<void>
+  get(key: string, namespace?: string): Promise<unknown>
+  set(key: string, value: unknown, namespace?: string): Promise<void>
+  remove(key: string, namespace?: string): Promise<void>
 }
 
 // HTTP API 类型

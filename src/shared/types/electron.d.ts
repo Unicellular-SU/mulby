@@ -153,6 +153,13 @@ export interface ElectronAPI {
   notification: {
     show: (message: string, type?: string) => void
   }
+  storage: {
+    get: (key: string, namespace?: string) => Promise<any>
+    set: (key: string, value: unknown, namespace?: string) => Promise<boolean>
+    remove: (key: string, namespace?: string) => Promise<boolean>
+    getAll?: (namespace?: string) => Promise<Record<string, unknown>>
+    clear?: (namespace?: string) => Promise<boolean>
+  }
   plugin: {
     getAll: () => Promise<PluginInfo[]>
     search: (query: string) => Promise<SearchResultItem[]>

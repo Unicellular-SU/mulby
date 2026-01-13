@@ -3,7 +3,7 @@ import { useMemo } from 'react'
 /**
  * InTools API Hook - 统一访问各 API
  */
-export function useIntools() {
+export function useIntools(pluginId?: string) {
     return useMemo(() => ({
         // Clipboard API
         clipboard: {
@@ -17,9 +17,9 @@ export function useIntools() {
 
         // Storage API
         storage: {
-            get: (key: string) => window.intools?.storage?.get(key),
-            set: (key: string, value: unknown) => window.intools?.storage?.set(key, value),
-            remove: (key: string) => window.intools?.storage?.remove(key),
+            get: (key: string) => window.intools?.storage?.get(key, pluginId),
+            set: (key: string, value: unknown) => window.intools?.storage?.set(key, value, pluginId),
+            remove: (key: string) => window.intools?.storage?.remove(key, pluginId),
         },
 
         // Window API
@@ -198,5 +198,5 @@ export function useIntools() {
             set: (mode: 'light' | 'dark' | 'system') => window.intools?.theme?.set(mode),
             getActual: () => window.intools?.theme?.getActual(),
         },
-    }), [])
+    }), [pluginId])
 }

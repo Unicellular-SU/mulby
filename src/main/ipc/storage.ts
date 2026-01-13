@@ -1,72 +1,72 @@
-import { ipcMain, app } from 'electron'
-import fs from 'fs'
-import path from 'path'
-
-// 使用用户数据目录下的 storage.json 作为存储文件
-const STORAGE_FILE = path.join(app.getPath('userData'), 'storage.json')
-
-// 确保存储文件存在
-function ensureStorageFile() {
-    if (!fs.existsSync(STORAGE_FILE)) {
-        try {
-            fs.writeFileSync(STORAGE_FILE, '{}', 'utf-8')
-        } catch (error) {
-            console.error('[Storage] Failed to create storage file:', error)
-        }
-    }
-}
-
-// 读取存储数据
-function readStorage(): Record<string, unknown> {
-    ensureStorageFile()
-    try {
-        const content = fs.readFileSync(STORAGE_FILE, 'utf-8')
-        return JSON.parse(content)
-    } catch (error) {
-        console.error('[Storage] Failed to read storage:', error)
-        return {}
-    }
-}
-
-// 写入存储数据
-function writeStorage(data: Record<string, unknown>) {
-    try {
-        fs.writeFileSync(STORAGE_FILE, JSON.stringify(data, null, 2), 'utf-8')
-    } catch (error) {
-        console.error('[Storage] Failed to write storage:', error)
-    }
-}
+import { ipcMain } from 'electron'
+import db from '../db'
 
 export function registerStorageHandlers() {
     // get: 获取值
-    ipcMain.handle('storage:get', (_, key: string) => {
-        const data = readStorage()
-        return data[key]
-    })
-
-    // set: 设置值
-    ipcMain.handle('storage:set', (_, key: string, value: unknown) => {
-        const data = readStorage()
-        data[key] = value
-        writeStorage(data)
-    })
-
-    // remove: 删除值
-    ipcMain.handle('storage:remove', (_, key: string) => {
-        const data = readStorage()
-        if (key in data) {
-            delete data[key]
-            writeStorage(data)
+    const stmtGet = db.prepare('SELECT value FROM store WHERE plugin_id = ? AND key = ?')
+    ipcMain.handle('storage:get', (_, key: string, namespace: string = 'global') => {
+        try {
+            const row = stmtGet.get(namespace, key) as { value: string } | undefined
+            return row ? JSON.parse(row.value) : undefined
+        } catch (error) {
+            console.error(`[Storage] Get failed (${namespace}:${key}):`, error)
+            return undefined
         }
     })
 
-    // getAll: 获取所有数据 (可选，用于调试或查看所有存储)
-    ipcMain.handle('storage:getAll', () => {
-        return readStorage()
+    // set: 设置值
+    const stmtSet = db.prepare(`
+    INSERT OR REPLACE INTO store (plugin_id, key, value, updated_at)
+    VALUES (?, ?, ?, ?)
+  `)
+    ipcMain.handle('storage:set', (_, key: string, value: unknown, namespace: string = 'global') => {
+        try {
+            const jsonValue = JSON.stringify(value)
+            stmtSet.run(namespace, key, jsonValue, Date.now())
+            return true
+        } catch (error) {
+            console.error(`[Storage] Set failed (${namespace}:${key}):`, error)
+            return false
+        }
     })
 
-    // clear: 清空存储 (慎用)
-    ipcMain.handle('storage:clear', () => {
-        writeStorage({})
+    // remove: 删除值
+    const stmtRemove = db.prepare('DELETE FROM store WHERE plugin_id = ? AND key = ?')
+    ipcMain.handle('storage:remove', (_, key: string, namespace: string = 'global') => {
+        try {
+            stmtRemove.run(namespace, key)
+            return true
+        } catch (error) {
+            console.error(`[Storage] Remove failed (${namespace}:${key}):`, error)
+            return false
+        }
+    })
+
+    // getAll: 获取某命名空间下的所有数据
+    const stmtGetAll = db.prepare('SELECT key, value FROM store WHERE plugin_id = ?')
+    ipcMain.handle('storage:getAll', (_, namespace: string = 'global') => {
+        try {
+            const rows = stmtGetAll.all(namespace) as { key: string; value: string }[]
+            const result: Record<string, unknown> = {}
+            for (const row of rows) {
+                result[row.key] = JSON.parse(row.value)
+            }
+            return result
+        } catch (error) {
+            console.error(`[Storage] GetAll failed (${namespace}):`, error)
+            return {}
+        }
+    })
+
+    // clear: 清空某命名空间下的所有数据
+    const stmtClear = db.prepare('DELETE FROM store WHERE plugin_id = ?')
+    ipcMain.handle('storage:clear', (_, namespace: string = 'global') => {
+        try {
+            stmtClear.run(namespace)
+            return true
+        } catch (error) {
+            console.error(`[Storage] Clear failed (${namespace}):`, error)
+            return false
+        }
     })
 }

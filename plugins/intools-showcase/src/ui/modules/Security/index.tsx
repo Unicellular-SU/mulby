@@ -1,9 +1,9 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { PageHeader, Card, Button, StatusBadge, CodeBlock } from '../../components'
 import { useIntools, useNotification } from '../../hooks'
 
 export function SecurityModule() {
-    const { security, storage } = useIntools()
+    const { security, storage } = useIntools('intools-showcase')
     const notify = useNotification()
 
     const [encryptionAvailable, setEncryptionAvailable] = useState<boolean | null>(null)

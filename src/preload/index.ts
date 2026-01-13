@@ -181,9 +181,9 @@ contextBridge.exposeInMainWorld('intools', {
 
   // Storage API
   storage: {
-    get: (key: string) => ipcRenderer.invoke('storage:get', key),
-    set: (key: string, value: unknown) => ipcRenderer.invoke('storage:set', key, value),
-    remove: (key: string) => ipcRenderer.invoke('storage:remove', key)
+    get: (key: string, namespace?: string) => ipcRenderer.invoke('storage:get', key, namespace),
+    set: (key: string, value: unknown, namespace?: string) => ipcRenderer.invoke('storage:set', key, value, namespace),
+    remove: (key: string, namespace?: string) => ipcRenderer.invoke('storage:remove', key, namespace)
   },
 
   // Media API
