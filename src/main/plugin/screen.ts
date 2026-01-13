@@ -1,4 +1,5 @@
-import { desktopCapturer, screen } from 'electron'
+import { desktopCapturer, screen, nativeImage } from 'electron'
+import { CaptureWindow } from './capture-window'
 
 export interface DisplayInfo {
   id: number
@@ -129,7 +130,7 @@ export class PluginScreen {
     if (!sourceId) {
       const sources = await desktopCapturer.getSources({
         types: ['screen'],
-        thumbnailSize: { width: 1, height: 1 }
+        thumbnailSize: { width: 1, height: 1 } // 只需要 ID
       })
       if (sources.length === 0) {
         throw new Error('No screen source available')
@@ -137,27 +138,57 @@ export class PluginScreen {
       sourceId = sources[0].id
     }
 
-    // 获取完整截图
-    const sources = await desktopCapturer.getSources({
-      types: ['screen', 'window'],
-      thumbnailSize: { width: 1920, height: 1080 }
-    })
-
-    const source = sources.find(s => s.id === sourceId)
-    if (!source) {
-      throw new Error(`Source not found: ${sourceId}`)
+    // 获取对应屏幕的分辨率
+    const displays = this.getAllDisplays()
+    let display = displays.find(d => String(d.id) === sourceId)
+    // sourceId 格式通常是 "screen:1:0" 或 "window:123:0"
+    // 对于 screen，可能无法直接匹配 display.id，尝试从 sourceId 解析或默认取主屏
+    if (!display) {
+      // 这是一个简化处理，如果 sourceId 包含 displayId 信息最好，否则对于多屏可能有问题
+      // 这里如果 sourceId 是 default screen，通常对应 id 为主屏或 primary
+      // 尝试解析: screen:display_id:0
+      const parts = sourceId.split(':')
+      if (parts[0] === 'screen' && parts.length >= 2) {
+        const displayId = parseInt(parts[1])
+        display = displays.find(d => d.id === displayId)
+      }
     }
 
-    // 使用 BrowserWindow 的 capturePage 或直接返回 thumbnail
-    // 注意：desktopCapturer 的 thumbnail 尺寸有限，完整截图需要使用 MediaStream
-    // 这里我们使用一个隐藏窗口来获取完整截图
-
-    const image = source.thumbnail
-
-    if (format === 'jpeg') {
-      return image.toJPEG(quality)
+    if (!display) {
+      display = this.getPrimaryDisplay()
     }
-    return image.toPNG()
+
+    const width = display.bounds.width * display.scaleFactor
+    const height = display.bounds.height * display.scaleFactor
+
+    // 使用隐藏窗口获取高清截图
+    try {
+      const buffer = await CaptureWindow.getInstance().capture(sourceId, width, height)
+
+      // 如果需要 jpeg，这里 buffer 默认是 png (来自 capture.tsx)
+      if (format === 'jpeg') {
+        const image = nativeImage.createFromBuffer(buffer)
+        return image.toJPEG(quality)
+      }
+
+      return buffer
+    } catch (e) {
+      console.error('High-res capture failed, falling back to desktopCapturer:', e)
+
+      // Fallback: 如果失败，回退到原来的 desktopCapturer 方案
+      const sources = await desktopCapturer.getSources({
+        types: ['screen', 'window'],
+        thumbnailSize: { width: 1920, height: 1080 }
+      })
+      const source = sources.find(s => s.id === sourceId)
+      if (!source) throw new Error('Source not found')
+
+      const image = source.thumbnail
+      if (format === 'jpeg') {
+        return image.toJPEG(quality)
+      }
+      return image.toPNG()
+    }
   }
 
   /**
