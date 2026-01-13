@@ -22,7 +22,7 @@ import { registerFilesystemHandlers } from './filesystem'
 import { registerStorageHandlers } from './storage'
 import { PluginManager } from '../plugin'
 import { PluginWindowManager } from '../plugin/window'
-import { ThemeManager } from '../theme'
+import { ThemeManager } from '../services/theme'
 
 export function registerAllHandlers(
   getMainWindow: () => BrowserWindow | null,

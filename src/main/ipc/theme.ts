@@ -1,5 +1,5 @@
 import { ipcMain } from 'electron'
-import { ThemeManager, ThemeMode } from '../theme'
+import { ThemeManager, ThemeMode } from '../services/theme'
 
 export function registerThemeHandlers(themeManager: ThemeManager) {
   // 获取主题信息

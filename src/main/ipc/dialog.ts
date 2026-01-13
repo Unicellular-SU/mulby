@@ -1,5 +1,5 @@
 import { dialog, ipcMain } from 'electron'
-import { withDialogMode } from '../blur-manager'
+import { withDialogMode } from '../services/blur-manager'
 
 export interface OpenDialogOptions {
   title?: string

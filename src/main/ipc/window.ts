@@ -1,6 +1,6 @@
 import { ipcMain, BrowserWindow } from 'electron'
 import { PluginWindowManager } from '../plugin/window'
-import { ThemeManager } from '../theme'
+import { ThemeManager } from '../services/theme'
 
 export function registerWindowHandlers(
   getMainWindow: () => BrowserWindow | null,

@@ -3,8 +3,8 @@ import { join } from 'path'
 import { registerAllHandlers } from './ipc'
 import { PluginManager } from './plugin'
 import { PluginWindowManager } from './plugin/window'
-import { ThemeManager } from './theme'
-import { isIgnoringBlur, startIgnoringBlur, stopIgnoringBlur, setWindowsProvider } from './blur-manager'
+import { ThemeManager } from './services/theme'
+import { isIgnoringBlur, startIgnoringBlur, stopIgnoringBlur, setWindowsProvider } from './services/blur-manager'
 
 let mainWindow: BrowserWindow | null = null
 const pluginManager = new PluginManager()

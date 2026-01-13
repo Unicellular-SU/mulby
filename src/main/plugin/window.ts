@@ -2,7 +2,7 @@ import { BrowserWindow, app, Menu } from 'electron'
 import { join } from 'path'
 import { existsSync } from 'fs'
 import { Plugin } from '../../shared/types/plugin'
-import { ThemeManager } from '../theme'
+import { ThemeManager } from '../services/theme'
 import { injectCustomTitleBar } from './titlebar'
 import { PluginPanelWindow } from './panel-window'
 

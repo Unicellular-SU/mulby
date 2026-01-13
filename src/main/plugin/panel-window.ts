@@ -1,9 +1,9 @@
 import { BrowserWindow, screen } from 'electron'
 import { join } from 'path'
 import { Plugin } from '../../shared/types/plugin'
-import { ThemeManager } from '../theme'
+import { ThemeManager } from '../services/theme'
 import { injectCustomTitleBar } from './titlebar'
-import { isIgnoringBlur } from '../blur-manager'
+import { isIgnoringBlur } from '../services/blur-manager'
 
 /**
  * 生成面板工具栏的代码（使用 Shadow DOM 隔离样式）
