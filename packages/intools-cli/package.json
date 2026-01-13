@@ -3,6 +3,10 @@
   "version": "1.0.0",
   "description": "InTools 插件开发 CLI 工具",
   "main": "dist/index.js",
+  "files": [
+    "dist",
+    "assets"
+  ],
   "bin": {
     "intools": "./dist/index.js"
   },
