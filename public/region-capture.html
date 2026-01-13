@@ -1,0 +1,335 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>区域截图</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        html,
+        body {
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background: transparent;
+            cursor: crosshair;
+            user-select: none;
+        }
+
+        #canvas {
+            width: 100%;
+            height: 100%;
+            display: block;
+        }
+
+        #info-panel {
+            position: fixed;
+            padding: 8px 12px;
+            background: rgba(0, 0, 0, 0.75);
+            color: white;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            font-size: 12px;
+            border-radius: 4px;
+            pointer-events: none;
+            display: none;
+            z-index: 1000;
+            backdrop-filter: blur(4px);
+        }
+
+        #tip {
+            position: fixed;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            padding: 10px 20px;
+            background: rgba(0, 0, 0, 0.8);
+            color: white;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            font-size: 14px;
+            border-radius: 6px;
+            backdrop-filter: blur(8px);
+            z-index: 1000;
+        }
+
+        #buttons {
+            position: fixed;
+            display: none;
+            gap: 8px;
+            z-index: 1001;
+        }
+
+        #buttons button {
+            padding: 8px 16px;
+            border: none;
+            border-radius: 4px;
+            font-size: 13px;
+            cursor: pointer;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        }
+
+        #btn-confirm {
+            background: #007AFF;
+            color: white;
+        }
+
+        #btn-confirm:hover {
+            background: #0056b3;
+        }
+
+        #btn-cancel {
+            background: rgba(255, 255, 255, 0.9);
+            color: #333;
+        }
+
+        #btn-cancel:hover {
+            background: rgba(255, 255, 255, 1);
+        }
+    </style>
+</head>
+
+<body>
+    <canvas id="canvas"></canvas>
+    <div id="info-panel"></div>
+    <div id="tip">拖拽选择截图区域，按 ESC 取消</div>
+    <div id="buttons">
+        <button id="btn-confirm">确认</button>
+        <button id="btn-cancel">取消</button>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+        const infoPanel = document.getElementById('info-panel');
+        const tip = document.getElementById('tip');
+        const buttons = document.getElementById('buttons');
+        const btnConfirm = document.getElementById('btn-confirm');
+        const btnCancel = document.getElementById('btn-cancel');
+
+        // 从 URL 参数获取显示器信息
+        const params = new URLSearchParams(window.location.search);
+        const displayInfo = JSON.parse(decodeURIComponent(params.get('display') || '{}'));
+
+        let isDrawing = false;
+        let startX = 0;
+        let startY = 0;
+        let currentX = 0;
+        let currentY = 0;
+        let hasSelection = false;
+        let selectionRect = null;
+
+        // 设置 canvas 尺寸
+        function resizeCanvas() {
+            canvas.width = window.innerWidth * window.devicePixelRatio;
+            canvas.height = window.innerHeight * window.devicePixelRatio;
+            canvas.style.width = window.innerWidth + 'px';
+            canvas.style.height = window.innerHeight + 'px';
+            ctx.scale(window.devicePixelRatio, window.devicePixelRatio);
+            draw();
+        }
+
+        // 绘制遮罩和选区
+        function draw() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            // 绘制半透明遮罩
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
+            ctx.fillRect(0, 0, window.innerWidth, window.innerHeight);
+
+            if (isDrawing || hasSelection) {
+                const rect = selectionRect || getSelectionRect();
+
+                // 清除选区（使之透明）
+                ctx.clearRect(rect.x, rect.y, rect.width, rect.height);
+
+                // 绘制选区边框
+                ctx.strokeStyle = '#007AFF';
+                ctx.lineWidth = 2;
+                ctx.strokeRect(rect.x, rect.y, rect.width, rect.height);
+
+                // 绘制四角小方块
+                const cornerSize = 8;
+                ctx.fillStyle = '#007AFF';
+                // 左上
+                ctx.fillRect(rect.x - cornerSize / 2, rect.y - cornerSize / 2, cornerSize, cornerSize);
+                // 右上
+                ctx.fillRect(rect.x + rect.width - cornerSize / 2, rect.y - cornerSize / 2, cornerSize, cornerSize);
+                // 左下
+                ctx.fillRect(rect.x - cornerSize / 2, rect.y + rect.height - cornerSize / 2, cornerSize, cornerSize);
+                // 右下
+                ctx.fillRect(rect.x + rect.width - cornerSize / 2, rect.y + rect.height - cornerSize / 2, cornerSize, cornerSize);
+            }
+        }
+
+        // 计算选区矩形（处理反向拖拽）
+        function getSelectionRect() {
+            const x = Math.min(startX, currentX);
+            const y = Math.min(startY, currentY);
+            const width = Math.abs(currentX - startX);
+            const height = Math.abs(currentY - startY);
+            return { x, y, width, height };
+        }
+
+        // 更新信息面板
+        function updateInfo(rect) {
+            if (rect.width > 0 && rect.height > 0) {
+                infoPanel.style.display = 'block';
+                infoPanel.textContent = `${Math.round(rect.width)} × ${Math.round(rect.height)}`;
+
+                // 定位信息面板
+                let infoX = rect.x;
+                let infoY = rect.y - 30;
+                if (infoY < 10) {
+                    infoY = rect.y + rect.height + 10;
+                }
+                infoPanel.style.left = infoX + 'px';
+                infoPanel.style.top = infoY + 'px';
+            } else {
+                infoPanel.style.display = 'none';
+            }
+        }
+
+        // 更新按钮位置
+        function updateButtons(rect) {
+            if (hasSelection && rect.width > 0 && rect.height > 0) {
+                buttons.style.display = 'flex';
+                let btnX = rect.x + rect.width - buttons.offsetWidth;
+                let btnY = rect.y + rect.height + 10;
+
+                if (btnY + 40 > window.innerHeight) {
+                    btnY = rect.y - 50;
+                }
+                if (btnX < 10) {
+                    btnX = rect.x;
+                }
+
+                buttons.style.left = btnX + 'px';
+                buttons.style.top = btnY + 'px';
+            } else {
+                buttons.style.display = 'none';
+            }
+        }
+
+        // 获取屏幕坐标（相对于全屏幕）
+        function getScreenCoordinates(rect) {
+            return {
+                x: displayInfo.bounds.x + rect.x,
+                y: displayInfo.bounds.y + rect.y,
+                width: rect.width,
+                height: rect.height
+            };
+        }
+
+        // 完成截图
+        function completeCapture() {
+            if (selectionRect && selectionRect.width > 0 && selectionRect.height > 0) {
+                const screenRect = getScreenCoordinates(selectionRect);
+                // 使用 preload 暴露的 regionCapture API
+                if (window.regionCapture) {
+                    window.regionCapture.complete(screenRect);
+                }
+            }
+        }
+
+        // 取消截图
+        function cancelCapture() {
+            if (window.regionCapture) {
+                window.regionCapture.cancel();
+            }
+        }
+
+        // 鼠标事件
+        canvas.addEventListener('mousedown', (e) => {
+            if (e.button !== 0) return; // 只响应左键
+
+            isDrawing = true;
+            hasSelection = false;
+            startX = e.clientX;
+            startY = e.clientY;
+            currentX = e.clientX;
+            currentY = e.clientY;
+            selectionRect = null;
+            tip.style.display = 'none';
+            buttons.style.display = 'none';
+            draw();
+        });
+
+        canvas.addEventListener('mousemove', (e) => {
+            if (!isDrawing) return;
+
+            currentX = e.clientX;
+            currentY = e.clientY;
+            const rect = getSelectionRect();
+            updateInfo(rect);
+            draw();
+        });
+
+        canvas.addEventListener('mouseup', (e) => {
+            if (!isDrawing) return;
+
+            isDrawing = false;
+            currentX = e.clientX;
+            currentY = e.clientY;
+            selectionRect = getSelectionRect();
+
+            if (selectionRect.width > 5 && selectionRect.height > 5) {
+                hasSelection = true;
+                updateButtons(selectionRect);
+            } else {
+                selectionRect = null;
+                hasSelection = false;
+            }
+            draw();
+        });
+
+        // 按钮事件
+        btnConfirm.addEventListener('click', (e) => {
+            e.stopPropagation();
+            completeCapture();
+        });
+
+        btnCancel.addEventListener('click', (e) => {
+            e.stopPropagation();
+            cancelCapture();
+        });
+
+        // 键盘事件
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') {
+                cancelCapture();
+            } else if (e.key === 'Enter' && hasSelection) {
+                completeCapture();
+            }
+        });
+
+        // 双击直接完成
+        canvas.addEventListener('dblclick', () => {
+            if (hasSelection) {
+                completeCapture();
+            }
+        });
+
+        // 初始化
+        window.addEventListener('resize', resizeCanvas);
+        resizeCanvas();
+
+        // 如果有 preload 暴露的 API，使用它
+        window.addEventListener('DOMContentLoaded', () => {
+            // 通过 contextBridge 暴露的 API 获取 IPC
+            if (window.intools) {
+                // 替换 IPC 发送方法
+                window.sendIPC = (channel, ...args) => {
+                    // 使用 intools 暴露的方法或回退到 postMessage
+                    console.log('Send IPC:', channel, args);
+                };
+            }
+        });
+    </script>
+</body>
+
+</html>

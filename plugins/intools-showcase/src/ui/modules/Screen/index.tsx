@@ -115,6 +115,23 @@ export function ScreenModule() {
         }
     }, [screen, notify])
 
+    const handleRegionCapture = useCallback(async () => {
+        setLoading(true)
+        try {
+            const result = await screen.screenCapture()
+            if (result) {
+                setScreenshot(result)
+                notify.success('区域截图成功')
+            } else {
+                notify.info('已取消截图')
+            }
+        } catch (error) {
+            notify.error('截图失败')
+        } finally {
+            setLoading(false)
+        }
+    }, [screen, notify])
+
     const handleCopyScreenshot = useCallback(async () => {
         if (!screenshot) return
         try {
@@ -242,6 +259,9 @@ export function ScreenModule() {
                     <div className="action-bar" style={{ marginBottom: 'var(--spacing-md)' }}>
                         <Button onClick={handleCapture} loading={loading}>
                             截取主屏幕
+                        </Button>
+                        <Button variant="primary" onClick={handleRegionCapture} loading={loading}>
+                            区域截图
                         </Button>
                         <Button variant="secondary" onClick={loadSources}>
                             获取屏幕源列表

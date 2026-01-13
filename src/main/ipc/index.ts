@@ -20,6 +20,7 @@ import { registerGeolocationHandlers } from './geolocation'
 import { registerHostHandlers } from './host'
 import { registerFilesystemHandlers } from './filesystem'
 import { registerStorageHandlers } from './storage'
+import { registerRegionCaptureHandlers } from '../plugin/region-capture'
 import { PluginManager } from '../plugin'
 import { PluginWindowManager } from '../plugin/window'
 import { ThemeManager } from '../services/theme'
@@ -51,4 +52,5 @@ export function registerAllHandlers(
   registerHostHandlers(pluginManager)
   registerFilesystemHandlers()
   registerStorageHandlers()
+  registerRegionCaptureHandlers()
 }

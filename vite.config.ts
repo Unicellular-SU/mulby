@@ -36,6 +36,14 @@ export default defineConfig({
             }
           }
         }
+      },
+      {
+        entry: 'src/preload/region-capture.ts',
+        vite: {
+          build: {
+            outDir: 'dist/preload'
+          }
+        }
       }
     ])
   ],

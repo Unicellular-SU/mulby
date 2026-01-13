@@ -70,6 +70,7 @@ export function useIntools(pluginId?: string) {
                 window.intools?.screen?.capture(options),
             captureRegion: (region: { x: number, y: number, width: number, height: number }, options?: { format?: 'png' | 'jpeg', quality?: number }) =>
                 window.intools?.screen?.captureRegion(region, options),
+            screenCapture: () => window.intools?.screen?.screenCapture(),
         },
 
         // Shell API

@@ -96,7 +96,8 @@ contextBridge.exposeInMainWorld('intools', {
       options?: { format?: 'png' | 'jpeg'; quality?: number }
     ) => ipcRenderer.invoke('screen:captureRegion', region, options),
     getMediaStreamConstraints: (options: { sourceId: string; audio?: boolean; frameRate?: number }) =>
-      ipcRenderer.invoke('screen:getMediaStreamConstraints', options)
+      ipcRenderer.invoke('screen:getMediaStreamConstraints', options),
+    screenCapture: () => ipcRenderer.invoke('screen:startRegionCapture')
   },
 
   // Shell API
