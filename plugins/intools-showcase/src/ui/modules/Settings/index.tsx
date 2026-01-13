@@ -8,7 +8,7 @@ interface ThemeInfo {
 }
 
 export function SettingsModule() {
-    const { theme, isDark } = useTheme()
+    const { theme } = useTheme()
     const { window: win, shortcut, tray, menu } = useIntools()
     const notify = useNotification()
 
@@ -18,6 +18,7 @@ export function SettingsModule() {
     const [registeredShortcuts, setRegisteredShortcuts] = useState<string[]>([])
     const [newShortcut, setNewShortcut] = useState('')
     const [trayExists, setTrayExists] = useState(false)
+    const [lastTriggered, setLastTriggered] = useState<{ accelerator: string; count: number; time: Date } | null>(null)
 
     const loadThemeInfo = useCallback(async () => {
         try {
@@ -45,6 +46,24 @@ export function SettingsModule() {
     useEffect(() => {
         loadThemeInfo()
     }, [theme, loadThemeInfo])
+
+    // 监听快捷键触发事件
+    useEffect(() => {
+        const handleShortcutTriggered = (accelerator: string) => {
+            setLastTriggered(prev => ({
+                accelerator,
+                count: prev?.accelerator === accelerator ? prev.count + 1 : 1,
+                time: new Date()
+            }))
+            notify.success(`🎯 快捷键触发: ${accelerator}`)
+        }
+
+        // 使用 intools API 订阅快捷键触发事件
+        window.intools?.shortcut?.onTriggered?.(handleShortcutTriggered)
+
+        // 注意：当前 onTriggered 没有返回取消订阅的函数，
+        // 如果需要清理，可以在 preload 中添加 offTriggered 方法
+    }, [notify])
 
     const handleThemeChange = useCallback(async (mode: 'light' | 'dark' | 'system') => {
         try {
@@ -319,6 +338,34 @@ export function SettingsModule() {
                             <Button variant="secondary" onClick={handleUnregisterAll}>
                                 注销所有快捷键
                             </Button>
+                        )}
+
+                        {/* 快捷键验证区域 */}
+                        {registeredShortcuts.length > 0 && (
+                            <div
+                                style={{
+                                    padding: 'var(--spacing-md)',
+                                    background: lastTriggered ? 'var(--success-bg)' : 'var(--bg-tertiary)',
+                                    borderRadius: 'var(--radius-md)',
+                                    border: lastTriggered ? '1px solid var(--success-border)' : '1px dashed var(--border-secondary)',
+                                    textAlign: 'center',
+                                }}
+                            >
+                                {lastTriggered ? (
+                                    <div>
+                                        <p style={{ margin: 0, fontWeight: 600, color: 'var(--success-text)' }}>
+                                            🎯 最后触发: <code style={{ fontFamily: 'monospace' }}>{lastTriggered.accelerator}</code>
+                                        </p>
+                                        <p style={{ margin: 'var(--spacing-xs) 0 0', fontSize: '12px', color: 'var(--text-secondary)' }}>
+                                            触发次数: {lastTriggered.count} | 时间: {lastTriggered.time.toLocaleTimeString()}
+                                        </p>
+                                    </div>
+                                ) : (
+                                    <p style={{ margin: 0, color: 'var(--text-tertiary)', fontSize: '13px' }}>
+                                        💡 注册快捷键后，按下快捷键验证是否生效
+                                    </p>
+                                )}
+                            </div>
                         )}
                     </div>
                 </Card>
