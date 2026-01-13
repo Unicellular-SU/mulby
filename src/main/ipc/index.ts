@@ -18,6 +18,7 @@ import { registerHttpHandlers } from './http'
 import { registerMenuHandlers } from './menu'
 import { registerGeolocationHandlers } from './geolocation'
 import { registerHostHandlers } from './host'
+import { registerFilesystemHandlers } from './filesystem'
 import { PluginManager } from '../plugin'
 import { PluginWindowManager } from '../plugin/window'
 import { ThemeManager } from '../theme'
@@ -47,4 +48,5 @@ export function registerAllHandlers(
   registerMenuHandlers()
   registerGeolocationHandlers()
   registerHostHandlers(pluginManager)
+  registerFilesystemHandlers()
 }

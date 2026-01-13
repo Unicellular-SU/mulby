@@ -109,6 +109,21 @@ contextBridge.exposeInMainWorld('intools', {
     beep: () => ipcRenderer.invoke('shell:beep')
   },
 
+  // Filesystem API
+  filesystem: {
+    readFile: (path: string, encoding?: 'utf-8' | 'base64') =>
+      ipcRenderer.invoke('filesystem:readFile', path, encoding),
+    writeFile: (path: string, data: string | ArrayBuffer, encoding?: 'utf-8' | 'base64') =>
+      ipcRenderer.invoke('filesystem:writeFile', path, data, encoding),
+    exists: (path: string) => ipcRenderer.invoke('filesystem:exists', path),
+    readdir: (path: string) => ipcRenderer.invoke('filesystem:readdir', path),
+    mkdir: (path: string) => ipcRenderer.invoke('filesystem:mkdir', path),
+    stat: (path: string) => ipcRenderer.invoke('filesystem:stat', path),
+    copy: (src: string, dest: string) => ipcRenderer.invoke('filesystem:copy', src, dest),
+    move: (src: string, dest: string) => ipcRenderer.invoke('filesystem:move', src, dest),
+    unlink: (path: string) => ipcRenderer.invoke('filesystem:unlink', path)
+  },
+
   // Dialog API
   dialog: {
     showOpenDialog: (options?: {
