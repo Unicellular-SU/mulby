@@ -4,14 +4,12 @@ import { registerAllHandlers } from './ipc'
 import { PluginManager } from './plugin'
 import { PluginWindowManager } from './plugin/window'
 import { ThemeManager } from './theme'
+import { isIgnoringBlur, startIgnoringBlur, stopIgnoringBlur, setWindowsProvider } from './blur-manager'
 
 let mainWindow: BrowserWindow | null = null
 const pluginManager = new PluginManager()
 const pluginWindowManager = new PluginWindowManager()
 const themeManager = new ThemeManager()
-
-// 用于防止 show/focus 过程中的 blur 误触发
-let ignoringBlur = false
 
 // 单实例锁：确保只有一个应用实例运行
 const gotTheLock = app.requestSingleInstanceLock()
@@ -62,7 +60,7 @@ function createWindow() {
 
   // 失焦隐藏（类似 uTools 的交互）
   mainWindow.on('blur', () => {
-    if (ignoringBlur) return
+    if (isIgnoringBlur()) return
 
     // 延迟检查，让焦点转移完成
     setTimeout(() => {
@@ -104,7 +102,7 @@ function toggleWindow() {
     mainWindow.setPosition(x, y)
 
     // 临时忽略 blur 事件，防止 show/focus 过程中误触发
-    ignoringBlur = true
+    startIgnoringBlur()
 
     mainWindow.show()
     mainWindow.focus()
@@ -113,9 +111,7 @@ function toggleWindow() {
     pluginWindowManager.showPanelWindow()
 
     // 延迟恢复 blur 监听（确保窗口完全获得焦点）
-    setTimeout(() => {
-      ignoringBlur = false
-    }, 100)
+    stopIgnoringBlur()
   }
 }
 
@@ -126,6 +122,15 @@ app.whenReady().then(async () => {
   }
 
   createWindow()
+
+  // 设置全局窗口提供者，用于系统对话框打开时临时隐藏窗口
+  setWindowsProvider(() => {
+    const windows: BrowserWindow[] = []
+    if (mainWindow && !mainWindow.isDestroyed()) windows.push(mainWindow)
+    const panelWin = pluginWindowManager.getPanelWindow()?.getWindow()
+    if (panelWin && !panelWin.isDestroyed()) windows.push(panelWin)
+    return windows
+  })
 
   // 设置主窗口到插件窗口管理器
   pluginWindowManager.setMainWindow(mainWindow!)

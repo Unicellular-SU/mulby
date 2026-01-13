@@ -1,4 +1,5 @@
 import { dialog } from 'electron'
+import { withDialogMode } from '../blur-manager'
 
 export interface OpenDialogOptions {
   title?: string
@@ -28,29 +29,35 @@ export interface MessageBoxOptions {
 export class PluginDialog {
   /**
    * 显示打开文件对话框
+   * 使用 withDialogMode 临时隐藏窗口，防止遮挡系统对话框
    */
   async showOpenDialog(options: OpenDialogOptions = {}): Promise<string[]> {
-    const result = await dialog.showOpenDialog({
-      title: options.title,
-      defaultPath: options.defaultPath,
-      buttonLabel: options.buttonLabel,
-      filters: options.filters,
-      properties: options.properties || ['openFile']
+    return withDialogMode(async () => {
+      const result = await dialog.showOpenDialog({
+        title: options.title,
+        defaultPath: options.defaultPath,
+        buttonLabel: options.buttonLabel,
+        filters: options.filters,
+        properties: options.properties || ['openFile']
+      })
+      return result.canceled ? [] : result.filePaths
     })
-    return result.canceled ? [] : result.filePaths
   }
 
   /**
    * 显示保存文件对话框
+   * 使用 withDialogMode 临时隐藏窗口，防止遮挡系统对话框
    */
   async showSaveDialog(options: SaveDialogOptions = {}): Promise<string | null> {
-    const result = await dialog.showSaveDialog({
-      title: options.title,
-      defaultPath: options.defaultPath,
-      buttonLabel: options.buttonLabel,
-      filters: options.filters
+    return withDialogMode(async () => {
+      const result = await dialog.showSaveDialog({
+        title: options.title,
+        defaultPath: options.defaultPath,
+        buttonLabel: options.buttonLabel,
+        filters: options.filters
+      })
+      return result.canceled ? null : result.filePath || null
     })
-    return result.canceled ? null : result.filePath || null
   }
 
   /**

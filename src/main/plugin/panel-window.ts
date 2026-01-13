@@ -3,6 +3,7 @@ import { join } from 'path'
 import { Plugin } from '../../shared/types/plugin'
 import { ThemeManager } from '../theme'
 import { injectCustomTitleBar } from './titlebar'
+import { isIgnoringBlur } from '../blur-manager'
 
 /**
  * 生成面板工具栏的代码（使用 Shadow DOM 隔离样式）
@@ -319,6 +320,9 @@ export class PluginPanelWindow {
 
         // 面板失焦时检查焦点去向
         this.panelWindow.on('blur', () => {
+            // 如果正在使用系统对话框，忽略 blur 事件
+            if (isIgnoringBlur()) return
+
             setTimeout(() => {
                 // 如果焦点回到了主窗口，不隐藏
                 if (this.mainWindow.isFocused()) {
