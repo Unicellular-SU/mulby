@@ -19,6 +19,10 @@ export function WindowAPIModule() {
     const [searchText, setSearchText] = useState('')
     const [findResult, setFindResult] = useState<number | null>(null)
 
+    // 子窗口状态
+    const [childWin, setChildWin] = useState<any | null>(null)
+    const [childMessages, setChildMessages] = useState<string[]>([])
+
     // 加载窗口信息
     const loadWindowInfo = useCallback(async () => {
         try {
@@ -111,6 +115,74 @@ export function WindowAPIModule() {
         win.stopFindInPage('clearSelection')
         setFindResult(null)
         notify.info('已停止查找')
+    }
+
+    // 子窗口操作
+    const handleCreateChild = async () => {
+        if (childWin) {
+            notify.warning('子窗口已存在')
+            return
+        }
+        try {
+            const proxy = await win.create('/child-window', {
+                width: 600,
+                height: 400,
+                title: '子窗口 Demo'
+            })
+            if (proxy) {
+                setChildWin(proxy)
+                notify.success('子窗口创建成功')
+            }
+        } catch (error) {
+            notify.error('创建子窗口失败')
+        }
+    }
+
+    const handleChildAction = async (action: 'show' | 'hide' | 'close' | 'focus' | 'ping') => {
+        if (!childWin) return
+        try {
+            switch (action) {
+                case 'show': await childWin.show(); break
+                case 'hide': await childWin.hide(); break
+                case 'close':
+                    await childWin.close()
+                    setChildWin(null)
+                    setChildMessages([])
+                    break
+                case 'focus': await childWin.focus(); break
+                case 'ping':
+                    await childWin.postMessage('ping', 'Message from Parent')
+                    break
+            }
+        } catch (error) {
+            console.error('Child action failed:', error)
+        }
+    }
+
+    // 监听子窗口消息
+    useEffect(() => {
+        const handleMessage = (channel: string, ...args: unknown[]) => {
+            console.log('[WindowAPI] Received child message:', channel, args)
+            setChildMessages(prev => [...prev, `[${channel}] ${args.join(', ')}`])
+            if (channel === 'child-event') {
+                notify.info(`收到子窗口消息: ${args[0]}`)
+            }
+        }
+        win.onChildMessage(handleMessage)
+        // Cleanup not strictly necessary as typical listeners persist, but good practice if API supported off
+    }, [win, notify])
+
+    // 文件拖拽
+    const handleDrag = () => {
+        // 使用一个假路径演示，实际应为真实文件路径
+        // In a real app, you might get this from a file picker or dropped file
+        const dummyPath = '/Users/public/demo.txt' // Demo path
+        try {
+            win.startDrag(dummyPath)
+            notify.info('已尝试开始拖拽 (需提供有效路径)')
+        } catch (e) {
+            notify.error('拖拽失败')
+        }
     }
 
     // 插件导航
@@ -228,6 +300,61 @@ export function WindowAPIModule() {
                             查找请求 ID: {findResult}
                         </div>
                     )}
+                </Card>
+
+                {/* 子窗口控制 */}
+                <Card title="子窗口控制" icon="👶">
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--spacing-md)' }}>
+                        <div style={{ display: 'flex', gap: 'var(--spacing-sm)' }}>
+                            <Button onClick={handleCreateChild} disabled={!!childWin}>创建子窗口</Button>
+                            <Button variant="secondary" onClick={() => handleChildAction('show')} disabled={!childWin}>显示</Button>
+                            <Button variant="secondary" onClick={() => handleChildAction('hide')} disabled={!childWin}>隐藏</Button>
+                            <Button variant="secondary" onClick={() => handleChildAction('focus')} disabled={!childWin}>聚焦</Button>
+                            <Button variant="secondary" onClick={() => handleChildAction('close')} disabled={!childWin}>关闭</Button>
+                        </div>
+
+                        {childWin && (
+                            <div style={{ padding: 'var(--spacing-sm)', background: 'var(--bg-secondary)', borderRadius: 'var(--radius-sm)' }}>
+                                <div style={{ marginBottom: 'var(--spacing-sm)', fontWeight: 'bold' }}>通信日志:</div>
+                                <div style={{ maxHeight: '100px', overflowY: 'auto', fontSize: '12px', fontFamily: 'monospace' }}>
+                                    {childMessages.length > 0 ? childMessages.map((m, i) => (
+                                        <div key={i}>{m}</div>
+                                    )) : <span style={{ color: 'var(--text-tertiary)' }}>暂无消息...</span>}
+                                </div>
+                                <div style={{ marginTop: 'var(--spacing-sm)' }}>
+                                    <Button variant="secondary" onClick={() => handleChildAction('ping')}>发送 Ping 给子窗口</Button>
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                </Card>
+
+                {/* 其他工具 */}
+                <Card title="其他工具" icon="🛠️">
+                    <div style={{ display: 'flex', gap: 'var(--spacing-md)', alignItems: 'center' }}>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--spacing-sm)' }}>
+                            <div style={{ fontSize: '14px', fontWeight: 'bold' }}>文件拖拽</div>
+                            <div
+                                style={{
+                                    width: '100px',
+                                    height: '60px',
+                                    background: 'var(--bg-secondary)',
+                                    border: '1px dashed var(--border-color)',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    cursor: 'grab',
+                                    userSelect: 'none'
+                                }}
+                                onMouseDown={(e) => {
+                                    e.preventDefault()
+                                    handleDrag()
+                                }}
+                            >
+                                <span>按住拖拽</span>
+                            </div>
+                        </div>
+                    </div>
                 </Card>
 
                 {/* 插件导航 */}

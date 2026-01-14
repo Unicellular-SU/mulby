@@ -20,13 +20,25 @@ interface IntoolsNotification {
   show(message: string, type?: 'info' | 'success' | 'warning' | 'error'): void
 }
 
+interface BrowserWindowProxy {
+  id: number
+  show(): Promise<void>
+  hide(): Promise<void>
+  close(): Promise<void>
+  focus(): Promise<void>
+  setTitle(title: string): Promise<void>
+  setSize(width: number, height: number): Promise<void>
+  setPosition(x: number, y: number): Promise<void>
+  postMessage(channel: string, ...args: unknown[]): Promise<void>
+}
+
 interface IntoolsWindow {
   hide(isRestorePreWindow?: boolean): void
   show(): void
   setSize(width: number, height: number): void
   setExpendHeight(height: number): void
   center(): void
-  create(url: string, options?: { width?: number; height?: number; title?: string }): Promise<number>
+  create(url: string, options?: { width?: number; height?: number; title?: string }): Promise<BrowserWindowProxy | null>
   close(): void
   detach(): void
   setAlwaysOnTop(flag: boolean): void

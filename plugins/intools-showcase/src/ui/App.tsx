@@ -12,11 +12,12 @@ import {
   SecurityModule,
   ImageEditor,
   WindowAPIModule,
+  ChildWindowModule,
 } from './modules'
 
 console.log('[App] Module imports loaded')
 
-type ModuleId = 'sysinfo' | 'clipboard' | 'filemanager' | 'network' | 'screen' | 'media' | 'settings' | 'security' | 'image-editor' | 'window-api'
+type ModuleId = 'sysinfo' | 'clipboard' | 'filemanager' | 'network' | 'screen' | 'media' | 'settings' | 'security' | 'image-editor' | 'window-api' | 'child-window'
 
 // 模块映射
 const moduleComponents: Record<ModuleId, React.FC> = {
@@ -30,6 +31,7 @@ const moduleComponents: Record<ModuleId, React.FC> = {
   security: SecurityModule,
   'image-editor': ImageEditor,
   'window-api': WindowAPIModule,
+  'child-window': ChildWindowModule,
 }
 
 // 从 URL 参数或插件初始化数据获取默认模块
@@ -38,6 +40,9 @@ function getInitialModule(): ModuleId {
   const hash = window.location.hash
   if (hash.includes('image-editor')) {
     return 'image-editor'
+  }
+  if (hash.includes('child-window')) {
+    return 'child-window'
   }
   // 强制只返回 sysinfo
   return 'sysinfo'
@@ -57,6 +62,8 @@ export default function App() {
       console.log('[App] onPluginInit received data:', data)
       if (data.route && data.route.includes('image-editor')) {
         setActiveModule('image-editor')
+      } else if (data.route && data.route.includes('child-window')) {
+        setActiveModule('child-window')
       }
     })
   }, [])

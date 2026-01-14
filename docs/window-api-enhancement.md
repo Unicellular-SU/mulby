@@ -17,32 +17,34 @@
 | `showOpenDialog()` | `dialog.showOpenDialog()` | ✅ 独立模块 |
 | `showSaveDialog()` | `dialog.showSaveDialog()` | ✅ 独立模块 |
 | `isDarkColors()` | `theme.getActual()` | ✅ 已实现 |
+| `setSubInput()` | `subInput.set()` | ✅ 已实现 |
+| `removeSubInput()` | `subInput.remove()` | ✅ 已实现 |
+| `setSubInputValue()` | `subInput.setValue()` | ✅ 已实现 |
+| `subInputFocus()` | `subInput.focus()` | ✅ 已实现 |
+| `subInputBlur()` | `subInput.blur()` | ✅ 已实现 |
+| `subInputSelect()` | `subInput.select()` | ✅ 已实现 |
+| `redirect()` | `plugin.redirect()` | ✅ 已实现 |
+| `outPlugin()` | `plugin.outPlugin()` | ✅ 已实现 |
+| `sendToParent()` | `window.sendToParent()` | ✅ 已实现 |
+| `findInPage()` | `window.findInPage()` | ✅ 已实现 |
+| `stopFindInPage()` | `window.stopFindInPage()` | ✅ 已实现 |
+| `startDrag()` | `window.startDrag()` | ✅ 已实现 |
+| `setExpendHeight()` | `window.setExpendHeight()` | ✅ 已实现 |
 
 ### ⚠️ 部分实现的 API
 
 | uTools API | 现状 | 需要修改 |
 |------------|------|----------|
-| `setExpendHeight(height)` | `window.setSize(w, h)` 需宽高 | 添加 `setHeight()` |
-| `getWindowType()` | `window.getMode()` 缺少类型 | 添加 `'browser'` 类型 |
-| `createBrowserWindow()` | `window.create()` 功能受限 | 增强回调和控制 |
-| `hideMainWindow(isRestore)` | `window.hide()` 缺少参数 | 添加可选参数 |
+| `getWindowType()` | `window.getWindowType()` | 添加 `'browser'` 返回值 |
+| `createBrowserWindow()` | `window.create()` 返回 ID | 需返回 `BrowserWindowProxy` 对象 |
+| `hideMainWindow(isRestore)` | `window.hide()` 参数未使用 | 实现焦点恢复逻辑 |
 
 ### ❌ 缺失的 API
 
 | API | 功能 | 优先级 |
 |-----|------|--------|
-| `setSubInput()` | 子输入框控制 | 🔴 高 |
-| `removeSubInput()` | 移除子输入框 | 🔴 高 |
-| `setSubInputValue()` | 设置子输入框值 | 🔴 高 |
-| `subInputFocus()` | 子输入框获取焦点 | 🔴 高 |
-| `subInputBlur()` | 子输入框失去焦点 | 中 |
-| `subInputSelect()` | 选中子输入框文本 | 中 |
-| `redirect()` | 跳转到其他插件 | 🔴 高 |
-| `outPlugin()` | 退出插件 | 🔴 高 |
-| `sendToParent()` | 向父窗口发消息 | 🔴 高 |
-| `findInPage()` | 页面内查找 | 低 |
-| `stopFindInPage()` | 停止页面内查找 | 低 |
-| `startDrag()` | 原生文件拖拽 | 中 |
+| `createBrowserWindow` Proxy | 子窗口控制对象 (show/hide/close等) | 🔴 高 |
+
 
 ---
 
@@ -273,14 +275,14 @@ stopFindInPage(action?: 'clearSelection' | 'keepSelection' | 'activateSelection'
 
 ---
 
-## 实现优先级
+### 实现优先级
 
-| 阶段 | 功能 | 复杂度 | 预计时间 |
+| 阶段 | 功能 | 复杂度 | 状态 |
 |------|------|--------|----------|
-| **Phase 1** | SubInput 子输入框系统 | 🔴 高 | 2-3 天 |
-| **Phase 2** | redirect + outPlugin | 🟡 中 | 1 天 |
-| **Phase 3** | 窗口间通信增强 | 🟡 中 | 1-2 天 |
-| **Phase 4** | 参数增强 + 工具 API | 🟢 低 | 0.5 天 |
+| **Phase 1** | SubInput 子输入框系统 | 🔴 高 | ✅ 已完成 |
+| **Phase 2** | redirect + outPlugin | 🟡 中 | ✅ 已完成 |
+| **Phase 3** | 窗口间通信增强 | 🟡 中 | ⚠️ 部分完成 (缺少 Proxy) |
+| **Phase 4** | 参数增强 + 工具 API | 🟢 低 | ✅ 大部分完成 |
 
 ---
 

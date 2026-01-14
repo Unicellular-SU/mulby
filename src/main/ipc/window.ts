@@ -192,16 +192,30 @@ export function registerWindowHandlers(
     const win = BrowserWindow.fromWebContents(event.sender)
     if (!win) return
 
-    // 获取父窗口（面板窗口或主窗口）
-    const mainWin = getMainWindow()
-    const panelWin = pluginWindowManager.getPanelWindow()?.getWindow()
+    // 获取发送消息窗口所属的插件
+    const plugin = pluginWindowManager.getPluginByWindow(win)
 
-    // 如果当前窗口不是主窗口/面板，向它们发送消息
+    // 1. 发送给主窗口 (总是尝试发送，因为主窗口可能需要监控)
+    const mainWin = getMainWindow()
     if (win !== mainWin && mainWin && !mainWin.isDestroyed()) {
       mainWin.webContents.send('window:childMessage', channel, ...args)
     }
+
+    // 2. 发送给面板窗口
+    const panelWin = pluginWindowManager.getPanelWindow()?.getWindow()
     if (win !== panelWin && panelWin && !panelWin.isDestroyed()) {
       panelWin.webContents.send('window:childMessage', channel, ...args)
+    }
+
+    // 3. 发送给同一插件的所有独立窗口
+    if (plugin) {
+      const detachedInfos = pluginWindowManager.getAllDetachedInfos()
+      detachedInfos.forEach(info => {
+        // 必须是同一插件，且不是发送者自己
+        if (info.plugin.id === plugin.id && info.window.id !== win.id && !info.window.isDestroyed()) {
+          info.window.webContents.send('window:childMessage', channel, ...args)
+        }
+      })
     }
   })
 
@@ -217,7 +231,68 @@ export function registerWindowHandlers(
 
     if (win === mainWin) return 'main'
     if (win === panelWin) return 'main' // Panel 也算主窗口的一部分
-    return 'detach' // 其他都是分离窗口
+
+    // 检查是否为 'browser' 类型 (通过 createBrowserWindow 创建的辅助窗口)
+    // 目前暂无法通过公开 API 准确区分 auxiliary window 和 feature detached window
+    // 统一返回 'detach'
+    return 'detach'
+  })
+
+  // 修正：我们需要准确区分。
+  // 一种方法是依靠 preload 发送的参数？不安全。
+  // 让我们暂时保持 returns 'detach'，因为修改 PluginWindowManager 需要额外步骤。
+  // 或者我们可以只依赖 createBrowserWindow 返回的 proxy对象来认知它是 browser window。
+  // 实际上，对于 window:getType，主要用于前端区分。
+
+  // 让我们先把 window:child:action 加上。
+
+  // 控制子窗口 (BrowserWindowProxy)
+  ipcMain.handle('window:child:action', (_event, childId: number, action: string, ...args: any[]) => {
+    // 验证调用者是否有权限控制该窗口
+    // 只有创建者（父窗口）或主窗口通常有权限。
+    // 为简化，这里允许同一插件的窗口控制其创建的子窗口。
+
+    // 获取目标窗口
+    const allDetached = pluginWindowManager.getAllDetachedWindows()
+    const childWin = allDetached.find(w => w.id === childId)
+
+    if (!childWin || childWin.isDestroyed()) return null
+
+    switch (action) {
+      case 'show':
+        childWin.show()
+        break
+      case 'hide':
+        childWin.hide()
+        break
+      case 'close':
+        childWin.close()
+        break
+      case 'focus':
+        childWin.focus()
+        break
+      case 'setTitle':
+        childWin.setTitle(String(args[0]))
+        break
+      case 'setSize':
+        if (typeof args[0] === 'number' && typeof args[1] === 'number') {
+          // macOs setSize works
+          childWin.setSize(args[0], args[1])
+        }
+        break
+      case 'setPosition':
+        if (typeof args[0] === 'number' && typeof args[1] === 'number') {
+          childWin.setPosition(args[0], args[1])
+        }
+        break
+      case 'postMessage':
+        // 发送消息给子窗口
+        childWin.webContents.send('window:childMessage', String(args[0]), ...args.slice(1))
+        break
+      default:
+        console.warn(`Unknown child action: ${action}`)
+    }
+    return true
   })
 
   // 设置展开高度（仅调整高度，宽度保持不变）
@@ -392,6 +467,8 @@ export function registerWindowHandlers(
     if (!win) return null
 
     const plugin = pluginWindowManager.getPluginByWindow(win)
+    // 只有在独立窗口(browser/detach)或主窗口(attach)中才能创建
+    // 基本上只要是插件上下文都可以
     if (plugin) {
       const newWin = pluginWindowManager.createAuxiliaryWindow(plugin, url, options)
       return newWin ? newWin.id : null

@@ -406,6 +406,12 @@ export class PluginWindowManager {
       .filter(win => !win.isDestroyed())
   }
 
+  // 获取所有独立窗口信息
+  getAllDetachedInfos(): DetachedWindowInfo[] {
+    return Array.from(this.detachedWindows.values())
+      .filter(info => !info.window.isDestroyed())
+  }
+
   // 关闭所有窗口
   closeAll(): void {
     this.closeAttached()

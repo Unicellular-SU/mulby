@@ -20,8 +20,21 @@ contextBridge.exposeInMainWorld('intools', {
     maximize: () => ipcRenderer.send('window:maximize'),
     getState: () => ipcRenderer.invoke('window:getState'),
     reload: () => ipcRenderer.send('plugin:reload'),
-    create: (url: string, options?: { width?: number; height?: number; title?: string }) =>
-      ipcRenderer.invoke('window:create', url, options),
+    create: async (url: string, options?: { width?: number; height?: number; title?: string }) => {
+      const id = await ipcRenderer.invoke('window:create', url, options)
+      if (!id) return null
+      return {
+        id,
+        show: () => ipcRenderer.invoke('window:child:action', id, 'show'),
+        hide: () => ipcRenderer.invoke('window:child:action', id, 'hide'),
+        close: () => ipcRenderer.invoke('window:child:action', id, 'close'),
+        focus: () => ipcRenderer.invoke('window:child:action', id, 'focus'),
+        setTitle: (title: string) => ipcRenderer.invoke('window:child:action', id, 'setTitle', title),
+        setSize: (width: number, height: number) => ipcRenderer.invoke('window:child:action', id, 'setSize', width, height),
+        setPosition: (x: number, y: number) => ipcRenderer.invoke('window:child:action', id, 'setPosition', x, y),
+        postMessage: (channel: string, ...args: unknown[]) => ipcRenderer.invoke('window:child:action', id, 'postMessage', channel, ...args)
+      }
+    },
     // 窗口间通信
     sendToParent: (channel: string, ...args: unknown[]) =>
       ipcRenderer.send('window:sendToParent', channel, ...args),
