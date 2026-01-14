@@ -14,7 +14,7 @@
 | 📋 **剪贴板** | clipboard, notification | 剪贴板读写、格式检测、图片和文件支持 |
 | 📁 **文件管理** | filesystem, dialog, shell | 文件操作、对话框、系统打开、Finder 定位 |
 | 🌐 **网络与HTTP** | http, network | HTTP 请求测试、网络状态监控 |
-| 🖥️ **屏幕与捕获** | screen, media | 显示器信息、截图、权限管理 |
+| 🖥️ **屏幕与捕获** | screen, media, window | 显示器信息、区域截图、多窗口协作、媒体权限 |
 | 🔊 **媒体与音频** | tts, shell | 语音合成、系统提示音 |
 | ⚙️ **高级设置** | theme, window, shortcut, tray, menu | 主题切换、窗口控制、快捷键、托盘、菜单 |
 | 🔐 **安全与存储** | security, storage | 加密存储、数据持久化 |
@@ -122,6 +122,51 @@ intools-showcase/
 - ✅ `menu` - 右键菜单
 - ✅ `geolocation` - 地理位置
 - ✅ `tts` - 语音合成
+- ✅ `window` - 多窗口管理 (create/show/close)
+
+## 典型案例：区域截图与编辑流程
+
+本项目实现了一个经典的"区域截图 -> 独立窗口编辑 -> 回传主窗口"的工作流，展示了多窗口协作与数据传递的最佳实践。
+
+```mermaid
+sequenceDiagram
+    participant U as 用户
+    participant Main as 主窗口(Screen模块)
+    participant IPC as 主进程
+    participant Overlay as 截图覆盖层
+    participant Editor as 图片编辑器
+
+    U->>Main: 点击"区域截图"
+    Main->>IPC: 调用 screen.screenCapture()
+    Note over Main: 主窗口自动隐藏(失焦)
+    
+    IPC->>Overlay: 创建全屏透明窗口
+    U->>Overlay: 拖拽选择区域
+    Overlay->>IPC: 完成选择
+    IPC->>Overlay: 关闭覆盖层
+    IPC->>Main: 返回截图数据(Base64)
+    
+    Main->>Editor: window.create('/image-editor')
+    Note right of Main: 使用 BroadcastChannel 建立连接
+    
+    Editor-->>Main: 发送 READY 消息
+    Main->>Editor: 发送 INIT_IMAGE (原图)
+    
+    U->>Editor: 绘制/编辑图片
+    U->>Editor: 点击"确认使用"
+    
+    Editor->>Main: 发送 SAVE_IMAGE (编辑后图片)
+    Editor->>Editor: 关闭窗口
+    
+    Main->>Main: 更新预览区域
+    Main->>Main: window.show() 恢复显示
+```
+
+### 关键技术点
+
+1.  **多窗口管理**：使用 `window.intools.window.create` 创建独立的编辑器窗口，互不干扰。
+2.  **窗口通信**：使用 Web 标准 `BroadcastChannel` 实现主窗口与编辑器窗口的直接通信，无需经过主进程中转，高效且低延迟。
+3.  **可见性控制**：利用 `window.show()` 确保截图流程结束后主窗口能正确恢复显示。
 
 ## 许可证
 
