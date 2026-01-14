@@ -1,4 +1,5 @@
-import { ipcMain, BrowserWindow, webContents, nativeImage } from 'electron'
+import { app, ipcMain, BrowserWindow, webContents, nativeImage } from 'electron'
+import { existsSync } from 'fs'
 import { PluginWindowManager } from '../plugin/window'
 import { ThemeManager } from '../services/theme'
 import { PluginManager } from '../plugin/manager'
@@ -323,13 +324,37 @@ export function registerWindowHandlers(
   ipcMain.on('window:startDrag', (event, filePath: string | string[]) => {
     const paths = Array.isArray(filePath) ? filePath : [filePath]
     if (paths.length === 0) return
+    const targetPath = paths[0]
+    if (!existsSync(targetPath)) {
+      console.warn(`[window:startDrag] File not found: ${targetPath}`)
+      return
+    }
+    const fallbackIcon = nativeImage.createFromBuffer(
+      Buffer.from(
+        'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAOqz9uoAAAAASUVORK5CYII=',
+        'base64'
+      )
+    )
 
-    // 创建一个简单的空图标（Electron 要求必须提供 icon）
-    const emptyIcon = nativeImage.createEmpty()
-    // 使用 file (单文件) 而不是 files，避免类型问题
-    event.sender.startDrag({
-      file: paths[0],
-      icon: emptyIcon
+    // Electron 要求提供 icon，优先用系统文件图标
+    app.getFileIcon(targetPath, { size: 'small' }).then((icon) => {
+      const dragIcon = icon?.isEmpty?.() ? fallbackIcon : icon
+      if (!event.sender.isDestroyed()) {
+        // 使用 file (单文件) 而不是 files，避免类型问题
+        event.sender.startDrag({
+          file: targetPath,
+          files: paths,
+          icon: dragIcon || fallbackIcon
+        })
+      }
+    }).catch(() => {
+      if (!event.sender.isDestroyed()) {
+        event.sender.startDrag({
+          file: targetPath,
+          files: paths,
+          icon: fallbackIcon
+        })
+      }
     })
   })
 

@@ -1,9 +1,10 @@
 import { useState, useEffect, useCallback } from 'react'
+import type { DragEvent } from 'react'
 import { PageHeader, Card, Button, StatusBadge, CodeBlock } from '../../components'
 import { useIntools, useNotification } from '../../hooks'
 
 export function WindowAPIModule() {
-    const { window: win, subInput, plugin } = useIntools()
+    const { window: win, subInput, plugin, filesystem, system, dialog } = useIntools()
     const notify = useNotification()
 
     // 窗口状态
@@ -22,6 +23,11 @@ export function WindowAPIModule() {
     // 子窗口状态
     const [childWin, setChildWin] = useState<any | null>(null)
     const [childMessages, setChildMessages] = useState<string[]>([])
+
+    // 文件拖拽状态
+    const [dragFilePath, setDragFilePath] = useState<string>('')
+    const [generatedTextPath, setGeneratedTextPath] = useState<string>('')
+    const [generatedImagePath, setGeneratedImagePath] = useState<string>('')
 
     // 加载窗口信息
     const loadWindowInfo = useCallback(async () => {
@@ -173,17 +179,60 @@ export function WindowAPIModule() {
     }, [win, notify])
 
     // 文件拖拽
-    const handleDrag = () => {
-        // 使用一个假路径演示，实际应为真实文件路径
-        // In a real app, you might get this from a file picker or dropped file
-        const dummyPath = '/Users/public/demo.txt' // Demo path
+    const handlePickDragFile = async () => {
         try {
-            win.startDrag(dummyPath)
-            notify.info('已尝试开始拖拽 (需提供有效路径)')
+            const files = await dialog.showOpenDialog({ properties: ['openFile'] })
+            const filePath = files?.[0]
+            if (filePath) {
+                setDragFilePath(filePath)
+                notify.success('已选择拖拽文件')
+            }
+        } catch (error) {
+            notify.error('选择文件失败')
+        }
+    }
+
+    const handleStartDrag = (filePath: string, event?: DragEvent<HTMLDivElement>) => {
+        if (!filePath) {
+            notify.warning('请先选择或生成文件')
+            return
+        }
+        event?.preventDefault()
+        try {
+            win.startDrag(filePath)
         } catch (e) {
             notify.error('拖拽失败')
         }
     }
+
+    const createTempFile = useCallback(async (type: 'text' | 'image') => {
+        try {
+            const tempDir = await system.getPath('temp')
+            if (!tempDir) {
+                notify.error('无法获取临时目录')
+                return ''
+            }
+            const timestamp = Date.now()
+            if (type === 'text') {
+                const filePath = `${tempDir}/intools-drag-${timestamp}.txt`
+                const content = `InTools Drag Demo\n${new Date(timestamp).toISOString()}`
+                await filesystem.writeFile(filePath, content, 'utf-8')
+                setGeneratedTextPath(filePath)
+                notify.success('已生成临时文本文件')
+                return filePath
+            }
+            const filePath = `${tempDir}/intools-drag-${timestamp}.png`
+            const base64Png =
+                'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAOqz9uoAAAAASUVORK5CYII='
+            await filesystem.writeFile(filePath, base64Png, 'base64')
+            setGeneratedImagePath(filePath)
+            notify.success('已生成临时图片文件')
+            return filePath
+        } catch (error) {
+            notify.error('生成临时文件失败')
+            return ''
+        }
+    }, [filesystem, system, notify])
 
     // 插件导航
     const handleOutPlugin = async (isKill: boolean) => {
@@ -331,12 +380,19 @@ export function WindowAPIModule() {
 
                 {/* 其他工具 */}
                 <Card title="其他工具" icon="🛠️">
-                    <div style={{ display: 'flex', gap: 'var(--spacing-md)', alignItems: 'center' }}>
+                    <div style={{ display: 'flex', gap: 'var(--spacing-lg)', alignItems: 'flex-start', flexWrap: 'wrap' }}>
                         <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--spacing-sm)' }}>
-                            <div style={{ fontSize: '14px', fontWeight: 'bold' }}>文件拖拽</div>
+                            <div style={{ fontSize: '14px', fontWeight: 'bold' }}>拖拽已有文件</div>
+                            <div style={{ display: 'flex', gap: 'var(--spacing-sm)', alignItems: 'center' }}>
+                                <Button variant="secondary" onClick={handlePickDragFile}>选择文件</Button>
+                                <span style={{ fontSize: '12px', color: 'var(--text-tertiary)' }}>
+                                    {dragFilePath || '未选择'}
+                                </span>
+                            </div>
                             <div
+                                draggable
                                 style={{
-                                    width: '100px',
+                                    width: '120px',
                                     height: '60px',
                                     background: 'var(--bg-secondary)',
                                     border: '1px dashed var(--border-color)',
@@ -346,12 +402,61 @@ export function WindowAPIModule() {
                                     cursor: 'grab',
                                     userSelect: 'none'
                                 }}
-                                onMouseDown={(e) => {
-                                    e.preventDefault()
-                                    handleDrag()
-                                }}
+                                onDragStart={(e) => handleStartDrag(dragFilePath, e)}
                             >
-                                <span>按住拖拽</span>
+                                <span>拖拽文件</span>
+                            </div>
+                        </div>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--spacing-sm)' }}>
+                            <div style={{ fontSize: '14px', fontWeight: 'bold' }}>拖拽生成内容</div>
+                            <div style={{ display: 'flex', gap: 'var(--spacing-sm)', alignItems: 'center' }}>
+                                <Button variant="secondary" onClick={() => createTempFile('text')}>生成文本</Button>
+                                <Button variant="secondary" onClick={() => createTempFile('image')}>生成图片</Button>
+                            </div>
+                            <div style={{ display: 'flex', gap: 'var(--spacing-sm)' }}>
+                                <div
+                                    draggable
+                                    style={{
+                                        width: '120px',
+                                        height: '60px',
+                                        background: 'var(--bg-secondary)',
+                                        border: '1px dashed var(--border-color)',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'center',
+                                        cursor: 'grab',
+                                        userSelect: 'none'
+                                    }}
+                                    onMouseDown={() => {
+                                        if (!generatedTextPath) void createTempFile('text')
+                                    }}
+                                    onDragStart={(e) => handleStartDrag(generatedTextPath, e)}
+                                >
+                                    <span>拖拽文本</span>
+                                </div>
+                                <div
+                                    draggable
+                                    style={{
+                                        width: '120px',
+                                        height: '60px',
+                                        background: 'var(--bg-secondary)',
+                                        border: '1px dashed var(--border-color)',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'center',
+                                        cursor: 'grab',
+                                        userSelect: 'none'
+                                    }}
+                                    onMouseDown={() => {
+                                        if (!generatedImagePath) void createTempFile('image')
+                                    }}
+                                    onDragStart={(e) => handleStartDrag(generatedImagePath, e)}
+                                >
+                                    <span>拖拽图片</span>
+                                </div>
+                            </div>
+                            <div style={{ fontSize: '12px', color: 'var(--text-tertiary)' }}>
+                                生成内容会写入系统临时目录，然后通过路径拖拽。
                             </div>
                         </div>
                     </div>
