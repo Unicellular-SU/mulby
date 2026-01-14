@@ -1,0 +1,115 @@
+## 10. Dialog API (dialog)
+
+Dialog API 提供系统原生对话框，支持 macOS、Windows 和 Linux。
+
+### 10.1 showOpenDialog(options?)
+显示打开文件对话框。
+
+```javascript
+// 选择单个文件
+const files = await dialog.showOpenDialog();
+
+// 选择多个文件
+const files = await dialog.showOpenDialog({
+  title: '选择文件',
+  properties: ['openFile', 'multiSelections']
+});
+
+// 选择目录
+const dirs = await dialog.showOpenDialog({
+  properties: ['openDirectory']
+});
+
+// 带文件过滤器
+const images = await dialog.showOpenDialog({
+  title: '选择图片',
+  filters: [
+    { name: '图片', extensions: ['jpg', 'png', 'gif'] },
+    { name: '所有文件', extensions: ['*'] }
+  ]
+});
+```
+
+**参数** (OpenDialogOptions):
+- `title` (string, 可选) - 对话框标题
+- `defaultPath` (string, 可选) - 默认路径
+- `buttonLabel` (string, 可选) - 确认按钮文字
+- `filters` (array, 可选) - 文件过滤器
+- `properties` (array, 可选) - 属性：
+  - `'openFile'` - 允许选择文件
+  - `'openDirectory'` - 允许选择目录
+  - `'multiSelections'` - 允许多选
+  - `'showHiddenFiles'` - 显示隐藏文件
+
+**返回值**: `string[]` - 选中的文件路径数组，取消时返回空数组
+
+### 10.2 showSaveDialog(options?)
+显示保存文件对话框。
+
+```javascript
+const savePath = await dialog.showSaveDialog({
+  title: '保存文件',
+  defaultPath: 'untitled.txt',
+  filters: [
+    { name: '文本文件', extensions: ['txt'] }
+  ]
+});
+
+if (savePath) {
+  filesystem.writeFile(savePath, content);
+}
+```
+
+**参数** (SaveDialogOptions):
+- `title` (string, 可选) - 对话框标题
+- `defaultPath` (string, 可选) - 默认文件名或路径
+- `buttonLabel` (string, 可选) - 确认按钮文字
+- `filters` (array, 可选) - 文件过滤器
+
+**返回值**: `string | null` - 保存路径，取消时返回 null
+
+### 10.3 showMessageBox(options)
+显示消息框。
+
+```javascript
+// 简单消息
+await dialog.showMessageBox({
+  message: '操作完成'
+});
+
+// 确认对话框
+const result = await dialog.showMessageBox({
+  type: 'question',
+  title: '确认',
+  message: '确定要删除吗？',
+  buttons: ['取消', '删除'],
+  defaultId: 0,
+  cancelId: 0
+});
+
+if (result.response === 1) {
+  // 用户点击了"删除"
+}
+```
+
+**参数** (MessageBoxOptions):
+- `type` (string, 可选) - 类型：'none' | 'info' | 'error' | 'question' | 'warning'
+- `title` (string, 可选) - 标题
+- `message` (string, 必需) - 消息内容
+- `detail` (string, 可选) - 详细信息
+- `buttons` (string[], 可选) - 按钮文字数组，默认 ['OK']
+- `defaultId` (number, 可选) - 默认选中按钮索引
+- `cancelId` (number, 可选) - 取消按钮索引
+
+**返回值**: `{ response: number; checkboxChecked: boolean }`
+
+### 10.4 showErrorBox(title, content)
+显示错误框（同步，会阻塞）。
+
+```javascript
+dialog.showErrorBox('错误', '发生了一个严重错误');
+```
+
+**参数**:
+- `title` (string) - 标题
+- `content` (string) - 错误内容

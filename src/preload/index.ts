@@ -3,24 +3,54 @@ import { contextBridge, ipcRenderer } from 'electron'
 contextBridge.exposeInMainWorld('intools', {
   // 窗口控制
   window: {
-    hide: () => ipcRenderer.send('window:hide'),
+    hide: (isRestorePreWindow?: boolean) => ipcRenderer.send('window:hide', isRestorePreWindow),
     show: () => ipcRenderer.send('window:show'),
     setSize: (width: number, height: number) =>
       ipcRenderer.send('window:setSize', width, height),
+    setExpendHeight: (height: number) => ipcRenderer.send('window:setExpendHeight', height),
     center: () => ipcRenderer.send('window:center'),
     // 插件窗口控制
     detach: () => ipcRenderer.send('plugin:detach'),
     close: () => ipcRenderer.send('plugin:close'),
     setAlwaysOnTop: (flag: boolean) => ipcRenderer.send('window:alwaysOnTop', flag),
     getMode: () => ipcRenderer.invoke('plugin:getMode'),
+    getWindowType: () => ipcRenderer.invoke('window:getType'),
     // 独立窗口标题栏控制
     minimize: () => ipcRenderer.send('window:minimize'),
     maximize: () => ipcRenderer.send('window:maximize'),
     getState: () => ipcRenderer.invoke('window:getState'),
     reload: () => ipcRenderer.send('plugin:reload'),
     create: (url: string, options?: { width?: number; height?: number; title?: string }) =>
-      ipcRenderer.invoke('window:create', url, options)
+      ipcRenderer.invoke('window:create', url, options),
+    // 窗口间通信
+    sendToParent: (channel: string, ...args: unknown[]) =>
+      ipcRenderer.send('window:sendToParent', channel, ...args),
+    onChildMessage: (callback: (channel: string, ...args: unknown[]) => void) => {
+      ipcRenderer.on('window:childMessage', (_, channel, ...args) => callback(channel, ...args))
+    },
+    // 页面内查找
+    findInPage: (text: string, options?: { forward?: boolean; findNext?: boolean; matchCase?: boolean }) =>
+      ipcRenderer.invoke('webContents:findInPage', text, options),
+    stopFindInPage: (action?: 'clearSelection' | 'keepSelection' | 'activateSelection') =>
+      ipcRenderer.send('webContents:stopFindInPage', action),
+    // 原生文件拖拽
+    startDrag: (filePath: string | string[]) => ipcRenderer.send('window:startDrag', filePath)
   },
+
+  // 子输入框 API (uTools 特色功能)
+  subInput: {
+    set: (placeholder?: string, isFocus?: boolean) =>
+      ipcRenderer.invoke('subInput:set', placeholder, isFocus),
+    remove: () => ipcRenderer.invoke('subInput:remove'),
+    setValue: (text: string) => ipcRenderer.send('subInput:setValue', text),
+    focus: () => ipcRenderer.send('subInput:focus'),
+    blur: () => ipcRenderer.send('subInput:blur'),
+    select: () => ipcRenderer.send('subInput:select'),
+    onChange: (callback: (data: { text: string }) => void) => {
+      ipcRenderer.on('subInput:onChange', (_, data) => callback(data))
+    }
+  },
+
 
   // 主题
   theme: {
@@ -65,7 +95,11 @@ contextBridge.exposeInMainWorld('intools', {
     enable: (name: string) => ipcRenderer.invoke('plugin:enable', name),
     disable: (name: string) => ipcRenderer.invoke('plugin:disable', name),
     uninstall: (name: string) => ipcRenderer.invoke('plugin:uninstall', name),
-    getReadme: (name: string) => ipcRenderer.invoke('plugin:getReadme', name)
+    getReadme: (name: string) => ipcRenderer.invoke('plugin:getReadme', name),
+    // 插件导航 API
+    redirect: (label: string | [string, string], payload?: unknown) =>
+      ipcRenderer.invoke('plugin:redirect', label, payload),
+    outPlugin: (isKill?: boolean) => ipcRenderer.invoke('plugin:out', isKill)
   },
 
   // 插件窗口事件

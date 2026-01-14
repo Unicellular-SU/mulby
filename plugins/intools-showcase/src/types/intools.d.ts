@@ -21,12 +21,40 @@ interface IntoolsNotification {
 }
 
 interface IntoolsWindow {
-  hide(): void
+  hide(isRestorePreWindow?: boolean): void
+  show(): void
   setSize(width: number, height: number): void
+  setExpendHeight(height: number): void
   center(): void
   create(url: string, options?: { width?: number; height?: number; title?: string }): Promise<number>
   close(): void
-  show(): void
+  detach(): void
+  setAlwaysOnTop(flag: boolean): void
+  getMode(): Promise<'attached' | 'detached'>
+  getWindowType(): Promise<'main' | 'detach'>
+  minimize(): void
+  maximize(): void
+  getState(): Promise<{ isMaximized: boolean; isAlwaysOnTop: boolean }>
+  reload(): void
+  // 窗口间通信
+  sendToParent(channel: string, ...args: unknown[]): void
+  onChildMessage(callback: (channel: string, ...args: unknown[]) => void): void
+  // 页面内查找
+  findInPage(text: string, options?: { forward?: boolean; findNext?: boolean; matchCase?: boolean }): Promise<number>
+  stopFindInPage(action?: 'clearSelection' | 'keepSelection' | 'activateSelection'): void
+  // 原生文件拖拽
+  startDrag(filePath: string | string[]): void
+}
+
+// SubInput 子输入框 API
+interface IntoolsSubInput {
+  set(placeholder?: string, isFocus?: boolean): Promise<boolean>
+  remove(): Promise<boolean>
+  setValue(text: string): void
+  focus(): void
+  blur(): void
+  select(): void
+  onChange(callback: (data: { text: string }) => void): void
 }
 
 interface IntoolsTheme {
@@ -43,6 +71,9 @@ interface IntoolsPlugin {
   enable(name: string): Promise<any>
   disable(name: string): Promise<any>
   uninstall(name: string): Promise<any>
+  // 插件导航 API
+  redirect(label: string | [string, string], payload?: unknown): Promise<boolean | { candidates: { name: string; displayName: string }[] }>
+  outPlugin(isKill?: boolean): Promise<boolean>
 }
 
 // Screen API 类型
@@ -309,6 +340,7 @@ interface IntoolsAPI {
   clipboard: IntoolsClipboard
   notification: IntoolsNotification
   window: IntoolsWindow
+  subInput: IntoolsSubInput
   plugin: IntoolsPlugin
   theme?: IntoolsTheme
   screen: IntoolsScreen
@@ -329,6 +361,7 @@ interface IntoolsAPI {
   filesystem: IntoolsFilesystem
   onPluginInit(callback: (data: PluginInitData) => void): void
   onThemeChange?(callback: (theme: 'light' | 'dark') => void): void
+  onWindowStateChange?(callback: (state: { isMaximized: boolean }) => void): void
 }
 
 declare global {

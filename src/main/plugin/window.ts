@@ -322,12 +322,6 @@ export class PluginWindowManager {
     const hash = path.startsWith('/') ? path.substring(1) : path
     // 开发环境如果使用了 loadURL (e.g. vite dev server)
     if (process.env.VITE_DEV_SERVER_URL || (process.env.NODE_ENV === 'development' && !app.isPackaged)) {
-      // 假设主窗口也是 loadURL 加载的，这里应该也是。
-      // 但是这里我们不知道插件是否运行在 dev server 上。
-      // 目前插件加载逻辑是 loadFile(uiPath)。
-      // 只有主程序在 dev 模式下可能用 server。插件通常是构建好的文件。
-      // 但其实 intools-showcase 也是在 src 下开发的，如果是 dev 模式...
-      // 现有的逻辑是 win.loadFile(uiPath)，所以这里也保持一致。
       win.loadFile(uiPath, { hash })
     } else {
       win.loadFile(uiPath, { hash })
