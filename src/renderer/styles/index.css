@@ -85,6 +85,27 @@ body {
   opacity: 0.5;
 }
 
+/* SubInput 模式指示器 */
+.subinput-indicator {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  color: var(--accent);
+  opacity: 0.8;
+  -webkit-app-region: no-drag;
+}
+
+.subinput-indicator svg {
+  animation: subinput-pulse 2s ease-in-out infinite;
+}
+
+@keyframes subinput-pulse {
+  0%, 100% { opacity: 0.6; }
+  50% { opacity: 1; }
+}
+
 /* Plugin Grid - 6列网格布局 */
 .plugin-grid {
   display: grid;

@@ -353,3 +353,35 @@ contextBridge.exposeInMainWorld('intools', {
       ipcRenderer.invoke('host:restart', pluginName)
   }
 })
+
+// ==========================================
+// 主窗口专用 API（用于 SubInput 等功能）
+// ==========================================
+contextBridge.exposeInMainWorld('intoolsMain', {
+  // SubInput 事件监听（主窗口接收插件发来的控制指令）
+  subInput: {
+    onEnabled: (callback: (data: { placeholder: string; isFocus: boolean }) => void) => {
+      ipcRenderer.on('subInput:enabled', (_, data) => callback(data))
+    },
+    onDisabled: (callback: () => void) => {
+      ipcRenderer.on('subInput:disabled', () => callback())
+    },
+    onSetValue: (callback: (text: string) => void) => {
+      ipcRenderer.on('subInput:setValue', (_, text) => callback(text))
+    },
+    onFocus: (callback: () => void) => {
+      ipcRenderer.on('subInput:focus', () => callback())
+    },
+    onBlur: (callback: () => void) => {
+      ipcRenderer.on('subInput:blur', () => callback())
+    },
+    onSelect: (callback: () => void) => {
+      ipcRenderer.on('subInput:select', () => callback())
+    },
+    // 主窗口输入变化时发送给主进程（转发给插件）
+    sendChange: (text: string) => {
+      ipcRenderer.send('subInput:change', text)
+    }
+  }
+})
+

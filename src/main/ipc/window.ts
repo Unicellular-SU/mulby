@@ -3,19 +3,15 @@ import { PluginWindowManager } from '../plugin/window'
 import { ThemeManager } from '../services/theme'
 import { PluginManager } from '../plugin/manager'
 import { Plugin, PluginFeature } from '../../shared/types/plugin'
+import {
+  setSubInputState,
+  clearSubInputState,
+  isSubInputEnabled,
+  getSubInputOwnerId
+} from '../services/subinput-state'
 
-// SubInput 状态管理
-interface SubInputState {
-  enabled: boolean
-  placeholder: string
-  ownerId: number  // 调用者 webContents id，用于标识哪个插件拥有 SubInput
-}
-
-let subInputState: SubInputState = {
-  enabled: false,
-  placeholder: '',
-  ownerId: 0
-}
+// 重新导出 clearSubInputState 供其他模块使用
+export { clearSubInputState } from '../services/subinput-state'
 
 export function registerWindowHandlers(
   getMainWindow: () => BrowserWindow | null,
@@ -27,20 +23,29 @@ export function registerWindowHandlers(
   // SubInput 子输入框 API
   // =========================================
 
-  // 设置子输入框
+  // 设置子输入框（只允许附着模式的插件使用）
   ipcMain.handle('subInput:set', (event, placeholder?: string, isFocus?: boolean) => {
     const mainWin = getMainWindow()
     if (!mainWin) return false
 
-    subInputState = {
-      enabled: true,
-      placeholder: placeholder || '请输入...',
-      ownerId: event.sender.id
+    // 检查调用者是否为面板窗口（附着模式）
+    const panelWin = pluginWindowManager.getPanelWindow()?.getWindow()
+    const callerWin = BrowserWindow.fromWebContents(event.sender)
+    if (!panelWin || callerWin !== panelWin) {
+      console.warn('[SubInput] Rejected: SubInput is only available in attached mode')
+      return false
     }
+
+    const placeholderText = placeholder || '请输入...'
+    setSubInputState({
+      enabled: true,
+      placeholder: placeholderText,
+      ownerId: event.sender.id
+    })
 
     // 通知主窗口切换到 SubInput 模式
     mainWin.webContents.send('subInput:enabled', {
-      placeholder: subInputState.placeholder,
+      placeholder: placeholderText,
       isFocus: isFocus !== false
     })
 
@@ -53,11 +58,12 @@ export function registerWindowHandlers(
     if (!mainWin) return false
 
     // 只有拥有者才能移除
-    if (subInputState.ownerId !== event.sender.id && subInputState.ownerId !== 0) {
+    const ownerId = getSubInputOwnerId()
+    if (ownerId !== event.sender.id && ownerId !== 0) {
       return false
     }
 
-    subInputState = { enabled: false, placeholder: '', ownerId: 0 }
+    clearSubInputState()
     mainWin.webContents.send('subInput:disabled')
     return true
   })
@@ -71,7 +77,11 @@ export function registerWindowHandlers(
   // 子输入框获取焦点
   ipcMain.on('subInput:focus', () => {
     const mainWin = getMainWindow()
-    mainWin?.webContents.send('subInput:focus')
+    if (mainWin) {
+      // 先聚焦主窗口，确保输入框能真正获得焦点
+      mainWin.focus()
+      mainWin.webContents.send('subInput:focus')
+    }
   })
 
   // 子输入框失去焦点
@@ -83,15 +93,21 @@ export function registerWindowHandlers(
   // 子输入框选中全部文本
   ipcMain.on('subInput:select', () => {
     const mainWin = getMainWindow()
-    mainWin?.webContents.send('subInput:select')
+    if (mainWin) {
+      // 先聚焦主窗口，确保全选后用户可以直接输入
+      mainWin.focus()
+      mainWin.webContents.send('subInput:select')
+    }
   })
 
   // 子输入框输入变化（由主窗口发送，转发给插件）
   ipcMain.on('subInput:change', (_event, text: string) => {
-    if (!subInputState.enabled || subInputState.ownerId === 0) return
+    if (!isSubInputEnabled()) return
+    const ownerId = getSubInputOwnerId()
+    if (ownerId === 0) return
 
     // 找到拥有者 webContents 并发送
-    const owner = webContents.fromId(subInputState.ownerId)
+    const owner = webContents.fromId(ownerId)
     if (owner && !owner.isDestroyed()) {
       owner.send('subInput:onChange', { text })
     }
@@ -147,8 +163,8 @@ export function registerWindowHandlers(
     if (!win) return false
 
     // 清理 SubInput 状态
-    if (subInputState.ownerId === event.sender.id) {
-      subInputState = { enabled: false, placeholder: '', ownerId: 0 }
+    if (getSubInputOwnerId() === event.sender.id) {
+      clearSubInputState()
       mainWin?.webContents.send('subInput:disabled')
     }
 

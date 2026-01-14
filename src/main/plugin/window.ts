@@ -5,6 +5,7 @@ import { Plugin } from '../../shared/types/plugin'
 import { ThemeManager } from '../services/theme'
 import { injectCustomTitleBar } from './titlebar'
 import { PluginPanelWindow } from './panel-window'
+import { clearSubInputState } from '../services/subinput-state'
 
 interface AttachedPlugin {
   plugin: Plugin
@@ -144,7 +145,13 @@ export class PluginWindowManager {
         this.panelWindow.close()
       }
 
-      // 通知渲染进程
+      // 清理主进程中的 SubInput 状态
+      clearSubInputState()
+
+      // 通知渲染进程禁用 SubInput（重置搜索框状态）
+      this.mainWindow?.webContents.send('subInput:disabled')
+
+      // 通知渲染进程插件已分离
       this.mainWindow?.webContents.send('plugin:detached')
 
       // 关闭插件后聚焦主窗口，使搜索框获得焦点
@@ -159,7 +166,11 @@ export class PluginWindowManager {
     const { plugin, featureCode, input } = this.attachedPlugin
     this.attachedPlugin = null
 
-    // 通知渲染进程（让主窗口恢复正常状态）
+    // 清理主进程中的 SubInput 状态
+    clearSubInputState()
+
+    // 通知渲染进程禁用 SubInput + 分离插件
+    this.mainWindow?.webContents.send('subInput:disabled')
     this.mainWindow?.webContents.send('plugin:detached')
 
     // 使用 promoteToWindow 将面板升级为独立窗口
