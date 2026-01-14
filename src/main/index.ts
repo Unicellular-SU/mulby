@@ -1,4 +1,6 @@
 import { app, BrowserWindow, globalShortcut, screen } from 'electron'
+import http from 'http'
+import https from 'https'
 import { join } from 'path'
 import { registerAllHandlers } from './ipc'
 import { PluginManager } from './plugin'
@@ -30,6 +32,33 @@ if (!gotTheLock) {
 
 function getMainWindow() {
   return mainWindow
+}
+
+function canReachUrl(url: string, timeoutMs = 800): Promise<boolean> {
+  return new Promise((resolve) => {
+    try {
+      const parsed = new URL(url)
+      const requester = parsed.protocol === 'https:' ? https : http
+      const req = requester.request(
+        {
+          method: 'GET',
+          hostname: parsed.hostname,
+          port: parsed.port,
+          path: parsed.pathname || '/',
+          timeout: timeoutMs
+        },
+        () => resolve(true)
+      )
+      req.on('error', () => resolve(false))
+      req.on('timeout', () => {
+        req.destroy()
+        resolve(false)
+      })
+      req.end()
+    } catch {
+      resolve(false)
+    }
+  })
 }
 
 function createWindow() {
@@ -81,21 +110,33 @@ function createWindow() {
     }, 50)
   })
 
-  if (process.env.VITE_DEV_SERVER_URL) {
-    mainWindow.loadURL(process.env.VITE_DEV_SERVER_URL).catch(e => {
-      console.error('[Main] Failed to load URL:', e)
-    })
-  } else {
-    // Fallback for dev mode when env var is missing
-    // 宽松检查：只要不是 packaged 或者 VITE_DEV_SERVER_URL 确实缺失且看起来像开发环境
-    if (!app.isPackaged || process.env.NODE_ENV === 'development' || !process.env.NODE_ENV) {
-      mainWindow.loadURL('http://localhost:5173').catch(e => {
-        console.error('[Main] Failed to load URL:', e)
-      })
-    } else {
-      mainWindow.loadFile(join(__dirname, '../renderer/index.html'))
+  const loadApp = async () => {
+    if (process.env.VITE_DEV_SERVER_URL) {
+      const devUrl = process.env.VITE_DEV_SERVER_URL
+      const reachable = await canReachUrl(devUrl)
+      if (reachable) {
+        await mainWindow?.loadURL(devUrl)
+        return
+      }
+      console.warn(`[Main] Dev server not reachable at ${devUrl}, falling back to local file.`)
     }
+
+    const isDevEnv = !app.isPackaged || process.env.NODE_ENV === 'development' || !process.env.NODE_ENV
+    if (isDevEnv) {
+      const devUrl = 'http://localhost:5173'
+      const reachable = await canReachUrl(devUrl)
+      if (reachable) {
+        await mainWindow?.loadURL(devUrl)
+        return
+      }
+    }
+
+    await mainWindow?.loadFile(join(__dirname, '../renderer/index.html'))
   }
+
+  void loadApp().catch((e) => {
+    console.error('[Main] Failed to load app:', e)
+  })
 }
 
 function toggleWindow() {

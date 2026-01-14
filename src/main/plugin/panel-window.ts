@@ -1,9 +1,38 @@
 import { BrowserWindow, screen } from 'electron'
+import http from 'http'
+import https from 'https'
 import { join } from 'path'
 import { Plugin } from '../../shared/types/plugin'
 import { ThemeManager } from '../services/theme'
 import { injectCustomTitleBar } from './titlebar'
 import { isIgnoringBlur } from '../services/blur-manager'
+
+function canReachUrl(url: string, timeoutMs = 800): Promise<boolean> {
+    return new Promise((resolve) => {
+        try {
+            const parsed = new URL(url)
+            const requester = parsed.protocol === 'https:' ? https : http
+            const req = requester.request(
+                {
+                    method: 'GET',
+                    hostname: parsed.hostname,
+                    port: parsed.port,
+                    path: parsed.pathname || '/',
+                    timeout: timeoutMs
+                },
+                () => resolve(true)
+            )
+            req.on('error', () => resolve(false))
+            req.on('timeout', () => {
+                req.destroy()
+                resolve(false)
+            })
+            req.end()
+        } catch {
+            resolve(false)
+        }
+    })
+}
 
 /**
  * 生成面板工具栏的代码（使用 Shadow DOM 隔离样式）
@@ -467,6 +496,7 @@ export class PluginPanelWindow {
         const bounds = this.panelWindow.getBounds()
         const url = this.panelWindow.webContents.getURL()
         const plugin = this.currentPlugin
+        const uiPath = join(plugin.path, plugin.manifest.ui)
         const featureCode = this.currentFeatureCode
         const input = this.currentInput
 
@@ -500,8 +530,19 @@ export class PluginPanelWindow {
             }
         })
 
-        // 加载相同的 URL
-        independentWindow.loadURL(url)
+        // 加载相同的 URL（若 dev server 不可达则回退到本地文件）
+        if (url.startsWith('http://') || url.startsWith('https://')) {
+            void canReachUrl(url).then((reachable) => {
+                if (reachable) {
+                    void independentWindow.loadURL(url)
+                } else {
+                    console.warn(`[PluginPanelWindow] Dev server not reachable at ${url}, falling back to local file.`)
+                    void independentWindow.loadFile(uiPath)
+                }
+            })
+        } else {
+            void independentWindow.loadURL(url)
+        }
 
         independentWindow.once('ready-to-show', async () => {
             // 注入自定义标题栏
