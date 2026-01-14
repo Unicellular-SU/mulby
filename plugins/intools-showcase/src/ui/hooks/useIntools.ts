@@ -26,6 +26,10 @@ export function useIntools(pluginId?: string) {
         window: {
             setSize: (width: number, height: number) => window.intools?.window?.setSize(width, height),
             hide: () => window.intools?.window?.hide(),
+            show: () => window.intools?.window?.show(),
+            close: () => window.intools?.window?.close(),
+            create: (url: string, options?: { width?: number; height?: number; title?: string }) =>
+                window.intools?.window?.create(url, options),
         },
 
         // HTTP API

@@ -4,6 +4,7 @@ contextBridge.exposeInMainWorld('intools', {
   // 窗口控制
   window: {
     hide: () => ipcRenderer.send('window:hide'),
+    show: () => ipcRenderer.send('window:show'),
     setSize: (width: number, height: number) =>
       ipcRenderer.send('window:setSize', width, height),
     center: () => ipcRenderer.send('window:center'),
@@ -16,7 +17,9 @@ contextBridge.exposeInMainWorld('intools', {
     minimize: () => ipcRenderer.send('window:minimize'),
     maximize: () => ipcRenderer.send('window:maximize'),
     getState: () => ipcRenderer.invoke('window:getState'),
-    reload: () => ipcRenderer.send('plugin:reload')
+    reload: () => ipcRenderer.send('plugin:reload'),
+    create: (url: string, options?: { width?: number; height?: number; title?: string }) =>
+      ipcRenderer.invoke('window:create', url, options)
   },
 
   // 主题

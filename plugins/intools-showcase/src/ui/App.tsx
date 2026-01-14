@@ -10,11 +10,12 @@ import {
   MediaModule,
   SettingsModule,
   SecurityModule,
+  ImageEditor,
 } from './modules'
 
 console.log('[App] Module imports loaded')
 
-type ModuleId = 'sysinfo' | 'clipboard' | 'filemanager' | 'network' | 'screen' | 'media' | 'settings' | 'security'
+type ModuleId = 'sysinfo' | 'clipboard' | 'filemanager' | 'network' | 'screen' | 'media' | 'settings' | 'security' | 'image-editor'
 
 // 模块映射
 const moduleComponents: Record<ModuleId, React.FC> = {
@@ -26,11 +27,16 @@ const moduleComponents: Record<ModuleId, React.FC> = {
   media: MediaModule,
   settings: SettingsModule,
   security: SecurityModule,
+  'image-editor': ImageEditor,
 }
 
 // 从 URL 参数或插件初始化数据获取默认模块
 function getInitialModule(): ModuleId {
-  console.log('[App] getInitialModule called', window.location.search)
+  console.log('[App] getInitialModule called', window.location.search, window.location.hash)
+  const hash = window.location.hash
+  if (hash.includes('image-editor')) {
+    return 'image-editor'
+  }
   // 强制只返回 sysinfo
   return 'sysinfo'
 }
@@ -47,8 +53,9 @@ export default function App() {
     console.log('[App] Mount effect')
     window.intools?.onPluginInit?.((data) => {
       console.log('[App] onPluginInit received data:', data)
-      // 这里的逻辑暂时简化，因为我们只有 sysinfo
-      // 如果将来需要恢复，可以看 git 历史
+      if (data.route && data.route.includes('image-editor')) {
+        setActiveModule('image-editor')
+      }
     })
   }, [])
 
@@ -59,6 +66,15 @@ export default function App() {
     if (id in moduleComponents) {
       setActiveModule(id as ModuleId)
     }
+  }
+
+  // 如果是图片编辑器，不显示侧边栏
+  if (activeModule === 'image-editor') {
+    return (
+      <div className="app" style={{ display: 'block' }}>
+        {ActiveModuleComponent ? <ActiveModuleComponent /> : <div>Module not found</div>}
+      </div>
+    )
   }
 
   return (

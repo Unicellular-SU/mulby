@@ -10,7 +10,31 @@ export function registerWindowHandlers(
   ipcMain.on('window:hide', (event) => {
     // 使用发送者窗口而非主窗口，以支持面板和独立窗口模式
     const win = BrowserWindow.fromWebContents(event.sender)
-    win?.hide()
+    if (!win) return
+
+    // 如果是面板窗口，需要通过管理器隐藏
+    const panelWin = pluginWindowManager.getPanelWindow()?.getWindow()
+    if (panelWin && panelWin.id === win.id) {
+      pluginWindowManager.hidePanelWindow()
+    } else {
+      win.hide()
+    }
+  })
+
+  // 显示窗口
+  ipcMain.on('window:show', (event) => {
+    const win = BrowserWindow.fromWebContents(event.sender)
+    if (!win) return
+
+    // 如果是面板窗口，通过管理器显示
+    const panelWin = pluginWindowManager.getPanelWindow()?.getWindow()
+    if (panelWin && panelWin.id === win.id) {
+      pluginWindowManager.showPanelWindow()
+    } else {
+      win.show()
+      if (win.isMinimized()) win.restore()
+      win.focus()
+    }
   })
 
   ipcMain.on('window:setSize', (event, width: number, height: number) => {
@@ -104,5 +128,18 @@ export function registerWindowHandlers(
 
       win.webContents.reload()
     }
+  })
+
+  // 创建新窗口
+  ipcMain.handle('window:create', async (event, url: string, options) => {
+    const win = BrowserWindow.fromWebContents(event.sender)
+    if (!win) return null
+
+    const plugin = pluginWindowManager.getPluginByWindow(win)
+    if (plugin) {
+      const newWin = pluginWindowManager.createAuxiliaryWindow(plugin, url, options)
+      return newWin ? newWin.id : null
+    }
+    return null
   })
 }

@@ -120,13 +120,54 @@ export function ScreenModule() {
         try {
             const result = await screen.screenCapture()
             if (result) {
-                setScreenshot(result)
-                notify.success('区域截图成功')
+                // 不再设置主界面预览，等待编辑结果
+                // setScreenshot(result)
+                // localStorage.setItem('intools-temp-screenshot', result)
+
+                const channel = new BroadcastChannel('intools-image-editor')
+
+                // 监听编辑器消息
+                channel.onmessage = (event) => {
+                    const { type, data } = event.data
+                    if (type === 'READY') {
+                        // 编辑器就绪，发送图片
+                        channel.postMessage({ type: 'INIT_IMAGE', data: result })
+                    } else if (type === 'SAVE_IMAGE') {
+                        // 接收编辑后的图片
+                        setScreenshot(data)
+                        notify.success('收到编辑后的图片')
+                        channel.close()
+                        // 恢复显示主窗口
+                        if (window.intools?.window?.show) {
+                            window.intools.window.show()
+                        }
+                    }
+                }
+
+                // 打开独立编辑器窗口
+                if (window.intools?.window?.create) {
+                    await window.intools.window.create('/image-editor', {
+                        title: '图片编辑器',
+                        width: 900,
+                        height: 700
+                    })
+                }
+
+                // notify.success('区域截图成功')
             } else {
                 notify.info('已取消截图')
+                // 恢复显示主窗口
+                if (window.intools?.window?.show) {
+                    window.intools.window.show()
+                }
             }
         } catch (error) {
+            console.error(error)
             notify.error('截图失败')
+            // 恢复显示主窗口
+            if (window.intools?.window?.show) {
+                window.intools.window.show()
+            }
         } finally {
             setLoading(false)
         }

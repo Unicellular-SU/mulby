@@ -24,6 +24,9 @@ interface IntoolsWindow {
   hide(): void
   setSize(width: number, height: number): void
   center(): void
+  create(url: string, options?: { width?: number; height?: number; title?: string }): Promise<number>
+  close(): void
+  show(): void
 }
 
 interface IntoolsTheme {
@@ -298,6 +301,8 @@ interface PluginInitData {
   featureCode: string
   feature?: string
   input: string
+  mode?: string
+  route?: string
 }
 
 interface IntoolsAPI {

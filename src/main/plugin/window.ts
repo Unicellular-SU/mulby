@@ -286,6 +286,106 @@ export class PluginWindowManager {
     return win
   }
 
+  // 创建辅助窗口（同插件的子窗口）
+  createAuxiliaryWindow(
+    plugin: Plugin,
+    path: string, // 路由路径，如 /img-editor
+    options?: { width?: number; height?: number; title?: string }
+  ): BrowserWindow | null {
+    if (!plugin.manifest.ui) return null
+
+    const uiPath = join(plugin.path, plugin.manifest.ui)
+    if (!existsSync(uiPath)) return null
+
+    const currentTheme = this.themeManager?.getActualTheme() || 'dark'
+    const isDark = currentTheme === 'dark'
+    const backgroundColor = isDark ? '#1e293b' : '#ffffff'
+
+    const win = new BrowserWindow({
+      width: options?.width || 800,
+      height: options?.height || 600,
+      minWidth: 300,
+      minHeight: 200,
+      show: false,
+      frame: false,
+      backgroundColor,
+      title: options?.title || plugin.manifest.displayName,
+      webPreferences: {
+        preload: join(__dirname, '../preload/index.js'),
+        contextIsolation: true,
+        nodeIntegration: false
+      }
+    })
+
+    // 加载页面，附加 hash 路由
+    // 如果 path 以 / 开头，作为 hash 加载
+    const hash = path.startsWith('/') ? path.substring(1) : path
+    // 开发环境如果使用了 loadURL (e.g. vite dev server)
+    if (process.env.VITE_DEV_SERVER_URL || (process.env.NODE_ENV === 'development' && !app.isPackaged)) {
+      // 假设主窗口也是 loadURL 加载的，这里应该也是。
+      // 但是这里我们不知道插件是否运行在 dev server 上。
+      // 目前插件加载逻辑是 loadFile(uiPath)。
+      // 只有主程序在 dev 模式下可能用 server。插件通常是构建好的文件。
+      // 但其实 intools-showcase 也是在 src 下开发的，如果是 dev 模式...
+      // 现有的逻辑是 win.loadFile(uiPath)，所以这里也保持一致。
+      win.loadFile(uiPath, { hash })
+    } else {
+      win.loadFile(uiPath, { hash })
+    }
+
+    win.once('ready-to-show', async () => {
+      await injectCustomTitleBar(win, options?.title || plugin.manifest.displayName, currentTheme)
+      win.show()
+      // win.webContents.openDevTools({ mode: 'detach' }) // Optional
+
+      // 发送初始化消息，让插件知道自己在哪个路由
+      win.webContents.send('plugin:init', {
+        pluginName: plugin.id,
+        featureCode: '', // 辅助窗口没有 featureCode
+        input: '',
+        mode: 'detached',
+        route: path // 额外字段，通知前端跳转
+      })
+
+      if (this.themeManager) {
+        win.webContents.send('theme:changed', this.themeManager.getActualTheme())
+      }
+    })
+
+    // 窗口状态事件
+    win.on('maximize', () => win.webContents.send('window:stateChanged', { isMaximized: true }))
+    win.on('unmaximize', () => win.webContents.send('window:stateChanged', { isMaximized: false }))
+
+    // 页面加载完成
+    win.webContents.on('did-finish-load', async () => {
+      const hasTitleBar = await win.webContents.executeJavaScript('document.getElementById("intools-titlebar") !== null')
+      if (!hasTitleBar) {
+        const theme = this.themeManager?.getActualTheme() || 'dark'
+        await injectCustomTitleBar(win, options?.title || plugin.manifest.displayName, theme)
+      }
+    })
+
+    if (this.themeManager) {
+      this.themeManager.registerWindow(win)
+    }
+
+    const windowId = win.id
+    this.detachedWindows.set(windowId, {
+      window: win,
+      plugin,
+      featureCode: '',
+      input: ''
+    })
+
+    this.updateDockVisibility()
+    win.on('closed', () => {
+      this.detachedWindows.delete(windowId)
+      this.updateDockVisibility()
+    })
+
+    return win
+  }
+
   // 关闭指定独立窗口
   closeDetached(windowId: number): void {
     const info = this.detachedWindows.get(windowId)
@@ -333,5 +433,22 @@ export class PluginWindowManager {
   // 显示面板窗口
   showPanelWindow(): void {
     this.panelWindow?.show()
+  }
+
+  // 根据窗口实例获取关联的插件
+  getPluginByWindow(win: BrowserWindow): Plugin | null {
+    if (!win) return null
+
+    // 检查是否为独立窗口
+    const detachedInfo = this.detachedWindows.get(win.id)
+    if (detachedInfo) return detachedInfo.plugin
+
+    // 检查是否为面板窗口
+    const panelWin = this.panelWindow?.getWindow()
+    if (panelWin && panelWin.id === win.id) {
+      return this.attachedPlugin?.plugin || null
+    }
+
+    return null
   }
 }
