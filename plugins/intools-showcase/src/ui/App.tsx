@@ -11,11 +11,12 @@ import {
   SettingsModule,
   SecurityModule,
   ImageEditor,
+  WindowAPIModule,
 } from './modules'
 
 console.log('[App] Module imports loaded')
 
-type ModuleId = 'sysinfo' | 'clipboard' | 'filemanager' | 'network' | 'screen' | 'media' | 'settings' | 'security' | 'image-editor'
+type ModuleId = 'sysinfo' | 'clipboard' | 'filemanager' | 'network' | 'screen' | 'media' | 'settings' | 'security' | 'image-editor' | 'window-api'
 
 // 模块映射
 const moduleComponents: Record<ModuleId, React.FC> = {
@@ -28,6 +29,7 @@ const moduleComponents: Record<ModuleId, React.FC> = {
   settings: SettingsModule,
   security: SecurityModule,
   'image-editor': ImageEditor,
+  'window-api': WindowAPIModule,
 }
 
 // 从 URL 参数或插件初始化数据获取默认模块

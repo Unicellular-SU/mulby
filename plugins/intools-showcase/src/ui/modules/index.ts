@@ -7,3 +7,5 @@ export { MediaModule } from './Media'
 export { SettingsModule } from './Settings'
 export { SecurityModule } from './Security'
 export { ImageEditor } from './ImageEditor'
+export { WindowAPIModule } from './WindowAPI'
+

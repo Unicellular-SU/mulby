@@ -25,11 +25,47 @@ export function useIntools(pluginId?: string) {
         // Window API
         window: {
             setSize: (width: number, height: number) => window.intools?.window?.setSize(width, height),
-            hide: () => window.intools?.window?.hide(),
+            setExpendHeight: (height: number) => window.intools?.window?.setExpendHeight?.(height),
+            hide: (isRestorePreWindow?: boolean) => window.intools?.window?.hide?.(isRestorePreWindow),
             show: () => window.intools?.window?.show(),
             close: () => window.intools?.window?.close(),
             create: (url: string, options?: { width?: number; height?: number; title?: string }) =>
                 window.intools?.window?.create(url, options),
+            detach: () => window.intools?.window?.detach?.(),
+            setAlwaysOnTop: (flag: boolean) => window.intools?.window?.setAlwaysOnTop?.(flag),
+            getMode: () => window.intools?.window?.getMode?.(),
+            getWindowType: () => window.intools?.window?.getWindowType?.(),
+            minimize: () => window.intools?.window?.minimize?.(),
+            maximize: () => window.intools?.window?.maximize?.(),
+            getState: () => window.intools?.window?.getState?.(),
+            reload: () => window.intools?.window?.reload?.(),
+            sendToParent: (channel: string, ...args: unknown[]) =>
+                window.intools?.window?.sendToParent?.(channel, ...args),
+            onChildMessage: (callback: (channel: string, ...args: unknown[]) => void) =>
+                window.intools?.window?.onChildMessage?.(callback),
+            findInPage: (text: string, options?: { forward?: boolean; findNext?: boolean; matchCase?: boolean }) =>
+                window.intools?.window?.findInPage?.(text, options),
+            stopFindInPage: (action?: 'clearSelection' | 'keepSelection' | 'activateSelection') =>
+                window.intools?.window?.stopFindInPage?.(action),
+            startDrag: (filePath: string | string[]) => window.intools?.window?.startDrag?.(filePath),
+        },
+
+        // SubInput API
+        subInput: {
+            set: (placeholder?: string, isFocus?: boolean) => window.intools?.subInput?.set?.(placeholder, isFocus),
+            remove: () => window.intools?.subInput?.remove?.(),
+            setValue: (text: string) => window.intools?.subInput?.setValue?.(text),
+            focus: () => window.intools?.subInput?.focus?.(),
+            blur: () => window.intools?.subInput?.blur?.(),
+            select: () => window.intools?.subInput?.select?.(),
+            onChange: (callback: (data: { text: string }) => void) => window.intools?.subInput?.onChange?.(callback),
+        },
+
+        // Plugin API
+        plugin: {
+            redirect: (label: string | [string, string], payload?: unknown) =>
+                window.intools?.plugin?.redirect?.(label, payload),
+            outPlugin: (isKill?: boolean) => window.intools?.plugin?.outPlugin?.(isKill),
         },
 
         // HTTP API

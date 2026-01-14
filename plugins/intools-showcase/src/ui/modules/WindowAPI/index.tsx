@@ -176,7 +176,7 @@ export function WindowAPIModule() {
                                 <>
                                     <Button variant="secondary" onClick={() => subInput.focus()}>聚焦</Button>
                                     <Button variant="secondary" onClick={() => subInput.select()}>全选</Button>
-                                    <Button variant="danger" onClick={handleDisableSubInput}>移除</Button>
+                                    <Button variant="secondary" onClick={handleDisableSubInput}>移除</Button>
                                 </>
                             )}
                         </div>
@@ -236,7 +236,7 @@ export function WindowAPIModule() {
                         <Button variant="secondary" onClick={() => handleOutPlugin(false)}>
                             退出插件 (隐藏)
                         </Button>
-                        <Button variant="danger" onClick={() => handleOutPlugin(true)}>
+                        <Button variant="secondary" onClick={() => handleOutPlugin(true)}>
                             退出插件 (关闭)
                         </Button>
                         <Button variant="secondary" onClick={() => win.reload()}>
