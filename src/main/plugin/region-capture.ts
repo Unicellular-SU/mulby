@@ -134,10 +134,13 @@ function getRegionCaptureHTML(displayInfo: object): string {
  * 为每个显示器创建全屏透明覆盖窗口
  */
 export async function startRegionCapture(): Promise<string | null> {
+  console.log('[RegionCapture] Starting region capture...')
+
   // 如果已有截图窗口，先关闭
   closeAllCaptureWindows()
 
   const displays = screen.getAllDisplays()
+  console.log(`[RegionCapture] Found ${displays.length} display(s)`)
 
   return new Promise((resolve) => {
     captureResolve = resolve
@@ -159,6 +162,7 @@ export async function startRegionCapture(): Promise<string | null> {
         simpleFullscreen: true, // macOS: 使用简单全屏模式
         enableLargerThanScreen: true,
         hasShadow: false,
+        show: false, // 先隐藏，等加载完成后显示
         webPreferences: {
           nodeIntegration: false,
           contextIsolation: true,
@@ -193,6 +197,12 @@ export async function startRegionCapture(): Promise<string | null> {
       const html = getRegionCaptureHTML(displayInfo)
       win.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(html)}`)
 
+      // 确保窗口加载后显示并获得焦点
+      win.once('ready-to-show', () => {
+        win.show()
+        win.focus()
+      })
+
       captureWindows.push({
         window: win,
         displayId: display.id,
@@ -201,7 +211,8 @@ export async function startRegionCapture(): Promise<string | null> {
 
       // 监听窗口关闭事件
       win.on('closed', () => {
-        captureWindows = captureWindows.filter(cw => cw.displayId !== display.id)
+        // 仅移除当前关闭的窗口实例，避免误删新创建的同显示器窗口
+        captureWindows = captureWindows.filter(cw => cw.window !== win)
       })
     })
   })
@@ -262,7 +273,7 @@ export function cancelRegionCapture(): void {
 function closeAllCaptureWindows(): void {
   captureWindows.forEach(cw => {
     if (!cw.window.isDestroyed()) {
-      cw.window.close()
+      cw.window.destroy()
     }
   })
   captureWindows = []
@@ -273,14 +284,17 @@ function closeAllCaptureWindows(): void {
  */
 export function registerRegionCaptureHandlers(): void {
   ipcMain.handle('screen:startRegionCapture', async () => {
+    console.log('[RegionCapture] IPC: screen:startRegionCapture received')
     return startRegionCapture()
   })
 
   ipcMain.on('region-capture:complete', async (_event, region) => {
+    console.log('[RegionCapture] IPC: region-capture:complete received', region)
     await completeRegionCapture(region)
   })
 
   ipcMain.on('region-capture:cancel', () => {
+    console.log('[RegionCapture] IPC: region-capture:cancel received')
     cancelRegionCapture()
   })
 }
