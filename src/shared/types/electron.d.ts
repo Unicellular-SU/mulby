@@ -160,6 +160,12 @@ export interface ElectronAPI {
     writeFiles: (files: string | string[]) => Promise<boolean>
     getFormat: () => Promise<'text' | 'image' | 'html' | 'empty'>
   }
+  input: {
+    hideMainWindowPasteText: (text: string) => Promise<boolean>
+    hideMainWindowPasteImage: (image: string | Buffer) => Promise<boolean>
+    hideMainWindowPasteFile: (filePaths: string | string[]) => Promise<boolean>
+    hideMainWindowTypeString: (text: string) => Promise<boolean>
+  }
   notification: {
     show: (message: string, type?: string) => void
   }

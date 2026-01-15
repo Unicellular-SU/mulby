@@ -93,6 +93,14 @@ contextBridge.exposeInMainWorld('intools', {
     getFormat: () => ipcRenderer.invoke('clipboard:getFormat')
   },
 
+  // 输入 API
+  input: {
+    hideMainWindowPasteText: (text: string) => ipcRenderer.invoke('input:hideMainWindowPasteText', text),
+    hideMainWindowPasteImage: (image: string | Buffer) => ipcRenderer.invoke('input:hideMainWindowPasteImage', image),
+    hideMainWindowPasteFile: (filePaths: string | string[]) => ipcRenderer.invoke('input:hideMainWindowPasteFile', filePaths),
+    hideMainWindowTypeString: (text: string) => ipcRenderer.invoke('input:hideMainWindowTypeString', text)
+  },
+
   // 通知
   notification: {
     show: (message: string, type?: string) =>
@@ -408,4 +416,3 @@ contextBridge.exposeInMainWorld('intoolsMain', {
     }
   }
 })
-

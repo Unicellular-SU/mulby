@@ -14,6 +14,7 @@ import { pluginMedia } from './media'
 import { pluginPowerMonitor } from './power'
 import { createPluginTray } from './tray'
 import { pluginNetwork } from './network'
+import { pluginInput } from './input'
 
 const pluginStorage = new PluginStorage()
 const pluginFilesystem = new PluginFilesystem()
@@ -171,7 +172,8 @@ export function createPluginAPI(pluginName: string) {
     tray: createPluginTray(pluginName),
     network: {
       isOnline: () => pluginNetwork.isOnline()
-    }
+    },
+    input: pluginInput
   }
 }
 

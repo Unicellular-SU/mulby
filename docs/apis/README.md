@@ -21,6 +21,7 @@
 
 - [GlobalShortcut API (shortcut)](./shortcut.md)
 - [剪贴板 API (clipboard)](./clipboard.md)
+- [输入 API (input)](./input.md)
 
 ## 文件与存储
 

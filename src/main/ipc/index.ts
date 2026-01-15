@@ -17,6 +17,7 @@ import { registerNetworkHandlers } from './network'
 import { registerHttpHandlers } from './http'
 import { registerMenuHandlers } from './menu'
 import { registerGeolocationHandlers } from './geolocation'
+import { registerInputHandlers } from './input'
 import { registerHostHandlers } from './host'
 import { registerFilesystemHandlers } from './filesystem'
 import { registerStorageHandlers } from './storage'
@@ -50,6 +51,7 @@ export function registerAllHandlers(
   registerHttpHandlers()
   registerMenuHandlers()
   registerGeolocationHandlers()
+  registerInputHandlers()
   registerHostHandlers(pluginManager)
   registerFilesystemHandlers()
   registerStorageHandlers()

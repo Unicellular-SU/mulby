@@ -2,7 +2,7 @@
 
 本文档记录 InTools 插件系统已实现和待实现的底层 API。
 
-## 已实现的 API（共 20 个）
+## 已实现的 API（共 21 个）
 
 ### 基础 API
 
@@ -29,6 +29,7 @@
 | **Tray** | `plugin/tray.ts` | 系统托盘 | ✅ (title 仅 macOS) |
 | **Menu** | `plugin/menu.ts` | 原生右键菜单 | ✅ |
 | **Network** | `plugin/network.ts` | 网络状态监控 | ✅ |
+| **Input** | `plugin/input.ts` | 输入/粘贴模拟 | ✅ (Linux 依赖 xdotool) |
 
 ### 媒体/硬件 API
 
@@ -85,6 +86,7 @@ src/main/
 │   ├── tray.ts       # Tray API
 │   ├── network.ts    # Network API
 │   ├── menu.ts       # Menu API
+│   ├── input.ts      # Input API
 │   └── geolocation.ts # Geolocation API
 │
 ├── ipc/              # IPC 处理器
@@ -105,6 +107,7 @@ src/main/
 │   ├── tray.ts
 │   ├── network.ts
 │   ├── menu.ts
+│   ├── input.ts
 │   └── geolocation.ts
 │
 src/preload/
@@ -132,4 +135,3 @@ src/shared/types/
 6. 更新 `src/shared/types/electron.d.ts` 类型定义
 7. 更新 `docs/api-reference.md` 文档
 8. 更新本文档的 API 列表
-
