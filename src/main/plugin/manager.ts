@@ -6,6 +6,7 @@ import { PluginRunner } from './runner'
 import { PluginStateManager } from './state'
 import { PluginWindowManager } from './window'
 import { PluginHostManager } from './host-manager'
+import { pluginFeatureStore } from './dynamic-features'
 import { Plugin, PluginFeature } from '../../shared/types/plugin'
 
 // 搜索结果项
@@ -91,6 +92,13 @@ export class PluginManager {
     return this.getAll().filter(p => p.enabled)
   }
 
+  // 获取插件所有功能入口（包含动态指令）
+  getFeatures(name: string): PluginFeature[] {
+    const plugin = this.plugins.get(name)
+    if (!plugin) return []
+    return this.getCombinedFeatures(plugin)
+  }
+
   // 搜索插件（返回匹配的功能入口，只搜索启用的插件）
   search(query: string): SearchResult[] {
     const enabledPlugins = this.getEnabled()
@@ -107,7 +115,7 @@ export class PluginManager {
     const q = query.toLowerCase()
 
     for (const plugin of enabledPlugins) {
-      for (const feature of plugin.manifest.features) {
+      for (const feature of this.getCombinedFeatures(plugin)) {
         for (const cmd of feature.cmds) {
           if (cmd.type === 'regex') {
             try {
@@ -264,6 +272,7 @@ export class PluginManager {
       this.plugins.delete(name)
       this.runners.delete(name)
       this.stateManager.removePluginState(name)
+      pluginFeatureStore.clearFeatures(name)
 
       return { success: true }
     } catch (err) {
@@ -294,6 +303,15 @@ export class PluginManager {
     return this.hostManager
   }
 
+  // 首次安装后主动初始化插件（触发 onLoad）
+  async initializePlugin(name: string): Promise<void> {
+    const plugin = this.plugins.get(name) || this.getAll().find(p => p.manifest.name === name)
+    if (!plugin) return
+    if (this.initializedPlugins.has(plugin.id)) return
+    await this.callPluginHook(plugin, 'onLoad')
+    this.initializedPlugins.add(plugin.id)
+  }
+
   // 销毁所有资源
   async destroy(): Promise<void> {
     // 销毁所有 Host 进程
@@ -303,5 +321,12 @@ export class PluginManager {
     this.plugins.clear()
     this.runners.clear()
     this.initializedPlugins.clear()
+  }
+
+  private getCombinedFeatures(plugin: Plugin): PluginFeature[] {
+    const dynamicFeatures = pluginFeatureStore.getPluginFeatures(plugin.id)
+    const dynamicCodes = new Set(dynamicFeatures.map(feature => feature.code))
+    const staticFeatures = plugin.manifest.features.filter(feature => !dynamicCodes.has(feature.code))
+    return [...staticFeatures, ...dynamicFeatures]
   }
 }

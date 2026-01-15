@@ -373,6 +373,12 @@ interface IntoolsFilesystem {
   join(...paths: string[]): string
 }
 
+interface IntoolsHost {
+  invoke(pluginName: string, method: string, ...args: unknown[]): Promise<unknown>
+  status(pluginName: string): Promise<{ ready: boolean; active: boolean }>
+  restart(pluginName: string): Promise<boolean>
+}
+
 interface PluginInitData {
   pluginName: string
   featureCode: string
@@ -407,6 +413,7 @@ interface IntoolsAPI {
   storage: IntoolsStorage
   http: IntoolsHttp
   filesystem: IntoolsFilesystem
+  host?: IntoolsHost
   onPluginInit(callback: (data: PluginInitData) => void): void
   onThemeChange?(callback: (theme: 'light' | 'dark') => void): void
   onWindowStateChange?(callback: (state: { isMaximized: boolean }) => void): void

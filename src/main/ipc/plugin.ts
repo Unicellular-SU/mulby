@@ -11,7 +11,7 @@ export function registerPluginHandlers(manager: PluginManager) {
       name: p.manifest.name,
       displayName: p.manifest.displayName,
       description: p.manifest.description,
-      features: p.manifest.features,
+      features: manager.getFeatures(p.id),
       enabled: p.enabled
     }))
   })
@@ -39,6 +39,9 @@ export function registerPluginHandlers(manager: PluginManager) {
     const result = await installer.install(filePath)
     if (result.success) {
       await manager.init() // 重新加载插件
+      if (result.pluginName) {
+        await manager.initializePlugin(result.pluginName)
+      }
     }
     return result
   })

@@ -20,17 +20,60 @@ interface PluginContext {
       get: (key: string) => Promise<unknown>
       set: (key: string, value: unknown) => Promise<void>
     }
+    features: {
+      getFeatures: (codes?: string[]) => Array<{ code: string }>
+      setFeature: (feature: {
+        code: string
+        explain?: string
+        icon?: string
+        platform?: string | string[]
+        mainHide?: boolean
+        mainPush?: boolean
+        cmds: Array<string | { type: 'keyword' | 'regex'; value?: string; match?: string; explain?: string }>
+      }) => void
+      removeFeature: (code: string) => boolean
+      redirectHotKeySetting: (cmdLabel: string, autocopy?: boolean) => void
+      redirectAiModelsSetting: () => void
+    }
   }
   input?: string
-  feature?: string
+  featureCode?: string
 }
 
 /**
  * 插件加载时调用
  * 用于初始化资源、注册服务等
  */
-export function onLoad() {
+export function onLoad(context?: PluginContext) {
   console.log('[InTools Showcase] 插件已加载')
+
+  const features = context?.api.features
+  if (!features) return
+
+  const existing = features.getFeatures()
+  if (existing && existing.length > 0) return
+
+  features.setFeature({
+    code: 'showcase:today',
+    explain: '动态指令：显示今日日期',
+    cmds: ['today', '日期']
+  })
+
+  features.setFeature({
+    code: 'showcase:reverse',
+    explain: '动态指令：反转输入文本',
+    cmds: [
+      { type: 'keyword', value: 'reverse' },
+      { type: 'regex', match: '^rev\\s+.+', explain: 'rev 开头文本' }
+    ]
+  })
+
+  features.setFeature({
+    code: 'showcase:mac-only',
+    explain: '动态指令：仅 macOS 可见',
+    platform: 'darwin',
+    cmds: ['mac only', 'macos']
+  })
 }
 
 /**
@@ -70,13 +113,13 @@ export async function run(context: PluginContext) {
   const { notification } = context.api
 
   // 记录功能触发
-  console.log(`[InTools Showcase] 功能触发: ${context.feature || 'main'}`)
+  console.log(`[InTools Showcase] 功能触发: ${context.featureCode || 'main'}`)
 
   // 对于 UI 插件，主要逻辑在前端处理
   // 这里可以做一些后端初始化工作
 
   // 示例：根据不同功能显示不同通知
-  switch (context.feature) {
+  switch (context.featureCode) {
     case 'sysinfo':
       notification.show('正在加载系统信息...')
       break

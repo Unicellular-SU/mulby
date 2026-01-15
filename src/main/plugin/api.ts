@@ -16,6 +16,8 @@ import { createPluginTray } from './tray'
 import { pluginNetwork } from './network'
 import { pluginInput } from './input'
 import { permissionManager } from './permission-manager'
+import { pluginFeatureStore, redirectHotKeySetting, redirectAiModelsSetting } from './dynamic-features'
+import type { DynamicFeatureInput } from '../../shared/types/plugin'
 
 const pluginStorage = new PluginStorage()
 const pluginFilesystem = new PluginFilesystem()
@@ -185,6 +187,19 @@ export function createPluginAPI(pluginName: string) {
       openSystemSettings: (type: 'geolocation' | 'camera' | 'microphone' | 'notifications' | 'screen' | 'accessibility' | 'contacts' | 'calendar') =>
         permissionManager.openSystemSettings(type),
       isAccessibilityTrusted: () => permissionManager.isAccessibilityTrusted()
+    },
+    features: {
+      getFeatures: (codes?: string[]) => pluginFeatureStore.getFeatures(pluginName, codes),
+      setFeature: (feature: DynamicFeatureInput) => {
+        pluginFeatureStore.setFeature(pluginName, feature)
+      },
+      removeFeature: (code: string) => pluginFeatureStore.removeFeature(pluginName, code),
+      redirectHotKeySetting: (cmdLabel: string, _autocopy?: boolean) => {
+        redirectHotKeySetting(cmdLabel)
+      },
+      redirectAiModelsSetting: () => {
+        redirectAiModelsSetting()
+      }
     }
   }
 }

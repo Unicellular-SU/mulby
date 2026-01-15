@@ -27,16 +27,20 @@ interface PluginState {
 
 interface PluginModule {
   run?: (context: PluginContext) => void | Promise<void>
-  onLoad?: () => void | Promise<void>
-  onUnload?: () => void | Promise<void>
-  onEnable?: () => void | Promise<void>
-  onDisable?: () => void | Promise<void>
+  onLoad?: (context?: HookContext) => void | Promise<void>
+  onUnload?: (context?: HookContext) => void | Promise<void>
+  onEnable?: (context?: HookContext) => void | Promise<void>
+  onDisable?: (context?: HookContext) => void | Promise<void>
 }
 
 interface PluginContext {
   api: PluginAPI
   featureCode: string
   input: string
+}
+
+interface HookContext {
+  api: PluginAPI
 }
 
 type PluginAPI = Record<string, unknown>
@@ -62,6 +66,7 @@ function generateId(): string {
 /** 调用主进程 API */
 async function callMainApi(api: string, args: unknown[]): Promise<unknown> {
   const id = generateId()
+  const sanitizedArgs = args.map(cloneForMessage)
 
   return new Promise((resolve, reject) => {
     pendingApiCalls.set(id, { resolve, reject })
@@ -69,7 +74,7 @@ async function callMainApi(api: string, args: unknown[]): Promise<unknown> {
     send({
       id,
       type: 'apiCall',
-      payload: { api, args }
+      payload: { api, args: sanitizedArgs }
     })
 
     // 30 秒超时
@@ -80,6 +85,18 @@ async function callMainApi(api: string, args: unknown[]): Promise<unknown> {
       }
     }, 30000)
   })
+}
+
+function cloneForMessage<T>(value: T): T {
+  try {
+    return structuredClone(value)
+  } catch {
+    try {
+      return JSON.parse(JSON.stringify(value)) as T
+    } catch {
+      return null as T
+    }
+  }
 }
 
 /** 创建代理 API 对象 */
@@ -204,7 +221,8 @@ async function handleCallHook(request: CallHookRequest): Promise<void> {
     const hook = module[hookName]
 
     if (typeof hook === 'function') {
-      await hook()
+      const api = createProxyAPI()
+      await hook({ api })
     }
 
     send({

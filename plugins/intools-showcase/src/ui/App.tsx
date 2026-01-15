@@ -34,6 +34,43 @@ const featureToModule: Record<string, ModuleId> = {
   screenshot: 'screen',
 }
 
+function handleDynamicCommand(featureCode: string, input?: string) {
+  const notification = window.intools?.notification
+  const clipboard = window.intools?.clipboard
+
+  switch (featureCode) {
+    case 'showcase:today': {
+      const today = new Date().toLocaleDateString()
+      void clipboard?.writeText(today)
+      notification?.show(`今日日期：${today}`)
+      break
+    }
+    case 'showcase:reverse': {
+      const raw = input?.trim() || ''
+      let text = raw
+      if (raw.toLowerCase().startsWith('rev ')) {
+        text = raw.slice(4)
+      } else if (raw.toLowerCase().startsWith('reverse ')) {
+        text = raw.slice(8)
+      }
+      if (!text) {
+        notification?.show('请输入要反转的文本')
+        break
+      }
+      const reversed = text.split('').reverse().join('')
+      void clipboard?.writeText(reversed)
+      notification?.show(`已复制反转结果：${reversed}`)
+      break
+    }
+    case 'showcase:mac-only': {
+      notification?.show('macOS 专用动态指令已触发')
+      break
+    }
+    default:
+      break
+  }
+}
+
 // 模块映射
 const moduleComponents: Record<ModuleId, React.ComponentType<any>> = {
   sysinfo: SystemInfoModule,
@@ -77,6 +114,9 @@ export default function App() {
     console.log('[App] Mount effect')
     window.intools?.onPluginInit?.((data) => {
       console.log('[App] onPluginInit received data:', data)
+      if (data.featureCode?.startsWith('showcase:')) {
+        handleDynamicCommand(data.featureCode, data.input)
+      }
       if (data.route && data.route.includes('image-editor')) {
         setActiveModule('image-editor')
         setScreenAutoAction(null)

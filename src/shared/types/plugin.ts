@@ -52,6 +52,28 @@ export interface CmdOver {
 
 export type PluginCmd = CmdKeyword | CmdRegex | CmdFiles | CmdImg | CmdOver
 
+export type DynamicCmdInput = string | PluginCmd
+
+export interface DynamicFeatureInput {
+  code: string
+  explain?: string
+  icon?: string
+  platform?: string | string[]
+  mainHide?: boolean
+  mainPush?: boolean
+  cmds: DynamicCmdInput[]
+}
+
+export interface DynamicFeature {
+  code: string
+  explain: string
+  icon?: string
+  platform?: string | string[]
+  mainHide?: boolean
+  mainPush?: boolean
+  cmds: PluginCmd[]
+}
+
 // 功能入口
 export interface PluginFeature {
   code: string
@@ -82,11 +104,15 @@ export interface Plugin {
 }
 
 // 插件生命周期钩子
+export interface PluginHookContext {
+  api: PluginAPI
+}
+
 export interface PluginLifecycleHooks {
-  onLoad?: () => void | Promise<void>
-  onUnload?: () => void | Promise<void>
-  onEnable?: () => void | Promise<void>
-  onDisable?: () => void | Promise<void>
+  onLoad?: (context?: PluginHookContext) => void | Promise<void>
+  onUnload?: (context?: PluginHookContext) => void | Promise<void>
+  onEnable?: (context?: PluginHookContext) => void | Promise<void>
+  onDisable?: (context?: PluginHookContext) => void | Promise<void>
 }
 
 // 插件模块导出
@@ -150,6 +176,13 @@ export interface PluginAPI {
     post: (url: string, body?: string | object, headers?: Record<string, string>) => Promise<HttpResponse>
     put: (url: string, body?: string | object, headers?: Record<string, string>) => Promise<HttpResponse>
     delete: (url: string, headers?: Record<string, string>) => Promise<HttpResponse>
+  }
+  features: {
+    getFeatures: (codes?: string[]) => DynamicFeature[]
+    setFeature: (feature: DynamicFeatureInput) => void
+    removeFeature: (code: string) => boolean
+    redirectHotKeySetting: (cmdLabel: string, autocopy?: boolean) => void
+    redirectAiModelsSetting: () => void
   }
 }
 

@@ -2,7 +2,7 @@
 
 本文档记录 InTools 插件系统已实现和待实现的底层 API。
 
-## 已实现的 API（共 22 个）
+## 已实现的 API（共 23 个）
 
 ### 基础 API
 
@@ -13,6 +13,7 @@
 | **Storage** | `plugin/storage.ts` | 数据持久化 | ✅ |
 | **Filesystem** | `plugin/filesystem.ts` | 文件系统操作 | ✅ |
 | **HTTP** | `plugin/http.ts` | 网络请求 | ✅ |
+| **Features** | `plugin/dynamic-features.ts` | 动态指令 | ✅ |
 | **Window** | `ipc/window.ts` | 窗口控制 | ✅ |
 | **Theme** | `ipc/theme.ts` | 主题管理 | ✅ |
 

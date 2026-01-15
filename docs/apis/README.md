@@ -24,6 +24,10 @@
 - [剪贴板 API (clipboard)](./clipboard.md)
 - [输入 API (input)](./input.md)
 
+## 插件功能
+
+- [动态指令 API (features)](./features.md)
+
 ## 文件与存储
 
 - [文件系统 API (filesystem)](./filesystem.md)
