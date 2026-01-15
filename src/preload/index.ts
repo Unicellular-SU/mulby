@@ -136,6 +136,8 @@ contextBridge.exposeInMainWorld('intools', {
     getPrimaryDisplay: () => ipcRenderer.invoke('screen:getPrimaryDisplay'),
     getDisplayNearestPoint: (point: { x: number; y: number }) =>
       ipcRenderer.invoke('screen:getDisplayNearestPoint', point),
+    getDisplayMatching: (rect: { x: number; y: number; width: number; height: number }) =>
+      ipcRenderer.invoke('screen:getDisplayMatching', rect),
     getCursorScreenPoint: () => ipcRenderer.invoke('screen:getCursorScreenPoint'),
     getSources: (options?: { types?: ('screen' | 'window')[]; thumbnailSize?: { width: number; height: number } }) =>
       ipcRenderer.invoke('screen:getSources', options),
@@ -147,7 +149,8 @@ contextBridge.exposeInMainWorld('intools', {
     ) => ipcRenderer.invoke('screen:captureRegion', region, options),
     getMediaStreamConstraints: (options: { sourceId: string; audio?: boolean; frameRate?: number }) =>
       ipcRenderer.invoke('screen:getMediaStreamConstraints', options),
-    screenCapture: () => ipcRenderer.invoke('screen:startRegionCapture')
+    screenCapture: () => ipcRenderer.invoke('screen:startRegionCapture'),
+    colorPick: () => ipcRenderer.invoke('screen:colorPick')
   },
 
   // Shell API

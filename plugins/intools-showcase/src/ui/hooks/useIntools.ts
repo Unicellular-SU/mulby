@@ -104,6 +104,10 @@ export function useIntools(pluginId?: string) {
             getAllDisplays: () => window.intools?.screen?.getAllDisplays(),
             getPrimaryDisplay: () => window.intools?.screen?.getPrimaryDisplay(),
             getCursorScreenPoint: () => window.intools?.screen?.getCursorScreenPoint(),
+            getDisplayNearestPoint: (point: { x: number; y: number }) =>
+                window.intools?.screen?.getDisplayNearestPoint?.(point),
+            getDisplayMatching: (rect: { x: number; y: number; width: number; height: number }) =>
+                window.intools?.screen?.getDisplayMatching?.(rect),
             getSources: (options?: { types?: ('screen' | 'window')[], thumbnailSize?: { width: number, height: number } }) =>
                 window.intools?.screen?.getSources(options),
             capture: (options?: { sourceId?: string, format?: 'png' | 'jpeg', quality?: number }) =>
@@ -111,6 +115,7 @@ export function useIntools(pluginId?: string) {
             captureRegion: (region: { x: number, y: number, width: number, height: number }, options?: { format?: 'png' | 'jpeg', quality?: number }) =>
                 window.intools?.screen?.captureRegion(region, options),
             screenCapture: () => window.intools?.screen?.screenCapture(),
+            colorPick: () => window.intools?.screen?.colorPick?.(),
         },
 
         // Shell API

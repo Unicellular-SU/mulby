@@ -107,16 +107,27 @@ interface CaptureSource {
   appIconDataUrl?: string
 }
 
+// Color Picker 返回类型
+interface ColorPickResult {
+  hex: string
+  rgb: string
+  r: number
+  g: number
+  b: number
+}
+
 interface IntoolsScreen {
   getAllDisplays(): Promise<DisplayInfo[]>
   getPrimaryDisplay(): Promise<DisplayInfo>
   getDisplayNearestPoint(point: { x: number; y: number }): Promise<DisplayInfo>
+  getDisplayMatching(rect: { x: number; y: number; width: number; height: number }): Promise<DisplayInfo>
   getCursorScreenPoint(): Promise<{ x: number; y: number }>
   getSources(options?: { types?: ('screen' | 'window')[]; thumbnailSize?: { width: number; height: number } }): Promise<CaptureSource[]>
   capture(options?: { sourceId?: string; format?: 'png' | 'jpeg'; quality?: number }): Promise<ArrayBuffer>
   captureRegion(region: { x: number; y: number; width: number; height: number }, options?: { format?: 'png' | 'jpeg'; quality?: number }): Promise<ArrayBuffer>
   getMediaStreamConstraints(options: { sourceId: string; audio?: boolean; frameRate?: number }): Promise<object>
   screenCapture(): Promise<string | null>
+  colorPick(): Promise<ColorPickResult | null>
 }
 
 // Shell API 类型

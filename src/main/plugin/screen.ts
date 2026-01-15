@@ -96,6 +96,23 @@ export class PluginScreen {
   }
 
   /**
+   * 获取矩形区域所在的显示器（重叠面积最大的）
+   */
+  getDisplayMatching(rect: { x: number; y: number; width: number; height: number }): DisplayInfo {
+    const display = screen.getDisplayMatching(rect)
+    const primaryId = screen.getPrimaryDisplay().id
+    return {
+      id: display.id,
+      label: display.label || `Display ${display.id}`,
+      bounds: display.bounds,
+      workArea: display.workArea,
+      scaleFactor: display.scaleFactor,
+      rotation: display.rotation,
+      isPrimary: display.id === primaryId
+    }
+  }
+
+  /**
    * 获取可捕获的源（屏幕和窗口）
    */
   async getSources(options: CaptureOptions = {}): Promise<CaptureSource[]> {

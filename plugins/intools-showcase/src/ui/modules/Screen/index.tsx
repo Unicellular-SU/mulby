@@ -20,6 +20,14 @@ interface CaptureSource {
     appIconDataUrl?: string
 }
 
+interface ColorPickResult {
+    hex: string
+    rgb: string
+    r: number
+    g: number
+    b: number
+}
+
 export function ScreenModule() {
     const { screen, media, clipboard, filesystem, dialog } = useIntools()
     const notify = useNotification()
@@ -31,6 +39,8 @@ export function ScreenModule() {
     const [cameraAccess, setCameraAccess] = useState<boolean | null>(null)
     const [micAccess, setMicAccess] = useState<boolean | null>(null)
     const [loading, setLoading] = useState(false)
+    const [pickedColor, setPickedColor] = useState<ColorPickResult | null>(null)
+    const [cursorDisplay, setCursorDisplay] = useState<DisplayInfo | null>(null)
 
     const loadDisplays = useCallback(async () => {
         try {
@@ -237,6 +247,41 @@ export function ScreenModule() {
         }
     }, [media, notify])
 
+    const handleColorPick = useCallback(async () => {
+        setLoading(true)
+        try {
+            const result = await screen.colorPick()
+            if (result) {
+                setPickedColor(result)
+                notify.success(`取色成功: ${result.hex}`)
+            } else {
+                notify.info('已取消取色')
+            }
+        } catch (error) {
+            notify.error('取色失败')
+        } finally {
+            setLoading(false)
+        }
+    }, [screen, notify])
+
+    const handleGetDisplayMatching = useCallback(async () => {
+        if (!cursorPos) return
+        try {
+            // 使用鼠标位置为中心创建一个 100x100 的矩形
+            const rect = {
+                x: cursorPos.x - 50,
+                y: cursorPos.y - 50,
+                width: 100,
+                height: 100
+            }
+            const display = await screen.getDisplayMatching(rect)
+            setCursorDisplay(display)
+            notify.success(`鼠标所在显示器: ${display.label}`)
+        } catch (error) {
+            notify.error('获取显示器失败')
+        }
+    }, [cursorPos, screen, notify])
+
     return (
         <div className="main-content">
             <PageHeader
@@ -410,6 +455,74 @@ export function ScreenModule() {
                     </div>
                 </Card>
 
+                {/* Color Picker */}
+                <Card title="屏幕取色器" icon="🎨">
+                    <div className="action-bar" style={{ marginBottom: 'var(--spacing-md)' }}>
+                        <Button variant="primary" onClick={handleColorPick} loading={loading}>
+                            🎨 屏幕取色
+                        </Button>
+                        <Button variant="secondary" onClick={handleGetDisplayMatching}>
+                            📍 获取鼠标所在显示器
+                        </Button>
+                    </div>
+
+                    {pickedColor && (
+                        <div style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: 'var(--spacing-md)',
+                            padding: 'var(--spacing-md)',
+                            background: 'var(--bg-tertiary)',
+                            borderRadius: 'var(--radius-md)',
+                            marginBottom: 'var(--spacing-md)'
+                        }}>
+                            <div style={{
+                                width: '60px',
+                                height: '60px',
+                                borderRadius: 'var(--radius-md)',
+                                backgroundColor: pickedColor.hex,
+                                border: '2px solid var(--border-color)',
+                                boxShadow: '0 2px 8px rgba(0,0,0,0.1)'
+                            }} />
+                            <div>
+                                <div style={{ fontWeight: 600, marginBottom: '4px' }}>
+                                    HEX: {pickedColor.hex}
+                                </div>
+                                <div style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>
+                                    RGB: {pickedColor.r}, {pickedColor.g}, {pickedColor.b}
+                                </div>
+                                <div style={{ fontSize: '12px', color: 'var(--text-tertiary)' }}>
+                                    {pickedColor.rgb}
+                                </div>
+                            </div>
+                            <Button
+                                variant="secondary"
+                                onClick={() => {
+                                    clipboard.writeText(pickedColor.hex)
+                                    notify.success('颜色已复制')
+                                }}
+                            >
+                                复制 HEX
+                            </Button>
+                        </div>
+                    )}
+
+                    {cursorDisplay && (
+                        <div style={{
+                            padding: 'var(--spacing-md)',
+                            background: 'var(--bg-tertiary)',
+                            borderRadius: 'var(--radius-md)',
+                        }}>
+                            <div style={{ fontWeight: 600, marginBottom: '8px' }}>
+                                鼠标所在显示器: {cursorDisplay.label}
+                            </div>
+                            <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
+                                分辨率: {cursorDisplay.bounds.width} × {cursorDisplay.bounds.height} @{cursorDisplay.scaleFactor}x
+                            </div>
+                        </div>
+                    )}
+                </Card>
+
                 {/* API Reference */}
                 <Card title="使用的 API" icon="📖">
                     <CodeBlock>
@@ -417,6 +530,7 @@ export function ScreenModule() {
 const displays = await screen.getAllDisplays()
 const primary = await screen.getPrimaryDisplay()
 const cursor = await screen.getCursorScreenPoint()
+const display = await screen.getDisplayMatching({ x: 100, y: 100, width: 200, height: 200 })
 
 // 屏幕源
 const sources = await screen.getSources({
@@ -427,6 +541,10 @@ const sources = await screen.getSources({
 // 截图
 const buffer = await screen.capture({ format: 'png' })
 const buffer = await screen.capture({ sourceId: 'screen:0:0' })
+
+// 屏幕取色
+const color = await screen.colorPick()
+// 返回: { hex: '#3B82F6', rgb: 'rgb(59, 130, 246)', r: 59, g: 130, b: 246 }
 
 // 媒体权限
 await media.hasCameraAccess()

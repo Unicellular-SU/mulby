@@ -44,6 +44,14 @@ export default defineConfig({
             outDir: 'dist/preload'
           }
         }
+      },
+      {
+        entry: 'src/preload/color-picker.ts',
+        vite: {
+          build: {
+            outDir: 'dist/preload'
+          }
+        }
       }
     ])
   ],

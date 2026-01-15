@@ -22,6 +22,11 @@ export function registerScreenHandlers() {
     return pluginScreen.getCursorScreenPoint()
   })
 
+  // 获取矩形区域所在的显示器
+  ipcMain.handle('screen:getDisplayMatching', (_, rect: { x: number; y: number; width: number; height: number }) => {
+    return pluginScreen.getDisplayMatching(rect)
+  })
+
   // 获取可捕获的源
   ipcMain.handle('screen:getSources', async (_, options?: CaptureOptions) => {
     return pluginScreen.getSources(options)

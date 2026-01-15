@@ -76,6 +76,15 @@ export interface RecordingOptions {
   frameRate?: number
 }
 
+// Color Picker API 类型
+export interface ColorPickResult {
+  hex: string
+  rgb: string
+  r: number
+  g: number
+  b: number
+}
+
 // Dialog API 类型
 export interface OpenDialogOptions {
   title?: string
@@ -177,6 +186,7 @@ export interface ElectronAPI {
     getAllDisplays: () => Promise<DisplayInfo[]>
     getPrimaryDisplay: () => Promise<DisplayInfo>
     getDisplayNearestPoint: (point: { x: number; y: number }) => Promise<DisplayInfo>
+    getDisplayMatching: (rect: { x: number; y: number; width: number; height: number }) => Promise<DisplayInfo>
     getCursorScreenPoint: () => Promise<{ x: number; y: number }>
     getSources: (options?: CaptureOptions) => Promise<CaptureSource[]>
     capture: (options?: ScreenshotOptions) => Promise<Buffer>
@@ -185,6 +195,8 @@ export interface ElectronAPI {
       options?: Omit<ScreenshotOptions, 'sourceId'>
     ) => Promise<Buffer>
     getMediaStreamConstraints: (options: RecordingOptions) => Promise<object>
+    screenCapture: () => Promise<string | null>
+    colorPick: () => Promise<ColorPickResult | null>
   }
   shell: {
     openPath: (path: string) => Promise<string>
