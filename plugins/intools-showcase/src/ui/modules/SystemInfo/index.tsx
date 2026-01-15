@@ -43,9 +43,16 @@ export function SystemInfoModule() {
     const [isOnline, setIsOnline] = useState<boolean | null>(null)
     const [isOnBattery, setIsOnBattery] = useState<boolean | null>(null)
     const [idleTime, setIdleTime] = useState<number | null>(null)
-    const [thermalState, setThermalState] = useState<string | null>(null)
+    const [_thermalState, setThermalState] = useState<string | null>(null)
     const [position, setPosition] = useState<Position | null>(null)
     const [loading, setLoading] = useState(true)
+
+    // 新增状态
+    const [nativeId, setNativeId] = useState<string | null>(null)
+    const [isDev, setIsDev] = useState<boolean | null>(null)
+    const [platform, setPlatform] = useState<{ isMacOS: boolean; isWindows: boolean; isLinux: boolean } | null>(null)
+    const [fileIcon, setFileIcon] = useState<string | null>(null)
+    const [iconPath, setIconPath] = useState<string>('.txt')
 
     const loadData = useCallback(async () => {
         console.log('[SystemInfo] loadData start')
@@ -63,13 +70,18 @@ export function SystemInfoModule() {
             console.log('[SystemInfo] got app info', app)
             if (app) setAppInfo(app)
 
-            // System Paths
+            // System Paths (扩展支持 exe 和 logs)
             console.log('[SystemInfo] fetching paths...')
-            const pathNames: ('desktop' | 'downloads' | 'documents' | 'pictures' | 'music' | 'videos' | 'temp')[] = ['desktop', 'downloads', 'documents', 'pictures', 'music', 'videos', 'temp']
+            const pathNames: ('desktop' | 'downloads' | 'documents' | 'pictures' | 'music' | 'videos' | 'temp' | 'exe' | 'logs')[] =
+                ['desktop', 'downloads', 'documents', 'pictures', 'music', 'videos', 'temp', 'exe', 'logs']
             const pathResults: Record<string, string> = {}
             for (const name of pathNames) {
-                const path = await system.getPath(name)
-                if (path) pathResults[name] = path
+                try {
+                    const path = await system.getPath(name)
+                    if (path) pathResults[name] = path
+                } catch (e) {
+                    console.warn(`[SystemInfo] Failed to get path: ${name}`, e)
+                }
             }
             console.log('[SystemInfo] got paths', pathResults)
             setPaths(pathResults)
@@ -94,6 +106,31 @@ export function SystemInfoModule() {
             const idle = await power.getSystemIdleTime()
             console.log('[SystemInfo] got idle time', idle)
             setIdleTime(idle ?? null)
+
+            // 新增 API 调用
+            // getNativeId
+            const deviceId = await system.getNativeId()
+            console.log('[SystemInfo] got native id', deviceId)
+            setNativeId(deviceId)
+
+            // isDev
+            const devMode = await system.isDev()
+            console.log('[SystemInfo] isDev', devMode)
+            setIsDev(devMode)
+
+            // Platform detection
+            const [mac, win, linux] = await Promise.all([
+                system.isMacOS(),
+                system.isWindows(),
+                system.isLinux()
+            ])
+            console.log('[SystemInfo] platform', { mac, win, linux })
+            setPlatform({ isMacOS: mac, isWindows: win, isLinux: linux })
+
+            // getFileIcon (默认 .txt)
+            const icon = await system.getFileIcon('.txt')
+            console.log('[SystemInfo] got file icon')
+            setFileIcon(icon)
 
         } catch (error) {
             console.error('[SystemInfo] Error loading data:', error)
@@ -145,6 +182,17 @@ export function SystemInfoModule() {
         } catch (error) {
             console.error('[SystemInfo] Error getting location:', error)
             notify.error('获取位置失败: ' + (error instanceof Error ? error.message : String(error)))
+        }
+    }
+
+    const handleGetFileIcon = async () => {
+        try {
+            const icon = await system.getFileIcon(iconPath)
+            setFileIcon(icon)
+            notify.success('图标获取成功')
+        } catch (error) {
+            notify.error('获取图标失败')
+            console.error(error)
         }
     }
 
@@ -201,9 +249,9 @@ export function SystemInfoModule() {
                         <div className="stat-label">空闲时间</div>
                     </div>
                     <div className="stat-item">
-                        <div className="stat-icon">🌡️</div>
-                        <div className="stat-value">{thermalState || '-'}</div>
-                        <div className="stat-label">热状态</div>
+                        <div className="stat-icon">{isDev ? '🛠️' : '📦'}</div>
+                        <div className="stat-value">{isDev ? '开发' : '生产'}</div>
+                        <div className="stat-label">运行模式</div>
                     </div>
                 </div>
 
@@ -271,6 +319,78 @@ export function SystemInfoModule() {
                     </Card>
                 </div>
 
+                {/* 新增: 设备标识与平台检测 */}
+                <Card title="设备标识 & 平台检测" icon="🔑">
+                    <div className="info-grid">
+                        <span className="info-label">设备 ID</span>
+                        <span className="info-value" style={{ fontSize: '11px', fontFamily: 'monospace' }}>
+                            {nativeId || '-'}
+                        </span>
+
+                        <span className="info-label">开发模式</span>
+                        <span className="info-value">
+                            <StatusBadge status={isDev ? 'warning' : 'success'}>
+                                {isDev ? '是 (isDev: true)' : '否 (isDev: false)'}
+                            </StatusBadge>
+                        </span>
+
+                        <span className="info-label">平台检测</span>
+                        <span className="info-value">
+                            {platform && (
+                                <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                                    <StatusBadge status={platform.isMacOS ? 'success' : 'info'}>
+                                        macOS: {platform.isMacOS ? '✓' : '✗'}
+                                    </StatusBadge>
+                                    <StatusBadge status={platform.isWindows ? 'success' : 'info'}>
+                                        Windows: {platform.isWindows ? '✓' : '✗'}
+                                    </StatusBadge>
+                                    <StatusBadge status={platform.isLinux ? 'success' : 'info'}>
+                                        Linux: {platform.isLinux ? '✓' : '✗'}
+                                    </StatusBadge>
+                                </div>
+                            )}
+                        </span>
+                    </div>
+                </Card>
+
+                {/* 新增: 文件图标 */}
+                <Card title="文件图标 API" icon="🖼️">
+                    <div style={{ display: 'flex', gap: '16px', alignItems: 'center', marginBottom: '16px' }}>
+                        <input
+                            type="text"
+                            value={iconPath}
+                            onChange={(e) => setIconPath(e.target.value)}
+                            placeholder="输入路径或扩展名 (如 .txt, folder)"
+                            style={{
+                                flex: 1,
+                                padding: '8px 12px',
+                                border: '1px solid var(--border-color)',
+                                borderRadius: '6px',
+                                background: 'var(--bg-secondary)',
+                                color: 'var(--text-primary)',
+                                fontSize: '13px'
+                            }}
+                        />
+                        <Button onClick={handleGetFileIcon}>获取图标</Button>
+                    </div>
+                    <div className="info-grid">
+                        <span className="info-label">图标预览</span>
+                        <span className="info-value">
+                            {fileIcon ? (
+                                <img
+                                    src={fileIcon}
+                                    alt="File icon"
+                                    style={{ width: '32px', height: '32px' }}
+                                />
+                            ) : '-'}
+                        </span>
+                        <span className="info-label">提示</span>
+                        <span className="info-value" style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>
+                            支持文件路径、扩展名（如 .txt、.pdf）或 "folder"
+                        </span>
+                    </div>
+                </Card>
+
                 {/* Paths Card */}
                 <Card title="系统路径" icon="📂">
                     <div className="info-grid">
@@ -313,10 +433,11 @@ export function SystemInfoModule() {
                 {/* Raw Data */}
                 <Card title="原始数据" icon="📄">
                     <CodeBlock>
-                        {JSON.stringify({ systemInfo, appInfo, paths }, null, 2)}
+                        {JSON.stringify({ systemInfo, appInfo, paths, nativeId, isDev, platform }, null, 2)}
                     </CodeBlock>
                 </Card>
             </div>
         </div>
     )
 }
+

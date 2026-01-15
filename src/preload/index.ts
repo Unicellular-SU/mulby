@@ -209,7 +209,14 @@ contextBridge.exposeInMainWorld('intools', {
     getAppInfo: () => ipcRenderer.invoke('system:getAppInfo'),
     getPath: (name: string) => ipcRenderer.invoke('system:getPath', name),
     getEnv: (name: string) => ipcRenderer.invoke('system:getEnv', name),
-    getIdleTime: () => ipcRenderer.invoke('system:getIdleTime')
+    getIdleTime: () => ipcRenderer.invoke('system:getIdleTime'),
+    // 新增 API
+    getFileIcon: (filePath: string) => ipcRenderer.invoke('system:getFileIcon', filePath),
+    getNativeId: () => ipcRenderer.invoke('system:getNativeId'),
+    isDev: () => ipcRenderer.invoke('system:isDev'),
+    isMacOS: () => ipcRenderer.invoke('system:isMacOS'),
+    isWindows: () => ipcRenderer.invoke('system:isWindows'),
+    isLinux: () => ipcRenderer.invoke('system:isLinux')
   },
 
   // GlobalShortcut API

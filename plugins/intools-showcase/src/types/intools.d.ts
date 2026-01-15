@@ -183,9 +183,16 @@ interface AppInfo {
 interface IntoolsSystem {
   getSystemInfo(): Promise<SystemInfo>
   getAppInfo(): Promise<AppInfo>
-  getPath(name: 'home' | 'appData' | 'userData' | 'temp' | 'desktop' | 'documents' | 'downloads' | 'music' | 'pictures' | 'videos'): Promise<string>
+  getPath(name: 'home' | 'appData' | 'userData' | 'temp' | 'exe' | 'desktop' | 'documents' | 'downloads' | 'music' | 'pictures' | 'videos' | 'logs'): Promise<string>
   getEnv(name: string): Promise<string | undefined>
   getIdleTime(): Promise<number>
+  // 新增 API
+  getFileIcon(filePath: string): Promise<string>
+  getNativeId(): Promise<string>
+  isDev(): Promise<boolean>
+  isMacOS(): Promise<boolean>
+  isWindows(): Promise<boolean>
+  isLinux(): Promise<boolean>
 }
 
 // GlobalShortcut API 类型

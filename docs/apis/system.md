@@ -57,10 +57,11 @@ interface AppInfo {
 ```javascript
 const desktop = await system.getPath('desktop');
 const downloads = await system.getPath('downloads');
+const exePath = await system.getPath('exe');  // 可执行文件路径
 ```
 
 **参数**:
-- `name` - 路径名称：'home' | 'appData' | 'userData' | 'temp' | 'desktop' | 'documents' | 'downloads' | 'music' | 'pictures' | 'videos'
+- `name` - 路径名称：'home' | 'appData' | 'userData' | 'temp' | 'exe' | 'desktop' | 'documents' | 'downloads' | 'music' | 'pictures' | 'videos' | 'logs'
 
 **返回值**: `string`
 
@@ -88,3 +89,61 @@ if (idleSeconds > 300) {
 ```
 
 **返回值**: `number` - 空闲时间（秒）
+
+### 11.6 getFileIcon(filePath)
+获取文件/文件夹的系统图标。
+
+```javascript
+// 获取指定文件的图标
+const icon = await system.getFileIcon('/path/to/file.pdf');
+document.querySelector('img').src = icon;
+
+// 获取扩展名类型的图标
+const txtIcon = await system.getFileIcon('.txt');
+
+// 获取文件夹图标
+const folderIcon = await system.getFileIcon('folder');
+```
+
+**参数**:
+- `filePath` (string) - 文件路径、扩展名（如 `.txt`）或 `'folder'`
+
+**返回值**: `string` - base64 Data URL 格式的图标
+
+### 11.7 getNativeId()
+获取设备唯一标识。
+
+```javascript
+const deviceId = await system.getNativeId();
+// 用于存储设备相关数据
+storage.set(`${deviceId}/settings`, { ... });
+```
+
+**返回值**: `string` - 32位设备唯一标识
+
+### 11.8 isDev()
+判断是否为开发环境。
+
+```javascript
+if (await system.isDev()) {
+  console.log('当前为开发模式');
+}
+```
+
+**返回值**: `boolean`
+
+### 11.9 isMacOS() / isWindows() / isLinux()
+判断当前操作系统平台。
+
+```javascript
+if (await system.isMacOS()) {
+  // macOS 特定逻辑
+} else if (await system.isWindows()) {
+  // Windows 特定逻辑
+} else if (await system.isLinux()) {
+  // Linux 特定逻辑
+}
+```
+
+**返回值**: `boolean`
+

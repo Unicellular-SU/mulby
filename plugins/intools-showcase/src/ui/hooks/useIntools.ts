@@ -149,9 +149,16 @@ export function useIntools(pluginId?: string) {
         system: {
             getSystemInfo: () => window.intools?.system?.getSystemInfo(),
             getAppInfo: () => window.intools?.system?.getAppInfo(),
-            getPath: (name: 'home' | 'appData' | 'userData' | 'temp' | 'desktop' | 'documents' | 'downloads' | 'music' | 'pictures' | 'videos') => window.intools?.system?.getPath(name),
+            getPath: (name: string) => window.intools?.system?.getPath(name),
             getEnv: (name: string) => window.intools?.system?.getEnv(name),
             getIdleTime: () => window.intools?.system?.getIdleTime(),
+            // 新增 API
+            getFileIcon: (filePath: string) => window.intools?.system?.getFileIcon?.(filePath),
+            getNativeId: () => window.intools?.system?.getNativeId?.(),
+            isDev: () => window.intools?.system?.isDev?.(),
+            isMacOS: () => window.intools?.system?.isMacOS?.(),
+            isWindows: () => window.intools?.system?.isWindows?.(),
+            isLinux: () => window.intools?.system?.isLinux?.(),
         },
 
         // Power API

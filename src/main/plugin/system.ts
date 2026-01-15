@@ -1,5 +1,6 @@
 import { app } from 'electron'
 import * as os from 'os'
+import * as crypto from 'crypto'
 
 export interface SystemInfo {
   platform: NodeJS.Platform
@@ -24,7 +25,15 @@ export interface AppInfo {
   userDataPath: string
 }
 
+// 路径类型定义
+export type PathName =
+  | 'home' | 'appData' | 'userData' | 'temp' | 'exe'
+  | 'desktop' | 'documents' | 'downloads' | 'music'
+  | 'pictures' | 'videos' | 'logs'
+
 export class PluginSystem {
+  private _nativeId: string | null = null
+
   /**
    * 获取系统信息
    */
@@ -60,8 +69,9 @@ export class PluginSystem {
 
   /**
    * 获取特定路径
+   * 扩展支持 'exe' 和 'logs' 类型
    */
-  getPath(name: 'home' | 'appData' | 'userData' | 'temp' | 'desktop' | 'documents' | 'downloads' | 'music' | 'pictures' | 'videos'): string {
+  getPath(name: PathName): string {
     return app.getPath(name)
   }
 
@@ -78,6 +88,73 @@ export class PluginSystem {
   getIdleTime(): number {
     const { powerMonitor } = require('electron')
     return powerMonitor.getSystemIdleTime()
+  }
+
+  /**
+   * 获取文件/文件夹的系统图标
+   * @param filePath 文件路径、扩展名（如 .txt）或 'folder'
+   * @returns base64 Data URL 格式的图标
+   */
+  async getFileIcon(filePath: string): Promise<string> {
+    const icon = await app.getFileIcon(filePath, { size: 'normal' })
+    return icon.toDataURL()
+  }
+
+  /**
+   * 获取设备唯一标识
+   * 使用机器信息生成稳定的设备 ID
+   */
+  getNativeId(): string {
+    if (this._nativeId) {
+      return this._nativeId
+    }
+
+    // 使用多个硬件特征生成稳定的设备标识
+    const machineInfo = [
+      os.hostname(),
+      os.platform(),
+      os.arch(),
+      os.cpus()[0]?.model || '',
+      os.totalmem().toString(),
+      os.homedir()
+    ].join('|')
+
+    this._nativeId = crypto
+      .createHash('sha256')
+      .update(machineInfo)
+      .digest('hex')
+      .substring(0, 32)
+
+    return this._nativeId
+  }
+
+  /**
+   * 判断是否为开发环境
+   * 插件应用开发环境：未打包运行
+   */
+  isDev(): boolean {
+    return !app.isPackaged
+  }
+
+  /**
+   * 判断是否为 macOS
+   */
+  isMacOS(): boolean {
+    return process.platform === 'darwin'
+  }
+
+  /**
+   * 判断是否为 Windows
+   */
+  isWindows(): boolean {
+    return process.platform === 'win32'
+  }
+
+  /**
+   * 判断是否为 Linux
+   */
+  isLinux(): boolean {
+    return process.platform === 'linux'
   }
 }
 

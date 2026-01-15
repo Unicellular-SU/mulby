@@ -26,4 +26,33 @@ export function registerSystemHandlers() {
   ipcMain.handle('system:getIdleTime', () => {
     return pluginSystem.getIdleTime()
   })
+
+  // 获取文件图标 (新增)
+  ipcMain.handle('system:getFileIcon', async (_, filePath: string) => {
+    return pluginSystem.getFileIcon(filePath)
+  })
+
+  // 获取设备唯一标识 (新增)
+  ipcMain.handle('system:getNativeId', () => {
+    return pluginSystem.getNativeId()
+  })
+
+  // 判断是否开发环境 (新增)
+  ipcMain.handle('system:isDev', () => {
+    return pluginSystem.isDev()
+  })
+
+  // 平台判断 (新增)
+  ipcMain.handle('system:isMacOS', () => {
+    return pluginSystem.isMacOS()
+  })
+
+  ipcMain.handle('system:isWindows', () => {
+    return pluginSystem.isWindows()
+  })
+
+  ipcMain.handle('system:isLinux', () => {
+    return pluginSystem.isLinux()
+  })
 }
+
