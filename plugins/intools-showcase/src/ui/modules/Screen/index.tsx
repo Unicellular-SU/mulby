@@ -504,6 +504,24 @@ export function ScreenModule() {
                             >
                                 复制 HEX
                             </Button>
+                            <Button
+                                variant="primary"
+                                onClick={async () => {
+                                    try {
+                                        const result = await window.intools?.plugin?.redirect?.(
+                                            ['@intools/color-converter', 'main'],
+                                            pickedColor.hex
+                                        )
+                                        if (!result) {
+                                            notify.error('跳转失败，请检查颜色转换器插件是否已安装')
+                                        }
+                                    } catch (error) {
+                                        notify.error('跳转失败')
+                                    }
+                                }}
+                            >
+                                🎨 在颜色转换器中打开
+                            </Button>
                         </div>
                     )}
 

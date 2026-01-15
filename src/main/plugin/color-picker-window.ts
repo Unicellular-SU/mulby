@@ -21,9 +21,9 @@ let screenshotDataUrls: Map<number, string> = new Map()
 
 /**
  * 获取颜色拾取器 HTML 模板
- * 使用预先截取的屏幕图片作为背景，实现取色功能
+ * 截图通过 IPC 传递，不嵌入 HTML 中
  */
-function getColorPickerHTML(displayInfo: object, screenshotDataUrl: string): string {
+function getColorPickerHTML(displayInfo: object): string {
   return `<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
@@ -38,6 +38,7 @@ function getColorPickerHTML(displayInfo: object, screenshotDataUrl: string): str
       overflow: hidden; 
       cursor: crosshair; 
       user-select: none;
+      background: #000;
     }
     #screenshot {
       position: fixed;
@@ -46,6 +47,7 @@ function getColorPickerHTML(displayInfo: object, screenshotDataUrl: string): str
       width: 100%;
       height: 100%;
       object-fit: cover;
+      display: none;
     }
     #cursor-dot {
       position: fixed;
@@ -57,6 +59,7 @@ function getColorPickerHTML(displayInfo: object, screenshotDataUrl: string): str
       pointer-events: none;
       transform: translate(-50%, -50%);
       z-index: 1002;
+      display: none;
     }
     #magnifier {
       position: fixed;
@@ -68,6 +71,7 @@ function getColorPickerHTML(displayInfo: object, screenshotDataUrl: string): str
       box-shadow: 0 4px 20px rgba(0,0,0,0.5);
       overflow: hidden;
       z-index: 1000;
+      display: none;
     }
     #magnifier-canvas {
       width: 100%;
@@ -95,6 +99,7 @@ function getColorPickerHTML(displayInfo: object, screenshotDataUrl: string): str
       pointer-events: none;
       z-index: 1001;
       min-width: 140px;
+      display: none;
     }
     #color-preview {
       width: 24px;
@@ -111,21 +116,22 @@ function getColorPickerHTML(displayInfo: object, screenshotDataUrl: string): str
     }
     #tip {
       position: fixed;
-      top: 20px;
+      top: 50%;
       left: 50%;
-      transform: translateX(-50%);
-      padding: 12px 24px;
+      transform: translate(-50%, -50%);
+      padding: 20px 40px;
       background: rgba(0,0,0,0.9);
       color: white;
       font-family: -apple-system, BlinkMacSystemFont, sans-serif;
-      font-size: 14px;
-      border-radius: 8px;
+      font-size: 16px;
+      border-radius: 12px;
       z-index: 1000;
+      display: none;
     }
   </style>
 </head>
 <body>
-  <img id="screenshot" src="${screenshotDataUrl}" />
+  <img id="screenshot" />
   <div id="cursor-dot"></div>
   <div id="magnifier">
     <canvas id="magnifier-canvas" width="120" height="120"></canvas>
@@ -136,7 +142,7 @@ function getColorPickerHTML(displayInfo: object, screenshotDataUrl: string): str
     <span class="color-text" id="color-hex">HEX: #000000</span>
     <span class="color-text" id="color-rgb">RGB: 0, 0, 0</span>
   </div>
-  <div id="tip">点击选取颜色 | ESC 取消</div>
+  <div id="tip">正在加载...</div>
   <script>
     console.log('[ColorPicker UI] Script loaded');
     
@@ -162,17 +168,35 @@ function getColorPickerHTML(displayInfo: object, screenshotDataUrl: string): str
     const offCanvas = document.createElement('canvas');
     const offCtx = offCanvas.getContext('2d', { willReadFrequently: true });
     
+    // 接收主进程发送的截图数据
+    if (window.colorPicker && window.colorPicker.onScreenshot) {
+      window.colorPicker.onScreenshot((dataUrl) => {
+        console.log('[ColorPicker UI] Received screenshot data, length:', dataUrl.length);
+        screenshot.src = dataUrl;
+      });
+    }
+    
     screenshot.onload = () => {
       console.log('[ColorPicker UI] Screenshot loaded');
       offCanvas.width = screenshot.naturalWidth;
       offCanvas.height = screenshot.naturalHeight;
       offCtx.drawImage(screenshot, 0, 0);
       tip.style.display = 'none';
+      screenshot.style.display = 'block';
+      // 显示 UI 元素
+      cursorDot.style.display = 'block';
+      magnifier.style.display = 'block';
+      colorInfo.style.display = 'block';
       isReady = true;
+      // 通知主进程显示窗口
+      if (window.colorPicker && window.colorPicker.ready) {
+        window.colorPicker.ready();
+      }
     };
     
     screenshot.onerror = () => {
       console.error('[ColorPicker UI] Failed to load screenshot');
+      tip.textContent = '加载失败，按 ESC 退出';
     };
     
     function rgbToHex(r, g, b) {
@@ -270,7 +294,7 @@ function getColorPickerHTML(displayInfo: object, screenshotDataUrl: string): str
     
     document.addEventListener('mousedown', (e) => {
       console.log('[ColorPicker UI] mousedown', e.button);
-      if (e.button === 0) {
+      if (e.button === 0 && isReady) {
         e.preventDefault();
         pickColor();
       }
@@ -281,7 +305,7 @@ function getColorPickerHTML(displayInfo: object, screenshotDataUrl: string): str
       if (e.key === 'Escape') {
         e.preventDefault();
         cancelPick();
-      } else if (e.key === 'Enter' || e.key === ' ') {
+      } else if ((e.key === 'Enter' || e.key === ' ') && isReady) {
         e.preventDefault();
         pickColor();
       }
@@ -295,6 +319,7 @@ function getColorPickerHTML(displayInfo: object, screenshotDataUrl: string): str
     // Initial position update
     document.addEventListener('DOMContentLoaded', () => {
       console.log('[ColorPicker UI] DOM ready, colorPicker available:', !!window.colorPicker);
+      // 不在此处调用 ready()，等待截图加载完成后再显示窗口
     });
   </script>
 </body>
@@ -309,6 +334,7 @@ async function captureAllScreens(): Promise<Map<number, string>> {
   const result = new Map<number, string>()
 
   // 获取所有屏幕源
+  console.time('desktopCapturer.getSources')
   const sources = await desktopCapturer.getSources({
     types: ['screen'],
     thumbnailSize: {
@@ -317,6 +343,7 @@ async function captureAllScreens(): Promise<Map<number, string>> {
       height: Math.max(...displays.map(d => d.bounds.height * d.scaleFactor))
     }
   })
+  console.timeEnd('desktopCapturer.getSources')
 
   // 将每个源与显示器匹配
   for (const display of displays) {
@@ -337,7 +364,9 @@ async function captureAllScreens(): Promise<Map<number, string>> {
     }
 
     if (source) {
+      console.time(`toDataURL-${display.id}`)
       result.set(display.id, source.thumbnail.toDataURL())
+      console.timeEnd(`toDataURL-${display.id}`)
     }
   }
 
@@ -370,71 +399,92 @@ export async function startColorPick(): Promise<ColorPickResult | null> {
 
     // 为每个显示器创建覆盖窗口
     displays.forEach((display, index) => {
+      console.log(`[ColorPicker] Creating window for display ${display.id}...`)
+
       const screenshotDataUrl = screenshotDataUrls.get(display.id)
       if (!screenshotDataUrl) {
-        console.warn(`[ColorPicker] No screenshot for display ${display.id}`)
+        console.warn(`[ColorPicker] No screenshot for display ${display.id}, available keys:`, Array.from(screenshotDataUrls.keys()))
         return
       }
 
-      const win = new BrowserWindow({
-        x: display.bounds.x,
-        y: display.bounds.y,
-        width: display.bounds.width,
-        height: display.bounds.height,
-        frame: false,
-        transparent: false, // 不透明，因为我们要显示截图
-        alwaysOnTop: true,
-        skipTaskbar: true,
-        resizable: false,
-        movable: false,
-        fullscreenable: true,
-        simpleFullscreen: true,
-        enableLargerThanScreen: true,
-        hasShadow: false,
-        show: false,
-        webPreferences: {
-          nodeIntegration: false,
-          contextIsolation: true,
-          preload: join(__dirname, '../preload/color-picker.js')
+      console.log(`[ColorPicker] Screenshot data URL length: ${screenshotDataUrl.length}`)
+
+      try {
+        const preloadPath = join(__dirname, '../preload/color-picker.js')
+        console.log(`[ColorPicker] Preload path: ${preloadPath}`)
+
+        const win = new BrowserWindow({
+          x: display.bounds.x,
+          y: display.bounds.y,
+          width: display.bounds.width,
+          height: display.bounds.height,
+          frame: false,
+          transparent: false,
+          alwaysOnTop: true,
+          skipTaskbar: true,
+          resizable: false,
+          movable: false,
+          fullscreenable: true,
+          simpleFullscreen: true,
+          enableLargerThanScreen: true,
+          hasShadow: false,
+          show: false,
+          webPreferences: {
+            nodeIntegration: false,
+            contextIsolation: true,
+            preload: preloadPath
+          }
+        })
+
+        console.log(`[ColorPicker] BrowserWindow created: ${win.id}`)
+
+        // 设置全屏
+        win.setSimpleFullScreen(true)
+
+        // macOS 特殊处理
+        if (process.platform === 'darwin') {
+          win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true })
+          win.setAlwaysOnTop(true, 'screen-saver')
         }
-      })
 
-      // 设置全屏
-      win.setSimpleFullScreen(true)
+        // 构建显示器信息（不包含截图）
+        const displayInfo = {
+          index,
+          displayId: display.id,
+          bounds: display.bounds,
+          scaleFactor: display.scaleFactor,
+          isPrimary: display.id === screen.getPrimaryDisplay().id
+        }
 
-      // macOS 特殊处理
-      if (process.platform === 'darwin') {
-        win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true })
-        win.setAlwaysOnTop(true, 'screen-saver')
+        // 加载取色器 HTML（不含截图数据）
+        const html = getColorPickerHTML(displayInfo)
+        console.log(`[ColorPicker] Loading HTML (${html.length} chars)`)
+
+        // 窗口保持隐藏，等待截图加载完成后再显示（由 color-picker:ready IPC 触发）
+        win.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(html)}`)
+
+        // 页面加载后发送截图数据
+        win.webContents.on('did-finish-load', () => {
+          console.log(`[ColorPicker] Window did-finish-load, sending screenshot...`)
+          win.webContents.send('color-picker:screenshot', screenshotDataUrl)
+        })
+
+        win.webContents.on('did-fail-load', (_, errorCode, errorDescription) => {
+          console.error(`[ColorPicker] Failed to load: ${errorCode} - ${errorDescription}`)
+        })
+
+        pickerWindows.push({
+          window: win,
+          displayId: display.id,
+          bounds: display.bounds
+        })
+
+        win.on('closed', () => {
+          pickerWindows = pickerWindows.filter(pw => pw.window !== win)
+        })
+      } catch (err) {
+        console.error(`[ColorPicker] Error creating window:`, err)
       }
-
-      // 构建显示器信息
-      const displayInfo = {
-        index,
-        displayId: display.id,
-        bounds: display.bounds,
-        scaleFactor: display.scaleFactor,
-        isPrimary: display.id === screen.getPrimaryDisplay().id
-      }
-
-      // 加载取色器 HTML
-      const html = getColorPickerHTML(displayInfo, screenshotDataUrl)
-      win.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(html)}`)
-
-      win.once('ready-to-show', () => {
-        win.show()
-        win.focus()
-      })
-
-      pickerWindows.push({
-        window: win,
-        displayId: display.id,
-        bounds: display.bounds
-      })
-
-      win.on('closed', () => {
-        pickerWindows = pickerWindows.filter(pw => pw.window !== win)
-      })
     })
   })
 }
@@ -494,5 +544,15 @@ export function registerColorPickerHandlers(): void {
   ipcMain.on('color-picker:cancel', () => {
     console.log('[ColorPicker] IPC: color-picker:cancel received')
     cancelColorPick()
+  })
+
+  // 截图加载完成，显示窗口
+  ipcMain.on('color-picker:ready', (event) => {
+    console.log('[ColorPicker] IPC: color-picker:ready received')
+    const win = BrowserWindow.fromWebContents(event.sender)
+    if (win && !win.isDestroyed()) {
+      win.show()
+      win.focus()
+    }
   })
 }
