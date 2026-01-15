@@ -27,6 +27,8 @@ interface PluginContext {
         explain?: string
         icon?: string
         platform?: string | string[]
+        mode?: 'ui' | 'silent' | 'detached'
+        route?: string
         mainHide?: boolean
         mainPush?: boolean
         cmds: Array<string | { type: 'keyword' | 'regex'; value?: string; match?: string; explain?: string }>
@@ -50,30 +52,7 @@ export function onLoad(context?: PluginContext) {
   const features = context?.api.features
   if (!features) return
 
-  const existing = features.getFeatures()
-  if (existing && existing.length > 0) return
-
-  features.setFeature({
-    code: 'showcase:today',
-    explain: '动态指令：显示今日日期',
-    cmds: ['today', '日期']
-  })
-
-  features.setFeature({
-    code: 'showcase:reverse',
-    explain: '动态指令：反转输入文本',
-    cmds: [
-      { type: 'keyword', value: 'reverse' },
-      { type: 'regex', match: '^rev\\s+.+', explain: 'rev 开头文本' }
-    ]
-  })
-
-  features.setFeature({
-    code: 'showcase:mac-only',
-    explain: '动态指令：仅 macOS 可见',
-    platform: 'darwin',
-    cmds: ['mac only', 'macos']
-  })
+  registerDynamicFeatures(features)
 }
 
 /**
@@ -110,7 +89,7 @@ export function onDisable() {
  * @param context.feature - 触发的功能代码
  */
 export async function run(context: PluginContext) {
-  const { notification } = context.api
+  const { notification, clipboard } = context.api
 
   // 记录功能触发
   console.log(`[InTools Showcase] 功能触发: ${context.featureCode || 'main'}`)
@@ -120,6 +99,45 @@ export async function run(context: PluginContext) {
 
   // 示例：根据不同功能显示不同通知
   switch (context.featureCode) {
+    case 'showcase:today': {
+      const today = new Date().toLocaleDateString()
+      await clipboard.writeText(today)
+      notification.show(`今日日期：${today}`)
+      break
+    }
+    case 'showcase:reverse': {
+      const raw = (context.input || '').trim()
+      let text = raw
+      if (raw.toLowerCase().startsWith('rev ')) {
+        text = raw.slice(4)
+      } else if (raw.toLowerCase().startsWith('reverse ')) {
+        text = raw.slice(8)
+      }
+      if (!text) {
+        notification.show('请输入要反转的文本')
+        break
+      }
+      const reversed = text.split('').reverse().join('')
+      await clipboard.writeText(reversed)
+      notification.show(`已复制反转结果：${reversed}`)
+      break
+    }
+    case 'showcase:mac-only':
+      notification.show('macOS 专用动态指令已触发')
+      break
+    case 'showcase:refresh-features': {
+      const features = context.api.features
+      if (!features) {
+        notification.show('动态指令 API 不可用')
+        break
+      }
+      for (const code of getDynamicFeatureCodes()) {
+        features.removeFeature(code)
+      }
+      registerDynamicFeatures(features)
+      notification.show('动态指令已清理并重新注册')
+      break
+    }
     case 'sysinfo':
       notification.show('正在加载系统信息...')
       break
@@ -141,3 +159,64 @@ export async function run(context: PluginContext) {
 // 同时导出为 module.exports 以保持兼容性
 const plugin = { onLoad, onUnload, onEnable, onDisable, run }
 export default plugin
+
+function getDynamicFeatureCodes(): string[] {
+  return [
+    'showcase:today',
+    'showcase:reverse',
+    'showcase:mac-only',
+    'showcase:refresh-features',
+    'showcase:ui-settings',
+    'showcase:ui-detached'
+  ]
+}
+
+function registerDynamicFeatures(features: NonNullable<PluginContext['api']['features']>) {
+  features.setFeature({
+    code: 'showcase:today',
+    explain: '动态指令：显示今日日期',
+    mode: 'silent',
+    cmds: ['today', '日期']
+  })
+
+  features.setFeature({
+    code: 'showcase:reverse',
+    explain: '动态指令：反转输入文本',
+    mode: 'silent',
+    cmds: [
+      { type: 'keyword', value: 'reverse' },
+      { type: 'regex', match: '^rev\\s+.+', explain: 'rev 开头文本' }
+    ]
+  })
+
+  features.setFeature({
+    code: 'showcase:mac-only',
+    explain: '动态指令：仅 macOS 可见',
+    mode: 'silent',
+    platform: 'darwin',
+    cmds: ['mac only', 'macos']
+  })
+
+  features.setFeature({
+    code: 'showcase:refresh-features',
+    explain: '动态指令：清理并刷新指令',
+    mode: 'silent',
+    cmds: ['清理动态指令', '刷新动态指令', 'refresh features']
+  })
+
+  features.setFeature({
+    code: 'showcase:ui-settings',
+    explain: '动态指令：打开设置面板',
+    mode: 'ui',
+    route: 'settings',
+    cmds: ['showcase settings', 'showcase ui']
+  })
+
+  features.setFeature({
+    code: 'showcase:ui-detached',
+    explain: '动态指令：以独立窗口打开',
+    mode: 'detached',
+    route: 'settings',
+    cmds: ['showcase detached', 'showcase window']
+  })
+}

@@ -93,7 +93,7 @@ export class PluginWindowManager {
   }
 
   // 附着插件（使用 Panel 模式）
-  attachPlugin(plugin: Plugin, featureCode: string, input?: string): boolean {
+  attachPlugin(plugin: Plugin, featureCode: string, input?: string, route?: string): boolean {
     if (!plugin.manifest.ui) return false
 
     const uiPath = join(plugin.path, plugin.manifest.ui)
@@ -117,7 +117,7 @@ export class PluginWindowManager {
       return false
     }
 
-    const panelWin = this.panelWindow.createPanel(plugin, featureCode, input || '')
+    const panelWin = this.panelWindow.createPanel(plugin, featureCode, input || '', route)
     if (!panelWin) {
       console.error('[PluginWindowManager] Failed to create panel window')
       this.attachedPlugin = null
@@ -205,7 +205,8 @@ export class PluginWindowManager {
   createDetachedWindow(
     plugin: Plugin,
     featureCode: string,
-    input?: string
+    input?: string,
+    route?: string
   ): BrowserWindow | null {
     if (!plugin.manifest.ui) return null
 
@@ -233,7 +234,11 @@ export class PluginWindowManager {
       }
     })
 
-    win.loadFile(uiPath)
+    if (route) {
+      void win.loadFile(uiPath, { hash: route })
+    } else {
+      win.loadFile(uiPath)
+    }
 
     win.once('ready-to-show', async () => {
       // 注入自定义标题栏
@@ -245,7 +250,8 @@ export class PluginWindowManager {
         pluginName: plugin.id,
         featureCode,
         input: input || '',
-        mode: 'detached'
+        mode: 'detached',
+        route
       })
       // 发送初始主题
       if (this.themeManager) {

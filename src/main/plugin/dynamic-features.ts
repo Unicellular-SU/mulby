@@ -65,6 +65,8 @@ function normalizeFeature(input: DynamicFeatureInput): DynamicFeature {
     explain: input.explain ?? input.code,
     icon: input.icon,
     platform: input.platform,
+    mode: input.mode,
+    route: input.route,
     mainHide: input.mainHide,
     mainPush: input.mainPush,
     cmds
@@ -112,7 +114,9 @@ class PluginFeatureStore {
     return this.getFeatures(pluginId).map((feature) => ({
       code: feature.code,
       explain: feature.explain,
-      cmds: feature.cmds
+      cmds: feature.cmds,
+      mode: feature.mode,
+      route: feature.route
     }))
   }
 

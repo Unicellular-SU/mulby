@@ -13,6 +13,7 @@ export interface SearchResultItem {
   displayName: string
   featureCode: string
   featureExplain: string
+  featureRoute?: string
   matchType: 'keyword' | 'regex'
   icon?: {
     type: 'url' | 'svg' | 'data-url'
@@ -29,6 +30,8 @@ export interface PluginInfo {
     code: string
     explain: string
     cmds: { type: string; value?: string; match?: string; exts?: string[] }[]
+    mode?: 'ui' | 'silent' | 'detached'
+    route?: string
   }[]
   enabled: boolean
 }

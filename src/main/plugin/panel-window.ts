@@ -259,7 +259,8 @@ export class PluginPanelWindow {
     createPanel(
         plugin: Plugin,
         featureCode: string,
-        input: string = ''
+        input: string = '',
+        route?: string
     ): BrowserWindow | null {
         if (!plugin.manifest.ui) return null
 
@@ -309,7 +310,11 @@ export class PluginPanelWindow {
         })
 
         // 加载插件 UI
-        this.panelWindow.loadFile(uiPath)
+        if (route) {
+            void this.panelWindow.loadFile(uiPath, { hash: route })
+        } else {
+            void this.panelWindow.loadFile(uiPath)
+        }
 
         // 设置位置同步监听器
         this.setupPositionSync()
@@ -338,7 +343,8 @@ export class PluginPanelWindow {
                 pluginName: plugin.id,
                 featureCode,
                 input,
-                mode: 'panel'
+                mode: 'panel',
+                route
             })
 
             // 发送主题

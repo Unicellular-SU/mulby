@@ -153,12 +153,21 @@ export class PluginManager {
       this.initializedPlugins.add(name)
     }
 
-    // 如果插件有 UI，打开 UI 窗口
-    if (plugin.manifest.ui) {
+    const feature = this.getCombinedFeatures(plugin).find(item => item.code === featureCode)
+    const useUI = Boolean(plugin.manifest.ui) && feature?.mode !== 'silent'
+    const useDetached = feature?.mode === 'detached'
+    const route = feature?.route
+
+    // 如果插件有 UI 且非静默指令，打开 UI 窗口
+    if (useUI) {
       if (!this.windowManager) {
         return { success: false, error: 'Window manager not initialized' }
       }
-      const success = this.windowManager.attachPlugin(plugin, featureCode, input)
+      if (useDetached) {
+        const win = this.windowManager.createDetachedWindow(plugin, featureCode, input, route)
+        return { success: Boolean(win), hasUI: true }
+      }
+      const success = this.windowManager.attachPlugin(plugin, featureCode, input, route)
       return { success, hasUI: true }
     }
 

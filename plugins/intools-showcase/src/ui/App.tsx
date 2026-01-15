@@ -32,6 +32,8 @@ const featureToModule: Record<string, ModuleId> = {
   media: 'media',
   settings: 'settings',
   screenshot: 'screen',
+  'showcase:ui-settings': 'settings',
+  'showcase:ui-detached': 'settings',
 }
 
 function handleDynamicCommand(featureCode: string, input?: string) {

@@ -59,6 +59,8 @@ export interface DynamicFeatureInput {
   explain?: string
   icon?: string
   platform?: string | string[]
+  mode?: 'ui' | 'silent' | 'detached'
+  route?: string
   mainHide?: boolean
   mainPush?: boolean
   cmds: DynamicCmdInput[]
@@ -69,6 +71,8 @@ export interface DynamicFeature {
   explain: string
   icon?: string
   platform?: string | string[]
+  mode?: 'ui' | 'silent' | 'detached'
+  route?: string
   mainHide?: boolean
   mainPush?: boolean
   cmds: PluginCmd[]
@@ -79,6 +83,8 @@ export interface PluginFeature {
   code: string
   explain: string
   cmds: PluginCmd[]
+  mode?: 'ui' | 'silent' | 'detached'
+  route?: string
 }
 
 // 插件清单
