@@ -173,8 +173,19 @@ export function useIntools(pluginId?: string) {
             isMacOS: () => window.intools?.system?.isMacOS?.(),
             isWindows: () => window.intools?.system?.isWindows?.(),
             isLinux: () => window.intools?.system?.isLinux?.(),
-            isAccessibilityTrusted: () => window.intools?.system?.isAccessibilityTrusted?.(),
-            openAccessibilitySettings: () => window.intools?.system?.openAccessibilitySettings?.(),
+        },
+
+        // Permission API
+        permission: {
+            getStatus: (type: 'geolocation' | 'camera' | 'microphone' | 'notifications' | 'screen' | 'accessibility' | 'contacts' | 'calendar') =>
+                window.intools?.permission?.getStatus(type),
+            request: (type: 'geolocation' | 'camera' | 'microphone' | 'notifications' | 'screen' | 'accessibility' | 'contacts' | 'calendar') =>
+                window.intools?.permission?.request(type),
+            canRequest: (type: 'geolocation' | 'camera' | 'microphone' | 'notifications' | 'screen' | 'accessibility' | 'contacts' | 'calendar') =>
+                window.intools?.permission?.canRequest(type),
+            openSystemSettings: (type: 'geolocation' | 'camera' | 'microphone' | 'notifications' | 'screen' | 'accessibility' | 'contacts' | 'calendar') =>
+                window.intools?.permission?.openSystemSettings(type),
+            isAccessibilityTrusted: () => window.intools?.permission?.isAccessibilityTrusted()
         },
 
         // Power API

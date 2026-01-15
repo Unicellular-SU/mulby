@@ -2,7 +2,7 @@
 
 本文档记录 InTools 插件系统已实现和待实现的底层 API。
 
-## 已实现的 API（共 21 个）
+## 已实现的 API（共 22 个）
 
 ### 基础 API
 
@@ -26,6 +26,7 @@
 | **System** | `plugin/system.ts` | 系统/应用信息 | ✅ |
 | **Shortcut** | `plugin/shortcut.ts` | 全局快捷键 | ✅ |
 | **Security** | `plugin/security.ts` | 加密存储 | ✅ |
+| **Permission** | `plugin/permission-manager.ts` | 权限管理 | ✅ (部分权限仅 macOS) |
 | **Tray** | `plugin/tray.ts` | 系统托盘 | ✅ (title 仅 macOS) |
 | **Menu** | `plugin/menu.ts` | 原生右键菜单 | ✅ |
 | **Network** | `plugin/network.ts` | 网络状态监控 | ✅ |
@@ -87,6 +88,7 @@ src/main/
 │   ├── network.ts    # Network API
 │   ├── menu.ts       # Menu API
 │   ├── input.ts      # Input API
+│   ├── permission-manager.ts # Permission API
 │   └── geolocation.ts # Geolocation API
 │
 ├── ipc/              # IPC 处理器
@@ -108,6 +110,7 @@ src/main/
 │   ├── network.ts
 │   ├── menu.ts
 │   ├── input.ts
+│   ├── permission.ts
 │   └── geolocation.ts
 │
 src/preload/

@@ -54,14 +54,4 @@ export function registerSystemHandlers() {
   ipcMain.handle('system:isLinux', () => {
     return pluginSystem.isLinux()
   })
-
-  // 辅助功能权限检测 (macOS)
-  ipcMain.handle('system:isAccessibilityTrusted', () => {
-    return pluginSystem.isAccessibilityTrusted()
-  })
-
-  // 打开辅助功能设置 (macOS)
-  ipcMain.handle('system:openAccessibilitySettings', () => {
-    return pluginSystem.openAccessibilitySettings()
-  })
 }

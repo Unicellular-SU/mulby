@@ -212,8 +212,14 @@ interface IntoolsSystem {
   isMacOS(): Promise<boolean>
   isWindows(): Promise<boolean>
   isLinux(): Promise<boolean>
+}
+
+interface IntoolsPermission {
+  getStatus(type: 'geolocation' | 'camera' | 'microphone' | 'notifications' | 'screen' | 'accessibility' | 'contacts' | 'calendar'): Promise<'authorized' | 'granted' | 'denied' | 'not-determined' | 'restricted' | 'limited' | 'unknown'>
+  request(type: 'geolocation' | 'camera' | 'microphone' | 'notifications' | 'screen' | 'accessibility' | 'contacts' | 'calendar'): Promise<'authorized' | 'granted' | 'denied' | 'not-determined' | 'restricted' | 'limited' | 'unknown'>
+  canRequest(type: 'geolocation' | 'camera' | 'microphone' | 'notifications' | 'screen' | 'accessibility' | 'contacts' | 'calendar'): Promise<boolean>
+  openSystemSettings(type: 'geolocation' | 'camera' | 'microphone' | 'notifications' | 'screen' | 'accessibility' | 'contacts' | 'calendar'): Promise<boolean>
   isAccessibilityTrusted(): Promise<boolean>
-  openAccessibilitySettings(): Promise<boolean>
 }
 
 // GlobalShortcut API 类型
@@ -388,6 +394,7 @@ interface IntoolsAPI {
   shell: IntoolsShell
   dialog: IntoolsDialog
   system: IntoolsSystem
+  permission: IntoolsPermission
   shortcut: IntoolsShortcut
   security: IntoolsSecurity
   media: IntoolsMedia

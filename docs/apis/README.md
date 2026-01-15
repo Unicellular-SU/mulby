@@ -7,6 +7,7 @@
 - [System API (system)](./system.md)
 - [Power API (power)](./power.md)
 - [Tray API (tray)](./tray.md)
+- [权限 API (permission)](./permission.md)
 
 ## 窗口与界面
 

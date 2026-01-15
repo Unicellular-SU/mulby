@@ -228,9 +228,16 @@ contextBridge.exposeInMainWorld('intools', {
     isDev: () => ipcRenderer.invoke('system:isDev'),
     isMacOS: () => ipcRenderer.invoke('system:isMacOS'),
     isWindows: () => ipcRenderer.invoke('system:isWindows'),
-    isLinux: () => ipcRenderer.invoke('system:isLinux'),
-    isAccessibilityTrusted: () => ipcRenderer.invoke('system:isAccessibilityTrusted'),
-    openAccessibilitySettings: () => ipcRenderer.invoke('system:openAccessibilitySettings')
+    isLinux: () => ipcRenderer.invoke('system:isLinux')
+  },
+
+  // Permission API
+  permission: {
+    getStatus: (type: string) => ipcRenderer.invoke('permission:getStatus', type),
+    request: (type: string) => ipcRenderer.invoke('permission:request', type),
+    canRequest: (type: string) => ipcRenderer.invoke('permission:canRequest', type),
+    openSystemSettings: (type: string) => ipcRenderer.invoke('permission:openSystemSettings', type),
+    isAccessibilityTrusted: () => ipcRenderer.invoke('permission:isAccessibilityTrusted')
   },
 
   // GlobalShortcut API

@@ -15,6 +15,7 @@ import { pluginPowerMonitor } from './power'
 import { createPluginTray } from './tray'
 import { pluginNetwork } from './network'
 import { pluginInput } from './input'
+import { permissionManager } from './permission-manager'
 
 const pluginStorage = new PluginStorage()
 const pluginFilesystem = new PluginFilesystem()
@@ -173,7 +174,18 @@ export function createPluginAPI(pluginName: string) {
     network: {
       isOnline: () => pluginNetwork.isOnline()
     },
-    input: pluginInput
+    input: pluginInput,
+    permission: {
+      getStatus: (type: 'geolocation' | 'camera' | 'microphone' | 'notifications' | 'screen' | 'accessibility' | 'contacts' | 'calendar') =>
+        permissionManager.getStatus(type),
+      request: (type: 'geolocation' | 'camera' | 'microphone' | 'notifications' | 'screen' | 'accessibility' | 'contacts' | 'calendar') =>
+        permissionManager.request(type),
+      canRequest: (type: 'geolocation' | 'camera' | 'microphone' | 'notifications' | 'screen' | 'accessibility' | 'contacts' | 'calendar') =>
+        permissionManager.canRequest(type),
+      openSystemSettings: (type: 'geolocation' | 'camera' | 'microphone' | 'notifications' | 'screen' | 'accessibility' | 'contacts' | 'calendar') =>
+        permissionManager.openSystemSettings(type),
+      isAccessibilityTrusted: () => permissionManager.isAccessibilityTrusted()
+    }
   }
 }
 

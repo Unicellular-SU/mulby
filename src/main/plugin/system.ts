@@ -1,4 +1,4 @@
-import { app, shell, systemPreferences } from 'electron'
+import { app } from 'electron'
 import * as os from 'os'
 import * as crypto from 'crypto'
 
@@ -155,23 +155,6 @@ export class PluginSystem {
    */
   isLinux(): boolean {
     return process.platform === 'linux'
-  }
-
-  /**
-   * 检测辅助功能权限 (macOS)
-   */
-  isAccessibilityTrusted(): boolean {
-    if (process.platform !== 'darwin') return true
-    return systemPreferences.isTrustedAccessibilityClient(false)
-  }
-
-  /**
-   * 打开辅助功能权限设置页 (macOS)
-   */
-  openAccessibilitySettings(): boolean {
-    if (process.platform !== 'darwin') return false
-    shell.openExternal('x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility')
-    return true
   }
 }
 

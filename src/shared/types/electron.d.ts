@@ -232,8 +232,13 @@ export interface ElectronAPI {
     isMacOS: () => Promise<boolean>
     isWindows: () => Promise<boolean>
     isLinux: () => Promise<boolean>
+  }
+  permission: {
+    getStatus: (type: 'geolocation' | 'camera' | 'microphone' | 'notifications' | 'screen' | 'accessibility' | 'contacts' | 'calendar') => Promise<'authorized' | 'granted' | 'denied' | 'not-determined' | 'restricted' | 'limited' | 'unknown'>
+    request: (type: 'geolocation' | 'camera' | 'microphone' | 'notifications' | 'screen' | 'accessibility' | 'contacts' | 'calendar') => Promise<'authorized' | 'granted' | 'denied' | 'not-determined' | 'restricted' | 'limited' | 'unknown'>
+    canRequest: (type: 'geolocation' | 'camera' | 'microphone' | 'notifications' | 'screen' | 'accessibility' | 'contacts' | 'calendar') => Promise<boolean>
+    openSystemSettings: (type: 'geolocation' | 'camera' | 'microphone' | 'notifications' | 'screen' | 'accessibility' | 'contacts' | 'calendar') => Promise<boolean>
     isAccessibilityTrusted: () => Promise<boolean>
-    openAccessibilitySettings: () => Promise<boolean>
   }
   shortcut: {
     register: (accelerator: string) => Promise<boolean>

@@ -3,7 +3,7 @@ import { PageHeader, Card, Button, CodeBlock } from '../../components'
 import { useIntools, useNotification } from '../../hooks'
 
 export function InputModule() {
-    const { input, dialog, system } = useIntools()
+    const { input, dialog, system, permission } = useIntools()
     const notify = useNotification()
 
     const [pasteText, setPasteText] = useState('')
@@ -33,7 +33,7 @@ export function InputModule() {
             const mac = await system.isMacOS()
             setIsMacOS(Boolean(mac))
             if (mac) {
-                const trusted = await system.isAccessibilityTrusted()
+                const trusted = await permission.isAccessibilityTrusted()
                 setAccessibilityTrusted(Boolean(trusted))
             } else {
                 setAccessibilityTrusted(true)
@@ -101,7 +101,7 @@ export function InputModule() {
     }
 
     const handleOpenAccessibilitySettings = async () => {
-        const ok = await system.openAccessibilitySettings()
+        const ok = await permission.openSystemSettings('accessibility')
         if (ok) {
             notify.info('已打开辅助功能设置')
         } else {

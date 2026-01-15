@@ -280,7 +280,7 @@ export class PermissionManager {
      * 打开系统设置
      * 当权限被拒绝时，引导用户手动开启
      */
-    openSystemSettings(type: PermissionType): void {
+    openSystemSettings(type: PermissionType): boolean {
         log.info(`[PermissionManager] Opening system settings for: ${type}`)
 
         if (process.platform === 'darwin') {
@@ -299,13 +299,25 @@ export class PermissionManager {
             const url = urlMap[type]
             if (url) {
                 shell.openExternal(url)
+                return true
             }
+            return false
         } else if (process.platform === 'win32') {
             // Windows 设置
             const { shell } = require('electron')
             shell.openExternal('ms-settings:privacy-location')
+            return true
         }
         // Linux: 各发行版设置差异较大，暂不处理
+        return false
+    }
+
+    /**
+     * macOS 辅助功能权限是否已授权
+     */
+    isAccessibilityTrusted(): boolean {
+        if (process.platform !== 'darwin') return true
+        return systemPreferences.isTrustedAccessibilityClient(false)
     }
 }
 
