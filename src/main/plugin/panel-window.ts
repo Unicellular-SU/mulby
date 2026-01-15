@@ -321,8 +321,13 @@ export class PluginPanelWindow {
             // 同步位置确保正确
             this.syncPosition()
 
-            // 显示窗口
-            this.panelWindow.showInactive() // 不抢夺焦点
+            // 确保主窗口是显示的
+            if (!this.mainWindow.isVisible()) {
+                this.mainWindow.show()
+            }
+
+            // 显示窗口 (使用 show() 抢夺焦点，确保显示)
+            this.panelWindow.show()
 
             // 注入面板工具栏（关闭/弹出按钮）
             const theme = this.themeManager?.getActualTheme() || 'dark'
@@ -371,12 +376,15 @@ export class PluginPanelWindow {
         this.panelWindow.webContents.on('render-process-gone', (_event, details) => {
             console.error('[PanelWindow] Render process gone:', details.reason)
             this.close()
-            // TODO: 可以通知用户插件崩溃
         })
 
         // 监听窗口关闭
+        // 关键修复：使用闭包捕获当前窗口实例，防止旧窗口关闭事件清理了新窗口的引用
+        const currentWin = this.panelWindow
         this.panelWindow.on('closed', () => {
-            this.cleanup()
+            if (this.panelWindow === currentWin) {
+                this.cleanup()
+            }
         })
 
         // 注册到主题管理器

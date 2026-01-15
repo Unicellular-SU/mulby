@@ -119,7 +119,7 @@ export function registerWindowHandlers(
   // =========================================
 
   // 跳转到另一个插件
-  ipcMain.handle('plugin:redirect', async (_event, label: string | [string, string], payload?: unknown) => {
+  ipcMain.handle('plugin:redirect', async (event, label: string | [string, string], payload?: unknown) => {
     if (!pluginManager) return false
 
     let pluginName: string
@@ -152,8 +152,23 @@ export function registerWindowHandlers(
     if (!plugin) return false
 
     const input = typeof payload === 'string' ? payload : JSON.stringify(payload || '')
-    pluginWindowManager.attachPlugin(plugin, featureCode, input)
-    return true
+
+    // 判断调用源是附着模式还是独立模式
+    const callerWin = BrowserWindow.fromWebContents(event.sender)
+    const mainWin = getMainWindow()
+    const panelWin = pluginWindowManager.getPanelWindow()?.getWindow()
+
+    const isAttachedContext = (callerWin && mainWin && callerWin === mainWin) ||
+      (callerWin && panelWin && callerWin === panelWin)
+
+    if (isAttachedContext) {
+      // 附着模式 -> 保持附着模式跳转
+      return pluginWindowManager.attachPlugin(plugin, featureCode, input)
+    } else {
+      // 独立模式 -> 打开新的独立窗口
+      const newWin = pluginWindowManager.createDetachedWindow(plugin, featureCode, input)
+      return !!newWin
+    }
   })
 
   // 退出插件
