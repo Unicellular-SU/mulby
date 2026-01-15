@@ -21,7 +21,7 @@ import { registerHostHandlers } from './host'
 import { registerFilesystemHandlers } from './filesystem'
 import { registerStorageHandlers } from './storage'
 import { registerRegionCaptureHandlers } from '../plugin/region-capture'
-import { registerColorPickerHandlers } from '../plugin/color-picker-window'
+import { registerColorPickHandlers } from '../plugin/color-pick'
 import { PluginManager } from '../plugin'
 import { PluginWindowManager } from '../plugin/window'
 import { ThemeManager } from '../services/theme'
@@ -54,5 +54,5 @@ export function registerAllHandlers(
   registerFilesystemHandlers()
   registerStorageHandlers()
   registerRegionCaptureHandlers()
-  registerColorPickerHandlers()
+  registerColorPickHandlers()
 }
