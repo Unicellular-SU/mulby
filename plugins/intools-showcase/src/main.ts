@@ -83,6 +83,9 @@ export async function run(context: PluginContext) {
     case 'clipboard':
       notification.show('剪贴板管理器已就绪')
       break
+    case 'input':
+      notification.show('输入控制已就绪')
+      break
     case 'screenshot':
       notification.show('截图功能已就绪')
       break

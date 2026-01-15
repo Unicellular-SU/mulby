@@ -16,6 +16,14 @@ export function useIntools(pluginId?: string) {
             getFormat: () => window.intools?.clipboard?.getFormat(),
         },
 
+        // Input API
+        input: {
+            hideMainWindowPasteText: (text: string) => window.intools?.input?.hideMainWindowPasteText(text),
+            hideMainWindowPasteImage: (image: string | ArrayBuffer) => window.intools?.input?.hideMainWindowPasteImage(image),
+            hideMainWindowPasteFile: (filePaths: string | string[]) => window.intools?.input?.hideMainWindowPasteFile(filePaths),
+            hideMainWindowTypeString: (text: string) => window.intools?.input?.hideMainWindowTypeString(text),
+        },
+
         // Storage API
         storage: {
             get: (key: string) => window.intools?.storage?.get(key, pluginId),
@@ -165,6 +173,8 @@ export function useIntools(pluginId?: string) {
             isMacOS: () => window.intools?.system?.isMacOS?.(),
             isWindows: () => window.intools?.system?.isWindows?.(),
             isLinux: () => window.intools?.system?.isLinux?.(),
+            isAccessibilityTrusted: () => window.intools?.system?.isAccessibilityTrusted?.(),
+            openAccessibilitySettings: () => window.intools?.system?.openAccessibilitySettings?.(),
         },
 
         // Power API

@@ -12,6 +12,7 @@
 |------|-----------|---------|
 | 📊 **系统信息** | system, power, geolocation, network | 系统/应用信息、电源状态、位置信息、网络状态 |
 | 📋 **剪贴板** | clipboard, notification | 剪贴板读写、格式检测、图片和文件支持 |
+| ⌨️ **输入控制** | input | 隐藏主窗口后粘贴文本/图片/文件或模拟键入 |
 | 📁 **文件管理** | filesystem, dialog, shell | 文件操作、对话框、系统打开、Finder 定位 |
 | 🌐 **网络与HTTP** | http, network | HTTP 请求测试、网络状态监控 |
 | 🖥️ **屏幕与捕获** | screen, media, window | 显示器信息、区域截图、多窗口协作、媒体权限 |
@@ -26,6 +27,7 @@
 - `showcase` / `demo` / `示例` - 打开功能展示面板
 - `sysinfo` / `系统信息` - 直接进入系统信息模块
 - `cb` / `剪贴板` - 直接进入剪贴板管理
+- `input` / `输入` - 直接进入输入控制
 - `files` / `文件` - 直接进入文件管理
 - `http` / `网络` - 直接进入网络测试
 - `screenshot` / `截图` / `screen` - 直接进入截图功能
@@ -83,6 +85,7 @@ intools-showcase/
 │       └── modules/           # 功能模块
 │           ├── SystemInfo/
 │           ├── Clipboard/
+│           ├── Input/
 │           ├── FileManager/
 │           ├── Network/
 │           ├── Screen/
@@ -99,6 +102,7 @@ intools-showcase/
 
 ### 基础 API
 - ✅ `clipboard` - 剪贴板操作
+- ✅ `input` - 输入与粘贴模拟
 - ✅ `notification` - 系统通知
 - ✅ `storage` - 数据存储
 - ✅ `window` - 窗口控制

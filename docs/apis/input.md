@@ -1,6 +1,7 @@
 ## 3. 输入 API (input)
 
 输入 API 用于对外部应用执行粘贴或键入操作，适配 macOS、Windows、Linux。
+调用时会先隐藏 InTools 窗口，以便目标应用接收输入焦点。
 
 注意：macOS 需要在系统设置中授予 InTools 辅助功能权限；Linux 依赖 `xdotool` 执行按键与输入（Wayland 环境可能受限）。
 

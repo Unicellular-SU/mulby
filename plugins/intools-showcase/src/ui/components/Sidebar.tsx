@@ -8,6 +8,7 @@ interface SidebarProps {
 const modules = [
     { id: 'sysinfo', icon: '📊', label: '系统信息' },
     { id: 'clipboard', icon: '📋', label: '剪贴板' },
+    { id: 'input', icon: '⌨️', label: '输入控制' },
     { id: 'filemanager', icon: '📁', label: '文件管理' },
     { id: 'network', icon: '🌐', label: '网络' },
     { id: 'screen', icon: '🖥️', label: '屏幕' },

@@ -61,6 +61,20 @@
       ]
     },
     {
+      "code": "input",
+      "explain": "输入控制示例",
+      "cmds": [
+        {
+          "type": "keyword",
+          "value": "input"
+        },
+        {
+          "type": "keyword",
+          "value": "输入"
+        }
+      ]
+    },
+    {
       "code": "files",
       "explain": "文件管理",
       "cmds": [

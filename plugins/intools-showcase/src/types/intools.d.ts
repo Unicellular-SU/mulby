@@ -17,6 +17,13 @@ interface IntoolsClipboard {
   getFormat(): Promise<'text' | 'image' | 'files' | 'empty'>
 }
 
+interface IntoolsInput {
+  hideMainWindowPasteText(text: string): Promise<boolean>
+  hideMainWindowPasteImage(image: string | ArrayBuffer): Promise<boolean>
+  hideMainWindowPasteFile(filePaths: string | string[]): Promise<boolean>
+  hideMainWindowTypeString(text: string): Promise<boolean>
+}
+
 interface IntoolsNotification {
   show(message: string, type?: 'info' | 'success' | 'warning' | 'error'): void
 }
@@ -205,6 +212,8 @@ interface IntoolsSystem {
   isMacOS(): Promise<boolean>
   isWindows(): Promise<boolean>
   isLinux(): Promise<boolean>
+  isAccessibilityTrusted(): Promise<boolean>
+  openAccessibilitySettings(): Promise<boolean>
 }
 
 // GlobalShortcut API 类型
@@ -369,6 +378,7 @@ interface PluginInitData {
 
 interface IntoolsAPI {
   clipboard: IntoolsClipboard
+  input: IntoolsInput
   notification: IntoolsNotification
   window: IntoolsWindow
   subInput: IntoolsSubInput

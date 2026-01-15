@@ -1,18 +1,22 @@
-import { BrowserWindow, clipboard, nativeImage } from 'electron'
+import { app, BrowserWindow, clipboard, nativeImage } from 'electron'
 import { execFile } from 'child_process'
 import { promisify } from 'util'
 
 const execFileAsync = promisify(execFile)
-const FOCUS_DELAY_MS = 120
+const FOCUS_DELAY_MS = 160
 
 function sleep(ms: number): Promise<void> {
   return new Promise(resolve => setTimeout(resolve, ms))
 }
 
-function hideFocusedWindow(): void {
-  const win = BrowserWindow.getFocusedWindow()
-  if (win && !win.isDestroyed()) {
-    win.hide()
+function hideAllAppWindows(): void {
+  for (const win of BrowserWindow.getAllWindows()) {
+    if (!win.isDestroyed()) {
+      win.hide()
+    }
+  }
+  if (process.platform === 'darwin') {
+    app.hide()
   }
 }
 
@@ -128,7 +132,7 @@ async function sendTypeString(text: string): Promise<void> {
 }
 
 async function withHiddenWindow(action: () => Promise<void>): Promise<void> {
-  hideFocusedWindow()
+  hideAllAppWindows()
   await sleep(FOCUS_DELAY_MS)
   await action()
 }

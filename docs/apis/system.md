@@ -119,6 +119,27 @@ const deviceId = await system.getNativeId();
 storage.set(`${deviceId}/settings`, { ... });
 ```
 
+### 11.8 isAccessibilityTrusted()
+检查 macOS 辅助功能权限是否已授权。
+
+```javascript
+const trusted = await system.isAccessibilityTrusted();
+if (!trusted) {
+  notification.show('请在系统设置中授予辅助功能权限');
+}
+```
+
+**返回值**: `boolean`
+
+### 11.9 openAccessibilitySettings()
+打开 macOS 的“辅助功能”隐私设置页。
+
+```javascript
+await system.openAccessibilitySettings();
+```
+
+**返回值**: `boolean` - 非 macOS 返回 false
+
 **返回值**: `string` - 32位设备唯一标识
 
 ### 11.8 isDev()
@@ -146,4 +167,3 @@ if (await system.isMacOS()) {
 ```
 
 **返回值**: `boolean`
-

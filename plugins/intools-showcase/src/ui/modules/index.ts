@@ -1,5 +1,6 @@
 export { SystemInfoModule } from './SystemInfo'
 export { ClipboardModule } from './Clipboard'
+export { InputModule } from './Input'
 export { FileManagerModule } from './FileManager'
 export { NetworkModule } from './Network'
 export { ScreenModule } from './Screen'

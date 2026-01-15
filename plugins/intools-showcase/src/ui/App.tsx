@@ -4,6 +4,7 @@ import { useTheme } from './hooks'
 import {
   SystemInfoModule,
   ClipboardModule,
+  InputModule,
   FileManagerModule,
   NetworkModule,
   ScreenModule,
@@ -17,12 +18,13 @@ import {
 
 console.log('[App] Module imports loaded')
 
-type ModuleId = 'sysinfo' | 'clipboard' | 'filemanager' | 'network' | 'screen' | 'media' | 'settings' | 'security' | 'image-editor' | 'window-api' | 'child-window'
+type ModuleId = 'sysinfo' | 'clipboard' | 'input' | 'filemanager' | 'network' | 'screen' | 'media' | 'settings' | 'security' | 'image-editor' | 'window-api' | 'child-window'
 
 // 模块映射
 const moduleComponents: Record<ModuleId, React.FC> = {
   sysinfo: SystemInfoModule,
   clipboard: ClipboardModule,
+  input: InputModule,
   filemanager: FileManagerModule,
   network: NetworkModule,
   screen: ScreenModule,
@@ -64,6 +66,8 @@ export default function App() {
         setActiveModule('image-editor')
       } else if (data.route && data.route.includes('child-window')) {
         setActiveModule('child-window')
+      } else if (data.featureCode === 'input') {
+        setActiveModule('input')
       }
     })
   }, [])

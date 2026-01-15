@@ -228,7 +228,9 @@ contextBridge.exposeInMainWorld('intools', {
     isDev: () => ipcRenderer.invoke('system:isDev'),
     isMacOS: () => ipcRenderer.invoke('system:isMacOS'),
     isWindows: () => ipcRenderer.invoke('system:isWindows'),
-    isLinux: () => ipcRenderer.invoke('system:isLinux')
+    isLinux: () => ipcRenderer.invoke('system:isLinux'),
+    isAccessibilityTrusted: () => ipcRenderer.invoke('system:isAccessibilityTrusted'),
+    openAccessibilitySettings: () => ipcRenderer.invoke('system:openAccessibilitySettings')
   },
 
   // GlobalShortcut API

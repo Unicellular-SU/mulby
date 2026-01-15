@@ -232,6 +232,8 @@ export interface ElectronAPI {
     isMacOS: () => Promise<boolean>
     isWindows: () => Promise<boolean>
     isLinux: () => Promise<boolean>
+    isAccessibilityTrusted: () => Promise<boolean>
+    openAccessibilitySettings: () => Promise<boolean>
   }
   shortcut: {
     register: (accelerator: string) => Promise<boolean>
