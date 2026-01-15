@@ -19,6 +19,7 @@ import {
 console.log('[App] Module imports loaded')
 
 type ModuleId = 'sysinfo' | 'clipboard' | 'input' | 'filemanager' | 'network' | 'screen' | 'media' | 'settings' | 'security' | 'image-editor' | 'window-api' | 'child-window'
+type ScreenAutoAction = 'region-capture' | null
 
 const featureToModule: Record<string, ModuleId> = {
   main: 'sysinfo',
@@ -30,10 +31,11 @@ const featureToModule: Record<string, ModuleId> = {
   screen: 'screen',
   media: 'media',
   settings: 'settings',
+  screenshot: 'screen',
 }
 
 // 模块映射
-const moduleComponents: Record<ModuleId, React.FC> = {
+const moduleComponents: Record<ModuleId, React.ComponentType<any>> = {
   sysinfo: SystemInfoModule,
   clipboard: ClipboardModule,
   input: InputModule,
@@ -65,6 +67,7 @@ function getInitialModule(): ModuleId {
 export default function App() {
   console.log('[App] Rendering...')
   const [activeModule, setActiveModule] = useState<ModuleId>(getInitialModule)
+  const [screenAutoAction, setScreenAutoAction] = useState<ScreenAutoAction>(null)
 
   // 初始化主题
   useTheme()
@@ -76,10 +79,16 @@ export default function App() {
       console.log('[App] onPluginInit received data:', data)
       if (data.route && data.route.includes('image-editor')) {
         setActiveModule('image-editor')
+        setScreenAutoAction(null)
       } else if (data.route && data.route.includes('child-window')) {
         setActiveModule('child-window')
+        setScreenAutoAction(null)
+      } else if (data.featureCode === 'screenshot') {
+        setActiveModule('screen')
+        setScreenAutoAction('region-capture')
       } else if (data.featureCode && data.featureCode in featureToModule) {
         setActiveModule(featureToModule[data.featureCode])
+        setScreenAutoAction(null)
       }
     })
   }, [])
@@ -89,6 +98,7 @@ export default function App() {
   const handleModuleChange = (id: string) => {
     console.log('[App] handleModuleChange:', id)
     if (id in moduleComponents) {
+      setScreenAutoAction(null)
       setActiveModule(id as ModuleId)
     }
   }
@@ -109,7 +119,14 @@ export default function App() {
         onModuleChange={handleModuleChange}
       />
       {ActiveModuleComponent ? (
-        <ActiveModuleComponent />
+        activeModule === 'screen' ? (
+          <ActiveModuleComponent
+            autoAction={screenAutoAction}
+            onAutoActionDone={() => setScreenAutoAction(null)}
+          />
+        ) : (
+          <ActiveModuleComponent />
+        )
       ) : (
         <div>Module not found</div>
       )}

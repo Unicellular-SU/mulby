@@ -21,12 +21,16 @@ export function registerClipboardHandlers() {
   })
 
   // 写入图片
-  ipcMain.handle('clipboard:writeImage', (_, image: string | Buffer) => {
+  ipcMain.handle('clipboard:writeImage', (_, image: string | Buffer | ArrayBuffer | Uint8Array) => {
     try {
       let nativeImg: Electron.NativeImage
 
       if (Buffer.isBuffer(image)) {
         nativeImg = nativeImage.createFromBuffer(image)
+      } else if (image instanceof ArrayBuffer) {
+        nativeImg = nativeImage.createFromBuffer(Buffer.from(new Uint8Array(image)))
+      } else if (ArrayBuffer.isView(image)) {
+        nativeImg = nativeImage.createFromBuffer(Buffer.from(image.buffer, image.byteOffset, image.byteLength))
       } else if (typeof image === 'string') {
         if (image.startsWith('data:image')) {
           nativeImg = nativeImage.createFromDataURL(image)

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react'
+import React, { useState, useEffect, useCallback, useRef } from 'react'
 import { PageHeader, Card, Button, StatusBadge, CodeBlock } from '../../components'
 import { useIntools, useNotification } from '../../hooks'
 
@@ -28,7 +28,12 @@ interface ColorPickResult {
     b: number
 }
 
-export function ScreenModule() {
+interface ScreenModuleProps {
+    autoAction?: 'region-capture' | null
+    onAutoActionDone?: () => void
+}
+
+export function ScreenModule({ autoAction, onAutoActionDone }: ScreenModuleProps) {
     const { screen, media, clipboard, filesystem, dialog } = useIntools()
     const notify = useNotification()
 
@@ -41,6 +46,7 @@ export function ScreenModule() {
     const [loading, setLoading] = useState(false)
     const [pickedColor, setPickedColor] = useState<ColorPickResult | null>(null)
     const [cursorDisplay, setCursorDisplay] = useState<DisplayInfo | null>(null)
+    const autoActionRunRef = useRef(false)
 
     const loadDisplays = useCallback(async () => {
         try {
@@ -182,6 +188,18 @@ export function ScreenModule() {
             setLoading(false)
         }
     }, [screen, notify])
+
+    useEffect(() => {
+        if (autoAction !== 'region-capture' || autoActionRunRef.current) return
+        autoActionRunRef.current = true
+        void (async () => {
+            try {
+                await handleRegionCapture()
+            } finally {
+                onAutoActionDone?.()
+            }
+        })()
+    }, [autoAction, handleRegionCapture, onAutoActionDone])
 
     const handleCopyScreenshot = useCallback(async () => {
         if (!screenshot) return

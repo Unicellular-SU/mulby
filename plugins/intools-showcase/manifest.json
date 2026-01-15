@@ -33,6 +33,24 @@
       ]
     },
     {
+      "code": "screenshot",
+      "explain": "区域截图并进入图片编辑",
+      "cmds": [
+        {
+          "type": "keyword",
+          "value": "sc"
+        },
+        {
+          "type": "keyword",
+          "value": "截图"
+        },
+        {
+          "type": "keyword",
+          "value": "screenshot"
+        }
+      ]
+    },
+    {
       "code": "sysinfo",
       "explain": "查看系统信息",
       "cmds": [
