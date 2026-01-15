@@ -20,8 +20,8 @@ export function WindowAPIModule() {
     const [searchText, setSearchText] = useState('')
     const [findResult, setFindResult] = useState<number | null>(null)
 
-    // 子窗口状态
-    const [childWin, setChildWin] = useState<any | null>(null)
+    // 子窗口状态 (支持多个子窗口)
+    const [childWindows, setChildWindows] = useState<{ id: number; proxy: any; name: string }[]>([])
     const [childMessages, setChildMessages] = useState<string[]>([])
 
     // 文件拖拽状态
@@ -123,41 +123,41 @@ export function WindowAPIModule() {
         notify.info('已停止查找')
     }
 
-    // 子窗口操作
+    // 子窗口操作 - 支持创建多个
     const handleCreateChild = async () => {
-        if (childWin) {
-            notify.warning('子窗口已存在')
-            return
-        }
         try {
+            const childIndex = childWindows.length + 1
             const proxy = await win.create('/child-window', {
-                width: 600,
-                height: 400,
-                title: '子窗口 Demo'
+                width: 550,
+                height: 380,
+                title: `子窗口 #${childIndex}`
             })
             if (proxy) {
-                setChildWin(proxy)
-                notify.success('子窗口创建成功')
+                setChildWindows(prev => [...prev, { id: proxy.id, proxy, name: `子窗口 #${childIndex}` }])
+                notify.success(`子窗口 #${childIndex} 创建成功`)
             }
         } catch (error) {
             notify.error('创建子窗口失败')
         }
     }
 
-    const handleChildAction = async (action: 'show' | 'hide' | 'close' | 'focus' | 'ping') => {
-        if (!childWin) return
+    const handleChildAction = async (action: 'show' | 'hide' | 'close' | 'focus' | 'ping', childId?: number) => {
+        const targetChild = childId
+            ? childWindows.find(c => c.id === childId)
+            : childWindows[childWindows.length - 1]
+        if (!targetChild) return
+
         try {
             switch (action) {
-                case 'show': await childWin.show(); break
-                case 'hide': await childWin.hide(); break
+                case 'show': await targetChild.proxy.show(); break
+                case 'hide': await targetChild.proxy.hide(); break
                 case 'close':
-                    await childWin.close()
-                    setChildWin(null)
-                    setChildMessages([])
+                    await targetChild.proxy.close()
+                    setChildWindows(prev => prev.filter(c => c.id !== targetChild.id))
                     break
-                case 'focus': await childWin.focus(); break
+                case 'focus': await targetChild.proxy.focus(); break
                 case 'ping':
-                    await childWin.postMessage('ping', 'Message from Parent')
+                    await targetChild.proxy.postMessage('ping', `来自父窗口的消息 @${new Date().toLocaleTimeString()}`)
                     break
             }
         } catch (error) {
@@ -165,18 +165,51 @@ export function WindowAPIModule() {
         }
     }
 
-    // 监听子窗口消息
+    // 关闭所有子窗口
+    const handleCloseAllChildren = async () => {
+        for (const child of childWindows) {
+            try { await child.proxy.close() } catch (e) { /* ignore */ }
+        }
+        setChildWindows([])
+        setChildMessages([])
+        notify.info('已关闭所有子窗口')
+    }
+
+    // 广播消息给所有子窗口
+    const handleBroadcast = async () => {
+        const msg = `广播消息 @${new Date().toLocaleTimeString()}`
+        for (const child of childWindows) {
+            try { await child.proxy.postMessage('broadcast', msg) } catch (e) { /* ignore */ }
+        }
+        notify.success(`已广播给 ${childWindows.length} 个子窗口`)
+    }
+
+    // 监听子窗口消息 + 转发逻辑
     useEffect(() => {
         const handleMessage = (channel: string, ...args: unknown[]) => {
+            const timestamp = new Date().toLocaleTimeString()
             console.log('[WindowAPI] Received child message:', channel, args)
-            setChildMessages(prev => [...prev, `[${channel}] ${args.join(', ')}`])
+            setChildMessages(prev => [...prev.slice(-9), `[${timestamp}] ${channel}: ${JSON.stringify(args)}`])
+
             if (channel === 'child-event') {
                 notify.info(`收到子窗口消息: ${args[0]}`)
             }
+
+            // 处理转发请求 - 向其他所有子窗口广播
+            if (channel === 'relay-request') {
+                const data = args[0] as { from?: string; message?: string }
+                childWindows.forEach(child => {
+                    child.proxy.postMessage('relayed', {
+                        originalFrom: data?.from,
+                        message: data?.message,
+                        relayedAt: timestamp
+                    })
+                })
+                notify.info('已转发消息给所有子窗口')
+            }
         }
         win.onChildMessage(handleMessage)
-        // Cleanup not strictly necessary as typical listeners persist, but good practice if API supported off
-    }, [win, notify])
+    }, [win, notify, childWindows])
 
     // 文件拖拽
     const handlePickDragFile = async () => {
@@ -352,29 +385,61 @@ export function WindowAPIModule() {
                 </Card>
 
                 {/* 子窗口控制 */}
-                <Card title="子窗口控制" icon="👶">
+                <Card title="多子窗口控制" icon="👶">
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--spacing-md)' }}>
-                        <div style={{ display: 'flex', gap: 'var(--spacing-sm)' }}>
-                            <Button onClick={handleCreateChild} disabled={!!childWin}>创建子窗口</Button>
-                            <Button variant="secondary" onClick={() => handleChildAction('show')} disabled={!childWin}>显示</Button>
-                            <Button variant="secondary" onClick={() => handleChildAction('hide')} disabled={!childWin}>隐藏</Button>
-                            <Button variant="secondary" onClick={() => handleChildAction('focus')} disabled={!childWin}>聚焦</Button>
-                            <Button variant="secondary" onClick={() => handleChildAction('close')} disabled={!childWin}>关闭</Button>
+                        <div style={{ display: 'flex', gap: 'var(--spacing-sm)', flexWrap: 'wrap' }}>
+                            <Button onClick={handleCreateChild}>创建子窗口 (+)</Button>
+                            <Button variant="secondary" onClick={handleBroadcast} disabled={childWindows.length === 0}>
+                                广播消息
+                            </Button>
+                            <Button variant="secondary" onClick={handleCloseAllChildren} disabled={childWindows.length === 0}>
+                                关闭全部
+                            </Button>
                         </div>
 
-                        {childWin && (
-                            <div style={{ padding: 'var(--spacing-sm)', background: 'var(--bg-secondary)', borderRadius: 'var(--radius-sm)' }}>
-                                <div style={{ marginBottom: 'var(--spacing-sm)', fontWeight: 'bold' }}>通信日志:</div>
-                                <div style={{ maxHeight: '100px', overflowY: 'auto', fontSize: '12px', fontFamily: 'monospace' }}>
-                                    {childMessages.length > 0 ? childMessages.map((m, i) => (
-                                        <div key={i}>{m}</div>
-                                    )) : <span style={{ color: 'var(--text-tertiary)' }}>暂无消息...</span>}
-                                </div>
-                                <div style={{ marginTop: 'var(--spacing-sm)' }}>
-                                    <Button variant="secondary" onClick={() => handleChildAction('ping')}>发送 Ping 给子窗口</Button>
-                                </div>
+                        {childWindows.length > 0 && (
+                            <div style={{ display: 'flex', gap: 'var(--spacing-xs)', flexWrap: 'wrap' }}>
+                                {childWindows.map((child) => (
+                                    <div key={child.id} style={{
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        gap: '4px',
+                                        padding: '4px 8px',
+                                        background: 'var(--bg-secondary)',
+                                        borderRadius: 'var(--radius-sm)',
+                                        fontSize: '12px'
+                                    }}>
+                                        <span>{child.name}</span>
+                                        <button
+                                            onClick={() => handleChildAction('ping', child.id)}
+                                            style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '12px' }}
+                                            title="发送消息"
+                                        >📤</button>
+                                        <button
+                                            onClick={() => handleChildAction('close', child.id)}
+                                            style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '12px' }}
+                                            title="关闭"
+                                        >✕</button>
+                                    </div>
+                                ))}
                             </div>
                         )}
+
+                        <div style={{ padding: 'var(--spacing-sm)', background: 'var(--bg-secondary)', borderRadius: 'var(--radius-sm)' }}>
+                            <div style={{ marginBottom: 'var(--spacing-sm)', fontWeight: 'bold', fontSize: '12px' }}>
+                                通信日志 (子窗口→父窗口):
+                            </div>
+                            <div style={{ maxHeight: '100px', overflowY: 'auto', fontSize: '11px', fontFamily: 'monospace' }}>
+                                {childMessages.length > 0 ? childMessages.map((m, i) => (
+                                    <div key={i}>{m}</div>
+                                )) : <span style={{ color: 'var(--text-tertiary)' }}>等待子窗口消息...</span>}
+                            </div>
+                        </div>
+
+                        <div style={{ fontSize: '11px', color: 'var(--text-tertiary)' }}>
+                            💡 子窗口发送的消息只会到达直接父窗口，不会被兄弟窗口收到。
+                            父窗口可通过"广播消息"将消息转发给所有子窗口。
+                        </div>
                     </div>
                 </Card>
 

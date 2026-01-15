@@ -18,6 +18,7 @@ interface DetachedWindowInfo {
   plugin: Plugin
   featureCode: string
   input: string
+  creatorId?: number  // 创建此窗口的父窗口 ID
 }
 
 export class PluginWindowManager {
@@ -301,7 +302,8 @@ export class PluginWindowManager {
   createAuxiliaryWindow(
     plugin: Plugin,
     path: string, // 路由路径，如 /img-editor
-    options?: { width?: number; height?: number; title?: string }
+    options?: { width?: number; height?: number; title?: string },
+    creatorId?: number  // 创建此窗口的父窗口 ID
   ): BrowserWindow | null {
     if (!plugin.manifest.ui) return null
 
@@ -379,7 +381,8 @@ export class PluginWindowManager {
       window: win,
       plugin,
       featureCode: '',
-      input: ''
+      input: '',
+      creatorId  // 记录创建者
     })
 
     this.updateDockVisibility()
@@ -461,5 +464,11 @@ export class PluginWindowManager {
     }
 
     return null
+  }
+
+  // 获取窗口的父窗口 ID
+  getParentWindowId(windowId: number): number | null {
+    const info = this.detachedWindows.get(windowId)
+    return info?.creatorId ?? null
   }
 }

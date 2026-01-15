@@ -193,30 +193,25 @@ export function registerWindowHandlers(
     const win = BrowserWindow.fromWebContents(event.sender)
     if (!win) return
 
-    // 获取发送消息窗口所属的插件
-    const plugin = pluginWindowManager.getPluginByWindow(win)
+    // 获取此窗口的直接父窗口 ID
+    const parentId = pluginWindowManager.getParentWindowId(win.id)
 
-    // 1. 发送给主窗口 (总是尝试发送，因为主窗口可能需要监控)
-    const mainWin = getMainWindow()
-    if (win !== mainWin && mainWin && !mainWin.isDestroyed()) {
-      mainWin.webContents.send('window:childMessage', channel, ...args)
-    }
+    if (parentId) {
+      // 有明确的父窗口，只发给父窗口
+      const parentWin = BrowserWindow.fromId(parentId)
+      if (parentWin && !parentWin.isDestroyed()) {
+        parentWin.webContents.send('window:childMessage', channel, ...args)
+      }
+    } else {
+      // 没有父窗口（可能是面板或第一级独立窗口）
+      // 只发给同插件的面板窗口
+      const plugin = pluginWindowManager.getPluginByWindow(win)
+      const panelWin = pluginWindowManager.getPanelWindow()?.getWindow()
+      const panelPlugin = pluginWindowManager.getPanelWindow()?.getCurrentPlugin()
 
-    // 2. 发送给面板窗口
-    const panelWin = pluginWindowManager.getPanelWindow()?.getWindow()
-    if (win !== panelWin && panelWin && !panelWin.isDestroyed()) {
-      panelWin.webContents.send('window:childMessage', channel, ...args)
-    }
-
-    // 3. 发送给同一插件的所有独立窗口
-    if (plugin) {
-      const detachedInfos = pluginWindowManager.getAllDetachedInfos()
-      detachedInfos.forEach(info => {
-        // 必须是同一插件，且不是发送者自己
-        if (info.plugin.id === plugin.id && info.window.id !== win.id && !info.window.isDestroyed()) {
-          info.window.webContents.send('window:childMessage', channel, ...args)
-        }
-      })
+      if (panelWin && plugin && panelPlugin?.id === plugin.id && win.id !== panelWin.id) {
+        panelWin.webContents.send('window:childMessage', channel, ...args)
+      }
     }
   })
 
@@ -492,10 +487,10 @@ export function registerWindowHandlers(
     if (!win) return null
 
     const plugin = pluginWindowManager.getPluginByWindow(win)
-    // 只有在独立窗口(browser/detach)或主窗口(attach)中才能创建
-    // 基本上只要是插件上下文都可以
+    // 只要是插件上下文都可以创建
     if (plugin) {
-      const newWin = pluginWindowManager.createAuxiliaryWindow(plugin, url, options)
+      // 传递 creatorId 以建立父子关系
+      const newWin = pluginWindowManager.createAuxiliaryWindow(plugin, url, options, win.id)
       return newWin ? newWin.id : null
     }
     return null

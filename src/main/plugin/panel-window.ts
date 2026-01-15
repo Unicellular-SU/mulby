@@ -496,7 +496,7 @@ export class PluginPanelWindow {
         const bounds = this.panelWindow.getBounds()
         const url = this.panelWindow.webContents.getURL()
         const plugin = this.currentPlugin
-        const uiPath = join(plugin.path, plugin.manifest.ui)
+        const uiPath = join(plugin.path, plugin.manifest.ui!)
         const featureCode = this.currentFeatureCode
         const input = this.currentInput
 

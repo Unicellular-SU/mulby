@@ -281,7 +281,7 @@ stopFindInPage(action?: 'clearSelection' | 'keepSelection' | 'activateSelection'
 |------|------|--------|----------|
 | **Phase 1** | SubInput 子输入框系统 | 🔴 高 | ✅ 已完成 |
 | **Phase 2** | redirect + outPlugin | 🟡 中 | ✅ 已完成 |
-| **Phase 3** | 窗口间通信增强 | 🟡 中 | ⚠️ 部分完成 (缺少 Proxy) |
+| **Phase 3** | 窗口间通信增强 | 🟡 中 | ✅ 已完成 |
 | **Phase 4** | 参数增强 + 工具 API | 🟢 低 | ✅ 大部分完成 |
 
 ---
