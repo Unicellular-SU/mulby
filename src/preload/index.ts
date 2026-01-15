@@ -87,8 +87,9 @@ contextBridge.exposeInMainWorld('intools', {
     readText: () => ipcRenderer.invoke('clipboard:readText'),
     writeText: (text: string) => ipcRenderer.invoke('clipboard:writeText', text),
     readImage: () => ipcRenderer.invoke('clipboard:readImage'),
-    writeImage: (buffer: Buffer) => ipcRenderer.invoke('clipboard:writeImage', buffer),
+    writeImage: (image: string | Buffer) => ipcRenderer.invoke('clipboard:writeImage', image),
     readFiles: () => ipcRenderer.invoke('clipboard:readFiles'),
+    writeFiles: (files: string | string[]) => ipcRenderer.invoke('clipboard:writeFiles', files),
     getFormat: () => ipcRenderer.invoke('clipboard:getFormat')
   },
 

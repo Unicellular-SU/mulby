@@ -123,12 +123,68 @@ export function ClipboardModule() {
         }
     }
 
+    const handleWriteFiles = async () => {
+        try {
+            const result = await window.intools.dialog.showOpenDialog({
+                title: '选择要复制的文件',
+                properties: ['openFile', 'multiSelections']
+            })
+            if (result && result.length > 0) {
+                await clipboard.writeFiles(result)
+                notify.success(`已复制 ${result.length} 个文件`)
+                readClipboard()
+            }
+        } catch (error) {
+            notify.error('复制文件失败')
+        }
+    }
+
+    const handleWriteImageFromPath = async () => {
+        try {
+            const result = await window.intools.dialog.showOpenDialog({
+                title: '选择图片',
+                filters: [{ name: 'Images', extensions: ['jpg', 'png', 'gif'] }],
+                properties: ['openFile']
+            })
+            if (result && result.length > 0) {
+                await clipboard.writeImage(result[0])
+                notify.success('图片(路径)已写入剪贴板')
+                readClipboard()
+            }
+        } catch (error) {
+            notify.error('写入图片失败')
+        }
+    }
+
+    const handleWriteImageBase64 = async () => {
+        // 创建一个简单的红色方块 Canvas 并转 Base64
+        const canvas = document.createElement('canvas')
+        canvas.width = 100
+        canvas.height = 100
+        const ctx = canvas.getContext('2d')
+        if (ctx) {
+            ctx.fillStyle = 'red'
+            ctx.fillRect(0, 0, 100, 100)
+            ctx.fillStyle = 'white'
+            ctx.font = '20px Arial'
+            ctx.fillText('Test', 30, 55)
+            const base64 = canvas.toDataURL('image/png')
+            try {
+                await clipboard.writeImage(base64)
+                notify.success('图片(Base64)已写入剪贴板')
+                readClipboard()
+            } catch (error) {
+                notify.error('写入Base64图片失败')
+            }
+        }
+    }
+
     return (
         <div className="main-content">
             <PageHeader
                 icon="📋"
                 title="剪贴板管理"
-                description="读取和写入剪贴板内容"
+                description="读取和写入剪贴板内容 (支持文本/图片/文件)"
                 actions={<Button onClick={readClipboard} loading={loading}>刷新</Button>}
             />
             <div className="page-content">
@@ -211,44 +267,60 @@ export function ClipboardModule() {
                 {/* Write Section */}
                 <Card title="写入测试" icon="✏️">
                     <div className="input-group" style={{ marginBottom: 'var(--spacing-md)' }}>
-                        <label className="input-label">输入内容</label>
-                        <textarea
-                            className="textarea"
-                            value={inputText}
-                            onChange={(e) => setInputText(e.target.value)}
-                            placeholder="输入要写入剪贴板的内容..."
-                            rows={3}
-                        />
+                        <label className="input-label">文本写入</label>
+                        <div style={{ display: 'flex', gap: '8px' }}>
+                            <textarea
+                                className="textarea"
+                                value={inputText}
+                                onChange={(e) => setInputText(e.target.value)}
+                                placeholder="输入要写入剪贴板的内容..."
+                                rows={2}
+                                style={{ flex: 1 }}
+                            />
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                                <Button onClick={handleWriteText} disabled={!inputText.trim()}>
+                                    写入文本
+                                </Button>
+                                <Button variant="secondary" onClick={handleWriteSampleText}>
+                                    写入样例
+                                </Button>
+                            </div>
+                        </div>
                     </div>
-                    <div className="action-bar">
-                        <Button onClick={handleWriteText} disabled={!inputText.trim()}>
-                            写入剪贴板
-                        </Button>
-                        <Button variant="secondary" onClick={handleWriteSampleText}>
-                            写入测试文本
-                        </Button>
+
+                    <div style={{ borderTop: '1px solid var(--border-color)', margin: '16px 0', paddingTop: '16px' }}>
+                        <label className="input-label" style={{ marginBottom: '12px', display: 'block' }}>高级写入</label>
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '12px' }}>
+                            <Button variant="secondary" onClick={handleWriteFiles}>
+                                📤 复制文件...
+                            </Button>
+                            <Button variant="secondary" onClick={handleWriteImageFromPath}>
+                                🖼️ 复制图片(路径)...
+                            </Button>
+                            <Button variant="secondary" onClick={handleWriteImageBase64}>
+                                🎨 复制图片(Base64)
+                            </Button>
+                        </div>
                     </div>
                 </Card>
 
                 {/* API Reference */}
-                <Card title="使用的 API" icon="📖">
+                <Card title="API 参考" icon="📖">
                     <CodeBlock>
-                        {`// 读取文本
-const text = clipboard.readText()
+                        {`// 1. 写入文件 (新增)
+await clipboard.writeFiles(['/path/to/file1', '/path/to/file2'])
 
-// 写入文本
-await clipboard.writeText('Hello World')
+// 2. 写入图片 (增强)
+// 支持 Buffer
+await clipboard.writeImage(buffer)
+// 支持本地路径
+await clipboard.writeImage('/path/to/image.png')
+// 支持 Data URL
+await clipboard.writeImage('data:image/png;base64,...')
 
-// 读取图片 (PNG Buffer)
-const imageBuffer = clipboard.readImage()
-
-// 读取文件列表
-const files = clipboard.readFiles()
-// [{ path, name, size, isDirectory }]
-
-// 获取格式
-const format = clipboard.getFormat()
-// 'text' | 'image' | 'files' | 'empty'`}
+// 3. 读取文件
+const files = await clipboard.readFiles()
+// [{ path, name, size, isDirectory }]`}
                     </CodeBlock>
                 </Card>
             </div>

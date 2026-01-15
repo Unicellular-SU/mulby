@@ -21,11 +21,71 @@ export function registerClipboardHandlers() {
   })
 
   // 写入图片
-  ipcMain.handle('clipboard:writeImage', (_, buffer: any) => {
-    // 确保 buffer 是 Node Buffer
-    const nodeBuffer = Buffer.from(buffer)
-    const image = nativeImage.createFromBuffer(nodeBuffer)
-    clipboard.writeImage(image)
+  ipcMain.handle('clipboard:writeImage', (_, image: string | Buffer) => {
+    try {
+      let nativeImg: Electron.NativeImage
+
+      if (Buffer.isBuffer(image)) {
+        nativeImg = nativeImage.createFromBuffer(image)
+      } else if (typeof image === 'string') {
+        if (image.startsWith('data:image')) {
+          nativeImg = nativeImage.createFromDataURL(image)
+        } else {
+          nativeImg = nativeImage.createFromPath(image)
+        }
+      } else {
+        throw new Error('Invalid image format')
+      }
+
+      if (nativeImg && !nativeImg.isEmpty()) {
+        clipboard.writeImage(nativeImg)
+        return true
+      }
+      return false
+    } catch (e) {
+      console.error('Failed to write image to clipboard:', e)
+      return false
+    }
+  })
+
+  // 写入文件
+  ipcMain.handle('clipboard:writeFiles', (_, filePaths: string | string[]) => {
+    const paths = Array.isArray(filePaths) ? filePaths : [filePaths]
+    if (paths.length === 0) return false
+
+    if (process.platform === 'darwin') {
+      // macOS 使用 NSFilenamesPboardType
+      // 需要构造 XML plist 格式
+      const plist = `<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<array>
+${paths.map(p => `    <string>${p}</string>`).join('\n')}
+</array>
+</plist>`
+      clipboard.writeBuffer('NSFilenamesPboardType', Buffer.from(plist))
+      return true
+    } else if (process.platform === 'win32') {
+      // Windows 使用 file-list 格式 (CF_HDROP 对应的 buffer 比较复杂，Electron 暂未原生支持简单的 writeFiles)
+      // 这里的 hack 方式是尝试通过 Buffer 写入，但 Electron 只有 writeBuffer custom format
+      // 实际上 Electron 的 clipboard.writeBuffer 在 Windows 上支持 'FileNameW' 可能有限
+      // 更兼容的方式是使用 nativeImage empty + writeFiles (Electron v20+ 有 clipboard.write({files: []}) 但我们需要检查版本)
+
+      // 检查 Electron 版本是否支持 clipboard.write({ files }) 
+      // (Electron 20+ 支持)
+      // @ts-ignore
+      if (clipboard.write && typeof clipboard.write === 'function') {
+        // @ts-ignore
+        clipboard.write({ files: paths })
+        return true
+      }
+    } else {
+      // Linux (X11/Wayland) - text/uri-list
+      const uriList = paths.map(p => `file://${p}`).join('\n')
+      clipboard.writeBuffer('text/uri-list', Buffer.from(uriList))
+      return true
+    }
+    return false
   })
 
   // 读取文件列表

@@ -10,8 +10,9 @@ export function useIntools(pluginId?: string) {
             readText: () => window.intools?.clipboard?.readText(),
             writeText: (text: string) => window.intools?.clipboard?.writeText(text),
             readImage: () => window.intools?.clipboard?.readImage(),
-            writeImage: (buffer: ArrayBuffer) => window.intools?.clipboard?.writeImage(buffer),
+            writeImage: (image: string | ArrayBuffer) => window.intools?.clipboard?.writeImage(image),
             readFiles: () => window.intools?.clipboard?.readFiles(),
+            writeFiles: (files: string | string[]) => window.intools?.clipboard?.writeFiles(files),
             getFormat: () => window.intools?.clipboard?.getFormat(),
         },
 
@@ -154,7 +155,7 @@ export function useIntools(pluginId?: string) {
         system: {
             getSystemInfo: () => window.intools?.system?.getSystemInfo(),
             getAppInfo: () => window.intools?.system?.getAppInfo(),
-            getPath: (name: string) => window.intools?.system?.getPath(name),
+            getPath: (name: string) => window.intools?.system?.getPath(name as any),
             getEnv: (name: string) => window.intools?.system?.getEnv(name),
             getIdleTime: () => window.intools?.system?.getIdleTime(),
             // 新增 API

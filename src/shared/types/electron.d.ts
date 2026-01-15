@@ -155,8 +155,9 @@ export interface ElectronAPI {
     readText: () => Promise<string>
     writeText: (text: string) => Promise<void>
     readImage: () => Promise<Buffer | null>
-    writeImage: (buffer: Buffer) => Promise<void>
+    writeImage: (image: string | Buffer) => Promise<boolean>
     readFiles: () => Promise<FileInfo[]>
+    writeFiles: (files: string | string[]) => Promise<boolean>
     getFormat: () => Promise<'text' | 'image' | 'html' | 'empty'>
   }
   notification: {

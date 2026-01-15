@@ -11,8 +11,9 @@ interface IntoolsClipboard {
   readText(): Promise<string>
   writeText(text: string): Promise<void>
   readImage(): Promise<ArrayBuffer | null>
-  writeImage(buffer: ArrayBuffer): Promise<void>
+  writeImage(image: string | ArrayBuffer): Promise<void>
   readFiles(): Promise<ClipboardFileInfo[]>
+  writeFiles(files: string | string[]): Promise<boolean>
   getFormat(): Promise<'text' | 'image' | 'files' | 'empty'>
 }
 
