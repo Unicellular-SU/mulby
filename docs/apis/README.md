@@ -44,3 +44,5 @@
 
 - [Media API (media)](./media.md)
 - [屏幕 API (screen)](./screen.md)
+- [Sharp 图像处理 API (sharp)](./sharp.md)
+
