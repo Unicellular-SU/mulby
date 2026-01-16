@@ -30,8 +30,18 @@ export interface InBrowserOptions {
     webPreferences?: Electron.WebPreferences;
 }
 
+export interface InBrowserInstance {
+    id: number;
+    url: string;
+    title: string;
+    width: number;
+    height: number;
+    x: number;
+    y: number;
+}
+
 export interface InBrowserOp {
-    type: 'goto' | 'show' | 'hide' | 'viewport' | 'click' | 'type' | 'press' | 'evaluate' | 'wait' | 'css' | 'when' | 'cookies' | 'pdf' | 'value' | 'check' | 'scroll' | 'devTools' | 'useragent' | 'focus' | 'end' | 'paste' | 'file' | 'device' | 'mousedown' | 'mouseup' | 'input' | 'clearCookies';
+    type: 'goto' | 'show' | 'hide' | 'viewport' | 'click' | 'type' | 'press' | 'evaluate' | 'wait' | 'css' | 'when' | 'cookies' | 'pdf' | 'value' | 'check' | 'scroll' | 'devTools' | 'useragent' | 'focus' | 'end' | 'paste' | 'file' | 'device' | 'mousedown' | 'mouseup' | 'input' | 'clearCookies' | 'dblclick' | 'hover' | 'screenshot' | 'markdown' | 'setCookies' | 'removeCookies' | 'download' | 'drop';
     args: any[];
 }
 
@@ -41,33 +51,65 @@ export interface InBrowserRunPayload {
     queue: InBrowserOp[];
 }
 
-export interface InBrowserResult {
-    id: number;
-    result: any[];
-}
+// Result tuple: [...any, InBrowserInstance]
+// We can't easily express variadic tuple types this way universally without strict TS versions,
+// but the promise return type is usually just Promise<any[]> where the last item is known.
 
 export interface InBrowser {
     goto(url: string, headers?: Record<string, string>, timeout?: number): InBrowser;
-    show(): InBrowser;
-    hide(): InBrowser;
+    useragent(ua: string): InBrowser;
     viewport(width: number, height: number): InBrowser;
-    evaluate(func: string | Function, ...params: any[]): InBrowser;
-    wait(msOrSelector: number | string): InBrowser;
-    click(selector: string): InBrowser;
-    type(selector: string, text: string): InBrowser;
-    input(selectorOrText: string, text?: string): InBrowser; // Alias for type/value, but uTools `input(text)` implies typing into FOCUSED element? OR `input(selector, text)`?
-    // User request: `.input(matchs[2])` AFTER `.focus(...)`. So `input(text)` where text is typed into currently focused element.
-    // uTools docs say: `.input(text)` inputs text. 
-    // And `.type(selector, text)` types into selector.
-    // So `input` here is likely "type into focused".
-    press(key: string, modifiers?: string[]): InBrowser;
-
-    // Advanced features
+    hide(): InBrowser;
+    show(): InBrowser;
     css(css: string): InBrowser;
-    when(selector: string): InBrowser;
-    cookies(name?: string): InBrowser;
-    clearCookies(url?: string): InBrowser;
+    evaluate(func: string | Function, ...params: any[]): InBrowser;
+    press(key: string, modifiers?: string[]): InBrowser;
+    click(selector: string, mouseButton?: 'left' | 'middle' | 'right'): InBrowser;
+    click(x: number, y: number, mouseButton?: 'left' | 'middle' | 'right'): InBrowser;
+    mousedown(selector: string, mouseButton?: 'left' | 'middle' | 'right'): InBrowser;
+    mousedown(x: number, y: number, mouseButton?: 'left' | 'middle' | 'right'): InBrowser;
+    mouseup(selector: string, mouseButton?: 'left' | 'middle' | 'right'): InBrowser;
+    mouseup(x: number, y: number, mouseButton?: 'left' | 'middle' | 'right'): InBrowser;
+    dblclick(selector: string, mouseButton?: 'left' | 'middle' | 'right'): InBrowser;
+    dblclick(x: number, y: number, mouseButton?: 'left' | 'middle' | 'right'): InBrowser;
+    hover(selector: string): InBrowser;
+    hover(x: number, y: number): InBrowser;
+    file(selector: string, payload: string | string[] | Buffer): InBrowser;
+    drop(selector: string, payload: string | string[] | Buffer): InBrowser;
+    drop(x: number, y: number, payload: string | string[] | Buffer): InBrowser;
+    input(text: string): InBrowser;
+    input(selector: string, text: string): InBrowser;
+    value(selector: string, val: string): InBrowser;
+    check(selector: string, checked: boolean): InBrowser;
+    focus(selector: string): InBrowser;
+    scroll(selector: string, optional?: boolean | { behavior?: 'auto' | 'smooth'; block?: 'start' | 'center' | 'end' | 'nearest'; inline?: 'start' | 'center' | 'end' | 'nearest'; }): InBrowser;
+    scroll(y: number): InBrowser;
+    scroll(x: number, y: number): InBrowser;
+    download(url: string, savePath?: string): InBrowser; // Not in original Op list! Added to Op list? 
+    // Wait, download was in doc but not in my Op list addition above.
+    // I missed `download` in the Op list update. I should add it.
+    // Doc says: ubrowser.download(url[, savePath])
+    // I'll add 'download' to Op list too.
+    paste(text: string): InBrowser;
+    screenshot(target?: string | { x: number; y: number; width: number; height: number }, savePath?: string): InBrowser;
+    markdown(selector?: string): InBrowser;
     pdf(options?: Electron.PrintToPDFOptions, savePath?: string): InBrowser;
+    device(options: { userAgent: string; size: { width: number; height: number } }): InBrowser;
+    wait(ms: number): InBrowser;
+    wait(selector: string, result?: boolean): InBrowser;
+    wait(selector: string, timeout?: number): InBrowser;
+    wait(selector: string, option?: { timeout?: number, interval?: number, result?: boolean }): InBrowser;
+    // wait(func...) complex signatures omitted for brevity but supported via generic args pass-through
+    when(selector: string, result?: boolean): InBrowser;
+    when(func: string | Function, ...params: any[]): InBrowser;
+    end(): InBrowser;
+    devTools(mode?: 'right' | 'bottom' | 'undocked' | 'detach'): InBrowser;
+    cookies(name?: string): InBrowser;
+    // cookies(filter...)
+    setCookies(name: string, value: string): InBrowser;
+    setCookies(cookies: { name: string; value: string }[]): InBrowser;
+    removeCookies(name: string): InBrowser;
+    clearCookies(url?: string): InBrowser;
 
     run(options?: InBrowserOptions): Promise<any[]>;
 }

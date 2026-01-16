@@ -19,34 +19,51 @@ export class InBrowserBuilder {
         return this;
     }
 
-    public device = (name: string): this => {
-        this.queue.push({ type: 'device', args: [name] });
+    public device = (options: { userAgent: string; size: { width: number; height: number } } | string): this => {
+        // Support legacy string or new object
+        this.queue.push({ type: 'device', args: [options] });
         return this;
     }
 
-    public click = (selector: string): this => {
-        this.queue.push({ type: 'click', args: [selector] });
+    public click = (selectorOrX: string | number, mouseButtonOrY?: 'left' | 'middle' | 'right' | number, mouseButton?: 'left' | 'middle' | 'right'): this => {
+        this.queue.push({ type: 'click', args: [selectorOrX, mouseButtonOrY, mouseButton] });
         return this;
     }
 
-    public mousedown = (selector: string): this => {
-        this.queue.push({ type: 'mousedown', args: [selector] });
+    public mousedown = (selectorOrX: string | number, mouseButtonOrY?: 'left' | 'middle' | 'right' | number, mouseButton?: 'left' | 'middle' | 'right'): this => {
+        this.queue.push({ type: 'mousedown', args: [selectorOrX, mouseButtonOrY, mouseButton] });
         return this;
     }
 
-    public mouseup = (selector: string): this => {
-        this.queue.push({ type: 'mouseup', args: [selector] });
+    public mouseup = (selectorOrX: string | number, mouseButtonOrY?: 'left' | 'middle' | 'right' | number, mouseButton?: 'left' | 'middle' | 'right'): this => {
+        this.queue.push({ type: 'mouseup', args: [selectorOrX, mouseButtonOrY, mouseButton] });
         return this;
     }
 
+    public dblclick = (selectorOrX: string | number, mouseButtonOrY?: 'left' | 'middle' | 'right' | number, mouseButton?: 'left' | 'middle' | 'right'): this => {
+        this.queue.push({ type: 'dblclick', args: [selectorOrX, mouseButtonOrY, mouseButton] });
+        return this;
+    }
+
+    public hover = (selectorOrX: string | number, y?: number): this => {
+        this.queue.push({ type: 'hover', args: [selectorOrX, y] });
+        return this;
+    }
+
+    // Legacy support: type(selector, text) -> now via input(selector, text) or just keep as alias
     public type = (selector: string, text: string): this => {
         this.queue.push({ type: 'type', args: [selector, text] });
         return this;
     }
 
-    public input = (text: string): this => {
-        // uTools .input(text) types into focused element
-        this.queue.push({ type: 'input', args: [text] });
+    public input = (selectorOrText: string, text?: string): this => {
+        if (text === undefined) {
+            // input(text) - types into focused
+            this.queue.push({ type: 'input', args: [selectorOrText] });
+        } else {
+            // input(selector, text) - types into selector
+            this.queue.push({ type: 'type', args: [selectorOrText, text] });
+        }
         return this;
     }
 
@@ -75,13 +92,31 @@ export class InBrowserBuilder {
         return this;
     }
 
-    public when = (selector: string): this => {
-        this.queue.push({ type: 'when', args: [selector] });
+    public when = (selectorOrFunc: string | Function, ...params: any[]): this => {
+        let funcString: string | undefined;
+        if (typeof selectorOrFunc === 'function') {
+            funcString = selectorOrFunc.toString();
+            // Simple native code check
+            if (funcString.includes('[native code]')) throw new Error('Cannot serialize native function');
+            this.queue.push({ type: 'when', args: [funcString, ...params] });
+        } else {
+            this.queue.push({ type: 'when', args: [selectorOrFunc, ...params] });
+        }
         return this;
     }
 
     public cookies = (name?: string): this => {
         this.queue.push({ type: 'cookies', args: [name] });
+        return this;
+    }
+
+    public setCookies = (nameOrCookies: string | { name: string; value: string }[], value?: string): this => {
+        this.queue.push({ type: 'setCookies', args: [nameOrCookies, value] });
+        return this;
+    }
+
+    public removeCookies = (name: string): this => {
+        this.queue.push({ type: 'removeCookies', args: [name] });
         return this;
     }
 
@@ -100,10 +135,12 @@ export class InBrowserBuilder {
         return this;
     }
 
-    public scroll = (selector: string | number, y?: number): this => {
-        // If first arg is number, it's global scroll y, second arg ignored
-        // If first arg is string, it's selector, second arg is y
-        this.queue.push({ type: 'scroll', args: [selector, y] });
+    public scroll = (selectorOrYOrX: string | number, optionalOrY?: any | number): this => {
+        // This is complex because of overloaded signatures.
+        // scroll(selector, optional)
+        // scroll(y)
+        // scroll(x, y)
+        this.queue.push({ type: 'scroll', args: [selectorOrYOrX, optionalOrY] });
         return this;
     }
 
@@ -132,6 +169,27 @@ export class InBrowserBuilder {
         return this;
     }
 
+    public screenshot = (target?: string | { x: number; y: number; width: number; height: number }, savePath?: string): this => {
+        this.queue.push({ type: 'screenshot', args: [target, savePath] });
+        return this;
+    }
+
+    public markdown = (selector?: string): this => {
+        this.queue.push({ type: 'markdown', args: [selector] });
+        return this;
+    }
+
+    public download = (urlOrFunc: string | Function, savePath?: string | null, ...params: any[]): this => {
+        let funcString: string | undefined;
+        if (typeof urlOrFunc === 'function') {
+            funcString = urlOrFunc.toString();
+            this.queue.push({ type: 'download', args: [funcString, savePath, ...params] });
+        } else {
+            this.queue.push({ type: 'download', args: [urlOrFunc, savePath] });
+        }
+        return this;
+    }
+
     public evaluate = (func: string | Function, ...params: any[]): this => {
         let funcString: string;
         if (typeof func === 'function') {
@@ -150,13 +208,23 @@ export class InBrowserBuilder {
         return this;
     }
 
-    public wait = (msOrSelector: number | string): this => {
-        this.queue.push({ type: 'wait', args: [msOrSelector] });
+    public wait = (msOrSelectorOrFunc: number | string | Function, ...args: any[]): this => {
+        if (typeof msOrSelectorOrFunc === 'function') {
+            const funcString = msOrSelectorOrFunc.toString();
+            this.queue.push({ type: 'wait', args: [funcString, ...args] });
+        } else {
+            this.queue.push({ type: 'wait', args: [msOrSelectorOrFunc, ...args] });
+        }
         return this;
     }
 
-    public file = (selector: string, payload: string | string[]): this => {
+    public file = (selector: string, payload: string | string[] | Buffer): this => {
         this.queue.push({ type: 'file', args: [selector, payload] });
+        return this;
+    }
+
+    public drop = (selectorOrX: string | number, optionalYOrPayload: number | string | string[] | Buffer, payload?: string | string[] | Buffer): this => {
+        this.queue.push({ type: 'drop', args: [selectorOrX, optionalYOrPayload, payload] });
         return this;
     }
 
@@ -176,34 +244,42 @@ export const inbrowser = {
 
     // Configuration / Setup
     useragent: (ua: string) => new InBrowserBuilder().useragent(ua),
-    device: (name: string) => new InBrowserBuilder().device(name),
+    device: (options: any) => new InBrowserBuilder().device(options),
     viewport: (width: number, height: number) => new InBrowserBuilder().viewport(width, height),
     show: () => new InBrowserBuilder().show(),
     hide: () => new InBrowserBuilder().hide(),
     devTools: (mode?: 'right' | 'bottom' | 'undocked' | 'detach') => new InBrowserBuilder().devTools(mode),
 
-    // Direct Actions (less common to start with, but supported)
-    click: (selector: string) => new InBrowserBuilder().click(selector),
-    mousedown: (selector: string) => new InBrowserBuilder().mousedown(selector),
-    mouseup: (selector: string) => new InBrowserBuilder().mouseup(selector),
+    // Direct Actions
+    click: (selectorOrX: string | number, mouseButtonOrY?: any, mouseButton?: any) => new InBrowserBuilder().click(selectorOrX, mouseButtonOrY, mouseButton),
+    mousedown: (selectorOrX: string | number, mouseButtonOrY?: any, mouseButton?: any) => new InBrowserBuilder().mousedown(selectorOrX, mouseButtonOrY, mouseButton),
+    mouseup: (selectorOrX: string | number, mouseButtonOrY?: any, mouseButton?: any) => new InBrowserBuilder().mouseup(selectorOrX, mouseButtonOrY, mouseButton),
+    dblclick: (selectorOrX: string | number, mouseButtonOrY?: any, mouseButton?: any) => new InBrowserBuilder().dblclick(selectorOrX, mouseButtonOrY, mouseButton),
+    hover: (selectorOrX: string | number, y?: number) => new InBrowserBuilder().hover(selectorOrX, y),
     type: (selector: string, text: string) => new InBrowserBuilder().type(selector, text),
-    input: (text: string) => new InBrowserBuilder().input(text),
+    input: (selectorOrText: string, text?: string) => new InBrowserBuilder().input(selectorOrText, text),
     value: (selector: string, val: string) => new InBrowserBuilder().value(selector, val),
     check: (selector: string, checked: boolean) => new InBrowserBuilder().check(selector, checked),
     focus: (selector: string) => new InBrowserBuilder().focus(selector),
     paste: (text: string) => new InBrowserBuilder().paste(text),
     press: (key: string, modifiers?: string[]) => new InBrowserBuilder().press(key, modifiers),
-    scroll: (selector: string | number, y?: number) => new InBrowserBuilder().scroll(selector, y),
+    scroll: (arg1: any, arg2?: any) => new InBrowserBuilder().scroll(arg1, arg2),
     file: (selector: string, payload: string | string[]) => new InBrowserBuilder().file(selector, payload),
+    drop: (selectorOrX: string | number, optionalYOrPayload: any, payload?: any) => new InBrowserBuilder().drop(selectorOrX, optionalYOrPayload, payload),
+    download: (urlOrFunc: string | Function, savePath?: string | null, ...params: any[]) => new InBrowserBuilder().download(urlOrFunc, savePath, ...params),
+    screenshot: (target?: any, savePath?: string) => new InBrowserBuilder().screenshot(target, savePath),
+    markdown: (selector?: string) => new InBrowserBuilder().markdown(selector),
 
     // Data / Execution
     evaluate: (func: string | Function, ...params: any[]) => new InBrowserBuilder().evaluate(func, ...params),
     cookies: (name?: string) => new InBrowserBuilder().cookies(name),
+    setCookies: (nameOrCookies: string | { name: string; value: string }[], value?: string) => new InBrowserBuilder().setCookies(nameOrCookies, value),
+    removeCookies: (name: string) => new InBrowserBuilder().removeCookies(name),
     clearCookies: (url?: string) => new InBrowserBuilder().clearCookies(url),
     pdf: (options?: Electron.PrintToPDFOptions, savePath?: string) => new InBrowserBuilder().pdf(options, savePath),
-    wait: (msOrSelector: number | string) => new InBrowserBuilder().wait(msOrSelector),
-    when: (selector: string) => new InBrowserBuilder().when(selector),
+    wait: (msOrSelectorOrFunc: number | string | Function, ...args: any[]) => new InBrowserBuilder().wait(msOrSelectorOrFunc, ...args),
+    when: (selectorOrFunc: string | Function, ...params: any[]) => new InBrowserBuilder().when(selectorOrFunc, ...params),
 
-    // Ending (makes no sense to start with end, but for completeness)
+    // Ending
     end: () => new InBrowserBuilder().end(),
 };

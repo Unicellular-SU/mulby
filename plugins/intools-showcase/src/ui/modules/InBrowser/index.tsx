@@ -296,6 +296,46 @@ export default function InBrowserDemo() {
         }
     }
 
+    const runNewFeaturesDemo = async () => {
+        if (!window.intools?.inbrowser) {
+            addLog('Error: window.intools.inbrowser not found');
+            return;
+        }
+
+        setLoading(true);
+        setLogs([]);
+        addLog('Starting New Features Demo (dblclick, hover, markdown, screenshot)...');
+
+        try {
+            const result = await window.intools.inbrowser
+                .goto('https://www.google.com')
+                .show()
+                .wait(1000)
+                .hover('div') // Generic hover
+                .wait(500)
+                .dblclick('body') // Generic dblclick
+                .wait(500)
+                .markdown('body') // Test markdown
+                .screenshot('body', null) // Test screenshot (return buffer)
+                // Test drop (simulated)
+                .drop('textarea[name="q"], input[name="q"]', '/Users/su/Downloads/screenshot-1768318296924.png')
+                .run({ width: 800, height: 600, show: true });
+
+            const md = result[0];
+            const img = result[1];
+
+            addLog(`Markdown length: ${md ? md.length : 0}`);
+            addLog(`Screenshot size: ${img ? img.length : 0} bytes`);
+            addLog(`Result: ${JSON.stringify(result)}`);
+
+        } catch (error: any) {
+            addLog(`Error: ${error.message}`);
+            console.error(error);
+        } finally {
+            setLoading(false);
+        }
+    }
+
     return (
         <div className="module-container">
             <div className="module-header">
@@ -435,6 +475,25 @@ export default function InBrowserDemo() {
                             }}
                         >
                             Run Cloud Drive Demo
+                        </button>
+                    </div>
+                    <div style={{ flex: 1 }}>
+                        <p>New Features (dblclick, hover, md, screen)</p>
+                        <button
+                            className="btn-primary"
+                            onClick={runNewFeaturesDemo}
+                            disabled={loading}
+                            style={{
+                                padding: '8px 16px',
+                                background: '#009688',
+                                color: '#fff',
+                                border: 'none',
+                                borderRadius: '4px',
+                                cursor: loading ? 'not-allowed' : 'pointer',
+                                width: '100%'
+                            }}
+                        >
+                            Run New Features Demo
                         </button>
                     </div>
                 </div>
