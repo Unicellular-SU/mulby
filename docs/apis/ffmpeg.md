@@ -120,14 +120,38 @@ console.log("提取完成")
 
 ```javascript
 intools.ffmpeg.run(["-i", "/path/to/source.mp4"]).catch((error) => {
-  // FFmpeg 会将媒体信息输出到 stderr
+  // 根据返回的错误信息提取，error.message 信息示例：
+  /*
+  Input #0, mov,mp4,m4a,3gp,3g2,mj2, from '/path/to/source.mp4':
+  Metadata:
+    major_brand     : isom
+    minor_version   : 512
+    compatible_brands: isomiso2avc1mp41
+    encoder         : Lavf61.7.100
+  Duration: 00:00:07.00, start: 0.000000, bitrate: 2002 kb/s
+  Stream #0:0[0x1](und): Video: h264 (High 4:4:4 Predictive) (avc1 / 0x31637661), yuv444p(tv, smpte170m/bt470bg/smpte170m, progressive), 720x1280, 1926 kb/s, 10 fps, 10 tbr, 10240 tbn (default)
+      Metadata:
+        handler_name    : VideoHandler
+        vendor_id       : [0][0][0][0]
+        encoder         : Lavc61.19.101 libx264
+  Stream #0:1[0x2](und): Audio: aac (LC) (mp4a / 0x6134706D), 44100 Hz, mono, fltp, 70 kb/s (default)
+      Metadata:
+        handler_name    : SoundHandler
+        vendor_id       : [0][0][0][0]
+At least one output file must be specified
+  */
+  const videoStream = error.message.match(/Stream #\d+:\d+.*Video: ([^\n]+)/)
+  const audioStream = error.message.match(/Stream #\d+:\d+.*Audio: ([^\n]+)/)
   const durationMatch = error.message.match(/Duration: ([^,]+)/)
   const bitrateMatch = error.message.match(/bitrate:\s*(\d+ kb\/s)/)
   
-  console.log({
-    duration: durationMatch?.[1],
-    bitrate: bitrateMatch?.[1]
-  })
+  const videoMetadata = {
+    duration: durationMatch?.[1] || null,
+    bitrate: bitrateMatch?.[1] || null,
+    video: videoStream?.[1] || null,
+    audio: audioStream?.[1] || null,
+  }
+  console.log(videoMetadata)
 })
 ```
 

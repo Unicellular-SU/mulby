@@ -214,11 +214,9 @@ export function registerFFmpegHandlers() {
                 if (code === 0) {
                     resolve()
                 } else {
-                    // 从 stderr 中提取错误信息
-                    const errorMatch = stderrBuffer.match(/Error[^\n]*/gi)
-                    const errorMessage = errorMatch
-                        ? errorMatch.join('; ')
-                        : `FFmpeg 执行失败 (exit code: ${code})`
+                    // 对于获取媒体信息等操作，stderr 包含关键信息
+                    // 即使有退出代码，我们也需要返回 stderr 内容供解析
+                    const errorMessage = stderrBuffer.trim() || `FFmpeg 执行失败 (exit code: ${code})`
                     reject(new Error(errorMessage))
                 }
             })

@@ -196,6 +196,55 @@ export function FFmpegModule() {
         }
     }, [notify])
 
+    // 视频信息状态
+    const [videoInfo, setVideoInfo] = useState<{
+        duration: string | null
+        bitrate: string | null
+        video: string | null
+        audio: string | null
+    } | null>(null)
+    const [gettingInfo, setGettingInfo] = useState(false)
+
+    // 获取视频信息
+    const handleGetVideoInfo = useCallback(async () => {
+        if (!inputFile) {
+            notify.warning('请先选择输入文件')
+            return
+        }
+
+        setGettingInfo(true)
+        setVideoInfo(null)
+
+        try {
+            // FFmpeg 不指定输出文件时会报错，但 stderr 包含媒体信息
+            await window.intools?.ffmpeg?.run(['-i', inputFile])
+        } catch (error: any) {
+            // 从错误信息中提取媒体元数据
+            const message = error.message || ''
+            const videoStream = message.match(/Stream #\d+:\d+.*Video: ([^\n]+)/)
+            const audioStream = message.match(/Stream #\d+:\d+.*Audio: ([^\n]+)/)
+            const durationMatch = message.match(/Duration: ([^,]+)/)
+            const bitrateMatch = message.match(/bitrate:\s*(\d+ kb\/s)/)
+
+            const metadata = {
+                duration: durationMatch?.[1] || null,
+                bitrate: bitrateMatch?.[1] || null,
+                video: videoStream?.[1] || null,
+                audio: audioStream?.[1] || null,
+            }
+
+            if (metadata.duration || metadata.video || metadata.audio) {
+                setVideoInfo(metadata)
+                notify.success('获取视频信息成功')
+            } else {
+                notify.error('无法解析视频信息')
+            }
+        } finally {
+            setGettingInfo(false)
+        }
+    }, [inputFile, notify])
+
+
     return (
         <div className="main-content">
             <PageHeader
@@ -348,6 +397,34 @@ export function FFmpegModule() {
                         </div>
                     )}
 
+                    {videoInfo && (
+                        <div style={{
+                            padding: 'var(--spacing-md)',
+                            background: 'var(--bg-tertiary)',
+                            borderRadius: 'var(--radius-md)',
+                            marginBottom: 'var(--spacing-md)',
+                            fontSize: '13px',
+                            lineHeight: '1.6'
+                        }}>
+                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 'var(--spacing-sm)', marginBottom: 'var(--spacing-sm)' }}>
+                                <div><strong>⏱️ 时长:</strong> {videoInfo.duration || '未知'}</div>
+                                <div><strong>📊 码率:</strong> {videoInfo.bitrate || '未知'}</div>
+                            </div>
+                            {videoInfo.video && (
+                                <div style={{ marginBottom: 'var(--spacing-xs)' }}>
+                                    <strong>📹 视频流:</strong>
+                                    <div style={{ color: 'var(--text-secondary)', fontSize: '12px', marginLeft: '1em' }}>{videoInfo.video}</div>
+                                </div>
+                            )}
+                            {videoInfo.audio && (
+                                <div>
+                                    <strong>🔊 音频流:</strong>
+                                    <div style={{ color: 'var(--text-secondary)', fontSize: '12px', marginLeft: '1em' }}>{videoInfo.audio}</div>
+                                </div>
+                            )}
+                        </div>
+                    )}
+
                     <div className="action-bar">
                         <Button
                             variant="primary"
@@ -363,6 +440,13 @@ export function FFmpegModule() {
                             disabled={!inputFile || isAvailable === false}
                         >
                             🎵 提取音频
+                        </Button>
+                        <Button
+                            onClick={handleGetVideoInfo}
+                            loading={gettingInfo}
+                            disabled={!inputFile || isAvailable === false}
+                        >
+                            📊 获取信息
                         </Button>
                         {running && (
                             <>
@@ -397,7 +481,14 @@ const task = intools.ffmpeg.run(
 
 // 取消/退出
 task.kill()  // 强制终止
-task.quit()  // 优雅退出`}
+task.quit()  // 优雅退出
+
+// 获取媒体信息
+intools.ffmpeg.run(["-i", "input.mp4"]).catch((err) => {
+  // 从 err.message (stderr) 提取时长、码率等信息
+  const duration = err.message.match(/Duration: ([^,]+)/)?.[1]
+  console.log(duration)
+})`}
                     </CodeBlock>
                 </Card>
             </div>
