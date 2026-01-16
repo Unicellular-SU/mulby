@@ -15,11 +15,12 @@ import {
   WindowAPIModule,
   ChildWindowModule,
   InBrowserDemo,
+  SharpModule,
 } from './modules'
 
 console.log('[App] Module imports loaded')
 
-type ModuleId = 'sysinfo' | 'clipboard' | 'input' | 'filemanager' | 'network' | 'screen' | 'media' | 'settings' | 'security' | 'image-editor' | 'window-api' | 'child-window' | 'inbrowser'
+type ModuleId = 'sysinfo' | 'clipboard' | 'input' | 'filemanager' | 'network' | 'screen' | 'media' | 'settings' | 'security' | 'image-editor' | 'window-api' | 'child-window' | 'inbrowser' | 'sharp'
 type ScreenAutoAction = 'region-capture' | null
 
 const featureToModule: Record<string, ModuleId> = {
@@ -35,7 +36,8 @@ const featureToModule: Record<string, ModuleId> = {
   screenshot: 'screen',
   'showcase:ui-settings': 'settings',
   'showcase:ui-detached': 'settings',
-  'showcase:inbrowser': 'inbrowser'
+  'showcase:inbrowser': 'inbrowser',
+  'showcase:sharp': 'sharp'
 }
 
 function handleDynamicCommand(featureCode: string, input?: string) {
@@ -90,6 +92,7 @@ const moduleComponents: Record<ModuleId, React.ComponentType<any>> = {
   'window-api': WindowAPIModule,
   'child-window': ChildWindowModule,
   'inbrowser': InBrowserDemo,
+  'sharp': SharpModule,
 }
 
 // 从 URL 参数或插件初始化数据获取默认模块

@@ -28,6 +28,7 @@ import { PluginManager } from '../plugin'
 import { PluginWindowManager } from '../plugin/window'
 import { ThemeManager } from '../services/theme'
 import { registerInBrowserHandlers } from './inbrowser'
+import { registerSharpHandlers } from './sharp'
 
 export function registerAllHandlers(
   getMainWindow: () => BrowserWindow | null,
@@ -61,4 +62,5 @@ export function registerAllHandlers(
   registerRegionCaptureHandlers()
   registerColorPickHandlers()
   registerInBrowserHandlers()
+  registerSharpHandlers()
 }

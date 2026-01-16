@@ -461,7 +461,72 @@ interface IntoolsAPI {
     clearInBrowserCache: () => Promise<boolean>
     run: (idOrOptions?: number | any, options?: any) => Promise<any[]>
   }
+  // Sharp 图像处理 API
+  sharp: IntoolsSharpFunction
+  getSharpVersion: () => Promise<{ sharp: Record<string, string>; format: Record<string, any> }>
 }
+
+/**
+ * Sharp 图像处理代理接口
+ */
+interface IntoolsSharpProxy {
+  // 尺寸调整
+  resize(width?: number, height?: number, options?: object): IntoolsSharpProxy
+  extend(options: object): IntoolsSharpProxy
+  extract(options: { left: number; top: number; width: number; height: number }): IntoolsSharpProxy
+  trim(options?: object): IntoolsSharpProxy
+
+  // 变换
+  rotate(angle?: number, options?: object): IntoolsSharpProxy
+  flip(): IntoolsSharpProxy
+  flop(): IntoolsSharpProxy
+
+  // 图像处理
+  blur(sigma?: number): IntoolsSharpProxy
+  sharpen(options?: object): IntoolsSharpProxy
+  flatten(options?: object): IntoolsSharpProxy
+  gamma(gamma?: number): IntoolsSharpProxy
+  negate(options?: object): IntoolsSharpProxy
+  normalize(options?: object): IntoolsSharpProxy
+  threshold(threshold?: number, options?: object): IntoolsSharpProxy
+  modulate(options?: object): IntoolsSharpProxy
+
+  // 颜色
+  tint(color: string | object): IntoolsSharpProxy
+  greyscale(greyscale?: boolean): IntoolsSharpProxy
+  grayscale(grayscale?: boolean): IntoolsSharpProxy
+
+  // 合成
+  composite(images: object[]): IntoolsSharpProxy
+
+  // 输出格式
+  png(options?: object): IntoolsSharpProxy
+  jpeg(options?: object): IntoolsSharpProxy
+  webp(options?: object): IntoolsSharpProxy
+  gif(options?: object): IntoolsSharpProxy
+  tiff(options?: object): IntoolsSharpProxy
+  avif(options?: object): IntoolsSharpProxy
+
+  // 元数据
+  withMetadata(options?: object): IntoolsSharpProxy
+
+  // 其他
+  clone(): IntoolsSharpProxy
+
+  // 终结方法
+  toBuffer(options?: object): Promise<ArrayBuffer>
+  toFile(fileOut: string): Promise<{ format: string; width: number; height: number; channels: number; size: number }>
+  metadata(): Promise<{ format?: string; width?: number; height?: number; channels?: number; space?: string; depth?: string; density?: number; hasAlpha?: boolean; orientation?: number }>
+  stats(): Promise<object>
+}
+
+/**
+ * Sharp 构造函数类型
+ */
+type IntoolsSharpFunction = (
+  input?: string | ArrayBuffer | Uint8Array | object | any[],
+  options?: object
+) => IntoolsSharpProxy
 
 declare global {
   interface Window {

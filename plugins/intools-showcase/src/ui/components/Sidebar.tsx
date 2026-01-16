@@ -16,6 +16,7 @@ const modules = [
     { id: 'window-api', label: '窗口 API', icon: '🪟' },
     { id: 'child-window', label: 'Child Window', icon: '🖼️' },
     { id: 'inbrowser', label: 'InBrowser', icon: '🤖' },
+    { id: 'sharp', label: 'Sharp 图像', icon: '🖼️' },
     { id: 'settings', icon: '⚙️', label: '设置' },
     { id: 'security', icon: '🔐', label: '安全' },
 ]

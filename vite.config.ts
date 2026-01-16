@@ -13,7 +13,7 @@ export default defineConfig({
           build: {
             outDir: 'dist/main',
             rollupOptions: {
-              external: ['electron', 'better-sqlite3', 'vm2']
+              external: ['electron', 'better-sqlite3', 'vm2', 'sharp']
             }
           }
         }

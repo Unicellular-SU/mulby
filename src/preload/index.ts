@@ -408,7 +408,81 @@ contextBridge.exposeInMainWorld('intools', {
   },
 
   // 可编程浏览器 API
-  inbrowser: inbrowser
+  inbrowser: inbrowser,
+
+  // Sharp 图像处理 API
+  // 由于 contextBridge 无法传递 Proxy 对象，使用可序列化的链式构建器模式
+  sharp: (input?: string | Buffer | ArrayBuffer | Uint8Array | object | any[], options?: object) => {
+    // 操作链记录
+    const operations: { method: string; args: any[] }[] = []
+
+    // 创建链式构建器 - 使用普通对象替代 Proxy
+    const createBuilder = (): any => {
+      // 执行 IPC 调用
+      const executeIpc = async () => {
+        return ipcRenderer.invoke('sharp:execute', { input, options, operations })
+      }
+
+      // 创建可序列化的构建器对象
+      const builder: Record<string, any> = {}
+
+      // 终结方法
+      const terminalMethods = ['toBuffer', 'toFile', 'metadata', 'stats']
+      terminalMethods.forEach(method => {
+        builder[method] = async (...args: any[]) => {
+          operations.push({ method, args })
+          return executeIpc()
+        }
+      })
+
+      // 链式方法列表
+      const chainMethods = [
+        // 尺寸调整
+        'resize', 'extend', 'extract', 'trim',
+        // 变换
+        'rotate', 'flip', 'flop', 'affine',
+        // 图像处理
+        'median', 'blur', 'sharpen', 'flatten', 'gamma', 'negate',
+        'normalise', 'normalize', 'clahe', 'convolve', 'threshold',
+        'linear', 'recomb', 'modulate',
+        // 颜色
+        'tint', 'greyscale', 'grayscale', 'pipelineColorspace', 'toColorspace',
+        // 通道
+        'removeAlpha', 'ensureAlpha', 'extractChannel', 'joinChannel', 'bandbool',
+        // 合成
+        'composite',
+        // 输出格式
+        'png', 'jpeg', 'webp', 'gif', 'tiff', 'avif', 'heif', 'raw',
+        // 元数据
+        'withMetadata', 'keepExif', 'withExif', 'keepIccProfile', 'withIccProfile',
+        // 其他
+        'timeout', 'tile'
+      ]
+
+      chainMethods.forEach(method => {
+        builder[method] = (...args: any[]) => {
+          operations.push({ method, args })
+          return builder // 返回同一个 builder 实现链式调用
+        }
+      })
+
+      // clone 方法特殊处理
+      builder.clone = () => {
+        // 创建一个新的 builder，复制当前操作链
+        const clonedOps = [...operations]
+        const newBuilder = createBuilder()
+        clonedOps.forEach(op => operations.push(op))
+        return newBuilder
+      }
+
+      return builder
+    }
+
+    return createBuilder()
+  },
+
+  // Sharp 版本信息
+  getSharpVersion: () => ipcRenderer.invoke('sharp:version')
 })
 
 // ==========================================

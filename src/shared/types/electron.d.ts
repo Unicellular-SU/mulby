@@ -325,7 +325,97 @@ export interface ElectronAPI {
   inbrowser: {
     goto: (url: string, headers?: Record<string, string>, timeout?: number) => InBrowser
   }
+  // Sharp 图像处理 API
+  sharp: SharpFunction
+  getSharpVersion: () => Promise<{ sharp: Record<string, string>; format: Record<string, any> }>
 }
+
+/**
+ * Sharp 图像处理代理接口
+ * 支持链式调用，在调用终结方法时触发实际执行
+ */
+export interface SharpProxy {
+  // 尺寸调整
+  resize(width?: number, height?: number, options?: { fit?: 'cover' | 'contain' | 'fill' | 'inside' | 'outside'; position?: string; background?: string | object }): SharpProxy
+  extend(options: { top?: number; bottom?: number; left?: number; right?: number; background?: string | object }): SharpProxy
+  extract(options: { left: number; top: number; width: number; height: number }): SharpProxy
+  trim(options?: { threshold?: number; lineArt?: boolean }): SharpProxy
+
+  // 变换
+  rotate(angle?: number, options?: { background?: string | object }): SharpProxy
+  flip(): SharpProxy
+  flop(): SharpProxy
+  affine(matrix: number[][], options?: { background?: string | object; idx?: number; idy?: number; odx?: number; ody?: number }): SharpProxy
+
+  // 图像处理
+  median(size?: number): SharpProxy
+  blur(sigma?: number): SharpProxy
+  sharpen(options?: { sigma?: number; m1?: number; m2?: number; x1?: number; y2?: number; y3?: number }): SharpProxy
+  flatten(options?: { background?: string | object }): SharpProxy
+  gamma(gamma?: number, gammaOut?: number): SharpProxy
+  negate(options?: { alpha?: boolean }): SharpProxy
+  normalise(options?: { lower?: number; upper?: number }): SharpProxy
+  normalize(options?: { lower?: number; upper?: number }): SharpProxy
+  clahe(options: { width: number; height: number; maxSlope?: number }): SharpProxy
+  convolve(options: { width: number; height: number; kernel: number[]; scale?: number; offset?: number }): SharpProxy
+  threshold(threshold?: number, options?: { greyscale?: boolean }): SharpProxy
+  linear(a?: number | number[], b?: number | number[]): SharpProxy
+  recomb(inputMatrix: number[][]): SharpProxy
+  modulate(options?: { brightness?: number; saturation?: number; hue?: number; lightness?: number }): SharpProxy
+
+  // 颜色处理
+  tint(color: string | object): SharpProxy
+  greyscale(greyscale?: boolean): SharpProxy
+  grayscale(grayscale?: boolean): SharpProxy
+  pipelineColorspace(colorspace: string): SharpProxy
+  toColorspace(colorspace: string): SharpProxy
+
+  // 通道操作
+  removeAlpha(): SharpProxy
+  ensureAlpha(alpha?: number): SharpProxy
+  extractChannel(channel: number | 'red' | 'green' | 'blue' | 'alpha'): SharpProxy
+  joinChannel(images: string | Buffer | ArrayBuffer | Uint8Array | (string | Buffer | ArrayBuffer | Uint8Array)[], options?: { raw?: { width: number; height: number; channels: number } }): SharpProxy
+  bandbool(boolOp: 'and' | 'or' | 'eor'): SharpProxy
+
+  // 合成
+  composite(images: { input: string | Buffer | { create?: any; text?: any }; gravity?: string; top?: number; left?: number; tile?: boolean; blend?: string; density?: number; raw?: { width: number; height: number; channels: number } }[]): SharpProxy
+
+  // 输出格式
+  png(options?: { progressive?: boolean; compressionLevel?: number; palette?: boolean; quality?: number; effort?: number; colors?: number; dither?: number }): SharpProxy
+  jpeg(options?: { quality?: number; progressive?: boolean; chromaSubsampling?: string; optimiseCoding?: boolean; mozjpeg?: boolean; trellisQuantisation?: boolean; overshootDeringing?: boolean; optimiseScans?: boolean; quantisationTable?: number }): SharpProxy
+  webp(options?: { quality?: number; alphaQuality?: number; lossless?: boolean; nearLossless?: boolean; smartSubsample?: boolean; effort?: number; loop?: number; delay?: number | number[] }): SharpProxy
+  gif(options?: { reuse?: boolean; progressive?: boolean; colors?: number; effort?: number; dither?: number; interFrameMaxError?: number; interPaletteMaxError?: number; loop?: number; delay?: number | number[]; force?: boolean }): SharpProxy
+  tiff(options?: { quality?: number; force?: boolean; compression?: string; predictor?: string; pyramid?: boolean; tile?: boolean; tileWidth?: number; tileHeight?: number; xres?: number; yres?: number; resolutionUnit?: string; bitdepth?: number }): SharpProxy
+  avif(options?: { quality?: number; lossless?: boolean; effort?: number; chromaSubsampling?: string }): SharpProxy
+  heif(options?: { quality?: number; compression?: string; lossless?: boolean; effort?: number; chromaSubsampling?: string }): SharpProxy
+  raw(options?: { depth?: string }): SharpProxy
+
+  // 元数据
+  withMetadata(options?: { orientation?: number; icc?: string; exif?: object; density?: number }): SharpProxy
+  keepExif(): SharpProxy
+  withExif(exif: object): SharpProxy
+  keepIccProfile(): SharpProxy
+  withIccProfile(icc: string, options?: { attach?: boolean }): SharpProxy
+
+  // 其他
+  timeout(options: { seconds: number }): SharpProxy
+  tile(options?: { size?: number; overlap?: number; angle?: number; background?: string | object; depth?: string; skipBlanks?: number; container?: string; layout?: string; centre?: boolean; id?: string; basename?: string }): SharpProxy
+  clone(): SharpProxy
+
+  // 终结方法 - 触发实际执行
+  toBuffer(options?: { resolveWithObject?: boolean }): Promise<Buffer | { data: Buffer; info: { format: string; width: number; height: number; channels: number; premultiplied: boolean; size: number } }>
+  toFile(fileOut: string, callback?: (err: Error | null, info: { format: string; width: number; height: number; channels: number; premultiplied: boolean; size: number }) => void): Promise<{ format: string; width: number; height: number; channels: number; premultiplied: boolean; size: number }>
+  metadata(): Promise<{ format?: string; size?: number; width?: number; height?: number; space?: string; channels?: number; depth?: string; density?: number; chromaSubsampling?: string; isProgressive?: boolean; pages?: number; pageHeight?: number; loop?: number; delay?: number[]; hasProfile?: boolean; hasAlpha?: boolean; orientation?: number; exif?: Buffer; icc?: Buffer; iptc?: Buffer; xmp?: Buffer; tifftagPhotoshop?: Buffer }>
+  stats(): Promise<{ channels: { min: number; max: number; sum: number; squaresSum: number; mean: number; stdev: number; minX: number; minY: number; maxX: number; maxY: number }[]; isOpaque: boolean; entropy: number; sharpness: number; dominant: { r: number; g: number; b: number } }>
+}
+
+/**
+ * Sharp 构造函数类型
+ */
+export type SharpFunction = (
+  input?: string | Buffer | ArrayBuffer | Uint8Array | { create?: { width: number; height: number; channels: number; background?: string | object; noise?: { type: 'gaussian'; mean?: number; sigma?: number } }; text?: { text: string; width?: number; height?: number; channels?: number; rgba?: boolean } } | any[],
+  options?: { raw?: { width: number; height: number; channels: number }; create?: { width: number; height: number; channels: number; background?: string | object }; text?: { text: string; width?: number; height?: number; channels?: number; rgba?: boolean }; animated?: boolean; limitInputPixels?: number; failOn?: 'error' | 'warning' | 'none'; density?: number; ignoreIcc?: boolean; pages?: number; page?: number; subifd?: number; level?: number; pdfBackground?: string | object }
+) => SharpProxy
 
 declare global {
   interface Window {
