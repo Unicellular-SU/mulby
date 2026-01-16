@@ -133,13 +133,19 @@ interface InBrowser {
   evaluate(func: Function, ...args: any[]): InBrowser;
   
   // 流程控制
-  wait(ms: number): InBrowser;
+  wait(msOrSelector: number | string): InBrowser; // 支持毫秒数或选择器
   when(selector: string): InBrowser;
   end(): InBrowser;
   
   // 执行
   run(options?: InBrowserOptions): Promise<any[]>;
 }
+
+### 4.1 高级选择器 (Advanced Selectors)
+**支持 Shadow DOM 和 iframe 穿透**
+使用 `>>` 符号分割选择器，可穿透多层 Shadow Root 或 iframe（同源）。
+示例：`iframe#outer >> iframe#inner >> button.login`
+此语法适用于 `click`, `type`, `value`, `check`, `focus`, `scroll`, `wait`, `when`, `mousedown`, `mouseup` 等所有涉及元素操作的方法。
 ```
 
 ## 5. 功能状态与开发路线图 (Feature Status & Roadmap)

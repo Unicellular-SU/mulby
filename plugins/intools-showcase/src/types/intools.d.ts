@@ -421,9 +421,11 @@ interface IntoolsAPI {
     goto: (url: string, headers?: Record<string, string>, timeout?: number) => any
     useragent: (ua: string) => any
     device: (name: string) => any
-    value: (selector: string, val: string) => any
-    check: (selector: string, checked: boolean) => any
-    focus: (selector: string) => any
+    viewport: (width: number, height: number) => any
+    show: () => any
+    hide: () => any
+    evaluate: (func: string | Function, ...params: any[]) => any
+    wait: (msOrSelector: number | string) => any
     click: (selector: string) => any
     mousedown: (selector: string) => any
     mouseup: (selector: string) => any

@@ -52,7 +52,7 @@ export interface InBrowser {
     hide(): InBrowser;
     viewport(width: number, height: number): InBrowser;
     evaluate(func: string | Function, ...params: any[]): InBrowser;
-    wait(ms: number): InBrowser;
+    wait(msOrSelector: number | string): InBrowser;
     click(selector: string): InBrowser;
     type(selector: string, text: string): InBrowser;
     press(key: string, modifiers?: string[]): InBrowser;

@@ -139,8 +139,8 @@ export class InBrowserBuilder {
         return this;
     }
 
-    public wait = (ms: number): this => {
-        this.queue.push({ type: 'wait', args: [ms] });
+    public wait = (msOrSelector: number | string): this => {
+        this.queue.push({ type: 'wait', args: [msOrSelector] });
         return this;
     }
 
@@ -188,7 +188,7 @@ export const inbrowser = {
     evaluate: (func: string | Function, ...params: any[]) => new InBrowserBuilder().evaluate(func, ...params),
     cookies: (name?: string) => new InBrowserBuilder().cookies(name),
     pdf: (options?: Electron.PrintToPDFOptions, savePath?: string) => new InBrowserBuilder().pdf(options, savePath),
-    wait: (ms: number) => new InBrowserBuilder().wait(ms),
+    wait: (msOrSelector: number | string) => new InBrowserBuilder().wait(msOrSelector),
     when: (selector: string) => new InBrowserBuilder().when(selector),
 
     // Ending (makes no sense to start with end, but for completeness)

@@ -37,10 +37,49 @@ export class InBrowserWindow {
         return results;
     }
 
+
+    private getSelectorFn() {
+        return `
+            function queryDeep(selector) {
+                if (!selector) return null;
+                if (typeof selector !== 'string') return null;
+                if (!selector.includes('>>')) return document.querySelector(selector);
+                
+                const parts = selector.split('>>').map(p => p.trim());
+                let root = document;
+                
+                for (let i = 0; i < parts.length; i++) {
+                    const part = parts[i];
+                    if (!root) return null;
+                    
+                    const el = root.querySelector(part);
+                    if (!el) return null;
+                    
+                    if (i === parts.length - 1) return el;
+                    
+                    // Traverse down
+                    if (el.tagName === 'IFRAME' || el.tagName === 'FRAME') {
+                        try {
+                            root = el.contentDocument;
+                        } catch (e) {
+                            return null; // Blocked by cross-origin
+                        }
+                    } else if (el.shadowRoot) {
+                        root = el.shadowRoot;
+                    } else {
+                        root = el; // Regular element acting as container?
+                    }
+                }
+                return null;
+            }
+        `;
+    }
+
     private async executeOp(op: InBrowserOp, results: any[]) {
         const win = this.window;
         const contents = win.webContents;
         const args = op.args;
+        const qFn = this.getSelectorFn();
 
         switch (op.type) {
             case 'goto':
@@ -74,8 +113,6 @@ export class InBrowserWindow {
                 const [funcString, params] = args;
                 console.log(`[InBrowser] Evaluating script:`, funcString, params);
 
-                // Wrap in try-catch to return error object if script fails
-                // We use an IIFE that returns a Promise resolving to { result, error }
                 const code = `
                     (async () => {
                         try {
@@ -98,22 +135,46 @@ export class InBrowserWindow {
                 break;
 
             case 'wait':
-                const [ms] = args;
-                await new Promise(resolve => setTimeout(resolve, ms));
+                const [msOrSelector] = args;
+                if (typeof msOrSelector === 'number') {
+                    await new Promise(resolve => setTimeout(resolve, msOrSelector));
+                } else if (typeof msOrSelector === 'string') {
+                    // wait(selector) alias style
+                    // Actually wait args is [ms] in type definition, but InBrowserBuilder allows 'wait' to take ms.
+                    // 'when' handles selector waiting. 
+                    // EXCEPT... User request: .wait("iframe#outer >> ..."). 
+                    // So we must handle string selector in 'wait' too if the API allows it (overloading).
+                    // In types.d.ts `wait(ms: number)` is defined. 
+                    // But uTools `wait` is polymorphic. Let's support it if passed.
+                    // We need to check if args[0] is string.
+                    const startTime = Date.now();
+                    const timeoutMs = 15000;
+                    while (Date.now() - startTime < timeoutMs) {
+                        const exists = await contents.executeJavaScript(`
+                            (function() {
+                                ${qFn}
+                                return !!queryDeep('${msOrSelector}');
+                            })()
+                        `);
+                        if (exists) return;
+                        await new Promise(r => setTimeout(r, 100));
+                    }
+                    throw new Error(`Timeout waiting for element: ${msOrSelector}`);
+                }
                 break;
 
             case 'click':
                 // args: [selector]
                 const [selector] = args;
                 const rect = await contents.executeJavaScript(`
-          (function() {
-            const el = document.querySelector('${selector}');
-            if (!el) throw new Error('Element not found: ${selector}');
-            const rect = el.getBoundingClientRect();
-            return { x: rect.x + rect.width / 2, y: rect.y + rect.height / 2 };
-          })()
-        `);
-                // We need integers for input events
+                  (function() {
+                    ${qFn}
+                    const el = queryDeep('${selector}');
+                    if (!el) throw new Error('Element not found: ${selector}');
+                    const rect = el.getBoundingClientRect();
+                    return { x: rect.x + rect.width / 2, y: rect.y + rect.height / 2 };
+                  })()
+                `);
                 const x = Math.round(rect.x);
                 const y = Math.round(rect.y);
 
@@ -124,10 +185,7 @@ export class InBrowserWindow {
             case 'type':
                 // args: [selector, text]
                 const [typeSelector, text] = args;
-                // First click to focus
                 await this.executeOp({ type: 'click', args: [typeSelector] }, results);
-
-                // Then type each character
                 for (const char of text) {
                     contents.sendInputEvent({ type: 'char', keyCode: char });
                 }
@@ -136,15 +194,8 @@ export class InBrowserWindow {
             case 'press':
                 // args: [key, modifiers]
                 const [key, modifiers] = args;
-                // Electron accelerator format or simple char? uTools says 'key'
-                // For sendInputEvent, we need keyCode.
-                // This is complex because mapping 'Enter' to '\r' etc might be needed.
-                // For Phase 1, basic char press:
-
                 const lowerKey = key.toLowerCase();
                 let keyCode = key;
-
-                // Simple mapping for common keys
                 if (lowerKey === 'enter') keyCode = '\r';
                 if (lowerKey === 'tab') keyCode = '\t';
 
@@ -153,37 +204,35 @@ export class InBrowserWindow {
                 contents.sendInputEvent({ type: 'keyUp', keyCode: keyCode, modifiers: modifiers as any });
                 break;
 
-
-            // TODO: Implement other ops: click, press, type, value, checkbox, etc.
-
             case 'css':
-                // args: [css]
                 const [css] = args;
                 await contents.insertCSS(css);
                 break;
 
             case 'when':
-                // args: [selector]
                 const [whenSelector] = args;
-                const startTime = Date.now();
-                const timeoutMs = 15000; // Default 15s timeout
+                const wStartTime = Date.now();
+                const wTimeoutMs = 15000;
 
-                while (Date.now() - startTime < timeoutMs) {
-                    const exists = await contents.executeJavaScript(`!!document.querySelector('${whenSelector}')`);
+                while (Date.now() - wStartTime < wTimeoutMs) {
+                    const exists = await contents.executeJavaScript(`
+                        (function() {
+                            ${qFn}
+                            return !!queryDeep('${whenSelector}');
+                        })()
+                    `);
                     if (exists) return;
-                    await new Promise(r => setTimeout(r, 100)); // poll every 100ms
+                    await new Promise(r => setTimeout(r, 100));
                 }
-                // If timeout, should we throw? uTools doc says "Returns void. Wait for element to exist"
-                // Let's throw for now to stop chain execution
                 throw new Error(`Timeout waiting for element: ${whenSelector}`);
                 break;
 
             case 'value':
-                // args: [selector, val]
                 const [valueSelector, val] = args;
                 await contents.executeJavaScript(`
                     (function() {
-                        const el = document.querySelector('${valueSelector}');
+                        ${qFn}
+                        const el = queryDeep('${valueSelector}');
                         if (!el) throw new Error('Element not found: ${valueSelector}');
                         el.value = '${val}';
                         el.dispatchEvent(new Event('input', { bubbles: true }));
@@ -193,11 +242,11 @@ export class InBrowserWindow {
                 break;
 
             case 'check':
-                // args: [selector, checked]
                 const [checkSelector, checked] = args;
                 await contents.executeJavaScript(`
                     (function() {
-                        const el = document.querySelector('${checkSelector}');
+                        ${qFn}
+                        const el = queryDeep('${checkSelector}');
                         if (!el) throw new Error('Element not found: ${checkSelector}');
                         if (el.type !== 'checkbox' && el.type !== 'radio') throw new Error('Element is not checkbox or radio: ${checkSelector}');
                         el.checked = ${checked};
@@ -208,17 +257,15 @@ export class InBrowserWindow {
                 break;
 
             case 'scroll':
-                // args: [selector | y, y]
                 const [arg1, arg2] = args;
                 if (typeof arg1 === 'number') {
-                    // Global scroll: scroll(y)
                     await contents.executeJavaScript(`window.scrollTo(0, ${arg1})`);
                 } else if (typeof arg1 === 'string') {
-                    // Element scroll: scroll(selector, y)
                     const scrollY = typeof arg2 === 'number' ? arg2 : 0;
                     await contents.executeJavaScript(`
                         (function() {
-                            const el = document.querySelector('${arg1}');
+                            ${qFn}
+                            const el = queryDeep('${arg1}');
                             if (!el) throw new Error('Element not found: ${arg1}');
                             el.scrollTop = ${scrollY};
                         })()
@@ -227,7 +274,6 @@ export class InBrowserWindow {
                 break;
 
             case 'devTools':
-                // args: [mode]
                 const [mode] = args;
                 if (mode) {
                     contents.openDevTools({ mode: mode });
@@ -237,17 +283,16 @@ export class InBrowserWindow {
                 break;
 
             case 'useragent':
-                // args: [ua]
                 const [ua] = args;
                 contents.setUserAgent(ua);
                 break;
 
             case 'focus':
-                // args: [selector]
                 const [focusSelector] = args;
                 await contents.executeJavaScript(`
                     (function() {
-                        const el = document.querySelector('${focusSelector}');
+                        ${qFn}
+                        const el = queryDeep('${focusSelector}');
                         if (!el) throw new Error('Element not found: ${focusSelector}');
                         el.focus();
                     })()
@@ -255,20 +300,13 @@ export class InBrowserWindow {
                 break;
 
             case 'paste':
-                // args: [text]
-                // For paste, we usually want to paste into the currently focused element.
-                // We use clipboard and contents.paste().
                 const [textToPaste] = args;
                 const { clipboard } = require('electron');
-                const oldText = clipboard.readText();
                 clipboard.writeText(textToPaste);
                 contents.paste();
-                // Optional: restore clipboard? usually automation doesn't care, but might be nice.
-                // For now, leave it.
                 break;
 
             case 'device':
-                // args: [name]
                 const [deviceName] = args;
                 const devices: Record<string, { ua: string, width: number, height: number }> = {
                     'iPhone X': { width: 375, height: 812, ua: 'Mozilla/5.0 (iPhone; CPU iPhone OS 13_2_3 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/13.0.3 Mobile/15E148 Safari/604.1' },
@@ -285,11 +323,11 @@ export class InBrowserWindow {
 
             case 'mousedown':
             case 'mouseup':
-                // args: [selector]
                 const [mouseSelector] = args;
                 const mouseRect = await contents.executeJavaScript(`
                     (function() {
-                        const el = document.querySelector('${mouseSelector}');
+                        ${qFn}
+                        const el = queryDeep('${mouseSelector}');
                         if (!el) throw new Error('Element not found: ${mouseSelector}');
                         const rect = el.getBoundingClientRect();
                         return { x: rect.x + rect.width / 2, y: rect.y + rect.height / 2 };
@@ -303,9 +341,10 @@ export class InBrowserWindow {
 
             case 'file':
                 // args: [selector, payload]
+                // Debugger approach: Selector must be simple for DOM.querySelector in Debugger API
+                // Currently only supports single level. TODO: Add deep support if possible via recursion in debugger
                 const [fileSelector, payload] = args;
                 const filePaths = Array.isArray(payload) ? payload : [payload];
-                // Use debugger to set file input
                 try {
                     contents.debugger.attach('1.3');
                     const { root } = await contents.debugger.sendCommand('DOM.getDocument');

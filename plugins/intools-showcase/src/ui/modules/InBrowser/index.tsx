@@ -186,6 +186,69 @@ export default function InBrowserDemo() {
         }
     }
 
+    const runBaiduMapDemo = async () => {
+        if (!window.intools?.inbrowser) {
+            addLog('Error: window.intools.inbrowser not found');
+            return;
+        }
+
+        setLoading(true);
+        setLogs([]);
+        addLog('Starting Baidu Map Demo...');
+
+        const address = "福州烟台山";
+
+        try {
+            addLog(`Searching for: ${address} on Baidu Map`);
+
+            const result = await window.intools.inbrowser
+                .goto("https://map.baidu.com")
+                .show() // Ensure window is visible
+                .wait(1000) // Wait for page load
+                .value("#sole-input", address) // using .value() as .input() replacement
+                .wait(300)
+                .press("Enter") // "enter" -> "Enter"
+                .run({ width: 1200, height: 800, show: true });
+
+            addLog(`Result: ${JSON.stringify(result)}`);
+        } catch (error: any) {
+            addLog(`Error: ${error.message}`);
+            console.error(error);
+        } finally {
+            setLoading(false);
+        }
+    }
+
+    const runIframeDemo = async () => {
+        if (!window.intools?.inbrowser) {
+            addLog('Error: window.intools.inbrowser not found');
+            return;
+        }
+
+        setLoading(true);
+        setLogs([]);
+        addLog('Starting Iframe Demo...');
+        addLog('Note: This will likely fail with timeout if the target URL is not accessible.');
+        addLog('Target: iframe#outer >> iframe#inner >> button.login');
+
+        try {
+            const result = await window.intools.inbrowser
+                .goto('https://container.iframe.test.web')
+                // Wait for button inside nested iframes
+                .wait("iframe#outer >> iframe#inner >> button.login")
+                // Click it
+                .click("iframe#outer >> iframe#inner >> button.login")
+                .run({ width: 1200, height: 800, show: true });
+
+            addLog(`Result: ${JSON.stringify(result)}`);
+        } catch (error: any) {
+            addLog(`Error: ${error.message}`);
+            // This is expected if the URL doesn't exist
+        } finally {
+            setLoading(false);
+        }
+    }
+
     return (
         <div className="module-container">
             <div className="module-header">
@@ -268,6 +331,44 @@ export default function InBrowserDemo() {
                             }}
                         >
                             Run P3 Features Demo
+                        </button>
+                    </div>
+                    <div style={{ flex: 1 }}>
+                        <p>Baidu Map Demo (User Request)</p>
+                        <button
+                            className="btn-primary"
+                            onClick={runBaiduMapDemo}
+                            disabled={loading}
+                            style={{
+                                padding: '8px 16px',
+                                background: '#E91E63',
+                                color: '#fff',
+                                border: 'none',
+                                borderRadius: '4px',
+                                cursor: loading ? 'not-allowed' : 'pointer',
+                                width: '100%'
+                            }}
+                        >
+                            Run Baidu Map Demo
+                        </button>
+                    </div>
+                    <div style={{ flex: 1 }}>
+                        <p>Iframe Demo (User Request)</p>
+                        <button
+                            className="btn-primary"
+                            onClick={runIframeDemo}
+                            disabled={loading}
+                            style={{
+                                padding: '8px 16px',
+                                background: '#9C27B0',
+                                color: '#fff',
+                                border: 'none',
+                                borderRadius: '4px',
+                                cursor: loading ? 'not-allowed' : 'pointer',
+                                width: '100%'
+                            }}
+                        >
+                            Run Iframe Demo
                         </button>
                     </div>
                 </div>
