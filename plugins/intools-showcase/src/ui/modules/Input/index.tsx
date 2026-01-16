@@ -2,6 +2,9 @@ import { useCallback, useEffect, useState } from 'react'
 import { PageHeader, Card, Button, CodeBlock } from '../../components'
 import { useIntools, useNotification } from '../../hooks'
 
+// 延迟函数
+const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms))
+
 export function InputModule() {
     const { input, dialog, system, permission, screen } = useIntools()
     const notify = useNotification()
@@ -16,6 +19,7 @@ export function InputModule() {
     const [busyAction, setBusyAction] = useState<string | null>(null)
     const [accessibilityTrusted, setAccessibilityTrusted] = useState<boolean | null>(null)
     const [isMacOS, setIsMacOS] = useState<boolean>(false)
+    const [scriptLog, setScriptLog] = useState<string[]>([])
 
     const runAction = useCallback(async (name: string, action: () => Promise<boolean>) => {
         setBusyAction(name)
@@ -169,6 +173,225 @@ export function InputModule() {
     // 模拟鼠标右键点击
     const handleSimulateMouseRightClick = async () => {
         await runSimulateAction('mouseRightClick', () => input.simulateMouseRightClick(mouseX, mouseY))
+    }
+
+    // WPS 自动化脚本：创建格式化文档
+    const runWpsAutoScript = async () => {
+        setBusyAction('wpsScript')
+        setScriptLog([])
+        const log = (msg: string) => setScriptLog(prev => [...prev, `${new Date().toLocaleTimeString()} - ${msg}`])
+
+        try {
+            const modKey = isMacOS ? 'command' : 'ctrl'
+
+            log('🚀 开始执行 WPS 自动化脚本...')
+            log('⏳ 请确保 WPS 文档窗口已打开并且光标在文档中')
+
+            // 步骤1: 输入标题（使用粘贴方式支持中文）
+            log('📝 步骤1: 输入标题')
+            await input.hideMainWindowPasteText('InTools 自动化演示文档')
+            await delay(300)
+
+            // 步骤2: 全选刚输入的标题
+            log('🔤 步骤2: 全选标题文字')
+            await input.simulateKeyboardTap('a', modKey)
+            await delay(200)
+
+            // 步骤3: 设置标题加粗
+            log('💪 步骤3: 设置加粗')
+            await input.simulateKeyboardTap('b', modKey)
+            await delay(200)
+
+            // 步骤4: 设置居中对齐
+            log('🎯 步骤4: 设置居中对齐')
+            await input.simulateKeyboardTap('e', modKey)
+            await delay(200)
+
+            // 步骤5: 移动到行尾，取消选中
+            log('➡️ 步骤5: 移动到行尾')
+            await input.simulateKeyboardTap('end')
+            await delay(200)
+
+            // 步骤6: 换行
+            log('↩️ 步骤6: 换行两次')
+            await input.simulateKeyboardTap('enter')
+            await delay(100)
+            await input.simulateKeyboardTap('enter')
+            await delay(200)
+
+            // 步骤7: 取消居中（恢复左对齐）
+            log('📐 步骤7: 恢复左对齐')
+            await input.simulateKeyboardTap('l', modKey)
+            await delay(200)
+
+            // 步骤8: 取消加粗
+            log('📝 步骤8: 取消加粗')
+            await input.simulateKeyboardTap('b', modKey)
+            await delay(200)
+
+            // 步骤9: 输入正文内容（使用粘贴方式支持中文）
+            log('✍️ 步骤9: 输入正文内容')
+            await input.hideMainWindowPasteText('这是由 InTools 自动生成的文档内容。')
+            await delay(300)
+
+            // 步骤10: 换行并继续输入
+            log('↩️ 步骤10: 换行并继续输入')
+            await input.simulateKeyboardTap('enter')
+            await delay(100)
+            await input.hideMainWindowPasteText('通过模拟按键 API，可以实现各种自动化操作。')
+            await delay(300)
+
+            // 步骤11: 换行
+            await input.simulateKeyboardTap('enter')
+            await delay(100)
+            await input.simulateKeyboardTap('enter')
+            await delay(100)
+
+            // 步骤12: 输入列表（使用粘贴方式支持中文）
+            log('📋 步骤12: 输入列表项目')
+            await input.hideMainWindowPasteText('功能特点：')
+            await delay(200)
+            await input.simulateKeyboardTap('enter')
+            await delay(100)
+            await input.hideMainWindowPasteText('1. 支持模拟键盘按键')
+            await delay(200)
+            await input.simulateKeyboardTap('enter')
+            await delay(100)
+            await input.hideMainWindowPasteText('2. 支持模拟鼠标操作')
+            await delay(200)
+            await input.simulateKeyboardTap('enter')
+            await delay(100)
+            await input.hideMainWindowPasteText('3. 跨平台兼容 macOS/Windows/Linux')
+            await delay(300)
+
+            // 步骤13: 换行并添加结束语
+            log('🏁 步骤13: 添加结束语')
+            await input.simulateKeyboardTap('enter')
+            await delay(100)
+            await input.simulateKeyboardTap('enter')
+            await delay(100)
+            const now = new Date().toLocaleString()
+            await input.hideMainWindowPasteText(`生成时间：${now}`)
+            await delay(300)
+
+            // 步骤14: 保存文档
+            log('💾 步骤14: 保存文档 (Ctrl+S)')
+            await input.simulateKeyboardTap('s', modKey)
+            await delay(500)
+
+            log('✅ 脚本执行完成！')
+            notify.success('WPS 自动化脚本执行完成')
+        } catch (error) {
+            log(`❌ 执行出错: ${error}`)
+            notify.error('脚本执行失败')
+            console.error(error)
+        } finally {
+            setBusyAction(null)
+        }
+    }
+
+    // WPS 快速插入表格脚本
+    const runWpsTableScript = async () => {
+        setBusyAction('wpsTableScript')
+        setScriptLog([])
+        const log = (msg: string) => setScriptLog(prev => [...prev, `${new Date().toLocaleTimeString()} - ${msg}`])
+
+        try {
+            const modKey = isMacOS ? 'command' : 'ctrl'
+
+            log('🚀 开始执行 WPS 表格插入脚本...')
+
+            // 输入表格标题（使用粘贴方式支持中文）
+            log('📝 输入表格标题')
+            await input.hideMainWindowPasteText('项目进度表')
+            await delay(200)
+            await input.simulateKeyboardTap('a', modKey)
+            await delay(100)
+            await input.simulateKeyboardTap('b', modKey)
+            await delay(100)
+            await input.simulateKeyboardTap('end')
+            await delay(100)
+            await input.simulateKeyboardTap('enter')
+            await delay(100)
+            await input.simulateKeyboardTap('enter')
+            await delay(100)
+            await input.simulateKeyboardTap('b', modKey) // 取消加粗
+            await delay(200)
+
+            // 模拟输入简易表格（使用 Tab 分隔，使用粘贴方式支持中文）
+            log('📊 输入表格内容')
+            const tableData = [
+                ['任务名称', '负责人', '状态', '完成度'],
+                ['需求分析', '张三', '已完成', '100%'],
+                ['UI设计', '李四', '进行中', '60%'],
+                ['前端开发', '王五', '待开始', '0%'],
+                ['后端开发', '赵六', '待开始', '0%']
+            ]
+
+            for (let i = 0; i < tableData.length; i++) {
+                const row = tableData[i]
+                for (let j = 0; j < row.length; j++) {
+                    await input.hideMainWindowPasteText(row[j])
+                    if (j < row.length - 1) {
+                        await delay(100)
+                        await input.simulateKeyboardTap('tab')
+                    }
+                    await delay(150)
+                }
+                await input.simulateKeyboardTap('enter')
+                await delay(150)
+            }
+
+            log('💾 保存文档')
+            await input.simulateKeyboardTap('s', modKey)
+            await delay(300)
+
+            log('✅ 表格插入完成！')
+            notify.success('表格插入脚本执行完成')
+        } catch (error) {
+            log(`❌ 执行出错: ${error}`)
+            notify.error('脚本执行失败')
+            console.error(error)
+        } finally {
+            setBusyAction(null)
+        }
+    }
+
+    // 快速格式化选中文本
+    const runQuickFormatScript = async () => {
+        setBusyAction('quickFormat')
+        setScriptLog([])
+        const log = (msg: string) => setScriptLog(prev => [...prev, `${new Date().toLocaleTimeString()} - ${msg}`])
+
+        try {
+            const modKey = isMacOS ? 'command' : 'ctrl'
+
+            log('🚀 开始快速格式化选中文本...')
+            log('⚠️ 请确保已在 WPS 中选中要格式化的文本')
+
+            // 加粗
+            log('💪 设置加粗')
+            await input.simulateKeyboardTap('b', modKey)
+            await delay(200)
+
+            // 斜体
+            log('📐 设置斜体')
+            await input.simulateKeyboardTap('i', modKey)
+            await delay(200)
+
+            // 下划线
+            log('➖ 设置下划线')
+            await input.simulateKeyboardTap('u', modKey)
+            await delay(200)
+
+            log('✅ 格式化完成！文本已设置为：加粗 + 斜体 + 下划线')
+            notify.success('快速格式化完成')
+        } catch (error) {
+            log(`❌ 执行出错: ${error}`)
+            notify.error('格式化失败')
+        } finally {
+            setBusyAction(null)
+        }
     }
 
     const handleOpenAccessibilitySettings = async () => {
@@ -433,7 +656,6 @@ console.log(\`鼠标位置: (\${pos.x}, \${pos.y})\`)`
                     <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
                         <Button
                             variant="secondary"
-                            size="small"
                             onClick={() => runSimulateAction('copy', () => input.simulateKeyboardTap('c', isMacOS ? 'command' : 'ctrl'))}
                             loading={busyAction === 'copy'}
                         >
@@ -441,7 +663,6 @@ console.log(\`鼠标位置: (\${pos.x}, \${pos.y})\`)`
                         </Button>
                         <Button
                             variant="secondary"
-                            size="small"
                             onClick={() => runSimulateAction('paste', () => input.simulateKeyboardTap('v', isMacOS ? 'command' : 'ctrl'))}
                             loading={busyAction === 'paste'}
                         >
@@ -449,7 +670,6 @@ console.log(\`鼠标位置: (\${pos.x}, \${pos.y})\`)`
                         </Button>
                         <Button
                             variant="secondary"
-                            size="small"
                             onClick={() => runSimulateAction('cut', () => input.simulateKeyboardTap('x', isMacOS ? 'command' : 'ctrl'))}
                             loading={busyAction === 'cut'}
                         >
@@ -457,7 +677,6 @@ console.log(\`鼠标位置: (\${pos.x}, \${pos.y})\`)`
                         </Button>
                         <Button
                             variant="secondary"
-                            size="small"
                             onClick={() => runSimulateAction('save', () => input.simulateKeyboardTap('s', isMacOS ? 'command' : 'ctrl'))}
                             loading={busyAction === 'save'}
                         >
@@ -465,7 +684,6 @@ console.log(\`鼠标位置: (\${pos.x}, \${pos.y})\`)`
                         </Button>
                         <Button
                             variant="secondary"
-                            size="small"
                             onClick={() => runSimulateAction('undo', () => input.simulateKeyboardTap('z', isMacOS ? 'command' : 'ctrl'))}
                             loading={busyAction === 'undo'}
                         >
@@ -473,7 +691,6 @@ console.log(\`鼠标位置: (\${pos.x}, \${pos.y})\`)`
                         </Button>
                         <Button
                             variant="secondary"
-                            size="small"
                             onClick={() => runSimulateAction('selectAll', () => input.simulateKeyboardTap('a', isMacOS ? 'command' : 'ctrl'))}
                             loading={busyAction === 'selectAll'}
                         >
@@ -481,7 +698,6 @@ console.log(\`鼠标位置: (\${pos.x}, \${pos.y})\`)`
                         </Button>
                         <Button
                             variant="secondary"
-                            size="small"
                             onClick={() => runSimulateAction('enter', () => input.simulateKeyboardTap('enter'))}
                             loading={busyAction === 'enter'}
                         >
@@ -489,7 +705,6 @@ console.log(\`鼠标位置: (\${pos.x}, \${pos.y})\`)`
                         </Button>
                         <Button
                             variant="secondary"
-                            size="small"
                             onClick={() => runSimulateAction('escape', () => input.simulateKeyboardTap('escape'))}
                             loading={busyAction === 'escape'}
                         >
@@ -509,6 +724,150 @@ console.log(\`鼠标位置: (\${pos.x}, \${pos.y})\`)`
                         <div><strong>Linux:</strong> 依赖 xdotool 工具，Wayland 环境可能受限。</div>
                         <div><strong>坐标系统:</strong> 鼠标坐标以整个屏幕左上角为原点，多显示器环境下需注意坐标计算。</div>
                     </div>
+                </Card>
+
+                {/* WPS 自动化脚本部分 */}
+                <div style={{ marginTop: '24px', marginBottom: '16px', fontWeight: 600, fontSize: '18px', color: 'var(--text-primary)' }}>
+                    📄 WPS 文档自动化脚本
+                </div>
+
+                <Card title="使用说明" icon="📖">
+                    <div style={{ display: 'grid', gap: '8px', color: 'var(--text-secondary)' }}>
+                        <div style={{ fontWeight: 500, color: 'var(--text-primary)' }}>操作步骤：</div>
+                        <div>1. 打开 WPS 文字，新建或打开一个文档</div>
+                        <div>2. 将光标放置在文档中你希望开始操作的位置</div>
+                        <div>3. 按 <kbd style={{ padding: '2px 6px', background: 'var(--bg-tertiary)', borderRadius: '4px', fontSize: '12px' }}>Alt+Space</kbd> 唤起 InTools</div>
+                        <div>4. 进入"输入控制"模块，点击下方任一脚本按钮</div>
+                        <div>5. InTools 会自动隐藏，脚本将在 WPS 中执行</div>
+                        <div style={{ marginTop: '8px', padding: '8px', background: 'var(--warning)', color: '#000', borderRadius: '6px', opacity: 0.8 }}>
+                            ⚠️ 脚本执行期间请勿操作键盘鼠标，否则可能干扰自动化流程
+                        </div>
+                    </div>
+                </Card>
+
+                <Card title="自动创建格式化文档" icon="📝" actions={
+                    <Button onClick={runWpsAutoScript} loading={busyAction === 'wpsScript'}>
+                        执行脚本
+                    </Button>
+                }>
+                    <div style={{ display: 'grid', gap: '8px', color: 'var(--text-secondary)' }}>
+                        <div>此脚本将自动执行以下操作：</div>
+                        <ul style={{ margin: '4px 0', paddingLeft: '20px', lineHeight: 1.8 }}>
+                            <li>输入标题并设置<strong>加粗、居中</strong></li>
+                            <li>输入正文段落</li>
+                            <li>创建功能列表</li>
+                            <li>添加时间戳</li>
+                            <li>自动保存文档</li>
+                        </ul>
+                        <div style={{ fontSize: '12px', color: 'var(--text-tertiary)' }}>
+                            预计执行时间：约 8-10 秒
+                        </div>
+                    </div>
+                </Card>
+
+                <Card title="快速插入表格" icon="📊" actions={
+                    <Button onClick={runWpsTableScript} loading={busyAction === 'wpsTableScript'}>
+                        执行脚本
+                    </Button>
+                }>
+                    <div style={{ display: 'grid', gap: '8px', color: 'var(--text-secondary)' }}>
+                        <div>此脚本将自动插入一个项目进度表：</div>
+                        <ul style={{ margin: '4px 0', paddingLeft: '20px', lineHeight: 1.8 }}>
+                            <li>输入表格标题（加粗）</li>
+                            <li>使用 Tab 分隔输入表格数据</li>
+                            <li>包含 5 行 4 列的示例数据</li>
+                            <li>自动保存文档</li>
+                        </ul>
+                        <div style={{ fontSize: '12px', color: 'var(--text-tertiary)' }}>
+                            💡 提示：输入后可以选中表格区域，使用 WPS 的"文本转表格"功能
+                        </div>
+                    </div>
+                </Card>
+
+                <Card title="快速格式化选中文本" icon="✨" actions={
+                    <Button onClick={runQuickFormatScript} loading={busyAction === 'quickFormat'}>
+                        执行脚本
+                    </Button>
+                }>
+                    <div style={{ display: 'grid', gap: '8px', color: 'var(--text-secondary)' }}>
+                        <div><strong>使用前请先在 WPS 中选中要格式化的文本</strong></div>
+                        <div>此脚本将对选中文本应用：</div>
+                        <ul style={{ margin: '4px 0', paddingLeft: '20px' }}>
+                            <li><strong>加粗</strong> (Ctrl+B)</li>
+                            <li><em>斜体</em> (Ctrl+I)</li>
+                            <li><u>下划线</u> (Ctrl+U)</li>
+                        </ul>
+                    </div>
+                </Card>
+
+                {/* 脚本执行日志 */}
+                {scriptLog.length > 0 && (
+                    <Card title="执行日志" icon="📋" actions={
+                        <Button variant="secondary" onClick={() => setScriptLog([])}>
+                            清空日志
+                        </Button>
+                    }>
+                        <div style={{
+                            maxHeight: '200px',
+                            overflowY: 'auto',
+                            padding: '8px 12px',
+                            background: 'var(--bg-tertiary)',
+                            borderRadius: '6px',
+                            fontFamily: 'monospace',
+                            fontSize: '12px',
+                            lineHeight: 1.8
+                        }}>
+                            {scriptLog.map((log, index) => (
+                                <div key={index} style={{
+                                    color: log.includes('❌') ? 'var(--error)' :
+                                           log.includes('✅') ? 'var(--success)' :
+                                           log.includes('⚠️') ? 'var(--warning)' :
+                                           'var(--text-secondary)'
+                                }}>
+                                    {log}
+                                </div>
+                            ))}
+                        </div>
+                    </Card>
+                )}
+
+                <Card title="自动化脚本代码示例" icon="💻">
+                    <CodeBlock>{`// WPS 自动化脚本示例
+async function wpsAutoScript() {
+  const modKey = isMacOS ? 'command' : 'ctrl';
+
+  // 1. 输入中文标题（使用 Paste 方式，支持中文）
+  await input.hideMainWindowPasteText('我的文档标题');
+  await delay(300);
+
+  // 2. 全选并加粗
+  await input.simulateKeyboardTap('a', modKey);
+  await delay(200);
+  await input.simulateKeyboardTap('b', modKey);
+  await delay(200);
+
+  // 3. 设置居中
+  await input.simulateKeyboardTap('e', modKey);
+  await delay(200);
+
+  // 4. 移动到行尾，换行
+  await input.simulateKeyboardTap('end');
+  await delay(100);
+  await input.simulateKeyboardTap('enter');
+  await delay(100);
+
+  // 5. 输入正文（使用 Paste 方式，支持中文）
+  await input.hideMainWindowPasteText('这是正文内容...');
+  await delay(300);
+
+  // 6. 保存文档
+  await input.simulateKeyboardTap('s', modKey);
+}
+
+// ⚠️ 重要提示：
+// - hideMainWindowPasteText: 通过剪贴板粘贴，支持中文
+// - hideMainWindowTypeString: 模拟键盘输入，仅支持英文
+// - 每个操作之间需要适当的延迟 (100-300ms)`}</CodeBlock>
                 </Card>
             </div>
         </div>
