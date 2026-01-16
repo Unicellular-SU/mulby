@@ -142,18 +142,67 @@ interface InBrowser {
 }
 ```
 
-## 5. 开发计划 (Phases)
+## 5. 功能状态与开发路线图 (Feature Status & Roadmap)
 
-1.  **Phase 1: 基础框架**
-    *   实现 IPC 通路。
-    *   实现 `goto`, `evaluate`, `run`。
-    *   实现简单的窗口创建与销毁。
-2.  **Phase 2: 交互增强**
-    *   实现 `click` (基于坐标计算)。
-    *   实现 `type`/`press` (InputEvent)。
-3.  **Phase 3: 高级功能**
-    *   `wait`, `when` (DOM 轮询)。
-    *   `cookies`, `download`。
-4.  **Phase 4: 优化与测试**
-    *   窗口复用池。
-    *   完善错误处理（超时、元素未找到）。
+### 5.1 已实现功能 (Implemented)
+
+| 功能 | 描述 | 状态 |
+| :--- | :--- | :--- |
+| `goto` | 导航到 URL，支持 headers 和超时 | ✅ Done |
+| `show` / `hide` | 显示/隐藏窗口 | ✅ Done |
+| `viewport` | 设置视口大小 | ✅ Done |
+| `click` | 点击元素 (基于坐标) | ✅ Done |
+| `type` | 输入文本 (逐字输入) | ✅ Done |
+| `press` | 模拟按键 | ✅ Done |
+| `evaluate` | 执行 JS 脚本 (支持传参) | ✅ Done |
+| `wait` | 等待指定时间 | ✅ Done |
+| `when` | 等待元素出现 | ✅ Done |
+| `css` | 注入 CSS 样式 | ✅ Done |
+| `cookies` | 获取 Cookies | ✅ Done |
+| `pdf` | 打印为 PDF | ✅ Done |
+| `run` | 执行操作队列 | ✅ Done |
+
+### 5.2 待实现功能 (To Be Implemented) - 优先级排序
+
+以下功能尚未实现，按照开发优先级排序：
+
+#### 🔴 Priority 1: High (核心交互)
+这些功能是日常自动化任务中非常高频使用的，缺失会显著影响可用性。
+
+1.  **`value(selector, value)`**
+    *   **描述**: 直接设置 Input/Textarea 的值。
+    *   **理由**: 比 `type` 更快、更稳定，适用于填表。
+2.  **`check(selector, checked)`**
+    *   **描述**: 勾选/取消勾选 Checkbox 或 Radio。
+    *   **理由**: 这种交互通过点击模拟可能不稳定，直接设置状态更可靠。
+3.  **`scroll(selector, y)` / `scroll(y)`**
+    *   **描述**: 滚动页面或特定元素。
+    *   **理由**: 很多懒加载页面需要滚动才能触发内容加载或让元素可见。
+4.  **`devTools(mode)`**
+    *   **描述**: 打开开发者工具 (`right`, `bottom`, `undocked`, `detach`)。
+    *   **理由**: 调试自动化脚本时的刚需。
+
+#### 🟡 Priority 2: Medium (常用增强)
+1.  **`useragent(userAgent)`**
+    *   **描述**: 设置专属 User-Agent。
+    *   **理由**: 虽然 `goto` header 可以支持，但独立方法更符合 API 直觉。
+2.  **`focus(selector)`**
+    *   **描述**: 使元素获得焦点。
+    *   **理由**: 某些交互（如触发 focus 事件）需要显式聚焦，或者配合 `type` 使用。
+3.  **`end()`**
+    *   **描述**: 强制结束并销毁浏览器实例。
+    *   **理由**: 虽然 `run` 结束通常会处理，但有时需要显式提前结束释放资源。
+4.  **`paste(text)`**
+    *   **描述**: 模拟粘贴文本或图片。
+    *   **理由**: 某些编辑器禁止直接输入，必须粘贴。
+
+#### 🟢 Priority 3: Low (低频/高级)
+1.  **`file(selector, payload)`**
+    *   **描述**: 处理文件上传控件。
+    *   **理由**: 相对复杂，使用场景不如文本交互多。
+2.  **`device(deviceName)`**
+    *   **描述**: 模拟特定设备（如 iPhone X）的 UA 和视口。
+    *   **理由**: 主要用于移动端页面测试，PC 端自动化场景较少。
+3.  **`mousedown` / `mouseup`**
+    *   **描述**: 细粒度的鼠标控制。
+    *   **理由**: 大多数场景 `click` 足够，极少数拖拽场景需要。

@@ -178,6 +178,64 @@ export class InBrowserWindow {
                 throw new Error(`Timeout waiting for element: ${whenSelector}`);
                 break;
 
+            case 'value':
+                // args: [selector, val]
+                const [valueSelector, val] = args;
+                await contents.executeJavaScript(`
+                    (function() {
+                        const el = document.querySelector('${valueSelector}');
+                        if (!el) throw new Error('Element not found: ${valueSelector}');
+                        el.value = '${val}';
+                        el.dispatchEvent(new Event('input', { bubbles: true }));
+                        el.dispatchEvent(new Event('change', { bubbles: true }));
+                    })()
+                `);
+                break;
+
+            case 'check':
+                // args: [selector, checked]
+                const [checkSelector, checked] = args;
+                await contents.executeJavaScript(`
+                    (function() {
+                        const el = document.querySelector('${checkSelector}');
+                        if (!el) throw new Error('Element not found: ${checkSelector}');
+                        if (el.type !== 'checkbox' && el.type !== 'radio') throw new Error('Element is not checkbox or radio: ${checkSelector}');
+                        el.checked = ${checked};
+                        el.dispatchEvent(new Event('click', { bubbles: true }));
+                        el.dispatchEvent(new Event('change', { bubbles: true }));
+                    })()
+                `);
+                break;
+
+            case 'scroll':
+                // args: [selector | y, y]
+                const [arg1, arg2] = args;
+                if (typeof arg1 === 'number') {
+                    // Global scroll: scroll(y)
+                    await contents.executeJavaScript(`window.scrollTo(0, ${arg1})`);
+                } else if (typeof arg1 === 'string') {
+                    // Element scroll: scroll(selector, y)
+                    const scrollY = typeof arg2 === 'number' ? arg2 : 0;
+                    await contents.executeJavaScript(`
+                        (function() {
+                            const el = document.querySelector('${arg1}');
+                            if (!el) throw new Error('Element not found: ${arg1}');
+                            el.scrollTop = ${scrollY};
+                        })()
+                     `);
+                }
+                break;
+
+            case 'devTools':
+                // args: [mode]
+                const [mode] = args;
+                if (mode) {
+                    contents.openDevTools({ mode: mode });
+                } else {
+                    contents.openDevTools();
+                }
+                break;
+
             case 'cookies':
                 // args: [name]
                 const [cookieName] = args;

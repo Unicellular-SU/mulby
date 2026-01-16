@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 
 
 export default function InBrowserDemo() {
@@ -51,7 +51,53 @@ export default function InBrowserDemo() {
         } finally {
             setLoading(false);
         }
-    };
+    }
+
+    const runP1Demo = async () => {
+        if (!window.intools?.inbrowser) {
+            addLog('Error: window.intools.inbrowser not found');
+            return;
+        }
+
+        setLoading(true);
+        setLogs([]);
+        addLog('Starting Priority 1 Features Demo...');
+
+        try {
+            addLog('Chain: goto(google) -> devTools -> value(search) -> scroll(y) -> evaluate(add check) -> check -> wait');
+
+            const result = await window.intools.inbrowser
+                .goto('https://www.google.com')
+                .show()
+                .devTools('right') // Test devTools
+                .wait(1000)
+                .value('textarea[name="q"], input[name="q"]', 'Priority 1 Features Test') // Test value
+                .scroll(500) // Test global scroll
+                .evaluate((() => {
+                    // Inject a checkbox to test check()
+                    const div = document.createElement('div');
+                    div.style.position = 'fixed';
+                    div.style.top = '100px';
+                    div.style.left = '100px';
+                    div.style.zIndex = '9999';
+                    div.style.background = 'white';
+                    div.style.padding = '20px';
+                    div.innerHTML = '<input type="checkbox" id="test-check"> Test Checkbox';
+                    document.body.appendChild(div);
+                }).toString())
+                .wait(1000)
+                .check('#test-check', true) // Test check
+                .wait(2000)
+                .run({ width: 1000, height: 800, show: true });
+
+            addLog(`Result: ${JSON.stringify(result)}`);
+        } catch (error: any) {
+            addLog(`Error: ${error.message}`);
+            console.error(error);
+        } finally {
+            setLoading(false);
+        }
+    }
 
     return (
         <div className="module-container">
@@ -60,23 +106,45 @@ export default function InBrowserDemo() {
             </div>
 
             <div className="module-content">
-                <div className="control-panel" style={{ padding: '20px', background: 'var(--bg-secondary)', borderRadius: '8px', marginBottom: '20px' }}>
-                    <p>This demo will open a hidden Google window, search for "uTools", change background color, and return page info.</p>
-                    <button
-                        className="btn-primary"
-                        onClick={runDemo}
-                        disabled={loading}
-                        style={{
-                            padding: '8px 16px',
-                            background: 'var(--accent)',
-                            color: '#fff',
-                            border: 'none',
-                            borderRadius: '4px',
-                            cursor: loading ? 'not-allowed' : 'pointer'
-                        }}
-                    >
-                        {loading ? 'Running...' : 'Run Automation'}
-                    </button>
+                <div className="control-panel" style={{ padding: '20px', background: 'var(--bg-secondary)', borderRadius: '8px', marginBottom: '20px', display: 'flex', gap: '10px' }}>
+                    <div style={{ flex: 1 }}>
+                        <p>Standard Demo: Search Google & Get Title</p>
+                        <button
+                            className="btn-primary"
+                            onClick={runDemo}
+                            disabled={loading}
+                            style={{
+                                padding: '8px 16px',
+                                background: 'var(--accent)',
+                                color: '#fff',
+                                border: 'none',
+                                borderRadius: '4px',
+                                cursor: loading ? 'not-allowed' : 'pointer',
+                                width: '100%'
+                            }}
+                        >
+                            Run Standard Demo
+                        </button>
+                    </div>
+                    <div style={{ flex: 1 }}>
+                        <p>Priority 1 Demo: Value, Check, Scroll, DevTools</p>
+                        <button
+                            className="btn-primary"
+                            onClick={runP1Demo}
+                            disabled={loading}
+                            style={{
+                                padding: '8px 16px',
+                                background: '#2196F3',
+                                color: '#fff',
+                                border: 'none',
+                                borderRadius: '4px',
+                                cursor: loading ? 'not-allowed' : 'pointer',
+                                width: '100%'
+                            }}
+                        >
+                            Run P1 Features Demo
+                        </button>
+                    </div>
                 </div>
 
                 <div className="logs-panel" style={{

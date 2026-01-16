@@ -59,6 +59,28 @@ export class InBrowserBuilder {
         return this;
     }
 
+    public value = (selector: string, val: string): this => {
+        this.queue.push({ type: 'value', args: [selector, val] });
+        return this;
+    }
+
+    public check = (selector: string, checked: boolean): this => {
+        this.queue.push({ type: 'check', args: [selector, checked] });
+        return this;
+    }
+
+    public scroll = (selector: string | number, y?: number): this => {
+        // If first arg is number, it's global scroll y, second arg ignored
+        // If first arg is string, it's selector, second arg is y
+        this.queue.push({ type: 'scroll', args: [selector, y] });
+        return this;
+    }
+
+    public devTools = (mode?: 'right' | 'bottom' | 'undocked' | 'detach'): this => {
+        this.queue.push({ type: 'devTools', args: [mode] });
+        return this;
+    }
+
     public pdf = (options?: Electron.PrintToPDFOptions, savePath?: string): this => {
         this.queue.push({ type: 'pdf', args: [options, savePath] });
         return this;

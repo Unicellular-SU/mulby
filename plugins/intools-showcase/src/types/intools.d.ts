@@ -419,6 +419,10 @@ interface IntoolsAPI {
   onWindowStateChange?(callback: (state: { isMaximized: boolean }) => void): void
   inbrowser: {
     goto: (url: string, headers?: Record<string, string>, timeout?: number) => any
+    value: (selector: string, val: string) => any
+    check: (selector: string, checked: boolean) => any
+    scroll: (selector: string | number, y?: number) => any
+    devTools: (mode?: 'right' | 'bottom' | 'undocked' | 'detach') => any
   }
 }
 
