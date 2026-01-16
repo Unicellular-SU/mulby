@@ -161,28 +161,30 @@ interface InBrowser {
 | `cookies` | 获取 Cookies | ✅ Done |
 | `pdf` | 打印为 PDF | ✅ Done |
 | `run` | 执行操作队列 | ✅ Done |
+| `value` | 设置输入框值 | ✅ Done |
+| `check` | 勾选/取消勾选 | ✅ Done |
+| `scroll` | 页面滚动 | ✅ Done |
+| `devTools` | 打开开发者工具 | ✅ Done |
 
 ### 5.2 待实现功能 (To Be Implemented) - 优先级排序
 
 以下功能尚未实现，按照开发优先级排序：
 
-#### 🔴 Priority 1: High (核心交互)
-这些功能是日常自动化任务中非常高频使用的，缺失会显著影响可用性。
+#### � Priority 2: Medium (常用增强)
+1.  **`useragent(userAgent)`**
+    *   **描述**: 设置专属 User-Agent。
+    *   **理由**: 虽然 `goto` header 可以支持，但独立方法更符合 API 直觉。
+2.  **`focus(selector)`**
+    *   **描述**: 使元素获得焦点。
+    *   **理由**: 某些交互（如触发 focus 事件）需要显式聚焦，或者配合 `type` 使用。
+3.  **`end()`**
+    *   **描述**: 强制结束并销毁浏览器实例。
+    *   **理由**: 虽然 `run` 结束通常会处理，但有时需要显式提前结束释放资源。
+4.  **`paste(text)`**
+    *   **描述**: 模拟粘贴文本或图片。
+    *   **理由**: 某些编辑器禁止直接输入，必须粘贴。
 
-1.  **`value(selector, value)`**
-    *   **描述**: 直接设置 Input/Textarea 的值。
-    *   **理由**: 比 `type` 更快、更稳定，适用于填表。
-2.  **`check(selector, checked)`**
-    *   **描述**: 勾选/取消勾选 Checkbox 或 Radio。
-    *   **理由**: 这种交互通过点击模拟可能不稳定，直接设置状态更可靠。
-3.  **`scroll(selector, y)` / `scroll(y)`**
-    *   **描述**: 滚动页面或特定元素。
-    *   **理由**: 很多懒加载页面需要滚动才能触发内容加载或让元素可见。
-4.  **`devTools(mode)`**
-    *   **描述**: 打开开发者工具 (`right`, `bottom`, `undocked`, `detach`)。
-    *   **理由**: 调试自动化脚本时的刚需。
-
-#### 🟡 Priority 2: Medium (常用增强)
+#### � Priority 3: Low (低频/高级)
 1.  **`useragent(userAgent)`**
     *   **描述**: 设置专属 User-Agent。
     *   **理由**: 虽然 `goto` header 可以支持，但独立方法更符合 API 直觉。

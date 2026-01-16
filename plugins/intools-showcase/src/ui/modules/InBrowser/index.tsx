@@ -99,6 +99,50 @@ export default function InBrowserDemo() {
         }
     }
 
+    const runP2Demo = async () => {
+        if (!window.intools?.inbrowser) {
+            addLog('Error: window.intools.inbrowser not found');
+            return;
+        }
+
+        setLoading(true);
+        setLogs([]);
+        addLog('Starting Priority 2 Features Demo...');
+
+        try {
+            addLog('Chain: useragent(CustomUA) -> goto(google) -> focus(search) -> paste(P2 Test) -> evaluate(get UA) -> wait -> end');
+
+            const customUA = 'Mozilla/5.0 (Priority2Test/1.0) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
+
+            const result = await window.intools.inbrowser
+                .useragent(customUA) // Test useragent
+                .goto('https://www.google.com')
+                .show()
+                .wait(1000)
+                .focus('textarea[name="q"], input[name="q"]') // Test focus
+                .wait(500)
+                .paste('Priority 2 Features Test') // Test paste
+                .wait(1000)
+                .evaluate((() => {
+                    return {
+                        ua: navigator.userAgent,
+                        value: (document.querySelector('textarea[name="q"], input[name="q"]') as any)?.value
+                    };
+                }).toString())
+                .wait(2000)
+                .end() // Test end
+                .run({ width: 1000, height: 800, show: true });
+
+            addLog(`Result: ${JSON.stringify(result)}`);
+            addLog('Browser should be closed manually via .end()');
+        } catch (error: any) {
+            addLog(`Error: ${error.message}`);
+            console.error(error);
+        } finally {
+            setLoading(false);
+        }
+    }
+
     return (
         <div className="module-container">
             <div className="module-header">
@@ -143,6 +187,25 @@ export default function InBrowserDemo() {
                             }}
                         >
                             Run P1 Features Demo
+                        </button>
+                    </div>
+                    <div style={{ flex: 1 }}>
+                        <p>Priority 2: UserAgent, Focus, Paste, End</p>
+                        <button
+                            className="btn-primary"
+                            onClick={runP2Demo}
+                            disabled={loading}
+                            style={{
+                                padding: '8px 16px',
+                                background: '#9C27B0',
+                                color: '#fff',
+                                border: 'none',
+                                borderRadius: '4px',
+                                cursor: loading ? 'not-allowed' : 'pointer',
+                                width: '100%'
+                            }}
+                        >
+                            Run P2 Features Demo
                         </button>
                     </div>
                 </div>

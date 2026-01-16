@@ -14,6 +14,11 @@ export class InBrowserBuilder {
         return this;
     }
 
+    public useragent = (ua: string): this => {
+        this.queue.push({ type: 'useragent', args: [ua] });
+        return this;
+    }
+
     public click = (selector: string): this => {
         this.queue.push({ type: 'click', args: [selector] });
         return this;
@@ -81,6 +86,21 @@ export class InBrowserBuilder {
         return this;
     }
 
+    public focus = (selector: string): this => {
+        this.queue.push({ type: 'focus', args: [selector] });
+        return this;
+    }
+
+    public paste = (text: string): this => {
+        this.queue.push({ type: 'paste', args: [text] });
+        return this;
+    }
+
+    public end = (): this => {
+        this.queue.push({ type: 'end', args: [] });
+        return this;
+    }
+
     public pdf = (options?: Electron.PrintToPDFOptions, savePath?: string): this => {
         this.queue.push({ type: 'pdf', args: [options, savePath] });
         return this;
@@ -118,8 +138,35 @@ export class InBrowserBuilder {
     }
 }
 
+// Expose all methods that can start a chain
 export const inbrowser = {
-    goto: (url: string, headers?: Record<string, string>, timeout?: number) => {
-        return new InBrowserBuilder().goto(url, headers, timeout);
-    },
+    // Navigation
+    goto: (url: string, headers?: Record<string, string>, timeout?: number) => new InBrowserBuilder().goto(url, headers, timeout),
+
+    // Configuration / Setup
+    useragent: (ua: string) => new InBrowserBuilder().useragent(ua),
+    viewport: (width: number, height: number) => new InBrowserBuilder().viewport(width, height),
+    show: () => new InBrowserBuilder().show(),
+    hide: () => new InBrowserBuilder().hide(),
+    devTools: (mode?: 'right' | 'bottom' | 'undocked' | 'detach') => new InBrowserBuilder().devTools(mode),
+
+    // Direct Actions (less common to start with, but supported)
+    click: (selector: string) => new InBrowserBuilder().click(selector),
+    type: (selector: string, text: string) => new InBrowserBuilder().type(selector, text),
+    value: (selector: string, val: string) => new InBrowserBuilder().value(selector, val),
+    check: (selector: string, checked: boolean) => new InBrowserBuilder().check(selector, checked),
+    focus: (selector: string) => new InBrowserBuilder().focus(selector),
+    paste: (text: string) => new InBrowserBuilder().paste(text),
+    press: (key: string, modifiers?: string[]) => new InBrowserBuilder().press(key, modifiers),
+    scroll: (selector: string | number, y?: number) => new InBrowserBuilder().scroll(selector, y),
+
+    // Data / Execution
+    evaluate: (func: string | Function, ...params: any[]) => new InBrowserBuilder().evaluate(func, ...params),
+    cookies: (name?: string) => new InBrowserBuilder().cookies(name),
+    pdf: (options?: Electron.PrintToPDFOptions, savePath?: string) => new InBrowserBuilder().pdf(options, savePath),
+    wait: (ms: number) => new InBrowserBuilder().wait(ms),
+    when: (selector: string) => new InBrowserBuilder().when(selector),
+
+    // Ending (makes no sense to start with end, but for completeness)
+    end: () => new InBrowserBuilder().end(),
 };

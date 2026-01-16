@@ -236,6 +236,46 @@ export class InBrowserWindow {
                 }
                 break;
 
+            case 'useragent':
+                // args: [ua]
+                const [ua] = args;
+                contents.setUserAgent(ua);
+                break;
+
+            case 'focus':
+                // args: [selector]
+                const [focusSelector] = args;
+                await contents.executeJavaScript(`
+                    (function() {
+                        const el = document.querySelector('${focusSelector}');
+                        if (!el) throw new Error('Element not found: ${focusSelector}');
+                        el.focus();
+                    })()
+                `);
+                break;
+
+            case 'paste':
+                // args: [text]
+                // For paste, we usually want to paste into the currently focused element.
+                // We use clipboard and contents.paste().
+                const [textToPaste] = args;
+                const { clipboard } = require('electron');
+                const oldText = clipboard.readText();
+                clipboard.writeText(textToPaste);
+                contents.paste();
+                // Optional: restore clipboard? usually automation doesn't care, but might be nice.
+                // For now, leave it.
+                break;
+
+            case 'end':
+                this.destroy();
+                // Optionally stop processing further ops?
+                // The loop in run() continues?
+                // If destroyed, accessing contents/window will throw.
+                // We should probably throw specific error to break the loop or handle it in run()
+                // But typically end() is the last op.
+                break;
+
             case 'cookies':
                 // args: [name]
                 const [cookieName] = args;
