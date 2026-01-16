@@ -1,10 +1,11 @@
-
+import { BrowserWindow, session } from 'electron';
 import { InBrowserWindow } from './InBrowserWindow';
-import { InBrowserRunPayload, InBrowserOptions } from '../../shared/types/inbrowser';
+import { InBrowserRunPayload, InBrowserOptions, InBrowserInstance } from '../../shared/types/inbrowser';
 
 export class InBrowserManager {
     private static instance: InBrowserManager;
     private windows: Map<number, InBrowserWindow> = new Map();
+    private proxyConfig: Electron.ProxyConfig | null = null;
 
     private constructor() { }
 
@@ -38,6 +39,11 @@ export class InBrowserManager {
             browserWindow.window.on('closed', () => {
                 this.windows.delete(browserWindow.id);
             });
+
+            // Apply proxy if set
+            if (this.proxyConfig) {
+                await browserWindow.window.webContents.session.setProxy(this.proxyConfig);
+            }
         }
 
         // Execute Queue
@@ -53,8 +59,16 @@ export class InBrowserManager {
             // We need to construct this InBrowserInstance object.
 
             if (!browserWindow.window.isDestroyed()) {
-                // For now, adhering to uTools behavior of returning the ID.
-                return [...result, { id: browserWindow.id }];
+                const instanceInfo: InBrowserInstance = {
+                    id: browserWindow.id,
+                    url: browserWindow.window.webContents.getURL(),
+                    title: browserWindow.window.getTitle(),
+                    width: browserWindow.window.getBounds().width,
+                    height: browserWindow.window.getBounds().height,
+                    x: browserWindow.window.getBounds().x,
+                    y: browserWindow.window.getBounds().y
+                };
+                return [...result, instanceInfo];
             }
 
             return result;
@@ -62,5 +76,40 @@ export class InBrowserManager {
         } catch (e) {
             throw e;
         }
+    }
+
+    public getIdleInBrowsers(): InBrowserInstance[] {
+        const idle: InBrowserInstance[] = [];
+        for (const win of this.windows.values()) {
+            if (!win.window.isDestroyed() && !win.window.isVisible()) {
+                idle.push({
+                    id: win.id,
+                    url: win.window.webContents.getURL(),
+                    title: win.window.getTitle(),
+                    width: win.window.getBounds().width,
+                    height: win.window.getBounds().height,
+                    x: win.window.getBounds().x,
+                    y: win.window.getBounds().y
+                });
+            }
+        }
+        return idle;
+    }
+
+    public async setInBrowserProxy(config: Electron.ProxyConfig): Promise<boolean> {
+        this.proxyConfig = config;
+        // Apply to existing windows? uTools doc doesn't specify, but usually "set proxy" implies future or global.
+        // Let's apply to all existing active windows for consistency.
+        for (const win of this.windows.values()) {
+            if (!win.window.isDestroyed()) {
+                await win.window.webContents.session.setProxy(config);
+            }
+        }
+        return true;
+    }
+
+    public async clearInBrowserCache(): Promise<boolean> {
+        await session.defaultSession.clearCache();
+        return true;
     }
 }

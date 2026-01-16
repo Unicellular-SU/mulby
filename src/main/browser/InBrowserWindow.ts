@@ -118,6 +118,12 @@ export class InBrowserWindow {
                 break;
             }
 
+            case 'css': {
+                const [cssString] = args;
+                await contents.insertCSS(cssString);
+                break;
+            }
+
 
             case 'evaluate':
             case 'when': // 'when' also uses simple evaluation if passed a function string
@@ -321,6 +327,31 @@ export class InBrowserWindow {
                 const { clipboard } = require('electron');
                 clipboard.writeText(textToPaste);
                 contents.paste();
+                break;
+            }
+
+            case 'press': {
+                const [key, modifiers] = args;
+                // Simple parsing for key. Node/Electron accelerator format vs sendInputEvent
+                // sendInputEvent accepts `keyCode` as char for simple, or special keys.
+                // Key codes: https://www.electronjs.org/docs/latest/api/web-contents#contentssendinputeventinput
+                // For simplified 'press', we treat 'key' as the character or key name.
+                // Modifiers need mapping.
+                const mods = (modifiers || []).map((m: string) => {
+                    if (m === 'ctrl') return 'control';
+                    if (m === 'cmd' || m === 'command') return 'meta';
+                    return m;
+                }) as ('shift' | 'control' | 'alt' | 'meta' | 'isKeypad' | 'isAutoRepeat' | 'leftButtonDown' | 'middleButtonDown' | 'rightButtonDown' | 'capsLock' | 'numLock' | 'left' | 'right' | 'command')[];
+
+                // Check if key is a single char or special key
+                // For simplicity, we send char event for single chars, and keyDown/Up for others
+                // Actually, correct flow is keyDown -> char (if printable) -> keyUp
+
+                await contents.sendInputEvent({ type: 'keyDown', keyCode: key, modifiers: mods });
+                if (key.length === 1) {
+                    await contents.sendInputEvent({ type: 'char', keyCode: key, modifiers: mods });
+                }
+                await contents.sendInputEvent({ type: 'keyUp', keyCode: key, modifiers: mods });
                 break;
             }
 
@@ -550,6 +581,18 @@ export class InBrowserWindow {
                     })()
                 `);
                 results.push(mdContent);
+                break;
+            }
+
+            case 'pdf': {
+                const [pdfOptions, pdfSavePath] = args;
+                const data = await contents.printToPDF(pdfOptions || {});
+                if (pdfSavePath) {
+                    const fs = require('fs');
+                    await fs.promises.writeFile(pdfSavePath, data);
+                } else {
+                    results.push(data); // Returns Buffer
+                }
                 break;
             }
 

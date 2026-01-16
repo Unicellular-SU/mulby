@@ -336,6 +336,54 @@ export default function InBrowserDemo() {
         }
     }
 
+    const runFinalGapDemo = async () => {
+        if (!window.intools?.inbrowser) {
+            addLog('Error: window.intools.inbrowser not found');
+            return;
+        }
+
+        setLoading(true);
+        setLogs([]);
+        addLog('Starting Final Gap Features Demo...');
+
+        try {
+            // Test Manager Methods
+            addLog('Testing Manager Methods...');
+            const idles = await window.intools.inbrowser.getIdleInBrowsers();
+            addLog(`Idle Windows: ${idles.length}`);
+
+            await window.intools.inbrowser.clearInBrowserCache();
+            addLog('Cache cleared');
+
+            // Test Ops
+            const downloadsPath = await window.intools.system.getPath('downloads');
+            const savePath = `${downloadsPath}/intools-test-${Date.now()}.pdf`;
+
+            addLog(`Chain: goto(google) -> css(bg=blue) -> press(A) -> pdf(${savePath}) -> end`);
+            const result = await window.intools.inbrowser
+                .goto('https://www.google.com')
+                .show()
+                .wait(1000)
+                .css('body { background: #e3f2fd !important; }') // Test CSS
+                .wait(500)
+                .focus('textarea[name="q"], input[name="q"]')
+                .press('A', ['shift']) // Test Press with modifier
+                .wait(500)
+                .pdf({ printBackground: true }, savePath) // Test PDF with save path
+                .end()
+                .run({ width: 800, height: 600, show: true });
+
+            addLog(`PDF Saved to: ${savePath}`);
+            addLog(`Result: ${JSON.stringify(result.map((r: any) => (r && r.length > 100) ? '[Big Data]' : r))}`);
+
+        } catch (error: any) {
+            addLog(`Error: ${error.message}`);
+            console.error(error);
+        } finally {
+            setLoading(false);
+        }
+    }
+
     return (
         <div className="module-container">
             <div className="module-header">
@@ -494,6 +542,25 @@ export default function InBrowserDemo() {
                             }}
                         >
                             Run New Features Demo
+                        </button>
+                    </div>
+                    <div style={{ flex: 1 }}>
+                        <p>Final Gap Features (css, press, pdf, manager)</p>
+                        <button
+                            className="btn-primary"
+                            onClick={runFinalGapDemo}
+                            disabled={loading}
+                            style={{
+                                padding: '8px 16px',
+                                background: '#607D8B',
+                                color: '#fff',
+                                border: 'none',
+                                borderRadius: '4px',
+                                cursor: loading ? 'not-allowed' : 'pointer',
+                                width: '100%'
+                            }}
+                        >
+                            Run Final Gap Demo
                         </button>
                     </div>
                 </div>

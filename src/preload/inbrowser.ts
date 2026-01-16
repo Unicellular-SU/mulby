@@ -277,9 +277,14 @@ export const inbrowser = {
     removeCookies: (name: string) => new InBrowserBuilder().removeCookies(name),
     clearCookies: (url?: string) => new InBrowserBuilder().clearCookies(url),
     pdf: (options?: Electron.PrintToPDFOptions, savePath?: string) => new InBrowserBuilder().pdf(options, savePath),
-    wait: (msOrSelectorOrFunc: number | string | Function, ...args: any[]) => new InBrowserBuilder().wait(msOrSelectorOrFunc, ...args),
+    wait: (msOrSelectorOrFunc: number | string | Function, ...args: any[]): InBrowserBuilder => new InBrowserBuilder().wait(msOrSelectorOrFunc, ...args),
     when: (selectorOrFunc: string | Function, ...params: any[]) => new InBrowserBuilder().when(selectorOrFunc, ...params),
 
     // Ending
     end: () => new InBrowserBuilder().end(),
+
+    // Manager Methods
+    getIdleInBrowsers: () => ipcRenderer.invoke('inbrowser:getIdleInBrowsers'),
+    setInBrowserProxy: (config: Electron.Config) => ipcRenderer.invoke('inbrowser:setInBrowserProxy', config),
+    clearInBrowserCache: () => ipcRenderer.invoke('inbrowser:clearInBrowserCache'),
 };

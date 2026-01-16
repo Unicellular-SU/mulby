@@ -440,12 +440,25 @@ interface IntoolsAPI {
     check: (selector: string, checked: boolean) => any
     value: (selector: string, val: string) => any
     focus: (selector: string) => any
-    when: (selector: string) => any
+    when: (selector: string | Function, ...params: any[]) => any
     css: (css: string) => any
     pdf: (options?: any, savePath?: string) => any
     cookies: (name?: string) => any
     clearCookies: (url?: string) => any
-    input: (text: string) => any
+    input: (selectorOrText: string, text?: string) => any
+    // New additions
+    dblclick: (selector: string) => any
+    hover: (selector: string) => any
+    screenshot: (target?: any, savePath?: string) => any
+    drop: (selector: string, payload: any) => any
+    download: (urlOrFunc: string | Function, savePath?: string, ...params: any[]) => any
+    removeCookies: (name: string) => any
+    setCookies: (nameOrCookies: any, value?: string) => any
+    markdown: (selector?: string) => any
+    // Manager Methods
+    getIdleInBrowsers: () => Promise<any[]>
+    setInBrowserProxy: (config: any) => Promise<boolean>
+    clearInBrowserCache: () => Promise<boolean>
   }
 }
 

@@ -12,4 +12,16 @@ export function registerInBrowserHandlers() {
             throw error; // Re-throw to renderer
         }
     });
+
+    ipcMain.handle('inbrowser:getIdleInBrowsers', async () => {
+        return InBrowserManager.getInstance().getIdleInBrowsers();
+    });
+
+    ipcMain.handle('inbrowser:setInBrowserProxy', async (_event, config: Electron.ProxyConfig) => {
+        return await InBrowserManager.getInstance().setInBrowserProxy(config);
+    });
+
+    ipcMain.handle('inbrowser:clearInBrowserCache', async () => {
+        return await InBrowserManager.getInstance().clearInBrowserCache();
+    });
 }
