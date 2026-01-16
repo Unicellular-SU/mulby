@@ -443,7 +443,7 @@ interface IntoolsAPI {
     when: (selector: string | Function, ...params: any[]) => any
     css: (css: string) => any
     pdf: (options?: any, savePath?: string) => any
-    cookies: (name?: string) => any
+    cookies: (nameOrFilter?: string | any) => any
     clearCookies: (url?: string) => any
     input: (selectorOrText: string, text?: string) => any
     // New additions
@@ -459,6 +459,7 @@ interface IntoolsAPI {
     getIdleInBrowsers: () => Promise<any[]>
     setInBrowserProxy: (config: any) => Promise<boolean>
     clearInBrowserCache: () => Promise<boolean>
+    run: (idOrOptions?: number | any, options?: any) => Promise<any[]>
   }
 }
 

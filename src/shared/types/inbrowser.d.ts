@@ -40,6 +40,16 @@ export interface InBrowserInstance {
     y: number;
 }
 
+export interface CookieFilter {
+    url?: string;
+    name?: string;
+    domain?: string;
+    path?: string;
+    secure?: boolean;
+    session?: boolean;
+    httpOnly?: boolean;
+}
+
 export interface InBrowserOp {
     type: 'goto' | 'show' | 'hide' | 'viewport' | 'click' | 'type' | 'press' | 'evaluate' | 'wait' | 'css' | 'when' | 'cookies' | 'pdf' | 'value' | 'check' | 'scroll' | 'devTools' | 'useragent' | 'focus' | 'end' | 'paste' | 'file' | 'device' | 'mousedown' | 'mouseup' | 'input' | 'clearCookies' | 'dblclick' | 'hover' | 'screenshot' | 'markdown' | 'setCookies' | 'removeCookies' | 'download' | 'drop';
     args: any[];
@@ -105,11 +115,13 @@ export interface InBrowser {
     end(): InBrowser;
     devTools(mode?: 'right' | 'bottom' | 'undocked' | 'detach'): InBrowser;
     cookies(name?: string): InBrowser;
+    cookies(filter: CookieFilter): InBrowser;
     // cookies(filter...)
     setCookies(name: string, value: string): InBrowser;
     setCookies(cookies: { name: string; value: string }[]): InBrowser;
     removeCookies(name: string): InBrowser;
     clearCookies(url?: string): InBrowser;
 
+    run(ubrowserId?: number, options?: InBrowserOptions): Promise<any[]>;
     run(options?: InBrowserOptions): Promise<any[]>;
 }

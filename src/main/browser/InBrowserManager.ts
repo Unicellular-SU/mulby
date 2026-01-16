@@ -1,4 +1,4 @@
-import { BrowserWindow, session } from 'electron';
+import { session } from 'electron';
 import { InBrowserWindow } from './InBrowserWindow';
 import { InBrowserRunPayload, InBrowserOptions, InBrowserInstance } from '../../shared/types/inbrowser';
 
@@ -19,9 +19,7 @@ export class InBrowserManager {
     public async run(payload: InBrowserRunPayload): Promise<any[]> {
         let browserWindow: InBrowserWindow;
 
-        // TODO: Support reusing windows via ID or Idle Pool
-        // For Phase 1, we just create a new window every time if ID is not provided.
-        // Ideally, if ID is provided, we reuse.
+        // Check if ID is provided to reuse existing window
 
         if (payload.id && this.windows.has(payload.id)) {
             browserWindow = this.windows.get(payload.id)!;

@@ -278,7 +278,13 @@ export class InBrowserWindow {
             case 'scroll': {
                 const [arg1, arg2] = args;
                 if (typeof arg1 === 'number') {
-                    await contents.executeJavaScript(`window.scrollTo(0, ${arg1})`);
+                    if (typeof arg2 === 'number') {
+                        // scroll(x, y)
+                        await contents.executeJavaScript(`window.scrollTo(${arg1}, ${arg2})`);
+                    } else {
+                        // scroll(y)
+                        await contents.executeJavaScript(`window.scrollTo(0, ${arg1})`);
+                    }
                 } else if (typeof arg1 === 'string') {
                     const scrollY = typeof arg2 === 'number' ? arg2 : 0;
                     await contents.executeJavaScript(`
@@ -287,6 +293,17 @@ export class InBrowserWindow {
                             const el = queryDeep(${JSON.stringify(arg1)});
                             if (!el) throw new Error('Element not found: ' + ${JSON.stringify(arg1)});
                             el.scrollTop = ${scrollY};
+                            // Also scrollIntoView? doc says scroll(selector, optional)
+                            // But here we implement scrolling the element itself?
+                            // Doc says: "Element scroll to visible position" for scroll(selector, optional).
+                            // Wait, existing logic was el.scrollTop = scrollY. That scrolls the element's content.
+                            // If arg2 is optional config, we should use scrollIntoView.
+                            if (typeof ${JSON.stringify(arg2)} === 'object' || typeof ${JSON.stringify(arg2)} === 'boolean' || ${JSON.stringify(arg2)} === undefined) {
+                                let opts = ${JSON.stringify(arg2)};
+                                if (opts === true) opts = { block: 'start' };
+                                if (opts === false) opts = { block: 'nearest' };
+                                el.scrollIntoView(opts);
+                            }
                         })()
                      `);
                 }
@@ -480,9 +497,20 @@ export class InBrowserWindow {
                 break;
 
             case 'cookies': {
-                // args: [name]
-                const [cookieName] = args;
-                const cookies = await contents.session.cookies.get(cookieName ? { name: cookieName } : {});
+                // args: [nameOrFilter]
+                const [nameOrFilter] = args;
+                let filter: Electron.CookiesGetFilter = {};
+                if (typeof nameOrFilter === 'string') {
+                    filter = { name: nameOrFilter };
+                } else if (typeof nameOrFilter === 'object') {
+                    filter = nameOrFilter;
+                }
+                // Electron requires url or domain usually if no url inferred.
+                // If filter is empty, Session treats it as "all", but filter object might need url.
+                // If url not provided in filter, maybe default to current url?
+                // uTools doc says: "url: Retrieve cookies associated with url. Empty means all URLs."
+                // Electron: If filter.url is not set, it might return all.
+                const cookies = await contents.session.cookies.get(filter);
                 results.push(cookies);
                 break;
             }
@@ -518,13 +546,32 @@ export class InBrowserWindow {
             }
 
             case 'download': {
-                // args: [url, savePath]
-                const [dUrl, dSavePath] = args;
-                win.webContents.downloadURL(dUrl);
-                // Handling save path requires listening to session 'will-download'
-                // But here we are in a synchronous flow (sort of).
-                // downloadURL is async in effect.
-                // If savePath is provided, we need to set it.
+                // args: [urlOrFunc, savePath, ...params]
+                // If urlOrFunc is function string, evaluate it first.
+                const [urlOrFunc, dSavePath, ...dParams] = args;
+                let downloadUrl = urlOrFunc;
+
+                if (typeof urlOrFunc === 'string' && (urlOrFunc.includes('function') || urlOrFunc.includes('=>'))) {
+                    // Evaluate function to get URL
+                    const code = `
+                    (async () => {
+                        try {
+                            const func = (${urlOrFunc});
+                            const result = await func(...${JSON.stringify(dParams || [])});
+                            return { result };
+                        } catch (e) {
+                            return { error: e.message || String(e) };
+                        }
+                    })()
+                    `;
+                    const executionResult = await contents.executeJavaScript(code);
+                    if (executionResult && executionResult.error) throw new Error(`Download URL evaluation failed: ${executionResult.error}`);
+                    downloadUrl = executionResult.result;
+                }
+
+                if (!downloadUrl) throw new Error('Download URL is empty');
+
+                win.webContents.downloadURL(downloadUrl);
                 if (dSavePath) {
                     win.webContents.session.once('will-download', (_event, item, _webContents) => {
                         item.setSavePath(dSavePath);

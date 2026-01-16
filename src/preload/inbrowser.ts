@@ -105,8 +105,8 @@ export class InBrowserBuilder {
         return this;
     }
 
-    public cookies = (name?: string): this => {
-        this.queue.push({ type: 'cookies', args: [name] });
+    public cookies = (nameOrFilter?: string | any): this => {
+        this.queue.push({ type: 'cookies', args: [nameOrFilter] });
         return this;
     }
 
@@ -228,11 +228,16 @@ export class InBrowserBuilder {
         return this;
     }
 
-    public run = async (options?: InBrowserOptions): Promise<any[]> => {
-        const payload: InBrowserRunPayload = {
-            queue: this.queue,
-            options: options || {},
-        };
+    public run = async (idOrOptions?: number | InBrowserOptions, options?: InBrowserOptions): Promise<any[]> => {
+        let payload: InBrowserRunPayload = { queue: this.queue };
+
+        if (typeof idOrOptions === 'number') {
+            payload.id = idOrOptions;
+            if (options) payload.options = options;
+        } else if (idOrOptions) {
+            payload.options = idOrOptions;
+        }
+
         return ipcRenderer.invoke('inbrowser:run', payload);
     }
 }
@@ -272,7 +277,7 @@ export const inbrowser = {
 
     // Data / Execution
     evaluate: (func: string | Function, ...params: any[]) => new InBrowserBuilder().evaluate(func, ...params),
-    cookies: (name?: string) => new InBrowserBuilder().cookies(name),
+    cookies: (nameOrFilter?: string | any) => new InBrowserBuilder().cookies(nameOrFilter),
     setCookies: (nameOrCookies: string | { name: string; value: string }[], value?: string) => new InBrowserBuilder().setCookies(nameOrCookies, value),
     removeCookies: (name: string) => new InBrowserBuilder().removeCookies(name),
     clearCookies: (url?: string) => new InBrowserBuilder().clearCookies(url),
