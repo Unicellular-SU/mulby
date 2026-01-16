@@ -29,6 +29,7 @@ import { PluginWindowManager } from '../plugin/window'
 import { ThemeManager } from '../services/theme'
 import { registerInBrowserHandlers } from './inbrowser'
 import { registerSharpHandlers } from './sharp'
+import { registerFFmpegHandlers } from './ffmpeg'
 
 export function registerAllHandlers(
   getMainWindow: () => BrowserWindow | null,
@@ -63,4 +64,5 @@ export function registerAllHandlers(
   registerColorPickHandlers()
   registerInBrowserHandlers()
   registerSharpHandlers()
+  registerFFmpegHandlers()
 }

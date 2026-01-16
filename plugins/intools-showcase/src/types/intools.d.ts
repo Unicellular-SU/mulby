@@ -379,6 +379,38 @@ interface IntoolsHost {
   restart(pluginName: string): Promise<boolean>
 }
 
+// FFmpeg API 类型
+interface FFmpegRunProgress {
+  bitrate: string
+  fps: number
+  frame: number
+  percent?: number
+  q: number | string
+  size: string
+  speed: string
+  time: string
+}
+
+interface FFmpegDownloadProgress {
+  phase: 'downloading' | 'extracting' | 'done'
+  percent: number
+  downloaded?: number
+  total?: number
+}
+
+interface FFmpegPromiseLike extends Promise<void> {
+  kill(): void
+  quit(): void
+}
+
+interface IntoolsFFmpeg {
+  isAvailable(): Promise<boolean>
+  getVersion(): Promise<string | null>
+  getPath(): Promise<string | null>
+  download(onProgress?: (progress: FFmpegDownloadProgress) => void): Promise<{ success: boolean; error?: string }>
+  run(args: string[], onProgress?: (progress: FFmpegRunProgress) => void): FFmpegPromiseLike
+}
+
 interface PluginInitData {
   pluginName: string
   featureCode: string
@@ -464,6 +496,8 @@ interface IntoolsAPI {
   // Sharp 图像处理 API
   sharp: IntoolsSharpFunction
   getSharpVersion: () => Promise<{ sharp: Record<string, string>; format: Record<string, any> }>
+  // FFmpeg 音视频处理 API
+  ffmpeg: IntoolsFFmpeg
 }
 
 /**

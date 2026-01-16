@@ -16,11 +16,12 @@ import {
   ChildWindowModule,
   InBrowserDemo,
   SharpModule,
+  FFmpegModule,
 } from './modules'
 
 console.log('[App] Module imports loaded')
 
-type ModuleId = 'sysinfo' | 'clipboard' | 'input' | 'filemanager' | 'network' | 'screen' | 'media' | 'settings' | 'security' | 'image-editor' | 'window-api' | 'child-window' | 'inbrowser' | 'sharp'
+type ModuleId = 'sysinfo' | 'clipboard' | 'input' | 'filemanager' | 'network' | 'screen' | 'media' | 'settings' | 'security' | 'image-editor' | 'window-api' | 'child-window' | 'inbrowser' | 'sharp' | 'ffmpeg'
 type ScreenAutoAction = 'region-capture' | null
 
 const featureToModule: Record<string, ModuleId> = {
@@ -37,7 +38,8 @@ const featureToModule: Record<string, ModuleId> = {
   'showcase:ui-settings': 'settings',
   'showcase:ui-detached': 'settings',
   'showcase:inbrowser': 'inbrowser',
-  'showcase:sharp': 'sharp'
+  'showcase:sharp': 'sharp',
+  'showcase:ffmpeg': 'ffmpeg'
 }
 
 function handleDynamicCommand(featureCode: string, input?: string) {
@@ -93,6 +95,7 @@ const moduleComponents: Record<ModuleId, React.ComponentType<any>> = {
   'child-window': ChildWindowModule,
   'inbrowser': InBrowserDemo,
   'sharp': SharpModule,
+  'ffmpeg': FFmpegModule,
 }
 
 // 从 URL 参数或插件初始化数据获取默认模块

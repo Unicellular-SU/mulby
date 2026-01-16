@@ -482,7 +482,97 @@ contextBridge.exposeInMainWorld('intools', {
   },
 
   // Sharp 版本信息
-  getSharpVersion: () => ipcRenderer.invoke('sharp:version')
+  getSharpVersion: () => ipcRenderer.invoke('sharp:version'),
+
+  // FFmpeg 音视频处理 API
+  // 实现 uTools 风格的 runFFmpeg API
+  ffmpeg: {
+    /**
+     * 检查 FFmpeg 是否可用
+     */
+    isAvailable: () => ipcRenderer.invoke('ffmpeg:isAvailable'),
+
+    /**
+     * 获取 FFmpeg 版本
+     */
+    getVersion: () => ipcRenderer.invoke('ffmpeg:getVersion'),
+
+    /**
+     * 获取 FFmpeg 可执行文件路径
+     */
+    getPath: () => ipcRenderer.invoke('ffmpeg:getPath'),
+
+    /**
+     * 下载并安装 FFmpeg
+     * @param onProgress 下载进度回调
+     */
+    download: (onProgress?: (progress: { phase: 'downloading' | 'extracting' | 'done'; percent: number; downloaded?: number; total?: number }) => void) => {
+      // 监听下载进度
+      if (onProgress) {
+        const listener = (_: any, progress: any) => onProgress(progress)
+        ipcRenderer.on('ffmpeg:downloadProgress', listener)
+        // 下载完成后移除监听
+        return ipcRenderer.invoke('ffmpeg:download').finally(() => {
+          ipcRenderer.removeListener('ffmpeg:downloadProgress', listener)
+        })
+      }
+      return ipcRenderer.invoke('ffmpeg:download')
+    },
+
+    /**
+     * 执行 FFmpeg 命令
+     * 返回扩展的 Promise，包含 kill() 和 quit() 方法
+     * @param args FFmpeg 参数数组
+     * @param onProgress 进度回调
+     */
+    run: (args: string[], onProgress?: (progress: { bitrate: string; fps: number; frame: number; percent?: number; q: number | string; size: string; speed: string; time: string }) => void) => {
+      let taskId: string | null = null
+
+      // 监听 taskId
+      const startListener = (_: any, data: { taskId: string }) => {
+        taskId = data.taskId
+      }
+      ipcRenderer.once('ffmpeg:started', startListener)
+
+      // 监听进度
+      let progressListener: ((...args: any[]) => void) | null = null
+      if (onProgress) {
+        progressListener = (_: any, data: { taskId: string; progress: any }) => {
+          // 只处理匹配的 taskId 或初始状态
+          if (!taskId || data.taskId === taskId) {
+            onProgress(data.progress)
+          }
+        }
+        ipcRenderer.on('ffmpeg:progress', progressListener)
+      }
+
+      // 执行命令
+      const resultPromise = ipcRenderer.invoke('ffmpeg:run', args).finally(() => {
+        // 清理监听器
+        ipcRenderer.removeListener('ffmpeg:started', startListener)
+        if (progressListener) {
+          ipcRenderer.removeListener('ffmpeg:progress', progressListener)
+        }
+      })
+
+      // 扩展 Promise，添加 kill 和 quit 方法
+      const promiseLike = resultPromise as Promise<void> & { kill: () => void; quit: () => void }
+
+      promiseLike.kill = () => {
+        if (taskId) {
+          ipcRenderer.invoke('ffmpeg:kill', taskId)
+        }
+      }
+
+      promiseLike.quit = () => {
+        if (taskId) {
+          ipcRenderer.invoke('ffmpeg:quit', taskId)
+        }
+      }
+
+      return promiseLike
+    }
+  }
 })
 
 // ==========================================

@@ -90,6 +90,33 @@ export interface ColorPickResult {
   b: number
 }
 
+// FFmpeg API 类型
+export interface FFmpegRunProgress {
+  bitrate: string
+  fps: number
+  frame: number
+  percent?: number
+  q: number | string
+  size: string
+  speed: string
+  time: string
+}
+
+export interface FFmpegDownloadProgress {
+  phase: 'downloading' | 'extracting' | 'done'
+  percent: number
+  downloaded?: number
+  total?: number
+}
+
+export type FFmpegRunProgressCallback = (progress: FFmpegRunProgress) => void
+export type FFmpegDownloadProgressCallback = (progress: FFmpegDownloadProgress) => void
+
+export interface FFmpegPromiseLike extends Promise<void> {
+  kill(): void
+  quit(): void
+}
+
 // Dialog API 类型
 export interface OpenDialogOptions {
   title?: string
@@ -328,6 +355,14 @@ export interface ElectronAPI {
   // Sharp 图像处理 API
   sharp: SharpFunction
   getSharpVersion: () => Promise<{ sharp: Record<string, string>; format: Record<string, any> }>
+  // FFmpeg 音视频处理 API
+  ffmpeg: {
+    isAvailable: () => Promise<boolean>
+    getVersion: () => Promise<string | null>
+    getPath: () => Promise<string | null>
+    download: (onProgress?: FFmpegDownloadProgressCallback) => Promise<{ success: boolean; error?: string }>
+    run: (args: string[], onProgress?: FFmpegRunProgressCallback) => FFmpegPromiseLike
+  }
 }
 
 /**

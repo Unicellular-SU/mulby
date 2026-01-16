@@ -12,4 +12,5 @@ export { WindowAPIModule } from './WindowAPI'
 export { ChildWindowModule } from './ChildWindow'
 export { default as InBrowserDemo } from './InBrowser'
 export { SharpModule } from './Sharp'
+export { FFmpegModule } from './FFmpeg'
 
