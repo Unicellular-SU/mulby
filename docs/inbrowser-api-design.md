@@ -165,46 +165,14 @@ interface InBrowser {
 | `check` | 勾选/取消勾选 | ✅ Done |
 | `scroll` | 页面滚动 | ✅ Done |
 | `devTools` | 打开开发者工具 | ✅ Done |
+| `useragent` | 设置 User-Agent | ✅ Done |
+| `focus` | 聚焦元素 | ✅ Done |
+| `end` | 结束会话 | ✅ Done |
+| `file` | 文件上传 | ✅ Done |
+| `device` | 模拟设备 | ✅ Done |
+| `mousedown` | 鼠标按下 | ✅ Done |
+| `mouseup` | 鼠标抬起 | ✅ Done |
 
-### 5.2 待实现功能 (To Be Implemented) - 优先级排序
+### 5.2 待实现功能 (To Be Implemented)
 
-以下功能尚未实现，按照开发优先级排序：
-
-#### � Priority 2: Medium (常用增强)
-1.  **`useragent(userAgent)`**
-    *   **描述**: 设置专属 User-Agent。
-    *   **理由**: 虽然 `goto` header 可以支持，但独立方法更符合 API 直觉。
-2.  **`focus(selector)`**
-    *   **描述**: 使元素获得焦点。
-    *   **理由**: 某些交互（如触发 focus 事件）需要显式聚焦，或者配合 `type` 使用。
-3.  **`end()`**
-    *   **描述**: 强制结束并销毁浏览器实例。
-    *   **理由**: 虽然 `run` 结束通常会处理，但有时需要显式提前结束释放资源。
-4.  **`paste(text)`**
-    *   **描述**: 模拟粘贴文本或图片。
-    *   **理由**: 某些编辑器禁止直接输入，必须粘贴。
-
-#### � Priority 3: Low (低频/高级)
-1.  **`useragent(userAgent)`**
-    *   **描述**: 设置专属 User-Agent。
-    *   **理由**: 虽然 `goto` header 可以支持，但独立方法更符合 API 直觉。
-2.  **`focus(selector)`**
-    *   **描述**: 使元素获得焦点。
-    *   **理由**: 某些交互（如触发 focus 事件）需要显式聚焦，或者配合 `type` 使用。
-3.  **`end()`**
-    *   **描述**: 强制结束并销毁浏览器实例。
-    *   **理由**: 虽然 `run` 结束通常会处理，但有时需要显式提前结束释放资源。
-4.  **`paste(text)`**
-    *   **描述**: 模拟粘贴文本或图片。
-    *   **理由**: 某些编辑器禁止直接输入，必须粘贴。
-
-#### 🟢 Priority 3: Low (低频/高级)
-1.  **`file(selector, payload)`**
-    *   **描述**: 处理文件上传控件。
-    *   **理由**: 相对复杂，使用场景不如文本交互多。
-2.  **`device(deviceName)`**
-    *   **描述**: 模拟特定设备（如 iPhone X）的 UA 和视口。
-    *   **理由**: 主要用于移动端页面测试，PC 端自动化场景较少。
-3.  **`mousedown` / `mouseup`**
-    *   **描述**: 细粒度的鼠标控制。
-    *   **理由**: 大多数场景 `click` 足够，极少数拖拽场景需要。
+*无 (所有规划功能已实现)*

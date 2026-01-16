@@ -31,7 +31,7 @@ export interface InBrowserOptions {
 }
 
 export interface InBrowserOp {
-    type: 'goto' | 'show' | 'hide' | 'viewport' | 'click' | 'type' | 'press' | 'evaluate' | 'wait' | 'css' | 'when' | 'cookies' | 'pdf' | 'value' | 'check' | 'scroll' | 'devTools' | 'useragent' | 'focus' | 'end' | 'paste';
+    type: 'goto' | 'show' | 'hide' | 'viewport' | 'click' | 'type' | 'press' | 'evaluate' | 'wait' | 'css' | 'when' | 'cookies' | 'pdf' | 'value' | 'check' | 'scroll' | 'devTools' | 'useragent' | 'focus' | 'end' | 'paste' | 'file' | 'device' | 'mousedown' | 'mouseup';
     args: any[];
 }
 

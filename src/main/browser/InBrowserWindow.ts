@@ -267,6 +267,62 @@ export class InBrowserWindow {
                 // For now, leave it.
                 break;
 
+            case 'device':
+                // args: [name]
+                const [deviceName] = args;
+                const devices: Record<string, { ua: string, width: number, height: number }> = {
+                    'iPhone X': { width: 375, height: 812, ua: 'Mozilla/5.0 (iPhone; CPU iPhone OS 13_2_3 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/13.0.3 Mobile/15E148 Safari/604.1' },
+                    'iPad': { width: 768, height: 1024, ua: 'Mozilla/5.0 (iPad; CPU OS 11_0 like Mac OS X) AppleWebKit/604.1.34 (KHTML, like Gecko) Version/11.0 Mobile/15A5341f Safari/604.1' }
+                };
+                const device = devices[deviceName];
+                if (device) {
+                    contents.setUserAgent(device.ua);
+                    win.setSize(device.width, device.height);
+                } else {
+                    console.warn(`Unknown device: ${deviceName}`);
+                }
+                break;
+
+            case 'mousedown':
+            case 'mouseup':
+                // args: [selector]
+                const [mouseSelector] = args;
+                const mouseRect = await contents.executeJavaScript(`
+                    (function() {
+                        const el = document.querySelector('${mouseSelector}');
+                        if (!el) throw new Error('Element not found: ${mouseSelector}');
+                        const rect = el.getBoundingClientRect();
+                        return { x: rect.x + rect.width / 2, y: rect.y + rect.height / 2 };
+                    })()
+                `);
+                const mouseX = Math.round(mouseRect.x);
+                const mouseY = Math.round(mouseRect.y);
+                const mouseType = op.type === 'mousedown' ? 'mouseDown' : 'mouseUp';
+                contents.sendInputEvent({ type: mouseType, x: mouseX, y: mouseY, button: 'left', clickCount: 1 });
+                break;
+
+            case 'file':
+                // args: [selector, payload]
+                const [fileSelector, payload] = args;
+                const filePaths = Array.isArray(payload) ? payload : [payload];
+                // Use debugger to set file input
+                try {
+                    contents.debugger.attach('1.3');
+                    const { root } = await contents.debugger.sendCommand('DOM.getDocument');
+                    const { nodeId } = await contents.debugger.sendCommand('DOM.querySelector', { nodeId: root.nodeId, selector: fileSelector });
+                    if (nodeId) {
+                        await contents.debugger.sendCommand('DOM.setFileInputFiles', { nodeId, files: filePaths });
+                    } else {
+                        throw new Error(`File input not found: ${fileSelector}`);
+                    }
+                } catch (err) {
+                    console.error('File Upload Error:', err);
+                    throw err;
+                } finally {
+                    if (contents.debugger.isAttached()) contents.debugger.detach();
+                }
+                break;
+
             case 'end':
                 this.destroy();
                 // Optionally stop processing further ops?

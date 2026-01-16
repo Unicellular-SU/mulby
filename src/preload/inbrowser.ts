@@ -19,8 +19,23 @@ export class InBrowserBuilder {
         return this;
     }
 
+    public device = (name: string): this => {
+        this.queue.push({ type: 'device', args: [name] });
+        return this;
+    }
+
     public click = (selector: string): this => {
         this.queue.push({ type: 'click', args: [selector] });
+        return this;
+    }
+
+    public mousedown = (selector: string): this => {
+        this.queue.push({ type: 'mousedown', args: [selector] });
+        return this;
+    }
+
+    public mouseup = (selector: string): this => {
+        this.queue.push({ type: 'mouseup', args: [selector] });
         return this;
     }
 
@@ -129,6 +144,11 @@ export class InBrowserBuilder {
         return this;
     }
 
+    public file = (selector: string, payload: string | string[]): this => {
+        this.queue.push({ type: 'file', args: [selector, payload] });
+        return this;
+    }
+
     public run = async (options?: InBrowserOptions): Promise<any[]> => {
         const payload: InBrowserRunPayload = {
             queue: this.queue,
@@ -145,6 +165,7 @@ export const inbrowser = {
 
     // Configuration / Setup
     useragent: (ua: string) => new InBrowserBuilder().useragent(ua),
+    device: (name: string) => new InBrowserBuilder().device(name),
     viewport: (width: number, height: number) => new InBrowserBuilder().viewport(width, height),
     show: () => new InBrowserBuilder().show(),
     hide: () => new InBrowserBuilder().hide(),
@@ -152,6 +173,8 @@ export const inbrowser = {
 
     // Direct Actions (less common to start with, but supported)
     click: (selector: string) => new InBrowserBuilder().click(selector),
+    mousedown: (selector: string) => new InBrowserBuilder().mousedown(selector),
+    mouseup: (selector: string) => new InBrowserBuilder().mouseup(selector),
     type: (selector: string, text: string) => new InBrowserBuilder().type(selector, text),
     value: (selector: string, val: string) => new InBrowserBuilder().value(selector, val),
     check: (selector: string, checked: boolean) => new InBrowserBuilder().check(selector, checked),
@@ -159,6 +182,7 @@ export const inbrowser = {
     paste: (text: string) => new InBrowserBuilder().paste(text),
     press: (key: string, modifiers?: string[]) => new InBrowserBuilder().press(key, modifiers),
     scroll: (selector: string | number, y?: number) => new InBrowserBuilder().scroll(selector, y),
+    file: (selector: string, payload: string | string[]) => new InBrowserBuilder().file(selector, payload),
 
     // Data / Execution
     evaluate: (func: string | Function, ...params: any[]) => new InBrowserBuilder().evaluate(func, ...params),

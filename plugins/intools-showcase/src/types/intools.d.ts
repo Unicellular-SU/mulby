@@ -420,12 +420,17 @@ interface IntoolsAPI {
   inbrowser: {
     goto: (url: string, headers?: Record<string, string>, timeout?: number) => any
     useragent: (ua: string) => any
+    device: (name: string) => any
     value: (selector: string, val: string) => any
     check: (selector: string, checked: boolean) => any
     focus: (selector: string) => any
+    click: (selector: string) => any
+    mousedown: (selector: string) => any
+    mouseup: (selector: string) => any
     scroll: (selector: string | number, y?: number) => any
     devTools: (mode?: 'right' | 'bottom' | 'undocked' | 'detach') => any
     paste: (text: string) => any
+    file: (selector: string, payload: string | string[]) => any
     end: () => any
   }
 }

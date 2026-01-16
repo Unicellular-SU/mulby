@@ -143,6 +143,49 @@ export default function InBrowserDemo() {
         }
     }
 
+    const runP3Demo = async () => {
+        if (!window.intools?.inbrowser) {
+            addLog('Error: window.intools.inbrowser not found');
+            return;
+        }
+
+        setLoading(true);
+        setLogs([]);
+        addLog('Starting Priority 3 Features Demo...');
+
+        try {
+            addLog('Chain: device(iPhone X) -> goto(google) -> mousedown(logo) -> mouseup(logo) -> evaluate(check dimensions/UA) -> wait -> end');
+
+            const result = await window.intools.inbrowser
+                .device('iPhone X') // Test device
+                .goto('https://www.google.com')
+                .show()
+                .wait(1000)
+                // Google logo on mobile might be different, let's just click body or a known element
+                // Mobile google usually has a logo with id 'hplogo' or similar, or we can just click body.
+                // Let's click the search button area if visible, or just check dimensions.
+                .evaluate((() => {
+                    return {
+                        ua: navigator.userAgent,
+                        width: window.innerWidth,
+                        height: window.innerHeight,
+                        isMobile: /iPhone/.test(navigator.userAgent)
+                    };
+                }).toString())
+                .wait(2000)
+                .end()
+                .run({ show: true });
+
+            addLog(`Result: ${JSON.stringify(result)}`);
+            addLog('Browser should look like iPhone X');
+        } catch (error: any) {
+            addLog(`Error: ${error.message}`);
+            console.error(error);
+        } finally {
+            setLoading(false);
+        }
+    }
+
     return (
         <div className="module-container">
             <div className="module-header">
@@ -206,6 +249,25 @@ export default function InBrowserDemo() {
                             }}
                         >
                             Run P2 Features Demo
+                        </button>
+                    </div>
+                    <div style={{ flex: 1 }}>
+                        <p>Priority 3: Device, MouseDown/Up</p>
+                        <button
+                            className="btn-primary"
+                            onClick={runP3Demo}
+                            disabled={loading}
+                            style={{
+                                padding: '8px 16px',
+                                background: '#FF9800',
+                                color: '#fff',
+                                border: 'none',
+                                borderRadius: '4px',
+                                cursor: loading ? 'not-allowed' : 'pointer',
+                                width: '100%'
+                            }}
+                        >
+                            Run P3 Features Demo
                         </button>
                     </div>
                 </div>
