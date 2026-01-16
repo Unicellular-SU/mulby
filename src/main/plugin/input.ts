@@ -474,72 +474,77 @@ export const pluginInput = {
   },
 
   /**
-   * 模拟键盘按键
+   * 隐藏主窗口并模拟键盘按键（发送到外部应用）
    * @param key 被模拟的主键，如 'a', 'enter', 'f1' 等
    * @param modifiers 修饰键数组，如 ['ctrl'], ['ctrl', 'shift'] 等
    */
-  async simulateKeyboardTap(key: string, ...modifiers: string[]): Promise<void> {
+  async simulateKeyboardTap(key: string, ...modifiers: string[]): Promise<boolean> {
     try {
-      await simulateKeyboardTapInternal(key, modifiers)
+      await withHiddenWindow(() => simulateKeyboardTapInternal(key, modifiers))
+      return true
     } catch (error) {
       console.error('[Input] Failed to simulate keyboard tap:', error)
-      throw error
+      return false
     }
   },
 
   /**
-   * 模拟鼠标移动到指定位置
+   * 隐藏主窗口并模拟鼠标移动到指定位置
    * @param x 相对于屏幕左上角的 X 坐标（像素）
    * @param y 相对于屏幕左上角的 Y 坐标（像素）
    */
-  async simulateMouseMove(x: number, y: number): Promise<void> {
+  async simulateMouseMove(x: number, y: number): Promise<boolean> {
     try {
-      await simulateMouseMoveInternal(x, y)
+      await withHiddenWindow(() => simulateMouseMoveInternal(x, y))
+      return true
     } catch (error) {
       console.error('[Input] Failed to simulate mouse move:', error)
-      throw error
+      return false
     }
   },
 
   /**
-   * 模拟鼠标左键单击
+   * 隐藏主窗口并模拟鼠标左键单击
    * @param x 相对于屏幕左上角的 X 坐标（像素）
    * @param y 相对于屏幕左上角的 Y 坐标（像素）
    */
-  async simulateMouseClick(x: number, y: number): Promise<void> {
+  async simulateMouseClick(x: number, y: number): Promise<boolean> {
     try {
-      await simulateMouseClickInternal(x, y, 'left', 1)
+      await withHiddenWindow(() => simulateMouseClickInternal(x, y, 'left', 1))
+      return true
     } catch (error) {
       console.error('[Input] Failed to simulate mouse click:', error)
-      throw error
+      return false
     }
   },
 
   /**
-   * 模拟鼠标左键双击
+   * 隐藏主窗口并模拟鼠标左键双击
    * @param x 相对于屏幕左上角的 X 坐标（像素）
    * @param y 相对于屏幕左上角的 Y 坐标（像素）
    */
-  async simulateMouseDoubleClick(x: number, y: number): Promise<void> {
+  async simulateMouseDoubleClick(x: number, y: number): Promise<boolean> {
     try {
-      await simulateMouseClickInternal(x, y, 'left', 2)
+      await withHiddenWindow(() => simulateMouseClickInternal(x, y, 'left', 2))
+      return true
     } catch (error) {
       console.error('[Input] Failed to simulate mouse double click:', error)
-      throw error
+      return false
     }
   },
 
   /**
-   * 模拟鼠标右键点击
+   * 隐藏主窗口并模拟鼠标右键点击
    * @param x 相对于屏幕左上角的 X 坐标（像素）
    * @param y 相对于屏幕左上角的 Y 坐标（像素）
    */
-  async simulateMouseRightClick(x: number, y: number): Promise<void> {
+  async simulateMouseRightClick(x: number, y: number): Promise<boolean> {
     try {
-      await simulateMouseClickInternal(x, y, 'right', 1)
+      await withHiddenWindow(() => simulateMouseClickInternal(x, y, 'right', 1))
+      return true
     } catch (error) {
       console.error('[Input] Failed to simulate mouse right click:', error)
-      throw error
+      return false
     }
   }
 }

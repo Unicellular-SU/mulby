@@ -61,10 +61,10 @@ await input.hideMainWindowTypeString('Hello World!');
 **返回值**: `boolean` - 是否执行成功
 
 ### 3.5 simulateKeyboardTap(key, ...modifiers)
-模拟键盘按键，支持单键和组合键。
+隐藏主窗口并模拟键盘按键，支持单键和组合键。操作会发送到之前活跃的应用。
 
 ```javascript
-// 模拟单个键
+// 模拟单个键（发送到目标应用）
 await input.simulateKeyboardTap('enter');
 
 // 模拟组合键 Ctrl+V（Windows/Linux 粘贴）
@@ -84,7 +84,7 @@ await input.simulateKeyboardTap('f5');
 - `key` (string) - 被模拟的主键，如 `'a'`, `'enter'`, `'f1'` 等
 - `...modifiers` (string[]) - 可选的修饰键，如 `'ctrl'`, `'alt'`, `'shift'`, `'command'` 等
 
-**返回值**: `void`
+**返回值**: `boolean` - 是否执行成功
 
 **支持的键名**:
 
@@ -108,7 +108,7 @@ await input.simulateKeyboardTap('f5');
 | command | cmd, meta, super, win |
 
 ### 3.6 simulateMouseMove(x, y)
-将鼠标移动到指定的屏幕坐标位置。
+隐藏主窗口并将鼠标移动到指定的屏幕坐标位置。
 
 ```javascript
 // 移动鼠标到屏幕坐标 (100, 200)
@@ -119,10 +119,10 @@ await input.simulateMouseMove(100, 200);
 - `x` (number) - 相对于屏幕左上角的 X 坐标（像素）
 - `y` (number) - 相对于屏幕左上角的 Y 坐标（像素）
 
-**返回值**: `void`
+**返回值**: `boolean` - 是否执行成功
 
 ### 3.7 simulateMouseClick(x, y)
-模拟鼠标左键单击操作。
+隐藏主窗口并模拟鼠标左键单击操作。
 
 ```javascript
 // 在坐标 (150, 200) 处单击
@@ -133,10 +133,10 @@ await input.simulateMouseClick(150, 200);
 - `x` (number) - 相对于屏幕左上角的 X 坐标（像素）
 - `y` (number) - 相对于屏幕左上角的 Y 坐标（像素）
 
-**返回值**: `void`
+**返回值**: `boolean` - 是否执行成功
 
 ### 3.8 simulateMouseDoubleClick(x, y)
-模拟鼠标左键双击操作。
+隐藏主窗口并模拟鼠标左键双击操作。
 
 ```javascript
 // 在坐标 (150, 200) 处双击
@@ -147,10 +147,10 @@ await input.simulateMouseDoubleClick(150, 200);
 - `x` (number) - 相对于屏幕左上角的 X 坐标（像素）
 - `y` (number) - 相对于屏幕左上角的 Y 坐标（像素）
 
-**返回值**: `void`
+**返回值**: `boolean` - 是否执行成功
 
 ### 3.9 simulateMouseRightClick(x, y)
-模拟鼠标右键点击操作。
+隐藏主窗口并模拟鼠标右键点击操作。
 
 ```javascript
 // 在坐标 (200, 250) 处右键点击
@@ -161,7 +161,7 @@ await input.simulateMouseRightClick(200, 250);
 - `x` (number) - 相对于屏幕左上角的 X 坐标（像素）
 - `y` (number) - 相对于屏幕左上角的 Y 坐标（像素）
 
-**返回值**: `void`
+**返回值**: `boolean` - 是否执行成功
 
 ### 3.10 完整示例
 

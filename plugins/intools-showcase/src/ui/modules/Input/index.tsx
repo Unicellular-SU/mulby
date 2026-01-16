@@ -33,11 +33,15 @@ export function InputModule() {
         }
     }, [notify])
 
-    const runSimulateAction = useCallback(async (name: string, action: () => Promise<void>) => {
+    const runSimulateAction = useCallback(async (name: string, action: () => Promise<boolean>) => {
         setBusyAction(name)
         try {
-            await action()
-            notify.success('模拟操作已执行')
+            const ok = await action()
+            if (ok) {
+                notify.success('模拟操作已发送到目标应用')
+            } else {
+                notify.error('模拟操作失败，请确认权限与环境依赖')
+            }
         } catch (error) {
             notify.error('模拟操作失败，请确认权限与环境依赖')
             console.error(error)
@@ -251,10 +255,13 @@ console.log(\`鼠标位置: (\${pos.x}, \${pos.y})\`)`
 
                 <Card title="使用教程" icon="📌">
                     <div style={{ display: 'grid', gap: '8px', color: 'var(--text-secondary)' }}>
-                        <div>1. 在目标应用中放置光标（例如编辑器或聊天窗口）。</div>
-                        <div>2. 切回 InTools Showcase，点击下方任一操作按钮。</div>
-                        <div>3. 主窗口会自动隐藏并执行粘贴或键入。</div>
-                        <div>4. macOS 需授予辅助功能权限；Linux 需安装 `xdotool`。</div>
+                        <div>1. <strong>打开目标应用</strong>（例如文本编辑器、浏览器、聊天窗口）。</div>
+                        <div>2. <strong>在目标应用中放置光标</strong>，确保它是你希望接收输入的位置。</div>
+                        <div>3. <strong>唤起 InTools</strong>（通过快捷键 Alt+Space）。</div>
+                        <div>4. <strong>点击下方操作按钮</strong>，InTools 会自动隐藏并向目标应用发送操作。</div>
+                        <div style={{ marginTop: '8px', padding: '8px', background: 'var(--bg-tertiary)', borderRadius: '6px' }}>
+                            💡 <strong>原理</strong>：所有模拟操作都会先隐藏 InTools 窗口，让目标应用获得焦点，然后再执行模拟操作。
+                        </div>
                     </div>
                 </Card>
 
@@ -323,6 +330,18 @@ console.log(\`鼠标位置: (\${pos.x}, \${pos.y})\`)`
                 <div style={{ marginTop: '24px', marginBottom: '16px', fontWeight: 600, fontSize: '18px', color: 'var(--text-primary)' }}>
                     🎮 模拟按键与鼠标
                 </div>
+
+                <Card title="模拟操作说明" icon="💡">
+                    <div style={{ display: 'grid', gap: '8px', color: 'var(--text-secondary)' }}>
+                        <div>模拟按键和鼠标操作会<strong>先隐藏 InTools 窗口</strong>，让之前活跃的应用获得焦点，然后发送模拟操作。</div>
+                        <div>这适用于以下场景：</div>
+                        <ul style={{ margin: '4px 0', paddingLeft: '20px' }}>
+                            <li>向编辑器发送快捷键（如 Ctrl+S 保存）</li>
+                            <li>在表单中自动输入并提交（模拟 Enter）</li>
+                            <li>自动化点击桌面上的某个位置</li>
+                        </ul>
+                    </div>
+                </Card>
 
                 <Card title="模拟键盘按键" icon="⌨️" actions={
                     <Button onClick={handleSimulateKeyboardTap} loading={busyAction === 'keyboardTap'}>
