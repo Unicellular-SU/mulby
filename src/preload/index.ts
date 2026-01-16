@@ -99,7 +99,18 @@ contextBridge.exposeInMainWorld('intools', {
     hideMainWindowPasteText: (text: string) => ipcRenderer.invoke('input:hideMainWindowPasteText', text),
     hideMainWindowPasteImage: (image: string | Buffer) => ipcRenderer.invoke('input:hideMainWindowPasteImage', image),
     hideMainWindowPasteFile: (filePaths: string | string[]) => ipcRenderer.invoke('input:hideMainWindowPasteFile', filePaths),
-    hideMainWindowTypeString: (text: string) => ipcRenderer.invoke('input:hideMainWindowTypeString', text)
+    hideMainWindowTypeString: (text: string) => ipcRenderer.invoke('input:hideMainWindowTypeString', text),
+    // 模拟按键 API
+    simulateKeyboardTap: (key: string, ...modifiers: string[]) =>
+      ipcRenderer.invoke('input:simulateKeyboardTap', key, modifiers),
+    simulateMouseMove: (x: number, y: number) =>
+      ipcRenderer.invoke('input:simulateMouseMove', x, y),
+    simulateMouseClick: (x: number, y: number) =>
+      ipcRenderer.invoke('input:simulateMouseClick', x, y),
+    simulateMouseDoubleClick: (x: number, y: number) =>
+      ipcRenderer.invoke('input:simulateMouseDoubleClick', x, y),
+    simulateMouseRightClick: (x: number, y: number) =>
+      ipcRenderer.invoke('input:simulateMouseRightClick', x, y)
   },
 
   // 通知

@@ -22,6 +22,17 @@ export function useIntools(pluginId?: string) {
             hideMainWindowPasteImage: (image: string | ArrayBuffer) => window.intools?.input?.hideMainWindowPasteImage(image),
             hideMainWindowPasteFile: (filePaths: string | string[]) => window.intools?.input?.hideMainWindowPasteFile(filePaths),
             hideMainWindowTypeString: (text: string) => window.intools?.input?.hideMainWindowTypeString(text),
+            // 模拟按键 API
+            simulateKeyboardTap: (key: string, ...modifiers: string[]) =>
+                window.intools?.input?.simulateKeyboardTap(key, ...modifiers),
+            simulateMouseMove: (x: number, y: number) =>
+                window.intools?.input?.simulateMouseMove(x, y),
+            simulateMouseClick: (x: number, y: number) =>
+                window.intools?.input?.simulateMouseClick(x, y),
+            simulateMouseDoubleClick: (x: number, y: number) =>
+                window.intools?.input?.simulateMouseDoubleClick(x, y),
+            simulateMouseRightClick: (x: number, y: number) =>
+                window.intools?.input?.simulateMouseRightClick(x, y),
         },
 
         // Storage API
