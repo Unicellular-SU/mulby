@@ -43,6 +43,14 @@ export class InBrowserWindow {
             function queryDeep(selector) {
                 if (!selector) return null;
                 if (typeof selector !== 'string') return null;
+                
+                // XPath support
+                if (selector.startsWith('//') || selector.startsWith('(') || selector.startsWith('xpath:')) {
+                    const cleanSelector = selector.startsWith('xpath:') ? selector.slice(6) : selector;
+                    const result = document.evaluate(cleanSelector, document, null, XPathResult.FIRST_ORDERED_NODE_TYPE, null);
+                    return result.singleNodeValue;
+                }
+
                 if (!selector.includes('>>')) return document.querySelector(selector);
                 
                 const parts = selector.split('>>').map(p => p.trim());
@@ -153,7 +161,7 @@ export class InBrowserWindow {
                         const exists = await contents.executeJavaScript(`
                             (function() {
                                 ${qFn}
-                                return !!queryDeep('${msOrSelector}');
+                                return !!queryDeep(${JSON.stringify(msOrSelector)});
                             })()
                         `);
                         if (exists) return;
@@ -169,8 +177,8 @@ export class InBrowserWindow {
                 const rect = await contents.executeJavaScript(`
                   (function() {
                     ${qFn}
-                    const el = queryDeep('${selector}');
-                    if (!el) throw new Error('Element not found: ${selector}');
+                    const el = queryDeep(${JSON.stringify(selector)});
+                    if (!el) throw new Error('Element not found: ' + ${JSON.stringify(selector)});
                     const rect = el.getBoundingClientRect();
                     return { x: rect.x + rect.width / 2, y: rect.y + rect.height / 2 };
                   })()
@@ -218,7 +226,7 @@ export class InBrowserWindow {
                     const exists = await contents.executeJavaScript(`
                         (function() {
                             ${qFn}
-                            return !!queryDeep('${whenSelector}');
+                            return !!queryDeep(${JSON.stringify(whenSelector)});
                         })()
                     `);
                     if (exists) return;
@@ -232,8 +240,8 @@ export class InBrowserWindow {
                 await contents.executeJavaScript(`
                     (function() {
                         ${qFn}
-                        const el = queryDeep('${valueSelector}');
-                        if (!el) throw new Error('Element not found: ${valueSelector}');
+                        const el = queryDeep(${JSON.stringify(valueSelector)});
+                        if (!el) throw new Error('Element not found: ' + ${JSON.stringify(valueSelector)});
                         el.value = '${val}';
                         el.dispatchEvent(new Event('input', { bubbles: true }));
                         el.dispatchEvent(new Event('change', { bubbles: true }));
@@ -246,9 +254,9 @@ export class InBrowserWindow {
                 await contents.executeJavaScript(`
                     (function() {
                         ${qFn}
-                        const el = queryDeep('${checkSelector}');
-                        if (!el) throw new Error('Element not found: ${checkSelector}');
-                        if (el.type !== 'checkbox' && el.type !== 'radio') throw new Error('Element is not checkbox or radio: ${checkSelector}');
+                        const el = queryDeep(${JSON.stringify(checkSelector)});
+                        if (!el) throw new Error('Element not found: ' + ${JSON.stringify(checkSelector)});
+                        if (el.type !== 'checkbox' && el.type !== 'radio') throw new Error('Element is not checkbox or radio: ' + ${JSON.stringify(checkSelector)});
                         el.checked = ${checked};
                         el.dispatchEvent(new Event('click', { bubbles: true }));
                         el.dispatchEvent(new Event('change', { bubbles: true }));
@@ -265,8 +273,8 @@ export class InBrowserWindow {
                     await contents.executeJavaScript(`
                         (function() {
                             ${qFn}
-                            const el = queryDeep('${arg1}');
-                            if (!el) throw new Error('Element not found: ${arg1}');
+                            const el = queryDeep(${JSON.stringify(arg1)});
+                            if (!el) throw new Error('Element not found: ' + ${JSON.stringify(arg1)});
                             el.scrollTop = ${scrollY};
                         })()
                      `);
@@ -292,8 +300,8 @@ export class InBrowserWindow {
                 await contents.executeJavaScript(`
                     (function() {
                         ${qFn}
-                        const el = queryDeep('${focusSelector}');
-                        if (!el) throw new Error('Element not found: ${focusSelector}');
+                        const el = queryDeep(${JSON.stringify(focusSelector)});
+                        if (!el) throw new Error('Element not found: ' + ${JSON.stringify(focusSelector)});
                         el.focus();
                     })()
                 `);
@@ -327,8 +335,8 @@ export class InBrowserWindow {
                 const mouseRect = await contents.executeJavaScript(`
                     (function() {
                         ${qFn}
-                        const el = queryDeep('${mouseSelector}');
-                        if (!el) throw new Error('Element not found: ${mouseSelector}');
+                        const el = queryDeep(${JSON.stringify(mouseSelector)});
+                        if (!el) throw new Error('Element not found: ' + ${JSON.stringify(mouseSelector)});
                         const rect = el.getBoundingClientRect();
                         return { x: rect.x + rect.width / 2, y: rect.y + rect.height / 2 };
                     })()
@@ -376,6 +384,34 @@ export class InBrowserWindow {
                 const [cookieName] = args;
                 const cookies = await contents.session.cookies.get(cookieName ? { name: cookieName } : {});
                 results.push(cookies);
+                break;
+
+            case 'clearCookies':
+                // args: [url]
+                const [clearUrl] = args;
+                if (clearUrl) {
+                    // Remove cookies for specific URL is complex with simple API.
+                    // session.cookies.remove(url, name) requires name.
+                    // If we want to clear ALL for a url, we must list checks.
+                    // uTools doc: "Clear cookies. url is optional."
+                    // If url is provided, maybe we accept it destroys all cookies for that domain?
+                    // Let's iterate and delete.
+                    const existing = await contents.session.cookies.get({ url: clearUrl });
+                    for (const c of existing) {
+                        await contents.session.cookies.remove(clearUrl, c.name);
+                    }
+                } else {
+                    await contents.session.clearStorageData({ storages: ['cookies'] });
+                }
+                break;
+
+            case 'input':
+                // args: [text]
+                // Type into currently focused element
+                const [inputText] = args;
+                for (const char of inputText) {
+                    contents.sendInputEvent({ type: 'char', keyCode: char });
+                }
                 break;
 
             case 'pdf':

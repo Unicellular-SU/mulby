@@ -126,6 +126,7 @@ interface InBrowser {
   click(selector: string): InBrowser;
   type(selector: string, text: string): InBrowser;
   press(key: string, modifiers?: string[]): InBrowser;
+  input(text: string): InBrowser; // 输入文本到当前焦点元素
   value(selector: string, value: string): InBrowser;
   check(selector: string, checked: boolean): InBrowser;
   
@@ -135,6 +136,8 @@ interface InBrowser {
   // 流程控制
   wait(msOrSelector: number | string): InBrowser; // 支持毫秒数或选择器
   when(selector: string): InBrowser;
+  cookies(name?: string): InBrowser;
+  clearCookies(url?: string): InBrowser; // 清除 Cookies
   end(): InBrowser;
   
   // 执行
@@ -142,9 +145,15 @@ interface InBrowser {
 }
 
 ### 4.1 高级选择器 (Advanced Selectors)
-**支持 Shadow DOM 和 iframe 穿透**
+
+**1. 支持 Shadow DOM 和 iframe 穿透**
 使用 `>>` 符号分割选择器，可穿透多层 Shadow Root 或 iframe（同源）。
 示例：`iframe#outer >> iframe#inner >> button.login`
+
+**2. 支持 XPath**
+支持以 `//` 或 `(` 开头的 XPath 选择器，或者使用 `xpath:` 前缀。
+示例：`//input[@type='password']` 或 `xpath://div[contains(text(), 'Login')]`
+
 此语法适用于 `click`, `type`, `value`, `check`, `focus`, `scroll`, `wait`, `when`, `mousedown`, `mouseup` 等所有涉及元素操作的方法。
 ```
 
@@ -178,6 +187,8 @@ interface InBrowser {
 | `device` | 模拟设备 | ✅ Done |
 | `mousedown` | 鼠标按下 | ✅ Done |
 | `mouseup` | 鼠标抬起 | ✅ Done |
+| `input` | 输入文本到焦点元素 | ✅ Done |
+| `clearCookies` | 清除 Cookies | ✅ Done |
 
 ### 5.2 待实现功能 (To Be Implemented)
 

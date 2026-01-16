@@ -247,6 +247,53 @@ export default function InBrowserDemo() {
         } finally {
             setLoading(false);
         }
+
+    }
+
+    const runCloudDriveDemo = async () => {
+        if (!window.intools?.inbrowser) {
+            addLog('Error: window.intools.inbrowser not found');
+            return;
+        }
+
+        setLoading(true);
+        setLogs([]);
+        addLog('Starting Cloud Drive Demo...');
+
+        const text = `https://pan.baidu.com/s/1ekPm-ooS0uvVA_J7ZqVGDQ 提取码: kvr5`;
+        const matchs = text.match(/(https?:\/\/[a-z0-9-._~:/?=#]+)\s*(?:\(|（)?(?:提取密?码?|访问密?码|密码)\s*(?::|：)?\s*([a-z0-9]{4,6})/i);
+
+        if (!matchs) {
+            addLog('Error: Failed to parse URL and code');
+            setLoading(false);
+            return;
+        }
+
+        const url = matchs[1];
+        const code = matchs[2];
+
+        addLog(`Target URL: ${url}`);
+        addLog(`Extraction Code: ${code}`);
+
+        try {
+            const result = await window.intools.inbrowser
+                .clearCookies(url)
+                .goto(url)
+                .show() // Ensure visible
+                .wait("input")
+                .focus("//input[contains(@placeholder, '提取码') or contains(@placeholder, '访问码')]") // XPath
+                .input(code) // New input method
+                .wait(300)
+                .press("Enter")
+                .run({ width: 1200, height: 800, show: true });
+
+            addLog(`Result: ${JSON.stringify(result)}`);
+        } catch (error: any) {
+            addLog(`Error: ${error.message}`);
+            // Expected if URL invalid or element not found
+        } finally {
+            setLoading(false);
+        }
     }
 
     return (
@@ -369,6 +416,25 @@ export default function InBrowserDemo() {
                             }}
                         >
                             Run Iframe Demo
+                        </button>
+                    </div>
+                    <div style={{ flex: 1 }}>
+                        <p>Cloud Drive Demo (User Request)</p>
+                        <button
+                            className="btn-primary"
+                            onClick={runCloudDriveDemo}
+                            disabled={loading}
+                            style={{
+                                padding: '8px 16px',
+                                background: '#3F51B5',
+                                color: '#fff',
+                                border: 'none',
+                                borderRadius: '4px',
+                                cursor: loading ? 'not-allowed' : 'pointer',
+                                width: '100%'
+                            }}
+                        >
+                            Run Cloud Drive Demo
                         </button>
                     </div>
                 </div>

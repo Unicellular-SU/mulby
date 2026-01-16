@@ -434,6 +434,18 @@ interface IntoolsAPI {
     paste: (text: string) => any
     file: (selector: string, payload: string | string[]) => any
     end: () => any
+    // Missing methods
+    type: (selector: string, text: string) => any
+    press: (key: string, modifiers?: string[]) => any
+    check: (selector: string, checked: boolean) => any
+    value: (selector: string, val: string) => any
+    focus: (selector: string) => any
+    when: (selector: string) => any
+    css: (css: string) => any
+    pdf: (options?: any, savePath?: string) => any
+    cookies: (name?: string) => any
+    clearCookies: (url?: string) => any
+    input: (text: string) => any
   }
 }
 

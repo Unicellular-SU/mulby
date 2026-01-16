@@ -31,7 +31,7 @@ export interface InBrowserOptions {
 }
 
 export interface InBrowserOp {
-    type: 'goto' | 'show' | 'hide' | 'viewport' | 'click' | 'type' | 'press' | 'evaluate' | 'wait' | 'css' | 'when' | 'cookies' | 'pdf' | 'value' | 'check' | 'scroll' | 'devTools' | 'useragent' | 'focus' | 'end' | 'paste' | 'file' | 'device' | 'mousedown' | 'mouseup';
+    type: 'goto' | 'show' | 'hide' | 'viewport' | 'click' | 'type' | 'press' | 'evaluate' | 'wait' | 'css' | 'when' | 'cookies' | 'pdf' | 'value' | 'check' | 'scroll' | 'devTools' | 'useragent' | 'focus' | 'end' | 'paste' | 'file' | 'device' | 'mousedown' | 'mouseup' | 'input' | 'clearCookies';
     args: any[];
 }
 
@@ -55,12 +55,18 @@ export interface InBrowser {
     wait(msOrSelector: number | string): InBrowser;
     click(selector: string): InBrowser;
     type(selector: string, text: string): InBrowser;
+    input(selectorOrText: string, text?: string): InBrowser; // Alias for type/value, but uTools `input(text)` implies typing into FOCUSED element? OR `input(selector, text)`?
+    // User request: `.input(matchs[2])` AFTER `.focus(...)`. So `input(text)` where text is typed into currently focused element.
+    // uTools docs say: `.input(text)` inputs text. 
+    // And `.type(selector, text)` types into selector.
+    // So `input` here is likely "type into focused".
     press(key: string, modifiers?: string[]): InBrowser;
 
     // Advanced features
     css(css: string): InBrowser;
     when(selector: string): InBrowser;
     cookies(name?: string): InBrowser;
+    clearCookies(url?: string): InBrowser;
     pdf(options?: Electron.PrintToPDFOptions, savePath?: string): InBrowser;
 
     run(options?: InBrowserOptions): Promise<any[]>;

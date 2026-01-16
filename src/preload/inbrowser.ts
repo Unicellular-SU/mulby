@@ -44,6 +44,12 @@ export class InBrowserBuilder {
         return this;
     }
 
+    public input = (text: string): this => {
+        // uTools .input(text) types into focused element
+        this.queue.push({ type: 'input', args: [text] });
+        return this;
+    }
+
     public press = (key: string, modifiers?: string[]): this => {
         this.queue.push({ type: 'press', args: [key, modifiers] });
         return this;
@@ -76,6 +82,11 @@ export class InBrowserBuilder {
 
     public cookies = (name?: string): this => {
         this.queue.push({ type: 'cookies', args: [name] });
+        return this;
+    }
+
+    public clearCookies = (url?: string): this => {
+        this.queue.push({ type: 'clearCookies', args: [url] });
         return this;
     }
 
@@ -176,6 +187,7 @@ export const inbrowser = {
     mousedown: (selector: string) => new InBrowserBuilder().mousedown(selector),
     mouseup: (selector: string) => new InBrowserBuilder().mouseup(selector),
     type: (selector: string, text: string) => new InBrowserBuilder().type(selector, text),
+    input: (text: string) => new InBrowserBuilder().input(text),
     value: (selector: string, val: string) => new InBrowserBuilder().value(selector, val),
     check: (selector: string, checked: boolean) => new InBrowserBuilder().check(selector, checked),
     focus: (selector: string) => new InBrowserBuilder().focus(selector),
@@ -187,6 +199,7 @@ export const inbrowser = {
     // Data / Execution
     evaluate: (func: string | Function, ...params: any[]) => new InBrowserBuilder().evaluate(func, ...params),
     cookies: (name?: string) => new InBrowserBuilder().cookies(name),
+    clearCookies: (url?: string) => new InBrowserBuilder().clearCookies(url),
     pdf: (options?: Electron.PrintToPDFOptions, savePath?: string) => new InBrowserBuilder().pdf(options, savePath),
     wait: (msOrSelector: number | string) => new InBrowserBuilder().wait(msOrSelector),
     when: (selector: string) => new InBrowserBuilder().when(selector),
