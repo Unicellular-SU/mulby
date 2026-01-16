@@ -14,11 +14,12 @@ import {
   ImageEditor,
   WindowAPIModule,
   ChildWindowModule,
+  InBrowserDemo,
 } from './modules'
 
 console.log('[App] Module imports loaded')
 
-type ModuleId = 'sysinfo' | 'clipboard' | 'input' | 'filemanager' | 'network' | 'screen' | 'media' | 'settings' | 'security' | 'image-editor' | 'window-api' | 'child-window'
+type ModuleId = 'sysinfo' | 'clipboard' | 'input' | 'filemanager' | 'network' | 'screen' | 'media' | 'settings' | 'security' | 'image-editor' | 'window-api' | 'child-window' | 'inbrowser'
 type ScreenAutoAction = 'region-capture' | null
 
 const featureToModule: Record<string, ModuleId> = {
@@ -34,6 +35,7 @@ const featureToModule: Record<string, ModuleId> = {
   screenshot: 'screen',
   'showcase:ui-settings': 'settings',
   'showcase:ui-detached': 'settings',
+  'showcase:inbrowser': 'inbrowser'
 }
 
 function handleDynamicCommand(featureCode: string, input?: string) {
@@ -87,6 +89,7 @@ const moduleComponents: Record<ModuleId, React.ComponentType<any>> = {
   'image-editor': ImageEditor,
   'window-api': WindowAPIModule,
   'child-window': ChildWindowModule,
+  'inbrowser': InBrowserDemo,
 }
 
 // 从 URL 参数或插件初始化数据获取默认模块

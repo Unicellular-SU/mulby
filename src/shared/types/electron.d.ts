@@ -1,3 +1,5 @@
+import { InBrowser } from './inbrowser'
+
 export interface FileInfo {
   path: string
   name: string
@@ -319,6 +321,9 @@ export interface ElectronAPI {
     resume: () => void
     getVoices: () => { name: string; lang: string; default: boolean; localService: boolean }[]
     isSpeaking: () => boolean
+  }
+  inbrowser: {
+    goto: (url: string, headers?: Record<string, string>, timeout?: number) => InBrowser
   }
 }
 

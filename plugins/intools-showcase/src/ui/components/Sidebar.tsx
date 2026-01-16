@@ -13,7 +13,9 @@ const modules = [
     { id: 'network', icon: '🌐', label: '网络' },
     { id: 'screen', icon: '🖥️', label: '屏幕' },
     { id: 'media', icon: '🎵', label: '媒体' },
-    { id: 'window-api', icon: '🪟', label: '窗口 API' },
+    { id: 'window-api', label: '窗口 API', icon: '🪟' },
+    { id: 'child-window', label: 'Child Window', icon: '🖼️' },
+    { id: 'inbrowser', label: 'InBrowser', icon: '🤖' },
     { id: 'settings', icon: '⚙️', label: '设置' },
     { id: 'security', icon: '🔐', label: '安全' },
 ]

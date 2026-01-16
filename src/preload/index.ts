@@ -1,4 +1,5 @@
 import { contextBridge, ipcRenderer } from 'electron'
+import { inbrowser } from './inbrowser'
 
 contextBridge.exposeInMainWorld('intools', {
   // 窗口控制
@@ -404,7 +405,10 @@ contextBridge.exposeInMainWorld('intools', {
       ipcRenderer.invoke('host:status', pluginName),
     restart: (pluginName: string) =>
       ipcRenderer.invoke('host:restart', pluginName)
-  }
+  },
+
+  // 可编程浏览器 API
+  inbrowser: inbrowser
 })
 
 // ==========================================

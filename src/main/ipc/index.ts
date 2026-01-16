@@ -27,6 +27,7 @@ import { registerColorPickHandlers } from '../plugin/color-pick'
 import { PluginManager } from '../plugin'
 import { PluginWindowManager } from '../plugin/window'
 import { ThemeManager } from '../services/theme'
+import { registerInBrowserHandlers } from './inbrowser'
 
 export function registerAllHandlers(
   getMainWindow: () => BrowserWindow | null,
@@ -59,4 +60,5 @@ export function registerAllHandlers(
   registerStorageHandlers()
   registerRegionCaptureHandlers()
   registerColorPickHandlers()
+  registerInBrowserHandlers()
 }

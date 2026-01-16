@@ -417,6 +417,9 @@ interface IntoolsAPI {
   onPluginInit(callback: (data: PluginInitData) => void): void
   onThemeChange?(callback: (theme: 'light' | 'dark') => void): void
   onWindowStateChange?(callback: (state: { isMaximized: boolean }) => void): void
+  inbrowser: {
+    goto: (url: string, headers?: Record<string, string>, timeout?: number) => any
+  }
 }
 
 declare global {
