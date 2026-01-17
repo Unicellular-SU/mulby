@@ -1,7 +1,8 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import SearchInput from './components/SearchInput'
 import PluginList from './components/PluginList'
 import PluginDetails from './components/PluginDetails'
+import type { InputAttachment, InputPayload } from '../shared/types/plugin'
 
 // 插件附着信息（Panel 模式）
 interface PluginInfo {
@@ -19,6 +20,8 @@ function App() {
   const [detailsPluginName, setDetailsPluginName] = useState<string | null>(null)
   const [isDragging, setIsDragging] = useState(false)
   const [theme, setTheme] = useState<'light' | 'dark'>('light')
+  const [attachments, setAttachments] = useState<UiAttachment[]>([])
+  const payload = useMemo(() => buildPayload(query, attachments), [query, attachments])
 
   // 初始化主题
   useEffect(() => {
@@ -33,7 +36,8 @@ function App() {
 
   // 调整窗口高度
   useEffect(() => {
-    const SEARCH_BOX_HEIGHT = 62
+    const ATTACHMENT_HEIGHT = attachments.length > 0 ? 56 : 0
+    const SEARCH_BOX_HEIGHT = 62 + ATTACHMENT_HEIGHT
     const BORDER_HEIGHT = 1
     const GRID_GAP = 12
     const CARD_HEIGHT = 100 // 图标40 + 名称14 + explain12 + padding24 + gap6*2
@@ -49,7 +53,7 @@ function App() {
     } else if (pluginOpen) {
       // 插件面板打开时，主窗口只保持搜索框高度（插件 UI 在独立的 Panel 窗口中）
       height = SEARCH_BOX_HEIGHT
-    } else if (query.length > 0 && resultCount > 0) {
+    } else if ((query.length > 0 || attachments.length > 0) && resultCount > 0) {
       // 根据结果数量动态计算高度，最多显示 4 行
       const visibleCount = Math.min(resultCount, MAX_ITEMS)
       const rows = Math.ceil(visibleCount / COLUMNS)
@@ -57,7 +61,7 @@ function App() {
         rows * CARD_HEIGHT + (rows - 1) * GRID_GAP
     }
     window.intools.window.setSize(680, height)
-  }, [query, resultCount, pluginOpen, detailsPluginName])
+  }, [query, resultCount, pluginOpen, detailsPluginName, attachments.length])
 
   // 监听插件附着事件
   useEffect(() => {
@@ -79,18 +83,24 @@ function App() {
           // 1. 优先关闭插件
           window.intools.window.close()
         } else if (query.length > 0) {
-          // 2. 清空搜索框
+          // 2. 清空搜索框与附件
           setQuery('')
+          clearAttachments()
+          setResultCount(0)
+          setDetailsPluginName(null)
+        } else if (attachments.length > 0) {
+          // 3. 清空附件
+          clearAttachments()
           setResultCount(0)
         } else {
-          // 3. 隐藏窗口
+          // 4. 隐藏窗口
           window.intools.window.hide()
         }
       }
     }
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [pluginOpen, query])
+  }, [pluginOpen, query, attachments.length])
 
   const handleQueryChange = (value: string) => {
     // 如果有附着的插件，先关闭它
@@ -99,10 +109,31 @@ function App() {
       setPluginOpen(false)
     }
     setQuery(value)
-    if (value.length === 0) {
+    if (value.length === 0 && attachments.length === 0) {
       setResultCount(0)
       setDetailsPluginName(null)
     }
+  }
+
+  const handleAttachmentsChange = (next: UiAttachment[]) => {
+    if (pluginOpen) {
+      window.intools.window.close()
+      setPluginOpen(false)
+    }
+    setAttachments(next)
+    if (next.length === 0 && query.length === 0) {
+      setResultCount(0)
+      setDetailsPluginName(null)
+    }
+  }
+
+  const clearAttachments = () => {
+    attachments.forEach((attachment) => {
+      if (attachment.previewUrl?.startsWith('blob:')) {
+        URL.revokeObjectURL(attachment.previewUrl)
+      }
+    })
+    setAttachments([])
   }
 
   // 拖拽安装插件
@@ -139,10 +170,15 @@ function App() {
       onDragLeave={() => setIsDragging(false)}
       onDrop={handleDrop}
     >
-      <SearchInput value={query} onChange={handleQueryChange} />
-      {query.length > 0 && !pluginOpen && (
+      <SearchInput
+        value={query}
+        onChange={handleQueryChange}
+        attachments={attachments}
+        onAttachmentsChange={handleAttachmentsChange}
+      />
+      {(query.length > 0 || attachments.length > 0) && !pluginOpen && (
         <PluginList
-          query={query}
+          payload={payload}
           onResultsChange={setResultCount}
           onShowDetails={setDetailsPluginName}
         />
@@ -150,6 +186,15 @@ function App() {
       {isDragging && <div className="drop-hint">拖放 .inplugin 文件安装插件</div>}
     </div>
   )
+}
+
+type UiAttachment = InputAttachment & { previewUrl?: string }
+
+function buildPayload(text: string, attachments: UiAttachment[]): InputPayload {
+  return {
+    text,
+    attachments: attachments.map(({ previewUrl, ...rest }) => rest)
+  }
 }
 
 export default App

@@ -1,8 +1,9 @@
 import { useState, useEffect } from 'react'
 import { SearchResultItem } from '../../shared/types/electron'
+import type { InputPayload } from '../../shared/types/plugin'
 
 interface PluginListProps {
-  query: string
+  payload: InputPayload
   onResultsChange?: (count: number) => void
   onShowDetails?: (pluginName: string) => void
 }
@@ -37,7 +38,7 @@ function PluginIcon({ icon }: { icon?: SearchResultItem['icon'] }) {
   )
 }
 
-function PluginList({ query, onResultsChange, onShowDetails }: PluginListProps) {
+function PluginList({ payload, onResultsChange, onShowDetails }: PluginListProps) {
   const [results, setResults] = useState<SearchResultItem[]>([])
   const [selectedIndex, setSelectedIndex] = useState(0)
 
@@ -47,7 +48,7 @@ function PluginList({ query, onResultsChange, onShowDetails }: PluginListProps) 
 
   useEffect(() => {
     loadPlugins()
-  }, [query])
+  }, [payload])
 
   // 键盘导航 - 支持四向移动
   useEffect(() => {
@@ -99,14 +100,14 @@ function PluginList({ query, onResultsChange, onShowDetails }: PluginListProps) 
   }, [results, selectedIndex, onShowDetails]) // Added onShowDetails to deps
 
   const loadPlugins = async () => {
-    const result = await window.intools.plugin.search(query)
+    const result = await window.intools.plugin.search(payload)
     setResults(result)
     setSelectedIndex(0)
     onResultsChange?.(result.length)
   }
 
   const handleRun = async (item: SearchResultItem) => {
-    const result = await window.intools.plugin.run(item.pluginId, item.featureCode, query)
+    const result = await window.intools.plugin.run(item.pluginId, item.featureCode, payload)
     if (result.success) {
       // 有 UI 的插件不隐藏窗口，会显示在附着区域
       if (!result.hasUI) {

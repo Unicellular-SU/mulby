@@ -3,7 +3,7 @@ import { existsSync } from 'fs'
 import { PluginWindowManager } from '../plugin/window'
 import { ThemeManager } from '../services/theme'
 import { PluginManager } from '../plugin/manager'
-import { Plugin, PluginFeature } from '../../shared/types/plugin'
+import { InputPayload, Plugin, PluginFeature } from '../../shared/types/plugin'
 import {
   setSubInputState,
   clearSubInputState,
@@ -13,6 +13,12 @@ import {
 
 // 重新导出 clearSubInputState 供其他模块使用
 export { clearSubInputState } from '../services/subinput-state'
+
+function isInputPayload(payload: unknown): payload is InputPayload {
+  if (!payload || typeof payload !== 'object') return false
+  const candidate = payload as InputPayload
+  return typeof candidate.text === 'string' && Array.isArray(candidate.attachments)
+}
 
 export function registerWindowHandlers(
   getMainWindow: () => BrowserWindow | null,
@@ -151,7 +157,9 @@ export function registerWindowHandlers(
     const plugin = pluginManager.getAll().find((p: Plugin) => p.id === pluginName)
     if (!plugin) return false
 
-    const input = typeof payload === 'string' ? payload : JSON.stringify(payload || '')
+    const input = isInputPayload(payload)
+      ? payload
+      : (typeof payload === 'string' ? payload : JSON.stringify(payload || ''))
 
     // 判断调用源是附着模式还是独立模式
     const callerWin = BrowserWindow.fromWebContents(event.sender)
@@ -163,10 +171,10 @@ export function registerWindowHandlers(
 
     if (isAttachedContext) {
       // 附着模式 -> 保持附着模式跳转
-      return pluginWindowManager.attachPlugin(plugin, featureCode, input)
+      return pluginWindowManager.attachPlugin(plugin, featureCode, isInputPayload(input) ? input : { text: input, attachments: [] })
     } else {
       // 独立模式 -> 打开新的独立窗口
-      const newWin = pluginWindowManager.createDetachedWindow(plugin, featureCode, input)
+      const newWin = pluginWindowManager.createDetachedWindow(plugin, featureCode, isInputPayload(input) ? input : { text: input, attachments: [] })
       return !!newWin
     }
   })

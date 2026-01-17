@@ -1,5 +1,5 @@
 import { app } from 'electron'
-import { join } from 'path'
+import { join, extname } from 'path'
 import { existsSync, rmSync } from 'fs'
 import { PluginLoader } from './loader'
 import { PluginRunner } from './runner'
@@ -7,13 +7,78 @@ import { PluginStateManager } from './state'
 import { PluginWindowManager } from './window'
 import { PluginHostManager } from './host-manager'
 import { pluginFeatureStore } from './dynamic-features'
-import { Plugin, PluginFeature } from '../../shared/types/plugin'
+import { InputAttachment, InputPayload, Plugin, PluginFeature } from '../../shared/types/plugin'
 
 // 搜索结果项
 interface SearchResult {
   plugin: Plugin
   feature: PluginFeature
-  matchType: 'keyword' | 'regex'
+  matchType: 'keyword' | 'regex' | 'files' | 'img'
+}
+
+function normalizeInputPayload(input?: string | InputPayload): InputPayload {
+  if (!input) {
+    return { text: '', attachments: [] }
+  }
+  if (typeof input === 'string') {
+    return { text: input, attachments: [] }
+  }
+  return {
+    text: input.text || '',
+    attachments: Array.isArray(input.attachments) ? input.attachments : []
+  }
+}
+
+function matchPriority(type: SearchResult['matchType']): number {
+  switch (type) {
+    case 'img':
+      return 3
+    case 'files':
+      return 3
+    case 'regex':
+      return 2
+    case 'keyword':
+      return 1
+  }
+}
+
+function normalizeExt(value: string): string {
+  if (!value) return ''
+  const trimmed = value.trim().toLowerCase()
+  if (trimmed === '*' || trimmed === '.*') return '*'
+  return trimmed.startsWith('.') ? trimmed : `.${trimmed}`
+}
+
+function getAttachmentExt(attachment: InputAttachment): string {
+  if (attachment.ext) return normalizeExt(attachment.ext)
+  if (attachment.path) return normalizeExt(extname(attachment.path))
+  if (attachment.name) return normalizeExt(extname(attachment.name))
+  return ''
+}
+
+function matchesFiles(exts: string[], attachments: InputAttachment[]): boolean {
+  const normalizedExts = exts.map(normalizeExt)
+  const hasWildcard = normalizedExts.includes('*')
+  if (hasWildcard) return attachments.length > 0
+
+  return attachments.some((attachment) => {
+    const ext = getAttachmentExt(attachment)
+    if (!ext) return false
+    return normalizedExts.includes(ext)
+  })
+}
+
+function matchesImageExts(exts: string[] | undefined, attachments: InputAttachment[]): boolean {
+  const imageAttachments = attachments.filter((attachment) => isImageAttachment(attachment))
+  if (!exts || exts.length === 0) return imageAttachments.length > 0
+  return matchesFiles(exts, imageAttachments)
+}
+
+function isImageAttachment(attachment: InputAttachment): boolean {
+  if (attachment.kind === 'image') return true
+  if (attachment.mime?.toLowerCase().startsWith('image/')) return true
+  const ext = getAttachmentExt(attachment)
+  return ['.png', '.jpg', '.jpeg', '.gif', '.webp', '.bmp', '.svg', '.tiff', '.tif', '.heic', '.heif'].includes(ext)
 }
 
 export class PluginManager {
@@ -100,10 +165,16 @@ export class PluginManager {
   }
 
   // 搜索插件（返回匹配的功能入口，只搜索启用的插件）
-  search(query: string): SearchResult[] {
+  search(input: string | InputPayload): SearchResult[] {
     const enabledPlugins = this.getEnabled()
 
-    if (!query) {
+    const normalizedInput = normalizeInputPayload(input)
+    const text = normalizedInput.text
+    const attachments = normalizedInput.attachments
+    const hasText = text.trim().length > 0
+    const hasAttachments = attachments.length > 0
+
+    if (!hasText && !hasAttachments) {
       return enabledPlugins.map(p => ({
         plugin: p,
         feature: p.manifest.features[0],
@@ -112,24 +183,59 @@ export class PluginManager {
     }
 
     const results: SearchResult[] = []
-    const q = query.toLowerCase()
+    const q = text.toLowerCase()
 
     for (const plugin of enabledPlugins) {
       for (const feature of this.getCombinedFeatures(plugin)) {
+        let matchType: SearchResult['matchType'] | null = null
+        let matchScore = 0
+
         for (const cmd of feature.cmds) {
           if (cmd.type === 'regex') {
+            if (!hasText) continue
             try {
               const regex = new RegExp(cmd.match)
-              if (regex.test(query)) {
-                results.push({ plugin, feature, matchType: 'regex' })
-                break
+              if (regex.test(text)) {
+                const score = matchPriority('regex')
+                if (score > matchScore) {
+                  matchType = 'regex'
+                  matchScore = score
+                }
               }
             } catch { }
           }
           if (cmd.type === 'keyword' && cmd.value.toLowerCase().includes(q)) {
-            results.push({ plugin, feature, matchType: 'keyword' })
-            break
+            if (!hasText) continue
+            const score = matchPriority('keyword')
+            if (score > matchScore) {
+              matchType = 'keyword'
+              matchScore = score
+            }
           }
+          if (cmd.type === 'files') {
+            if (!hasAttachments) continue
+            if (matchesFiles(cmd.exts, attachments)) {
+              const score = matchPriority('files')
+              if (score > matchScore) {
+                matchType = 'files'
+                matchScore = score
+              }
+            }
+          }
+          if (cmd.type === 'img') {
+            if (!hasAttachments) continue
+            if (matchesImageExts(cmd.exts, attachments)) {
+              const score = matchPriority('img')
+              if (score > matchScore) {
+                matchType = 'img'
+                matchScore = score
+              }
+            }
+          }
+        }
+
+        if (matchType) {
+          results.push({ plugin, feature, matchType })
         }
       }
     }
@@ -138,7 +244,11 @@ export class PluginManager {
   }
 
   // 执行插件
-  async run(name: string, featureCode: string, input?: string): Promise<{ success: boolean; hasUI?: boolean; error?: string }> {
+  async run(
+    name: string,
+    featureCode: string,
+    input?: string | InputPayload
+  ): Promise<{ success: boolean; hasUI?: boolean; error?: string }> {
     const plugin = this.plugins.get(name)
     if (!plugin) {
       return { success: false, error: 'Plugin not found' }
@@ -154,6 +264,7 @@ export class PluginManager {
     }
 
     const feature = this.getCombinedFeatures(plugin).find(item => item.code === featureCode)
+    const normalizedInput = normalizeInputPayload(input)
     const useUI = Boolean(plugin.manifest.ui) && feature?.mode !== 'silent'
     const useDetached = feature?.mode === 'detached'
     const route = feature?.route
@@ -164,20 +275,20 @@ export class PluginManager {
         return { success: false, error: 'Window manager not initialized' }
       }
       if (useDetached) {
-        const win = this.windowManager.createDetachedWindow(plugin, featureCode, input, route)
+        const win = this.windowManager.createDetachedWindow(plugin, featureCode, normalizedInput, route)
         return { success: Boolean(win), hasUI: true }
       }
-      const success = this.windowManager.attachPlugin(plugin, featureCode, input, route)
+      const success = this.windowManager.attachPlugin(plugin, featureCode, normalizedInput, route)
       return { success, hasUI: true }
     }
 
     // 无 UI 插件，使用 UtilityProcess 或 VM2 执行
     try {
       if (this.useUtilityProcess) {
-        await this.hostManager.runPlugin(plugin, featureCode, input || '')
+        await this.hostManager.runPlugin(plugin, featureCode, normalizedInput.text, normalizedInput.attachments)
       } else {
         const runner = this.getRunner(plugin)
-        await runner.run(featureCode, input)
+        await runner.run(featureCode, normalizedInput.text, normalizedInput.attachments)
       }
       return { success: true }
     } catch (err) {

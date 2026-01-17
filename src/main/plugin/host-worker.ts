@@ -37,6 +37,7 @@ interface PluginContext {
   api: PluginAPI
   featureCode: string
   input: string
+  attachments?: InputAttachment[]
 }
 
 interface HookContext {
@@ -44,6 +45,17 @@ interface HookContext {
 }
 
 type PluginAPI = Record<string, unknown>
+
+interface InputAttachment {
+  id: string
+  name: string
+  size: number
+  kind: 'file' | 'image'
+  mime?: string
+  ext?: string
+  path?: string
+  dataUrl?: string
+}
 
 let pluginState: PluginState | null = null
 const pendingApiCalls = new Map<string, {
@@ -184,12 +196,12 @@ function loadModule(): PluginModule {
 
 /** 执行插件 */
 async function handleRun(request: RunRequest): Promise<void> {
-  const { featureCode, input } = request.payload
+  const { featureCode, input, attachments } = request.payload
 
   try {
     const module = loadModule()
     const api = createProxyAPI()
-    const context: PluginContext = { api, featureCode, input }
+    const context: PluginContext = { api, featureCode, input, attachments }
 
     if (typeof module.run === 'function') {
       await module.run(context)

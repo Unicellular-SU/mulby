@@ -88,7 +88,7 @@
 | keyword | 关键词触发 | value: 关键词 |
 | regex | 正则匹配 | match: 正则, explain: 说明 |
 | files | 文件类型 | exts: [".json", ".txt"] |
-| img | 图片 | - |
+| img | 图片 | exts?: [".png", ".jpg"] |
 | over | 选中文本 | - |
 
 ### Icon 字段

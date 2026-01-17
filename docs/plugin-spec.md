@@ -221,6 +221,34 @@ module.exports = {
 };
 ```
 
+## Plugin Context
+
+`run(context)` 的 context 参数包含输入与附件信息，常用字段如下：
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| input | string | 触发时的文本输入 |
+| featureCode | string | 触发的功能入口 code |
+| attachments | array | 文件/图片附件列表（可选） |
+
+### attachments 结构
+
+```ts
+type InputAttachment = {
+  id: string
+  name: string
+  size: number
+  kind: 'file' | 'image'
+  mime?: string
+  ext?: string
+  path?: string
+  dataUrl?: string
+}
+```
+
+- `path`：来自文件粘贴/拖拽时的本地路径。
+- `dataUrl`：图片从剪贴板粘贴且无路径时提供的 Base64 数据。
+
 ### 完整生命周期示例
 
 ```javascript
@@ -354,8 +382,9 @@ const { clipboard, notification } = require('@intools/sdk');
 
 module.exports = {
   async run(context) {
-    // context.text - 触发时的文本（关键词后的内容或剪贴板）
-    const input = context.text || await clipboard.readText();
+    // context.input - 触发时的文本
+    const input = context.input || await clipboard.readText();
+    const attachments = context.attachments || [];
 
     // 处理逻辑
     const result = processData(input);

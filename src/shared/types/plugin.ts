@@ -25,6 +25,25 @@ export interface ResolvedIcon {
   value: string
 }
 
+// 输入附件
+export type InputAttachmentKind = 'file' | 'image'
+
+export interface InputAttachment {
+  id: string
+  name: string
+  size: number
+  kind: InputAttachmentKind
+  mime?: string
+  ext?: string
+  path?: string
+  dataUrl?: string
+}
+
+export interface InputPayload {
+  text: string
+  attachments: InputAttachment[]
+}
+
 // 命令类型
 export interface CmdKeyword {
   type: 'keyword'
@@ -44,6 +63,7 @@ export interface CmdFiles {
 
 export interface CmdImg {
   type: 'img'
+  exts?: string[]
 }
 
 export interface CmdOver {
@@ -142,6 +162,7 @@ export interface PluginContext {
   api: PluginAPI
   featureCode: string
   input: string
+  attachments?: InputAttachment[]
 }
 
 // 剪贴板文件信息

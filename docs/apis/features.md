@@ -25,7 +25,7 @@
 type CmdKeyword = { type: 'keyword'; value: string }
 type CmdRegex = { type: 'regex'; match: string; explain?: string }
 type CmdFiles = { type: 'files'; exts: string[] }
-type CmdImg = { type: 'img' }
+type CmdImg = { type: 'img'; exts?: string[] }
 type CmdOver = { type: 'over' }
 
 type DynamicCmdInput = string | CmdKeyword | CmdRegex | CmdFiles | CmdImg | CmdOver

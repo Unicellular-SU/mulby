@@ -1,7 +1,7 @@
 import { readFileSync } from 'fs'
 import { join } from 'path'
 import { VM } from 'vm2'
-import { Plugin, PluginModule } from '../../shared/types/plugin'
+import { InputAttachment, Plugin, PluginModule } from '../../shared/types/plugin'
 import { createPluginAPI } from './api'
 
 export class PluginRunner {
@@ -38,10 +38,10 @@ export class PluginRunner {
   }
 
   // 执行插件
-  async run(featureCode: string, input?: string): Promise<void> {
+  async run(featureCode: string, input?: string, attachments?: InputAttachment[]): Promise<void> {
     const pluginModule = this.loadModule()
     const api = createPluginAPI(this.plugin.id)
-    const context = { api, featureCode, input: input || '' }
+    const context = { api, featureCode, input: input || '', attachments }
 
     try {
       if (typeof pluginModule.run === 'function') {

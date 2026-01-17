@@ -1,8 +1,11 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
+import type { InputAttachment } from '../../shared/types/plugin'
 
 interface SearchInputProps {
   value: string
   onChange: (value: string) => void
+  attachments: UiAttachment[]
+  onAttachmentsChange: (attachments: UiAttachment[]) => void
 }
 
 // intoolsMain 类型声明
@@ -27,7 +30,11 @@ interface SubInputState {
   placeholder: string
 }
 
-function SearchInput({ value, onChange }: SearchInputProps) {
+interface UiAttachment extends InputAttachment {
+  previewUrl?: string
+}
+
+function SearchInput({ value, onChange, attachments, onAttachmentsChange }: SearchInputProps) {
   const inputRef = useRef<HTMLInputElement>(null)
   const [subInput, setSubInput] = useState<SubInputState>({ enabled: false, placeholder: '' })
   const [subInputValue, setSubInputValue] = useState('')
@@ -80,21 +87,99 @@ function SearchInput({ value, onChange }: SearchInputProps) {
     }
   }, [subInput.enabled, onChange])
 
+  const handlePaste = useCallback(async (e: React.ClipboardEvent<HTMLInputElement>) => {
+    const items = Array.from(e.clipboardData.items)
+    const files = items
+      .filter((item) => item.kind === 'file')
+      .map((item) => item.getAsFile())
+      .filter((file): file is File => Boolean(file))
+
+    if (files.length === 0) return
+
+    e.preventDefault()
+    const next = await buildAttachments(files, attachments)
+    if (next.length > 0) {
+      onAttachmentsChange(next)
+    }
+  }, [attachments, onAttachmentsChange])
+
+  const handleDrop = useCallback(async (e: React.DragEvent<HTMLInputElement>) => {
+    const files = Array.from(e.dataTransfer.files || [])
+    if (files.some((file) => file.path?.endsWith('.inplugin'))) return
+
+    e.preventDefault()
+    e.stopPropagation()
+
+    if (files.length === 0) return
+    const next = await buildAttachments(files, attachments)
+    if (next.length > 0) {
+      onAttachmentsChange(next)
+    }
+  }, [attachments, onAttachmentsChange])
+
+  const handleRemoveAttachment = useCallback((id: string) => {
+    const next = attachments.filter((attachment) => {
+      if (attachment.id !== id) return true
+      if (attachment.previewUrl?.startsWith('blob:')) {
+        URL.revokeObjectURL(attachment.previewUrl)
+      }
+      return false
+    })
+    onAttachmentsChange(next)
+  }, [attachments, onAttachmentsChange])
+
   return (
-    <div className="search-box">
+    <div className={`search-box ${attachments.length > 0 ? 'has-attachments' : ''}`}>
       <svg className="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor">
         <circle cx="11" cy="11" r="8" />
         <path d="m21 21-4.35-4.35" />
       </svg>
-      <input
-        ref={inputRef}
-        type="text"
-        className="search-input"
-        placeholder={subInput.enabled ? subInput.placeholder : '输入关键词搜索插件...'}
-        value={subInput.enabled ? subInputValue : value}
-        onChange={handleInputChange}
-        autoFocus
-      />
+      <div className="search-input-wrap">
+        {attachments.length > 0 && (
+          <div className="attachment-list no-drag">
+            {attachments.map((attachment) => (
+              <div className="attachment-item" key={attachment.id} title={attachment.name}>
+                {attachment.kind === 'image' && attachment.previewUrl ? (
+                  <img className="attachment-thumb" src={attachment.previewUrl} alt="" />
+                ) : (
+                  <div className="attachment-icon">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                      <path d="M14 2v6h6" />
+                    </svg>
+                  </div>
+                )}
+                <div className="attachment-meta">
+                  <span className="attachment-name">{attachment.name}</span>
+                  <span className="attachment-size">{formatBytes(attachment.size)}</span>
+                </div>
+                <button
+                  className="attachment-remove"
+                  type="button"
+                  onClick={() => handleRemoveAttachment(attachment.id)}
+                  aria-label="移除附件"
+                >
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                    <path d="M18 6L6 18M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+        <input
+          ref={inputRef}
+          type="text"
+          className="search-input"
+          placeholder={subInput.enabled ? subInput.placeholder : '输入关键词搜索插件...'}
+          value={subInput.enabled ? subInputValue : value}
+          onChange={handleInputChange}
+          onPaste={handlePaste}
+          onDragOver={(e) => e.preventDefault()}
+          onDrop={handleDrop}
+          autoFocus
+        />
+      </div>
       {subInput.enabled && (
         <div className="subinput-indicator" title="SubInput 模式">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -106,5 +191,81 @@ function SearchInput({ value, onChange }: SearchInputProps) {
   )
 }
 
-export default SearchInput
+async function buildAttachments(files: File[], existing: UiAttachment[]): Promise<UiAttachment[]> {
+  const next = [...existing]
+  for (const file of files) {
+    const attachment = await createAttachment(file)
+    if (!attachment) continue
 
+    const duplicate = next.some((item) => {
+      if (item.path && attachment.path) {
+        return item.path === attachment.path
+      }
+      return item.name === attachment.name && item.size === attachment.size && item.mime === attachment.mime
+    })
+    if (!duplicate) {
+      next.push(attachment)
+    } else if (attachment.previewUrl?.startsWith('blob:')) {
+      URL.revokeObjectURL(attachment.previewUrl)
+    }
+  }
+  return next
+}
+
+async function createAttachment(file: File): Promise<UiAttachment | null> {
+  const filePath = (file as File & { path?: string }).path
+  const name = file.name || filePath?.split(/[/\\]/).pop() || 'untitled'
+  const mime = file.type || undefined
+  const ext = extractExt(name)
+  const isImage = mime?.startsWith('image/') || isImageExt(ext)
+  const previewUrl = isImage ? URL.createObjectURL(file) : undefined
+  const dataUrl = isImage && !filePath ? await readFileAsDataUrl(file) : undefined
+
+  return {
+    id: crypto.randomUUID?.() || `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`,
+    name,
+    size: file.size,
+    kind: isImage ? 'image' : 'file',
+    mime,
+    ext,
+    path: filePath,
+    dataUrl,
+    previewUrl
+  }
+}
+
+function extractExt(name: string): string | undefined {
+  const match = /(\.[^./\\]+)$/.exec(name)
+  return match ? match[1].toLowerCase() : undefined
+}
+
+function isImageExt(ext?: string): boolean {
+  if (!ext) return false
+  return ['.png', '.jpg', '.jpeg', '.gif', '.webp', '.bmp', '.svg', '.tiff', '.tif', '.heic', '.heif'].includes(ext)
+}
+
+function readFileAsDataUrl(file: File): Promise<string | undefined> {
+  return new Promise((resolve) => {
+    const reader = new FileReader()
+    reader.onload = () => {
+      resolve(typeof reader.result === 'string' ? reader.result : undefined)
+    }
+    reader.onerror = () => resolve(undefined)
+    reader.readAsDataURL(file)
+  })
+}
+
+function formatBytes(bytes: number): string {
+  if (!Number.isFinite(bytes)) return '0 B'
+  if (bytes < 1024) return `${bytes} B`
+  const units = ['KB', 'MB', 'GB', 'TB']
+  let size = bytes
+  let unitIndex = -1
+  while (size >= 1024 && unitIndex < units.length - 1) {
+    size /= 1024
+    unitIndex += 1
+  }
+  return `${size.toFixed(size < 10 ? 1 : 0)} ${units[unitIndex]}`
+}
+
+export default SearchInput

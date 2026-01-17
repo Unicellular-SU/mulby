@@ -2,7 +2,7 @@ import { BrowserWindow, screen } from 'electron'
 import http from 'http'
 import https from 'https'
 import { join } from 'path'
-import { Plugin } from '../../shared/types/plugin'
+import { InputAttachment, InputPayload, Plugin } from '../../shared/types/plugin'
 import { ThemeManager } from '../services/theme'
 import { injectCustomTitleBar } from './titlebar'
 import { isIgnoringBlur } from '../services/blur-manager'
@@ -236,6 +236,7 @@ export class PluginPanelWindow {
     private currentPlugin: Plugin | null = null
     private currentFeatureCode: string = ''
     private currentInput: string = ''
+    private currentAttachments: InputAttachment[] = []
 
     // 位置同步相关
     private moveHandler: (() => void) | null = null
@@ -259,7 +260,7 @@ export class PluginPanelWindow {
     createPanel(
         plugin: Plugin,
         featureCode: string,
-        input: string = '',
+        input?: InputPayload,
         route?: string
     ): BrowserWindow | null {
         if (!plugin.manifest.ui) return null
@@ -272,7 +273,8 @@ export class PluginPanelWindow {
         // 存储当前插件信息
         this.currentPlugin = plugin
         this.currentFeatureCode = featureCode
-        this.currentInput = input
+        this.currentInput = input?.text || ''
+        this.currentAttachments = input?.attachments || []
 
         // 计算初始位置
         const { x, y, width } = this.calculatePanelBounds()
@@ -342,7 +344,8 @@ export class PluginPanelWindow {
             this.panelWindow.webContents.send('plugin:init', {
                 pluginName: plugin.id,
                 featureCode,
-                input,
+                input: this.currentInput,
+                attachments: this.currentAttachments,
                 mode: 'panel',
                 route
             })
@@ -513,6 +516,7 @@ export class PluginPanelWindow {
         const uiPath = join(plugin.path, plugin.manifest.ui!)
         const featureCode = this.currentFeatureCode
         const input = this.currentInput
+        const attachments = this.currentAttachments
 
         // 关闭面板（但不清理插件信息，因为我们要转移到新窗口）
         this.panelWindow.close()
@@ -573,6 +577,7 @@ export class PluginPanelWindow {
                 pluginName: plugin.id,
                 featureCode,
                 input,
+                attachments,
                 mode: 'detached'
             })
 
@@ -610,6 +615,7 @@ export class PluginPanelWindow {
         this.currentPlugin = null
         this.currentFeatureCode = ''
         this.currentInput = ''
+        this.currentAttachments = []
 
         return independentWindow
     }
@@ -633,6 +639,7 @@ export class PluginPanelWindow {
         this.currentPlugin = null
         this.currentFeatureCode = ''
         this.currentInput = ''
+        this.currentAttachments = []
         this.syncScheduled = false
     }
 

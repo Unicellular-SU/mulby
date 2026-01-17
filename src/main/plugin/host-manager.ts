@@ -14,7 +14,7 @@ import type {
 import { generateRequestId } from './host-protocol'
 import { createPluginAPI } from './api'
 import { PluginHostWatchdog } from './watchdog'
-import type { Plugin } from '../../shared/types/plugin'
+import type { InputAttachment, Plugin } from '../../shared/types/plugin'
 
 // ============ 类型定义 ============
 
@@ -342,7 +342,12 @@ export class PluginHostManager extends EventEmitter {
   /**
    * 执行插件
    */
-  async runPlugin(plugin: Plugin, featureCode: string, input: string): Promise<void> {
+  async runPlugin(
+    plugin: Plugin,
+    featureCode: string,
+    input: string,
+    attachments?: InputAttachment[]
+  ): Promise<void> {
     const pluginName = plugin.id
 
     // 确保插件已初始化
@@ -356,7 +361,7 @@ export class PluginHostManager extends EventEmitter {
     await this.sendRequest(pluginName, {
       id: generateRequestId(),
       type: 'run',
-      payload: { featureCode, input }
+      payload: { featureCode, input, attachments }
     })
   }
 

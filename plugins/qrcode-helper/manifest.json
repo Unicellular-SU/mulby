@@ -28,6 +28,19 @@
           "label": "转二维码"
         }
       ]
+    },
+    {
+      "code": "scan",
+      "explain": "识别二维码",
+      "cmds": [
+        {
+          "type": "img",
+          "exts": [
+            "jpg",
+            "png"
+          ]
+        }
+      ]
     }
   ]
 }

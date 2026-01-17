@@ -1,11 +1,27 @@
-import React, { useState, useEffect, useCallback } from 'react'
+import React, { useState, useEffect, useCallback, useRef } from 'react'
 import jsQR from 'jsqr'
 import { useIntools } from '../hooks/useIntools'
 
-export const QRCodeScanner: React.FC = () => {
+interface InputAttachment {
+    id: string
+    name: string
+    size: number
+    kind: 'file' | 'image'
+    mime?: string
+    ext?: string
+    path?: string
+    dataUrl?: string
+}
+
+interface QRCodeScannerProps {
+    initialAttachment?: InputAttachment | null
+}
+
+export const QRCodeScanner: React.FC<QRCodeScannerProps> = ({ initialAttachment }) => {
     const [result, setResult] = useState('')
     const [error, setError] = useState('')
-    const { clipboard, notification } = useIntools()
+    const { clipboard, notification, filesystem } = useIntools()
+    const lastAttachmentId = useRef<string | null>(null)
 
     const scanImage = useCallback((imageData: ImageData) => {
         const code = jsQR(imageData.data, imageData.width, imageData.height)
@@ -43,6 +59,47 @@ export const QRCodeScanner: React.FC = () => {
         }
         reader.readAsDataURL(file)
     }, [scanImage])
+
+    const processDataUrl = useCallback((dataUrl: string) => {
+        const img = new Image()
+        img.onload = () => {
+            const canvas = document.createElement('canvas')
+            const context = canvas.getContext('2d')
+            if (!context) return
+
+            canvas.width = img.width
+            canvas.height = img.height
+            context.drawImage(img, 0, 0)
+            const imageData = context.getImageData(0, 0, canvas.width, canvas.height)
+            scanImage(imageData)
+        }
+        img.src = dataUrl
+    }, [scanImage])
+
+    useEffect(() => {
+        const loadAttachment = async () => {
+            if (!initialAttachment || initialAttachment.kind !== 'image') return
+            if (lastAttachmentId.current === initialAttachment.id) return
+            lastAttachmentId.current = initialAttachment.id
+
+            if (initialAttachment.dataUrl) {
+                processDataUrl(initialAttachment.dataUrl)
+                return
+            }
+
+            if (initialAttachment.path) {
+                const base64 = await filesystem.readFile(initialAttachment.path, 'base64')
+                if (typeof base64 !== 'string' || base64.length === 0) {
+                    setError('无法读取图片内容')
+                    return
+                }
+                const mime = initialAttachment.mime || 'image/png'
+                processDataUrl(`data:${mime};base64,${base64}`)
+            }
+        }
+
+        void loadAttachment()
+    }, [initialAttachment, filesystem, processDataUrl])
 
     // 监听粘贴事件
     useEffect(() => {

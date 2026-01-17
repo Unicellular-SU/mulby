@@ -1,5 +1,6 @@
 import { ipcMain } from 'electron'
 import { PluginManager } from '../plugin'
+import type { InputPayload } from '../../shared/types/plugin'
 import { PluginInstaller } from '../plugin/installer'
 
 export function registerPluginHandlers(manager: PluginManager) {
@@ -17,7 +18,7 @@ export function registerPluginHandlers(manager: PluginManager) {
   })
 
   // 搜索插件（返回匹配的功能入口）
-  ipcMain.handle('plugin:search', (_, query: string) => {
+  ipcMain.handle('plugin:search', (_, query: string | InputPayload) => {
     return manager.search(query).map(result => ({
       pluginId: result.plugin.id,
       pluginName: result.plugin.manifest.name,
@@ -30,7 +31,7 @@ export function registerPluginHandlers(manager: PluginManager) {
   })
 
   // 执行插件
-  ipcMain.handle('plugin:run', async (_, name: string, featureCode: string, input?: string) => {
+  ipcMain.handle('plugin:run', async (_, name: string, featureCode: string, input?: string | InputPayload) => {
     return manager.run(name, featureCode, input)
   })
 

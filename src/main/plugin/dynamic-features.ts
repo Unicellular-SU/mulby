@@ -39,7 +39,10 @@ function normalizeCmd(cmd: DynamicCmdInput): PluginCmd {
       }
       return { type: 'files', exts: cmd.exts }
     case 'img':
-      return { type: 'img' }
+      if (cmd.exts && (!Array.isArray(cmd.exts) || cmd.exts.length === 0)) {
+        throw new Error('Img command exts must be a non-empty array')
+      }
+      return { type: 'img', exts: cmd.exts }
     case 'over':
       return { type: 'over' }
   }

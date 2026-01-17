@@ -1,7 +1,7 @@
 import { BrowserWindow, app, Menu } from 'electron'
 import { join } from 'path'
 import { existsSync } from 'fs'
-import { Plugin } from '../../shared/types/plugin'
+import { InputAttachment, InputPayload, Plugin } from '../../shared/types/plugin'
 import { ThemeManager } from '../services/theme'
 import { injectCustomTitleBar } from './titlebar'
 import { PluginPanelWindow } from './panel-window'
@@ -11,6 +11,7 @@ interface AttachedPlugin {
   plugin: Plugin
   featureCode: string
   input: string
+  attachments?: InputAttachment[]
 }
 
 interface DetachedWindowInfo {
@@ -18,6 +19,7 @@ interface DetachedWindowInfo {
   plugin: Plugin
   featureCode: string
   input: string
+  attachments?: InputAttachment[]
   creatorId?: number  // 创建此窗口的父窗口 ID
 }
 
@@ -93,7 +95,7 @@ export class PluginWindowManager {
   }
 
   // 附着插件（使用 Panel 模式）
-  attachPlugin(plugin: Plugin, featureCode: string, input?: string, route?: string): boolean {
+  attachPlugin(plugin: Plugin, featureCode: string, input?: InputPayload, route?: string): boolean {
     if (!plugin.manifest.ui) return false
 
     const uiPath = join(plugin.path, plugin.manifest.ui)
@@ -108,7 +110,8 @@ export class PluginWindowManager {
     this.attachedPlugin = {
       plugin,
       featureCode,
-      input: input || ''
+      input: input?.text || '',
+      attachments: input?.attachments
     }
 
     // 使用 Panel 模式（独立窗口跟随）
@@ -117,7 +120,7 @@ export class PluginWindowManager {
       return false
     }
 
-    const panelWin = this.panelWindow.createPanel(plugin, featureCode, input || '', route)
+    const panelWin = this.panelWindow.createPanel(plugin, featureCode, input, route)
     if (!panelWin) {
       console.error('[PluginWindowManager] Failed to create panel window')
       this.attachedPlugin = null
@@ -129,7 +132,8 @@ export class PluginWindowManager {
       pluginName: plugin.id,
       displayName: plugin.manifest.displayName,
       featureCode,
-      input: input || '',
+      input: input?.text || '',
+      attachments: input?.attachments,
       mode: 'panel'
     })
 
@@ -164,7 +168,7 @@ export class PluginWindowManager {
   detachCurrent(): BrowserWindow | null {
     if (!this.attachedPlugin) return null
 
-    const { plugin, featureCode, input } = this.attachedPlugin
+    const { plugin, featureCode, input, attachments } = this.attachedPlugin
     this.attachedPlugin = null
 
     // 清理主进程中的 SubInput 状态
@@ -184,7 +188,8 @@ export class PluginWindowManager {
           window: win,
           plugin,
           featureCode,
-          input
+          input,
+          attachments
         })
         this.updateDockVisibility()
 
@@ -198,14 +203,14 @@ export class PluginWindowManager {
     }
 
     // 如果 promoteToWindow 失败，创建新的独立窗口
-    return this.createDetachedWindow(plugin, featureCode, input)
+    return this.createDetachedWindow(plugin, featureCode, { text: input, attachments })
   }
 
   // 创建独立窗口
   createDetachedWindow(
     plugin: Plugin,
     featureCode: string,
-    input?: string,
+    input?: InputPayload,
     route?: string
   ): BrowserWindow | null {
     if (!plugin.manifest.ui) return null
@@ -254,7 +259,8 @@ export class PluginWindowManager {
       win.webContents.send('plugin:init', {
         pluginName: plugin.id,
         featureCode,
-        input: input || '',
+        input: input?.text || '',
+        attachments: input?.attachments,
         mode: 'detached',
         route
       })
@@ -294,7 +300,8 @@ export class PluginWindowManager {
       window: win,
       plugin,
       featureCode,
-      input: input || ''
+      input: input?.text || '',
+      attachments: input?.attachments
     })
 
     // 显示 Dock 图标
@@ -366,6 +373,7 @@ export class PluginWindowManager {
         pluginName: plugin.id,
         featureCode: '', // 辅助窗口没有 featureCode
         input: '',
+        attachments: [],
         mode: 'detached',
         route: path // 额外字段，通知前端跳转
       })
@@ -398,6 +406,7 @@ export class PluginWindowManager {
       plugin,
       featureCode: '',
       input: '',
+      attachments: [],
       creatorId  // 记录创建者
     })
 

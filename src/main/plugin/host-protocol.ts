@@ -3,6 +3,8 @@
  * 定义主进程与 UtilityProcess 之间的消息格式
  */
 
+import type { InputAttachment } from '../../shared/types/plugin'
+
 // ============ 消息类型 ============
 
 /** 主进程 -> Worker 的请求类型 */
@@ -43,6 +45,7 @@ export interface RunRequest extends HostRequestBase {
   payload: {
     featureCode: string
     input: string
+    attachments?: InputAttachment[]
   }
 }
 

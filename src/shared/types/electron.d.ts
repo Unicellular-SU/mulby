@@ -1,4 +1,5 @@
 import { InBrowser } from './inbrowser'
+import type { InputPayload, InputAttachment } from './plugin'
 
 export interface FileInfo {
   path: string
@@ -16,7 +17,7 @@ export interface SearchResultItem {
   featureCode: string
   featureExplain: string
   featureRoute?: string
-  matchType: 'keyword' | 'regex'
+  matchType: 'keyword' | 'regex' | 'files' | 'img'
   icon?: {
     type: 'url' | 'svg' | 'data-url'
     value: string
@@ -211,16 +212,16 @@ export interface ElectronAPI {
   }
   plugin: {
     getAll: () => Promise<PluginInfo[]>
-    search: (query: string) => Promise<SearchResultItem[]>
-    run: (name: string, featureCode: string, input?: string) => Promise<{ success: boolean; hasUI?: boolean; error?: string }>
+    search: (query: string | InputPayload) => Promise<SearchResultItem[]>
+    run: (name: string, featureCode: string, input?: string | InputPayload) => Promise<{ success: boolean; hasUI?: boolean; error?: string }>
     install: (filePath: string) => Promise<{ success: boolean; pluginName?: string; isUpdate?: boolean; oldVersion?: string; newVersion?: string; error?: string }>
     enable: (name: string) => Promise<{ success: boolean; error?: string }>
     disable: (name: string) => Promise<{ success: boolean; error?: string }>
     uninstall: (name: string) => Promise<{ success: boolean; error?: string }>
     getReadme: (name: string) => Promise<string | null>
   }
-  onPluginInit: (callback: (data: { pluginName: string; featureCode: string; input: string; mode?: string }) => void) => void
-  onPluginAttach: (callback: (data: { pluginName: string; displayName: string; featureCode: string; input: string; mode: 'panel' }) => void) => void
+  onPluginInit: (callback: (data: { pluginName: string; featureCode: string; input: string; attachments?: InputAttachment[]; mode?: string }) => void) => void
+  onPluginAttach: (callback: (data: { pluginName: string; displayName: string; featureCode: string; input: string; attachments?: InputAttachment[]; mode: 'panel' }) => void) => void
   onPluginDetached: (callback: () => void) => void
   screen: {
     getAllDisplays: () => Promise<DisplayInfo[]>
