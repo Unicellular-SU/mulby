@@ -1,5 +1,6 @@
 import { InBrowser } from './inbrowser'
 import type { InputPayload, InputAttachment } from './plugin'
+import type { AppSettings, ShortcutStatusMap } from './settings'
 
 export interface FileInfo {
   path: string
@@ -185,6 +186,9 @@ export interface ElectronAPI {
     getActual: () => Promise<'light' | 'dark'>
   }
   onThemeChange: (callback: (theme: 'light' | 'dark') => void) => void
+  app: {
+    onOpenSettings: (callback: () => void) => void
+  }
   clipboard: {
     readText: () => Promise<string>
     writeText: (text: string) => Promise<void>
@@ -209,6 +213,13 @@ export interface ElectronAPI {
     remove: (key: string, namespace?: string) => Promise<boolean>
     getAll?: (namespace?: string) => Promise<Record<string, unknown>>
     clear?: (namespace?: string) => Promise<boolean>
+  }
+  settings: {
+    get: () => Promise<{ settings: AppSettings; shortcutStatus: ShortcutStatusMap }>
+    update: (partial: Partial<AppSettings>) => Promise<{ settings: AppSettings; shortcutStatus: ShortcutStatusMap }>
+    reset: () => Promise<{ settings: AppSettings; shortcutStatus: ShortcutStatusMap }>
+    pauseShortcuts: () => Promise<ShortcutStatusMap>
+    resumeShortcuts: () => Promise<ShortcutStatusMap>
   }
   plugin: {
     getAll: () => Promise<PluginInfo[]>

@@ -7,6 +7,8 @@ import { PluginManager } from './plugin'
 import { PluginWindowManager } from './plugin/window'
 import { ThemeManager } from './services/theme'
 import { isIgnoringBlur, startIgnoringBlur, stopIgnoringBlur, setWindowsProvider } from './services/blur-manager'
+import { appSettingsManager } from './services/app-settings'
+import { AppShortcutManager } from './services/app-shortcuts'
 
 let mainWindow: BrowserWindow | null = null
 const pluginManager = new PluginManager()
@@ -139,6 +141,53 @@ function createWindow() {
   })
 }
 
+function showMainWindow() {
+  if (!mainWindow || mainWindow.isDestroyed()) {
+    return
+  }
+
+  // 每次显示前都强制重置关键属性，确保窗口行为正确
+  if (process.platform === 'darwin') {
+    try {
+      mainWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true })
+      mainWindow.setAlwaysOnTop(true, 'floating')
+    } catch (e) {
+      console.error('Error setting window properties:', e)
+    }
+  } else {
+    mainWindow.setAlwaysOnTop(true)
+  }
+
+  try {
+    // 获取当前鼠标所在的显示器
+    const cursorPoint = screen.getCursorScreenPoint()
+    const display = screen.getDisplayNearestPoint(cursorPoint)
+    const { width: screenWidth, height: screenHeight } = display.workAreaSize
+    const { x: screenX, y: screenY } = display.workArea
+
+    // 计算窗口位置：水平居中，垂直方向在屏幕 1/5 处
+    const windowBounds = mainWindow.getBounds()
+    const x = screenX + Math.round((screenWidth - windowBounds.width) / 2)
+    const y = screenY + Math.round(screenHeight / 5)
+
+    mainWindow.setPosition(x, y)
+
+    // 临时忽略 blur 事件，防止 show/focus 过程中误触发
+    startIgnoringBlur()
+
+    mainWindow.show()
+    mainWindow.focus()
+
+    // 恢复之前隐藏的面板
+    pluginWindowManager.showPanelWindow()
+
+    // 延迟恢复 blur 监听（确保窗口完全获得焦点）
+    stopIgnoringBlur()
+  } catch (e) {
+    console.error('Error in show sequence:', e)
+  }
+}
+
 function toggleWindow() {
   if (!mainWindow || mainWindow.isDestroyed()) {
     return
@@ -147,46 +196,7 @@ function toggleWindow() {
     pluginWindowManager.hidePanelWindow()
     mainWindow.hide()
   } else {
-    // 每次显示前都强制重置关键属性，确保窗口行为正确
-    if (process.platform === 'darwin') {
-      try {
-        mainWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true })
-        mainWindow.setAlwaysOnTop(true, 'floating')
-      } catch (e) {
-        console.error('Error setting window properties:', e)
-      }
-    } else {
-      mainWindow.setAlwaysOnTop(true)
-    }
-
-    try {
-      // 获取当前鼠标所在的显示器
-      const cursorPoint = screen.getCursorScreenPoint()
-      const display = screen.getDisplayNearestPoint(cursorPoint)
-      const { width: screenWidth, height: screenHeight } = display.workAreaSize
-      const { x: screenX, y: screenY } = display.workArea
-
-      // 计算窗口位置：水平居中，垂直方向在屏幕 1/5 处
-      const windowBounds = mainWindow.getBounds()
-      const x = screenX + Math.round((screenWidth - windowBounds.width) / 2)
-      const y = screenY + Math.round(screenHeight / 5)
-
-      mainWindow.setPosition(x, y)
-
-      // 临时忽略 blur 事件，防止 show/focus 过程中误触发
-      startIgnoringBlur()
-
-      mainWindow.show()
-      mainWindow.focus()
-
-      // 恢复之前隐藏的面板
-      pluginWindowManager.showPanelWindow()
-
-      // 延迟恢复 blur 监听（确保窗口完全获得焦点）
-      stopIgnoringBlur()
-    } catch (e) {
-      console.error('Error in show sequence:', e)
-    }
+    showMainWindow()
   }
 }
 
@@ -195,6 +205,24 @@ app.whenReady().then(async () => {
   if (process.platform === 'darwin' && app.dock) {
     app.dock.hide()
   }
+
+  const appShortcutManager = new AppShortcutManager({
+    toggleWindow: () => toggleWindow(),
+    openSettings: () => {
+      showMainWindow()
+      mainWindow?.webContents.send('app:openSettings')
+    }
+  })
+
+  // 注册 IPC 处理器
+  registerAllHandlers(
+    getMainWindow,
+    pluginManager,
+    pluginWindowManager,
+    themeManager,
+    appSettingsManager,
+    appShortcutManager
+  )
 
   createWindow()
 
@@ -222,11 +250,7 @@ app.whenReady().then(async () => {
   // 初始化插件管理器
   await pluginManager.init()
 
-  // 注册 IPC 处理器
-  registerAllHandlers(getMainWindow, pluginManager, pluginWindowManager, themeManager)
-
-  // 注册全局快捷键
-  globalShortcut.register('Alt+Space', toggleWindow)
+  appShortcutManager.apply(appSettingsManager.getSettings().shortcuts)
 })
 
 app.on('window-all-closed', () => {

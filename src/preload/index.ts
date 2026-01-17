@@ -78,6 +78,13 @@ contextBridge.exposeInMainWorld('intools', {
     ipcRenderer.on('theme:changed', (_, theme) => callback(theme))
   },
 
+  // App events
+  app: {
+    onOpenSettings: (callback: () => void) => {
+      ipcRenderer.on('app:openSettings', () => callback())
+    }
+  },
+
   // 窗口状态变化事件
   onWindowStateChange: (callback: (state: { isMaximized: boolean }) => void) => {
     ipcRenderer.on('window:stateChanged', (_, state) => callback(state))
@@ -276,6 +283,15 @@ contextBridge.exposeInMainWorld('intools', {
     get: (key: string, namespace?: string) => ipcRenderer.invoke('storage:get', key, namespace),
     set: (key: string, value: unknown, namespace?: string) => ipcRenderer.invoke('storage:set', key, value, namespace),
     remove: (key: string, namespace?: string) => ipcRenderer.invoke('storage:remove', key, namespace)
+  },
+
+  // App settings API
+  settings: {
+    get: () => ipcRenderer.invoke('settings:get'),
+    update: (partial: unknown) => ipcRenderer.invoke('settings:update', partial),
+    reset: () => ipcRenderer.invoke('settings:reset'),
+    pauseShortcuts: () => ipcRenderer.invoke('settings:shortcuts:pause'),
+    resumeShortcuts: () => ipcRenderer.invoke('settings:shortcuts:resume')
   },
 
   // Media API

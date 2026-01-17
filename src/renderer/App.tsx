@@ -1,8 +1,9 @@
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useCallback } from 'react'
 import SearchInput from './components/SearchInput'
 import PluginList from './components/PluginList'
 import PluginDetails from './components/PluginDetails'
 import AttachmentManager from './components/AttachmentManager'
+import SettingsView, { SettingsSection } from './components/SettingsView'
 import type { InputAttachment, InputPayload } from '../shared/types/plugin'
 
 // 插件附着信息（Panel 模式）
@@ -19,6 +20,8 @@ function App() {
   const [resultCount, setResultCount] = useState(0)
   const [pluginOpen, setPluginOpen] = useState(false) // 仅用于跟踪插件是否打开
   const [detailsPluginName, setDetailsPluginName] = useState<string | null>(null)
+  const [viewMode, setViewMode] = useState<'home' | 'plugin-details' | 'settings'>('home')
+  const [settingsSection, setSettingsSection] = useState<SettingsSection>('general')
   const [isDragging, setIsDragging] = useState(false)
   const [theme, setTheme] = useState<'light' | 'dark'>('light')
   const [attachments, setAttachments] = useState<UiAttachment[]>([])
@@ -69,9 +72,9 @@ function App() {
 
     let height = SEARCH_BOX_HEIGHT
 
-    if (detailsPluginName) {
-      // 插件详情页
-      height = 700
+    if (viewMode !== 'home') {
+      // 设置/详情页高度
+      height = 550
     } else if (pluginOpen) {
       // 插件面板打开时，主窗口只保持搜索框高度（插件 UI 在独立的 Panel 窗口中）
       height = SEARCH_BOX_HEIGHT
@@ -85,7 +88,7 @@ function App() {
         rows * CARD_HEIGHT + (rows - 1) * GRID_GAP
     }
     window.intools.window.setSize(680, height)
-  }, [query, resultCount, pluginOpen, detailsPluginName, attachments.length, attachmentsManagerOpen, managerMetrics.managerHeight])
+  }, [query, resultCount, pluginOpen, detailsPluginName, attachments.length, attachmentsManagerOpen, managerMetrics.managerHeight, viewMode])
 
   // 监听插件附着事件
   useEffect(() => {
@@ -110,12 +113,25 @@ function App() {
     }
   }, [pluginOpen, attachmentsManagerOpen])
 
+  const openSettings = useCallback((section: SettingsSection = 'general') => {
+    if (pluginOpen) {
+      window.intools.window.close()
+      setPluginOpen(false)
+    }
+    setAttachmentsManagerOpen(false)
+    setSettingsSection(section)
+    setViewMode('settings')
+  }, [pluginOpen])
+
   // ESC 键分级退出处理
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
         e.preventDefault()
-        if (attachmentsManagerOpen) {
+        if (viewMode !== 'home') {
+          setViewMode('home')
+          setDetailsPluginName(null)
+        } else if (attachmentsManagerOpen) {
           setAttachmentsManagerOpen(false)
         } else if (pluginOpen) {
           // 1. 优先关闭插件
@@ -138,7 +154,24 @@ function App() {
     }
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [pluginOpen, query, attachments.length, attachmentsManagerOpen])
+  }, [pluginOpen, query, attachments.length, attachmentsManagerOpen, viewMode])
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === ',') {
+        e.preventDefault()
+        openSettings()
+      }
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [openSettings])
+
+  useEffect(() => {
+    window.intools.app.onOpenSettings(() => {
+      openSettings()
+    })
+  }, [openSettings])
 
   const handleQueryChange = (value: string) => {
     // 如果有附着的插件，先关闭它
@@ -153,6 +186,7 @@ function App() {
     if (value.length === 0 && attachments.length === 0) {
       setResultCount(0)
       setDetailsPluginName(null)
+      setViewMode('home')
     }
   }
 
@@ -165,6 +199,7 @@ function App() {
     if (next.length === 0 && query.length === 0) {
       setResultCount(0)
       setDetailsPluginName(null)
+      setViewMode('home')
     }
   }
 
@@ -193,12 +228,27 @@ function App() {
     }
   }
 
-  if (detailsPluginName) {
+  if (viewMode === 'plugin-details' && detailsPluginName) {
     return (
       <div className={`app ${isDragging ? 'dragging' : ''}`}>
         <PluginDetails
           pluginName={detailsPluginName}
-          onBack={() => setDetailsPluginName(null)}
+          onBack={() => {
+            setDetailsPluginName(null)
+            setViewMode('home')
+          }}
+        />
+      </div>
+    )
+  }
+
+  if (viewMode === 'settings') {
+    return (
+      <div className={`app ${isDragging ? 'dragging' : ''}`}>
+        <SettingsView
+          section={settingsSection}
+          onSectionChange={setSettingsSection}
+          onClose={() => setViewMode('home')}
         />
       </div>
     )
@@ -238,7 +288,11 @@ function App() {
         <PluginList
           payload={payload}
           onResultsChange={setResultCount}
-          onShowDetails={setDetailsPluginName}
+          onShowDetails={(pluginName) => {
+            setDetailsPluginName(pluginName)
+            setViewMode('plugin-details')
+          }}
+          onOpenSettings={() => openSettings()}
         />
       )}
       {isDragging && <div className="drop-hint">拖放 .inplugin 文件安装插件</div>}

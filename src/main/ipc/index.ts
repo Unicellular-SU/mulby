@@ -30,12 +30,17 @@ import { ThemeManager } from '../services/theme'
 import { registerInBrowserHandlers } from './inbrowser'
 import { registerSharpHandlers } from './sharp'
 import { registerFFmpegHandlers } from './ffmpeg'
+import { registerSettingsHandlers } from './settings'
+import { AppSettingsManager } from '../services/app-settings'
+import { AppShortcutManager } from '../services/app-shortcuts'
 
 export function registerAllHandlers(
   getMainWindow: () => BrowserWindow | null,
   pluginManager: PluginManager,
   pluginWindowManager: PluginWindowManager,
-  themeManager: ThemeManager
+  themeManager: ThemeManager,
+  appSettingsManager: AppSettingsManager,
+  appShortcutManager: AppShortcutManager
 ) {
   registerClipboardHandlers()
   registerNotificationHandlers()
@@ -65,4 +70,5 @@ export function registerAllHandlers(
   registerInBrowserHandlers()
   registerSharpHandlers()
   registerFFmpegHandlers()
+  registerSettingsHandlers(appSettingsManager, appShortcutManager)
 }

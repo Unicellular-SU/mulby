@@ -6,6 +6,7 @@ interface PluginListProps {
   payload: InputPayload
   onResultsChange?: (count: number) => void
   onShowDetails?: (pluginName: string) => void
+  onOpenSettings?: () => void
 }
 
 // 插件图标组件
@@ -38,7 +39,7 @@ function PluginIcon({ icon }: { icon?: SearchResultItem['icon'] }) {
   )
 }
 
-function PluginList({ payload, onResultsChange, onShowDetails }: PluginListProps) {
+function PluginList({ payload, onResultsChange, onShowDetails, onOpenSettings }: PluginListProps) {
   const [results, setResults] = useState<SearchResultItem[]>([])
   const [selectedIndex, setSelectedIndex] = useState(0)
 
@@ -91,8 +92,9 @@ function PluginList({ payload, onResultsChange, onShowDetails }: PluginListProps
         case 'i':
           if (e.metaKey || e.ctrlKey) {
             e.preventDefault()
-            if (results[selectedIndex]) {
-              onShowDetails?.(results[selectedIndex].pluginName)
+            const current = results[selectedIndex]
+            if (current && !isSettingsItem(current)) {
+              onShowDetails?.(current.pluginName)
             }
           }
           break
@@ -105,12 +107,17 @@ function PluginList({ payload, onResultsChange, onShowDetails }: PluginListProps
 
   const loadPlugins = async () => {
     const result = await window.intools.plugin.search(payload)
-    setResults(result)
+    const combined = injectSettingsResult(result, payload.text)
+    setResults(combined)
     setSelectedIndex(0)
-    onResultsChange?.(result.length)
+    onResultsChange?.(combined.length)
   }
 
   const handleRun = async (item: SearchResultItem) => {
+    if (isSettingsItem(item)) {
+      onOpenSettings?.()
+      return
+    }
     const result = await window.intools.plugin.run(item.pluginId, item.featureCode, payload)
     if (result.success) {
       // 有 UI 的插件不隐藏窗口，会显示在附着区域
@@ -139,7 +146,9 @@ function PluginList({ payload, onResultsChange, onShowDetails }: PluginListProps
           onClick={() => handleRun(item)}
           onContextMenu={(e) => {
             e.preventDefault()
-            onShowDetails?.(item.pluginName)
+            if (!isSettingsItem(item)) {
+              onShowDetails?.(item.pluginName)
+            }
           }}
         >
           <PluginIcon icon={item.icon} />
@@ -152,3 +161,39 @@ function PluginList({ payload, onResultsChange, onShowDetails }: PluginListProps
 }
 
 export default PluginList
+
+const SETTINGS_ITEM_ID = '__system_settings__'
+
+const SETTINGS_ICON_SVG = `
+<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+  <circle cx="12" cy="12" r="3" />
+  <path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9c0 .7.4 1.3 1.1 1.6.2.1.4.1.6.1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z" />
+</svg>
+`.trim()
+
+function isSettingsItem(item: SearchResultItem) {
+  return item.pluginId === SETTINGS_ITEM_ID
+}
+
+function injectSettingsResult(results: SearchResultItem[], queryText: string) {
+  const text = queryText.trim().toLowerCase()
+  if (!text) return results
+
+  const keywordMatch = /(settings|setting|preferences|prefs|设置|偏好)/i.test(text)
+  if (!keywordMatch) return results
+
+  const exists = results.some((item) => item.pluginId === SETTINGS_ITEM_ID)
+  if (exists) return results
+
+  const settingsItem: SearchResultItem = {
+    pluginId: SETTINGS_ITEM_ID,
+    pluginName: SETTINGS_ITEM_ID,
+    displayName: '设置',
+    featureCode: 'settings',
+    featureExplain: '打开设置面板',
+    matchType: 'keyword',
+    icon: { type: 'svg', value: SETTINGS_ICON_SVG }
+  }
+
+  return [settingsItem, ...results]
+}
