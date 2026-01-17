@@ -207,7 +207,9 @@ export function registerFFmpegHandlers() {
                 activeProcesses.delete(taskId)
                 console.log('[FFmpeg] 进程退出, code:', code)
 
-                if (code === 0) {
+                // code 0: 正常完成
+                // code 255: 被信号终止（如 SIGINT/quit），也视为正常退出
+                if (code === 0 || code === 255) {
                     resolve()
                 } else {
                     // 对于获取媒体信息等操作，stderr 包含关键信息
