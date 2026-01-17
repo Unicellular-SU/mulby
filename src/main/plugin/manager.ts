@@ -16,6 +16,12 @@ interface SearchResult {
   matchType: 'keyword' | 'regex' | 'files' | 'img'
 }
 
+interface FeatureMatch {
+  matchType: SearchResult['matchType']
+  cmd: PluginCmd
+  score: number
+}
+
 function normalizeInputPayload(input?: string | InputPayload): InputPayload {
   if (!input) {
     return { text: '', attachments: [] }
@@ -74,11 +80,79 @@ function matchesImageExts(exts: string[] | undefined, attachments: InputAttachme
   return matchesFiles(exts, imageAttachments)
 }
 
+function filterAttachmentsByCmd(attachments: InputAttachment[], cmd?: PluginCmd): InputAttachment[] {
+  if (!cmd) return attachments
+  if (cmd.type !== 'files' && cmd.type !== 'img') return attachments
+  if (!cmd.exts || cmd.exts.length === 0) return attachments
+
+  const normalizedExts = cmd.exts.map(normalizeExt)
+  if (normalizedExts.includes('*')) return attachments
+
+  return attachments.filter((attachment) => {
+    const ext = getAttachmentExt(attachment)
+    if (!ext) return false
+    return normalizedExts.includes(ext)
+  })
+}
+
 function isImageAttachment(attachment: InputAttachment): boolean {
   if (attachment.kind === 'image') return true
   if (attachment.mime?.toLowerCase().startsWith('image/')) return true
   const ext = getAttachmentExt(attachment)
   return ['.png', '.jpg', '.jpeg', '.gif', '.webp', '.bmp', '.svg', '.tiff', '.tif', '.heic', '.heif'].includes(ext)
+}
+
+function findBestMatch(feature: PluginFeature, input: InputPayload): FeatureMatch | null {
+  const text = input.text
+  const q = text.toLowerCase()
+  const hasText = text.trim().length > 0
+  const hasAttachments = input.attachments.length > 0
+
+  let best: FeatureMatch | null = null
+
+  for (const cmd of feature.cmds) {
+    let matchType: SearchResult['matchType'] | null = null
+
+    if (cmd.type === 'regex') {
+      if (!hasText) continue
+      try {
+        const regex = new RegExp(cmd.match)
+        if (regex.test(text)) {
+          matchType = 'regex'
+        }
+      } catch { }
+    }
+
+    if (cmd.type === 'keyword') {
+      if (!hasText) continue
+      if (cmd.value.toLowerCase().includes(q)) {
+        matchType = 'keyword'
+      }
+    }
+
+    if (cmd.type === 'files') {
+      if (!hasAttachments) continue
+      if (matchesFiles(cmd.exts, input.attachments)) {
+        matchType = 'files'
+      }
+    }
+
+    if (cmd.type === 'img') {
+      if (!hasAttachments) continue
+      if (matchesImageExts(cmd.exts, input.attachments)) {
+        matchType = 'img'
+      }
+    }
+
+    if (!matchType) continue
+
+    const score = matchPriority(matchType)
+    if (!best || score > best.score) {
+      best = { matchType, cmd, score }
+    }
+  }
+
+  return best
 }
 
 export class PluginManager {
@@ -183,59 +257,11 @@ export class PluginManager {
     }
 
     const results: SearchResult[] = []
-    const q = text.toLowerCase()
-
     for (const plugin of enabledPlugins) {
       for (const feature of this.getCombinedFeatures(plugin)) {
-        let matchType: SearchResult['matchType'] | null = null
-        let matchScore = 0
-
-        for (const cmd of feature.cmds) {
-          if (cmd.type === 'regex') {
-            if (!hasText) continue
-            try {
-              const regex = new RegExp(cmd.match)
-              if (regex.test(text)) {
-                const score = matchPriority('regex')
-                if (score > matchScore) {
-                  matchType = 'regex'
-                  matchScore = score
-                }
-              }
-            } catch { }
-          }
-          if (cmd.type === 'keyword' && cmd.value.toLowerCase().includes(q)) {
-            if (!hasText) continue
-            const score = matchPriority('keyword')
-            if (score > matchScore) {
-              matchType = 'keyword'
-              matchScore = score
-            }
-          }
-          if (cmd.type === 'files') {
-            if (!hasAttachments) continue
-            if (matchesFiles(cmd.exts, attachments)) {
-              const score = matchPriority('files')
-              if (score > matchScore) {
-                matchType = 'files'
-                matchScore = score
-              }
-            }
-          }
-          if (cmd.type === 'img') {
-            if (!hasAttachments) continue
-            if (matchesImageExts(cmd.exts, attachments)) {
-              const score = matchPriority('img')
-              if (score > matchScore) {
-                matchType = 'img'
-                matchScore = score
-              }
-            }
-          }
-        }
-
-        if (matchType) {
-          results.push({ plugin, feature, matchType })
+        const match = findBestMatch(feature, normalizedInput)
+        if (match) {
+          results.push({ plugin, feature, matchType: match.matchType })
         }
       }
     }
@@ -265,6 +291,12 @@ export class PluginManager {
 
     const feature = this.getCombinedFeatures(plugin).find(item => item.code === featureCode)
     const normalizedInput = normalizeInputPayload(input)
+    const matched = feature ? findBestMatch(feature, normalizedInput) : null
+    const filteredAttachments = filterAttachmentsByCmd(normalizedInput.attachments, matched?.cmd)
+    const resolvedInput: InputPayload = {
+      text: normalizedInput.text,
+      attachments: filteredAttachments
+    }
     const useUI = Boolean(plugin.manifest.ui) && feature?.mode !== 'silent'
     const useDetached = feature?.mode === 'detached'
     const route = feature?.route
@@ -275,20 +307,20 @@ export class PluginManager {
         return { success: false, error: 'Window manager not initialized' }
       }
       if (useDetached) {
-        const win = this.windowManager.createDetachedWindow(plugin, featureCode, normalizedInput, route)
+        const win = this.windowManager.createDetachedWindow(plugin, featureCode, resolvedInput, route)
         return { success: Boolean(win), hasUI: true }
       }
-      const success = this.windowManager.attachPlugin(plugin, featureCode, normalizedInput, route)
+      const success = this.windowManager.attachPlugin(plugin, featureCode, resolvedInput, route)
       return { success, hasUI: true }
     }
 
     // 无 UI 插件，使用 UtilityProcess 或 VM2 执行
     try {
       if (this.useUtilityProcess) {
-        await this.hostManager.runPlugin(plugin, featureCode, normalizedInput.text, normalizedInput.attachments)
+        await this.hostManager.runPlugin(plugin, featureCode, resolvedInput.text, resolvedInput.attachments)
       } else {
         const runner = this.getRunner(plugin)
-        await runner.run(featureCode, normalizedInput.text, normalizedInput.attachments)
+        await runner.run(featureCode, resolvedInput.text, resolvedInput.attachments)
       }
       return { success: true }
     } catch (err) {

@@ -1,783 +1,126 @@
 # InTools 插件开发规范
 
-> 本文档为 AI 生成插件优化，结构清晰、示例完整。
+本文档描述当前版本 InTools 的插件开发规范，内容以实际代码、CLI 和官方文档为准。
 
----
+## 快速开始
 
-## 快速入门
-
-### 使用 CLI 创建插件（推荐）
+使用 CLI 创建、开发与打包插件：
 
 ```bash
-# 创建 React 插件（默认）
+npm install -g intools-cli
+
 intools create my-plugin
-
-# 创建基础插件（无 UI）
-intools create my-plugin --template basic
-
-# 进入目录并安装依赖
 cd my-plugin
 npm install
-
-# 开发模式（热重载）
 npm run dev
-
-# 构建
 npm run build
-
-# 打包发布
 npm run pack
 ```
 
-### React 插件项目结构（默认）
+创建无 UI 插件（basic 模板）：
+
+```bash
+intools create my-plugin --template basic
+```
+
+CLI 行为与完整命令说明见 `packages/intools-cli/README.md`。
+
+## 项目结构
+
+### React 插件（默认模板）
 
 ```
 my-plugin/
-├── package.json          # npm 配置
-├── manifest.json         # 插件配置
-├── tsconfig.json         # TypeScript 配置
-├── vite.config.ts        # Vite 配置
+├── package.json
+├── manifest.json
+├── tsconfig.json
+├── vite.config.ts
+├── icon.png
 ├── src/
-│   ├── main.ts           # 后端逻辑（沙箱运行）
+│   ├── main.ts
 │   ├── types/
-│   │   └── intools.d.ts  # API 类型定义
-│   └── ui/               # React UI 源码
+│   │   └── intools.d.ts
+│   └── ui/
 │       ├── index.html
 │       ├── main.tsx
 │       ├── App.tsx
+│       ├── hooks/
+│       │   └── useIntools.ts
 │       └── styles.css
-├── dist/                 # 后端构建输出
+├── dist/
 │   └── main.js
-└── ui/                   # UI 构建输出
+└── ui/
     ├── index.html
     └── assets/
 ```
 
-### 基础插件结构（无 UI）
+### 基础插件（无 UI 模板）
 
 ```
 my-plugin/
-├── manifest.json   # 必需：插件配置
-├── package.json    # npm 配置
+├── package.json
+├── manifest.json
+├── icon.png
 └── src/
-    └── main.ts     # 入口文件
+    └── main.ts
 ```
 
----
+模板输出由 CLI 生成（见 `packages/intools-cli/src/commands/create/templates/*`）。
 
-## manifest.json 完整规范
+## manifest.json
 
-```json
-{
-  "name": "plugin-name",
-  "version": "1.0.0",
-  "displayName": "插件显示名称",
-  "description": "插件功能描述",
-  "author": "作者名",
-  "runtime": "nodejs",
-  "main": "main.js",
-  "ui": "ui/index.html",
-  "icon": "<svg viewBox=\"0 0 24 24\" fill=\"currentColor\"><path d=\"...\"/></svg>",
-  "permissions": ["clipboard", "notification"],
-  "triggers": [],
-  "shortcut": "CmdOrCtrl+Shift+X",
-  "minAppVersion": "1.0.0"
-}
-```
+manifest 规范请以 `docs/manifest-v2.md` 为准。本节仅补充与实际加载行为相关的关键点：
 
-### 字段说明
+- 必填字段（由加载器校验）：`name`, `version`, `displayName`, `main`, `features`。
+- `id` 可选且推荐；若未提供，插件 ID 取 `name`。
+- `icon` 未设置时会尝试加载插件目录下的 `icon.png`。
 
-| 字段 | 类型 | 必需 | 说明 |
-|------|------|------|------|
-| name | string | 是 | 唯一标识，仅小写字母、数字、连字符 |
-| version | string | 是 | 语义化版本 (x.y.z) |
-| displayName | string | 是 | 用户看到的名称 |
-| description | string | 是 | 功能描述 |
-| runtime | string | 是 | `nodejs` 或 `python` |
-| main | string | 是 | 入口文件路径 |
-| ui | string | 否 | UI 文件路径（有界面时必填） |
-| icon | string/object | 否 | 插件图标（见下方说明） |
-| permissions | array | 否 | 所需权限 |
-| triggers | array | 是 | 触发条件 |
-| shortcut | string | 否 | 全局快捷键 |
+功能入口 `features` 与 `cmds` 类型说明请参考 `docs/manifest-v2.md`。
 
----
+## 插件生命周期与执行入口
 
-## 插件图标 (icon)
+插件后端导出以下可选钩子与执行入口：
 
-插件图标支持三种格式：本地文件、URL、内联 SVG。
+- `onLoad` / `onUnload`
+- `onEnable` / `onDisable`
+- `run`
 
-### 格式说明
-
-| 格式 | 示例 | 说明 |
-|------|------|------|
-| 本地文件 | `"icon": "icon.png"` | 插件目录下的图片文件 |
-| URL | `"icon": "https://example.com/icon.png"` | 远程图片链接 |
-| 内联 SVG | `"icon": "<svg>...</svg>"` | SVG 字符串（推荐 AI 生成） |
-
-### 内联 SVG 示例
-
-```json
-{
-  "name": "json-formatter",
-  "icon": "<svg viewBox=\"0 0 24 24\" fill=\"currentColor\"><path d=\"M5 3h2v2H5v5a2 2 0 01-2 2 2 2 0 012 2v5h2v2H5c-1.1 0-2-.9-2-2v-4a2 2 0 00-2-2H0v-2h1a2 2 0 002-2V5a2 2 0 012-2zm14 0a2 2 0 012 2v4a2 2 0 002 2h1v2h-1a2 2 0 00-2 2v4a2 2 0 01-2 2h-2v-2h2v-5a2 2 0 012-2 2 2 0 01-2-2V5h-2V3h2z\"/></svg>"
-}
-```
-
-### 默认行为
-
-- 未设置 `icon` 时，自动加载插件目录下的 `icon.png`
-- 若无图标文件，显示默认占位图标
-
----
-
-## 触发器 (triggers)
-
-### keyword - 关键词触发
-```json
-{ "type": "keyword", "value": "json", "description": "输入 json 触发" }
-```
-
-### regex - 正则匹配剪贴板
-```json
-{ "type": "regex", "value": "^\\{.*\\}$", "description": "检测到 JSON" }
-```
-
-### file - 文件类型
-```json
-{ "type": "file", "value": [".png", ".jpg"], "description": "图片文件" }
-```
-
----
-
-## 权限 (permissions)
-
-| 权限 | 说明 | 使用场景 |
-|------|------|----------|
-| clipboard | 读写剪贴板 | 文本处理、格式转换 |
-| notification | 系统通知 | 操作反馈 |
-| storage | 本地存储 | 保存配置、历史记录 |
-| filesystem | 文件读写 | 文件处理插件 |
-| network | 网络请求 | API 调用、翻译 |
-| shell | 系统命令 | 高级操作（需审核） |
-
----
-
-## 插件生命周期
-
-插件在 InTools 中有完整的生命周期管理，开发者可以通过钩子函数在特定时机执行代码。
-
-### 生命周期状态
-
-```
-安装 → 加载(onLoad) → 启用(onEnable) ⇄ 禁用(onDisable) → 卸载(onUnload)
-```
-
-| 状态 | 说明 |
-|------|------|
-| loaded | 插件已加载，manifest 已读取 |
-| enabled | 插件已启用，可被搜索和执行 |
-| disabled | 插件已禁用，不参与搜索但保留在系统中 |
-
-### 生命周期钩子
-
-| 钩子 | 触发时机 | 用途 |
-|------|----------|------|
-| onLoad | 插件加载时 | 初始化资源、注册服务 |
-| onUnload | 插件卸载时 | 清理资源、保存状态 |
-| onEnable | 插件启用时 | 恢复服务、重新注册 |
-| onDisable | 插件禁用时 | 暂停服务、释放资源 |
-
-### 钩子函数示例
-
-```javascript
-module.exports = {
-  // 插件加载时调用
-  onLoad() {
-    console.log('插件已加载');
-    // 初始化资源，如建立连接、加载配置
-  },
-
-  // 插件卸载时调用
-  onUnload() {
-    console.log('插件即将卸载');
-    // 清理资源，如关闭连接、保存数据
-  },
-
-  // 插件启用时调用
-  onEnable() {
-    console.log('插件已启用');
-  },
-
-  // 插件禁用时调用
-  onDisable() {
-    console.log('插件已禁用');
-  },
-
-  // 主执行函数
-  async run(context) {
-    // 插件主逻辑
-  }
-};
-```
-
-## Plugin Context
-
-`run(context)` 的 context 参数包含输入与附件信息，常用字段如下：
+`run(context)` 的 `context` 结构：
 
 | 字段 | 类型 | 说明 |
 |------|------|------|
-| input | string | 触发时的文本输入 |
-| featureCode | string | 触发的功能入口 code |
-| attachments | array | 文件/图片附件列表（可选） |
+| `api` | object | 插件 API 入口（按功能拆分，见下方） |
+| `featureCode` | string | 触发的功能入口 code |
+| `input` | string | 触发时的文本输入 |
+| `attachments` | array | 文件/图片附件列表（可选） |
 
-### attachments 结构
+`attachments` 的结构参见 `src/shared/types/plugin.ts`。
+
+## UI 初始化事件
+
+UI 插件在窗口加载后，会收到初始化事件：
 
 ```ts
-type InputAttachment = {
-  id: string
-  name: string
-  size: number
-  kind: 'file' | 'image'
-  mime?: string
-  ext?: string
-  path?: string
-  dataUrl?: string
-}
+window.intools.onPluginInit((data) => {
+  // data: { pluginName, featureCode, input, attachments?, mode?, route? }
+})
 ```
 
-- `path`：来自文件粘贴/拖拽时的本地路径。
-- `dataUrl`：图片从剪贴板粘贴且无路径时提供的 Base64 数据。
+- `route` 来自 feature 的 `route` 配置（或辅助窗口创建时的路由）。
+- `attachments` 与 `run(context)` 中一致，便于 UI 直接处理粘贴/拖拽输入。
 
-### 完整生命周期示例
+## API 说明
 
-```javascript
-const { storage, notification } = require('@intools/sdk');
+所有 API 都在 `docs/apis` 中分文件维护，请按类别查阅：
 
-let cache = null;
-let timer = null;
+- 入口索引：`docs/apis/README.md`
+- 动态指令（runtime features）：`docs/apis/features.md`
 
-module.exports = {
-  async onLoad() {
-    // 加载缓存数据
-    cache = await storage.get('cache') || {};
-    console.log('缓存已加载');
-  },
+## 构建与打包
 
-  onEnable() {
-    // 启动定时任务
-    timer = setInterval(() => {
-      console.log('定时任务运行中...');
-    }, 60000);
-  },
+- `npm run build` 输出：
+  - 后端：`dist/main.js`
+  - UI：`ui/`（由 Vite 产出）
+- `npm run pack` 生成 `.inplugin` 安装包
 
-  onDisable() {
-    // 停止定时任务
-    if (timer) {
-      clearInterval(timer);
-      timer = null;
-    }
-  },
-
-  async onUnload() {
-    // 保存缓存数据
-    await storage.set('cache', cache);
-    console.log('缓存已保存');
-  },
-
-  async run(context) {
-    // 使用缓存执行操作
-    const result = processWithCache(context.input, cache);
-    notification.show('处理完成');
-  }
-};
-
-function processWithCache(input, cache) {
-  // 处理逻辑
-  return input;
-}
-```
-
-### 注意事项
-
-1. **钩子函数可选**：所有生命周期钩子都是可选的，只需实现需要的钩子
-2. **支持异步**：钩子函数可以是 async 函数，系统会等待其完成
-3. **错误处理**：钩子中的错误不会阻止插件加载，但会记录到日志
-4. **状态持久化**：插件的启用/禁用状态会自动保存，重启后恢复
-
----
-
-## 插件模板
-
-### 模板 A：React 插件（推荐）
-
-适用于：需要精美 UI、复杂交互、使用第三方库
-
-```bash
-intools create my-plugin
-```
-
-**src/ui/App.tsx**
-```tsx
-import { useEffect, useState } from 'react'
-
-// 获取初始主题
-function getInitialTheme(): 'light' | 'dark' {
-  const params = new URLSearchParams(window.location.search)
-  return (params.get('theme') as 'light' | 'dark') || 'light'
-}
-
-export default function App() {
-  const [input, setInput] = useState('')
-  const [output, setOutput] = useState('')
-  const [theme, setTheme] = useState<'light' | 'dark'>(getInitialTheme)
-
-  // 应用主题
-  useEffect(() => {
-    document.documentElement.classList.toggle('dark', theme === 'dark')
-  }, [theme])
-
-  // 监听主题变化
-  useEffect(() => {
-    window.intools?.onThemeChange?.((newTheme) => setTheme(newTheme))
-  }, [])
-
-  // 接收插件初始化数据
-  useEffect(() => {
-    window.intools?.onPluginInit?.((data) => {
-      if (data.input) setInput(data.input)
-    })
-  }, [])
-
-  const handleProcess = async () => {
-    const result = input.toUpperCase()
-    setOutput(result)
-    await window.intools?.clipboard?.writeText(result)
-    window.intools?.notification?.show('已复制到剪贴板')
-  }
-
-  return (
-    <div className="app">
-      <textarea value={input} onChange={(e) => setInput(e.target.value)} />
-      <button onClick={handleProcess}>处理</button>
-      <textarea value={output} readOnly />
-    </div>
-  )
-}
-```
-
-### 模板 B：无 UI 插件
-
-适用于：剪贴板处理、格式转换、快速计算
-
-```
-plugin-name/
-├── manifest.json
-└── main.js
-```
-
-**main.js**
-```javascript
-const { clipboard, notification } = require('@intools/sdk');
-
-module.exports = {
-  async run(context) {
-    // context.input - 触发时的文本
-    const input = context.input || await clipboard.readText();
-    const attachments = context.attachments || [];
-
-    // 处理逻辑
-    const result = processData(input);
-
-    // 输出结果
-    await clipboard.writeText(result);
-    notification.show('处理完成');
-  }
-};
-
-function processData(input) {
-  // 在这里实现处理逻辑
-  return input;
-}
-```
-
----
-
-### 模板 B：有 UI 插件 (Node.js)
-
-适用于：需要用户交互、展示结果、复杂操作
-
-```
-plugin-name/
-├── manifest.json
-├── main.js
-└── ui/
-    └── index.html
-```
-
-**manifest.json** (需添加 ui 字段)
-```json
-{
-  "name": "my-ui-plugin",
-  "version": "1.0.0",
-  "displayName": "带界面的插件",
-  "description": "需要用户交互的插件",
-  "runtime": "nodejs",
-  "main": "main.js",
-  "ui": "ui/index.html",
-  "permissions": ["clipboard"],
-  "triggers": [
-    { "type": "keyword", "value": "myui" }
-  ]
-}
-```
-
-**main.js**
-```javascript
-const { clipboard, ui } = require('@intools/sdk');
-
-module.exports = {
-  async run(context) {
-    const text = await clipboard.readText();
-    ui.send('init', { text });
-  }
-};
-
-ui.on('process', async (data) => {
-  await clipboard.writeText(data.result);
-});
-```
-
-**ui/index.html**
-```html
-<!DOCTYPE html>
-<html>
-<head>
-  <meta charset="UTF-8">
-  <style>
-    body { font-family: system-ui; padding: 16px; }
-    textarea { width: 100%; height: 150px; }
-    button { margin-top: 8px; padding: 8px 16px; }
-  </style>
-</head>
-<body>
-  <textarea id="input"></textarea>
-  <button onclick="process()">处理</button>
-  <script>
-    const { ui } = require('@intools/sdk');
-    ui.on('init', (data) => {
-      document.getElementById('input').value = data.text;
-    });
-    function process() {
-      const text = document.getElementById('input').value;
-      ui.send('process', { result: text });
-    }
-  </script>
-</body>
-</html>
-```
-
----
-
-## API 快速参考
-
-### clipboard - 剪贴板
-
-```javascript
-const { clipboard } = require('@intools/sdk');
-
-// 读取文本
-const text = await clipboard.readText();
-
-// 写入文本
-await clipboard.writeText('内容');
-
-// 读取图片 (返回 Buffer)
-const image = await clipboard.readImage();
-
-// 读取文件列表
-const files = await clipboard.readFiles();
-// 返回: [{ path, name, size, type }]
-
-// 获取格式
-const format = await clipboard.getFormat();
-// 返回: 'text' | 'image' | 'files' | 'empty'
-```
-
-### notification - 通知
-
-```javascript
-const { notification } = require('@intools/sdk');
-
-notification.show('操作成功');
-notification.show('发生错误', 'error');
-// type: 'info' | 'success' | 'warning' | 'error'
-```
-
-### storage - 存储
-
-```javascript
-const { storage } = require('@intools/sdk');
-
-await storage.set('key', { data: 'value' });
-const data = await storage.get('key');
-await storage.remove('key');
-```
-
-### http - 网络请求
-
-```javascript
-const { http } = require('@intools/sdk');
-
-const res = await http.request({
-  url: 'https://api.example.com/data',
-  method: 'POST',
-  headers: { 'Content-Type': 'application/json' },
-  body: JSON.stringify({ key: 'value' })
-});
-```
-
----
-
-## 常见场景示例
-
-### 示例 1：JSON 格式化插件
-
-**manifest.json**
-```json
-{
-  "name": "json-formatter",
-  "version": "1.0.0",
-  "displayName": "JSON 格式化",
-  "description": "格式化或压缩 JSON 数据",
-  "runtime": "nodejs",
-  "main": "main.js",
-  "permissions": ["clipboard", "notification"],
-  "triggers": [
-    { "type": "keyword", "value": "json" },
-    { "type": "regex", "value": "^\\s*[{\\[]" }
-  ]
-}
-```
-
-**main.js**
-```javascript
-const { clipboard, notification } = require('@intools/sdk');
-
-module.exports = {
-  async run(context) {
-    const text = await clipboard.readText();
-    try {
-      const obj = JSON.parse(text);
-      const formatted = JSON.stringify(obj, null, 2);
-      await clipboard.writeText(formatted);
-      notification.show('JSON 格式化成功');
-    } catch (e) {
-      notification.show('无效的 JSON', 'error');
-    }
-  }
-};
-```
-
----
-
-### 示例 2：时间戳转换插件
-
-**manifest.json**
-```json
-{
-  "name": "timestamp-converter",
-  "version": "1.0.0",
-  "displayName": "时间戳转换",
-  "description": "时间戳与日期互转",
-  "runtime": "nodejs",
-  "main": "main.js",
-  "permissions": ["clipboard", "notification"],
-  "triggers": [
-    { "type": "keyword", "value": "ts" },
-    { "type": "regex", "value": "^\\d{10,13}$" }
-  ]
-}
-```
-
-**main.js**
-```javascript
-const { clipboard, notification } = require('@intools/sdk');
-
-module.exports = {
-  async run(context) {
-    const text = await clipboard.readText();
-    let result;
-    if (/^\d{10,13}$/.test(text)) {
-      const ts = text.length === 10 ? text * 1000 : Number(text);
-      result = new Date(ts).toLocaleString();
-    } else {
-      result = String(new Date(text).getTime());
-    }
-    await clipboard.writeText(result);
-    notification.show('转换完成: ' + result);
-  }
-};
-```
-
----
-
-### 示例 3：翻译插件（带 UI）
-
-**manifest.json**
-```json
-{
-  "name": "translator",
-  "version": "1.0.0",
-  "displayName": "快速翻译",
-  "description": "中英文互译",
-  "runtime": "nodejs",
-  "main": "main.js",
-  "ui": "ui/index.html",
-  "permissions": ["clipboard", "network"],
-  "triggers": [
-    { "type": "keyword", "value": "fy" }
-  ]
-}
-```
-
-**main.js**
-```javascript
-const { clipboard, http, ui } = require('@intools/sdk');
-
-module.exports = {
-  async run(context) {
-    const text = await clipboard.readText();
-    ui.send('init', { text });
-  }
-};
-
-ui.on('translate', async ({ text, from, to }) => {
-  const res = await http.request({
-    url: 'https://api.translate.com/v1/translate',
-    method: 'POST',
-    body: JSON.stringify({ text, from, to })
-  });
-  ui.send('result', { translation: res.data.result });
-});
-```
-
----
-
-## AI 生成插件指南
-
-当用户描述需求时，AI 应按以下步骤生成插件：
-
-### 步骤 1：分析需求
-
-确定以下信息：
-- 插件功能是什么？
-- 需要哪些权限？
-- 是否需要 UI？
-- 触发方式是什么？
-
-### 步骤 2：选择模板
-
-| 需求类型 | 模板 |
-|---------|------|
-| 剪贴板处理 | 模板 A（无 UI） |
-| 格式转换 | 模板 A（无 UI） |
-| 需要用户输入 | 模板 B（有 UI） |
-| 展示结果列表 | 模板 B（有 UI） |
-
-### 步骤 3：生成代码
-
-按以下顺序生成：
-1. `manifest.json` - 配置文件
-2. `main.js` - 主逻辑
-3. `ui/index.html` - UI 文件（如需要）
-
-### 生成规则
-
-1. **name** 使用小写字母和连字符
-2. **triggers** 至少包含一个 keyword 类型
-3. **permissions** 只申请必要的权限
-4. **icon** 使用内联 SVG 生成图标（见下方说明）
-5. 代码使用 async/await 风格
-6. 错误处理使用 try/catch
-7. 操作完成后发送 notification
-
-### 图标生成指南
-
-AI 生成插件时，应使用内联 SVG 作为图标。SVG 图标应：
-
-1. 使用 `viewBox="0 0 24 24"` 标准尺寸
-2. 使用 `fill="currentColor"` 以适应主题
-3. 图标应简洁、易识别，与插件功能相关
-4. 避免使用复杂渐变或滤镜
-
-**示例：为不同类型插件生成图标**
-
-```json
-// JSON 工具 - 花括号图标
-"icon": "<svg viewBox=\"0 0 24 24\" fill=\"currentColor\"><path d=\"M5 3h2v2H5v5a2 2 0 01-2 2 2 2 0 012 2v5h2v2H5c-1.1 0-2-.9-2-2v-4a2 2 0 00-2-2H0v-2h1a2 2 0 002-2V5a2 2 0 012-2zm14 0a2 2 0 012 2v4a2 2 0 002 2h1v2h-1a2 2 0 00-2 2v4a2 2 0 01-2 2h-2v-2h2v-5a2 2 0 012-2 2 2 0 01-2-2V5h-2V3h2z\"/></svg>"
-
-// 时间戳 - 时钟图标
-"icon": "<svg viewBox=\"0 0 24 24\" fill=\"currentColor\"><path d=\"M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10 10-4.5 10-10S17.5 2 12 2zm0 18c-4.4 0-8-3.6-8-8s3.6-8 8-8 8 3.6 8 8-3.6 8-8 8zm.5-13H11v6l5.2 3.2.8-1.3-4.5-2.7V7z\"/></svg>"
-
-// 翻译 - 语言图标
-"icon": "<svg viewBox=\"0 0 24 24\" fill=\"currentColor\"><path d=\"M12.87 15.07l-2.54-2.51.03-.03A17.52 17.52 0 0014.07 6H17V4h-7V2H8v2H1v2h11.17C11.5 7.92 10.44 9.75 9 11.35 8.07 10.32 7.3 9.19 6.69 8h-2c.73 1.63 1.73 3.17 2.98 4.56l-5.09 5.02L4 19l5-5 3.11 3.11.76-2.04zM18.5 10h-2L12 22h2l1.12-3h4.75L21 22h2l-4.5-12zm-2.62 7l1.62-4.33L19.12 17h-3.24z\"/></svg>"
-
-// Base64 - 编码图标
-"icon": "<svg viewBox=\"0 0 24 24\" fill=\"currentColor\"><path d=\"M3 5v14h18V5H3zm16 12H5V7h14v10zM7 9h4v2H7v-2zm0 4h4v2H7v-2zm6-4h4v2h-4v-2zm0 4h4v2h-4v-2z\"/></svg>"
-```
-
-### 示例提示词
-
-用户说：「帮我做一个 Base64 编解码插件」
-
-AI 应生成：
-
-```
-base64-codec/
-├── manifest.json
-└── main.js
-```
-
-**manifest.json**
-```json
-{
-  "name": "base64-codec",
-  "version": "1.0.0",
-  "displayName": "Base64 编解码",
-  "description": "Base64 编码和解码",
-  "runtime": "nodejs",
-  "main": "main.js",
-  "permissions": ["clipboard", "notification"],
-  "triggers": [
-    { "type": "keyword", "value": "b64" },
-    { "type": "keyword", "value": "base64" }
-  ]
-}
-```
-
-**main.js**
-```javascript
-const { clipboard, notification } = require('@intools/sdk');
-
-module.exports = {
-  async run(context) {
-    const text = await clipboard.readText();
-    let result;
-    try {
-      // 尝试解码
-      result = Buffer.from(text, 'base64').toString('utf-8');
-      if (Buffer.from(result).toString('base64') !== text) {
-        // 不是有效 base64，执行编码
-        result = Buffer.from(text).toString('base64');
-      }
-    } catch {
-      result = Buffer.from(text).toString('base64');
-    }
-    await clipboard.writeText(result);
-    notification.show('已复制到剪贴板');
-  }
-};
-```
-
----
+构建/打包流程以 CLI 为准（`packages/intools-cli/README.md`）。

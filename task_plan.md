@@ -1,7 +1,7 @@
-# Task Plan: Img Cmd Extension Filter
+# Task Plan: Rewrite Plugin Spec
 
 ## Goal
-Allow manifest `cmds` to filter image attachments by extension.
+Rewrite `docs/plugin-spec.md` based on current CLI, APIs, manifest spec, and code.
 
 ## Phases
 - [x] Phase 1: Plan and setup
@@ -10,8 +10,8 @@ Allow manifest `cmds` to filter image attachments by extension.
 - [x] Phase 4: Review and deliver
 
 ## Key Questions
-1. Where is `img` matching implemented in search?
-2. Which docs describe `cmd` types for manifest features?
+1. Which docs already cover APIs and manifest fields to reference?
+2. What is the current plugin project structure and CLI commands?
 
 ## Decisions Made
 - None yet
@@ -20,4 +20,4 @@ Allow manifest `cmds` to filter image attachments by extension.
 - None yet
 
 ## Status
-**Completed** - Added ext filtering for img cmd matching
+**Completed** - Rewrote plugin-spec.md to current spec
