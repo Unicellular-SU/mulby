@@ -63,29 +63,21 @@ function App() {
   useEffect(() => {
     const SEARCH_BOX_HEIGHT = 62
     const BORDER_HEIGHT = 1
-    const GRID_GAP = 12
-    const CARD_HEIGHT = 100 // 图标40 + 名称14 + explain12 + padding24 + gap6*2
-    const GRID_PADDING = 16
-    const COLUMNS = 6
-    const MAX_ITEMS = 24 // 4行 × 6列
+    const EXPANDED_HEIGHT = 550
     const MANAGER_HEIGHT = managerMetrics.managerHeight
 
     let height = SEARCH_BOX_HEIGHT
 
     if (viewMode !== 'home') {
       // 设置/详情页高度
-      height = 550
+      height = EXPANDED_HEIGHT
     } else if (pluginOpen) {
       // 插件面板打开时，主窗口只保持搜索框高度（插件 UI 在独立的 Panel 窗口中）
       height = SEARCH_BOX_HEIGHT
     } else if (attachmentsManagerOpen && attachments.length > 0) {
       height = SEARCH_BOX_HEIGHT + BORDER_HEIGHT + MANAGER_HEIGHT
     } else if ((query.length > 0 || attachments.length > 0) && resultCount > 0) {
-      // 根据结果数量动态计算高度，最多显示 4 行
-      const visibleCount = Math.min(resultCount, MAX_ITEMS)
-      const rows = Math.ceil(visibleCount / COLUMNS)
-      height = SEARCH_BOX_HEIGHT + BORDER_HEIGHT + GRID_PADDING * 2 +
-        rows * CARD_HEIGHT + (rows - 1) * GRID_GAP
+      height = EXPANDED_HEIGHT
     }
     window.intools.window.setSize(680, height)
   }, [query, resultCount, pluginOpen, detailsPluginName, attachments.length, attachmentsManagerOpen, managerMetrics.managerHeight, viewMode])

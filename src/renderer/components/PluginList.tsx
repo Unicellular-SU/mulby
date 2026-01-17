@@ -45,7 +45,7 @@ function PluginList({ payload, onResultsChange, onShowDetails, onOpenSettings }:
 
   // Grid 配置
   const COLUMNS = 6
-  const MAX_ITEMS = 24 // 4行 × 6列
+  const MAX_ITEMS = 30 // 5行 × 6列
   const SEARCH_DEBOUNCE_MS = 150
 
   useEffect(() => {
@@ -138,24 +138,32 @@ function PluginList({ payload, onResultsChange, onShowDetails, onOpenSettings }:
   }
 
   return (
-    <div className="plugin-grid">
-      {displayResults.map((item, index) => (
-        <div
-          key={`${item.pluginName}-${item.featureCode}`}
-          className={`plugin-card ${index === selectedIndex ? 'selected' : ''}`}
-          onClick={() => handleRun(item)}
-          onContextMenu={(e) => {
-            e.preventDefault()
-            if (!isSettingsItem(item)) {
-              onShowDetails?.(item.pluginName)
-            }
-          }}
-        >
-          <PluginIcon icon={item.icon} />
-          <span className="plugin-card-name">{item.displayName}</span>
-          <span className="plugin-card-explain">{item.featureExplain}</span>
-        </div>
-      ))}
+    <div className="plugin-grid" role="listbox">
+      {displayResults.map((item, index) => {
+        const isSettings = isSettingsItem(item)
+        return (
+          <div
+            key={`${item.pluginName}-${item.featureCode}`}
+            className={`plugin-card ${isSettings ? 'settings' : ''} ${index === selectedIndex ? 'selected' : ''}`}
+            role="option"
+            aria-selected={index === selectedIndex}
+            onClick={() => handleRun(item)}
+            onMouseEnter={() => setSelectedIndex(index)}
+            onContextMenu={(e) => {
+              e.preventDefault()
+              if (!isSettings) {
+                onShowDetails?.(item.pluginName)
+              }
+            }}
+          >
+            <div className="plugin-card-top">
+              <PluginIcon icon={item.icon} />
+            </div>
+            <span className="plugin-card-name">{item.displayName}</span>
+            <span className="plugin-card-explain">{item.featureExplain}</span>
+          </div>
+        )
+      })}
     </div>
   )
 }
