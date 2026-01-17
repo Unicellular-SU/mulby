@@ -413,7 +413,7 @@ export class PluginPanelWindow {
         // 面板位于主窗口正下方，宽度相同
         return {
             x: mainBounds.x,
-            y: mainBounds.y + mainBounds.height,
+            y: mainBounds.y + mainBounds.height + 8,
             width: mainBounds.width
         }
     }

@@ -10,6 +10,14 @@
   --text-secondary: #64748b;
   --accent: #2563eb;
   --border: #e2e8f0;
+  --glass-bg: rgba(255, 255, 255, 0.78);
+  --glass-bg-strong: rgba(255, 255, 255, 0.88);
+  --glass-border: rgba(255, 255, 255, 0.55);
+  --glass-shadow: 0 12px 30px rgba(15, 23, 42, 0.12);
+  --glass-accent: rgba(59, 130, 246, 0.6);
+  --glass-accent-bg: rgba(219, 234, 254, 0.6);
+  --glass-blur: 16px;
+  --glass-blur-strong: 20px;
 }
 
 .dark {
@@ -20,6 +28,14 @@
   --text-secondary: #94a3b8;
   --accent: #3b82f6;
   --border: #334155;
+  --glass-bg: rgba(15, 23, 42, 0.72);
+  --glass-bg-strong: rgba(15, 23, 42, 0.84);
+  --glass-border: rgba(148, 163, 184, 0.18);
+  --glass-shadow: 0 16px 32px rgba(0, 0, 0, 0.35);
+  --glass-accent: rgba(59, 130, 246, 0.7);
+  --glass-accent-bg: rgba(30, 58, 138, 0.35);
+  --glass-blur: 16px;
+  --glass-blur-strong: 20px;
 }
 
 * {
@@ -55,73 +71,54 @@ body {
 }
 
 .app-home {
-  background: rgba(255, 255, 255, 0.82);
-  border: 1px solid rgba(255, 255, 255, 0.6);
-  box-shadow: 0 12px 30px rgba(15, 23, 42, 0.12);
-  backdrop-filter: blur(18px);
-  -webkit-backdrop-filter: blur(18px);
-}
-
-.dark .app-home {
-  background: rgba(15, 23, 42, 0.78);
-  border-color: rgba(148, 163, 184, 0.18);
-  box-shadow: 0 16px 32px rgba(0, 0, 0, 0.35);
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-border);
+  box-shadow: var(--glass-shadow);
+  backdrop-filter: blur(var(--glass-blur-strong));
+  -webkit-backdrop-filter: blur(var(--glass-blur-strong));
 }
 
 .app-home .plugin-grid {
-  background: rgba(255, 255, 255, 0.65);
-  border-top-color: rgba(226, 232, 240, 0.6);
-  backdrop-filter: blur(14px);
-  -webkit-backdrop-filter: blur(14px);
-}
-
-.dark .app-home .plugin-grid {
-  background: rgba(15, 23, 42, 0.6);
-  border-top-color: rgba(51, 65, 85, 0.6);
+  background: var(--glass-bg);
+  border-top-color: var(--glass-border);
+  backdrop-filter: blur(var(--glass-blur));
+  -webkit-backdrop-filter: blur(var(--glass-blur));
 }
 
 .settings-shell {
-  background: radial-gradient(circle at top left, rgba(59, 130, 246, 0.18), transparent 45%),
+  background:
+    radial-gradient(circle at top left, rgba(59, 130, 246, 0.18), transparent 45%),
     radial-gradient(circle at 20% 90%, rgba(16, 185, 129, 0.14), transparent 40%),
     linear-gradient(135deg, rgba(255, 255, 255, 0.9), rgba(248, 250, 252, 0.9));
 }
 
 .dark .settings-shell {
-  background: radial-gradient(circle at top left, rgba(59, 130, 246, 0.2), transparent 45%),
+  background:
+    radial-gradient(circle at top left, rgba(59, 130, 246, 0.2), transparent 45%),
     radial-gradient(circle at 20% 90%, rgba(14, 116, 144, 0.2), transparent 40%),
     linear-gradient(135deg, rgba(15, 23, 42, 0.88), rgba(30, 41, 59, 0.9));
 }
 
 .glass-surface {
-  background: rgba(255, 255, 255, 0.75);
-  backdrop-filter: blur(18px);
-  -webkit-backdrop-filter: blur(18px);
-}
-
-.dark .glass-surface {
-  background: rgba(15, 23, 42, 0.7);
+  background: var(--glass-bg);
+  backdrop-filter: blur(var(--glass-blur));
+  -webkit-backdrop-filter: blur(var(--glass-blur));
 }
 
 .glass-card {
   border-radius: 16px;
-  border: 1px solid rgba(255, 255, 255, 0.4);
-  background: rgba(255, 255, 255, 0.75);
-  backdrop-filter: blur(18px);
-  -webkit-backdrop-filter: blur(18px);
+  border: 1px solid var(--glass-border);
+  background: var(--glass-bg);
+  backdrop-filter: blur(var(--glass-blur));
+  -webkit-backdrop-filter: blur(var(--glass-blur));
   padding: 16px;
-  box-shadow: 0 12px 30px rgba(15, 23, 42, 0.08);
-}
-
-.dark .glass-card {
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  background: rgba(15, 23, 42, 0.65);
-  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.35);
+  box-shadow: var(--glass-shadow);
 }
 
 .glass-button {
   border-radius: 999px;
   border: 1px solid rgba(148, 163, 184, 0.5);
-  background: rgba(255, 255, 255, 0.6);
+  background: var(--glass-bg);
   color: #475569;
   transition: border-color 0.2s ease, color 0.2s ease, background 0.2s ease;
 }
@@ -133,7 +130,7 @@ body {
 
 .dark .glass-button {
   border-color: rgba(148, 163, 184, 0.25);
-  background: rgba(15, 23, 42, 0.6);
+  background: var(--glass-bg);
   color: #cbd5f5;
 }
 
@@ -154,14 +151,14 @@ body {
 .settings-input {
   border-radius: 14px;
   border: 1px solid rgba(148, 163, 184, 0.4);
-  background: rgba(255, 255, 255, 0.7);
+  background: var(--glass-bg-strong);
   padding: 10px 14px;
   font-size: 14px;
   color: #0f172a;
 }
 
 .dark .settings-input {
-  background: rgba(15, 23, 42, 0.65);
+  background: var(--glass-bg-strong);
   border-color: rgba(148, 163, 184, 0.2);
   color: #e2e8f0;
 }
@@ -175,7 +172,7 @@ body {
 .settings-chip {
   border-radius: 999px;
   border: 1px solid rgba(148, 163, 184, 0.45);
-  background: rgba(255, 255, 255, 0.55);
+  background: var(--glass-bg);
   padding: 6px 10px;
   font-size: 12px;
   color: #475569;
@@ -188,20 +185,27 @@ body {
 }
 
 .settings-chip-active {
-  border-color: rgba(59, 130, 246, 0.6);
+  border-color: var(--glass-accent);
   color: #1d4ed8;
-  background: rgba(219, 234, 254, 0.6);
+  background: var(--glass-accent-bg);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+  }
 }
 
 .dark .settings-chip {
-  background: rgba(15, 23, 42, 0.6);
+  background: var(--glass-bg);
   border-color: rgba(148, 163, 184, 0.2);
   color: #cbd5f5;
 }
 
 .dark .settings-chip-active {
-  background: rgba(30, 58, 138, 0.35);
-  border-color: rgba(59, 130, 246, 0.7);
+  background: var(--glass-accent-bg);
+  border-color: var(--glass-accent);
   color: #bfdbfe;
 }
 
@@ -247,18 +251,12 @@ body {
   padding: 0 18px;
   gap: 12px;
   -webkit-app-region: drag;
-  background: rgba(255, 255, 255, 0.72);
-  border: 1px solid rgba(255, 255, 255, 0.55);
+  background: var(--glass-bg-strong);
+  border: 1px solid var(--glass-border);
   box-shadow: 0 10px 24px rgba(15, 23, 42, 0.08);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
+  backdrop-filter: blur(var(--glass-blur));
+  -webkit-backdrop-filter: blur(var(--glass-blur));
   transition: background-color 0.2s ease-out;
-}
-
-.dark .search-box {
-  background: rgba(15, 23, 42, 0.72);
-  border-color: rgba(148, 163, 184, 0.16);
-  box-shadow: 0 12px 26px rgba(0, 0, 0, 0.35);
 }
 
 .search-icon {
