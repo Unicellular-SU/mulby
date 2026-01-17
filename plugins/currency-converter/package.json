@@ -1,0 +1,13 @@
+{
+  "name": "currency-converter",
+  "version": "1.0.0",
+  "scripts": {
+    "build": "esbuild src/main.ts --bundle --platform=node --outfile=dist/main.js",
+    "dev": "intools dev",
+    "pack": "intools pack"
+  },
+  "devDependencies": {
+    "esbuild": "^0.20.0",
+    "typescript": "^5.0.0"
+  }
+}
