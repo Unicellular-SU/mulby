@@ -87,6 +87,16 @@ export interface PluginFeature {
   route?: string
 }
 
+// 独立窗口配置
+export interface WindowOptions {
+  width?: number       // 默认宽度
+  height?: number      // 默认高度
+  minWidth?: number    // 最小宽度
+  minHeight?: number   // 最小高度
+  maxWidth?: number    // 最大宽度
+  maxHeight?: number   // 最大高度
+}
+
 // 插件清单
 export interface PluginManifest {
   id?: string  // 唯一标识符（推荐格式：@scope/name 或 com.example.name）
@@ -98,6 +108,7 @@ export interface PluginManifest {
   ui?: string  // UI 文件路径（可选）
   icon?: PluginIcon  // 插件图标（可选）
   features: PluginFeature[]
+  window?: WindowOptions  // 独立窗口配置（可选）
 }
 
 // 插件实例

@@ -524,13 +524,18 @@ export class PluginPanelWindow {
         const isDark = currentTheme === 'dark'
         const backgroundColor = isDark ? '#1e293b' : '#ffffff'
 
+        // 从 manifest.window 读取窗口配置
+        const windowConfig = plugin.manifest.window || {}
+
         const independentWindow = new BrowserWindow({
-            width: Math.max(bounds.width, 500),
-            height: Math.max(bounds.height, 400),
+            width: Math.max(bounds.width, windowConfig.width ?? 500),
+            height: Math.max(bounds.height, windowConfig.height ?? 400),
             x: bounds.x,
             y: bounds.y,
-            minWidth: 300,
-            minHeight: 200,
+            minWidth: windowConfig.minWidth ?? 300,
+            minHeight: windowConfig.minHeight ?? 200,
+            maxWidth: windowConfig.maxWidth,
+            maxHeight: windowConfig.maxHeight,
             frame: false, // 使用自定义标题栏
             show: false,
             resizable: true,

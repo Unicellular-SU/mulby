@@ -218,11 +218,16 @@ export class PluginWindowManager {
     const isDark = currentTheme === 'dark'
     const backgroundColor = isDark ? '#1e293b' : '#ffffff'
 
+    // 从 manifest.window 读取窗口配置
+    const windowConfig = plugin.manifest.window || {}
+
     const win = new BrowserWindow({
-      width: 500,
-      height: 400,
-      minWidth: 300,
-      minHeight: 200,
+      width: windowConfig.width ?? 500,
+      height: windowConfig.height ?? 400,
+      minWidth: windowConfig.minWidth ?? 300,
+      minHeight: windowConfig.minHeight ?? 200,
+      maxWidth: windowConfig.maxWidth,
+      maxHeight: windowConfig.maxHeight,
       show: false,
       frame: false,
       backgroundColor,
@@ -320,11 +325,16 @@ export class PluginWindowManager {
     const isDark = currentTheme === 'dark'
     const backgroundColor = isDark ? '#1e293b' : '#ffffff'
 
+    // 从 manifest.window 读取窗口配置（辅助窗口优先使用传入的 options）
+    const windowConfig = plugin.manifest.window || {}
+
     const win = new BrowserWindow({
-      width: options?.width || 800,
-      height: options?.height || 600,
-      minWidth: 300,
-      minHeight: 200,
+      width: options?.width || windowConfig.width || 800,
+      height: options?.height || windowConfig.height || 600,
+      minWidth: windowConfig.minWidth ?? 300,
+      minHeight: windowConfig.minHeight ?? 200,
+      maxWidth: windowConfig.maxWidth,
+      maxHeight: windowConfig.maxHeight,
       show: false,
       frame: false,
       backgroundColor,

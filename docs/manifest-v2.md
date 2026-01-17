@@ -47,6 +47,33 @@
 | ui | string | 否 | UI 文件路径 |
 | icon | string/object | 否 | 插件图标 |
 | features | array | 是 | 功能入口列表 |
+| window | object | 否 | 独立窗口配置 |
+
+### Window 配置
+
+配置插件在独立窗口模式下的默认尺寸。
+
+```json
+{
+  "window": {
+    "width": 800,
+    "height": 600,
+    "minWidth": 400,
+    "minHeight": 300,
+    "maxWidth": 1200,
+    "maxHeight": 900
+  }
+}
+```
+
+| 字段 | 类型 | 默认值 | 说明 |
+|------|------|--------|------|
+| width | number | 500 | 默认宽度 |
+| height | number | 400 | 默认高度 |
+| minWidth | number | 300 | 最小宽度 |
+| minHeight | number | 200 | 最小高度 |
+| maxWidth | number | - | 最大宽度（不设置则无限制） |
+| maxHeight | number | - | 最大高度（不设置则无限制） |
 
 ### Feature 字段
 | 字段 | 类型 | 必需 | 说明 |
