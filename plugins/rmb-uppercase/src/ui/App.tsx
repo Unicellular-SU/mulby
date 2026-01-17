@@ -5,6 +5,8 @@ interface PluginInitData {
   pluginName: string
   featureCode: string
   input: string
+  mode?: string
+  route?: string
 }
 
 export default function App() {

@@ -1,0 +1,33 @@
+{
+  "id": "qrcode-helper",
+  "name": "qrcode-helper",
+  "version": "1.0.0",
+  "displayName": "二维码助手",
+  "description": "简单好用的二维码生成与识别工具",
+  "main": "dist/main.js",
+  "ui": "ui/index.html",
+  "icon": "icon.png",
+  "features": [
+    {
+      "code": "main",
+      "explain": "二维码助手",
+      "cmds": [
+        {
+          "type": "keyword",
+          "value": "qrcode"
+        }
+      ]
+    },
+    {
+      "code": "generate",
+      "explain": "转二维码",
+      "cmds": [
+        {
+          "type": "regex",
+          "match": "^.{1,500}$",
+          "label": "转二维码"
+        }
+      ]
+    }
+  ]
+}

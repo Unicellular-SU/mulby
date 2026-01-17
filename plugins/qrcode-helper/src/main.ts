@@ -32,19 +32,19 @@ interface PluginContext {
 }
 
 export function onLoad() {
-  console.log('[rmb-uppercase] 插件已加载')
+  console.log('[qrcode-helper] 插件已加载')
 }
 
 export function onUnload() {
-  console.log('[rmb-uppercase] 插件已卸载')
+  console.log('[qrcode-helper] 插件已卸载')
 }
 
 export function onEnable() {
-  console.log('[rmb-uppercase] 插件已启用')
+  console.log('[qrcode-helper] 插件已启用')
 }
 
 export function onDisable() {
-  console.log('[rmb-uppercase] 插件已禁用')
+  console.log('[qrcode-helper] 插件已禁用')
 }
 
 export async function run(context: PluginContext) {
