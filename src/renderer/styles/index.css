@@ -10,6 +10,8 @@
   --text-secondary: #64748b;
   --accent: #2563eb;
   --border: #e2e8f0;
+  --attachment-summary-height: 32px;
+  --attachment-summary-gap: 8px;
 }
 
 .dark {
@@ -61,6 +63,9 @@ body {
   align-items: flex-start;
 }
 
+.search-box.has-attachments .search-icon {
+  margin-top: calc(var(--attachment-summary-height) + var(--attachment-summary-gap));
+}
 .search-icon {
   width: 20px;
   height: 20px;
@@ -72,7 +77,7 @@ body {
   flex: 1;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: var(--attachment-summary-gap);
   -webkit-app-region: no-drag;
 }
 
@@ -166,7 +171,7 @@ body {
   border-radius: 10px;
   border: 1px solid var(--border);
   background: var(--bg-secondary);
-  min-height: 32px;
+  min-height: var(--attachment-summary-height);
 }
 
 .attachment-summary-info {
