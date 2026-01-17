@@ -11,6 +11,6 @@ export { ImageEditor } from './ImageEditor'
 export { WindowAPIModule } from './WindowAPI'
 export { ChildWindowModule } from './ChildWindow'
 export { default as InBrowserDemo } from './InBrowser'
+export { AttachmentsModule } from './Attachments'
 export { SharpModule } from './Sharp'
 export { FFmpegModule } from './FFmpeg'
-

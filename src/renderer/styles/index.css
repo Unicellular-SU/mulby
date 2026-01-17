@@ -10,8 +10,6 @@
   --text-secondary: #64748b;
   --accent: #2563eb;
   --border: #e2e8f0;
-  --attachment-summary-height: 32px;
-  --attachment-summary-gap: 8px;
 }
 
 .dark {
@@ -59,30 +57,26 @@ body {
   transition: background-color 0.2s ease-out;
 }
 
-.search-box.has-attachments {
-  align-items: flex-start;
-}
-
-.search-box.has-attachments .search-icon {
-  margin-top: calc(var(--attachment-summary-height) + var(--attachment-summary-gap));
-}
 .search-icon {
   width: 20px;
   height: 20px;
   color: var(--text-secondary);
   stroke-width: 2;
+  flex-shrink: 0;
 }
 
 .search-input-wrap {
   flex: 1;
   display: flex;
-  flex-direction: column;
-  gap: var(--attachment-summary-gap);
+  flex-direction: row;
+  align-items: center;
+  gap: 10px;
   -webkit-app-region: no-drag;
 }
 
 .search-input {
-  flex: 1;
+  flex: 1 1 auto;
+  min-width: 0;
   border: none;
   outline: none;
   font-size: 17px;
@@ -171,7 +165,14 @@ body {
   border-radius: 10px;
   border: 1px solid var(--border);
   background: var(--bg-secondary);
-  min-height: var(--attachment-summary-height);
+  min-height: 30px;
+  flex: 0 1 auto;
+  min-width: 160px;
+}
+
+.attachment-summary-inline {
+  max-width: 40%;
+  overflow: hidden;
 }
 
 .attachment-summary-info {
@@ -185,6 +186,7 @@ body {
   align-items: center;
   gap: 6px;
   min-width: 0;
+  flex-wrap: nowrap;
 }
 
 .attachment-chip {
@@ -195,7 +197,7 @@ body {
   border-radius: 8px;
   border: 1px solid var(--border);
   background: var(--bg-primary);
-  max-width: 140px;
+  max-width: 120px;
 }
 
 .attachment-chip-name {
@@ -204,7 +206,7 @@ body {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  max-width: 90px;
+  max-width: 70px;
 }
 
 .attachment-chip-remove {
@@ -236,6 +238,13 @@ body {
   border-radius: 8px;
   cursor: pointer;
   transition: background-color 0.15s ease-out, color 0.15s ease-out;
+}
+
+.attachment-summary-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
 }
 
 .attachment-summary-more:hover,

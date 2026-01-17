@@ -140,8 +140,6 @@ function SearchInput({
   }, [attachments, onAttachmentsChange])
 
   const totalAttachmentSize = attachments.reduce((sum, attachment) => sum + attachment.size, 0)
-  const summaryAttachments = attachments.slice(0, SUMMARY_CHIP_LIMIT)
-  const remainingCount = attachments.length - summaryAttachments.length
   const handleToggleManager = useCallback(() => {
     if (attachmentsManagerOpen) {
       onAttachmentsManagerClose()
@@ -184,48 +182,6 @@ function SearchInput({
         </div>
       )}
       <div className="search-input-wrap">
-        {attachments.length > 0 && (
-          <div className="attachment-summary no-drag">
-            <div className="attachment-summary-info">
-              附件 {attachments.length} · {formatBytes(totalAttachmentSize)}
-            </div>
-            <div className="attachment-summary-chips">
-              {summaryAttachments.map((attachment) => (
-                <div className="attachment-chip" key={attachment.id} title={attachment.name}>
-                  <span className="attachment-chip-name">{attachment.name}</span>
-                  <button
-                    type="button"
-                    className="attachment-chip-remove"
-                    onClick={() => handleRemoveAttachment(attachment.id)}
-                    aria-label={`移除 ${attachment.name}`}
-                  >
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
-                      <path d="M18 6L6 18M6 6l12 12" />
-                    </svg>
-                  </button>
-                </div>
-              ))}
-              {remainingCount > 0 && (
-                <button
-                  type="button"
-                  className="attachment-summary-more"
-                  onClick={handleToggleManager}
-                  aria-label={`查看剩余 ${remainingCount} 个附件`}
-                >
-                  +{remainingCount}
-                </button>
-              )}
-              <button
-                type="button"
-                className="attachment-summary-manage"
-                onClick={handleToggleManager}
-                aria-expanded={attachmentsManagerOpen}
-              >
-                {attachmentsManagerOpen ? '收起' : '管理'}
-              </button>
-            </div>
-          </div>
-        )}
         <input
           ref={inputRef}
           type="text"
@@ -245,6 +201,23 @@ function SearchInput({
           onDrop={handleDrop}
           autoFocus
         />
+        {attachments.length > 0 && (
+          <div className="attachment-summary attachment-summary-inline no-drag">
+            <div className="attachment-summary-info">
+              附件 {attachments.length} · {formatBytes(totalAttachmentSize)}
+            </div>
+            <div className="attachment-summary-actions">
+              <button
+                type="button"
+                className="attachment-summary-manage"
+                onClick={handleToggleManager}
+                aria-expanded={attachmentsManagerOpen}
+              >
+                {attachmentsManagerOpen ? '收起' : '管理'}
+              </button>
+            </div>
+          </div>
+        )}
       </div>
       {subInput.enabled && (
         <div className="subinput-indicator" title="SubInput 模式">
@@ -337,7 +310,6 @@ function formatBytes(bytes: number): string {
 const SUMMARY_THRESHOLD = 400
 const SUMMARY_HEAD_LENGTH = 8
 const SUMMARY_TAIL_LENGTH = 8
-const SUMMARY_CHIP_LIMIT = 3
 
 function buildSummary(text: string): { head: string; tail: string } {
   if (text.length <= SUMMARY_HEAD_LENGTH + SUMMARY_TAIL_LENGTH) {

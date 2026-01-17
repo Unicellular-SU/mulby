@@ -17,11 +17,12 @@ import {
   InBrowserDemo,
   SharpModule,
   FFmpegModule,
+  AttachmentsModule
 } from './modules'
 
 console.log('[App] Module imports loaded')
 
-type ModuleId = 'sysinfo' | 'clipboard' | 'input' | 'filemanager' | 'network' | 'screen' | 'media' | 'settings' | 'security' | 'image-editor' | 'window-api' | 'child-window' | 'inbrowser' | 'sharp' | 'ffmpeg'
+type ModuleId = 'sysinfo' | 'clipboard' | 'input' | 'filemanager' | 'network' | 'screen' | 'media' | 'settings' | 'security' | 'image-editor' | 'window-api' | 'child-window' | 'inbrowser' | 'sharp' | 'ffmpeg' | 'attachments'
 type ScreenAutoAction = 'region-capture' | null
 
 const featureToModule: Record<string, ModuleId> = {
@@ -39,7 +40,8 @@ const featureToModule: Record<string, ModuleId> = {
   'showcase:ui-detached': 'settings',
   'showcase:inbrowser': 'inbrowser',
   'showcase:sharp': 'sharp',
-  'showcase:ffmpeg': 'ffmpeg'
+  'showcase:ffmpeg': 'ffmpeg',
+  'attachments': 'attachments'
 }
 
 function handleDynamicCommand(featureCode: string, input?: string) {
@@ -96,6 +98,7 @@ const moduleComponents: Record<ModuleId, React.ComponentType<any>> = {
   'inbrowser': InBrowserDemo,
   'sharp': SharpModule,
   'ffmpeg': FFmpegModule,
+  'attachments': AttachmentsModule
 }
 
 // 从 URL 参数或插件初始化数据获取默认模块
@@ -116,6 +119,7 @@ export default function App() {
   console.log('[App] Rendering...')
   const [activeModule, setActiveModule] = useState<ModuleId>(getInitialModule)
   const [screenAutoAction, setScreenAutoAction] = useState<ScreenAutoAction>(null)
+  const [attachmentsData, setAttachmentsData] = useState<any[]>([])
 
   // 初始化主题
   useTheme()
@@ -140,6 +144,10 @@ export default function App() {
       } else if (data.featureCode && data.featureCode in featureToModule) {
         setActiveModule(featureToModule[data.featureCode])
         setScreenAutoAction(null)
+      }
+
+      if (data.attachments) {
+        setAttachmentsData(data.attachments)
       }
     })
   }, [])
@@ -176,7 +184,11 @@ export default function App() {
             onAutoActionDone={() => setScreenAutoAction(null)}
           />
         ) : (
-          <ActiveModuleComponent />
+          activeModule === 'attachments' ? (
+            <ActiveModuleComponent attachments={attachmentsData} />
+          ) : (
+            <ActiveModuleComponent />
+          )
         )
       ) : (
         <div>Module not found</div>

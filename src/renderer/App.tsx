@@ -58,8 +58,7 @@ function App() {
 
   // 调整窗口高度
   useEffect(() => {
-    const ATTACHMENT_SUMMARY_HEIGHT = attachments.length > 0 ? 32 : 0
-    const SEARCH_BOX_HEIGHT = 62 + ATTACHMENT_SUMMARY_HEIGHT
+    const SEARCH_BOX_HEIGHT = 62
     const BORDER_HEIGHT = 1
     const GRID_GAP = 12
     const CARD_HEIGHT = 100 // 图标40 + 名称14 + explain12 + padding24 + gap6*2

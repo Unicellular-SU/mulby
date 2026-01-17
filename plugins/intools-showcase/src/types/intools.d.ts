@@ -412,6 +412,17 @@ interface IntoolsFFmpeg {
   run(args: string[], onProgress?: (progress: FFmpegRunProgress) => void): FFmpegTask
 }
 
+interface InputAttachment {
+  id: string
+  name: string
+  size: number
+  kind: 'file' | 'image'
+  mime?: string
+  ext?: string
+  path?: string
+  dataUrl?: string
+}
+
 interface PluginInitData {
   pluginName: string
   featureCode: string
@@ -419,6 +430,7 @@ interface PluginInitData {
   input: string
   mode?: string
   route?: string
+  attachments?: InputAttachment[]
 }
 
 interface IntoolsAPI {

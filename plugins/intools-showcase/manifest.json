@@ -169,6 +169,20 @@
           "value": "设置"
         }
       ]
+    },
+    {
+      "code": "attachments",
+      "explain": "附件接收展示",
+      "cmds": [
+        {
+          "type": "keyword",
+          "value": "attachments"
+        },
+        {
+          "type": "keyword",
+          "value": "附件"
+        }
+      ]
     }
   ]
 }
