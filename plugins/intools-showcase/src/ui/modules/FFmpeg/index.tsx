@@ -126,7 +126,7 @@ export function FFmpegModule() {
 
             if (task) {
                 currentTaskRef.current = task
-                await task
+                await task.promise
                 notify.success('视频压缩完成！')
             }
         } catch (error: any) {
@@ -168,7 +168,7 @@ export function FFmpegModule() {
 
             if (task) {
                 currentTaskRef.current = task
-                await task
+                await task.promise
                 notify.success(`音频提取完成：${audioOutput}`)
             }
         } catch (error: any) {
@@ -244,6 +244,138 @@ export function FFmpegModule() {
         }
     }, [inputFile, notify])
 
+
+    // 屏幕录制状态
+    const [recording, setRecording] = useState(false)
+    const [recordMouse, setRecordMouse] = useState(true)
+
+    // 生成录屏参数
+    const getRecordingArgs = async (
+        speaker: boolean | string,
+        microphone: string | boolean,
+        captureMouse: boolean,
+        area: { x: number; y: number; width: number; height: number; screenId?: string } | string | null,
+        outputFile: string
+    ) => {
+        const isWindows = await window.intools.system.isWindows()
+        const isMacOS = await window.intools.system.isMacOS()
+
+        if (isWindows) {
+            if (speaker && typeof speaker !== 'string') {
+                throw new Error('扬声器录制需要启用「立体声混音」')
+            }
+            return [
+                ...(microphone ? ['-f', 'dshow', '-i', `audio=${microphone}`] : []),
+                ...(speaker ? ['-f', 'dshow', '-i', `audio=${speaker}`] : []),
+                '-f', 'gdigrab',
+                '-framerate', '30',
+                '-draw_mouse', captureMouse ? '1' : '0',
+                ...(area && typeof area === 'object'
+                    ? ['-offset_x', String(Math.round(area.x)), '-offset_y', String(Math.round(area.y)), '-video_size', `${Math.round(area.width)}x${Math.round(area.height)}`]
+                    : []),
+                '-i', 'desktop',
+                ...((microphone && speaker) ? ['-filter_complex', '[0:a][1:a]amix=inputs=2:duration=longest:dropout_transition=2[aout]', '-map', '2:v', '-map', '[aout]'] : []),
+                '-r', '30',
+                '-c:v', 'libx264',
+                '-pix_fmt', 'yuv420p',
+                '-preset', 'ultrafast',
+                '-crf', '23',
+                ...((microphone || speaker) ? ['-c:a', 'aac', '-b:a', '192k'] : []),
+                '-y',
+                outputFile
+            ]
+        }
+
+        if (isMacOS) {
+            if (speaker || microphone) {
+                throw new Error('当前示例 macOS 暂不支持录制声音')
+            }
+            // macOS 需要 avfoundation，通常 -i "1" 为主屏幕
+            // 注意：需要确保终端/应用有屏幕录制权限
+            return [
+                '-f', 'avfoundation',
+                '-framerate', '30',
+                '-capture_cursor', captureMouse ? '1' : '0',
+                ...(
+                    area && typeof area === 'object'
+                        ? ['-i', String(area.screenId || '1'), '-vf', `crop=${area.width}:${area.height}:${area.x}:${area.y}`]
+                        : ['-i', String(area || '1')]
+                ),
+                '-c:v', 'libx264',
+                '-pix_fmt', 'yuv420p',
+                '-preset', 'ultrafast',
+                '-crf', '23',
+                '-y',
+                outputFile
+            ]
+        }
+
+        throw new Error('不支持当前平台录制')
+    }
+
+    // 开始录制
+    const handleStartRecording = useCallback(async () => {
+        try {
+            // 选择保存路径
+            const savePath = await window.intools.dialog.showSaveDialog({
+                title: '保存录屏文件',
+                defaultPath: 'capture.mp4',
+                filters: [{ name: '视频文件', extensions: ['mp4'] }]
+            })
+
+            if (!savePath) return
+
+            setRecording(true)
+            setRunProgress(null)
+            notify.info('开始录制...')
+
+            // 开始录制 (全屏，捕获鼠标，无音频)
+            // windows 需要 gdigrab, macos 需要 avfoundation
+            // 这里为了演示，传 null 表示全屏
+            const args = await getRecordingArgs(false, false, recordMouse, null, savePath)
+
+            const task = window.intools.ffmpeg.run(
+                args,
+                (progress) => {
+                    setRunProgress({
+                        percent: undefined,
+                        time: progress.time,
+                        speed: progress.speed
+                    })
+                }
+            )
+
+            if (task) {
+                currentTaskRef.current = task
+                await task.promise  // 等待 Promise 完成
+                notify.success(`录制完成: ${savePath}`)
+            }
+        } catch (error: any) {
+            if (error.message.includes('SIGKILL') || error.message.includes('exit code: 255')) {
+                // 忽略 kill/quit 导致的错误
+                return
+            }
+            notify.error(`录制失败: ${error.message}`)
+        } finally {
+            setRecording(false)
+            setRunProgress(null)
+            currentTaskRef.current = null
+        }
+    }, [recordMouse, notify])
+
+    // 停止录制
+    const handleStopRecording = useCallback(() => {
+        console.log('[FFmpeg UI] handleStopRecording 被调用')
+        console.log('[FFmpeg UI] currentTaskRef.current:', currentTaskRef.current)
+        if (currentTaskRef.current) {
+            console.log('[FFmpeg UI] 调用 quit()')
+            currentTaskRef.current.quit() // 发送 q 停止录制
+            notify.info('正在停止录制...')
+        } else {
+            console.log('[FFmpeg UI] currentTaskRef.current 为空，无法停止')
+            notify.warning('没有正在进行的录制任务')
+        }
+    }, [notify])
 
     return (
         <div className="main-content">
@@ -354,6 +486,42 @@ export function FFmpegModule() {
                     )}
                 </Card>
 
+                {/* 屏幕录制 */}
+                <Card title="屏幕录制 (实验性)" icon="🎥">
+                    <div style={{ marginBottom: 'var(--spacing-md)' }}>
+                        <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '14px', cursor: 'pointer' }}>
+                            <input
+                                type="checkbox"
+                                checked={recordMouse}
+                                onChange={e => setRecordMouse(e.target.checked)}
+                            />
+                            捕获鼠标光标
+                        </label>
+                    </div>
+                    <div className="action-bar">
+                        {!recording ? (
+                            <Button
+                                variant="primary"
+                                onClick={handleStartRecording}
+                                disabled={isAvailable === false}
+                            >
+                                🔴 开始录制
+                            </Button>
+                        ) : (
+                            <Button
+                                variant="secondary"
+                                onClick={handleStopRecording}
+                                style={{
+                                    borderColor: 'var(--error)',
+                                    color: 'var(--error)'
+                                }}
+                            >
+                                ⏹️ 停止录制
+                            </Button>
+                        )}
+                    </div>
+                </Card>
+
                 {/* 处理操作 */}
                 <Card title="处理操作" icon="🎨">
                     {runProgress && (
@@ -369,22 +537,24 @@ export function FFmpegModule() {
                                 marginBottom: 'var(--spacing-sm)',
                                 fontSize: '13px'
                             }}>
-                                <span>处理中...</span>
+                                <span>{recording ? '录制中...' : '处理中...'}</span>
                                 <span>{runProgress.percent !== undefined ? `${runProgress.percent}%` : runProgress.time}</span>
                             </div>
-                            <div style={{
-                                height: '8px',
-                                background: 'var(--bg-secondary)',
-                                borderRadius: '4px',
-                                overflow: 'hidden'
-                            }}>
+                            {runProgress.percent !== undefined && (
                                 <div style={{
-                                    height: '100%',
-                                    width: `${runProgress.percent || 0}%`,
-                                    background: 'var(--accent-primary)',
-                                    transition: 'width 0.3s ease'
-                                }} />
-                            </div>
+                                    height: '8px',
+                                    background: 'var(--bg-secondary)',
+                                    borderRadius: '4px',
+                                    overflow: 'hidden'
+                                }}>
+                                    <div style={{
+                                        height: '100%',
+                                        width: `${runProgress.percent || 0}%`,
+                                        background: 'var(--accent-primary)',
+                                        transition: 'width 0.3s ease'
+                                    }} />
+                                </div>
+                            )}
                             {runProgress.speed && (
                                 <div style={{
                                     fontSize: '12px',
@@ -464,34 +634,41 @@ export function FFmpegModule() {
                 {/* API 参考 */}
                 <Card title="使用的 API" icon="📖">
                     <CodeBlock>
-                        {`// 检查 FFmpeg 状态
-const available = await intools.ffmpeg.isAvailable()
-const version = await intools.ffmpeg.getVersion()
+                        {`// 生成录屏参数
+async function getRecordingArgs (speaker, microphone, captureMouse, area, outputFile) {
+  const isWindows = await intools.system.isWindows()
 
-// 下载 FFmpeg
-await intools.ffmpeg.download((progress) => {
-  console.log(progress.phase, progress.percent + '%')
-})
+                        if (isWindows) {
+    // Windows 参数构造 (gdigrab + dshow)
+    return [
+                        // ... 省略具体参数构造细节 ...
+                        '-f', 'gdigrab', '-i', 'desktop',
+                        '-y', outputFile
+                        ]
+  }
 
-// 视频压缩
-const task = intools.ffmpeg.run(
-  ["-i", "input.mp4", "-crf", "28", "output.mp4"],
-  (progress) => console.log(progress.percent + '%')
-)
+                        // macOS 参数构造 (avfoundation)
+                        return ['-f', 'avfoundation', '-i', '1', '-y', outputFile]
+}
 
-// 取消/退出
-task.kill()  // 强制终止
-task.quit()  // 优雅退出
+                        // 使用示例：
+                        // 1. 获取参数
+                        const args = await getRecordingArgs(false, false, true, null, '/path/to.mp4')
 
-// 获取媒体信息
-intools.ffmpeg.run(["-i", "input.mp4"]).catch((err) => {
-  // 从 err.message (stderr) 提取时长、码率等信息
-  const duration = err.message.match(/Duration: ([^,]+)/)?.[1]
-  console.log(duration)
-})`}
+// 2. 启动任务 (注意：不要 await run，先拿到 task 对象以便控制)
+const task = intools.ffmpeg.run(args, (progress) => {
+                            console.log('录制时间:', progress.time)
+                        })
+
+// 3. 10秒后停止录制 (发送 'q' 命令)
+setTimeout(() => task.quit(), 10000)
+
+// 4. 等待任务结束
+await task`}
                     </CodeBlock>
                 </Card>
             </div>
         </div>
     )
 }
+

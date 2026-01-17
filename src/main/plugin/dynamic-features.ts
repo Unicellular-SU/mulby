@@ -42,8 +42,6 @@ function normalizeCmd(cmd: DynamicCmdInput): PluginCmd {
       return { type: 'img' }
     case 'over':
       return { type: 'over' }
-    default:
-      throw new Error(`Unsupported command type: ${cmd.type}`)
   }
 }
 

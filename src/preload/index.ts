@@ -526,20 +526,16 @@ contextBridge.exposeInMainWorld('intools', {
      * @param onProgress 进度回调
      */
     run: (args: string[], onProgress?: (progress: { bitrate: string; fps: number; frame: number; percent?: number; q: number | string; size: string; speed: string; time: string }) => void) => {
-      let taskId: string | null = null
-
-      // 监听 taskId
-      const startListener = (_: any, data: { taskId: string }) => {
-        taskId = data.taskId
-      }
-      ipcRenderer.once('ffmpeg:started', startListener)
+      // 生成唯一的 taskId
+      const taskId = `ffmpeg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+      console.log('[FFmpeg Preload] run() 启动任务, taskId:', taskId)
 
       // 监听进度
       let progressListener: ((...args: any[]) => void) | null = null
       if (onProgress) {
         progressListener = (_: any, data: { taskId: string; progress: any }) => {
-          // 只处理匹配的 taskId 或初始状态
-          if (!taskId || data.taskId === taskId) {
+          // 只处理匹配的 taskId
+          if (data.taskId === taskId) {
             onProgress(data.progress)
           }
         }
@@ -547,30 +543,25 @@ contextBridge.exposeInMainWorld('intools', {
       }
 
       // 执行命令
-      const resultPromise = ipcRenderer.invoke('ffmpeg:run', args).finally(() => {
+      const resultPromise = ipcRenderer.invoke('ffmpeg:run', { args, taskId }).finally(() => {
         // 清理监听器
-        ipcRenderer.removeListener('ffmpeg:started', startListener)
         if (progressListener) {
           ipcRenderer.removeListener('ffmpeg:progress', progressListener)
         }
       })
 
-      // 扩展 Promise，添加 kill 和 quit 方法
-      const promiseLike = resultPromise as Promise<void> & { kill: () => void; quit: () => void }
-
-      promiseLike.kill = () => {
-        if (taskId) {
+      // 返回包含控制方法的对象（而非扩展 Promise，以避免 contextBridge 序列化问题）
+      return {
+        promise: resultPromise,
+        kill: () => {
+          console.log('[FFmpeg Preload] kill() 被调用, taskId:', taskId)
           ipcRenderer.invoke('ffmpeg:kill', taskId)
-        }
-      }
-
-      promiseLike.quit = () => {
-        if (taskId) {
+        },
+        quit: () => {
+          console.log('[FFmpeg Preload] quit() 被调用, taskId:', taskId)
           ipcRenderer.invoke('ffmpeg:quit', taskId)
         }
       }
-
-      return promiseLike
     }
   }
 })

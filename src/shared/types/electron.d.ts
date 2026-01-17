@@ -112,7 +112,8 @@ export interface FFmpegDownloadProgress {
 export type FFmpegRunProgressCallback = (progress: FFmpegRunProgress) => void
 export type FFmpegDownloadProgressCallback = (progress: FFmpegDownloadProgress) => void
 
-export interface FFmpegPromiseLike extends Promise<void> {
+export interface FFmpegTask {
+  promise: Promise<void>
   kill(): void
   quit(): void
 }
@@ -361,7 +362,7 @@ export interface ElectronAPI {
     getVersion: () => Promise<string | null>
     getPath: () => Promise<string | null>
     download: (onProgress?: FFmpegDownloadProgressCallback) => Promise<{ success: boolean; error?: string }>
-    run: (args: string[], onProgress?: FFmpegRunProgressCallback) => FFmpegPromiseLike
+    run: (args: string[], onProgress?: FFmpegRunProgressCallback) => FFmpegTask
   }
 }
 

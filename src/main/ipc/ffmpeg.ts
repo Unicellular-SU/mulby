@@ -20,10 +20,7 @@ import {
 // 活跃的 FFmpeg 进程映射
 const activeProcesses = new Map<string, ChildProcess>()
 
-// 生成唯一任务 ID
-function generateTaskId(): string {
-    return `ffmpeg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
-}
+
 
 /**
  * 解析 FFmpeg 进度输出
@@ -162,7 +159,7 @@ export function registerFFmpegHandlers() {
     })
 
     // 执行 FFmpeg 命令
-    ipcMain.handle('ffmpeg:run', async (event, args: string[]) => {
+    ipcMain.handle('ffmpeg:run', async (event, { args, taskId }: { args: string[]; taskId: string }) => {
         const ffmpegPath = getFFmpegPath()
 
         // 检查是否已安装
@@ -171,7 +168,6 @@ export function registerFFmpegHandlers() {
             throw new Error('FFmpeg 未安装，请先调用 download() 进行安装')
         }
 
-        const taskId = generateTaskId()
         const webContents = event.sender
 
         return new Promise<void>((resolve, reject) => {
@@ -225,9 +221,6 @@ export function registerFFmpegHandlers() {
                 activeProcesses.delete(taskId)
                 reject(error)
             })
-
-            // 立即返回 taskId 供 kill/quit 使用
-            webContents.send('ffmpeg:started', { taskId })
         })
     })
 
@@ -242,11 +235,23 @@ export function registerFFmpegHandlers() {
         return false
     })
 
-    // 优雅退出 FFmpeg 进程（发送 'q' 到 stdin）
+    // 优雅退出 FFmpeg 进程（发送 'q' 到 stdin 或 SIGINT）
     ipcMain.handle('ffmpeg:quit', async (_, taskId: string) => {
-        const process = activeProcesses.get(taskId)
-        if (process && process.stdin) {
-            process.stdin.write('q')
+        const ffmpegProc = activeProcesses.get(taskId)
+        if (ffmpegProc) {
+            console.log('[FFmpeg] 停止任务:', taskId)
+
+            // 方式 1: 发送 'q' 命令 (Windows/Mac 通用，但依赖 stdin 连接)
+            if (ffmpegProc.stdin && !ffmpegProc.stdin.destroyed) {
+                ffmpegProc.stdin.write('q\n')
+            }
+
+            // 方式 2: 发送 SIGINT 信号 (Mac/Linux 首选，支持优雅退出)
+            // 注意：Windows 上 SIGINT 会强制终止，所以只在非 Windows 平台发送
+            if (process.platform !== 'win32') {
+                ffmpegProc.kill('SIGINT')
+            }
+
             return true
         }
         return false

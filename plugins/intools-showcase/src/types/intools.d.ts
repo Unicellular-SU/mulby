@@ -398,7 +398,8 @@ interface FFmpegDownloadProgress {
   total?: number
 }
 
-interface FFmpegPromiseLike extends Promise<void> {
+interface FFmpegTask {
+  promise: Promise<void>
   kill(): void
   quit(): void
 }
@@ -408,7 +409,7 @@ interface IntoolsFFmpeg {
   getVersion(): Promise<string | null>
   getPath(): Promise<string | null>
   download(onProgress?: (progress: FFmpegDownloadProgress) => void): Promise<{ success: boolean; error?: string }>
-  run(args: string[], onProgress?: (progress: FFmpegRunProgress) => void): FFmpegPromiseLike
+  run(args: string[], onProgress?: (progress: FFmpegRunProgress) => void): FFmpegTask
 }
 
 interface PluginInitData {
