@@ -42,6 +42,8 @@
 |------|------|------|------|
 | name | string | 是 | 插件唯一标识 |
 | version | string | 是 | 版本号 |
+| author | string | 否 | 作者名称 |
+| homepage | string | 否 | 插件主页/网站 |
 | displayName | string | 是 | 显示名称 |
 | main | string | 是 | 入口文件 |
 | ui | string | 否 | UI 文件路径 |

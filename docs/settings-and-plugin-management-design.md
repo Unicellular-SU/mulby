@@ -270,6 +270,7 @@ state:
 - Search-driven entry to Settings (system command injected into results when query matches settings keywords).
 - Shortcut status reflects current registration, loaded with settings; status only updates when shortcut settings change.
 - Recording shortcuts temporarily pauses app-level global shortcuts to prevent hiding the window during capture.
+- Plugin management list with search, status filter, enable/disable, details, and uninstall (built-in plugins locked).
 - Store sources list add/remove/toggle persisted to settings.
 - Permissions status display and system settings jump.
 - About section reads app info and user data path.
@@ -279,6 +280,7 @@ state:
 - `settings:get`, `settings:update`, `settings:reset`
 - Renderer API: `window.intools.settings`
 - App event: `app:openSettings` (main -> renderer)
+ - `plugin:getAll` now returns version/author/path/builtin for management UI.
 
 ### Pending
 

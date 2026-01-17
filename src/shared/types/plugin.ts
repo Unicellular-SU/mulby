@@ -122,6 +122,8 @@ export interface PluginManifest {
   id?: string  // 唯一标识符（推荐格式：@scope/name 或 com.example.name）
   name: string
   version: string
+  author?: string
+  homepage?: string
   displayName: string
   description: string
   main: string

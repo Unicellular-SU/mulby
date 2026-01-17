@@ -1,10 +1,13 @@
-import { ipcMain } from 'electron'
+import { ipcMain, app } from 'electron'
+import { resolve } from 'path'
 import { PluginManager } from '../plugin'
 import type { InputPayload } from '../../shared/types/plugin'
 import { PluginInstaller } from '../plugin/installer'
 
 export function registerPluginHandlers(manager: PluginManager) {
   const installer = new PluginInstaller()
+  const userPluginsDir = resolve(app.getPath('userData'), 'plugins')
+  const isBuiltin = (pluginPath: string) => !resolve(pluginPath).startsWith(userPluginsDir)
   // 获取所有插件
   ipcMain.handle('plugin:getAll', () => {
     return manager.getAll().map(p => ({
@@ -12,6 +15,12 @@ export function registerPluginHandlers(manager: PluginManager) {
       name: p.manifest.name,
       displayName: p.manifest.displayName,
       description: p.manifest.description,
+      version: p.manifest.version,
+      author: p.manifest.author,
+      homepage: p.manifest.homepage,
+      icon: p.resolvedIcon,
+      path: p.path,
+      builtin: isBuiltin(p.path),
       features: manager.getFeatures(p.id),
       enabled: p.enabled
     }))
@@ -49,16 +58,28 @@ export function registerPluginHandlers(manager: PluginManager) {
 
   // 启用插件
   ipcMain.handle('plugin:enable', async (_, name: string) => {
+    const plugin = manager.get(name)
+    if (plugin && isBuiltin(plugin.path)) {
+      return { success: false, error: '内置插件不支持禁用' }
+    }
     return manager.enable(name)
   })
 
   // 禁用插件
   ipcMain.handle('plugin:disable', async (_, name: string) => {
+    const plugin = manager.get(name)
+    if (plugin && isBuiltin(plugin.path)) {
+      return { success: false, error: '内置插件不支持禁用' }
+    }
     return manager.disable(name)
   })
 
   // 卸载插件
   ipcMain.handle('plugin:uninstall', async (_, name: string) => {
+    const plugin = manager.get(name)
+    if (plugin && isBuiltin(plugin.path)) {
+      return { success: false, error: '内置插件不支持卸载' }
+    }
     return manager.uninstall(name)
   })
 

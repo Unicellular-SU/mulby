@@ -74,6 +74,7 @@ manifest 规范请以 `docs/manifest-v2.md` 为准。本节仅补充与实际加
 - 必填字段（由加载器校验）：`name`, `version`, `displayName`, `main`, `features`。
 - `id` 可选且推荐；若未提供，插件 ID 取 `name`。
 - `icon` 未设置时会尝试加载插件目录下的 `icon.png`。
+- `author` / `homepage` 为可选元信息，用于插件管理展示。
 
 功能入口 `features` 与 `cmds` 类型说明请参考 `docs/manifest-v2.md`。
 

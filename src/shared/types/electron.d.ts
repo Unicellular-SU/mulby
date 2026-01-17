@@ -30,6 +30,15 @@ export interface PluginInfo {
   name: string
   displayName: string
   description: string
+  version?: string
+  author?: string
+  homepage?: string
+  icon?: {
+    type: 'url' | 'svg' | 'data-url'
+    value: string
+  }
+  path?: string
+  builtin?: boolean
   features: {
     code: string
     explain: string

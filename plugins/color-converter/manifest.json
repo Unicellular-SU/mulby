@@ -2,6 +2,8 @@
   "id": "@intools/color-converter",
   "name": "color-converter",
   "version": "1.0.0",
+  "author": "InTools Team",
+  "homepage": "https://github.com/intools",
   "displayName": "颜色转换器",
   "description": "HEX、RGB、HSL 颜色格式互转，支持颜色预览和取色",
   "main": "dist/main.js",

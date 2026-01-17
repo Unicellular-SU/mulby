@@ -249,6 +249,10 @@ function App() {
           section={settingsSection}
           onSectionChange={setSettingsSection}
           onClose={() => setViewMode('home')}
+          onOpenPluginDetails={(pluginName) => {
+            setDetailsPluginName(pluginName)
+            setViewMode('plugin-details')
+          }}
         />
       </div>
     )
@@ -256,7 +260,7 @@ function App() {
 
   return (
     <div
-      className={`app ${isDragging ? 'dragging' : ''}`}
+      className={`app app-home ${isDragging ? 'dragging' : ''}`}
       onDragOver={(e) => { e.preventDefault(); setIsDragging(true) }}
       onDragLeave={() => setIsDragging(false)}
       onDrop={handleDrop}

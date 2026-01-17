@@ -2,6 +2,8 @@
   "id": "@intools/json-formatter",
   "name": "json-formatter",
   "version": "1.0.0",
+  "author": "InTools Team",
+  "homepage": "https://github.com/intools",
   "displayName": "JSON 工具箱",
   "description": "JSON 格式化、压缩、校验等功能",
   "main": "main.js",

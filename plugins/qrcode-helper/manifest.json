@@ -2,6 +2,8 @@
   "id": "qrcode-helper",
   "name": "qrcode-helper",
   "version": "1.0.0",
+  "author": "InTools Team",
+  "homepage": "https://github.com/intools",
   "displayName": "二维码助手",
   "description": "简单好用的二维码生成与识别工具",
   "main": "dist/main.js",

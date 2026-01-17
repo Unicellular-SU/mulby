@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { AppSettings, AppShortcutAction, ShortcutStatusMap, StoreSource } from '../../shared/types/settings'
+import type { PluginInfo } from '../../shared/types/electron'
 
 type SettingsSection =
   | 'general'
@@ -14,6 +15,7 @@ interface SettingsViewProps {
   section: SettingsSection
   onSectionChange: (section: SettingsSection) => void
   onClose: () => void
+  onOpenPluginDetails: (pluginName: string) => void
 }
 
 const SECTION_ITEMS: { id: SettingsSection; label: string }[] = [
@@ -38,6 +40,32 @@ const PERMISSIONS = [
   { id: 'camera', label: '摄像头' },
   { id: 'geolocation', label: '定位' }
 ]
+
+function PluginIcon({ icon, name }: { icon?: PluginInfo['icon']; name: string }) {
+  if (!icon) {
+    return (
+      <div className="settings-plugin-icon settings-plugin-icon-default" aria-hidden="true">
+        <span>{name.slice(0, 1).toUpperCase()}</span>
+      </div>
+    )
+  }
+
+  if (icon.type === 'svg') {
+    return (
+      <div
+        className="settings-plugin-icon"
+        aria-hidden="true"
+        dangerouslySetInnerHTML={{ __html: icon.value }}
+      />
+    )
+  }
+
+  return (
+    <div className="settings-plugin-icon" aria-hidden="true">
+      <img src={icon.value} alt="" width="24" height="24" />
+    </div>
+  )
+}
 
 function formatPermissionStatus(status: string) {
   switch (status) {
@@ -215,7 +243,7 @@ function ShortcutInput({
   )
 }
 
-export default function SettingsView({ section, onSectionChange, onClose }: SettingsViewProps) {
+export default function SettingsView({ section, onSectionChange, onClose, onOpenPluginDetails }: SettingsViewProps) {
   const [settings, setSettings] = useState<AppSettings | null>(null)
   const [themeMode, setThemeMode] = useState<'light' | 'dark' | 'system'>('system')
   const [shortcutStatus, setShortcutStatus] = useState<ShortcutStatusMap | null>(null)
@@ -224,6 +252,10 @@ export default function SettingsView({ section, onSectionChange, onClose }: Sett
   const [newSource, setNewSource] = useState<{ name: string; url: string }>({ name: '', url: '' })
   const [sourceError, setSourceError] = useState<string | null>(null)
   const [activeRecordings, setActiveRecordings] = useState(0)
+  const [plugins, setPlugins] = useState<PluginInfo[]>([])
+  const [pluginQuery, setPluginQuery] = useState('')
+  const [pluginFilter, setPluginFilter] = useState<'all' | 'enabled' | 'disabled'>('all')
+  const [pluginLoading, setPluginLoading] = useState(false)
 
   useEffect(() => {
     window.intools.settings.get().then(({ settings, shortcutStatus }) => {
@@ -246,6 +278,11 @@ export default function SettingsView({ section, onSectionChange, onClose }: Sett
       setPermissionStatus(next)
     }
     void load()
+  }, [section])
+
+  useEffect(() => {
+    if (section !== 'plugins') return
+    void refreshPlugins()
   }, [section])
 
   const sources = settings?.storeSources ?? []
@@ -275,6 +312,64 @@ export default function SettingsView({ section, onSectionChange, onClose }: Sett
       return next
     })
   }
+
+  const refreshPlugins = async () => {
+    setPluginLoading(true)
+    try {
+      const list = await window.intools.plugin.getAll()
+      setPlugins(list)
+    } finally {
+      setPluginLoading(false)
+    }
+  }
+
+  const handleTogglePlugin = async (plugin: PluginInfo) => {
+    if (plugin.builtin) {
+      window.intools.notification.show('内置插件不可禁用', 'error')
+      return
+    }
+    const result = plugin.enabled
+      ? await window.intools.plugin.disable(plugin.name)
+      : await window.intools.plugin.enable(plugin.name)
+    if (result.success) {
+      setPlugins((prev) =>
+        prev.map((item) =>
+          item.name === plugin.name ? { ...item, enabled: !plugin.enabled } : item
+        )
+      )
+    } else {
+      window.intools.notification.show(result.error || '操作失败', 'error')
+    }
+  }
+
+  const handleUninstallPlugin = async (plugin: PluginInfo) => {
+    if (plugin.builtin) {
+      window.intools.notification.show('内置插件不可卸载', 'error')
+      return
+    }
+    const confirmed = confirm(`确定要卸载插件 ${plugin.displayName} 吗？`)
+    if (!confirmed) return
+    const result = await window.intools.plugin.uninstall(plugin.name)
+    if (result.success) {
+      setPlugins((prev) => prev.filter((item) => item.name !== plugin.name))
+    } else {
+      window.intools.notification.show(result.error || '卸载失败', 'error')
+    }
+  }
+
+  const filteredPlugins = useMemo(() => {
+    const query = pluginQuery.trim().toLowerCase()
+    return plugins.filter((plugin) => {
+      if (pluginFilter === 'enabled' && !plugin.enabled) return false
+      if (pluginFilter === 'disabled' && plugin.enabled) return false
+      if (!query) return true
+      return (
+        plugin.displayName.toLowerCase().includes(query) ||
+        plugin.name.toLowerCase().includes(query) ||
+        plugin.description.toLowerCase().includes(query)
+      )
+    })
+  }, [plugins, pluginQuery, pluginFilter])
 
   const handleShortcutChange = async (action: AppShortcutAction, accelerator: string) => {
     if (!settings) return
@@ -332,8 +427,8 @@ export default function SettingsView({ section, onSectionChange, onClose }: Sett
   )
 
   return (
-    <div className="h-full flex flex-col bg-white dark:bg-gray-900 overflow-hidden no-drag">
-      <div className="flex items-center px-4 py-3 border-b border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-900/60">
+    <div className="settings-shell h-full flex flex-col overflow-hidden no-drag">
+      <div className="settings-topbar glass-surface flex items-center px-4 py-3 border-b border-white/20">
         <button
           onClick={onClose}
           className="mr-3 p-2 rounded-full hover:bg-gray-200 dark:hover:bg-gray-800 transition-colors no-drag"
@@ -350,15 +445,15 @@ export default function SettingsView({ section, onSectionChange, onClose }: Sett
       </div>
 
       <div className="flex-1 flex overflow-hidden">
-        <aside className="w-48 border-r border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900">
+        <aside className="settings-sidebar glass-surface w-48 border-r border-white/20">
           <nav className="py-4">
             {SECTION_ITEMS.map(item => (
               <button
                 key={item.id}
                 className={`w-full text-left px-4 py-2 text-sm transition-colors ${
                   item.id === section
-                    ? 'bg-blue-50 text-blue-600 dark:bg-blue-900/20 dark:text-blue-300'
-                    : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800/60'
+                    ? 'bg-blue-500/15 text-blue-700 dark:text-blue-200'
+                    : 'text-gray-700 dark:text-gray-200 hover:bg-white/40 dark:hover:bg-white/10'
                 }`}
                 onClick={() => onSectionChange(item.id)}
               >
@@ -371,22 +466,22 @@ export default function SettingsView({ section, onSectionChange, onClose }: Sett
         <main className="flex-1 overflow-auto">
           <div className="max-w-3xl mx-auto px-6 py-6">
             {section === 'general' && (
-              <div className="text-sm text-gray-500 dark:text-gray-400">
+              <div className="glass-card text-sm text-gray-600 dark:text-gray-300">
                 通用设置将在后续版本提供。
               </div>
             )}
 
             {section === 'appearance' && (
-              <div className="space-y-4">
+              <div className="glass-card space-y-4">
                 <div className="text-sm font-medium text-gray-900 dark:text-gray-100">主题模式</div>
-                <div className="flex gap-3">
+                <div className="flex flex-wrap gap-3">
                   {(['light', 'dark', 'system'] as const).map((mode) => (
                     <button
                       key={mode}
-                      className={`px-4 py-2 rounded border text-sm transition-colors ${
+                      className={`px-4 py-2 rounded-full border text-sm transition-colors ${
                         themeMode === mode
-                          ? 'border-blue-500 text-blue-600 dark:text-blue-300'
-                          : 'border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 hover:border-gray-300 dark:hover:border-gray-600'
+                          ? 'border-blue-400/60 text-blue-700 dark:text-blue-200'
+                          : 'border-white/40 text-gray-700 dark:text-gray-200 hover:border-white/60'
                       }`}
                       onClick={async () => {
                         const info = await window.intools.theme.set(mode)
@@ -401,7 +496,7 @@ export default function SettingsView({ section, onSectionChange, onClose }: Sett
             )}
 
             {section === 'shortcuts' && settings && (
-              <div>
+              <div className="glass-card">
                 {SHORTCUTS.map(item => (
                   <ShortcutInput
                     key={item.id}
@@ -418,8 +513,121 @@ export default function SettingsView({ section, onSectionChange, onClose }: Sett
             )}
 
             {section === 'plugins' && (
-              <div className="text-sm text-gray-500 dark:text-gray-400">
-                插件管理将在下一阶段完成。
+              <div className="space-y-5">
+                <div className="glass-card space-y-4">
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="text-sm font-medium text-gray-900 dark:text-gray-100">
+                      插件管理
+                    </div>
+                    <button
+                      className="glass-button px-3 py-2 text-xs"
+                      onClick={refreshPlugins}
+                      disabled={pluginLoading}
+                    >
+                      {pluginLoading ? '刷新中...' : '刷新'}
+                    </button>
+                  </div>
+                  <div className="flex flex-col gap-3">
+                    <input
+                      className="settings-input w-full"
+                      placeholder="搜索插件名称或描述..."
+                      value={pluginQuery}
+                      onChange={(e) => setPluginQuery(e.target.value)}
+                    />
+                    <div className="settings-filter-row">
+                      {(['all', 'enabled', 'disabled'] as const).map((key) => (
+                        <button
+                          key={key}
+                          className={`settings-chip ${
+                            pluginFilter === key ? 'settings-chip-active' : ''
+                          }`}
+                          onClick={() => setPluginFilter(key)}
+                        >
+                          {key === 'all' ? '全部' : key === 'enabled' ? '已启用' : '已禁用'}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="text-xs text-gray-500 dark:text-gray-400">
+                    当前 {filteredPlugins.length} 个插件
+                  </div>
+                </div>
+
+                {filteredPlugins.length === 0 ? (
+                  <div className="glass-card text-sm text-gray-500 dark:text-gray-400">
+                    没有匹配的插件。
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    {filteredPlugins.map((plugin) => (
+                      <div
+                        key={plugin.id}
+                        className="glass-card flex flex-col gap-3"
+                      >
+                        <div className="flex items-start gap-3">
+                          <PluginIcon icon={plugin.icon} name={plugin.displayName} />
+                          <div className="min-w-0 flex-1">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <div className="text-sm font-semibold text-gray-900 dark:text-gray-100">
+                                {plugin.displayName}
+                              </div>
+                              {plugin.builtin && (
+                                <span className="text-[11px] px-2 py-0.5 rounded-full bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-300">
+                                  内置
+                                </span>
+                              )}
+                              {!plugin.enabled && (
+                                <span className="text-[11px] px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300">
+                                  已停用
+                                </span>
+                              )}
+                            </div>
+                            <div className="text-xs text-gray-500 dark:text-gray-400 line-clamp-2">
+                              {plugin.description}
+                            </div>
+                            <div className="text-xs text-gray-400 dark:text-gray-500 flex flex-wrap items-center gap-x-3 gap-y-1 mt-1">
+                              <span>
+                                {plugin.name}
+                                {plugin.version ? ` · v${plugin.version}` : ''}
+                              </span>
+                              {plugin.author && <span>作者：{plugin.author}</span>}
+                              {plugin.homepage && (
+                                <button
+                                  className="text-xs text-blue-600 dark:text-blue-300 hover:underline"
+                                  onClick={() => window.intools.shell.openExternal(plugin.homepage!)}
+                                >
+                                  打开主页
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                          <button
+                            className={`settings-chip ${plugin.enabled ? 'settings-chip-active' : ''}`}
+                            onClick={() => handleTogglePlugin(plugin)}
+                            disabled={plugin.builtin}
+                          >
+                            {plugin.enabled ? '已启用' : '已禁用'}
+                          </button>
+                        </div>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <button
+                            className="glass-button px-3 py-1.5 text-xs"
+                            onClick={() => onOpenPluginDetails(plugin.name)}
+                          >
+                            详情
+                          </button>
+                          <button
+                            className="glass-button glass-danger px-3 py-1.5 text-xs"
+                            onClick={() => handleUninstallPlugin(plugin)}
+                            disabled={plugin.builtin}
+                          >
+                            卸载
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             )}
 
@@ -499,7 +707,7 @@ export default function SettingsView({ section, onSectionChange, onClose }: Sett
                 {PERMISSIONS.map(item => (
                   <div
                     key={item.id}
-                    className="flex items-center justify-between gap-4 px-4 py-3 rounded border border-gray-200 dark:border-gray-800"
+                    className="glass-card flex items-center justify-between gap-4"
                   >
                     <div>
                       <div className="text-sm font-medium text-gray-900 dark:text-gray-100">{item.label}</div>
@@ -509,7 +717,7 @@ export default function SettingsView({ section, onSectionChange, onClose }: Sett
                     </div>
                     <div className="flex items-center gap-2">
                       <button
-                        className="px-3 py-1 rounded text-xs border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300 hover:border-gray-300 dark:hover:border-gray-600"
+                        className="glass-button px-3 py-1 text-xs"
                         onClick={() => window.intools.permission.openSystemSettings(item.id)}
                       >
                         打开系统设置
@@ -521,7 +729,7 @@ export default function SettingsView({ section, onSectionChange, onClose }: Sett
             )}
 
             {section === 'about' && (
-              <div className="space-y-4 text-sm text-gray-600 dark:text-gray-300">
+              <div className="glass-card space-y-4 text-sm text-gray-600 dark:text-gray-300">
                 <div>
                   <div className="font-medium text-gray-900 dark:text-gray-100">应用信息</div>
                   <div>名称：{appInfo?.name}</div>
@@ -532,7 +740,7 @@ export default function SettingsView({ section, onSectionChange, onClose }: Sett
                   <div className="text-xs text-gray-500 dark:text-gray-400 break-all">{appInfo?.userDataPath}</div>
                 </div>
                 <button
-                  className="px-3 py-1 rounded text-xs border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300 hover:border-gray-300 dark:hover:border-gray-600"
+                  className="glass-button px-3 py-1 text-xs"
                   onClick={() => appInfo?.userDataPath && window.intools.shell.openFolder(appInfo.userDataPath)}
                 >
                   打开数据目录

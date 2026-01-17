@@ -2,6 +2,8 @@
   "id": "@intools/encoding-converter",
   "name": "encoding-converter",
   "version": "1.0.0",
+  "author": "InTools Team",
+  "homepage": "https://github.com/intools",
   "displayName": "Encoding Converter",
   "description": "Text encoding converter (UTF-8, GBK), Base64/Hex transport, URL encoding, and Huffman compression visualizer.",
   "main": "dist/main.js",

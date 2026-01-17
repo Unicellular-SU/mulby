@@ -8,6 +8,7 @@
   "ui": "ui/index.html",
   "icon": "icon.png",
   "author": "InTools Team",
+  "homepage": "https://github.com/intools",
   "minAppVersion": "1.0.0",
   "features": [
     {
