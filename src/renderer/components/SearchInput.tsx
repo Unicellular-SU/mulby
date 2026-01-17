@@ -6,6 +6,9 @@ interface SearchInputProps {
   onChange: (value: string) => void
   attachments: UiAttachment[]
   onAttachmentsChange: (attachments: UiAttachment[]) => void
+  attachmentsManagerOpen: boolean
+  onAttachmentsManagerOpen: () => void
+  onAttachmentsManagerClose: () => void
 }
 
 // intoolsMain 类型声明
@@ -34,7 +37,15 @@ interface UiAttachment extends InputAttachment {
   previewUrl?: string
 }
 
-function SearchInput({ value, onChange, attachments, onAttachmentsChange }: SearchInputProps) {
+function SearchInput({
+  value,
+  onChange,
+  attachments,
+  onAttachmentsChange,
+  attachmentsManagerOpen,
+  onAttachmentsManagerOpen,
+  onAttachmentsManagerClose
+}: SearchInputProps) {
   const inputRef = useRef<HTMLInputElement>(null)
   const [subInput, setSubInput] = useState<SubInputState>({ enabled: false, placeholder: '' })
   const [subInputValue, setSubInputValue] = useState('')
@@ -128,6 +139,17 @@ function SearchInput({ value, onChange, attachments, onAttachmentsChange }: Sear
     onAttachmentsChange(next)
   }, [attachments, onAttachmentsChange])
 
+  const totalAttachmentSize = attachments.reduce((sum, attachment) => sum + attachment.size, 0)
+  const summaryAttachments = attachments.slice(0, SUMMARY_CHIP_LIMIT)
+  const remainingCount = attachments.length - summaryAttachments.length
+  const handleToggleManager = useCallback(() => {
+    if (attachmentsManagerOpen) {
+      onAttachmentsManagerClose()
+    } else {
+      onAttachmentsManagerOpen()
+    }
+  }, [attachmentsManagerOpen, onAttachmentsManagerClose, onAttachmentsManagerOpen])
+
   const isSummaryMode = !subInput.enabled && value.length > SUMMARY_THRESHOLD
   const displayValue = subInput.enabled ? subInputValue : (isSummaryMode ? '' : value)
   const summary = isSummaryMode ? buildSummary(value) : null
@@ -163,35 +185,45 @@ function SearchInput({ value, onChange, attachments, onAttachmentsChange }: Sear
       )}
       <div className="search-input-wrap">
         {attachments.length > 0 && (
-          <div className="attachment-list no-drag">
-            {attachments.map((attachment) => (
-              <div className="attachment-item" key={attachment.id} title={attachment.name}>
-                {attachment.kind === 'image' && attachment.previewUrl ? (
-                  <img className="attachment-thumb" src={attachment.previewUrl} alt="" />
-                ) : (
-                  <div className="attachment-icon">
+          <div className="attachment-summary no-drag">
+            <div className="attachment-summary-info">
+              附件 {attachments.length} · {formatBytes(totalAttachmentSize)}
+            </div>
+            <div className="attachment-summary-chips">
+              {summaryAttachments.map((attachment) => (
+                <div className="attachment-chip" key={attachment.id} title={attachment.name}>
+                  <span className="attachment-chip-name">{attachment.name}</span>
+                  <button
+                    type="button"
+                    className="attachment-chip-remove"
+                    onClick={() => handleRemoveAttachment(attachment.id)}
+                    aria-label={`移除 ${attachment.name}`}
+                  >
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
-                      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-                      <path d="M14 2v6h6" />
+                      <path d="M18 6L6 18M6 6l12 12" />
                     </svg>
-                  </div>
-                )}
-                <div className="attachment-meta">
-                  <span className="attachment-name">{attachment.name}</span>
-                  <span className="attachment-size">{formatBytes(attachment.size)}</span>
+                  </button>
                 </div>
+              ))}
+              {remainingCount > 0 && (
                 <button
-                  className="attachment-remove"
                   type="button"
-                  onClick={() => handleRemoveAttachment(attachment.id)}
-                  aria-label="移除附件"
+                  className="attachment-summary-more"
+                  onClick={handleToggleManager}
+                  aria-label={`查看剩余 ${remainingCount} 个附件`}
                 >
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
-                    <path d="M18 6L6 18M6 6l12 12" />
-                  </svg>
+                  +{remainingCount}
                 </button>
-              </div>
-            ))}
+              )}
+              <button
+                type="button"
+                className="attachment-summary-manage"
+                onClick={handleToggleManager}
+                aria-expanded={attachmentsManagerOpen}
+              >
+                {attachmentsManagerOpen ? '收起' : '管理'}
+              </button>
+            </div>
           </div>
         )}
         <input
@@ -305,6 +337,7 @@ function formatBytes(bytes: number): string {
 const SUMMARY_THRESHOLD = 400
 const SUMMARY_HEAD_LENGTH = 8
 const SUMMARY_TAIL_LENGTH = 8
+const SUMMARY_CHIP_LIMIT = 3
 
 function buildSummary(text: string): { head: string; tail: string } {
   if (text.length <= SUMMARY_HEAD_LENGTH + SUMMARY_TAIL_LENGTH) {

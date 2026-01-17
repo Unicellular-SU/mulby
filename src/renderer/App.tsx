@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo } from 'react'
 import SearchInput from './components/SearchInput'
 import PluginList from './components/PluginList'
 import PluginDetails from './components/PluginDetails'
+import AttachmentManager from './components/AttachmentManager'
 import type { InputAttachment, InputPayload } from '../shared/types/plugin'
 
 // 插件附着信息（Panel 模式）
@@ -21,7 +22,28 @@ function App() {
   const [isDragging, setIsDragging] = useState(false)
   const [theme, setTheme] = useState<'light' | 'dark'>('light')
   const [attachments, setAttachments] = useState<UiAttachment[]>([])
+  const [attachmentsManagerOpen, setAttachmentsManagerOpen] = useState(false)
   const payload = useMemo(() => buildPayload(query, attachments), [query, attachments])
+  const managerMetrics = useMemo(() => {
+    const MANAGER_HEADER_HEIGHT = 34
+    const MANAGER_TOOLBAR_HEIGHT = 34
+    const MANAGER_ROW_HEIGHT = 52
+    const MANAGER_ROW_GAP = 6
+    const MANAGER_GAP = 10
+    const MANAGER_PADDING = 26
+    const MANAGER_MAX_ROWS = 6
+
+    const rows = Math.min(attachments.length, MANAGER_MAX_ROWS)
+    const rawListHeight = rows * MANAGER_ROW_HEIGHT + Math.max(0, rows - 1) * MANAGER_ROW_GAP
+    const listHeight = Math.max(60, rawListHeight)
+    const managerHeight = MANAGER_PADDING +
+      MANAGER_HEADER_HEIGHT +
+      MANAGER_TOOLBAR_HEIGHT +
+      MANAGER_GAP * 2 +
+      listHeight
+
+    return { managerHeight, listHeight }
+  }, [attachments.length])
 
   // 初始化主题
   useEffect(() => {
@@ -36,14 +58,15 @@ function App() {
 
   // 调整窗口高度
   useEffect(() => {
-    const ATTACHMENT_HEIGHT = attachments.length > 0 ? 56 : 0
-    const SEARCH_BOX_HEIGHT = 62 + ATTACHMENT_HEIGHT
+    const ATTACHMENT_SUMMARY_HEIGHT = attachments.length > 0 ? 32 : 0
+    const SEARCH_BOX_HEIGHT = 62 + ATTACHMENT_SUMMARY_HEIGHT
     const BORDER_HEIGHT = 1
     const GRID_GAP = 12
     const CARD_HEIGHT = 100 // 图标40 + 名称14 + explain12 + padding24 + gap6*2
     const GRID_PADDING = 16
     const COLUMNS = 6
     const MAX_ITEMS = 24 // 4行 × 6列
+    const MANAGER_HEIGHT = managerMetrics.managerHeight
 
     let height = SEARCH_BOX_HEIGHT
 
@@ -53,6 +76,8 @@ function App() {
     } else if (pluginOpen) {
       // 插件面板打开时，主窗口只保持搜索框高度（插件 UI 在独立的 Panel 窗口中）
       height = SEARCH_BOX_HEIGHT
+    } else if (attachmentsManagerOpen && attachments.length > 0) {
+      height = SEARCH_BOX_HEIGHT + BORDER_HEIGHT + MANAGER_HEIGHT
     } else if ((query.length > 0 || attachments.length > 0) && resultCount > 0) {
       // 根据结果数量动态计算高度，最多显示 4 行
       const visibleCount = Math.min(resultCount, MAX_ITEMS)
@@ -61,7 +86,7 @@ function App() {
         rows * CARD_HEIGHT + (rows - 1) * GRID_GAP
     }
     window.intools.window.setSize(680, height)
-  }, [query, resultCount, pluginOpen, detailsPluginName, attachments.length])
+  }, [query, resultCount, pluginOpen, detailsPluginName, attachments.length, attachmentsManagerOpen, managerMetrics.managerHeight])
 
   // 监听插件附着事件
   useEffect(() => {
@@ -74,12 +99,26 @@ function App() {
     })
   }, [])
 
+  useEffect(() => {
+    if (attachments.length === 0 && attachmentsManagerOpen) {
+      setAttachmentsManagerOpen(false)
+    }
+  }, [attachments.length, attachmentsManagerOpen])
+
+  useEffect(() => {
+    if (pluginOpen && attachmentsManagerOpen) {
+      setAttachmentsManagerOpen(false)
+    }
+  }, [pluginOpen, attachmentsManagerOpen])
+
   // ESC 键分级退出处理
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
         e.preventDefault()
-        if (pluginOpen) {
+        if (attachmentsManagerOpen) {
+          setAttachmentsManagerOpen(false)
+        } else if (pluginOpen) {
           // 1. 优先关闭插件
           window.intools.window.close()
         } else if (query.length > 0) {
@@ -100,13 +139,16 @@ function App() {
     }
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [pluginOpen, query, attachments.length])
+  }, [pluginOpen, query, attachments.length, attachmentsManagerOpen])
 
   const handleQueryChange = (value: string) => {
     // 如果有附着的插件，先关闭它
     if (pluginOpen) {
       window.intools.window.close()
       setPluginOpen(false)
+    }
+    if (attachmentsManagerOpen) {
+      setAttachmentsManagerOpen(false)
     }
     setQuery(value)
     if (value.length === 0 && attachments.length === 0) {
@@ -175,8 +217,25 @@ function App() {
         onChange={handleQueryChange}
         attachments={attachments}
         onAttachmentsChange={handleAttachmentsChange}
+        attachmentsManagerOpen={attachmentsManagerOpen}
+        onAttachmentsManagerOpen={() => {
+          if (pluginOpen) {
+            window.intools.window.close()
+            setPluginOpen(false)
+          }
+          setAttachmentsManagerOpen(true)
+        }}
+        onAttachmentsManagerClose={() => setAttachmentsManagerOpen(false)}
       />
-      {(query.length > 0 || attachments.length > 0) && !pluginOpen && (
+      {attachmentsManagerOpen && attachments.length > 0 && (
+        <AttachmentManager
+          attachments={attachments}
+          onAttachmentsChange={handleAttachmentsChange}
+          onClose={() => setAttachmentsManagerOpen(false)}
+          listMaxHeight={managerMetrics.listHeight}
+        />
+      )}
+      {(query.length > 0 || attachments.length > 0) && !pluginOpen && !attachmentsManagerOpen && (
         <PluginList
           payload={payload}
           onResultsChange={setResultCount}

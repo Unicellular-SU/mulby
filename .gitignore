@@ -5,3 +5,7 @@ dist
 .claude
 .agent
 release
+.shared
+.codex
+.workflow
+.workflows
