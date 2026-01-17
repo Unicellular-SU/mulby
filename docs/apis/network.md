@@ -1,8 +1,14 @@
-## 17. Network API (network)
+# Network API (network)
+本文档描述 Network API (network) 的使用方法与接口。
+
+> 入口：
+> - UI/渲染进程：`window.intools.network`
+> - 插件后端：`context.api.network`
 
 Network API 提供网络状态监控，支持 macOS、Windows 和 Linux。
 
-### 17.1 isOnline()
+### isOnline()
+[Renderer] [Backend]
 检查当前是否在线。
 
 ```javascript
@@ -13,7 +19,8 @@ if (await network.isOnline()) {
 
 **返回值**: `boolean`
 
-### 17.2 onOnline(callback)
+### onOnline(callback)
+[Renderer]
 监听网络恢复事件。
 
 ```javascript
@@ -22,11 +29,20 @@ window.intools.network.onOnline(() => {
 });
 ```
 
-### 17.3 onOffline(callback)
+### onOffline(callback)
+[Renderer]
 监听网络断开事件。
 
 ```javascript
 window.intools.network.onOffline(() => {
   console.log('网络已断开');
 });
+```
+
+### 完整示例
+
+```javascript
+const online = await window.intools.network.isOnline();
+console.log('online:', online);
+window.intools.network.onOnline(() => console.log('网络恢复'));
 ```

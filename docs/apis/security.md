@@ -1,8 +1,14 @@
-## 13. Security API (security)
+# Security API (security)
+本文档描述 Security API (security) 的使用方法与接口。
+
+> 入口：
+> - UI/渲染进程：`window.intools.security`
+> - 插件后端：`context.api.security`
 
 Security API 提供安全的加密存储功能，使用系统级加密（macOS Keychain、Windows DPAPI、Linux Secret Service）。
 
-### 13.1 isEncryptionAvailable()
+### isEncryptionAvailable()
+[Renderer] [Backend]
 检查加密功能是否可用。
 
 ```javascript
@@ -14,7 +20,8 @@ if (!available) {
 
 **返回值**: `boolean`
 
-### 13.2 encryptString(plainText)
+### encryptString(plainText)
+[Renderer] [Backend]
 加密字符串。
 
 ```javascript
@@ -27,7 +34,8 @@ const encrypted = await security.encryptString('my-secret-password');
 
 **返回值**: `Buffer` - 加密后的数据
 
-### 13.3 decryptString(encrypted)
+### decryptString(encrypted)
+[Renderer] [Backend]
 解密字符串。
 
 ```javascript
@@ -40,7 +48,7 @@ console.log(decrypted); // 'my-secret-password'
 
 **返回值**: `string` - 解密后的明文
 
-### 13.4 完整示例
+### 完整示例
 
 ```javascript
 module.exports = {

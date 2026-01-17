@@ -1,6 +1,12 @@
-## 5. 网络 API (http)
+# 网络 API (http)
+本文档描述 网络 API (http) 的使用方法与接口。
 
-### 5.1 request(options)
+> 入口：
+> - UI/渲染进程：`window.intools.http`
+> - 插件后端：`context.api.http`
+
+### request(options)
+[Renderer] [Backend]
 发起 HTTP 请求。
 
 ```javascript
@@ -29,12 +35,17 @@ console.log(response.data);    // 响应内容
 interface HttpResponse {
   status: number;      // HTTP 状态码
   statusText: string;  // 状态描述
-  headers: Record<string, string>;  // 响应头
+  headers: Record<string, string>;  // 响应头（已归一化为字符串）
   data: string;        // 响应内容
 }
 ```
 
-### 5.2 get(url, headers?)
+**错误行为**:
+- 超时会 reject（错误信息为 `Request timeout`）
+- 网络/连接错误会 reject
+
+### get(url, headers?)
+[Renderer] [Backend]
 GET 请求快捷方法。
 
 ```javascript
@@ -42,7 +53,8 @@ const response = await http.get('https://api.example.com/users');
 const data = JSON.parse(response.data);
 ```
 
-### 5.3 post(url, body?, headers?)
+### post(url, body?, headers?)
+[Renderer] [Backend]
 POST 请求快捷方法。
 
 ```javascript
@@ -52,7 +64,8 @@ const response = await http.post('https://api.example.com/users', {
 });
 ```
 
-### 5.4 put(url, body?, headers?)
+### put(url, body?, headers?)
+[Renderer] [Backend]
 PUT 请求快捷方法。
 
 ```javascript
@@ -61,14 +74,15 @@ const response = await http.put('https://api.example.com/users/1', {
 });
 ```
 
-### 5.5 delete(url, headers?)
+### delete(url, headers?)
+[Renderer] [Backend]
 DELETE 请求快捷方法。
 
 ```javascript
 const response = await http.delete('https://api.example.com/users/1');
 ```
 
-### 5.6 完整示例
+### 完整示例
 
 ```javascript
 module.exports = {

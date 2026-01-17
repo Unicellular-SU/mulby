@@ -1,8 +1,11 @@
 # Sharp 图像处理 API
+本文档描述 Sharp 图像处理 API 的使用方法与接口。
+
+> 入口：`window.intools.sharp`
 
 Sharp API 提供高性能的图像处理功能，包括缩放、裁剪、旋转、格式转换等。基于 [sharp](https://sharp.pixelplumbing.com/) 库实现。
 
-## 基本用法
+### 基本用法
 
 ```javascript
 // 调整尺寸
@@ -23,7 +26,8 @@ await intools.sharp('/path/to/input.png')
   .toFile('/path/to/output.jpg')
 ```
 
-## sharp(input?, options?)
+### sharp(input?, options?)
+[Renderer]
 
 创建 Sharp 实例。
 
@@ -35,9 +39,10 @@ await intools.sharp('/path/to/input.png')
   - `{ text: { text, width?, height? } }` - 创建文本图像
 - `options` - Sharp 选项（可选）
 
-## 尺寸调整方法
+### 尺寸调整方法
 
 ### resize(width?, height?, options?)
+[Renderer]
 
 调整图像尺寸。
 
@@ -57,6 +62,7 @@ await intools.sharp('/path/to/input.png')
 ```
 
 ### extract({ left, top, width, height })
+[Renderer]
 
 裁剪图像区域。
 
@@ -65,6 +71,7 @@ await intools.sharp('/path/to/input.png')
 ```
 
 ### trim(options?)
+[Renderer]
 
 自动裁剪边缘空白。
 
@@ -72,9 +79,10 @@ await intools.sharp('/path/to/input.png')
 .trim({ threshold: 10 })
 ```
 
-## 变换方法
+### 变换方法
 
 ### rotate(angle?, options?)
+[Renderer]
 
 旋转图像。
 
@@ -84,6 +92,7 @@ await intools.sharp('/path/to/input.png')
 ```
 
 ### flip() / flop()
+[Renderer]
 
 垂直翻转 / 水平翻转。
 
@@ -92,9 +101,10 @@ await intools.sharp('/path/to/input.png')
 .flop()  // 水平翻转
 ```
 
-## 图像处理方法
+### 图像处理方法
 
 ### blur(sigma?)
+[Renderer]
 
 模糊处理。
 
@@ -103,6 +113,7 @@ await intools.sharp('/path/to/input.png')
 ```
 
 ### sharpen(options?)
+[Renderer]
 
 锐化处理。
 
@@ -112,6 +123,7 @@ await intools.sharp('/path/to/input.png')
 ```
 
 ### grayscale() / greyscale()
+[Renderer]
 
 转换为灰度图。
 
@@ -120,6 +132,7 @@ await intools.sharp('/path/to/input.png')
 ```
 
 ### negate(options?)
+[Renderer]
 
 反相处理。
 
@@ -128,6 +141,7 @@ await intools.sharp('/path/to/input.png')
 ```
 
 ### gamma(gamma?)
+[Renderer]
 
 伽马校正。
 
@@ -136,6 +150,7 @@ await intools.sharp('/path/to/input.png')
 ```
 
 ### threshold(threshold?, options?)
+[Renderer]
 
 二值化处理。
 
@@ -144,6 +159,7 @@ await intools.sharp('/path/to/input.png')
 ```
 
 ### modulate(options?)
+[Renderer]
 
 调整亮度、饱和度、色相。
 
@@ -156,6 +172,7 @@ await intools.sharp('/path/to/input.png')
 ```
 
 ### tint(color)
+[Renderer]
 
 着色处理。
 
@@ -164,9 +181,10 @@ await intools.sharp('/path/to/input.png')
 .tint('#ff0000')
 ```
 
-## 合成方法
+### 合成方法
 
 ### composite(images)
+[Renderer]
 
 图像合成。
 
@@ -178,9 +196,10 @@ await intools.sharp('/path/to/input.png')
 }])
 ```
 
-## 输出格式方法
+### 输出格式方法
 
 ### png(options?) / jpeg(options?) / webp(options?) / gif(options?) / tiff(options?) / avif(options?)
+[Renderer]
 
 设置输出格式。
 
@@ -190,19 +209,24 @@ await intools.sharp('/path/to/input.png')
 .webp({ quality: 75, lossless: false })
 ```
 
-## 终结方法
+### 终结方法
 
 ### toBuffer(options?)
+[Renderer]
 
-输出为 Buffer。
+输出为 ArrayBuffer（渲染进程）。
 
 ```javascript
 const buffer = await sharp('/path/to/image.jpg')
   .resize(200, 200)
   .toBuffer()
+
+// 如需 Buffer:
+const nodeBuffer = Buffer.from(new Uint8Array(buffer))
 ```
 
 ### toFile(path)
+[Renderer]
 
 输出到文件。
 
@@ -215,6 +239,7 @@ const info = await sharp('/path/to/input.jpg')
 ```
 
 ### metadata()
+[Renderer]
 
 获取图像元数据。
 
@@ -233,6 +258,7 @@ const meta = await sharp('/path/to/image.jpg').metadata()
 ```
 
 ### stats()
+[Renderer]
 
 获取图像统计信息。
 
@@ -241,7 +267,7 @@ const stats = await sharp('/path/to/image.jpg').stats()
 // { channels, isOpaque, entropy, sharpness, dominant }
 ```
 
-## 创建空白图像
+### 创建空白图像
 
 ```javascript
 const buffer = await intools.sharp({
@@ -254,16 +280,16 @@ const buffer = await intools.sharp({
 }).png().toBuffer()
 ```
 
-## 获取 Sharp 版本信息
+### 获取 Sharp 版本信息
 
 ```javascript
 const version = await intools.getSharpVersion()
 // { sharp: { vips: '...', sharp: '...' }, format: { ... } }
 ```
 
-## 完整示例
+### 完整示例
 
-### 图片处理插件
+#### 图片处理插件
 
 ```javascript
 // 批量处理图片
@@ -292,7 +318,7 @@ async function addWatermark(imagePath, watermarkPath, outputPath) {
 }
 ```
 
-## 注意事项
+#### 注意事项
 
 1. **链式调用**: 所有方法都返回构建器对象，支持链式调用
 2. **异步操作**: 终结方法（`toBuffer`, `toFile`, `metadata`, `stats`）返回 Promise

@@ -1,8 +1,14 @@
-## 11. System API (system)
+# System API (system)
+本文档描述 System API (system) 的使用方法与接口。
+
+> 入口：
+> - UI/渲染进程：`window.intools.system`
+> - 插件后端：`context.api.system`
 
 System API 提供系统和应用信息，支持 macOS、Windows 和 Linux。
 
-### 11.1 getSystemInfo()
+### getSystemInfo()
+[Renderer] [Backend]
 获取系统信息。
 
 ```javascript
@@ -31,7 +37,8 @@ interface SystemInfo {
 }
 ```
 
-### 11.2 getAppInfo()
+### getAppInfo()
+[Renderer] [Backend]
 获取应用信息。
 
 ```javascript
@@ -51,7 +58,8 @@ interface AppInfo {
 }
 ```
 
-### 11.3 getPath(name)
+### getPath(name)
+[Renderer] [Backend]
 获取系统特定路径。
 
 ```javascript
@@ -65,7 +73,8 @@ const exePath = await system.getPath('exe');  // 可执行文件路径
 
 **返回值**: `string`
 
-### 11.4 getEnv(name)
+### getEnv(name)
+[Renderer] [Backend]
 获取环境变量。
 
 ```javascript
@@ -78,7 +87,8 @@ const home = await system.getEnv('HOME');
 
 **返回值**: `string | undefined`
 
-### 11.5 getIdleTime()
+### getIdleTime()
+[Renderer] [Backend]
 获取系统空闲时间。
 
 ```javascript
@@ -90,7 +100,8 @@ if (idleSeconds > 300) {
 
 **返回值**: `number` - 空闲时间（秒）
 
-### 11.6 getFileIcon(filePath)
+### getFileIcon(filePath)
+[Renderer] [Backend]
 获取文件/文件夹的系统图标。
 
 ```javascript
@@ -110,7 +121,8 @@ const folderIcon = await system.getFileIcon('folder');
 
 **返回值**: `string` - base64 Data URL 格式的图标
 
-### 11.7 getNativeId()
+### getNativeId()
+[Renderer] [Backend]
 获取设备唯一标识。
 
 ```javascript
@@ -122,7 +134,8 @@ storage.set(`${deviceId}/settings`, { ... });
 
 **返回值**: `string` - 32位设备唯一标识
 
-### 11.8 isDev()
+### isDev()
+[Renderer] [Backend]
 判断是否为开发环境。
 
 ```javascript
@@ -133,7 +146,8 @@ if (await system.isDev()) {
 
 **返回值**: `boolean`
 
-### 11.9 isMacOS() / isWindows() / isLinux()
+### isMacOS() / isWindows() / isLinux()
+[Renderer] [Backend]
 判断当前操作系统平台。
 
 ```javascript
@@ -147,3 +161,10 @@ if (await system.isMacOS()) {
 ```
 
 **返回值**: `boolean`
+
+### 完整示例
+
+```javascript
+const info = await window.intools.system.getSystemInfo();
+console.log(info.platform, info.arch);
+```

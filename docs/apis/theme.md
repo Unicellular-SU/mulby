@@ -1,8 +1,12 @@
-## 7. 主题 API (theme)
+# 主题 API (theme)
+本文档描述 主题 API (theme) 的使用方法与接口。
+
+> 入口：`window.intools.theme`
 
 主题 API 允许插件获取和跟随主程序的主题设置，实现视觉一致性。
 
-### 7.1 get()
+### get()
+[Renderer]
 获取当前主题信息。
 
 ```javascript
@@ -19,7 +23,8 @@ interface ThemeInfo {
 }
 ```
 
-### 7.2 set(mode)
+### set(mode)
+[Renderer]
 设置主题模式。
 
 ```javascript
@@ -33,7 +38,8 @@ await window.intools.theme.set('system'); // 跟随系统主题
 
 **返回值**: `ThemeInfo` - 更新后的主题信息
 
-### 7.3 getActual()
+### getActual()
+[Renderer]
 获取实际应用的主题（解析 system 后的结果）。
 
 ```javascript
@@ -43,7 +49,8 @@ const theme = await window.intools.theme.getActual();
 
 **返回值**: `'light' | 'dark'`
 
-### 7.4 onThemeChange(callback)
+### onThemeChange(callback)
+[Renderer]
 监听主题变化事件。
 
 ```javascript
@@ -56,7 +63,7 @@ window.intools.onThemeChange((theme) => {
 **参数**:
 - `callback` ((theme: 'light' | 'dark') => void) - 主题变化回调函数
 
-### 7.5 插件中使用主题
+### 插件中使用主题
 
 #### 获取初始主题
 
@@ -79,7 +86,7 @@ window.intools?.onThemeChange?.((theme) => {
 });
 ```
 
-### 7.6 完整示例
+### 完整示例
 
 #### 插件 CSS（使用 CSS 变量支持主题）
 

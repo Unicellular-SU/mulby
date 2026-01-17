@@ -1,8 +1,12 @@
-## 19. Geolocation API (geolocation)
+# Geolocation API (geolocation)
+本文档描述 Geolocation API (geolocation) 的使用方法与接口。
+
+> 入口：`window.intools.geolocation`
 
 Geolocation API 提供地理位置功能，支持 macOS、Windows 和 Linux。
 
-### 19.1 getAccessStatus()
+### getAccessStatus()
+[Renderer]
 获取位置权限状态。
 
 ```javascript
@@ -16,7 +20,8 @@ const status = await geolocation.getAccessStatus();
 
 **返回值**: `string`
 
-### 19.2 requestAccess()
+### requestAccess()
+[Renderer]
 请求位置权限（仅 macOS 有效）。
 
 ```javascript
@@ -32,7 +37,8 @@ if (status === 'granted') {
 
 **返回值**: `string` - 权限状态
 
-### 19.3 canGetPosition()
+### canGetPosition()
+[Renderer]
 检查是否可以获取位置。
 
 ```javascript
@@ -43,7 +49,8 @@ if (await geolocation.canGetPosition()) {
 
 **返回值**: `boolean`
 
-### 19.4 openSettings()
+### openSettings()
+[Renderer]
 打开系统位置权限设置。
 
 ```javascript
@@ -55,7 +62,8 @@ await geolocation.openSettings();
 - Windows: 打开 设置 > 隐私 > 位置
 - Linux: 暂不支持
 
-### 19.5 getCurrentPosition()
+### getCurrentPosition()
+[Renderer]
 获取当前位置。
 
 ```javascript
@@ -82,7 +90,7 @@ interface GeolocationPosition {
 }
 ```
 
-### 19.6 完整示例
+### 完整示例
 
 ```javascript
 // 推荐的权限检查流程

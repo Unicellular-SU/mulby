@@ -1,8 +1,14 @@
-## 12. GlobalShortcut API (shortcut)
+# GlobalShortcut API (shortcut)
+本文档描述 GlobalShortcut API (shortcut) 的使用方法与接口。
+
+> 入口：
+> - UI/渲染进程：`window.intools.shortcut`
+> - 插件后端：`context.api.shortcut`
 
 GlobalShortcut API 允许插件注册全局快捷键，支持 macOS、Windows 和 Linux。
 
-### 12.1 register(accelerator)
+### register(accelerator)
+[Renderer] [Backend]
 注册全局快捷键。
 
 ```javascript
@@ -22,7 +28,8 @@ if (success) {
 - `CommandOrControl` - macOS 上为 Command，其他平台为 Control
 - 示例: `CommandOrControl+X`, `Alt+Shift+P`, `F12`
 
-### 12.2 unregister(accelerator)
+### unregister(accelerator)
+[Renderer] [Backend]
 注销全局快捷键。
 
 ```javascript
@@ -32,14 +39,16 @@ await shortcut.unregister('CommandOrControl+Shift+X');
 **参数**:
 - `accelerator` (string) - 快捷键组合
 
-### 12.3 unregisterAll()
+### unregisterAll()
+[Renderer] [Backend]
 注销该插件注册的所有快捷键。
 
 ```javascript
 await shortcut.unregisterAll();
 ```
 
-### 12.4 isRegistered(accelerator)
+### isRegistered(accelerator)
+[Renderer] [Backend]
 检查快捷键是否已被注册。
 
 ```javascript
@@ -48,11 +57,19 @@ const registered = await shortcut.isRegistered('CommandOrControl+X');
 
 **返回值**: `boolean`
 
-### 12.5 onTriggered(callback)
+### onTriggered(callback)
+[Renderer] [Backend]
 监听快捷键触发事件（仅插件 UI 中使用）。
 
 ```javascript
 window.intools.shortcut.onTriggered((accelerator) => {
   console.log(`快捷键 ${accelerator} 被触发`);
 });
+```
+
+### 完整示例
+
+```javascript
+await window.intools.shortcut.register('CommandOrControl+Shift+X');
+window.intools.shortcut.onTriggered((key) => console.log('triggered', key));
 ```

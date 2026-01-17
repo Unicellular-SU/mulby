@@ -1,8 +1,14 @@
-## 8. 屏幕 API (screen)
+# 屏幕 API (screen)
+本文档描述 屏幕 API (screen) 的使用方法与接口。
+
+> 入口：
+> - UI/渲染进程：`window.intools.screen`
+> - 插件后端：`context.api.screen`
 
 屏幕 API 提供截图、录屏和屏幕信息获取功能，支持 macOS、Windows 和 Linux。
 
-### 8.1 getAllDisplays()
+### getAllDisplays()
+[Renderer] [Backend]
 获取所有显示器信息。
 
 ```javascript
@@ -34,7 +40,8 @@ interface DisplayInfo {
 }
 ```
 
-### 8.2 getPrimaryDisplay()
+### getPrimaryDisplay()
+[Renderer] [Backend]
 获取主显示器信息。
 
 ```javascript
@@ -44,7 +51,8 @@ console.log(primary.bounds.width, primary.bounds.height);
 
 **返回值**: `DisplayInfo`
 
-### 8.3 getDisplayNearestPoint(point)
+### getDisplayNearestPoint(point)
+[Renderer] [Backend]
 获取指定坐标位置的显示器。
 
 ```javascript
@@ -56,7 +64,21 @@ const display = await screen.getDisplayNearestPoint({ x: 100, y: 100 });
 
 **返回值**: `DisplayInfo`
 
-### 8.4 getCursorScreenPoint()
+### getDisplayMatching(rect)
+[Renderer]
+获取包含指定矩形区域的显示器。
+
+```javascript
+const display = await screen.getDisplayMatching({ x: 0, y: 0, width: 800, height: 600 });
+```
+
+**参数**:
+- `rect` ({ x: number; y: number; width: number; height: number })
+
+**返回值**: `DisplayInfo`
+
+### getCursorScreenPoint()
+[Renderer] [Backend]
 获取鼠标当前位置。
 
 ```javascript
@@ -66,7 +88,8 @@ console.log(`鼠标位置: ${cursor.x}, ${cursor.y}`);
 
 **返回值**: `{ x: number; y: number }`
 
-### 8.5 getSources(options?)
+### getSources(options?)
+[Renderer] [Backend]
 获取可捕获的屏幕和窗口源列表。
 
 ```javascript
@@ -102,7 +125,8 @@ interface CaptureSource {
 }
 ```
 
-### 8.6 capture(options?)
+### capture(options?)
+[Renderer] [Backend]
 截取屏幕截图。
 
 ```javascript
@@ -126,9 +150,10 @@ const jpegBuffer = await screen.capture({
 - `format` ('png' | 'jpeg', 可选) - 输出格式，默认 'png'
 - `quality` (number, 可选) - JPEG 质量 0-100，默认 90
 
-**返回值**: `Buffer` - 图片数据
+**返回值**: `Buffer | Uint8Array` - 图片数据
 
-### 8.7 captureRegion(region, options?)
+### captureRegion(region, options?)
+[Renderer] [Backend]
 截取屏幕指定区域。
 
 ```javascript
@@ -153,9 +178,10 @@ const buffer = await screen.captureRegion(
   - `format` ('png' | 'jpeg') - 输出格式
   - `quality` (number) - JPEG 质量
 
-**返回值**: `Buffer` - 图片数据
+**返回值**: `Buffer | Uint8Array` - 图片数据
 
-### 8.8 getMediaStreamConstraints(options)
+### getMediaStreamConstraints(options)
+[Renderer] [Backend]
 获取录屏所需的 MediaStream 约束配置。
 
 ```javascript
@@ -177,7 +203,41 @@ const recorder = new MediaRecorder(stream, { mimeType: 'video/webm' });
 
 **返回值**: `object` - MediaStream 约束配置
 
-### 8.9 完整示例
+### screenCapture()
+[Renderer]
+交互式区域截图，返回 PNG Data URL。
+
+```javascript
+const dataUrl = await screen.screenCapture();
+if (dataUrl) {
+  // dataUrl 形如 data:image/png;base64,...
+}
+```
+
+**返回值**: `string | null`
+
+### colorPick()
+[Renderer]
+屏幕取色，返回颜色信息。
+
+```javascript
+const color = await screen.colorPick();
+// { hex: '#FF00FF', rgb: 'rgb(255, 0, 255)', r: 255, g: 0, b: 255 }
+```
+
+**返回值**: `ColorPickResult | null`
+
+```typescript
+interface ColorPickResult {
+  hex: string;
+  rgb: string;
+  r: number;
+  g: number;
+  b: number;
+}
+```
+
+### 完整示例
 
 #### 截图插件示例
 
@@ -187,56 +247,14 @@ module.exports = {
     const { screen, filesystem, notification, clipboard } = context.api;
 
     try {
-      // 获取所有显示器
-      const displays = await screen.getAllDisplays();
-      notification.show(`检测到 ${displays.length} 个显示器`);
-
-      // 截取主屏幕
       const buffer = await screen.capture({ format: 'png' });
-
-      // 保存到文件
       const path = `/tmp/screenshot_${Date.now()}.png`;
       filesystem.writeFile(path, buffer);
-
-      // 复制到剪贴板
       clipboard.writeImage(buffer);
-
       notification.show('截图已保存并复制到剪贴板');
     } catch (error) {
       notification.show('截图失败: ' + error.message, 'error');
     }
   }
 };
-```
-
-#### 录屏插件示例（UI 部分）
-
-```javascript
-// 在插件 UI 中使用
-async function startRecording() {
-  // 获取屏幕源
-  const sources = await window.intools.screen.getSources({ types: ['screen'] });
-
-  // 获取 MediaStream 约束
-  const constraints = await window.intools.screen.getMediaStreamConstraints({
-    sourceId: sources[0].id,
-    audio: true,
-    frameRate: 30
-  });
-
-  // 创建 MediaStream
-  const stream = await navigator.mediaDevices.getUserMedia(constraints);
-
-  // 创建录制器
-  const chunks = [];
-  const recorder = new MediaRecorder(stream, { mimeType: 'video/webm' });
-
-  recorder.ondataavailable = (e) => chunks.push(e.data);
-  recorder.onstop = () => {
-    const blob = new Blob(chunks, { type: 'video/webm' });
-    // 处理录制的视频...
-  };
-
-  recorder.start();
-}
 ```

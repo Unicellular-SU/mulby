@@ -1,6 +1,12 @@
-## 6. 文件系统 API (filesystem)
+# 文件系统 API (filesystem)
+本文档描述 文件系统 API (filesystem) 的使用方法与接口。
 
-### 6.1 readFile(path, encoding?)
+> 入口：
+> - UI/渲染进程：`window.intools.filesystem`
+> - 插件后端：`context.api.filesystem`
+
+### readFile(path, encoding?)
+[Renderer] [Backend]
 读取文件内容。
 
 ```javascript
@@ -18,9 +24,10 @@ const base64 = filesystem.readFile('/path/to/image.jpg', 'base64');
 - `path` (string) - 文件路径
 - `encoding` (string, 可选) - 编码方式: `utf-8` | `base64`
 
-**返回值**: `Buffer | string`
+**返回值**: `Buffer | Uint8Array | string`
 
-### 6.2 writeFile(path, data, encoding?)
+### writeFile(path, data, encoding?)
+[Renderer] [Backend]
 写入文件。
 
 ```javascript
@@ -36,10 +43,11 @@ filesystem.writeFile('/path/to/output.jpg', base64String, 'base64');
 
 **参数**:
 - `path` (string) - 文件路径
-- `data` (Buffer | string) - 文件内容
+- `data` (Buffer | Uint8Array | ArrayBuffer | string) - 文件内容
 - `encoding` (string, 可选) - 编码方式: `utf-8` | `base64`
 
-### 6.3 exists(path)
+### exists(path)
+[Renderer] [Backend]
 检查文件或目录是否存在。
 
 ```javascript
@@ -50,14 +58,16 @@ if (filesystem.exists('/path/to/file.txt')) {
 
 **返回值**: `boolean`
 
-### 6.4 unlink(path)
+### unlink(path)
+[Renderer] [Backend]
 删除文件。
 
 ```javascript
 filesystem.unlink('/path/to/file.txt');
 ```
 
-### 6.5 readdir(path)
+### readdir(path)
+[Renderer] [Backend]
 读取目录内容。
 
 ```javascript
@@ -67,14 +77,16 @@ const files = filesystem.readdir('/path/to/dir');
 
 **返回值**: `string[]` - 文件名数组
 
-### 6.6 mkdir(path)
+### mkdir(path)
+[Renderer] [Backend]
 创建目录（递归创建）。
 
 ```javascript
 filesystem.mkdir('/path/to/new/dir');
 ```
 
-### 6.7 stat(path)
+### stat(path)
+[Renderer] [Backend]
 获取文件信息。
 
 ```javascript
@@ -96,21 +108,25 @@ interface FileStat {
 }
 ```
 
-### 6.8 copy(src, dest)
+### copy(src, dest)
+[Renderer] [Backend]
 复制文件。
 
 ```javascript
 filesystem.copy('/path/to/source.txt', '/path/to/dest.txt');
 ```
 
-### 6.9 move(src, dest)
+### move(src, dest)
+[Renderer] [Backend]
 移动或重命名文件。
 
 ```javascript
 filesystem.move('/path/to/old.txt', '/path/to/new.txt');
 ```
 
-### 6.10 路径工具方法
+### 路径工具方法（仅插件后端）
+
+> 仅 `context.api.filesystem` 可用，`window.intools.filesystem` 不提供。
 
 ```javascript
 // 获取扩展名
@@ -125,4 +141,15 @@ filesystem.dirname('/path/to/file.txt');  // '/path/to'
 // 获取文件名
 filesystem.basename('/path/to/file.txt');  // 'file.txt'
 filesystem.basename('/path/to/file.txt', '.txt');  // 'file'
+```
+
+### 完整示例
+
+```javascript
+// 写入并读取文件
+const temp = await window.intools.system.getPath('temp');
+const filePath = `${temp}/intools-demo.txt`;
+window.intools.filesystem.writeFile(filePath, 'Hello InTools', 'utf-8');
+const text = window.intools.filesystem.readFile(filePath, 'utf-8');
+console.log(text);
 ```

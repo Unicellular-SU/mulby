@@ -8,6 +8,7 @@
 - [Power API (power)](./power.md)
 - [Tray API (tray)](./tray.md)
 - [权限 API (permission)](./permission.md)
+- [Security API (security)](./security.md)
 
 ## 窗口与界面
 
@@ -26,7 +27,10 @@
 
 ## 插件功能
 
+- [插件管理 API (plugin)](./plugin.md)
+- [插件 Host API (host)](./host.md)
 - [动态指令 API (features)](./features.md)
+- [InBrowser API (inbrowser)](./inbrowser.md)
 
 ## 文件与存储
 
@@ -45,4 +49,4 @@
 - [Media API (media)](./media.md)
 - [屏幕 API (screen)](./screen.md)
 - [Sharp 图像处理 API (sharp)](./sharp.md)
-
+- [FFmpeg 音视频处理 API (ffmpeg)](./ffmpeg.md)

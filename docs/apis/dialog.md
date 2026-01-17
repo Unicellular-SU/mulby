@@ -1,8 +1,14 @@
-## 10. Dialog API (dialog)
+# Dialog API (dialog)
+本文档描述 Dialog API (dialog) 的使用方法与接口。
+
+> 入口：
+> - UI/渲染进程：`window.intools.dialog`
+> - 插件后端：`context.api.dialog`
 
 Dialog API 提供系统原生对话框，支持 macOS、Windows 和 Linux。
 
-### 10.1 showOpenDialog(options?)
+### showOpenDialog(options?)
+[Renderer] [Backend]
 显示打开文件对话框。
 
 ```javascript
@@ -43,7 +49,8 @@ const images = await dialog.showOpenDialog({
 
 **返回值**: `string[]` - 选中的文件路径数组，取消时返回空数组
 
-### 10.2 showSaveDialog(options?)
+### showSaveDialog(options?)
+[Renderer] [Backend]
 显示保存文件对话框。
 
 ```javascript
@@ -68,7 +75,8 @@ if (savePath) {
 
 **返回值**: `string | null` - 保存路径，取消时返回 null
 
-### 10.3 showMessageBox(options)
+### showMessageBox(options)
+[Renderer] [Backend]
 显示消息框。
 
 ```javascript
@@ -103,7 +111,8 @@ if (result.response === 1) {
 
 **返回值**: `{ response: number; checkboxChecked: boolean }`
 
-### 10.4 showErrorBox(title, content)
+### showErrorBox(title, content)
+[Renderer] [Backend]
 显示错误框（同步，会阻塞）。
 
 ```javascript
@@ -113,3 +122,18 @@ dialog.showErrorBox('错误', '发生了一个严重错误');
 **参数**:
 - `title` (string) - 标题
 - `content` (string) - 错误内容
+
+**返回值**: `void`
+
+### 完整示例
+
+```javascript
+// 选择文件
+const files = await window.intools.dialog.showOpenDialog({
+  title: '选择文件',
+  properties: ['openFile', 'multiSelections']
+});
+if (files.length) {
+  window.intools.notification.show(`已选择 ${files.length} 个文件`);
+}
+```

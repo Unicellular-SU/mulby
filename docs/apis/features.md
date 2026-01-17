@@ -1,22 +1,62 @@
 # 动态指令 API (features)
+本文档描述 动态指令 API (features) 的使用方法与接口。
+
+> 入口：`context.api.features`
 
 参考 uTools 的「动态指令」概念，InTools 提供可运行时增删功能入口的能力。适用于用户可配置入口、在线内容映射、批量快捷命令等场景。
 
-## 适用场景
+### 适用场景
 
 - 用户自定义快捷指令（例如：自定义网站快捷打开）
 - 运行时根据数据源生成入口（例如：收藏列表、常用模板）
 - 插件配置变更后动态刷新入口
 - 区分 UI 与后台指令执行方式
 
-## 核心概念
+### 核心概念
 
 - 动态指令属于插件本身，存储在用户数据目录中。
 - 同一 `code` 会覆盖旧配置，适合做“更新式注册”。
 - `mode` 决定执行方式：`ui`/`detached` 会打开 UI，`silent` 仅执行后端逻辑。
 - `route` 会作为窗口的 hash 传入，便于 UI 内部路由跳转。
 
-## getFeatures
+### 类型定义
+
+```ts
+type CmdKeyword = { type: 'keyword'; value: string }
+type CmdRegex = { type: 'regex'; match: string; explain?: string }
+type CmdFiles = { type: 'files'; exts: string[] }
+type CmdImg = { type: 'img' }
+type CmdOver = { type: 'over' }
+
+type DynamicCmdInput = string | CmdKeyword | CmdRegex | CmdFiles | CmdImg | CmdOver
+
+interface DynamicFeatureInput {
+  code: string
+  explain?: string
+  icon?: string
+  platform?: string | string[]
+  mode?: 'ui' | 'silent' | 'detached'
+  route?: string
+  mainHide?: boolean
+  mainPush?: boolean
+  cmds: DynamicCmdInput[]
+}
+
+interface DynamicFeature {
+  code: string
+  explain: string
+  icon?: string
+  platform?: string | string[]
+  mode?: 'ui' | 'silent' | 'detached'
+  route?: string
+  mainHide?: boolean
+  mainPush?: boolean
+  cmds: Array<CmdKeyword | CmdRegex | CmdFiles | CmdImg | CmdOver>
+}
+```
+
+### getFeatures
+[Backend]
 
 ```ts
 features.getFeatures(codes?: string[]): DynamicFeature[]
@@ -24,9 +64,11 @@ features.getFeatures(codes?: string[]): DynamicFeature[]
 
 - 返回当前插件已注册的动态指令
 - 可传入 `codes` 过滤指定功能
-- `platform` 字段会自动按当前平台过滤
+- `platform` 字段会按当前平台过滤
+- 返回的 `cmds` 一定为对象结构（字符串会被归一化为 `{ type: 'keyword', value }`）
 
-## setFeature
+### setFeature
+[Backend]
 
 ```ts
 features.setFeature(feature: DynamicFeatureInput): void
@@ -49,7 +91,8 @@ features.setFeature(feature: DynamicFeatureInput): void
 - 字符串：会被视为 `keyword` 指令
 - 对象：使用 InTools 的 `cmd` 结构（`keyword`/`regex`/`files`/`img`/`over`）
 
-## removeFeature
+### removeFeature
+[Backend]
 
 ```ts
 features.removeFeature(code: string): boolean
@@ -57,9 +100,9 @@ features.removeFeature(code: string): boolean
 
 删除动态指令，返回是否成功删除。
 
-## 使用示例
+### 完整示例
 
-### 1) 注册 silent 指令（无 UI）
+#### 注册 silent 指令（无 UI）
 
 ```ts
 api.features.setFeature({
@@ -70,7 +113,7 @@ api.features.setFeature({
 })
 ```
 
-### 2) 注册 UI 指令（附着面板）
+#### 注册 UI 指令（附着面板）
 
 ```ts
 api.features.setFeature({
@@ -82,7 +125,7 @@ api.features.setFeature({
 })
 ```
 
-### 3) 注册 detached 指令（独立窗口）
+#### 注册 detached 指令（独立窗口）
 
 ```ts
 api.features.setFeature({
@@ -94,7 +137,7 @@ api.features.setFeature({
 })
 ```
 
-### 4) 清理并刷新指令
+#### 清理并刷新指令
 
 ```ts
 for (const code of ['today', 'settings', 'window']) {
@@ -102,18 +145,20 @@ for (const code of ['today', 'settings', 'window']) {
 }
 ```
 
-## redirectHotKeySetting
+#### redirectHotKeySetting
+[Backend]
 
 ```ts
 features.redirectHotKeySetting(cmdLabel: string, autocopy?: boolean): void
 ```
 
-InTools 暂无快捷键设置界面，目前会提示使用 `shortcut` API 注册快捷键。
+当前会弹出提示通知，建议使用 `shortcut` API 注册快捷键。
 
-## redirectAiModelsSetting
+#### redirectAiModelsSetting
+[Backend]
 
 ```ts
 features.redirectAiModelsSetting(): void
 ```
 
-InTools 暂无 AI 模型设置界面，为保留接口。
+当前会弹出提示通知，为保留接口。

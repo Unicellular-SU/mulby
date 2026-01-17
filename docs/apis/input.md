@@ -1,4 +1,9 @@
-## 3. 输入 API (input)
+# 输入 API (input)
+本文档描述 输入 API (input) 的使用方法与接口。
+
+> 入口：
+> - UI/渲染进程：`window.intools.input`
+> - 插件后端：`context.api.input`
 
 输入 API 用于对外部应用执行粘贴、键入操作以及模拟键盘和鼠标操作，适配 macOS、Windows、Linux。
 调用时部分方法会先隐藏 InTools 窗口，以便目标应用接收输入焦点。
@@ -7,7 +12,8 @@
 - macOS 需要在系统设置中授予 InTools 辅助功能权限
 - Linux 依赖 `xdotool` 执行按键与输入（Wayland 环境可能受限）
 
-### 3.1 hideMainWindowPasteText(text)
+### hideMainWindowPasteText(text)
+[Renderer] [Backend]
 将文本写入剪贴板并模拟粘贴到当前焦点应用。
 
 ```javascript
@@ -19,7 +25,8 @@ await input.hideMainWindowPasteText('Hello InTools');
 
 **返回值**: `boolean` - 是否执行成功
 
-### 3.2 hideMainWindowPasteImage(image)
+### hideMainWindowPasteImage(image)
+[Renderer] [Backend]
 将图片写入剪贴板并模拟粘贴到当前焦点应用。
 
 ```javascript
@@ -35,7 +42,8 @@ await input.hideMainWindowPasteImage('/path/to/image.png');
 
 **返回值**: `boolean` - 是否执行成功
 
-### 3.3 hideMainWindowPasteFile(filePath)
+### hideMainWindowPasteFile(filePath)
+[Renderer] [Backend]
 将文件写入剪贴板并模拟粘贴到当前焦点应用。
 
 ```javascript
@@ -48,7 +56,8 @@ await input.hideMainWindowPasteFile(['/path/a.txt', '/path/b.txt']);
 
 **返回值**: `boolean` - 是否执行成功
 
-### 3.4 hideMainWindowTypeString(text)
+### hideMainWindowTypeString(text)
+[Renderer] [Backend]
 隐藏主窗口并模拟键入文本（不依赖剪贴板）。
 
 ```javascript
@@ -60,7 +69,8 @@ await input.hideMainWindowTypeString('Hello World!');
 
 **返回值**: `boolean` - 是否执行成功
 
-### 3.5 simulateKeyboardTap(key, ...modifiers)
+### simulateKeyboardTap(key, ...modifiers)
+[Renderer] [Backend]
 隐藏主窗口并模拟键盘按键，支持单键和组合键。操作会发送到之前活跃的应用。
 
 ```javascript
@@ -107,7 +117,8 @@ await input.simulateKeyboardTap('f5');
 | shift | - |
 | command | cmd, meta, super, win |
 
-### 3.6 simulateMouseMove(x, y)
+### simulateMouseMove(x, y)
+[Renderer] [Backend]
 隐藏主窗口并将鼠标移动到指定的屏幕坐标位置。
 
 ```javascript
@@ -121,7 +132,8 @@ await input.simulateMouseMove(100, 200);
 
 **返回值**: `boolean` - 是否执行成功
 
-### 3.7 simulateMouseClick(x, y)
+### simulateMouseClick(x, y)
+[Renderer] [Backend]
 隐藏主窗口并模拟鼠标左键单击操作。
 
 ```javascript
@@ -135,7 +147,8 @@ await input.simulateMouseClick(150, 200);
 
 **返回值**: `boolean` - 是否执行成功
 
-### 3.8 simulateMouseDoubleClick(x, y)
+### simulateMouseDoubleClick(x, y)
+[Renderer] [Backend]
 隐藏主窗口并模拟鼠标左键双击操作。
 
 ```javascript
@@ -149,7 +162,8 @@ await input.simulateMouseDoubleClick(150, 200);
 
 **返回值**: `boolean` - 是否执行成功
 
-### 3.9 simulateMouseRightClick(x, y)
+### simulateMouseRightClick(x, y)
+[Renderer] [Backend]
 隐藏主窗口并模拟鼠标右键点击操作。
 
 ```javascript
@@ -163,7 +177,7 @@ await input.simulateMouseRightClick(200, 250);
 
 **返回值**: `boolean` - 是否执行成功
 
-### 3.10 完整示例
+### 完整示例
 
 ```javascript
 module.exports = {
@@ -183,7 +197,7 @@ module.exports = {
 };
 ```
 
-### 注意事项
+#### 注意事项
 
 1. **坐标系统**: 鼠标操作使用的 `(x, y)` 坐标是以**整个屏幕**的左上角为原点，单位为像素。在多显示器环境下需要注意坐标计算。
 

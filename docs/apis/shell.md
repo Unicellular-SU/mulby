@@ -1,8 +1,14 @@
-## 9. Shell API (shell)
+# Shell API (shell)
+本文档描述 Shell API (shell) 的使用方法与接口。
+
+> 入口：
+> - UI/渲染进程：`window.intools.shell`
+> - 插件后端：`context.api.shell`
 
 Shell API 提供系统级操作，包括打开文件、URL 和文件管理器，支持 macOS、Windows 和 Linux。
 
-### 9.1 openPath(path)
+### openPath(path)
+[Renderer] [Backend]
 使用系统默认应用打开文件。
 
 ```javascript
@@ -18,7 +24,8 @@ await shell.openPath('/path/to/document.pdf');
 
 **返回值**: `string` - 错误信息，成功时为空字符串
 
-### 9.2 openExternal(url)
+### openExternal(url)
+[Renderer] [Backend]
 使用系统默认浏览器打开 URL。
 
 ```javascript
@@ -29,7 +36,8 @@ await shell.openExternal('mailto:test@example.com');
 **参数**:
 - `url` (string) - URL 地址（支持 http、https、mailto 等协议）
 
-### 9.3 showItemInFolder(path)
+### showItemInFolder(path)
+[Renderer] [Backend]
 在文件管理器中显示并选中文件。
 
 ```javascript
@@ -42,7 +50,8 @@ shell.showItemInFolder('/path/to/file.txt');
 **参数**:
 - `path` (string) - 文件路径
 
-### 9.4 openFolder(path)
+### openFolder(path)
+[Renderer] [Backend]
 打开文件所在目录。
 
 ```javascript
@@ -56,7 +65,8 @@ await shell.openFolder('/path/to/directory');
 
 **返回值**: `string` - 错误信息，成功时为空字符串
 
-### 9.5 trashItem(path)
+### trashItem(path)
+[Renderer] [Backend]
 将文件移动到回收站/废纸篓。
 
 ```javascript
@@ -66,14 +76,15 @@ await shell.trashItem('/path/to/file.txt');
 **参数**:
 - `path` (string) - 文件路径
 
-### 9.6 beep()
+### beep()
+[Renderer] [Backend]
 播放系统提示音。
 
 ```javascript
 shell.beep();
 ```
 
-### 9.7 完整示例
+### 完整示例
 
 ```javascript
 module.exports = {
