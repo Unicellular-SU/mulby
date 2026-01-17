@@ -18,8 +18,8 @@ export function registerPluginHandlers(manager: PluginManager) {
   })
 
   // 搜索插件（返回匹配的功能入口）
-  ipcMain.handle('plugin:search', (_, query: string | InputPayload) => {
-    return manager.search(query).map(result => ({
+  ipcMain.handle('plugin:search', async (_, query: string | InputPayload) => {
+    return (await manager.search(query)).map(result => ({
       pluginId: result.plugin.id,
       pluginName: result.plugin.manifest.name,
       displayName: result.plugin.manifest.displayName,

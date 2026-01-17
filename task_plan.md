@@ -1,7 +1,7 @@
-# Task Plan: Rewrite Plugin Spec
+# Task Plan: UtilityProcess Search
 
 ## Goal
-Rewrite `docs/plugin-spec.md` based on current CLI, APIs, manifest spec, and code.
+Move plugin search matching into a UtilityProcess to keep main process responsive.
 
 ## Phases
 - [x] Phase 1: Plan and setup
@@ -10,8 +10,8 @@ Rewrite `docs/plugin-spec.md` based on current CLI, APIs, manifest spec, and cod
 - [x] Phase 4: Review and deliver
 
 ## Key Questions
-1. Which docs already cover APIs and manifest fields to reference?
-2. What is the current plugin project structure and CLI commands?
+1. Where should the search worker live and how to pass plugin/feature data?
+2. How to keep matching logic consistent with PluginManager?
 
 ## Decisions Made
 - None yet
@@ -20,4 +20,4 @@ Rewrite `docs/plugin-spec.md` based on current CLI, APIs, manifest spec, and cod
 - None yet
 
 ## Status
-**Completed** - Rewrote plugin-spec.md to current spec
+**Completed** - Implemented UtilityProcess search worker

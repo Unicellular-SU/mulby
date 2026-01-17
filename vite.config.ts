@@ -38,6 +38,14 @@ export default defineConfig({
         }
       },
       {
+        entry: 'src/main/plugin/search-worker.ts',
+        vite: {
+          build: {
+            outDir: 'dist/worker'
+          }
+        }
+      },
+      {
         entry: 'src/preload/region-capture.ts',
         vite: {
           build: {

@@ -97,6 +97,66 @@ body {
   opacity: 0.5;
 }
 
+.input-summary-card {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 10px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--bg-secondary);
+  color: var(--text-secondary);
+  font-size: 13px;
+  line-height: 1.4;
+  max-width: 260px;
+  -webkit-app-region: no-drag;
+}
+
+.input-summary-text {
+  display: flex;
+  gap: 4px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 150px;
+}
+
+.input-summary-head,
+.input-summary-tail {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.input-summary-ellipsis {
+  flex-shrink: 0;
+  opacity: 0.6;
+}
+
+.input-summary-meta {
+  flex-shrink: 0;
+  font-size: 11px;
+  opacity: 0.8;
+}
+
+.input-summary-clear {
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  padding: 4px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.input-summary-clear:hover {
+  color: var(--text-primary);
+  background: var(--bg-selected);
+}
+
+.input-summary-clear svg {
+  width: 14px;
+  height: 14px;
+}
+
 .attachment-list {
   display: flex;
   gap: 8px;

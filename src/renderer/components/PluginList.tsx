@@ -45,9 +45,13 @@ function PluginList({ payload, onResultsChange, onShowDetails }: PluginListProps
   // Grid 配置
   const COLUMNS = 6
   const MAX_ITEMS = 24 // 4行 × 6列
+  const SEARCH_DEBOUNCE_MS = 150
 
   useEffect(() => {
-    loadPlugins()
+    const timer = setTimeout(() => {
+      loadPlugins()
+    }, SEARCH_DEBOUNCE_MS)
+    return () => clearTimeout(timer)
   }, [payload])
 
   // 键盘导航 - 支持四向移动

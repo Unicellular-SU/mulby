@@ -128,12 +128,39 @@ function SearchInput({ value, onChange, attachments, onAttachmentsChange }: Sear
     onAttachmentsChange(next)
   }, [attachments, onAttachmentsChange])
 
+  const isSummaryMode = !subInput.enabled && value.length > SUMMARY_THRESHOLD
+  const displayValue = subInput.enabled ? subInputValue : (isSummaryMode ? '' : value)
+  const summary = isSummaryMode ? buildSummary(value) : null
+  const handleClearSummary = useCallback(() => {
+    onChange('')
+  }, [onChange])
+
   return (
     <div className={`search-box ${attachments.length > 0 ? 'has-attachments' : ''}`}>
       <svg className="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor">
         <circle cx="11" cy="11" r="8" />
         <path d="m21 21-4.35-4.35" />
       </svg>
+      {isSummaryMode && (
+        <div className="input-summary-card no-drag" aria-hidden="true">
+          <div className="input-summary-text">
+            <span className="input-summary-head">{summary?.head}</span>
+            <span className="input-summary-ellipsis">...</span>
+            <span className="input-summary-tail">{summary?.tail}</span>
+          </div>
+          <div className="input-summary-meta">共 {value.length} 字</div>
+          <button
+            className="input-summary-clear"
+            type="button"
+            onClick={handleClearSummary}
+            aria-label="清空输入"
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
+              <path d="M18 6L6 18M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+      )}
       <div className="search-input-wrap">
         {attachments.length > 0 && (
           <div className="attachment-list no-drag">
@@ -171,9 +198,16 @@ function SearchInput({ value, onChange, attachments, onAttachmentsChange }: Sear
           ref={inputRef}
           type="text"
           className="search-input"
-          placeholder={subInput.enabled ? subInput.placeholder : '输入关键词搜索插件...'}
-          value={subInput.enabled ? subInputValue : value}
+          placeholder={isSummaryMode ? '' : (subInput.enabled ? subInput.placeholder : '输入关键词搜索插件...')}
+          value={displayValue}
           onChange={handleInputChange}
+          onKeyDown={(e) => {
+            if (!isSummaryMode || subInput.enabled) return
+            if (e.key === 'Backspace' || e.key === 'Delete') {
+              e.preventDefault()
+              onChange('')
+            }
+          }}
           onPaste={handlePaste}
           onDragOver={(e) => e.preventDefault()}
           onDrop={handleDrop}
@@ -266,6 +300,20 @@ function formatBytes(bytes: number): string {
     unitIndex += 1
   }
   return `${size.toFixed(size < 10 ? 1 : 0)} ${units[unitIndex]}`
+}
+
+const SUMMARY_THRESHOLD = 400
+const SUMMARY_HEAD_LENGTH = 8
+const SUMMARY_TAIL_LENGTH = 8
+
+function buildSummary(text: string): { head: string; tail: string } {
+  if (text.length <= SUMMARY_HEAD_LENGTH + SUMMARY_TAIL_LENGTH) {
+    return { head: text, tail: '' }
+  }
+  return {
+    head: text.slice(0, SUMMARY_HEAD_LENGTH),
+    tail: text.slice(-SUMMARY_TAIL_LENGTH)
+  }
 }
 
 export default SearchInput
