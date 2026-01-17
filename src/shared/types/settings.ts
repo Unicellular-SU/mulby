@@ -15,9 +15,22 @@ export interface StoreSource {
   lastError?: string
 }
 
+// 日志级别类型
+export type LogLevel = 'debug' | 'info' | 'warn' | 'error'
+
+// 开发者模式设置
+export interface DeveloperSettings {
+  enabled: boolean           // 是否启用开发者模式
+  pluginPaths: string[]      // 外部插件开发目录列表
+  autoReload: boolean        // 是否自动热重载
+  showDevTools: boolean      // 是否自动打开 DevTools
+  logLevel: LogLevel         // 日志级别
+}
+
 export interface AppSettings {
   shortcuts: AppShortcutSettings
   storeSources: StoreSource[]
+  developer: DeveloperSettings
 }
 
 export interface ShortcutStatus {

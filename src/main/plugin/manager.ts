@@ -47,12 +47,31 @@ export class PluginManager {
     this.plugins.clear()
     this.runners.clear()
 
-    // 用户数据目录的插件
+    // 动态导入设置管理器，避免循环依赖
+    const { appSettingsManager } = await import('../services/app-settings')
+    const settings = appSettingsManager.getSettings()
+    const developer = settings.developer
+
+    // 用户数据目录的插件（已安装）
     const userPluginsDir = join(app.getPath('userData'), 'plugins')
-    // 开发目录的插件（项目根目录）
+
+    // 开发目录的插件（项目根目录，仅在开发模式下有效）
     const devPluginsDir = join(process.cwd(), 'plugins')
 
-    const dirs = [userPluginsDir, devPluginsDir].filter(d => existsSync(d))
+    // 用户自定义的开发目录（开发者模式启用时生效）
+    const customDevDirs = developer.enabled ? developer.pluginPaths : []
+
+    const dirs = [
+      userPluginsDir,
+      ...(app.isPackaged ? [] : [devPluginsDir]),  // 打包后不从 cwd/plugins 加载
+      ...customDevDirs.filter(d => existsSync(d))   // 自定义的开发目录
+    ].filter(d => existsSync(d))
+
+    // 记录开发目录，用于标记开发插件
+    const devDirs = new Set([
+      ...(app.isPackaged ? [] : [devPluginsDir]),
+      ...customDevDirs
+    ])
 
     for (const dir of dirs) {
       const loader = new PluginLoader(dir)
@@ -69,6 +88,9 @@ export class PluginManager {
           )
           continue  // 跳过冲突的插件
         }
+
+        // 标记开发中的插件
+        plugin.isDev = Array.from(devDirs).some(devDir => plugin.path.startsWith(devDir))
 
         // 应用持久化的状态
         const state = this.stateManager.getPluginState(plugin.id)

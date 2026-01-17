@@ -9,7 +9,14 @@ const DEFAULT_SETTINGS: AppSettings = {
     toggleWindow: 'Alt+Space',
     openSettings: 'CommandOrControl+,'
   },
-  storeSources: []
+  storeSources: [],
+  developer: {
+    enabled: false,
+    pluginPaths: [],
+    autoReload: true,
+    showDevTools: false,
+    logLevel: 'info'
+  }
 }
 
 const stmtGet = db.prepare('SELECT value FROM store WHERE plugin_id = ? AND key = ?')
@@ -26,7 +33,11 @@ function mergeSettings(current: AppSettings, next: Partial<AppSettings>): AppSet
       ...current.shortcuts,
       ...(next.shortcuts || {})
     },
-    storeSources: next.storeSources ?? current.storeSources
+    storeSources: next.storeSources ?? current.storeSources,
+    developer: {
+      ...current.developer,
+      ...(next.developer || {})
+    }
   }
 }
 

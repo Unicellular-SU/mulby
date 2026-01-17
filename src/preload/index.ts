@@ -294,6 +294,14 @@ contextBridge.exposeInMainWorld('intools', {
     resumeShortcuts: () => ipcRenderer.invoke('settings:shortcuts:resume')
   },
 
+  // 开发者模式 API
+  developer: {
+    addPluginPath: (path: string) => ipcRenderer.invoke('developer:addPluginPath', path),
+    removePluginPath: (path: string) => ipcRenderer.invoke('developer:removePluginPath', path),
+    reloadPlugins: () => ipcRenderer.invoke('developer:reloadPlugins'),
+    selectDirectory: () => ipcRenderer.invoke('developer:selectDirectory')
+  },
+
   // Media API
   media: {
     getAccessStatus: (mediaType: 'microphone' | 'camera') =>

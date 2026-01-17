@@ -140,6 +140,7 @@ export interface Plugin {
   path: string
   enabled: boolean
   resolvedIcon?: ResolvedIcon  // 解析后的图标数据
+  isDev?: boolean  // 是否为开发目录的插件
 }
 
 // 插件生命周期钩子

@@ -9,6 +9,7 @@ type SettingsSection =
   | 'plugins'
   | 'store'
   | 'permissions'
+  | 'developer'
   | 'about'
 
 interface SettingsViewProps {
@@ -25,6 +26,7 @@ const SECTION_ITEMS: { id: SettingsSection; label: string }[] = [
   { id: 'plugins', label: '插件' },
   { id: 'store', label: '插件商店' },
   { id: 'permissions', label: '权限' },
+  { id: 'developer', label: '开发者' },
   { id: 'about', label: '关于' }
 ]
 
@@ -203,11 +205,11 @@ function ShortcutInput({
     ? ''
     : status?.reason === 'duplicate'
       ? '快捷键冲突'
-    : status?.reason === 'in-use'
-      ? '被系统占用'
-    : status?.reason === 'invalid'
-      ? '格式无效'
-    : '注册失败'
+      : status?.reason === 'in-use'
+        ? '被系统占用'
+        : status?.reason === 'invalid'
+          ? '格式无效'
+          : '注册失败'
 
   const displayValue = recording ? (preview || '按下快捷键') : (value || '未设置')
 
@@ -225,11 +227,10 @@ function ShortcutInput({
           )}
         </div>
         <button
-          className={`px-3 py-1.5 rounded text-sm border transition-colors ${
-            recording
-              ? 'border-blue-500 text-blue-600 dark:text-blue-300'
-              : 'border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 hover:border-gray-300 dark:hover:border-gray-600'
-          }`}
+          className={`px-3 py-1.5 rounded text-sm border transition-colors ${recording
+            ? 'border-blue-500 text-blue-600 dark:text-blue-300'
+            : 'border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 hover:border-gray-300 dark:hover:border-gray-600'
+            }`}
           onClick={() => {
             setError(null)
             setRecording(true)
@@ -450,11 +451,10 @@ export default function SettingsView({ section, onSectionChange, onClose, onOpen
             {SECTION_ITEMS.map(item => (
               <button
                 key={item.id}
-                className={`w-full text-left px-4 py-2 text-sm transition-colors ${
-                  item.id === section
-                    ? 'bg-blue-500/15 text-blue-700 dark:text-blue-200'
-                    : 'text-gray-700 dark:text-gray-200 hover:bg-white/40 dark:hover:bg-white/10'
-                }`}
+                className={`w-full text-left px-4 py-2 text-sm transition-colors ${item.id === section
+                  ? 'bg-blue-500/15 text-blue-700 dark:text-blue-200'
+                  : 'text-gray-700 dark:text-gray-200 hover:bg-white/40 dark:hover:bg-white/10'
+                  }`}
                 onClick={() => onSectionChange(item.id)}
               >
                 {item.label}
@@ -478,11 +478,10 @@ export default function SettingsView({ section, onSectionChange, onClose, onOpen
                   {(['light', 'dark', 'system'] as const).map((mode) => (
                     <button
                       key={mode}
-                      className={`px-4 py-2 rounded-full border text-sm transition-colors ${
-                        themeMode === mode
-                          ? 'border-blue-400/60 text-blue-700 dark:text-blue-200'
-                          : 'border-white/40 text-gray-700 dark:text-gray-200 hover:border-white/60'
-                      }`}
+                      className={`px-4 py-2 rounded-full border text-sm transition-colors ${themeMode === mode
+                        ? 'border-blue-400/60 text-blue-700 dark:text-blue-200'
+                        : 'border-white/40 text-gray-700 dark:text-gray-200 hover:border-white/60'
+                        }`}
                       onClick={async () => {
                         const info = await window.intools.theme.set(mode)
                         setThemeMode(info.mode)
@@ -538,9 +537,8 @@ export default function SettingsView({ section, onSectionChange, onClose, onOpen
                       {(['all', 'enabled', 'disabled'] as const).map((key) => (
                         <button
                           key={key}
-                          className={`settings-chip ${
-                            pluginFilter === key ? 'settings-chip-active' : ''
-                          }`}
+                          className={`settings-chip ${pluginFilter === key ? 'settings-chip-active' : ''
+                            }`}
                           onClick={() => setPluginFilter(key)}
                         >
                           {key === 'all' ? '全部' : key === 'enabled' ? '已启用' : '已禁用'}
@@ -652,11 +650,10 @@ export default function SettingsView({ section, onSectionChange, onClose, onOpen
                         </div>
                         <div className="flex items-center gap-3">
                           <button
-                            className={`px-3 py-1 rounded text-xs border ${
-                              source.enabled
-                                ? 'border-blue-500 text-blue-600 dark:text-blue-300'
-                                : 'border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300'
-                            }`}
+                            className={`px-3 py-1 rounded text-xs border ${source.enabled
+                              ? 'border-blue-500 text-blue-600 dark:text-blue-300'
+                              : 'border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300'
+                              }`}
                             onClick={() => handleToggleSource(source.id, !source.enabled)}
                           >
                             {source.enabled ? '已启用' : '已停用'}
@@ -725,6 +722,221 @@ export default function SettingsView({ section, onSectionChange, onClose, onOpen
                     </div>
                   </div>
                 ))}
+              </div>
+            )}
+
+            {section === 'developer' && settings && (
+              <div className="space-y-5">
+                {/* 开发者模式开关 */}
+                <div className="glass-card space-y-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <div className="text-sm font-medium text-gray-900 dark:text-gray-100">
+                        启用开发者模式
+                      </div>
+                      <div className="text-xs text-gray-500 dark:text-gray-400">
+                        开启后可从外部目录加载开发中的插件
+                      </div>
+                    </div>
+                    <button
+                      className={`relative w-11 h-6 rounded-full transition-colors ${settings.developer.enabled
+                          ? 'bg-blue-500'
+                          : 'bg-gray-300 dark:bg-gray-600'
+                        }`}
+                      onClick={() => {
+                        updateSettings({
+                          developer: {
+                            ...settings.developer,
+                            enabled: !settings.developer.enabled
+                          }
+                        })
+                      }}
+                    >
+                      <span
+                        className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${settings.developer.enabled ? 'translate-x-5' : ''
+                          }`}
+                      />
+                    </button>
+                  </div>
+                </div>
+
+                {/* 插件开发目录 */}
+                {settings.developer.enabled && (
+                  <div className="glass-card space-y-4">
+                    <div className="text-sm font-medium text-gray-900 dark:text-gray-100">
+                      插件开发目录
+                    </div>
+
+                    {settings.developer.pluginPaths.length === 0 ? (
+                      <div className="text-sm text-gray-500 dark:text-gray-400">
+                        还没有添加任何开发目录。
+                      </div>
+                    ) : (
+                      <div className="space-y-2">
+                        {settings.developer.pluginPaths.map((path) => (
+                          <div
+                            key={path}
+                            className="flex items-center justify-between gap-3 px-3 py-2 rounded border border-gray-200 dark:border-gray-700 bg-white/50 dark:bg-gray-900/50"
+                          >
+                            <div className="text-sm text-gray-700 dark:text-gray-300 truncate flex-1">
+                              {path}
+                            </div>
+                            <button
+                              className="text-xs text-red-500 hover:text-red-600 dark:text-red-400 dark:hover:text-red-300"
+                              onClick={async () => {
+                                await window.intools.developer.removePluginPath(path)
+                                const result = await window.intools.settings.get()
+                                setSettings(result.settings)
+                                await refreshPlugins()
+                              }}
+                            >
+                              移除
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    <div className="flex gap-2">
+                      <button
+                        className="glass-button px-3 py-2 text-xs"
+                        onClick={async () => {
+                          const path = await window.intools.developer.selectDirectory()
+                          if (path) {
+                            const result = await window.intools.developer.addPluginPath(path)
+                            if (result.success) {
+                              const settingsResult = await window.intools.settings.get()
+                              setSettings(settingsResult.settings)
+                              await refreshPlugins()
+                            } else {
+                              window.intools.notification.show(result.error || '添加失败', 'error')
+                            }
+                          }
+                        }}
+                      >
+                        + 添加目录
+                      </button>
+                      <button
+                        className="glass-button px-3 py-2 text-xs"
+                        onClick={async () => {
+                          await window.intools.developer.reloadPlugins()
+                          await refreshPlugins()
+                          window.intools.notification.show('插件已刷新')
+                        }}
+                      >
+                        刷新插件
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {/* 调试选项 */}
+                {settings.developer.enabled && (
+                  <div className="glass-card space-y-4">
+                    <div className="text-sm font-medium text-gray-900 dark:text-gray-100">
+                      调试选项
+                    </div>
+
+                    {/* 自动热重载 */}
+                    <div className="flex items-center justify-between py-2 border-b border-gray-200/80 dark:border-gray-800/80">
+                      <div>
+                        <div className="text-sm text-gray-900 dark:text-gray-100">
+                          自动热重载
+                        </div>
+                        <div className="text-xs text-gray-500 dark:text-gray-400">
+                          检测文件变化时自动重新加载插件
+                        </div>
+                      </div>
+                      <button
+                        className={`relative w-11 h-6 rounded-full transition-colors ${settings.developer.autoReload
+                            ? 'bg-blue-500'
+                            : 'bg-gray-300 dark:bg-gray-600'
+                          }`}
+                        onClick={() => {
+                          updateSettings({
+                            developer: {
+                              ...settings.developer,
+                              autoReload: !settings.developer.autoReload
+                            }
+                          })
+                        }}
+                      >
+                        <span
+                          className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${settings.developer.autoReload ? 'translate-x-5' : ''
+                            }`}
+                        />
+                      </button>
+                    </div>
+
+                    {/* 自动打开 DevTools */}
+                    <div className="flex items-center justify-between py-2 border-b border-gray-200/80 dark:border-gray-800/80">
+                      <div>
+                        <div className="text-sm text-gray-900 dark:text-gray-100">
+                          自动打开开发者工具
+                        </div>
+                        <div className="text-xs text-gray-500 dark:text-gray-400">
+                          打开插件窗口时自动打开 DevTools
+                        </div>
+                      </div>
+                      <button
+                        className={`relative w-11 h-6 rounded-full transition-colors ${settings.developer.showDevTools
+                            ? 'bg-blue-500'
+                            : 'bg-gray-300 dark:bg-gray-600'
+                          }`}
+                        onClick={() => {
+                          updateSettings({
+                            developer: {
+                              ...settings.developer,
+                              showDevTools: !settings.developer.showDevTools
+                            }
+                          })
+                        }}
+                      >
+                        <span
+                          className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${settings.developer.showDevTools ? 'translate-x-5' : ''
+                            }`}
+                        />
+                      </button>
+                    </div>
+
+                    {/* 日志级别 */}
+                    <div className="py-2">
+                      <div className="text-sm text-gray-900 dark:text-gray-100 mb-2">
+                        日志级别
+                      </div>
+                      <div className="flex flex-wrap gap-2">
+                        {(['debug', 'info', 'warn', 'error'] as const).map((level) => (
+                          <button
+                            key={level}
+                            className={`settings-chip ${settings.developer.logLevel === level ? 'settings-chip-active' : ''
+                              }`}
+                            onClick={() => {
+                              updateSettings({
+                                developer: {
+                                  ...settings.developer,
+                                  logLevel: level
+                                }
+                              })
+                            }}
+                          >
+                            {level.charAt(0).toUpperCase() + level.slice(1)}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* 提示信息 */}
+                <div className="glass-card text-sm text-gray-600 dark:text-gray-300 space-y-2">
+                  <div className="font-medium text-gray-900 dark:text-gray-100">💡 使用提示</div>
+                  <ul className="list-disc list-inside text-xs space-y-1">
+                    <li>添加的开发目录应该包含插件文件夹（每个文件夹包含 manifest.json）</li>
+                    <li>开发目录的插件将显示「开发中」标记</li>
+                    <li>修改插件代码后，点击「刷新插件」或重启应用</li>
+                    <li>使用 <code className="px-1 py-0.5 bg-gray-100 dark:bg-gray-800 rounded">npm run dev</code> 启动 Vite 开发服务器支持 UI 热重载</li>
+                  </ul>
+                </div>
               </div>
             )}
 

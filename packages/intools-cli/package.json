@@ -1,6 +1,6 @@
 {
   "name": "intools-cli",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "InTools 插件开发 CLI 工具",
   "main": "dist/index.js",
   "files": [
@@ -8,7 +8,7 @@
     "assets"
   ],
   "bin": {
-    "intools": "./dist/index.js"
+    "intools": "dist/index.js"
   },
   "scripts": {
     "build": "tsc",

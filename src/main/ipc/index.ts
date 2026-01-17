@@ -33,6 +33,7 @@ import { registerFFmpegHandlers } from './ffmpeg'
 import { registerSettingsHandlers } from './settings'
 import { AppSettingsManager } from '../services/app-settings'
 import { AppShortcutManager } from '../services/app-shortcuts'
+import { registerDeveloperHandlers } from './developer'
 
 export function registerAllHandlers(
   getMainWindow: () => BrowserWindow | null,
@@ -71,4 +72,5 @@ export function registerAllHandlers(
   registerSharpHandlers()
   registerFFmpegHandlers()
   registerSettingsHandlers(appSettingsManager, appShortcutManager)
+  registerDeveloperHandlers(pluginManager)
 }

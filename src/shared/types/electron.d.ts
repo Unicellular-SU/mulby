@@ -230,6 +230,12 @@ export interface ElectronAPI {
     pauseShortcuts: () => Promise<ShortcutStatusMap>
     resumeShortcuts: () => Promise<ShortcutStatusMap>
   }
+  developer: {
+    addPluginPath: (path: string) => Promise<{ success: boolean; error?: string }>
+    removePluginPath: (path: string) => Promise<{ success: boolean }>
+    reloadPlugins: () => Promise<{ success: boolean }>
+    selectDirectory: () => Promise<string | null>
+  }
   plugin: {
     getAll: () => Promise<PluginInfo[]>
     search: (query: string | InputPayload) => Promise<SearchResultItem[]>
