@@ -76,7 +76,33 @@ async function startViteDevServer(cwd: string) {
     return
   }
 
+  // 每次启动开发模式都构建 UI
+  // 这样应用可以加载最新的插件 UI
+  console.log(chalk.blue('构建 UI...'))
+  await new Promise<void>((resolve, reject) => {
+    const viteBuild = spawn('npx', ['vite', 'build'], {
+      cwd,
+      stdio: 'inherit',
+      shell: true
+    })
+
+    viteBuild.on('close', (code) => {
+      if (code === 0) {
+        console.log(chalk.green('✓ UI 构建完成: ui/'))
+        resolve()
+      } else {
+        reject(new Error(`Vite 构建失败，退出码: ${code}`))
+      }
+    })
+
+    viteBuild.on('error', reject)
+  })
+
+  console.log()
   console.log(chalk.blue('启动 Vite 开发服务器...'))
+  console.log(chalk.gray('  💡 提示: Vite 开发服务器提供 UI 预览，修改 UI 代码后'))
+  console.log(chalk.gray('           在 InTools 中点击「刷新插件」或执行 npm run build 更新'))
+  console.log()
 
   viteProcess = spawn('npx', ['vite', '--host'], {
     cwd,

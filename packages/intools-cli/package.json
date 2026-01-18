@@ -1,11 +1,12 @@
 {
   "name": "intools-cli",
-  "version": "1.0.2",
+  "version": "1.0.4",
   "description": "InTools 插件开发 CLI 工具",
   "main": "dist/index.js",
   "files": [
     "dist",
-    "assets"
+    "assets",
+    "PLUGIN_API.md"
   ],
   "bin": {
     "intools": "dist/index.js"

@@ -4,13 +4,18 @@ import { create } from './commands/create'
 import { build } from './commands/build'
 import { pack } from './commands/pack'
 import { dev } from './commands/dev'
+import { readFileSync } from 'fs'
+import { join } from 'path'
+
+// 读取 package.json 获取版本号
+const pkg = JSON.parse(readFileSync(join(__dirname, '..', 'package.json'), 'utf-8'))
 
 const program = new Command()
 
 program
   .name('intools')
   .description('InTools 插件开发 CLI 工具')
-  .version('1.0.0')
+  .version(pkg.version)
 
 program
   .command('create <name>')

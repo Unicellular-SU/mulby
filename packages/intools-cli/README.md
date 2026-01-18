@@ -141,6 +141,7 @@ my-plugin/
 ├── tsconfig.json         # TypeScript 配置
 ├── vite.config.ts        # Vite 配置
 ├── icon.png              # 插件图标
+├── PLUGIN_API.md         # API 参考文档
 ├── src/
 │   ├── main.ts           # 后端逻辑（沙箱运行）
 │   ├── types/
@@ -166,6 +167,7 @@ my-plugin/
 ├── package.json
 ├── manifest.json
 ├── icon.png
+├── PLUGIN_API.md         # API 参考文档
 └── src/
     └── main.ts
 ```
@@ -364,131 +366,35 @@ npm run build
 ### 插件 API
 
 插件在沙箱中运行，通过 `context.api` 访问各种 API。
-完整类型请参考模板生成的 `src/types/intools.d.ts`。
 
-#### 剪贴板 API (clipboard)
+> 📚 **完整 API 参考请查看 [`PLUGIN_API.md`](./PLUGIN_API.md)**
+> 
+> 该文件会在创建插件时自动生成，包含全部 28 个 API 模块的详细说明。
+
+#### 常用 API 快速示例
 
 ```typescript
-const { clipboard } = context.api
-
-// 读取文本
+// 剪贴板
 const text = clipboard.readText()
+await clipboard.writeText('Hello')
 
-// 写入文本
-await clipboard.writeText('Hello World')
-
-// 读取图片（返回 PNG Buffer）
-const imageBuffer = clipboard.readImage()
-
-// 写入图片
-clipboard.writeImage(imageData)
-
-// 读取文件列表
-const files = clipboard.readFiles()
-// 返回: [{ path, name, size, isDirectory }]
-
-// 获取剪贴板格式
-const format = clipboard.getFormat()
-// 返回: 'text' | 'image' | 'files' | 'empty'
-```
-
-#### 通知 API (notification)
-
-```typescript
-const { notification } = context.api
-
+// 通知
 notification.show('操作成功')
 notification.show('发生错误', 'error')
-// type: 'info' | 'success' | 'warning' | 'error'
-```
 
-#### 存储 API (storage)
-
-```typescript
-const { storage } = context.api
-
-// 存储数据
-await storage.set('key', { foo: 'bar' })
-
-// 读取数据
+// 存储
+await storage.set('key', { data: 'value' })
 const data = await storage.get('key')
 
-// 删除数据
-await storage.remove('key')
-```
+// 文件系统
+const content = filesystem.readFile('/path/file.txt', 'utf-8')
+filesystem.writeFile('/path/output.txt', 'content', 'utf-8')
 
-#### 网络 API (http)
+// HTTP 请求
+const response = await http.post('https://api.example.com', { key: 'value' })
 
-```typescript
-const { http } = context.api
-
-// 完整请求
-const response = await http.request({
-  url: 'https://api.example.com/data',
-  method: 'POST',
-  headers: { 'Authorization': 'Bearer token' },
-  body: { key: 'value' },
-  timeout: 5000
-})
-
-// 快捷方法
-await http.get(url, headers?)
-await http.post(url, body?, headers?)
-await http.put(url, body?, headers?)
-await http.delete(url, headers?)
-```
-
-#### 窗口 API (window，仅 UI)
-
-```typescript
-const { window } = window.intools
-
-// 设置窗口大小
-await window.setSize(600, 400)
-
-// 隐藏窗口
-await window.hide()
-```
-
-#### 输入 API (input，仅 UI)
-
-```typescript
-const { input } = window.intools
-
-await input.hideMainWindowPasteText('Hello')
-await input.simulateKeyboardTap('A', 'cmd')
-```
-
-#### 权限 API (permission，仅 UI)
-
-```typescript
-const status = await window.intools?.permission?.getStatus('screen')
-```
-
-#### 文件系统 API (filesystem)
-
-```typescript
-const { filesystem } = context.api
-
-// 读写文件
-const buffer = filesystem.readFile('/path/to/file.png')
-const text = filesystem.readFile('/path/to/file.txt', 'utf-8')
-filesystem.writeFile('/path/to/output.txt', 'content', 'utf-8')
-
-// 文件操作
-filesystem.exists('/path')
-filesystem.unlink('/path')
-filesystem.mkdir('/path')
-filesystem.readdir('/path')
-filesystem.stat('/path')
-filesystem.copy(src, dest)
-filesystem.move(src, dest)
-
-// 路径工具
-filesystem.extname('/file.txt')   // '.txt'
-filesystem.dirname('/path/file')  // '/path'
-filesystem.basename('/path/file.txt')  // 'file.txt'
-filesystem.join('/path', 'to', 'file')
+// 对话框
+const files = await dialog.showOpenDialog({ properties: ['openFile'] })
 ```
 
 ---
@@ -668,21 +574,34 @@ cd json-formatter
 
 **src/main.ts:**
 ```typescript
-module.exports = {
-  async run(context: any) {
-    const { clipboard, notification } = context.api
-    const text = context.input || await clipboard.readText()
-
-    try {
-      const obj = JSON.parse(text)
-      const formatted = JSON.stringify(obj, null, 2)
-      await clipboard.writeText(formatted)
-      notification.show('JSON 格式化成功')
-    } catch (e) {
-      notification.show('无效的 JSON', 'error')
+interface PluginContext {
+  api: {
+    clipboard: {
+      readText: () => string
+      writeText: (text: string) => Promise<void>
+    }
+    notification: {
+      show: (message: string, type?: string) => void
     }
   }
+  input?: string
 }
+
+export async function run(context: PluginContext) {
+  const { clipboard, notification } = context.api
+  const text = context.input || clipboard.readText()
+
+  try {
+    const obj = JSON.parse(text)
+    const formatted = JSON.stringify(obj, null, 2)
+    await clipboard.writeText(formatted)
+    notification.show('JSON 格式化成功')
+  } catch (e) {
+    notification.show('无效的 JSON', 'error')
+  }
+}
+
+export default { run }
 ```
 
 ### 示例 2：翻译插件（带 UI）
@@ -717,16 +636,16 @@ npm install
 
 **src/main.ts:**
 ```typescript
-module.exports = {
-  onLoad() {
-    console.log('翻译插件已加载')
-  },
-
-  async run(context: any) {
-    // UI 插件通常不需要在 run 中做太多事
-    // 主要逻辑在 UI 中处理
-  }
+export function onLoad() {
+  console.log('翻译插件已加载')
 }
+
+export async function run() {
+  // UI 插件通常不需要在 run 中做太多事
+  // 主要逻辑在 UI 中处理
+}
+
+export default { onLoad, run }
 ```
 
 **src/ui/App.tsx:**
@@ -813,11 +732,3 @@ A: 修改 `manifest.json` 中的 `version` 字段，重新打包后安装即可�
 
 A: 前端通过 `window.intools.shell` 调用系统能力；后端运行在沙箱中，仅能使用 `context.api` 暴露的接口。具体能力以 `intools.d.ts` 为准。
 
----
-
-## 相关文档
-
-- [InTools 插件开发规范](../../docs/plugin-spec.md)
-- [InTools API 接口参考](../../docs/api-reference.md)
-- [Manifest 规范 v2](../../docs/manifest-v2.md)
-- [插件打包说明](../../docs/plugin-packaging.md)

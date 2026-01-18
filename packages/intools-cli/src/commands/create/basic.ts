@@ -21,4 +21,11 @@ export async function createBasicProject(targetDir: string, name: string) {
   const mainTs = buildBasicMain(name)
   fs.writeFileSync(path.join(targetDir, 'src/main.ts'), mainTs)
   console.log(chalk.green('  ✓ src/main.ts'))
+
+  // 复制 API 参考文档
+  const apiDocSrc = path.join(__dirname, '../../..', 'PLUGIN_API.md')
+  if (fs.existsSync(apiDocSrc)) {
+    fs.copyFileSync(apiDocSrc, path.join(targetDir, 'PLUGIN_API.md'))
+    console.log(chalk.green('  ✓ PLUGIN_API.md'))
+  }
 }

@@ -29,6 +29,13 @@ export async function createReactProject(targetDir: string, name: string) {
   createBackendMain(targetDir, name)
   createReactUI(targetDir, name)
   createIntoolsTypes(targetDir)
+
+  // 复制 API 参考文档
+  const apiDocSrc = path.join(__dirname, '../../..', 'PLUGIN_API.md')
+  if (fs.existsSync(apiDocSrc)) {
+    fs.copyFileSync(apiDocSrc, path.join(targetDir, 'PLUGIN_API.md'))
+    console.log(chalk.green('  ✓ PLUGIN_API.md'))
+  }
 }
 
 function createReactManifest(targetDir: string, name: string) {
