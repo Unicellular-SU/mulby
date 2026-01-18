@@ -56,6 +56,10 @@ export interface PluginInfo {
     cmds: { type: 'keyword' | 'regex' | 'files' | 'img' | 'over' | string; value?: string; match?: string; explain?: string; exts?: string[] }[]
     mode?: 'ui' | 'silent' | 'detached'
     route?: string
+    icon?: {
+      type: 'url' | 'svg' | 'data-url'
+      value: string
+    }
   }[]
   enabled: boolean
 }
