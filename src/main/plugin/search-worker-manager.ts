@@ -44,7 +44,7 @@ export class PluginSearchWorker {
   }
 
   private ensureWorker(): void {
-    if (this.worker && !this.worker.killed) return
+    if (this.worker) return
 
     this.worker = utilityProcess.fork(this.workerPath)
     this.worker.stdout?.on('data', (chunk) => {
@@ -53,8 +53,8 @@ export class PluginSearchWorker {
     this.worker.stderr?.on('data', (chunk) => {
       console.error('[SearchWorker]', chunk.toString())
     })
-    this.worker.on('message', (message: SearchResponse | { data?: SearchResponse }) => {
-      const payload = message && 'data' in message ? message.data : message
+    this.worker.on('message', (message: any) => {
+      const payload = (message.data || message) as SearchResponse
       if (!payload || !payload.id) return
       const pending = this.pending.get(payload.id)
       if (!pending) return
@@ -66,10 +66,6 @@ export class PluginSearchWorker {
         return
       }
       pending.resolve(payload.payload.results)
-    })
-
-    this.worker.on('error', (error) => {
-      console.error('[SearchWorker] UtilityProcess error:', error)
     })
 
     this.worker.on('exit', () => {

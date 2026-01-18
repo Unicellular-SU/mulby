@@ -128,16 +128,16 @@ function SearchInput({
     }
   }, [attachments, onAttachmentsChange])
 
-  const handleRemoveAttachment = useCallback((id: string) => {
-    const next = attachments.filter((attachment) => {
-      if (attachment.id !== id) return true
-      if (attachment.previewUrl?.startsWith('blob:')) {
-        URL.revokeObjectURL(attachment.previewUrl)
-      }
-      return false
-    })
-    onAttachmentsChange(next)
-  }, [attachments, onAttachmentsChange])
+  // const handleRemoveAttachment = useCallback((id: string) => {
+  //   const next = attachments.filter((attachment) => {
+  //     if (attachment.id !== id) return true
+  //     if (attachment.previewUrl?.startsWith('blob:')) {
+  //       URL.revokeObjectURL(attachment.previewUrl)
+  //     }
+  //     return false
+  //   })
+  //   onAttachmentsChange(next)
+  // }, [attachments, onAttachmentsChange])
 
   const totalAttachmentSize = attachments.reduce((sum, attachment) => sum + attachment.size, 0)
   const handleToggleManager = useCallback(() => {

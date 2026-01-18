@@ -14,8 +14,8 @@ function send(message: SearchResponse): void {
   }
 }
 
-const onMessage = (request: SearchRequest | { data?: SearchRequest }) => {
-  const payload = (request && 'data' in request) ? request.data : request
+const onMessage = (request: any) => {
+  const payload = (request.data || request) as SearchRequest
   if (!payload || payload.type !== 'search') return
 
   try {

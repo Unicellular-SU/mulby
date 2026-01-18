@@ -96,3 +96,23 @@ interface FileSearchResult {
 - Windows 平台强依赖 "Everything" 及其命令行工具 `es.exe`。
 - Linux 平台依赖 `locate` 命令（需确保 `updatedb` 定期运行）。
 - macOS 使用原生 Spotlight 索引，无需额外配置。
+
+---
+
+# 搜索 Worker 修复进度
+
+> **更新时间**: 2026-01-18
+> **状态**: ✅ 已完成
+
+## 完成内容
+
+### 搜索 Worker 模块
+- [x] `src/main/plugin/search-worker-manager.ts`
+  - 修复 `UtilityProcess` API 使用错误（移除 `.killed` 和 `error` 事件监听）
+  - 修正消息 Payload 类型推断
+- [x] `src/main/plugin/search-worker.ts`
+  - 修正消息 Payload 类型推断
+  - 标准化消息解包逻辑
+
+### 验证
+- [x] 通过 `typecheck` 检查，相关文件无报错
