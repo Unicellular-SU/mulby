@@ -89,11 +89,11 @@
 
 | type | 触发方式 | 可用字段 |
 |------|----------|----------|
-| keyword | 关键词匹配 | `value`（关键词）, `explain?` |
-| regex | 正则匹配 | `match`（正则）, `explain?`, `label?`, `minLength?`, `maxLength?` |
-| files | 文件拖入 | `exts?`, `fileType?`（file/directory/any）, `match?`, `minLength?`, `maxLength?` |
+| keyword | 关键词匹配 | `value`（关键词） |
+| regex | 正则匹配 | `match`（正则）, `explain?`, `label?`（指令名称）, `minLength?`, `maxLength?` |
+| files | 文件拖入 | `exts?`, `fileType?`（file/directory/any, 默认 any）, `match?`（文件名正则, 与 exts 二选一）, `minLength?`, `maxLength?` |
 | img | 图片拖入 | `exts?` |
-| over | 选中文本 | `label?`, `exclude?`（排除正则）, `minLength?`, `maxLength?` |
+| over | 选中文本 | `label?`（指令名称）, `exclude?`（排除正则）, `minLength?`, `maxLength?`（默认 10000） |
 
 ### 示例
 
@@ -386,19 +386,19 @@
 
 | 类型 | 字段 | 说明 |
 |------|------|------|
-| `keyword` | `value`, `explain?` | 关键词匹配 |
+| `keyword` | `value` | 关键词匹配 |
 | `regex` | `match`, `explain?`, `label?`, `minLength?`, `maxLength?` | 正则匹配 |
 | `files` | `exts?`, `fileType?`, `match?`, `minLength?`, `maxLength?` | 文件匹配 |
 | `img` | `exts?` | 图片匹配 |
 | `over` | `label?`, `exclude?`, `minLength?`, `maxLength?` | 覆盖匹配 |
 
 **files 特殊字段**:
-- `fileType`: `'file' | 'directory' | 'any'` - 文件类型过滤
-- `match`: 匹配文件名的正则表达式
+- `fileType`: `'file' | 'directory' | 'any'` - 文件类型过滤 (默认 'any')
+- `match`: 匹配文件名的正则表达式 (与 `exts` 二选一)
 - `minLength` / `maxLength`: 文件数量限制
 
 **regex / over 特殊字段**:
-- `minLength` / `maxLength`: 输入文本长度限制
+- `minLength` / `maxLength`: 输入文本长度限制 (over 默认为 10000)
 - `exclude`: 排除的正则表达式（仅 over）
 
 ---

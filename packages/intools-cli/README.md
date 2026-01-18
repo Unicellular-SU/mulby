@@ -183,11 +183,20 @@ my-plugin/
   "id": "my-plugin",
   "name": "my-plugin",
   "version": "1.0.0",
+  "type": "utility",
   "displayName": "我的插件",
   "description": "插件功能描述",
   "main": "dist/main.js",
   "ui": "ui/index.html",
   "icon": "icon.png",
+  "pluginSetting": {
+    "single": true,
+    "height": 400
+  },
+  "window": {
+    "width": 800,
+    "height": 600
+  },
   "features": [
     {
       "code": "main",
@@ -206,6 +215,7 @@ my-plugin/
 |------|------|------|------|
 | `name` | string | ✅ | 插件唯一标识（小写字母、数字、连字符） |
 | `version` | string | ✅ | 语义化版本 (x.y.z) |
+| `type` | string | ❌ | 插件类型 (utility/productivity/developer/system/media/network/ai/entertainment/other) |
 | `displayName` | string | ✅ | 用户看到的名称 |
 | `description` | string | ✅ | 功能描述 |
 | `id` | string | ✅ | 插件唯一 ID（推荐，优先于 name） |
@@ -213,6 +223,8 @@ my-plugin/
 | `ui` | string | ❌ | UI 文件路径（有界面时必填） |
 | `icon` | string/object | ❌ | 插件图标 |
 | `features` | array | ✅ | 功能入口列表 |
+| `pluginSetting` | object | ❌ | 插件行为设置 (`single`, `height`) |
+| `window` | object | ❌ | 独立窗口配置 (`width`, `height`, `minWidth`, etc.) |
 | `author` | string | ❌ | 作者名 |
 | `homepage` | string | ❌ | 项目主页 |
 | `minAppVersion` | string | ❌ | 最低 InTools 版本要求 |
@@ -251,16 +263,20 @@ my-plugin/
 | `cmds` | array | ✅ | 触发命令列表 |
 | `mode` | string | ❌ | `ui` / `silent` / `detached` |
 | `route` | string | ❌ | UI 路由（用于子窗口或页内路由） |
+| `icon` | string/object | ❌ | 功能独立图标 |
+| `mainHide` | boolean | ❌ | 触发时隐藏主窗口 |
+| `mainPush` | boolean | ❌ | 向搜索框推送内容 |
+
 
 #### 触发命令类型 (cmds)
 
-| type | 说明 | 额外字段 |
+| type | 说明 | 可用字段 |
 |------|------|----------|
 | `keyword` | 关键词触发 | `value`: 关键词 |
-| `regex` | 正则匹配 | `match`: 正则表达式, `explain`: 说明 |
-| `files` | 文件类型 | `exts`: [".json", ".txt"] |
-| `img` | 图片 | - |
-| `over` | 选中文本 | - |
+| `regex` | 正则匹配 | `match`: 正则表达式, `explain`: 说明, `label?`: 指令名称, `minLength?`, `maxLength?` |
+| `files` | 文件拖入 | `exts?`, `fileType?` (file/directory/any), `match?` (文件名正则), `minLength?`, `maxLength?` |
+| `img` | 图片拖入 | `exts?` |
+| `over` | 选中文本 | `label?` (指令名称), `exclude?` (排除正则), `minLength?`, `maxLength?` |
 
 #### 图标配置
 
@@ -275,6 +291,10 @@ my-plugin/
 
 // 3. 内联 SVG
 "icon": "<svg viewBox=\"0 0 24 24\" fill=\"currentColor\"><path d=\"...\"/></svg>"
+
+// 4. 对象形式（支持更多类型）
+"icon": { "type": "file", "value": "assets/logo.png" }
+"icon": { "type": "url", "value": "https://example.com/icon.png" }
 ```
 
 > 💡 **提示:** 未设置 `icon` 时，会自动尝试加载插件目录下的 `icon.png`
@@ -368,8 +388,41 @@ npm run build
 插件在沙箱中运行，通过 `context.api` 访问各种 API。
 
 > 📚 **完整 API 参考请查看 [`PLUGIN_API.md`](./PLUGIN_API.md)**
-> 
+>
 > 该文件会在创建插件时自动生成，包含全部 28 个 API 模块的详细说明。
+
+#### 可用 API 模块
+
+| 模块 | 说明 | 常用方法 |
+|------|------|----------|
+| `clipboard` | 剪贴板 | `readText`, `writeText`, `readImage` |
+| `filesystem` | 文件系统 | `readFile`, `writeFile`, `readdir` |
+| `storage` | 数据存储 | `get`, `set`, `remove` |
+| `dialog` | 系统对话框 | `showOpenDialog`, `showMessageBox` |
+| `notification` | 通知 | `show` |
+| `shell` | 系统外壳 | `openExternal`, `showItemInFolder` |
+| `http` | 网络请求 | `get`, `post`, `request` |
+| `system` | 系统信息 | `getSystemInfo`, `getPath` |
+| `screen` | 屏幕控制 | `capture`, `colorPick`, `getAllDisplays` |
+| `input` | 模拟输入 | `simulateKeyboardTap`, `hideMainWindowPasteText` |
+| `window` | 窗口控制 | `hide`, `setSize`, `create` |
+| `theme` | 主题 | `get`, `set` |
+| `plugin` | 插件管理 | `run`, `redirect`, `outPlugin` |
+| `features` | 动态功能 | `setFeature`, `removeFeature` |
+| `shortcut` | 全局快捷键 | `register`, `unregister` |
+| `permission` | 权限管理 | `request`, `getStatus` |
+| `security` | 安全 | `encryptString`, `decryptString` |
+| `tray` | 系统托盘 | `create`, `setIcon` |
+| `menu` | 上下文菜单 | `showContextMenu` |
+| `network` | 网络状态 | `isOnline` |
+| `power` | 电源监控 | `getSystemIdleTime`, `onAC` |
+| `media` | 媒体权限 | `hasCameraAccess` |
+| `geolocation` | 地理位置 | `getCurrentPosition` |
+| `tts` | 语音合成 | `speak` |
+| `host` | 主机控制 | `invoke` |
+| `sharp` | 图像处理 | `resize`, `toBuffer` |
+| `ffmpeg` | 音视频处理 | `run`, `download` |
+| `inbrowser` | 浏览器自动化 | `goto`, `click`, `evaluate` |
 
 #### 常用 API 快速示例
 
@@ -380,7 +433,6 @@ await clipboard.writeText('Hello')
 
 // 通知
 notification.show('操作成功')
-notification.show('发生错误', 'error')
 
 // 存储
 await storage.set('key', { data: 'value' })
@@ -388,13 +440,17 @@ const data = await storage.get('key')
 
 // 文件系统
 const content = filesystem.readFile('/path/file.txt', 'utf-8')
-filesystem.writeFile('/path/output.txt', 'content', 'utf-8')
 
 // HTTP 请求
 const response = await http.post('https://api.example.com', { key: 'value' })
 
-// 对话框
-const files = await dialog.showOpenDialog({ properties: ['openFile'] })
+// 屏幕取色
+const color = await screen.colorPick()
+
+// 浏览器自动化
+await inbrowser.goto('https://google.com')
+await inbrowser.type('input[name="q"]', 'intools')
+await inbrowser.click('input[name="btnK"]')
 ```
 
 ---
