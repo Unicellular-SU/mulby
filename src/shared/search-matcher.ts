@@ -71,6 +71,29 @@ export interface CmdFilesMatch {
   maxLength?: number
 }
 
+// Regex Cache
+const regexCache = new Map<string, RegExp>()
+const MAX_CACHE_SIZE = 1000
+
+function getCachedRegex(pattern: string): RegExp | null {
+  if (regexCache.has(pattern)) {
+    return regexCache.get(pattern)!
+  }
+
+  try {
+    const regex = new RegExp(pattern)
+    if (regexCache.size >= MAX_CACHE_SIZE) {
+      // Simple LRU: delete first key
+      const firstKey = regexCache.keys().next().value
+      if (firstKey) regexCache.delete(firstKey)
+    }
+    regexCache.set(pattern, regex)
+    return regex
+  } catch {
+    return null
+  }
+}
+
 export function matchesFiles(cmd: CmdFilesMatch, attachments: InputAttachment[]): boolean {
   const { exts, fileType = 'any', match, minLength, maxLength } = cmd
 
@@ -90,15 +113,13 @@ export function matchesFiles(cmd: CmdFilesMatch, attachments: InputAttachment[])
 
   // 如果指定了 match 正则，使用正则匹配文件名
   if (match) {
-    try {
-      const regex = new RegExp(match)
+    const regex = getCachedRegex(match)
+    if (regex) {
       const hasMatch = filtered.some((a) => {
         const name = a.name || ''
         return regex.test(name)
       })
       if (!hasMatch) return false
-    } catch {
-      // 正则无效，跳过
     }
   }
 
@@ -148,12 +169,11 @@ export function findBestMatch(feature: PluginFeature, input: InputPayload): Feat
       // 检查长度限制
       if (cmd.minLength !== undefined && text.length < cmd.minLength) continue
       if (cmd.maxLength !== undefined && text.length > cmd.maxLength) continue
-      try {
-        const regex = new RegExp(cmd.match)
-        if (regex.test(text)) {
-          matchType = 'regex'
-        }
-      } catch { }
+
+      const regex = getCachedRegex(cmd.match)
+      if (regex && regex.test(text)) {
+        matchType = 'regex'
+      }
     }
 
     if (cmd.type === 'keyword') {
@@ -185,10 +205,8 @@ export function findBestMatch(feature: PluginFeature, input: InputPayload): Feat
       if (text.length < min || text.length > max) continue
       // 检查排除规则
       if (cmd.exclude) {
-        try {
-          const excludeRegex = new RegExp(cmd.exclude)
-          if (excludeRegex.test(text)) continue
-        } catch { }
+        const excludeRegex = getCachedRegex(cmd.exclude)
+        if (excludeRegex && excludeRegex.test(text)) continue
       }
       matchType = 'over'
     }

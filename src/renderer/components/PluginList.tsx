@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback, useRef, memo } from 'react'
 import { SearchResultItem } from '../../shared/types/electron'
 import type { InputPayload } from '../../shared/types/plugin'
 
@@ -9,8 +9,8 @@ interface PluginListProps {
   onOpenSettings?: () => void
 }
 
-// 插件图标组件
-function PluginIcon({ icon }: { icon?: SearchResultItem['icon'] }) {
+// 插件图标组件 - 使用 Memo 避免无谓重渲染
+const PluginIcon = memo(function PluginIcon({ icon }: { icon?: SearchResultItem['icon'] }) {
   if (!icon) {
     // 默认图标
     return (
@@ -37,11 +37,51 @@ function PluginIcon({ icon }: { icon?: SearchResultItem['icon'] }) {
       <img src={icon.value} alt="" width="20" height="20" />
     </div>
   )
+})
+
+interface PluginItemProps {
+  item: SearchResultItem
+  isSelected: boolean
+  index: number
+  onRun: (item: SearchResultItem) => void
+  onHover: (index: number) => void
+  onShowDetails?: (pluginName: string) => void
 }
+
+const PluginItem = memo(function PluginItem({ item, isSelected, index, onRun, onHover, onShowDetails }: PluginItemProps) {
+  const isSettings = isSettingsItem(item)
+  return (
+    <div
+      className={`plugin-card ${isSettings ? 'settings' : ''} ${isSelected ? 'selected' : ''}`}
+      role="option"
+      aria-selected={isSelected}
+      onClick={() => onRun(item)}
+      onMouseEnter={() => onHover(index)}
+      onContextMenu={(e) => {
+        e.preventDefault()
+        if (!isSettings) {
+          onShowDetails?.(item.pluginName)
+        }
+      }}
+    >
+      <div className="plugin-card-top">
+        <PluginIcon icon={item.icon} />
+      </div>
+      <span className="plugin-card-name">{item.displayName}</span>
+      <span className="plugin-card-explain">{item.featureExplain}</span>
+    </div>
+  )
+})
 
 function PluginList({ payload, onResultsChange, onShowDetails, onOpenSettings }: PluginListProps) {
   const [results, setResults] = useState<SearchResultItem[]>([])
   const [selectedIndex, setSelectedIndex] = useState(0)
+
+  // 使用 ref 追踪最新的 payload，确保回调函数稳定
+  const payloadRef = useRef(payload)
+  useEffect(() => {
+    payloadRef.current = payload
+  }, [payload])
 
   // Grid 配置
   const COLUMNS = 6
@@ -103,7 +143,7 @@ function PluginList({ payload, onResultsChange, onShowDetails, onOpenSettings }:
 
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [results, selectedIndex, onShowDetails]) // Added onShowDetails to deps
+  }, [results, selectedIndex, onShowDetails])
 
   const loadPlugins = async () => {
     const result = await window.intools.plugin.search(payload)
@@ -113,12 +153,15 @@ function PluginList({ payload, onResultsChange, onShowDetails, onOpenSettings }:
     onResultsChange?.(combined.length)
   }
 
-  const handleRun = async (item: SearchResultItem) => {
+  // 稳定的 handleRun 回调
+  const handleRun = useCallback(async (item: SearchResultItem) => {
     if (isSettingsItem(item)) {
       onOpenSettings?.()
       return
     }
-    const result = await window.intools.plugin.run(item.pluginId, item.featureCode, payload)
+    // 使用最新的 payload
+    const currentPayload = payloadRef.current
+    const result = await window.intools.plugin.run(item.pluginId, item.featureCode, currentPayload)
     if (result.success) {
       // 有 UI 的插件不隐藏窗口，会显示在附着区域
       if (!result.hasUI) {
@@ -127,7 +170,12 @@ function PluginList({ payload, onResultsChange, onShowDetails, onOpenSettings }:
     } else {
       console.error('Plugin error:', result.error)
     }
-  }
+  }, [onOpenSettings])
+
+  // 稳定的 hover 回调
+  const handleHover = useCallback((index: number) => {
+    setSelectedIndex(index)
+  }, [])
 
   // 只显示最多 MAX_ITEMS 个结果
   const displayResults = results.slice(0, MAX_ITEMS)
@@ -139,31 +187,17 @@ function PluginList({ payload, onResultsChange, onShowDetails, onOpenSettings }:
 
   return (
     <div className="plugin-grid" role="listbox">
-      {displayResults.map((item, index) => {
-        const isSettings = isSettingsItem(item)
-        return (
-          <div
-            key={`${item.pluginName}-${item.featureCode}`}
-            className={`plugin-card ${isSettings ? 'settings' : ''} ${index === selectedIndex ? 'selected' : ''}`}
-            role="option"
-            aria-selected={index === selectedIndex}
-            onClick={() => handleRun(item)}
-            onMouseEnter={() => setSelectedIndex(index)}
-            onContextMenu={(e) => {
-              e.preventDefault()
-              if (!isSettings) {
-                onShowDetails?.(item.pluginName)
-              }
-            }}
-          >
-            <div className="plugin-card-top">
-              <PluginIcon icon={item.icon} />
-            </div>
-            <span className="plugin-card-name">{item.displayName}</span>
-            <span className="plugin-card-explain">{item.featureExplain}</span>
-          </div>
-        )
-      })}
+      {displayResults.map((item, index) => (
+        <PluginItem
+          key={`${item.pluginName}-${item.featureCode}`}
+          item={item}
+          index={index}
+          isSelected={index === selectedIndex}
+          onRun={handleRun}
+          onHover={handleHover}
+          onShowDetails={onShowDetails}
+        />
+      ))}
     </div>
   )
 }

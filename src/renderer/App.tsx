@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useCallback } from 'react'
+import { useState, useEffect, useMemo, useCallback, useDeferredValue } from 'react'
 import SearchInput from './components/SearchInput'
 import PluginList from './components/PluginList'
 import PluginDetails from './components/PluginDetails'
@@ -30,6 +30,8 @@ function App() {
   const [attachments, setAttachments] = useState<UiAttachment[]>([])
   const [attachmentsManagerOpen, setAttachmentsManagerOpen] = useState(false)
   const payload = useMemo(() => buildPayload(query, attachments), [query, attachments])
+  const deferredPayload = useDeferredValue(payload)
+
   const managerMetrics = useMemo(() => {
     const MANAGER_HEADER_HEIGHT = 34
     const MANAGER_TOOLBAR_HEIGHT = 34
@@ -321,7 +323,7 @@ function App() {
       )}
       {(query.length > 0 || attachments.length > 0) && !pluginOpen && !attachmentsManagerOpen && (
         <PluginList
-          payload={payload}
+          payload={deferredPayload}
           onResultsChange={setResultCount}
           onShowDetails={(pluginName) => {
             setDetailsPluginName(pluginName)

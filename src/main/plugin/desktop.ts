@@ -11,12 +11,24 @@ export interface FileSearchResult {
 }
 
 export class PluginDesktop {
+    private currentSearchProcess: import('child_process').ChildProcess | null = null
+
     /**
      * 搜索系统文件
      * @param query 搜索关键词
      * @param limit 结果数量限制
      */
     async searchFiles(query: string, limit: number = 100): Promise<FileSearchResult[]> {
+        // 取消上一次搜索
+        if (this.currentSearchProcess) {
+            try {
+                this.currentSearchProcess.kill()
+            } catch (e) {
+                // ignore
+            }
+            this.currentSearchProcess = null
+        }
+
         const os = platform()
         let results: string[] = []
 
@@ -45,8 +57,14 @@ export class PluginDesktop {
                 results = await this.runCommand('locate', ['-i', '-l', limit.toString(), query], limit)
             }
         } catch (error) {
+            // 忽略被杀死的进程错误
+            if (error instanceof Error && (error.message.includes('SIGTERM') || error.message.includes('SIGKILL'))) {
+                return []
+            }
             console.error('[Desktop] Search failed:', error)
             return []
+        } finally {
+            this.currentSearchProcess = null
         }
 
         // 格式化结果并补充基础信息
@@ -122,6 +140,8 @@ export class PluginDesktop {
     private runCommand(cmd: string, args: string[], limit: number): Promise<string[]> {
         return new Promise((resolve, reject) => {
             const child = spawn(cmd, args)
+            this.currentSearchProcess = child
+
             let output = ''
             let error = ''
 
@@ -144,6 +164,15 @@ export class PluginDesktop {
 
             child.on('close', (code) => {
                 if (code !== 0 && code !== null) {
+                    // 如果被 kill (SIGTERM/SIGKILL)，通常 code 也是 null 或非0，视情况处理
+                    // 这里我们假设如果不为0且非 locate 的 1，就是错误
+                    // 注意：被 kill 也会触发 close
+                    if (child.killed) {
+                        // 被主动 kill，不视为错误
+                        resolve([])
+                        return
+                    }
+
                     if (cmd === 'locate' && code === 1) {
                         resolve([])
                         return
