@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo, useCallback } from 'react'
 import SearchInput from './components/SearchInput'
 import PluginList from './components/PluginList'
 import PluginDetails from './components/PluginDetails'
+import PluginManagerView from './components/PluginManagerView'
 import AttachmentManager from './components/AttachmentManager'
 import SettingsView, { SettingsSection } from './components/SettingsView'
 import type { InputAttachment, InputPayload } from '../shared/types/plugin'
@@ -20,8 +21,10 @@ function App() {
   const [resultCount, setResultCount] = useState(0)
   const [pluginOpen, setPluginOpen] = useState(false) // 仅用于跟踪插件是否打开
   const [detailsPluginName, setDetailsPluginName] = useState<string | null>(null)
-  const [viewMode, setViewMode] = useState<'home' | 'plugin-details' | 'settings'>('home')
+  const [detailsReturnTarget, setDetailsReturnTarget] = useState<'home' | 'settings' | 'plugins'>('home')
+  const [viewMode, setViewMode] = useState<'home' | 'plugin-details' | 'settings' | 'plugins'>('home')
   const [settingsSection, setSettingsSection] = useState<SettingsSection>('general')
+  const [pluginManagerReturnTarget, setPluginManagerReturnTarget] = useState<'home' | 'settings'>('home')
   const [isDragging, setIsDragging] = useState(false)
   const [theme, setTheme] = useState<'light' | 'dark'>('light')
   const [attachments, setAttachments] = useState<UiAttachment[]>([])
@@ -115,6 +118,16 @@ function App() {
     setViewMode('settings')
   }, [pluginOpen])
 
+  const openPluginManager = useCallback((from: 'home' | 'settings' = 'home') => {
+    if (pluginOpen) {
+      window.intools.window.close()
+      setPluginOpen(false)
+    }
+    setAttachmentsManagerOpen(false)
+    setPluginManagerReturnTarget(from)
+    setViewMode('plugins')
+  }, [pluginOpen])
+
   // ESC 键分级退出处理
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -164,6 +177,18 @@ function App() {
       openSettings()
     })
   }, [openSettings])
+
+  useEffect(() => {
+    window.intools.app.onOpenPluginStore(() => {
+      openSettings('store')
+    })
+  }, [openSettings])
+
+  useEffect(() => {
+    window.intools.app.onOpenPluginManager(() => {
+      openPluginManager('home')
+    })
+  }, [openPluginManager])
 
   const handleQueryChange = (value: string) => {
     // 如果有附着的插件，先关闭它
@@ -227,7 +252,7 @@ function App() {
           pluginName={detailsPluginName}
           onBack={() => {
             setDetailsPluginName(null)
-            setViewMode('home')
+            setViewMode(detailsReturnTarget === 'settings' ? 'settings' : detailsReturnTarget === 'plugins' ? 'plugins' : 'home')
           }}
         />
       </div>
@@ -241,8 +266,22 @@ function App() {
           section={settingsSection}
           onSectionChange={setSettingsSection}
           onClose={() => setViewMode('home')}
+          onOpenPluginManager={() => {
+            openPluginManager('settings')
+          }}
+        />
+      </div>
+    )
+  }
+
+  if (viewMode === 'plugins') {
+    return (
+      <div className={`app ${isDragging ? 'dragging' : ''}`}>
+        <PluginManagerView
+          onBack={() => setViewMode(pluginManagerReturnTarget === 'settings' ? 'settings' : 'home')}
           onOpenPluginDetails={(pluginName) => {
             setDetailsPluginName(pluginName)
+            setDetailsReturnTarget('plugins')
             setViewMode('plugin-details')
           }}
         />
@@ -286,6 +325,7 @@ function App() {
           onResultsChange={setResultCount}
           onShowDetails={(pluginName) => {
             setDetailsPluginName(pluginName)
+            setDetailsReturnTarget('home')
             setViewMode('plugin-details')
           }}
           onOpenSettings={() => openSettings()}

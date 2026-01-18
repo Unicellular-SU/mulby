@@ -208,6 +208,8 @@ export interface ElectronAPI {
   onThemeChange: (callback: (theme: 'light' | 'dark') => void) => void
   app: {
     onOpenSettings: (callback: () => void) => void
+    onOpenPluginStore: (callback: () => void) => void
+    onOpenPluginManager: (callback: () => void) => void
   }
   clipboard: {
     readText: () => Promise<string>

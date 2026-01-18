@@ -7,7 +7,9 @@ const SETTINGS_KEY = 'settings'
 const DEFAULT_SETTINGS: AppSettings = {
   shortcuts: {
     toggleWindow: 'Alt+Space',
-    openSettings: 'CommandOrControl+,'
+    openSettings: 'CommandOrControl+,',
+    openPluginStore: 'CommandOrControl+I',
+    openPluginManager: 'CommandOrControl+Shift+M'
   },
   storeSources: [],
   developer: {
@@ -57,6 +59,14 @@ function sanitizeShortcuts(settings: AppSettings): AppSettings {
 
   if (next.shortcuts.openSettings.includes('Dead')) {
     next.shortcuts.openSettings = DEFAULT_SETTINGS.shortcuts.openSettings
+  }
+
+  if (next.shortcuts.openPluginStore.includes('Dead')) {
+    next.shortcuts.openPluginStore = DEFAULT_SETTINGS.shortcuts.openPluginStore
+  }
+
+  if (next.shortcuts.openPluginManager.includes('Dead')) {
+    next.shortcuts.openPluginManager = DEFAULT_SETTINGS.shortcuts.openPluginManager
   }
 
   return next

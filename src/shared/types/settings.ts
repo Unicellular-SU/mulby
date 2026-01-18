@@ -1,8 +1,10 @@
-export type AppShortcutAction = 'toggleWindow' | 'openSettings'
+export type AppShortcutAction = 'toggleWindow' | 'openSettings' | 'openPluginStore' | 'openPluginManager'
 
 export interface AppShortcutSettings {
   toggleWindow: string
   openSettings: string
+  openPluginStore: string
+  openPluginManager: string
 }
 
 export interface StoreSource {

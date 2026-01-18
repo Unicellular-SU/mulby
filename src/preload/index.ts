@@ -82,6 +82,12 @@ contextBridge.exposeInMainWorld('intools', {
   app: {
     onOpenSettings: (callback: () => void) => {
       ipcRenderer.on('app:openSettings', () => callback())
+    },
+    onOpenPluginStore: (callback: () => void) => {
+      ipcRenderer.on('app:openPluginStore', () => callback())
+    },
+    onOpenPluginManager: (callback: () => void) => {
+      ipcRenderer.on('app:openPluginManager', () => callback())
     }
   },
 

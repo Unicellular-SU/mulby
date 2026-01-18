@@ -211,6 +211,14 @@ app.whenReady().then(async () => {
     openSettings: () => {
       showMainWindow()
       mainWindow?.webContents.send('app:openSettings')
+    },
+    openPluginStore: () => {
+      showMainWindow()
+      mainWindow?.webContents.send('app:openPluginStore')
+    },
+    openPluginManager: () => {
+      showMainWindow()
+      mainWindow?.webContents.send('app:openPluginManager')
     }
   })
 

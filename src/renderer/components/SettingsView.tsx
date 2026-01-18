@@ -1,12 +1,9 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { AppSettings, AppShortcutAction, ShortcutStatusMap, StoreSource } from '../../shared/types/settings'
-import type { PluginInfo } from '../../shared/types/electron'
-
 type SettingsSection =
   | 'general'
   | 'appearance'
   | 'shortcuts'
-  | 'plugins'
   | 'store'
   | 'permissions'
   | 'developer'
@@ -16,23 +13,23 @@ interface SettingsViewProps {
   section: SettingsSection
   onSectionChange: (section: SettingsSection) => void
   onClose: () => void
-  onOpenPluginDetails: (pluginName: string) => void
+  onOpenPluginManager: () => void
 }
 
 const SECTION_ITEMS: { id: SettingsSection; label: string }[] = [
   { id: 'general', label: '通用' },
   { id: 'appearance', label: '外观' },
   { id: 'shortcuts', label: '快捷键' },
-  { id: 'plugins', label: '插件' },
   { id: 'store', label: '插件商店' },
   { id: 'permissions', label: '权限' },
   { id: 'developer', label: '开发者' },
   { id: 'about', label: '关于' }
 ]
-
 const SHORTCUTS: { id: AppShortcutAction; label: string; description: string }[] = [
   { id: 'toggleWindow', label: '唤起主窗口', description: '显示或隐藏主窗口' },
-  { id: 'openSettings', label: '打开设置', description: '直接进入设置面板' }
+  { id: 'openSettings', label: '打开设置', description: '直接进入设置面板' },
+  { id: 'openPluginStore', label: '打开插件商店', description: '直接进入插件商店页面' },
+  { id: 'openPluginManager', label: '打开插件管理', description: '直接进入插件管理页面' }
 ]
 
 const PERMISSIONS = [
@@ -42,32 +39,6 @@ const PERMISSIONS = [
   { id: 'camera', label: '摄像头' },
   { id: 'geolocation', label: '定位' }
 ] as const
-
-function PluginIcon({ icon, name }: { icon?: PluginInfo['icon']; name: string }) {
-  if (!icon) {
-    return (
-      <div className="settings-plugin-icon settings-plugin-icon-default" aria-hidden="true">
-        <span>{name.slice(0, 1).toUpperCase()}</span>
-      </div>
-    )
-  }
-
-  if (icon.type === 'svg') {
-    return (
-      <div
-        className="settings-plugin-icon"
-        aria-hidden="true"
-        dangerouslySetInnerHTML={{ __html: icon.value }}
-      />
-    )
-  }
-
-  return (
-    <div className="settings-plugin-icon" aria-hidden="true">
-      <img src={icon.value} alt="" width="24" height="24" />
-    </div>
-  )
-}
 
 function formatPermissionStatus(status: string) {
   switch (status) {
@@ -244,7 +215,7 @@ function ShortcutInput({
   )
 }
 
-export default function SettingsView({ section, onSectionChange, onClose, onOpenPluginDetails }: SettingsViewProps) {
+export default function SettingsView({ section, onSectionChange, onClose, onOpenPluginManager }: SettingsViewProps) {
   const [settings, setSettings] = useState<AppSettings | null>(null)
   const [themeMode, setThemeMode] = useState<'light' | 'dark' | 'system'>('system')
   const [shortcutStatus, setShortcutStatus] = useState<ShortcutStatusMap | null>(null)
@@ -253,10 +224,6 @@ export default function SettingsView({ section, onSectionChange, onClose, onOpen
   const [newSource, setNewSource] = useState<{ name: string; url: string }>({ name: '', url: '' })
   const [sourceError, setSourceError] = useState<string | null>(null)
   const [_activeRecordings, setActiveRecordings] = useState(0)
-  const [plugins, setPlugins] = useState<PluginInfo[]>([])
-  const [pluginQuery, setPluginQuery] = useState('')
-  const [pluginFilter, setPluginFilter] = useState<'all' | 'enabled' | 'disabled'>('all')
-  const [pluginLoading, setPluginLoading] = useState(false)
 
   useEffect(() => {
     window.intools.settings.get().then(({ settings, shortcutStatus }) => {
@@ -279,11 +246,6 @@ export default function SettingsView({ section, onSectionChange, onClose, onOpen
       setPermissionStatus(next)
     }
     void load()
-  }, [section])
-
-  useEffect(() => {
-    if (section !== 'plugins') return
-    void refreshPlugins()
   }, [section])
 
   const sources = settings?.storeSources ?? []
@@ -313,64 +275,6 @@ export default function SettingsView({ section, onSectionChange, onClose, onOpen
       return next
     })
   }
-
-  const refreshPlugins = async () => {
-    setPluginLoading(true)
-    try {
-      const list = await window.intools.plugin.getAll()
-      setPlugins(list)
-    } finally {
-      setPluginLoading(false)
-    }
-  }
-
-  const handleTogglePlugin = async (plugin: PluginInfo) => {
-    if (plugin.builtin) {
-      window.intools.notification.show('内置插件不可禁用', 'error')
-      return
-    }
-    const result = plugin.enabled
-      ? await window.intools.plugin.disable(plugin.name)
-      : await window.intools.plugin.enable(plugin.name)
-    if (result.success) {
-      setPlugins((prev) =>
-        prev.map((item) =>
-          item.name === plugin.name ? { ...item, enabled: !plugin.enabled } : item
-        )
-      )
-    } else {
-      window.intools.notification.show(result.error || '操作失败', 'error')
-    }
-  }
-
-  const handleUninstallPlugin = async (plugin: PluginInfo) => {
-    if (plugin.builtin) {
-      window.intools.notification.show('内置插件不可卸载', 'error')
-      return
-    }
-    const confirmed = confirm(`确定要卸载插件 ${plugin.displayName} 吗？`)
-    if (!confirmed) return
-    const result = await window.intools.plugin.uninstall(plugin.name)
-    if (result.success) {
-      setPlugins((prev) => prev.filter((item) => item.name !== plugin.name))
-    } else {
-      window.intools.notification.show(result.error || '卸载失败', 'error')
-    }
-  }
-
-  const filteredPlugins = useMemo(() => {
-    const query = pluginQuery.trim().toLowerCase()
-    return plugins.filter((plugin) => {
-      if (pluginFilter === 'enabled' && !plugin.enabled) return false
-      if (pluginFilter === 'disabled' && plugin.enabled) return false
-      if (!query) return true
-      return (
-        plugin.displayName.toLowerCase().includes(query) ||
-        plugin.name.toLowerCase().includes(query) ||
-        plugin.description.toLowerCase().includes(query)
-      )
-    })
-  }, [plugins, pluginQuery, pluginFilter])
 
   const handleShortcutChange = async (action: AppShortcutAction, accelerator: string) => {
     if (!settings) return
@@ -478,8 +382,19 @@ export default function SettingsView({ section, onSectionChange, onClose, onOpen
         <main className="flex-1 min-h-0 overflow-auto">
           <div className="mx-auto max-w-5xl px-6 pb-16 pt-8">
             {section === 'general' && (
-              <div className={`${cardClass} text-sm text-slate-600 dark:text-slate-300`}>
-                通用设置将在后续版本提供。
+              <div className="space-y-4">
+                <div className={`${cardClass} text-sm text-slate-600 dark:text-slate-300`}>
+                  通用设置将在后续版本提供。
+                </div>
+                <div className={`${cardClass} flex items-center justify-between gap-4`}>
+                  <div>
+                    <div className="text-sm font-medium text-slate-900 dark:text-white">插件管理</div>
+                    <div className="text-xs text-slate-500 dark:text-slate-400">管理插件启用状态、更新与卸载</div>
+                  </div>
+                  <button className={primaryPillClass} onClick={onOpenPluginManager}>
+                    打开插件管理
+                  </button>
+                </div>
               </div>
             )}
 
@@ -520,123 +435,6 @@ export default function SettingsView({ section, onSectionChange, onClose, onOpen
                     onRecordEnd={handleRecordEnd}
                   />
                 ))}
-              </div>
-            )}
-
-            {section === 'plugins' && (
-              <div className="space-y-5">
-                <div className={`${cardClass} space-y-4`}>
-                  <div className="flex items-center justify-between gap-3">
-                    <div className="text-sm font-medium text-slate-900 dark:text-white">
-                      插件管理
-                    </div>
-                    <button
-                      className={actionButtonClass}
-                      onClick={refreshPlugins}
-                      disabled={pluginLoading}
-                    >
-                      {pluginLoading ? '刷新中...' : '刷新'}
-                    </button>
-                  </div>
-                  <div className="flex flex-col gap-3">
-                    <input
-                      className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-2 text-sm text-slate-700 shadow-sm outline-none transition focus:border-slate-300 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-200"
-                      placeholder="搜索插件名称或描述..."
-                      value={pluginQuery}
-                      onChange={(e) => setPluginQuery(e.target.value)}
-                    />
-                    <div className="flex flex-wrap gap-2">
-                      {(['all', 'enabled', 'disabled'] as const).map((key) => (
-                        <button
-                          key={key}
-                          className={pluginFilter === key ? primaryPillClass : pillClass}
-                          onClick={() => setPluginFilter(key)}
-                        >
-                          {key === 'all' ? '全部' : key === 'enabled' ? '已启用' : '已禁用'}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                  <div className="text-xs text-slate-500 dark:text-slate-400">
-                    当前 {filteredPlugins.length} 个插件
-                  </div>
-                </div>
-
-                {filteredPlugins.length === 0 ? (
-                  <div className={`${cardClass} text-sm text-slate-500 dark:text-slate-400`}>
-                    没有匹配的插件。
-                  </div>
-                ) : (
-                  <div className="space-y-3">
-                    {filteredPlugins.map((plugin) => (
-                      <div
-                        key={plugin.id}
-                        className={`${cardClassTight} flex flex-col gap-3`}
-                      >
-                        <div className="flex items-start gap-3">
-                          <PluginIcon icon={plugin.icon} name={plugin.displayName} />
-                          <div className="min-w-0 flex-1">
-                            <div className="flex flex-wrap items-center gap-2">
-                              <div className="text-sm font-semibold text-slate-900 dark:text-white">
-                                {plugin.displayName}
-                              </div>
-                              {plugin.builtin && (
-                                <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] text-slate-600 dark:bg-slate-800 dark:text-slate-300">
-                                  内置
-                                </span>
-                              )}
-                              {!plugin.enabled && (
-                                <span className="rounded-full bg-amber-50 px-2 py-0.5 text-[11px] text-amber-700 dark:bg-amber-900/30 dark:text-amber-300">
-                                  已停用
-                                </span>
-                              )}
-                            </div>
-                            <div className="text-xs text-slate-500 dark:text-slate-400 line-clamp-2">
-                              {plugin.description}
-                            </div>
-                            <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-400 dark:text-slate-500">
-                              <span>
-                                {plugin.name}
-                                {plugin.version ? ` · v${plugin.version}` : ''}
-                              </span>
-                              {plugin.author && <span>作者：{plugin.author}</span>}
-                              {plugin.homepage && (
-                                <button
-                                  className="text-xs text-slate-700 hover:underline dark:text-slate-200"
-                                  onClick={() => window.intools.shell.openExternal(plugin.homepage!)}
-                                >
-                                  打开主页
-                                </button>
-                              )}
-                            </div>
-                          </div>
-                          <button
-                            className={plugin.enabled ? primaryPillClass : pillClass}
-                            onClick={() => handleTogglePlugin(plugin)}
-                            disabled={plugin.builtin}
-                          >
-                            {plugin.enabled ? '已启用' : '已禁用'}
-                          </button>
-                        </div>
-                        <div className="flex flex-wrap items-center gap-2">
-                          <button
-                            className={actionButtonClass}
-                            onClick={() => onOpenPluginDetails(plugin.name)}
-                          >
-                            详情
-                          </button>
-                          <button
-                            className="rounded-full border border-red-200 bg-white px-3 py-1.5 text-xs text-red-600 transition hover:border-red-300 hover:text-red-700 disabled:cursor-not-allowed disabled:opacity-50 dark:border-red-900/60 dark:bg-slate-950 dark:text-red-400"
-                            onClick={() => handleUninstallPlugin(plugin)}
-                            disabled={plugin.builtin}
-                          >
-                            卸载
-                          </button>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
               </div>
             )}
 
@@ -795,7 +593,6 @@ export default function SettingsView({ section, onSectionChange, onClose, onOpen
                                 await window.intools.developer.removePluginPath(path)
                                 const result = await window.intools.settings.get()
                                 setSettings(result.settings)
-                                await refreshPlugins()
                               }}
                             >
                               移除
@@ -810,16 +607,15 @@ export default function SettingsView({ section, onSectionChange, onClose, onOpen
                         className={actionButtonClass}
                         onClick={async () => {
                           const path = await window.intools.developer.selectDirectory()
-                          if (path) {
-                            const result = await window.intools.developer.addPluginPath(path)
-                            if (result.success) {
-                              const settingsResult = await window.intools.settings.get()
-                              setSettings(settingsResult.settings)
-                              await refreshPlugins()
-                            } else {
-                              window.intools.notification.show(result.error || '添加失败', 'error')
+                            if (path) {
+                              const result = await window.intools.developer.addPluginPath(path)
+                              if (result.success) {
+                                const settingsResult = await window.intools.settings.get()
+                                setSettings(settingsResult.settings)
+                              } else {
+                                window.intools.notification.show(result.error || '添加失败', 'error')
+                              }
                             }
-                          }
                         }}
                       >
                         + 添加目录
@@ -828,7 +624,6 @@ export default function SettingsView({ section, onSectionChange, onClose, onOpen
                         className={actionButtonClass}
                         onClick={async () => {
                           await window.intools.developer.reloadPlugins()
-                          await refreshPlugins()
                           window.intools.notification.show('插件已刷新')
                         }}
                       >

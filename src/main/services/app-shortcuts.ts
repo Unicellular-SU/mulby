@@ -1,13 +1,15 @@
 import { globalShortcut } from 'electron'
 import type { AppShortcutAction, AppShortcutSettings, ShortcutStatusMap } from '../../shared/types/settings'
 
-const ACTION_ORDER: AppShortcutAction[] = ['toggleWindow', 'openSettings']
+const ACTION_ORDER: AppShortcutAction[] = ['toggleWindow', 'openSettings', 'openPluginStore', 'openPluginManager']
 
 export class AppShortcutManager {
   private registered = new Map<AppShortcutAction, string>()
   private status: ShortcutStatusMap = {
     toggleWindow: { ok: true },
-    openSettings: { ok: true }
+    openSettings: { ok: true },
+    openPluginStore: { ok: true },
+    openPluginManager: { ok: true }
   }
   private paused = false
   private actions: Record<AppShortcutAction, () => void>
@@ -22,7 +24,9 @@ export class AppShortcutManager {
     }
     const nextStatus: ShortcutStatusMap = {
       toggleWindow: { ok: true },
-      openSettings: { ok: true }
+      openSettings: { ok: true },
+      openPluginStore: { ok: true },
+      openPluginManager: { ok: true }
     }
     const used = new Map<string, AppShortcutAction>()
 
