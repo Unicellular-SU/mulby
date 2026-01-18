@@ -67,8 +67,10 @@ const PluginItem = memo(function PluginItem({ item, isSelected, index, onRun, on
       <div className="plugin-card-top">
         <PluginIcon icon={item.icon} />
       </div>
-      <span className="plugin-card-name">{item.displayName}</span>
-      <span className="plugin-card-explain">{item.featureExplain}</span>
+      <div className="plugin-card-info">
+        <span className="plugin-card-name">{item.displayName}</span>
+        <span className="plugin-card-explain">{item.featureExplain}</span>
+      </div>
     </div>
   )
 })
@@ -84,7 +86,7 @@ function PluginList({ payload, onResultsChange, onShowDetails, onOpenSettings }:
   }, [payload])
 
   // Grid 配置
-  const COLUMNS = 6
+
   const MAX_ITEMS = 30 // 5行 × 6列
   const SEARCH_DEBOUNCE_MS = 150
 
@@ -100,18 +102,28 @@ function PluginList({ payload, onResultsChange, onShowDetails, onOpenSettings }:
     const handleKeyDown = (e: KeyboardEvent) => {
       const maxIndex = Math.min(results.length, MAX_ITEMS) - 1
 
+      const getColumns = () => {
+        const width = window.innerWidth
+        if (width <= 420) return 2
+        if (width <= 580) return 3
+        if (width <= 760) return 4
+        if (width <= 980) return 5
+        return 6
+      }
+      const columns = getColumns()
+
       switch (e.key) {
         case 'ArrowUp':
           e.preventDefault()
           setSelectedIndex(i => {
-            const newIndex = i - COLUMNS
+            const newIndex = i - columns
             return newIndex >= 0 ? newIndex : i
           })
           break
         case 'ArrowDown':
           e.preventDefault()
           setSelectedIndex(i => {
-            const newIndex = i + COLUMNS
+            const newIndex = i + columns
             return newIndex <= maxIndex ? newIndex : i
           })
           break
