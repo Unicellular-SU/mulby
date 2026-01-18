@@ -23,10 +23,31 @@
 
 ```ts
 type CmdKeyword = { type: 'keyword'; value: string }
-type CmdRegex = { type: 'regex'; match: string; explain?: string }
-type CmdFiles = { type: 'files'; exts: string[] }
+type CmdRegex = {
+  type: 'regex'
+  match: string
+  explain?: string
+  label?: string       // 指令名称（显示在搜索结果中）
+  minLength?: number   // 最少字符数
+  maxLength?: number   // 最多字符数
+}
+type FileType = 'file' | 'directory' | 'any'
+type CmdFiles = {
+  type: 'files'
+  exts?: string[]         // 文件扩展名（可选）
+  fileType?: FileType     // 文件类型过滤（默认 'any'）
+  match?: string          // 匹配文件(夹)名称的正则表达式（与 exts 二选一）
+  minLength?: number      // 最少文件数
+  maxLength?: number      // 最多文件数
+}
 type CmdImg = { type: 'img'; exts?: string[] }
-type CmdOver = { type: 'over' }
+type CmdOver = {
+  type: 'over'
+  label?: string       // 指令名称
+  exclude?: string     // 排除的正则表达式
+  minLength?: number   // 最少字符数
+  maxLength?: number   // 最多字符数（默认 10000）
+}
 
 type DynamicCmdInput = string | CmdKeyword | CmdRegex | CmdFiles | CmdImg | CmdOver
 

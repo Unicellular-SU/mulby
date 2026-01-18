@@ -1,3 +1,15 @@
+// 插件类型
+export type PluginType =
+  | 'utility'      // 实用工具（计算器、格式转换）
+  | 'productivity' // 效率工具（剪贴板管理、快捷启动）
+  | 'developer'    // 开发者工具（JSON 格式化、编码转换）
+  | 'system'       // 系统工具（系统信息、进程管理）
+  | 'media'        // 媒体工具（图片处理、视频转换）
+  | 'network'      // 网络工具（API 测试、网络诊断）
+  | 'ai'           // AI 工具（翻译、文本生成）
+  | 'entertainment' // 休闲娱乐
+  | 'other'        // 其他
+
 // 图标类型
 export interface IconUrl {
   type: 'url'
@@ -54,11 +66,21 @@ export interface CmdRegex {
   type: 'regex'
   match: string
   explain?: string
+  label?: string       // 指令名称（显示在搜索结果中）
+  minLength?: number   // 最少字符数
+  maxLength?: number   // 最多字符数
 }
+
+// 文件类型过滤
+export type FileType = 'file' | 'directory' | 'any'
 
 export interface CmdFiles {
   type: 'files'
-  exts: string[]
+  exts?: string[]         // 文件扩展名（可选）
+  fileType?: FileType     // 文件类型过滤（默认 'any'）
+  match?: string          // 匹配文件(夹)名称的正则表达式（与 exts 二选一）
+  minLength?: number      // 最少文件数
+  maxLength?: number      // 最多文件数
 }
 
 export interface CmdImg {
@@ -68,6 +90,10 @@ export interface CmdImg {
 
 export interface CmdOver {
   type: 'over'
+  label?: string       // 指令名称
+  exclude?: string     // 排除的正则表达式
+  minLength?: number   // 最少字符数
+  maxLength?: number   // 最多字符数（默认 10000）
 }
 
 export type PluginCmd = CmdKeyword | CmdRegex | CmdFiles | CmdImg | CmdOver
@@ -105,6 +131,9 @@ export interface PluginFeature {
   cmds: PluginCmd[]
   mode?: 'ui' | 'silent' | 'detached'
   route?: string
+  icon?: PluginIcon     // 功能独立图标（支持路径/svg/网络链接）
+  mainPush?: boolean    // 是否向搜索框推送内容
+  mainHide?: boolean    // 触发该功能时不显示主窗口
 }
 
 // 独立窗口配置
@@ -117,11 +146,18 @@ export interface WindowOptions {
   maxHeight?: number   // 最大高度
 }
 
+// 插件行为设置
+export interface PluginSetting {
+  single?: boolean     // 是否单例模式运行（默认 true）
+  height?: number      // 插件初始高度
+}
+
 // 插件清单
 export interface PluginManifest {
   id?: string  // 唯一标识符（推荐格式：@scope/name 或 com.example.name）
   name: string
   version: string
+  type?: PluginType  // 插件类型
   author?: string
   homepage?: string
   displayName: string
@@ -131,6 +167,7 @@ export interface PluginManifest {
   icon?: PluginIcon  // 插件图标（可选）
   features: PluginFeature[]
   window?: WindowOptions  // 独立窗口配置（可选）
+  pluginSetting?: PluginSetting  // 插件行为设置（可选）
 }
 
 // 插件实例

@@ -1,10 +1,148 @@
-# InTools 插件 API 参考
+# InTools 插件开发完整指南
 
-> 本文档包含 InTools 插件开发可用的全部 API。
+> 本文档包含 InTools 插件开发所需的全部信息，包括 Manifest 配置规范和 API 参考。
 > - **UI/渲染进程**：`window.intools.{模块名}`
 > - **插件后端**：`context.api.{模块名}`
 
 ---
+
+# 第一部分：Manifest 配置规范
+
+## manifest.json 基本结构
+
+```json
+{
+  "name": "my-plugin",
+  "version": "1.0.0",
+  "type": "utility",
+  "displayName": "我的插件",
+  "description": "插件描述",
+  "main": "dist/main.js",
+  "ui": "ui/index.html",
+  "icon": "icon.png",
+  "pluginSetting": {
+    "single": true,
+    "height": 400
+  },
+  "window": {
+    "width": 800,
+    "height": 600
+  },
+  "features": [
+    {
+      "code": "main",
+      "explain": "主功能",
+      "cmds": [{ "type": "keyword", "value": "关键词" }]
+    }
+  ]
+}
+```
+
+## 顶层字段
+
+| 字段 | 类型 | 必需 | 说明 |
+|------|------|------|------|
+| name | string | ✓ | 插件唯一标识 |
+| version | string | ✓ | 版本号 |
+| type | string | | 类型（utility/productivity/developer/system/media/network/ai/entertainment/other） |
+| displayName | string | ✓ | 显示名称 |
+| description | string | | 插件描述 |
+| main | string | ✓ | 后端入口文件 |
+| ui | string | | UI 入口文件 |
+| icon | string/object | | 插件图标（路径/URL/SVG） |
+| features | array | ✓ | 功能入口列表 |
+| pluginSetting | object | | 插件行为设置 |
+| window | object | | 独立窗口配置 |
+
+## PluginSetting 配置
+
+| 字段 | 类型 | 默认值 | 说明 |
+|------|------|--------|------|
+| single | boolean | true | 单例模式（不允许多开） |
+| height | number | - | 初始高度 |
+
+## Window 配置
+
+| 字段 | 默认值 | 说明 |
+|------|--------|------|
+| width | 500 | 默认宽度 |
+| height | 400 | 默认高度 |
+| minWidth | 300 | 最小宽度 |
+| minHeight | 200 | 最小高度 |
+| maxWidth | - | 最大宽度 |
+| maxHeight | - | 最大高度 |
+
+## Feature 字段
+
+| 字段 | 类型 | 必需 | 说明 |
+|------|------|------|------|
+| code | string | ✓ | 功能代码 |
+| explain | string | ✓ | 功能说明 |
+| cmds | array | ✓ | 触发命令列表 |
+| mode | string | | 模式（ui/silent/detached） |
+| route | string | | UI 路由路径 |
+| icon | string/object | | 功能独立图标 |
+| mainHide | boolean | | 触发时隐藏主窗口 |
+| mainPush | boolean | | 向搜索框推送内容 |
+
+## Cmd 命令类型
+
+| type | 触发方式 | 可用字段 |
+|------|----------|----------|
+| keyword | 关键词匹配 | `value`（关键词）, `explain?` |
+| regex | 正则匹配 | `match`（正则）, `explain?`, `label?`, `minLength?`, `maxLength?` |
+| files | 文件拖入 | `exts?`, `fileType?`（file/directory/any）, `match?`, `minLength?`, `maxLength?` |
+| img | 图片拖入 | `exts?` |
+| over | 选中文本 | `label?`, `exclude?`（排除正则）, `minLength?`, `maxLength?` |
+
+### 示例
+
+```json
+{
+  "features": [
+    {
+      "code": "format",
+      "explain": "格式化 JSON",
+      "cmds": [
+        { "type": "keyword", "value": "json" },
+        { "type": "regex", "match": "^\\s*[{\\[]", "explain": "检测到 JSON" }
+      ]
+    },
+    {
+      "code": "process-pdf",
+      "explain": "处理 PDF 文件",
+      "cmds": [
+        { "type": "files", "exts": [".pdf"], "minLength": 1, "maxLength": 10 }
+      ]
+    },
+    {
+      "code": "folder-tool",
+      "explain": "文件夹工具",
+      "cmds": [
+        { "type": "files", "fileType": "directory" }
+      ]
+    }
+  ]
+}
+```
+
+## Icon 图标配置
+
+```json
+// 字符串简写
+"icon": "icon.png"
+"icon": "https://example.com/icon.png"
+"icon": "<svg>...</svg>"
+
+// 对象形式
+"icon": { "type": "file", "value": "assets/logo.png" }
+"icon": { "type": "url", "value": "https://example.com/icon.png" }
+"icon": { "type": "svg", "value": "<svg>...</svg>" }
+```
+
+---
+
+# 第二部分：API 参考
 
 ## 1. 剪贴板 (clipboard)
 
@@ -233,8 +371,35 @@
 | `setFeature(feature)` | B | 注册动态指令 |
 | `removeFeature(code)` | B | 删除动态指令 |
 
-**DynamicFeatureInput**: `code`, `explain`, `icon`, `platform`, `mode`, `route`, `cmds`  
-**mode**: `'ui' | 'silent' | 'detached'`
+**DynamicFeatureInput**:
+- `code` - 指令代码
+- `explain` - 说明文字
+- `icon` - 图标（路径/SVG/URL）
+- `platform` - 平台限制
+- `mode` - 模式：`'ui' | 'silent' | 'detached'`
+- `route` - 路由路径
+- `mainHide` - 触发时隐藏主窗口
+- `mainPush` - 向搜索框推送内容
+- `cmds` - 命令数组
+
+### cmds 命令类型
+
+| 类型 | 字段 | 说明 |
+|------|------|------|
+| `keyword` | `value`, `explain?` | 关键词匹配 |
+| `regex` | `match`, `explain?`, `label?`, `minLength?`, `maxLength?` | 正则匹配 |
+| `files` | `exts?`, `fileType?`, `match?`, `minLength?`, `maxLength?` | 文件匹配 |
+| `img` | `exts?` | 图片匹配 |
+| `over` | `label?`, `exclude?`, `minLength?`, `maxLength?` | 覆盖匹配 |
+
+**files 特殊字段**:
+- `fileType`: `'file' | 'directory' | 'any'` - 文件类型过滤
+- `match`: 匹配文件名的正则表达式
+- `minLength` / `maxLength`: 文件数量限制
+
+**regex / over 特殊字段**:
+- `minLength` / `maxLength`: 输入文本长度限制
+- `exclude`: 排除的正则表达式（仅 over）
 
 ---
 

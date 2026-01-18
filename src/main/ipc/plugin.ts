@@ -32,14 +32,28 @@ export function registerPluginHandlers(manager: PluginManager) {
 
   // 搜索插件（返回匹配的功能入口）
   ipcMain.handle('plugin:search', async (_, query: string | InputPayload) => {
-    return (await manager.search(query)).map(result => ({
-      pluginId: result.plugin.id,
-      pluginName: result.plugin.manifest.name,
-      displayName: result.plugin.manifest.displayName,
-      featureCode: result.feature.code,
-      featureExplain: result.feature.explain,
-      matchType: result.matchType,
-      icon: result.plugin.resolvedIcon
+    const { resolveIcon } = require('../plugin/icon-resolver') as { resolveIcon: (icon: any, path: string) => Promise<any> }
+    const searchResults = await manager.search(query)
+
+    return Promise.all(searchResults.map(async result => {
+      // 优先使用功能独立图标，否则使用插件图标
+      let icon = result.plugin.resolvedIcon
+      if (result.feature.icon) {
+        const featureIcon = await resolveIcon(result.feature.icon, result.plugin.path)
+        if (featureIcon) {
+          icon = featureIcon
+        }
+      }
+
+      return {
+        pluginId: result.plugin.id,
+        pluginName: result.plugin.manifest.name,
+        displayName: result.plugin.manifest.displayName,
+        featureCode: result.feature.code,
+        featureExplain: result.feature.explain,
+        matchType: result.matchType,
+        icon
+      }
     }))
   })
 

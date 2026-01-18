@@ -32,19 +32,40 @@ function normalizeCmd(cmd: DynamicCmdInput): PluginCmd {
       if (!cmd.match) {
         throw new Error('Regex command requires match')
       }
-      return { type: 'regex', match: cmd.match, explain: cmd.explain }
-    case 'files':
-      if (!Array.isArray(cmd.exts) || cmd.exts.length === 0) {
-        throw new Error('Files command requires exts')
+      return {
+        type: 'regex',
+        match: cmd.match,
+        explain: cmd.explain,
+        label: cmd.label,
+        minLength: cmd.minLength,
+        maxLength: cmd.maxLength
       }
-      return { type: 'files', exts: cmd.exts }
+    case 'files':
+      // exts 和 match 至少有一个，或者只指定 fileType
+      if (!cmd.exts && !cmd.match && !cmd.fileType) {
+        throw new Error('Files command requires exts, match, or fileType')
+      }
+      return {
+        type: 'files',
+        exts: cmd.exts,
+        fileType: cmd.fileType,
+        match: cmd.match,
+        minLength: cmd.minLength,
+        maxLength: cmd.maxLength
+      }
     case 'img':
       if (cmd.exts && (!Array.isArray(cmd.exts) || cmd.exts.length === 0)) {
         throw new Error('Img command exts must be a non-empty array')
       }
       return { type: 'img', exts: cmd.exts }
     case 'over':
-      return { type: 'over' }
+      return {
+        type: 'over',
+        label: cmd.label,
+        exclude: cmd.exclude,
+        minLength: cmd.minLength,
+        maxLength: cmd.maxLength
+      }
   }
 }
 

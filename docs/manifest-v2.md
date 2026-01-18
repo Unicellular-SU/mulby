@@ -42,6 +42,7 @@
 |------|------|------|------|
 | name | string | 是 | 插件唯一标识 |
 | version | string | 是 | 版本号 |
+| type | PluginType | 否 | 插件类型（utility/productivity/developer/system/media/network/ai/entertainment/other） |
 | author | string | 否 | 作者名称 |
 | homepage | string | 否 | 插件主页/网站 |
 | displayName | string | 是 | 显示名称 |
@@ -50,6 +51,25 @@
 | icon | string/object | 否 | 插件图标 |
 | features | array | 是 | 功能入口列表 |
 | window | object | 否 | 独立窗口配置 |
+| pluginSetting | object | 否 | 插件行为设置 |
+
+### PluginSetting 配置
+
+控制插件运行行为。
+
+```json
+{
+  "pluginSetting": {
+    "single": true,
+    "height": 400
+  }
+}
+```
+
+| 字段 | 类型 | 默认值 | 说明 |
+|------|------|--------|------|
+| single | boolean | true | 是否单例模式运行（不允许多开） |
+| height | number | - | 插件初始高度 |
 
 ### Window 配置
 
@@ -83,15 +103,20 @@
 | code | string | 是 | 功能代码，传递给插件 |
 | explain | string | 是 | 功能说明，显示给用户 |
 | cmds | array | 是 | 触发命令列表 |
+| mode | string | 否 | 执行模式（ui/silent/detached） |
+| route | string | 否 | UI 路由 |
+| icon | string/object | 否 | 功能独立图标（支持路径/svg/网络链接） |
+| mainPush | boolean | 否 | 是否向搜索框推送内容 |
+| mainHide | boolean | 否 | 触发该功能时不显示主窗口 |
 
 ### Cmd 类型
 | type | 说明 | 额外字段 |
 |------|------|----------|
 | keyword | 关键词触发 | value: 关键词 |
-| regex | 正则匹配 | match: 正则, explain: 说明 |
-| files | 文件类型 | exts: [".json", ".txt"] |
+| regex | 正则匹配 | match: 正则, explain: 说明, label?: 指令名称, minLength?: 最少字符数, maxLength?: 最多字符数 |
+| files | 文件/文件夹 | exts?: 扩展名数组, fileType?: file/directory/any, match?: 文件名正则, minLength?: 最少数量, maxLength?: 最多数量 |
 | img | 图片 | exts?: [".png", ".jpg"] |
-| over | 选中文本 | - |
+| over | 选中文本 | label?: 指令名称, exclude?: 排除正则, minLength?: 最少字符数, maxLength?: 最多字符数 |
 
 #### 文件/图片匹配说明
 

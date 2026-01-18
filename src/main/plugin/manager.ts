@@ -209,6 +209,12 @@ export class PluginManager {
     const useUI = Boolean(plugin.manifest.ui) && feature?.mode !== 'silent'
     const useDetached = feature?.mode === 'detached'
     const route = feature?.route
+    const shouldHideMain = feature?.mainHide === true
+
+    // 如果 mainHide 为 true，隐藏主窗口
+    if (shouldHideMain && this.windowManager) {
+      this.windowManager.hidePanelWindow()
+    }
 
     // 如果插件有 UI 且非静默指令，打开 UI 窗口
     if (useUI) {

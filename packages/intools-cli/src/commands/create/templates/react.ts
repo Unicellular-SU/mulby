@@ -113,7 +113,14 @@ export function buildBackendMain(name: string) {
         route?: string
         mainHide?: boolean
         mainPush?: boolean
-        cmds: Array<string | { type: 'keyword' | 'regex'; value?: string; match?: string; explain?: string }>
+        cmds: Array<
+          | string
+          | { type: 'keyword'; value: string; explain?: string }
+          | { type: 'regex'; match: string; explain?: string; label?: string; minLength?: number; maxLength?: number }
+          | { type: 'files'; exts?: string[]; fileType?: 'file' | 'directory' | 'any'; match?: string; minLength?: number; maxLength?: number }
+          | { type: 'img'; exts?: string[] }
+          | { type: 'over'; label?: string; exclude?: string; minLength?: number; maxLength?: number }
+        >
       }) => void
       removeFeature: (code: string) => boolean
       redirectHotKeySetting: (cmdLabel: string, autocopy?: boolean) => void

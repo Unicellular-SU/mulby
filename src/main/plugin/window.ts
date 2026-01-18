@@ -203,7 +203,7 @@ export class PluginWindowManager {
     }
 
     // 如果 promoteToWindow 失败，创建新的独立窗口
-    return this.createDetachedWindow(plugin, featureCode, { text: input, attachments })
+    return this.createDetachedWindow(plugin, featureCode, { text: input, attachments: attachments || [] })
   }
 
   // 创建独立窗口
@@ -217,6 +217,34 @@ export class PluginWindowManager {
 
     const uiPath = join(plugin.path, plugin.manifest.ui)
     if (!existsSync(uiPath)) return null
+
+    // 单例模式检查：如果 pluginSetting.single 为 true（默认），检查是否已有该插件的窗口
+    const isSingleMode = plugin.manifest.pluginSetting?.single !== false
+    if (isSingleMode) {
+      // 查找已存在的该插件窗口
+      for (const [_, info] of this.detachedWindows) {
+        if (info.plugin.id === plugin.id) {
+          // 已有窗口，聚焦并返回现有窗口
+          const existingWindow = info.window
+          if (existingWindow && !existingWindow.isDestroyed()) {
+            if (existingWindow.isMinimized()) {
+              existingWindow.restore()
+            }
+            existingWindow.focus()
+            // 发送新的输入和 feature 信息
+            existingWindow.webContents.send('plugin:init', {
+              pluginName: plugin.id,
+              featureCode,
+              input: input?.text || '',
+              attachments: input?.attachments || [],
+              mode: 'detached',
+              route
+            })
+            return existingWindow
+          }
+        }
+      }
+    }
 
     // 根据当前主题设置窗口背景色，避免重载时闪白
     const currentTheme = this.themeManager?.getActualTheme() || 'dark'

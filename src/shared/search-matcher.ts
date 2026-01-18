@@ -1,7 +1,7 @@
 import { extname } from 'path'
 import type { InputAttachment, InputPayload, PluginCmd, PluginFeature } from './types/plugin'
 
-export type MatchType = 'keyword' | 'regex' | 'files' | 'img'
+export type MatchType = 'keyword' | 'regex' | 'files' | 'img' | 'over'
 
 export interface FeatureMatch {
   matchType: MatchType
@@ -30,6 +30,8 @@ export function matchPriority(type: MatchType): number {
       return 3
     case 'regex':
       return 2
+    case 'over':
+      return 1  // 与 keyword 同级
     case 'keyword':
       return 1
   }
@@ -49,22 +51,78 @@ export function getAttachmentExt(attachment: InputAttachment): string {
   return ''
 }
 
-export function matchesFiles(exts: string[], attachments: InputAttachment[]): boolean {
-  const normalizedExts = exts.map(normalizeExt)
-  const hasWildcard = normalizedExts.includes('*')
-  if (hasWildcard) return attachments.length > 0
+// 检查附件是否为目录（基于 kind 或路径判断）
+export function isDirectoryAttachment(attachment: InputAttachment): boolean {
+  // 通过 kind 判断
+  if (attachment.kind === 'file' && attachment.path) {
+    // 如果路径以斜杠结尾或没有扩展名，可能是目录
+    // 实际判断需要从主进程获取，这里基于已有信息推断
+    const hasExt = attachment.ext || extname(attachment.path || attachment.name || '')
+    if (!hasExt && !attachment.mime) return true
+  }
+  return false
+}
 
-  return attachments.some((attachment) => {
-    const ext = getAttachmentExt(attachment)
-    if (!ext) return false
-    return normalizedExts.includes(ext)
-  })
+export interface CmdFilesMatch {
+  exts?: string[]
+  fileType?: 'file' | 'directory' | 'any'
+  match?: string
+  minLength?: number
+  maxLength?: number
+}
+
+export function matchesFiles(cmd: CmdFilesMatch, attachments: InputAttachment[]): boolean {
+  const { exts, fileType = 'any', match, minLength, maxLength } = cmd
+
+  // 过滤符合 fileType 的附件
+  let filtered = attachments
+  if (fileType === 'file') {
+    filtered = attachments.filter((a) => !isDirectoryAttachment(a))
+  } else if (fileType === 'directory') {
+    filtered = attachments.filter((a) => isDirectoryAttachment(a))
+  }
+
+  if (filtered.length === 0) return false
+
+  // 检查数量限制
+  if (minLength !== undefined && filtered.length < minLength) return false
+  if (maxLength !== undefined && filtered.length > maxLength) return false
+
+  // 如果指定了 match 正则，使用正则匹配文件名
+  if (match) {
+    try {
+      const regex = new RegExp(match)
+      const hasMatch = filtered.some((a) => {
+        const name = a.name || ''
+        return regex.test(name)
+      })
+      if (!hasMatch) return false
+    } catch {
+      // 正则无效，跳过
+    }
+  }
+
+  // 如果指定了扩展名，检查扩展名
+  if (exts && exts.length > 0) {
+    const normalizedExts = exts.map(normalizeExt)
+    const hasWildcard = normalizedExts.includes('*')
+    if (!hasWildcard) {
+      const hasExtMatch = filtered.some((attachment) => {
+        const ext = getAttachmentExt(attachment)
+        if (!ext) return false
+        return normalizedExts.includes(ext)
+      })
+      if (!hasExtMatch) return false
+    }
+  }
+
+  return true
 }
 
 export function matchesImageExts(exts: string[] | undefined, attachments: InputAttachment[]): boolean {
   const imageAttachments = attachments.filter((attachment) => isImageAttachment(attachment))
   if (!exts || exts.length === 0) return imageAttachments.length > 0
-  return matchesFiles(exts, imageAttachments)
+  return matchesFiles({ exts }, imageAttachments)
 }
 
 export function isImageAttachment(attachment: InputAttachment): boolean {
@@ -87,6 +145,9 @@ export function findBestMatch(feature: PluginFeature, input: InputPayload): Feat
 
     if (cmd.type === 'regex') {
       if (!hasText) continue
+      // 检查长度限制
+      if (cmd.minLength !== undefined && text.length < cmd.minLength) continue
+      if (cmd.maxLength !== undefined && text.length > cmd.maxLength) continue
       try {
         const regex = new RegExp(cmd.match)
         if (regex.test(text)) {
@@ -104,7 +165,7 @@ export function findBestMatch(feature: PluginFeature, input: InputPayload): Feat
 
     if (cmd.type === 'files') {
       if (!hasAttachments) continue
-      if (matchesFiles(cmd.exts, input.attachments)) {
+      if (matchesFiles(cmd, input.attachments)) {
         matchType = 'files'
       }
     }
@@ -114,6 +175,22 @@ export function findBestMatch(feature: PluginFeature, input: InputPayload): Feat
       if (matchesImageExts(cmd.exts, input.attachments)) {
         matchType = 'img'
       }
+    }
+
+    if (cmd.type === 'over') {
+      if (!hasText) continue
+      // 检查长度限制
+      const min = cmd.minLength ?? 0
+      const max = cmd.maxLength ?? 10000
+      if (text.length < min || text.length > max) continue
+      // 检查排除规则
+      if (cmd.exclude) {
+        try {
+          const excludeRegex = new RegExp(cmd.exclude)
+          if (excludeRegex.test(text)) continue
+        } catch { }
+      }
+      matchType = 'over'
     }
 
     if (!matchType) continue
