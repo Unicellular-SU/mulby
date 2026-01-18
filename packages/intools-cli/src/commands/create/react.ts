@@ -13,7 +13,9 @@ import {
   buildStylesCss,
   buildTsConfig,
   buildUseIntools,
-  buildViteConfig
+  buildViteConfig,
+  buildGitignore,
+  buildReactReadme
 } from './templates/react'
 
 export async function createReactProject(targetDir: string, name: string) {
@@ -29,6 +31,8 @@ export async function createReactProject(targetDir: string, name: string) {
   createBackendMain(targetDir, name)
   createReactUI(targetDir, name)
   createIntoolsTypes(targetDir)
+  createGitignore(targetDir)
+  createReadme(targetDir, name)
 
   // 复制 API 参考文档
   const apiDocSrc = path.join(__dirname, '../../..', 'PLUGIN_API.md')
@@ -98,4 +102,16 @@ function createIntoolsTypes(targetDir: string) {
   const typesDts = buildIntoolsTypes()
   fs.writeFileSync(path.join(targetDir, 'src/types/intools.d.ts'), typesDts)
   console.log(chalk.green('  ✓ src/types/intools.d.ts'))
+}
+
+function createGitignore(targetDir: string) {
+  const gitignore = buildGitignore()
+  fs.writeFileSync(path.join(targetDir, '.gitignore'), gitignore)
+  console.log(chalk.green('  ✓ .gitignore'))
+}
+
+function createReadme(targetDir: string, name: string) {
+  const readme = buildReactReadme(name)
+  fs.writeFileSync(path.join(targetDir, 'README.md'), readme)
+  console.log(chalk.green('  ✓ README.md'))
 }
