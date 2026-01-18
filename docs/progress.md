@@ -52,3 +52,47 @@ geolocation.getCurrentPosition() // 获取当前位置
 ## 依赖项
 
 - `node-mac-permissions@^2.5.0` (macOS 权限检查)
+
+---
+
+# 系统文件搜索支持进度
+
+> **更新时间**: 2026-01-18
+> **状态**: ✅ 已完成
+
+## 完成内容
+
+### 核心模块
+- [x] `src/main/plugin/desktop.ts`
+  - 跨平台文件搜索实现
+  - macOS: `mdfind`
+  - Windows: `es` (Everything CLI)
+  - Linux: `locate`
+
+### IPC 通信
+- [x] `src/main/ipc/desktop.ts` - 注册搜索处理程序
+- [x] `src/main/ipc/index.ts` - 整合 Desktop 模块
+
+### 预加载脚本
+- [x] `src/preload/index.ts` - 暴露 `intools.desktop.searchFiles`
+
+## API 说明
+
+```typescript
+// 搜索系统文件
+// query: 关键词
+// limit: 限制返回数量 (默认 100)
+intools.desktop.searchFiles(query: string, limit?: number): Promise<FileSearchResult[]>
+
+interface FileSearchResult {
+  name: string
+  path: string
+  isDirectory: boolean
+  size?: number
+}
+```
+
+## 注意事项
+- Windows 平台强依赖 "Everything" 及其命令行工具 `es.exe`。
+- Linux 平台依赖 `locate` 命令（需确保 `updatedb` 定期运行）。
+- macOS 使用原生 Spotlight 索引，无需额外配置。

@@ -8,6 +8,7 @@ import { registerScreenHandlers } from './screen'
 import { registerShellHandlers } from './shell'
 import { registerDialogHandlers } from './dialog'
 import { registerSystemHandlers } from './system'
+import { registerDesktopHandlers } from './desktop'
 import { registerGlobalShortcutHandlers } from './shortcut'
 import { registerSecurityHandlers } from './security'
 import { registerMediaHandlers } from './media'
@@ -52,6 +53,7 @@ export function registerAllHandlers(
   registerShellHandlers()
   registerDialogHandlers()
   registerSystemHandlers()
+  registerDesktopHandlers()
   registerGlobalShortcutHandlers()
   registerSecurityHandlers()
   registerMediaHandlers()

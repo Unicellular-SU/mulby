@@ -203,6 +203,11 @@ const intoolsApi = {
     beep: () => ipcRenderer.invoke('shell:beep')
   },
 
+  // Desktop API
+  desktop: {
+    searchFiles: (query: string, limit?: number) => ipcRenderer.invoke('desktop:searchFiles', query, limit)
+  },
+
   // Filesystem API
   filesystem: {
     readFile: (path: string, encoding?: 'utf-8' | 'base64') =>

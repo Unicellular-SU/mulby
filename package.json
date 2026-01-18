@@ -73,6 +73,12 @@
       "node_modules/node-mac-permissions/**/*",
       "node_modules/sharp/**/*"
     ],
+    "extraResources": [
+      {
+        "from": "resources/bin",
+        "to": "bin"
+      }
+    ],
     "win": {
       "target": [
         "nsis",
