@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Preload 测试</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: #1e1e1e;
+      color: #e0e0e0;
+      padding: 20px;
+      min-height: 100vh;
+    }
+    h2 { color: #4fc3f7; margin-bottom: 16px; }
+    .section {
+      background: #2d2d2d;
+      border-radius: 8px;
+      padding: 16px;
+      margin-bottom: 16px;
+    }
+    .section h3 {
+      color: #81c784;
+      margin-bottom: 12px;
+      font-size: 14px;
+    }
+    .info-item {
+      display: flex;
+      margin-bottom: 8px;
+      font-size: 13px;
+    }
+    .info-label {
+      color: #888;
+      width: 100px;
+      flex-shrink: 0;
+    }
+    .info-value {
+      color: #fff;
+      font-family: 'Monaco', 'Consolas', monospace;
+    }
+    .status {
+      padding: 8px 12px;
+      border-radius: 4px;
+      font-size: 13px;
+      margin-bottom: 12px;
+    }
+    .status.success { background: #1b5e20; color: #a5d6a7; }
+    .status.error { background: #b71c1c; color: #ef9a9a; }
+    pre {
+      background: #1a1a1a;
+      padding: 12px;
+      border-radius: 4px;
+      font-size: 12px;
+      overflow-x: auto;
+      max-height: 200px;
+      overflow-y: auto;
+    }
+    button {
+      background: #0078d4;
+      color: #fff;
+      border: none;
+      padding: 8px 16px;
+      border-radius: 4px;
+      cursor: pointer;
+      margin-right: 8px;
+      margin-bottom: 8px;
+    }
+    button:hover { background: #1084d8; }
+  </style>
+</head>
+<body>
+  <h2>🔌 Preload 功能测试</h2>
+  
+  <div class="section">
+    <h3>API 可用性检查</h3>
+    <div id="api-status"></div>
+  </div>
+  
+  <div class="section">
+    <h3>系统信息 (通过自定义 preload)</h3>
+    <div id="system-info"></div>
+  </div>
+  
+  <div class="section">
+    <h3>核心 API 检查 (window.intools)</h3>
+    <div id="intools-status"></div>
+  </div>
+
+  <div class="section">
+    <h3>文件操作测试</h3>
+    <button onclick="listHomeDirFiles()">列出家目录文件</button>
+    <pre id="file-result">点击按钮测试...</pre>
+  </div>
+
+  <script>
+    // 检查自定义 API
+    function checkApis() {
+      const statusEl = document.getElementById('api-status')
+      const hasCustomApi = typeof window.customApi !== 'undefined'
+      
+      if (hasCustomApi) {
+        statusEl.innerHTML = `<div class="status success">✅ window.customApi 已加载</div>`
+      } else {
+        statusEl.innerHTML = `<div class="status error">❌ window.customApi 未找到</div>`
+      }
+    }
+    
+    // 显示系统信息
+    function showSystemInfo() {
+      const el = document.getElementById('system-info')
+      
+      if (typeof window.customApi?.getSystemInfo === 'function') {
+        const info = window.customApi.getSystemInfo()
+        el.innerHTML = `
+          <div class="info-item"><span class="info-label">平台:</span><span class="info-value">${info.platform}</span></div>
+          <div class="info-item"><span class="info-label">架构:</span><span class="info-value">${info.arch}</span></div>
+          <div class="info-item"><span class="info-label">Node版本:</span><span class="info-value">${info.nodeVersion}</span></div>
+          <div class="info-item"><span class="info-label">主机名:</span><span class="info-value">${info.hostname}</span></div>
+          <div class="info-item"><span class="info-label">家目录:</span><span class="info-value">${info.homeDir}</span></div>
+        `
+      } else {
+        el.innerHTML = '<div class="status error">自定义 API 不可用</div>'
+      }
+    }
+    
+    // 检查核心 intools API
+    function checkIntools() {
+      const el = document.getElementById('intools-status')
+      const hasIntools = typeof window.intools !== 'undefined'
+      
+      if (hasIntools) {
+        const apis = []
+        if (window.intools.clipboard) apis.push('clipboard')
+        if (window.intools.storage) apis.push('storage')
+        if (window.intools.notification) apis.push('notification')
+        if (window.intools.window) apis.push('window')
+        if (window.intools.system) apis.push('system')
+        
+        el.innerHTML = `
+          <div class="status success">✅ window.intools 可用</div>
+          <div class="info-item"><span class="info-label">可用模块:</span><span class="info-value">${apis.join(', ')}</span></div>
+        `
+      } else {
+        el.innerHTML = '<div class="status error">❌ window.intools 未找到</div>'
+      }
+    }
+    
+    // 列出家目录文件
+    function listHomeDirFiles() {
+      const el = document.getElementById('file-result')
+      
+      if (typeof window.customApi?.getSystemInfo === 'function' && 
+          typeof window.customApi?.listDir === 'function') {
+        const homeDir = window.customApi.getSystemInfo().homeDir
+        const files = window.customApi.listDir(homeDir)
+        el.textContent = files.slice(0, 20).join('\n') + (files.length > 20 ? '\n... 更多文件' : '')
+      } else {
+        el.textContent = '自定义 API 不可用'
+      }
+    }
+    
+    // 初始化
+    checkApis()
+    showSystemInfo()
+    checkIntools()
+  </script>
+</body>
+</html>

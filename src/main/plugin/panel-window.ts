@@ -6,6 +6,7 @@ import { InputAttachment, InputPayload, Plugin } from '../../shared/types/plugin
 import { ThemeManager } from '../services/theme'
 import { injectCustomTitleBar } from './titlebar'
 import { isIgnoringBlur } from '../services/blur-manager'
+import { getPluginPreloadPath } from './plugin-preload-wrapper'
 
 function canReachUrl(url: string, timeoutMs = 800): Promise<boolean> {
     return new Promise((resolve) => {
@@ -284,6 +285,11 @@ export class PluginPanelWindow {
         const isDark = currentTheme === 'dark'
         const backgroundColor = isDark ? '#1e293b' : '#ffffff'
 
+        // 获取插件 preload 路径（支持自定义 preload）
+        const basePreloadPath = join(__dirname, '../preload/index.js')
+        const preloadPath = getPluginPreloadPath(basePreloadPath, plugin)
+        const hasCustomPreload = !!plugin.manifest.preload
+
         this.panelWindow = new BrowserWindow({
             width,
             height: this.PANEL_HEIGHT,
@@ -304,10 +310,10 @@ export class PluginPanelWindow {
             hasShadow: true,
             roundedCorners: true,
             webPreferences: {
-                preload: join(__dirname, '../preload/index.js'),
-                contextIsolation: true,
-                nodeIntegration: false,
-                sandbox: true // 启用沙箱增强安全性
+                preload: preloadPath,
+                contextIsolation: !hasCustomPreload,
+                nodeIntegration: hasCustomPreload,
+                sandbox: !hasCustomPreload // 如果有自定义 preload，禁用沙箱以允许 Node.js 访问
             }
         })
 
@@ -531,6 +537,11 @@ export class PluginPanelWindow {
         // 从 manifest.window 读取窗口配置
         const windowConfig = plugin.manifest.window || {}
 
+        // 获取插件 preload 路径（支持自定义 preload）
+        const basePreloadPath = join(__dirname, '../preload/index.js')
+        const preloadPath = getPluginPreloadPath(basePreloadPath, plugin)
+        const hasCustomPreload = !!plugin.manifest.preload
+
         const independentWindow = new BrowserWindow({
             width: Math.max(bounds.width, windowConfig.width ?? 500),
             height: Math.max(bounds.height, windowConfig.height ?? 400),
@@ -547,9 +558,9 @@ export class PluginPanelWindow {
             backgroundColor,
             title: plugin.manifest.displayName,
             webPreferences: {
-                preload: join(__dirname, '../preload/index.js'),
-                contextIsolation: true,
-                nodeIntegration: false
+                preload: preloadPath,
+                contextIsolation: !hasCustomPreload,
+                nodeIntegration: hasCustomPreload
             }
         })
 

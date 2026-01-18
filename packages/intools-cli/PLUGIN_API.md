@@ -49,6 +49,7 @@
 | description | string | | 插件描述 |
 | main | string | ✓ | 后端入口文件 |
 | ui | string | | UI 入口文件 |
+| preload | string | | 自定义 preload 脚本（可使用 Node.js） |
 | icon | string/object | | 插件图标（路径/URL/SVG） |
 | features | array | ✓ | 功能入口列表 |
 | pluginSetting | object | | 插件行为设置 |
@@ -139,6 +140,57 @@
 "icon": { "type": "url", "value": "https://example.com/icon.png" }
 "icon": { "type": "svg", "value": "<svg>...</svg>" }
 ```
+
+## Preload 配置（自定义 Node.js 能力）
+
+配置自定义 preload 脚本，可在渲染进程中直接使用 Node.js 能力。
+
+### 配置方式
+
+```json
+{
+  "preload": "preload.js"
+}
+```
+
+### preload.js 示例
+
+```javascript
+// preload.js - 遵循 CommonJS 规范
+const fs = require('fs')
+const os = require('os')
+const path = require('path')
+
+// 通过 window 暴露给前端
+window.myApi = {
+  getHomeDir: () => os.homedir(),
+  readFile: (filePath) => fs.readFileSync(filePath, 'utf-8'),
+  platform: process.platform
+}
+```
+
+### 前端调用
+
+```typescript
+// 在 UI 组件中使用
+const homeDir = window.myApi?.getHomeDir()
+const content = window.myApi?.readFile('/path/to/file.txt')
+
+// 核心 API 仍然可用
+const text = await window.intools.clipboard.readText()
+```
+
+### 注意事项
+
+| 项目 | 说明 |
+|------|------|
+| 文件格式 | CommonJS 格式，使用 `require()` 导入模块 |
+| 代码规范 | 必须是清晰可读的源码，**不能压缩/混淆** |
+| 可用模块 | Node.js 原生模块 + 第三方 npm 模块 |
+| API 暴露 | 通过 `window.xxx` 暴露自定义 API |
+| 核心 API | `window.intools` 核心 API 仍然可用 |
+| 安全性 | 有完整 Node.js 权限，需注意安全风险 |
+| 打包 | 运行 `intools pack` 会自动包含 preload 文件 |
 
 ---
 

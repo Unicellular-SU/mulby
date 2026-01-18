@@ -62,6 +62,17 @@ async function createArchive(
       archive.directory(uiDir, 'ui')
     }
 
+    // 添加 preload 脚本（如果在 manifest 中配置了）
+    if (manifest.preload) {
+      const preloadPath = path.join(cwd, manifest.preload)
+      if (fs.existsSync(preloadPath)) {
+        archive.file(preloadPath, { name: manifest.preload })
+        console.log(chalk.gray(`  + ${manifest.preload}`))
+      } else {
+        console.log(chalk.yellow(`警告: preload 文件不存在: ${manifest.preload}`))
+      }
+    }
+
     // 添加 README.md（如果存在）
     const readmePath = path.join(cwd, 'README.md')
     if (fs.existsSync(readmePath)) {

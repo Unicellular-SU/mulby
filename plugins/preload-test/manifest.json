@@ -1,0 +1,22 @@
+{
+    "id": "preload-test",
+    "name": "preload-test",
+    "version": "1.0.0",
+    "displayName": "Preload 测试",
+    "description": "测试自定义 preload 功能",
+    "main": "main.js",
+    "ui": "ui/index.html",
+    "preload": "preload.js",
+    "features": [
+        {
+            "code": "test",
+            "explain": "测试自定义 Preload",
+            "cmds": [
+                {
+                    "type": "keyword",
+                    "value": "preload"
+                }
+            ]
+        }
+    ]
+}

@@ -1,7 +1,12 @@
 import { contextBridge, ipcRenderer } from 'electron'
 import { inbrowser } from './inbrowser'
 
-contextBridge.exposeInMainWorld('intools', {
+// 检测是否启用了 contextIsolation
+// 当 contextIsolation 为 false 时，contextBridge 不可用，需要直接设置 window
+const isContextIsolated = process.contextIsolated
+
+// 定义 intools API 对象
+const intoolsApi = {
   // 窗口控制
   window: {
     hide: (isRestorePreWindow?: boolean) => ipcRenderer.send('window:hide', isRestorePreWindow),
@@ -594,12 +599,10 @@ contextBridge.exposeInMainWorld('intools', {
       }
     }
   }
-})
+}
 
-// ==========================================
 // 主窗口专用 API（用于 SubInput 等功能）
-// ==========================================
-contextBridge.exposeInMainWorld('intoolsMain', {
+const intoolsMainApi = {
   // SubInput 事件监听（主窗口接收插件发来的控制指令）
   subInput: {
     onEnabled: (callback: (data: { placeholder: string; isFocus: boolean }) => void) => {
@@ -625,4 +628,17 @@ contextBridge.exposeInMainWorld('intoolsMain', {
       ipcRenderer.send('subInput:change', text)
     }
   }
-})
+}
+
+// 根据 contextIsolation 状态选择暴露方式
+if (isContextIsolated) {
+  // contextIsolation 启用时，使用 contextBridge（安全模式）
+  contextBridge.exposeInMainWorld('intools', intoolsApi)
+  contextBridge.exposeInMainWorld('intoolsMain', intoolsMainApi)
+} else {
+  // contextIsolation 禁用时，直接设置 window 属性（自定义 preload 模式）
+  // @ts-ignore - 在非隔离模式下直接访问 window
+  window.intools = intoolsApi
+  // @ts-ignore
+  window.intoolsMain = intoolsMainApi
+}

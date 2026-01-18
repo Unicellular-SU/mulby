@@ -164,6 +164,7 @@ export interface PluginManifest {
   description: string
   main: string
   ui?: string  // UI 文件路径（可选）
+  preload?: string  // 自定义 preload 脚本路径（可选）
   icon?: PluginIcon  // 插件图标（可选）
   features: PluginFeature[]
   window?: WindowOptions  // 独立窗口配置（可选）

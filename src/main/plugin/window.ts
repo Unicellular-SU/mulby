@@ -6,6 +6,7 @@ import { ThemeManager } from '../services/theme'
 import { injectCustomTitleBar } from './titlebar'
 import { PluginPanelWindow } from './panel-window'
 import { clearSubInputState } from '../services/subinput-state'
+import { getPluginPreloadPath } from './plugin-preload-wrapper'
 
 interface AttachedPlugin {
   plugin: Plugin
@@ -254,6 +255,11 @@ export class PluginWindowManager {
     // 从 manifest.window 读取窗口配置
     const windowConfig = plugin.manifest.window || {}
 
+    // 获取插件 preload 路径（支持自定义 preload）
+    const basePreloadPath = join(__dirname, '../preload/index.js')
+    const preloadPath = getPluginPreloadPath(basePreloadPath, plugin)
+    const hasCustomPreload = !!plugin.manifest.preload
+
     const win = new BrowserWindow({
       width: windowConfig.width ?? 500,
       height: windowConfig.height ?? 400,
@@ -266,9 +272,10 @@ export class PluginWindowManager {
       backgroundColor,
       title: plugin.manifest.displayName,
       webPreferences: {
-        preload: join(__dirname, '../preload/index.js'),
-        contextIsolation: true,
-        nodeIntegration: false
+        preload: preloadPath,
+        // 如果有自定义 preload，关闭上下文隔离以允许直接设置 window 属性
+        contextIsolation: !hasCustomPreload,
+        nodeIntegration: hasCustomPreload
       }
     })
 
@@ -363,6 +370,11 @@ export class PluginWindowManager {
     // 从 manifest.window 读取窗口配置（辅助窗口优先使用传入的 options）
     const windowConfig = plugin.manifest.window || {}
 
+    // 获取插件 preload 路径（支持自定义 preload）
+    const basePreloadPath = join(__dirname, '../preload/index.js')
+    const preloadPath = getPluginPreloadPath(basePreloadPath, plugin)
+    const hasCustomPreload = !!plugin.manifest.preload
+
     const win = new BrowserWindow({
       width: options?.width || windowConfig.width || 800,
       height: options?.height || windowConfig.height || 600,
@@ -375,9 +387,9 @@ export class PluginWindowManager {
       backgroundColor,
       title: options?.title || plugin.manifest.displayName,
       webPreferences: {
-        preload: join(__dirname, '../preload/index.js'),
-        contextIsolation: true,
-        nodeIntegration: false
+        preload: preloadPath,
+        contextIsolation: !hasCustomPreload,
+        nodeIntegration: hasCustomPreload
       }
     })
 

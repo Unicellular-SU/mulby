@@ -48,6 +48,7 @@
 | displayName | string | 是 | 显示名称 |
 | main | string | 是 | 入口文件 |
 | ui | string | 否 | UI 文件路径 |
+| preload | string | 否 | 自定义 preload 脚本路径（可使用 Node.js） |
 | icon | string/object | 否 | 插件图标 |
 | features | array | 是 | 功能入口列表 |
 | window | object | 否 | 独立窗口配置 |
@@ -173,3 +174,44 @@
 
 - 未设置 `icon` 时，自动尝试加载插件目录下的 `icon.png`
 - 若无图标文件，显示默认占位图标
+
+### Preload 配置
+
+配置自定义 preload 脚本，可在渲染进程中使用 Node.js 能力。
+
+```json
+{
+  "preload": "preload.js"
+}
+```
+
+#### preload.js 示例
+
+```javascript
+// preload.js - 遵循 CommonJS 规范
+const fs = require('fs')
+const os = require('os')
+const path = require('path')
+
+// 通过 window 暴露给前端
+window.myApi = {
+  getHomeDir: () => os.homedir(),
+  readFile: (filePath) => fs.readFileSync(filePath, 'utf-8'),
+  platform: process.platform
+}
+```
+
+#### 前端使用
+
+```typescript
+// 在 UI 组件中使用
+const homeDir = window.myApi?.getHomeDir()
+const content = window.myApi?.readFile('/path/to/file.txt')
+```
+
+#### 注意事项
+
+- preload.js 必须是清晰可读的源码，不能压缩/混淆
+- 可以使用 Node.js 原生模块和第三方模块
+- 通过 `window.xxx` 暴露 API 给前端
+- `window.intools` 核心 API 仍然可用
