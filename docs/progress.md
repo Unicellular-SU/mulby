@@ -107,6 +107,13 @@ interface FileSearchResult {
 ## 完成内容
 
 ### 搜索 Worker 模块
+- [x] Fix `filesystem.writeFile` to support `ArrayBuffer` input (resolves JSPDF output issue)
+- [x] Enhance `ArrayBuffer` support for other modules:
+  - `security.decryptString`: Accept `ArrayBuffer`
+  - `input.hideMainWindowPasteImage`: Accept `ArrayBuffer`
+  - `http.post` / `http.put`: Accept `ArrayBuffer` as body
+- [x] Update documentation in `docs/apis/`
+- [ ] Fix Search Worker Errors (In Progress)
 - [x] `src/main/plugin/search-worker-manager.ts`
   - 修复 `UtilityProcess` API 使用错误（移除 `.killed` 和 `error` 事件监听）
   - 修正消息 Payload 类型推断

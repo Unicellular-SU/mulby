@@ -33,7 +33,7 @@ export class PluginFilesystem {
   }
 
   // 写入文件
-  writeFile(filePath: string, data: string | Buffer, encoding?: 'utf-8' | 'base64'): void {
+  writeFile(filePath: string, data: string | Buffer | ArrayBuffer, encoding?: 'utf-8' | 'base64'): void {
     const dir = dirname(filePath)
     if (!existsSync(dir)) {
       mkdirSync(dir, { recursive: true })
@@ -42,7 +42,11 @@ export class PluginFilesystem {
     if (encoding === 'base64' && typeof data === 'string') {
       writeFileSync(filePath, Buffer.from(data, 'base64'))
     } else {
-      writeFileSync(filePath, data)
+      if (data instanceof ArrayBuffer) {
+        writeFileSync(filePath, Buffer.from(data))
+      } else {
+        writeFileSync(filePath, data as string | NodeJS.ArrayBufferView)
+      }
     }
   }
 

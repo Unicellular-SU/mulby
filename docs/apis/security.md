@@ -44,7 +44,7 @@ console.log(decrypted); // 'my-secret-password'
 ```
 
 **参数**:
-- `encrypted` (Buffer) - 加密的数据
+- `encrypted` (Buffer | ArrayBuffer) - 加密的数据
 
 **返回值**: `string` - 解密后的明文
 

@@ -15,7 +15,7 @@ export function registerSecurityHandlers() {
   })
 
   // 解密字符串
-  ipcMain.handle('security:decryptString', (_, encrypted: Buffer) => {
-    return security.decryptString(Buffer.from(encrypted))
+  ipcMain.handle('security:decryptString', (_, encrypted: Buffer | ArrayBuffer) => {
+    return security.decryptString(encrypted)
   })
 }

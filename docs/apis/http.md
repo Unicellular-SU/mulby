@@ -26,7 +26,7 @@ console.log(response.data);    // 响应内容
 - `url` (string) - 请求地址
 - `method` (string, 可选) - 请求方法: GET | POST | PUT | DELETE | PATCH | HEAD，默认 GET
 - `headers` (object, 可选) - 请求头
-- `body` (string | object, 可选) - 请求体，object 会自动 JSON 序列化
+- `body` (string | object | Buffer | ArrayBuffer, 可选) - 请求体，object 会自动 JSON 序列化
 - `timeout` (number, 可选) - 超时时间(毫秒)，默认 30000
 
 **返回值** (HttpResponse):

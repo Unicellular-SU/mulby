@@ -10,7 +10,7 @@ export function registerFilesystemHandlers() {
     })
 
     // 写入文件
-    ipcMain.handle('filesystem:writeFile', async (_, path: string, data: string | Buffer, encoding?: 'utf-8' | 'base64') => {
+    ipcMain.handle('filesystem:writeFile', async (_, path: string, data: string | Buffer | ArrayBuffer, encoding?: 'utf-8' | 'base64') => {
         pluginFilesystem.writeFile(path, data, encoding)
     })
 

@@ -38,7 +38,8 @@ filesystem.writeFile('/path/to/output.png', buffer);
 filesystem.writeFile('/path/to/output.txt', 'Hello World', 'utf-8');
 
 // 写入 Base64 数据
-filesystem.writeFile('/path/to/output.jpg', base64String, 'base64');
+// 写入 ArrayBuffer 数据
+filesystem.writeFile('/path/to/output.pdf', arrayBuffer);
 ```
 
 **参数**:

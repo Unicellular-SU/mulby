@@ -12,11 +12,11 @@ export function registerHttpHandlers() {
         return pluginHttp.get(url, headers)
     })
 
-    ipcMain.handle('http:post', async (_, url, body, headers) => {
+    ipcMain.handle('http:post', async (_, url, body: string | object | Buffer | ArrayBuffer, headers) => {
         return pluginHttp.post(url, body, headers)
     })
 
-    ipcMain.handle('http:put', async (_, url, body, headers) => {
+    ipcMain.handle('http:put', async (_, url, body: string | object | Buffer | ArrayBuffer, headers) => {
         return pluginHttp.put(url, body, headers)
     })
 

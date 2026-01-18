@@ -38,7 +38,7 @@ await input.hideMainWindowPasteImage('/path/to/image.png');
 ```
 
 **参数**:
-- `image` (string | Buffer) - 图片路径、Data URL 或 Buffer
+- `image` (string | Buffer | ArrayBuffer) - 图片路径、Data URL、Buffer 或 ArrayBuffer
 
 **返回值**: `boolean` - 是否执行成功
 

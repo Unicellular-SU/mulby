@@ -167,11 +167,13 @@ function hideAllAppWindows(): void {
   }
 }
 
-function writeImageToClipboard(image: string | Buffer): boolean {
+function writeImageToClipboard(image: string | Buffer | ArrayBuffer): boolean {
   try {
     let nativeImg: Electron.NativeImage
     if (Buffer.isBuffer(image)) {
       nativeImg = nativeImage.createFromBuffer(image)
+    } else if (image instanceof ArrayBuffer) {
+      nativeImg = nativeImage.createFromBuffer(Buffer.from(image))
     } else if (typeof image === 'string') {
       if (image.startsWith('data:image')) {
         nativeImg = nativeImage.createFromDataURL(image)
@@ -398,7 +400,7 @@ async function simulateMouseClickInternal(x: number, y: number, button: 'left' |
   if (process.platform === 'win32') {
     const downFlag = button === 'right' ? '0x0008' : '0x0002'
     const upFlag = button === 'right' ? '0x0010' : '0x0004'
-    
+
     let clickScript = `
 Add-Type -AssemblyName System.Windows.Forms
 $signature = @'
@@ -441,7 +443,7 @@ export const pluginInput = {
       return false
     }
   },
-  async hideMainWindowPasteImage(image: string | Buffer): Promise<boolean> {
+  async hideMainWindowPasteImage(image: string | Buffer | ArrayBuffer): Promise<boolean> {
     try {
       const ok = writeImageToClipboard(image)
       if (!ok) return false

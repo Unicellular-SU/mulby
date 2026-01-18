@@ -21,11 +21,12 @@ export class PluginSecurity {
   /**
    * 解密字符串
    */
-  decryptString(encrypted: Buffer): string {
+  decryptString(encrypted: Buffer | ArrayBuffer): string {
     if (!this.isEncryptionAvailable()) {
       throw new Error('Encryption is not available on this system')
     }
-    return safeStorage.decryptString(encrypted)
+    const buffer = encrypted instanceof ArrayBuffer ? Buffer.from(encrypted) : encrypted
+    return safeStorage.decryptString(buffer)
   }
 }
 

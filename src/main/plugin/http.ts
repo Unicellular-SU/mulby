@@ -4,7 +4,7 @@ export interface HttpRequestOptions {
   url: string
   method?: 'GET' | 'POST' | 'PUT' | 'DELETE' | 'PATCH' | 'HEAD'
   headers?: Record<string, string>
-  body?: string | object
+  body?: string | object | Buffer | ArrayBuffer
   timeout?: number
 }
 
@@ -73,11 +73,20 @@ export class PluginHttp {
 
       // 发送请求体
       if (body) {
-        const bodyStr = typeof body === 'object' ? JSON.stringify(body) : body
-        if (typeof body === 'object' && !headers['Content-Type']) {
-          request.setHeader('Content-Type', 'application/json')
+        let finalBody: string | Buffer
+        if (typeof body === 'string') {
+          finalBody = body
+        } else if (Buffer.isBuffer(body)) {
+          finalBody = body
+        } else if (body instanceof ArrayBuffer) {
+          finalBody = Buffer.from(body)
+        } else {
+          finalBody = JSON.stringify(body)
+          if (!headers['Content-Type']) {
+            request.setHeader('Content-Type', 'application/json')
+          }
         }
-        request.write(bodyStr)
+        request.write(finalBody)
       }
 
       request.end()
@@ -89,11 +98,11 @@ export class PluginHttp {
     return this.request({ url, method: 'GET', headers })
   }
 
-  async post(url: string, body?: string | object, headers?: Record<string, string>): Promise<HttpResponse> {
+  async post(url: string, body?: string | object | Buffer | ArrayBuffer, headers?: Record<string, string>): Promise<HttpResponse> {
     return this.request({ url, method: 'POST', body, headers })
   }
 
-  async put(url: string, body?: string | object, headers?: Record<string, string>): Promise<HttpResponse> {
+  async put(url: string, body?: string | object | Buffer | ArrayBuffer, headers?: Record<string, string>): Promise<HttpResponse> {
     return this.request({ url, method: 'PUT', body, headers })
   }
 

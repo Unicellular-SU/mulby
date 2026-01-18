@@ -6,7 +6,7 @@ export function registerInputHandlers() {
     pluginInput.hideMainWindowPasteText(text)
   )
 
-  ipcMain.handle('input:hideMainWindowPasteImage', (_, image: string | Buffer) =>
+  ipcMain.handle('input:hideMainWindowPasteImage', (_, image: string | Buffer | ArrayBuffer) =>
     pluginInput.hideMainWindowPasteImage(image)
   )
 

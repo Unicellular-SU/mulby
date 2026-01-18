@@ -215,7 +215,7 @@ const text = await window.intools.clipboard.readText()
 | 方法 | 环境 | 说明 |
 |------|------|------|
 | `readFile(path, encoding?)` | R/B | 读取文件 → `Buffer | string` |
-| `writeFile(path, data, encoding?)` | R/B | 写入文件 |
+| `writeFile(path, data, encoding?)` | R/B | 写入文件 (`data`: `string \| Buffer \| ArrayBuffer`) |
 | `exists(path)` | R/B | 检查是否存在 → `boolean` |
 | `unlink(path)` | R/B | 删除文件 |
 | `readdir(path)` | R/B | 读取目录 → `string[]` |
@@ -281,10 +281,10 @@ const text = await window.intools.clipboard.readText()
 
 | 方法 | 环境 | 说明 |
 |------|------|------|
-| `request(options)` | R/B | 发起请求 → `HttpResponse` |
+| `request(options)` | R/B | 发起请求 (`body`: `string \| object \| Buffer \| ArrayBuffer`) → `HttpResponse` |
 | `get(url, headers?)` | R/B | GET 请求 |
-| `post(url, body?, headers?)` | R/B | POST 请求 |
-| `put(url, body?, headers?)` | R/B | PUT 请求 |
+| `post(url, body?, headers?)` | R/B | POST 请求 (`body`: `string \| object \| Buffer \| ArrayBuffer`) |
+| `put(url, body?, headers?)` | R/B | PUT 请求 (`body`: `string \| object \| Buffer \| ArrayBuffer`) |
 | `delete(url, headers?)` | R/B | DELETE 请求 |
 
 **HttpRequestOptions**: `url`, `method`, `headers`, `body`, `timeout`  
@@ -332,7 +332,7 @@ const text = await window.intools.clipboard.readText()
 | 方法 | 环境 | 说明 |
 |------|------|------|
 | `hideMainWindowPasteText(text)` | R/B | 粘贴文本到焦点应用 |
-| `hideMainWindowPasteImage(image)` | R/B | 粘贴图片到焦点应用 |
+| `hideMainWindowPasteImage(image)` | R/B | 粘贴图片到焦点应用 (`image`: `Path \| Buffer \| DataURL \| ArrayBuffer`) |
 | `hideMainWindowPasteFile(paths)` | R/B | 粘贴文件到焦点应用 |
 | `hideMainWindowTypeString(text)` | R/B | 模拟键入文本 |
 | `simulateKeyboardTap(key, ...modifiers)` | R/B | 模拟按键 |
@@ -489,7 +489,7 @@ const text = await window.intools.clipboard.readText()
 |------|------|------|
 | `isEncryptionAvailable()` | R/B | 检查加密可用性 |
 | `encryptString(plainText)` | R/B | 加密字符串 → `Buffer` |
-| `decryptString(encrypted)` | R/B | 解密字符串 → `string` |
+| `decryptString(encrypted)` | R/B | 解密字符串 (`encrypted`: `Buffer \| ArrayBuffer`) → `string` |
 
 ---
 
