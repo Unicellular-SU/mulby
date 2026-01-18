@@ -33,16 +33,27 @@ export interface PluginInfo {
   version?: string
   author?: string
   homepage?: string
+  main?: string
+  ui?: string
+  window?: {
+    width?: number
+    height?: number
+    minWidth?: number
+    minHeight?: number
+    maxWidth?: number
+    maxHeight?: number
+  }
   icon?: {
     type: 'url' | 'svg' | 'data-url'
     value: string
   }
   path?: string
   builtin?: boolean
+  isDev?: boolean
   features: {
     code: string
     explain: string
-    cmds: { type: string; value?: string; match?: string; exts?: string[] }[]
+    cmds: { type: 'keyword' | 'regex' | 'files' | 'img' | 'over' | string; value?: string; match?: string; explain?: string; exts?: string[] }[]
     mode?: 'ui' | 'silent' | 'detached'
     route?: string
   }[]

@@ -41,7 +41,7 @@ const PERMISSIONS = [
   { id: 'microphone', label: '麦克风' },
   { id: 'camera', label: '摄像头' },
   { id: 'geolocation', label: '定位' }
-]
+] as const
 
 function PluginIcon({ icon, name }: { icon?: PluginInfo['icon']; name: string }) {
   if (!icon) {
@@ -214,31 +214,31 @@ function ShortcutInput({
   const displayValue = recording ? (preview || '按下快捷键') : (value || '未设置')
 
   return (
-    <div className="flex items-center justify-between gap-6 py-3 border-b border-gray-200/80 dark:border-gray-800/80">
-      <div>
-        <div className="text-sm font-medium text-gray-900 dark:text-gray-100">{label}</div>
-        <div className="text-xs text-gray-500 dark:text-gray-400">{description}</div>
-      </div>
-      <div className="flex items-center gap-3">
-        <div className="min-w-[180px] text-right">
-          <div className="text-sm text-gray-900 dark:text-gray-100">{displayValue}</div>
-          {(error || statusText) && (
-            <div className="text-xs text-red-500">{error || statusText}</div>
-          )}
+    <div className="rounded-2xl border border-slate-200/80 bg-white/80 p-4 backdrop-blur dark:border-slate-800/80 dark:bg-slate-900/70 sm:p-5">
+      <div className="space-y-3">
+        <div className="text-sm font-semibold text-slate-900 dark:text-white">{label}</div>
+        <div className="text-xs text-slate-500 dark:text-slate-400">{description}</div>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="min-w-[200px] flex-1 rounded-xl border border-slate-200 bg-white px-3 py-2 text-left text-sm text-slate-700 shadow-sm dark:border-slate-800 dark:bg-slate-950 dark:text-slate-200">
+            <div className="text-sm font-medium">{displayValue}</div>
+            {(error || statusText) && (
+              <div className="text-xs text-red-500">{error || statusText}</div>
+            )}
+          </div>
+          <button
+            className={`rounded-full border px-3 py-1.5 text-xs transition-colors ${recording
+              ? 'border-slate-900 bg-slate-900 text-white dark:border-white dark:bg-white dark:text-slate-900'
+              : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300 hover:text-slate-900 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-200'
+              }`}
+            onClick={() => {
+              setError(null)
+              setRecording(true)
+              onRecordStart()
+            }}
+          >
+            {recording ? '按下快捷键' : '录制'}
+          </button>
         </div>
-        <button
-          className={`px-3 py-1.5 rounded text-sm border transition-colors ${recording
-            ? 'border-blue-500 text-blue-600 dark:text-blue-300'
-            : 'border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 hover:border-gray-300 dark:hover:border-gray-600'
-            }`}
-          onClick={() => {
-            setError(null)
-            setRecording(true)
-            onRecordStart()
-          }}
-        >
-          {recording ? '按下快捷键' : '录制'}
-        </button>
       </div>
     </div>
   )
@@ -252,7 +252,7 @@ export default function SettingsView({ section, onSectionChange, onClose, onOpen
   const [appInfo, setAppInfo] = useState<{ name: string; version: string; userDataPath: string } | null>(null)
   const [newSource, setNewSource] = useState<{ name: string; url: string }>({ name: '', url: '' })
   const [sourceError, setSourceError] = useState<string | null>(null)
-  const [activeRecordings, setActiveRecordings] = useState(0)
+  const [_activeRecordings, setActiveRecordings] = useState(0)
   const [plugins, setPlugins] = useState<PluginInfo[]>([])
   const [pluginQuery, setPluginQuery] = useState('')
   const [pluginFilter, setPluginFilter] = useState<'all' | 'enabled' | 'disabled'>('all')
@@ -426,34 +426,46 @@ export default function SettingsView({ section, onSectionChange, onClose, onOpen
     () => SECTION_ITEMS.find(item => item.id === section)?.label ?? '',
     [section]
   )
+  const cardClass = 'rounded-[24px] border border-slate-200/80 bg-white/80 p-6 backdrop-blur dark:border-slate-800/80 dark:bg-slate-900/70'
+  const cardClassTight = 'rounded-[24px] border border-slate-200/80 bg-white/80 p-5 backdrop-blur dark:border-slate-800/80 dark:bg-slate-900/70'
+  const pillClass = 'rounded-full border border-slate-200 bg-white px-3 py-1 text-xs text-slate-600 shadow-sm transition hover:border-slate-300 hover:text-slate-900 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-300 dark:hover:text-white'
+  const primaryPillClass = 'rounded-full border border-slate-900 bg-slate-900 px-3 py-1 text-xs text-white shadow-sm transition dark:border-white dark:bg-white dark:text-slate-900'
+  const actionButtonClass = 'rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-700 transition hover:border-slate-300 hover:text-slate-900 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-200'
 
   return (
-    <div className="settings-shell h-full flex flex-col overflow-hidden no-drag">
-      <div className="settings-topbar glass-surface flex items-center px-4 py-3 border-b border-white/20">
+    <div className="relative h-full overflow-hidden bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-100 no-drag">
+      <div className="pointer-events-none absolute inset-0">
+        <div className="absolute -top-28 left-1/2 h-80 w-80 -translate-x-1/2 rounded-full bg-blue-200/40 blur-[120px] dark:bg-blue-500/20" />
+        <div className="absolute right-16 top-24 h-64 w-64 rounded-full bg-emerald-200/40 blur-[120px] dark:bg-emerald-400/10" />
+        <div className="absolute bottom-0 left-16 h-64 w-64 rounded-full bg-indigo-200/30 blur-[120px] dark:bg-indigo-500/10" />
+      </div>
+
+      <div className="relative flex h-full min-h-0 flex-col">
+        <div className="flex items-center gap-3 border-b border-slate-200/70 bg-white/70 px-6 py-4 backdrop-blur dark:border-slate-800/80 dark:bg-slate-900/60">
         <button
           onClick={onClose}
-          className="mr-3 p-2 rounded-full hover:bg-gray-200 dark:hover:bg-gray-800 transition-colors no-drag"
+          className="flex h-10 w-10 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-600 transition hover:border-slate-300 hover:text-slate-900 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:text-white no-drag"
           title="返回"
         >
-          <svg className="w-5 h-5 text-gray-600 dark:text-gray-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+          <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
             <path d="M19 12H5M12 19l-7-7 7-7" strokeLinecap="round" strokeLinejoin="round" />
           </svg>
         </button>
         <div>
-          <div className="text-sm text-gray-500 dark:text-gray-400">设置</div>
-          <div className="text-lg font-semibold text-gray-900 dark:text-gray-100">{currentSectionLabel}</div>
+          <div className="text-xs uppercase tracking-[0.35em] text-slate-500 dark:text-slate-400">Settings</div>
+          <div className="text-lg font-semibold text-slate-900 dark:text-slate-100">{currentSectionLabel}</div>
         </div>
       </div>
 
-      <div className="flex-1 flex overflow-hidden">
-        <aside className="settings-sidebar glass-surface w-48 border-r border-white/20">
-          <nav className="py-4">
+      <div className="flex-1 flex min-h-0 overflow-hidden">
+        <aside className="w-56 shrink-0 border-r border-slate-200/70 bg-white/70 backdrop-blur dark:border-slate-800/80 dark:bg-slate-900/60">
+          <nav className="flex flex-col gap-1 p-4">
             {SECTION_ITEMS.map(item => (
               <button
                 key={item.id}
-                className={`w-full text-left px-4 py-2 text-sm transition-colors ${item.id === section
-                  ? 'bg-blue-500/15 text-blue-700 dark:text-blue-200'
-                  : 'text-gray-700 dark:text-gray-200 hover:bg-white/40 dark:hover:bg-white/10'
+                className={`w-full rounded-xl px-4 py-2.5 text-left text-sm font-medium transition-colors ${item.id === section
+                  ? 'bg-slate-900 text-white dark:bg-white dark:text-slate-900'
+                  : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-300 dark:hover:bg-slate-800/60 dark:hover:text-white'
                   }`}
                 onClick={() => onSectionChange(item.id)}
               >
@@ -463,24 +475,24 @@ export default function SettingsView({ section, onSectionChange, onClose, onOpen
           </nav>
         </aside>
 
-        <main className="flex-1 overflow-auto">
-          <div className="max-w-3xl mx-auto px-6 py-6">
+        <main className="flex-1 min-h-0 overflow-auto">
+          <div className="mx-auto max-w-5xl px-6 pb-16 pt-8">
             {section === 'general' && (
-              <div className="glass-card text-sm text-gray-600 dark:text-gray-300">
+              <div className={`${cardClass} text-sm text-slate-600 dark:text-slate-300`}>
                 通用设置将在后续版本提供。
               </div>
             )}
 
             {section === 'appearance' && (
-              <div className="glass-card space-y-4">
-                <div className="text-sm font-medium text-gray-900 dark:text-gray-100">主题模式</div>
+              <div className={`${cardClass} space-y-4`}>
+                <div className="text-sm font-medium text-slate-900 dark:text-white">主题模式</div>
                 <div className="flex flex-wrap gap-3">
                   {(['light', 'dark', 'system'] as const).map((mode) => (
                     <button
                       key={mode}
-                      className={`px-4 py-2 rounded-full border text-sm transition-colors ${themeMode === mode
-                        ? 'border-blue-400/60 text-blue-700 dark:text-blue-200'
-                        : 'border-white/40 text-gray-700 dark:text-gray-200 hover:border-white/60'
+                      className={`rounded-full border px-4 py-2 text-sm transition-colors ${themeMode === mode
+                        ? 'border-slate-900 bg-slate-900 text-white dark:border-white dark:bg-white dark:text-slate-900'
+                        : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:text-slate-900 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-300'
                         }`}
                       onClick={async () => {
                         const info = await window.intools.theme.set(mode)
@@ -495,7 +507,7 @@ export default function SettingsView({ section, onSectionChange, onClose, onOpen
             )}
 
             {section === 'shortcuts' && settings && (
-              <div className="glass-card">
+              <div className="space-y-3">
                 {SHORTCUTS.map(item => (
                   <ShortcutInput
                     key={item.id}
@@ -513,13 +525,13 @@ export default function SettingsView({ section, onSectionChange, onClose, onOpen
 
             {section === 'plugins' && (
               <div className="space-y-5">
-                <div className="glass-card space-y-4">
+                <div className={`${cardClass} space-y-4`}>
                   <div className="flex items-center justify-between gap-3">
-                    <div className="text-sm font-medium text-gray-900 dark:text-gray-100">
+                    <div className="text-sm font-medium text-slate-900 dark:text-white">
                       插件管理
                     </div>
                     <button
-                      className="glass-button px-3 py-2 text-xs"
+                      className={actionButtonClass}
                       onClick={refreshPlugins}
                       disabled={pluginLoading}
                     >
@@ -528,17 +540,16 @@ export default function SettingsView({ section, onSectionChange, onClose, onOpen
                   </div>
                   <div className="flex flex-col gap-3">
                     <input
-                      className="settings-input w-full"
+                      className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-2 text-sm text-slate-700 shadow-sm outline-none transition focus:border-slate-300 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-200"
                       placeholder="搜索插件名称或描述..."
                       value={pluginQuery}
                       onChange={(e) => setPluginQuery(e.target.value)}
                     />
-                    <div className="settings-filter-row">
+                    <div className="flex flex-wrap gap-2">
                       {(['all', 'enabled', 'disabled'] as const).map((key) => (
                         <button
                           key={key}
-                          className={`settings-chip ${pluginFilter === key ? 'settings-chip-active' : ''
-                            }`}
+                          className={pluginFilter === key ? primaryPillClass : pillClass}
                           onClick={() => setPluginFilter(key)}
                         >
                           {key === 'all' ? '全部' : key === 'enabled' ? '已启用' : '已禁用'}
@@ -546,13 +557,13 @@ export default function SettingsView({ section, onSectionChange, onClose, onOpen
                       ))}
                     </div>
                   </div>
-                  <div className="text-xs text-gray-500 dark:text-gray-400">
+                  <div className="text-xs text-slate-500 dark:text-slate-400">
                     当前 {filteredPlugins.length} 个插件
                   </div>
                 </div>
 
                 {filteredPlugins.length === 0 ? (
-                  <div className="glass-card text-sm text-gray-500 dark:text-gray-400">
+                  <div className={`${cardClass} text-sm text-slate-500 dark:text-slate-400`}>
                     没有匹配的插件。
                   </div>
                 ) : (
@@ -560,30 +571,30 @@ export default function SettingsView({ section, onSectionChange, onClose, onOpen
                     {filteredPlugins.map((plugin) => (
                       <div
                         key={plugin.id}
-                        className="glass-card flex flex-col gap-3"
+                        className={`${cardClassTight} flex flex-col gap-3`}
                       >
                         <div className="flex items-start gap-3">
                           <PluginIcon icon={plugin.icon} name={plugin.displayName} />
                           <div className="min-w-0 flex-1">
                             <div className="flex flex-wrap items-center gap-2">
-                              <div className="text-sm font-semibold text-gray-900 dark:text-gray-100">
+                              <div className="text-sm font-semibold text-slate-900 dark:text-white">
                                 {plugin.displayName}
                               </div>
                               {plugin.builtin && (
-                                <span className="text-[11px] px-2 py-0.5 rounded-full bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-300">
+                                <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] text-slate-600 dark:bg-slate-800 dark:text-slate-300">
                                   内置
                                 </span>
                               )}
                               {!plugin.enabled && (
-                                <span className="text-[11px] px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300">
+                                <span className="rounded-full bg-amber-50 px-2 py-0.5 text-[11px] text-amber-700 dark:bg-amber-900/30 dark:text-amber-300">
                                   已停用
                                 </span>
                               )}
                             </div>
-                            <div className="text-xs text-gray-500 dark:text-gray-400 line-clamp-2">
+                            <div className="text-xs text-slate-500 dark:text-slate-400 line-clamp-2">
                               {plugin.description}
                             </div>
-                            <div className="text-xs text-gray-400 dark:text-gray-500 flex flex-wrap items-center gap-x-3 gap-y-1 mt-1">
+                            <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-400 dark:text-slate-500">
                               <span>
                                 {plugin.name}
                                 {plugin.version ? ` · v${plugin.version}` : ''}
@@ -591,7 +602,7 @@ export default function SettingsView({ section, onSectionChange, onClose, onOpen
                               {plugin.author && <span>作者：{plugin.author}</span>}
                               {plugin.homepage && (
                                 <button
-                                  className="text-xs text-blue-600 dark:text-blue-300 hover:underline"
+                                  className="text-xs text-slate-700 hover:underline dark:text-slate-200"
                                   onClick={() => window.intools.shell.openExternal(plugin.homepage!)}
                                 >
                                   打开主页
@@ -600,7 +611,7 @@ export default function SettingsView({ section, onSectionChange, onClose, onOpen
                             </div>
                           </div>
                           <button
-                            className={`settings-chip ${plugin.enabled ? 'settings-chip-active' : ''}`}
+                            className={plugin.enabled ? primaryPillClass : pillClass}
                             onClick={() => handleTogglePlugin(plugin)}
                             disabled={plugin.builtin}
                           >
@@ -609,13 +620,13 @@ export default function SettingsView({ section, onSectionChange, onClose, onOpen
                         </div>
                         <div className="flex flex-wrap items-center gap-2">
                           <button
-                            className="glass-button px-3 py-1.5 text-xs"
+                            className={actionButtonClass}
                             onClick={() => onOpenPluginDetails(plugin.name)}
                           >
                             详情
                           </button>
                           <button
-                            className="glass-button glass-danger px-3 py-1.5 text-xs"
+                            className="rounded-full border border-red-200 bg-white px-3 py-1.5 text-xs text-red-600 transition hover:border-red-300 hover:text-red-700 disabled:cursor-not-allowed disabled:opacity-50 dark:border-red-900/60 dark:bg-slate-950 dark:text-red-400"
                             onClick={() => handleUninstallPlugin(plugin)}
                             disabled={plugin.builtin}
                           >
@@ -632,34 +643,31 @@ export default function SettingsView({ section, onSectionChange, onClose, onOpen
             {section === 'store' && settings && (
               <div className="space-y-6">
                 <div>
-                  <div className="text-sm font-medium text-gray-900 dark:text-gray-100 mb-2">插件源</div>
+                  <div className="mb-2 text-sm font-medium text-slate-900 dark:text-white">插件源</div>
                   <div className="space-y-3">
                     {sources.length === 0 && (
-                      <div className="text-sm text-gray-500 dark:text-gray-400">
+                      <div className="text-sm text-slate-500 dark:text-slate-400">
                         还没有添加任何插件源。
                       </div>
                     )}
                     {sources.map(source => (
                       <div
                         key={source.id}
-                        className="flex items-center justify-between gap-4 px-4 py-3 rounded border border-gray-200 dark:border-gray-800"
+                        className={`${cardClassTight} flex items-center justify-between gap-4`}
                       >
                         <div className="min-w-0">
-                          <div className="text-sm font-medium text-gray-900 dark:text-gray-100">{source.name}</div>
-                          <div className="text-xs text-gray-500 dark:text-gray-400 truncate">{source.url}</div>
+                          <div className="text-sm font-medium text-slate-900 dark:text-white">{source.name}</div>
+                          <div className="text-xs text-slate-500 dark:text-slate-400 truncate">{source.url}</div>
                         </div>
                         <div className="flex items-center gap-3">
                           <button
-                            className={`px-3 py-1 rounded text-xs border ${source.enabled
-                              ? 'border-blue-500 text-blue-600 dark:text-blue-300'
-                              : 'border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300'
-                              }`}
+                            className={source.enabled ? primaryPillClass : pillClass}
                             onClick={() => handleToggleSource(source.id, !source.enabled)}
                           >
                             {source.enabled ? '已启用' : '已停用'}
                           </button>
                           <button
-                            className="px-3 py-1 rounded text-xs border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300 hover:border-gray-300 dark:hover:border-gray-600"
+                            className={actionButtonClass}
                             onClick={() => handleRemoveSource(source.id)}
                           >
                             删除
@@ -671,16 +679,16 @@ export default function SettingsView({ section, onSectionChange, onClose, onOpen
                 </div>
 
                 <div>
-                  <div className="text-sm font-medium text-gray-900 dark:text-gray-100 mb-2">新增插件源</div>
+                  <div className="mb-2 text-sm font-medium text-slate-900 dark:text-white">新增插件源</div>
                   <div className="grid grid-cols-1 gap-3">
                     <input
-                      className="w-full rounded border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 px-3 py-2 text-sm text-gray-900 dark:text-gray-100"
+                      className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-2 text-sm text-slate-700 shadow-sm outline-none transition focus:border-slate-300 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-200"
                       placeholder="来源名称"
                       value={newSource.name}
                       onChange={(e) => setNewSource(prev => ({ ...prev, name: e.target.value }))}
                     />
                     <input
-                      className="w-full rounded border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 px-3 py-2 text-sm text-gray-900 dark:text-gray-100"
+                      className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-2 text-sm text-slate-700 shadow-sm outline-none transition focus:border-slate-300 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-200"
                       placeholder="JSON 索引地址"
                       value={newSource.url}
                       onChange={(e) => setNewSource(prev => ({ ...prev, url: e.target.value }))}
@@ -689,7 +697,7 @@ export default function SettingsView({ section, onSectionChange, onClose, onOpen
                       <div className="text-xs text-red-500">{sourceError}</div>
                     )}
                     <button
-                      className="inline-flex items-center justify-center px-4 py-2 rounded border border-blue-500 text-blue-600 dark:text-blue-300 text-sm hover:border-blue-400"
+                      className="inline-flex items-center justify-center rounded-full border border-slate-900 bg-slate-900 px-4 py-2 text-sm text-white transition hover:bg-slate-800 dark:border-white dark:bg-white dark:text-slate-900 dark:hover:bg-slate-100"
                       onClick={handleAddSource}
                     >
                       添加来源
@@ -704,17 +712,17 @@ export default function SettingsView({ section, onSectionChange, onClose, onOpen
                 {PERMISSIONS.map(item => (
                   <div
                     key={item.id}
-                    className="glass-card flex items-center justify-between gap-4"
+                    className={`${cardClassTight} flex items-center justify-between gap-4`}
                   >
                     <div>
-                      <div className="text-sm font-medium text-gray-900 dark:text-gray-100">{item.label}</div>
-                      <div className="text-xs text-gray-500 dark:text-gray-400">
+                      <div className="text-sm font-medium text-slate-900 dark:text-white">{item.label}</div>
+                      <div className="text-xs text-slate-500 dark:text-slate-400">
                         {formatPermissionStatus(permissionStatus[item.id])}
                       </div>
                     </div>
                     <div className="flex items-center gap-2">
                       <button
-                        className="glass-button px-3 py-1 text-xs"
+                        className={actionButtonClass}
                         onClick={() => window.intools.permission.openSystemSettings(item.id)}
                       >
                         打开系统设置
@@ -728,20 +736,20 @@ export default function SettingsView({ section, onSectionChange, onClose, onOpen
             {section === 'developer' && settings && (
               <div className="space-y-5">
                 {/* 开发者模式开关 */}
-                <div className="glass-card space-y-4">
+                <div className={`${cardClass} space-y-4`}>
                   <div className="flex items-center justify-between">
                     <div>
-                      <div className="text-sm font-medium text-gray-900 dark:text-gray-100">
+                      <div className="text-sm font-medium text-slate-900 dark:text-white">
                         启用开发者模式
                       </div>
-                      <div className="text-xs text-gray-500 dark:text-gray-400">
+                      <div className="text-xs text-slate-500 dark:text-slate-400">
                         开启后可从外部目录加载开发中的插件
                       </div>
                     </div>
                     <button
                       className={`relative w-11 h-6 rounded-full transition-colors ${settings.developer.enabled
-                          ? 'bg-blue-500'
-                          : 'bg-gray-300 dark:bg-gray-600'
+                        ? 'bg-blue-500'
+                        : 'bg-gray-300 dark:bg-gray-600'
                         }`}
                       onClick={() => {
                         updateSettings({
@@ -762,13 +770,13 @@ export default function SettingsView({ section, onSectionChange, onClose, onOpen
 
                 {/* 插件开发目录 */}
                 {settings.developer.enabled && (
-                  <div className="glass-card space-y-4">
-                    <div className="text-sm font-medium text-gray-900 dark:text-gray-100">
+                  <div className={`${cardClass} space-y-4`}>
+                    <div className="text-sm font-medium text-slate-900 dark:text-white">
                       插件开发目录
                     </div>
 
                     {settings.developer.pluginPaths.length === 0 ? (
-                      <div className="text-sm text-gray-500 dark:text-gray-400">
+                      <div className="text-sm text-slate-500 dark:text-slate-400">
                         还没有添加任何开发目录。
                       </div>
                     ) : (
@@ -776,9 +784,9 @@ export default function SettingsView({ section, onSectionChange, onClose, onOpen
                         {settings.developer.pluginPaths.map((path) => (
                           <div
                             key={path}
-                            className="flex items-center justify-between gap-3 px-3 py-2 rounded border border-gray-200 dark:border-gray-700 bg-white/50 dark:bg-gray-900/50"
+                            className="flex items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-white/70 px-3 py-2 text-sm text-slate-700 shadow-sm dark:border-slate-800 dark:bg-slate-950 dark:text-slate-200"
                           >
-                            <div className="text-sm text-gray-700 dark:text-gray-300 truncate flex-1">
+                            <div className="truncate flex-1">
                               {path}
                             </div>
                             <button
@@ -799,7 +807,7 @@ export default function SettingsView({ section, onSectionChange, onClose, onOpen
 
                     <div className="flex gap-2">
                       <button
-                        className="glass-button px-3 py-2 text-xs"
+                        className={actionButtonClass}
                         onClick={async () => {
                           const path = await window.intools.developer.selectDirectory()
                           if (path) {
@@ -817,7 +825,7 @@ export default function SettingsView({ section, onSectionChange, onClose, onOpen
                         + 添加目录
                       </button>
                       <button
-                        className="glass-button px-3 py-2 text-xs"
+                        className={actionButtonClass}
                         onClick={async () => {
                           await window.intools.developer.reloadPlugins()
                           await refreshPlugins()
@@ -832,25 +840,25 @@ export default function SettingsView({ section, onSectionChange, onClose, onOpen
 
                 {/* 调试选项 */}
                 {settings.developer.enabled && (
-                  <div className="glass-card space-y-4">
-                    <div className="text-sm font-medium text-gray-900 dark:text-gray-100">
+                  <div className={`${cardClass} space-y-4`}>
+                    <div className="text-sm font-medium text-slate-900 dark:text-white">
                       调试选项
                     </div>
 
                     {/* 自动热重载 */}
-                    <div className="flex items-center justify-between py-2 border-b border-gray-200/80 dark:border-gray-800/80">
+                    <div className="flex items-center justify-between border-b border-slate-200/80 py-2 dark:border-slate-800/80">
                       <div>
-                        <div className="text-sm text-gray-900 dark:text-gray-100">
+                        <div className="text-sm text-slate-900 dark:text-white">
                           自动热重载
                         </div>
-                        <div className="text-xs text-gray-500 dark:text-gray-400">
+                        <div className="text-xs text-slate-500 dark:text-slate-400">
                           检测文件变化时自动重新加载插件
                         </div>
                       </div>
                       <button
                         className={`relative w-11 h-6 rounded-full transition-colors ${settings.developer.autoReload
-                            ? 'bg-blue-500'
-                            : 'bg-gray-300 dark:bg-gray-600'
+                          ? 'bg-blue-500'
+                          : 'bg-gray-300 dark:bg-gray-600'
                           }`}
                         onClick={() => {
                           updateSettings({
@@ -869,19 +877,19 @@ export default function SettingsView({ section, onSectionChange, onClose, onOpen
                     </div>
 
                     {/* 自动打开 DevTools */}
-                    <div className="flex items-center justify-between py-2 border-b border-gray-200/80 dark:border-gray-800/80">
+                    <div className="flex items-center justify-between border-b border-slate-200/80 py-2 dark:border-slate-800/80">
                       <div>
-                        <div className="text-sm text-gray-900 dark:text-gray-100">
+                        <div className="text-sm text-slate-900 dark:text-white">
                           自动打开开发者工具
                         </div>
-                        <div className="text-xs text-gray-500 dark:text-gray-400">
+                        <div className="text-xs text-slate-500 dark:text-slate-400">
                           打开插件窗口时自动打开 DevTools
                         </div>
                       </div>
                       <button
                         className={`relative w-11 h-6 rounded-full transition-colors ${settings.developer.showDevTools
-                            ? 'bg-blue-500'
-                            : 'bg-gray-300 dark:bg-gray-600'
+                          ? 'bg-blue-500'
+                          : 'bg-gray-300 dark:bg-gray-600'
                           }`}
                         onClick={() => {
                           updateSettings({
@@ -901,15 +909,14 @@ export default function SettingsView({ section, onSectionChange, onClose, onOpen
 
                     {/* 日志级别 */}
                     <div className="py-2">
-                      <div className="text-sm text-gray-900 dark:text-gray-100 mb-2">
+                      <div className="mb-2 text-sm text-slate-900 dark:text-white">
                         日志级别
                       </div>
                       <div className="flex flex-wrap gap-2">
                         {(['debug', 'info', 'warn', 'error'] as const).map((level) => (
                           <button
                             key={level}
-                            className={`settings-chip ${settings.developer.logLevel === level ? 'settings-chip-active' : ''
-                              }`}
+                            className={settings.developer.logLevel === level ? primaryPillClass : pillClass}
                             onClick={() => {
                               updateSettings({
                                 developer: {
@@ -928,8 +935,8 @@ export default function SettingsView({ section, onSectionChange, onClose, onOpen
                 )}
 
                 {/* 提示信息 */}
-                <div className="glass-card text-sm text-gray-600 dark:text-gray-300 space-y-2">
-                  <div className="font-medium text-gray-900 dark:text-gray-100">💡 使用提示</div>
+                <div className={`${cardClass} space-y-2 text-sm text-slate-600 dark:text-slate-300`}>
+                  <div className="font-medium text-slate-900 dark:text-white">使用提示</div>
                   <ul className="list-disc list-inside text-xs space-y-1">
                     <li>添加的开发目录应该包含插件文件夹（每个文件夹包含 manifest.json）</li>
                     <li>开发目录的插件将显示「开发中」标记</li>
@@ -941,18 +948,18 @@ export default function SettingsView({ section, onSectionChange, onClose, onOpen
             )}
 
             {section === 'about' && (
-              <div className="glass-card space-y-4 text-sm text-gray-600 dark:text-gray-300">
+              <div className={`${cardClass} space-y-4 text-sm text-slate-600 dark:text-slate-300`}>
                 <div>
-                  <div className="font-medium text-gray-900 dark:text-gray-100">应用信息</div>
+                  <div className="font-medium text-slate-900 dark:text-white">应用信息</div>
                   <div>名称：{appInfo?.name}</div>
                   <div>版本：{appInfo?.version}</div>
                 </div>
                 <div>
-                  <div className="font-medium text-gray-900 dark:text-gray-100">数据目录</div>
-                  <div className="text-xs text-gray-500 dark:text-gray-400 break-all">{appInfo?.userDataPath}</div>
+                  <div className="font-medium text-slate-900 dark:text-white">数据目录</div>
+                  <div className="text-xs text-slate-500 dark:text-slate-400 break-all">{appInfo?.userDataPath}</div>
                 </div>
                 <button
-                  className="glass-button px-3 py-1 text-xs"
+                  className={actionButtonClass}
                   onClick={() => appInfo?.userDataPath && window.intools.shell.openFolder(appInfo.userDataPath)}
                 >
                   打开数据目录
@@ -961,6 +968,7 @@ export default function SettingsView({ section, onSectionChange, onClose, onOpen
             )}
           </div>
         </main>
+      </div>
       </div>
     </div>
   )

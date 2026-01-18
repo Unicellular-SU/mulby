@@ -18,9 +18,13 @@ export function registerPluginHandlers(manager: PluginManager) {
       version: p.manifest.version,
       author: p.manifest.author,
       homepage: p.manifest.homepage,
+      main: p.manifest.main,
+      ui: p.manifest.ui,
+      window: p.manifest.window,
       icon: p.resolvedIcon,
       path: p.path,
       builtin: isBuiltin(p.path),
+      isDev: p.isDev,
       features: manager.getFeatures(p.id),
       enabled: p.enabled
     }))
