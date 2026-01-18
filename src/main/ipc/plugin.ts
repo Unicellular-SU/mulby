@@ -1,6 +1,7 @@
 import { ipcMain, app } from 'electron'
 import { resolve } from 'path'
 import { PluginManager } from '../plugin'
+import { resolveIcon } from '../plugin/icon-resolver'
 import type { InputPayload } from '../../shared/types/plugin'
 import { PluginInstaller } from '../plugin/installer'
 
@@ -32,7 +33,6 @@ export function registerPluginHandlers(manager: PluginManager) {
 
   // 搜索插件（返回匹配的功能入口）
   ipcMain.handle('plugin:search', async (_, query: string | InputPayload) => {
-    const { resolveIcon } = require('../plugin/icon-resolver') as { resolveIcon: (icon: any, path: string) => Promise<any> }
     const searchResults = await manager.search(query)
 
     return Promise.all(searchResults.map(async result => {
