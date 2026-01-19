@@ -819,7 +819,7 @@ export function useIntools(pluginId?: string) {
 export function buildGitignore() {
   return `node_modules
 dist
-ui
+/ui/
 .DS_Store
 *.log
 `

@@ -435,6 +435,86 @@ window.electronApi = {
 
 ---
 
+### 开发流程
+
+使用 preload 的插件开发流程与普通插件略有不同：
+
+#### 项目结构
+
+```
+my-plugin/
+├── manifest.json          # 配置 preload 字段
+├── package.json           # 依赖列表（含 type: module）
+├── preload.cjs            # 👈 Preload 脚本（根目录，不打包）
+├── lib/                   # 可选：自编写模块
+│   └── utils.cjs
+├── src/
+│   ├── main.ts            # 后端入口
+│   └── ui/                # React UI
+├── dist/                  # 构建输出（main.js）
+├── ui/                    # UI 构建输出
+└── node_modules/          # npm 依赖
+```
+
+#### CLI 命令说明
+
+| 命令 | Preload 处理方式 |
+|------|-----------------|
+| `intools create` | 创建项目模板，手动添加 `preload.cjs` |
+| `intools dev` | 无需处理，preload 使用源码直接运行 |
+| `intools build` | 无需处理，preload **不需要打包** |
+| `intools pack` | **自动打包** preload 文件 + node_modules 生产依赖 |
+
+#### 开发步骤
+
+```bash
+# 1. 创建插件
+cd plugins
+npx intools create my-plugin --template react
+
+# 2. 手动创建 preload.cjs
+touch preload.cjs
+
+# 3. 在 manifest.json 中配置
+# "preload": "preload.cjs"
+
+# 4. 安装第三方依赖（如需要）
+npm install pdf-lib lodash
+
+# 5. 编写 preload.cjs（使用 require）
+
+# 6. 开发调试
+npm run dev
+
+# 7. 构建
+npm run build
+
+# 8. 打包发布
+npm run pack
+```
+
+#### 打包后的结构
+
+`intools pack` 会生成包含以下内容的 `.inplugin` 文件：
+
+```
+my-plugin-1.0.0.inplugin
+├── manifest.json
+├── main.js                # 后端（打包后）
+├── preload.cjs            # Preload 源码
+├── ui/                    # UI 构建产物
+├── node_modules/          # 👈 自动包含生产依赖
+│   ├── pdf-lib/
+│   └── (依赖的依赖...)
+├── icon.png
+└── README.md
+```
+
+> [!NOTE]
+> 只有 `package.json` 中 `dependencies`（生产依赖）会被打包。`devDependencies` 不会包含在内。
+
+---
+
 # 第二部分：API 参考
 
 ## 1. 剪贴板 (clipboard)

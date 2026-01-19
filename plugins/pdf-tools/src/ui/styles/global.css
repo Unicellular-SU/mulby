@@ -1,0 +1,60 @@
+:root {
+    /* iOS 16 Glassmorphism Colors & Effects */
+    --glass-bg: rgba(255, 255, 255, 0.65);
+    --glass-border: rgba(255, 255, 255, 0.4);
+    --glass-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.15);
+    --glass-blur: blur(20px);
+    --glass-saturation: saturate(180%);
+
+    --primary-color: #007AFF;
+    --text-primary: #1c1c1e;
+    --text-secondary: #8e8e93;
+    --bg-app: #f2f2f7;
+
+    --sidebar-width: 260px;
+    --radius-lg: 24px;
+    --radius-md: 16px;
+    --radius-sm: 12px;
+}
+
+@media (prefers-color-scheme: dark) {
+    :root {
+        --glass-bg: rgba(30, 30, 30, 0.65);
+        --glass-border: rgba(255, 255, 255, 0.1);
+        --glass-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.3);
+
+        --text-primary: #ffffff;
+        --text-secondary: #98989f;
+        --bg-app: #000000;
+    }
+}
+
+* {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+    -webkit-font-smoothing: antialiased;
+}
+
+body {
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", Arial, sans-serif;
+    background-color: var(--bg-app);
+    color: var(--text-primary);
+    height: 100vh;
+    overflow: hidden;
+    font-size: 14px;
+}
+
+#root {
+    height: 100%;
+    width: 100%;
+}
+
+/* Utility Class for Glassmorphism */
+.glass-panel {
+    background: var(--glass-bg);
+    backdrop-filter: var(--glass-blur) var(--glass-saturation);
+    -webkit-backdrop-filter: var(--glass-blur) var(--glass-saturation);
+    border: 1px solid var(--glass-border);
+    box-shadow: var(--glass-shadow);
+}
