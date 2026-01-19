@@ -278,6 +278,122 @@ export function MyComponent() {
 
 ---
 
+### 模块引入方法
+
+Preload 脚本支持多种模块引入方式：
+
+#### 1. 引入 Node.js 原生模块
+
+```javascript
+// preload.js
+const fs = require('fs')           // 文件系统
+const os = require('os')           // 操作系统信息
+const path = require('path')       // 路径操作
+const crypto = require('crypto')   // 加密
+const { spawn } = require('child_process')  // 子进程
+
+window.nodeApi = {
+  homeDir: os.homedir(),
+  platform: process.platform,
+  cpus: os.cpus().length,
+  hash: (text) => crypto.createHash('md5').update(text).digest('hex')
+}
+```
+
+#### 2. 引入自编写模块
+
+```javascript
+// preload.js
+// 相对于 preload.js 文件的路径
+const utils = require('./lib/utils')           // 同级 lib 目录
+const helpers = require('./helpers/format')    // 同级 helpers 目录
+const shared = require('../shared/constants')  // 上级目录
+
+window.myApi = {
+  format: utils.formatData,
+  constants: shared.APP_NAME
+}
+```
+
+> [!NOTE]
+> 自编写模块也必须使用 CommonJS 格式（`module.exports`），路径相对于 `preload.js` 文件位置。
+
+#### 3. 引入第三方模块
+
+**方式 A：通过 npm 安装**
+
+```bash
+# 在插件目录安装依赖
+cd my-plugin
+npm install pdf-lib lodash dayjs
+```
+
+```javascript
+// preload.js
+const { PDFDocument } = require('pdf-lib')
+const _ = require('lodash')
+const dayjs = require('dayjs')
+
+window.pdfApi = {
+  mergePDFs: async (paths) => { /* ... */ },
+  formatDate: (date) => dayjs(date).format('YYYY-MM-DD')
+}
+```
+
+**方式 B：通过源码引入**
+
+将第三方库源码放入插件目录：
+
+```
+my-plugin/
+├── preload.js
+├── vendor/
+│   ├── lodash.min.js
+│   └── crypto-js.js
+```
+
+```javascript
+// preload.js
+const _ = require('./vendor/lodash.min.js')
+const CryptoJS = require('./vendor/crypto-js.js')
+```
+
+#### 4. 引入 Electron 渲染进程 API
+
+```javascript
+// preload.js
+const { 
+  ipcRenderer,      // 进程通信
+  clipboard,        // 剪贴板（直接访问，无需 IPC）
+  shell,            // 打开外部链接/文件
+  nativeImage,      // 图片处理
+  contextBridge     // 上下文桥接（自定义 preload 模式下不需要）
+} = require('electron')
+
+window.electronApi = {
+  // 剪贴板操作
+  readClipboard: () => clipboard.readText(),
+  writeClipboard: (text) => clipboard.writeText(text),
+  readImage: () => clipboard.readImage().toDataURL(),
+  
+  // 打开外部资源
+  openExternal: (url) => shell.openExternal(url),
+  showInFolder: (path) => shell.showItemInFolder(path),
+  
+  // 自定义 IPC 通信（与主进程交互）
+  send: (channel, data) => ipcRenderer.send(channel, data),
+  invoke: (channel, ...args) => ipcRenderer.invoke(channel, ...args),
+  on: (channel, callback) => {
+    ipcRenderer.on(channel, (event, ...args) => callback(...args))
+  }
+}
+```
+
+> [!TIP]
+> 虽然可以直接使用 Electron API，但建议优先使用 `window.intools` 封装的 API，它们提供了更好的跨平台兼容性和错误处理。
+
+---
+
 ### 与 Main 后端的区别
 
 | 对比项 | Preload 脚本 | Main 后端 (main.js) |

@@ -191,24 +191,55 @@ export function buildAppTsx(name: string) {
   return `import { useEffect, useState } from 'react'
 import { useIntools } from './hooks/useIntools'
 
+// 附件类型定义
+interface Attachment {
+  id: string
+  name: string
+  size: number
+  kind: 'file' | 'image'
+  mime?: string
+  ext?: string
+  path?: string
+  dataUrl?: string
+}
+
 interface PluginInitData {
   pluginName: string
   featureCode: string
   input: string
   mode?: string
   route?: string
+  attachments?: Attachment[]
 }
 
 export default function App() {
   const [input, setInput] = useState('')
   const [output, setOutput] = useState('')
+  const [theme, setTheme] = useState<'light' | 'dark'>('light')
+  const [attachments, setAttachments] = useState<Attachment[]>([])
   const { clipboard, notification } = useIntools('${name}')
 
   useEffect(() => {
+    // 获取初始主题（从 URL 参数）
+    const params = new URLSearchParams(window.location.search)
+    const initialTheme = (params.get('theme') as 'light' | 'dark') || 'light'
+    setTheme(initialTheme)
+    document.documentElement.classList.toggle('dark', initialTheme === 'dark')
+
+    // 监听主题变化
+    window.intools?.onThemeChange?.((newTheme: 'light' | 'dark') => {
+      setTheme(newTheme)
+      document.documentElement.classList.toggle('dark', newTheme === 'dark')
+    })
+
     // 接收插件初始化数据
     window.intools?.onPluginInit?.((data: PluginInitData) => {
       if (data.input) {
         setInput(data.input)
+      }
+      // 接收附件数据
+      if (data.attachments) {
+        setAttachments(data.attachments)
       }
     })
   }, [])
@@ -223,10 +254,44 @@ export default function App() {
     notification.show('已复制到剪贴板')
   }
 
+  // 格式化文件大小
+  const formatSize = (bytes: number) => {
+    if (bytes < 1024) return \`\${bytes} B\`
+    if (bytes < 1024 * 1024) return \`\${(bytes / 1024).toFixed(1)} KB\`
+    return \`\${(bytes / 1024 / 1024).toFixed(1)} MB\`
+  }
+
   return (
     <div className="app">
       <div className="titlebar">${name}</div>
       <div className="container">
+        {/* 附件展示区域 */}
+        {attachments.length > 0 && (
+          <div className="field">
+            <label>附件 ({attachments.length})</label>
+            <div className="attachments-list">
+              {attachments.map((item, index) => (
+                <div key={item.id || index} className="attachment-item">
+                  <span className="attachment-icon">
+                    {item.kind === 'image' ? '🖼️' : '📄'}
+                  </span>
+                  <div className="attachment-info">
+                    <div className="attachment-name">{item.name}</div>
+                    <div className="attachment-meta">{formatSize(item.size)}</div>
+                  </div>
+                  {item.kind === 'image' && (item.dataUrl || item.path) && (
+                    <img
+                      src={item.dataUrl || \`file://\${item.path}\`}
+                      alt={item.name}
+                      className="attachment-preview"
+                    />
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
         <div className="field">
           <label>输入</label>
           <textarea
@@ -255,8 +320,35 @@ export default function App() {
 `
 }
 
+
 export function buildStylesCss() {
-  return `* {
+  return `/* CSS 变量 - 亮色主题 */
+:root {
+  --bg-primary: #ffffff;
+  --bg-secondary: #f5f5f5;
+  --bg-tertiary: #ebebeb;
+  --text-primary: #1e1e1e;
+  --text-secondary: #666666;
+  --text-tertiary: #999999;
+  --border-color: #e0e0e0;
+  --accent-color: #0078d4;
+  --accent-hover: #1084d8;
+}
+
+/* CSS 变量 - 暗色主题 */
+:root.dark {
+  --bg-primary: #1e1e1e;
+  --bg-secondary: #2d2d2d;
+  --bg-tertiary: #3d3d3d;
+  --text-primary: #e0e0e0;
+  --text-secondary: #999999;
+  --text-tertiary: #666666;
+  --border-color: #3d3d3d;
+  --accent-color: #0078d4;
+  --accent-hover: #1084d8;
+}
+
+* {
   margin: 0;
   padding: 0;
   box-sizing: border-box;
@@ -264,9 +356,10 @@ export function buildStylesCss() {
 
 body {
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-  background: #1e1e1e;
-  color: #e0e0e0;
+  background: var(--bg-primary);
+  color: var(--text-primary);
   min-height: 100vh;
+  transition: background-color 0.2s, color 0.2s;
 }
 
 .app {
@@ -277,12 +370,12 @@ body {
 
 .titlebar {
   height: 32px;
-  background: #2d2d2d;
+  background: var(--bg-secondary);
   display: flex;
   align-items: center;
   justify-content: center;
   font-size: 13px;
-  color: #999;
+  color: var(--text-secondary);
   -webkit-app-region: drag;
   flex-shrink: 0;
 }
@@ -306,29 +399,30 @@ body {
 
 .field label {
   font-size: 12px;
-  color: #999;
+  color: var(--text-secondary);
 }
 
 .field textarea {
   flex: 1;
-  background: #2d2d2d;
-  border: 1px solid #3d3d3d;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
   border-radius: 6px;
   padding: 12px;
-  color: #fff;
+  color: var(--text-primary);
   font-family: 'Monaco', 'Consolas', monospace;
   font-size: 13px;
   resize: none;
   outline: none;
   min-height: 80px;
+  transition: background-color 0.2s, border-color 0.2s, color 0.2s;
 }
 
 .field textarea:focus {
-  border-color: #0078d4;
+  border-color: var(--accent-color);
 }
 
 .field textarea::placeholder {
-  color: #666;
+  color: var(--text-tertiary);
 }
 
 .actions {
@@ -347,21 +441,70 @@ button {
 }
 
 .btn-primary {
-  background: #0078d4;
+  background: var(--accent-color);
   color: #fff;
 }
 
 .btn-primary:hover {
-  background: #1084d8;
+  background: var(--accent-hover);
 }
 
 .btn-secondary {
-  background: #3d3d3d;
-  color: #fff;
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
 }
 
 .btn-secondary:hover {
-  background: #4d4d4d;
+  background: var(--bg-secondary);
+}
+
+/* 附件列表样式 */
+.attachments-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+.attachment-item {
+  display: flex;
+  align-items: center;
+  padding: 10px 12px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  gap: 10px;
+}
+
+.attachment-icon {
+  font-size: 20px;
+}
+
+.attachment-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.attachment-name {
+  font-size: 13px;
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.attachment-meta {
+  font-size: 11px;
+  color: var(--text-tertiary);
+  margin-top: 2px;
+}
+
+.attachment-preview {
+  width: 40px;
+  height: 40px;
+  border-radius: 4px;
+  object-fit: cover;
 }
 `
 }
@@ -1142,6 +1285,17 @@ interface IntoolsFFmpeg {
   run(args: string[], onProgress?: (progress: FFmpegRunProgress) => void): FFmpegTask
 }
 
+interface Attachment {
+  id: string
+  name: string
+  size: number
+  kind: 'file' | 'image'
+  mime?: string
+  ext?: string
+  path?: string
+  dataUrl?: string
+}
+
 interface PluginInitData {
   pluginName: string
   featureCode: string
@@ -1149,6 +1303,7 @@ interface PluginInitData {
   input: string
   mode?: string
   route?: string
+  attachments?: Attachment[]
 }
 
 interface IntoolsAPI {
