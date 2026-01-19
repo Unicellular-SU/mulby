@@ -141,56 +141,172 @@
 "icon": { "type": "svg", "value": "<svg>...</svg>" }
 ```
 
-## Preload 配置（自定义 Node.js 能力）
+## Preload 预加载脚本 ⭐ 核心概念
 
-配置自定义 preload 脚本，可在渲染进程中直接使用 Node.js 能力。
+> [!IMPORTANT]
+> **Preload 是 InTools 插件访问 Node.js 能力的核心机制。** 对于需要在渲染进程（UI）中使用 Node.js API、第三方 npm 模块或 Electron 渲染进程 API 的插件来说，Preload 是**必不可少**的。
+
+### 什么是 Preload？
+
+Preload 脚本是一个特殊的 JavaScript 文件，在**渲染进程加载之前**执行，具有以下特点：
+
+| 特性 | 说明 |
+|------|------|
+| 🔧 **Node.js 完整支持** | 可以使用 `require()` 导入任何 Node.js 原生模块和 npm 包 |
+| 🖥️ **Electron API 访问** | 可以调用 Electron 渲染进程 API |
+| 🌉 **桥接能力** | 通过 `window.xxx` 将原生能力暴露给前端 React/Vue 组件 |
+| ⚡ **同步执行** | 在页面 DOM 加载前执行，确保 API 可用 |
+
+### 适用场景
+
+以下场景**需要使用** Preload：
+
+- 📂 使用 `pdf-lib`、`sharp`、`ffmpeg` 等需要 Node.js 环境的 npm 包
+- 🔐 调用 Node.js 加密模块 (`crypto`)、子进程 (`child_process`)
+- 📁 需要比 `window.intools.filesystem` 更底层的文件操作
+- 🔗 与本地数据库交互 (SQLite、LevelDB 等)
+- 🎯 任何需要原生能力但又想在前端统一调用的场景
+
+---
 
 ### 配置方式
 
+在 `manifest.json` 中添加 `preload` 字段，指定预加载脚本路径：
+
 ```json
 {
-  "preload": "preload.js"
+  "name": "my-plugin",
+  "version": "1.0.0",
+  "displayName": "我的插件",
+  "main": "dist/main.js",
+  "ui": "ui/index.html",
+  "preload": "preload.js",  // 👈 指定预加载脚本
+  "features": [...]
 }
 ```
 
-### preload.js 示例
+---
+
+### preload.js 编写规范
 
 ```javascript
-// preload.js - 遵循 CommonJS 规范
+// preload.js - 必须使用 CommonJS 规范
 const fs = require('fs')
 const os = require('os')
 const path = require('path')
+const { PDFDocument } = require('pdf-lib')  // 可使用 npm 包
 
-// 通过 window 暴露给前端
-window.myApi = {
+/**
+ * 通过 window 对象暴露 API 给前端
+ * 命名建议：window.{插件名}Api 或 window.{功能名}Api
+ */
+window.myPluginApi = {
+  // 同步方法
   getHomeDir: () => os.homedir(),
-  readFile: (filePath) => fs.readFileSync(filePath, 'utf-8'),
-  platform: process.platform
+  getPlatform: () => process.platform,
+  
+  // 异步方法
+  readFile: async (filePath) => {
+    return fs.promises.readFile(filePath, 'utf-8')
+  },
+  
+  // 复杂功能封装
+  mergePDFs: async (pdfPaths, outputPath) => {
+    const mergedPdf = await PDFDocument.create()
+    for (const pdfPath of pdfPaths) {
+      const pdfBytes = fs.readFileSync(pdfPath)
+      const pdf = await PDFDocument.load(pdfBytes)
+      const pages = await mergedPdf.copyPages(pdf, pdf.getPageIndices())
+      pages.forEach(page => mergedPdf.addPage(page))
+    }
+    const bytes = await mergedPdf.save()
+    fs.writeFileSync(outputPath, bytes)
+    return outputPath
+  }
+}
+
+console.log('[Preload] API 已挂载到 window.myPluginApi')
+```
+
+---
+
+### 前端调用示例
+
+```tsx
+// 在 React 组件中调用
+import { useEffect, useState } from 'react'
+
+// 类型声明（推荐单独放在 types.d.ts）
+declare global {
+  interface Window {
+    myPluginApi?: {
+      getHomeDir: () => string
+      getPlatform: () => string
+      readFile: (path: string) => Promise<string>
+      mergePDFs: (paths: string[], output: string) => Promise<string>
+    }
+  }
+}
+
+export function MyComponent() {
+  const [homeDir, setHomeDir] = useState('')
+  
+  useEffect(() => {
+    // 使用可选链确保安全访问
+    if (window.myPluginApi) {
+      setHomeDir(window.myPluginApi.getHomeDir())
+    }
+  }, [])
+  
+  const handleMerge = async () => {
+    const result = await window.myPluginApi?.mergePDFs(
+      ['/path/to/1.pdf', '/path/to/2.pdf'],
+      '/path/to/merged.pdf'
+    )
+    console.log('合并完成:', result)
+  }
+  
+  // 核心 API 仍然可用
+  const handleCopy = async () => {
+    const text = await window.intools.clipboard.readText()
+    console.log('剪贴板内容:', text)
+  }
+  
+  return <div>Home: {homeDir}</div>
 }
 ```
 
-### 前端调用
+---
 
-```typescript
-// 在 UI 组件中使用
-const homeDir = window.myApi?.getHomeDir()
-const content = window.myApi?.readFile('/path/to/file.txt')
+### 与 Main 后端的区别
 
-// 核心 API 仍然可用
-const text = await window.intools.clipboard.readText()
-```
+| 对比项 | Preload 脚本 | Main 后端 (main.js) |
+|--------|--------------|---------------------|
+| 执行环境 | 渲染进程（带 Node.js 权限） | 独立 Worker 进程 |
+| 调用方式 | `window.xxxApi.method()` | `window.intools.host.invoke()` |
+| 适合场景 | 同步操作、UI 紧密相关的原生功能 | 后台任务、长时间运行的操作 |
+| 进程通信 | 无需 IPC，直接调用 | 需要 IPC，异步调用 |
+| 生命周期 | 随 UI 窗口创建/销毁 | 独立管理，可持久化 |
+
+> [!TIP]
+> **选择建议**：如果功能与 UI 紧密相关且需要快速响应，使用 **Preload**；如果是后台任务或需要在无 UI 时运行，使用 **Main 后端**。
+
+---
 
 ### 注意事项
 
 | 项目 | 说明 |
 |------|------|
-| 文件格式 | CommonJS 格式，使用 `require()` 导入模块 |
-| 代码规范 | 必须是清晰可读的源码，**不能压缩/混淆** |
-| 可用模块 | Node.js 原生模块 + 第三方 npm 模块 |
-| API 暴露 | 通过 `window.xxx` 暴露自定义 API |
-| 核心 API | `window.intools` 核心 API 仍然可用 |
-| 安全性 | 有完整 Node.js 权限，需注意安全风险 |
-| 打包 | 运行 `intools pack` 会自动包含 preload 文件 |
+| 📝 文件格式 | **必须是 CommonJS** 格式，使用 `require()` 导入模块 |
+| 🔍 代码规范 | 必须是清晰可读的源码，**禁止压缩/混淆**（安全审查需要） |
+| 📦 可用模块 | Node.js 原生模块 + 已安装的 npm 包 |
+| 🌐 API 暴露 | 通过 `window.xxx` 暴露，建议使用 `window.{插件名}Api` 命名 |
+| 🔧 核心 API | `window.intools` 核心 API 在 Preload 环境中**仍然可用** |
+| ⚠️ 安全性 | 拥有完整 Node.js 权限，**请谨慎处理用户输入** |
+| 📦 打包 | `intools pack` 会自动包含 preload 及其依赖 |
+
+> [!CAUTION]
+> Preload 脚本拥有完整的 Node.js 权限，可以访问文件系统、网络等敏感资源。请确保代码安全，避免执行不可信的用户输入。
 
 ---
 

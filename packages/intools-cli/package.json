@@ -1,6 +1,6 @@
 {
   "name": "intools-cli",
-  "version": "1.0.7",
+  "version": "1.0.8",
   "description": "InTools 插件开发 CLI 工具",
   "main": "dist/index.js",
   "files": [

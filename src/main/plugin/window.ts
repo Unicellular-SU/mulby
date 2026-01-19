@@ -275,7 +275,8 @@ export class PluginWindowManager {
         preload: preloadPath,
         // 如果有自定义 preload，关闭上下文隔离以允许直接设置 window 属性
         contextIsolation: !hasCustomPreload,
-        nodeIntegration: hasCustomPreload
+        nodeIntegration: hasCustomPreload,
+        sandbox: !hasCustomPreload // 如果有自定义 preload，禁用沙箱以允许 Node.js 访问
       }
     })
 
@@ -389,7 +390,8 @@ export class PluginWindowManager {
       webPreferences: {
         preload: preloadPath,
         contextIsolation: !hasCustomPreload,
-        nodeIntegration: hasCustomPreload
+        nodeIntegration: hasCustomPreload,
+        sandbox: !hasCustomPreload // 如果有自定义 preload，禁用沙箱以允许 Node.js 访问
       }
     })
 
