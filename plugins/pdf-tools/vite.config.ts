@@ -8,7 +8,8 @@ export default defineConfig({
   base: './',
   build: {
     outDir: '../../ui',
-    emptyOutDir: true
+    emptyOutDir: true,
+    chunkSizeWarningLimit: 2000
   },
   resolve: {
     alias: {

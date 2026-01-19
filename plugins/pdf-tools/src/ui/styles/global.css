@@ -1,48 +1,48 @@
 :root {
-    /* iOS 16 Glassmorphism Colors & Effects */
-    --glass-bg: rgba(255, 255, 255, 0.65);
-    --glass-border: rgba(255, 255, 255, 0.4);
-    --glass-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.15);
-    --glass-blur: blur(20px);
+    /* iOS 26 Glassmorphism & Colors */
+    --primary-color: #007AFF;
+    --primary-hover: #0062cc;
+    /* Vibrant Mesh Gradient Background - Light (Default) */
+    --bg-gradient: radial-gradient(circle at 0% 0%, #E3F2FD 0%, #E1F5FE 50%, #F3E5F5 100%),
+        radial-gradient(circle at 100% 100%, #E8EAF6 0%, #E0F7FA 100%);
+
+    /* Premium Glass Effect - Bright White */
+    --glass-bg: rgba(255, 255, 255, 0.85);
+    --glass-border: 1px solid rgba(255, 255, 255, 0.8);
+    --glass-shadow: 0 8px 32px rgba(0, 0, 0, 0.05);
+    --glass-blur: blur(24px);
     --glass-saturation: saturate(180%);
 
-    --primary-color: #007AFF;
-    --text-primary: #1c1c1e;
-    --text-secondary: #8e8e93;
-    --bg-app: #f2f2f7;
+    /* Text Colors */
+    --text-primary: #000000;
+    --text-secondary: #505055;
+    --text-tertiary: #86868b;
 
-    --sidebar-width: 260px;
-    --radius-lg: 24px;
-    --radius-md: 16px;
-    --radius-sm: 12px;
+    /* Dimensions & Spacing */
+    --sidebar-width: 80px;
+    /* Compact */
+    --radius-lg: 20px;
+    --radius-md: 14px;
+    --radius-sm: 8px;
+    --header-height: 60px;
 }
 
-@media (prefers-color-scheme: dark) {
-    :root {
-        --glass-bg: rgba(30, 30, 30, 0.65);
-        --glass-border: rgba(255, 255, 255, 0.1);
-        --glass-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.3);
-
-        --text-primary: #ffffff;
-        --text-secondary: #98989f;
-        --bg-app: #000000;
-    }
-}
 
 * {
     box-sizing: border-box;
     margin: 0;
     padding: 0;
     -webkit-font-smoothing: antialiased;
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "Helvetica Neue", Helvetica, Arial, sans-serif;
 }
 
 body {
-    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", Arial, sans-serif;
-    background-color: var(--bg-app);
+    background: var(--bg-gradient);
     color: var(--text-primary);
     height: 100vh;
     overflow: hidden;
-    font-size: 14px;
+    font-size: 15px;
+    line-height: 1.5;
 }
 
 #root {
@@ -50,11 +50,37 @@ body {
     width: 100%;
 }
 
-/* Utility Class for Glassmorphism */
+/* Glass Utility */
 .glass-panel {
     background: var(--glass-bg);
     backdrop-filter: var(--glass-blur) var(--glass-saturation);
     -webkit-backdrop-filter: var(--glass-blur) var(--glass-saturation);
-    border: 1px solid var(--glass-border);
+    border: var(--glass-border);
     box-shadow: var(--glass-shadow);
+    transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
+}
+
+/* UI Elements */
+button {
+    font-family: inherit;
+    user-select: none;
+}
+
+/* Custom Scrollbar for WebKit */
+::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+}
+
+::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+    background: rgba(142, 142, 147, 0.3);
+    border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: rgba(142, 142, 147, 0.5);
 }

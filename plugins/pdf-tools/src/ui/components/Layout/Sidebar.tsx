@@ -34,43 +34,112 @@ const Sidebar: React.FC<SidebarProps> = ({ activePath, onNavigate }) => {
             borderRadius: 'var(--radius-lg)',
             display: 'flex',
             flexDirection: 'column',
-            padding: '20px'
+            alignItems: 'center',
+            padding: '24px 0',
+            background: 'var(--glass-bg)',
+            backdropFilter: 'var(--glass-blur)',
+            border: 'var(--glass-border)',
+            transition: 'width 0.3s ease'
         }}>
-            <div style={{ padding: '0 12px 24px', fontSize: '18px', fontWeight: '600', color: 'var(--text-primary)' }}>
-                PDF 工具箱
+            {/* Logo / Brand */}
+            <div style={{
+                marginBottom: '30px',
+                display: 'flex',
+                justifyContent: 'center',
+                alignItems: 'center',
+                width: '48px',
+                height: '48px',
+                background: 'linear-gradient(135deg, #007AFF 0%, #5856D6 100%)',
+                borderRadius: '14px',
+                boxShadow: '0 8px 16px rgba(0, 122, 255, 0.25)',
+                color: 'white'
+            }}>
+                <span style={{ fontSize: '20px', fontWeight: 'bold' }}>P</span>
             </div>
 
-            <nav style={{ display: 'flex', flexDirection: 'column', gap: '8px', overflowY: 'auto' }}>
+            {/* Navigation */}
+            <nav style={{
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '16px',
+                flex: 1,
+                width: '100%',
+                alignItems: 'center',
+                overflowY: 'auto',
+                paddingBottom: '16px',
+                /* Custom Scrollbar Styles */
+                scrollbarWidth: 'thin',
+                scrollbarColor: 'rgba(0,0,0,0.2) transparent'
+            }}>
+                <style>{`
+                    nav::-webkit-scrollbar {
+                        width: 4px;
+                        display: block; /* Force show */
+                    }
+                    nav::-webkit-scrollbar-track {
+                        background: transparent;
+                    }
+                    nav::-webkit-scrollbar-thumb {
+                        background: rgba(0, 0, 0, 0.2);
+                        border-radius: 4px;
+                    }
+                    nav::-webkit-scrollbar-thumb:hover {
+                        background: rgba(0, 0, 0, 0.3);
+                    }
+                `}</style>
                 {NAV_ITEMS.map((item) => {
                     const Icon = item.icon;
+                    const isActive = activePath === item.id;
                     return (
                         <button
                             key={item.id}
                             onClick={() => onNavigate(item.id)}
+                            title={item.label}
                             style={{
                                 display: 'flex',
+                                justifyContent: 'center',
                                 alignItems: 'center',
-                                gap: '12px',
-                                padding: '12px 16px',
+                                width: '48px',
+                                height: '48px',
+                                flexShrink: 0, /* Prevent shrinking */
                                 border: 'none',
-                                background: activePath === item.id ? 'rgba(255,255,255,0.5)' : 'transparent',
-                                borderRadius: 'var(--radius-md)',
-                                color: activePath === item.id ? 'var(--primary-color)' : 'var(--text-secondary)',
+                                background: isActive ? 'var(--primary-color)' : 'transparent',
+                                borderRadius: '14px',
+                                color: isActive ? '#fff' : 'var(--text-secondary)',
                                 cursor: 'pointer',
-                                fontSize: '14px',
-                                fontWeight: activePath === item.id ? '600' : '400',
-                                transition: 'all 0.2s ease',
-                                textAlign: 'left',
-                                backdropFilter: activePath === item.id ? 'blur(10px)' : 'none',
-                                boxShadow: activePath === item.id ? '0 2px 10px rgba(0,0,0,0.05)' : 'none'
+                                transition: 'all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1)',
+                                boxShadow: isActive ? '0 4px 12px rgba(0, 122, 255, 0.3)' : 'none',
+                                position: 'relative'
+                            }}
+                            onMouseEnter={(e) => {
+                                if (!isActive) {
+                                    e.currentTarget.style.background = 'rgba(0,0,0,0.05)';
+                                    e.currentTarget.style.transform = 'scale(1.05)';
+                                }
+                            }}
+                            onMouseLeave={(e) => {
+                                if (!isActive) {
+                                    e.currentTarget.style.background = 'transparent';
+                                    e.currentTarget.style.transform = 'scale(1)';
+                                }
                             }}
                         >
-                            <Icon size={20} strokeWidth={2} />
-                            {item.label}
+                            <Icon size={24} strokeWidth={isActive ? 2.5 : 2} />
                         </button>
                     );
                 })}
             </nav>
+
+            {/* Footer / Version */}
+            <div style={{
+                marginTop: 'auto',
+                padding: '16px 0',
+                color: 'var(--text-tertiary)',
+                fontSize: '10px',
+                textAlign: 'center'
+            }}>
+                v1.0
+            </div>
         </aside>
     );
 };

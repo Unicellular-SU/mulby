@@ -1,7 +1,7 @@
 import * as pdfjsLib from 'pdfjs-dist';
 // @ts-ignore
 import pdfWorker from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
-import { Document, Packer, Paragraph, TextRun } from 'docx';
+import { Document, Packer, Paragraph, TextRun, ImageRun } from 'docx';
 import PptxGenJS from 'pptxgenjs';
 import * as XLSX from 'xlsx';
 
@@ -110,12 +110,51 @@ class PDFService {
             const textContent = await page.getTextContent();
             const strings = textContent.items.map((item: any) => item.str).join(' ');
 
-            children.push(
-                new Paragraph({
-                    children: [new TextRun(strings)],
-                }),
-                new Paragraph({ text: "", pageBreakBefore: true })
-            );
+            // Check if page has text content
+            if (strings.trim().length > 0) {
+                children.push(
+                    new Paragraph({
+                        children: [new TextRun(strings)],
+                    }),
+                    new Paragraph({ text: "", pageBreakBefore: true })
+                );
+            } else {
+                // Fallback: Render page as image for scanned PDFs
+                console.log(`Page ${i} has no text, rendering as image...`);
+                const viewport = page.getViewport({ scale: 2.0 });
+                const canvas = document.createElement('canvas');
+                canvas.width = viewport.width;
+                canvas.height = viewport.height;
+                const context = canvas.getContext('2d');
+
+                if (context) {
+                    const renderContext = {
+                        canvasContext: context,
+                        viewport: viewport,
+                    } as any;
+                    await page.render(renderContext).promise;
+
+                    const blob = await new Promise<Blob | null>(resolve => canvas.toBlob(resolve, 'image/png'));
+                    if (blob) {
+                        const buffer = await blob.arrayBuffer();
+                        children.push(
+                            new Paragraph({
+                                children: [
+                                    new ImageRun({
+                                        data: buffer,
+                                        transformation: {
+                                            width: viewport.width / 2,
+                                            height: viewport.height / 2,
+                                        },
+                                        type: "png",
+                                    }),
+                                ],
+                            }),
+                            new Paragraph({ text: "", pageBreakBefore: true }) // Add page break after image
+                        );
+                    }
+                }
+            }
         }
 
         const doc = new Document({ sections: [{ children }] });
@@ -146,7 +185,38 @@ class PDFService {
             const strings = textContent.items.map((item: any) => item.str).join(' ');
 
             const slide = pptx.addSlide();
-            slide.addText(strings, { x: 0.5, y: 0.5, w: '90%', h: '90%', fontSize: 14 });
+
+            // Check if page has text content
+            if (strings.trim().length > 0) {
+                slide.addText(strings, { x: 0.5, y: 0.5, w: '90%', h: '90%', fontSize: 14 });
+            } else {
+                // Fallback: Render page as image for scanned PDFs
+                console.log(`Page ${i} has no text, rendering as image...`);
+                const viewport = page.getViewport({ scale: 2.0 });
+                const canvas = document.createElement('canvas');
+                canvas.width = viewport.width;
+                canvas.height = viewport.height;
+                const context = canvas.getContext('2d');
+
+                if (context) {
+                    const renderContext = {
+                        canvasContext: context,
+                        viewport: viewport,
+                    } as any;
+                    await page.render(renderContext).promise;
+
+                    const dataUrl = canvas.toDataURL('image/png');
+                    // PptxGenJS addImage expects base64 string or URL
+                    slide.addImage({
+                        data: dataUrl,
+                        x: 0.5,
+                        y: 0.5,
+                        w: pptx.presLayout.width - 1, // Adjust width to fit slide, -1 for padding
+                        h: pptx.presLayout.height - 1, // Adjust height to fit slide, -1 for padding
+                        sizing: { type: 'contain', w: pptx.presLayout.width - 1, h: pptx.presLayout.height - 1 }
+                    });
+                }
+            }
         }
 
         // Generate Blob
@@ -194,6 +264,31 @@ class PDFService {
 
         await api.saveFile(outputPath, new Uint8Array(wbout));
         return outputPath;
+    }
+    async getPageCount(pdfPath: string): Promise<number> {
+        const pdf = await this.getDocument(pdfPath);
+        return pdf.numPages;
+    }
+
+    async renderPageToDataURL(pdfPath: string, pageNum: number, scale = 0.5): Promise<string> {
+        const pdf = await this.getDocument(pdfPath);
+        const page = await pdf.getPage(pageNum);
+        const viewport = page.getViewport({ scale });
+
+        const canvas = document.createElement('canvas');
+        canvas.width = viewport.width;
+        canvas.height = viewport.height;
+        const context = canvas.getContext('2d');
+
+        if (!context) throw new Error('Canvas context missing');
+
+        const renderContext = {
+            canvasContext: context,
+            viewport: viewport,
+        } as any;
+        await page.render(renderContext).promise;
+
+        return canvas.toDataURL('image/png');
     }
 }
 

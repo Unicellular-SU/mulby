@@ -13,17 +13,20 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children, activePath, onNavigat
             display: 'flex',
             height: '100vh',
             width: '100vw',
-            background: 'linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%)', // Subtle gradient
-            padding: '16px',
-            gap: '16px'
+            padding: '20px',
+            gap: '24px',
+            background: 'transparent',
+            color: 'var(--text-primary)'
         }}>
             <Sidebar activePath={activePath} onNavigate={onNavigate} />
             <main className="glass-panel" style={{
                 flex: 1,
                 borderRadius: 'var(--radius-lg)',
-                padding: '24px',
+                padding: '30px',
                 overflowY: 'auto',
-                position: 'relative'
+                position: 'relative',
+                display: 'flex',
+                flexDirection: 'column'
             }}>
                 {children}
             </main>
