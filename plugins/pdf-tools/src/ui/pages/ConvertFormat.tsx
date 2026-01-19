@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { FileText, Presentation, Sheet, FileQuestion, Upload } from 'lucide-react';
 import { useIntools } from '../hooks/useIntools';
+import { pdfService } from '../services/PDFService';
 import '../types';
 
 interface ConvertFormatProps {
@@ -50,13 +51,13 @@ const ConvertFormat: React.FC<ConvertFormatProps> = ({ type }) => {
             let outputPath;
             switch (type) {
                 case 'word':
-                    outputPath = await window.pdfApi?.convertPDFToWord(file, outputDir);
+                    outputPath = await pdfService.convertToWord(file, outputDir);
                     break;
                 case 'ppt':
-                    outputPath = await window.pdfApi?.convertPDFToPPT(file, outputDir);
+                    outputPath = await pdfService.convertToPPT(file, outputDir);
                     break;
                 case 'excel':
-                    outputPath = await window.pdfApi?.convertPDFToExcel(file, outputDir);
+                    outputPath = await pdfService.convertToExcel(file, outputDir);
                     break;
             }
 

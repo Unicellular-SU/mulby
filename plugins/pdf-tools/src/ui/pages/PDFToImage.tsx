@@ -1,10 +1,11 @@
 import React, { useState } from 'react';
 import { FileImage, Upload, FileText } from 'lucide-react';
 import { useIntools } from '../hooks/useIntools';
+import { pdfService } from '../services/PDFService';
 import '../types';
 
 const PDFToImage: React.FC = () => {
-    const { dialog, shell, notification, system } = useIntools('pdf-tools');
+    const { dialog, notification, system } = useIntools('pdf-tools');
     const [file, setFile] = useState<string | null>(null);
     const [processing, setProcessing] = useState(false);
 
@@ -30,7 +31,7 @@ const PDFToImage: React.FC = () => {
                 ? `${downloadsPath}/${file.split('/').pop()?.replace('.pdf', '')}_pages`
                 : '.';
 
-            const outputPaths = await window.pdfApi?.pdfToImage(file, outputDir);
+            const outputPaths = await pdfService.pdfToImage(file, outputDir);
 
             if (outputPaths && outputPaths.length > 0) {
                 notification.show(`转换成功！共生成 ${outputPaths.length} 张图片`, 'success');

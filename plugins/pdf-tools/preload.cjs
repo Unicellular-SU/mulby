@@ -27,37 +27,42 @@ process.on('uncaughtException', (err) => {
     logToFile(`[Uncaught Exception] ${err.stack || err}`);
 });
 
-window.addEventListener('unhandledrejection', (event) => {
-    logToFile(`[Unhandled Rejection] ${event.reason}`);
-});
-
-// Singleton PDFJS Loader
-let pdfjsInstance = null;
-async function initPDFJS() {
-    if (pdfjsInstance) return pdfjsInstance;
-
-    try {
-        logToFile('Initializing PDF.js...');
-        const pdfjs = await import('pdfjs-dist/legacy/build/pdf.mjs');
-
-        if (pdfjs.GlobalWorkerOptions) {
-            pdfjs.GlobalWorkerOptions.workerSrc = false;
-            logToFile(`GlobalWorkerOptions.workerSrc set to false`);
-        } else {
-            logToFile('WARNING: GlobalWorkerOptions not found!');
-        }
-
-        pdfjsInstance = pdfjs;
-        logToFile('PDF.js initialized successfully');
-        return pdfjs;
-    } catch (error) {
-        logToFile(`Failed to initialize PDF.js: ${error.stack || error}`);
-        throw error;
-    }
-}
-
 // 暴露 PDF 处理 API 给渲染进程
 window.pdfApi = {
+    // === 文件 I/O 基础能力 ===
+    readFile: async (filePath) => {
+        try {
+            return await fsPromises.readFile(filePath);
+        } catch (error) {
+            throw new Error(`读取文件失败: ${error.message}`);
+        }
+    },
+
+    saveFile: async (filePath, data) => {
+        try {
+            // Ensure directory exists
+            await fsPromises.mkdir(path.dirname(filePath), { recursive: true });
+            await fsPromises.writeFile(filePath, data);
+            return filePath;
+        } catch (error) {
+            throw new Error(`保存文件失败: ${error.message}`);
+        }
+    },
+
+    openPath: async (filePath) => {
+        // Only for context, might not be needed if host provides generic open
+        // But keeping it simple for now if needed by UI
+        const { shell } = require('electron');
+        shell.openPath(filePath);
+    },
+
+    ensureDir: async (dirPath) => {
+        await fsPromises.mkdir(dirPath, { recursive: true });
+    },
+
+    // === 纯 Node.js PDF 操作 (pdf-lib) ===
+    // 所有的不可视化操作（拆分、合并、水印）依然在这里执行，因为 pdf-lib 在 Node 下更高效且无需渲染
+
     getPDFInfo: async (pdfPath) => {
         try {
             const pdfBytes = await fsPromises.readFile(pdfPath);
@@ -187,178 +192,8 @@ window.pdfApi = {
         }
     },
 
-    pdfToImage: async (pdfPath, outputDir) => {
-        try {
-            logToFile(`[pdfToImage] Starting conversion for: ${pdfPath}`);
-            const pdfjsLib = await initPDFJS();
-
-            logToFile('[pdfToImage] Reading file...');
-            const data = new Uint8Array(await fsPromises.readFile(pdfPath));
-
-            logToFile('[pdfToImage] Loading document...');
-            const loadingTask = pdfjsLib.getDocument({
-                data,
-                cMapUrl: 'node_modules/pdfjs-dist/cmaps/',
-                cMapPacked: true,
-                standardFontDataUrl: 'node_modules/pdfjs-dist/standard_fonts/'
-            });
-
-            const pdf = await loadingTask.promise;
-            logToFile(`[pdfToImage] Document loaded. Pages: ${pdf.numPages}`);
-
-            const outputPaths = [];
-            await fsPromises.mkdir(outputDir, { recursive: true });
-
-            for (let i = 1; i <= pdf.numPages; i++) {
-                logToFile(`[pdfToImage] Rendering page ${i}...`);
-                const page = await pdf.getPage(i);
-
-                const viewport = page.getViewport({ scale: 2.0 });
-                if (typeof document === 'undefined') {
-                    throw new Error('DOM document is not available');
-                }
-
-                const canvas = document.createElement('canvas');
-                canvas.width = viewport.width;
-                canvas.height = viewport.height;
-                const context = canvas.getContext('2d');
-                logToFile('[pdfToImage] Canvas context created');
-
-                await page.render({
-                    canvasContext: context,
-                    viewport: viewport,
-                }).promise;
-
-                logToFile(`[pdfToImage] Page ${i} rendered. Converting to blob...`);
-
-                const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
-                const buffer = new Uint8Array(await blob.arrayBuffer());
-
-                const outputPath = path.join(outputDir, `page_${i}.png`);
-                await fsPromises.writeFile(outputPath, buffer);
-                outputPaths.push(outputPath);
-
-                logToFile(`[pdfToImage] Saved page ${i}`);
-                canvas.width = 0;
-                canvas.height = 0;
-            }
-
-            logToFile('[pdfToImage] Complete');
-            return outputPaths;
-        } catch (error) {
-            logToFile(`[pdfToImage] Error: ${error.stack || error}`);
-            throw new Error(`PDF转图片失败: ${error.message}`);
-        }
-    },
-
-    extractImages: async (pdfPath, outputDir) => {
-        return window.pdfApi.pdfToImage(pdfPath, outputDir);
-    },
-
-    convertPDFToWord: async (pdfPath, outputDir) => {
-        try {
-            logToFile('[PDF] Starting PDF to Word...');
-            const pdfjsLib = await initPDFJS();
-
-            const data = new Uint8Array(await fsPromises.readFile(pdfPath));
-            const pdf = await pdfjsLib.getDocument({ data }).promise;
-
-            const children = [];
-
-            for (let i = 1; i <= pdf.numPages; i++) {
-                const page = await pdf.getPage(i);
-                const textContent = await page.getTextContent();
-                const strings = textContent.items.map(item => item.str).join(' ');
-
-                children.push(
-                    new Paragraph({
-                        children: [new TextRun(strings)],
-                    }),
-                    new Paragraph({ text: "", pageBreakBefore: true })
-                );
-            }
-
-            const doc = new Document({ sections: [{ children }] });
-
-            await fsPromises.mkdir(outputDir, { recursive: true });
-            const fileName = path.basename(pdfPath, '.pdf') + '.docx';
-            const outputPath = path.join(outputDir, fileName);
-
-            const buffer = await Packer.toBuffer(doc);
-            await fsPromises.writeFile(outputPath, buffer);
-
-            return outputPath;
-        } catch (error) {
-            logToFile(`[PDF] Convert Word Error: ${error.stack}`);
-            throw new Error(`PDF转Word失败: ${error.message}`);
-        }
-    },
-
-    convertPDFToPPT: async (pdfPath, outputDir) => {
-        try {
-            logToFile('[PDF] Starting PDF to PPT...');
-            const pdfjsLib = await initPDFJS();
-
-            const data = new Uint8Array(await fsPromises.readFile(pdfPath));
-            const pdf = await pdfjsLib.getDocument({ data }).promise;
-
-            const pptx = new PptxGenJS();
-
-            for (let i = 1; i <= pdf.numPages; i++) {
-                const page = await pdf.getPage(i);
-                const textContent = await page.getTextContent();
-                const strings = textContent.items.map(item => item.str).join(' ');
-
-                const slide = pptx.addSlide();
-                slide.addText(strings, { x: 0.5, y: 0.5, w: '90%', h: '90%', fontSize: 14 });
-            }
-
-            await fsPromises.mkdir(outputDir, { recursive: true });
-            const fileName = path.basename(pdfPath, '.pdf') + '.pptx';
-            const outputPath = path.join(outputDir, fileName);
-
-            await pptx.writeFile({ fileName: outputPath });
-
-            return outputPath;
-        } catch (error) {
-            logToFile(`[PDF] Convert PPT Error: ${error.stack}`);
-            throw new Error(`PDF转PPT失败: ${error.message}`);
-        }
-    },
-
-    convertPDFToExcel: async (pdfPath, outputDir) => {
-        try {
-            logToFile('[PDF] Starting PDF to Excel...');
-            const pdfjsLib = await initPDFJS();
-
-            const data = new Uint8Array(await fsPromises.readFile(pdfPath));
-            const pdf = await pdfjsLib.getDocument({ data }).promise;
-
-            const rows = [];
-
-            for (let i = 1; i <= pdf.numPages; i++) {
-                const page = await pdf.getPage(i);
-                const textContent = await page.getTextContent();
-                const strings = textContent.items.map(item => item.str);
-                rows.push(strings);
-            }
-
-            const wb = XLSX.utils.book_new();
-            const ws = XLSX.utils.aoa_to_sheet(rows);
-            XLSX.utils.book_append_sheet(wb, ws, "PDF Data");
-
-            await fsPromises.mkdir(outputDir, { recursive: true });
-            const fileName = path.basename(pdfPath, '.pdf') + '.xlsx';
-            const outputPath = path.join(outputDir, fileName);
-
-            XLSX.writeFile(wb, outputPath);
-
-            return outputPath;
-        } catch (error) {
-            logToFile(`[PDF] Convert Excel Error: ${error.stack}`);
-            throw new Error(`PDF转Excel失败: ${error.message}`);
-        }
-    }
+    // Legacy wrappers or empty functions if frontend still calls them directly (though frontend will be updated)
+    // pdfToImage, convert* functions are removed as they will be implemented in Frontend
 };
 
-logToFile('Preload API loaded with File Logging');
+logToFile('Preload API loaded (I/O Mode)');
