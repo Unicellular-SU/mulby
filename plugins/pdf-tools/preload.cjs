@@ -1,7 +1,7 @@
 // preload.cjs - PDF 处理 API
 // 使用 CommonJS 格式，放在项目根目录，不需要打包
 
-const { PDFDocument, degrees, rgb, StandardFonts } = require('pdf-lib');
+const { PDFDocument, degrees, rgb, StandardFonts, PDFName, PDFDict, PDFRawStream } = require('pdf-lib');
 const fs = require('fs');
 const fsPromises = fs.promises;
 const path = require('path');
@@ -74,6 +74,123 @@ window.pdfApi = {
             };
         } catch (error) {
             throw new Error(`获取PDF信息失败: ${error.message}`);
+        }
+    },
+
+    extractPDFImages: async (pdfPath, outputDir) => {
+        try {
+            const pdfBytes = await fsPromises.readFile(pdfPath);
+            const pdfDoc = await PDFDocument.load(pdfBytes);
+            const outputPaths = [];
+            const visitedRefs = new Set();
+
+            await fsPromises.mkdir(outputDir, { recursive: true });
+
+            const pages = pdfDoc.getPages();
+            for (let i = 0; i < pages.length; i++) {
+                const page = pages[i];
+                const { Resources } = page.node.normalizedEntries();
+                if (!Resources) continue;
+
+                const xObjects = Resources.get(PDFName.of('XObject'));
+                if (!xObjects) continue;
+
+                if (xObjects instanceof PDFDict) {
+                    for (const [key, ref] of xObjects.entries()) {
+                        // Global deduplication based on object reference
+                        if (visitedRefs.has(ref.toString())) continue;
+                        visitedRefs.add(ref.toString());
+
+                        const xObject = pdfDoc.context.lookup(ref);
+                        if (xObject instanceof PDFRawStream) {
+                            const subtype = xObject.dict.get(PDFName.of('Subtype'));
+                            if (subtype === PDFName.of('Image')) {
+                                const filter = xObject.dict.get(PDFName.of('Filter'));
+                                let ext = '';
+                                const data = xObject.contents;
+
+                                // Identify format
+                                if (filter === PDFName.of('DCTDecode')) {
+                                    ext = 'jpg';
+                                } else if (filter === PDFName.of('JPXDecode')) {
+                                    ext = 'jp2';
+                                } else if (filter === PDFName.of('FlateDecode')) {
+                                    // Check magic numbers for PNG: 89 50 4E 47
+                                    if (data.length > 4 && data[0] === 0x89 && data[1] === 0x50 && data[2] === 0x4E && data[3] === 0x47) {
+                                        ext = 'png';
+                                    }
+                                }
+
+                                if (ext) {
+                                    // Use a flatter naming scheme since we are deduplicating globally
+                                    // But preserving the "first found page" index is helpful context
+                                    const imgName = `image_${outputPaths.length + 1}_p${i + 1}.${ext}`;
+                                    const imgPath = path.join(outputDir, imgName);
+                                    await fsPromises.writeFile(imgPath, data);
+                                    outputPaths.push(imgPath);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            return outputPaths;
+        } catch (error) {
+            throw new Error(`提取图片失败: ${error.message}`);
+        }
+    },
+
+    getPDFImagePreview: async (pdfPath) => {
+        try {
+            const pdfBytes = await fsPromises.readFile(pdfPath);
+            const pdfDoc = await PDFDocument.load(pdfBytes);
+
+            const pages = pdfDoc.getPages();
+            // Try first 5 pages to find an image
+            const maxPages = Math.min(pages.length, 5);
+
+            for (let i = 0; i < maxPages; i++) {
+                const page = pages[i];
+                const { Resources } = page.node.normalizedEntries();
+                if (!Resources) continue;
+
+                const xObjects = Resources.get(PDFName.of('XObject'));
+                if (!xObjects) continue;
+
+                if (xObjects instanceof PDFDict) {
+                    for (const [key, ref] of xObjects.entries()) {
+                        const xObject = pdfDoc.context.lookup(ref);
+                        if (xObject instanceof PDFRawStream) {
+                            const subtype = xObject.dict.get(PDFName.of('Subtype'));
+                            if (subtype === PDFName.of('Image')) {
+                                const filter = xObject.dict.get(PDFName.of('Filter'));
+                                let mimeType = '';
+                                const data = xObject.contents;
+
+                                if (filter === PDFName.of('DCTDecode')) {
+                                    mimeType = 'image/jpeg';
+                                } else if (filter === PDFName.of('JPXDecode')) {
+                                    mimeType = 'image/jp2';
+                                } else if (filter === PDFName.of('FlateDecode')) {
+                                    // Check magic numbers for PNG
+                                    if (data.length > 4 && data[0] === 0x89 && data[1] === 0x50 && data[2] === 0x4E && data[3] === 0x47) {
+                                        mimeType = 'image/png';
+                                    }
+                                }
+
+                                if (mimeType) {
+                                    const base64 = Buffer.from(data).toString('base64');
+                                    return `data:${mimeType};base64,${base64}`;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            return null;
+        } catch (error) {
+            console.error('Preview extraction failed:', error);
+            return null;
         }
     },
 

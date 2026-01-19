@@ -44,6 +44,21 @@ class PDFService {
 
     async pdfToImage(pdfPath: string, outputDir: string, onProgress?: ProgressCallback): Promise<string[]> {
         const api = getApi();
+
+        // 优先使用后端提取（直接从流中提取图片，解决 jsPDF 生成文件渲染白屏问题）
+        try {
+            // @ts-ignore
+            if (api.extractPDFImages) {
+                if (onProgress) onProgress({ current: 0, total: 100, status: '正在通过后端提取图片...' });
+                // @ts-ignore
+                const results = await api.extractPDFImages(pdfPath, outputDir);
+                if (results && results.length > 0) return results;
+            }
+        } catch (e) {
+            console.warn('Backend extraction failed, falling back to frontend...', e);
+        }
+
+        // Fallback: Frontend Rendering
         await api.ensureDir(outputDir);
 
         const pdf = await this.getDocument(pdfPath);
@@ -67,9 +82,6 @@ class PDFService {
 
             if (!context) throw new Error('Canvas context could not be created');
 
-            // RenderContext type mismatch fix: pass canvasContext directly or check type definition
-            // pdfjs-dist v4+ often expects { canvasContext, viewport } 
-            // but sometimes strict types complain about missing 'transform' or 'background'
             const renderContext = {
                 canvasContext: context,
                 viewport: viewport,
@@ -83,11 +95,8 @@ class PDFService {
 
             // Path handling
             const fileName = `page_${i}.png`;
-            // Simple robust path joining that works for both / and \ based on the input path style
-            // If outputDir contains backslashes, treat as Windows style
             const isWindows = outputDir.includes('\\');
             const separator = isWindows ? '\\' : '/';
-            // Trim trailing separator if present
             const cleanDir = outputDir.endsWith(separator) ? outputDir.slice(0, -1) : outputDir;
             const finalPath = `${cleanDir}${separator}${fileName}`;
 
@@ -96,6 +105,28 @@ class PDFService {
         }
 
         return outputPaths;
+    }
+
+    async getThumbnail(pdfPath: string): Promise<string | null> {
+        const api = getApi();
+        try {
+            // @ts-ignore
+            if (api.getPDFImagePreview) {
+                // @ts-ignore
+                const preview = await api.getPDFImagePreview(pdfPath);
+                if (preview) return preview;
+            }
+        } catch (e) {
+            console.warn('Backend preview failed', e);
+        }
+
+        // Fallback
+        try {
+            return await this.renderPageToDataURL(pdfPath, 1, 0.2);
+        } catch (e) {
+            console.error('Fallback preview failed', e);
+            return null;
+        }
     }
 
     async convertToWord(pdfPath: string, outputDir: string): Promise<string> {
