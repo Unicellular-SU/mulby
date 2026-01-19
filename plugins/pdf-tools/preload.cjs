@@ -84,7 +84,8 @@ window.pdfApi = {
             const pageCount = pdf.getPageCount();
             const outputPaths = [];
 
-            await fsPromises.mkdir(outputDir, { recursive: true });
+            const saveDir = path.join(outputDir, prefix);
+            await fsPromises.mkdir(saveDir, { recursive: true });
 
             for (let i = 0; i < pageCount; i++) {
                 const newPdf = await PDFDocument.create();
@@ -92,7 +93,7 @@ window.pdfApi = {
                 newPdf.addPage(copiedPage);
 
                 const newPdfBytes = await newPdf.save();
-                const outputPath = path.join(outputDir, `${prefix}_${i + 1}.pdf`);
+                const outputPath = path.join(saveDir, `${prefix}_${i + 1}.pdf`);
                 await fsPromises.writeFile(outputPath, newPdfBytes);
                 outputPaths.push(outputPath);
             }
