@@ -1,8 +1,10 @@
-import React, { useState } from 'react';
-import { FileText, Presentation, Sheet, FileQuestion, Upload } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { FileText, Presentation, Sheet, FileQuestion } from 'lucide-react';
 import { useIntools } from '../hooks/useIntools';
 import { pdfService } from '../services/PDFService';
+import { PDFHeader, PDFUploadArea, PDFPageThumbnail } from '../components/SharedPDFComponents';
 import '../types';
+import { PDFInfo } from '../types';
 
 interface ConvertFormatProps {
     type: 'word' | 'ppt' | 'excel';
@@ -11,6 +13,8 @@ interface ConvertFormatProps {
 const ConvertFormat: React.FC<ConvertFormatProps> = ({ type }) => {
     const { dialog, shell, notification, system } = useIntools('pdf-tools');
     const [file, setFile] = useState<string | null>(null);
+    const [info, setInfo] = useState<PDFInfo | null>(null);
+    const [pdfDoc, setPdfDoc] = useState<any>(null); // pdfjs-dist document proxy
     const [processing, setProcessing] = useState(false);
 
     const titles = {
@@ -21,10 +25,10 @@ const ConvertFormat: React.FC<ConvertFormatProps> = ({ type }) => {
 
     const getIcon = () => {
         switch (type) {
-            case 'word': return <FileText size={24} color="var(--primary-color)" />;
-            case 'ppt': return <Presentation size={24} color="var(--primary-color)" />;
-            case 'excel': return <Sheet size={24} color="var(--primary-color)" />;
-            default: return <FileQuestion size={24} color="var(--primary-color)" />;
+            case 'word': return <FileText size={28} color="var(--primary-color)" />;
+            case 'ppt': return <Presentation size={28} color="var(--primary-color)" />;
+            case 'excel': return <Sheet size={28} color="var(--primary-color)" />;
+            default: return <FileQuestion size={28} color="var(--primary-color)" />;
         }
     };
 
@@ -36,7 +40,21 @@ const ConvertFormat: React.FC<ConvertFormatProps> = ({ type }) => {
         });
 
         if (result && result.length > 0) {
-            setFile(result[0]);
+            const filePath = result[0];
+            setFile(filePath);
+
+            try {
+                // Get info
+                const info = await window.pdfApi?.getPDFInfo(filePath);
+                setInfo(info || null);
+
+                // Load doc for preview
+                const doc = await pdfService.getDocument(filePath);
+                setPdfDoc(doc);
+            } catch (error) {
+                console.error(error);
+                notification.show('读取PDF失败', 'error');
+            }
         }
     };
 
@@ -72,84 +90,35 @@ const ConvertFormat: React.FC<ConvertFormatProps> = ({ type }) => {
         }
     };
 
-    const [previews, setPreviews] = useState<string[]>([]);
-    const [pageCount, setPageCount] = useState(0);
-
-    React.useEffect(() => {
-        if (!file) {
-            setPreviews([]);
-            setPageCount(0);
-            return;
-        }
-
-        const loadPreviews = async () => {
-            try {
-                const count = await pdfService.getPageCount(file);
-                setPageCount(count);
-
-                // Load first 10 pages for preview
-                const numToLoad = Math.min(count, 10);
-                const loadedPreviews = [];
-                for (let i = 1; i <= numToLoad; i++) {
-                    const dataUrl = await pdfService.renderPageToDataURL(file, i, 0.3);
-                    loadedPreviews.push(dataUrl);
-                }
-                setPreviews(loadedPreviews);
-            } catch (error) {
-                console.error('Failed to load previews:', error);
-            }
+    // Clean up pdfDoc when unmounting or changing file
+    useEffect(() => {
+        return () => {
+            // If we needed to destroy the doc, pdfjs usually handles it, 
+            // but good to reset state if file changes handled by setFile(null) logic if needed.
         };
-
-        loadPreviews();
     }, [file]);
 
     return (
-        <div style={{ padding: '10px', height: '100%', display: 'flex', flexDirection: 'column' }}>
-            <h2 style={{ marginBottom: '24px', fontSize: '28px', fontWeight: '700', display: 'flex', alignItems: 'center', gap: '12px', letterSpacing: '-0.5px' }}>
-                {React.cloneElement(getIcon() as React.ReactElement, { size: 32 })} {titles[type]}
-            </h2>
+        <div style={{ padding: '16px', height: '100%', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+            <PDFHeader
+                title={titles[type]}
+                icon={getIcon()}
+                actionButton={file ? {
+                    label: "更换文件",
+                    onClick: handleSelectFile
+                } : undefined}
+            />
 
             {!file ? (
-                <div
-                    onClick={handleSelectFile}
-                    style={{
-                        background: 'rgba(255,255,255,0.5)',
-                        borderRadius: '20px',
-                        padding: '40px',
-                        textAlign: 'center',
-                        border: '2px dashed rgba(0, 122, 255, 0.3)',
-                        cursor: 'pointer',
-                        transition: 'all 0.3s ease',
-                        flex: 1,
-                        display: 'flex',
-                        flexDirection: 'column',
-                        justifyContent: 'center',
-                        alignItems: 'center'
-                    }}
-                    onMouseEnter={(e) => {
-                        e.currentTarget.style.background = 'rgba(0, 122, 255, 0.05)';
-                        e.currentTarget.style.borderColor = 'var(--primary-color)';
-                    }}
-                    onMouseLeave={(e) => {
-                        e.currentTarget.style.background = 'rgba(255,255,255,0.5)';
-                        e.currentTarget.style.borderColor = 'rgba(0, 122, 255, 0.3)';
-                    }}
-                >
-                    <div style={{ marginBottom: '16px', display: 'flex', justifyContent: 'center' }}>
-                        <div style={{ padding: '20px', background: 'var(--primary-color)', borderRadius: '50%', boxShadow: '0 8px 16px rgba(0, 122, 255, 0.2)' }}>
-                            <Upload size={40} color="white" />
-                        </div>
-                    </div>
-                    <p style={{ fontSize: '18px', fontWeight: '600', color: 'var(--text-primary)' }}>点击选择 PDF 文件</p>
-                </div>
+                <PDFUploadArea onClick={handleSelectFile} title="点击选择 PDF 文件" />
             ) : (
-                <div style={{ flex: 1, display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
+                <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '16px', overflow: 'hidden' }}>
+                    {/* Settings / Info Area */}
                     <div style={{
                         background: 'rgba(255, 255, 255, 0.6)',
                         backdropFilter: 'blur(10px)',
-                        padding: '20px',
-                        borderRadius: '20px',
-                        marginBottom: '24px',
+                        padding: '16px',
+                        borderRadius: '16px',
                         display: 'flex',
                         alignItems: 'center',
                         gap: '20px',
@@ -168,104 +137,96 @@ const ConvertFormat: React.FC<ConvertFormatProps> = ({ type }) => {
                             alignItems: 'center',
                             color: 'var(--primary-color)'
                         }}>
-                            <FileText size={28} />
+                            {getIcon()}
                         </div>
-                        <div style={{ flex: 1 }}>
-                            <div style={{ fontSize: '16px', fontWeight: '600' }}>{file.split(/[/\\]/).pop()}</div>
-                            <div style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>{pageCount} 页</div>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{
+                                fontSize: '16px',
+                                fontWeight: '600',
+                                marginBottom: '4px',
+                                whiteSpace: 'nowrap',
+                                overflow: 'hidden',
+                                textOverflow: 'ellipsis'
+                            }} title={file.split(/[/\\]/).pop()}>
+                                {file.split(/[/\\]/).pop()}
+                            </div>
+                            <div style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>
+                                {info?.pageCount || 0} 页 &bull; 目标格式: {type.toUpperCase()}
+                            </div>
                         </div>
-                        <button onClick={() => setFile(null)} style={{
-                            border: 'none', background: 'rgba(0,0,0,0.05)', padding: '8px 16px', borderRadius: '12px',
-                            cursor: 'pointer', color: 'var(--primary-color)', fontWeight: '500', fontSize: '14px'
-                        }}>更换</button>
+
+                        <div style={{
+                            fontSize: '13px',
+                            color: 'var(--text-secondary)',
+                            background: 'rgba(0,0,0,0.03)',
+                            padding: '8px 12px',
+                            borderRadius: '8px',
+                            maxWidth: '200px',
+                            flexShrink: 0
+                        }}>
+                            注意: 复杂版式或扫描件可能无法完美还原
+                        </div>
                     </div>
 
                     {/* Preview Grid */}
                     <div style={{
                         flex: 1,
                         overflowY: 'auto',
-                        marginBottom: '20px',
-                        display: 'grid',
-                        gridTemplateColumns: 'repeat(auto-fill, minmax(100px, 1fr))',
-                        gap: '16px',
-                        padding: '4px'
+                        background: 'rgba(0,0,0,0.02)',
+                        borderRadius: '16px',
+                        padding: '16px'
                     }}>
-                        {previews.map((src, index) => (
-                            <div key={index} style={{
-                                background: 'white',
-                                borderRadius: '12px',
-                                overflow: 'hidden',
-                                boxShadow: '0 4px 12px rgba(0,0,0,0.08)',
-                                aspectRatio: '0.7',
-                                display: 'flex',
-                                justifyContent: 'center',
-                                alignItems: 'center',
-                                border: '1px solid rgba(0,0,0,0.05)',
-                                transition: 'transform 0.2s',
-                                cursor: 'default'
-                            }}
-                                onMouseEnter={(e) => { e.currentTarget.style.transform = 'translateY(-2px)' }}
-                                onMouseLeave={(e) => { e.currentTarget.style.transform = 'none' }}
-                            >
-                                <img src={src} alt={`Page ${index + 1}`} style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
-                            </div>
-                        ))}
-                        {pageCount > previews.length && (
+                        {pdfDoc ? (
                             <div style={{
-                                display: 'flex',
-                                justifyContent: 'center',
-                                alignItems: 'center',
-                                color: 'var(--text-secondary)',
-                                fontSize: '13px',
-                                background: 'rgba(0,0,0,0.03)',
-                                borderRadius: '12px'
+                                display: 'grid',
+                                gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))',
+                                gap: '16px'
                             }}>
-                                +{pageCount - previews.length} 更多...
+                                {Array.from({ length: info?.pageCount || 0 }).map((_, i) => {
+                                    const pageNum = i + 1;
+                                    return (
+                                        <div key={i} style={{
+                                            transition: 'transform 0.2s',
+                                        }}
+                                            onMouseEnter={(e) => { e.currentTarget.style.transform = 'translateY(-2px)' }}
+                                            onMouseLeave={(e) => { e.currentTarget.style.transform = 'none' }}
+                                        >
+                                            <PDFPageThumbnail pdfDoc={pdfDoc} pageNum={pageNum} />
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        ) : (
+                            <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#999' }}>
+                                加载预览中...
                             </div>
                         )}
                     </div>
 
-                    <div style={{ background: 'rgba(255,255,255,0.5)', padding: '20px', borderRadius: '20px', marginBottom: '20px', flexShrink: 0 }}>
-                        <p style={{ color: 'var(--text-secondary)', lineHeight: '1.6', fontSize: '14px' }}>
-                            <strong>注意：</strong>转换效果取决于 PDF 源文件的结构。<br />
-                            扫描件, 加密文档或复杂版式可能无法完美还原。
-                        </p>
+                    {/* Footer / Action */}
+                    <div style={{ display: 'flex', justifyContent: 'flex-end', paddingTop: '8px' }}>
+                        <button
+                            onClick={handleConvert}
+                            disabled={processing}
+                            style={{
+                                width: '100%',
+                                padding: '16px',
+                                border: 'none',
+                                borderRadius: '14px',
+                                background: processing ? 'rgba(0,0,0,0.05)' : 'linear-gradient(135deg, #007AFF 0%, #0056b3 100%)',
+                                color: processing ? 'var(--text-secondary)' : 'white',
+                                fontSize: '16px',
+                                fontWeight: '600',
+                                cursor: processing ? 'not-allowed' : 'pointer',
+                                boxShadow: processing ? 'none' : '0 8px 20px rgba(0, 122, 255, 0.3)',
+                                transition: 'all 0.3s ease',
+                                letterSpacing: '-0.3px',
+                                flexShrink: 0
+                            }}
+                        >
+                            {processing ? '转换中...' : '开始转换'}
+                        </button>
                     </div>
-
-                    <button
-                        onClick={handleConvert}
-                        disabled={processing}
-                        style={{
-                            width: '100%',
-                            padding: '18px',
-                            border: 'none',
-                            borderRadius: '16px',
-                            background: processing ? 'rgba(0,0,0,0.05)' : 'linear-gradient(135deg, #007AFF 0%, #0056b3 100%)',
-                            color: processing ? 'var(--text-secondary)' : 'white',
-                            fontSize: '17px',
-                            fontWeight: '600',
-                            cursor: processing ? 'not-allowed' : 'pointer',
-                            boxShadow: processing ? 'none' : '0 10px 20px rgba(0, 122, 255, 0.3)',
-                            transition: 'all 0.3s ease',
-                            marginTop: 'auto',
-                            letterSpacing: '-0.3px',
-                            flexShrink: 0
-                        }}
-                        onMouseEnter={(e) => {
-                            if (!processing) {
-                                e.currentTarget.style.transform = 'translateY(-2px)';
-                                e.currentTarget.style.boxShadow = '0 14px 24px rgba(0, 122, 255, 0.4)';
-                            }
-                        }}
-                        onMouseLeave={(e) => {
-                            if (!processing) {
-                                e.currentTarget.style.transform = 'none';
-                                e.currentTarget.style.boxShadow = '0 10px 20px rgba(0, 122, 255, 0.3)';
-                            }
-                        }}
-                    >
-                        {processing ? '转换中...' : '开始转换'}
-                    </button>
                 </div>
             )}
         </div>

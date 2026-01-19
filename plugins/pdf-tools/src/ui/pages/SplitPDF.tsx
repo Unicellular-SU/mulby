@@ -1,82 +1,12 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState } from 'react';
 import { Scissors, Plus, Trash2, ArrowRight, LayoutGrid, List } from 'lucide-react';
-import { PDFHeader, PDFUploadArea } from '../components/SharedPDFComponents';
+import { PDFHeader, PDFUploadArea, PDFPageThumbnail } from '../components/SharedPDFComponents';
 import { useIntools } from '../hooks/useIntools';
 import { pdfService } from '../services/PDFService';
 import '../types';
 import { PDFInfo, SplitRange } from '../types';
 
-const PDFPageThumbnail: React.FC<{
-    pdfDoc: any; // Using any to avoid complex type setup in this file, ideally PDFDocumentProxy
-    pageNum: number;
-    scale?: number;
-}> = ({ pdfDoc, pageNum, scale = 0.2 }) => {
-    const canvasRef = useRef<HTMLCanvasElement>(null);
-    const [loading, setLoading] = useState(true);
-
-    useEffect(() => {
-        let mounted = true;
-        const renderPage = async () => {
-            if (!pdfDoc || !canvasRef.current) return;
-            try {
-                const page = await pdfDoc.getPage(pageNum);
-                if (!mounted) return;
-
-                const viewport = page.getViewport({ scale });
-                const canvas = canvasRef.current;
-                const context = canvas.getContext('2d');
-
-                if (context) {
-                    canvas.width = viewport.width;
-                    canvas.height = viewport.height;
-
-                    await page.render({
-                        canvasContext: context,
-                        viewport: viewport
-                    }).promise;
-                }
-                setLoading(false);
-            } catch (err) {
-                console.error(`Error rendering page ${pageNum}:`, err);
-            }
-        };
-        renderPage();
-        return () => { mounted = false; };
-    }, [pdfDoc, pageNum, scale]);
-
-    return (
-        <div style={{
-            position: 'relative',
-            borderRadius: '8px',
-            overflow: 'hidden',
-            boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
-            background: '#fff',
-            aspectRatio: '1/1.414',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center'
-        }}>
-            <canvas ref={canvasRef} style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
-            <div style={{
-                position: 'absolute',
-                bottom: '4px',
-                right: '4px',
-                background: 'rgba(0,0,0,0.5)',
-                color: 'white',
-                fontSize: '10px',
-                padding: '2px 6px',
-                borderRadius: '4px'
-            }}>
-                {pageNum}
-            </div>
-            {loading && (
-                <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#f5f5f7' }}>
-                    <div style={{ width: '16px', height: '16px', border: '2px solid rgba(0,0,0,0.1)', borderTopColor: 'var(--primary-color)', borderRadius: '50%', animation: 'spin 1s linear infinite' }} />
-                </div>
-            )}
-        </div>
-    );
-};
+// PDFPageThumbnail moved to SharedPDFComponents
 
 const SplitPDF: React.FC = () => {
     const { dialog, notification, system } = useIntools('pdf-tools');
