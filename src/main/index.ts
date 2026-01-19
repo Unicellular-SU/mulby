@@ -75,12 +75,19 @@ function canReachUrl(url: string, timeoutMs = 800): Promise<boolean> {
 }
 
 function createWindow() {
+  const settings = appSettingsManager.getSettings()
+  // 默认宽度 800
+  const width = settings.window?.width || 800
+
   mainWindow = new BrowserWindow({
-    width: 680,
+    width,
     height: 62,
     show: false,
     frame: false,
-    resizable: false,
+    resizable: true, // 允许用户调整大小
+    minHeight: 62,   // 锁定初始高度
+    maxHeight: 62,
+    minWidth: 400,   // 设置最小宽度
     skipTaskbar: true,
     transparent: true,
     type: 'panel', // macOS 上 panel 类型有助于浮动在全屏应用之上
@@ -122,6 +129,27 @@ function createWindow() {
       mainWindow?.hide()
     }, 50)
   })
+
+  // 状态保存防抖
+  let saveTimer: NodeJS.Timeout | null = null
+  const saveState = () => {
+    if (saveTimer) clearTimeout(saveTimer)
+    saveTimer = setTimeout(() => {
+      if (!mainWindow || mainWindow.isDestroyed()) return
+      const bounds = mainWindow.getBounds()
+      appSettingsManager.updateSettings({
+        window: {
+          width: bounds.width,
+          x: bounds.x,
+          y: bounds.y
+        }
+      })
+    }, 500)
+  }
+
+  // 监听窗口调整和移动
+  mainWindow.on('resize', saveState)
+  mainWindow.on('move', saveState)
 
   const loadApp = async () => {
     if (process.env.VITE_DEV_SERVER_URL) {
@@ -170,18 +198,24 @@ function showMainWindow() {
   }
 
   try {
-    // 获取当前鼠标所在的显示器
-    const cursorPoint = screen.getCursorScreenPoint()
-    const display = screen.getDisplayNearestPoint(cursorPoint)
-    const { width: screenWidth, height: screenHeight } = display.workAreaSize
-    const { x: screenX, y: screenY } = display.workArea
+    // 优先使用保存的位置
+    const settings = appSettingsManager.getSettings()
+    if (settings.window?.x !== undefined && settings.window?.y !== undefined) {
+      mainWindow.setPosition(settings.window.x, settings.window.y)
+    } else {
+      // 获取当前鼠标所在的显示器
+      const cursorPoint = screen.getCursorScreenPoint()
+      const display = screen.getDisplayNearestPoint(cursorPoint)
+      const { width: screenWidth, height: screenHeight } = display.workAreaSize
+      const { x: screenX, y: screenY } = display.workArea
 
-    // 计算窗口位置：水平居中，垂直方向在屏幕 1/5 处
-    const windowBounds = mainWindow.getBounds()
-    const x = screenX + Math.round((screenWidth - windowBounds.width) / 2)
-    const y = screenY + Math.round(screenHeight / 5)
+      // 计算窗口位置：水平居中，垂直方向在屏幕 1/5 处
+      const windowBounds = mainWindow.getBounds()
+      const x = screenX + Math.round((screenWidth - windowBounds.width) / 2)
+      const y = screenY + Math.round(screenHeight / 5)
 
-    mainWindow.setPosition(x, y)
+      mainWindow.setPosition(x, y)
+    }
 
     // 临时忽略 blur 事件，防止 show/focus 过程中误触发
     startIgnoringBlur()

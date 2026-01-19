@@ -319,6 +319,12 @@ export function registerWindowHandlers(
     const win = BrowserWindow.fromWebContents(event.sender)
     if (win) {
       const [width] = win.getSize()
+      const mainWin = getMainWindow()
+      if (win === mainWin) {
+        // 更新最小/最大高度限制，锁定高度但允许宽度调整
+        win.setMinimumSize(400, height)
+        win.setMaximumSize(9999, height)
+      }
       win.setSize(width, height)
     }
   })
@@ -415,6 +421,12 @@ export function registerWindowHandlers(
     // 使用发送者窗口而非主窗口，以支持面板和独立窗口模式
     const win = BrowserWindow.fromWebContents(event.sender)
     if (win) {
+      const mainWin = getMainWindow()
+      if (win === mainWin) {
+        // 更新最小/最大高度限制，锁定高度但允许宽度调整
+        win.setMinimumSize(400, height)
+        win.setMaximumSize(9999, height)
+      }
       // 直接调整大小，无需切换 resizable 状态
       // setSize 在 macOS 上对无边框窗口也有效
       win.setSize(width, height)

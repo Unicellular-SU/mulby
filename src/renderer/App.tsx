@@ -85,7 +85,7 @@ function App() {
     } else if ((query.length > 0 || attachments.length > 0) && resultCount > 0) {
       height = EXPANDED_HEIGHT
     }
-    window.intools.window.setSize(680, height)
+    window.intools.window.setExpendHeight(height)
   }, [query, resultCount, pluginOpen, detailsPluginName, attachments.length, attachmentsManagerOpen, managerMetrics.managerHeight, viewMode])
 
   // 监听插件附着事件

@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Scissors, Plus, Trash2, Upload, ArrowRight, LayoutGrid, List } from 'lucide-react';
+import { Scissors, Plus, Trash2, ArrowRight, LayoutGrid, List } from 'lucide-react';
+import { PDFHeader, PDFUploadArea } from '../components/SharedPDFComponents';
 import { useIntools } from '../hooks/useIntools';
 import { pdfService } from '../services/PDFService';
 import '../types';
@@ -140,178 +141,167 @@ const SplitPDF: React.FC = () => {
         setRanges([...ranges, { start: 1, end: info?.pageCount || 1, name: `part_${ranges.length + 1}` }]);
     };
 
-    return (
-        <div style={{ padding: '10px', height: '100%', display: 'flex', flexDirection: 'column' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: file ? '16px' : '24px' }}>
-                <h2 style={{ fontSize: '28px', fontWeight: '700', display: 'flex', alignItems: 'center', gap: '12px', letterSpacing: '-0.5px', margin: 0 }}>
-                    <Scissors color="var(--primary-color)" size={32} /> PDF 拆分
-                </h2>
+    const updateRange = (index: number, field: 'start' | 'end' | 'name', value: number | string) => {
+        const newRanges = [...ranges];
+        if (field === 'start' || field === 'end') {
+            newRanges[index][field] = Math.max(1, Math.min(info?.pageCount || 1, value as number));
+        } else {
+            newRanges[index][field] = value as string;
+        }
+        setRanges(newRanges);
+    };
 
-                {file && (
-                    <button onClick={handleSelectFile} style={{
-                        display: 'flex', alignItems: 'center', gap: '6px', padding: '8px 16px', borderRadius: '12px',
-                        border: '1px dashed rgba(0, 122, 255, 0.5)', background: 'rgba(0, 122, 255, 0.05)', color: 'var(--primary-color)',
-                        cursor: 'pointer', fontSize: '14px', fontWeight: '500', transition: 'all 0.2s ease', height: 'fit-content'
-                    }}>
-                        更换文件
-                    </button>
-                )}
-            </div>
+    const removeRange = (index: number) => {
+        setRanges(ranges.filter((_, i) => i !== index));
+    };
+
+    const isPageInRange = (pageNum: number) => {
+        if (mode === 'auto') return true;
+        return ranges.some(range => pageNum >= range.start && pageNum <= range.end);
+    };
+
+    return (
+        <div style={{ padding: '16px', height: '100%', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+            <PDFHeader
+                title="拆分 PDF"
+                icon={<Scissors color="var(--primary-color)" size={28} />}
+                actionButton={file ? {
+                    label: "更换文件",
+                    onClick: handleSelectFile
+                } : undefined}
+            />
 
             {!file ? (
-                <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
-                    <div
-                        onClick={handleSelectFile}
-                        style={{
-                            background: 'rgba(255,255,255,0.5)',
-                            borderRadius: '24px',
-                            padding: '60px 40px',
-                            textAlign: 'center',
-                            border: '2px dashed rgba(0, 122, 255, 0.3)',
-                            cursor: 'pointer',
-                            transition: 'all 0.3s ease',
-                            display: 'flex',
-                            flexDirection: 'column',
-                            alignItems: 'center',
-                            gap: '16px'
-                        }}
-                        onMouseEnter={(e) => {
-                            e.currentTarget.style.background = 'rgba(0, 122, 255, 0.05)';
-                            e.currentTarget.style.borderColor = 'var(--primary-color)';
-                            e.currentTarget.style.transform = 'scale(1.01)';
-                        }}
-                        onMouseLeave={(e) => {
-                            e.currentTarget.style.background = 'rgba(255,255,255,0.3)';
-                            e.currentTarget.style.borderColor = 'rgba(0, 122, 255, 0.3)';
-                            e.currentTarget.style.transform = 'scale(1)';
-                        }}
-                    >
-                        <div style={{
-                            width: '96px', height: '96px', background: 'var(--primary-color)',
-                            borderRadius: '50%', boxShadow: '0 12px 24px rgba(0, 122, 255, 0.25)',
-                            marginBottom: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center'
-                        }}>
-                            <Upload size={48} color="white" />
-                        </div>
-                        <div>
-                            <p style={{ fontSize: '20px', fontWeight: 'bold', color: 'var(--text-primary)', marginBottom: '8px' }}>点击选择 PDF 文件</p>
-                            <p style={{ fontSize: '14px', color: 'var(--text-secondary)' }}>支持拖拽上传</p>
-                        </div>
-                    </div>
-                </div>
+                <PDFUploadArea onClick={handleSelectFile} title="点击选择 PDF 文件" />
             ) : (
-                <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+                <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '16px', overflow: 'hidden' }}>
+                    {/* Settings Area */}
+                    <div style={{ display: 'flex', gap: '16px', alignItems: 'center', background: 'rgba(255,255,255,0.6)', padding: '12px', borderRadius: '16px', backdropFilter: 'blur(10px)' }}>
 
-                    {/* Mode Toggle */}
-                    <div style={{ marginBottom: '16px' }}>
-                        <div style={{
-                            display: 'flex', padding: '4px', background: 'rgba(118, 118, 128, 0.12)', borderRadius: '12px'
-                        }}>
-                            {(['auto', 'manual'] as const).map(m => (
-                                <button
-                                    key={m}
-                                    onClick={() => setMode(m)}
-                                    style={{
-                                        flex: 1,
-                                        padding: '8px',
-                                        border: 'none',
-                                        borderRadius: '8px',
-                                        background: mode === m ? '#fff' : 'transparent',
-                                        color: mode === m ? '#000' : 'var(--text-secondary)',
-                                        fontWeight: mode === m ? '600' : '500',
-                                        boxShadow: mode === m ? '0 2px 8px rgba(0,0,0,0.12)' : 'none',
-                                        cursor: 'pointer',
-                                        transition: 'all 0.2s ease',
-                                        display: 'flex',
-                                        alignItems: 'center',
-                                        justifyContent: 'center',
-                                        gap: '6px'
-                                    }}
-                                >
-                                    {m === 'auto' ? <LayoutGrid size={16} /> : <List size={16} />}
-                                    {m === 'auto' ? '自动拆分 (每页存为单独文件)' : '自定义拆分 (指定页面范围)'}
-                                </button>
-                            ))}
-                        </div>
-                    </div>
-
-                    {/* Manual Range Editor */}
-                    {mode === 'manual' && (
-                        <div style={{ maxHeight: '150px', overflowY: 'auto', marginBottom: '16px', padding: '4px' }}>
-                            {ranges.map((range, index) => (
-                                <div key={index} style={{
-                                    display: 'flex', gap: '8px', alignItems: 'center', marginBottom: '8px',
-                                    background: 'rgba(255,255,255,0.6)', padding: '8px 12px', borderRadius: '12px',
-                                    border: '1px solid rgba(255,255,255,0.4)'
-                                }}>
-                                    <span style={{ fontWeight: '600', fontSize: '13px', width: '64px', whiteSpace: 'nowrap', flexShrink: 0 }}>第 {index + 1} 部分</span>
-                                    <input
-                                        type="number" min="1" max={info?.pageCount} value={range.start}
-                                        onChange={(e) => { const n = [...ranges]; n[index].start = parseInt(e.target.value); setRanges(n); }}
-                                        style={{ width: '50px', padding: '6px', borderRadius: '8px', border: '1px solid rgba(0,0,0,0.1)' }}
-                                    />
-                                    <ArrowRight size={14} color="var(--text-secondary)" />
-                                    <input
-                                        type="number" min="1" max={info?.pageCount} value={range.end}
-                                        onChange={(e) => { const n = [...ranges]; n[index].end = parseInt(e.target.value); setRanges(n); }}
-                                        style={{ width: '50px', padding: '6px', borderRadius: '8px', border: '1px solid rgba(0,0,0,0.1)' }}
-                                    />
-                                    <input
-                                        type="text" value={range.name} placeholder="文件名"
-                                        onChange={(e) => { const n = [...ranges]; n[index].name = e.target.value; setRanges(n); }}
-                                        style={{ flex: 1, padding: '6px', borderRadius: '8px', border: '1px solid rgba(0,0,0,0.1)' }}
-                                    />
-                                    <button onClick={() => setRanges(ranges.filter((_, i) => i !== index))} style={{
-                                        border: 'none', background: 'rgba(255,59,48,0.1)', width: '28px', height: '28px', minWidth: '28px', borderRadius: '50%',
-                                        display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0, padding: 0
-                                    }}><Trash2 size={14} color="#FF3B30" /></button>
-                                </div>
-                            ))}
-                            <button onClick={addRange} style={{
-                                width: '100%', padding: '8px', borderRadius: '10px', border: '1px dashed var(--primary-color)',
-                                background: 'rgba(0,122,255,0.05)', color: 'var(--primary-color)', cursor: 'pointer', fontSize: '13px',
-                                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px'
-                            }}>
-                                <Plus size={16} /> 添加范围
+                        {/* Mode Toggle */}
+                        <div style={{ display: 'flex', background: 'rgba(0,0,0,0.05)', borderRadius: '10px', padding: '4px' }}>
+                            <button
+                                onClick={() => setMode('auto')}
+                                style={{
+                                    border: 'none', background: mode === 'auto' ? '#fff' : 'transparent',
+                                    borderRadius: '8px', padding: '6px 12px', cursor: 'pointer',
+                                    fontWeight: mode === 'auto' ? '600' : '500',
+                                    boxShadow: mode === 'auto' ? '0 2px 8px rgba(0,0,0,0.1)' : 'none',
+                                    color: mode === 'auto' ? '#000' : 'var(--text-secondary)',
+                                    display: 'flex', alignItems: 'center', gap: '6px'
+                                }}
+                            >
+                                <LayoutGrid size={16} /> 自动拆分
+                            </button>
+                            <button
+                                onClick={() => setMode('manual')}
+                                style={{
+                                    border: 'none', background: mode === 'manual' ? '#fff' : 'transparent',
+                                    borderRadius: '8px', padding: '6px 12px', cursor: 'pointer',
+                                    fontWeight: mode === 'manual' ? '600' : '500',
+                                    boxShadow: mode === 'manual' ? '0 2px 8px rgba(0,0,0,0.1)' : 'none',
+                                    color: mode === 'manual' ? '#000' : 'var(--text-secondary)',
+                                    display: 'flex', alignItems: 'center', gap: '6px'
+                                }}
+                            >
+                                <List size={16} /> 手动范围
                             </button>
                         </div>
-                    )}
 
-                    {/* PDF Page Grid */}
-                    <div style={{ flex: 1, overflowY: 'auto', marginBottom: '16px', background: 'rgba(0,0,0,0.02)', borderRadius: '16px', padding: '16px' }}>
-                        {pdfDoc && info ? (
-                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(100px, 1fr))', gap: '16px' }}>
-                                {Array.from({ length: info.pageCount }).map((_, i) => (
-                                    <PDFPageThumbnail key={i} pdfDoc={pdfDoc} pageNum={i + 1} />
+                        {/* Manual Mode Inputs */}
+                        {mode === 'manual' && (
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', overflowX: 'auto', flex: 1 }}>
+                                {ranges.map((range, index) => (
+                                    <div key={index} style={{
+                                        display: 'flex', alignItems: 'center', background: '#fff',
+                                        padding: '4px 8px', borderRadius: '8px', border: '1px solid #eee',
+                                        gap: '6px', minWidth: 'fit-content'
+                                    }}>
+                                        <div style={{ fontSize: '12px', fontWeight: '500', width: '40px', color: '#666', borderRight: '1px solid #eee', paddingRight: '6px' }}>
+                                            Part {index + 1}
+                                        </div>
+                                        <input
+                                            type="number" min="1" max={range.end}
+                                            value={range.start}
+                                            onChange={(e) => updateRange(index, 'start', parseInt(e.target.value) || 1)}
+                                            style={{ width: '40px', border: 'none', background: 'transparent', textAlign: 'center', fontWeight: '600' }}
+                                        />
+                                        <ArrowRight size={14} color="#999" />
+                                        <input
+                                            type="number" min={range.start} max={info?.pageCount || 1}
+                                            value={range.end}
+                                            onChange={(e) => updateRange(index, 'end', parseInt(e.target.value) || 1)}
+                                            style={{ width: '40px', border: 'none', background: 'transparent', textAlign: 'center', fontWeight: '600' }}
+                                        />
+                                        {ranges.length > 1 && (
+                                            <button onClick={() => removeRange(index)} style={{ border: 'none', background: 'transparent', cursor: 'pointer', padding: '2px' }}>
+                                                <Trash2 size={14} color="#FF3B30" />
+                                            </button>
+                                        )}
+                                    </div>
                                 ))}
+                                <button onClick={addRange} style={{
+                                    border: 'none', background: 'var(--primary-color)', color: 'white',
+                                    borderRadius: '8px', width: '28px', height: '28px', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                    cursor: 'pointer', flexShrink: 0
+                                }}>
+                                    <Plus size={16} />
+                                </button>
                             </div>
-                        ) : (
-                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', color: 'var(--text-secondary)' }}>
-                                正在加载预览...
+                        )}
+
+                        {/* Auto Mode Info (Optional place holder) */}
+                        {mode === 'auto' && (
+                            <div style={{ fontSize: '13px', color: 'var(--text-secondary)', marginLeft: '8px' }}>
+                                每页拆分为单独的 PDF 文件
                             </div>
                         )}
                     </div>
 
-                    <button
-                        onClick={handleSplit}
-                        disabled={splitting}
-                        style={{
-                            width: '100%',
-                            padding: '16px',
-                            border: 'none',
-                            borderRadius: '16px',
-                            background: splitting ? 'rgba(0,0,0,0.05)' : 'linear-gradient(135deg, #007AFF 0%, #0056b3 100%)',
-                            color: splitting ? 'var(--text-secondary)' : 'white',
-                            fontSize: '17px',
-                            fontWeight: '600',
-                            cursor: splitting ? 'not-allowed' : 'pointer',
-                            boxShadow: splitting ? 'none' : '0 10px 20px rgba(0, 122, 255, 0.3)',
-                            transition: 'all 0.3s ease',
-                            display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '8px'
-                        }}
-                    >
-                        {splitting ? '拆分中...' : <><Scissors size={20} /> 开始拆分</>}
-                    </button>
+                    {/* Preview Area */}
+                    <div style={{ flex: 1, overflowY: 'auto', background: 'rgba(0,0,0,0.02)', borderRadius: '16px', padding: '16px' }}>
+                        {pdfDoc ? (
+                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: '16px' }}>
+                                {Array.from({ length: info?.pageCount || 0 }).map((_, i) => {
+                                    const pageNum = i + 1;
+                                    const isInRange = isPageInRange(pageNum);
+                                    return (
+                                        <div key={i} style={{ opacity: isInRange ? 1 : 0.3, transition: 'opacity 0.2s', position: 'relative' }}>
+                                            <PDFPageThumbnail pdfDoc={pdfDoc} pageNum={pageNum} />
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        ) : (
+                            <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#999' }}>
+                                加载预览中...
+                            </div>
+                        )}
+                    </div>
+
+                    {/* Footer / Action */}
+                    <div style={{ display: 'flex', justifyContent: 'flex-end', paddingTop: '16px' }}>
+                        <button
+                            onClick={handleSplit}
+                            disabled={splitting || !file}
+                            style={{
+                                width: '200px',
+                                padding: '14px',
+                                background: splitting || !file ? 'rgba(0,0,0,0.05)' : 'linear-gradient(135deg, #007AFF 0%, #0056b3 100%)',
+                                color: splitting || !file ? 'var(--text-secondary)' : 'white',
+                                border: 'none',
+                                borderRadius: '12px',
+                                fontSize: '16px',
+                                fontWeight: '600',
+                                cursor: splitting || !file ? 'not-allowed' : 'pointer',
+                                boxShadow: splitting || !file ? 'none' : '0 4px 12px rgba(0, 122, 255, 0.3)',
+                                transition: 'all 0.3s ease',
+                                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px'
+                            }}
+                        >
+                            {splitting ? '拆分中...' : <><Scissors size={18} /> 开始拆分</>}
+                        </button>
+                    </div>
                 </div>
             )}
         </div>

@@ -29,10 +29,18 @@ export interface DeveloperSettings {
   logLevel: LogLevel         // 日志级别
 }
 
+// 窗口设置
+export interface WindowSettings {
+  width: number
+  x?: number
+  y?: number
+}
+
 export interface AppSettings {
   shortcuts: AppShortcutSettings
   storeSources: StoreSource[]
   developer: DeveloperSettings
+  window?: WindowSettings
 }
 
 export interface ShortcutStatus {

@@ -10,11 +10,19 @@ export interface SplitRange {
     name: string;
 }
 
-export interface WatermarkOptions {
-    size: number;
+export interface WatermarkConfig {
+    type: 'text' | 'image';
+    text?: string;
+    imagePath?: string;
+    layout: 'center' | 'tile';
+    width?: number;
+    height?: number;
+    scale?: number;
     opacity: number;
-    color: string;
     rotate: number;
+    color?: string;
+    fontSize?: number;
+    gap?: number;
 }
 
 declare global {
@@ -31,7 +39,7 @@ declare global {
             splitPDFByPage: (path: string, outputDir: string, prefix?: string) => Promise<string[]>;
             splitPDFByRanges: (path: string, ranges: SplitRange[], outputDir: string) => Promise<string[]>;
             mergePDFs: (files: string[], outputDir: string, fileName?: string) => Promise<string>;
-            watermarkPDF: (path: string, text: string, options: WatermarkOptions, outputDir: string) => Promise<string>;
+            watermarkPDF: (path: string, config: WatermarkConfig, outputDir: string) => Promise<string>;
 
             // Legacy / Proxied (Optional, if we want to support old calls temporarily)
             extractImages: (path: string, outputDir: string) => Promise<string[]>;

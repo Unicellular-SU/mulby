@@ -144,3 +144,25 @@ interface FileSearchResult {
     - 调整边框颜色和 Hover 状态，提升精致度
     - **智能修复黑色 SVG 图标**：应用反色滤镜 (`invert + hue-rotate`)，将黑色图标翻转为白色，同时保留彩色图标色相
   - 微调内边距 (padding) 和间隙 (gap) 适配大图标
+
+---
+
+# PDF 水印预览优化
+
+> **更新时间**: 2026-01-19
+> **状态**: ✅ 已完成
+
+## 完成内容
+
+### UI 优化
+- [x] `plugins/pdf-tools/src/ui/pages/Watermark.tsx`
+  - 优化预览区域样式
+  - 移除预览图片的尺寸限制 (90% -> 100%)，使其填满预览容器
+  - 移除图片阴影，减少视觉干扰
+  - 修复预览模式下的图片拉伸问题 (`object-fit: contain`)
+  - 修正预览水印旋转方向，与后端坐标系对齐
+
+### 后端修复
+- [x] `plugins/pdf-tools/preload.cjs`
+  - 将文本宽度计算从粗略估算改为精确测量 (`widthOfTextAtSize`)，解决居中偏移问题
+  - 实现旋转几何校正算法：将 pdf-lib 默认的左下角旋转锚点转换为中心旋转，确保水印在旋转后依然准确居中

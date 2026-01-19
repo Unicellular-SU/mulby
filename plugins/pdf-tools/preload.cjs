@@ -156,30 +156,158 @@ window.pdfApi = {
         }
     },
 
-    watermarkPDF: async (pdfPath, text, options, outputDir) => {
+    watermarkPDF: async (pdfPath, watermarkConfig, outputDir) => {
         try {
             const pdfBytes = await fsPromises.readFile(pdfPath);
             const pdf = await PDFDocument.load(pdfBytes);
             const pages = pdf.getPages();
-            const { size = 50, opacity = 0.5, color = '#000000', rotate = 45 } = options;
 
-            const r = parseInt(color.slice(1, 3), 16) / 255;
-            const g = parseInt(color.slice(3, 5), 16) / 255;
-            const b = parseInt(color.slice(5, 7), 16) / 255;
+            // Destructure new config structure
+            const {
+                type = 'text',
+                text,
+                imagePath,
+                layout = 'center', // 'center' | 'tile'
+                width: imgWidth, // desired width for image
+                height: imgHeight, // desired height for image
+                opacity = 0.5,
+                rotate = 45,
+                color = '#000000',
+                fontSize = 50,
+                gap = 200 // gap for tile mode
+            } = watermarkConfig;
 
-            const helveticaFont = await pdf.embedFont(StandardFonts.Helvetica);
+            let embeddedImage;
+            let helveticaFont;
+
+            // Prepare resources
+            if (type === 'image' && imagePath) {
+                const imageBytes = await fsPromises.readFile(imagePath);
+                const ext = path.extname(imagePath).toLowerCase();
+                if (ext === '.png') {
+                    embeddedImage = await pdf.embedPng(imageBytes);
+                } else if (ext === '.jpg' || ext === '.jpeg') {
+                    embeddedImage = await pdf.embedJpg(imageBytes);
+                } else {
+                    throw new Error('不支持的图片格式 (仅支持 PNG, JPG)');
+                }
+            } else {
+                helveticaFont = await pdf.embedFont(StandardFonts.Helvetica);
+            }
+
+            const drawOnPage = (page) => {
+                const { width: pageWidth, height: pageHeight } = page.getSize();
+                const rotationAngle = Number(rotate) || 0;
+                const pdfRotation = degrees(rotationAngle);
+                const rads = (rotationAngle * Math.PI) / 180;
+
+                const textStr = String(text || '');
+                const fs = Number(fontSize) || 50;
+
+                // Calculate dimensions
+                let wmWidth = 0, wmHeight = 0;
+
+                if (type === 'image' && embeddedImage) {
+                    // Check if scale is provided (0-1) or explicit width
+                    const scale = Number(watermarkConfig.scale) || 0.5;
+                    const dims = embeddedImage.scale(scale);
+                    wmWidth = dims.width;
+                    wmHeight = dims.height;
+                } else if (helveticaFont) {
+                    // Calculate exact text size
+                    // Handle case where text might be empty or font issues
+                    try {
+                        wmWidth = helveticaFont.widthOfTextAtSize(textStr, fs);
+                        wmHeight = helveticaFont.heightAtSize(fs);
+                    } catch (e) {
+                        // Fallback estimation
+                        wmWidth = textStr.length * fs * 0.5;
+                        wmHeight = fs;
+                    }
+                } else {
+                    // Fallback if no font and no image (shouldn't happen for text type)
+                    wmWidth = textStr.length * fs * 0.5;
+                    wmHeight = fs;
+                }
+
+                const drawItem = (cx, cy) => {
+                    // Geometric correction for center rotation
+                    // We want the center of the rotated item to be at (cx, cy).
+                    // pdf-lib rotates around the bottom-left corner of the item (the draw point).
+                    // So we need to calculate where to place the draw point (dx, dy) such that:
+                    // (dx, dy) + rotated_center_offset = (cx, cy)
+
+                    const w = wmWidth;
+                    const h = wmHeight;
+
+                    // Center offset relative to bottom-left (unrotated)
+                    // const ox = w / 2;
+                    // const oy = h / 2;
+
+                    // Rotated center relative to bottom-left
+                    // Using standard Counter-Clockwise rotation matrix (pdf-lib uses CCW)
+                    const cos = Math.cos(rads);
+                    const sin = Math.sin(rads);
+
+                    const rotatedCenterX = (w / 2) * cos - (h / 2) * sin;
+                    const rotatedCenterY = (w / 2) * sin + (h / 2) * cos;
+
+                    const drawX = cx - rotatedCenterX;
+                    const drawY = cy - rotatedCenterY;
+
+                    if (type === 'image' && embeddedImage) {
+                        page.drawImage(embeddedImage, {
+                            x: drawX,
+                            y: drawY,
+                            width: wmWidth,
+                            height: wmHeight,
+                            opacity: Number(opacity) || 0.5,
+                            rotate: pdfRotation,
+                        });
+                    } else if (textStr) {
+                        const r = parseInt(color.slice(1, 3), 16) / 255;
+                        const g = parseInt(color.slice(3, 5), 16) / 255;
+                        const b = parseInt(color.slice(5, 7), 16) / 255;
+
+                        if (helveticaFont) {
+                            page.drawText(textStr, {
+                                x: drawX,
+                                y: drawY,
+                                size: fs,
+                                font: helveticaFont,
+                                color: rgb(r, g, b),
+                                opacity: Number(opacity) || 0.5,
+                                rotate: pdfRotation,
+                            });
+                        }
+                    }
+                };
+
+                if (layout === 'tile') {
+                    // Simple grid tiling
+                    // Rotate the coordinate system or calculate rotated positions? 
+                    // Simplest tile: grid over page, then draw.
+                    // For better coverage with rotation, we might need a larger grid.
+
+                    // Use simple grid for now
+                    const cols = Math.ceil(pageWidth / gap) + 2;
+                    const rows = Math.ceil(pageHeight / gap) + 2;
+                    const startX = -(gap);
+                    const startY = -(gap);
+
+                    for (let r = 0; r < rows; r++) {
+                        for (let c = 0; c < cols; c++) {
+                            drawItem(startX + c * gap, startY + r * gap);
+                        }
+                    }
+                } else {
+                    // Center
+                    drawItem(pageWidth / 2, pageHeight / 2);
+                }
+            };
 
             for (const page of pages) {
-                const { width, height } = page.getSize();
-                page.drawText(text, {
-                    x: width / 2 - (text.length * size) / 4,
-                    y: height / 2,
-                    size: size,
-                    font: helveticaFont,
-                    color: rgb(r, g, b),
-                    opacity: opacity,
-                    rotate: degrees(rotate),
-                });
+                drawOnPage(page);
             }
 
             await fsPromises.mkdir(outputDir, { recursive: true });

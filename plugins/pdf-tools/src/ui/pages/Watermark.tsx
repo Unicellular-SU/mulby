@@ -1,241 +1,487 @@
-import React, { useState } from 'react';
-import { Droplet, Upload, FileText } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Droplet, FileText, Image as ImageIcon, Type, Trash2, LayoutGrid, Maximize } from 'lucide-react';
 import { useIntools } from '../hooks/useIntools';
 import { pdfService } from '../services/PDFService';
-import '../types';
+import { WatermarkConfig } from '../types';
+import { PDFHeader, PDFUploadArea } from '../components/SharedPDFComponents';
 
 const Watermark: React.FC = () => {
     const { dialog, notification, system } = useIntools('pdf-tools');
-    const [file, setFile] = useState<string | null>(null);
-    const [text, setText] = useState('Confidential');
-    const [options, setOptions] = useState({
-        size: 50,
-        opacity: 0.5,
-        color: '#ff0000',
-        rotate: 45
-    });
+    const [files, setFiles] = useState<string[]>([]);
     const [processing, setProcessing] = useState(false);
+    const [preview, setPreview] = useState<string | null>(null);
+    const [activeTab, setActiveTab] = useState<'settings' | 'files'>('settings');
 
-    const handleSelectFile = async () => {
+    // Layout Calculation State
+    const containerRef = React.useRef<HTMLDivElement>(null);
+    const [imgNaturalSize, setImgNaturalSize] = useState<{ w: number; h: number } | null>(null);
+    const [containerDimensions, setContainerDimensions] = useState({ width: 0, height: 0 });
+
+    // Handle Image Size
+    useEffect(() => {
+        if (!preview) {
+            setImgNaturalSize(null);
+            return;
+        }
+        const img = new Image();
+        img.onload = () => {
+            setImgNaturalSize({ w: img.naturalWidth, h: img.naturalHeight });
+        };
+        img.src = preview;
+    }, [preview]);
+
+    // Handle Container Resize
+    useEffect(() => {
+        if (!containerRef.current) return;
+        const observer = new ResizeObserver(entries => {
+            for (const entry of entries) {
+                setContainerDimensions({
+                    width: entry.contentRect.width,
+                    height: entry.contentRect.height
+                });
+            }
+        });
+        observer.observe(containerRef.current);
+        return () => observer.disconnect();
+    }, []);
+
+    const getDisplaySize = () => {
+        if (!imgNaturalSize || !containerDimensions.width || !containerDimensions.height) {
+            return { width: '100%', height: '100%' };
+        }
+
+        const padding = 0.95;
+        const maxW = containerDimensions.width * padding;
+        const maxH = containerDimensions.height * padding;
+        const ratio = imgNaturalSize.w / imgNaturalSize.h;
+
+        let w = maxW;
+        let h = w / ratio;
+
+        if (h > maxH) {
+            h = maxH;
+            w = h * ratio;
+        }
+
+        return { width: `${w}px`, height: `${h}px` };
+    };
+
+    const displaySize = getDisplaySize();
+
+    // Config State
+    const [config, setConfig] = useState<WatermarkConfig>({
+        type: 'text',
+        text: 'Confidential',
+        layout: 'center',
+        scale: 0.5,
+        opacity: 0.5,
+        rotate: 45,
+        color: '#ff0000',
+        fontSize: 50,
+        gap: 200
+    });
+
+    const handleSelectFiles = async () => {
         const result = await dialog.showOpenDialog({
             title: '选择 PDF 文件',
             filters: [{ name: 'PDF Files', extensions: ['pdf'] }],
+            properties: ['openFile', 'multiSelections']
+        });
+
+        if (result && result.length > 0) {
+            setFiles(prev => [...new Set([...prev, ...result])]);
+        }
+    };
+
+    const handleSelectImage = async () => {
+        const result = await dialog.showOpenDialog({
+            title: '选择图片水印',
+            filters: [{ name: 'Images', extensions: ['png', 'jpg', 'jpeg'] }],
             properties: ['openFile']
         });
 
         if (result && result.length > 0) {
-            setFile(result[0]);
+            setConfig(prev => ({ ...prev, imagePath: result[0], type: 'image' }));
         }
     };
 
+    const removeFile = (index: number) => {
+        const newFiles = [...files];
+        newFiles.splice(index, 1);
+        setFiles(newFiles);
+    };
+
+    // Update preview when files[0] changes
+    useEffect(() => {
+        if (files.length > 0) {
+            pdfService.renderPageToDataURL(files[0], 1, 0.4).then(setPreview).catch(console.error);
+        } else {
+            setPreview(null);
+        }
+    }, [files]);
+
     const handleApply = async () => {
-        if (!file || !text) return;
+        if (files.length === 0) return;
+        if (config.type === 'image' && !config.imagePath) {
+            notification.show('请先选择水印图片', 'error');
+            return;
+        }
 
         try {
             setProcessing(true);
             const downloadsPath = await system.getPath('downloads');
             const outputDir = downloadsPath || '.';
 
-            const outputPath = await window.pdfApi?.watermarkPDF(file, text, options, outputDir);
-
-            if (outputPath) {
-                notification.show('水印添加成功！', 'success');
-                // shell.showItemInFolder(outputPath); // Prevent hiding window
+            let count = 0;
+            for (const file of files) {
+                await window.pdfApi?.watermarkPDF(file, config, outputDir);
+                count++;
             }
+
+            notification.show(`成功为 ${count} 个文件添加水印！`, 'success');
         } catch (error: any) {
+            console.error(error);
             notification.show(`添加水印失败: ${error.message}`, 'error');
         } finally {
             setProcessing(false);
         }
     };
 
-    const [preview, setPreview] = useState<string | null>(null);
-
-    React.useEffect(() => {
-        if (file) {
-            pdfService.renderPageToDataURL(file, 1, 0.3).then(setPreview).catch(console.error);
-        } else {
-            setPreview(null);
-        }
-    }, [file]);
-
     return (
-        <div style={{ padding: '10px', height: '100%', display: 'flex', flexDirection: 'column' }}>
-            <h2 style={{ marginBottom: '24px', fontSize: '28px', fontWeight: '700', display: 'flex', alignItems: 'center', gap: '12px', letterSpacing: '-0.5px' }}>
-                <Droplet color="var(--primary-color)" size={32} /> PDF 水印
-            </h2>
+        <div style={{ padding: '16px', height: '100%', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+            <PDFHeader
+                title="PDF 水印"
+                icon={<Droplet color="var(--primary-color)" size={28} />}
+                actionButton={files.length > 0 ? {
+                    label: "添加文件",
+                    onClick: handleSelectFiles
+                } : undefined}
+            />
 
-            {!file ? (
-                <div
-                    onClick={handleSelectFile}
-                    style={{
-                        background: 'rgba(255,255,255,0.5)',
-                        borderRadius: '20px',
-                        padding: '40px',
-                        textAlign: 'center',
-                        border: '2px dashed rgba(0, 122, 255, 0.3)',
-                        cursor: 'pointer',
-                        transition: 'all 0.3s ease',
-                        flex: 1,
-                        display: 'flex',
-                        flexDirection: 'column',
-                        justifyContent: 'center',
-                        alignItems: 'center'
-                    }}
-                    onMouseEnter={(e) => {
-                        e.currentTarget.style.background = 'rgba(0, 122, 255, 0.05)';
-                        e.currentTarget.style.borderColor = 'var(--primary-color)';
-                    }}
-                    onMouseLeave={(e) => {
-                        e.currentTarget.style.background = 'rgba(255,255,255,0.5)';
-                        e.currentTarget.style.borderColor = 'rgba(0, 122, 255, 0.3)';
-                    }}
-                >
-                    <div style={{ marginBottom: '16px', display: 'flex', justifyContent: 'center' }}>
-                        <div style={{ padding: '20px', background: 'var(--primary-color)', borderRadius: '50%', boxShadow: '0 8px 16px rgba(0, 122, 255, 0.2)' }}>
-                            <Upload size={40} color="white" />
-                        </div>
-                    </div>
-                    <p style={{ fontSize: '18px', fontWeight: '600', color: 'var(--text-primary)' }}>点击选择 PDF 文件</p>
-                </div>
+            {files.length === 0 ? (
+                <PDFUploadArea onClick={handleSelectFiles} />
             ) : (
-                <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
-                    <div style={{
-                        background: 'rgba(255, 255, 255, 0.6)',
-                        backdropFilter: 'blur(10px)',
-                        padding: '20px',
-                        borderRadius: '20px',
-                        marginBottom: '24px',
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '20px',
-                        border: '1px solid rgba(255,255,255,0.4)',
-                        boxShadow: '0 4px 20px rgba(0,0,0,0.03)'
-                    }}>
-                        <div style={{
-                            width: '60px',
-                            height: '80px',
-                            background: '#fff',
-                            borderRadius: '8px',
-                            boxShadow: '0 2px 10px rgba(0,0,0,0.1)',
-                            display: 'flex',
-                            justifyContent: 'center',
-                            alignItems: 'center',
-                            overflow: 'hidden',
-                            flexShrink: 0
-                        }}>
-                            {preview ? (
-                                <img src={preview} alt="Thumb" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                <div style={{ flex: 1, display: 'flex', gap: '16px', overflow: 'hidden' }}>
+
+                    {/* Left Sidebar: Controls & Files */}
+                    <div style={{ width: '320px', display: 'flex', flexDirection: 'column', gap: '12px', background: 'rgba(255,255,255,0.6)', backdropFilter: 'blur(10px)', borderRadius: '16px', padding: '16px', border: '1px solid rgba(255,255,255,0.4)', overflow: 'hidden' }}>
+
+                        {/* Tabs */}
+                        <div style={{ display: 'flex', padding: '4px', background: 'rgba(118, 118, 128, 0.12)', borderRadius: '10px' }}>
+                            <button
+                                onClick={() => setActiveTab('settings')}
+                                style={{
+                                    flex: 1, padding: '6px', border: 'none', borderRadius: '8px',
+                                    background: activeTab === 'settings' ? '#fff' : 'transparent',
+                                    color: activeTab === 'settings' ? '#000' : 'var(--text-secondary)',
+                                    fontWeight: activeTab === 'settings' ? '600' : '500',
+                                    boxShadow: activeTab === 'settings' ? '0 2px 4px rgba(0,0,0,0.08)' : 'none',
+                                    cursor: 'pointer', transition: 'all 0.2s', fontSize: '13px'
+                                }}
+                            >
+                                设置
+                            </button>
+                            <button
+                                onClick={() => setActiveTab('files')}
+                                style={{
+                                    flex: 1, padding: '6px', border: 'none', borderRadius: '8px',
+                                    background: activeTab === 'files' ? '#fff' : 'transparent',
+                                    color: activeTab === 'files' ? '#000' : 'var(--text-secondary)',
+                                    fontWeight: activeTab === 'files' ? '600' : '500',
+                                    boxShadow: activeTab === 'files' ? '0 2px 4px rgba(0,0,0,0.08)' : 'none',
+                                    cursor: 'pointer', transition: 'all 0.2s', fontSize: '13px'
+                                }}
+                            >
+                                文件 ({files.length})
+                            </button>
+                        </div>
+
+                        {/* Content Area */}
+                        <div style={{ flex: 1, overflowY: 'auto', paddingRight: '2px' }}>
+                            {activeTab === 'settings' ? (
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+
+                                    {/* Type Selection */}
+                                    <div style={{ display: 'flex', gap: '12px' }}>
+                                        {(['text', 'image'] as const).map(m => (
+                                            <div
+                                                key={m}
+                                                onClick={() => setConfig({ ...config, type: m })}
+                                                style={{
+                                                    flex: 1, cursor: 'pointer',
+                                                    border: `2px solid ${config.type === m ? 'var(--primary-color)' : 'transparent'}`,
+                                                    background: config.type === m ? 'rgba(0,122,255,0.05)' : 'rgba(0,0,0,0.03)',
+                                                    borderRadius: '10px', padding: '8px',
+                                                    display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px',
+                                                    transition: 'all 0.2s'
+                                                }}
+                                            >
+                                                {m === 'text' ? <Type size={18} color={config.type === m ? 'var(--primary-color)' : '#999'} /> : <ImageIcon size={18} color={config.type === m ? 'var(--primary-color)' : '#999'} />}
+                                                <span style={{ fontSize: '12px', fontWeight: '500', color: config.type === m ? 'var(--primary-color)' : '#666' }}>
+                                                    {m === 'text' ? '文字' : '图片'}
+                                                </span>
+                                            </div>
+                                        ))}
+                                    </div>
+
+                                    {/* Main Input */}
+                                    {config.type === 'text' ? (
+                                        <div>
+                                            <label style={{ display: 'block', margin: '0 0 6px 4px', fontWeight: '600', fontSize: '12px', color: '#555' }}>内容</label>
+                                            <input
+                                                type="text" value={config.text}
+                                                onChange={e => setConfig({ ...config, text: e.target.value })}
+                                                style={{
+                                                    width: '100%', padding: '10px', borderRadius: '10px', border: '1px solid #ddd',
+                                                    fontSize: '14px', outline: 'none', background: '#fff'
+                                                }}
+                                                placeholder="输入水印文字"
+                                            />
+                                        </div>
+                                    ) : (
+                                        <div>
+                                            <label style={{ display: 'block', margin: '0 0 6px 4px', fontWeight: '600', fontSize: '12px', color: '#555' }}>源文件</label>
+                                            <div
+                                                onClick={handleSelectImage}
+                                                style={{
+                                                    border: '1px dashed #ccc', borderRadius: '10px', padding: '10px',
+                                                    textAlign: 'center', cursor: 'pointer', background: '#fff',
+                                                    color: config.imagePath ? 'var(--primary-color)' : 'var(--text-secondary)',
+                                                    fontSize: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px'
+                                                }}
+                                            >
+                                                <ImageIcon size={14} />
+                                                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '100%' }}>
+                                                    {config.imagePath ? config.imagePath.split(/[/\\]/).pop() : '点击选择图片'}
+                                                </span>
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    {/* Layout Grid */}
+                                    <div>
+                                        <label style={{ display: 'block', margin: '0 0 6px 4px', fontWeight: '600', fontSize: '12px', color: '#555' }}>排列方式</label>
+                                        <div style={{ display: 'flex', gap: '8px' }}>
+                                            <button
+                                                onClick={() => setConfig({ ...config, layout: 'center' })}
+                                                style={{
+                                                    flex: 1, padding: '8px', borderRadius: '10px', border: `1px solid ${config.layout === 'center' ? 'var(--primary-color)' : '#e0e0e0'}`,
+                                                    background: config.layout === 'center' ? '#fff' : 'rgba(255,255,255,0.5)',
+                                                    color: config.layout === 'center' ? 'var(--primary-color)' : '#666', cursor: 'pointer', fontSize: '12px',
+                                                    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px'
+                                                }}
+                                            >
+                                                <Maximize size={14} /> 居中
+                                            </button>
+                                            <button
+                                                onClick={() => setConfig({ ...config, layout: 'tile' })}
+                                                style={{
+                                                    flex: 1, padding: '8px', borderRadius: '10px', border: `1px solid ${config.layout === 'tile' ? 'var(--primary-color)' : '#e0e0e0'}`,
+                                                    background: config.layout === 'tile' ? '#fff' : 'rgba(255,255,255,0.5)',
+                                                    color: config.layout === 'tile' ? 'var(--primary-color)' : '#666', cursor: 'pointer', fontSize: '12px',
+                                                    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px'
+                                                }}
+                                            >
+                                                <LayoutGrid size={14} /> 平铺
+                                            </button>
+                                        </div>
+                                    </div>
+
+                                    {/* Sliders Area */}
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', background: 'rgba(0,0,0,0.02)', padding: '12px', borderRadius: '12px' }}>
+                                        {/* Row 1 */}
+                                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                                            <div>
+                                                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
+                                                    <span style={{ fontSize: '11px', color: '#666' }}>旋转</span>
+                                                    <span style={{ fontSize: '11px', fontWeight: '600' }}>{config.rotate}°</span>
+                                                </div>
+                                                <input type="range" min="0" max="360" value={config.rotate} onChange={e => setConfig({ ...config, rotate: parseInt(e.target.value) })} style={{ width: '100%', height: '4px', accentColor: 'var(--primary-color)' }} />
+                                            </div>
+                                            <div>
+                                                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
+                                                    <span style={{ fontSize: '11px', color: '#666' }}>透明度</span>
+                                                    <span style={{ fontSize: '11px', fontWeight: '600' }}>{config.opacity}</span>
+                                                </div>
+                                                <input type="range" min="0" max="1" step="0.1" value={config.opacity} onChange={e => setConfig({ ...config, opacity: parseFloat(e.target.value) })} style={{ width: '100%', height: '4px', accentColor: 'var(--primary-color)' }} />
+                                            </div>
+                                        </div>
+
+                                        {/* Row 2 */}
+                                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                                            <div>
+                                                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
+                                                    <span style={{ fontSize: '11px', color: '#666' }}>{config.type === 'image' ? '缩放' : '字号'}</span>
+                                                    <span style={{ fontSize: '11px', fontWeight: '600' }}>{config.type === 'image' ? config.scale : config.fontSize}</span>
+                                                </div>
+                                                {config.type === 'image' ? (
+                                                    <input type="range" min="0.1" max="2" step="0.1" value={config.scale || 0.5} onChange={e => setConfig({ ...config, scale: parseFloat(e.target.value) })} style={{ width: '100%', height: '4px', accentColor: 'var(--primary-color)' }} />
+                                                ) : (
+                                                    <input type="range" min="10" max="200" value={config.fontSize || 50} onChange={e => setConfig({ ...config, fontSize: parseInt(e.target.value) })} style={{ width: '100%', height: '4px', accentColor: 'var(--primary-color)' }} />
+                                                )}
+                                            </div>
+                                            {config.layout === 'tile' && (
+                                                <div>
+                                                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
+                                                        <span style={{ fontSize: '11px', color: '#666' }}>间距</span>
+                                                        <span style={{ fontSize: '11px', fontWeight: '600' }}>{config.gap}</span>
+                                                    </div>
+                                                    <input type="range" min="50" max="500" value={config.gap || 200} onChange={e => setConfig({ ...config, gap: parseInt(e.target.value) })} style={{ width: '100%', height: '4px', accentColor: 'var(--primary-color)' }} />
+                                                </div>
+                                            )}
+                                        </div>
+
+                                        {config.type === 'text' && (
+                                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingTop: '4px' }}>
+                                                <span style={{ fontSize: '12px', color: '#666' }}>文字颜色</span>
+                                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', background: '#fff', padding: '4px 8px', borderRadius: '20px', border: '1px solid #eee' }}>
+                                                    <input type="color" value={config.color} onChange={e => setConfig({ ...config, color: e.target.value })} style={{ width: '16px', height: '16px', border: 'none', padding: 0, background: 'transparent', cursor: 'pointer' }} />
+                                                    <span style={{ fontSize: '11px', fontFamily: 'monospace' }}>{config.color}</span>
+                                                </div>
+                                            </div>
+                                        )}
+                                    </div>
+
+                                </div>
                             ) : (
-                                <FileText size={32} color="var(--primary-color)" />
+                                // File List
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                                    {files.map((f, i) => (
+                                        <div key={i} style={{
+                                            display: 'flex', alignItems: 'center', padding: '10px', background: 'rgba(255,255,255,0.8)', borderRadius: '10px',
+                                            border: '1px solid rgba(0,0,0,0.05)', gap: '10px'
+                                        }}>
+                                            <FileText size={18} color="var(--primary-color)" />
+                                            <div style={{ flex: 1, overflow: 'hidden' }}>
+                                                <div style={{ fontSize: '13px', fontWeight: '500', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                                    {f.split(/[/\\]/).pop()}
+                                                </div>
+                                            </div>
+                                            <button onClick={() => removeFile(i)} style={{ border: 'none', background: 'transparent', cursor: 'pointer', padding: '4px', opacity: 0.6, transition: 'opacity 0.2s' }} onMouseEnter={e => e.currentTarget.style.opacity = '1'} onMouseLeave={e => e.currentTarget.style.opacity = '0.6'}>
+                                                <Trash2 size={14} color="#FF3B30" />
+                                            </button>
+                                        </div>
+                                    ))}
+                                </div>
                             )}
                         </div>
-                        <span style={{ fontWeight: '600', flex: 1 }}>{file.split(/[/\\]/).pop()}</span>
-                        <button onClick={() => setFile(null)} style={{
-                            border: 'none', background: 'rgba(0,0,0,0.05)', padding: '8px 16px', borderRadius: '12px',
-                            cursor: 'pointer', color: 'var(--primary-color)', fontWeight: '500', fontSize: '14px'
-                        }}>更换</button>
-                    </div>
 
-                    <div style={{ background: 'rgba(255,255,255,0.6)', padding: '24px', borderRadius: '24px', marginBottom: '24px', border: '1px solid rgba(255,255,255,0.4)' }}>
-                        <div style={{ marginBottom: '20px' }}>
-                            <label style={{ display: 'block', marginBottom: '10px', fontWeight: '600', color: 'var(--text-primary)' }}>水印文字</label>
-                            <input
-                                type="text"
-                                value={text}
-                                onChange={(e) => setText(e.target.value)}
+                        {/* Footer Button */}
+                        <div style={{ paddingTop: '12px', borderTop: '1px solid rgba(0,0,0,0.05)' }}>
+                            <button
+                                onClick={handleApply}
+                                disabled={processing || files.length === 0}
                                 style={{
-                                    width: '100%', padding: '12px 16px', borderRadius: '12px',
-                                    border: '1px solid rgba(0,0,0,0.1)', background: 'rgba(255,255,255,0.8)',
-                                    fontSize: '16px', outline: 'none', transition: 'all 0.2s'
+                                    width: '100%', padding: '12px', border: 'none', borderRadius: '12px',
+                                    background: processing || files.length === 0 ? 'rgba(0,0,0,0.05)' : 'linear-gradient(135deg, #007AFF 0%, #0056b3 100%)',
+                                    color: processing || files.length === 0 ? 'var(--text-secondary)' : 'white',
+                                    fontSize: '15px', fontWeight: '600', cursor: processing || files.length === 0 ? 'not-allowed' : 'pointer',
+                                    boxShadow: processing || files.length === 0 ? 'none' : '0 4px 12px rgba(0, 122, 255, 0.3)',
+                                    transition: 'all 0.3s', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px'
                                 }}
-                                onFocus={(e) => e.target.style.background = '#fff'}
-                                onBlur={(e) => e.target.style.background = 'rgba(255,255,255,0.5)'}
-                            />
-                        </div>
-
-                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '24px' }}>
-                            <div>
-                                <label style={{ display: 'block', marginBottom: '10px', fontSize: '14px', color: 'var(--text-secondary)' }}>字号: {options.size}px</label>
-                                <input
-                                    type="range" min="10" max="200"
-                                    value={options.size}
-                                    onChange={(e) => setOptions({ ...options, size: parseInt(e.target.value) })}
-                                    style={{ width: '100%', accentColor: 'var(--primary-color)' }}
-                                />
-                            </div>
-                            <div>
-                                <label style={{ display: 'block', marginBottom: '10px', fontSize: '14px', color: 'var(--text-secondary)' }}>透明度: {options.opacity}</label>
-                                <input
-                                    type="range" min="0" max="1" step="0.1"
-                                    value={options.opacity}
-                                    onChange={(e) => setOptions({ ...options, opacity: parseFloat(e.target.value) })}
-                                    style={{ width: '100%', accentColor: 'var(--primary-color)' }}
-                                />
-                            </div>
-                            <div>
-                                <label style={{ display: 'block', marginBottom: '10px', fontSize: '14px', color: 'var(--text-secondary)' }}>旋转: {options.rotate}°</label>
-                                <input
-                                    type="range" min="0" max="360"
-                                    value={options.rotate}
-                                    onChange={(e) => setOptions({ ...options, rotate: parseInt(e.target.value) })}
-                                    style={{ width: '100%', accentColor: 'var(--primary-color)' }}
-                                />
-                            </div>
-                            <div>
-                                <label style={{ display: 'block', marginBottom: '10px', fontSize: '14px', color: 'var(--text-secondary)' }}>颜色</label>
-                                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                                    <input
-                                        type="color"
-                                        value={options.color}
-                                        onChange={(e) => setOptions({ ...options, color: e.target.value })}
-                                        style={{
-                                            width: '40px', height: '40px', border: 'none', padding: 0, borderRadius: '50%', overflow: 'hidden', cursor: 'pointer',
-                                            boxShadow: '0 2px 8px rgba(0,0,0,0.1)'
-                                        }}
-                                    />
-                                    <span style={{ fontSize: '14px', color: 'var(--text-primary)', fontFamily: 'monospace' }}>{options.color}</span>
-                                </div>
-                            </div>
+                            >
+                                {processing ? (
+                                    '处理中...'
+                                ) : (
+                                    <>
+                                        <Droplet size={18} />
+                                        添加水印
+                                    </>
+                                )}
+                            </button>
                         </div>
                     </div>
 
-                    <div style={{ flex: 1 }}></div>
-
-                    <button
-                        onClick={handleApply}
-                        disabled={processing || !text}
+                    {/* Right Main: Preview Area */}
+                    <div
+                        ref={containerRef}
                         style={{
-                            width: '100%',
-                            padding: '18px',
-                            border: 'none',
+                            flex: 1,
+                            background: '#e0e0e0',
                             borderRadius: '16px',
-                            background: processing || !text ? 'rgba(0,0,0,0.05)' : 'linear-gradient(135deg, #007AFF 0%, #0056b3 100%)',
-                            color: processing || !text ? 'var(--text-secondary)' : 'white',
-                            fontSize: '17px',
-                            fontWeight: '600',
-                            cursor: processing || !text ? 'not-allowed' : 'pointer',
-                            boxShadow: processing || !text ? 'none' : '0 10px 20px rgba(0, 122, 255, 0.3)',
-                            transition: 'all 0.3s ease',
-                            marginTop: 'auto',
-                            letterSpacing: '-0.3px',
-                            flexShrink: 0
-                        }}
-                        onMouseEnter={(e) => {
-                            if (!processing && text) {
-                                e.currentTarget.style.transform = 'translateY(-2px)';
-                                e.currentTarget.style.boxShadow = '0 14px 24px rgba(0, 122, 255, 0.4)';
-                            }
-                        }}
-                        onMouseLeave={(e) => {
-                            if (!processing && text) {
-                                e.currentTarget.style.transform = 'none';
-                                e.currentTarget.style.boxShadow = '0 10px 20px rgba(0, 122, 255, 0.3)';
-                            }
+                            overflow: 'hidden',
+                            position: 'relative',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            boxShadow: 'inset 0 0 20px rgba(0,0,0,0.05)',
+                            minHeight: '400px'
                         }}
                     >
-                        {processing ? '处理中...' : '添加水印'}
-                    </button>
+                        {preview && imgNaturalSize ? (
+                            <div style={{
+                                width: displaySize.width,
+                                height: displaySize.height,
+                                position: 'relative',
+                                boxShadow: '0 8px 24px rgba(0,0,0,0.15)',
+                                background: 'white'
+                            }}>
+                                <img
+                                    src={preview}
+                                    alt="Preview"
+                                    style={{ width: '100%', height: '100%', display: 'block', objectFit: 'contain' }}
+                                />
+
+                                {/* Overlay */}
+                                <div style={{
+                                    position: 'absolute', inset: 0, pointerEvents: 'none', overflow: 'hidden',
+                                    display: config.layout === 'center' ? 'flex' : 'block',
+                                    alignItems: 'center', justifyContent: 'center',
+                                }}>
+                                    {config.layout === 'tile' ? (
+                                        <div style={{
+                                            width: '200%', height: '200%', position: 'absolute', top: '-50%', left: '-50%',
+                                            display: 'flex', flexWrap: 'wrap', gap: `${(config.gap || 200) / 2}px`,
+                                            transform: `rotate(${-config.rotate}deg)`,
+                                            justifyContent: 'center', alignContent: 'center'
+                                        }}>
+                                            {Array.from({ length: 100 }).map((_, i) => (
+                                                <div key={i} style={{
+                                                    opacity: config.opacity,
+                                                    fontSize: `${(config.fontSize || 50) / 2}px`,
+                                                    color: config.color,
+                                                    whiteSpace: 'nowrap'
+                                                }}>
+                                                    {config.type === 'text' ? config.text : (
+                                                        <div style={{ width: '50px', height: '50px', background: 'rgba(0,0,0,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>IMG</div>
+                                                    )}
+                                                </div>
+                                            ))}
+                                        </div>
+                                    ) : (
+                                        <div style={{
+                                            transform: `rotate(${-config.rotate}deg)`,
+                                            opacity: config.opacity,
+                                            fontSize: `${config.fontSize || 50}px`,
+                                            color: config.color,
+                                            whiteSpace: 'nowrap',
+                                        }}>
+                                            {config.type === 'text' ? config.text : (
+                                                <div style={{
+                                                    width: `${100 * (config.scale || 0.5)}px`, height: `${100 * (config.scale || 0.5)}px`,
+                                                    background: 'rgba(0,122,255,0.3)', border: '2px dashed var(--primary-color)',
+                                                    display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '12px'
+                                                }}>
+                                                    图片水印预览
+                                                </div>
+                                            )}
+                                        </div>
+                                    )}
+                                </div>
+
+                                <div style={{ position: 'absolute', bottom: '16px', right: '16px', background: 'rgba(0,0,0,0.6)', color: 'white', fontSize: '12px', padding: '6px 12px', borderRadius: '20px', backdropFilter: 'blur(4px)' }}>
+                                    预览模式
+                                </div>
+                            </div>
+                        ) : (
+                            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '12px', color: '#999' }}>
+                                <div style={{ width: '64px', height: '64px', borderRadius: '50%', background: 'rgba(0,0,0,0.05)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                    <FileText size={32} opacity={0.5} />
+                                </div>
+                                <span>选择文件以预览效果</span>
+                            </div>
+                        )}
+                    </div>
                 </div>
             )}
         </div>

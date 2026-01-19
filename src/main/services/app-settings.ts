@@ -18,6 +18,9 @@ const DEFAULT_SETTINGS: AppSettings = {
     autoReload: true,
     showDevTools: false,
     logLevel: 'info'
+  },
+  window: {
+    width: 800
   }
 }
 
@@ -39,6 +42,10 @@ function mergeSettings(current: AppSettings, next: Partial<AppSettings>): AppSet
     developer: {
       ...current.developer,
       ...(next.developer || {})
+    },
+    window: {
+      ...(current.window || { width: 800 }),
+      ...(next.window || {})
     }
   }
 }
