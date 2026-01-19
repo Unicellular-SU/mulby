@@ -33,8 +33,8 @@ class PDFService {
             // data from Electron preload is typically Uint8Array in renderer
             return await pdfjsLib.getDocument({
                 data: data,
-                cMapUrl: 'https://cdn.jsdelivr.net/npm/pdfjs-dist@5.4.530/cmaps/',
-                cMapPacked: true,
+                cMapUrl: 'https://cdn.jsdelivr.net/npm/pdfjs-dist@4.4.168/cmaps/',
+                cMapPacked: true, // true? or removed in v4? It was true in v3/v4.
             }).promise;
         } catch (e: any) {
             console.error('Failed to load PDF:', e);
@@ -42,30 +42,37 @@ class PDFService {
         }
     }
 
-    async pdfToImage(pdfPath: string, outputDir: string, onProgress?: ProgressCallback): Promise<string[]> {
+    /**
+     * 提取 PDF 中的内嵌图片
+     */
+    async extractImages(pdfPath: string, outputDir: string, onProgress?: ProgressCallback): Promise<string[]> {
         const api = getApi();
 
-        // 优先使用后端提取（直接从流中提取图片，解决 jsPDF 生成文件渲染白屏问题）
-        try {
+        // 使用后端提取（直接从流中提取图片）
+        // @ts-ignore
+        if (api.extractPDFImages) {
+            if (onProgress) onProgress({ current: 0, total: 100, status: '正在通过后端提取图片...' });
             // @ts-ignore
-            if (api.extractPDFImages) {
-                if (onProgress) onProgress({ current: 0, total: 100, status: '正在通过后端提取图片...' });
-                // @ts-ignore
-                const results = await api.extractPDFImages(pdfPath, outputDir);
-                if (results && results.length > 0) return results;
-            }
-        } catch (e) {
-            console.warn('Backend extraction failed, falling back to frontend...', e);
+            const results = await api.extractPDFImages(pdfPath, outputDir);
+            if (results) return results;
         }
 
-        // Fallback: Frontend Rendering
+        console.warn('Backend extractPDFImages non-existent');
+        return [];
+    }
+
+    /**
+     * 将 PDF 每一页渲染为图片 (PDF 转图片)
+     */
+    async convertPDFToImages(pdfPath: string, outputDir: string, onProgress?: ProgressCallback): Promise<string[]> {
+        const api = getApi();
         await api.ensureDir(outputDir);
 
         const pdf = await this.getDocument(pdfPath);
         const totalPages = pdf.numPages;
         const outputPaths: string[] = [];
 
-        console.log(`Starting PDF to Image. Pages: ${totalPages}`);
+        console.log(`Starting PDF to Image conversion. Pages: ${totalPages}`);
 
         for (let i = 1; i <= totalPages; i++) {
             if (onProgress) {
@@ -82,11 +89,27 @@ class PDFService {
 
             if (!context) throw new Error('Canvas context could not be created');
 
+            // Set white background
+            context.fillStyle = '#ffffff';
+            context.fillRect(0, 0, canvas.width, canvas.height);
+
+            // Render configuration
             const renderContext = {
                 canvasContext: context,
                 viewport: viewport,
+                // Ensure watermarks and annotations are rendered
+                // @ts-ignore - AnnotationMode might not be exported in types but exists in runtime or needs explicit value 1
+                annotationMode: 1, // ENABLE
+                includeHidden: false,
             } as any;
-            await page.render(renderContext).promise;
+
+            try {
+                await page.render(renderContext).promise;
+            } catch (renderError) {
+                console.error(`Error rendering page ${i}:`, renderError);
+                // Continue to next page or throw? Let's try to output what we have (white page) but log error.
+                // Or maybe the canvas is partially drawn.
+            }
 
             const blob = await new Promise<Blob | null>(resolve => canvas.toBlob(resolve, 'image/png'));
             if (!blob) throw new Error('Image creation failed');
@@ -94,7 +117,7 @@ class PDFService {
             const buffer = await blob.arrayBuffer();
 
             // Path handling
-            const fileName = `page_${i}.png`;
+            const fileName = `page_${i.toString().padStart(3, '0')}.png`; // Pad numbers for ordering
             const isWindows = outputDir.includes('\\');
             const separator = isWindows ? '\\' : '/';
             const cleanDir = outputDir.endsWith(separator) ? outputDir.slice(0, -1) : outputDir;

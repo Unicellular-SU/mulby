@@ -118,7 +118,7 @@ const ExtractImages: React.FC = () => {
                 const fileName = file.split(/[/\\]/).pop()?.replace('.pdf', '') || 'unknown';
                 const outputDir = `${baseOutputDir}/${fileName}_images`;
 
-                const outputPaths = await pdfService.pdfToImage(file, outputDir);
+                const outputPaths = await pdfService.extractImages(file, outputDir);
                 if (outputPaths && outputPaths.length > 0) {
                     successCount++;
                 }

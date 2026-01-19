@@ -194,3 +194,34 @@ interface FileSearchResult {
   - 优化结果通知，统计成功处理的文件数量
   - 修复图片提取逻辑：增加全局去重，解决由页面资源复用导致的重复提取问题 (8页提取64张 -> 8页提取8张)
   - 修复预览白屏问题：增强 `getPDFImagePreview`，支持 FlateDecode 编码的 PNG 图片预览提取
+
+---
+
+# PDF 转图片 UI 重构
+
+> **更新时间**: 2026-01-20
+> **状态**: ✅ 已完成
+
+## 完成内容
+
+### UI 重构
+- [x] 重构 `plugins/pdf-tools/src/ui/pages/PDFToImage.tsx`
+  - 接入 `SharedPDFComponents`，保持设计一致性
+  - 支持**多文件上传**与批量转换
+  - 对齐 `ExtractImages` 的列表式 UI 设计，提供更清晰的文件管理体验
+  - 优化导出逻辑：导出时根据原 PDF 文件名自动创建独立文件夹 (`{filename}_pages`)，避免文件混淆
+
+### 逻辑修复
+- [x] 修正 PDF 转换与提取的概念混淆
+  - 核心问题：原 `pdfToImage` 方法在存在后端 API 时错误地优先调用了 `extractPDFImages`，导致“转图片”功能变成了“提取图片”。
+  - 重构 `PDFService`：拆分为 `convertPDFToImages` (渲染页面) 和 `extractImages` (提取资源) 两个独立方法。
+  - `PDFToImage` 页面现明确调用渲染逻辑，确保将每一页完整转换为图片。
+  - `ExtractImages` 页面现明确调用提取逻辑，仅获取内嵌资源。
+
+### 渲染修复
+- [x] 修复水印和标注不显示的问题
+  - 原因：`pdfjs-dist` 默认渲染模式可能未开启注解层 (Annotation Layer) 或忽略了某些可选内容组。
+  - 修复：在 `convertPDFToImages` 中显式设置 `annotationMode: 1` (ENABLE) 并添加错误捕获，确保水印、图章等覆盖层元素能正确渲染到输出图片中。
+- [x] 修复 `Found invalid object in transferList` 错误
+  - 原因：`pdfjs-dist` v5.x 在 Electron 环境下处理 `ImageBitmap` 传输时存在兼容性问题，导致部分图像无法解码。
+  - 修复：降级 `pdfjs-dist` 至稳定版本 `4.4.168`，从根本上解决传输列表对象无效问题，恢复图片 PDF 的正常渲染。
