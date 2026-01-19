@@ -284,20 +284,51 @@ window.pdfApi = {
                 };
 
                 if (layout === 'tile') {
-                    // Simple grid tiling
-                    // Rotate the coordinate system or calculate rotated positions? 
-                    // Simplest tile: grid over page, then draw.
-                    // For better coverage with rotation, we might need a larger grid.
+                    // Refactored Tiling Logic: "Rotated Grid"
+                    // To match frontend "container rotation" effect:
+                    // 1. Generate grid points relative to center (0,0)
+                    // 2. Rotate these points by the rotation angle
+                    // 3. Translate to page center
 
-                    // Use simple grid for now
-                    const cols = Math.ceil(pageWidth / gap) + 2;
-                    const rows = Math.ceil(pageHeight / gap) + 2;
-                    const startX = -(gap);
-                    const startY = -(gap);
+                    // Match frontend gap scaling logic (frontend uses gap/2)
+                    const realGap = Number(gap) || 200;
 
-                    for (let r = 0; r < rows; r++) {
-                        for (let c = 0; c < cols; c++) {
-                            drawItem(startX + c * gap, startY + r * gap);
+                    const centerX = pageWidth / 2;
+                    const centerY = pageHeight / 2;
+
+                    // Calculate coverage radius needed to cover the rotated page corners
+                    // Standard radius + buffer
+                    const radius = Math.sqrt(pageWidth * pageWidth + pageHeight * pageHeight);
+                    const count = Math.ceil(radius / realGap);
+
+                    // Precompute rotation math for grid points
+                    // Note: We rotate the *positions* by the same angle as the elements
+                    // to simulate the "whole grid rotated" effect.
+                    const cos = Math.cos(rads);
+                    const sin = Math.sin(rads);
+
+                    for (let r = -count; r <= count; r++) {
+                        for (let c = -count; c <= count; c++) {
+                            // Original grid point relative to center
+                            const gx = c * realGap;
+                            const gy = r * realGap;
+
+                            // Rotate the grid point
+                            // (x', y') = (x cos - y sin, x sin + y cos)
+                            const rx = gx * cos - gy * sin;
+                            const ry = gx * sin + gy * cos;
+
+                            // Translate to page center
+                            const px = centerX + rx;
+                            const py = centerY + ry;
+
+                            // Only draw if within reasonable bounds (optional optimization)
+                            // Buffer: add some margin to ensure we cover edges fully
+                            const margin = Math.max(wmWidth, wmHeight) * 2 + 100;
+                            if (px > -margin && px < pageWidth + margin &&
+                                py > -margin && py < pageHeight + margin) {
+                                drawItem(px, py);
+                            }
                         }
                     }
                 } else {

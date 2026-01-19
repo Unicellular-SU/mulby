@@ -13,9 +13,31 @@ const Watermark: React.FC = () => {
     const [activeTab, setActiveTab] = useState<'settings' | 'files'>('settings');
 
     // Layout Calculation State
-    const containerRef = React.useRef<HTMLDivElement>(null);
+    const resizeObserverRef = React.useRef<ResizeObserver | null>(null);
     const [imgNaturalSize, setImgNaturalSize] = useState<{ w: number; h: number } | null>(null);
     const [containerDimensions, setContainerDimensions] = useState({ width: 0, height: 0 });
+
+    // Handle Container Resize via Callback Ref (handles conditional rendering)
+    const onContainerRefChange = React.useCallback((node: HTMLDivElement | null) => {
+        if (node) {
+            // Node mounted
+            resizeObserverRef.current = new ResizeObserver(entries => {
+                for (const entry of entries) {
+                    setContainerDimensions({
+                        width: entry.contentRect.width,
+                        height: entry.contentRect.height
+                    });
+                }
+            });
+            resizeObserverRef.current.observe(node);
+        } else {
+            // Node unmounting
+            if (resizeObserverRef.current) {
+                resizeObserverRef.current.disconnect();
+                resizeObserverRef.current = null;
+            }
+        }
+    }, []);
 
     // Handle Image Size
     useEffect(() => {
@@ -30,24 +52,9 @@ const Watermark: React.FC = () => {
         img.src = preview;
     }, [preview]);
 
-    // Handle Container Resize
-    useEffect(() => {
-        if (!containerRef.current) return;
-        const observer = new ResizeObserver(entries => {
-            for (const entry of entries) {
-                setContainerDimensions({
-                    width: entry.contentRect.width,
-                    height: entry.contentRect.height
-                });
-            }
-        });
-        observer.observe(containerRef.current);
-        return () => observer.disconnect();
-    }, []);
-
     const getDisplaySize = () => {
         if (!imgNaturalSize || !containerDimensions.width || !containerDimensions.height) {
-            return { width: '100%', height: '100%' };
+            return { width: 0, height: 0, valid: false };
         }
 
         const padding = 0.95;
@@ -63,7 +70,7 @@ const Watermark: React.FC = () => {
             w = h * ratio;
         }
 
-        return { width: `${w}px`, height: `${h}px` };
+        return { width: w, height: h, valid: true };
     };
 
     const displaySize = getDisplaySize();
@@ -394,7 +401,7 @@ const Watermark: React.FC = () => {
 
                     {/* Right Main: Preview Area */}
                     <div
-                        ref={containerRef}
+                        ref={onContainerRefChange}
                         style={{
                             flex: 1,
                             background: '#e0e0e0',
@@ -410,8 +417,8 @@ const Watermark: React.FC = () => {
                     >
                         {preview && imgNaturalSize ? (
                             <div style={{
-                                width: displaySize.width,
-                                height: displaySize.height,
+                                width: displaySize.valid ? `${displaySize.width}px` : '100%',
+                                height: displaySize.valid ? `${displaySize.height}px` : '100%',
                                 position: 'relative',
                                 boxShadow: '0 8px 24px rgba(0,0,0,0.15)',
                                 background: 'white'
@@ -429,25 +436,69 @@ const Watermark: React.FC = () => {
                                     alignItems: 'center', justifyContent: 'center',
                                 }}>
                                     {config.layout === 'tile' ? (
-                                        <div style={{
-                                            width: '200%', height: '200%', position: 'absolute', top: '-50%', left: '-50%',
-                                            display: 'flex', flexWrap: 'wrap', gap: `${(config.gap || 200) / 2}px`,
-                                            transform: `rotate(${-config.rotate}deg)`,
-                                            justifyContent: 'center', alignContent: 'center'
-                                        }}>
-                                            {Array.from({ length: 100 }).map((_, i) => (
-                                                <div key={i} style={{
-                                                    opacity: config.opacity,
-                                                    fontSize: `${(config.fontSize || 50) / 2}px`,
-                                                    color: config.color,
-                                                    whiteSpace: 'nowrap'
-                                                }}>
-                                                    {config.type === 'text' ? config.text : (
-                                                        <div style={{ width: '50px', height: '50px', background: 'rgba(0,0,0,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>IMG</div>
-                                                    )}
-                                                </div>
-                                            ))}
-                                        </div>
+                                        // Refactored to match backend geometric logic exactly
+                                        (() => {
+                                            if (!displaySize.valid) return null;
+
+                                            const w = displaySize.width;
+                                            const h = displaySize.height;
+                                            const cx = w / 2;
+                                            const cy = h / 2;
+
+                                            // Match backend scaler
+                                            const realGap = config.gap || 200;
+                                            const realFontSize = config.fontSize || 50;
+
+                                            // Calculate coverage radius
+                                            const radius = Math.sqrt(w * w + h * h);
+                                            const count = Math.ceil(radius / realGap);
+
+                                            // Precompute rotation
+                                            // UI uses negative rotation for visual correction
+                                            const rads = ((-config.rotate) * Math.PI) / 180;
+                                            const cos = Math.cos(rads);
+                                            const sin = Math.sin(rads);
+
+                                            const items = [];
+                                            for (let r = -count; r <= count; r++) {
+                                                for (let c = -count; c <= count; c++) {
+                                                    const gx = c * realGap;
+                                                    const gy = r * realGap;
+
+                                                    // Rotate
+                                                    const rx = gx * cos - gy * sin;
+                                                    const ry = gx * sin + gy * cos;
+
+                                                    // Translate to center
+                                                    const px = cx + rx;
+                                                    const py = cy + ry;
+
+                                                    // Bounds check (visual optim)
+                                                    const margin = 200;
+                                                    if (px > -margin && px < w + margin &&
+                                                        py > -margin && py < h + margin) {
+                                                        items.push(
+                                                            <div key={`${r}-${c}`} style={{
+                                                                position: 'absolute',
+                                                                left: px,
+                                                                top: py,
+                                                                transform: `translate(-50%, -50%) rotate(${-config.rotate}deg)`,
+                                                                opacity: config.opacity,
+                                                                fontSize: `${realFontSize}px`,
+                                                                color: config.color,
+                                                                whiteSpace: 'nowrap',
+                                                                pointerEvents: 'none'
+                                                            }}>
+                                                                {config.type === 'text' ? config.text : (
+                                                                    <div style={{ width: '50px', height: '50px', background: 'rgba(0,0,0,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>IMG</div>
+                                                                )}
+                                                            </div>
+                                                        );
+                                                    }
+                                                }
+                                            }
+                                            return <>{items}</>;
+                                        })()
                                     ) : (
                                         <div style={{
                                             transform: `rotate(${-config.rotate}deg)`,
