@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Combine, Plus, X, FileText } from 'lucide-react';
+import { Combine, Plus, Trash2, FileText, ArrowUp, ArrowDown } from 'lucide-react';
 import { useIntools } from '../hooks/useIntools';
 import { pdfService } from '../services/PDFService';
 import '../types';
@@ -72,17 +72,17 @@ const FileItem: React.FC<{
 
             <div style={{ display: 'flex', gap: '8px' }}>
                 <button onClick={(e) => { e.stopPropagation(); onMove(index, 'up'); }} disabled={index === 0} style={{
-                    border: 'none', background: 'rgba(0,0,0,0.05)', borderRadius: '8px', width: '32px', height: '32px',
-                    cursor: index === 0 ? 'default' : 'pointer', opacity: index === 0 ? 0.3 : 1, display: 'flex', alignItems: 'center', justifyContent: 'center'
-                }}>↑</button>
+                    border: 'none', background: 'rgba(0,0,0,0.05)', borderRadius: '8px', width: '32px', height: '32px', minWidth: '32px', padding: 0,
+                    cursor: index === 0 ? 'default' : 'pointer', opacity: index === 0 ? 0.3 : 1, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0
+                }}><ArrowUp size={16} color="var(--text-primary)" /></button>
                 <button onClick={(e) => { e.stopPropagation(); onMove(index, 'down'); }} disabled={index === total - 1} style={{
-                    border: 'none', background: 'rgba(0,0,0,0.05)', borderRadius: '8px', width: '32px', height: '32px',
-                    cursor: index === total - 1 ? 'default' : 'pointer', opacity: index === total - 1 ? 0.3 : 1, display: 'flex', alignItems: 'center', justifyContent: 'center'
-                }}>↓</button>
+                    border: 'none', background: 'rgba(0,0,0,0.05)', borderRadius: '8px', width: '32px', height: '32px', minWidth: '32px', padding: 0,
+                    cursor: index === total - 1 ? 'default' : 'pointer', opacity: index === total - 1 ? 0.3 : 1, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0
+                }}><ArrowDown size={16} color="var(--text-primary)" /></button>
                 <button onClick={(e) => { e.stopPropagation(); onRemove(index); }} style={{
-                    border: 'none', background: 'rgba(255, 59, 48, 0.1)', borderRadius: '8px', width: '32px', height: '32px',
-                    cursor: 'pointer', color: '#FF3B30', display: 'flex', alignItems: 'center', justifyContent: 'center'
-                }}><X size={18} /></button>
+                    border: 'none', background: 'rgba(255, 59, 48, 0.1)', borderRadius: '8px', width: '32px', height: '32px', minWidth: '32px', padding: 0,
+                    cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0
+                }}><Trash2 size={16} color="#FF3B30" /></button>
             </div>
         </div>
     );
@@ -149,79 +149,140 @@ const MergePDF: React.FC = () => {
 
     return (
         <div style={{ padding: '10px', height: '100%', display: 'flex', flexDirection: 'column' }}>
-            <h2 style={{ marginBottom: '24px', fontSize: '28px', fontWeight: '700', display: 'flex', alignItems: 'center', gap: '12px', letterSpacing: '-0.5px' }}>
-                <Combine color="var(--primary-color)" size={32} /> PDF 合并
-            </h2>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: files.length > 0 ? '16px' : '24px' }}>
+                <h2 style={{ fontSize: '28px', fontWeight: '700', display: 'flex', alignItems: 'center', gap: '12px', letterSpacing: '-0.5px', margin: 0 }}>
+                    <Combine color="var(--primary-color)" size={32} /> PDF 合并
+                </h2>
 
-            <div
-                onClick={handleAddFiles}
-                style={{
-                    background: 'rgba(255,255,255,0.5)',
-                    borderRadius: '20px',
-                    padding: '40px',
-                    textAlign: 'center',
-                    border: '2px dashed rgba(0, 122, 255, 0.3)',
-                    cursor: 'pointer',
-                    marginBottom: '24px',
-                    transition: 'all 0.3s ease'
-                }}
-                onMouseEnter={(e) => {
-                    e.currentTarget.style.background = 'rgba(0, 122, 255, 0.05)';
-                    e.currentTarget.style.borderColor = 'var(--primary-color)';
-                }}
-                onMouseLeave={(e) => {
-                    e.currentTarget.style.background = 'rgba(255,255,255,0.3)';
-                    e.currentTarget.style.borderColor = 'rgba(0, 122, 255, 0.3)';
-                }}
-            >
-                <div style={{ marginBottom: '16px', display: 'flex', justifyContent: 'center' }}>
-                    <div style={{ padding: '16px', background: 'var(--primary-color)', borderRadius: '50%', boxShadow: '0 8px 16px rgba(0, 122, 255, 0.2)' }}>
-                        <Plus size={32} color="white" />
+                {files.length > 0 && (
+                    <button
+                        onClick={handleAddFiles}
+                        style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '6px',
+                            padding: '8px 16px',
+                            borderRadius: '12px',
+                            border: '1px dashed rgba(0, 122, 255, 0.5)',
+                            background: 'rgba(0, 122, 255, 0.05)',
+                            color: 'var(--primary-color)',
+                            cursor: 'pointer',
+                            fontSize: '14px',
+                            fontWeight: '500',
+                            transition: 'all 0.2s ease',
+                            height: 'fit-content'
+                        }}
+                        onMouseEnter={(e) => {
+                            e.currentTarget.style.background = 'rgba(0, 122, 255, 0.1)';
+                            e.currentTarget.style.transform = 'translateY(-1px)';
+                            e.currentTarget.style.boxShadow = '0 2px 8px rgba(0, 122, 255, 0.1)';
+                        }}
+                        onMouseLeave={(e) => {
+                            e.currentTarget.style.background = 'rgba(0, 122, 255, 0.05)';
+                            e.currentTarget.style.transform = 'none';
+                            e.currentTarget.style.boxShadow = 'none';
+                        }}
+                    >
+                        <Plus size={16} /> 继续添加
+                    </button>
+                )}
+            </div>
+
+            {files.length === 0 ? (
+                <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+                    <div
+                        onClick={handleAddFiles}
+                        style={{
+                            background: 'rgba(255,255,255,0.5)',
+                            borderRadius: '24px',
+                            padding: '60px 40px',
+                            textAlign: 'center',
+                            border: '2px dashed rgba(0, 122, 255, 0.3)',
+                            cursor: 'pointer',
+                            transition: 'all 0.3s ease',
+                            display: 'flex',
+                            flexDirection: 'column',
+                            alignItems: 'center',
+                            gap: '16px'
+                        }}
+                        onMouseEnter={(e) => {
+                            e.currentTarget.style.background = 'rgba(0, 122, 255, 0.05)';
+                            e.currentTarget.style.borderColor = 'var(--primary-color)';
+                            e.currentTarget.style.transform = 'scale(1.01)';
+                        }}
+                        onMouseLeave={(e) => {
+                            e.currentTarget.style.background = 'rgba(255,255,255,0.3)';
+                            e.currentTarget.style.borderColor = 'rgba(0, 122, 255, 0.3)';
+                            e.currentTarget.style.transform = 'scale(1)';
+                        }}
+                    >
+                        <div style={{
+                            width: '96px',
+                            height: '96px',
+                            background: 'var(--primary-color)',
+                            borderRadius: '50%',
+                            boxShadow: '0 12px 24px rgba(0, 122, 255, 0.25)',
+                            marginBottom: '8px',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            flexShrink: 0
+                        }}>
+                            <Plus size={48} color="white" />
+                        </div>
+                        <div>
+                            <p style={{ fontSize: '20px', fontWeight: 'bold', color: 'var(--text-primary)', marginBottom: '8px' }}>点击添加 PDF 文件</p>
+                            <p style={{ fontSize: '14px', color: 'var(--text-secondary)' }}>或将文件拖放到此处</p>
+                        </div>
                     </div>
                 </div>
-                <p style={{ fontSize: '16px', fontWeight: '500', color: 'var(--text-primary)' }}>点击添加 PDF 文件</p>
-                <p style={{ fontSize: '13px', color: 'var(--text-secondary)', marginTop: '4px' }}>支持多选 / 拖拽上传</p>
-            </div>
+            ) : (
+                <>
+                    <div style={{ flex: 1, overflowY: 'auto', marginBottom: '20px', paddingRight: '4px' }}>
+                        {files.map((file, index) => (
+                            <FileItem key={file} file={file} index={index} total={files.length} onMove={moveFile} onRemove={handleRemoveFile} />
+                        ))}
+                    </div>
 
-            <div style={{ flex: 1, overflowY: 'auto', marginBottom: '20px' }}>
-                {files.map((file, index) => (
-                    <FileItem key={file} file={file} index={index} total={files.length} onMove={moveFile} onRemove={handleRemoveFile} />
-                ))}
-            </div>
-
-            <button
-                onClick={handleMerge}
-                disabled={files.length < 2 || merging}
-                style={{
-                    width: '100%',
-                    padding: '18px',
-                    border: 'none',
-                    borderRadius: '16px',
-                    background: files.length < 2 || merging ? 'rgba(0,0,0,0.05)' : 'linear-gradient(135deg, #007AFF 0%, #0056b3 100%)',
-                    color: files.length < 2 || merging ? 'var(--text-secondary)' : 'white',
-                    fontSize: '17px',
-                    fontWeight: '600',
-                    cursor: files.length < 2 || merging ? 'not-allowed' : 'pointer',
-                    boxShadow: files.length < 2 || merging ? 'none' : '0 10px 20px rgba(0, 122, 255, 0.3)',
-                    transition: 'all 0.3s ease',
-                    marginTop: 'auto',
-                    letterSpacing: '-0.3px'
-                }}
-                onMouseEnter={(e) => {
-                    if (files.length >= 2 && !merging) {
-                        e.currentTarget.style.transform = 'translateY(-2px)';
-                        e.currentTarget.style.boxShadow = '0 14px 24px rgba(0, 122, 255, 0.4)';
-                    }
-                }}
-                onMouseLeave={(e) => {
-                    if (files.length >= 2 && !merging) {
-                        e.currentTarget.style.transform = 'none';
-                        e.currentTarget.style.boxShadow = '0 10px 20px rgba(0, 122, 255, 0.3)';
-                    }
-                }}
-            >
-                {merging ? '合并中...' : `开始合并 (${files.length} 个文件)`}
-            </button>
+                    <button
+                        onClick={handleMerge}
+                        disabled={files.length < 2 || merging}
+                        style={{
+                            width: '100%',
+                            padding: '18px',
+                            border: 'none',
+                            borderRadius: '16px',
+                            background: files.length < 2 || merging ? 'rgba(0,0,0,0.05)' : 'linear-gradient(135deg, #007AFF 0%, #0056b3 100%)',
+                            color: files.length < 2 || merging ? 'var(--text-secondary)' : 'white',
+                            fontSize: '17px',
+                            fontWeight: '600',
+                            cursor: files.length < 2 || merging ? 'not-allowed' : 'pointer',
+                            boxShadow: files.length < 2 || merging ? 'none' : '0 10px 20px rgba(0, 122, 255, 0.3)',
+                            transition: 'all 0.3s ease',
+                            marginTop: 'auto',
+                            letterSpacing: '-0.3px',
+                            display: 'flex',
+                            justifyContent: 'center',
+                            alignItems: 'center',
+                            gap: '8px'
+                        }}
+                        onMouseEnter={(e) => {
+                            if (files.length >= 2 && !merging) {
+                                e.currentTarget.style.transform = 'translateY(-2px)';
+                                e.currentTarget.style.boxShadow = '0 14px 24px rgba(0, 122, 255, 0.4)';
+                            }
+                        }}
+                        onMouseLeave={(e) => {
+                            if (files.length >= 2 && !merging) {
+                                e.currentTarget.style.transform = 'none';
+                                e.currentTarget.style.boxShadow = '0 10px 20px rgba(0, 122, 255, 0.3)';
+                            }
+                        }}
+                    >
+                        {merging ? '合并中...' : <><Combine size={20} /> 开始合并 ({files.length} 个文件)</>}
+                    </button>
+                </>
+            )}
         </div>
     );
 };
