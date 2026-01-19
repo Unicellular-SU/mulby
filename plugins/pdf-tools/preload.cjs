@@ -77,6 +77,16 @@ window.pdfApi = {
         }
     },
 
+    getFileSize: async (filePath) => {
+        try {
+            const stats = await fsPromises.stat(filePath);
+            return stats.size;
+        } catch (error) {
+            console.error('Failed to get file size:', error);
+            return 0;
+        }
+    },
+
     extractPDFImages: async (pdfPath, outputDir) => {
         try {
             const pdfBytes = await fsPromises.readFile(pdfPath);

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Combine, Plus, Trash2, FileText, ArrowUp, ArrowDown } from 'lucide-react';
+import { Combine, Trash2, FileText, ArrowUp, ArrowDown } from 'lucide-react';
 import { PDFHeader, PDFUploadArea } from '../components/SharedPDFComponents';
 import { useIntools } from '../hooks/useIntools';
 import { pdfService } from '../services/PDFService';
@@ -13,9 +13,11 @@ const FileItem: React.FC<{
     onRemove: (index: number) => void;
 }> = ({ file, index, total, onMove, onRemove }) => {
     const [preview, setPreview] = React.useState<string | null>(null);
+    const [pageCount, setPageCount] = React.useState<number>(0);
 
     React.useEffect(() => {
         pdfService.renderPageToDataURL(file, 1, 0.2).then(setPreview).catch(console.error);
+        pdfService.getPageCount(file).then(setPageCount).catch(console.error);
     }, [file]);
 
     return (
@@ -67,7 +69,7 @@ const FileItem: React.FC<{
                     {file.split(/[/\\]/).pop()}
                 </div>
                 <div style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>
-                    Page 1
+                    {pageCount} 页
                 </div>
             </div>
 

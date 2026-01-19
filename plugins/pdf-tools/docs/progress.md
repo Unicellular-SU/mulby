@@ -1,5 +1,17 @@
 # PDF Tools Refactoring Progress
 
+## 2026-01-20
+
+### PDF Compression Feature
+#### Completed Tasks
+- **Feasibility Analysis**: Confirmed that PDF compression is possible via rasterization (re-rendering pages to compressed JPEGs and re-assembling). This method is effective for reducing file size but sacrifices text selectability.
+- **Backend Implementation (Frontend Logic)**: Added `compressPDF` method to `PDFService`. It uses `pdfjs-dist` to render pages and `pdf-lib` to create a new compressed document.
+- **UI Implementation**: Created `CompressPDF` page with:
+    - File selection/drag-and-drop.
+    - Compression level selector (High Quality, Balanced, High Compression).
+    - Status feedback.
+- **Integration**: Added "PDF Compression" to the sidebar and routing.
+
 ## 2026-01-19
 
 ### UI Standardization and Watermark Refactor

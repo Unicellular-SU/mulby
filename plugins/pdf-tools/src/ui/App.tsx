@@ -9,6 +9,7 @@ import Watermark from './pages/Watermark';
 import ExtractImages from './pages/ExtractImages';
 import PDFToImage from './pages/PDFToImage';
 import ConvertFormat from './pages/ConvertFormat';
+import CompressPDF from './pages/CompressPDF';
 
 const App: React.FC = () => {
   const [activePath, setActivePath] = useState('merge');
@@ -31,6 +32,8 @@ const App: React.FC = () => {
         return <ConvertFormat type="ppt" />;
       case 'pdf-to-excel':
         return <ConvertFormat type="excel" />;
+      case 'compress':
+        return <CompressPDF />;
       default:
         return <MergePDF />;
     }

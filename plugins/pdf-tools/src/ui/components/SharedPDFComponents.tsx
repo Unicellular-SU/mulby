@@ -9,23 +9,45 @@ interface PDFHeaderProps {
         icon?: React.ReactNode;
         onClick: () => void;
     };
+    secondaryAction?: {
+        label: string;
+        icon?: React.ReactNode;
+        onClick: () => void;
+    };
 }
 
-export const PDFHeader: React.FC<PDFHeaderProps> = ({ title, icon, actionButton }) => {
+export const PDFHeader: React.FC<PDFHeaderProps> = ({ title, icon, actionButton, secondaryAction }) => {
     return (
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <h2 style={{ fontSize: '24px', fontWeight: '700', display: 'flex', alignItems: 'center', gap: '12px', margin: 0 }}>
                 {icon} {title}
             </h2>
-            {actionButton && (
-                <button onClick={actionButton.onClick} style={{
-                    display: 'flex', alignItems: 'center', gap: '6px',
-                    padding: '8px 16px', borderRadius: '20px', border: 'none',
-                    background: 'var(--primary-color)', color: 'white', cursor: 'pointer', fontWeight: '500'
-                }}>
-                    {actionButton.icon || <Plus size={18} />} {actionButton.label}
-                </button>
-            )}
+            <div style={{ display: 'flex', gap: '8px' }}>
+                {actionButton && (
+                    <button onClick={actionButton.onClick} style={{
+                        display: 'flex', alignItems: 'center', gap: '6px',
+                        padding: '8px 16px', borderRadius: '12px', border: 'none',
+                        background: 'var(--primary-color)', color: 'white', cursor: 'pointer', fontWeight: '500',
+                        fontSize: '14px',
+                        boxShadow: '0 2px 8px rgba(0, 122, 255, 0.25)'
+                    }}>
+                        {actionButton.icon || <Plus size={18} />} {actionButton.label}
+                    </button>
+                )}
+                {secondaryAction && (
+                    <button onClick={secondaryAction.onClick} style={{
+                        display: 'flex', alignItems: 'center', gap: '6px',
+                        padding: '8px 16px', borderRadius: '12px',
+                        border: '1px solid rgba(0,0,0,0.1)',
+                        background: 'rgba(255,255,255,0.8)',
+                        color: 'var(--text-secondary)',
+                        cursor: 'pointer', fontWeight: '500',
+                        fontSize: '14px'
+                    }}>
+                        {secondaryAction.icon} {secondaryAction.label}
+                    </button>
+                )}
+            </div>
         </div>
     );
 };

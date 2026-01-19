@@ -7,7 +7,8 @@ import {
     FileImage,
     FileText,
     Presentation,
-    Sheet
+    Sheet,
+    Minimize2
 } from 'lucide-react';
 
 interface SidebarProps {
@@ -18,6 +19,7 @@ interface SidebarProps {
 const NAV_ITEMS = [
     { id: 'merge', icon: Combine, label: 'PDF 合并' },
     { id: 'split', icon: Scissors, label: 'PDF 拆分' },
+    { id: 'compress', icon: Minimize2, label: 'PDF 压缩' },
     { id: 'watermark', icon: Droplet, label: 'PDF 水印' },
     { id: 'extract-img', icon: ImageIcon, label: '提取图片' },
     { id: 'pdf-to-img', icon: FileImage, label: 'PDF 转图片' },

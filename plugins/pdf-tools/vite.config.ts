@@ -9,7 +9,16 @@ export default defineConfig({
   build: {
     outDir: '../../ui',
     emptyOutDir: true,
-    chunkSizeWarningLimit: 2000
+    chunkSizeWarningLimit: 2000,
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          'pdf-core': ['pdfjs-dist', 'pdf-lib'],
+          'office-utils': ['docx', 'pptxgenjs', 'xlsx'],
+          'vendor': ['react', 'react-dom', 'lucide-react'],
+        }
+      }
+    }
   },
   resolve: {
     alias: {
