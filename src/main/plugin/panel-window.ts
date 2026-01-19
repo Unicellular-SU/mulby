@@ -4,6 +4,7 @@ import https from 'https'
 import { join } from 'path'
 import { InputAttachment, InputPayload, Plugin } from '../../shared/types/plugin'
 import { ThemeManager } from '../services/theme'
+import { loggerService } from '../services/logger'
 import { injectCustomTitleBar } from './titlebar'
 import { isIgnoringBlur } from '../services/blur-manager'
 import { getPluginPreloadPath } from './plugin-preload-wrapper'
@@ -389,6 +390,14 @@ export class PluginPanelWindow {
 
         // 监听渲染进程崩溃
         this.panelWindow.webContents.on('render-process-gone', (_event, details) => {
+            // 记录崩溃日志到持久化存储
+            loggerService.crash({
+                pluginId: this.currentPlugin?.id || 'unknown',
+                reason: details.reason,
+                exitCode: details.exitCode,
+                windowId: this.panelWindow?.id
+            })
+
             console.error('[PanelWindow] Render process gone:', details.reason)
             this.close()
         })

@@ -14,6 +14,7 @@ interface SettingsViewProps {
   onSectionChange: (section: SettingsSection) => void
   onClose: () => void
   onOpenPluginManager: () => void
+  onOpenLogViewer?: () => void
 }
 
 const SECTION_ITEMS: { id: SettingsSection; label: string }[] = [
@@ -215,7 +216,7 @@ function ShortcutInput({
   )
 }
 
-export default function SettingsView({ section, onSectionChange, onClose, onOpenPluginManager }: SettingsViewProps) {
+export default function SettingsView({ section, onSectionChange, onClose, onOpenPluginManager, onOpenLogViewer }: SettingsViewProps) {
   const [settings, setSettings] = useState<AppSettings | null>(null)
   const [themeMode, setThemeMode] = useState<'light' | 'dark' | 'system'>('system')
   const [shortcutStatus, setShortcutStatus] = useState<ShortcutStatusMap | null>(null)
@@ -346,267 +347,267 @@ export default function SettingsView({ section, onSectionChange, onClose, onOpen
 
       <div className="relative flex h-full min-h-0 flex-col">
         <div className="flex items-center gap-3 border-b border-slate-200/70 bg-white/70 px-6 py-4 backdrop-blur dark:border-slate-800/80 dark:bg-slate-900/60">
-        <button
-          onClick={onClose}
-          className="flex h-10 w-10 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-600 transition hover:border-slate-300 hover:text-slate-900 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:text-white no-drag"
-          title="返回"
-        >
-          <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-            <path d="M19 12H5M12 19l-7-7 7-7" strokeLinecap="round" strokeLinejoin="round" />
-          </svg>
-        </button>
-        <div>
-          <div className="text-xs uppercase tracking-[0.35em] text-slate-500 dark:text-slate-400">Settings</div>
-          <div className="text-lg font-semibold text-slate-900 dark:text-slate-100">{currentSectionLabel}</div>
+          <button
+            onClick={onClose}
+            className="flex h-10 w-10 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-600 transition hover:border-slate-300 hover:text-slate-900 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:text-white no-drag"
+            title="返回"
+          >
+            <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M19 12H5M12 19l-7-7 7-7" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+          </button>
+          <div>
+            <div className="text-xs uppercase tracking-[0.35em] text-slate-500 dark:text-slate-400">Settings</div>
+            <div className="text-lg font-semibold text-slate-900 dark:text-slate-100">{currentSectionLabel}</div>
+          </div>
         </div>
-      </div>
 
-      <div className="flex-1 flex min-h-0 overflow-hidden">
-        <aside className="w-56 shrink-0 border-r border-slate-200/70 bg-white/70 backdrop-blur dark:border-slate-800/80 dark:bg-slate-900/60">
-          <nav className="flex flex-col gap-1 p-4">
-            {SECTION_ITEMS.map(item => (
-              <button
-                key={item.id}
-                className={`w-full rounded-xl px-4 py-2.5 text-left text-sm font-medium transition-colors ${item.id === section
-                  ? 'bg-slate-900 text-white dark:bg-white dark:text-slate-900'
-                  : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-300 dark:hover:bg-slate-800/60 dark:hover:text-white'
-                  }`}
-                onClick={() => onSectionChange(item.id)}
-              >
-                {item.label}
-              </button>
-            ))}
-          </nav>
-        </aside>
+        <div className="flex-1 flex min-h-0 overflow-hidden">
+          <aside className="w-56 shrink-0 border-r border-slate-200/70 bg-white/70 backdrop-blur dark:border-slate-800/80 dark:bg-slate-900/60">
+            <nav className="flex flex-col gap-1 p-4">
+              {SECTION_ITEMS.map(item => (
+                <button
+                  key={item.id}
+                  className={`w-full rounded-xl px-4 py-2.5 text-left text-sm font-medium transition-colors ${item.id === section
+                    ? 'bg-slate-900 text-white dark:bg-white dark:text-slate-900'
+                    : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-300 dark:hover:bg-slate-800/60 dark:hover:text-white'
+                    }`}
+                  onClick={() => onSectionChange(item.id)}
+                >
+                  {item.label}
+                </button>
+              ))}
+            </nav>
+          </aside>
 
-        <main className="flex-1 min-h-0 overflow-auto">
-          <div className="mx-auto max-w-5xl px-6 pb-16 pt-8">
-            {section === 'general' && (
-              <div className="space-y-4">
-                <div className={`${cardClass} text-sm text-slate-600 dark:text-slate-300`}>
-                  通用设置将在后续版本提供。
-                </div>
-                <div className={`${cardClass} flex items-center justify-between gap-4`}>
-                  <div>
-                    <div className="text-sm font-medium text-slate-900 dark:text-white">插件管理</div>
-                    <div className="text-xs text-slate-500 dark:text-slate-400">管理插件启用状态、更新与卸载</div>
+          <main className="flex-1 min-h-0 overflow-auto">
+            <div className="mx-auto max-w-5xl px-6 pb-16 pt-8">
+              {section === 'general' && (
+                <div className="space-y-4">
+                  <div className={`${cardClass} text-sm text-slate-600 dark:text-slate-300`}>
+                    通用设置将在后续版本提供。
                   </div>
-                  <button className={primaryPillClass} onClick={onOpenPluginManager}>
-                    打开插件管理
-                  </button>
-                </div>
-              </div>
-            )}
-
-            {section === 'appearance' && (
-              <div className={`${cardClass} space-y-4`}>
-                <div className="text-sm font-medium text-slate-900 dark:text-white">主题模式</div>
-                <div className="flex flex-wrap gap-3">
-                  {(['light', 'dark', 'system'] as const).map((mode) => (
-                    <button
-                      key={mode}
-                      className={`rounded-full border px-4 py-2 text-sm transition-colors ${themeMode === mode
-                        ? 'border-slate-900 bg-slate-900 text-white dark:border-white dark:bg-white dark:text-slate-900'
-                        : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:text-slate-900 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-300'
-                        }`}
-                      onClick={async () => {
-                        const info = await window.intools.theme.set(mode)
-                        setThemeMode(info.mode)
-                      }}
-                    >
-                      {mode === 'light' ? '浅色' : mode === 'dark' ? '深色' : '跟随系统'}
+                  <div className={`${cardClass} flex items-center justify-between gap-4`}>
+                    <div>
+                      <div className="text-sm font-medium text-slate-900 dark:text-white">插件管理</div>
+                      <div className="text-xs text-slate-500 dark:text-slate-400">管理插件启用状态、更新与卸载</div>
+                    </div>
+                    <button className={primaryPillClass} onClick={onOpenPluginManager}>
+                      打开插件管理
                     </button>
-                  ))}
+                  </div>
                 </div>
-              </div>
-            )}
+              )}
 
-            {section === 'shortcuts' && settings && (
-              <div className="space-y-3">
-                {SHORTCUTS.map(item => (
-                  <ShortcutInput
-                    key={item.id}
-                    label={item.label}
-                    description={item.description}
-                    value={settings.shortcuts[item.id]}
-                    status={shortcutStatus?.[item.id]}
-                    onChange={(accelerator) => handleShortcutChange(item.id, accelerator)}
-                    onRecordStart={handleRecordStart}
-                    onRecordEnd={handleRecordEnd}
-                  />
-                ))}
-              </div>
-            )}
-
-            {section === 'store' && settings && (
-              <div className="space-y-6">
-                <div>
-                  <div className="mb-2 text-sm font-medium text-slate-900 dark:text-white">插件源</div>
-                  <div className="space-y-3">
-                    {sources.length === 0 && (
-                      <div className="text-sm text-slate-500 dark:text-slate-400">
-                        还没有添加任何插件源。
-                      </div>
-                    )}
-                    {sources.map(source => (
-                      <div
-                        key={source.id}
-                        className={`${cardClassTight} flex items-center justify-between gap-4`}
+              {section === 'appearance' && (
+                <div className={`${cardClass} space-y-4`}>
+                  <div className="text-sm font-medium text-slate-900 dark:text-white">主题模式</div>
+                  <div className="flex flex-wrap gap-3">
+                    {(['light', 'dark', 'system'] as const).map((mode) => (
+                      <button
+                        key={mode}
+                        className={`rounded-full border px-4 py-2 text-sm transition-colors ${themeMode === mode
+                          ? 'border-slate-900 bg-slate-900 text-white dark:border-white dark:bg-white dark:text-slate-900'
+                          : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:text-slate-900 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-300'
+                          }`}
+                        onClick={async () => {
+                          const info = await window.intools.theme.set(mode)
+                          setThemeMode(info.mode)
+                        }}
                       >
-                        <div className="min-w-0">
-                          <div className="text-sm font-medium text-slate-900 dark:text-white">{source.name}</div>
-                          <div className="text-xs text-slate-500 dark:text-slate-400 truncate">{source.url}</div>
-                        </div>
-                        <div className="flex items-center gap-3">
-                          <button
-                            className={source.enabled ? primaryPillClass : pillClass}
-                            onClick={() => handleToggleSource(source.id, !source.enabled)}
-                          >
-                            {source.enabled ? '已启用' : '已停用'}
-                          </button>
-                          <button
-                            className={actionButtonClass}
-                            onClick={() => handleRemoveSource(source.id)}
-                          >
-                            删除
-                          </button>
-                        </div>
-                      </div>
+                        {mode === 'light' ? '浅色' : mode === 'dark' ? '深色' : '跟随系统'}
+                      </button>
                     ))}
                   </div>
                 </div>
+              )}
 
-                <div>
-                  <div className="mb-2 text-sm font-medium text-slate-900 dark:text-white">新增插件源</div>
-                  <div className="grid grid-cols-1 gap-3">
-                    <input
-                      className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-2 text-sm text-slate-700 shadow-sm outline-none transition focus:border-slate-300 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-200"
-                      placeholder="来源名称"
-                      value={newSource.name}
-                      onChange={(e) => setNewSource(prev => ({ ...prev, name: e.target.value }))}
+              {section === 'shortcuts' && settings && (
+                <div className="space-y-3">
+                  {SHORTCUTS.map(item => (
+                    <ShortcutInput
+                      key={item.id}
+                      label={item.label}
+                      description={item.description}
+                      value={settings.shortcuts[item.id]}
+                      status={shortcutStatus?.[item.id]}
+                      onChange={(accelerator) => handleShortcutChange(item.id, accelerator)}
+                      onRecordStart={handleRecordStart}
+                      onRecordEnd={handleRecordEnd}
                     />
-                    <input
-                      className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-2 text-sm text-slate-700 shadow-sm outline-none transition focus:border-slate-300 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-200"
-                      placeholder="JSON 索引地址"
-                      value={newSource.url}
-                      onChange={(e) => setNewSource(prev => ({ ...prev, url: e.target.value }))}
-                    />
-                    {sourceError && (
-                      <div className="text-xs text-red-500">{sourceError}</div>
-                    )}
-                    <button
-                      className="inline-flex items-center justify-center rounded-full border border-slate-900 bg-slate-900 px-4 py-2 text-sm text-white transition hover:bg-slate-800 dark:border-white dark:bg-white dark:text-slate-900 dark:hover:bg-slate-100"
-                      onClick={handleAddSource}
-                    >
-                      添加来源
-                    </button>
-                  </div>
+                  ))}
                 </div>
-              </div>
-            )}
+              )}
 
-            {section === 'permissions' && (
-              <div className="space-y-3">
-                {PERMISSIONS.map(item => (
-                  <div
-                    key={item.id}
-                    className={`${cardClassTight} flex items-center justify-between gap-4`}
-                  >
-                    <div>
-                      <div className="text-sm font-medium text-slate-900 dark:text-white">{item.label}</div>
-                      <div className="text-xs text-slate-500 dark:text-slate-400">
-                        {formatPermissionStatus(permissionStatus[item.id])}
-                      </div>
+              {section === 'store' && settings && (
+                <div className="space-y-6">
+                  <div>
+                    <div className="mb-2 text-sm font-medium text-slate-900 dark:text-white">插件源</div>
+                    <div className="space-y-3">
+                      {sources.length === 0 && (
+                        <div className="text-sm text-slate-500 dark:text-slate-400">
+                          还没有添加任何插件源。
+                        </div>
+                      )}
+                      {sources.map(source => (
+                        <div
+                          key={source.id}
+                          className={`${cardClassTight} flex items-center justify-between gap-4`}
+                        >
+                          <div className="min-w-0">
+                            <div className="text-sm font-medium text-slate-900 dark:text-white">{source.name}</div>
+                            <div className="text-xs text-slate-500 dark:text-slate-400 truncate">{source.url}</div>
+                          </div>
+                          <div className="flex items-center gap-3">
+                            <button
+                              className={source.enabled ? primaryPillClass : pillClass}
+                              onClick={() => handleToggleSource(source.id, !source.enabled)}
+                            >
+                              {source.enabled ? '已启用' : '已停用'}
+                            </button>
+                            <button
+                              className={actionButtonClass}
+                              onClick={() => handleRemoveSource(source.id)}
+                            >
+                              删除
+                            </button>
+                          </div>
+                        </div>
+                      ))}
                     </div>
-                    <div className="flex items-center gap-2">
+                  </div>
+
+                  <div>
+                    <div className="mb-2 text-sm font-medium text-slate-900 dark:text-white">新增插件源</div>
+                    <div className="grid grid-cols-1 gap-3">
+                      <input
+                        className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-2 text-sm text-slate-700 shadow-sm outline-none transition focus:border-slate-300 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-200"
+                        placeholder="来源名称"
+                        value={newSource.name}
+                        onChange={(e) => setNewSource(prev => ({ ...prev, name: e.target.value }))}
+                      />
+                      <input
+                        className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-2 text-sm text-slate-700 shadow-sm outline-none transition focus:border-slate-300 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-200"
+                        placeholder="JSON 索引地址"
+                        value={newSource.url}
+                        onChange={(e) => setNewSource(prev => ({ ...prev, url: e.target.value }))}
+                      />
+                      {sourceError && (
+                        <div className="text-xs text-red-500">{sourceError}</div>
+                      )}
                       <button
-                        className={actionButtonClass}
-                        onClick={() => window.intools.permission.openSystemSettings(item.id)}
+                        className="inline-flex items-center justify-center rounded-full border border-slate-900 bg-slate-900 px-4 py-2 text-sm text-white transition hover:bg-slate-800 dark:border-white dark:bg-white dark:text-slate-900 dark:hover:bg-slate-100"
+                        onClick={handleAddSource}
                       >
-                        打开系统设置
+                        添加来源
                       </button>
                     </div>
                   </div>
-                ))}
-              </div>
-            )}
-
-            {section === 'developer' && settings && (
-              <div className="space-y-5">
-                {/* 开发者模式开关 */}
-                <div className={`${cardClass} space-y-4`}>
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <div className="text-sm font-medium text-slate-900 dark:text-white">
-                        启用开发者模式
-                      </div>
-                      <div className="text-xs text-slate-500 dark:text-slate-400">
-                        开启后可从外部目录加载开发中的插件
-                      </div>
-                    </div>
-                    <button
-                      className={`relative w-11 h-6 rounded-full transition-colors ${settings.developer.enabled
-                        ? 'bg-blue-500'
-                        : 'bg-gray-300 dark:bg-gray-600'
-                        }`}
-                      onClick={() => {
-                        updateSettings({
-                          developer: {
-                            ...settings.developer,
-                            enabled: !settings.developer.enabled
-                          }
-                        })
-                      }}
-                    >
-                      <span
-                        className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${settings.developer.enabled ? 'translate-x-5' : ''
-                          }`}
-                      />
-                    </button>
-                  </div>
                 </div>
+              )}
 
-                {/* 插件开发目录 */}
-                {settings.developer.enabled && (
-                  <div className={`${cardClass} space-y-4`}>
-                    <div className="text-sm font-medium text-slate-900 dark:text-white">
-                      插件开发目录
+              {section === 'permissions' && (
+                <div className="space-y-3">
+                  {PERMISSIONS.map(item => (
+                    <div
+                      key={item.id}
+                      className={`${cardClassTight} flex items-center justify-between gap-4`}
+                    >
+                      <div>
+                        <div className="text-sm font-medium text-slate-900 dark:text-white">{item.label}</div>
+                        <div className="text-xs text-slate-500 dark:text-slate-400">
+                          {formatPermissionStatus(permissionStatus[item.id])}
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <button
+                          className={actionButtonClass}
+                          onClick={() => window.intools.permission.openSystemSettings(item.id)}
+                        >
+                          打开系统设置
+                        </button>
+                      </div>
                     </div>
+                  ))}
+                </div>
+              )}
 
-                    {settings.developer.pluginPaths.length === 0 ? (
-                      <div className="text-sm text-slate-500 dark:text-slate-400">
-                        还没有添加任何开发目录。
+              {section === 'developer' && settings && (
+                <div className="space-y-5">
+                  {/* 开发者模式开关 */}
+                  <div className={`${cardClass} space-y-4`}>
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <div className="text-sm font-medium text-slate-900 dark:text-white">
+                          启用开发者模式
+                        </div>
+                        <div className="text-xs text-slate-500 dark:text-slate-400">
+                          开启后可从外部目录加载开发中的插件
+                        </div>
                       </div>
-                    ) : (
-                      <div className="space-y-2">
-                        {settings.developer.pluginPaths.map((path) => (
-                          <div
-                            key={path}
-                            className="flex items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-white/70 px-3 py-2 text-sm text-slate-700 shadow-sm dark:border-slate-800 dark:bg-slate-950 dark:text-slate-200"
-                          >
-                            <div className="truncate flex-1">
-                              {path}
-                            </div>
-                            <button
-                              className="text-xs text-red-500 hover:text-red-600 dark:text-red-400 dark:hover:text-red-300"
-                              onClick={async () => {
-                                await window.intools.developer.removePluginPath(path)
-                                const result = await window.intools.settings.get()
-                                setSettings(result.settings)
-                              }}
-                            >
-                              移除
-                            </button>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-
-                    <div className="flex gap-2">
                       <button
-                        className={actionButtonClass}
-                        onClick={async () => {
-                          const path = await window.intools.developer.selectDirectory()
+                        className={`relative w-11 h-6 rounded-full transition-colors ${settings.developer.enabled
+                          ? 'bg-blue-500'
+                          : 'bg-gray-300 dark:bg-gray-600'
+                          }`}
+                        onClick={() => {
+                          updateSettings({
+                            developer: {
+                              ...settings.developer,
+                              enabled: !settings.developer.enabled
+                            }
+                          })
+                        }}
+                      >
+                        <span
+                          className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${settings.developer.enabled ? 'translate-x-5' : ''
+                            }`}
+                        />
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* 插件开发目录 */}
+                  {settings.developer.enabled && (
+                    <div className={`${cardClass} space-y-4`}>
+                      <div className="text-sm font-medium text-slate-900 dark:text-white">
+                        插件开发目录
+                      </div>
+
+                      {settings.developer.pluginPaths.length === 0 ? (
+                        <div className="text-sm text-slate-500 dark:text-slate-400">
+                          还没有添加任何开发目录。
+                        </div>
+                      ) : (
+                        <div className="space-y-2">
+                          {settings.developer.pluginPaths.map((path) => (
+                            <div
+                              key={path}
+                              className="flex items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-white/70 px-3 py-2 text-sm text-slate-700 shadow-sm dark:border-slate-800 dark:bg-slate-950 dark:text-slate-200"
+                            >
+                              <div className="truncate flex-1">
+                                {path}
+                              </div>
+                              <button
+                                className="text-xs text-red-500 hover:text-red-600 dark:text-red-400 dark:hover:text-red-300"
+                                onClick={async () => {
+                                  await window.intools.developer.removePluginPath(path)
+                                  const result = await window.intools.settings.get()
+                                  setSettings(result.settings)
+                                }}
+                              >
+                                移除
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+
+                      <div className="flex gap-2">
+                        <button
+                          className={actionButtonClass}
+                          onClick={async () => {
+                            const path = await window.intools.developer.selectDirectory()
                             if (path) {
                               const result = await window.intools.developer.addPluginPath(path)
                               if (result.success) {
@@ -616,154 +617,176 @@ export default function SettingsView({ section, onSectionChange, onClose, onOpen
                                 window.intools.notification.show(result.error || '添加失败', 'error')
                               }
                             }
-                        }}
-                      >
-                        + 添加目录
-                      </button>
-                      <button
-                        className={actionButtonClass}
-                        onClick={async () => {
-                          await window.intools.developer.reloadPlugins()
-                          window.intools.notification.show('插件已刷新')
-                        }}
-                      >
-                        刷新插件
-                      </button>
-                    </div>
-                  </div>
-                )}
-
-                {/* 调试选项 */}
-                {settings.developer.enabled && (
-                  <div className={`${cardClass} space-y-4`}>
-                    <div className="text-sm font-medium text-slate-900 dark:text-white">
-                      调试选项
-                    </div>
-
-                    {/* 自动热重载 */}
-                    <div className="flex items-center justify-between border-b border-slate-200/80 py-2 dark:border-slate-800/80">
-                      <div>
-                        <div className="text-sm text-slate-900 dark:text-white">
-                          自动热重载
-                        </div>
-                        <div className="text-xs text-slate-500 dark:text-slate-400">
-                          检测文件变化时自动重新加载插件
-                        </div>
+                          }}
+                        >
+                          + 添加目录
+                        </button>
+                        <button
+                          className={actionButtonClass}
+                          onClick={async () => {
+                            await window.intools.developer.reloadPlugins()
+                            window.intools.notification.show('插件已刷新')
+                          }}
+                        >
+                          刷新插件
+                        </button>
                       </div>
-                      <button
-                        className={`relative w-11 h-6 rounded-full transition-colors ${settings.developer.autoReload
-                          ? 'bg-blue-500'
-                          : 'bg-gray-300 dark:bg-gray-600'
-                          }`}
-                        onClick={() => {
-                          updateSettings({
-                            developer: {
-                              ...settings.developer,
-                              autoReload: !settings.developer.autoReload
-                            }
-                          })
-                        }}
-                      >
-                        <span
-                          className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${settings.developer.autoReload ? 'translate-x-5' : ''
+                    </div>
+                  )}
+
+                  {/* 调试选项 */}
+                  {settings.developer.enabled && (
+                    <div className={`${cardClass} space-y-4`}>
+                      <div className="text-sm font-medium text-slate-900 dark:text-white">
+                        调试选项
+                      </div>
+
+                      {/* 自动热重载 */}
+                      <div className="flex items-center justify-between border-b border-slate-200/80 py-2 dark:border-slate-800/80">
+                        <div>
+                          <div className="text-sm text-slate-900 dark:text-white">
+                            自动热重载
+                          </div>
+                          <div className="text-xs text-slate-500 dark:text-slate-400">
+                            检测文件变化时自动重新加载插件
+                          </div>
+                        </div>
+                        <button
+                          className={`relative w-11 h-6 rounded-full transition-colors ${settings.developer.autoReload
+                            ? 'bg-blue-500'
+                            : 'bg-gray-300 dark:bg-gray-600'
                             }`}
-                        />
-                      </button>
-                    </div>
-
-                    {/* 自动打开 DevTools */}
-                    <div className="flex items-center justify-between border-b border-slate-200/80 py-2 dark:border-slate-800/80">
-                      <div>
-                        <div className="text-sm text-slate-900 dark:text-white">
-                          自动打开开发者工具
-                        </div>
-                        <div className="text-xs text-slate-500 dark:text-slate-400">
-                          打开插件窗口时自动打开 DevTools
-                        </div>
+                          onClick={() => {
+                            updateSettings({
+                              developer: {
+                                ...settings.developer,
+                                autoReload: !settings.developer.autoReload
+                              }
+                            })
+                          }}
+                        >
+                          <span
+                            className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${settings.developer.autoReload ? 'translate-x-5' : ''
+                              }`}
+                          />
+                        </button>
                       </div>
-                      <button
-                        className={`relative w-11 h-6 rounded-full transition-colors ${settings.developer.showDevTools
-                          ? 'bg-blue-500'
-                          : 'bg-gray-300 dark:bg-gray-600'
-                          }`}
-                        onClick={() => {
-                          updateSettings({
-                            developer: {
-                              ...settings.developer,
-                              showDevTools: !settings.developer.showDevTools
-                            }
-                          })
-                        }}
-                      >
-                        <span
-                          className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${settings.developer.showDevTools ? 'translate-x-5' : ''
+
+                      {/* 自动打开 DevTools */}
+                      <div className="flex items-center justify-between border-b border-slate-200/80 py-2 dark:border-slate-800/80">
+                        <div>
+                          <div className="text-sm text-slate-900 dark:text-white">
+                            自动打开开发者工具
+                          </div>
+                          <div className="text-xs text-slate-500 dark:text-slate-400">
+                            打开插件窗口时自动打开 DevTools
+                          </div>
+                        </div>
+                        <button
+                          className={`relative w-11 h-6 rounded-full transition-colors ${settings.developer.showDevTools
+                            ? 'bg-blue-500'
+                            : 'bg-gray-300 dark:bg-gray-600'
                             }`}
-                        />
-                      </button>
-                    </div>
+                          onClick={() => {
+                            updateSettings({
+                              developer: {
+                                ...settings.developer,
+                                showDevTools: !settings.developer.showDevTools
+                              }
+                            })
+                          }}
+                        >
+                          <span
+                            className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${settings.developer.showDevTools ? 'translate-x-5' : ''
+                              }`}
+                          />
+                        </button>
+                      </div>
 
-                    {/* 日志级别 */}
-                    <div className="py-2">
-                      <div className="mb-2 text-sm text-slate-900 dark:text-white">
-                        日志级别
-                      </div>
-                      <div className="flex flex-wrap gap-2">
-                        {(['debug', 'info', 'warn', 'error'] as const).map((level) => (
-                          <button
-                            key={level}
-                            className={settings.developer.logLevel === level ? primaryPillClass : pillClass}
-                            onClick={() => {
-                              updateSettings({
-                                developer: {
-                                  ...settings.developer,
-                                  logLevel: level
-                                }
-                              })
-                            }}
-                          >
-                            {level.charAt(0).toUpperCase() + level.slice(1)}
-                          </button>
-                        ))}
+                      {/* 日志级别 */}
+                      <div className="py-2">
+                        <div className="mb-2 text-sm text-slate-900 dark:text-white">
+                          日志级别
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                          {(['debug', 'info', 'warn', 'error'] as const).map((level) => (
+                            <button
+                              key={level}
+                              className={settings.developer.logLevel === level ? primaryPillClass : pillClass}
+                              onClick={() => {
+                                updateSettings({
+                                  developer: {
+                                    ...settings.developer,
+                                    logLevel: level
+                                  }
+                                })
+                              }}
+                            >
+                              {level.charAt(0).toUpperCase() + level.slice(1)}
+                            </button>
+                          ))}
+                        </div>
                       </div>
                     </div>
+                  )}
+
+                  {/* 日志查看器入口 */}
+                  {settings.developer.enabled && onOpenLogViewer && (
+                    <div className={`${cardClass}`}>
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <div className="text-sm font-medium text-slate-900 dark:text-white">
+                            开发者日志
+                          </div>
+                          <div className="text-xs text-slate-500 dark:text-slate-400">
+                            查看插件日志和崩溃报告
+                          </div>
+                        </div>
+                        <button
+                          className={primaryPillClass}
+                          onClick={onOpenLogViewer}
+                        >
+                          打开日志查看器
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* 提示信息 */}
+                  <div className={`${cardClass} space-y-2 text-sm text-slate-600 dark:text-slate-300`}>
+                    <div className="font-medium text-slate-900 dark:text-white">使用提示</div>
+                    <ul className="list-disc list-inside text-xs space-y-1">
+                      <li>添加的开发目录应该包含插件文件夹（每个文件夹包含 manifest.json）</li>
+                      <li>开发目录的插件将显示「开发中」标记</li>
+                      <li>修改插件代码后，点击「刷新插件」或重启应用</li>
+                      <li>使用 <code className="px-1 py-0.5 bg-gray-100 dark:bg-gray-800 rounded">npm run dev</code> 启动 Vite 开发服务器支持 UI 热重载</li>
+                    </ul>
                   </div>
-                )}
+                </div>
+              )}
 
-                {/* 提示信息 */}
-                <div className={`${cardClass} space-y-2 text-sm text-slate-600 dark:text-slate-300`}>
-                  <div className="font-medium text-slate-900 dark:text-white">使用提示</div>
-                  <ul className="list-disc list-inside text-xs space-y-1">
-                    <li>添加的开发目录应该包含插件文件夹（每个文件夹包含 manifest.json）</li>
-                    <li>开发目录的插件将显示「开发中」标记</li>
-                    <li>修改插件代码后，点击「刷新插件」或重启应用</li>
-                    <li>使用 <code className="px-1 py-0.5 bg-gray-100 dark:bg-gray-800 rounded">npm run dev</code> 启动 Vite 开发服务器支持 UI 热重载</li>
-                  </ul>
+              {section === 'about' && (
+                <div className={`${cardClass} space-y-4 text-sm text-slate-600 dark:text-slate-300`}>
+                  <div>
+                    <div className="font-medium text-slate-900 dark:text-white">应用信息</div>
+                    <div>名称：{appInfo?.name}</div>
+                    <div>版本：{appInfo?.version}</div>
+                  </div>
+                  <div>
+                    <div className="font-medium text-slate-900 dark:text-white">数据目录</div>
+                    <div className="text-xs text-slate-500 dark:text-slate-400 break-all">{appInfo?.userDataPath}</div>
+                  </div>
+                  <button
+                    className={actionButtonClass}
+                    onClick={() => appInfo?.userDataPath && window.intools.shell.openFolder(appInfo.userDataPath)}
+                  >
+                    打开数据目录
+                  </button>
                 </div>
-              </div>
-            )}
-
-            {section === 'about' && (
-              <div className={`${cardClass} space-y-4 text-sm text-slate-600 dark:text-slate-300`}>
-                <div>
-                  <div className="font-medium text-slate-900 dark:text-white">应用信息</div>
-                  <div>名称：{appInfo?.name}</div>
-                  <div>版本：{appInfo?.version}</div>
-                </div>
-                <div>
-                  <div className="font-medium text-slate-900 dark:text-white">数据目录</div>
-                  <div className="text-xs text-slate-500 dark:text-slate-400 break-all">{appInfo?.userDataPath}</div>
-                </div>
-                <button
-                  className={actionButtonClass}
-                  onClick={() => appInfo?.userDataPath && window.intools.shell.openFolder(appInfo.userDataPath)}
-                >
-                  打开数据目录
-                </button>
-              </div>
-            )}
-          </div>
-        </main>
-      </div>
+              )}
+            </div>
+          </main>
+        </div>
       </div>
     </div>
   )

@@ -603,6 +603,33 @@ const intoolsApi = {
         }
       }
     }
+  },
+
+  // 日志 API（开发者模式下记录插件日志）
+  log: {
+    debug: (message: string, ...args: unknown[]) =>
+      ipcRenderer.send('log:write', 'debug', message, args),
+    info: (message: string, ...args: unknown[]) =>
+      ipcRenderer.send('log:write', 'info', message, args),
+    warn: (message: string, ...args: unknown[]) =>
+      ipcRenderer.send('log:write', 'warn', message, args),
+    error: (message: string, ...args: unknown[]) =>
+      ipcRenderer.send('log:write', 'error', message, args),
+    // 获取日志（用于日志查看器）
+    getLogs: (options?: { pluginId?: string; level?: string; limit?: number }) =>
+      ipcRenderer.invoke('log:getLogs', options),
+    // 清除日志
+    clear: (pluginId?: string) =>
+      ipcRenderer.invoke('log:clear', pluginId),
+    // 获取日志目录
+    getLogsDir: () =>
+      ipcRenderer.invoke('log:getLogsDir'),
+    // 订阅实时日志
+    subscribe: () =>
+      ipcRenderer.invoke('log:subscribe'),
+    onLog: (callback: (entry: { timestamp: number; level: string; pluginId: string; message: string; args?: unknown[] }) => void) => {
+      ipcRenderer.on('log:new', (_, entry) => callback(entry))
+    }
   }
 }
 
@@ -647,3 +674,67 @@ if (isContextIsolated) {
   // @ts-ignore
   window.intoolsMain = intoolsMainApi
 }
+
+// ==================== 自动错误捕获（开发者模式） ====================
+// 捕获渲染进程中的错误，发送到主进程日志系统
+// 这样崩溃前的错误信息可以被记录下来
+
+// 保存原始 console 方法
+const originalConsoleError = console.error
+const originalConsoleWarn = console.warn
+
+// 拦截 console.error
+console.error = (...args: unknown[]) => {
+  // 调用原始方法
+  originalConsoleError.apply(console, args)
+  // 发送到主进程日志
+  try {
+    const message = args.map(arg => {
+      if (arg instanceof Error) {
+        return `${arg.message}\n${arg.stack || ''}`
+      }
+      return typeof arg === 'object' ? JSON.stringify(arg) : String(arg)
+    }).join(' ')
+    ipcRenderer.send('log:write', 'error', message)
+  } catch {
+    // 忽略序列化错误
+  }
+}
+
+// 拦截 console.warn
+console.warn = (...args: unknown[]) => {
+  originalConsoleWarn.apply(console, args)
+  try {
+    const message = args.map(arg =>
+      typeof arg === 'object' ? JSON.stringify(arg) : String(arg)
+    ).join(' ')
+    ipcRenderer.send('log:write', 'warn', message)
+  } catch {
+    // 忽略序列化错误
+  }
+}
+
+// 捕获未捕获的异常
+window.addEventListener('error', (event) => {
+  try {
+    const message = event.error
+      ? `${event.error.message}\n${event.error.stack || ''}`
+      : `${event.message} at ${event.filename}:${event.lineno}:${event.colno}`
+    ipcRenderer.send('log:write', 'error', `[Uncaught Error] ${message}`)
+  } catch {
+    ipcRenderer.send('log:write', 'error', '[Uncaught Error] (failed to serialize)')
+  }
+})
+
+// 捕获未处理的 Promise 拒绝
+window.addEventListener('unhandledrejection', (event) => {
+  try {
+    const reason = event.reason
+    const message = reason instanceof Error
+      ? `${reason.message}\n${reason.stack || ''}`
+      : typeof reason === 'object' ? JSON.stringify(reason) : String(reason)
+    ipcRenderer.send('log:write', 'error', `[Unhandled Rejection] ${message}`)
+  } catch {
+    ipcRenderer.send('log:write', 'error', '[Unhandled Rejection] (failed to serialize)')
+  }
+})

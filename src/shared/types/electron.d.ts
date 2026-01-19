@@ -2,6 +2,20 @@ import { InBrowser } from './inbrowser'
 import type { InputPayload, InputAttachment } from './plugin'
 import type { AppSettings, ShortcutStatusMap } from './settings'
 
+// 日志条目接口
+export interface LogEntry {
+  timestamp: number
+  level: 'debug' | 'info' | 'warn' | 'error' | 'crash'
+  pluginId: string
+  message: string
+  args?: unknown[]
+  crashDetails?: {
+    reason: string
+    exitCode?: number
+    windowId?: number
+  }
+}
+
 export interface FileInfo {
   path: string
   name: string
@@ -407,6 +421,18 @@ export interface ElectronAPI {
     getPath: () => Promise<string | null>
     download: (onProgress?: FFmpegDownloadProgressCallback) => Promise<{ success: boolean; error?: string }>
     run: (args: string[], onProgress?: FFmpegRunProgressCallback) => FFmpegTask
+  }
+  // 日志 API
+  log: {
+    debug: (message: string, ...args: unknown[]) => void
+    info: (message: string, ...args: unknown[]) => void
+    warn: (message: string, ...args: unknown[]) => void
+    error: (message: string, ...args: unknown[]) => void
+    getLogs: (options?: { pluginId?: string; level?: string; limit?: number }) => Promise<LogEntry[]>
+    clear: (pluginId?: string) => Promise<{ success: boolean }>
+    getLogsDir: () => Promise<string>
+    subscribe: () => Promise<{ success: boolean }>
+    onLog: (callback: (entry: LogEntry) => void) => void
   }
 }
 

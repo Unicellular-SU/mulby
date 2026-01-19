@@ -35,6 +35,8 @@ import { registerSettingsHandlers } from './settings'
 import { AppSettingsManager } from '../services/app-settings'
 import { AppShortcutManager } from '../services/app-shortcuts'
 import { registerDeveloperHandlers } from './developer'
+import { registerLogIpc, setDeveloperModeGetter } from './log'
+
 
 export function registerAllHandlers(
   getMainWindow: () => BrowserWindow | null,
@@ -75,4 +77,8 @@ export function registerAllHandlers(
   registerFFmpegHandlers()
   registerSettingsHandlers(appSettingsManager, appShortcutManager)
   registerDeveloperHandlers(pluginManager)
+
+  // 注册日志 IPC 处理器，并设置开发者模式获取器
+  setDeveloperModeGetter(() => appSettingsManager.getSettings().developer.enabled)
+  registerLogIpc()
 }

@@ -3,6 +3,7 @@ import { join } from 'path'
 import { existsSync } from 'fs'
 import { InputAttachment, InputPayload, Plugin } from '../../shared/types/plugin'
 import { ThemeManager } from '../services/theme'
+import { loggerService } from '../services/logger'
 import { injectCustomTitleBar } from './titlebar'
 import { PluginPanelWindow } from './panel-window'
 import { clearSubInputState } from '../services/subinput-state'
@@ -342,6 +343,18 @@ export class PluginWindowManager {
 
     // 显示 Dock 图标
     this.updateDockVisibility()
+
+    // 监听渲染进程崩溃
+    win.webContents.on('render-process-gone', (_event, details) => {
+      // 记录崩溃日志到持久化存储
+      loggerService.crash({
+        pluginId: plugin.id,
+        reason: details.reason,
+        exitCode: details.exitCode,
+        windowId: win.id
+      })
+      console.error('[PluginWindowManager] Render process gone:', plugin.id, details.reason)
+    })
 
     win.on('closed', () => {
       this.detachedWindows.delete(windowId)

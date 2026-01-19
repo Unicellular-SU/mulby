@@ -5,6 +5,7 @@ import PluginDetails from './components/PluginDetails'
 import PluginManagerView from './components/PluginManagerView'
 import AttachmentManager from './components/AttachmentManager'
 import SettingsView, { SettingsSection } from './components/SettingsView'
+import LogViewerView from './components/LogViewerView'
 import type { InputAttachment, InputPayload } from '../shared/types/plugin'
 
 // 插件附着信息（Panel 模式）
@@ -22,7 +23,7 @@ function App() {
   const [pluginOpen, setPluginOpen] = useState(false) // 仅用于跟踪插件是否打开
   const [detailsPluginName, setDetailsPluginName] = useState<string | null>(null)
   const [detailsReturnTarget, setDetailsReturnTarget] = useState<'home' | 'settings' | 'plugins'>('home')
-  const [viewMode, setViewMode] = useState<'home' | 'plugin-details' | 'settings' | 'plugins'>('home')
+  const [viewMode, setViewMode] = useState<'home' | 'plugin-details' | 'settings' | 'plugins' | 'logs'>('home')
   const [settingsSection, setSettingsSection] = useState<SettingsSection>('general')
   const [pluginManagerReturnTarget, setPluginManagerReturnTarget] = useState<'home' | 'settings'>('home')
   const [isDragging, setIsDragging] = useState(false)
@@ -271,6 +272,7 @@ function App() {
           onOpenPluginManager={() => {
             openPluginManager('settings')
           }}
+          onOpenLogViewer={() => setViewMode('logs')}
         />
       </div>
     )
@@ -290,6 +292,15 @@ function App() {
       </div>
     )
   }
+
+  if (viewMode === 'logs') {
+    return (
+      <div className={`app ${isDragging ? 'dragging' : ''}`}>
+        <LogViewerView onClose={() => setViewMode('settings')} />
+      </div>
+    )
+  }
+
 
   return (
     <div

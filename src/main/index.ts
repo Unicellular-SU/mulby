@@ -1,4 +1,4 @@
-import { app, BrowserWindow, globalShortcut, screen } from 'electron'
+import { app, BrowserWindow, globalShortcut, screen, crashReporter } from 'electron'
 import http from 'http'
 import https from 'https'
 import { join } from 'path'
@@ -9,6 +9,17 @@ import { ThemeManager } from './services/theme'
 import { isIgnoringBlur, startIgnoringBlur, stopIgnoringBlur, setWindowsProvider } from './services/blur-manager'
 import { appSettingsManager } from './services/app-settings'
 import { AppShortcutManager } from './services/app-shortcuts'
+
+// 启动崩溃报告器（生成本地 crash dump，用于分析 Native 层崩溃）
+// 必须在 app 模块加载后尽早调用
+crashReporter.start({
+  productName: 'InTools',
+  companyName: 'InTools',
+  submitURL: '', // 不上传，只保存本地
+  uploadToServer: false,
+  ignoreSystemCrashHandler: false
+})
+console.log('[CrashReporter] 崩溃报告器已启动，dump 目录:', app.getPath('crashDumps'))
 
 let mainWindow: BrowserWindow | null = null
 const pluginManager = new PluginManager()
