@@ -435,6 +435,136 @@ window.electronApi = {
 
 ---
 
+### Preload vs 前端代码：适用场景区分 ⭐
+
+> [!IMPORTANT]
+> **Preload 并非万能！** 并非所有 Node.js 相关功能都应放在 Preload 中。以下是基于 pdf-tools 插件开发实践总结的经验。
+
+#### 核心原则
+
+| 放在 `preload.cjs` | 放在前端 React/Vue 项目 |
+|-------------------|------------------------|
+| 纯 Node.js 环境操作 | 需要 DOM/浏览器 API 的操作 |
+| 无需渲染的数据处理 | 需要 `document`、`canvas` 等 |
+| 第三方纯 JS 库 | 需要浏览器环境的第三方库 |
+
+#### ✅ 适合放在 Preload 的功能
+
+```javascript
+// preload.cjs
+const fs = require('fs');
+const { PDFDocument } = require('pdf-lib');  // 纯 JS 库，不依赖 DOM
+
+window.pdfApi = {
+  // ✅ 文件 I/O - Node.js 原生能力
+  readFile: async (path) => fs.promises.readFile(path),
+  saveFile: async (path, data) => fs.promises.writeFile(path, data),
+  
+  // ✅ PDF 字节操作 - pdf-lib 是纯 JS 库，不需要渲染
+  getPDFInfo: async (pdfPath) => {
+    const bytes = await fs.promises.readFile(pdfPath);
+    const pdf = await PDFDocument.load(bytes);
+    return { pageCount: pdf.getPageCount() };
+  },
+  
+  // ✅ 合并/拆分/水印 - 都是字节级操作，不涉及可视化
+  mergePDFs: async (files, output) => { /* ... */ },
+  splitPDF: async (file, outputDir) => { /* ... */ },
+  addWatermark: async (file, config) => { /* ... */ },
+};
+```
+
+**适用场景**：
+- 📂 文件读写 (`fs`)
+- 🔧 PDF 结构操作（合并、拆分、提取元数据）
+- 📦 纯 JS 第三方库（`pdf-lib`、`docx`、`xlsx`）
+- 🔐 加密、压缩等纯数据处理
+
+#### ❌ 不适合放在 Preload 的功能
+
+以下功能**必须放在前端项目**（如 React 组件或 Service 类）：
+
+```typescript
+// src/ui/services/PDFService.ts
+import * as pdfjsLib from 'pdfjs-dist';
+
+class PDFService {
+  // ❌ 需要 canvas 渲染 - 必须在浏览器环境
+  async convertPDFToImages(pdfPath: string) {
+    const pdf = await pdfjsLib.getDocument(data).promise;
+    
+    for (let i = 1; i <= pdf.numPages; i++) {
+      const page = await pdf.getPage(i);
+      
+      // 这些 API 只在浏览器中存在！
+      const canvas = document.createElement('canvas');  // ❌ 需要 DOM
+      const context = canvas.getContext('2d');          // ❌ 需要 Canvas API
+      
+      await page.render({ canvasContext: context }).promise;
+      
+      const blob = await new Promise(resolve => 
+        canvas.toBlob(resolve, 'image/png')  // ❌ 需要 Blob API
+      );
+    }
+  }
+}
+```
+
+**不适合的场景**：
+- 🖼️ PDF 页面渲染为图片（需要 `canvas`）
+- 📄 转换为 Word/PPT 时需要渲染图片（扫描件 PDF）
+- 🎨 任何涉及 `document`、`canvas`、`Image` 的操作
+
+#### 错误示例与报错
+
+如果在 Preload 中使用浏览器 API：
+
+```javascript
+// preload.cjs - ❌ 错误做法！
+window.pdfApi = {
+  renderToImage: async () => {
+    const canvas = document.createElement('canvas');  
+    // 💥 报错: ReferenceError: document is not defined
+  }
+};
+```
+
+#### 正确的架构模式
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                     前端 React 项目                          │
+│  ┌─────────────────────────────────────────────────────┐   │
+│  │  PDFService.ts                                       │   │
+│  │  - convertPDFToImages() ← 使用 pdfjs-dist + canvas   │   │
+│  │  - convertToWord()      ← 需要渲染扫描件              │   │
+│  │  - compressPDF()        ← 需要渲染后压缩              │   │
+│  └──────────────────────────┬──────────────────────────┘   │
+│                             │ 调用                          │
+│                             ▼                               │
+│  ┌─────────────────────────────────────────────────────┐   │
+│  │  window.pdfApi (来自 preload.cjs)                    │   │
+│  │  - readFile() / saveFile()  ← 文件 I/O               │   │
+│  │  - getPDFInfo()             ← 获取元数据              │   │
+│  │  - mergePDFs()              ← 字节操作                │   │
+│  │  - splitPDF()               ← 字节操作                │   │
+│  └─────────────────────────────────────────────────────┘   │
+└─────────────────────────────────────────────────────────────┘
+                              │
+                              │ require()
+                              ▼
+┌─────────────────────────────────────────────────────────────┐
+│                     preload.cjs                              │
+│  - fs, path (Node.js 原生)                                   │
+│  - pdf-lib, docx, xlsx (纯 JS 第三方库)                       │
+└─────────────────────────────────────────────────────────────┘
+```
+
+> [!TIP]
+> **简单判断方法**：如果你的代码中出现了 `document`、`canvas`、`Image`、`Blob` 等关键字，那它就应该放在前端 React 项目中，而不是 Preload。
+
+---
+
 ### 开发流程
 
 使用 preload 的插件开发流程与普通插件略有不同：
