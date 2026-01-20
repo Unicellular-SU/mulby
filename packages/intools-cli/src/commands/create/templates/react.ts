@@ -273,7 +273,7 @@ export default function App() {
 
   return (
     <div className="app">
-      <div className="titlebar">${name}</div>
+
       <div className="container">
         {/* 附件展示区域 */}
         {attachments.length > 0 && (
@@ -378,17 +378,7 @@ body {
   height: 100vh;
 }
 
-.titlebar {
-  height: 32px;
-  background: var(--bg-secondary);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 13px;
-  color: var(--text-secondary);
-  -webkit-app-region: drag;
-  flex-shrink: 0;
-}
+
 
 .container {
   flex: 1;

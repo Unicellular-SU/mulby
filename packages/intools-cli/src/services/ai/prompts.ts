@@ -7,8 +7,9 @@ export function buildSystemPrompt(templates?: Record<string, string>, isScaffold
     let templateSection = '';
     if (templates && Object.keys(templates).length > 0) {
         templateSection = `
-## Reference Templates (Standard Code)
-You MUST use these templates as the base for new files. Do not reinvent the wheel.
+## Reference Templates (Usage Guide)
+1. **Structure Only**: You MUST use these templates as the base for file structure and config (manifest.json, package.json).
+2. **UI/Style Freedom**: For UI code (App.tsx, styles.css), treat these as EXAMPLES only. Do NOT copy the style. You are encouraged to design a better, more unique UI while keeping the structural correctness.
 
 ${Object.entries(templates).map(([filename, content]) => `
 ### ${filename}
@@ -55,23 +56,29 @@ ${scaffoldInfo}
 ${fileMapSection}
 
 ## Work Rules (ReAct Agent)
-1. **Interactive Development**: Don't just plan; ACT. Use \`read_file\`, \`write_file\`, \`run_command\` to implement the plugin.
-2. **Standard Structure**: Follow the InTools plugin structure strictly.
-3. **Step-by-Step**:
-   - First, understand the user request.
+1. **Interactive Development**: Don't just plan; ACT. Use \`read_file\`, \`write_file\`, \`replace_in_file\`, \`run_command\` to implement the plugin.
+2. **Efficient Editing**:
+   - For small changes (bug fixes, single function updates), use \`replace_in_file\` to save tokens.
+   - Only use \`write_file\` for creating new files or rewriting the entire file content.
+3. **Standard Structure**: Follow the InTools plugin structure strictly.
+4. **Requirement Gathering (CRITICAL)**:
+   - Before writing code, you MUST follow the "Work Flow" (Step 1 & 2) in the guide.
+   - Use \`ask_user\` to clarify requirements (trigger method, UI layout, core logic) if the user's initial request is vague.
+   - Do NOT guess requirements. Ask.
+5. **Step-by-Step Implementation**:
    - If scaffolded: logic implementation.
-   - If empty: scaffold first (use templates if provided).
-4. **Tool Usage**:
-   - Use \`ask_user\` if requirements are unclear.
+   - If empty: scaffold first (use structural templates).
+6. **Tool Usage**:
+   - Use \`ask_user\` to clarify requirements or to request specific user inputs.
    - Use \`finish\` ONLY when the plugin is fully verified or implemented.
-5. **Context**: You have the current project structure above. Use it to locate files.
+7. **Context**: You have the current project structure above. Use it to locate files.
 
 If the user needs Node.js capabilities (fs, child_process, etc.), you MUST:
 1. Create \`preload.cjs\` (CommonJS format).
 2. Configure \`"preload": "preload.cjs"\` in \`manifest.json\`.
 3. See "Preload 预加载脚本" section in API Reference.
 
-6. **Testing**:
+8. **Testing**:
    - **DO NOT** create UI test files (e.g. \`*.test.tsx\`, \`*.spec.ts\`, \`*.html\` test files) that require a browser environment.
    - You may create simple unit tests for logic/utility functions if needed.
    - Rely on manual verification by the user for UI/Rendering behavior.

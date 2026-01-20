@@ -16,6 +16,22 @@ export const PLUGIN_GENERATION_TOOLS = [
     {
         type: 'function',
         function: {
+            name: 'replace_in_file',
+            description: 'Replace a specific part of a file. Use this for small edits (bug fixes, tweaks) to save tokens. It fails if the target string is not found or found multiple times (unless expected).',
+            parameters: {
+                type: 'object',
+                properties: {
+                    path: { type: 'string', description: 'Relative path to the file' },
+                    target: { type: 'string', description: 'Exact string to be replaced (must be unique in file)' },
+                    replacement: { type: 'string', description: 'New content to replace the target with' }
+                },
+                required: ['path', 'target', 'replacement']
+            }
+        }
+    },
+    {
+        type: 'function',
+        function: {
             name: 'write_file',
             description: 'Create or overwrite a file with new content.',
             parameters: {

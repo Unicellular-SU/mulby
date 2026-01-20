@@ -179,6 +179,8 @@ export class AIAgent {
         switch (name) {
             case 'read_file':
                 return await this.handleReadFile(args.path);
+            case 'replace_in_file':
+                return await this.handleReplaceInFile(args.path, args.target, args.replacement);
             case 'write_file':
                 return await this.handleWriteFile(args.path, args.content);
             case 'run_command':
@@ -209,6 +211,33 @@ export class AIAgent {
         await this.fileWriter.writeFile(filePath, content);
         console.log(chalk.green(`  ✓ Wrote ${filePath}`));
         return `Successfully wrote file: ${filePath}`;
+    }
+
+    private async handleReplaceInFile(filePath: string, target: string, replacement: string): Promise<string> {
+        const fullPath = path.resolve(this.session.targetDir, filePath);
+
+        if (!await fs.pathExists(fullPath)) {
+            return `File not found: ${filePath}`;
+        }
+
+        const content = await fs.readFile(fullPath, 'utf-8');
+
+        if (!content.includes(target)) {
+            // Check for potential whitespace/formatting issues causing mismatch
+            // For now, strict match failure
+            return `Error: Target string not found in file. Please ensure 'target' matches exactly (including indentation). You might want to use read_file first to verify constraint.`;
+        }
+
+        const parts = content.split(target);
+        if (parts.length > 2) {
+            return `Error: Target string found multiple times (${parts.length - 1} times). Please provide a more unique target string context to ensure correct replacement.`;
+        }
+
+        const newContent = content.replace(target, replacement);
+        await this.fileWriter.writeFile(filePath, newContent);
+        console.log(chalk.green(`  ✓ Modified ${filePath}`));
+
+        return `Successfully replaced content in ${filePath}.`;
     }
 
     private async handleRunCommand(command: string): Promise<string> {
