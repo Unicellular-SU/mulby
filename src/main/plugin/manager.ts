@@ -97,6 +97,12 @@ export class PluginManager {
         plugin.enabled = state.enabled
 
         this.plugins.set(plugin.id, plugin)
+
+        // 如果是开发模式插件，启动文件监听
+        if (plugin.isDev && plugin.enabled) {
+          this.setupPluginWatcher(plugin)
+        }
+
         // 注意：不在这里调用 onLoad 钩子
         // UtilityProcess 采用懒加载，只有在插件首次运行时才创建
       }
@@ -281,6 +287,11 @@ export class PluginManager {
     plugin.enabled = true
     this.stateManager.setEnabled(name, true)
 
+    // 如果是开发插件，启用监听
+    if (plugin.isDev) {
+      this.setupPluginWatcher(plugin)
+    }
+
     // 只有已初始化的插件才调用 onEnable 钩子
     if (this.initializedPlugins.has(name)) {
       await this.callPluginHook(plugin, 'onEnable')
@@ -298,6 +309,9 @@ export class PluginManager {
     if (!plugin.enabled) {
       return { success: true }
     }
+
+    // 停止文件监听
+    this.stopPluginWatcher(name)
 
     // 只有已初始化的插件才调用钩子
     if (this.initializedPlugins.has(name)) {
@@ -323,6 +337,9 @@ export class PluginManager {
     }
 
     try {
+      // 停止监听
+      this.stopPluginWatcher(name)
+
       // 只有已初始化的插件才调用钩子和销毁 Host
       if (this.initializedPlugins.has(name)) {
         await this.callPluginHook(plugin, 'onUnload')
@@ -381,6 +398,9 @@ export class PluginManager {
 
   // 销毁所有资源
   async destroy(): Promise<void> {
+    // 停止所有监听
+    this.clearWatchers()
+
     // 销毁所有 Host 进程
     await this.hostManager.destroyAll()
 
@@ -388,6 +408,99 @@ export class PluginManager {
     this.plugins.clear()
     this.runners.clear()
     this.initializedPlugins.clear()
+  }
+
+  // ================= 文件监听相关 =================
+
+  private watchers: Map<string, import('fs').FSWatcher> = new Map()
+  private debounceTimers: Map<string, NodeJS.Timeout> = new Map()
+
+  private setupPluginWatcher(plugin: Plugin) {
+    // 防止重复监听
+    if (this.watchers.has(plugin.id)) return
+
+    try {
+      const mainFile = join(plugin.path, plugin.manifest.main)
+      const watchDir = require('path').dirname(mainFile)
+      const filename = require('path').basename(mainFile)
+
+      if (!existsSync(watchDir)) return
+
+      // console.log(`[PluginManager] Watching ${plugin.id} -> ${watchDir} for ${filename}`)
+
+      // 监听目录以支持原子写入（esbuild 构建通常是先写临时文件再 rename）
+      const watcher = require('fs').watch(watchDir, (_eventType: string, triggerFilename: string | null) => {
+        // triggerFilename 在某些系统上可能为空，但在 macOS/Windows 上通常有效
+        // 我们只关心目标文件的变动
+        if (triggerFilename && triggerFilename === filename) {
+          this.triggerHotReload(plugin.id)
+        }
+      })
+
+      this.watchers.set(plugin.id, watcher)
+    } catch (err) {
+      console.warn(`[PluginManager] Failed to watch plugin ${plugin.id}:`, err)
+    }
+  }
+
+  private stopPluginWatcher(pluginId: string) {
+    const watcher = this.watchers.get(pluginId)
+    if (watcher) {
+      watcher.close()
+      this.watchers.delete(pluginId)
+    }
+    const timer = this.debounceTimers.get(pluginId)
+    if (timer) {
+      clearTimeout(timer)
+      this.debounceTimers.delete(pluginId)
+    }
+  }
+
+  private clearWatchers() {
+    for (const [id] of this.watchers) {
+      this.stopPluginWatcher(id)
+    }
+  }
+
+  private triggerHotReload(pluginId: string) {
+    // 防抖
+    if (this.debounceTimers.has(pluginId)) {
+      clearTimeout(this.debounceTimers.get(pluginId)!)
+    }
+
+    const timer = setTimeout(() => {
+      this.reloadBackend(pluginId)
+      this.debounceTimers.delete(pluginId)
+    }, 300)
+
+    this.debounceTimers.set(pluginId, timer)
+  }
+
+  private async reloadBackend(pluginId: string) {
+    console.log(`[PluginManager] Hot reloading plugin: ${pluginId}`)
+    const plugin = this.plugins.get(pluginId)
+    if (!plugin) return
+
+    // 1. 如果有运行中的 Host，销毁它（强制下次运行重新加载代码）
+    if (this.hostManager.isHostReady(pluginId)) {
+      await this.hostManager.destroyHost(pluginId)
+    }
+
+    // 2. 如果插件已初始化（触发过 onLoad），重新触发 onLoad
+    if (this.initializedPlugins.has(pluginId)) {
+      // 重新标记为未初始化，以便 run() 或其他方法再次触发初始化
+      this.initializedPlugins.delete(pluginId)
+
+      // 注意：这里是否立即调用 onLoad 取决于需求。
+      // 如果插件是后台运行的（如 onLoad 启动了某些服务），应该立即重启。
+      // 但由于 lazy load 策略，我们可以让它在下次用户交互时加载，
+      // 或者如果它是常驻的，就立即加载。
+      // 为了更好的开发体验，这里尝试主动重新初始化
+      await this.initializePlugin(pluginId)
+    }
+
+    // 3. 通知 UI 或其他组件（可选）
+    // TODO: 可以发送事件给前端提示插件已更新
   }
 
   private getCombinedFeatures(plugin: Plugin): PluginFeature[] {
