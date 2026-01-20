@@ -10,18 +10,22 @@ import { SYSTEM_PROMPT } from './ai/prompts';
 import { PLUGIN_GENERATION_TOOLS } from './ai/tools';
 import { AIMessage } from '../types/ai';
 import { ContextManager } from './ai/context-manager';
+import { tui } from './tui';
 
 export class AIAgent {
     private aiService = AIServiceFactory.create();
     private sessionManager = SessionManager.getInstance();
     private fileWriter: FileWriter;
+    private autoApproveCommands = false;
+
 
     constructor(private session: GenerationSession, private systemPrompt?: string) {
         this.fileWriter = new FileWriter(session.targetDir);
     }
 
     public async start() {
-        console.log(chalk.blue('🤖 AI Agent 已启动...'));
+        tui.start();
+        tui.log(chalk.blue('🤖 AI Agent 已启动...'));
 
         // Initialize history if empty
         if (this.session.conversationHistory.length === 0) {
@@ -39,7 +43,7 @@ export class AIAgent {
             // Threshold could be config driven, setting 10k chars (~2.5k tokens) as warning, 
             // but let's say 40k chars (~10k tokens) for auto-compression
             if (count > 10000) {
-                console.log(chalk.yellow(`⚠️ Context is large (~${count} tokens). Auto-compressing to save costs/tokens...`));
+                tui.log(chalk.yellow(`⚠️ Context is large (~${count} tokens). Auto-compressing to save costs/tokens...`));
                 await this.compressContext();
             }
         }
@@ -97,7 +101,7 @@ export class AIAgent {
                     this.session.conversationHistory[0].content = sysContent;
                 }
 
-                process.stdout.write(chalk.gray(`Thinking... (Turn ${loopCount})`)); // Show initial status without newline
+                tui.setStatus(`Thinking... (Turn ${loopCount})`);
                 const startTime = Date.now();
                 const response = await this.aiService.chat(this.session.conversationHistory, {
                     tools: PLUGIN_GENERATION_TOOLS,
@@ -111,8 +115,8 @@ export class AIAgent {
                 }
 
                 // Clear previous "Thinking..." line and print stats
-                process.stdout.write(`\r\x1b[K`); // Clear line
-                console.log(chalk.gray(`Thinking... (Turn ${loopCount}) - ${duration}s${usageInfo}`));
+                // process.stdout.write(`\r\x1b[K`); // Clear line
+                tui.log(chalk.gray(`Thinking... (Turn ${loopCount}) - ${duration}s${usageInfo}`));
 
                 // 2. Add Assistant Message
                 const assistantMsg: AIMessage = {
@@ -124,7 +128,7 @@ export class AIAgent {
                 this.sessionManager.saveSession(this.session);
 
                 if (response.content) {
-                    console.log(chalk.white('AI: ' + response.content));
+                    tui.log(chalk.white('AI: ' + response.content));
                 }
 
                 // 3. Handle Tool Calls
@@ -134,14 +138,15 @@ export class AIAgent {
                         const toolArgs = JSON.parse(toolCall.function.arguments);
                         const toolCallId = toolCall.id;
 
-                        console.log(chalk.cyan(`[Tool] Calling ${toolName}...`));
+                        tui.log(chalk.cyan(`[Tool] Calling ${toolName}...`));
 
                         let result: string;
                         try {
+                            tui.setStatus(`Executing ${toolName}...`);
                             result = await this.executeTool(toolName, toolArgs);
                         } catch (e: any) {
                             result = `Error executing tool ${toolName}: ${e.message}`;
-                            console.error(chalk.red(`[Tool Error] ${result}`));
+                            tui.log(chalk.red(`[Tool Error] ${result}`));
                         }
 
                         // Add Tool Result Message
@@ -166,13 +171,15 @@ export class AIAgent {
                 }
 
             } catch (error: any) {
-                console.error(chalk.red('\n❌ Agent 发生错误:'), error.message);
+                tui.log(chalk.red('\n❌ Agent 发生错误: ' + error.message));
                 this.session.status = 'failed';
                 this.session.error = error.message;
                 this.sessionManager.saveSession(this.session);
+                tui.stop();
                 return;
             }
         }
+        tui.stop();
     }
 
     private async executeTool(name: string, args: any): Promise<string> {
@@ -209,7 +216,7 @@ export class AIAgent {
 
     private async handleWriteFile(filePath: string, content: string): Promise<string> {
         await this.fileWriter.writeFile(filePath, content);
-        console.log(chalk.green(`  ✓ Wrote ${filePath}`));
+        tui.log(chalk.green(`  ✓ Wrote ${filePath}`));
         return `Successfully wrote file: ${filePath}`;
     }
 
@@ -235,7 +242,7 @@ export class AIAgent {
 
         const newContent = content.replace(target, replacement);
         await this.fileWriter.writeFile(filePath, newContent);
-        console.log(chalk.green(`  ✓ Modified ${filePath}`));
+        tui.log(chalk.green(`  ✓ Modified ${filePath}`));
 
         return `Successfully replaced content in ${filePath}.`;
     }
@@ -246,17 +253,17 @@ export class AIAgent {
         const allowed = ['npm install', 'npm i', 'yarn add', 'pnpm add', 'mkdir', 'touch'];
         const isAllowed = allowed.some(p => command.startsWith(p));
 
-        if (!isAllowed) {
-            const { confirm } = await inquirer.prompt([{
-                type: 'confirm',
-                name: 'confirm',
-                message: `AI wants to run command: "${command}". Allow?`,
-                default: false
-            }]);
-            if (!confirm) return "User denied command execution.";
+        if (!isAllowed && !this.autoApproveCommands) {
+            const confirm = await this.safePromptTui(`AI wants to run command: "${command}". Allow? (y/n/a[lways])`);
+            const lower = confirm.toLowerCase();
+            if (lower === 'a' || lower === 'always') {
+                this.autoApproveCommands = true;
+            } else if (lower !== 'y') {
+                return "User denied command execution.";
+            }
         }
 
-        console.log(chalk.yellow(`  > Executing: ${command}`));
+        tui.log(chalk.yellow(`  > Executing: ${command}`));
 
         return new Promise((resolve, reject) => {
             const child = spawn(command, {
@@ -286,16 +293,10 @@ export class AIAgent {
 
     // Centralized handler for user input to intercept Slash Commands
     private async promptUser(message: string): Promise<string | null> {
-        // Clear any lingering "Thinking..." or progress line
-        process.stdout.write(`\r\x1b[K`);
-
+        tui.setStatus('Waiting for user input...');
         const prefix = chalk.blue('›');
-        const { input } = await inquirer.prompt([{
-            type: 'input',
-            name: 'input',
-            message: `${prefix} ${message}`,
-            prefix: '' // Disable default inquirer prefix '?'
-        }]);
+        // Use TUI prompt
+        const input = await tui.prompt(`${prefix} ${message}`);
 
         if (input.startsWith('/')) {
             const handled = await this.handleSlashCommand(input);
@@ -315,14 +316,15 @@ export class AIAgent {
         switch (cmd) {
             case '/exit':
             case '/quit':
-                console.log(chalk.yellow('👋 Exiting session...'));
+                tui.log(chalk.yellow('👋 Exiting session...'));
                 this.session.status = 'completed'; // or keep as is?
                 this.sessionManager.saveSession(this.session);
+                tui.stop();
                 process.exit(0);
                 return true;
 
             case '/clear':
-                console.log(chalk.yellow('🧹 Clearing context (keeping system prompt)...'));
+                tui.log(chalk.yellow('🧹 Clearing context (keeping system prompt)...'));
                 const systemPrompt = this.session.conversationHistory.find(m => m.role === 'system');
                 this.session.conversationHistory = systemPrompt ? [systemPrompt] : [];
                 this.sessionManager.saveSession(this.session);
@@ -330,16 +332,16 @@ export class AIAgent {
 
             case '/tokens':
                 const count = ContextManager.estimateTokenCount(this.session.conversationHistory);
-                console.log(chalk.cyan(`📊 Current Context: ~${count} tokens (${this.session.conversationHistory.length} messages)`));
+                tui.log(chalk.cyan(`📊 Current Context: ~${count} tokens (${this.session.conversationHistory.length} messages)`));
                 return true;
 
             case '/compress':
-                console.log(chalk.yellow('📦 Compressing context...'));
+                tui.log(chalk.yellow('📦 Compressing context...'));
                 await this.compressContext();
                 return true;
 
             case '/help':
-                console.log(chalk.green(`
+                tui.log(chalk.green(`
 Available Commands:
   /exit, /quit   - Save and exit
   /clear         - Clear conversation history (keeps system prompt)
@@ -350,7 +352,7 @@ Available Commands:
                 return true;
 
             default:
-                console.log(chalk.red(`Unknown command: ${cmd}`));
+                tui.log(chalk.red(`Unknown command: ${cmd}`));
                 return true;
         }
     }
@@ -372,11 +374,11 @@ Available Commands:
             summarizer
         );
         this.sessionManager.saveSession(this.session);
-        console.log(chalk.green('✅ Context compressed.'));
+        tui.log(chalk.green('✅ Context compressed.'));
     }
 
     private async handleAskUser(question: string): Promise<string> {
-        console.log(chalk.magenta(`\n🤖 AI Question: ${question}`));
+        tui.log(chalk.magenta(`\n🤖 AI Question: ${question}`));
 
         while (true) {
             const answer = await this.promptUser('Your Answer:');
@@ -404,31 +406,31 @@ Available Commands:
         }
     }
 
+    // Helper to allow slash commands during any prompt
+    private async safePromptTui(message: string): Promise<string> {
+        while (true) {
+            const input = await tui.prompt(message);
+            if (input.startsWith('/')) {
+                const handled = await this.handleSlashCommand(input);
+                if (handled) continue; // Loop back to prompt if handled (unless exit killed process)
+            }
+            return input;
+        }
+    }
+
     // ... (rest of the class)
 
     private async handleFinish(summary: string): Promise<string> {
-        console.log(chalk.green('\n✅ AI 认为任务已完成:'));
-        console.log(chalk.white(summary));
+        tui.log(chalk.green('\n✅ AI 认为任务已完成:'));
+        tui.log(chalk.white(summary));
 
-        const { action } = await inquirer.prompt([{
-            type: 'list',
-            name: 'action',
-            message: '下一步操作?',
-            choices: [
-                { name: '结束会话 (Exit)', value: 'exit' },
-                { name: '继续提问 (Continue)', value: 'continue' }
-            ]
-        }]);
+        const action = await this.safePromptTui('下一步操作? (exit/continue)');
 
         if (action === 'exit') {
             this.session.status = 'completed';
             return "Task marked as completed.";
         } else {
-            const { input } = await inquirer.prompt([{
-                type: 'input',
-                name: 'input',
-                message: '请输入修改需求:'
-            }]);
+            const input = await this.safePromptTui('请输入修改需求:');
             return `User rejected completion. New requirement: ${input}`;
         }
     }

@@ -96,6 +96,24 @@ export class SessionManager {
         return null;
     }
 
+    public getLatestSessionForDir(dir: string): GenerationSession | null {
+        const files = fs.readdirSync(SESSION_DIR)
+            .filter(f => f.endsWith('.json'))
+            .map(f => ({
+                name: f,
+                time: fs.statSync(path.join(SESSION_DIR, f)).mtime.getTime()
+            }))
+            .sort((a, b) => b.time - a.time);
+
+        for (const file of files) {
+            const session = this.getSession(file.name.replace('.json', ''));
+            if (session && session.targetDir === dir) {
+                return session;
+            }
+        }
+        return null;
+    }
+
     public listSessions(): GenerationSession[] {
         const files = fs.readdirSync(SESSION_DIR).filter(f => f.endsWith('.json'));
         return files.map(f => fs.readJsonSync(path.join(SESSION_DIR, f)));

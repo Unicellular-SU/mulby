@@ -8,6 +8,7 @@ import { configCommand } from './commands/config'
 import { sessionCommand } from './commands/ai-session'
 import { readFileSync } from 'fs'
 import { join } from 'path'
+import { resume } from './commands/resume'
 
 // 读取 package.json 获取版本号
 const pkg = JSON.parse(readFileSync(join(__dirname, '..', 'package.json'), 'utf-8'))
@@ -51,5 +52,10 @@ program
   .command('ai-session <action> [sessionId]')
   .description('管理 AI 会话 (list, resume)')
   .action(sessionCommand)
+
+program
+  .command('resume')
+  .description('恢复当前目录的 AI 会话')
+  .action(resume)
 
 program.parse()
