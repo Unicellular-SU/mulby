@@ -7,18 +7,7 @@ import { ConfigManager } from '../../services/config-manager';
 import { buildSystemPrompt, USER_GUIDE_PROMPT } from '../../services/ai/prompts';
 import * as path from 'path';
 import { FileWriter } from '../../services/file-writer';
-import {
-    buildReactManifest,
-    buildReactPackageJson,
-    buildTsConfig,
-    buildBackendMain,
-    buildMainTsx,
-    buildViteConfig,
-    buildIndexHtml,
-    buildAppTsx,
-    buildStylesCss,
-    buildUseIntools
-} from './templates/react';
+import { createReactProject } from './react';
 
 export async function aiCreate(name: string, options: any) {
     const configManager = ConfigManager.getInstance();
@@ -139,32 +128,9 @@ export async function aiCreate(name: string, options: any) {
     });
     sessionManager.saveSession(session);
 
-    // Prepare Templates
-    const manifest = buildReactManifest(name);
-    const packageJson = buildReactPackageJson(name);
-    const tsConfig = buildTsConfig();
-    const viteConfig = buildViteConfig();
-    const backendMain = buildBackendMain(name);
-    const indexHtml = buildIndexHtml(name);
-    const mainTsx = buildMainTsx();
-    const appTsx = buildAppTsx(name);
-    const stylesCss = buildStylesCss();
-    const useIntools = buildUseIntools();
-
     // Scaffold Project
     console.log(chalk.cyan('📦 正在生成项目脚手架...'));
-    const fileWriter = new FileWriter(targetDir);
-
-    await fileWriter.writeFile('manifest.json', JSON.stringify(manifest, null, 2));
-    await fileWriter.writeFile('package.json', JSON.stringify(packageJson, null, 2));
-    await fileWriter.writeFile('tsconfig.json', JSON.stringify(tsConfig, null, 2));
-    await fileWriter.writeFile('vite.config.ts', viteConfig);
-    await fileWriter.writeFile('src/main.ts', backendMain);
-    await fileWriter.writeFile('ui/index.html', indexHtml);
-    await fileWriter.writeFile('src/ui/main.tsx', mainTsx);
-    await fileWriter.writeFile('src/ui/App.tsx', appTsx);
-    await fileWriter.writeFile('src/ui/styles.css', stylesCss);
-    await fileWriter.writeFile('src/ui/hooks/useIntools.ts', useIntools);
+    await createReactProject(targetDir, name);
 
     console.log(chalk.green('✓ 脚手架创建完成'));
 

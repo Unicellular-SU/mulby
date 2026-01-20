@@ -277,3 +277,60 @@ interface FileSearchResult {
   - 支持展示 DeepSeek R1 等模型的 `reasoning_content` (通过 `<think>` 标签)
 - [x] **性能监控** (`src/services/ai-generator.ts`)
   - 实时显示每轮对话的思考耗时与 Token 使用量 (e.g., `Thinking... (Turn 1) - 2.5s, 150 tokens`)
+
+---
+
+# AI CLI 体验优化
+
+> **更新时间**: 2026-01-20
+> **状态**: ✅ 已完成
+
+## 完成内容
+
+### 交互与上下文
+- [x] **Slash Commands** (`src/services/ai-generator.ts`)
+  - 支持 `/exit`, `/clear`, `/tokens`, `/compress`, `/help` 命令
+  - 清晰的 `›` 命令行提示符，优化输入体验
+- [x] **上下文自动压缩** (`src/services/ai/context-manager.ts`)
+  - 实现 Token 估算与历史记录摘要压缩
+  - 恢复会话时自动检测并压缩超长上下文
+  - **[Fix]** 修复了压缩时切断 Tool Call 链导致 400 错误 ("role 'tool' must be a response to a preceding message") 的问题
+
+### 上下文优化
+- [x] **Smart Pruning (Read-and-Forget)** (`src/services/ai/context-manager.ts`)
+  - 实现了基于混合记忆架构的 "Smart Pruning" 策略
+  - 自动检测并剪枝历史记录中的大段 Tool 输出（>1000 字符），仅保留占位符
+  - 显著降低 Token 消耗，同时保留最近会话的完整细节 (Tail Memory)
+- [x] **Dynamic File Map (Hybrid Memory Head)** (`src/services/ai/prompts.ts`, `ai-generator.ts`)
+  - 实现了动态文件树注入机制
+  - **Head 更新**: 每次对话前自动扫描项目目录，生成最新文件树并注入 System Prompt
+  - 消除 AI 对文件结构的幻觉，确保始终知晓新建文件的位置
+
+### 脚手架统一
+- [x] **Unified Scaffolding** (`src/commands/create/ai-create.ts`)
+  - AI 创建流程复用标准 `createReactProject` 逻辑，确保文件结构一致性
+  - 移除冗余的模板生成代码
+
+### Prompt 优化
+- [x] **No UI Tests** (`src/services/ai/prompts.ts`)
+  - 明确禁止 AI 生成依赖浏览器的 UI 测试文件
+  - 引导 AI 专注于逻辑单元测试与手动验证
+```
+
+---
+
+# AI 文档与提示词整合
+
+> **更新时间**: 2026-01-20
+> **状态**: ✅ 已完成
+
+## 完成内容
+
+- [x] **文档合并与优化** (`packages/intools-cli/src/services/ai/`)
+  - 将 `PLUGIN_API.md` 的完整 API 规范合并入 `PLUGIN_DEVELOP_PROMPT.md`
+  - 移除了冗余的 `PLUGIN_API.md` 文件（AI 服务专用副本）
+  - 优化了提示词结构：Role -> Workflow -> Detailed API Reference
+- [x] **代码引用更新**
+  - 更新 `knowledge.ts` 以移除对旧 API 文件的读取
+  - 更新 `prompts.ts` 以适配新的单一上下文源
+  - 确保合并后的提示词能提供完整的 Manifest 规范和 API 参考，提升 AI 生成准确性

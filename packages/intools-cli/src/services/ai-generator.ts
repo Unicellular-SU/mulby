@@ -55,6 +55,48 @@ export class AIAgent {
             loopCount++;
 
             try {
+                // 0. Update Dynamic File Map (The Head)
+                // We update the System Prompt (the first message) with the current file structure
+                // This ensures the AI always has the latest "World View".
+                if (this.session.conversationHistory.length > 0 && this.session.conversationHistory[0].role === 'system') {
+                    const currentFileMap = await this.generateFileMap();
+                    // We need to re-build the system prompt with the new map
+                    // Since we stored the initial systemPrompt in constructor, we can rebuild it.
+                    // But wait, constructure systemPrompt might be the *result* string.
+                    // Actually, prompts.ts exports `buildSystemPrompt`.
+                    // We should probably just replace the "## Current Project Structure" section if we want to be fancy,
+                    // or easier: just rebuild the whole string using `buildSystemPrompt`.
+                    // However, we don't have the original `templates` here easily unless we stored them.
+                    // Plan B: Just Append/Replace the file map at the end of the system prompt if it exists, or rely on a marker.
+
+                    // Better approach: Let's import buildSystemPrompt and use it.
+                    // But we don't have `templates` or `isScaffolded` state stored in AIAgent.
+                    // Let's modify AIAgent to store the original config or just hack it:
+                    // We will inject a specific marker in the prompts.ts and regex replace it here.
+                    // Or simpler: Just rebuild it if we can. 
+
+                    // Actually, let's keep it simple. We will update the system prompt by replacing the 
+                    // content inside ```...``` of the "Current Project Structure" section if it exists,
+                    // or append it if it doesn't.
+
+                    let sysContent = this.session.conversationHistory[0].content || '';
+                    const mapHeader = '## Current Project Structure';
+
+                    if (sysContent.includes(mapHeader)) {
+                        // Replace existing map
+                        // Regex to match: ## Current Project Structure\n(Auto-updated file tree)\n```\n[\s\S]*?\n```
+                        sysContent = sysContent.replace(
+                            /## Current Project Structure\n\(Auto-updated file tree\)\n```[\s\S]*?```/,
+                            `## Current Project Structure\n(Auto-updated file tree)\n\`\`\`\n${currentFileMap}\n\`\`\``
+                        );
+                    } else {
+                        // Append new map (first run or migration)
+                        sysContent += `\n\n## Current Project Structure\n(Auto-updated file tree)\n\`\`\`\n${currentFileMap}\n\`\`\``;
+                    }
+
+                    this.session.conversationHistory[0].content = sysContent;
+                }
+
                 process.stdout.write(chalk.gray(`Thinking... (Turn ${loopCount})`)); // Show initial status without newline
                 const startTime = Date.now();
                 const response = await this.aiService.chat(this.session.conversationHistory, {
@@ -215,10 +257,15 @@ export class AIAgent {
 
     // Centralized handler for user input to intercept Slash Commands
     private async promptUser(message: string): Promise<string | null> {
+        // Clear any lingering "Thinking..." or progress line
+        process.stdout.write(`\r\x1b[K`);
+
+        const prefix = chalk.blue('›');
         const { input } = await inquirer.prompt([{
             type: 'input',
             name: 'input',
-            message: message
+            message: `${prefix} ${message}`,
+            prefix: '' // Disable default inquirer prefix '?'
         }]);
 
         if (input.startsWith('/')) {
@@ -355,5 +402,47 @@ Available Commands:
             }]);
             return `User rejected completion. New requirement: ${input}`;
         }
+    }
+    /**
+     * Generates a simplified file tree for the context.
+     * Ignores node_modules, .git, dist, etc.
+     */
+    private async generateFileMap(): Promise<string> {
+        const rootDir = this.session.targetDir;
+        let fileMap = '';
+
+        const walk = async (currentDir: string, indent: string) => {
+            try {
+                const files = await fs.readdir(currentDir);
+                // Sort: directories first, then files
+                files.sort((a, b) => {
+                    return a.localeCompare(b);
+                });
+
+                for (const file of files) {
+                    if (['node_modules', '.git', 'dist', '.DS_Store', 'package-lock.json', 'yarn.lock'].includes(file)) continue;
+
+                    const fullPath = path.join(currentDir, file);
+                    const stats = await fs.stat(fullPath);
+
+                    if (stats.isDirectory()) {
+                        fileMap += `${indent}${file}/\n`;
+                        await walk(fullPath, indent + '  ');
+                    } else {
+                        fileMap += `${indent}${file}\n`;
+                    }
+                }
+            } catch (e) {
+                fileMap += `${indent}(Error reading directory)\n`;
+            }
+        };
+
+        if (await fs.pathExists(rootDir)) {
+            await walk(rootDir, '');
+        } else {
+            fileMap = '(Target directory not created yet)';
+        }
+
+        return fileMap.trim();
     }
 }

@@ -1,9 +1,8 @@
 
-import { getPluginDevelopGuide, getPluginApiDocs } from './knowledge';
+import { getPluginDevelopGuide } from './knowledge';
 
-export function buildSystemPrompt(templates?: Record<string, string>, isScaffolded: boolean = false): string {
+export function buildSystemPrompt(templates?: Record<string, string>, isScaffolded: boolean = false, fileMap?: string): string {
     const guide = getPluginDevelopGuide();
-    const apiDocs = getPluginApiDocs();
 
     let templateSection = '';
     if (templates && Object.keys(templates).length > 0) {
@@ -32,6 +31,14 @@ The project has already been scaffolded with the standard React structure (manif
 The project directory is empty or contains only basic config. You might need to create the initial structure using the reference templates.
 `;
 
+    const fileMapSection = fileMap ? `
+## Current Project Structure
+(Auto-updated file tree)
+\`\`\`
+${fileMap}
+\`\`\`
+` : '';
+
     return `
 # Role: InTools 插件开发专家 (Interactive Agent)
 
@@ -41,12 +48,11 @@ The project directory is empty or contains only basic config. You might need to 
 ## Core Knowledge & Guidelines
 ${guide}
 
-## API Reference
-${apiDocs}
-
 ${templateSection}
 
 ${scaffoldInfo}
+
+${fileMapSection}
 
 ## Work Rules (ReAct Agent)
 1. **Interactive Development**: Don't just plan; ACT. Use \`read_file\`, \`write_file\`, \`run_command\` to implement the plugin.
@@ -58,12 +64,17 @@ ${scaffoldInfo}
 4. **Tool Usage**:
    - Use \`ask_user\` if requirements are unclear.
    - Use \`finish\` ONLY when the plugin is fully verified or implemented.
-5. **Context**: You can see the current directory structure using \`run_command('ls -R')\`.
+5. **Context**: You have the current project structure above. Use it to locate files.
 
 If the user needs Node.js capabilities (fs, child_process, etc.), you MUST:
 1. Create \`preload.cjs\` (CommonJS format).
 2. Configure \`"preload": "preload.cjs"\` in \`manifest.json\`.
 3. See "Preload 预加载脚本" section in API Reference.
+
+6. **Testing**:
+   - **DO NOT** create UI test files (e.g. \`*.test.tsx\`, \`*.spec.ts\`, \`*.html\` test files) that require a browser environment.
+   - You may create simple unit tests for logic/utility functions if needed.
+   - Rely on manual verification by the user for UI/Rendering behavior.
 
 Now, start your work.
 `;

@@ -14,7 +14,7 @@ I have successfully refactored the `intools create --ai` feature to use an **Int
 - **[Usage Logging](file:///packages/intools-cli/src/services/ai-generator.ts)**: Added time duration and token usage logging (e.g., `(2.5s, 150 tokens)`) after each "Thinking..." step directly in the console output.
 - **[Interactive Finish](file:///packages/intools-cli/src/services/ai-generator.ts)**: Modified the `finish` tool to prompt the user. The user can choose to **Exit** or **Continue** with new requirements, keeping the session active.
 - **[Smart Resume](file:///packages/intools-cli/src/commands/create/ai-create.ts)**: When using `--resume` on a completed session, the CLI now automatically reactivates it to `generating` status and prompts for new instructions.
-- **[Knowledge Integration](file:///packages/intools-cli/src/services/ai/knowledge.ts)**: Automatically loads `PLUGIN_DEVELOP_PROMPT.md` and `PLUGIN_API.md` into the system prompt.
+- **[Knowledge Integration](file:///packages/intools-cli/src/services/ai/knowledge.ts)**: Automatically loads `PLUGIN_DEVELOP_PROMPT.md` into the system prompt.
 - **[Template Injection](file:///packages/intools-cli/src/commands/create/ai-create.ts)**: Injects standard React templates (`package.json`, `manifest.json`, `main.ts`, `App.tsx`) into the system prompt, ensuring the AI follows the correct project structure.
 - **[Tools](file:///packages/intools-cli/src/services/ai/tools.ts)**: Added `read_file`, `run_command`, `ask_user`, `finish`.
 

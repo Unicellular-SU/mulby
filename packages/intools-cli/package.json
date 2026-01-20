@@ -6,7 +6,7 @@
   "files": [
     "dist",
     "assets",
-    "PLUGIN_API.md"
+    "PLUGIN_DEVELOP_PROMPT.md"
   ],
   "bin": {
     "intools": "dist/index.js"

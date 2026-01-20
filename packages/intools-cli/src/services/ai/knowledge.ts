@@ -23,19 +23,5 @@ export function getPluginDevelopGuide(): string {
     return '';
 }
 
-export function getPluginApiDocs(): string {
-    try {
-        const filePath = path.join(__dirname, 'PLUGIN_API.md');
-        if (fs.existsSync(filePath)) {
-            return fs.readFileSync(filePath, 'utf-8');
-        }
-        // Fallback to package root
-        const devPath = path.resolve(__dirname, '../../../../../packages/intools-cli/PLUGIN_API.md');
-        if (fs.existsSync(devPath)) {
-            return fs.readFileSync(devPath, 'utf-8');
-        }
-    } catch (e) {
-        console.warn('Failed to load PLUGIN_API.md', e);
-    }
-    return '';
-}
+
+

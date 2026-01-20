@@ -141,7 +141,6 @@ my-plugin/
 ├── tsconfig.json         # TypeScript 配置
 ├── vite.config.ts        # Vite 配置
 ├── icon.png              # 插件图标
-├── PLUGIN_API.md         # API 参考文档
 ├── src/
 │   ├── main.ts           # 后端逻辑（沙箱运行）
 │   ├── types/
@@ -167,7 +166,6 @@ my-plugin/
 ├── package.json
 ├── manifest.json
 ├── icon.png
-├── PLUGIN_API.md         # API 参考文档
 └── src/
     └── main.ts
 ```
@@ -387,7 +385,7 @@ npm run build
 
 插件在沙箱中运行，通过 `context.api` 访问各种 API。
 
-> 📚 **完整 API 参考请查看 [`PLUGIN_API.md`](./PLUGIN_API.md)**
+> 📚 **完整 API 参考请查看 [`PLUGIN_DEVELOP_PROMPT.md`](./PLUGIN_DEVELOP_PROMPT.md)**
 >
 > 该文件会在创建插件时自动生成，包含全部 28 个 API 模块的详细说明。
 

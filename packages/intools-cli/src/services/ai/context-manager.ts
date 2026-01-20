@@ -39,15 +39,26 @@ export class ContextManager {
 
         const systemMessage = messages[0].role === 'system' ? messages[0] : null;
         const startIndex = systemMessage ? 1 : 0;
-        const endIndex = messages.length - keepLastN;
+        let endIndex = messages.length - keepLastN;
+        if (endIndex < startIndex) endIndex = startIndex;
+
+        // Ensure we doesn't cut in the middle of a tool chain.
+        // If the starting message of the retained segment is a 'tool' message,
+        // we must shift the boundary back to include the Assistant message that triggered it.
+        while (endIndex > startIndex && messages[endIndex].role === 'tool') {
+            endIndex--;
+        }
 
         const messagesToSummarize = messages.slice(startIndex, endIndex);
         const retainedMessages = messages.slice(endIndex);
 
         console.log(`Compressing ${messagesToSummarize.length} messages...`);
 
+        // Prune large tool outputs from the body (Read-and-Forget)
+        const prunedMessages = this.pruneOldToolOutputs(messagesToSummarize);
+
         // Convert messages to a text format for the AI to summarize
-        const textToSummarize = messagesToSummarize.map(m => {
+        const textToSummarize = prunedMessages.map(m => {
             return `${m.role.toUpperCase()}: ${m.content || '(Tool Operations)'}`;
         }).join('\n\n');
 
@@ -69,5 +80,20 @@ export class ContextManager {
             console.error('Failed to compress history:', error);
             return messages; // Return original on failure
         }
+    }
+    /**
+     * Prunes large tool outputs from historical messages.
+     * This implements the "Read-and-Forget" strategy.
+     */
+    private static pruneOldToolOutputs(messages: AIMessage[]): AIMessage[] {
+        return messages.map(msg => {
+            if (msg.role === 'tool' && msg.content && msg.content.length > 1000) {
+                return {
+                    ...msg,
+                    content: `[Tool output pruned: ${msg.content.length} chars. See summary for context.]`
+                };
+            }
+            return msg;
+        });
     }
 }
