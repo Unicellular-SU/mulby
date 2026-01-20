@@ -1,0 +1,53 @@
+{
+  "name": "color_helper",
+  "displayName": "颜色助手",
+  "version": "1.0.0",
+  "description": "一个功能丰富的颜色工具插件，支持颜色解析、图片色卡提取、UI色卡、传统色、渐变色和收藏功能",
+  "author": "Intools Plugin Developer",
+  "icon": "plugin-icon.svg",
+  "homepage": "https://github.com/intools-plugins/color_helper",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/intools-plugins/color_helper.git"
+  },
+  "keywords": ["color", "palette", "gradient", "design", "ui", "traditional"],
+  "category": "design",
+  "engines": {
+    "intools": ">=1.0.0"
+  },
+  "main": "dist/main.js",
+  "ui": "ui/index.html",
+  "permissions": ["clipboard", "notification", "filesystem"],
+  "features": [
+    {
+      "code": "color_parser",
+      "name": "颜色解析",
+      "description": "颜色值解析工具 - 支持HEX、RGB格式"
+    },
+    {
+      "code": "image_colors",
+      "name": "图片色卡",
+      "description": "从图片提取颜色色卡"
+    },
+    {
+      "code": "ui_colors",
+      "name": "UI色卡",
+      "description": "常用UI设计色卡"
+    },
+    {
+      "code": "traditional_colors",
+      "name": "传统色",
+      "description": "中国传统颜色库"
+    },
+    {
+      "code": "gradients",
+      "name": "渐变色",
+      "description": "渐变色生成器"
+    },
+    {
+      "code": "color_favorites",
+      "name": "收藏功能",
+      "description": "收藏的颜色和渐变色"
+    }
+  ]
+}
