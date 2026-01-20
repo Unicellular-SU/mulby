@@ -26,14 +26,19 @@ export interface IconFile {
   value?: string  // 相对路径，默认为 'icon.png'
 }
 
-export type PluginIconObject = IconUrl | IconSvg | IconFile
+export interface IconEmoji {
+  type: 'emoji'
+  value: string
+}
+
+export type PluginIconObject = IconUrl | IconSvg | IconFile | IconEmoji
 
 // 支持简写：字符串会自动解析为对应类型
 export type PluginIcon = PluginIconObject | string
 
 // 解析后的图标数据（传递给渲染进程）
 export interface ResolvedIcon {
-  type: 'url' | 'svg' | 'data-url'
+  type: 'url' | 'svg' | 'data-url' | 'emoji'
   value: string
 }
 

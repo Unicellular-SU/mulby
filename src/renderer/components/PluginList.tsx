@@ -31,6 +31,14 @@ const PluginIcon = memo(function PluginIcon({ icon }: { icon?: SearchResultItem[
     )
   }
 
+  if (icon.type === 'emoji') {
+    return (
+      <div className="plugin-icon" style={{ fontSize: '20px', lineHeight: '20px', textAlign: 'center' }}>
+        {icon.value}
+      </div>
+    )
+  }
+
   // url 或 data-url
   return (
     <div className="plugin-icon">

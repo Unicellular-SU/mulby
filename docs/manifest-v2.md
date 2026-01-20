@@ -140,9 +140,21 @@
 
 若用户输入包含 `a.pdf`、`b.pdf`、`c.png`，则该 feature 会匹配，并且仅向插件传递两个 `.pdf` 附件。
 
+// SVG
+"icon": { "type": "svg", "value": "<svg>...</svg>" }
+
+// Emoji
+"icon": { "type": "emoji", "value": "🚀" }
+```
+
+#### 默认行为
+
+- 未设置 `icon` 时，自动尝试加载插件目录下的 `icon.png`
+- 若无图标文件，显示默认占位图标
+
 ### Icon 字段
 
-插件图标支持三种格式，可使用字符串简写或对象形式。
+插件图标支持四种格式，可使用字符串简写或对象形式。
 
 #### 字符串简写
 
@@ -152,6 +164,9 @@
 
 // URL
 "icon": "https://example.com/icon.png"
+
+// Emoji (直接使用 Emoji 字符)
+"icon": "🚀"
 
 // 内联 SVG
 "icon": "<svg viewBox=\"0 0 24 24\">...</svg>"
@@ -165,15 +180,6 @@
 
 // URL
 "icon": { "type": "url", "value": "https://example.com/icon.png" }
-
-// SVG
-"icon": { "type": "svg", "value": "<svg>...</svg>" }
-```
-
-#### 默认行为
-
-- 未设置 `icon` 时，自动尝试加载插件目录下的 `icon.png`
-- 若无图标文件，显示默认占位图标
 
 ### Preload 配置
 

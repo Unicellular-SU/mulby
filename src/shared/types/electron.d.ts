@@ -34,7 +34,7 @@ export interface SearchResultItem {
   featureRoute?: string
   matchType: 'keyword' | 'regex' | 'files' | 'img'
   icon?: {
-    type: 'url' | 'svg' | 'data-url'
+    type: 'url' | 'svg' | 'data-url' | 'emoji'
     value: string
   }
 }
@@ -58,7 +58,7 @@ export interface PluginInfo {
     maxHeight?: number
   }
   icon?: {
-    type: 'url' | 'svg' | 'data-url'
+    type: 'url' | 'svg' | 'data-url' | 'emoji'
     value: string
   }
   path?: string
@@ -71,7 +71,7 @@ export interface PluginInfo {
     mode?: 'ui' | 'silent' | 'detached'
     route?: string
     icon?: {
-      type: 'url' | 'svg' | 'data-url'
+      type: 'url' | 'svg' | 'data-url' | 'emoji'
       value: string
     }
   }[]
