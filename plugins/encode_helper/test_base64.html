@@ -1,0 +1,265 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Base64功能测试</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background-color: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #333;
+            text-align: center;
+        }
+        .test-case {
+            margin: 20px 0;
+            padding: 15px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            background-color: #f9f9f9;
+        }
+        .input, .output {
+            margin: 10px 0;
+        }
+        label {
+            font-weight: bold;
+            display: block;
+            margin-bottom: 5px;
+        }
+        textarea {
+            width: 100%;
+            height: 60px;
+            padding: 8px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            font-family: monospace;
+        }
+        .buttons {
+            display: flex;
+            gap: 10px;
+            margin: 10px 0;
+        }
+        button {
+            padding: 8px 16px;
+            background-color: #007bff;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        button:hover {
+            background-color: #0056b3;
+        }
+        .result {
+            margin-top: 10px;
+            padding: 10px;
+            background-color: #e9ecef;
+            border-radius: 4px;
+            font-family: monospace;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Base64功能测试</h1>
+        
+        <div class="test-case">
+            <h2>测试1: Base64加密（编码）</h2>
+            <div class="input">
+                <label>输入文本：</label>
+                <textarea id="encodeInput">Hello, 世界！</textarea>
+            </div>
+            <div class="buttons">
+                <button onclick="testEncode()">测试加密</button>
+            </div>
+            <div class="output">
+                <label>预期输出：</label>
+                <div class="result" id="encodeExpected">SGVsbG8sIOS4lueVjCE=</div>
+            </div>
+            <div class="output">
+                <label>实际输出：</label>
+                <div class="result" id="encodeActual"></div>
+            </div>
+        </div>
+
+        <div class="test-case">
+            <h2>测试2: Base64解密（解码）</h2>
+            <div class="input">
+                <label>输入Base64：</label>
+                <textarea id="decodeInput">SGVsbG8sIOS4lueVjCE=</textarea>
+            </div>
+            <div class="buttons">
+                <button onclick="testDecode()">测试解密</button>
+            </div>
+            <div class="output">
+                <label>预期输出：</label>
+                <div class="result" id="decodeExpected">Hello, 世界！</div>
+            </div>
+            <div class="output">
+                <label>实际输出：</label>
+                <div class="result" id="decodeActual"></div>
+            </div>
+        </div>
+
+        <div class="test-case">
+            <h2>测试3: 其他功能验证</h2>
+            <div class="buttons">
+                <button onclick="testAll()">测试所有功能</button>
+            </div>
+            <div id="allResults"></div>
+        </div>
+    </div>
+
+    <script>
+        // Base64编码函数（与插件中相同）
+        function encodeBase64(text) {
+            try {
+                return btoa(unescape(encodeURIComponent(text)));
+            } catch (e) {
+                return '编码失败';
+            }
+        }
+
+        // Base64解码函数（与插件中相同）
+        function decodeBase64(base64) {
+            try {
+                return decodeURIComponent(escape(atob(base64)));
+            } catch (e) {
+                return '解码失败';
+            }
+        }
+
+        // 测试加密
+        function testEncode() {
+            const input = document.getElementById('encodeInput').value;
+            const result = encodeBase64(input);
+            document.getElementById('encodeActual').textContent = result;
+            
+            const expected = document.getElementById('encodeExpected').textContent;
+            if (result === expected) {
+                document.getElementById('encodeActual').style.color = 'green';
+                document.getElementById('encodeActual').innerHTML = result + ' ✓';
+            } else {
+                document.getElementById('encodeActual').style.color = 'red';
+                document.getElementById('encodeActual').innerHTML = result + ' ✗';
+            }
+        }
+
+        // 测试解密
+        function testDecode() {
+            const input = document.getElementById('decodeInput').value;
+            const result = decodeBase64(input);
+            document.getElementById('decodeActual').textContent = result;
+            
+            const expected = document.getElementById('decodeExpected').textContent;
+            if (result === expected) {
+                document.getElementById('decodeActual').style.color = 'green';
+                document.getElementById('decodeActual').innerHTML = result + ' ✓';
+            } else {
+                document.getElementById('decodeActual').style.color = 'red';
+                document.getElementById('decodeActual').innerHTML = result + ' ✗';
+            }
+        }
+
+        // 测试所有功能
+        function testAll() {
+            const tests = [
+                {
+                    name: 'Base64编码',
+                    input: 'Hello, 世界！',
+                    expected: 'SGVsbG8sIOS4lueVjCE=',
+                    func: encodeBase64
+                },
+                {
+                    name: 'Base64解码',
+                    input: 'SGVsbG8sIOS4lueVjCE=',
+                    expected: 'Hello, 世界！',
+                    func: decodeBase64
+                },
+                {
+                    name: 'Base64编码（英文）',
+                    input: 'Hello World',
+                    expected: 'SGVsbG8gV29ybGQ=',
+                    func: encodeBase64
+                },
+                {
+                    name: 'Base64解码（英文）',
+                    input: 'SGVsbG8gV29ybGQ=',
+                    expected: 'Hello World',
+                    func: decodeBase64
+                },
+                {
+                    name: 'Base64编码（数字）',
+                    input: '123456',
+                    expected: 'MTIzNDU2',
+                    func: encodeBase64
+                },
+                {
+                    name: 'Base64解码（数字）',
+                    input: 'MTIzNDU2',
+                    expected: '123456',
+                    func: decodeBase64
+                }
+            ];
+
+            let resultsHtml = '<h3>测试结果：</h3>';
+            let passed = 0;
+            let failed = 0;
+
+            tests.forEach(test => {
+                const result = test.func(test.input);
+                const passedTest = result === test.expected;
+                
+                if (passedTest) {
+                    passed++;
+                    resultsHtml += `
+                        <div style="color: green; margin: 5px 0;">
+                            ✓ ${test.name}: 通过
+                        </div>
+                    `;
+                } else {
+                    failed++;
+                    resultsHtml += `
+                        <div style="color: red; margin: 5px 0;">
+                            ✗ ${test.name}: 失败
+                            <div style="font-size: 0.9em; color: #666;">
+                                输入: ${test.input}<br>
+                                预期: ${test.expected}<br>
+                                实际: ${result}
+                            </div>
+                        </div>
+                    `;
+                }
+            });
+
+            resultsHtml += `
+                <div style="margin-top: 10px; padding: 10px; background-color: ${failed === 0 ? '#d4edda' : '#f8d7da'}; border-radius: 4px;">
+                    <strong>总计：</strong> ${tests.length} 个测试<br>
+                    <strong>通过：</strong> ${passed} (${Math.round(passed/tests.length*100)}%)<br>
+                    <strong>失败：</strong> ${failed} (${Math.round(failed/tests.length*100)}%)
+                </div>
+            `;
+
+            document.getElementById('allResults').innerHTML = resultsHtml;
+        }
+
+        // 页面加载时自动运行基本测试
+        window.onload = function() {
+            console.log('Base64功能测试页面已加载');
+            console.log('编码测试:', encodeBase64('Hello, 世界！'));
+            console.log('解码测试:', decodeBase64('SGVsbG8sIOS4lueVjCE='));
+        };
+    </script>
+</body>
+</html>

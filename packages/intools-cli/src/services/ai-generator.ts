@@ -9,6 +9,7 @@ import { FileWriter } from './file-writer';
 import { SYSTEM_PROMPT } from './ai/prompts';
 import { PLUGIN_GENERATION_TOOLS } from './ai/tools';
 import { AIMessage } from '../types/ai';
+import { ContextManager } from './ai/context-manager';
 
 export class AIAgent {
     private aiService = AIServiceFactory.create();
@@ -32,6 +33,16 @@ export class AIAgent {
 
         // Check/Add context if just starting (simple check if user message is the last one)
         // Or we can rely on the user guide prompt input in cli command.
+
+        if (this.session.conversationHistory.length > 0) {
+            const count = ContextManager.estimateTokenCount(this.session.conversationHistory);
+            // Threshold could be config driven, setting 10k chars (~2.5k tokens) as warning, 
+            // but let's say 40k chars (~10k tokens) for auto-compression
+            if (count > 10000) {
+                console.log(chalk.yellow(`⚠️ Context is large (~${count} tokens). Auto-compressing to save costs/tokens...`));
+                await this.compressContext();
+            }
+        }
 
         await this.runLoop();
     }
@@ -137,6 +148,8 @@ export class AIAgent {
             // Legacy/Deprecated
             case 'plan_files':
                 return "Tool 'plan_files' is deprecated. Please use read_file/write_file directly.";
+            case 'finish':
+                return await this.handleFinish(args.summary);
             default:
                 throw new Error(`Unknown tool: ${name}`);
         }
@@ -198,15 +211,124 @@ export class AIAgent {
         });
     }
 
+    // ... (previous methods)
+
+    // Centralized handler for user input to intercept Slash Commands
+    private async promptUser(message: string): Promise<string | null> {
+        const { input } = await inquirer.prompt([{
+            type: 'input',
+            name: 'input',
+            message: message
+        }]);
+
+        if (input.startsWith('/')) {
+            const handled = await this.handleSlashCommand(input);
+            if (handled) {
+                // If command handled (e.g. /tokens), we prompt again effectively (or return null to loop)
+                // For simplified flow, we return null to indicate "no input for AI yet, handled by system"
+                return null;
+            }
+            // If /exit, handleSlashCommand handles process exit or session ending
+        }
+        return input;
+    }
+
+    private async handleSlashCommand(command: string): Promise<boolean> {
+        const [cmd, ...args] = command.split(' ');
+
+        switch (cmd) {
+            case '/exit':
+            case '/quit':
+                console.log(chalk.yellow('👋 Exiting session...'));
+                this.session.status = 'completed'; // or keep as is?
+                this.sessionManager.saveSession(this.session);
+                process.exit(0);
+                return true;
+
+            case '/clear':
+                console.log(chalk.yellow('🧹 Clearing context (keeping system prompt)...'));
+                const systemPrompt = this.session.conversationHistory.find(m => m.role === 'system');
+                this.session.conversationHistory = systemPrompt ? [systemPrompt] : [];
+                this.sessionManager.saveSession(this.session);
+                return true;
+
+            case '/tokens':
+                const count = ContextManager.estimateTokenCount(this.session.conversationHistory);
+                console.log(chalk.cyan(`📊 Current Context: ~${count} tokens (${this.session.conversationHistory.length} messages)`));
+                return true;
+
+            case '/compress':
+                console.log(chalk.yellow('📦 Compressing context...'));
+                await this.compressContext();
+                return true;
+
+            case '/help':
+                console.log(chalk.green(`
+Available Commands:
+  /exit, /quit   - Save and exit
+  /clear         - Clear conversation history (keeps system prompt)
+  /tokens        - Show estimated token usage
+  /compress      - Summarize and compress history manually
+  /help          - Show this help
+`));
+                return true;
+
+            default:
+                console.log(chalk.red(`Unknown command: ${cmd}`));
+                return true;
+        }
+    }
+
+    private async compressContext() {
+        // Use a lightweight summarizer (or just the same AI service)
+        const summarizer = async (text: string) => {
+            // Create a temporary simplified chat for summarization
+            const result = await this.aiService.chat([
+                { role: 'system', content: 'You are a helpful assistant.' },
+                { role: 'user', content: `Please summarize the following technical conversation history into a concise paragraph, capturing key decisions and current state:\n\n${text}` }
+            ], { toolChoice: 'none' }); // No tools for summary
+            return result.content || 'No summary generated.';
+        };
+
+        this.session.conversationHistory = await ContextManager.compressHistory(
+            this.session.conversationHistory,
+            6, // Keep last 6 messages
+            summarizer
+        );
+        this.sessionManager.saveSession(this.session);
+        console.log(chalk.green('✅ Context compressed.'));
+    }
+
     private async handleAskUser(question: string): Promise<string> {
         console.log(chalk.magenta(`\n🤖 AI Question: ${question}`));
-        const { answer } = await inquirer.prompt([{
-            type: 'input',
-            name: 'answer',
-            message: 'Your Answer:'
-        }]);
-        return answer;
+
+        while (true) {
+            const answer = await this.promptUser('Your Answer:');
+            if (answer !== null) return answer;
+            // If answer is null, it meant a slash command was executed, so we loop again to ask for input.
+        }
     }
+
+    private async handleUserInteraction() {
+        while (true) {
+            const input = await this.promptUser('用户输入 (或直接回车继续):');
+            if (input === null) continue; // Slash command executed
+
+            if (input && input.trim()) {
+                this.session.conversationHistory.push({
+                    role: 'user',
+                    content: input
+                });
+                this.sessionManager.saveSession(this.session);
+                break; // Break loop to let AI process content
+            } else {
+                // Empty input (Enter)
+                break;
+            }
+        }
+    }
+
+    // ... (rest of the class)
 
     private async handleFinish(summary: string): Promise<string> {
         console.log(chalk.green('\n✅ AI 认为任务已完成:'));
@@ -232,23 +354,6 @@ export class AIAgent {
                 message: '请输入修改需求:'
             }]);
             return `User rejected completion. New requirement: ${input}`;
-        }
-    }
-
-    // Fallback if AI talks without using tools (e.g. asking for clarification freely)
-    private async handleUserInteraction() {
-        const { input } = await inquirer.prompt([{
-            type: 'input',
-            name: 'input',
-            message: '用户输入 (或直接回车继续):'
-        }]);
-
-        if (input && input.trim()) {
-            this.session.conversationHistory.push({
-                role: 'user',
-                content: input
-            });
-            this.sessionManager.saveSession(this.session);
         }
     }
 }

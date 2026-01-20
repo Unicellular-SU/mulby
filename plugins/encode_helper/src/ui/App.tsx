@@ -286,7 +286,103 @@ export default function App() {
       )
   }
 
-  // 处理输入
+  // 处理Base64加密
+  const handleBase64Encode = async () => {
+    const result = encodeBase64()
+    setOutput(result)
+    
+    // 复制到剪贴板并通知
+    if (result) {
+      await clipboard.writeText(result)
+      notification.show('已复制到剪贴板')
+    }
+  }
+
+  // 处理Base64解密
+  const handleBase64Decode = async () => {
+    const result = decodeBase64()
+    setOutput(result)
+    
+    // 复制到剪贴板并通知
+    if (result) {
+      await clipboard.writeText(result)
+      notification.show('已复制到剪贴板')
+    }
+  }
+
+  // 处理URL编码
+  const handleURLEncode = async () => {
+    const result = encodeURL()
+    setOutput(result)
+    
+    // 复制到剪贴板并通知
+    if (result) {
+      await clipboard.writeText(result)
+      notification.show('已复制到剪贴板')
+    }
+  }
+
+  // 处理URL解码
+  const handleURLDecode = async () => {
+    const result = decodeURL()
+    setOutput(result)
+    
+    // 复制到剪贴板并通知
+    if (result) {
+      await clipboard.writeText(result)
+      notification.show('已复制到剪贴板')
+    }
+  }
+
+  // 处理Unicode编码
+  const handleUnicodeEncode = async () => {
+    const result = encodeUnicode()
+    setOutput(result)
+    
+    // 复制到剪贴板并通知
+    if (result) {
+      await clipboard.writeText(result)
+      notification.show('已复制到剪贴板')
+    }
+  }
+
+  // 处理Unicode解码
+  const handleUnicodeDecode = async () => {
+    const result = decodeUnicode()
+    setOutput(result)
+    
+    // 复制到剪贴板并通知
+    if (result) {
+      await clipboard.writeText(result)
+      notification.show('已复制到剪贴板')
+    }
+  }
+
+  // 处理HTML编码
+  const handleHTMLEncode = async () => {
+    const result = encodeHTML()
+    setOutput(result)
+    
+    // 复制到剪贴板并通知
+    if (result) {
+      await clipboard.writeText(result)
+      notification.show('已复制到剪贴板')
+    }
+  }
+
+  // 处理HTML解码
+  const handleHTMLDecode = async () => {
+    const result = decodeHTML()
+    setOutput(result)
+    
+    // 复制到剪贴板并通知
+    if (result) {
+      await clipboard.writeText(result)
+      notification.show('已复制到剪贴板')
+    }
+  }
+
+  // 处理通用转换
   const handleProcess = async () => {
     let result = ''
     
@@ -294,32 +390,8 @@ export default function App() {
       case 'time':
         result = convertTime()
         break
-      case 'base64':
-        // 尝试自动检测是编码还是解码
-        if (/^[A-Za-z0-9+/]+={0,2}$/.test(input.trim())) {
-          result = decodeBase64()
-        } else {
-          result = encodeBase64()
-        }
-        break
-      case 'url':
-        // 尝试自动检测是编码还是解码
-        if (/%[0-9A-Fa-f]{2}/.test(input)) {
-          result = decodeURL()
-        } else {
-          result = encodeURL()
-        }
-        break
       case 'hash':
         result = await calculateHash()
-        break
-      case 'unicode':
-        // 尝试自动检测是编码还是解码
-        if (/\\u[0-9A-Fa-f]{4}/.test(input)) {
-          result = decodeUnicode()
-        } else {
-          result = encodeUnicode()
-        }
         break
       case 'uuid':
         result = generateUUID()
@@ -327,12 +399,36 @@ export default function App() {
       case 'radix':
         result = convertRadix()
         break
-      case 'html':
-        // 尝试自动检测是编码还是解码
-        if (/&[a-z]+;|&#x?[0-9A-Fa-f]+;/.test(input)) {
-          result = decodeHTML()
-        } else {
-          result = encodeHTML()
+      default:
+        // 对于其他功能，使用自动检测
+        if (currentFeature === 'base64') {
+          // 尝试自动检测是编码还是解码
+          if (/^[A-Za-z0-9+/]+={0,2}$/.test(input.trim())) {
+            result = decodeBase64()
+          } else {
+            result = encodeBase64()
+          }
+        } else if (currentFeature === 'url') {
+          // 尝试自动检测是编码还是解码
+          if (/%[0-9A-Fa-f]{2}/.test(input)) {
+            result = decodeURL()
+          } else {
+            result = encodeURL()
+          }
+        } else if (currentFeature === 'unicode') {
+          // 尝试自动检测是编码还是解码
+          if (/\\u[0-9A-Fa-f]{4}/.test(input)) {
+            result = decodeUnicode()
+          } else {
+            result = encodeUnicode()
+          }
+        } else if (currentFeature === 'html') {
+          // 尝试自动检测是编码还是解码
+          if (/&[a-z]+;|&#x?[0-9A-Fa-f]+;/.test(input)) {
+            result = decodeHTML()
+          } else {
+            result = encodeHTML()
+          }
         }
         break
     }
@@ -420,6 +516,79 @@ export default function App() {
     }
   }
 
+  // 渲染功能特定的操作按钮
+  const renderFeatureActions = () => {
+    switch (currentFeature) {
+      case 'base64':
+        return (
+          <div className="actions">
+            <button className="btn-primary" onClick={handleBase64Encode}>
+              加密 (Base64编码)
+            </button>
+            <button className="btn-primary" onClick={handleBase64Decode}>
+              解密 (Base64解码)
+            </button>
+            <button className="btn-secondary" onClick={() => setInput('')}>
+              清空
+            </button>
+          </div>
+        )
+      case 'url':
+        return (
+          <div className="actions">
+            <button className="btn-primary" onClick={handleURLEncode}>
+              编码 (URL编码)
+            </button>
+            <button className="btn-primary" onClick={handleURLDecode}>
+              解码 (URL解码)
+            </button>
+            <button className="btn-secondary" onClick={() => setInput('')}>
+              清空
+            </button>
+          </div>
+        )
+      case 'unicode':
+        return (
+          <div className="actions">
+            <button className="btn-primary" onClick={handleUnicodeEncode}>
+              编码 (Unicode编码)
+            </button>
+            <button className="btn-primary" onClick={handleUnicodeDecode}>
+              解码 (Unicode解码)
+            </button>
+            <button className="btn-secondary" onClick={() => setInput('')}>
+              清空
+            </button>
+          </div>
+        )
+      case 'html':
+        return (
+          <div className="actions">
+            <button className="btn-primary" onClick={handleHTMLEncode}>
+              编码 (HTML转义)
+            </button>
+            <button className="btn-primary" onClick={handleHTMLDecode}>
+              解码 (HTML还原)
+            </button>
+            <button className="btn-secondary" onClick={() => setInput('')}>
+              清空
+            </button>
+          </div>
+        )
+      default:
+        return (
+          <div className="actions">
+            <button className="btn-primary" onClick={handleProcess}>
+              转换
+            </button>
+            <button className="btn-secondary" onClick={() => setInput('')}>
+              清空
+            </button>
+          </div>
+        )
+    }
+  }
+
   // 获取功能描述
   const getFeatureDescription = () => {
     const descriptions = {
@@ -500,14 +669,10 @@ export default function App() {
             autoFocus
           />
         </div>
-        <div className="actions">
-          <button className="btn-primary" onClick={handleProcess}>
-            转换
-          </button>
-          <button className="btn-secondary" onClick={() => setInput('')}>
-            清空
-          </button>
-        </div>
+        
+        {/* 功能特定操作按钮 */}
+        {renderFeatureActions()}
+        
         <div className="field">
           <label>输出</label>
           <textarea
