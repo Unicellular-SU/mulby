@@ -225,3 +225,55 @@ interface FileSearchResult {
 - [x] 修复 `Found invalid object in transferList` 错误
   - 原因：`pdfjs-dist` v5.x 在 Electron 环境下处理 `ImageBitmap` 传输时存在兼容性问题，导致部分图像无法解码。
   - 修复：降级 `pdfjs-dist` 至稳定版本 `4.4.168`，从根本上解决传输列表对象无效问题，恢复图片 PDF 的正常渲染。
+
+---
+
+# 搜索框多行输入修复
+
+> **更新时间**: 2026-01-20
+> **状态**: ✅ 已完成
+
+## 修复内容
+
+### 搜索框 (SearchInput)
+- [x] `src/renderer/components/SearchInput.tsx`
+  - 将 `<input>` 替换为 `<textarea>`，以支持多行文本输入（如粘贴 YAML/JSON 配置）
+  - 维持单行外观 (`rows={1}`)，但允许存储和传递包含换行符的原始文本
+  - 拦截 `Enter` 键：
+    - `Enter` (无 Shift): 阻止默认换行，维持“输入框”体验
+    - `Shift + Enter`: 允许输入换行符
+- [x] `src/renderer/styles/index.css`
+  - 为 `.search-input` 添加 `textarea` 专属样式 (`resize: none`, `white-space: pre-wrap`)
+  - 确保垂直对齐和高度与原输入框一致
+
+### 解决问题
+- 修复了用户在宿主搜索框粘贴多行内容（如 YAML）后，插件接收到的文本被展平为单行的问题。
+
+---
+
+# AI 插件生成增强
+
+> **更新时间**: 2026-01-20
+> **状态**: ✅ 已完成
+
+## 完成内容
+
+### 核心模块
+- [x] **Scaffold-First Workflow** (`src/commands/create/ai-create.ts`)
+  - 重构生成流程为"先脚手架，后 AI"模式
+  - 在 AI 介入前确定性生成核心文件 (`package.json`, `manifest.json`, `src/ui/App.tsx` 等)
+  - 显著降低 AI 生成错误 boilerplate 的概率
+
+### 交互体验增强
+- [x] **交互式完成 (Interactive Finish)** (`src/services/ai-generator.ts`)
+  - AI 任务完成后不强制退出，用户可选择 "Exit" 或 "Continue"
+  - 支持在当前上下文中继续追加修改需求
+- [x] **智能会话恢复 (Smart Resume)** (`src/commands/create/ai-create.ts`)
+  - `intools create --ai --resume` 自动识别并激活 `completed` 状态的会话
+  - 自动重置状态并引导用户输入新指令，实现无缝断点续传
+
+### 可视化与监控
+- [x] **思考过程可视化** (`src/services/ai/providers/openai.ts`)
+  - 支持展示 DeepSeek R1 等模型的 `reasoning_content` (通过 `<think>` 标签)
+- [x] **性能监控** (`src/services/ai-generator.ts`)
+  - 实时显示每轮对话的思考耗时与 Token 使用量 (e.g., `Thinking... (Turn 1) - 2.5s, 150 tokens`)

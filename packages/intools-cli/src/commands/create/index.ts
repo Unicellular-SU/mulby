@@ -3,12 +3,14 @@ import * as path from 'path'
 import chalk from 'chalk'
 import { createBasicProject } from './basic'
 import { createReactProject } from './react'
+import { aiCreate } from './ai-create'
 
-interface CreateOptions {
-  template: 'react' | 'basic'
-}
+export async function create(name: string, options: any) {
+  if (options.ai || options.resume) {
+    await aiCreate(name, options);
+    return;
+  }
 
-export async function create(name: string, options: CreateOptions) {
   const targetDir = path.resolve(process.cwd(), name)
 
   if (fs.existsSync(targetDir)) {

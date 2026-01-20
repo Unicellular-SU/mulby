@@ -8,7 +8,15 @@
 
 ## 已完成任务
 
-### 2026-01-09
+### 2026-01-20
+
+#### AI 插件生成功能增强
+- [x] Scaffold-First Workflow (先脚手架后 AI)
+- [x] AI 思考过程可视化 (Reasoning Content Support)
+- [x] 实时 Time & Token Usage Logging
+- [x] 交互式完成 (Interactive Finish)
+- [x] 智能会话恢复 (Smart Resume)
+- [x] 知识库自动挂载 (Plugin Docs Injection)
 
 #### 项目初始化
 - [x] 创建项目文档结构

@@ -1,6 +1,6 @@
 {
   "name": "intools-cli",
-  "version": "1.0.9",
+  "version": "1.1.1",
   "description": "InTools 插件开发 CLI 工具",
   "main": "dist/index.js",
   "files": [
@@ -12,21 +12,27 @@
     "intools": "dist/index.js"
   },
   "scripts": {
-    "build": "tsc",
+    "build": "tsc && cp src/services/ai/*.md dist/services/ai/",
     "dev": "tsc -w"
   },
   "dependencies": {
-    "commander": "^12.0.0",
-    "esbuild": "^0.20.0",
+    "@anthropic-ai/sdk": "^0.71.2",
     "archiver": "^7.0.0",
     "chalk": "^4.1.2",
+    "chokidar": "^3.6.0",
+    "commander": "^12.0.0",
+    "esbuild": "^0.20.0",
     "fs-extra": "^11.2.0",
-    "chokidar": "^3.6.0"
+    "inquirer": "^13.2.0",
+    "openai": "^6.16.0",
+    "uuid": "^13.0.0"
   },
   "devDependencies": {
-    "@types/node": "^20.0.0",
     "@types/archiver": "^6.0.0",
     "@types/fs-extra": "^11.0.0",
+    "@types/inquirer": "^9.0.9",
+    "@types/node": "^20.0.0",
+    "@types/uuid": "^10.0.0",
     "typescript": "^5.0.0"
   }
 }

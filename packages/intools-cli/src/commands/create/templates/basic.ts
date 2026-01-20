@@ -4,18 +4,10 @@ export function buildBasicManifest(name: string) {
     name,
     version: '1.0.0',
     displayName: name,
+    author: 'intools',
     description: '插件描述',
     main: 'dist/main.js',
     icon: 'icon.png',
-    // 独立窗口配置（可选）
-    // window: {
-    //   width: 800,       // 默认宽度
-    //   height: 600,      // 默认高度
-    //   minWidth: 400,    // 最小宽度
-    //   minHeight: 300,   // 最小高度
-    //   maxWidth: 1200,   // 最大宽度
-    //   maxHeight: 900    // 最大高度
-    // },
     features: [
       {
         code: 'main',

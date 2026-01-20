@@ -4,6 +4,8 @@ import { create } from './commands/create'
 import { build } from './commands/build'
 import { pack } from './commands/pack'
 import { dev } from './commands/dev'
+import { configCommand } from './commands/config'
+import { sessionCommand } from './commands/ai-session'
 import { readFileSync } from 'fs'
 import { join } from 'path'
 
@@ -21,6 +23,8 @@ program
   .command('create <name>')
   .description('创建新插件项目')
   .option('-t, --template <template>', '模板类型: react (默认) | basic', 'react')
+  .option('--ai', '使用 AI 辅助生成插件')
+  .option('--resume [sessionId]', '恢复 AI 生成会话')
   .action(create)
 
 program
@@ -37,5 +41,15 @@ program
   .command('dev')
   .description('开发模式（热重载）')
   .action(dev)
+
+program
+  .command('config <action> [key] [value]')
+  .description('管理配置 (get, set, delete, list)')
+  .action(configCommand)
+
+program
+  .command('ai-session <action> [sessionId]')
+  .description('管理 AI 会话 (list, resume)')
+  .action(sessionCommand)
 
 program.parse()

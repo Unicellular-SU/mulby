@@ -46,7 +46,7 @@ function SearchInput({
   onAttachmentsManagerOpen,
   onAttachmentsManagerClose
 }: SearchInputProps) {
-  const inputRef = useRef<HTMLInputElement>(null)
+  const inputRef = useRef<HTMLTextAreaElement>(null)
   const [subInput, setSubInput] = useState<SubInputState>({ enabled: false, placeholder: '' })
   const [subInputValue, setSubInputValue] = useState('')
 
@@ -86,7 +86,7 @@ function SearchInput({
   }, [])
 
   // 处理输入变化
-  const handleInputChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleInputChange = useCallback((e: React.ChangeEvent<HTMLTextAreaElement>) => {
     const text = e.target.value
     if (subInput.enabled) {
       // SubInput 模式：更新本地值并通知主进程转发给插件
@@ -98,7 +98,7 @@ function SearchInput({
     }
   }, [subInput.enabled, onChange])
 
-  const handlePaste = useCallback(async (e: React.ClipboardEvent<HTMLInputElement>) => {
+  const handlePaste = useCallback(async (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
     const items = Array.from(e.clipboardData.items)
     const files = items
       .filter((item) => item.kind === 'file')
@@ -114,7 +114,7 @@ function SearchInput({
     }
   }, [attachments, onAttachmentsChange])
 
-  const handleDrop = useCallback(async (e: React.DragEvent<HTMLInputElement>) => {
+  const handleDrop = useCallback(async (e: React.DragEvent<HTMLTextAreaElement>) => {
     const files = Array.from(e.dataTransfer.files || [])
     if (files.some((file) => file.path?.endsWith('.inplugin'))) return
 
@@ -127,17 +127,6 @@ function SearchInput({
       onAttachmentsChange(next)
     }
   }, [attachments, onAttachmentsChange])
-
-  // const handleRemoveAttachment = useCallback((id: string) => {
-  //   const next = attachments.filter((attachment) => {
-  //     if (attachment.id !== id) return true
-  //     if (attachment.previewUrl?.startsWith('blob:')) {
-  //       URL.revokeObjectURL(attachment.previewUrl)
-  //     }
-  //     return false
-  //   })
-  //   onAttachmentsChange(next)
-  // }, [attachments, onAttachmentsChange])
 
   const totalAttachmentSize = attachments.reduce((sum, attachment) => sum + attachment.size, 0)
   const handleToggleManager = useCallback(() => {
@@ -182,14 +171,20 @@ function SearchInput({
         </div>
       )}
       <div className="search-input-wrap">
-        <input
+        <textarea
           ref={inputRef}
-          type="text"
+          rows={1}
           className="search-input"
           placeholder={isSummaryMode ? '' : (subInput.enabled ? subInput.placeholder : '输入关键词搜索插件...')}
           value={displayValue}
           onChange={handleInputChange}
           onKeyDown={(e) => {
+            // Prevent Enter from creating a newline, unless Shift is pressed
+            if (e.key === 'Enter' && !e.shiftKey) {
+              e.preventDefault()
+              return
+            }
+
             if (!isSummaryMode || subInput.enabled) return
             if (e.key === 'Backspace' || e.key === 'Delete') {
               e.preventDefault()
