@@ -5,6 +5,7 @@ import { build } from './commands/build'
 import { pack } from './commands/pack'
 import { dev } from './commands/dev'
 import { configCommand } from './commands/config'
+import { createAIConfigCommand } from './commands/config-ai'
 import { sessionCommand } from './commands/ai-session'
 import { readFileSync } from 'fs'
 import { join } from 'path'
@@ -47,6 +48,9 @@ program
   .command('config <action> [key] [value]')
   .description('管理配置 (get, set, delete, list)')
   .action(configCommand)
+
+// 添加 AI 配置命令（独立的顶级命令）
+program.addCommand(createAIConfigCommand())
 
 program
   .command('ai-session <action> [sessionId]')

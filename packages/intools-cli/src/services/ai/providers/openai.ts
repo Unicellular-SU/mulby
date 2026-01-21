@@ -1,46 +1,28 @@
 import OpenAI from 'openai';
 import { BaseAIProvider, ChatOptions, AIChatResponse } from './base';
-import { AIConfig, AIMessage } from '../../../types/ai';
+import { AIProviderConfig, AIMessage } from '../../../types/ai';
 
 export class OpenAIProvider extends BaseAIProvider {
     private client: OpenAI;
 
-    constructor(config: AIConfig) {
+    constructor(config: AIProviderConfig) {
         super(config);
         this.client = new OpenAI({
             apiKey: config.apiKey,
-            baseURL: config.apiEndpoint || this.getBaseURL(config.provider),
+            baseURL: config.apiEndpoint,
             timeout: (config.timeout || 60) * 1000,
         });
     }
 
-    private getBaseURL(provider: string): string | undefined {
-        switch (provider) {
-            case 'deepseek':
-                return 'https://api.deepseek.com/v1';
-            default:
-                return undefined;
-        }
-    }
-
-    private getDefaultModel(provider: string): string {
-        switch (provider) {
-            case 'deepseek':
-                return 'deepseek-chat';
-            default:
-                return 'gpt-4o';
-        }
-    }
-
     async chat(messages: AIMessage[], options?: ChatOptions): Promise<AIChatResponse> {
-        const model = options?.model || this.config.model || this.getDefaultModel(this.config.provider);
+        const model = options?.model || this.config.model || 'gpt-4o';
         let maxTokens = options?.maxTokens || this.config.maxTokens || 4096;
 
         // Final safety cast to number
         maxTokens = Number(maxTokens);
         if (isNaN(maxTokens)) maxTokens = 4096;
 
-        const response = await this.client.chat.completions.create({
+        const requestOptions: any = {
             model: model,
             messages: messages as any, // Type casting for compatibility
             temperature: options?.temperature,
@@ -48,13 +30,23 @@ export class OpenAIProvider extends BaseAIProvider {
             tools: options?.tools,
             tool_choice: options?.toolChoice,
             stream: false,
-        });
+        };
+
+        if (options?.enableThinking || this.config.enableThinking) {
+            requestOptions.extra_body = {
+                thinking: {
+                    type: "enabled",
+                },
+            };
+        }
+
+        const response = await this.client.chat.completions.create(requestOptions);
 
         const choice = response.choices[0];
         const message = choice.message;
         let content = message.content;
 
-        // DeepSeek reasoning support
+        // DeepSeek & GLM reasoning support
         if ((message as any).reasoning_content) {
             const thinking = (message as any).reasoning_content;
             content = `<think>\n${thinking}\n</think>\n\n${content || ''}`;
@@ -72,29 +64,75 @@ export class OpenAIProvider extends BaseAIProvider {
     }
 
     async chatStream(messages: AIMessage[], onChunk: (chunk: string) => void, options?: ChatOptions): Promise<string> {
-        const model = options?.model || this.config.model || this.getDefaultModel(this.config.provider);
+        const model = options?.model || this.config.model || 'gpt-4o';
         let maxTokens = options?.maxTokens || this.config.maxTokens || 4096;
 
         // Final safety cast to number
         maxTokens = Number(maxTokens);
         if (isNaN(maxTokens)) maxTokens = 4096;
 
-        const stream = await this.client.chat.completions.create({
+        const requestOptions: any = {
             model: model,
             messages: messages as any,
             temperature: options?.temperature,
             max_tokens: maxTokens,
             stream: true,
-        });
+        };
+
+        if (options?.enableThinking || this.config.enableThinking) {
+            requestOptions.extra_body = {
+                thinking: {
+                    type: "enabled",
+                },
+            };
+        }
+
+        const stream = await this.client.chat.completions.create(requestOptions) as any;
 
         let fullContent = '';
+        let hasStartedThinking = false;
+        let hasEndedThinking = false;
+
         for await (const chunk of stream) {
-            const content = chunk.choices[0]?.delta?.content || '';
+            const delta = chunk.choices[0]?.delta as any;
+
+            // Handle reasoning content (GLM/DeepSeek)
+            if (delta?.reasoning_content) {
+                if (!hasStartedThinking) {
+                    const startTag = '<think>\n';
+                    fullContent += startTag;
+                    onChunk(startTag);
+                    hasStartedThinking = true;
+                }
+                const reasoning = delta.reasoning_content;
+                fullContent += reasoning;
+                onChunk(reasoning);
+                continue;
+            }
+
+            // Close thinking tag if we switch to normal content
+            if (hasStartedThinking && !hasEndedThinking && (delta?.content || delta?.tool_calls)) {
+                const endTag = '\n</think>\n\n';
+                fullContent += endTag;
+                onChunk(endTag);
+                hasEndedThinking = true;
+            }
+
+            const content = delta?.content || '';
             if (content) {
                 fullContent += content;
                 onChunk(content);
             }
         }
+
+        // Ensure thinking tag is closed if stream ends just after reasoning
+        if (hasStartedThinking && !hasEndedThinking) {
+            const endTag = '\n</think>\n\n';
+            fullContent += endTag;
+            onChunk(endTag);
+            hasEndedThinking = true;
+        }
+
         return fullContent;
     }
 }

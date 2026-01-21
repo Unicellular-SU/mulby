@@ -1,11 +1,11 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { BaseAIProvider, ChatOptions, AIChatResponse } from './base';
-import { AIConfig, AIMessage } from '../../../types/ai';
+import { AIProviderConfig, AIMessage } from '../../../types/ai';
 
 export class ClaudeProvider extends BaseAIProvider {
     private client: Anthropic;
 
-    constructor(config: AIConfig) {
+    constructor(config: AIProviderConfig) {
         super(config);
         this.client = new Anthropic({
             apiKey: config.apiKey,

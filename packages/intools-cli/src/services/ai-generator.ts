@@ -18,6 +18,8 @@ export class AIAgent {
     private sessionManager = SessionManager.getInstance();
     private fileWriter: FileWriter;
     private autoApproveCommands = false;
+    private currentProvider?: string;  // 当前使用的供应商名称
+    private currentModel?: string;     // 当前使用的模型名称
 
 
     constructor(private session: GenerationSession, private systemPrompt?: string) {
@@ -581,6 +583,74 @@ Now you can start implementing the features by modifying these files.`;
                 await this.compressContext();
                 return true;
 
+            case '/use':
+                // 切换供应商配置
+                if (args.length === 0) {
+                    // 显示当前配置和可用配置
+                    const providers = AIServiceFactory.listProviders();
+                    const defaultProvider = AIServiceFactory.getDefaultProvider();
+                    const current = this.currentProvider || defaultProvider || providers[0];
+
+                    tui.log(chalk.cyan('\n可用的供应商配置:'));
+                    providers.forEach(p => {
+                        const marker = p === current ? chalk.green('● ') : '  ';
+                        const suffix = p === defaultProvider ? chalk.gray(' (默认)') : '';
+                        tui.log(`${marker}${p}${suffix}`);
+                    });
+                    tui.log(chalk.gray('\n使用 /use <name> 切换供应商'));
+                } else {
+                    const providerName = args[0];
+                    const config = AIServiceFactory.getProviderConfig(providerName);
+                    if (!config) {
+                        tui.log(chalk.red(`❌ 未找到配置 "${providerName}"`));
+                        tui.log(chalk.gray('使用 /use 查看可用配置'));
+                    } else {
+                        this.currentProvider = providerName;
+                        this.currentModel = undefined; // 重置模型覆盖
+                        this.aiService = AIServiceFactory.create(providerName);
+                        tui.log(chalk.green(`✓ 已切换到 "${providerName}" (${config.provider} - ${config.model || '默认模型'})`));
+                    }
+                }
+                return true;
+
+            case '/model':
+                // 切换模型
+                if (args.length === 0) {
+                    // 显示当前模型和可用模型
+                    const providers = AIServiceFactory.listProviders();
+                    const defaultProvider = AIServiceFactory.getDefaultProvider();
+                    const currentProviderName = this.currentProvider || defaultProvider || providers[0];
+                    const config = AIServiceFactory.getProviderConfig(currentProviderName);
+
+                    if (config) {
+                        const currentModel = this.currentModel || config.model || '未指定';
+                        tui.log(chalk.cyan(`\n当前供应商: ${currentProviderName} (${config.provider})`));
+                        tui.log(chalk.cyan(`当前模型: ${currentModel}`));
+
+                        // 导入 PROVIDER_MODELS
+                        const { PROVIDER_MODELS } = await import('../types/ai');
+                        const availableModels = PROVIDER_MODELS[config.provider];
+                        if (availableModels && availableModels.length > 0) {
+                            tui.log(chalk.cyan('\n可用模型:'));
+                            availableModels.forEach(m => {
+                                const marker = m === currentModel ? chalk.green('● ') : '  ';
+                                tui.log(`${marker}${m}`);
+                            });
+                        }
+                        tui.log(chalk.gray('\n使用 /model <name> 切换模型'));
+                    }
+                } else {
+                    const modelName = args.join(' ');
+                    const providers = AIServiceFactory.listProviders();
+                    const defaultProvider = AIServiceFactory.getDefaultProvider();
+                    const currentProviderName = this.currentProvider || defaultProvider || providers[0];
+
+                    this.currentModel = modelName;
+                    this.aiService = AIServiceFactory.create(currentProviderName, modelName);
+                    tui.log(chalk.green(`✓ 已切换模型为 "${modelName}"`));
+                }
+                return true;
+
             case '/help':
                 tui.log(chalk.green(`
 Available Commands:
@@ -588,6 +658,8 @@ Available Commands:
   /clear         - Clear conversation history (keeps system prompt)
   /tokens        - Show estimated token usage
   /compress      - Summarize and compress history manually
+  /use [name]    - Switch AI provider (show list if no name)
+  /model [name]  - Switch model (show list if no name)
   /help          - Show this help
 `));
                 return true;

@@ -1,5 +1,5 @@
 
-import { AIMessage, AIConfig } from '../../../types/ai';
+import { AIMessage, AIProviderConfig } from '../../../types/ai';
 
 export interface ChatOptions {
     model?: string;
@@ -9,6 +9,7 @@ export interface ChatOptions {
     tools?: any[];
     toolChoice?: any;
     stream?: boolean;
+    enableThinking?: boolean;
 }
 
 export interface AIChatResponse {
@@ -22,7 +23,7 @@ export interface AIChatResponse {
 }
 
 export abstract class BaseAIProvider {
-    constructor(protected config: AIConfig) { }
+    constructor(protected config: AIProviderConfig) { }
 
     abstract chat(messages: AIMessage[], options?: ChatOptions): Promise<AIChatResponse>;
     abstract chatStream(messages: AIMessage[], onChunk: (chunk: string) => void, options?: ChatOptions): Promise<string>;
