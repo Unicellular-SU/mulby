@@ -16,6 +16,36 @@ const SLASH_COMMANDS = [
     { cmd: '/compress', desc: 'compress history' },
     { cmd: '/use', desc: 'switch provider' },
     { cmd: '/model', desc: 'switch model' },
+    // Plan commands
+    { cmd: '/plan', desc: 'show current plan' },
+    { cmd: '/plan show', desc: 'show plan details' },
+    { cmd: '/plan edit', desc: 'edit plan' },
+    { cmd: '/plan clear', desc: 'clear plan' },
+    { cmd: '/plan resume', desc: 'resume saved plan' },
+    { cmd: '/plan approve', desc: 'approve draft plan' },
+    { cmd: '/plan save', desc: 'save as template' },
+    { cmd: '/plan load', desc: 'load from template' },
+    { cmd: '/plan deps', desc: 'show dependencies' },
+    { cmd: '/plan validate', desc: 'validate plan' },
+    // Progress commands
+    { cmd: '/progress', desc: 'show progress' },
+    { cmd: '/progress detail', desc: 'detailed progress' },
+    { cmd: '/progress export', desc: 'export markdown' },
+    { cmd: '/progress json', desc: 'export json' },
+    // Task commands
+    { cmd: '/task', desc: 'task commands' },
+    { cmd: '/task next', desc: 'show next task' },
+    { cmd: '/task skip', desc: 'skip task' },
+    { cmd: '/task retry', desc: 'retry failed task' },
+    { cmd: '/task add', desc: 'add new task' },
+    { cmd: '/task remove', desc: 'remove task' },
+    { cmd: '/task detail', desc: 'task details' },
+    // Template commands
+    { cmd: '/template', desc: 'template commands' },
+    { cmd: '/template list', desc: 'list templates' },
+    { cmd: '/template use', desc: 'use template' },
+    { cmd: '/template delete', desc: 'delete template' },
+    { cmd: '/template builtin', desc: 'built-in templates' },
 ];
 
 export const InputArea: React.FC<InputAreaProps> = ({ isPrompting, statusMessage, onSubmit }) => {

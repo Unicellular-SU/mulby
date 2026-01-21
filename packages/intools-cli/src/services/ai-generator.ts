@@ -12,6 +12,10 @@ import { AIMessage } from '../types/ai';
 import { ContextManager } from './ai/context-manager';
 import { tui } from './tui';
 import { createReactProject } from '../commands/create/react';
+import { PlanManager } from './plan-manager';
+import { PlanCommandHandler } from './plan-command-handler';
+import { TaskAnalyzer } from './task-analyzer';
+import { TaskPlan, Task, TaskComplexity } from '../types/plan';
 
 export class AIAgent {
     private aiService = AIServiceFactory.create();
@@ -20,15 +24,37 @@ export class AIAgent {
     private autoApproveCommands = false;
     private currentProvider?: string;  // 当前使用的供应商名称
     private currentModel?: string;     // 当前使用的模型名称
+    private planManager: PlanManager;
+    private planCommandHandler: PlanCommandHandler;
+    private currentPlan: TaskPlan | null = null;
 
 
     constructor(private session: GenerationSession, private systemPrompt?: string) {
         this.fileWriter = new FileWriter(session.targetDir);
+        this.planManager = new PlanManager(path.join(session.targetDir, '.intools'));
+        this.planCommandHandler = new PlanCommandHandler(
+            this.planManager,
+            () => this.currentPlan,
+            (plan) => { this.currentPlan = plan; },
+            async (plan) => { await this.planManager.savePlan(plan, this.session.id); }
+        );
     }
 
     public async start(options: { waitForInput?: boolean } = {}) {
         tui.start();
         tui.log(chalk.blue('🤖 AI Agent 已启动...'));
+
+        // Load existing plan if available
+        try {
+            this.currentPlan = await this.planManager.loadSessionPlan(this.session.id);
+            if (this.currentPlan) {
+                tui.log(chalk.cyan(`📋 已加载任务计划: ${this.currentPlan.goal}`));
+                const summary = this.planManager.getProgressSummary(this.currentPlan);
+                tui.log(chalk.gray(`   进度: ${summary.completed}/${summary.total} (${Math.round(summary.percentage)}%)`));
+            }
+        } catch (error) {
+            // No plan exists, that's fine
+        }
 
         // Initialize history if empty
         if (this.session.conversationHistory.length === 0) {
@@ -706,9 +732,25 @@ Available Commands:
   /compress      - Summarize and compress history manually
   /use [name]    - Switch AI provider (show list if no name)
   /model [name]  - Switch model (show list if no name)
+  /plan          - Plan management (show, edit, clear, resume, approve, save, load, deps, validate)
+  /progress      - Show task progress (detail, export, json)
+  /task          - Task control (next, skip, retry, add, remove, detail)
+  /template      - Template management (list, use, delete, builtin)
   /help          - Show this help
 `));
                 return true;
+
+            case '/plan':
+                return await this.planCommandHandler.handlePlanCommand(args);
+
+            case '/progress':
+                return await this.planCommandHandler.handleProgressCommand(args);
+
+            case '/task':
+                return await this.planCommandHandler.handleTaskCommand(args);
+
+            case '/template':
+                return await this.planCommandHandler.handleTemplateCommand(args);
 
             default:
                 tui.log(chalk.red(`Unknown command: ${cmd}`));
@@ -853,6 +895,49 @@ Return ONLY the JSON object, no additional text or markdown formatting.`;
             if (input === null) continue; // Slash command executed
 
             if (input && input.trim()) {
+                // Only skip analysis for obvious non-task inputs
+                if (!TaskAnalyzer.shouldSkipAnalysis(input)) {
+
+                    // Use AI to analyze task complexity
+                    tui.log(chalk.gray('正在分析任务复杂度...'));
+                    const analysis = await TaskAnalyzer.analyze(input);
+
+                    // If task is complex and no active plan, suggest planning
+                    if (analysis.shouldPlan && !this.currentPlan) {
+                        tui.log(chalk.cyan(`\n📊 ${TaskAnalyzer.getAnalysisDescription(analysis)}`));
+                        tui.log(chalk.yellow('💡 建议：此任务可能需要规划。'));
+
+                        const choice = await tui.select([
+                            { label: '进入规划模式 (推荐)', value: 'plan' },
+                            { label: '直接执行', value: 'direct' },
+                            { label: '从模板开始', value: 'template' }
+                        ]);
+
+                        if (choice === 'plan') {
+                            // Add instruction for AI to create a plan
+                            this.session.conversationHistory.push({
+                                role: 'user',
+                                content: `请为以下任务创建一个详细的执行计划，将其分解为具体的步骤：\n\n${input}\n\n请使用 JSON 格式返回计划，包含 goal 和 tasks 数组。`
+                            });
+                            this.sessionManager.saveSession(this.session);
+                            break;
+                        } else if (choice === 'template') {
+                            // Let user choose a template
+                            await this.planCommandHandler.handlePlanCommand(['load']);
+                            // Re-check currentPlan after template load (it may have been set)
+                            const loadedPlan = this.currentPlan as TaskPlan | null;
+                            if (loadedPlan) {
+                                // Update goal with user's input
+                                loadedPlan.goal = input.slice(0, 100);
+                                await this.planManager.savePlan(loadedPlan, this.session.id);
+                                tui.log(chalk.green(`✅ 计划已创建，目标：${loadedPlan.goal}`));
+                            }
+                            continue; // Let user continue or modify
+                        }
+                        // else: direct execution, fall through
+                    }
+                }
+
                 this.session.conversationHistory.push({
                     role: 'user',
                     content: input
