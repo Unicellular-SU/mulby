@@ -115,25 +115,10 @@ export async function aiCreate(name: string, options: any) {
             console.log(chalk.yellow('🔄 Reactivating completed/failed session...'));
             session.status = 'generating';
             sessionManager.saveSession(session);
-
-            // Prompt for new instructions since the last task was finished
-            const { newInstruction } = await inquirer.prompt([{
-                type: 'input',
-                name: 'newInstruction',
-                message: '请输入新的修改需求 (直接回车则由 AI 决定下一步):'
-            }]);
-
-            if (newInstruction && newInstruction.trim()) {
-                session.conversationHistory.push({
-                    role: 'user',
-                    content: newInstruction
-                });
-                sessionManager.saveSession(session);
-            }
         }
 
         const agent = new AIAgent(session);
-        await agent.start();
+        await agent.start({ waitForInput: true });
         return;
     }
 

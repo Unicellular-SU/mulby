@@ -26,7 +26,7 @@ export class AIAgent {
         this.fileWriter = new FileWriter(session.targetDir);
     }
 
-    public async start() {
+    public async start(options: { waitForInput?: boolean } = {}) {
         tui.start();
         tui.log(chalk.blue('🤖 AI Agent 已启动...'));
 
@@ -38,9 +38,6 @@ export class AIAgent {
             });
         }
 
-        // Check/Add context if just starting (simple check if user message is the last one)
-        // Or we can rely on the user guide prompt input in cli command.
-
         if (this.session.conversationHistory.length > 0) {
             const count = ContextManager.estimateTokenCount(this.session.conversationHistory);
             // Threshold could be config driven, setting 10k chars (~2.5k tokens) as warning, 
@@ -49,6 +46,10 @@ export class AIAgent {
                 tui.log(chalk.yellow(`⚠️ Context is large (~${count} tokens). Auto-compressing to save costs/tokens...`));
                 await this.compressContext();
             }
+        }
+
+        if (options.waitForInput) {
+            await this.handleUserInteraction();
         }
 
         await this.runLoop();

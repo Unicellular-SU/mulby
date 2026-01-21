@@ -103,26 +103,11 @@ export async function resume(options: any) {
 
         session.status = 'generating';
         sessionManager.saveSession(session);
-
-        // Ask for new instruction since it was done
-        const { newInstruction } = await inquirer.prompt([{
-            type: 'input',
-            name: 'newInstruction',
-            message: 'Enter new instruction (or press Enter to let AI decide):'
-        }]);
-
-        if (newInstruction && newInstruction.trim()) {
-            session.conversationHistory.push({
-                role: 'user',
-                content: newInstruction
-            });
-            sessionManager.saveSession(session);
-        }
     }
 
     // Start UI
     // Note: AIAgent will look for system prompt in history or default.
     // Since we are resuming, we assume the agent can handle context.
     const agent = new AIAgent(session);
-    await agent.start();
+    await agent.start({ waitForInput: true });
 }

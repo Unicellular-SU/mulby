@@ -453,3 +453,21 @@ interface FileSearchResult {
 - 验证了用户输入命令或回答问题后，内容会正确保留在屏幕历史中。
 - 验证了大规模 YAML/代码粘贴可正确被识别为多行输入，而非多次提交或界面错位。
 - 验证了使用 `\` + Enter 可手动输入多行内容，且在行数较少时可见。
+
+---
+
+# 恢复会话逻辑优化
+
+> **更新时间**: 2026-01-21
+> **状态**: ✅ 已完成
+
+## 完成内容
+
+### 交互逻辑调整
+- [x] **强制等待用户输入** (`packages/intools-cli/src/commands/resume.ts`, `services/ai-generator.ts`)
+  - 修改了 `intools resume` 的行为：无论会话历史如何， resumed session 启动时都会先暂停，等待用户输入。
+  - 允许用户在恢复会话时先补充新的上下文或指令，而不是让 AI 基于旧历史直接继续执行。
+  - 若用户直接回车，则按原逻辑继续。
+- [x] **去除冗余 Prompt** (`packages/intools-cli/src/commands/resume.ts`)
+  - 移除了 `resume` 命令中通过 `inquirer` 询问新指令的逻辑，统一收敛至 AI Agent 内的 TUI 交互界面，体验更连贯。
+  - 对齐了 `intools create --resume` 的行为。
