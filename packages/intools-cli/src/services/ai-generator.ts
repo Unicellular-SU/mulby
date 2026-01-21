@@ -11,6 +11,7 @@ import { PLUGIN_GENERATION_TOOLS } from './ai/tools';
 import { AIMessage } from '../types/ai';
 import { ContextManager } from './ai/context-manager';
 import { tui } from './tui';
+import { createReactProject } from '../commands/create/react';
 
 export class AIAgent {
     private aiService = AIServiceFactory.create();
@@ -194,13 +195,13 @@ export class AIAgent {
                 return await this.handleRunCommand(args.command);
             case 'ask_user':
                 return await this.handleAskUser(args.question);
+            case 'scaffold_project':
+                return await this.handleScaffoldProject(args.reason);
             case 'finish':
                 return await this.handleFinish(args.summary);
             // Legacy/Deprecated
             case 'plan_files':
                 return "Tool 'plan_files' is deprecated. Please use read_file/write_file directly.";
-            case 'finish':
-                return await this.handleFinish(args.summary);
             default:
                 throw new Error(`Unknown tool: ${name}`);
         }
@@ -219,6 +220,33 @@ export class AIAgent {
         tui.log(chalk.green(`  ✓ Wrote ${filePath}`));
         return `Successfully wrote file: ${filePath}`;
     }
+
+    private async handleScaffoldProject(reason: string): Promise<string> {
+        tui.log(chalk.cyan(`📦 正在生成项目脚手架... (${reason})`));
+
+        const targetDir = this.session.targetDir;
+        const pluginName = this.session.pluginName || path.basename(targetDir);
+
+        try {
+            await createReactProject(targetDir, pluginName);
+            tui.log(chalk.green('✓ 脚手架创建完成'));
+            return `Project scaffold created successfully at ${targetDir}. The following files were generated:
+- package.json
+- manifest.json
+- vite.config.ts
+- tsconfig.json
+- src/ui/App.tsx
+- src/ui/main.tsx
+- src/ui/styles.css
+- src/ui/index.html
+- src/main.ts
+
+Now you can start implementing the features by modifying these files.`;
+        } catch (e: any) {
+            return `Failed to create scaffold: ${e.message}`;
+        }
+    }
+
 
     private async handleReplaceInFile(filePath: string, target: string, replacement: string): Promise<string> {
         const fullPath = path.resolve(this.session.targetDir, filePath);
@@ -317,6 +345,21 @@ export class AIAgent {
             case '/exit':
             case '/quit':
                 tui.log(chalk.yellow('👋 Exiting session...'));
+
+                // Check if we are exiting while tool calls are pending (e.g. at a prompt inside a tool)
+                const last = this.session.conversationHistory[this.session.conversationHistory.length - 1];
+                if (last && last.role === 'assistant' && last.tool_calls && last.tool_calls.length > 0) {
+                    tui.log(chalk.gray('Closing pending tool calls...'));
+                    for (const call of last.tool_calls) {
+                        this.session.conversationHistory.push({
+                            role: 'tool',
+                            tool_call_id: call.id,
+                            name: call.function.name,
+                            content: 'Session exited by user.'
+                        });
+                    }
+                }
+
                 this.session.status = 'completed'; // or keep as is?
                 this.sessionManager.saveSession(this.session);
                 tui.stop();

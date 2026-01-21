@@ -106,36 +106,22 @@ export async function aiCreate(name: string, options: any) {
         return;
     }
 
-    // 3. New Session
-    console.log(USER_GUIDE_PROMPT);
-
-    const { description } = await inquirer.prompt([{
-        type: 'input',
-        name: 'description',
-        message: '功能描述:',
-        validate: (input) => input.length > 5
-    }]);
-
+    // 3. New Session - 先进入顾问模式，收集需求后再创建脚手架
     const targetDir = path.resolve(process.cwd(), name);
 
-    const session = sessionManager.createSession(description, targetDir);
+    const session = sessionManager.createSession(`插件: ${name}`, targetDir);
     session.pluginName = name;
 
-    // Add user message to history
+    // 初始消息：只传递插件名称，触发 AI 进入顾问模式
     session.conversationHistory.push({
         role: 'user',
-        content: `我的插件名称是 "${name}"。\n需求描述：${description}`
+        content: `我想创建一个名为 "${name}" 的插件。请进入产品顾问模式，通过提问帮我明确需求。`
     });
     sessionManager.saveSession(session);
 
-    // Scaffold Project
-    console.log(chalk.cyan('📦 正在生成项目脚手架...'));
-    await createReactProject(targetDir, name);
-
-    console.log(chalk.green('✓ 脚手架创建完成'));
-
-    // Start AI Agent
-    const systemPrompt = buildSystemPrompt({}, true); // true indicates project is scaffolded
+    // 先启动 AI Agent 进行需求收集（此时尚未创建脚手架）
+    // isScaffolded = false，让 AI 知道项目尚未创建
+    const systemPrompt = buildSystemPrompt({}, false);
     const agent = new AIAgent(session, systemPrompt);
     await agent.start();
 }

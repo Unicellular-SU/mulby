@@ -62,7 +62,7 @@ export const PLUGIN_GENERATION_TOOLS = [
         type: 'function',
         function: {
             name: 'ask_user',
-            description: 'Ask the user a question to clarify requirements or request a decision.',
+            description: 'Ask the user a question to clarify requirements or request a decision. Use this frequently during the Product Consultant phase.',
             parameters: {
                 type: 'object',
                 properties: {
@@ -72,6 +72,21 @@ export const PLUGIN_GENERATION_TOOLS = [
             }
         }
     },
+    {
+        type: 'function',
+        function: {
+            name: 'scaffold_project',
+            description: 'Create the project scaffold (React + Vite template). Call this ONLY after you have confirmed requirements with the user in the Product Consultant phase. This will generate: package.json, manifest.json, vite.config.ts, src/ui/App.tsx, etc.',
+            parameters: {
+                type: 'object',
+                properties: {
+                    reason: { type: 'string', description: 'Reason for creating scaffold (e.g., "Requirements confirmed: image stitching tool with drag-drop UI")' }
+                },
+                required: ['reason']
+            }
+        }
+    },
+
     {
         type: 'function',
         function: {
