@@ -159,6 +159,7 @@ export class AIAgent {
                 const assistantMsg: AIMessage = {
                     role: 'assistant',
                     content: response.content,
+                    reasoning_content: response.reasoning_content,
                     tool_calls: response.toolCalls
                 };
                 this.session.conversationHistory.push(assistantMsg);

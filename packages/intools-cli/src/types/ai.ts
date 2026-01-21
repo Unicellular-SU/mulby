@@ -58,6 +58,7 @@ export const PROVIDER_ENDPOINTS: Record<AIProviderType, string | undefined> = {
 export interface AIMessage {
     role: 'system' | 'user' | 'assistant' | 'tool';
     content: string | null;
+    reasoning_content?: string;
     tool_calls?: any[];
     tool_call_id?: string;
     name?: string;

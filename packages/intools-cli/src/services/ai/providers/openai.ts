@@ -47,13 +47,16 @@ export class OpenAIProvider extends BaseAIProvider {
         let content = message.content;
 
         // DeepSeek & GLM reasoning support
+        let reasoningContent: string | undefined;
         if ((message as any).reasoning_content) {
-            const thinking = (message as any).reasoning_content;
-            content = `<think>\n${thinking}\n</think>\n\n${content || ''}`;
+            reasoningContent = (message as any).reasoning_content;
+            // Removed: content = `<think>\n${thinking}\n</think>\n\n${content || ''}`;
+            // We now keep content clean and return reasoning_content separately
         }
 
         return {
             content: content,
+            reasoning_content: reasoningContent,
             toolCalls: message.tool_calls,
             usage: response.usage ? {
                 promptTokens: response.usage.prompt_tokens,
@@ -92,7 +95,8 @@ export class OpenAIProvider extends BaseAIProvider {
 
         const stream = await this.client.chat.completions.create(requestOptions) as any;
 
-        let fullContent = '';
+        let cleanContent = '';
+        let reasoningContent = '';
         const toolCallsMap: Record<number, any> = {};
 
         let hasStartedThinking = false;
@@ -113,12 +117,11 @@ export class OpenAIProvider extends BaseAIProvider {
             if (delta?.reasoning_content) {
                 if (!hasStartedThinking) {
                     const startTag = '<think>\n';
-                    fullContent += startTag;
                     onChunk(startTag);
                     hasStartedThinking = true;
                 }
                 const reasoning = delta.reasoning_content;
-                fullContent += reasoning;
+                reasoningContent += reasoning;
                 onChunk(reasoning);
                 continue;
             }
@@ -126,7 +129,6 @@ export class OpenAIProvider extends BaseAIProvider {
             // Close thinking tag if we switch to normal content or tools
             if (hasStartedThinking && !hasEndedThinking && (delta?.content || delta?.tool_calls)) {
                 const endTag = '\n</think>\n\n';
-                fullContent += endTag;
                 onChunk(endTag);
                 hasEndedThinking = true;
             }
@@ -134,7 +136,7 @@ export class OpenAIProvider extends BaseAIProvider {
             // Handle Content
             const content = delta?.content || '';
             if (content) {
-                fullContent += content;
+                cleanContent += content;
                 onChunk(content);
             }
 
@@ -164,7 +166,6 @@ export class OpenAIProvider extends BaseAIProvider {
         // Ensure thinking tag is closed if stream ends just after reasoning
         if (hasStartedThinking && !hasEndedThinking) {
             const endTag = '\n</think>\n\n';
-            fullContent += endTag;
             onChunk(endTag);
             hasEndedThinking = true;
         }
@@ -179,7 +180,8 @@ export class OpenAIProvider extends BaseAIProvider {
         }));
 
         return {
-            content: fullContent,
+            content: cleanContent,
+            reasoning_content: reasoningContent || undefined,
             toolCalls: toolCalls.length > 0 ? toolCalls : undefined,
             usage: finalUsage ? {
                 promptTokens: finalUsage.prompt_tokens,

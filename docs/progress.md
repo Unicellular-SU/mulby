@@ -334,3 +334,27 @@ interface FileSearchResult {
   - 更新 `knowledge.ts` 以移除对旧 API 文件的读取
   - 更新 `prompts.ts` 以适配新的单一上下文源
   - 确保合并后的提示词能提供完整的 Manifest 规范和 API 参考，提升 AI 生成准确性
+
+---
+
+# DeepSeek 思考模型支持修复
+
+> **更新时间**: 2026-01-21
+> **状态**: ✅ 已完成
+
+## 修复内容
+
+### API 兼容性
+- [x] **Reasoning Content 字段支持** (`src/services/ai/providers/`)
+  - 修复了 DeepSeek Reasoner 模型在多轮对话中报错 `Missing reasoning_content` 的问题
+  - **OpenAIProvider (`openai.ts`):** 
+    - 重构 `chat` 和 `chatStream` 方法，从响应中分离 `reasoning_content` 和 `content`
+    - 保持流式输出中 `<think>` 标签的生成，确保 CLI UI 思考动效正常
+    - API 响应对象 (`AIChatResponse`) 新增 `reasoning_content` 字段
+  - **AI Agent (`ai-generator.ts`):** 
+    - 更新历史消息构建逻辑，确保 Assistant 消息包含 `reasoning_content`
+    - 满足 DeepSeek API 对上下文完整性的严格要求
+
+### 类型定义
+- [x] **Type Definitions** (`src/types/ai.ts`, `base.ts`)
+  - 更新 `AIMessage` 和 `AIChatResponse` 接口，正式支持 `reasoning_content` 字段

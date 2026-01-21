@@ -14,6 +14,7 @@ export interface ChatOptions {
 
 export interface AIChatResponse {
     content: string | null;
+    reasoning_content?: string;
     toolCalls?: any[];
     usage?: {
         promptTokens: number;
