@@ -38,6 +38,8 @@ export default function App() {
   const [outputImage, setOutputImage] = useState<string>('')
   const [theme, setTheme] = useState<'light' | 'dark'>('light')
   const [isProcessing, setIsProcessing] = useState(false)
+  const [isCopying, setIsCopying] = useState(false)
+  const [isDownloading, setIsDownloading] = useState(false)
   const [outputWidth, setOutputWidth] = useState<number>(800)
   const [spacing, setSpacing] = useState<number>(0)
   const [backgroundColor, setBackgroundColor] = useState<string>('#ffffff')
@@ -211,10 +213,18 @@ export default function App() {
         return sum + (img.visibleHeight * scale) + spacing
       }, -spacing) // 减去最后一个间距
 
+      // 检查图片尺寸是否过大
+      const maxHeight = 10000 // 最大高度限制
+      if (totalHeight > maxHeight) {
+        notification.show(`图片高度过大（${Math.round(totalHeight)}px），建议减少图片数量或降低输出宽度`)
+        return
+      }
+
       // 创建canvas
       const canvas = canvasRef.current
       if (!canvas) return
 
+      // 设置canvas尺寸
       canvas.width = outputWidth
       canvas.height = totalHeight
       const ctx = canvas.getContext('2d')
@@ -256,14 +266,14 @@ export default function App() {
         currentY += scaledHeight + spacing
       }
 
-      // 获取结果图片
-      const resultDataUrl = canvas.toDataURL('image/png')
+      // 获取结果图片（使用较低质量减少文件大小）
+      const resultDataUrl = canvas.toDataURL('image/png', 0.9)
       setOutputImage(resultDataUrl)
 
-      notification.show('图片拼接完成！')
+      notification.show('✅ 图片拼接完成！')
     } catch (error) {
       console.error('拼接图片失败:', error)
-      notification.show('拼接失败，请重试')
+      notification.show('❌ 拼接失败，请重试')
     } finally {
       setIsProcessing(false)
     }
@@ -275,36 +285,137 @@ export default function App() {
       return
     }
 
+    if (isCopying) return // 防止重复点击
+
+    setIsCopying(true)
+
     try {
-      // 将DataURL转换为Blob
-      const response = await fetch(outputImage)
-      const blob = await response.blob()
+      // 显示复制中状态
+      notification.show('正在复制到剪贴板...')
+
+      // 直接从canvas获取Blob，避免DataURL转换
+      const canvas = canvasRef.current
+      if (!canvas) {
+        throw new Error('Canvas not found')
+      }
+
+      // 使用Promise包装toBlob方法
+      const blob = await new Promise<Blob>((resolve, reject) => {
+        canvas.toBlob((blob) => {
+          if (blob) {
+            resolve(blob)
+          } else {
+            reject(new Error('Failed to create blob'))
+          }
+        }, 'image/png', 0.9) // 使用90%质量减少文件大小
+      })
+
+      // 检查剪贴板API是否可用
+      if (!navigator.clipboard || !navigator.clipboard.write) {
+        throw new Error('Clipboard API not available')
+      }
 
       // 复制到剪贴板
       const clipboardItem = new ClipboardItem({ 'image/png': blob })
       await navigator.clipboard.write([clipboardItem])
 
-      notification.show('已复制到剪贴板')
+      notification.show('✅ 已成功复制到剪贴板')
     } catch (error) {
       console.error('复制失败:', error)
-      notification.show('复制失败，请重试')
+      
+      // 提供备用方案
+      try {
+        // 尝试使用execCommand作为备用方案
+        const canvas = canvasRef.current
+        if (canvas) {
+          canvas.toBlob((blob) => {
+            if (blob) {
+              const item = new ClipboardItem({ 'image/png': blob })
+              navigator.clipboard.write([item]).then(() => {
+                notification.show('✅ 已成功复制到剪贴板（备用方案）')
+              }).catch(() => {
+                notification.show('❌ 复制失败，请尝试下载图片')
+              })
+            }
+          }, 'image/png')
+        }
+      } catch (fallbackError) {
+        notification.show('❌ 复制失败，请尝试下载图片')
+      }
+    } finally {
+      setIsCopying(false)
     }
   }
 
-  const downloadImage = () => {
+  const downloadImage = async () => {
     if (!outputImage) {
       notification.show('请先生成拼接图片')
       return
     }
 
-    const link = document.createElement('a')
-    link.href = outputImage
-    link.download = `stitched_image_${Date.now()}.png`
-    document.body.appendChild(link)
-    link.click()
-    document.body.removeChild(link)
+    if (isDownloading) return // 防止重复点击
 
-    notification.show('图片已下载')
+    setIsDownloading(true)
+
+    try {
+      // 显示下载中状态
+      notification.show('正在准备下载...')
+
+      // 使用setTimeout让UI有机会更新
+      await new Promise(resolve => setTimeout(resolve, 100))
+
+      // 直接从canvas获取Blob，避免DataURL转换
+      const canvas = canvasRef.current
+      if (!canvas) {
+        throw new Error('Canvas not found')
+      }
+
+      // 使用toBlob方法，避免大DataURL阻塞UI
+      const blob = await new Promise<Blob>((resolve, reject) => {
+        canvas.toBlob((blob) => {
+          if (blob) {
+            resolve(blob)
+          } else {
+            reject(new Error('Failed to create blob'))
+          }
+        }, 'image/png', 0.9) // 使用90%质量减少文件大小
+      })
+
+      // 创建对象URL，避免大DataURL
+      const url = URL.createObjectURL(blob)
+      
+      // 创建下载链接
+      const link = document.createElement('a')
+      link.href = url
+      link.download = `stitched_image_${Date.now()}.png`
+      link.style.display = 'none'
+      
+      // 添加点击事件清理对象URL
+      const cleanup = () => {
+        setTimeout(() => {
+          URL.revokeObjectURL(url)
+          if (document.body.contains(link)) {
+            document.body.removeChild(link)
+          }
+          setIsDownloading(false)
+        }, 1000) // 延迟清理，确保下载开始
+      }
+
+      link.onclick = cleanup
+
+      document.body.appendChild(link)
+      
+      // 使用requestAnimationFrame避免阻塞
+      requestAnimationFrame(() => {
+        link.click()
+        notification.show('✅ 图片下载已开始')
+        cleanup()
+      })
+    } catch (error) {
+      console.error('下载失败:', error)
+      notification.show('❌ 下载失败，请重试')
+      setIsDownloading(false)
+    }
   }
 
   const formatSize = (bytes: number) => {
@@ -316,197 +427,201 @@ export default function App() {
   return (
     <div className="app">
       <div className="container">
-        <h1>长图拼接</h1>
-        <p className="subtitle">将多张图片任意纵向裁切后拼接成一张长图</p>
+        <div className="main-content">
+          <h1>长图拼接</h1>
+          <p className="subtitle">将多张图片任意纵向裁切后拼接成一张长图</p>
 
-        {/* 图片上传区域 */}
-        <div className="upload-section">
-          <label className="upload-btn">
-            <input
-              type="file"
-              accept="image/*"
-              multiple
-              onChange={handleImageUpload}
-              style={{ display: 'none' }}
-            />
-            <span className="upload-icon">+</span>
-            <span>添加图片</span>
-          </label>
-          <span className="upload-hint">
-            支持拖放或点击上传多张图片<br />
-            支持格式：PNG、JPG、JPEG、GIF、WebP、BMP
-          </span>
-        </div>
-
-        {/* 图片列表 */}
-        {images.length > 0 && (
-          <div className="images-section">
-            <h2>图片列表 ({images.length})</h2>
-            <div className="images-list">
-              {images.map((img, index) => (
-                <div key={img.id} className="image-item">
-                  <div className="image-header">
-                    <div className="image-info">
-                      <span className="image-name">{img.name}</span>
-                      <span className="image-dimensions">
-                        {img.width} × {img.height} ({formatSize(img.size)})
-                      </span>
-                    </div>
-                    <div className="image-actions">
-                      <button
-                        className="btn-icon"
-                        onClick={() => moveImage(index, 'up')}
-                        disabled={index === 0}
-                        title="上移"
-                      >
-                        ↑
-                      </button>
-                      <button
-                        className="btn-icon"
-                        onClick={() => moveImage(index, 'down')}
-                        disabled={index === images.length - 1}
-                        title="下移"
-                      >
-                        ↓
-                      </button>
-                      <button
-                        className="btn-icon btn-danger"
-                        onClick={() => removeImage(img.id)}
-                        title="删除"
-                      >
-                        ×
-                      </button>
-                    </div>
-                  </div>
-
-                  <div className="image-preview-container">
-                    <img
-                      src={img.dataUrl}
-                      alt={img.name}
-                      className="image-preview"
-                    />
-                    <div className="crop-overlay">
-                      <div
-                        className="crop-top"
-                        style={{ height: `${img.cropTop}%` }}
-                      />
-                      <div
-                        className="crop-bottom"
-                        style={{ height: `${img.cropBottom}%` }}
-                      />
-                    </div>
-                  </div>
-
-                  <div className="crop-controls">
-                    <div className="crop-slider">
-                      <label>顶部裁切: {img.cropTop}%</label>
-                      <input
-                        type="range"
-                        min="0"
-                        max="100"
-                        value={img.cropTop}
-                        onChange={(e) => updateCrop(img.id, parseInt(e.target.value), img.cropBottom)}
-                      />
-                    </div>
-                    <div className="crop-slider">
-                      <label>底部裁切: {img.cropBottom}%</label>
-                      <input
-                        type="range"
-                        min="0"
-                        max="100"
-                        value={img.cropBottom}
-                        onChange={(e) => updateCrop(img.id, img.cropTop, parseInt(e.target.value))}
-                      />
-                    </div>
-                    <div className="crop-info">
-                      显示高度: {Math.round(img.visibleHeight)}px
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
+          {/* 图片上传区域 */}
+          <div className="upload-section">
+            <label className="upload-btn">
+              <input
+                type="file"
+                accept="image/*"
+                multiple
+                onChange={handleImageUpload}
+                style={{ display: 'none' }}
+              />
+              <span className="upload-icon">+</span>
+              <span>添加图片</span>
+            </label>
+            <span className="upload-hint">
+              支持拖放或点击上传多张图片<br />
+              支持格式：PNG、JPG、JPEG、GIF、WebP、BMP
+            </span>
           </div>
-        )}
 
-        {/* 拼接设置 */}
-        <div className="settings-section">
-          <h2>拼接设置</h2>
-          <div className="settings-grid">
-            <div className="setting-item">
-              <label>输出宽度 (px)</label>
-              <input
-                type="number"
-                min="100"
-                max="5000"
-                value={outputWidth}
-                onChange={(e) => setOutputWidth(parseInt(e.target.value) || 800)}
-              />
+          {/* 图片列表 */}
+          {images.length > 0 && (
+            <div className="images-section">
+              <h2>图片列表 ({images.length})</h2>
+              <div className="images-list">
+                {images.map((img, index) => (
+                  <div key={img.id} className="image-item">
+                    <div className="image-header">
+                      <div className="image-info">
+                        <span className="image-name">{img.name}</span>
+                        <span className="image-dimensions">
+                          {img.width} × {img.height} ({formatSize(img.size)})
+                        </span>
+                      </div>
+                      <div className="image-actions">
+                        <button
+                          className="btn-icon"
+                          onClick={() => moveImage(index, 'up')}
+                          disabled={index === 0}
+                          title="上移"
+                        >
+                          ↑
+                        </button>
+                        <button
+                          className="btn-icon"
+                          onClick={() => moveImage(index, 'down')}
+                          disabled={index === images.length - 1}
+                          title="下移"
+                        >
+                          ↓
+                        </button>
+                        <button
+                          className="btn-icon btn-danger"
+                          onClick={() => removeImage(img.id)}
+                          title="删除"
+                        >
+                          ×
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="image-preview-container">
+                      <img
+                        src={img.dataUrl}
+                        alt={img.name}
+                        className="image-preview"
+                      />
+                      <div className="crop-overlay">
+                        <div
+                          className="crop-top"
+                          style={{ height: `${img.cropTop}%` }}
+                        />
+                        <div
+                          className="crop-bottom"
+                          style={{ height: `${img.cropBottom}%` }}
+                        />
+                      </div>
+                    </div>
+
+                    <div className="crop-controls">
+                      <div className="crop-slider">
+                        <label>顶部裁切: {img.cropTop}%</label>
+                        <input
+                          type="range"
+                          min="0"
+                          max="100"
+                          value={img.cropTop}
+                          onChange={(e) => updateCrop(img.id, parseInt(e.target.value), img.cropBottom)}
+                        />
+                      </div>
+                      <div className="crop-slider">
+                        <label>底部裁切: {img.cropBottom}%</label>
+                        <input
+                          type="range"
+                          min="0"
+                          max="100"
+                          value={img.cropBottom}
+                          onChange={(e) => updateCrop(img.id, img.cropTop, parseInt(e.target.value))}
+                        />
+                      </div>
+                      <div className="crop-info">
+                        显示高度: {Math.round(img.visibleHeight)}px
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
             </div>
-            <div className="setting-item">
-              <label>图片间距 (px)</label>
-              <input
-                type="number"
-                min="0"
-                max="100"
-                value={spacing}
-                onChange={(e) => setSpacing(parseInt(e.target.value) || 0)}
-              />
-            </div>
-            <div className="setting-item">
-              <label>背景颜色</label>
-              <div className="color-picker">
+          )}
+
+          {/* 拼接设置 */}
+          <div className="settings-section">
+            <h2>拼接设置</h2>
+            <div className="settings-grid">
+              <div className="setting-item">
+                <label>输出宽度 (px)</label>
                 <input
-                  type="color"
-                  value={backgroundColor}
-                  onChange={(e) => setBackgroundColor(e.target.value)}
+                  type="number"
+                  min="100"
+                  max="5000"
+                  value={outputWidth}
+                  onChange={(e) => setOutputWidth(parseInt(e.target.value) || 800)}
                 />
-                <span>{backgroundColor}</span>
+              </div>
+              <div className="setting-item">
+                <label>图片间距 (px)</label>
+                <input
+                  type="number"
+                  min="0"
+                  max="100"
+                  value={spacing}
+                  onChange={(e) => setSpacing(parseInt(e.target.value) || 0)}
+                />
+              </div>
+              <div className="setting-item">
+                <label>背景颜色</label>
+                <div className="color-picker">
+                  <input
+                    type="color"
+                    value={backgroundColor}
+                    onChange={(e) => setBackgroundColor(e.target.value)}
+                  />
+                  <span>{backgroundColor}</span>
+                </div>
               </div>
             </div>
           </div>
-        </div>
 
-        {/* 操作按钮 */}
-        <div className="action-section">
-          <button
-            className="btn-primary"
-            onClick={stitchImages}
-            disabled={isProcessing || images.length === 0}
-          >
-            {isProcessing ? '🔄 处理中...' : '🚀 开始拼接'}
-          </button>
-        </div>
+          {/* 操作按钮 */}
+          <div className="action-section">
+            <button
+              className="btn-primary"
+              onClick={stitchImages}
+              disabled={isProcessing || images.length === 0}
+            >
+              {isProcessing ? '🔄 处理中...' : '🚀 开始拼接'}
+            </button>
+          </div>
 
-        {/* 结果展示 */}
-        {outputImage && (
-          <div className="result-section">
-            <h2>拼接结果</h2>
-            <div className="result-container">
-              <img
-                src={outputImage}
-                alt="拼接结果"
-                className="result-image"
-              />
-              <div className="result-actions">
-                <button
-                  className="btn-secondary"
-                  onClick={copyToClipboard}
-                >
-                  📋 复制到剪贴板
-                </button>
-                <button
-                  className="btn-secondary"
-                  onClick={downloadImage}
-                >
-                  ⬇️ 下载图片
-                </button>
+          {/* 结果展示 */}
+          {outputImage && (
+            <div className="result-section">
+              <h2>拼接结果</h2>
+              <div className="result-container">
+                <img
+                  src={outputImage}
+                  alt="拼接结果"
+                  className="result-image"
+                />
+                <div className="result-actions">
+                  <button
+                    className="btn-secondary"
+                    onClick={copyToClipboard}
+                    disabled={isCopying}
+                  >
+                    {isCopying ? '📋 复制中...' : '📋 复制到剪贴板'}
+                  </button>
+                  <button
+                    className="btn-secondary"
+                    onClick={downloadImage}
+                    disabled={isDownloading}
+                  >
+                    {isDownloading ? '⬇️ 下载中...' : '⬇️ 下载图片'}
+                  </button>
+                </div>
               </div>
             </div>
-          </div>
-        )}
+          )}
 
-        {/* 隐藏的canvas用于图片处理 */}
-        <canvas ref={canvasRef} style={{ display: 'none' }} />
+          {/* 隐藏的canvas用于图片处理 */}
+          <canvas ref={canvasRef} style={{ display: 'none' }} />
+        </div>
       </div>
     </div>
   )
