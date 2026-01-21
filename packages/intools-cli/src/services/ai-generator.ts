@@ -665,15 +665,12 @@ Available Commands:
         tui.log(chalk.green('\n✅ AI 认为任务已完成:'));
         tui.log(chalk.white(summary));
 
-        const action = await this.safePromptTui('下一步操作? (exit/continue)');
+        tui.log(chalk.gray('(输入新需求继续，或输入 /exit 退出)'));
+        const input = await this.safePromptTui('请输入修改需求:');
 
-        if (action === 'exit') {
-            this.session.status = 'completed';
-            return "Task marked as completed.";
-        } else {
-            const input = await this.safePromptTui('请输入修改需求:');
-            return `User rejected completion. New requirement: ${input}`;
-        }
+        // Since we are strictly "continuing" if the user gave input (otherwise /exit would happen in safePromptTui),
+        // we essentially treat this as a user feedback loop.
+        return `User provided new requirement after previous completion: ${input}`;
     }
     /**
      * Generates a simplified file tree for the context.
