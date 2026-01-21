@@ -39,13 +39,7 @@ export class AIAgent {
         }
 
         if (this.session.conversationHistory.length > 0) {
-            const count = ContextManager.estimateTokenCount(this.session.conversationHistory);
-            // Threshold could be config driven, setting 10k chars (~2.5k tokens) as warning, 
-            // but let's say 40k chars (~10k tokens) for auto-compression
-            if (count > 10000) {
-                tui.log(chalk.yellow(`⚠️ Context is large (~${count} tokens). Auto-compressing to save costs/tokens...`));
-                await this.compressContext();
-            }
+            await this.checkAndCompressContext();
         }
 
         if (options.waitForInput) {
@@ -83,11 +77,12 @@ export class AIAgent {
                     // We will inject a specific marker in the prompts.ts and regex replace it here.
                     // Or simpler: Just rebuild it if we can. 
 
-                    // Actually, let's keep it simple. We will update the system prompt by replacing the 
+                    // Actually, let's keep it simple. We will update the system prompt by replacing the
                     // content inside ```...``` of the "Current Project Structure" section if it exists,
                     // or append it if it doesn't.
 
-                    let sysContent = this.session.conversationHistory[0].content || '';
+                    const currentContent = this.session.conversationHistory[0].content;
+                    let sysContent = typeof currentContent === 'string' ? currentContent : '';
                     const mapHeader = '## Current Project Structure';
 
                     if (sysContent.includes(mapHeader)) {
@@ -721,24 +716,125 @@ Available Commands:
         }
     }
 
-    private async compressContext() {
-        // Use a lightweight summarizer (or just the same AI service)
+    private async checkAndCompressContext() {
+        const tokens = ContextManager.estimateTokenCount(this.session.conversationHistory);
+
+        // Tiered compression thresholds
+        const LIGHT_THRESHOLD = 5000;   // Light compression: prune tool outputs only
+        const MEDIUM_THRESHOLD = 10000; // Medium compression: summarize with 8k target
+        const HEAVY_THRESHOLD = 15000;  // Heavy compression: aggressive 5k target
+
+        if (tokens < LIGHT_THRESHOLD) {
+            return; // No compression needed
+        }
+
+        if (tokens < MEDIUM_THRESHOLD) {
+            // Light compression: only prune tool outputs
+            tui.log(chalk.yellow(`⚠️ Context at ${tokens} tokens. Applying light compression (pruning tool outputs)...`));
+            await this.lightCompress();
+        } else if (tokens < HEAVY_THRESHOLD) {
+            // Medium compression: summarize with 8k target
+            tui.log(chalk.yellow(`⚠️ Context at ${tokens} tokens. Applying medium compression (target: 8k tokens)...`));
+            await this.compressContext(8000);
+        } else {
+            // Heavy compression: aggressive 5k target
+            tui.log(chalk.red(`⚠️ Context at ${tokens} tokens. Applying heavy compression (target: 5k tokens)...`));
+            await this.compressContext(5000);
+        }
+    }
+
+    private async lightCompress() {
+        // Only prune tool outputs, no summarization
+        this.session.conversationHistory = ContextManager.lightCompress(this.session.conversationHistory);
+        this.sessionManager.saveSession(this.session);
+        tui.log(chalk.green('✅ Light compression applied (tool outputs pruned).'));
+    }
+
+    private async compressContext(targetTokens: number = 8000) {
+        // Structured summarizer that generates JSON format
         const summarizer = async (text: string) => {
-            // Create a temporary simplified chat for summarization
-            const result = await this.aiService.chat([
-                { role: 'system', content: 'You are a helpful assistant.' },
-                { role: 'user', content: `Please summarize the following technical conversation history into a concise paragraph, capturing key decisions and current state:\n\n${text}` }
-            ], { toolChoice: 'none' }); // No tools for summary
-            return result.content || 'No summary generated.';
+            const prompt = `Please summarize the following technical conversation history into a structured JSON format.
+Focus on capturing the essential information that would help continue the conversation effectively.
+
+Required JSON structure:
+{
+    "objective": "用户的核心目标（1-2句话）",
+    "key_decisions": ["关键决策1", "关键决策2"],
+    "current_state": "当前进度和状态",
+    "files_modified": ["涉及的文件路径"],
+    "errors_resolved": ["已解决的错误"],
+    "pending_tasks": ["待完成的任务"]
+}
+
+Conversation history:
+${text}
+
+Return ONLY the JSON object, no additional text or markdown formatting.`;
+
+            try {
+                const result = await this.aiService.chat([
+                    { role: 'system', content: 'You are a helpful assistant that generates structured summaries in JSON format.' },
+                    { role: 'user', content: prompt }
+                ], { toolChoice: 'none' }); // No tools for summary
+
+                // Try to parse as JSON
+                const content = result.content || '{}';
+                const jsonMatch = content.match(/\{[\s\S]*\}/);
+                if (jsonMatch) {
+                    const summary = JSON.parse(jsonMatch[0]);
+                    return this.formatStructuredSummary(summary);
+                }
+
+                // Fallback to plain text if JSON parsing fails
+                return content;
+            } catch (error) {
+                console.warn('Failed to generate structured summary, using fallback:', error);
+                // Fallback to simple summary
+                const result = await this.aiService.chat([
+                    { role: 'system', content: 'You are a helpful assistant.' },
+                    { role: 'user', content: `Please summarize the following technical conversation history into a concise paragraph:\n\n${text}` }
+                ], { toolChoice: 'none' });
+                return result.content || 'No summary generated.';
+            }
         };
 
         this.session.conversationHistory = await ContextManager.compressHistory(
             this.session.conversationHistory,
-            6, // Keep last 6 messages
+            targetTokens,
             summarizer
         );
         this.sessionManager.saveSession(this.session);
-        tui.log(chalk.green('✅ Context compressed.'));
+        tui.log(chalk.green(`✅ Context compressed to ~${targetTokens} tokens.`));
+    }
+
+    private formatStructuredSummary(summary: any): string {
+        const parts: string[] = [];
+
+        if (summary.objective) {
+            parts.push(`**目标**: ${summary.objective}`);
+        }
+
+        if (summary.key_decisions && summary.key_decisions.length > 0) {
+            parts.push(`\n**关键决策**:\n${summary.key_decisions.map((d: string) => `- ${d}`).join('\n')}`);
+        }
+
+        if (summary.current_state) {
+            parts.push(`\n**当前状态**: ${summary.current_state}`);
+        }
+
+        if (summary.files_modified && summary.files_modified.length > 0) {
+            parts.push(`\n**修改的文件**:\n${summary.files_modified.map((f: string) => `- ${f}`).join('\n')}`);
+        }
+
+        if (summary.errors_resolved && summary.errors_resolved.length > 0) {
+            parts.push(`\n**已解决的错误**:\n${summary.errors_resolved.map((e: string) => `- ${e}`).join('\n')}`);
+        }
+
+        if (summary.pending_tasks && summary.pending_tasks.length > 0) {
+            parts.push(`\n**待完成任务**:\n${summary.pending_tasks.map((t: string) => `- ${t}`).join('\n')}`);
+        }
+
+        return parts.join('\n');
     }
 
     private async handleAskUser(question: string): Promise<string> {

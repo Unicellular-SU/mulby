@@ -55,9 +55,22 @@ export const PROVIDER_ENDPOINTS: Record<AIProviderType, string | undefined> = {
     custom: undefined
 };
 
+export interface AIMessageContentBlock {
+    type: 'text' | 'image';
+    text?: string;
+    source?: {
+        type: 'base64';
+        media_type: string;
+        data: string;
+    };
+    cache_control?: {
+        type: 'ephemeral';
+    };
+}
+
 export interface AIMessage {
     role: 'system' | 'user' | 'assistant' | 'tool';
-    content: string | null;
+    content: string | AIMessageContentBlock[] | null;
     reasoning_content?: string;
     tool_calls?: any[];
     tool_call_id?: string;

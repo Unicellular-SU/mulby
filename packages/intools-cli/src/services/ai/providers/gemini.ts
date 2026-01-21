@@ -145,7 +145,7 @@ export class GeminiProvider extends BaseAIProvider {
 
         for (const msg of messages) {
             if (msg.role === 'system') {
-                systemInstruction = msg.content || '';
+                systemInstruction = typeof msg.content === 'string' ? msg.content : '';
                 continue;
             }
 

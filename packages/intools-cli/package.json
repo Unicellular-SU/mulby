@@ -27,6 +27,7 @@
     "ink-select-input": "^4.2.2",
     "ink-text-input": "^4.0.3",
     "inquirer": "^13.2.0",
+    "js-tiktoken": "^1.0.21",
     "openai": "^6.16.0",
     "react": "^17.0.2",
     "uuid": "^13.0.0"

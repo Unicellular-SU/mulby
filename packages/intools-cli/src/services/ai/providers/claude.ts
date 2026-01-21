@@ -28,16 +28,26 @@ export class ClaudeProvider extends BaseAIProvider {
 
         const params: Anthropic.MessageCreateParamsNonStreaming = {
             model: model,
-            messages: userAssistantMessages.map(m => ({
-                role: m.role as 'user' | 'assistant',
-                content: m.content || '', // Handle null content (blocks?)
-                // Anthropic is strict about content blocks for tools, 
-                // but simple string content for simple messages.
-                // If we have tool outputs, we need to handle block format.
-            })) as any,
+            messages: userAssistantMessages.map(m => {
+                // Support both string content and content blocks (for cache_control)
+                let content: string | any[];
+                if (typeof m.content === 'string' || m.content === null) {
+                    content = m.content || '';
+                } else if (Array.isArray(m.content)) {
+                    // Content blocks format - preserve cache_control
+                    content = m.content;
+                } else {
+                    content = '';
+                }
+
+                return {
+                    role: m.role as 'user' | 'assistant',
+                    content: content
+                };
+            }) as any,
             max_tokens: maxTokens,
             temperature: options?.temperature,
-            system: systemMessage?.content || undefined,
+            system: typeof systemMessage?.content === 'string' ? systemMessage.content : undefined,
         };
 
         if (options?.tools && options.tools.length > 0) {
@@ -94,7 +104,7 @@ export class ClaudeProvider extends BaseAIProvider {
             })) as any,
             max_tokens: maxTokens,
             temperature: options?.temperature,
-            system: systemMessage?.content || undefined,
+            system: typeof systemMessage?.content === 'string' ? systemMessage.content : undefined,
         });
 
         let fullContent = '';
