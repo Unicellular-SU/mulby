@@ -22,6 +22,7 @@ export const InputArea: React.FC<InputAreaProps> = ({ isPrompting, statusMessage
     const [query, setQuery] = useState('');
     const [cursorPos, setCursorPos] = useState(0);
     const [matchingCmds, setMatchingCmds] = useState<typeof SLASH_COMMANDS>([]);
+    const [selectedCmdIndex, setSelectedCmdIndex] = useState(-1);
 
     useInput((input, key) => {
         if (!isPrompting) return;
@@ -48,8 +49,18 @@ export const InputArea: React.FC<InputAreaProps> = ({ isPrompting, statusMessage
             return;
         }
 
-        // 2. Handle explicit Enter key (Submit)
+        // 2. Handle explicit Enter key (Submit or autocomplete)
         if (key.return) {
+            // If there are matching commands and one is selected, autocomplete it
+            if (matchingCmds.length > 0 && selectedCmdIndex >= 0) {
+                const selectedCmd = matchingCmds[selectedCmdIndex].cmd;
+                setQuery(selectedCmd);
+                setCursorPos(selectedCmd.length);
+                setMatchingCmds([]);
+                setSelectedCmdIndex(-1);
+                return;
+            }
+
             // Check for continuation char '\'
             if (query.trimEnd().endsWith('\\')) {
                 const lastSlash = query.lastIndexOf('\\');
@@ -69,11 +80,12 @@ export const InputArea: React.FC<InputAreaProps> = ({ isPrompting, statusMessage
             setQuery('');
             setCursorPos(0);
             setMatchingCmds([]);
+            setSelectedCmdIndex(-1);
             onSubmit(payload);
             return;
         }
 
-        // 3. Handle Arrow Keys for cursor movement
+        // 3. Handle Arrow Keys for cursor movement or command selection
         if (key.leftArrow) {
             setCursorPos(prev => Math.max(0, prev - 1));
             return;
@@ -83,7 +95,16 @@ export const InputArea: React.FC<InputAreaProps> = ({ isPrompting, statusMessage
             return;
         }
         if (key.upArrow) {
-            // Move cursor up one line
+            // If there are matching commands, navigate the command list
+            if (matchingCmds.length > 0) {
+                setSelectedCmdIndex(prev => {
+                    if (prev <= 0) return matchingCmds.length - 1;
+                    return prev - 1;
+                });
+                return;
+            }
+
+            // Otherwise, move cursor up one line
             const lines = query.slice(0, cursorPos).split('\n');
             if (lines.length > 1) {
                 const currentLinePos = lines[lines.length - 1].length;
@@ -94,7 +115,16 @@ export const InputArea: React.FC<InputAreaProps> = ({ isPrompting, statusMessage
             return;
         }
         if (key.downArrow) {
-            // Move cursor down one line
+            // If there are matching commands, navigate the command list
+            if (matchingCmds.length > 0) {
+                setSelectedCmdIndex(prev => {
+                    if (prev >= matchingCmds.length - 1) return 0;
+                    return prev + 1;
+                });
+                return;
+            }
+
+            // Otherwise, move cursor down one line
             const beforeCursor = query.slice(0, cursorPos);
             const afterCursor = query.slice(cursorPos);
             const currentLinePos = beforeCursor.split('\n').pop()?.length || 0;
@@ -129,8 +159,11 @@ export const InputArea: React.FC<InputAreaProps> = ({ isPrompting, statusMessage
             if (next.startsWith('/') && !next.includes('\n')) {
                 const matches = SLASH_COMMANDS.filter(c => c.cmd.startsWith(next));
                 setMatchingCmds(matches);
+                // Auto-select first command when list appears
+                setSelectedCmdIndex(matches.length > 0 ? 0 : -1);
             } else {
                 setMatchingCmds([]);
+                setSelectedCmdIndex(-1);
             }
             return next;
         });
@@ -160,8 +193,10 @@ export const InputArea: React.FC<InputAreaProps> = ({ isPrompting, statusMessage
         <Box flexDirection="column" width="100%">
             {matchingCmds.length > 0 && (
                 <Box flexDirection="column" paddingLeft={2} borderStyle="single" borderColor="blue" width="100%">
-                    {matchingCmds.map(c => (
-                        <Text key={c.cmd} color="blue">{c.cmd} <Text color="gray">- {c.desc}</Text></Text>
+                    {matchingCmds.map((c, index) => (
+                        <Text key={c.cmd} color={index === selectedCmdIndex ? "cyan" : "blue"} inverse={index === selectedCmdIndex}>
+                            {c.cmd} <Text color={index === selectedCmdIndex ? "white" : "gray"}>- {c.desc}</Text>
+                        </Text>
                     ))}
                 </Box>
             )}
