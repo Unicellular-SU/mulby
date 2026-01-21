@@ -1,7 +1,6 @@
 // @ts-nocheck
 import React, { useState, useEffect } from 'react';
-import { Box } from 'ink';
-import { LogArea } from './components/LogArea';
+import { Box, Static, Text } from 'ink';
 import { InputArea } from './components/InputArea';
 
 export const TerminalApp: React.FC = () => {
@@ -38,6 +37,8 @@ const TerminalUI: React.FC = () => {
 
     useEffect(() => {
         const updateState = () => {
+            // Important: We must create a new array reference for React to detect change,
+            // but for Static, passing the whole growing array works.
             setLogs([...terminalStore.logs]);
             setIsPrompting(terminalStore.isPrompting);
             setStatusMessage(terminalStore.statusMessage);
@@ -65,19 +66,28 @@ const TerminalUI: React.FC = () => {
 
     return (
         <Box flexDirection="column" justifyContent="space-between">
-            <LogArea logs={logs} />
-            {isSelecting ? (
-                <SelectArea
-                    items={selectItems}
-                    onSelect={handleSelect}
-                />
-            ) : (
-                <InputArea
-                    isPrompting={isPrompting}
-                    statusMessage={statusMessage}
-                    onSubmit={handleInput}
-                />
-            )}
+            <Static items={logs}>
+                {(log, index) => (
+                    <Box key={index} paddingBottom={0}>
+                        <Text color="white">{log}</Text>
+                    </Box>
+                )}
+            </Static>
+
+            <Box marginTop={1}>
+                {isSelecting ? (
+                    <SelectArea
+                        items={selectItems}
+                        onSelect={handleSelect}
+                    />
+                ) : (
+                    <InputArea
+                        isPrompting={isPrompting}
+                        statusMessage={statusMessage}
+                        onSubmit={handleInput}
+                    />
+                )}
+            </Box>
         </Box>
     );
 };

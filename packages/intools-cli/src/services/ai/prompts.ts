@@ -95,7 +95,7 @@ ${isScaffolded ? 'Once confirmed:' : 'After scaffolding:'}
 2. **NO Junk files**: DO NOT create \`ICON_INSTRUCTIONS.md\`, \`README_TEMP.txt\`, etc.
 3. **NO UI Tests**: DO NOT create \`*.test.tsx\` or \`*.spec.ts\`
 4. **NO skipping Phase 1**: You MUST ask questions before writing code.
-5. **Use SVG for Icons**: DO NOT create \`icon.png\` or any raster images. You MUST create \`icon.svg\` if an icon is needed.
+5. **Use SVG for Icons**: DO NOT create \`icon.png\` or any raster images.
 6. **NO Dev Server**: DO NOT run \`npm run dev\`, \`vite\`, or any watch mode commands. Testing is done by the user in the host app.
 
 If the user needs Node.js capabilities (fs, child_process, etc.), you MUST:
