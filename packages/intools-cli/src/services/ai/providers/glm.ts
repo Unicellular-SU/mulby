@@ -12,7 +12,7 @@ export class GLMProvider extends OpenAIProvider {
         const glmConfig: AIProviderConfig = {
             ...config,
             provider: 'glm',
-            apiEndpoint: config.apiEndpoint || 'https://open.bigmodel.cn/api/coding/paas/v4',
+            apiEndpoint: config.apiEndpoint || 'https://open.bigmodel.cn/api/paas/v4',
             model: config.model || 'glm-4.7',
             enableThinking: true
         };

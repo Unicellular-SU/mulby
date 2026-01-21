@@ -63,7 +63,7 @@ export class OpenAIProvider extends BaseAIProvider {
         };
     }
 
-    async chatStream(messages: AIMessage[], onChunk: (chunk: string) => void, options?: ChatOptions): Promise<string> {
+    async chatStream(messages: AIMessage[], onChunk: (chunk: string) => void, options?: ChatOptions): Promise<AIChatResponse> {
         const model = options?.model || this.config.model || 'gpt-4o';
         let maxTokens = options?.maxTokens || this.config.maxTokens || 4096;
 
@@ -76,7 +76,10 @@ export class OpenAIProvider extends BaseAIProvider {
             messages: messages as any,
             temperature: options?.temperature,
             max_tokens: maxTokens,
+            tools: options?.tools,
+            tool_choice: options?.toolChoice,
             stream: true,
+            stream_options: { include_usage: true }
         };
 
         if (options?.enableThinking || this.config.enableThinking) {
@@ -90,11 +93,21 @@ export class OpenAIProvider extends BaseAIProvider {
         const stream = await this.client.chat.completions.create(requestOptions) as any;
 
         let fullContent = '';
+        const toolCallsMap: Record<number, any> = {};
+
         let hasStartedThinking = false;
         let hasEndedThinking = false;
+        let finalUsage: any = undefined;
 
         for await (const chunk of stream) {
-            const delta = chunk.choices[0]?.delta as any;
+            if (chunk.usage) {
+                finalUsage = chunk.usage;
+            }
+
+            const choices = chunk.choices || [];
+            if (choices.length === 0) continue;
+
+            const delta = choices[0].delta as any;
 
             // Handle reasoning content (GLM/DeepSeek)
             if (delta?.reasoning_content) {
@@ -110,7 +123,7 @@ export class OpenAIProvider extends BaseAIProvider {
                 continue;
             }
 
-            // Close thinking tag if we switch to normal content
+            // Close thinking tag if we switch to normal content or tools
             if (hasStartedThinking && !hasEndedThinking && (delta?.content || delta?.tool_calls)) {
                 const endTag = '\n</think>\n\n';
                 fullContent += endTag;
@@ -118,10 +131,33 @@ export class OpenAIProvider extends BaseAIProvider {
                 hasEndedThinking = true;
             }
 
+            // Handle Content
             const content = delta?.content || '';
             if (content) {
                 fullContent += content;
                 onChunk(content);
+            }
+
+            // Handle Tool Calls
+            if (delta?.tool_calls) {
+                for (const toolCall of delta.tool_calls) {
+                    const index = toolCall.index;
+                    if (!toolCallsMap[index]) {
+                        toolCallsMap[index] = {
+                            id: toolCall.id || '',
+                            type: toolCall.type || 'function',
+                            function: {
+                                name: toolCall.function?.name || '',
+                                arguments: toolCall.function?.arguments || ''
+                            }
+                        };
+                    } else {
+                        // Append arguments
+                        if (toolCall.function?.arguments) {
+                            toolCallsMap[index].function.arguments += toolCall.function.arguments;
+                        }
+                    }
+                }
             }
         }
 
@@ -133,6 +169,23 @@ export class OpenAIProvider extends BaseAIProvider {
             hasEndedThinking = true;
         }
 
-        return fullContent;
+        const toolCalls = Object.values(toolCallsMap).map((tc: any) => ({
+            id: tc.id,
+            type: tc.type,
+            function: {
+                name: tc.function.name,
+                arguments: tc.function.arguments // Keep as string, caller parses it
+            }
+        }));
+
+        return {
+            content: fullContent,
+            toolCalls: toolCalls.length > 0 ? toolCalls : undefined,
+            usage: finalUsage ? {
+                promptTokens: finalUsage.prompt_tokens,
+                completionTokens: finalUsage.completion_tokens,
+                totalTokens: finalUsage.total_tokens
+            } : undefined
+        };
     }
 }

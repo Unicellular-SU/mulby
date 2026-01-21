@@ -106,10 +106,44 @@ export class AIAgent {
 
                 tui.setStatus(`Thinking... (Turn ${loopCount})`);
                 const startTime = Date.now();
-                const response = await this.aiService.chat(this.session.conversationHistory, {
-                    tools: PLUGIN_GENERATION_TOOLS,
-                    toolChoice: 'auto' // Let AI decide
-                });
+
+                let thinkingBuffer = '';
+                let isThinking = false;
+                let lastStatusUpdate = 0;
+
+                const response = await this.aiService.chatStream(
+                    this.session.conversationHistory,
+                    (chunk) => {
+                        // Handle thinking tags added by provider
+                        if (chunk.includes('<think>')) {
+                            isThinking = true;
+                            chunk = chunk.replace('<think>', '').trimStart();
+                        }
+
+                        if (chunk.includes('</think>')) {
+                            isThinking = false;
+                            chunk = chunk.replace('</think>', '').trimEnd();
+                            tui.setStatus(`Thinking completed. Generating response...`);
+                        }
+
+                        if (isThinking && chunk) {
+                            thinkingBuffer += chunk;
+                            // Update partial thinking status (last 80 chars)
+                            // Clean newlines for status bar
+                            // Throttle updates to avoid TUI lag (max 10fps) (every 100ms)
+                            const now = Date.now();
+                            if (now - lastStatusUpdate > 100) {
+                                const display = thinkingBuffer.slice(-80).replace(/\n/g, ' ');
+                                tui.setStatus(`Thinking: ${display}`);
+                                lastStatusUpdate = now;
+                            }
+                        }
+                    },
+                    {
+                        tools: PLUGIN_GENERATION_TOOLS,
+                        toolChoice: 'auto'
+                    }
+                );
                 const duration = ((Date.now() - startTime) / 1000).toFixed(1);
 
                 let usageInfo = '';
@@ -584,60 +618,75 @@ Now you can start implementing the features by modifying these files.`;
                 return true;
 
             case '/use':
-                // 切换供应商配置
+                // Switch Provider
                 if (args.length === 0) {
-                    // 显示当前配置和可用配置
                     const providers = AIServiceFactory.listProviders();
                     const defaultProvider = AIServiceFactory.getDefaultProvider();
                     const current = this.currentProvider || defaultProvider || providers[0];
 
-                    tui.log(chalk.cyan('\n可用的供应商配置:'));
-                    providers.forEach(p => {
-                        const marker = p === current ? chalk.green('● ') : '  ';
-                        const suffix = p === defaultProvider ? chalk.gray(' (默认)') : '';
-                        tui.log(`${marker}${p}${suffix}`);
-                    });
-                    tui.log(chalk.gray('\n使用 /use <name> 切换供应商'));
+                    const items = providers.map(p => ({
+                        label: p === current ? `${p} (Current)` : p,
+                        value: p
+                    }));
+
+                    tui.log(chalk.cyan('Select AI Provider:'));
+                    const selected = await tui.select(items);
+
+                    if (selected) {
+                        const config = AIServiceFactory.getProviderConfig(selected);
+                        if (config) {
+                            this.currentProvider = selected;
+                            this.currentModel = undefined;
+                            this.aiService = AIServiceFactory.create(selected);
+                            tui.log(chalk.green(`✓ Switched to "${selected}" (${config.provider})`));
+                        }
+                    }
                 } else {
                     const providerName = args[0];
                     const config = AIServiceFactory.getProviderConfig(providerName);
                     if (!config) {
-                        tui.log(chalk.red(`❌ 未找到配置 "${providerName}"`));
-                        tui.log(chalk.gray('使用 /use 查看可用配置'));
+                        tui.log(chalk.red(`❌ Configuration "${providerName}" not found`));
                     } else {
                         this.currentProvider = providerName;
-                        this.currentModel = undefined; // 重置模型覆盖
+                        this.currentModel = undefined;
                         this.aiService = AIServiceFactory.create(providerName);
-                        tui.log(chalk.green(`✓ 已切换到 "${providerName}" (${config.provider} - ${config.model || '默认模型'})`));
+                        tui.log(chalk.green(`✓ Switched to "${providerName}" (${config.provider})`));
                     }
                 }
                 return true;
 
             case '/model':
-                // 切换模型
+                // Switch Model
                 if (args.length === 0) {
-                    // 显示当前模型和可用模型
                     const providers = AIServiceFactory.listProviders();
                     const defaultProvider = AIServiceFactory.getDefaultProvider();
                     const currentProviderName = this.currentProvider || defaultProvider || providers[0];
                     const config = AIServiceFactory.getProviderConfig(currentProviderName);
 
                     if (config) {
-                        const currentModel = this.currentModel || config.model || '未指定';
-                        tui.log(chalk.cyan(`\n当前供应商: ${currentProviderName} (${config.provider})`));
-                        tui.log(chalk.cyan(`当前模型: ${currentModel}`));
+                        const currentModel = this.currentModel || config.model || 'Default';
 
-                        // 导入 PROVIDER_MODELS
+                        // Import PROVIDER_MODELS
                         const { PROVIDER_MODELS } = await import('../types/ai');
                         const availableModels = PROVIDER_MODELS[config.provider];
+
                         if (availableModels && availableModels.length > 0) {
-                            tui.log(chalk.cyan('\n可用模型:'));
-                            availableModels.forEach(m => {
-                                const marker = m === currentModel ? chalk.green('● ') : '  ';
-                                tui.log(`${marker}${m}`);
-                            });
+                            const items = availableModels.map(m => ({
+                                label: m === currentModel ? `${m} (Current)` : m,
+                                value: m
+                            }));
+
+                            tui.log(chalk.cyan(`Select Model for ${currentProviderName}:`));
+                            const selected = await tui.select(items);
+
+                            if (selected) {
+                                this.currentModel = selected;
+                                this.aiService = AIServiceFactory.create(currentProviderName, selected);
+                                tui.log(chalk.green(`✓ Switched model to "${selected}"`));
+                            }
+                        } else {
+                            tui.log(chalk.yellow(`No models predefined for provider type: ${config.provider}`));
                         }
-                        tui.log(chalk.gray('\n使用 /model <name> 切换模型'));
                     }
                 } else {
                     const modelName = args.join(' ');
@@ -647,7 +696,7 @@ Now you can start implementing the features by modifying these files.`;
 
                     this.currentModel = modelName;
                     this.aiService = AIServiceFactory.create(currentProviderName, modelName);
-                    tui.log(chalk.green(`✓ 已切换模型为 "${modelName}"`));
+                    tui.log(chalk.green(`✓ Switched model to "${modelName}"`));
                 }
                 return true;
 

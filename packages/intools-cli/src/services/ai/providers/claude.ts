@@ -76,7 +76,7 @@ export class ClaudeProvider extends BaseAIProvider {
         };
     }
 
-    async chatStream(messages: AIMessage[], onChunk: (chunk: string) => void, options?: ChatOptions): Promise<string> {
+    async chatStream(messages: AIMessage[], onChunk: (chunk: string) => void, options?: ChatOptions): Promise<AIChatResponse> {
         const model = options?.model || this.config.model || 'claude-3-5-sonnet-20241022';
         let maxTokens = options?.maxTokens || this.config.maxTokens || 4096;
 
@@ -104,6 +104,7 @@ export class ClaudeProvider extends BaseAIProvider {
         });
 
         await stream.finalMessage();
-        return fullContent;
+        // TODO: Handle tool calls/usage in stream properly
+        return { content: fullContent };
     }
 }

@@ -42,6 +42,10 @@ export class TerminalService {
         return await terminalStore.startPrompt();
     }
 
+    public async select(items: Array<{ label: string; value: string }>): Promise<string> {
+        return await terminalStore.startSelect(items);
+    }
+
     public setStatus(message: string) {
         terminalStore.setStatus(message);
     }

@@ -69,7 +69,7 @@ export class GeminiProvider extends BaseAIProvider {
         messages: AIMessage[],
         onChunk: (chunk: string) => void,
         options?: ChatOptions
-    ): Promise<string> {
+    ): Promise<AIChatResponse> {
         const { contents, systemInstruction } = this.convertMessages(messages);
         const tools = options?.tools ? this.convertTools(options.tools) : undefined;
 
@@ -135,7 +135,8 @@ export class GeminiProvider extends BaseAIProvider {
             }
         }
 
-        return fullContent;
+        // TODO: Handle tool calls in stream if needed
+        return { content: fullContent };
     }
 
     private convertMessages(messages: AIMessage[]): { contents: GeminiMessage[]; systemInstruction?: string } {

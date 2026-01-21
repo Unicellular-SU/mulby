@@ -27,9 +27,13 @@ export const TerminalApp: React.FC = () => {
 // Internal component that actually hooks into the store/events
 import { terminalStore } from '../services/tui/store';
 
+import { SelectArea } from './components/SelectArea';
+
 const TerminalUI: React.FC = () => {
     const [logs, setLogs] = useState<string[]>([]);
     const [isPrompting, setIsPrompting] = useState(false);
+    const [isSelecting, setIsSelecting] = useState(false);
+    const [selectItems, setSelectItems] = useState<any[]>([]);
     const [statusMessage, setStatusMessage] = useState('');
 
     useEffect(() => {
@@ -37,6 +41,8 @@ const TerminalUI: React.FC = () => {
             setLogs([...terminalStore.logs]);
             setIsPrompting(terminalStore.isPrompting);
             setStatusMessage(terminalStore.statusMessage);
+            setIsSelecting(terminalStore.isSelecting);
+            setSelectItems(terminalStore.selectItems);
         };
 
         // Initial sync
@@ -53,14 +59,25 @@ const TerminalUI: React.FC = () => {
         terminalStore.submitInput(value);
     };
 
+    const handleSelect = (value: string) => {
+        terminalStore.submitSelect(value);
+    };
+
     return (
         <Box flexDirection="column" justifyContent="space-between">
             <LogArea logs={logs} />
-            <InputArea
-                isPrompting={isPrompting}
-                statusMessage={statusMessage}
-                onSubmit={handleInput}
-            />
+            {isSelecting ? (
+                <SelectArea
+                    items={selectItems}
+                    onSelect={handleSelect}
+                />
+            ) : (
+                <InputArea
+                    isPrompting={isPrompting}
+                    statusMessage={statusMessage}
+                    onSubmit={handleInput}
+                />
+            )}
         </Box>
     );
 };

@@ -15,6 +15,8 @@ const SLASH_COMMANDS = [
     { cmd: '/clear', desc: 'clear context' },
     { cmd: '/tokens', desc: 'show token usage' },
     { cmd: '/compress', desc: 'compress history' },
+    { cmd: '/use', desc: 'switch provider' },
+    { cmd: '/model', desc: 'switch model' },
 ];
 
 export const InputArea: React.FC<InputAreaProps> = ({ isPrompting, statusMessage, onSubmit }) => {

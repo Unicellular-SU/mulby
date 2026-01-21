@@ -26,5 +26,5 @@ export abstract class BaseAIProvider {
     constructor(protected config: AIProviderConfig) { }
 
     abstract chat(messages: AIMessage[], options?: ChatOptions): Promise<AIChatResponse>;
-    abstract chatStream(messages: AIMessage[], onChunk: (chunk: string) => void, options?: ChatOptions): Promise<string>;
+    abstract chatStream(messages: AIMessage[], onChunk: (chunk: string) => void, options?: ChatOptions): Promise<AIChatResponse>;
 }
