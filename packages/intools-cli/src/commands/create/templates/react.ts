@@ -41,16 +41,17 @@ export function buildReactPackageJson(name: string) {
       pack: 'intools pack'
     },
     dependencies: {
-      react: '^18.2.0',
-      'react-dom': '^18.2.0'
+      react: '^19.0.0',
+      'react-dom': '^19.0.0'
     },
     devDependencies: {
-      '@types/react': '^18.2.0',
-      '@types/react-dom': '^18.2.0',
-      '@vitejs/plugin-react': '^4.2.0',
-      esbuild: '^0.20.0',
+      '@types/react': '^19.0.0',
+      '@types/react-dom': '^19.0.0',
+      '@vitejs/plugin-react': '^4.3.0',
+      '@tailwindcss/vite': '^4.0.0',
+      tailwindcss: '^4.0.0',
       typescript: '^5.3.0',
-      vite: '^5.0.0'
+      vite: '^5.2.0'
     }
   }
 }
@@ -81,10 +82,11 @@ export function buildTsConfig() {
 export function buildViteConfig() {
   return `import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
+import tailwindcss from '@tailwindcss/vite'
 import path from 'path'
 
 export default defineConfig({
-  plugins: [react()],
+  plugins: [react(), tailwindcss()],
   root: 'src/ui',
   base: './',
   build: {
@@ -184,15 +186,15 @@ export function buildIndexHtml(name: string) {
 }
 
 export function buildMainTsx() {
-  return `import React from 'react'
-import ReactDOM from 'react-dom/client'
+  return `import { StrictMode } from 'react'
+import { createRoot } from 'react-dom/client'
 import App from './App'
 import './styles.css'
 
-ReactDOM.createRoot(document.getElementById('root')!).render(
-  <React.StrictMode>
+createRoot(document.getElementById('root')!).render(
+  <StrictMode>
     <App />
-  </React.StrictMode>
+  </StrictMode>
 )
 `
 }
@@ -332,7 +334,9 @@ export default function App() {
 
 
 export function buildStylesCss() {
-  return `/* CSS 变量 - 亮色主题 */
+  return `@import "tailwindcss";
+
+/* CSS 变量 - 亮色主题 */
 :root {
   --bg-primary: #ffffff;
   --bg-secondary: #f5f5f5;

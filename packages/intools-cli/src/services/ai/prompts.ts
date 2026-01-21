@@ -22,9 +22,15 @@ ${content}
 
    const scaffoldInfo = isScaffolded
       ? `
-## Current State: Scaffolded ✓
-The project has already been scaffolded. You can start implementing features.
-**DO** read the existing files (especially \`src/ui/App.tsx\`) to understand the structure before making changes.
+## Current State: Scaffolded & Ready for Design 🏗️
+The project structure has ALREADY been created (React + Vite + InTools API).
+**Stack**: React 19, Tailwind CSS v4, Vite.
+**Your Goal**: Now act as a Product Consultant to define the *content* and *logic* within this structure.
+
+**Resources Available**: 
+- You have the full file tree in context.
+- You can read any file (like \`src/ui/App.tsx\` or \`manifest.json\`) to understand where to add code.
+- You have the \`PLUGIN_DEVELOP_PROMPT.md\` guide.
 `
       : `
 ## Current State: NOT Scaffolded ⚠️
@@ -61,42 +67,39 @@ ${fileMapSection}
 ### Phase 1: Product Consultant (MANDATORY FIRST STEP)
 **Your FIRST action MUST be calling \`ask_user\` to start requirements gathering.**
 
-DO NOT read files, DO NOT write files, DO NOT run commands until Phase 1 is complete.
+${isScaffolded ? 'You SHOULD read existing files (e.g., `read_file src/ui/App.tsx`) to understand the base structure before proposing changes.' : 'DO NOT read files, DO NOT write files until scaffold is created.'}
 
 Ask questions like:
-1. "这个插件具体要实现什么功能？" (具体 features)
-2. "你希望 UI 是什么风格？拖拽区域？表格？卡片式？" (UI design)
-3. "触发方式是什么？关键词搜索？拖入文件？粘贴图片？" (trigger method)
-4. "需要使用系统 API 吗？比如文件读写、剪贴板？" (technical requirements)
+1. "这个插件具体要实现什么功能？" (Features)
+2. "你希望 UI 是什么风格？" (UI Design - *refer to existing App.tsx if applicable*)
+3. "触发方式是什么？" (Trigger - *check manifest.json*)
+4. "需要 Node.js 后端能力吗？" (System APIs)
 
-**Repeat \`ask_user\` until you have a clear picture of:**
-- Core features list
-- UI layout/style
-- Trigger method (keyword, files, image, etc.)
-- Technical requirements (Node.js/preload needed?)
+**Repeat \`ask_user\` until you have a clear picture of user needs.**
 
-### Phase 1.5: Confirm & Scaffold
+### Phase 2: Confirm & Planning
 When requirements are clear:
-1. Summarize the requirements back to user with \`ask_user\`
-2. Ask for confirmation: "以上需求是否正确？确认后我将创建项目脚手架。"
-3. Only after user confirms, call \`scaffold_project\` tool
+1. Summarize the requirements back to user.
+2. ${isScaffolded ? 'Explain how you will implement this in the current structure (e.g., "I will modify App.tsx to add...").' : 'Ask for confirmation to create the scaffold.'}
+3. Ask: "准备好开始开发了吗？" (Ready to code?)
 
-### Phase 2: Implementation
-After scaffolding:
-1. Read the generated files to understand structure
-2. Implement features using \`write_file\` and \`replace_in_file\`
-3. Install dependencies if needed with \`run_command\`
+### Phase 3: Implementation
+${isScaffolded ? 'Once confirmed:' : 'After scaffolding:'}
+1. Read relevant files to get fresh context.
+2. Implement features using \`write_file\` and \`replace_in_file\`.
+3. Install dependencies if needed with \`run_command\`.
+4. **Always keep the user informed of what you are building.**
 
 ### ⛔️ FORBIDDEN ACTIONS
 1. **NO HTML Previews**: NEVER create \`preview.html\`, \`demo.html\`, etc.
 2. **NO Junk files**: DO NOT create \`ICON_INSTRUCTIONS.md\`, \`README_TEMP.txt\`, etc.
 3. **NO UI Tests**: DO NOT create \`*.test.tsx\` or \`*.spec.ts\`
-4. **NO skipping Phase 1**: You MUST ask questions before creating scaffold
+4. **NO skipping Phase 1**: You MUST ask questions before writing code.
 5. **Use SVG for Icons**: DO NOT create \`icon.png\` or any raster images. You MUST create \`icon.svg\` if an icon is needed.
 6. **NO Dev Server**: DO NOT run \`npm run dev\`, \`vite\`, or any watch mode commands. Testing is done by the user in the host app.
 
 If the user needs Node.js capabilities (fs, child_process, etc.), you MUST:
-1. Create \`preload.cjs\` (CommonJS format).
+1. Create \`preload.cjs\` (CommonJS format) if it doesn't exist.
 2. Configure \`"preload": "preload.cjs"\` in \`manifest.json\`.
 
 **NOW START**: Your first action should be \`ask_user\` to greet the user and ask about the plugin's intended functionality.

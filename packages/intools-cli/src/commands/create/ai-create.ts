@@ -138,21 +138,30 @@ export async function aiCreate(name: string, options: any) {
     }
 
     // 3. New Session - 先进入顾问模式，收集需求后再创建脚手架
+    // 3. New Session - 先创建脚手架，再进入顾问模式
     const targetDir = path.resolve(process.cwd(), name);
+
+    console.log(chalk.blue(`\n🚀 初始化项目脚手架: ${name}...`));
+    try {
+        await createReactProject(targetDir, name);
+        console.log(chalk.green('✓ 脚手架创建完成\n'));
+    } catch (err) {
+        console.error(chalk.red('脚手架创建失败:'), err);
+        return;
+    }
 
     const session = sessionManager.createSession(`插件: ${name}`, targetDir);
     session.pluginName = name;
 
-    // 初始消息：传递插件名称和描述(如果有)，触发 AI 进入顾问模式
+    // 初始消息：告知 AI 脚手架已就绪，触发 Consultant Mode (Context Aware)
     let initialPrompt = `我想创建一个名为 "${name}" 的 InTools 插件。`;
-
-    // InTools 简介背景，帮助 AI 建立上下文
-    initialPrompt += `\n\n【关于 InTools】\nInTools 是一款跨平台桌面效率工具箱 (类似 uTools/Raycast)。插件支持 React UI + Node.js 后端，可访问系统 API (剪贴板、模拟输入、文件读写等)。`;
+    initialPrompt += `\n\n✅ 项目脚手架已创建完成 (React + Vite + InTools API)。`;
+    initialPrompt += `\n当前文件结构已包含：manifest.json, src/ui/App.tsx, src/main.ts 等基础文件。`;
+    initialPrompt += `\n请读取现有文件了解结构，并作为产品顾问并通过提问帮我明确功能需求和 UI 设计。`;
 
     if (options.desc) {
-        initialPrompt += `\n\n插件描述: ${options.desc}\n`;
+        initialPrompt += `\n\n插件初步设想: ${options.desc}\n`;
     }
-    initialPrompt += `\n请进入产品顾问模式，通过提问帮我明确需求。`;
 
     session.conversationHistory.push({
         role: 'user',
@@ -160,9 +169,9 @@ export async function aiCreate(name: string, options: any) {
     });
     sessionManager.saveSession(session);
 
-    // 先启动 AI Agent 进行需求收集（此时尚未创建脚手架）
-    // isScaffolded = false，让 AI 知道项目尚未创建
-    const systemPrompt = buildSystemPrompt({}, false);
+    // isScaffolded = true，让 AI 知道项目已存在，可以读取文件
+    // 此时 user 还没有确认具体需求，所以 AI 仍需进入 Phase 1，但在有上下文的情况下进行
+    const systemPrompt = buildSystemPrompt({}, true);
     const agent = new AIAgent(session, systemPrompt);
     await agent.start();
 }

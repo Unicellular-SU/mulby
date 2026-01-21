@@ -358,3 +358,48 @@ interface FileSearchResult {
 ### 类型定义
 - [x] **Type Definitions** (`src/types/ai.ts`, `base.ts`)
   - 更新 `AIMessage` 和 `AIChatResponse` 接口，正式支持 `reasoning_content` 字段
+
+---
+
+# React 模板 Tailwind CSS 支持
+
+> **更新时间**: 2026-01-21
+> **状态**: ✅ 已完成
+
+## 完成内容
+
+### 模板增强
+- [x] **React 模板升级** (`packages/intools-cli/src/commands/create/templates/react.ts`)
+  - 集成 `tailwindcss`, `postcss`, `autoprefixer` 依赖
+  - 新增 Tailwind 配置文件生成器 (`buildTailwindConfig`)
+  - 新增 PostCSS 配置文件生成器 (`buildPostcssConfig`)
+  - 更新 `styles.css` 引入 `@tailwind` 指令
+
+### 创建流程
+- [x] **脚手架逻辑更新** (`packages/intools-cli/src/commands/create/react.ts`)
+  - 在创建项目时自动生成 `tailwind.config.js` 和 `postcss.config.js`
+  - 确保 AI 创建的项目 (`intools create --ai`) 和手动创建的项目均默认支持 Tailwind CSS
+
+---
+
+# 升级 React 19 & Tailwind 4
+
+> **更新时间**: 2026-01-21
+> **状态**: ✅ 已完成
+
+## 完成内容
+
+### 模板升级
+- [x] **React 模板升级** (`packages/intools-cli/src/commands/create/templates/react.ts`)
+  - 升级 React 依赖至 `v19`
+  - 升级 Tailwind CSS 至 `v4`，集成 `@tailwindcss/vite`
+  - 移除显式的 PostCSS 配置（改为 Vite 插件处理）
+  - 更新 `styles.css` 为 `@import "tailwindcss";`
+
+### 流程优化
+- [x] **创建逻辑精简** (`packages/intools-cli/src/commands/create/react.ts`)
+  - 移除了不再需要的 `tailwind.config.js` 和 `postcss.config.js` 生成步骤
+
+### AI 上下文
+- [x] **Prompt 更新** (`packages/intools-cli/src/services/ai/prompts.ts`)
+  - 显式告知 AI 当前环境为 React 19 + Tailwind 4 + Vite，确保生成的代码通过新的 CSS 方式引入 Tailwind。
