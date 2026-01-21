@@ -173,6 +173,38 @@ export class AIAgent {
 
             } catch (error: any) {
                 tui.log(chalk.red('\n❌ Agent 发生错误: ' + error.message));
+
+                // Check for JSON truncation or parsing errors (likely due to token limit)
+                const isJsonError = error.message.includes('JSON') || error.message.includes('Unterminated string');
+
+                if (isJsonError) {
+                    tui.log(chalk.yellow('⚠️ 检测到 JSON 解析错误，通常是因为输出被截断 (上下文过长)。'));
+
+                    const shouldRecover = await this.safePromptTui('是否尝试压缩上下文并重试本轮对话？ (Y/n) [默认: Y]');
+                    if (shouldRecover.toLowerCase() !== 'n') {
+                        // 1. Compress context
+                        await this.compressContext();
+
+                        // 2. Remove the last assistant message if it was the one that failed parsing
+                        // (If we failed during tool parsing, the assistant message was already added)
+                        const lastMsg = this.session.conversationHistory[this.session.conversationHistory.length - 1];
+                        if (lastMsg && lastMsg.role === 'assistant') {
+                            this.session.conversationHistory.pop();
+                            tui.log(chalk.gray('  Info: Removed partial/failed assistant message from history.'));
+                        }
+
+                        this.sessionManager.saveSession(this.session);
+                        tui.log(chalk.green('✅ 恢复成功，正在重试...'));
+                        continue; // Retry loop
+                    }
+                }
+
+                // Generic Retry Prompt
+                const action = await this.safePromptTui('是否重试？(y/n/exit)');
+                if (action.toLowerCase() === 'y') {
+                    continue;
+                }
+
                 this.session.status = 'failed';
                 this.session.error = error.message;
                 this.sessionManager.saveSession(this.session);
