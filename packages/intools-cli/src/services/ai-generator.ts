@@ -199,11 +199,177 @@ export class AIAgent {
                 return await this.handleScaffoldProject(args.reason);
             case 'finish':
                 return await this.handleFinish(args.summary);
+
+            // New Tools
+            case 'list_dir':
+                return await this.handleListDir(args.path);
+            case 'search_files':
+                return await this.handleSearchFiles(args.query, args.path);
+            case 'read_file_outline':
+                return await this.handleReadFileOutline(args.path);
+            case 'delete_file':
+                return await this.handleDeleteFile(args.path);
+            case 'move_file':
+                return await this.handleMoveFile(args.source, args.destination);
+            case 'fetch_url':
+                return await this.handleFetchUrl(args.url);
+            case 'check_types':
+                return await this.handleCheckTypes();
+
             // Legacy/Deprecated
             case 'plan_files':
                 return "Tool 'plan_files' is deprecated. Please use read_file/write_file directly.";
             default:
                 throw new Error(`Unknown tool: ${name}`);
+        }
+    }
+
+    // --- New Tool Handlers ---
+
+    private async handleListDir(dirPath: string): Promise<string> {
+        const fullPath = path.resolve(this.session.targetDir, dirPath);
+        if (!await fs.pathExists(fullPath)) return `Directory not found: ${dirPath}`;
+
+        try {
+            const files = await fs.readdir(fullPath);
+            const detailed = await Promise.all(files.map(async f => {
+                const stat = await fs.stat(path.join(fullPath, f));
+                return `${f}${stat.isDirectory() ? '/' : ''}`;
+            }));
+            return `Contents of ${dirPath}:\n${detailed.join('\n')}`;
+        } catch (e: any) {
+            return `Error listing directory: ${e.message}`;
+        }
+    }
+
+    private async handleSearchFiles(query: string, searchPath: string = '.'): Promise<string> {
+        const fullPath = path.resolve(this.session.targetDir, searchPath);
+        if (!await fs.pathExists(fullPath)) return `Path not found: ${searchPath}`;
+
+        const results: string[] = [];
+        try {
+            // Recursive walk
+            const walk = async (dir: string) => {
+                const files = await fs.readdir(dir);
+                for (const file of files) {
+                    if (['node_modules', '.git', 'dist'].includes(file)) continue;
+                    const fPath = path.join(dir, file);
+                    const stat = await fs.stat(fPath);
+                    if (stat.isDirectory()) {
+                        await walk(fPath);
+                    } else {
+                        const content = await fs.readFile(fPath, 'utf-8');
+                        if (content.includes(query)) { // Simple string match, regex support would need eval or new RegExp
+                            // If query is regex-like, try regex?
+                            // The prompt says "String or Regex". 
+                            // Let's safe-guard: if it looks like regex, use regex.
+                            // Actually, simple includes is safer for now. 
+                            // If user wants regex, we can try new RegExp(query).
+                            let match = false;
+                            try {
+                                if (new RegExp(query).test(content)) match = true;
+                            } catch {
+                                if (content.includes(query)) match = true;
+                            }
+
+                            if (match) {
+                                // Find line number
+                                const lines = content.split('\n');
+                                lines.forEach((line, idx) => {
+                                    if (line.includes(query) || (new RegExp(query).test(line))) {
+                                        results.push(`${path.relative(this.session.targetDir, fPath)}:${idx + 1}: ${line.trim().slice(0, 100)}`);
+                                    }
+                                });
+                            }
+                        }
+                    }
+                }
+            };
+            await walk(fullPath);
+            return results.length > 0 ? results.join('\n') : 'No matches found.';
+        } catch (e: any) {
+            return `Error searching files: ${e.message}`;
+        }
+    }
+
+    private async handleReadFileOutline(filePath: string): Promise<string> {
+        const fullPath = path.resolve(this.session.targetDir, filePath);
+        if (!await fs.pathExists(fullPath)) return `File not found: ${filePath}`;
+
+        try {
+            const content = await fs.readFile(fullPath, 'utf-8');
+            const lines = content.split('\n');
+            const outline = lines
+                .map((line, idx) => ({ line, idx: idx + 1 }))
+                .filter(({ line }) => {
+                    const l = line.trim();
+                    return (
+                        l.startsWith('export ') ||
+                        l.startsWith('class ') ||
+                        l.startsWith('function ') ||
+                        l.startsWith('interface ') ||
+                        l.startsWith('type ') ||
+                        l.match(/^const\s+[A-Z_]+\s+=/) // Constants
+                    ) && !l.startsWith('export default'); // Handle default exports maybe?
+                })
+                .map(({ line, idx }) => `${idx}: ${line.trim()}`);
+
+            return outline.length > 0 ? outline.join('\n') : 'No outline elements found (only imports or internal code?).';
+        } catch (e: any) {
+            return `Error reading outline: ${e.message}`;
+        }
+    }
+
+    private async handleDeleteFile(filePath: string): Promise<string> {
+        const fullPath = path.resolve(this.session.targetDir, filePath);
+        try {
+            await fs.remove(fullPath);
+            tui.log(chalk.yellow(`  ✓ Deleted ${filePath}`));
+            return `Deleted ${filePath}`;
+        } catch (e: any) {
+            return `Error deleting file: ${e.message}`;
+        }
+    }
+
+    private async handleMoveFile(source: string, dest: string): Promise<string> {
+        const fullSource = path.resolve(this.session.targetDir, source);
+        const fullDest = path.resolve(this.session.targetDir, dest);
+        try {
+            await fs.move(fullSource, fullDest, { overwrite: true });
+            tui.log(chalk.yellow(`  ✓ Moved ${source} -> ${dest}`));
+            return `Moved ${source} to ${dest}`;
+        } catch (e: any) {
+            return `Error moving file: ${e.message}`;
+        }
+    }
+
+    private async handleFetchUrl(url: string): Promise<string> {
+        tui.log(chalk.cyan(`  🌐 Fetching ${url}...`));
+        try {
+            // Using global fetch (Node 18+)
+            const response = await fetch(url);
+            if (!response.ok) return `Failed to fetch: ${response.status} ${response.statusText}`;
+            const text = await response.text();
+            // Simple naive HTML to text or just return raw?
+            // Use a simple heuristic to strip tags if HTML?
+            // For now return raw but truncated
+            const maxLength = 20000;
+            const content = text.length > maxLength
+                ? text.slice(0, maxLength) + `\n...(Truncated ${text.length - maxLength} chars)`
+                : text;
+            return content;
+        } catch (e: any) {
+            return `Fetch error: ${e.message}`;
+        }
+    }
+
+    private async handleCheckTypes(): Promise<string> {
+        tui.log(chalk.cyan(`  🛡️ Checking types...`));
+        try {
+            return await this.handleRunCommand('npm run build'); // Commonly runs tsc
+            // Or explicitly: npx tsc --noEmit
+        } catch (e: any) {
+            return `Type check failed: ${e.message}`;
         }
     }
 

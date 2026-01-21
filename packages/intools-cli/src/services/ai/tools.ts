@@ -86,6 +86,104 @@ export const PLUGIN_GENERATION_TOOLS = [
             }
         }
     },
+    {
+        type: 'function',
+        function: {
+            name: 'list_dir',
+            description: 'List files and directories in a specific path. Use this to explore the project structure.',
+            parameters: {
+                type: 'object',
+                properties: {
+                    path: { type: 'string', description: 'Relative path to list (e.g., ".", "src/components")' }
+                },
+                required: ['path']
+            }
+        }
+    },
+    {
+        type: 'function',
+        function: {
+            name: 'search_files',
+            description: 'Search for a string or pattern in files. Useful for finding component usage or specific code snippets.',
+            parameters: {
+                type: 'object',
+                properties: {
+                    query: { type: 'string', description: 'String or Regex to search for' },
+                    path: { type: 'string', description: 'Directory to search in (default: ".")' }
+                },
+                required: ['query']
+            }
+        }
+    },
+    {
+        type: 'function',
+        function: {
+            name: 'read_file_outline',
+            description: 'Read the outline (symbols, functions, classes) of a file without reading the full content. Saves tokens.',
+            parameters: {
+                type: 'object',
+                properties: {
+                    path: { type: 'string', description: 'Relative path to the file' }
+                },
+                required: ['path']
+            }
+        }
+    },
+    {
+        type: 'function',
+        function: {
+            name: 'delete_file',
+            description: 'Delete a file or directory.',
+            parameters: {
+                type: 'object',
+                properties: {
+                    path: { type: 'string', description: 'Relative path to delete' }
+                },
+                required: ['path']
+            }
+        }
+    },
+    {
+        type: 'function',
+        function: {
+            name: 'move_file',
+            description: 'Move or rename a file.',
+            parameters: {
+                type: 'object',
+                properties: {
+                    source: { type: 'string', description: 'Current path' },
+                    destination: { type: 'string', description: 'New path' }
+                },
+                required: ['source', 'destination']
+            }
+        }
+    },
+    {
+        type: 'function',
+        function: {
+            name: 'fetch_url',
+            description: 'Fetch content from a URL to read documentation or external data (converts to Markdown/Text).',
+            parameters: {
+                type: 'object',
+                properties: {
+                    url: { type: 'string', description: 'The URL to fetch' }
+                },
+                required: ['url']
+            }
+        }
+    },
+    {
+        type: 'function',
+        function: {
+            name: 'check_types',
+            description: 'Run TypeScript compiler to check for type errors.',
+            parameters: {
+                type: 'object',
+                properties: {},
+                required: []
+            }
+        }
+    },
 
     {
         type: 'function',
