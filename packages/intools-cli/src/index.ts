@@ -26,6 +26,7 @@ program
   .description('创建新插件项目')
   .option('-t, --template <template>', '模板类型: react (默认) | basic', 'react')
   .option('--ai', '使用 AI 辅助生成插件')
+  .option('--desc <description>', '此插件的简单功能描述')
   .option('--resume [sessionId]', '恢复 AI 生成会话')
   .action(create)
 

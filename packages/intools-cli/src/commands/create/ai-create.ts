@@ -143,10 +143,20 @@ export async function aiCreate(name: string, options: any) {
     const session = sessionManager.createSession(`插件: ${name}`, targetDir);
     session.pluginName = name;
 
-    // 初始消息：只传递插件名称，触发 AI 进入顾问模式
+    // 初始消息：传递插件名称和描述(如果有)，触发 AI 进入顾问模式
+    let initialPrompt = `我想创建一个名为 "${name}" 的 InTools 插件。`;
+
+    // InTools 简介背景，帮助 AI 建立上下文
+    initialPrompt += `\n\n【关于 InTools】\nInTools 是一款跨平台桌面效率工具箱 (类似 uTools/Raycast)。插件支持 React UI + Node.js 后端，可访问系统 API (剪贴板、模拟输入、文件读写等)。`;
+
+    if (options.desc) {
+        initialPrompt += `\n\n插件描述: ${options.desc}\n`;
+    }
+    initialPrompt += `\n请进入产品顾问模式，通过提问帮我明确需求。`;
+
     session.conversationHistory.push({
         role: 'user',
-        content: `我想创建一个名为 "${name}" 的插件。请进入产品顾问模式，通过提问帮我明确需求。`
+        content: initialPrompt
     });
     sessionManager.saveSession(session);
 
