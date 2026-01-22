@@ -16,11 +16,11 @@ export class OpenAIProvider extends BaseAIProvider {
 
     async chat(messages: AIMessage[], options?: ChatOptions): Promise<AIChatResponse> {
         const model = options?.model || this.config.model || 'gpt-4o';
-        let maxTokens = options?.maxTokens || this.config.maxTokens || 4096;
+        let maxTokens = options?.maxTokens || this.config.maxTokens || 128000;
 
         // Final safety cast to number
         maxTokens = Number(maxTokens);
-        if (isNaN(maxTokens)) maxTokens = 4096;
+        if (isNaN(maxTokens)) maxTokens = 128000;
 
         const requestOptions: any = {
             model: model,

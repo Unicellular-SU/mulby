@@ -1,5 +1,5 @@
 // 支持的 AI 供应商类型
-export type AIProviderType = 'openai' | 'claude' | 'deepseek' | 'gemini' | 'glm' | 'custom';
+export type AIProviderType = 'openai' | 'claude' | 'deepseek' | 'gemini' | 'glm' | 'minimax' | 'custom';
 
 // 单个供应商配置
 export interface AIProviderConfig {
@@ -42,6 +42,7 @@ export const PROVIDER_MODELS: Record<AIProviderType, string[]> = {
     deepseek: ['deepseek-chat', 'deepseek-reasoner'],
     gemini: ['gemini-3-pro-preview'],
     glm: ['glm-4.7'],
+    minimax: ['MiniMax-M2.1', 'MiniMax-M2.1-lightning', 'MiniMax-M2'],
     custom: []
 };
 
@@ -52,6 +53,7 @@ export const PROVIDER_ENDPOINTS: Record<AIProviderType, string | undefined> = {
     deepseek: 'https://api.deepseek.com',
     gemini: 'https://generativelanguage.googleapis.com/v1beta',
     glm: 'https://open.bigmodel.cn/api/paas/v4',
+    minimax: 'https://api.minimaxi.com/anthropic',
     custom: undefined
 };
 

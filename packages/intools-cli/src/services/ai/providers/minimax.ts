@@ -2,20 +2,37 @@ import Anthropic from '@anthropic-ai/sdk';
 import { BaseAIProvider, ChatOptions, AIChatResponse } from './base';
 import { AIProviderConfig, AIMessage } from '../../../types/ai';
 
-export class ClaudeProvider extends BaseAIProvider {
+/**
+ * MiniMax Provider - 使用 Anthropic SDK 兼容接口
+ *
+ * 支持模型:
+ * - MiniMax-M2.1: 强大多语言编程实力 (输出速度约60tps)
+ * - MiniMax-M2.1-lightning: 极速版，更快更敏捷 (输出速度约100tps)
+ * - MiniMax-M2: 专为高效编码与Agent工作流而生
+ *
+ * API 端点: https://api.minimaxi.com/anthropic
+ */
+export class MiniMaxProvider extends BaseAIProvider {
     private client: Anthropic;
 
     constructor(config: AIProviderConfig) {
-        super(config);
+        const minimaxConfig: AIProviderConfig = {
+            ...config,
+            provider: 'minimax',
+            apiEndpoint: config.apiEndpoint || 'https://api.minimaxi.com/anthropic',
+            model: config.model || 'MiniMax-M2.1'
+        };
+        super(minimaxConfig);
+
         this.client = new Anthropic({
-            apiKey: config.apiKey,
-            baseURL: config.apiEndpoint, // Optional custom endpoint
-            timeout: (config.timeout || 60) * 1000,
+            apiKey: minimaxConfig.apiKey,
+            baseURL: minimaxConfig.apiEndpoint,
+            timeout: (minimaxConfig.timeout || 60) * 1000,
         });
     }
 
     async chat(messages: AIMessage[], options?: ChatOptions): Promise<AIChatResponse> {
-        const model = options?.model || this.config.model || 'claude-3-5-sonnet-20241022';
+        const model = options?.model || this.config.model || 'MiniMax-M2.1';
         let maxTokens = options?.maxTokens || this.config.maxTokens || 128000;
 
         maxTokens = Number(maxTokens);
@@ -29,12 +46,11 @@ export class ClaudeProvider extends BaseAIProvider {
         const params: Anthropic.MessageCreateParamsNonStreaming = {
             model: model,
             messages: userAssistantMessages.map(m => {
-                // Support both string content and content blocks (for cache_control)
+                // Support both string content and content blocks
                 let content: string | any[];
                 if (typeof m.content === 'string' || m.content === null) {
                     content = m.content || '';
                 } else if (Array.isArray(m.content)) {
-                    // Content blocks format - preserve cache_control
                     content = m.content;
                 } else {
                     content = '';
@@ -60,6 +76,8 @@ export class ClaudeProvider extends BaseAIProvider {
 
         const response = await this.client.messages.create(params);
 
+        // Handle thinking blocks (MiniMax supports thinking/reasoning)
+        const thinkingBlock = response.content.find((c: any) => c.type === 'thinking');
         const contentBlock = response.content.find((c: any) => c.type === 'text');
         const toolUseBlocks = response.content.filter((c: any) => c.type === 'tool_use');
 
@@ -77,6 +95,7 @@ export class ClaudeProvider extends BaseAIProvider {
 
         return {
             content: contentBlock && contentBlock.type === 'text' ? contentBlock.text : null,
+            reasoning_content: thinkingBlock && thinkingBlock.type === 'thinking' ? thinkingBlock.thinking : undefined,
             toolCalls: toolCalls,
             usage: {
                 promptTokens: response.usage.input_tokens,
@@ -87,7 +106,7 @@ export class ClaudeProvider extends BaseAIProvider {
     }
 
     async chatStream(messages: AIMessage[], onChunk: (chunk: string) => void, options?: ChatOptions): Promise<AIChatResponse> {
-        const model = options?.model || this.config.model || 'claude-3-5-sonnet-20241022';
+        const model = options?.model || this.config.model || 'MiniMax-M2.1';
         let maxTokens = options?.maxTokens || this.config.maxTokens || 4096;
 
         maxTokens = Number(maxTokens);
@@ -108,13 +127,24 @@ export class ClaudeProvider extends BaseAIProvider {
         });
 
         let fullContent = '';
-        stream.on('text', (text: string) => {
-            fullContent += text;
-            onChunk(text);
-        });
+        let reasoningContent = '';
 
-        await stream.finalMessage();
-        // TODO: Handle tool calls/usage in stream properly
-        return { content: fullContent };
+        // Use for-await to iterate stream events
+        for await (const event of stream) {
+            if (event.type === 'content_block_delta') {
+                const delta = event.delta as any;
+                if (delta.type === 'thinking_delta' && delta.thinking) {
+                    reasoningContent += delta.thinking;
+                } else if (delta.type === 'text_delta' && delta.text) {
+                    fullContent += delta.text;
+                    onChunk(delta.text);
+                }
+            }
+        }
+
+        return {
+            content: fullContent,
+            reasoning_content: reasoningContent || undefined
+        };
     }
 }

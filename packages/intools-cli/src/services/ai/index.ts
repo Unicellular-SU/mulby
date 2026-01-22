@@ -5,6 +5,7 @@ import { ClaudeProvider } from './providers/claude';
 import { DeepSeekProvider } from './providers/deepseek';
 import { GeminiProvider } from './providers/gemini';
 import { GLMProvider } from './providers/glm';
+import { MiniMaxProvider } from './providers/minimax';
 import { AIConfig, AIProviderConfig, DEFAULT_PROVIDER_CONFIG } from '../../types/ai';
 
 export class AIServiceFactory {
@@ -61,6 +62,8 @@ export class AIServiceFactory {
                 return new GeminiProvider(config);
             case 'glm':
                 return new GLMProvider(config);
+            case 'minimax':
+                return new MiniMaxProvider(config);
             case 'openai':
             case 'custom':
             default:
