@@ -846,50 +846,33 @@ Available Commands:
     private async compressContext(targetTokens: number = 8000) {
         const beforeTokens = ContextManager.estimateTokenCount(this.session.conversationHistory);
 
-        // Structured summarizer that generates JSON format
+        // Simple text summarizer - no JSON parsing to avoid truncation/format issues
         const summarizer = async (text: string) => {
-            const prompt = `Please summarize the following technical conversation history into a structured JSON format.
-Focus on capturing the essential information that would help continue the conversation effectively.
+            const prompt = `请将以下技术对话历史总结为简洁的上下文摘要，帮助后续继续对话。
 
-Required JSON structure:
-{
-    "objective": "用户的核心目标（1-2句话）",
-    "key_decisions": ["关键决策1", "关键决策2"],
-    "current_state": "当前进度和状态",
-    "files_modified": ["涉及的文件路径"],
-    "errors_resolved": ["已解决的错误"],
-    "pending_tasks": ["待完成的任务"]
-}
+格式要求（纯文本，不要用 JSON 或 markdown）：
+- 用户目标：（1-2句话描述核心需求）
+- 关键决策：（已做出的重要决定，用逗号分隔）
+- 当前状态：（进度和状态）
+- 修改的文件：（涉及的文件路径，用逗号分隔）
+- 待完成：（剩余任务，用逗号分隔）
 
-Conversation history:
+对话历史：
 ${text}
 
-Return ONLY the JSON object, no additional text or markdown formatting.`;
+请直接输出摘要，不要用代码块或其他格式。`;
 
             try {
                 const result = await this.aiService.chat([
-                    { role: 'system', content: 'You are a helpful assistant that generates structured summaries in JSON format.' },
+                    { role: 'system', content: '你是一个帮助生成对话摘要的助手。直接输出纯文本摘要，不要使用 JSON、markdown 或代码块格式。' },
                     { role: 'user', content: prompt }
-                ], { toolChoice: 'none' }); // No tools for summary
-
-                // Try to parse as JSON
-                const content = result.content || '{}';
-                const jsonMatch = content.match(/\{[\s\S]*\}/);
-                if (jsonMatch) {
-                    const summary = JSON.parse(jsonMatch[0]);
-                    return this.formatStructuredSummary(summary);
-                }
-
-                // Fallback to plain text if JSON parsing fails
-                return content;
-            } catch (error) {
-                console.warn('Failed to generate structured summary, using fallback:', error);
-                // Fallback to simple summary
-                const result = await this.aiService.chat([
-                    { role: 'system', content: 'You are a helpful assistant.' },
-                    { role: 'user', content: `Please summarize the following technical conversation history into a concise paragraph:\n\n${text}` }
                 ], { toolChoice: 'none' });
-                return result.content || 'No summary generated.';
+
+                return result.content || '无法生成摘要';
+            } catch (error) {
+                console.warn('Failed to generate summary:', error);
+                // Ultra simple fallback
+                return `对话摘要生成失败，保留原始上下文的最后部分。`;
             }
         };
 
@@ -919,36 +902,6 @@ Return ONLY the JSON object, no additional text or markdown formatting.`;
         // Simply delegate to compressContext with the aggressive target
         // This ensures we still get summarization of removed messages
         await this.compressContext(targetTokens);
-    }
-
-    private formatStructuredSummary(summary: any): string {
-        const parts: string[] = [];
-
-        if (summary.objective) {
-            parts.push(`**目标**: ${summary.objective}`);
-        }
-
-        if (summary.key_decisions && summary.key_decisions.length > 0) {
-            parts.push(`\n**关键决策**:\n${summary.key_decisions.map((d: string) => `- ${d}`).join('\n')}`);
-        }
-
-        if (summary.current_state) {
-            parts.push(`\n**当前状态**: ${summary.current_state}`);
-        }
-
-        if (summary.files_modified && summary.files_modified.length > 0) {
-            parts.push(`\n**修改的文件**:\n${summary.files_modified.map((f: string) => `- ${f}`).join('\n')}`);
-        }
-
-        if (summary.errors_resolved && summary.errors_resolved.length > 0) {
-            parts.push(`\n**已解决的错误**:\n${summary.errors_resolved.map((e: string) => `- ${e}`).join('\n')}`);
-        }
-
-        if (summary.pending_tasks && summary.pending_tasks.length > 0) {
-            parts.push(`\n**待完成任务**:\n${summary.pending_tasks.map((t: string) => `- ${t}`).join('\n')}`);
-        }
-
-        return parts.join('\n');
     }
 
     private async handleAskUser(question: string): Promise<string> {
