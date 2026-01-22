@@ -33,10 +33,10 @@ export class MiniMaxProvider extends BaseAIProvider {
 
     async chat(messages: AIMessage[], options?: ChatOptions): Promise<AIChatResponse> {
         const model = options?.model || this.config.model || 'MiniMax-M2.1';
-        let maxTokens = options?.maxTokens || this.config.maxTokens || 128000;
+        let maxTokens = options?.maxTokens || this.config.maxTokens || 8192;
 
         maxTokens = Number(maxTokens);
-        if (isNaN(maxTokens)) maxTokens = 128000;
+        if (isNaN(maxTokens)) maxTokens = 8192;
 
         // Convert messages to Anthropic format
         // System message is a top-level parameter in Anthropic API

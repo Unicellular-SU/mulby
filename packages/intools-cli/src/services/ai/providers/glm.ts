@@ -15,7 +15,7 @@ export class GLMProvider extends OpenAIProvider {
             apiEndpoint: config.apiEndpoint || 'https://open.bigmodel.cn/api/paas/v4',
             model: config.model || 'glm-4.7',
             enableThinking: true,
-            maxTokens: config.maxTokens || 128000,
+            maxTokens: config.maxTokens || 65535,
         };
         super(glmConfig);
     }

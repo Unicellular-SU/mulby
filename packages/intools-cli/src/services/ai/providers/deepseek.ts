@@ -13,7 +13,7 @@ export class DeepSeekProvider extends OpenAIProvider {
             provider: 'deepseek',
             apiEndpoint: config.apiEndpoint || 'https://api.deepseek.com',
             model: config.model || 'deepseek-chat',
-            maxTokens: config.maxTokens || 128000,
+            maxTokens: config.maxTokens || 65535,
         };
         super(deepseekConfig);
     }

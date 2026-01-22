@@ -16,10 +16,10 @@ export class ClaudeProvider extends BaseAIProvider {
 
     async chat(messages: AIMessage[], options?: ChatOptions): Promise<AIChatResponse> {
         const model = options?.model || this.config.model || 'claude-3-5-sonnet-20241022';
-        let maxTokens = options?.maxTokens || this.config.maxTokens || 128000;
+        let maxTokens = options?.maxTokens || this.config.maxTokens || 8192;
 
         maxTokens = Number(maxTokens);
-        if (isNaN(maxTokens)) maxTokens = 128000;
+        if (isNaN(maxTokens)) maxTokens = 8192;
 
         // Convert messages to Anthropic format
         // System message is a top-level parameter in Anthropic API
