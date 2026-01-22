@@ -83,7 +83,10 @@ export class AIAgent {
             loopCount++;
 
             try {
-                // 0. Update Dynamic File Map (The Head)
+                // 0.1 Check and compress context before each turn
+                await this.checkAndCompressContext();
+
+                // 0.2 Update Dynamic File Map (The Head)
                 // We update the System Prompt (the first message) with the current file structure
                 // This ensures the AI always has the latest "World View".
                 if (this.session.conversationHistory.length > 0 && this.session.conversationHistory[0].role === 'system') {
@@ -729,28 +732,26 @@ Available Commands:
   /exit, /quit   - Save and exit
   /clear         - Clear conversation history (keeps system prompt)
   /tokens        - Show estimated token usage
-  /compress      - Summarize and compress history manually
-  /use [name]    - Switch AI provider (show list if no name)
-  /model [name]  - Switch model (show list if no name)
-  /plan          - Plan management (show, edit, clear, resume, approve, save, load, deps, validate)
-  /progress      - Show task progress (detail, export, json)
-  /task          - Task control (next, skip, retry, add, remove, detail)
-  /template      - Template management (list, use, delete, builtin)
+  /compress      - Manually compress context
+  /use [name]    - Switch AI provider
+  /model [name]  - Switch model
+  /plan [需求]    - Show plan or force plan mode
   /help          - Show this help
 `));
                 return true;
 
             case '/plan':
-                return await this.planCommandHandler.handlePlanCommand(args);
-
-            case '/progress':
-                return await this.planCommandHandler.handleProgressCommand(args);
-
-            case '/task':
-                return await this.planCommandHandler.handleTaskCommand(args);
-
-            case '/template':
-                return await this.planCommandHandler.handleTemplateCommand(args);
+                const result = await this.planCommandHandler.handlePlanCommand(args);
+                if (!result.handled && result.requirement) {
+                    // Force plan mode - add to conversation for AI to create plan
+                    this.session.conversationHistory.push({
+                        role: 'user',
+                        content: `请为以下任务创建一个详细的执行计划：\n\n${result.requirement}\n\n请列出具体的步骤（作为 todo list），然后开始执行。`
+                    });
+                    this.sessionManager.saveSession(this.session);
+                    return false; // Let AI process
+                }
+                return true;
 
             default:
                 tui.log(chalk.red(`Unknown command: ${cmd}`));
@@ -761,10 +762,13 @@ Available Commands:
     private async checkAndCompressContext() {
         const tokens = ContextManager.estimateTokenCount(this.session.conversationHistory);
 
-        // Tiered compression thresholds
-        const LIGHT_THRESHOLD = 5000;   // Light compression: prune tool outputs only
-        const MEDIUM_THRESHOLD = 10000; // Medium compression: summarize with 8k target
-        const HEAVY_THRESHOLD = 15000;  // Heavy compression: aggressive 5k target
+        // Model context limit (most models support 128k, some support more)
+        const MODEL_LIMIT = 128000;
+
+        // Tiered compression thresholds based on model limit
+        const LIGHT_THRESHOLD = MODEL_LIMIT * 0.5;   // 50% - prune tool outputs
+        const MEDIUM_THRESHOLD = MODEL_LIMIT * 0.7;  // 70% - summarize with larger target
+        const HEAVY_THRESHOLD = MODEL_LIMIT * 0.85;  // 85% - aggressive compression
 
         if (tokens < LIGHT_THRESHOLD) {
             return; // No compression needed
@@ -772,16 +776,18 @@ Available Commands:
 
         if (tokens < MEDIUM_THRESHOLD) {
             // Light compression: only prune tool outputs
-            tui.log(chalk.yellow(`⚠️ Context at ${tokens} tokens. Applying light compression (pruning tool outputs)...`));
+            tui.log(chalk.yellow(`⚠️ Context at ${tokens} tokens (${Math.round(tokens / MODEL_LIMIT * 100)}% of limit). Applying light compression...`));
             await this.lightCompress();
         } else if (tokens < HEAVY_THRESHOLD) {
-            // Medium compression: summarize with 8k target
-            tui.log(chalk.yellow(`⚠️ Context at ${tokens} tokens. Applying medium compression (target: 8k tokens)...`));
-            await this.compressContext(8000);
+            // Medium compression: summarize with 30% of limit as target
+            const target = Math.floor(MODEL_LIMIT * 0.3);
+            tui.log(chalk.yellow(`⚠️ Context at ${tokens} tokens (${Math.round(tokens / MODEL_LIMIT * 100)}% of limit). Applying medium compression (target: ${target} tokens)...`));
+            await this.compressContext(target);
         } else {
-            // Heavy compression: aggressive 5k target
-            tui.log(chalk.red(`⚠️ Context at ${tokens} tokens. Applying heavy compression (target: 5k tokens)...`));
-            await this.compressContext(5000);
+            // Heavy compression: aggressive 20% of limit as target
+            const target = Math.floor(MODEL_LIMIT * 0.2);
+            tui.log(chalk.red(`⚠️ Context at ${tokens} tokens (${Math.round(tokens / MODEL_LIMIT * 100)}% of limit). Applying heavy compression (target: ${target} tokens)...`));
+            await this.compressContext(target);
         }
     }
 
@@ -793,6 +799,8 @@ Available Commands:
     }
 
     private async compressContext(targetTokens: number = 8000) {
+        const beforeTokens = ContextManager.estimateTokenCount(this.session.conversationHistory);
+
         // Structured summarizer that generates JSON format
         const summarizer = async (text: string) => {
             const prompt = `Please summarize the following technical conversation history into a structured JSON format.
@@ -845,8 +853,49 @@ Return ONLY the JSON object, no additional text or markdown formatting.`;
             targetTokens,
             summarizer
         );
+
+        const afterTokens = ContextManager.estimateTokenCount(this.session.conversationHistory);
         this.sessionManager.saveSession(this.session);
-        tui.log(chalk.green(`✅ Context compressed to ~${targetTokens} tokens.`));
+
+        if (afterTokens >= beforeTokens * 0.9) {
+            // Compression didn't help much, force more aggressive reduction
+            tui.log(chalk.yellow(`⚠️ Compression insufficient (${beforeTokens} -> ${afterTokens}). Forcing aggressive cleanup...`));
+            await this.forceAggressiveCompress(targetTokens);
+        } else {
+            tui.log(chalk.green(`✅ Context compressed: ${beforeTokens} -> ${afterTokens} tokens.`));
+        }
+    }
+
+    /**
+     * Force aggressive compression by keeping only system prompt and last few messages
+     */
+    private async forceAggressiveCompress(targetTokens: number) {
+        const systemMsg = this.session.conversationHistory.find(m => m.role === 'system');
+        const nonSystemMsgs = this.session.conversationHistory.filter(m => m.role !== 'system');
+
+        // Keep only last N messages that fit within budget
+        const kept: AIMessage[] = [];
+        let currentTokens = systemMsg ? ContextManager.estimateTokenCount([systemMsg]) : 0;
+
+        // Start from the most recent messages
+        for (let i = nonSystemMsgs.length - 1; i >= 0; i--) {
+            const msg = nonSystemMsgs[i];
+            const msgTokens = ContextManager.estimateTokenCount([msg]);
+
+            if (currentTokens + msgTokens < targetTokens * 0.8) {
+                kept.unshift(msg);
+                currentTokens += msgTokens;
+            } else {
+                break;
+            }
+        }
+
+        // Rebuild history
+        this.session.conversationHistory = systemMsg ? [systemMsg, ...kept] : kept;
+        this.sessionManager.saveSession(this.session);
+
+        const afterTokens = ContextManager.estimateTokenCount(this.session.conversationHistory);
+        tui.log(chalk.green(`✅ Aggressive compression complete: ${afterTokens} tokens (kept ${kept.length} recent messages).`));
     }
 
     private formatStructuredSummary(summary: any): string {
@@ -895,44 +944,28 @@ Return ONLY the JSON object, no additional text or markdown formatting.`;
             if (input === null) continue; // Slash command executed
 
             if (input && input.trim()) {
-                // Only skip analysis for obvious non-task inputs
-                if (!TaskAnalyzer.shouldSkipAnalysis(input)) {
-
-                    // Use AI to analyze task complexity
-                    tui.log(chalk.gray('正在分析任务复杂度...'));
+                // Only analyze for complex tasks if no active plan
+                if (!this.currentPlan && !TaskAnalyzer.shouldSkipAnalysis(input)) {
+                    tui.log(chalk.gray('正在分析任务...'));
                     const analysis = await TaskAnalyzer.analyze(input);
 
-                    // If task is complex and no active plan, suggest planning
-                    if (analysis.shouldPlan && !this.currentPlan) {
+                    // If complex task, suggest planning
+                    if (analysis.shouldPlan) {
                         tui.log(chalk.cyan(`\n📊 ${TaskAnalyzer.getAnalysisDescription(analysis)}`));
-                        tui.log(chalk.yellow('💡 建议：此任务可能需要规划。'));
 
                         const choice = await tui.select([
-                            { label: '进入规划模式 (推荐)', value: 'plan' },
-                            { label: '直接执行', value: 'direct' },
-                            { label: '从模板开始', value: 'template' }
+                            { label: '创建计划后执行 (推荐)', value: 'plan' },
+                            { label: '直接执行', value: 'direct' }
                         ]);
 
                         if (choice === 'plan') {
-                            // Add instruction for AI to create a plan
+                            // Ask AI to create plan first
                             this.session.conversationHistory.push({
                                 role: 'user',
-                                content: `请为以下任务创建一个详细的执行计划，将其分解为具体的步骤：\n\n${input}\n\n请使用 JSON 格式返回计划，包含 goal 和 tasks 数组。`
+                                content: `请为以下任务创建一个执行计划，列出具体步骤，然后开始执行：\n\n${input}`
                             });
                             this.sessionManager.saveSession(this.session);
                             break;
-                        } else if (choice === 'template') {
-                            // Let user choose a template
-                            await this.planCommandHandler.handlePlanCommand(['load']);
-                            // Re-check currentPlan after template load (it may have been set)
-                            const loadedPlan = this.currentPlan as TaskPlan | null;
-                            if (loadedPlan) {
-                                // Update goal with user's input
-                                loadedPlan.goal = input.slice(0, 100);
-                                await this.planManager.savePlan(loadedPlan, this.session.id);
-                                tui.log(chalk.green(`✅ 计划已创建，目标：${loadedPlan.goal}`));
-                            }
-                            continue; // Let user continue or modify
                         }
                         // else: direct execution, fall through
                     }
@@ -943,7 +976,7 @@ Return ONLY the JSON object, no additional text or markdown formatting.`;
                     content: input
                 });
                 this.sessionManager.saveSession(this.session);
-                break; // Break loop to let AI process content
+                break;
             } else {
                 // Empty input (Enter)
                 break;
