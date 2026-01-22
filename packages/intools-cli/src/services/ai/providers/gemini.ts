@@ -23,17 +23,19 @@ export class GeminiProvider extends BaseAIProvider {
         super(config);
         this.apiKey = config.apiKey;
         this.baseURL = config.apiEndpoint || 'https://generativelanguage.googleapis.com/v1beta';
-        this.model = config.model || 'gemini-2.0-flash-exp';
+        this.model = config.model || 'gemini-3-pro-preview';
     }
 
     async chat(messages: AIMessage[], options?: ChatOptions): Promise<AIChatResponse> {
         const { contents, systemInstruction } = this.convertMessages(messages);
         const tools = options?.tools ? this.convertTools(options.tools) : undefined;
+        // maxTokens 是最大输出 token 数，使用 getMaxOutputTokens() 获取模型默认值
+        const maxOutputTokens = options?.maxTokens || this.config.maxTokens || this.getMaxOutputTokens();
 
         const requestBody: any = {
             contents,
             generationConfig: {
-                maxOutputTokens: this.config.maxTokens,
+                maxOutputTokens,
                 temperature: 0.7,
             }
         };
@@ -72,11 +74,13 @@ export class GeminiProvider extends BaseAIProvider {
     ): Promise<AIChatResponse> {
         const { contents, systemInstruction } = this.convertMessages(messages);
         const tools = options?.tools ? this.convertTools(options.tools) : undefined;
+        // maxTokens 是最大输出 token 数，使用 getMaxOutputTokens() 获取模型默认值
+        const maxOutputTokens = options?.maxTokens || this.config.maxTokens || this.getMaxOutputTokens();
 
         const requestBody: any = {
             contents,
             generationConfig: {
-                maxOutputTokens: this.config.maxTokens,
+                maxOutputTokens,
                 temperature: 0.7,
             }
         };

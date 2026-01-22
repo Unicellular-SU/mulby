@@ -15,12 +15,13 @@ export class OpenAIProvider extends BaseAIProvider {
     }
 
     async chat(messages: AIMessage[], options?: ChatOptions): Promise<AIChatResponse> {
-        const model = options?.model || this.config.model || 'gpt-4o';
-        let maxTokens = options?.maxTokens || this.config.maxTokens || 128000;
+        const model = options?.model || this.config.model || 'gpt-5.2';
+        // maxTokens 是最大输出 token 数，使用 getMaxOutputTokens() 获取模型默认值
+        let maxTokens = options?.maxTokens || this.config.maxTokens || this.getMaxOutputTokens();
 
         // Final safety cast to number
         maxTokens = Number(maxTokens);
-        if (isNaN(maxTokens)) maxTokens = 128000;
+        if (isNaN(maxTokens)) maxTokens = 128000;  // gpt-5.2 默认最大输出
 
         const requestOptions: any = {
             model: model,
@@ -67,12 +68,13 @@ export class OpenAIProvider extends BaseAIProvider {
     }
 
     async chatStream(messages: AIMessage[], onChunk: (chunk: string) => void, options?: ChatOptions): Promise<AIChatResponse> {
-        const model = options?.model || this.config.model || 'gpt-4o';
-        let maxTokens = options?.maxTokens || this.config.maxTokens || 4096;
+        const model = options?.model || this.config.model || 'gpt-5.2';
+        // maxTokens 是最大输出 token 数，使用 getMaxOutputTokens() 获取模型默认值
+        let maxTokens = options?.maxTokens || this.config.maxTokens || this.getMaxOutputTokens();
 
         // Final safety cast to number
         maxTokens = Number(maxTokens);
-        if (isNaN(maxTokens)) maxTokens = 4096;
+        if (isNaN(maxTokens)) maxTokens = 128000;  // gpt-5.2 默认最大输出
 
         const requestOptions: any = {
             model: model,

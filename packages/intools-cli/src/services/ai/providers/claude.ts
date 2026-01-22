@@ -67,10 +67,11 @@ export class ClaudeProvider extends BaseAIProvider {
 
     async chat(messages: AIMessage[], options?: ChatOptions): Promise<AIChatResponse> {
         const model = options?.model || this.config.model || 'claude-3-5-sonnet-20241022';
-        let maxTokens = options?.maxTokens || this.config.maxTokens || 8192;
+        // maxTokens 是最大输出 token 数，使用 getMaxOutputTokens() 获取模型默认值
+        let maxTokens = options?.maxTokens || this.config.maxTokens || this.getMaxOutputTokens();
 
         maxTokens = Number(maxTokens);
-        if (isNaN(maxTokens)) maxTokens = 8192;
+        if (isNaN(maxTokens)) maxTokens = 8192;  // claude-3-5-sonnet 默认最大输出
 
         // Convert messages to Anthropic format
         // System message is a top-level parameter in Anthropic API
@@ -151,10 +152,11 @@ export class ClaudeProvider extends BaseAIProvider {
 
     async chatStream(messages: AIMessage[], onChunk: (chunk: string) => void, options?: ChatOptions): Promise<AIChatResponse> {
         const model = options?.model || this.config.model || 'claude-3-5-sonnet-20241022';
-        let maxTokens = options?.maxTokens || this.config.maxTokens || 4096;
+        // maxTokens 是最大输出 token 数，使用 getMaxOutputTokens() 获取模型默认值
+        let maxTokens = options?.maxTokens || this.config.maxTokens || this.getMaxOutputTokens();
 
         maxTokens = Number(maxTokens);
-        if (isNaN(maxTokens)) maxTokens = 4096;
+        if (isNaN(maxTokens)) maxTokens = 8192;  // claude-3-5-sonnet 默认最大输出
 
         const systemMessage = messages.find(m => m.role === 'system');
         const userAssistantMessages = messages.filter(m => m.role !== 'system');
