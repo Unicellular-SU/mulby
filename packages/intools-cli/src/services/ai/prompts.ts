@@ -24,7 +24,7 @@ ${content}
       ? `
 ## Current State: Scaffolded & Ready for Design 🏗️
 The project structure has ALREADY been created (React + Vite + InTools API).
-**Stack**: React 19, Tailwind CSS v4, Vite.
+**Stack**: React 18, Tailwind CSS v3, Vite.
 **Your Goal**: Now act as a Product Consultant to define the *content* and *logic* within this structure.
 
 **Resources Available**: 

@@ -15,7 +15,9 @@ import {
   buildUseIntools,
   buildViteConfig,
   buildGitignore,
-  buildReactReadme
+  buildReactReadme,
+  buildPostcssConfig,
+  buildTailwindConfig
 } from './templates/react'
 
 export async function createReactProject(targetDir: string, name: string) {
@@ -28,6 +30,8 @@ export async function createReactProject(targetDir: string, name: string) {
   createReactPackageJson(targetDir, name)
   createTsConfig(targetDir)
   createViteConfig(targetDir)
+  createPostcssConfig(targetDir)
+  createTailwindConfig(targetDir)
   createBackendMain(targetDir, name)
   createReactUI(targetDir, name)
   createIntoolsTypes(targetDir)
@@ -64,6 +68,18 @@ function createViteConfig(targetDir: string) {
   const viteConfig = buildViteConfig()
   fs.writeFileSync(path.join(targetDir, 'vite.config.ts'), viteConfig)
   console.log(chalk.green('  ✓ vite.config.ts'))
+}
+
+function createPostcssConfig(targetDir: string) {
+  const config = buildPostcssConfig()
+  fs.writeFileSync(path.join(targetDir, 'postcss.config.js'), config)
+  console.log(chalk.green('  ✓ postcss.config.js'))
+}
+
+function createTailwindConfig(targetDir: string) {
+  const config = buildTailwindConfig()
+  fs.writeFileSync(path.join(targetDir, 'tailwind.config.js'), config)
+  console.log(chalk.green('  ✓ tailwind.config.js'))
 }
 
 function createBackendMain(targetDir: string, name: string) {

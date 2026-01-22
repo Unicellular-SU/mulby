@@ -41,17 +41,19 @@ export function buildReactPackageJson(name: string) {
       pack: 'intools pack'
     },
     dependencies: {
-      react: '^19.0.0',
-      'react-dom': '^19.0.0'
+      react: '^18.3.1',
+      'react-dom': '^18.3.1',
+      'lucide-react': '^0.562.0'
     },
     devDependencies: {
-      '@types/react': '^19.0.0',
-      '@types/react-dom': '^19.0.0',
-      '@vitejs/plugin-react': '^4.3.0',
-      '@tailwindcss/vite': '^4.0.0',
-      tailwindcss: '^4.0.0',
-      typescript: '^5.3.0',
-      vite: '^5.2.0'
+      '@types/react': '^18.3.3',
+      '@types/react-dom': '^18.3.0',
+      '@vitejs/plugin-react': '^4.3.1',
+      autoprefixer: '^10.4.19',
+      postcss: '^8.4.38',
+      tailwindcss: '^3.4.4',
+      typescript: '^5.2.2',
+      vite: '^5.3.1'
     }
   }
 }
@@ -82,11 +84,10 @@ export function buildTsConfig() {
 export function buildViteConfig() {
   return `import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
-import tailwindcss from '@tailwindcss/vite'
 import path from 'path'
 
 export default defineConfig({
-  plugins: [react(), tailwindcss()],
+  plugins: [react()],
   root: 'src/ui',
   base: './',
   build: {
@@ -99,6 +100,31 @@ export default defineConfig({
     }
   }
 })
+`
+}
+
+export function buildPostcssConfig() {
+  return `export default {
+  plugins: {
+    tailwindcss: {},
+    autoprefixer: {},
+  },
+}
+`
+}
+
+export function buildTailwindConfig() {
+  return `/** @type {import('tailwindcss').Config} */
+export default {
+  content: [
+    "./src/ui/index.html",
+    "./src/ui/**/*.{js,ts,jsx,tsx}",
+  ],
+  theme: {
+    extend: {},
+  },
+  plugins: [],
+}
 `
 }
 
@@ -201,6 +227,7 @@ createRoot(document.getElementById('root')!).render(
 
 export function buildAppTsx(name: string) {
   return `import { useEffect, useState } from 'react'
+import { FileText, Image } from 'lucide-react'
 import { useIntools } from './hooks/useIntools'
 
 // 附件类型定义
@@ -285,7 +312,7 @@ export default function App() {
               {attachments.map((item, index) => (
                 <div key={item.id || index} className="attachment-item">
                   <span className="attachment-icon">
-                    {item.kind === 'image' ? '🖼️' : '📄'}
+                    {item.kind === 'image' ? <Image size={20} /> : <FileText size={20} />}
                   </span>
                   <div className="attachment-info">
                     <div className="attachment-name">{item.name}</div>
@@ -334,7 +361,9 @@ export default function App() {
 
 
 export function buildStylesCss() {
-  return `@import "tailwindcss";
+  return `@tailwind base;
+@tailwind components;
+@tailwind utilities;
 
 /* CSS 变量 - 亮色主题 */
 :root {
