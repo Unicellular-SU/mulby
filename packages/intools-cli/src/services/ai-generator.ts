@@ -27,6 +27,7 @@ export class AIAgent {
     private planManager: PlanManager;
     private planCommandHandler: PlanCommandHandler;
     private currentPlan: TaskPlan | null = null;
+    private lastCompressedTokens: number = 0;  // 记录上次压缩后的 token 数
 
 
     constructor(private session: GenerationSession, private systemPrompt?: string) {
@@ -765,29 +766,64 @@ Available Commands:
         // Model context limit (most models support 128k, some support more)
         const MODEL_LIMIT = 128000;
 
-        // Tiered compression thresholds based on model limit
-        const LIGHT_THRESHOLD = MODEL_LIMIT * 0.5;   // 50% - prune tool outputs
-        const MEDIUM_THRESHOLD = MODEL_LIMIT * 0.7;  // 70% - summarize with larger target
-        const HEAVY_THRESHOLD = MODEL_LIMIT * 0.85;  // 85% - aggressive compression
+        // 1. Growth check: avoid frequent compression
+        const growth = tokens - this.lastCompressedTokens;
+        const MIN_GROWTH = MODEL_LIMIT * 0.08; // 8% growth threshold (~10k tokens)
 
-        if (tokens < LIGHT_THRESHOLD) {
-            return; // No compression needed
+        if (this.lastCompressedTokens > 0 && growth < MIN_GROWTH) {
+            return; // Skip if growth is insufficient
         }
 
-        if (tokens < MEDIUM_THRESHOLD) {
+        // 2. Tiered compression zones (based on industry best practices)
+        const SAFE_ZONE = MODEL_LIMIT * 0.5;      // 50% - safe, no compression
+        const LIGHT_ZONE = MODEL_LIMIT * 0.65;    // 65% - light compression (prune tool outputs)
+        const MEDIUM_ZONE = MODEL_LIMIT * 0.78;   // 78% - medium compression (summarize + keep important)
+        const HEAVY_ZONE = MODEL_LIMIT * 0.88;    // 88% - heavy compression (aggressive summarization)
+        const CRITICAL_ZONE = MODEL_LIMIT * 0.95; // 95% - critical compression (keep only recent)
+
+        if (tokens < SAFE_ZONE) {
+            return; // Safe zone, no action needed
+        }
+
+        if (tokens < LIGHT_ZONE) {
             // Light compression: only prune tool outputs
-            tui.log(chalk.yellow(`⚠️ Context at ${tokens} tokens (${Math.round(tokens / MODEL_LIMIT * 100)}% of limit). Applying light compression...`));
+            tui.log(chalk.yellow(`⚠️ Context at ${tokens} tokens (${Math.round(tokens / MODEL_LIMIT * 100)}%). Applying light compression...`));
             await this.lightCompress();
-        } else if (tokens < HEAVY_THRESHOLD) {
-            // Medium compression: summarize with 30% of limit as target
-            const target = Math.floor(MODEL_LIMIT * 0.3);
-            tui.log(chalk.yellow(`⚠️ Context at ${tokens} tokens (${Math.round(tokens / MODEL_LIMIT * 100)}% of limit). Applying medium compression (target: ${target} tokens)...`));
+            const afterTokens = ContextManager.estimateTokenCount(this.session.conversationHistory);
+            tui.log(chalk.green(`✅ Light compression: ${tokens} -> ${afterTokens} tokens.`));
+            this.lastCompressedTokens = afterTokens;
+        } else if (tokens < MEDIUM_ZONE) {
+            // Medium compression: target 50% of limit
+            const target = Math.floor(MODEL_LIMIT * 0.5);
+            tui.log(chalk.yellow(`⚠️ Context at ${tokens} tokens (${Math.round(tokens / MODEL_LIMIT * 100)}%). Applying medium compression (target: ${target})...`));
             await this.compressContext(target);
+            const afterTokens = ContextManager.estimateTokenCount(this.session.conversationHistory);
+            tui.log(chalk.green(`✅ Medium compression: ${tokens} -> ${afterTokens} tokens.`));
+            this.lastCompressedTokens = afterTokens;
+        } else if (tokens < HEAVY_ZONE) {
+            // Heavy compression: target 35% of limit
+            const target = Math.floor(MODEL_LIMIT * 0.35);
+            tui.log(chalk.red(`⚠️ Context at ${tokens} tokens (${Math.round(tokens / MODEL_LIMIT * 100)}%). Applying heavy compression (target: ${target})...`));
+            await this.compressContext(target);
+            const afterTokens = ContextManager.estimateTokenCount(this.session.conversationHistory);
+            tui.log(chalk.green(`✅ Heavy compression: ${tokens} -> ${afterTokens} tokens.`));
+            this.lastCompressedTokens = afterTokens;
+        } else if (tokens < CRITICAL_ZONE) {
+            // Critical compression: target 25% of limit
+            const target = Math.floor(MODEL_LIMIT * 0.25);
+            tui.log(chalk.red(`🚨 Context at ${tokens} tokens (${Math.round(tokens / MODEL_LIMIT * 100)}%). Applying critical compression (target: ${target})...`));
+            await this.forceAggressiveCompress(target);
+            const afterTokens = ContextManager.estimateTokenCount(this.session.conversationHistory);
+            tui.log(chalk.green(`✅ Critical compression: ${tokens} -> ${afterTokens} tokens.`));
+            this.lastCompressedTokens = afterTokens;
         } else {
-            // Heavy compression: aggressive 20% of limit as target
-            const target = Math.floor(MODEL_LIMIT * 0.2);
-            tui.log(chalk.red(`⚠️ Context at ${tokens} tokens (${Math.round(tokens / MODEL_LIMIT * 100)}% of limit). Applying heavy compression (target: ${target} tokens)...`));
-            await this.compressContext(target);
+            // Emergency: over 95%, immediate aggressive compression
+            const target = Math.floor(MODEL_LIMIT * 0.15);
+            tui.log(chalk.red(`🚨 EMERGENCY: Context at ${tokens} tokens (${Math.round(tokens / MODEL_LIMIT * 100)}%). Forcing aggressive compression (target: ${target})...`));
+            await this.forceAggressiveCompress(target);
+            const afterTokens = ContextManager.estimateTokenCount(this.session.conversationHistory);
+            tui.log(chalk.green(`✅ Emergency compression: ${tokens} -> ${afterTokens} tokens.`));
+            this.lastCompressedTokens = afterTokens;
         }
     }
 
