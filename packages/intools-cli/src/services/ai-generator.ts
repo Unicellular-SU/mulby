@@ -903,44 +903,22 @@ Return ONLY the JSON object, no additional text or markdown formatting.`;
         this.sessionManager.saveSession(this.session);
 
         if (afterTokens >= beforeTokens * 0.9) {
-            // Compression didn't help much, force more aggressive reduction
-            tui.log(chalk.yellow(`⚠️ Compression insufficient (${beforeTokens} -> ${afterTokens}). Forcing aggressive cleanup...`));
-            await this.forceAggressiveCompress(targetTokens);
+            // Compression didn't help much - this usually means most messages are important
+            // or the summarization couldn't reduce much. Just log a warning.
+            tui.log(chalk.yellow(`⚠️ Compression limited: ${beforeTokens} -> ${afterTokens} tokens (most content deemed important).`));
         } else {
             tui.log(chalk.green(`✅ Context compressed: ${beforeTokens} -> ${afterTokens} tokens.`));
         }
     }
 
     /**
-     * Force aggressive compression by keeping only system prompt and last few messages
+     * Force aggressive compression - uses the same summarization logic as compressContext
+     * but with a more aggressive target. The key is still summarization, not deletion.
      */
     private async forceAggressiveCompress(targetTokens: number) {
-        const systemMsg = this.session.conversationHistory.find(m => m.role === 'system');
-        const nonSystemMsgs = this.session.conversationHistory.filter(m => m.role !== 'system');
-
-        // Keep only last N messages that fit within budget
-        const kept: AIMessage[] = [];
-        let currentTokens = systemMsg ? ContextManager.estimateTokenCount([systemMsg]) : 0;
-
-        // Start from the most recent messages
-        for (let i = nonSystemMsgs.length - 1; i >= 0; i--) {
-            const msg = nonSystemMsgs[i];
-            const msgTokens = ContextManager.estimateTokenCount([msg]);
-
-            if (currentTokens + msgTokens < targetTokens * 0.8) {
-                kept.unshift(msg);
-                currentTokens += msgTokens;
-            } else {
-                break;
-            }
-        }
-
-        // Rebuild history
-        this.session.conversationHistory = systemMsg ? [systemMsg, ...kept] : kept;
-        this.sessionManager.saveSession(this.session);
-
-        const afterTokens = ContextManager.estimateTokenCount(this.session.conversationHistory);
-        tui.log(chalk.green(`✅ Aggressive compression complete: ${afterTokens} tokens (kept ${kept.length} recent messages).`));
+        // Simply delegate to compressContext with the aggressive target
+        // This ensures we still get summarization of removed messages
+        await this.compressContext(targetTokens);
     }
 
     private formatStructuredSummary(summary: any): string {

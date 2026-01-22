@@ -233,9 +233,12 @@ export class ContextManager {
      * - Removes orphaned tool messages (no corresponding assistant)
      * - Removes assistant messages with tool_calls that have no responses
      * - Handles both leading/trailing and middle incomplete chains
+     * - SAFETY: Always keeps at least MIN_KEEP_MESSAGES to prevent empty arrays
      */
     private static ensureCompleteToolChains(messages: AIMessage[]): AIMessage[] {
         if (messages.length === 0) return messages;
+
+        const MIN_KEEP_MESSAGES = 3; // Safety minimum to prevent empty results
 
         // 1. Build a set of all tool_call IDs that have responses
         const respondedToolCallIds = new Set<string>();
@@ -303,6 +306,27 @@ export class ContextManager {
             } else {
                 break;
             }
+        }
+
+        // SAFETY: If we filtered too aggressively, keep at least the last few non-tool messages
+        if (filtered.length === 0 && messages.length > 0) {
+            console.warn(`[ContextManager] ensureCompleteToolChains filtered all messages! Keeping last ${MIN_KEEP_MESSAGES} safe messages.`);
+            const safeMsgs: AIMessage[] = [];
+            for (let i = messages.length - 1; i >= 0 && safeMsgs.length < MIN_KEEP_MESSAGES; i--) {
+                const msg = messages[i];
+                // Only keep user/assistant messages without tool_calls
+                if (msg.role === 'user' || (msg.role === 'assistant' && !msg.tool_calls?.length)) {
+                    safeMsgs.unshift(msg);
+                }
+            }
+
+            // Last resort: if still empty, keep the very last message regardless of type
+            if (safeMsgs.length === 0) {
+                console.warn(`[ContextManager] No safe messages found, keeping last message as fallback.`);
+                safeMsgs.push(messages[messages.length - 1]);
+            }
+
+            return safeMsgs;
         }
 
         return filtered;

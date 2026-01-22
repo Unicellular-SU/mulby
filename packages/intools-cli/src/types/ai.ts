@@ -131,8 +131,8 @@ export const MODEL_CONTEXT_WINDOWS: Record<string, ModelInfo> = {
     'claude-3-5-haiku': { contextWindow: 200000, maxOutput: 8192 },
 
     // ============ DeepSeek ============
-    'deepseek-chat': { contextWindow: 65536, maxOutput: 8192 },
-    'deepseek-reasoner': { contextWindow: 65536, maxOutput: 32768 },
+    'deepseek-chat': { contextWindow: 128000, maxOutput: 8192 },
+    'deepseek-reasoner': { contextWindow: 128000, maxOutput: 64000 },
 
     // ============ Gemini (Google) ============
     // Gemini 3 系列 (2026年最新)
@@ -190,7 +190,7 @@ export function getModelContextWindow(modelName: string, provider?: AIProviderTy
             case 'claude':
                 return { contextWindow: 200000, maxOutput: 8192 };   // claude-3-5-sonnet 默认值
             case 'deepseek':
-                return { contextWindow: 65536, maxOutput: 8192 };    // deepseek-chat 默认值
+                return { contextWindow: 128000, maxOutput: 8192 };    // deepseek-chat 默认值
             case 'gemini':
                 return { contextWindow: 1000000, maxOutput: 65536 }; // gemini-3-pro 默认值
             case 'glm':

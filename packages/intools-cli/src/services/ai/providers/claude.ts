@@ -14,6 +14,116 @@ export class ClaudeProvider extends BaseAIProvider {
         });
     }
 
+    /**
+     * 将 OpenAI 格式的消息转换为 Anthropic API 格式
+     *
+     * OpenAI 格式:
+     * - { role: 'assistant', content: '...', tool_calls: [...] }
+     * - { role: 'tool', tool_call_id: '...', content: '...' }
+     *
+     * Anthropic 格式:
+     * - { role: 'assistant', content: [{ type: 'text', text: '...' }, { type: 'tool_use', id: '...', name: '...', input: {...} }] }
+     * - { role: 'user', content: [{ type: 'tool_result', tool_use_id: '...', content: '...' }] }
+     */
+    protected convertMessagesToAnthropicFormat(messages: AIMessage[]): Anthropic.MessageParam[] {
+        const result: Anthropic.MessageParam[] = [];
+        let i = 0;
+
+        while (i < messages.length) {
+            const msg = messages[i];
+
+            // 跳过 system 消息（会作为顶层参数传递）
+            if (msg.role === 'system') {
+                i++;
+                continue;
+            }
+
+            if (msg.role === 'assistant') {
+                const contentBlocks: any[] = [];
+
+                // 添加文本内容
+                if (msg.content) {
+                    const textContent = typeof msg.content === 'string' ? msg.content :
+                        (Array.isArray(msg.content) ? msg.content : '');
+                    if (typeof textContent === 'string' && textContent.trim()) {
+                        contentBlocks.push({ type: 'text', text: textContent });
+                    } else if (Array.isArray(textContent)) {
+                        // 如果是内容块数组，直接使用
+                        contentBlocks.push(...textContent);
+                    }
+                }
+
+                // 转换 tool_calls 为 tool_use blocks
+                if (msg.tool_calls && msg.tool_calls.length > 0) {
+                    for (const toolCall of msg.tool_calls) {
+                        let input: any = {};
+                        try {
+                            input = typeof toolCall.function.arguments === 'string'
+                                ? JSON.parse(toolCall.function.arguments)
+                                : toolCall.function.arguments;
+                        } catch {
+                            input = {};
+                        }
+                        contentBlocks.push({
+                            type: 'tool_use',
+                            id: toolCall.id,
+                            name: toolCall.function.name,
+                            input: input
+                        });
+                    }
+                }
+
+                // 如果没有任何内容，添加空文本
+                if (contentBlocks.length === 0) {
+                    contentBlocks.push({ type: 'text', text: '' });
+                }
+
+                result.push({
+                    role: 'assistant',
+                    content: contentBlocks
+                });
+                i++;
+            } else if (msg.role === 'tool') {
+                // 收集连续的 tool 消息，合并为一个 user 消息
+                const toolResultBlocks: any[] = [];
+
+                while (i < messages.length && messages[i].role === 'tool') {
+                    const toolMsg = messages[i];
+                    toolResultBlocks.push({
+                        type: 'tool_result',
+                        tool_use_id: toolMsg.tool_call_id,
+                        content: typeof toolMsg.content === 'string' ? toolMsg.content : JSON.stringify(toolMsg.content)
+                    });
+                    i++;
+                }
+
+                result.push({
+                    role: 'user',
+                    content: toolResultBlocks
+                });
+            } else if (msg.role === 'user') {
+                // 普通 user 消息
+                let content: string | any[];
+                if (typeof msg.content === 'string' || msg.content === null) {
+                    content = msg.content || '';
+                } else if (Array.isArray(msg.content)) {
+                    content = msg.content;
+                } else {
+                    content = '';
+                }
+                result.push({
+                    role: 'user',
+                    content: content
+                });
+                i++;
+            } else {
+                i++;
+            }
+        }
+
+        return result;
+    }
+
     protected parseXMLToolCalls(content: string): any[] {
         const toolCalls: any[] = [];
         // Regex to match <tool_name>... content ...</tool_name>
@@ -76,27 +186,11 @@ export class ClaudeProvider extends BaseAIProvider {
         // Convert messages to Anthropic format
         // System message is a top-level parameter in Anthropic API
         const systemMessage = messages.find(m => m.role === 'system');
-        const userAssistantMessages = messages.filter(m => m.role !== 'system');
+        const anthropicMessages = this.convertMessagesToAnthropicFormat(messages);
 
         const params: Anthropic.MessageCreateParamsNonStreaming = {
             model: model,
-            messages: userAssistantMessages.map(m => {
-                // Support both string content and content blocks (for cache_control)
-                let content: string | any[];
-                if (typeof m.content === 'string' || m.content === null) {
-                    content = m.content || '';
-                } else if (Array.isArray(m.content)) {
-                    // Content blocks format - preserve cache_control
-                    content = m.content;
-                } else {
-                    content = '';
-                }
-
-                return {
-                    role: m.role as 'user' | 'assistant',
-                    content: content
-                };
-            }) as any,
+            messages: anthropicMessages,
             max_tokens: maxTokens,
             temperature: options?.temperature,
             system: typeof systemMessage?.content === 'string' ? systemMessage.content : undefined,
@@ -159,18 +253,26 @@ export class ClaudeProvider extends BaseAIProvider {
         if (isNaN(maxTokens)) maxTokens = 8192;  // claude-3-5-sonnet 默认最大输出
 
         const systemMessage = messages.find(m => m.role === 'system');
-        const userAssistantMessages = messages.filter(m => m.role !== 'system');
+        const anthropicMessages = this.convertMessagesToAnthropicFormat(messages);
 
-        const stream = this.client.messages.stream({
+        const streamParams: any = {
             model: model,
-            messages: userAssistantMessages.map(m => ({
-                role: m.role as 'user' | 'assistant',
-                content: m.content || ''
-            })) as any,
+            messages: anthropicMessages,
             max_tokens: maxTokens,
             temperature: options?.temperature,
             system: typeof systemMessage?.content === 'string' ? systemMessage.content : undefined,
-        });
+        };
+
+        // 添加 tools 参数，确保流式模式下也能使用工具调用
+        if (options?.tools && options.tools.length > 0) {
+            streamParams.tools = options.tools.map(t => ({
+                name: t.function.name,
+                description: t.function.description,
+                input_schema: t.function.parameters
+            }));
+        }
+
+        const stream = this.client.messages.stream(streamParams);
 
         let fullContent = '';
         stream.on('text', (text: string) => {
