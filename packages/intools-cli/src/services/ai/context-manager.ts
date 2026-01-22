@@ -23,6 +23,16 @@ interface ScoredMessage {
     index: number;
 }
 
+/**
+ * Message group - either a single message or a tool chain (assistant + tool responses)
+ */
+interface MessageGroup {
+    messages: ScoredMessage[];
+    totalScore: number;
+    totalTokens: number;
+    startIndex: number;  // First message index in the group
+}
+
 export class ContextManager {
     // Fallback: 4 characters per token as a rough heuristic
     private static readonly CHARS_PER_TOKEN = 4;
@@ -90,7 +100,18 @@ export class ContextManager {
         let totalChars = 0;
         for (const msg of messages) {
             if (msg.content) {
-                totalChars += msg.content.length;
+                if (typeof msg.content === 'string') {
+                    totalChars += msg.content.length;
+                } else if (Array.isArray(msg.content)) {
+                    // Handle content blocks array
+                    for (const block of msg.content) {
+                        if (block.type === 'text' && block.text) {
+                            totalChars += block.text.length;
+                        } else {
+                            totalChars += JSON.stringify(block).length;
+                        }
+                    }
+                }
             }
             if (msg.tool_calls) {
                 for (const call of msg.tool_calls) {
@@ -124,16 +145,19 @@ export class ContextManager {
         const systemMessage = messages[0].role === 'system' ? messages[0] : null;
         const startIndex = systemMessage ? 1 : 0;
 
-        let kept: AIMessage[];
+        // Get indices of messages to keep (relative to full messages array)
+        let keptIndices: Set<number>;
 
         if (useScoring) {
-            // Use score-based selection
+            // Use score-based selection - returns indices relative to messagesToScore
             const messagesToScore = messages.slice(startIndex);
-            kept = this.selectMessagesByScore(messagesToScore, targetTokens * 0.7);
+            const relativeIndices = this.selectMessageIndicesByScore(messagesToScore, targetTokens * 0.7);
+            // Convert to absolute indices
+            keptIndices = new Set([...relativeIndices].map(i => i + startIndex));
         } else {
             // Fallback: time-based retention (old behavior)
             const keepBudget = Math.floor(targetTokens * 0.7);
-            kept = [];
+            keptIndices = new Set<number>();
             let currentTokens = 0;
 
             // Retain messages from the end, up to the budget
@@ -142,19 +166,28 @@ export class ContextManager {
                 const msgTokens = this.estimateTokenCount([msg]);
 
                 if (currentTokens + msgTokens < keepBudget) {
-                    kept.unshift(msg);
+                    keptIndices.add(i);
                     currentTokens += msgTokens;
                 } else {
                     break;
                 }
             }
-
-            // Ensure we don't cut in the middle of a tool chain
-            kept = this.ensureCompleteToolChains(kept);
         }
 
-        // Messages to compress
-        const toCompress = messages.slice(startIndex, messages.length - kept.length);
+        // Build kept and toCompress arrays based on indices
+        let kept: AIMessage[] = [];
+        let toCompress: AIMessage[] = [];
+
+        for (let i = startIndex; i < messages.length; i++) {
+            if (keptIndices.has(i)) {
+                kept.push(messages[i]);
+            } else {
+                toCompress.push(messages[i]);
+            }
+        }
+
+        // Ensure we don't cut in the middle of a tool chain (applies to both strategies)
+        kept = this.ensureCompleteToolChains(kept);
 
         if (toCompress.length === 0) {
             return systemMessage ? [systemMessage, ...kept] : kept;
@@ -196,23 +229,83 @@ export class ContextManager {
     }
 
     /**
-     * Ensures that retained messages don't start/end in the middle of a tool chain.
+     * Ensures that retained messages don't have broken tool chains.
+     * - Removes orphaned tool messages (no corresponding assistant)
+     * - Removes assistant messages with tool_calls that have no responses
+     * - Handles both leading/trailing and middle incomplete chains
      */
     private static ensureCompleteToolChains(messages: AIMessage[]): AIMessage[] {
         if (messages.length === 0) return messages;
 
-        // Remove leading tool messages (orphaned responses)
-        while (messages.length > 0 && messages[0].role === 'tool') {
-            messages.shift();
+        // 1. Build a set of all tool_call IDs that have responses
+        const respondedToolCallIds = new Set<string>();
+        for (const msg of messages) {
+            if (msg.role === 'tool' && msg.tool_call_id) {
+                respondedToolCallIds.add(msg.tool_call_id);
+            }
         }
 
-        // Remove trailing assistant messages with tool calls (incomplete chains)
-        const lastMsg = messages[messages.length - 1];
-        if (lastMsg?.role === 'assistant' && lastMsg.tool_calls?.length) {
-            messages.pop();
+        // 2. Build a set of all valid tool_call IDs from assistant messages
+        //    that have ALL their tool_calls responded to
+        const validToolCallIds = new Set<string>();
+        const assistantIndicesToRemove = new Set<number>();
+
+        for (let i = 0; i < messages.length; i++) {
+            const msg = messages[i];
+            if (msg.role === 'assistant' && msg.tool_calls && msg.tool_calls.length > 0) {
+                // Check if ALL tool_calls have responses
+                const allResponded = msg.tool_calls.every(
+                    call => call.id && respondedToolCallIds.has(call.id)
+                );
+
+                if (allResponded) {
+                    // All tool_calls have responses - mark them as valid
+                    for (const call of msg.tool_calls) {
+                        if (call.id) {
+                            validToolCallIds.add(call.id);
+                        }
+                    }
+                } else {
+                    // Some tool_calls don't have responses - remove this assistant message
+                    assistantIndicesToRemove.add(i);
+                }
+            }
         }
 
-        return messages;
+        // 3. Filter messages
+        const filtered = messages.filter((msg, index) => {
+            // Remove assistant messages with incomplete tool chains
+            if (assistantIndicesToRemove.has(index)) {
+                return false;
+            }
+
+            // Remove orphaned tool messages
+            if (msg.role === 'tool') {
+                const toolCallId = msg.tool_call_id;
+                if (!toolCallId || !validToolCallIds.has(toolCallId)) {
+                    return false;
+                }
+            }
+
+            return true;
+        });
+
+        // 4. Remove leading tool messages (in case any slipped through)
+        while (filtered.length > 0 && filtered[0].role === 'tool') {
+            filtered.shift();
+        }
+
+        // 5. Remove trailing assistant messages with tool calls (incomplete chains)
+        while (filtered.length > 0) {
+            const lastMsg = filtered[filtered.length - 1];
+            if (lastMsg?.role === 'assistant' && lastMsg.tool_calls?.length) {
+                filtered.pop();
+            } else {
+                break;
+            }
+        }
+
+        return filtered;
     }
 
     /**
@@ -460,11 +553,13 @@ export class ContextManager {
 
     /**
      * Calculate comprehensive score for a message
+     * @param precomputedTokens - Pre-computed token count to avoid redundant calculation
      */
     private static scoreMessage(
         msg: AIMessage,
         index: number,
         allMessages: AIMessage[],
+        precomputedTokens: number,
         config: ScoringConfig = this.DEFAULT_SCORING_CONFIG
     ): number {
         let score = 0;
@@ -478,10 +573,9 @@ export class ContextManager {
         // 3. Context dependency
         score += this.calculateContextDependency(msg, index, allMessages);
 
-        // 4. Length penalty
-        if (config.lengthPenaltyEnabled) {
-            const tokens = this.estimateTokenCount([msg]);
-            const lengthPenalty = Math.min(0, -Math.log10(tokens / 100));
+        // 4. Length penalty (use pre-computed tokens)
+        if (config.lengthPenaltyEnabled && precomputedTokens > 0) {
+            const lengthPenalty = Math.min(0, -Math.log10(precomputedTokens / 100));
             score += lengthPenalty;
         }
 
@@ -493,112 +587,175 @@ export class ContextManager {
     }
 
     /**
-     * Detect incomplete tool chains that must be kept together
+     * Group messages into tool chains and standalone messages.
+     * Tool chains (assistant with tool_calls + corresponding tool responses) are grouped together
+     * so they can be selected or discarded as a unit.
      */
-    private static detectIncompleteToolChains(scored: ScoredMessage[]): ScoredMessage[] {
-        const toolChains: ScoredMessage[] = [];
+    private static groupMessagesWithToolChains(scored: ScoredMessage[]): MessageGroup[] {
+        const groups: MessageGroup[] = [];
+        const usedIndices = new Set<number>();
 
+        // First pass: identify tool chains
         for (let i = 0; i < scored.length; i++) {
             const current = scored[i];
 
-            // If assistant message has tool_calls, check if all responses are present
-            if (current.message.role === 'assistant' && current.message.tool_calls) {
-                const toolCallIds = current.message.tool_calls.map(tc => tc.id);
+            if (current.message.role === 'assistant' && current.message.tool_calls?.length) {
+                const toolCallIds = new Set(current.message.tool_calls.map(tc => tc.id));
+                const chainMessages: ScoredMessage[] = [current];
 
-                // Find corresponding tool responses
+                // Find all corresponding tool responses
                 for (let j = i + 1; j < scored.length; j++) {
                     const next = scored[j];
                     if (next.message.role === 'tool' &&
-                        toolCallIds.includes(next.message.tool_call_id || '')) {
-                        toolChains.push(current);
-                        toolChains.push(next);
+                        next.message.tool_call_id &&
+                        toolCallIds.has(next.message.tool_call_id)) {
+                        chainMessages.push(next);
+                    }
+                    // Stop if we hit another assistant message (new potential chain)
+                    if (next.message.role === 'assistant') {
+                        break;
                     }
                 }
+
+                // Mark all indices as used
+                for (const msg of chainMessages) {
+                    usedIndices.add(msg.index);
+                }
+
+                // Calculate group totals
+                const totalScore = chainMessages.reduce((sum, m) => sum + m.score, 0);
+                const totalTokens = chainMessages.reduce((sum, m) => sum + m.tokens, 0);
+
+                groups.push({
+                    messages: chainMessages,
+                    totalScore,
+                    totalTokens,
+                    startIndex: current.index
+                });
             }
         }
 
-        return toolChains;
+        // Second pass: add standalone messages (not part of any tool chain)
+        for (const msg of scored) {
+            if (!usedIndices.has(msg.index)) {
+                groups.push({
+                    messages: [msg],
+                    totalScore: msg.score,
+                    totalTokens: msg.tokens,
+                    startIndex: msg.index
+                });
+            }
+        }
+
+        // Sort groups by their start index to maintain order
+        groups.sort((a, b) => a.startIndex - b.startIndex);
+
+        return groups;
     }
 
     /**
-     * Select messages to keep based on scores and token budget
+     * Select message indices to keep based on scores and token budget.
+     * Tool chains are treated as atomic units - they are either kept entirely or discarded entirely.
+     * @returns Set of message indices to keep
      */
-    private static selectMessagesByScore(
+    private static selectMessageIndicesByScore(
         messages: AIMessage[],
         targetTokens: number,
         config: ScoringConfig = this.DEFAULT_SCORING_CONFIG
-    ): AIMessage[] {
-        if (messages.length === 0) return [];
+    ): Set<number> {
+        if (messages.length === 0) return new Set();
 
-        // 1. Calculate scores for all messages
+        // 1. Pre-compute tokens for all messages (done once)
+        const tokenCounts = messages.map(msg => this.estimateTokenCount([msg]));
+
+        // 2. Calculate scores for all messages (using pre-computed tokens)
         const scored: ScoredMessage[] = messages.map((msg, idx) => ({
             message: msg,
-            score: this.scoreMessage(msg, idx, messages, config),
-            tokens: this.estimateTokenCount([msg]),
+            score: this.scoreMessage(msg, idx, messages, tokenCounts[idx], config),
+            tokens: tokenCounts[idx],
             index: idx
         }));
 
-        // 2. Forced keep zone
-        const forcedKeep: ScoredMessage[] = [];
+        // 3. Group messages (tool chains are grouped together)
+        const groups = this.groupMessagesWithToolChains(scored);
 
-        // System message (first)
-        if (scored[0]?.message.role === 'system') {
-            forcedKeep.push(scored[0]);
+        // 4. Identify forced keep groups (last N messages)
+        const forcedKeepGroupIndices = new Set<number>();
+        const lastNIndices = new Set<number>();
+        for (let i = Math.max(0, scored.length - config.forcedKeepLastN); i < scored.length; i++) {
+            lastNIndices.add(i);
         }
 
-        // Last N messages
-        const lastN = scored.slice(-config.forcedKeepLastN);
-        forcedKeep.push(...lastN);
+        for (let gi = 0; gi < groups.length; gi++) {
+            const group = groups[gi];
+            // If any message in this group is in lastN, keep the whole group
+            if (group.messages.some(m => lastNIndices.has(m.index))) {
+                forcedKeepGroupIndices.add(gi);
+            }
+        }
 
-        // Incomplete tool chains
-        const toolChains = this.detectIncompleteToolChains(scored);
-        forcedKeep.push(...toolChains);
+        // 5. Calculate forced tokens
+        let forcedTokens = 0;
+        for (const gi of forcedKeepGroupIndices) {
+            forcedTokens += groups[gi].totalTokens;
+        }
 
-        // Remove duplicates
-        const forcedSet = new Set(forcedKeep.map(s => s.index));
-        const forcedUnique = scored.filter(s => forcedSet.has(s.index));
-        const forcedTokens = forcedUnique.reduce((sum, s) => sum + s.tokens, 0);
+        // 6. Remaining budget
+        const remainingBudget = targetTokens - forcedTokens;
 
-        // 3. Remaining budget (70% of target, minus forced)
-        const remainingBudget = targetTokens * 0.7 - forcedTokens;
+        // 7. If budget exhausted, return only forced indices
         if (remainingBudget <= 0) {
-            // Budget exhausted, return only forced messages
-            return forcedUnique.sort((a, b) => a.index - b.index).map(s => s.message);
+            const result = new Set<number>();
+            for (const gi of forcedKeepGroupIndices) {
+                for (const m of groups[gi].messages) {
+                    result.add(m.index);
+                }
+            }
+            return result;
         }
 
-        // 4. Candidates (exclude forced messages)
-        const candidates = scored.filter(s => !forcedSet.has(s.index));
+        // 8. Candidate groups (not forced)
+        const candidateGroups: { group: MessageGroup; index: number }[] = [];
+        for (let gi = 0; gi < groups.length; gi++) {
+            if (!forcedKeepGroupIndices.has(gi)) {
+                candidateGroups.push({ group: groups[gi], index: gi });
+            }
+        }
 
-        // 5. Sort by score (descending)
-        candidates.sort((a, b) => b.score - a.score);
+        // 9. Sort candidates by score density (score per token) for better efficiency
+        candidateGroups.sort((a, b) => {
+            const densityA = a.group.totalScore / a.group.totalTokens;
+            const densityB = b.group.totalScore / b.group.totalTokens;
+            return densityB - densityA;  // Higher density first
+        });
 
-        // 6. Greedy selection (knapsack problem)
-        const selected: ScoredMessage[] = [];
+        // 10. Greedy selection
+        const selectedGroupIndices = new Set<number>(forcedKeepGroupIndices);
         let usedTokens = 0;
 
-        for (const candidate of candidates) {
-            // Only select if score meets threshold
-            if (candidate.score < config.minScoreThreshold) {
+        for (const { group, index } of candidateGroups) {
+            // Calculate average score per message for threshold check
+            const avgScore = group.totalScore / group.messages.length;
+
+            // Skip low-value groups
+            if (avgScore < config.minScoreThreshold) {
                 continue;
             }
 
-            if (usedTokens + candidate.tokens <= remainingBudget) {
-                selected.push(candidate);
-                usedTokens += candidate.tokens;
+            if (usedTokens + group.totalTokens <= remainingBudget) {
+                selectedGroupIndices.add(index);
+                usedTokens += group.totalTokens;
             }
         }
 
-        // 7. Combine and sort by original index
-        const final = [...forcedUnique, ...selected].sort((a, b) => a.index - b.index);
+        // 11. Collect all selected message indices
+        const result = new Set<number>();
+        for (const gi of selectedGroupIndices) {
+            for (const m of groups[gi].messages) {
+                result.add(m.index);
+            }
+        }
 
-        // Remove duplicates again
-        const seen = new Set<number>();
-        const unique = final.filter(s => {
-            if (seen.has(s.index)) return false;
-            seen.add(s.index);
-            return true;
-        });
-
-        return unique.map(s => s.message);
+        return result;
     }
 }
