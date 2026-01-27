@@ -114,7 +114,10 @@ export class PluginWindowManager {
         if (info.plugin.id === plugin.id) {
           const existingWindow = info.window
           if (existingWindow && !existingWindow.isDestroyed()) {
-            // 已有独立窗口，聚焦并发送新的输入
+            // 已有独立窗口，显示并聚焦
+            if (!existingWindow.isVisible()) {
+              existingWindow.show()
+            }
             if (existingWindow.isMinimized()) {
               existingWindow.restore()
             }
@@ -253,9 +256,12 @@ export class PluginWindowManager {
       // 查找已存在的该插件窗口
       for (const [_, info] of this.detachedWindows) {
         if (info.plugin.id === plugin.id) {
-          // 已有窗口，聚焦并返回现有窗口
+          // 已有窗口，显示并聚焦
           const existingWindow = info.window
           if (existingWindow && !existingWindow.isDestroyed()) {
+            if (!existingWindow.isVisible()) {
+              existingWindow.show()
+            }
             if (existingWindow.isMinimized()) {
               existingWindow.restore()
             }
@@ -369,7 +375,7 @@ export class PluginWindowManager {
     })
 
     // 显示 Dock 图标
-    this.updateDockVisibility()
+    void this.updateDockVisibility()
 
     // 监听渲染进程崩溃
     win.webContents.on('render-process-gone', (_event, details) => {

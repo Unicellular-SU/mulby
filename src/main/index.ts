@@ -90,6 +90,11 @@ function createWindow() {
     minWidth: 400,   // 设置最小宽度
     skipTaskbar: true,
     transparent: true,
+    // macOS: 阻止窗口自动管理 dock 图标
+    ...(process.platform === 'darwin' ? {
+      vibrancy: 'under-window',
+      visualEffectState: 'active'
+    } : {}),
     type: 'panel', // macOS 上 panel 类型有助于浮动在全屏应用之上
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
@@ -190,6 +195,13 @@ function showMainWindow() {
     try {
       mainWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true })
       mainWindow.setAlwaysOnTop(true, 'floating')
+
+      // 如果有独立窗口，在显示主窗口之前先确保 dock 图标显示
+      // 并且设置一个短暂的延迟，确保 dock 状态稳定
+      const hasDetachedWindows = pluginWindowManager.getAllDetachedWindows().length > 0
+      if (hasDetachedWindows && app.dock) {
+        void app.dock.show()
+      }
     } catch (e) {
       console.error('Error setting window properties:', e)
     }
@@ -228,6 +240,19 @@ function showMainWindow() {
 
     // 延迟恢复 blur 监听（确保窗口完全获得焦点）
     stopIgnoringBlur()
+
+    // macOS: 再次确保 dock 图标状态正确（在 show 之后）
+    if (process.platform === 'darwin' && app.dock) {
+      const hasDetachedWindows = pluginWindowManager.getAllDetachedWindows().length > 0
+      if (hasDetachedWindows) {
+        // 使用 setImmediate 确保在下一个事件循环中执行
+        setImmediate(() => {
+          if (app.dock) {
+            void app.dock.show()
+          }
+        })
+      }
+    }
   } catch (e) {
     console.error('Error in show sequence:', e)
   }
@@ -240,6 +265,14 @@ function toggleWindow() {
   if (mainWindow.isVisible()) {
     pluginWindowManager.hidePanelWindow()
     mainWindow.hide()
+
+    // macOS: 如果有独立窗口，确保 dock 图标保持显示
+    if (process.platform === 'darwin' && app.dock) {
+      const hasDetachedWindows = pluginWindowManager.getAllDetachedWindows().length > 0
+      if (hasDetachedWindows) {
+        void app.dock.show()
+      }
+    }
   } else {
     showMainWindow()
   }
@@ -266,6 +299,30 @@ app.whenReady().then(async () => {
       mainWindow?.webContents.send('app:openPluginManager')
     }
   })
+
+  // macOS: 监听 dock 图标点击事件
+  if (process.platform === 'darwin') {
+    app.on('activate', () => {
+      // 点击 dock 图标时，显示所有隐藏的独立窗口
+      const detachedWindows = pluginWindowManager.getAllDetachedWindows()
+      if (detachedWindows.length > 0) {
+        detachedWindows.forEach(win => {
+          if (!win.isDestroyed() && !win.isVisible()) {
+            win.show()
+          }
+          if (!win.isDestroyed() && win.isMinimized()) {
+            win.restore()
+          }
+          if (!win.isDestroyed()) {
+            win.focus()
+          }
+        })
+      } else {
+        // 如果没有独立窗口，显示主窗口
+        showMainWindow()
+      }
+    })
+  }
 
   // 注册 IPC 处理器
   registerAllHandlers(

@@ -71,6 +71,7 @@
 |------|------|--------|------|
 | single | boolean | true | 是否单例模式运行（不允许多开） |
 | height | number | - | 插件初始高度 |
+| defaultDetached | boolean | false | 是否默认以独立窗口运行 |
 
 ### Window 配置
 

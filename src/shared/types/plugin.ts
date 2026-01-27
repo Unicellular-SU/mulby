@@ -153,8 +153,9 @@ export interface WindowOptions {
 
 // 插件行为设置
 export interface PluginSetting {
-  single?: boolean     // 是否单例模式运行（默认 true）
-  height?: number      // 插件初始高度
+  single?: boolean          // 是否单例模式运行（默认 true）
+  height?: number           // 插件初始高度
+  defaultDetached?: boolean // 是否默认以独立窗口运行（默认 false）
 }
 
 // 插件清单

@@ -213,7 +213,9 @@ export class PluginManager {
       attachments: filteredAttachments
     }
     const useUI = Boolean(plugin.manifest.ui) && feature?.mode !== 'silent'
-    const useDetached = feature?.mode === 'detached'
+    // 判断是否使用独立窗口：优先使用 feature.mode，其次使用 pluginSetting.defaultDetached
+    const useDetached = feature?.mode === 'detached' ||
+                        (feature?.mode !== 'ui' && plugin.manifest.pluginSetting?.defaultDetached === true)
     const route = feature?.route
     const shouldHideMain = feature?.mainHide === true
 
