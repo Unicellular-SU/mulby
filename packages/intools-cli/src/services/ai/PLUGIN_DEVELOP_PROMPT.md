@@ -423,12 +423,57 @@ interface FFmpeg {
 
 // inbrowser (R) - Browser Automation
 interface InBrowser {
-  goto(url: string): this;
-  click(sel: string): this;
-  type(sel: string, text: string): this;
-  wait(msOrSel: number|string): this;
-  evaluate<T>(fn: () => T): Promise<T>;
-  screenshot(): Promise<Buffer>;
+  // Navigation & Window
+  goto(url: string, headers?: Record<string, string>, timeout?: number): this;
+  useragent(ua: string): this;
+  device(nameOrOption: string | { userAgent: string; size: { width: number; height: number } }): this;
+  viewport(width: number, height: number): this;
+  show(): this;
+  hide(): this;
+  devTools(mode?: 'right' | 'bottom' | 'undocked' | 'detach'): this;
+
+  // Interaction
+  click(selector: string | number, mouseButtonOrY?: string | number, mouseButton?: string): this;
+  mousedown(selector: string | number, mouseButtonOrY?: string | number, mouseButton?: string): this;
+  mouseup(selector: string | number, mouseButtonOrY?: string | number, mouseButton?: string): this;
+  dblclick(selector: string | number, mouseButtonOrY?: string | number, mouseButton?: string): this;
+  hover(selector: string | number, y?: number): this;
+  type(selector: string, text: string): this;
+  input(selectorOrText: string, text?: string): this;
+  press(key: string, modifiers?: string[]): this;
+  focus(selector: string): this;
+  scroll(selectorOrY: string | number, optionalOrY?: any): this;
+  paste(text: string): this;
+  file(selector: string, payload: string | string[] | Buffer): this;
+  drop(selectorOrX: string | number, optionalYOrPayload: any, payload?: any): this;
+
+  // Content & State
+  value(selector: string, val: string): this;
+  check(selector: string, checked: boolean): this;
+  css(cssText: string): this;
+  cookies(nameOrFilter?: string | any): this;
+  setCookies(nameOrCookies: string | any[], value?: string): this;
+  removeCookies(name: string): this;
+  clearCookies(url?: string): this;
+
+  // Flow Control
+  wait(msOrSelectorOrFunc: number | string | Function, ...params: any[]): this;
+  when(selectorOrFunc: string | Function, ...params: any[]): this;
+  end(): this;
+
+  // Output Data (In run() result)
+  evaluate<T>(func: string | Function, ...params: any[]): this;
+  screenshot(target?: string | object, savePath?: string): this;
+  pdf(options?: any, savePath?: string): this;
+  markdown(selector?: string): this;
+  download(urlOrFunc: string | Function, savePath?: string, ...params: any[]): this;
+
+  // Execution
   run(): Promise<any[]>;
+
+  // Management
+  getIdleInBrowsers(): Promise<any[]>;
+  setInBrowserProxy(config: any): Promise<boolean>;
+  clearInBrowserCache(): Promise<boolean>;
 }
 ```
