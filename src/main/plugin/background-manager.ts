@@ -214,7 +214,8 @@ export class BackgroundPluginManager extends EventEmitter {
         errorCount: health?.errorCount ?? 0,
         healthy: this.watchdog.isHostHealthy(pluginId),
         lastHeartbeat: health?.lastHeartbeat ?? 0,
-        missedHeartbeats: health?.missedHeartbeats ?? 0
+        missedHeartbeats: health?.missedHeartbeats ?? 0,
+        runMode: 'background'
       })
     }
 
@@ -248,7 +249,8 @@ export class BackgroundPluginManager extends EventEmitter {
       errorCount: health?.errorCount ?? 0,
       healthy: this.watchdog.isHostHealthy(pluginId),
       lastHeartbeat: health?.lastHeartbeat ?? 0,
-      missedHeartbeats: health?.missedHeartbeats ?? 0
+      missedHeartbeats: health?.missedHeartbeats ?? 0,
+      runMode: 'background'
     }
   }
 

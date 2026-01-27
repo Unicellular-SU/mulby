@@ -3,6 +3,7 @@ import SearchInput from './components/SearchInput'
 import PluginList from './components/PluginList'
 import PluginDetails from './components/PluginDetails'
 import PluginManagerView from './components/PluginManagerView'
+import BackgroundPluginManagerView from './components/BackgroundPluginManagerView'
 import AttachmentManager from './components/AttachmentManager'
 import SettingsView, { SettingsSection } from './components/SettingsView'
 import LogViewerView from './components/LogViewerView'
@@ -23,9 +24,10 @@ function App() {
   const [pluginOpen, setPluginOpen] = useState(false) // 仅用于跟踪插件是否打开
   const [detailsPluginName, setDetailsPluginName] = useState<string | null>(null)
   const [detailsReturnTarget, setDetailsReturnTarget] = useState<'home' | 'settings' | 'plugins'>('home')
-  const [viewMode, setViewMode] = useState<'home' | 'plugin-details' | 'settings' | 'plugins' | 'logs'>('home')
+  const [viewMode, setViewMode] = useState<'home' | 'plugin-details' | 'settings' | 'plugins' | 'logs' | 'background-plugins'>('home')
   const [settingsSection, setSettingsSection] = useState<SettingsSection>('general')
   const [pluginManagerReturnTarget, setPluginManagerReturnTarget] = useState<'home' | 'settings'>('home')
+  const [backgroundPluginManagerReturnTarget, setBackgroundPluginManagerReturnTarget] = useState<'home' | 'settings'>('home')
   const [isDragging, setIsDragging] = useState(false)
   const [theme, setTheme] = useState<'light' | 'dark'>('light')
   const [attachments, setAttachments] = useState<UiAttachment[]>([])
@@ -129,6 +131,16 @@ function App() {
     setAttachmentsManagerOpen(false)
     setPluginManagerReturnTarget(from)
     setViewMode('plugins')
+  }, [pluginOpen])
+
+  const openBackgroundPluginManager = useCallback((from: 'home' | 'settings' = 'home') => {
+    if (pluginOpen) {
+      window.intools.window.close()
+      setPluginOpen(false)
+    }
+    setAttachmentsManagerOpen(false)
+    setBackgroundPluginManagerReturnTarget(from)
+    setViewMode('background-plugins')
   }, [pluginOpen])
 
   // ESC 键分级退出处理
@@ -272,6 +284,9 @@ function App() {
           onOpenPluginManager={() => {
             openPluginManager('settings')
           }}
+          onOpenBackgroundPluginManager={() => {
+            openBackgroundPluginManager('settings')
+          }}
           onOpenLogViewer={() => setViewMode('logs')}
         />
       </div>
@@ -288,6 +303,16 @@ function App() {
             setDetailsReturnTarget('plugins')
             setViewMode('plugin-details')
           }}
+        />
+      </div>
+    )
+  }
+
+  if (viewMode === 'background-plugins') {
+    return (
+      <div className={`app ${isDragging ? 'dragging' : ''}`}>
+        <BackgroundPluginManagerView
+          onBack={() => setViewMode(backgroundPluginManagerReturnTarget === 'settings' ? 'settings' : 'home')}
         />
       </div>
     )

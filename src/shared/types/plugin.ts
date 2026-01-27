@@ -336,4 +336,7 @@ export interface BackgroundPluginInfo {
   healthy: boolean               // 是否健康
   lastHeartbeat: number          // 最后心跳时间
   missedHeartbeats: number       // 丢失心跳次数
+
+  // 运行模式
+  runMode: 'background' | 'active'  // background: 后台运行, active: 活跃运行（独立窗口/面板）
 }

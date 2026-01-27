@@ -108,7 +108,55 @@ export function registerPluginHandlers(manager: PluginManager) {
 
   // 列出所有后台插件
   ipcMain.handle('plugin:listBackground', () => {
-    return manager.getBackgroundManager().list()
+    const backgroundPlugins = manager.getBackgroundManager().list()
+    const activeHosts = manager.getHostManager().getActiveHosts()
+    const allPlugins = manager.getAll()
+
+    // 合并后台插件和其他活跃插件
+    const result = []
+    const addedPlugins = new Set<string>()
+
+    // 先添加后台插件
+    for (const bgPlugin of backgroundPlugins) {
+      result.push({
+        ...bgPlugin,
+        runMode: 'background' as const
+      })
+      addedPlugins.add(bgPlugin.pluginId)
+    }
+
+    // 添加其他活跃的插件（有 Host 进程但不在后台列表中的）
+    for (const hostPluginId of activeHosts) {
+      if (!addedPlugins.has(hostPluginId)) {
+        const plugin = allPlugins.find(p => p.id === hostPluginId)
+        if (plugin) {
+          const watchdog = manager.getHostManager().getWatchdog()
+          const health = watchdog.getHostHealth(hostPluginId)
+          const hostInfo = manager.getHostManager().getHostInfo(hostPluginId)
+
+          result.push({
+            pluginId: plugin.id,
+            pluginName: plugin.manifest.name,
+            displayName: plugin.manifest.displayName,
+            startedAt: hostInfo?.startedAt ?? Date.now(),
+            uptime: hostInfo?.startedAt ? Date.now() - hostInfo.startedAt : 0,
+            persistent: false,
+            maxRuntime: 0,
+            memoryUsage: health?.memoryUsage ?? 0,
+            cpuUsage: health?.cpuUsage ?? 0,
+            requestCount: health?.requestCount ?? 0,
+            errorCount: health?.errorCount ?? 0,
+            healthy: health ? watchdog.isHostHealthy(hostPluginId) : true, // 有健康数据才判断，否则视为健康
+            lastHeartbeat: health?.lastHeartbeat ?? 0,
+            missedHeartbeats: health?.missedHeartbeats ?? 0,
+            runMode: 'active' as const // 活跃插件（可能是独立窗口或面板）
+          })
+          addedPlugins.add(hostPluginId)
+        }
+      }
+    }
+
+    return result
   })
 
   // 停止后台插件

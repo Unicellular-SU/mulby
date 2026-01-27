@@ -1,5 +1,5 @@
 import { InBrowser } from './inbrowser'
-import type { InputPayload, InputAttachment } from './plugin'
+import type { InputPayload, InputAttachment, BackgroundPluginInfo } from './plugin'
 import type { AppSettings, ShortcutStatusMap } from './settings'
 
 // 日志条目接口
@@ -277,6 +277,11 @@ export interface ElectronAPI {
     disable: (name: string) => Promise<{ success: boolean; error?: string }>
     uninstall: (name: string) => Promise<{ success: boolean; error?: string }>
     getReadme: (name: string) => Promise<string | null>
+    // 后台插件管理
+    listBackground: () => Promise<BackgroundPluginInfo[]>
+    stopBackground: (pluginId: string) => Promise<{ success: boolean }>
+    getBackgroundInfo: (pluginId: string) => Promise<BackgroundPluginInfo | null>
+    startBackground: (pluginId: string) => Promise<{ success: boolean }>
   }
   onPluginInit: (callback: (data: { pluginName: string; featureCode: string; input: string; attachments?: InputAttachment[]; mode?: string }) => void) => void
   onPluginAttach: (callback: (data: { pluginName: string; displayName: string; featureCode: string; input: string; attachments?: InputAttachment[]; mode: 'panel' }) => void) => void
