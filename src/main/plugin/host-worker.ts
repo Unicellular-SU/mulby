@@ -324,3 +324,26 @@ setInterval(() => {
     payload: { success: true, heartbeat: true }
   })
 }, 3000)
+
+// 启动资源统计收集（每 5 秒发送一次）
+setInterval(() => {
+  const memoryUsage = process.memoryUsage()
+  const cpuUsage = process.cpuUsage()
+
+  send({
+    id: generateId(),
+    type: 'resourceStats',
+    payload: {
+      memoryUsage: {
+        rss: memoryUsage.rss,
+        heapTotal: memoryUsage.heapTotal,
+        heapUsed: memoryUsage.heapUsed,
+        external: memoryUsage.external
+      },
+      cpuUsage: {
+        user: cpuUsage.user,
+        system: cpuUsage.system
+      }
+    }
+  })
+}, 5000)

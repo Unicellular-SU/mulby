@@ -20,6 +20,7 @@ export type HostResponseType =
   | 'result'      // 执行结果
   | 'error'       // 错误
   | 'apiCall'     // API 调用请求
+  | 'resourceStats' // 资源统计
 
 // ============ 请求消息 ============
 
@@ -107,7 +108,24 @@ export interface ApiCallResponse extends HostResponseBase {
   }
 }
 
-export type HostResponse = ReadyResponse | ResultResponse | ErrorResponse | ApiCallResponse
+/** 资源统计响应（Worker -> 主进程） */
+export interface ResourceStatsResponse extends HostResponseBase {
+  type: 'resourceStats'
+  payload: {
+    memoryUsage: {
+      rss: number        // 常驻集大小（字节）
+      heapTotal: number  // 堆总大小（字节）
+      heapUsed: number   // 已使用堆（字节）
+      external: number   // 外部内存（字节）
+    }
+    cpuUsage: {
+      user: number       // 用户 CPU 时间（微秒）
+      system: number     // 系统 CPU 时间（微秒）
+    }
+  }
+}
+
+export type HostResponse = ReadyResponse | ResultResponse | ErrorResponse | ApiCallResponse | ResourceStatsResponse
 
 // ============ API 响应（主进程 -> Worker） ============
 

@@ -103,9 +103,6 @@ export class PluginHostManager extends EventEmitter {
       // 立即注册到 Watchdog，持续监控
       this.watchdog.registerHost(pluginName)
 
-      // 启动内存监控
-      this.startMemoryMonitoring(pluginName, child)
-
       // 等待 ready 信号
       return await this.waitForReady(pluginName)
     } catch (err) {
@@ -164,7 +161,26 @@ export class PluginHostManager extends EventEmitter {
       case 'apiCall':
         this.handleApiCall(host, message, plugin)
         break
+
+      case 'resourceStats':
+        this.handleResourceStats(host, message)
+        break
     }
+  }
+
+  /**
+   * 处理资源统计
+   */
+  private handleResourceStats(host: PluginHost, message: HostResponse): void {
+    if (message.type !== 'resourceStats') return
+
+    const { memoryUsage } = message.payload
+
+    // 更新内存使用（使用 RSS - 常驻集大小）
+    this.watchdog.updateMemoryUsage(host.pluginName, memoryUsage.rss)
+
+    // CPU 使用数据已收集，但 Watchdog 暂不支持 CPU 监控
+    // 未来可以扩展 Watchdog 来支持 CPU 使用率监控
   }
 
   /**
@@ -230,39 +246,6 @@ export class PluginHostManager extends EventEmitter {
   /**
    * 启动内存监控
    */
-  private startMemoryMonitoring(pluginName: string, process: UtilityProcess): void {
-    // 每 5 秒更新一次内存使用
-    const interval = setInterval(() => {
-      const host = this.hosts.get(pluginName)
-      if (!host) {
-        clearInterval(interval)
-        return
-      }
-
-      try {
-        // 获取进程内存使用（需要通过 Node.js API）
-        // 注意：UtilityProcess 没有直接的内存 API，我们需要通过其他方式获取
-        // 暂时使用估算值，后续可以通过 IPC 从 worker 获取
-        if (process.pid) {
-          // 这里需要使用 Node.js 的 process.memoryUsage() 或系统 API
-          // 暂时先设置为 0，后续完善
-          this.watchdog.updateMemoryUsage(pluginName, 0)
-        }
-      } catch (err) {
-        // 进程可能已经退出
-        clearInterval(interval)
-      }
-    }, 5000)
-
-    // 存储 interval 以便清理
-    if (!this.memoryMonitorIntervals) {
-      this.memoryMonitorIntervals = new Map()
-    }
-    this.memoryMonitorIntervals.set(pluginName, interval)
-  }
-
-  private memoryMonitorIntervals?: Map<string, NodeJS.Timeout>
-
   /**
    * 等待 Host 就绪
    */
@@ -458,15 +441,6 @@ export class PluginHostManager extends EventEmitter {
   private cleanupHost(pluginName: string): void {
     const host = this.hosts.get(pluginName)
     if (!host) return
-
-    // 清理内存监控
-    if (this.memoryMonitorIntervals) {
-      const interval = this.memoryMonitorIntervals.get(pluginName)
-      if (interval) {
-        clearInterval(interval)
-        this.memoryMonitorIntervals.delete(pluginName)
-      }
-    }
 
     // 注销 Watchdog 监控
     this.watchdog.unregisterHost(pluginName)
