@@ -106,6 +106,33 @@ export class PluginWindowManager {
       return false
     }
 
+    // 单例模式检查：如果 pluginSetting.single 为 true（默认），检查是否已有该插件的独立窗口
+    const isSingleMode = plugin.manifest.pluginSetting?.single !== false
+    if (isSingleMode) {
+      // 查找已存在的该插件的独立窗口
+      for (const [_, info] of this.detachedWindows) {
+        if (info.plugin.id === plugin.id) {
+          const existingWindow = info.window
+          if (existingWindow && !existingWindow.isDestroyed()) {
+            // 已有独立窗口，聚焦并发送新的输入
+            if (existingWindow.isMinimized()) {
+              existingWindow.restore()
+            }
+            existingWindow.focus()
+            existingWindow.webContents.send('plugin:init', {
+              pluginName: plugin.id,
+              featureCode,
+              input: input?.text || '',
+              attachments: input?.attachments || [],
+              mode: 'detached',
+              route
+            })
+            return true
+          }
+        }
+      }
+    }
+
     // 关闭之前附着的插件
     this.closeAttached()
 
