@@ -5,6 +5,9 @@ import { promisify } from 'util'
 const execFileAsync = promisify(execFile)
 const FOCUS_DELAY_MS = 160
 
+// 记录隐藏前可见的窗口
+let hiddenWindows: Set<number> = new Set()
+
 // macOS 键码映射 (key code)
 const MAC_KEY_CODES: Record<string, number> = {
   // 功能键
@@ -157,14 +160,37 @@ function sleep(ms: number): Promise<void> {
 }
 
 function hideAllAppWindows(): void {
+  // 清空之前的记录
+  hiddenWindows.clear()
+
+  // 隐藏所有窗口，并记录哪些窗口在隐藏前是可见的
   for (const win of BrowserWindow.getAllWindows()) {
-    if (!win.isDestroyed()) {
+    if (!win.isDestroyed() && win.isVisible()) {
+      hiddenWindows.add(win.id)
       win.hide()
     }
   }
+
+  // macOS: 必须调用 app.hide() 才能让焦点真正回到用户之前的窗口
   if (process.platform === 'darwin') {
     app.hide()
   }
+}
+
+// 恢复之前隐藏的窗口
+function restoreHiddenWindows(): void {
+  // macOS: 先调用 app.show() 恢复应用
+  if (process.platform === 'darwin') {
+    app.show()
+  }
+
+  for (const winId of hiddenWindows) {
+    const win = BrowserWindow.fromId(winId)
+    if (win && !win.isDestroyed()) {
+      win.show()
+    }
+  }
+  hiddenWindows.clear()
 }
 
 function writeImageToClipboard(image: string | Buffer | ArrayBuffer): boolean {
@@ -430,6 +456,7 @@ async function withHiddenWindow(action: () => Promise<void>): Promise<void> {
   hideAllAppWindows()
   await sleep(FOCUS_DELAY_MS)
   await action()
+  // 不自动恢复窗口，让插件决定何时恢复
 }
 
 export const pluginInput = {
@@ -471,6 +498,20 @@ export const pluginInput = {
       return true
     } catch (error) {
       console.error('[Input] Failed to type string:', error)
+      return false
+    }
+  },
+
+  /**
+   * 恢复之前隐藏的窗口
+   * 在完成所有输入操作后调用此方法来恢复窗口
+   */
+  async restoreWindows(): Promise<boolean> {
+    try {
+      restoreHiddenWindows()
+      return true
+    } catch (error) {
+      console.error('[Input] Failed to restore windows:', error)
       return false
     }
   },

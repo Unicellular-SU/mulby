@@ -69,6 +69,28 @@ await input.hideMainWindowTypeString('Hello World!');
 
 **返回值**: `boolean` - 是否执行成功
 
+**注意**: 连续调用输入 API 时，窗口会保持隐藏状态，避免闪烁。完成所有输入后，调用 `restoreWindows()` 恢复窗口。
+
+### restoreWindows()
+[Renderer] [Backend]
+恢复之前被输入 API 隐藏的窗口。
+
+```javascript
+// 连续输入示例
+await input.hideMainWindowTypeString('username');
+await input.simulateKeyboardTap('Tab');
+await input.hideMainWindowTypeString('password');
+// 所有输入完成后，恢复窗口
+await input.restoreWindows();
+```
+
+**返回值**: `boolean` - 是否执行成功
+
+**说明**:
+- 当连续调用多个输入 API 时，窗口会保持隐藏状态，避免闪烁
+- 完成所有输入操作后，调用此方法恢复窗口
+- 如果不调用此方法，用户可以通过快捷键或 dock 图标手动恢复窗口
+
 ### simulateKeyboardTap(key, ...modifiers)
 [Renderer] [Backend]
 隐藏主窗口并模拟键盘按键，支持单键和组合键。操作会发送到之前活跃的应用。
@@ -183,16 +205,43 @@ await input.simulateMouseRightClick(200, 250);
 module.exports = {
   async run(context) {
     const { input } = context.api;
-    
+
     // 粘贴文本
     await input.hideMainWindowPasteText('InTools rocks!');
-    
+
     // 模拟键盘快捷键
     await input.simulateKeyboardTap('s', 'ctrl'); // Ctrl+S 保存
-    
+
     // 模拟鼠标操作
     await input.simulateMouseMove(500, 300);
     await input.simulateMouseClick(500, 300);
+  }
+};
+```
+
+### 连续输入示例
+
+当需要连续执行多个输入操作时（如填充表单），使用 `restoreWindows()` 避免窗口闪烁：
+
+```javascript
+module.exports = {
+  async run(context) {
+    const { input } = context.api;
+
+    // 填充用户名
+    await input.hideMainWindowTypeString('john_doe');
+
+    // 切换到密码框
+    await input.simulateKeyboardTap('Tab');
+
+    // 填充密码
+    await input.hideMainWindowTypeString('secret123');
+
+    // 提交表单
+    await input.simulateKeyboardTap('Enter');
+
+    // 所有输入完成后，恢复窗口
+    await input.restoreWindows();
   }
 };
 ```

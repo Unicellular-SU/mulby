@@ -1,6 +1,7 @@
 # InTools Plugin Development Guide
 
-> **Contexts**: `UI` = `window.intools.{module}`, `Main` = `context.api.{module}`. Most APIs are available in both contexts (marked as **R/B**).
+> **Architecture**: InTools is built on the **Electron** framework. Plugins run in a multi-process environment.
+> **Contexts**: `UI` = **Renderer Process** (`window.intools.{module}`), `Main` = **Main Process** (`context.api.{module}`). Most APIs are available in both contexts (marked as **R/B**).
 
 ## 1. Project Structure
 
@@ -398,6 +399,7 @@ interface Input {
   hideMainWindowPasteImage(img: string|Buffer): Promise<boolean>;
   hideMainWindowPasteFile(path: string|string[]): Promise<boolean>;
   hideMainWindowTypeString(text: string): Promise<boolean>;
+  restoreWindows(): Promise<boolean>; // Restore hidden windows after input
   simulateKeyboardTap(key: string, ...modifiers: string[]): Promise<boolean>;
   simulateMouseMove(x: number, y: number): Promise<boolean>;
   simulateMouseClick(x: number, y: number): Promise<boolean>;

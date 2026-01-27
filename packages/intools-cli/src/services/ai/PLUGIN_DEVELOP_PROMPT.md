@@ -399,6 +399,7 @@ interface Input {
   hideMainWindowPasteImage(img: string|Buffer): Promise<boolean>;
   hideMainWindowPasteFile(path: string|string[]): Promise<boolean>;
   hideMainWindowTypeString(text: string): Promise<boolean>;
+  restoreWindows(): Promise<boolean>; // Restore hidden windows after input
   simulateKeyboardTap(key: string, ...modifiers: string[]): Promise<boolean>;
   simulateMouseMove(x: number, y: number): Promise<boolean>;
   simulateMouseClick(x: number, y: number): Promise<boolean>;

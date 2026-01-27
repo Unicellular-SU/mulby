@@ -119,6 +119,7 @@ const intoolsApi = {
     hideMainWindowPasteImage: (image: string | Buffer) => ipcRenderer.invoke('input:hideMainWindowPasteImage', image),
     hideMainWindowPasteFile: (filePaths: string | string[]) => ipcRenderer.invoke('input:hideMainWindowPasteFile', filePaths),
     hideMainWindowTypeString: (text: string) => ipcRenderer.invoke('input:hideMainWindowTypeString', text),
+    restoreWindows: () => ipcRenderer.invoke('input:restoreWindows'),
     // 模拟按键 API
     simulateKeyboardTap: (key: string, ...modifiers: string[]) =>
       ipcRenderer.invoke('input:simulateKeyboardTap', key, modifiers),

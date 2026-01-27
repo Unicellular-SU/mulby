@@ -9,15 +9,14 @@ export function buildReactManifest(name: string) {
     main: 'dist/main.js',
     ui: 'ui/index.html',
     icon: 'icon.png',
-    // 独立窗口配置（可选）
-    // window: {
-    //   width: 800,       // 默认宽度
-    //   height: 600,      // 默认高度
-    //   minWidth: 400,    // 最小宽度
-    //   minHeight: 300,   // 最小高度
-    //   maxWidth: 1200,   // 最大宽度
-    //   maxHeight: 900    // 最大高度
-    // },
+    window: {
+      width: 800,       // 默认宽度
+      height: 600,      // 默认高度
+      minWidth: 400,    // 最小宽度
+      minHeight: 300,   // 最小高度
+      maxWidth: 1200,   // 最大宽度
+      maxHeight: 900    // 最大高度
+    },
     features: [
       {
         code: 'main',
@@ -564,6 +563,7 @@ export function useIntools(pluginId?: string) {
       hideMainWindowPasteImage: (image: string | ArrayBuffer) => window.intools?.input?.hideMainWindowPasteImage(image),
       hideMainWindowPasteFile: (filePaths: string | string[]) => window.intools?.input?.hideMainWindowPasteFile(filePaths),
       hideMainWindowTypeString: (text: string) => window.intools?.input?.hideMainWindowTypeString(text),
+      restoreWindows: () => window.intools?.input?.restoreWindows(),
       simulateKeyboardTap: (key: string, ...modifiers: string[]) =>
         window.intools?.input?.simulateKeyboardTap(key, ...modifiers),
       simulateMouseMove: (x: number, y: number) => window.intools?.input?.simulateMouseMove(x, y),
@@ -952,6 +952,7 @@ interface IntoolsInput {
   hideMainWindowPasteImage(image: string | ArrayBuffer): Promise<boolean>
   hideMainWindowPasteFile(filePaths: string | string[]): Promise<boolean>
   hideMainWindowTypeString(text: string): Promise<boolean>
+  restoreWindows(): Promise<boolean>
   simulateKeyboardTap(key: string, ...modifiers: string[]): Promise<boolean>
   simulateMouseMove(x: number, y: number): Promise<boolean>
   simulateMouseClick(x: number, y: number): Promise<boolean>

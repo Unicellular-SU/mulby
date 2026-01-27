@@ -18,6 +18,10 @@ export function registerInputHandlers() {
     pluginInput.hideMainWindowTypeString(text)
   )
 
+  ipcMain.handle('input:restoreWindows', () =>
+    pluginInput.restoreWindows()
+  )
+
   // 模拟按键 API
   ipcMain.handle('input:simulateKeyboardTap', (_, key: string, modifiers: string[]) =>
     pluginInput.simulateKeyboardTap(key, ...modifiers)

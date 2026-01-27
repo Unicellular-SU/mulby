@@ -303,6 +303,9 @@ app.whenReady().then(async () => {
   // macOS: 监听 dock 图标点击事件
   if (process.platform === 'darwin') {
     app.on('activate', () => {
+      // 先调用 app.show() 恢复应用状态
+      app.show()
+
       // 点击 dock 图标时，显示所有隐藏的独立窗口
       const detachedWindows = pluginWindowManager.getAllDetachedWindows()
       if (detachedWindows.length > 0) {
