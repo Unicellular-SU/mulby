@@ -21,9 +21,19 @@ class TerminalStore extends EventEmitter {
 
     startPrompt(): Promise<string> {
         return new Promise((resolve) => {
-            if (this.isSelecting) {
-                // Should ideally cancel selection or queue, but for now override
+            // 如果已有未完成的 prompt，先用空字符串 resolve 它
+            if (this.inputResolver) {
+                const oldResolver = this.inputResolver;
+                this.inputResolver = null;
+                oldResolver('');
+            }
+            // 如果正在选择，取消选择并 resolve
+            if (this.isSelecting && this.selectResolver) {
+                const oldResolver = this.selectResolver;
+                this.selectResolver = null;
                 this.isSelecting = false;
+                this.selectItems = [];
+                oldResolver('');
             }
             this.isPrompting = true;
             this.inputResolver = resolve;
@@ -33,8 +43,18 @@ class TerminalStore extends EventEmitter {
 
     startSelect(items: Array<{ label: string; value: string }>): Promise<string> {
         return new Promise((resolve) => {
-            if (this.isPrompting) {
+            // 如果已有未完成的 select，先用空字符串 resolve 它
+            if (this.selectResolver) {
+                const oldResolver = this.selectResolver;
+                this.selectResolver = null;
+                oldResolver('');
+            }
+            // 如果正在 prompt，取消 prompt 并 resolve
+            if (this.isPrompting && this.inputResolver) {
+                const oldResolver = this.inputResolver;
+                this.inputResolver = null;
                 this.isPrompting = false;
+                oldResolver('');
             }
             this.isSelecting = true;
             this.selectItems = items;
@@ -84,6 +104,26 @@ class TerminalStore extends EventEmitter {
             this.emit('change');
             resolver(value);
         }
+    }
+
+    /**
+     * 清理所有等待中的 Promise，防止进程挂起
+     */
+    cleanup() {
+        if (this.inputResolver) {
+            const resolver = this.inputResolver;
+            this.inputResolver = null;
+            this.isPrompting = false;
+            resolver('');
+        }
+        if (this.selectResolver) {
+            const resolver = this.selectResolver;
+            this.selectResolver = null;
+            this.isSelecting = false;
+            this.selectItems = [];
+            resolver('');
+        }
+        this.removeAllListeners();
     }
 }
 

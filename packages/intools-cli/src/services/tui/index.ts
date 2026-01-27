@@ -26,8 +26,15 @@ export class TerminalService {
     }
 
     public stop() {
+        // 先清理 store 中可能还在等待的 Promise
+        terminalStore.cleanup();
+
         if (this.inkInstance) {
-            this.inkInstance.unmount();
+            try {
+                this.inkInstance.unmount();
+            } catch (e) {
+                // 忽略 unmount 错误
+            }
             this.inkInstance = null;
         }
     }

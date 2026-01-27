@@ -10,6 +10,20 @@ import { sessionCommand } from './commands/ai-session'
 import { readFileSync } from 'fs'
 import { join } from 'path'
 import { resume } from './commands/resume'
+import chalk from 'chalk'
+
+// 全局错误处理 - 防止进程意外退出
+process.on('uncaughtException', (err) => {
+  console.error(chalk.red('\n❌ Uncaught Exception:'))
+  console.error(chalk.red(err.stack || err.message))
+  process.exit(1)
+})
+
+process.on('unhandledRejection', (reason, promise) => {
+  console.error(chalk.red('\n❌ Unhandled Promise Rejection:'))
+  console.error(chalk.red(reason instanceof Error ? reason.stack || reason.message : String(reason)))
+  // 不立即退出，让程序有机会处理
+})
 
 // 读取 package.json 获取版本号
 const pkg = JSON.parse(readFileSync(join(__dirname, '..', 'package.json'), 'utf-8'))

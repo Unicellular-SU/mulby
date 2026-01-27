@@ -1,6 +1,7 @@
 # InTools Plugin Development Guide
 
-> **Contexts**: `UI` = `window.intools.{module}`, `Main` = `context.api.{module}`. Most APIs are available in both contexts (marked as **R/B**).
+> **Architecture**: InTools is built on the **Electron** framework. Plugins run in a multi-process environment.
+> **Contexts**: `UI` = **Renderer Process** (`window.intools.{module}`), `Main` = **Main Process** (`context.api.{module}`). Most APIs are available in both contexts (marked as **R/B**).
 
 ## 1. Project Structure
 

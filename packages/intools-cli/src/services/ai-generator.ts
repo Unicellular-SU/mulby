@@ -80,8 +80,24 @@ export class AIAgent {
         let loopCount = 0;
         const MAX_LOOPS = 50;
 
-        while (this.session.status !== 'completed' && this.session.status !== 'failed' && loopCount < MAX_LOOPS) {
+        while (this.session.status !== 'completed' && this.session.status !== 'failed') {
             loopCount++;
+
+            // 检查是否达到循环上限
+            if (loopCount > MAX_LOOPS) {
+                tui.log(chalk.yellow(`\n⚠️ 已执行 ${MAX_LOOPS} 轮，是否继续？`));
+                const action = await this.safePromptTui('继续执行？(y/n)');
+                if (action.toLowerCase() === 'y') {
+                    loopCount = 0; // 重置计数器
+                    tui.log(chalk.green('✓ 继续执行...'));
+                } else {
+                    tui.log(chalk.yellow('👋 会话已暂停，可使用 intools resume 恢复'));
+                    // 保持 generating 状态，这样 resume 时可以继续
+                    this.sessionManager.saveSession(this.session);
+                    tui.stop();
+                    return;
+                }
+            }
 
             try {
                 // 0.1 Check and compress context before each turn
@@ -199,8 +215,24 @@ export class AIAgent {
                 if (response.toolCalls && response.toolCalls.length > 0) {
                     for (const toolCall of response.toolCalls) {
                         const toolName = toolCall.function.name;
-                        const toolArgs = JSON.parse(toolCall.function.arguments);
                         const toolCallId = toolCall.id;
+
+                        let toolArgs: any;
+                        try {
+                            toolArgs = JSON.parse(toolCall.function.arguments);
+                        } catch (parseError: any) {
+                            tui.log(chalk.red(`[Tool] JSON 解析失败: ${parseError.message}`));
+                            tui.log(chalk.gray(`  原始参数: ${toolCall.function.arguments.slice(0, 200)}...`));
+                            // 添加错误响应让 AI 知道参数解析失败
+                            this.session.conversationHistory.push({
+                                role: 'tool',
+                                tool_call_id: toolCallId,
+                                name: toolName,
+                                content: `Error: Failed to parse tool arguments - ${parseError.message}. Please retry with valid JSON.`
+                            });
+                            this.sessionManager.saveSession(this.session);
+                            continue;
+                        }
 
                         tui.log(chalk.cyan(`[Tool] Calling ${toolName}...`));
 
@@ -621,10 +653,11 @@ Now you can start implementing the features by modifying these files.`;
                     }
                 }
 
-                this.session.status = 'completed'; // or keep as is?
+                this.session.status = 'completed';
                 this.sessionManager.saveSession(this.session);
                 tui.stop();
-                process.exit(0);
+                // 给 TUI 一点时间完成清理
+                setTimeout(() => process.exit(0), 100);
                 return true;
 
             case '/clear':
