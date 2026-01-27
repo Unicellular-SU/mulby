@@ -269,8 +269,8 @@ export class PluginManager {
           console.error(`[PluginManager] Failed to call onBackground for ${name}:`, err)
         }
 
-        // 启动后台运行
-        const bgSuccess = await this.backgroundManager.start(plugin)
+        // 启动后台运行（不再调用 onBackground，因为已经调用过了）
+        const bgSuccess = await this.backgroundManager.start(plugin, false)
         if (bgSuccess) {
           console.log(`[PluginManager] Plugin ${name} started in background after execution`)
         }
@@ -580,8 +580,8 @@ export class PluginManager {
       console.error(`[PluginManager] Failed to call onBackground for ${pluginId}:`, err)
     }
 
-    // 启动后台运行
-    const success = await this.backgroundManager.start(plugin)
+    // 启动后台运行（不再调用 onBackground，因为已经调用过了）
+    const success = await this.backgroundManager.start(plugin, false)
     if (success) {
       console.log(`[PluginManager] Plugin ${pluginId} started in background after window closed`)
     } else {

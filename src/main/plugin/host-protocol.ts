@@ -85,6 +85,7 @@ export interface ResultResponse extends HostResponseBase {
   payload: {
     success: boolean
     data?: unknown
+    heartbeat?: boolean  // 心跳标记
   }
 }
 

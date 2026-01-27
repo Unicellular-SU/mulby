@@ -315,3 +315,12 @@ send({
   type: 'ready',
   payload: null
 })
+
+// 启动心跳机制（每 3 秒发送一次心跳）
+setInterval(() => {
+  send({
+    id: generateId(),
+    type: 'result',
+    payload: { success: true, heartbeat: true }
+  })
+}, 3000)

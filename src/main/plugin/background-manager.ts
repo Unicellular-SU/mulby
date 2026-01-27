@@ -76,7 +76,7 @@ export class BackgroundPluginManager extends EventEmitter {
   /**
    * 启动后台插件
    */
-  async start(plugin: Plugin): Promise<boolean> {
+  async start(plugin: Plugin, callOnBackground: boolean = true): Promise<boolean> {
     const pluginId = plugin.id
 
     console.log(`[BackgroundManager] Attempting to start plugin ${pluginId}`)
@@ -106,6 +106,12 @@ export class BackgroundPluginManager extends EventEmitter {
         }
         console.log(`[BackgroundManager] Initializing plugin ${pluginId}`)
         await this.hostManager.initPlugin(plugin)
+      }
+
+      // 调用 onBackground 钩子（如果需要）
+      if (callOnBackground) {
+        console.log(`[BackgroundManager] Calling onBackground hook for ${pluginId}`)
+        await this.hostManager.callHook(plugin, 'onBackground')
       }
 
       // 注册到后台插件列表
