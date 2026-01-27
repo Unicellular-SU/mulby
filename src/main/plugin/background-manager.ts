@@ -15,6 +15,7 @@ interface BackgroundPlugin {
   plugin: Plugin
   startedAt: number
   runtimeTimer?: NodeJS.Timeout  // 运行时间限制定时器
+  restoreAttempts?: number        // 恢复尝试次数
 }
 
 // ============ 常量 ============
@@ -28,6 +29,8 @@ export const BACKGROUND_WATCHDOG_CONFIG = {
   maxRequestsPerMinute: 500,     // 500 次/分钟（后台插件更严格）
   maxErrorsPerMinute: 30         // 30 次/分钟（后台插件更严格）
 }
+
+const MAX_RESTORE_ATTEMPTS = 3   // 最大恢复尝试次数
 
 export class BackgroundPluginManager extends EventEmitter {
   private backgroundPlugins: Map<string, BackgroundPlugin> = new Map()
@@ -271,35 +274,129 @@ export class BackgroundPluginManager extends EventEmitter {
     })
 
     if (pluginsToRestore.length === 0) {
+      console.log('[BackgroundManager] No persistent plugins to restore')
       return
     }
 
-    console.log(`[BackgroundManager] Restoring ${pluginsToRestore.length} persistent plugins`)
+    console.log(`[BackgroundManager] Found ${pluginsToRestore.length} persistent plugins to restore:`,
+      pluginsToRestore.map(p => p.id))
 
     // 延迟 2 秒启动，避免影响应用启动速度
     setTimeout(async () => {
+      console.log('[BackgroundManager] Starting to restore persistent plugins...')
+      const startTime = Date.now()
+
       // 批量限制：同时最多恢复 3 个插件
       const batchSize = 3
+      let successCount = 0
+      let failCount = 0
+      const failedPlugins: Plugin[] = []
+
       for (let i = 0; i < pluginsToRestore.length; i += batchSize) {
         const batch = pluginsToRestore.slice(i, i + batchSize)
-        await Promise.all(
+        const batchNum = Math.floor(i / batchSize) + 1
+        const totalBatches = Math.ceil(pluginsToRestore.length / batchSize)
+
+        console.log(`[BackgroundManager] Processing batch ${batchNum}/${totalBatches}:`, batch.map(p => p.id))
+
+        const results = await Promise.allSettled(
           batch.map(async plugin => {
             try {
-              const success = await this.start(plugin)
+              console.log(`[BackgroundManager] Restoring plugin: ${plugin.id}`)
+              const success = await this.start(plugin, true)
+
               if (success) {
-                console.log(`[BackgroundManager] Restored plugin: ${plugin.id}`)
+                console.log(`[BackgroundManager] ✓ Successfully restored plugin: ${plugin.id}`)
+                return { success: true, pluginId: plugin.id, plugin }
               } else {
-                console.warn(`[BackgroundManager] Failed to restore plugin: ${plugin.id}`)
-                this.stateManager.setBackgroundRunning(plugin.id, false)
+                console.warn(`[BackgroundManager] ✗ Failed to restore plugin: ${plugin.id}`)
+                return { success: false, pluginId: plugin.id, plugin, error: 'Start returned false' }
               }
             } catch (err) {
-              console.error(`[BackgroundManager] Error restoring plugin ${plugin.id}:`, err)
-              this.stateManager.setBackgroundRunning(plugin.id, false)
+              const errorMsg = err instanceof Error ? err.message : 'Unknown error'
+              console.error(`[BackgroundManager] ✗ Error restoring plugin ${plugin.id}:`, errorMsg)
+              return { success: false, pluginId: plugin.id, plugin, error: errorMsg }
             }
           })
         )
+
+        // 统计结果
+        results.forEach(result => {
+          if (result.status === 'fulfilled') {
+            if (result.value.success) {
+              successCount++
+            } else {
+              failCount++
+              failedPlugins.push(result.value.plugin)
+            }
+          } else {
+            failCount++
+          }
+        })
+
+        // 批次之间延迟 500ms，避免资源峰值
+        if (i + batchSize < pluginsToRestore.length) {
+          await new Promise(resolve => setTimeout(resolve, 500))
+        }
       }
+
+      const duration = Date.now() - startTime
+      console.log(`[BackgroundManager] Restore completed in ${duration}ms: ${successCount} succeeded, ${failCount} failed`)
+
+      // 对失败的插件进行重试（最多重试 2 次）
+      if (failedPlugins.length > 0) {
+        console.log(`[BackgroundManager] Retrying ${failedPlugins.length} failed plugins...`)
+        await this.retryFailedPlugins(failedPlugins)
+      }
+
+      // 触发恢复完成事件
+      this.emit('restore:completed', { successCount, failCount, duration })
     }, 2000)
+  }
+
+  /**
+   * 重试失败的插件恢复
+   */
+  private async retryFailedPlugins(plugins: Plugin[]): Promise<void> {
+    for (const plugin of plugins) {
+      const state = this.stateManager.getPluginState(plugin.id)
+      const attempts = (state.backgroundRestartCount || 0) + 1
+
+      if (attempts > MAX_RESTORE_ATTEMPTS) {
+        console.warn(`[BackgroundManager] Plugin ${plugin.id} exceeded max restore attempts (${MAX_RESTORE_ATTEMPTS}), giving up`)
+        this.stateManager.setBackgroundRunning(plugin.id, false)
+        continue
+      }
+
+      console.log(`[BackgroundManager] Retry attempt ${attempts}/${MAX_RESTORE_ATTEMPTS} for plugin: ${plugin.id}`)
+
+      // 延迟重试，避免立即失败
+      await new Promise(resolve => setTimeout(resolve, 2000 * attempts))
+
+      try {
+        const success = await this.start(plugin, true)
+        if (success) {
+          console.log(`[BackgroundManager] ✓ Successfully restored plugin on retry: ${plugin.id}`)
+          // 重置重试计数
+          this.stateManager.resetBackgroundRestartCount(plugin.id)
+        } else {
+          console.warn(`[BackgroundManager] ✗ Failed to restore plugin on retry: ${plugin.id}`)
+          // 更新重试计数
+          this.updateRestartCount(plugin.id, attempts)
+        }
+      } catch (err) {
+        console.error(`[BackgroundManager] ✗ Error on retry for plugin ${plugin.id}:`, err)
+        this.updateRestartCount(plugin.id, attempts)
+      }
+    }
+  }
+
+  /**
+   * 更新插件的重启计数
+   */
+  private updateRestartCount(pluginId: string, count: number): void {
+    this.stateManager.updateBackgroundRestartCount(pluginId, count)
+    this.stateManager.setBackgroundRunning(pluginId, false)
   }
 
   /**
@@ -316,15 +413,27 @@ export class BackgroundPluginManager extends EventEmitter {
   async shutdown(): Promise<void> {
     const plugins = this.list()
 
+    if (plugins.length === 0) {
+      console.log('[BackgroundManager] No background plugins to shutdown')
+      return
+    }
+
+    console.log(`[BackgroundManager] Shutting down ${plugins.length} background plugins...`)
+
     // 保存状态
     for (const info of plugins) {
+      console.log(`[BackgroundManager] Saving state for plugin: ${info.pluginId}`)
       this.stateManager.setBackgroundRunning(info.pluginId, true)
     }
 
     // 优雅退出（最多等待 3 秒）
+    const startTime = Date.now()
     await Promise.race([
       this.stopAll(),
       new Promise(resolve => setTimeout(resolve, 3000))
     ])
+
+    const duration = Date.now() - startTime
+    console.log(`[BackgroundManager] Shutdown completed in ${duration}ms`)
   }
 }

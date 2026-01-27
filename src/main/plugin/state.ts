@@ -89,4 +89,21 @@ export class PluginStateManager {
     }
     this.save()
   }
+
+  // 更新后台重启计数
+  updateBackgroundRestartCount(name: string, count: number): void {
+    if (!this.state[name]) {
+      this.state[name] = { enabled: true }
+    }
+    this.state[name].backgroundRestartCount = count
+    this.save()
+  }
+
+  // 重置后台重启计数
+  resetBackgroundRestartCount(name: string): void {
+    if (this.state[name]) {
+      this.state[name].backgroundRestartCount = 0
+      this.save()
+    }
+  }
 }
