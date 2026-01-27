@@ -78,26 +78,9 @@ export class AIAgent {
 
     private async runLoop() {
         let loopCount = 0;
-        const MAX_LOOPS = 50;
 
         while (this.session.status !== 'completed' && this.session.status !== 'failed') {
             loopCount++;
-
-            // 检查是否达到循环上限
-            if (loopCount > MAX_LOOPS) {
-                tui.log(chalk.yellow(`\n⚠️ 已执行 ${MAX_LOOPS} 轮，是否继续？`));
-                const action = await this.safePromptTui('继续执行？(y/n)');
-                if (action.toLowerCase() === 'y') {
-                    loopCount = 0; // 重置计数器
-                    tui.log(chalk.green('✓ 继续执行...'));
-                } else {
-                    tui.log(chalk.yellow('👋 会话已暂停，可使用 intools resume 恢复'));
-                    // 保持 generating 状态，这样 resume 时可以继续
-                    this.sessionManager.saveSession(this.session);
-                    tui.stop();
-                    return;
-                }
-            }
 
             try {
                 // 0.1 Check and compress context before each turn
