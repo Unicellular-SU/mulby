@@ -156,6 +156,9 @@ export interface PluginSetting {
   single?: boolean          // 是否单例模式运行（默认 true）
   height?: number           // 插件初始高度
   defaultDetached?: boolean // 是否默认以独立窗口运行（默认 false）
+  background?: boolean      // 是否允许后台运行（默认 false）
+  persistent?: boolean      // 是否持久化（重启后自动恢复，默认 false）
+  maxRuntime?: number       // 最大运行时间（毫秒，0 表示无限制，默认 0）
 }
 
 // 插件清单
@@ -197,6 +200,8 @@ export interface PluginLifecycleHooks {
   onUnload?: (context?: PluginHookContext) => void | Promise<void>
   onEnable?: (context?: PluginHookContext) => void | Promise<void>
   onDisable?: (context?: PluginHookContext) => void | Promise<void>
+  onBackground?: (context?: PluginHookContext) => void | Promise<void>  // 进入后台时
+  onForeground?: (context?: PluginHookContext) => void | Promise<void>  // 从后台恢复时
 }
 
 // 插件模块导出
@@ -277,6 +282,9 @@ export interface PluginStateConfig {
     enabled: boolean
     installedAt?: number
     updatedAt?: number
+    backgroundRunning?: boolean      // 是否在后台运行
+    backgroundStartedAt?: number     // 后台启动时间
+    backgroundRestartCount?: number  // 重启次数
   }
 }
 
@@ -306,4 +314,26 @@ export interface HttpResponse {
   statusText: string
   headers: Record<string, string>
   data: string
+}
+
+// 后台插件信息
+export interface BackgroundPluginInfo {
+  pluginId: string
+  pluginName: string
+  displayName: string
+  startedAt: number              // 启动时间戳
+  uptime: number                 // 运行时长（毫秒）
+  persistent: boolean            // 是否持久化
+  maxRuntime: number             // 最大运行时间
+
+  // 资源使用情况（来自 Watchdog）
+  memoryUsage: number            // 内存使用（MB）
+  cpuUsage: number               // CPU 使用率（%）
+  requestCount: number           // 请求计数
+  errorCount: number             // 错误计数
+
+  // 健康状态
+  healthy: boolean               // 是否健康
+  lastHeartbeat: number          // 最后心跳时间
+  missedHeartbeats: number       // 丢失心跳次数
 }

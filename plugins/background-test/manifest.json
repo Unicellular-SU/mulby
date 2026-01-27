@@ -1,0 +1,24 @@
+{
+  "name": "background-test",
+  "version": "1.0.0",
+  "displayName": "后台运行测试",
+  "description": "测试插件后台运行功能",
+  "main": "dist/main.js",
+  "features": [
+    {
+      "code": "test",
+      "explain": "测试后台运行",
+      "cmds": [
+        {
+          "type": "keyword",
+          "value": "bgtest"
+        }
+      ]
+    }
+  ],
+  "pluginSetting": {
+    "background": true,
+    "persistent": true,
+    "maxRuntime": 300000
+  }
+}

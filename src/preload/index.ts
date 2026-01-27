@@ -150,6 +150,11 @@ const intoolsApi = {
     disable: (name: string) => ipcRenderer.invoke('plugin:disable', name),
     uninstall: (name: string) => ipcRenderer.invoke('plugin:uninstall', name),
     getReadme: (name: string) => ipcRenderer.invoke('plugin:getReadme', name),
+    // 后台插件 API
+    listBackground: () => ipcRenderer.invoke('plugin:listBackground'),
+    stopBackground: (pluginId: string) => ipcRenderer.invoke('plugin:stopBackground', pluginId),
+    getBackgroundInfo: (pluginId: string) => ipcRenderer.invoke('plugin:getBackgroundInfo', pluginId),
+    startBackground: (pluginId: string) => ipcRenderer.invoke('plugin:startBackground', pluginId),
     // 插件导航 API
     redirect: (label: string | [string, string], payload?: unknown) =>
       ipcRenderer.invoke('plugin:redirect', label, payload),

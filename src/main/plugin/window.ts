@@ -31,6 +31,7 @@ export class PluginWindowManager {
   private attachedPlugin: AttachedPlugin | null = null
   private detachedWindows: Map<number, DetachedWindowInfo> = new Map()
   private dockVisible = false
+  private onWindowClosedCallback?: (pluginId: string) => Promise<void>
 
   // 面板窗口管理器（跟随搜索框的插件窗口）
   private panelWindow: PluginPanelWindow | null = null
@@ -84,6 +85,11 @@ export class PluginWindowManager {
     this.themeManager = manager
     // 同时设置到面板窗口管理器
     this.panelWindow?.setThemeManager(manager)
+  }
+
+  // 设置窗口关闭回调（用于处理后台运行）
+  setOnWindowClosedCallback(callback: (pluginId: string) => Promise<void>) {
+    this.onWindowClosedCallback = callback
   }
 
   // 获取附着的插件信息
@@ -393,6 +399,12 @@ export class PluginWindowManager {
       this.detachedWindows.delete(windowId)
       // 检查是否需要隐藏 Dock 图标
       this.updateDockVisibility()
+      // 触发窗口关闭回调（用于处理后台运行）
+      if (this.onWindowClosedCallback) {
+        this.onWindowClosedCallback(plugin.id).catch(err => {
+          console.error('[PluginWindowManager] Error in window closed callback:', err)
+        })
+      }
     })
 
     return win

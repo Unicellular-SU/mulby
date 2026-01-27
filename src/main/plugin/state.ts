@@ -34,7 +34,7 @@ export class PluginStateManager {
   }
 
   // 获取插件状态
-  getPluginState(name: string): { enabled: boolean; installedAt?: number; updatedAt?: number } {
+  getPluginState(name: string): { enabled: boolean; installedAt?: number; updatedAt?: number; backgroundRunning?: boolean; backgroundStartedAt?: number; backgroundRestartCount?: number } {
     return this.state[name] || { enabled: true }
   }
 
@@ -76,5 +76,17 @@ export class PluginStateManager {
   // 获取所有状态
   getAllStates(): PluginStateConfig {
     return { ...this.state }
+  }
+
+  // 设置后台运行状态
+  setBackgroundRunning(name: string, running: boolean): void {
+    if (!this.state[name]) {
+      this.state[name] = { enabled: true }
+    }
+    this.state[name].backgroundRunning = running
+    if (running) {
+      this.state[name].backgroundStartedAt = Date.now()
+    }
+    this.save()
   }
 }

@@ -105,4 +105,30 @@ export function registerPluginHandlers(manager: PluginManager) {
   ipcMain.handle('plugin:getReadme', async (_, name: string) => {
     return manager.getReadme(name)
   })
+
+  // 列出所有后台插件
+  ipcMain.handle('plugin:listBackground', () => {
+    return manager.getBackgroundManager().list()
+  })
+
+  // 停止后台插件
+  ipcMain.handle('plugin:stopBackground', async (_, pluginId: string) => {
+    await manager.getBackgroundManager().stop(pluginId, 'manual')
+    return { success: true }
+  })
+
+  // 获取后台插件详细信息
+  ipcMain.handle('plugin:getBackgroundInfo', (_, pluginId: string) => {
+    return manager.getBackgroundManager().getInfo(pluginId)
+  })
+
+  // 手动启动后台插件
+  ipcMain.handle('plugin:startBackground', async (_, pluginId: string) => {
+    const plugin = manager.get(pluginId)
+    if (!plugin) {
+      return { success: false, error: '插件不存在' }
+    }
+    const success = await manager.getBackgroundManager().start(plugin)
+    return { success }
+  })
 }

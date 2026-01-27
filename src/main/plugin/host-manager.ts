@@ -370,7 +370,7 @@ export class PluginHostManager extends EventEmitter {
    */
   async callHook(
     plugin: Plugin,
-    hookName: 'onLoad' | 'onUnload' | 'onEnable' | 'onDisable'
+    hookName: 'onLoad' | 'onUnload' | 'onEnable' | 'onDisable' | 'onBackground' | 'onForeground'
   ): Promise<void> {
     const pluginName = plugin.id
 
@@ -461,6 +461,13 @@ export class PluginHostManager extends EventEmitter {
    */
   getActiveHosts(): string[] {
     return Array.from(this.hosts.keys())
+  }
+
+  /**
+   * 获取 Watchdog 实例
+   */
+  getWatchdog(): PluginHostWatchdog {
+    return this.watchdog
   }
 
   /**

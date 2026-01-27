@@ -11,6 +11,7 @@ import { InputPayload, Plugin, PluginFeature } from '../../shared/types/plugin'
 import { PluginSearchWorker } from './search-worker-manager'
 import { filterAttachmentsByCmd, findBestMatch, normalizeInputPayload } from '../../shared/search-matcher'
 import type { MatchType } from '../../shared/search-matcher'
+import { BackgroundPluginManager } from './background-manager'
 
 // 搜索结果项
 interface SearchResult {
@@ -29,16 +30,26 @@ export class PluginManager {
   private useUtilityProcess: boolean = true  // 是否使用 UtilityProcess
   private initializedPlugins: Set<string> = new Set()  // 已初始化的插件（懒加载跟踪）
   private searchWorker: PluginSearchWorker
+  private backgroundManager: BackgroundPluginManager
 
   constructor() {
     this.stateManager = new PluginStateManager()
     this.hostManager = new PluginHostManager()
     this.searchWorker = new PluginSearchWorker()
+    this.backgroundManager = new BackgroundPluginManager(
+      this.hostManager,
+      this.hostManager.getWatchdog(),
+      this.stateManager
+    )
   }
 
   // 设置窗口管理器
   setWindowManager(windowManager: PluginWindowManager) {
     this.windowManager = windowManager
+    // 设置窗口关闭回调，处理后台运行
+    windowManager.setOnWindowClosedCallback(async (pluginId: string) => {
+      await this.handleWindowClosed(pluginId)
+    })
   }
 
   // 初始化：加载所有插件
@@ -109,6 +120,9 @@ export class PluginManager {
     }
 
     console.log(`Loaded ${this.plugins.size} plugins from: ${dirs.join(', ')}`)
+
+    // 恢复持久化的后台插件
+    await this.backgroundManager.restorePersistent(this.getAll())
   }
 
   // 获取所有插件
@@ -245,6 +259,23 @@ export class PluginManager {
         const runner = this.getRunner(plugin)
         await runner.run(featureCode, resolvedInput.text, resolvedInput.attachments)
       }
+
+      // 无 UI 插件执行完成后，如果支持后台运行，则启动后台运行
+      if (plugin.manifest.pluginSetting?.background && !this.backgroundManager.isRunning(name)) {
+        // 调用 onBackground 钩子
+        try {
+          await this.callPluginHook(plugin, 'onBackground')
+        } catch (err) {
+          console.error(`[PluginManager] Failed to call onBackground for ${name}:`, err)
+        }
+
+        // 启动后台运行
+        const bgSuccess = await this.backgroundManager.start(plugin)
+        if (bgSuccess) {
+          console.log(`[PluginManager] Plugin ${name} started in background after execution`)
+        }
+      }
+
       return { success: true }
     } catch (err) {
       const error = err instanceof Error ? err.message : 'Unknown error'
@@ -263,7 +294,7 @@ export class PluginManager {
   }
 
   // 调用插件生命周期钩子
-  private async callPluginHook(plugin: Plugin, hookName: 'onLoad' | 'onUnload' | 'onEnable' | 'onDisable'): Promise<void> {
+  private async callPluginHook(plugin: Plugin, hookName: 'onLoad' | 'onUnload' | 'onEnable' | 'onDisable' | 'onBackground' | 'onForeground'): Promise<void> {
     try {
       if (this.useUtilityProcess) {
         await this.hostManager.callHook(plugin, hookName)
@@ -312,6 +343,11 @@ export class PluginManager {
       return { success: true }
     }
 
+    // 停止后台运行（如果正在后台运行）
+    if (this.backgroundManager.isRunning(name)) {
+      await this.backgroundManager.stop(name, 'disabled')
+    }
+
     // 停止文件监听
     this.stopPluginWatcher(name)
 
@@ -339,6 +375,11 @@ export class PluginManager {
     }
 
     try {
+      // 停止后台运行（如果正在后台运行）
+      if (this.backgroundManager.isRunning(name)) {
+        await this.backgroundManager.stop(name, 'uninstalled')
+      }
+
       // 停止监听
       this.stopPluginWatcher(name)
 
@@ -389,6 +430,11 @@ export class PluginManager {
     return this.hostManager
   }
 
+  // 获取 BackgroundPluginManager 实例
+  getBackgroundManager(): BackgroundPluginManager {
+    return this.backgroundManager
+  }
+
   // 首次安装后主动初始化插件（触发 onLoad）
   async initializePlugin(name: string): Promise<void> {
     const plugin = this.plugins.get(name) || this.getAll().find(p => p.manifest.name === name)
@@ -402,6 +448,9 @@ export class PluginManager {
   async destroy(): Promise<void> {
     // 停止所有监听
     this.clearWatchers()
+
+    // 优雅关闭后台插件
+    await this.backgroundManager.shutdown()
 
     // 销毁所有 Host 进程
     await this.hostManager.destroyAll()
@@ -503,6 +552,41 @@ export class PluginManager {
 
     // 3. 通知 UI 或其他组件（可选）
     // TODO: 可以发送事件给前端提示插件已更新
+  }
+
+  /**
+   * 处理窗口关闭事件
+   * 如果插件支持后台运行，则启动后台运行
+   */
+  private async handleWindowClosed(pluginId: string): Promise<void> {
+    const plugin = this.plugins.get(pluginId)
+    if (!plugin) return
+
+    // 检查插件是否支持后台运行
+    const supportsBackground = plugin.manifest.pluginSetting?.background === true
+    if (!supportsBackground) {
+      return
+    }
+
+    // 检查是否已经在后台运行
+    if (this.backgroundManager.isRunning(pluginId)) {
+      return
+    }
+
+    // 调用 onBackground 钩子
+    try {
+      await this.callPluginHook(plugin, 'onBackground')
+    } catch (err) {
+      console.error(`[PluginManager] Failed to call onBackground for ${pluginId}:`, err)
+    }
+
+    // 启动后台运行
+    const success = await this.backgroundManager.start(plugin)
+    if (success) {
+      console.log(`[PluginManager] Plugin ${pluginId} started in background after window closed`)
+    } else {
+      console.warn(`[PluginManager] Failed to start plugin ${pluginId} in background`)
+    }
   }
 
   private getCombinedFeatures(plugin: Plugin): PluginFeature[] {

@@ -31,6 +31,8 @@ interface PluginModule {
   onUnload?: (context?: HookContext) => void | Promise<void>
   onEnable?: (context?: HookContext) => void | Promise<void>
   onDisable?: (context?: HookContext) => void | Promise<void>
+  onBackground?: (context?: HookContext) => void | Promise<void>
+  onForeground?: (context?: HookContext) => void | Promise<void>
 }
 
 interface PluginContext {
@@ -186,7 +188,13 @@ function loadModule(): PluginModule {
       exports: {},
       require: () => null,
       console,
-      Buffer
+      Buffer,
+      setTimeout,
+      setInterval,
+      clearTimeout,
+      clearInterval,
+      setImmediate,
+      clearImmediate
     }
   })
 
