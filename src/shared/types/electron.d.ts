@@ -1,6 +1,7 @@
 import { InBrowser } from './inbrowser'
 import type { InputPayload, InputAttachment, BackgroundPluginInfo } from './plugin'
 import type { AppSettings, ShortcutStatusMap } from './settings'
+import type { Task, TaskExecution } from './task'
 
 // 日志条目接口
 export interface LogEntry {
@@ -284,6 +285,14 @@ export interface ElectronAPI {
     startBackground: (pluginId: string) => Promise<{ success: boolean }>
     // 停止运行中的插件（包括 UI 插件和后台插件）
     stopPlugin: (pluginId: string) => Promise<{ success: boolean }>
+  }
+  scheduler: {
+    listTasks: (filter?: { pluginId?: string; status?: string; type?: string }) => Promise<Task[]>
+    getTask: (taskId: string) => Promise<Task | null>
+    cancelTask: (taskId: string) => Promise<{ success: boolean }>
+    pauseTask: (taskId: string) => Promise<{ success: boolean }>
+    resumeTask: (taskId: string) => Promise<{ success: boolean }>
+    getExecutions: (taskId: string, limit?: number) => Promise<TaskExecution[]>
   }
   onPluginInit: (callback: (data: { pluginName: string; featureCode: string; input: string; attachments?: InputAttachment[]; mode?: string }) => void) => void
   onPluginAttach: (callback: (data: { pluginName: string; displayName: string; featureCode: string; input: string; attachments?: InputAttachment[]; mode: 'panel' }) => void) => void

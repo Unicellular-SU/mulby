@@ -162,6 +162,18 @@ const intoolsApi = {
     outPlugin: (isKill?: boolean) => ipcRenderer.invoke('plugin:out', isKill)
   },
 
+  // 任务调度器 API
+  scheduler: {
+    listTasks: (filter?: { pluginId?: string; status?: string; type?: string }) =>
+      ipcRenderer.invoke('scheduler:listTasks', filter),
+    getTask: (taskId: string) => ipcRenderer.invoke('scheduler:getTask', taskId),
+    cancelTask: (taskId: string) => ipcRenderer.invoke('scheduler:cancelTask', taskId),
+    pauseTask: (taskId: string) => ipcRenderer.invoke('scheduler:pauseTask', taskId),
+    resumeTask: (taskId: string) => ipcRenderer.invoke('scheduler:resumeTask', taskId),
+    getExecutions: (taskId: string, limit?: number) =>
+      ipcRenderer.invoke('scheduler:getExecutions', taskId, limit)
+  },
+
   // 插件窗口事件
   onPluginInit: (callback: (data: { pluginName: string; featureCode: string; input: string; mode?: string }) => void) => {
     ipcRenderer.on('plugin:init', (_, data) => callback(data))

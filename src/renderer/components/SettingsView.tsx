@@ -15,6 +15,7 @@ interface SettingsViewProps {
   onClose: () => void
   onOpenPluginManager: () => void
   onOpenBackgroundPluginManager?: () => void
+  onOpenTaskScheduler?: () => void
   onOpenLogViewer?: () => void
 }
 
@@ -217,7 +218,7 @@ function ShortcutInput({
   )
 }
 
-export default function SettingsView({ section, onSectionChange, onClose, onOpenPluginManager, onOpenBackgroundPluginManager, onOpenLogViewer }: SettingsViewProps) {
+export default function SettingsView({ section, onSectionChange, onClose, onOpenPluginManager, onOpenBackgroundPluginManager, onOpenTaskScheduler, onOpenLogViewer }: SettingsViewProps) {
   const [settings, setSettings] = useState<AppSettings | null>(null)
   const [themeMode, setThemeMode] = useState<'light' | 'dark' | 'system'>('system')
   const [shortcutStatus, setShortcutStatus] = useState<ShortcutStatusMap | null>(null)
@@ -405,6 +406,17 @@ export default function SettingsView({ section, onSectionChange, onClose, onOpen
                       </div>
                       <button className={primaryPillClass} onClick={onOpenBackgroundPluginManager}>
                         打开任务管理器
+                      </button>
+                    </div>
+                  )}
+                  {onOpenTaskScheduler && (
+                    <div className={`${cardClass} flex items-center justify-between gap-4`}>
+                      <div>
+                        <div className="text-sm font-medium text-slate-900 dark:text-white">任务调度器</div>
+                        <div className="text-xs text-slate-500 dark:text-slate-400">查看和管理所有定时任务</div>
+                      </div>
+                      <button className={primaryPillClass} onClick={onOpenTaskScheduler}>
+                        打开任务调度器
                       </button>
                     </div>
                   )}
