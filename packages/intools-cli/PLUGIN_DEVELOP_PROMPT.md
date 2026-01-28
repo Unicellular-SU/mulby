@@ -494,3 +494,58 @@ interface InBrowser {
   clearInBrowserCache(): Promise<boolean>;
 }
 ```
+
+## 5. Background Plugin Development
+
+Enable plugins to run in the background (e.g., for cron jobs, monitoring).
+
+### 5.1 Configuration (`manifest.json`)
+
+Explicitly enable background mode:
+
+```json
+{
+  "pluginSetting": {
+    "background": true,         // Enable background mode
+    "persistent": true,         // Auto-restore on app restart
+    "maxRuntime": 0             // Max runtime in ms (0 = unlimited)
+  }
+}
+```
+
+### 5.2 Lifecycle Hooks (`src/main.ts`)
+
+Handle background transitions:
+
+```typescript
+export function onBackground() {
+  // Triggered when window closes (if background: true)
+  console.log('Moved to background');
+  // Start background tasks (e.g., cron jobs)
+}
+
+export function onForeground() {
+  // Triggered when window re-opens
+  console.log('Back to foreground');
+  // Optional: Update UI or optimize resources
+}
+
+// Standard hooks
+export function onLoad() { /* Init */ }
+export function onUnload() { /* Cleanup (Called on app exit or manual stop) */ }
+```
+
+### 5.3 Management API
+
+- **Check Status**: `api.plugin.listBackground()`
+- **Stop**: `api.plugin.stopBackground(pluginId)`
+- **Start**: `api.plugin.startBackground(pluginId)`
+
+### 5.4 UI Plugin Integration
+
+For plugins with UI (`"ui": "..."` in manifest):
+1. Background logic MUST go in **backend** (`src/main.ts`).
+2. **Frontend** (`src/ui/...`) stops when window closes.
+3. Use IPC (via `api.messaging` or `host` module) to communicate between active UI and background backend.
+
+
