@@ -344,10 +344,19 @@ interface Plugin {
   search(query: string): Promise<PluginSearchResult[]>;
   run(id: string, code: string, input?: any): Promise<void>;
   install(path: string): Promise<void>;
+  enable(name: string): Promise<{ success: boolean; error?: string }>;
+  disable(name: string): Promise<{ success: boolean; error?: string }>;
   uninstall(id: string): Promise<void>;
   outPlugin(kill?: boolean): Promise<void>;
   redirect(label: string, payload?: any): Promise<boolean>;
   getReadme(id: string): Promise<string>;
+  
+  // Background & Process Management
+  listBackground(): Promise<any[]>;
+  startBackground(pluginId: string): Promise<{ success: boolean; error?: string }>;
+  stopBackground(pluginId: string): Promise<{ success: boolean }>;
+  getBackgroundInfo(pluginId: string): Promise<any>;
+  stopPlugin(pluginId: string): Promise<void>;
 }
 
 // theme (R)

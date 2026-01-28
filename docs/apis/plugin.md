@@ -139,6 +139,56 @@ await window.intools.plugin.outPlugin(true); // 强制销毁独立窗口
 [Renderer]
 主窗口插件分离事件。
 
+### plugin.listBackground()
+[Renderer]
+获取所有后台运行的插件及活跃的插件宿主进程信息。
+
+```javascript
+const processes = await window.intools.plugin.listBackground();
+```
+
+**返回值**: `Array<BackgroundPluginInfo>` (包含插件的基础信息、运行模式、资源占用、健康状态等)
+
+### plugin.startBackground(pluginId)
+[Renderer]
+手动启动后台插件。
+
+```javascript
+await window.intools.plugin.startBackground('my-plugin');
+```
+
+**返回值**: `{ success: boolean; error?: string }`
+
+### plugin.stopBackground(pluginId)
+[Renderer]
+停止后台插件。
+
+```javascript
+await window.intools.plugin.stopBackground('my-plugin');
+```
+
+**返回值**: `{ success: boolean }`
+
+### plugin.getBackgroundInfo(pluginId)
+[Renderer]
+获取后台插件详细信息。
+
+```javascript
+const info = await window.intools.plugin.getBackgroundInfo('my-plugin');
+```
+
+**返回值**: `any`
+
+### plugin.stopPlugin(pluginId)
+[Renderer]
+停止运行中的插件（关闭窗口并销毁 Host 进程）。
+
+```javascript
+await window.intools.plugin.stopPlugin('my-plugin');
+```
+
+**返回值**: `Promise<void>`
+
 ### 完整示例
 
 ```javascript

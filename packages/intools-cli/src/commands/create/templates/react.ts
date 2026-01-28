@@ -650,9 +650,22 @@ export function useIntools(pluginId?: string) {
 
     // Plugin API
     plugin: {
+      getAll: () => window.intools?.plugin?.getAll?.(),
+      search: (query: string) => window.intools?.plugin?.search?.(query),
+      run: (name: string, featureCode: string, input?: string) => window.intools?.plugin?.run?.(name, featureCode, input),
+      install: (filePath: string) => window.intools?.plugin?.install?.(filePath),
+      uninstall: (name: string) => window.intools?.plugin?.uninstall?.(name),
+      getReadme: (name: string) => window.intools?.plugin?.getReadme?.(name),
       redirect: (label: string | [string, string], payload?: unknown) =>
         window.intools?.plugin?.redirect?.(label, payload),
       outPlugin: (isKill?: boolean) => window.intools?.plugin?.outPlugin?.(isKill),
+      enable: (name: string) => window.intools?.plugin?.enable?.(name),
+      disable: (name: string) => window.intools?.plugin?.disable?.(name),
+      listBackground: () => window.intools?.plugin?.listBackground?.(),
+      startBackground: (pluginId: string) => window.intools?.plugin?.startBackground?.(pluginId),
+      stopBackground: (pluginId: string) => window.intools?.plugin?.stopBackground?.(pluginId),
+      getBackgroundInfo: (pluginId: string) => window.intools?.plugin?.getBackgroundInfo?.(pluginId),
+      stopPlugin: (pluginId: string) => window.intools?.plugin?.stopPlugin?.(pluginId),
     },
 
     // HTTP API
@@ -1038,17 +1051,57 @@ interface IntoolsTheme {
   getActual(): Promise<'light' | 'dark'>
 }
 
+interface PluginInfo {
+  id: string
+  name: string
+  displayName: string
+  description?: string
+  features: Array<{ code: string; explain?: string }>
+  enabled: boolean
+}
+
+interface PluginSearchResult {
+  pluginId: string
+  pluginName: string
+  displayName: string
+  featureCode: string
+  featureExplain?: string
+  matchType: 'keyword' | 'regex' | 'prefix' | 'exact' | string
+  icon?: string
+}
+
+interface BackgroundPluginInfo {
+  pluginId: string
+  pluginName: string
+  displayName: string
+  runMode: 'background' | 'active'
+  startedAt?: number
+  uptime?: number
+  memoryUsage?: number
+  cpuUsage?: number
+  requestCount?: number
+  errorCount?: number
+  healthy?: boolean
+  lastHeartbeat?: number
+  missedHeartbeats?: number
+}
+
 interface IntoolsPlugin {
-  getAll(): Promise<any[]>
-  search(query: string): Promise<any[]>
-  run(name: string, featureCode: string, input?: string): Promise<any>
-  install(filePath: string): Promise<any>
-  enable(name: string): Promise<any>
-  disable(name: string): Promise<any>
-  uninstall(name: string): Promise<any>
+  getAll(): Promise<PluginInfo[]>
+  search(query: string): Promise<PluginSearchResult[]>
+  run(name: string, featureCode: string, input?: string): Promise<{ success: boolean; hasUI?: boolean; error?: string }>
+  install(filePath: string): Promise<{ success: boolean; pluginName?: string; error?: string }>
+  enable(name: string): Promise<{ success: boolean; error?: string }>
+  disable(name: string): Promise<{ success: boolean; error?: string }>
+  uninstall(name: string): Promise<{ success: boolean; error?: string }>
   getReadme(name: string): Promise<string | null>
   redirect(label: string | [string, string], payload?: unknown): Promise<boolean | { candidates: { name: string; displayName: string }[] }>
   outPlugin(isKill?: boolean): Promise<boolean>
+  listBackground(): Promise<BackgroundPluginInfo[]>
+  startBackground(pluginId: string): Promise<{ success: boolean; error?: string }>
+  stopBackground(pluginId: string): Promise<{ success: boolean }>
+  getBackgroundInfo(pluginId: string): Promise<BackgroundPluginInfo>
+  stopPlugin(pluginId: string): Promise<void>
 }
 
 interface DisplayInfo {

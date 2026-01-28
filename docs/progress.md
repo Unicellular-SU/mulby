@@ -471,3 +471,31 @@ interface FileSearchResult {
 - [x] **去除冗余 Prompt** (`packages/intools-cli/src/commands/resume.ts`)
   - 移除了 `resume` 命令中通过 `inquirer` 询问新指令的逻辑，统一收敛至 AI Agent 内的 TUI 交互界面，体验更连贯。
   - 对齐了 `intools create --resume` 的行为。
+
+---
+
+# plugin:listBackground 等 API 补全
+
+> **更新时间**: 2026-01-28
+> **状态**: ✅ 已完成
+
+## 完成内容
+
+### 文档更新
+- [x] `docs/apis/plugin.md`
+  - 增补了 `listBackground`, `startBackground`, `stopBackground`, `getBackgroundInfo`, `stopPlugin` 等 API 接口文档。
+  - 明确了相关 API 的参数、返回值类型及使用示例。
+
+### 插件开发提示词更新
+- [x] `packages/intools-cli/PLUGIN_DEVELOP_PROMPT.md`
+  - 更新 `Plugin` 接口定义，补全了 `enable`, `disable` 及上述后台管理相关方法的类型声明。
+  - 确保 AI 生成插件代码时能正确识别和使用这些 API。
+
+### 模板代码更新
+- [x] `packages/intools-cli/src/commands/create/templates/react.ts`
+  - 更新 `useIntools` hook 生成逻辑，暴露 `listBackground` 等新 API。
+  - 更新 `intools.d.ts` 类型定义生成逻辑，补充 `IntoolsPlugin` 接口定义，增加 `listBackground`, `startBackground`, `stopBackground`, `getBackgroundInfo`, `stopPlugin` 方法声明。
+  - 完善 `IntoolsPlugin` 相关接口类型，新增 `PluginInfo`, `PluginSearchResult`, `BackgroundPluginInfo` 等类型定义，消除 `any` 类型。
+
+
+
