@@ -46,6 +46,29 @@ export function buildBasicMain(name: string) {
     notification: {
       show: (message: string, type?: string) => void
     }
+    scheduler: {
+      schedule: (task: {
+        name: string
+        type: 'once' | 'repeat' | 'delay'
+        callback: string
+        time?: number
+        cron?: string
+        delay?: number
+        payload?: any
+        maxRetries?: number
+        retryDelay?: number
+        timeout?: number
+      }) => Promise<any>
+      cancel: (taskId: string) => Promise<void>
+      pause: (taskId: string) => Promise<void>
+      resume: (taskId: string) => Promise<void>
+      list: (filter?: { status?: string; type?: string }) => Promise<any[]>
+      get: (taskId: string) => Promise<any>
+      getExecutions: (taskId: string, limit?: number) => Promise<any[]>
+      validateCron: (expression: string) => boolean
+      getNextCronTime: (expression: string, after?: Date) => Date
+      describeCron: (expression: string) => string
+    }
   }
   input?: string
   featureCode?: string

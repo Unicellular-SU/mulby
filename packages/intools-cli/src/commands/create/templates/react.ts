@@ -145,6 +145,29 @@ export function buildBackendMain(name: string) {
       on: (handler: (message: { id: string; from: string; to?: string; type: string; payload: unknown; timestamp: number }) => void | Promise<void>) => void
       off: (handler?: (message: any) => void) => void
     }
+    scheduler: {
+      schedule: (task: {
+        name: string
+        type: 'once' | 'repeat' | 'delay'
+        callback: string
+        time?: number
+        cron?: string
+        delay?: number
+        payload?: any
+        maxRetries?: number
+        retryDelay?: number
+        timeout?: number
+      }) => Promise<any>
+      cancel: (taskId: string) => Promise<void>
+      pause: (taskId: string) => Promise<void>
+      resume: (taskId: string) => Promise<void>
+      list: (filter?: { status?: string; type?: string }) => Promise<any[]>
+      get: (taskId: string) => Promise<any>
+      getExecutions: (taskId: string, limit?: number) => Promise<any[]>
+      validateCron: (expression: string) => boolean
+      getNextCronTime: (expression: string, after?: Date) => Date
+      describeCron: (expression: string) => string
+    }
     features?: {
       getFeatures: (codes?: string[]) => Array<{ code: string }>
       setFeature: (feature: {
@@ -600,6 +623,31 @@ export function useIntools(pluginId?: string) {
         timestamp: number
       }) => void | Promise<void>) => window.intools?.messaging?.on(callback),
       off: (callback?: (message: any) => void) => window.intools?.messaging?.off(callback),
+    },
+
+    // Scheduler API
+    scheduler: {
+      schedule: (task: {
+        name: string
+        type: 'once' | 'repeat' | 'delay'
+        callback: string
+        time?: number
+        cron?: string
+        delay?: number
+        payload?: any
+        maxRetries?: number
+        retryDelay?: number
+        timeout?: number
+      }) => window.intools?.scheduler?.schedule(task),
+      cancel: (taskId: string) => window.intools?.scheduler?.cancel(taskId),
+      pause: (taskId: string) => window.intools?.scheduler?.pause(taskId),
+      resume: (taskId: string) => window.intools?.scheduler?.resume(taskId),
+      list: (filter?: { status?: string; type?: string }) => window.intools?.scheduler?.list(filter),
+      get: (taskId: string) => window.intools?.scheduler?.get(taskId),
+      getExecutions: (taskId: string, limit?: number) => window.intools?.scheduler?.getExecutions(taskId, limit),
+      validateCron: (expression: string) => window.intools?.scheduler?.validateCron(expression),
+      getNextCronTime: (expression: string, after?: Date) => window.intools?.scheduler?.getNextCronTime(expression, after),
+      describeCron: (expression: string) => window.intools?.scheduler?.describeCron(expression),
     },
 
     // Notification API
@@ -1328,6 +1376,33 @@ interface IntoolsMessaging {
   off(handler?: (message: any) => void): void
 }
 
+interface IntoolsScheduler {
+  schedule(task: {
+    name: string
+    type: 'once' | 'repeat' | 'delay'
+    callback: string
+    time?: number
+    cron?: string
+    delay?: number
+    payload?: any
+    maxRetries?: number
+    retryDelay?: number
+    timeout?: number
+    description?: string
+    endTime?: number
+    maxExecutions?: number
+  }): Promise<any>
+  cancel(taskId: string): Promise<void>
+  pause(taskId: string): Promise<void>
+  resume(taskId: string): Promise<void>
+  list(filter?: { status?: string; type?: string; limit?: number }): Promise<any[]>
+  get(taskId: string): Promise<any>
+  getExecutions(taskId: string, limit?: number): Promise<any[]>
+  validateCron(expression: string): boolean
+  getNextCronTime(expression: string, after?: Date): Date
+  describeCron(expression: string): string
+}
+
 interface HttpResponse {
   status: number
   statusText: string
@@ -1456,6 +1531,7 @@ interface IntoolsAPI {
   http: IntoolsHttp
   filesystem: IntoolsFilesystem
   messaging: IntoolsMessaging
+  scheduler: IntoolsScheduler
   host?: IntoolsHost
   onPluginInit(callback: (data: PluginInitData) => void): void
   onPluginAttach?(callback: (data: { pluginName: string; displayName: string; featureCode: string; input: string; uiPath: string; preloadPath: string }) => void): void

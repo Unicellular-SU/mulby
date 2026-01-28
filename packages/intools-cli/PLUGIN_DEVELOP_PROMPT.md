@@ -254,6 +254,61 @@ interface Messaging {
   on(handler: (message: { id: string; from: string; to?: string; type: string; payload: unknown; timestamp: number }) => void | Promise<void>): void;
   off(handler?: (message: any) => void): void;
 }
+
+// scheduler (B) - Task Scheduler
+interface Scheduler {
+  schedule(task: TaskInput): Promise<Task>;
+  cancel(taskId: string): Promise<void>;
+  pause(taskId: string): Promise<void>;
+  resume(taskId: string): Promise<void>;
+  get(taskId: string): Promise<Task | null>;
+  list(filter?: { status?: string; type?: string; limit?: number }): Promise<Task[]>;
+  getExecutions(taskId: string, limit?: number): Promise<TaskExecution[]>;
+  validateCron(expression: string): boolean;
+  getNextCronTime(expression: string, after?: Date): Date;
+  describeCron(expression: string): string;
+}
+
+interface TaskInput {
+  name: string;
+  type: 'once' | 'repeat' | 'delay';
+  callback: string;
+  description?: string;
+  payload?: any;
+  time?: number;           // For 'once' type
+  cron?: string;           // For 'repeat' type (6-field: sec min hour day month weekday)
+  delay?: number;          // For 'delay' type
+  timezone?: string;
+  maxRetries?: number;
+  retryDelay?: number;
+  timeout?: number;
+  endTime?: number;        // For 'repeat' type
+  maxExecutions?: number;  // For 'repeat' type
+}
+
+interface Task extends TaskInput {
+  id: string;
+  pluginId: string;
+  status: 'pending' | 'running' | 'paused' | 'completed' | 'failed' | 'cancelled';
+  nextRunTime?: number;
+  lastRunTime?: number;
+  executionCount: number;
+  failureCount: number;
+  lastError?: string;
+  createdAt: number;
+  updatedAt: number;
+}
+
+interface TaskExecution {
+  id: string;
+  taskId: string;
+  startTime: number;
+  endTime?: number;
+  status: 'success' | 'failed' | 'timeout';
+  result?: any;
+  error?: string;
+  duration?: number;
+}
 ```
 
 ### Advanced System Modules
@@ -548,4 +603,119 @@ For plugins with UI (`"ui": "..."` in manifest):
 2. **Frontend** (`src/ui/...`) stops when window closes.
 3. Use IPC (via `api.messaging` or `host` module) to communicate between active UI and background backend.
 
+## 6. Task Scheduler (Backend Only)
+
+Schedule tasks to run at specific times or intervals. Tasks persist across app restarts.
+
+### 6.1 Creating Tasks
+
+```typescript
+// One-time: Execute at timestamp
+await api.scheduler.schedule({
+  name: 'Meeting Reminder',
+  type: 'once',
+  time: Date.now() + 3600000,  // 1 hour later
+  callback: 'onReminder',
+  payload: { message: 'Meeting starts soon' }
+});
+
+// Repeat: Execute via Cron (6-field: sec min hour day month weekday)
+await api.scheduler.schedule({
+  name: 'Daily Backup',
+  type: 'repeat',
+  cron: '0 0 2 * * *',  // Daily at 2 AM
+  callback: 'onBackup'
+});
+
+// Delay: Execute after milliseconds
+await api.scheduler.schedule({
+  name: 'Delayed Task',
+  type: 'delay',
+  delay: 5000,  // 5 seconds
+  callback: 'onTask'
+});
+```
+
+### 6.2 Task Callbacks
+
+Export callback functions in `src/main.ts`:
+
+```typescript
+export async function onReminder({ api, payload, task }) {
+  api.notification.show(payload.message);
+  // Return value is logged in execution history
+  return { success: true };
+}
+
+export async function onBackup({ api }) {
+  try {
+    await api.filesystem.copy('/source', '/backup');
+    return { files: 100 };
+  } catch (error) {
+    throw error;  // Triggers retry if maxRetries configured
+  }
+}
+```
+
+### 6.3 Managing Tasks
+
+```typescript
+// List tasks (current plugin only)
+const tasks = await api.scheduler.list();
+const pending = await api.scheduler.list({ status: 'pending' });
+
+// Control tasks
+await api.scheduler.pause(taskId);
+await api.scheduler.resume(taskId);
+await api.scheduler.cancel(taskId);
+
+// Query
+const task = await api.scheduler.get(taskId);
+const history = await api.scheduler.getExecutions(taskId, 10);
+```
+
+### 6.4 Advanced Options
+
+```typescript
+await api.scheduler.schedule({
+  name: 'Robust Task',
+  type: 'once',
+  time: Date.now() + 1000,
+  callback: 'onTask',
+  maxRetries: 3,        // Retry on failure
+  retryDelay: 30000,    // Wait 30s between retries
+  timeout: 60000,       // Kill after 60s
+  payload: { data: 'important' }
+});
+
+// Repeat with limits
+await api.scheduler.schedule({
+  name: 'Limited Repeat',
+  type: 'repeat',
+  cron: '0 0 * * * *',
+  callback: 'onTask',
+  endTime: Date.now() + 86400000,  // Stop after 24h
+  maxExecutions: 100                // Or after 100 runs
+});
+```
+
+### 6.5 Cron Helpers
+
+```typescript
+// Validate expression
+api.scheduler.validateCron('0 0 2 * * *');  // true
+
+// Get next run time
+api.scheduler.getNextCronTime('0 0 2 * * *');  // Date object
+
+// Human-readable description
+api.scheduler.describeCron('0 0 2 * * *');  // "每天凌晨2点"
+```
+
+**Common Cron Examples**:
+- `'0 * * * * *'` - Every minute
+- `'0 0 * * * *'` - Every hour
+- `'0 0 2 * * *'` - Daily at 2 AM
+- `'0 0 9 * * 1-5'` - Weekdays at 9 AM
+- `'0 */30 * * * *'` - Every 30 minutes
 
