@@ -15,6 +15,8 @@ interface HostHealth {
   cpuUsage: number
   requestCount: number
   errorCount: number
+  lastCpuTime: number      // 上次 CPU 时间（微秒）
+  lastCpuTimestamp: number // 上次 CPU 时间戳（毫秒）
 }
 
 interface WatchdogConfig {
@@ -88,7 +90,9 @@ export class PluginHostWatchdog extends EventEmitter {
       memoryUsage: 0,
       cpuUsage: 0,
       requestCount: 0,
-      errorCount: 0
+      errorCount: 0,
+      lastCpuTime: 0,
+      lastCpuTimestamp: Date.now()
     })
   }
 
@@ -161,6 +165,31 @@ export class PluginHostWatchdog extends EventEmitter {
     if (memoryMB > this.config.maxMemoryMB) {
       this.emit('host:memory-exceeded', pluginName, memoryMB)
     }
+  }
+
+  /**
+   * 更新 CPU 使用
+   * @param pluginName 插件名称
+   * @param cpuTimeMicroseconds CPU 时间（微秒），user + system 的总和
+   */
+  updateCpuUsage(pluginName: string, cpuTimeMicroseconds: number): void {
+    const health = this.hosts.get(pluginName)
+    if (!health) return
+
+    const now = Date.now()
+    const timeDelta = now - health.lastCpuTimestamp // 毫秒
+    const cpuDelta = cpuTimeMicroseconds - health.lastCpuTime // 微秒
+
+    if (timeDelta > 0 && health.lastCpuTime > 0) {
+      // CPU 使用率 = (CPU 时间增量 / 实际时间增量) * 100
+      // 将微秒转换为毫秒：cpuDelta / 1000
+      const cpuPercent = (cpuDelta / 1000 / timeDelta) * 100
+      health.cpuUsage = Math.max(0, Math.min(100, cpuPercent)) // 限制在 0-100%
+    }
+
+    // 更新记录
+    health.lastCpuTime = cpuTimeMicroseconds
+    health.lastCpuTimestamp = now
   }
 
   /**

@@ -243,11 +243,21 @@ export default function BackgroundPluginManagerView({ onBack }: BackgroundPlugin
                             </div>
                           </div>
                           <div>
+                            <div className="text-[10px] uppercase tracking-wider text-slate-400 dark:text-slate-500">CPU</div>
+                            <div className="mt-0.5 text-xs font-medium text-slate-700 dark:text-slate-300">
+                              {plugin.cpuUsage.toFixed(1)}%
+                            </div>
+                          </div>
+                          <div>
                             <div className="text-[10px] uppercase tracking-wider text-slate-400 dark:text-slate-500">请求数</div>
                             <div className="mt-0.5 text-xs font-medium text-slate-700 dark:text-slate-300">
                               {plugin.requestCount}
                             </div>
                           </div>
+                        </div>
+
+                        {/* 第二行：错误数 */}
+                        <div className="grid grid-cols-4 gap-3 mt-2">
                           <div>
                             <div className="text-[10px] uppercase tracking-wider text-slate-400 dark:text-slate-500">错误数</div>
                             <div className="mt-0.5 text-xs font-medium text-slate-700 dark:text-slate-300">

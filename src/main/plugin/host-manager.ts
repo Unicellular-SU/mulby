@@ -174,13 +174,14 @@ export class PluginHostManager extends EventEmitter {
   private handleResourceStats(host: PluginHost, message: HostResponse): void {
     if (message.type !== 'resourceStats') return
 
-    const { memoryUsage } = message.payload
+    const { memoryUsage, cpuUsage } = message.payload
 
     // 更新内存使用（使用 RSS - 常驻集大小）
     this.watchdog.updateMemoryUsage(host.pluginName, memoryUsage.rss)
 
-    // CPU 使用数据已收集，但 Watchdog 暂不支持 CPU 监控
-    // 未来可以扩展 Watchdog 来支持 CPU 使用率监控
+    // 更新 CPU 使用（user + system 时间）
+    const totalCpuTime = cpuUsage.user + cpuUsage.system
+    this.watchdog.updateCpuUsage(host.pluginName, totalCpuTime)
   }
 
   /**
