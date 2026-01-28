@@ -527,6 +527,15 @@ export class PluginWindowManager {
     }
   }
 
+  // 关闭指定插件的所有独立窗口
+  closeDetachedWindowsByPlugin(pluginId: string): void {
+    for (const info of this.detachedWindows.values()) {
+      if (info.plugin.id === pluginId && !info.window.isDestroyed()) {
+        info.window.close()
+      }
+    }
+  }
+
   // 获取所有独立窗口
   getAllDetachedWindows(): BrowserWindow[] {
     return Array.from(this.detachedWindows.values())

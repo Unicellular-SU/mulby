@@ -75,13 +75,18 @@ export default function BackgroundPluginManagerView({ onBack }: BackgroundPlugin
     return () => clearInterval(interval)
   }, [autoRefresh])
 
-  const handleStop = async (pluginId: string) => {
-    const confirmed = confirm('确定要停止此后台插件吗？')
+  const handleStop = async (pluginId: string, runMode: 'background' | 'active') => {
+    const modeText = runMode === 'background' ? '后台插件' : '插件'
+    const confirmed = confirm(`确定要停止此${modeText}吗？`)
     if (!confirmed) return
 
     try {
-      await window.intools.plugin.stopBackground(pluginId)
-      window.intools.notification.show('后台插件已停止', 'success')
+      if (runMode === 'background') {
+        await window.intools.plugin.stopBackground(pluginId)
+      } else {
+        await window.intools.plugin.stopPlugin(pluginId)
+      }
+      window.intools.notification.show(`${modeText}已停止`, 'success')
       await refreshPlugins()
     } catch (err) {
       window.intools.notification.show('停止失败', 'error')
@@ -89,15 +94,20 @@ export default function BackgroundPluginManagerView({ onBack }: BackgroundPlugin
   }
 
   const handleStopAll = async () => {
-    const backgroundPlugins = plugins.filter(p => p.runMode === 'background')
-    if (backgroundPlugins.length === 0) return
+    if (plugins.length === 0) return
 
-    const confirmed = confirm(`确定要停止所有 ${backgroundPlugins.length} 个后台插件吗？`)
+    const confirmed = confirm(`确定要停止所有 ${plugins.length} 个插件吗？`)
     if (!confirmed) return
 
     try {
-      await Promise.all(backgroundPlugins.map(p => window.intools.plugin.stopBackground(p.pluginId)))
-      window.intools.notification.show('所有后台插件已停止', 'success')
+      await Promise.all(plugins.map(p => {
+        if (p.runMode === 'background') {
+          return window.intools.plugin.stopBackground(p.pluginId)
+        } else {
+          return window.intools.plugin.stopPlugin(p.pluginId)
+        }
+      }))
+      window.intools.notification.show('所有插件已停止', 'success')
       await refreshPlugins()
     } catch (err) {
       window.intools.notification.show('停止失败', 'error')
@@ -139,9 +149,9 @@ export default function BackgroundPluginManagerView({ onBack }: BackgroundPlugin
           <button className={actionButtonClass} onClick={refreshPlugins} disabled={loading}>
             {loading ? '刷新中...' : '刷新'}
           </button>
-          {plugins.filter(p => p.runMode === 'background').length > 0 && (
+          {plugins.length > 0 && (
             <button className={dangerButtonClass} onClick={handleStopAll}>
-              停止全部后台
+              停止全部
             </button>
           )}
         </div>
@@ -276,14 +286,12 @@ export default function BackgroundPluginManagerView({ onBack }: BackgroundPlugin
 
                       {/* 右侧：操作按钮 */}
                       <div className="flex flex-col gap-2">
-                        {plugin.runMode === 'background' && (
-                          <button
-                            className={dangerButtonClass}
-                            onClick={() => handleStop(plugin.pluginId)}
-                          >
-                            停止
-                          </button>
-                        )}
+                        <button
+                          className={dangerButtonClass}
+                          onClick={() => handleStop(plugin.pluginId, plugin.runMode)}
+                        >
+                          停止
+                        </button>
                       </div>
                     </div>
                   </div>

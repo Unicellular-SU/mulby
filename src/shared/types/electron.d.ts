@@ -282,6 +282,8 @@ export interface ElectronAPI {
     stopBackground: (pluginId: string) => Promise<{ success: boolean }>
     getBackgroundInfo: (pluginId: string) => Promise<BackgroundPluginInfo | null>
     startBackground: (pluginId: string) => Promise<{ success: boolean }>
+    // 停止运行中的插件（包括 UI 插件和后台插件）
+    stopPlugin: (pluginId: string) => Promise<{ success: boolean }>
   }
   onPluginInit: (callback: (data: { pluginName: string; featureCode: string; input: string; attachments?: InputAttachment[]; mode?: string }) => void) => void
   onPluginAttach: (callback: (data: { pluginName: string; displayName: string; featureCode: string; input: string; attachments?: InputAttachment[]; mode: 'panel' }) => void) => void

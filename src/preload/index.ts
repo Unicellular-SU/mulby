@@ -155,6 +155,7 @@ const intoolsApi = {
     stopBackground: (pluginId: string) => ipcRenderer.invoke('plugin:stopBackground', pluginId),
     getBackgroundInfo: (pluginId: string) => ipcRenderer.invoke('plugin:getBackgroundInfo', pluginId),
     startBackground: (pluginId: string) => ipcRenderer.invoke('plugin:startBackground', pluginId),
+    stopPlugin: (pluginId: string) => ipcRenderer.invoke('plugin:stopPlugin', pluginId),
     // 插件导航 API
     redirect: (label: string | [string, string], payload?: unknown) =>
       ipcRenderer.invoke('plugin:redirect', label, payload),

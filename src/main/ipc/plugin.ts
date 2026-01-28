@@ -179,4 +179,9 @@ export function registerPluginHandlers(manager: PluginManager) {
     const success = await manager.getBackgroundManager().start(plugin)
     return { success }
   })
+
+  // 停止运行中的插件（关闭窗口并销毁 Host 进程）
+  ipcMain.handle('plugin:stopPlugin', async (_, pluginId: string) => {
+    return manager.stopPlugin(pluginId)
+  })
 }

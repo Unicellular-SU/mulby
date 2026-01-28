@@ -608,4 +608,43 @@ export class PluginManager {
     const staticFeatures = plugin.manifest.features.filter(feature => !dynamicCodes.has(feature.code))
     return [...staticFeatures, ...dynamicFeatures]
   }
+
+  /**
+   * 停止运行中的插件（关闭窗口并销毁 Host 进程）
+   */
+  async stopPlugin(pluginId: string): Promise<{ success: boolean; error?: string }> {
+    const plugin = this.plugins.get(pluginId)
+    if (!plugin) {
+      return { success: false, error: '插件不存在' }
+    }
+
+    try {
+      // 1. 如果是后台插件，停止后台运行
+      if (this.backgroundManager.isRunning(pluginId)) {
+        await this.backgroundManager.stop(pluginId, 'manual')
+      }
+
+      // 2. 关闭插件窗口（如果有）
+      if (this.windowManager) {
+        // 关闭所有该插件的独立窗口
+        this.windowManager.closeDetachedWindowsByPlugin(pluginId)
+
+        // 如果当前附着的插件是该插件，关闭附着模式
+        const currentPlugin = this.windowManager.getPanelWindow()?.getCurrentPlugin()
+        if (currentPlugin?.id === pluginId) {
+          this.windowManager.closeAttached()
+        }
+      }
+
+      // 3. 销毁 Host 进程
+      if (this.useUtilityProcess && this.hostManager.isHostReady(pluginId)) {
+        await this.hostManager.destroyHost(pluginId)
+      }
+
+      return { success: true }
+    } catch (err) {
+      const error = err instanceof Error ? err.message : '停止插件失败'
+      return { success: false, error }
+    }
+  }
 }
