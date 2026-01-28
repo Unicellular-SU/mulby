@@ -61,6 +61,16 @@ export interface InputPayload {
   attachments: InputAttachment[]
 }
 
+// Phase 4: 插件间通信消息
+export interface PluginMessage {
+  id: string              // 消息 ID
+  from: string            // 发送者插件 ID
+  to?: string             // 接收者插件 ID（可选，不指定则为广播）
+  type: string            // 消息类型
+  payload: unknown        // 消息内容
+  timestamp: number       // 时间戳
+}
+
 // 命令类型
 export interface CmdKeyword {
   type: 'keyword'
@@ -151,6 +161,17 @@ export interface WindowOptions {
   maxHeight?: number   // 最大高度
 }
 
+// Phase 4: 资源限制配置
+export interface ResourceLimits {
+  maxMemoryMB?: number           // 最大内存使用（MB）
+  maxRequestsPerMinute?: number  // 每分钟最大请求数
+  maxErrorsPerMinute?: number    // 每分钟最大错误数
+  memoryLeakThresholdMBPerMinute?: number  // 内存泄漏阈值（MB/分钟）
+}
+
+// 资源限制预设
+export type ResourceLimitPreset = 'low' | 'medium' | 'high' | 'unlimited'
+
 // 插件行为设置
 export interface PluginSetting {
   single?: boolean          // 是否单例模式运行（默认 true）
@@ -159,6 +180,7 @@ export interface PluginSetting {
   background?: boolean      // 是否允许后台运行（默认 false）
   persistent?: boolean      // 是否持久化（重启后自动恢复，默认 false）
   maxRuntime?: number       // 最大运行时间（毫秒，0 表示无限制，默认 0）
+  resourceLimits?: ResourceLimits | ResourceLimitPreset  // 资源限制配置或预设
 }
 
 // 插件清单
@@ -273,6 +295,12 @@ export interface PluginAPI {
     removeFeature: (code: string) => boolean
     redirectHotKeySetting: (cmdLabel: string, autocopy?: boolean) => void
     redirectAiModelsSetting: () => void
+  }
+  messaging: {
+    send: (targetPluginId: string, type: string, payload: unknown) => Promise<void>
+    broadcast: (type: string, payload: unknown) => Promise<void>
+    on: (handler: (message: PluginMessage) => void | Promise<void>) => void
+    off: (handler: (message: PluginMessage) => void | Promise<void>) => void
   }
 }
 

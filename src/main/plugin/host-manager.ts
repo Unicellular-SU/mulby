@@ -15,6 +15,8 @@ import { generateRequestId } from './host-protocol'
 import { createPluginAPI } from './api'
 import { PluginHostWatchdog } from './watchdog'
 import type { InputAttachment, Plugin } from '../../shared/types/plugin'
+import { resolveResourceLimits, applyResourceLimitsToWatchdog } from './resource-limits'
+import { PluginMessageBus } from './message-bus'
 
 // ============ 类型定义 ============
 
@@ -39,6 +41,7 @@ export class PluginHostManager extends EventEmitter {
   private hosts: Map<string, PluginHost> = new Map()
   private workerPath: string
   private watchdog: PluginHostWatchdog
+  private messageBus: PluginMessageBus
 
   constructor() {
     super()
@@ -51,6 +54,9 @@ export class PluginHostManager extends EventEmitter {
     this.watchdog = new PluginHostWatchdog()
     this.setupWatchdogListeners()
     this.watchdog.start()
+
+    // Phase 4: 初始化消息总线
+    this.messageBus = new PluginMessageBus()
   }
 
   /**
@@ -100,8 +106,22 @@ export class PluginHostManager extends EventEmitter {
       this.hosts.set(pluginName, host)
       this.setupHostListeners(host, plugin)
 
-      // 立即注册到 Watchdog，持续监控
-      this.watchdog.registerHost(pluginName)
+      // Phase 4: 解析插件的资源限制配置
+      const resourceLimitsConfig = plugin.manifest.pluginSetting?.resourceLimits
+      const resolvedLimits = resolveResourceLimits(resourceLimitsConfig, 'medium')
+      const customWatchdogConfig = applyResourceLimitsToWatchdog(resolvedLimits, {
+        heartbeatInterval: 5000,
+        heartbeatTimeout: 10000,
+        maxMissedHeartbeats: 3,
+        maxMemoryMB: 512,
+        maxRequestsPerMinute: 1000,
+        maxErrorsPerMinute: 50,
+        memoryLeakThresholdMBPerMinute: 10,
+        memoryHistorySize: 12
+      })
+
+      // 立即注册到 Watchdog，持续监控（使用插件特定的资源限制）
+      this.watchdog.registerHost(pluginName, customWatchdogConfig)
 
       // 等待 ready 信号
       return await this.waitForReady(pluginName)
@@ -213,7 +233,7 @@ export class PluginHostManager extends EventEmitter {
     const [namespace, method] = api.split('.')
 
     try {
-      const pluginApi = createPluginAPI(plugin.id)
+      const pluginApi = createPluginAPI(plugin.id, this.messageBus)
       const apiNamespace = pluginApi[namespace as keyof typeof pluginApi]
 
       if (!apiNamespace || typeof apiNamespace !== 'object') {
@@ -446,6 +466,9 @@ export class PluginHostManager extends EventEmitter {
     // 注销 Watchdog 监控
     this.watchdog.unregisterHost(pluginName)
 
+    // Phase 4: 清理消息总线订阅
+    this.messageBus.cleanup(pluginName)
+
     // 清理所有待处理的请求
     for (const [, pending] of host.pendingRequests) {
       clearTimeout(pending.timeout)
@@ -498,6 +521,13 @@ export class PluginHostManager extends EventEmitter {
   }
 
   /**
+   * Phase 4: 获取消息总线实例
+   */
+  getMessageBus(): PluginMessageBus {
+    return this.messageBus
+  }
+
+  /**
    * 调用插件方法（供 UI 窗口使用）
    * @param pluginName 插件名称
    * @param method API 方法路径，如 'clipboard.readText'
@@ -515,7 +545,7 @@ export class PluginHostManager extends EventEmitter {
 
     // 直接调用主进程的 API（因为 API 实现在主进程中）
     const [namespace, methodName] = method.split('.')
-    const pluginApi = createPluginAPI(pluginName)
+    const pluginApi = createPluginAPI(pluginName, this.messageBus)
     const apiNamespace = pluginApi[namespace as keyof typeof pluginApi]
 
     if (!apiNamespace || typeof apiNamespace !== 'object') {

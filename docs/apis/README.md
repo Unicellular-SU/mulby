@@ -30,6 +30,7 @@
 - [插件管理 API (plugin)](./plugin.md)
 - [插件 Host API (host)](./host.md)
 - [动态指令 API (features)](./features.md)
+- [插件间通信 API (messaging)](./messaging.md)
 - [InBrowser API (inbrowser)](./inbrowser.md)
 
 ## 文件与存储

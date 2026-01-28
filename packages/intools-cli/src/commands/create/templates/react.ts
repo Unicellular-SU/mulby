@@ -139,6 +139,12 @@ export function buildBackendMain(name: string) {
     notification: {
       show: (message: string, type?: string) => void
     }
+    messaging: {
+      send: (targetPluginId: string, type: string, payload: unknown) => Promise<void>
+      broadcast: (type: string, payload: unknown) => Promise<void>
+      on: (handler: (message: { id: string; from: string; to?: string; type: string; payload: unknown; timestamp: number }) => void | Promise<void>) => void
+      off: (handler?: (message: any) => void) => void
+    }
     features?: {
       getFeatures: (codes?: string[]) => Array<{ code: string }>
       setFeature: (feature: {
@@ -577,6 +583,23 @@ export function useIntools(pluginId?: string) {
       get: (key: string) => window.intools?.storage?.get(key, pluginId),
       set: (key: string, value: unknown) => window.intools?.storage?.set(key, value, pluginId),
       remove: (key: string) => window.intools?.storage?.remove(key, pluginId),
+    },
+
+    // Messaging API
+    messaging: {
+      send: (targetPluginId: string, type: string, payload: unknown) =>
+        window.intools?.messaging?.send(targetPluginId, type, payload),
+      broadcast: (type: string, payload: unknown) =>
+        window.intools?.messaging?.broadcast(type, payload),
+      on: (callback: (message: {
+        id: string
+        from: string
+        to?: string
+        type: string
+        payload: unknown
+        timestamp: number
+      }) => void | Promise<void>) => window.intools?.messaging?.on(callback),
+      off: (callback?: (message: any) => void) => window.intools?.messaging?.off(callback),
     },
 
     // Notification API
@@ -1238,6 +1261,20 @@ interface IntoolsStorage {
   remove(key: string, namespace?: string): Promise<void>
 }
 
+interface IntoolsMessaging {
+  send(targetPluginId: string, type: string, payload: unknown): Promise<void>
+  broadcast(type: string, payload: unknown): Promise<void>
+  on(handler: (message: {
+    id: string
+    from: string
+    to?: string
+    type: string
+    payload: unknown
+    timestamp: number
+  }) => void | Promise<void>): void
+  off(handler?: (message: any) => void): void
+}
+
 interface HttpResponse {
   status: number
   statusText: string
@@ -1365,6 +1402,7 @@ interface IntoolsAPI {
   storage: IntoolsStorage
   http: IntoolsHttp
   filesystem: IntoolsFilesystem
+  messaging: IntoolsMessaging
   host?: IntoolsHost
   onPluginInit(callback: (data: PluginInitData) => void): void
   onPluginAttach?(callback: (data: { pluginName: string; displayName: string; featureCode: string; input: string; uiPath: string; preloadPath: string }) => void): void

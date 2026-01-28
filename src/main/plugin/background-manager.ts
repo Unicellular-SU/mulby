@@ -74,6 +74,14 @@ export class BackgroundPluginManager extends EventEmitter {
         this.stop(pluginId, 'error-threshold')
       }
     })
+
+    // Phase 4: 内存泄漏警告
+    this.watchdog.on('host:memory-leak-warning', (pluginId: string, growthRate: number) => {
+      if (this.isRunning(pluginId)) {
+        console.warn(`[BackgroundManager] Plugin ${pluginId} memory leak detected: ${growthRate.toFixed(2)}MB/min`)
+        // 记录警告但不立即停止，让用户决定是否停止
+      }
+    })
   }
 
   /**

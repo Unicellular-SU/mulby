@@ -246,6 +246,14 @@ interface Storage {
   clear(): void; // B only
   keys(): string[]; // B only
 }
+
+// messaging (R/B) - Plugin-to-Plugin Communication
+interface Messaging {
+  send(targetPluginId: string, type: string, payload: unknown): Promise<void>;
+  broadcast(type: string, payload: unknown): Promise<void>;
+  on(handler: (message: { id: string; from: string; to?: string; type: string; payload: unknown; timestamp: number }) => void | Promise<void>): void;
+  off(handler?: (message: any) => void): void;
+}
 ```
 
 ### Advanced System Modules

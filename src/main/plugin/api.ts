@@ -17,14 +17,15 @@ import { pluginNetwork } from './network'
 import { pluginInput } from './input'
 import { permissionManager } from './permission-manager'
 import { pluginFeatureStore, redirectHotKeySetting, redirectAiModelsSetting } from './dynamic-features'
-import type { DynamicFeatureInput } from '../../shared/types/plugin'
+import type { DynamicFeatureInput, PluginMessage } from '../../shared/types/plugin'
+import type { PluginMessageBus } from './message-bus'
 
 const pluginStorage = new PluginStorage()
 const pluginFilesystem = new PluginFilesystem()
 const pluginHttp = new PluginHttp()
 
 // 创建插件可用的 API 上下文
-export function createPluginAPI(pluginName: string) {
+export function createPluginAPI(pluginName: string, messageBus?: PluginMessageBus) {
   return {
     clipboard: {
       readText: () => clipboard.readText(),
@@ -199,6 +200,33 @@ export function createPluginAPI(pluginName: string) {
       },
       redirectAiModelsSetting: () => {
         redirectAiModelsSetting()
+      }
+    },
+    // Phase 4: 插件间通信 API
+    messaging: {
+      send: async (targetPluginId: string, type: string, payload: unknown) => {
+        if (!messageBus) {
+          throw new Error('Message bus not available')
+        }
+        await messageBus.send(pluginName, targetPluginId, type, payload)
+      },
+      broadcast: async (type: string, payload: unknown) => {
+        if (!messageBus) {
+          throw new Error('Message bus not available')
+        }
+        await messageBus.broadcast(pluginName, type, payload)
+      },
+      on: (handler: (message: PluginMessage) => void | Promise<void>) => {
+        if (!messageBus) {
+          throw new Error('Message bus not available')
+        }
+        messageBus.subscribe(pluginName, handler)
+      },
+      off: (handler?: (message: PluginMessage) => void | Promise<void>) => {
+        if (!messageBus) {
+          throw new Error('Message bus not available')
+        }
+        messageBus.unsubscribe(pluginName, handler)
       }
     }
   }
