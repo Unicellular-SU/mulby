@@ -161,6 +161,19 @@ export function registerWindowHandlers(
       ? payload
       : (typeof payload === 'string' ? payload : JSON.stringify(payload || ''))
 
+    // 初始化 Host 进程（确保插件出现在任务管理器中）
+    if (plugin.manifest.ui) {
+      try {
+        const hostManager = pluginManager.getHostManager()
+        const hostReady = await hostManager.initPlugin(plugin)
+        if (!hostReady) {
+          console.warn(`[redirect] Failed to init host for plugin ${pluginName}, continuing anyway`)
+        }
+      } catch (err) {
+        console.error(`[redirect] Error initializing host for plugin ${pluginName}:`, err)
+      }
+    }
+
     // 判断调用源是附着模式还是独立模式
     const callerWin = BrowserWindow.fromWebContents(event.sender)
     const mainWin = getMainWindow()

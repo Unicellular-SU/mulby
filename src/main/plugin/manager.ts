@@ -243,6 +243,19 @@ export class PluginManager {
       if (!this.windowManager) {
         return { success: false, error: 'Window manager not initialized' }
       }
+
+      // 初始化 Host 进程（确保插件出现在任务管理器中）
+      if (this.useUtilityProcess) {
+        try {
+          const hostReady = await this.hostManager.initPlugin(plugin)
+          if (!hostReady) {
+            console.warn(`[PluginManager] Failed to init host for UI plugin ${name}, continuing anyway`)
+          }
+        } catch (err) {
+          console.error(`[PluginManager] Error initializing host for UI plugin ${name}:`, err)
+        }
+      }
+
       if (useDetached) {
         const win = this.windowManager.createDetachedWindow(plugin, featureCode, resolvedInput, route)
         return { success: Boolean(win), hasUI: true }
