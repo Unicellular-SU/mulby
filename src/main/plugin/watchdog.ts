@@ -32,7 +32,7 @@ interface HostHealth {
   customLimits?: Partial<WatchdogConfig>  // 插件自定义资源限制
 }
 
-interface WatchdogConfig {
+export interface WatchdogConfig {
   heartbeatInterval: number    // 心跳检测间隔（毫秒）
   heartbeatTimeout: number     // 心跳超时时间（毫秒）
   maxMissedHeartbeats: number  // 最大允许丢失心跳次数

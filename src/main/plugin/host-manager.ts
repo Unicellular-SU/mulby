@@ -17,6 +17,7 @@ import { PluginHostWatchdog } from './watchdog'
 import type { InputAttachment, Plugin } from '../../shared/types/plugin'
 import { resolveResourceLimits, applyResourceLimitsToWatchdog } from './resource-limits'
 import { PluginMessageBus } from './message-bus'
+import type { TaskScheduler } from '../scheduler'
 
 // ============ 类型定义 ============
 
@@ -42,6 +43,7 @@ export class PluginHostManager extends EventEmitter {
   private workerPath: string
   private watchdog: PluginHostWatchdog
   private messageBus: PluginMessageBus
+  private taskScheduler?: TaskScheduler
 
   constructor() {
     super()
@@ -57,6 +59,13 @@ export class PluginHostManager extends EventEmitter {
 
     // Phase 4: 初始化消息总线
     this.messageBus = new PluginMessageBus()
+  }
+
+  /**
+   * 设置任务调度器
+   */
+  setTaskScheduler(scheduler: TaskScheduler): void {
+    this.taskScheduler = scheduler
   }
 
   /**
@@ -233,7 +242,7 @@ export class PluginHostManager extends EventEmitter {
     const [namespace, method] = api.split('.')
 
     try {
-      const pluginApi = createPluginAPI(plugin.id, this.messageBus)
+      const pluginApi = createPluginAPI(plugin.id, this.messageBus, this.taskScheduler)
       const apiNamespace = pluginApi[namespace as keyof typeof pluginApi]
 
       if (!apiNamespace || typeof apiNamespace !== 'object') {
@@ -545,7 +554,7 @@ export class PluginHostManager extends EventEmitter {
 
     // 直接调用主进程的 API（因为 API 实现在主进程中）
     const [namespace, methodName] = method.split('.')
-    const pluginApi = createPluginAPI(pluginName, this.messageBus)
+    const pluginApi = createPluginAPI(pluginName, this.messageBus, this.taskScheduler)
     const apiNamespace = pluginApi[namespace as keyof typeof pluginApi]
 
     if (!apiNamespace || typeof apiNamespace !== 'object') {

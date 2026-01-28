@@ -12,6 +12,7 @@ import { PluginSearchWorker } from './search-worker-manager'
 import { filterAttachmentsByCmd, findBestMatch, normalizeInputPayload } from '../../shared/search-matcher'
 import type { MatchType } from '../../shared/search-matcher'
 import { BackgroundPluginManager } from './background-manager'
+import { TaskScheduler } from '../scheduler'
 
 // 搜索结果项
 interface SearchResult {
@@ -31,6 +32,7 @@ export class PluginManager {
   private initializedPlugins: Set<string> = new Set()  // 已初始化的插件（懒加载跟踪）
   private searchWorker: PluginSearchWorker
   private backgroundManager: BackgroundPluginManager
+  private taskScheduler: TaskScheduler
 
   constructor() {
     this.stateManager = new PluginStateManager()
@@ -41,6 +43,11 @@ export class PluginManager {
       this.hostManager.getWatchdog(),
       this.stateManager
     )
+
+    // 初始化任务调度器
+    this.taskScheduler = new TaskScheduler()
+    this.taskScheduler.setPluginManager(this)
+    this.hostManager.setTaskScheduler(this.taskScheduler)
   }
 
   // 设置窗口管理器
@@ -120,6 +127,9 @@ export class PluginManager {
     }
 
     console.log(`Loaded ${this.plugins.size} plugins from: ${dirs.join(', ')}`)
+
+    // 启动任务调度器
+    await this.taskScheduler.start()
 
     // 恢复持久化的后台插件
     await this.backgroundManager.restorePersistent(this.getAll())
@@ -464,6 +474,9 @@ export class PluginManager {
 
     // 优雅关闭后台插件
     await this.backgroundManager.shutdown()
+
+    // 关闭任务调度器
+    await this.taskScheduler.shutdown()
 
     // 销毁所有 Host 进程
     await this.hostManager.destroyAll()

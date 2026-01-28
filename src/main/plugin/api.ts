@@ -19,13 +19,15 @@ import { permissionManager } from './permission-manager'
 import { pluginFeatureStore, redirectHotKeySetting, redirectAiModelsSetting } from './dynamic-features'
 import type { DynamicFeatureInput, PluginMessage } from '../../shared/types/plugin'
 import type { PluginMessageBus } from './message-bus'
+import type { TaskScheduler } from '../scheduler'
+import type { TaskInput, TaskFilter } from '../scheduler/types'
 
 const pluginStorage = new PluginStorage()
 const pluginFilesystem = new PluginFilesystem()
 const pluginHttp = new PluginHttp()
 
 // 创建插件可用的 API 上下文
-export function createPluginAPI(pluginName: string, messageBus?: PluginMessageBus) {
+export function createPluginAPI(pluginName: string, messageBus?: PluginMessageBus, taskScheduler?: TaskScheduler) {
   return {
     clipboard: {
       readText: () => clipboard.readText(),
@@ -202,7 +204,6 @@ export function createPluginAPI(pluginName: string, messageBus?: PluginMessageBu
         redirectAiModelsSetting()
       }
     },
-    // Phase 4: 插件间通信 API
     messaging: {
       send: async (targetPluginId: string, type: string, payload: unknown) => {
         if (!messageBus) {
@@ -227,6 +228,75 @@ export function createPluginAPI(pluginName: string, messageBus?: PluginMessageBu
           throw new Error('Message bus not available')
         }
         messageBus.unsubscribe(pluginName, handler)
+      }
+    },
+    // Task Scheduler API
+    scheduler: {
+      schedule: async (task: TaskInput) => {
+        if (!taskScheduler) {
+          throw new Error('Task scheduler not available')
+        }
+        return await taskScheduler.createTask({
+          ...task,
+          pluginId: pluginName
+        })
+      },
+      cancel: async (taskId: string) => {
+        if (!taskScheduler) {
+          throw new Error('Task scheduler not available')
+        }
+        await taskScheduler.cancelTask(taskId)
+      },
+      pause: async (taskId: string) => {
+        if (!taskScheduler) {
+          throw new Error('Task scheduler not available')
+        }
+        await taskScheduler.pauseTask(taskId)
+      },
+      resume: async (taskId: string) => {
+        if (!taskScheduler) {
+          throw new Error('Task scheduler not available')
+        }
+        await taskScheduler.resumeTask(taskId)
+      },
+      get: async (taskId: string) => {
+        if (!taskScheduler) {
+          throw new Error('Task scheduler not available')
+        }
+        return await taskScheduler.getTask(taskId)
+      },
+      list: async (filter?: TaskFilter) => {
+        if (!taskScheduler) {
+          throw new Error('Task scheduler not available')
+        }
+        return await taskScheduler.listTasks({
+          ...filter,
+          pluginId: pluginName
+        })
+      },
+      getExecutions: async (taskId: string, limit?: number) => {
+        if (!taskScheduler) {
+          throw new Error('Task scheduler not available')
+        }
+        return await taskScheduler.getExecutions(taskId, limit)
+      },
+      validateCron: (expression: string) => {
+        if (!taskScheduler) {
+          throw new Error('Task scheduler not available')
+        }
+        return taskScheduler.validateCron(expression)
+      },
+      getNextCronTime: (expression: string, after?: Date) => {
+        if (!taskScheduler) {
+          throw new Error('Task scheduler not available')
+        }
+        return taskScheduler.getNextCronTime(expression, after)
+      },
+      describeCron: (expression: string) => {
+        if (!taskScheduler) {
+          throw new Error('Task scheduler not available')
+        }
+        return taskScheduler.describeCron(expression)
       }
     }
   }
