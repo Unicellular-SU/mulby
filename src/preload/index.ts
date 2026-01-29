@@ -1,9 +1,12 @@
 import { contextBridge, ipcRenderer } from 'electron'
 import { inbrowser } from './inbrowser'
+import { patchConsoleWithTimestamp } from '../shared/utils/console'
 
 // 检测是否启用了 contextIsolation
 // 当 contextIsolation 为 false 时，contextBridge 不可用，需要直接设置 window
 const isContextIsolated = process.contextIsolated
+
+patchConsoleWithTimestamp()
 
 // 定义 intools API 对象
 const intoolsApi = {
