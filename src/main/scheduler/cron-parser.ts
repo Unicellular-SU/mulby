@@ -11,7 +11,9 @@ export class CronParser {
    */
   validate(expression: string): boolean {
     try {
-      cronParser.parseExpression(expression)
+      cronParser.parseExpression(expression, {
+        tz: 'Asia/Shanghai'
+      })
       return true
     } catch {
       return false
@@ -24,7 +26,8 @@ export class CronParser {
   getNextTime(expression: string, after?: Date): Date {
     try {
       const interval = cronParser.parseExpression(expression, {
-        currentDate: after || new Date()
+        currentDate: after || new Date(),
+        tz: 'Asia/Shanghai'
       })
       return interval.next().toDate()
     } catch (error) {
@@ -38,7 +41,8 @@ export class CronParser {
   getNextTimes(expression: string, count: number, after?: Date): Date[] {
     try {
       const interval = cronParser.parseExpression(expression, {
-        currentDate: after || new Date()
+        currentDate: after || new Date(),
+        tz: 'Asia/Shanghai'
       })
       const times: Date[] = []
       for (let i = 0; i < count; i++) {

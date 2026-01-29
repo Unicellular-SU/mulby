@@ -437,6 +437,36 @@ export class PluginHostManager extends EventEmitter {
   }
 
   /**
+   * 调用任务回调
+   */
+  async callTaskCallback(
+    plugin: Plugin,
+    callbackName: string,
+    payload: unknown,
+    task: unknown
+  ): Promise<unknown> {
+    const pluginName = plugin.id
+
+    // 检查 Host 是否存在且准备好
+    const host = this.hosts.get(pluginName)
+    if (!host) {
+      // 尝试初始化
+      const inited = await this.initPlugin(plugin)
+      if (!inited) {
+        throw new Error(`Failed to init plugin: ${pluginName}`)
+      }
+    } else if (!host.ready) {
+      throw new Error(`Host not ready: ${pluginName}`)
+    }
+
+    return await this.sendRequest(pluginName, {
+      id: generateRequestId(),
+      type: 'callTaskCallback',
+      payload: { callbackName, payload, task }
+    })
+  }
+
+  /**
    * 销毁 Host 进程
    */
   async destroyHost(pluginName: string): Promise<void> {

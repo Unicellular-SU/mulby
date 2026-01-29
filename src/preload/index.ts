@@ -167,11 +167,16 @@ const intoolsApi = {
     listTasks: (filter?: { pluginId?: string; status?: string; type?: string }) =>
       ipcRenderer.invoke('scheduler:listTasks', filter),
     getTask: (taskId: string) => ipcRenderer.invoke('scheduler:getTask', taskId),
+    schedule: (task: any) => ipcRenderer.invoke('scheduler:schedule', task),
     cancelTask: (taskId: string) => ipcRenderer.invoke('scheduler:cancelTask', taskId),
     pauseTask: (taskId: string) => ipcRenderer.invoke('scheduler:pauseTask', taskId),
     resumeTask: (taskId: string) => ipcRenderer.invoke('scheduler:resumeTask', taskId),
     getExecutions: (taskId: string, limit?: number) =>
-      ipcRenderer.invoke('scheduler:getExecutions', taskId, limit)
+      ipcRenderer.invoke('scheduler:getExecutions', taskId, limit),
+    validateCron: (expression: string) => ipcRenderer.invoke('scheduler:validateCron', expression),
+    getNextCronTime: (expression: string, after?: Date) =>
+      ipcRenderer.invoke('scheduler:getNextCronTime', expression, after),
+    describeCron: (expression: string) => ipcRenderer.invoke('scheduler:describeCron', expression)
   },
 
   // 插件窗口事件

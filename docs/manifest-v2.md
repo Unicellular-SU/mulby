@@ -62,7 +62,10 @@
 {
   "pluginSetting": {
     "single": true,
-    "height": 400
+    "height": 400,
+    "background": true,
+    "persistent": true,
+    "maxRuntime": 3600000
   }
 }
 ```
@@ -72,6 +75,9 @@
 | single | boolean | true | 是否单例模式运行（不允许多开） |
 | height | number | - | 插件初始高度 |
 | defaultDetached | boolean | false | 是否默认以独立窗口运行 |
+| background | boolean | false | 是否允许后台运行 |
+| persistent | boolean | false | 是否持久化（重启后自动恢复，需开启 background） |
+| maxRuntime | number | 0 | 最大运行时间（毫秒，0 表示无限制） |
 
 ### Window 配置
 

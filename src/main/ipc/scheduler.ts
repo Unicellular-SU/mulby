@@ -32,6 +32,17 @@ export function registerSchedulerHandlers(pluginManager: PluginManager) {
     }
   })
 
+  // 创建任务
+  ipcMain.handle('scheduler:schedule', async (_, task: any) => {
+    try {
+      const scheduler = getScheduler()
+      return await scheduler.createTask(task)
+    } catch (err) {
+      console.error('Failed to schedule task:', err)
+      throw err
+    }
+  })
+
   // 取消任务
   ipcMain.handle('scheduler:cancelTask', async (_, taskId: string) => {
     try {
@@ -75,6 +86,39 @@ export function registerSchedulerHandlers(pluginManager: PluginManager) {
       return await scheduler.getExecutions(taskId, limit)
     } catch (err) {
       console.error('Failed to get executions:', err)
+      throw err
+    }
+  })
+
+  // 验证 Cron 表达式
+  ipcMain.handle('scheduler:validateCron', async (_, expression: string) => {
+    try {
+      const scheduler = getScheduler()
+      return scheduler.validateCron(expression)
+    } catch (err) {
+      console.error('Failed to validate cron:', err)
+      throw err
+    }
+  })
+
+  // 获取下次执行时间
+  ipcMain.handle('scheduler:getNextCronTime', async (_, expression: string, after?: Date) => {
+    try {
+      const scheduler = getScheduler()
+      return scheduler.getNextCronTime(expression, after)
+    } catch (err) {
+      console.error('Failed to get next cron time:', err)
+      throw err
+    }
+  })
+
+  // 描述 Cron 表达式
+  ipcMain.handle('scheduler:describeCron', async (_, expression: string) => {
+    try {
+      const scheduler = getScheduler()
+      return scheduler.describeCron(expression)
+    } catch (err) {
+      console.error('Failed to describe cron:', err)
       throw err
     }
   })

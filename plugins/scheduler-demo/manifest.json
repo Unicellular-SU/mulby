@@ -1,0 +1,36 @@
+{
+  "id": "scheduler-demo",
+  "name": "scheduler-demo",
+  "version": "1.0.0",
+  "author": "intools",
+  "displayName": "任务调度演示",
+  "description": "演示后台任务和任务调度功能的示例插件",
+  "main": "dist/main.js",
+  "ui": "ui/index.html",
+  "icon": "icon.png",
+  "pluginSetting": {
+    "background": true,
+    "persistent": true,
+    "maxRuntime": 3600000
+  },
+  "window": {
+    "width": 800,
+    "height": 600,
+    "minWidth": 400,
+    "minHeight": 300,
+    "maxWidth": 1200,
+    "maxHeight": 900
+  },
+  "features": [
+    {
+      "code": "main",
+      "explain": "任务调度管理",
+      "cmds": [
+        {
+          "type": "keyword",
+          "value": "scheduler-demo"
+        }
+      ]
+    }
+  ]
+}

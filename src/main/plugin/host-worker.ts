@@ -262,6 +262,41 @@ async function handleCallHook(request: CallHookRequest): Promise<void> {
   }
 }
 
+/** 调用任务回调 */
+async function handleCallTaskCallback(request: any): Promise<void> {
+  const { callbackName, payload, task } = request.payload
+
+  try {
+    const module = loadModule()
+    const callback = (module as any)[callbackName]
+
+    if (typeof callback === 'function') {
+      const api = createProxyAPI()
+      const result = await callback({ api, payload, task })
+
+      // 序列化结果以确保可以通过 postMessage 发送
+      const serializedResult = cloneForMessage(result)
+
+      send({
+        id: request.id,
+        type: 'result',
+        payload: { success: true, data: serializedResult }
+      })
+    } else {
+      throw new Error(`Callback not found: ${callbackName}`)
+    }
+  } catch (err) {
+    send({
+      id: request.id,
+      type: 'error',
+      payload: {
+        message: err instanceof Error ? err.message : 'Callback failed',
+        stack: err instanceof Error ? err.stack : undefined
+      }
+    })
+  }
+}
+
 /** 处理 API 调用结果 */
 function handleApiResult(result: ApiResult): void {
   const pending = pendingApiCalls.get(result.id)
@@ -297,6 +332,9 @@ function handleMessage(message: HostRequest | ApiResult): void {
       break
     case 'callHook':
       handleCallHook(request)
+      break
+    case 'callTaskCallback':
+      handleCallTaskCallback(request)
       break
     case 'terminate':
       process.exit(0)

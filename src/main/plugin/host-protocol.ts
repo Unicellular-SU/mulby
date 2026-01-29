@@ -12,6 +12,7 @@ export type HostRequestType =
   | 'init'        // 初始化插件
   | 'run'         // 执行插件
   | 'callHook'    // 调用生命周期钩子
+  | 'callTaskCallback'  // 调用任务回调
   | 'terminate'   // 终止插件
 
 /** Worker -> 主进程的响应类型 */
@@ -58,13 +59,23 @@ export interface CallHookRequest extends HostRequestBase {
   }
 }
 
+/** 任务回调调用请求 */
+export interface CallTaskCallbackRequest extends HostRequestBase {
+  type: 'callTaskCallback'
+  payload: {
+    callbackName: string
+    payload: unknown
+    task: unknown
+  }
+}
+
 /** 终止请求 */
 export interface TerminateRequest extends HostRequestBase {
   type: 'terminate'
   payload: null
 }
 
-export type HostRequest = InitRequest | RunRequest | CallHookRequest | TerminateRequest
+export type HostRequest = InitRequest | RunRequest | CallHookRequest | CallTaskCallbackRequest | TerminateRequest
 
 // ============ 响应消息 ============
 

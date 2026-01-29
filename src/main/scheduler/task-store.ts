@@ -14,6 +14,10 @@ export class TaskStore {
   constructor() {
     const dbPath = join(app.getPath('userData'), 'task-scheduler.db')
     this.db = new Database(dbPath)
+
+    // 启用 WAL 模式以提高并发性能
+    this.db.pragma('journal_mode = WAL')
+
     this.initDatabase()
   }
 
@@ -95,8 +99,9 @@ export class TaskStore {
    * 保存任务
    */
   async saveTask(task: Task): Promise<void> {
+    // 使用 INSERT ... ON CONFLICT DO UPDATE 来避免触发 DELETE CASCADE
     const stmt = this.db.prepare(`
-      INSERT OR REPLACE INTO tasks (
+      INSERT INTO tasks (
         id, plugin_id, name, description, type, status,
         time, cron, delay, timezone,
         callback, payload, max_retries, retry_delay, timeout,
@@ -111,6 +116,29 @@ export class TaskStore {
         ?, ?, ?, ?, ?,
         ?, ?
       )
+      ON CONFLICT(id) DO UPDATE SET
+        plugin_id = excluded.plugin_id,
+        name = excluded.name,
+        description = excluded.description,
+        type = excluded.type,
+        status = excluded.status,
+        time = excluded.time,
+        cron = excluded.cron,
+        delay = excluded.delay,
+        timezone = excluded.timezone,
+        callback = excluded.callback,
+        payload = excluded.payload,
+        max_retries = excluded.max_retries,
+        retry_delay = excluded.retry_delay,
+        timeout = excluded.timeout,
+        end_time = excluded.end_time,
+        max_executions = excluded.max_executions,
+        next_run_time = excluded.next_run_time,
+        last_run_time = excluded.last_run_time,
+        execution_count = excluded.execution_count,
+        failure_count = excluded.failure_count,
+        last_error = excluded.last_error,
+        updated_at = excluded.updated_at
     `)
 
     stmt.run(

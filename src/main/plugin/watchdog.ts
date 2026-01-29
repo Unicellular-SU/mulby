@@ -342,6 +342,11 @@ export class PluginHostWatchdog extends EventEmitter {
         if (health.missedHeartbeats === this.config.maxMissedHeartbeats) {
           this.emit('host:unresponsive', pluginName)
         }
+      } else {
+        // 如果心跳正常，重置错过次数
+        if (health.missedHeartbeats > 0) {
+          health.missedHeartbeats = 0
+        }
       }
 
       // 重置每分钟计数器（简化实现，每次检查时衰减）

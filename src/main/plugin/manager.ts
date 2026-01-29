@@ -624,20 +624,17 @@ export class PluginManager {
 
   /**
    * 停止运行中的插件（关闭窗口并销毁 Host 进程）
+   * @param pluginId 插件 ID
+   * @param keepBackground 是否保留后台进程（默认 false）
    */
-  async stopPlugin(pluginId: string): Promise<{ success: boolean; error?: string }> {
+  async stopPlugin(pluginId: string, keepBackground: boolean = false): Promise<{ success: boolean; error?: string }> {
     const plugin = this.plugins.get(pluginId)
     if (!plugin) {
       return { success: false, error: '插件不存在' }
     }
 
     try {
-      // 1. 如果是后台插件，停止后台运行
-      if (this.backgroundManager.isRunning(pluginId)) {
-        await this.backgroundManager.stop(pluginId, 'manual')
-      }
-
-      // 2. 关闭插件窗口（如果有）
+      // 1. 关闭插件窗口（如果有）
       if (this.windowManager) {
         // 关闭所有该插件的独立窗口
         this.windowManager.closeDetachedWindowsByPlugin(pluginId)
@@ -649,8 +646,13 @@ export class PluginManager {
         }
       }
 
-      // 3. 销毁 Host 进程
-      if (this.useUtilityProcess && this.hostManager.isHostReady(pluginId)) {
+      // 2. 如果不保留后台进程，停止后台运行
+      if (!keepBackground && this.backgroundManager.isRunning(pluginId)) {
+        await this.backgroundManager.stop(pluginId, 'manual')
+      }
+
+      // 3. 如果不保留后台进程，销毁 Host 进程
+      if (!keepBackground && this.useUtilityProcess && this.hostManager.isHostReady(pluginId)) {
         await this.hostManager.destroyHost(pluginId)
       }
 
@@ -659,5 +661,19 @@ export class PluginManager {
       const error = err instanceof Error ? err.message : '停止插件失败'
       return { success: false, error }
     }
+  }
+
+  /**
+   * 仅关闭插件窗口，保留后台进程
+   */
+  async closePluginWindow(pluginId: string): Promise<{ success: boolean; error?: string }> {
+    const plugin = this.plugins.get(pluginId)
+    if (!plugin) {
+      return { success: false, error: '插件不存在' }
+    }
+
+    // 如果插件支持后台运行，保留后台进程
+    const supportsBackground = plugin.manifest.pluginSetting?.background === true
+    return await this.stopPlugin(pluginId, supportsBackground)
   }
 }

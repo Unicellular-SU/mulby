@@ -92,10 +92,13 @@ export function createPluginAPI(pluginName: string, messageBus?: PluginMessageBu
     },
     notification: {
       show: (message: string, _type?: string) => {
-        new Notification({
-          title: 'InTools',
-          body: message
-        }).show()
+        // 使用 setImmediate 确保不阻塞事件循环
+        setImmediate(() => {
+          new Notification({
+            title: 'InTools',
+            body: message
+          }).show()
+        })
       }
     },
     storage: {

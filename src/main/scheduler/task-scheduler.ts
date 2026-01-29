@@ -38,7 +38,6 @@ export class TaskScheduler extends EventEmitter {
   async start(): Promise<void> {
     if (this.running) return
 
-    console.log('[TaskScheduler] Starting...')
     this.running = true
 
     // 恢复持久化的任务
@@ -46,8 +45,6 @@ export class TaskScheduler extends EventEmitter {
 
     // 开始调度循环
     this.scheduleNext()
-
-    console.log('[TaskScheduler] Started')
   }
 
   /**
@@ -97,7 +94,6 @@ export class TaskScheduler extends EventEmitter {
     }
 
     this.emit('task:created', task)
-    console.log(`[TaskScheduler] Task created: ${task.id} (${task.name})`)
 
     return task
   }
@@ -120,7 +116,6 @@ export class TaskScheduler extends EventEmitter {
     await this.store.saveTask(task)
 
     this.emit('task:cancelled', task)
-    console.log(`[TaskScheduler] Task cancelled: ${taskId}`)
   }
 
   /**
@@ -145,7 +140,6 @@ export class TaskScheduler extends EventEmitter {
     await this.store.saveTask(task)
 
     this.emit('task:paused', task)
-    console.log(`[TaskScheduler] Task paused: ${taskId}`)
   }
 
   /**
@@ -177,7 +171,6 @@ export class TaskScheduler extends EventEmitter {
     }
 
     this.emit('task:resumed', task)
-    console.log(`[TaskScheduler] Task resumed: ${taskId}`)
   }
 
   /**
@@ -226,9 +219,10 @@ export class TaskScheduler extends EventEmitter {
    * 恢复持久化的任务
    */
   private async restore(): Promise<void> {
-    console.log('[TaskScheduler] Restoring tasks...')
-
     const tasks = await this.store.getPendingTasks()
+
+    // 收集需要自动启动的插件
+    const pluginsToStart = new Set<string>()
 
     for (const task of tasks) {
       // 重新计算下次执行时间
@@ -237,6 +231,9 @@ export class TaskScheduler extends EventEmitter {
       if (task.nextRunTime) {
         this.queue.push(task)
         await this.store.saveTask(task)
+
+        // 记录需要启动的插件
+        pluginsToStart.add(task.pluginId)
       } else {
         // 任务已过期，标记为完成
         task.status = 'completed'
@@ -244,7 +241,35 @@ export class TaskScheduler extends EventEmitter {
       }
     }
 
-    console.log(`[TaskScheduler] Restored ${tasks.length} tasks`)
+    // 自动启动有待执行任务的后台插件
+    if (this.pluginManager && pluginsToStart.size > 0) {
+      const backgroundManager = (this.pluginManager as any).backgroundManager
+
+      for (const pluginId of pluginsToStart) {
+        const plugin = this.pluginManager.get(pluginId)
+        if (!plugin) {
+          continue
+        }
+
+        // 检查插件是否支持后台运行
+        const supportsBackground = plugin.manifest.pluginSetting?.background === true
+        if (!supportsBackground) {
+          continue
+        }
+
+        // 检查是否已在运行
+        if (backgroundManager.isRunning(pluginId)) {
+          continue
+        }
+
+        // 启动后台插件
+        try {
+          await backgroundManager.start(plugin, true)
+        } catch (err) {
+          console.error(`[TaskScheduler] Error auto-starting plugin ${pluginId}:`, err)
+        }
+      }
+    }
   }
 
   /**
@@ -286,8 +311,6 @@ export class TaskScheduler extends EventEmitter {
    * 执行任务
    */
   private async executeTask(task: Task): Promise<void> {
-    console.log(`[TaskScheduler] Executing task: ${task.id} (${task.name})`)
-
     // 从队列中移除
     this.queue.pop()
 
@@ -348,22 +371,25 @@ export class TaskScheduler extends EventEmitter {
         task.status = 'pending'
         task.nextRunTime = Date.now() + (task.retryDelay || 60000)
         this.queue.push(task)
-        console.log(`[TaskScheduler] Task will retry: ${task.id} (attempt ${task.failureCount}/${task.maxRetries})`)
       } else {
         task.status = 'failed'
         console.error(`[TaskScheduler] Task failed: ${task.id}`, error)
       }
 
       this.emit('task:failed', task, error)
+    } finally {
+      // 保存执行记录和任务状态（确保即使出错也会保存）
+      task.updatedAt = Date.now()
+      try {
+        await this.store.saveExecution(execution)
+        await this.store.saveTask(task)
+      } catch (saveError) {
+        console.error(`[TaskScheduler] Failed to save task/execution: ${task.id}`, saveError)
+      }
+
+      // 调度下一个任务
+      this.scheduleNext()
     }
-
-    // 保存执行记录和任务状态
-    task.updatedAt = Date.now()
-    await this.store.saveExecution(execution)
-    await this.store.saveTask(task)
-
-    // 调度下一个任务
-    this.scheduleNext()
   }
 
   /**
@@ -393,16 +419,41 @@ export class TaskScheduler extends EventEmitter {
       throw new Error(`Plugin not found: ${task.pluginId}`)
     }
 
-    // 获取 HostManager
-    const hostManager = this.pluginManager.getHostManager()
-
-    // 确保插件已初始化
-    if (!hostManager.isHostReady(task.pluginId)) {
-      await hostManager.initPlugin(plugin)
+    // 检查插件是否已启用
+    if (!plugin.enabled) {
+      throw new Error(`Plugin is disabled: ${task.pluginId}`)
     }
 
+    // 获取 HostManager 和 BackgroundManager
+    const hostManager = this.pluginManager.getHostManager()
+    const backgroundManager = (this.pluginManager as any).backgroundManager
+    const watchdog = hostManager.getWatchdog()
+
+    // 检查插件是否支持后台运行
+    const supportsBackground = plugin.manifest.pluginSetting?.background === true
+
+    // 如果插件支持后台运行但未运行，自动启动后台进程
+    if (supportsBackground && !backgroundManager.isRunning(task.pluginId)) {
+      const started = await backgroundManager.start(plugin, true)
+      if (!started) {
+        throw new Error(`Failed to auto-start background plugin: ${task.pluginId}`)
+      }
+    }
+
+    // 确保 Host 已初始化
+    if (!hostManager.isHostReady(task.pluginId)) {
+      // 尝试初始化插件
+      const initialized = await hostManager.initPlugin(plugin)
+      if (!initialized) {
+        throw new Error(`Failed to initialize plugin: ${task.pluginId}`)
+      }
+    }
+
+    // 在执行任务前记录心跳，给任务执行留出足够时间
+    watchdog.recordHeartbeat(task.pluginId)
+
     // 调用插件的回调方法
-    return await hostManager.callHook(plugin, task.callback as any)
+    return await hostManager.callTaskCallback(plugin, task.callback, task.payload, task)
   }
 
   /**
