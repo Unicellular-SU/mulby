@@ -109,7 +109,7 @@ export class TaskQueue {
   private bubbleUp(index: number): void {
     while (index > 0) {
       const parentIndex = Math.floor((index - 1) / 2)
-      if (this.heap[index].nextRunTime! >= this.heap[parentIndex].nextRunTime!) {
+      if (this.compare(this.heap[index], this.heap[parentIndex]) >= 0) {
         break
       }
       [this.heap[index], this.heap[parentIndex]] = [this.heap[parentIndex], this.heap[index]]
@@ -127,11 +127,11 @@ export class TaskQueue {
       const right = 2 * index + 2
 
       if (left < this.heap.length &&
-          this.heap[left].nextRunTime! < this.heap[smallest].nextRunTime!) {
+          this.compare(this.heap[left], this.heap[smallest]) < 0) {
         smallest = left
       }
       if (right < this.heap.length &&
-          this.heap[right].nextRunTime! < this.heap[smallest].nextRunTime!) {
+          this.compare(this.heap[right], this.heap[smallest]) < 0) {
         smallest = right
       }
       if (smallest === index) break
@@ -139,5 +139,21 @@ export class TaskQueue {
       [this.heap[index], this.heap[smallest]] = [this.heap[smallest], this.heap[index]]
       index = smallest
     }
+  }
+
+  /**
+   * 比较两个任务的优先级
+   * 返回负数表示 a 优先级更高，正数表示 b 优先级更高
+   */
+  private compare(a: Task, b: Task): number {
+    // 先比较优先级（高优先级在前）
+    const priorityA = a.priority ?? 5
+    const priorityB = b.priority ?? 5
+    if (priorityA !== priorityB) {
+      return priorityB - priorityA  // 优先级高的排在前面
+    }
+
+    // 优先级相同，比较执行时间（早的在前）
+    return (a.nextRunTime ?? 0) - (b.nextRunTime ?? 0)
   }
 }

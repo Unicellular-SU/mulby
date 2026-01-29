@@ -26,6 +26,7 @@ export interface TaskInput {
   payload?: unknown          // 传递给回调的数据
 
   // 可选配置
+  priority?: number          // 优先级（0-10，数字越大优先级越高，默认 5）
   timezone?: string          // 时区（默认系统时区）
   maxRetries?: number        // 最大重试次数（默认 0）
   retryDelay?: number        // 重试延迟（毫秒，默认 60000）

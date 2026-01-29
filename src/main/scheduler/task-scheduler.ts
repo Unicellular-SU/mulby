@@ -17,6 +17,10 @@ export class TaskScheduler extends EventEmitter {
   private timer: NodeJS.Timeout | null = null
   private running: boolean = false
   private pluginManager: any  // 将在初始化时注入
+  private pluginCleanupTimers: Map<string, NodeJS.Timeout> = new Map()
+  private readonly CLEANUP_DELAY_SHORT = 30 * 1000  // 30秒：下一个任务即将执行
+  private runningTasks: Set<string> = new Set()
+  private readonly MAX_CONCURRENT_TASKS = 5
 
   constructor() {
     super()
@@ -58,6 +62,12 @@ export class TaskScheduler extends EventEmitter {
       clearTimeout(this.timer)
       this.timer = null
     }
+
+    // 清理所有插件清理定时器
+    for (const [, timer] of this.pluginCleanupTimers) {
+      clearTimeout(timer)
+    }
+    this.pluginCleanupTimers.clear()
 
     console.log('[TaskScheduler] Stopped')
   }
@@ -220,9 +230,12 @@ export class TaskScheduler extends EventEmitter {
    */
   private async restore(): Promise<void> {
     const tasks = await this.store.getPendingTasks()
+    const now = Date.now()
+    const PRESTART_THRESHOLD = 60000  // 1分钟内要执行的任务，预启动插件
 
     // 收集需要自动启动的插件
     const pluginsToStart = new Set<string>()
+    const pluginsToPrestart = new Set<string>()
 
     for (const task of tasks) {
       // 重新计算下次执行时间
@@ -233,7 +246,18 @@ export class TaskScheduler extends EventEmitter {
         await this.store.saveTask(task)
 
         // 记录需要启动的插件
-        pluginsToStart.add(task.pluginId)
+        const plugin = this.pluginManager?.get(task.pluginId)
+        if (plugin) {
+          const supportsBackground = plugin.manifest.pluginSetting?.background === true
+
+          if (supportsBackground) {
+            // 后台插件：始终启动
+            pluginsToStart.add(task.pluginId)
+          } else if (task.nextRunTime - now <= PRESTART_THRESHOLD) {
+            // 非后台插件：如果任务在1分钟内执行，预启动
+            pluginsToPrestart.add(task.pluginId)
+          }
+        }
       } else {
         // 任务已过期，标记为完成
         task.status = 'completed'
@@ -241,19 +265,13 @@ export class TaskScheduler extends EventEmitter {
       }
     }
 
-    // 自动启动有待执行任务的后台插件
+    // 自动启动后台插件
     if (this.pluginManager && pluginsToStart.size > 0) {
       const backgroundManager = (this.pluginManager as any).backgroundManager
 
       for (const pluginId of pluginsToStart) {
         const plugin = this.pluginManager.get(pluginId)
         if (!plugin) {
-          continue
-        }
-
-        // 检查插件是否支持后台运行
-        const supportsBackground = plugin.manifest.pluginSetting?.background === true
-        if (!supportsBackground) {
           continue
         }
 
@@ -264,12 +282,40 @@ export class TaskScheduler extends EventEmitter {
 
         // 启动后台插件
         try {
+          console.log(`[TaskScheduler] Auto-starting background plugin: ${pluginId}`)
           await backgroundManager.start(plugin, true)
         } catch (err) {
           console.error(`[TaskScheduler] Error auto-starting plugin ${pluginId}:`, err)
         }
       }
     }
+
+    // 预启动非后台插件（只初始化 Host，不启动后台）
+    if (this.pluginManager && pluginsToPrestart.size > 0) {
+      const hostManager = this.pluginManager.getHostManager()
+
+      for (const pluginId of pluginsToPrestart) {
+        const plugin = this.pluginManager.get(pluginId)
+        if (!plugin) {
+          continue
+        }
+
+        // 检查 Host 是否已就绪
+        if (hostManager.isHostReady(pluginId)) {
+          continue
+        }
+
+        // 预初始化插件
+        try {
+          console.log(`[TaskScheduler] Pre-initializing plugin for upcoming task: ${pluginId}`)
+          await hostManager.initPlugin(plugin)
+        } catch (err) {
+          console.error(`[TaskScheduler] Error pre-initializing plugin ${pluginId}:`, err)
+        }
+      }
+    }
+
+    console.log(`[TaskScheduler] Restored ${tasks.length} tasks, started ${pluginsToStart.size} background plugins, pre-initialized ${pluginsToPrestart.size} plugins`)
   }
 
   /**
@@ -284,6 +330,10 @@ export class TaskScheduler extends EventEmitter {
       this.timer = null
     }
 
+    // 尝试执行所有到期的任务（并发控制）
+    this.executeReadyTasks()
+
+    // 调度下一个任务
     const nextTask = this.queue.peek()
 
     if (!nextTask || !nextTask.nextRunTime) {
@@ -297,13 +347,37 @@ export class TaskScheduler extends EventEmitter {
 
     if (delay <= 0) {
       // 立即执行
-      this.executeTask(nextTask)
+      setImmediate(() => this.scheduleNext())
     } else {
       // 设置定时器（最大值限制）
       const actualDelay = Math.min(delay, 2147483647)
       this.timer = setTimeout(() => {
-        this.executeTask(nextTask)
+        this.scheduleNext()
       }, actualDelay)
+    }
+  }
+
+  /**
+   * 执行所有到期的任务（并发控制）
+   */
+  private async executeReadyTasks(): Promise<void> {
+    const now = Date.now()
+
+    while (this.runningTasks.size < this.MAX_CONCURRENT_TASKS) {
+      const nextTask = this.queue.peek()
+
+      // 没有任务或任务未到期
+      if (!nextTask || !nextTask.nextRunTime || nextTask.nextRunTime > now) {
+        break
+      }
+
+      // 从队列移除
+      this.queue.pop()
+
+      // 异步执行任务（不等待）
+      this.executeTask(nextTask).catch(err => {
+        console.error(`[TaskScheduler] Unhandled error in task ${nextTask.id}:`, err)
+      })
     }
   }
 
@@ -311,8 +385,8 @@ export class TaskScheduler extends EventEmitter {
    * 执行任务
    */
   private async executeTask(task: Task): Promise<void> {
-    // 从队列中移除
-    this.queue.pop()
+    // 标记任务正在执行
+    this.runningTasks.add(task.id)
 
     // 更新状态
     task.status = 'running'
@@ -387,8 +461,11 @@ export class TaskScheduler extends EventEmitter {
         console.error(`[TaskScheduler] Failed to save task/execution: ${task.id}`, saveError)
       }
 
-      // 调度下一个任务
-      this.scheduleNext()
+      // 移除运行标记
+      this.runningTasks.delete(task.id)
+
+      // 触发下一轮调度（检查是否有更多任务可以执行）
+      setImmediate(() => this.scheduleNext())
     }
   }
 
@@ -432,6 +509,12 @@ export class TaskScheduler extends EventEmitter {
     // 检查插件是否支持后台运行
     const supportsBackground = plugin.manifest.pluginSetting?.background === true
 
+    // 取消清理定时器（如果存在）
+    if (this.pluginCleanupTimers.has(task.pluginId)) {
+      clearTimeout(this.pluginCleanupTimers.get(task.pluginId)!)
+      this.pluginCleanupTimers.delete(task.pluginId)
+    }
+
     // 如果插件支持后台运行但未运行，自动启动后台进程
     if (supportsBackground && !backgroundManager.isRunning(task.pluginId)) {
       const started = await backgroundManager.start(plugin, true)
@@ -452,8 +535,74 @@ export class TaskScheduler extends EventEmitter {
     // 在执行任务前记录心跳，给任务执行留出足够时间
     watchdog.recordHeartbeat(task.pluginId)
 
-    // 调用插件的回调方法
-    return await hostManager.callTaskCallback(plugin, task.callback, task.payload, task)
+    try {
+      // 调用插件的回调方法
+      return await hostManager.callTaskCallback(plugin, task.callback, task.payload, task)
+    } finally {
+      // 如果不支持后台运行，设置清理定时器
+      if (!supportsBackground) {
+        this.schedulePluginCleanup(task.pluginId)
+      }
+    }
+  }
+
+  /**
+   * 调度插件清理
+   * 智能延迟销毁：如果下一个任务在 30 秒内执行，保持进程；否则立即销毁
+   */
+  private schedulePluginCleanup(pluginId: string): void {
+    const now = Date.now()
+
+    // 查找该插件的下一个待执行任务
+    const nextTask = this.queue.toArray()
+      .filter(t => t.pluginId === pluginId && t.nextRunTime && t.nextRunTime > now)
+      .sort((a, b) => (a.nextRunTime ?? 0) - (b.nextRunTime ?? 0))[0]
+
+    if (!nextTask) {
+      // 没有待执行任务，立即销毁
+      this.cleanupPlugin(pluginId)
+      return
+    }
+
+    const timeUntilNextTask = (nextTask.nextRunTime ?? 0) - now
+
+    if (timeUntilNextTask > this.CLEANUP_DELAY_SHORT) {
+      // 下一个任务超过 30 秒后执行，立即销毁
+      this.cleanupPlugin(pluginId)
+      return
+    }
+
+    // 下一个任务在 30 秒内执行，延迟销毁
+    const timer = setTimeout(async () => {
+      // 再次检查是否有即将执行的任务
+      const stillHasUpcomingTask = this.queue.toArray().some(t =>
+        t.pluginId === pluginId &&
+        t.nextRunTime &&
+        t.nextRunTime > Date.now() &&
+        t.nextRunTime - Date.now() <= this.CLEANUP_DELAY_SHORT
+      )
+
+      if (!stillHasUpcomingTask) {
+        this.cleanupPlugin(pluginId)
+      }
+
+      this.pluginCleanupTimers.delete(pluginId)
+    }, timeUntilNextTask)
+
+    this.pluginCleanupTimers.set(pluginId, timer)
+  }
+
+  /**
+   * 清理插件进程
+   */
+  private async cleanupPlugin(pluginId: string): Promise<void> {
+    if (!this.pluginManager) return
+
+    const hostManager = this.pluginManager.getHostManager()
+    if (hostManager.isHostReady(pluginId)) {
+      console.log(`[TaskScheduler] Cleaning up plugin: ${pluginId}`)
+      await hostManager.destroyHost(pluginId)
+    }
   }
 
   /**

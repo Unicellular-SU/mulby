@@ -19,6 +19,25 @@ export class TaskStore {
     this.db.pragma('journal_mode = WAL')
 
     this.initDatabase()
+    this.migrateDatabase()
+  }
+
+  /**
+   * 数据库迁移
+   */
+  private migrateDatabase(): void {
+    // 检查 priority 字段是否存在
+    const columns = this.db.pragma('table_info(tasks)') as any[]
+    const hasPriority = columns.some(col => col.name === 'priority')
+
+    if (!hasPriority) {
+      console.log('[TaskStore] Migrating database: adding priority column')
+      this.db.exec(`ALTER TABLE tasks ADD COLUMN priority INTEGER DEFAULT 5;`)
+      console.log('[TaskStore] Database migration completed')
+    }
+
+    // 创建 priority 索引（无论是否迁移都要确保索引存在）
+    this.db.exec(`CREATE INDEX IF NOT EXISTS idx_priority ON tasks(priority);`)
   }
 
   /**
@@ -44,6 +63,7 @@ export class TaskStore {
         -- 执行配置
         callback TEXT NOT NULL,
         payload TEXT,
+        priority INTEGER DEFAULT 5,
         max_retries INTEGER DEFAULT 0,
         retry_delay INTEGER DEFAULT 60000,
         timeout INTEGER DEFAULT 30000,
@@ -104,14 +124,14 @@ export class TaskStore {
       INSERT INTO tasks (
         id, plugin_id, name, description, type, status,
         time, cron, delay, timezone,
-        callback, payload, max_retries, retry_delay, timeout,
+        callback, payload, priority, max_retries, retry_delay, timeout,
         end_time, max_executions,
         next_run_time, last_run_time, execution_count, failure_count, last_error,
         created_at, updated_at
       ) VALUES (
         ?, ?, ?, ?, ?, ?,
         ?, ?, ?, ?,
-        ?, ?, ?, ?, ?,
+        ?, ?, ?, ?, ?, ?,
         ?, ?,
         ?, ?, ?, ?, ?,
         ?, ?
@@ -128,6 +148,7 @@ export class TaskStore {
         timezone = excluded.timezone,
         callback = excluded.callback,
         payload = excluded.payload,
+        priority = excluded.priority,
         max_retries = excluded.max_retries,
         retry_delay = excluded.retry_delay,
         timeout = excluded.timeout,
@@ -154,6 +175,7 @@ export class TaskStore {
       task.timezone || null,
       task.callback,
       task.payload ? JSON.stringify(task.payload) : null,
+      task.priority ?? 5,
       task.maxRetries || 0,
       task.retryDelay || 60000,
       task.timeout || 30000,
@@ -316,6 +338,7 @@ export class TaskStore {
       timezone: row.timezone,
       callback: row.callback,
       payload: row.payload ? JSON.parse(row.payload) : undefined,
+      priority: row.priority ?? 5,
       maxRetries: row.max_retries,
       retryDelay: row.retry_delay,
       timeout: row.timeout,
