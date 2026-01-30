@@ -41,6 +41,7 @@ export default function App() {
   const [taskType, setTaskType] = useState<'once' | 'repeat' | 'delay'>('delay')
   const [taskMessage, setTaskMessage] = useState('')
   const [taskDelay, setTaskDelay] = useState('5000')
+  const [taskDateTime, setTaskDateTime] = useState('')
   const [taskCron, setTaskCron] = useState('0 */1 * * * *')
   const [cronDescription, setCronDescription] = useState('')
   const { notification, scheduler } = useIntools('scheduler-demo')
@@ -77,7 +78,27 @@ export default function App() {
         return
       }
 
-      if (taskType === 'once' || taskType === 'delay') {
+      if (taskType === 'once') {
+        // 一次性任务：使用日期时间选择器
+        if (!taskDateTime) {
+          notification.show('请选择执行时间', 'error')
+          return
+        }
+        const time = new Date(taskDateTime).getTime()
+        if (isNaN(time) || time <= Date.now()) {
+          notification.show('请选择未来的时间', 'error')
+          return
+        }
+        await scheduler.schedule({
+          pluginId: 'scheduler-demo',
+          name: '一次性任务',
+          type: 'once',
+          time: time,
+          callback: 'onOnceTask',
+          payload: { message: taskMessage }
+        })
+      } else if (taskType === 'delay') {
+        // 延迟任务：使用延迟毫秒数
         const delay = parseInt(taskDelay)
         if (isNaN(delay) || delay <= 0) {
           notification.show('请输入有效的延迟时间（毫秒）', 'error')
@@ -85,11 +106,10 @@ export default function App() {
         }
         await scheduler.schedule({
           pluginId: 'scheduler-demo',
-          name: taskType === 'once' ? '一次性任务' : '延迟任务',
-          type: taskType,
-          time: taskType === 'once' ? Date.now() + delay : undefined,
-          delay: taskType === 'delay' ? delay : undefined,
-          callback: taskType === 'once' ? 'onOnceTask' : 'onDelayTask',
+          name: '延迟任务',
+          type: 'delay',
+          delay: delay,
+          callback: 'onDelayTask',
           payload: { message: taskMessage }
         })
       } else if (taskType === 'repeat') {
@@ -111,6 +131,7 @@ export default function App() {
       notification.show('任务创建成功')
       setShowCreateModal(false)
       setTaskMessage('')
+      setTaskDateTime('')
       await loadTasks()
     } catch (err: any) {
       console.error('Failed to create task:', err)
@@ -467,7 +488,21 @@ export default function App() {
                   />
                 </div>
 
-                {(taskType === 'delay' || taskType === 'once') && (
+                {taskType === 'once' && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                      执行时间
+                    </label>
+                    <input
+                      type="datetime-local"
+                      value={taskDateTime}
+                      onChange={(e) => setTaskDateTime(e.target.value)}
+                      className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                    />
+                  </div>
+                )}
+
+                {taskType === 'delay' && (
                   <div>
                     <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                       延迟时间（毫秒）

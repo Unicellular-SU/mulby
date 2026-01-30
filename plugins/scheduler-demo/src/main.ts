@@ -68,7 +68,6 @@ interface PluginContext {
 }
 
 // 后台任务状态
-let backgroundTaskId: string | null = null
 let taskCount = 0
 
 export function onLoad() {
@@ -110,7 +109,7 @@ export async function onBackgroundStop(context: PluginContext) {
 // 定时任务回调
 export async function onScheduledTask(context: PluginContext & { payload: any; task: any }) {
   const { notification } = context.api
-  const { payload, task } = context
+  const { payload } = context
 
   taskCount++
   console.log(`[scheduler-demo] 定时任务执行 #${taskCount}:`, payload.message)

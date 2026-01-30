@@ -59,11 +59,14 @@ export function buildBasicMain(name: string) {
         retryDelay?: number
         timeout?: number
       }) => Promise<any>
-      cancel: (taskId: string) => Promise<void>
-      pause: (taskId: string) => Promise<void>
-      resume: (taskId: string) => Promise<void>
-      list: (filter?: { status?: string; type?: string }) => Promise<any[]>
-      get: (taskId: string) => Promise<any>
+      cancelTask: (taskId: string) => Promise<void>
+      pauseTask: (taskId: string) => Promise<void>
+      resumeTask: (taskId: string) => Promise<void>
+      listTasks: (filter?: { status?: string; type?: string; limit?: number; offset?: number }) => Promise<any[]>
+      getTaskCount: (filter?: { status?: string; type?: string }) => Promise<number>
+      getTask: (taskId: string) => Promise<any>
+      deleteTasks: (taskIds: string[]) => Promise<{ success: boolean; deletedCount: number }>
+      cleanupTasks: (olderThan?: number) => Promise<{ success: boolean; deletedCount: number }>
       getExecutions: (taskId: string, limit?: number) => Promise<any[]>
       validateCron: (expression: string) => boolean
       getNextCronTime: (expression: string, after?: Date) => Date

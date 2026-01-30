@@ -158,11 +158,14 @@ export function buildBackendMain(name: string) {
         retryDelay?: number
         timeout?: number
       }) => Promise<any>
-      cancel: (taskId: string) => Promise<void>
-      pause: (taskId: string) => Promise<void>
-      resume: (taskId: string) => Promise<void>
-      list: (filter?: { status?: string; type?: string }) => Promise<any[]>
-      get: (taskId: string) => Promise<any>
+      cancelTask: (taskId: string) => Promise<void>
+      pauseTask: (taskId: string) => Promise<void>
+      resumeTask: (taskId: string) => Promise<void>
+      listTasks: (filter?: { status?: string; type?: string; limit?: number; offset?: number }) => Promise<any[]>
+      getTaskCount: (filter?: { status?: string; type?: string }) => Promise<number>
+      getTask: (taskId: string) => Promise<any>
+      deleteTasks: (taskIds: string[]) => Promise<{ success: boolean; deletedCount: number }>
+      cleanupTasks: (olderThan?: number) => Promise<{ success: boolean; deletedCount: number }>
       getExecutions: (taskId: string, limit?: number) => Promise<any[]>
       validateCron: (expression: string) => boolean
       getNextCronTime: (expression: string, after?: Date) => Date
@@ -639,11 +642,14 @@ export function useIntools(pluginId?: string) {
         retryDelay?: number
         timeout?: number
       }) => window.intools?.scheduler?.schedule(task),
-      cancel: (taskId: string) => window.intools?.scheduler?.cancel(taskId),
-      pause: (taskId: string) => window.intools?.scheduler?.pause(taskId),
-      resume: (taskId: string) => window.intools?.scheduler?.resume(taskId),
-      list: (filter?: { status?: string; type?: string }) => window.intools?.scheduler?.list(filter),
-      get: (taskId: string) => window.intools?.scheduler?.get(taskId),
+      cancelTask: (taskId: string) => window.intools?.scheduler?.cancelTask(taskId),
+      pauseTask: (taskId: string) => window.intools?.scheduler?.pauseTask(taskId),
+      resumeTask: (taskId: string) => window.intools?.scheduler?.resumeTask(taskId),
+      listTasks: (filter?: { status?: string; type?: string; limit?: number; offset?: number }) => window.intools?.scheduler?.listTasks(filter),
+      getTaskCount: (filter?: { status?: string; type?: string }) => window.intools?.scheduler?.getTaskCount(filter),
+      getTask: (taskId: string) => window.intools?.scheduler?.getTask(taskId),
+      deleteTasks: (taskIds: string[]) => window.intools?.scheduler?.deleteTasks(taskIds),
+      cleanupTasks: (olderThan?: number) => window.intools?.scheduler?.cleanupTasks(olderThan),
       getExecutions: (taskId: string, limit?: number) => window.intools?.scheduler?.getExecutions(taskId, limit),
       validateCron: (expression: string) => window.intools?.scheduler?.validateCron(expression),
       getNextCronTime: (expression: string, after?: Date) => window.intools?.scheduler?.getNextCronTime(expression, after),
@@ -1392,11 +1398,14 @@ interface IntoolsScheduler {
     endTime?: number
     maxExecutions?: number
   }): Promise<any>
-  cancel(taskId: string): Promise<void>
-  pause(taskId: string): Promise<void>
-  resume(taskId: string): Promise<void>
-  list(filter?: { status?: string; type?: string; limit?: number }): Promise<any[]>
-  get(taskId: string): Promise<any>
+  cancelTask(taskId: string): Promise<void>
+  pauseTask(taskId: string): Promise<void>
+  resumeTask(taskId: string): Promise<void>
+  listTasks(filter?: { status?: string; type?: string; limit?: number; offset?: number }): Promise<any[]>
+  getTaskCount(filter?: { status?: string; type?: string }): Promise<number>
+  getTask(taskId: string): Promise<any>
+  deleteTasks(taskIds: string[]): Promise<{ success: boolean; deletedCount: number }>
+  cleanupTasks(olderThan?: number): Promise<{ success: boolean; deletedCount: number }>
   getExecutions(taskId: string, limit?: number): Promise<any[]>
   validateCron(expression: string): boolean
   getNextCronTime(expression: string, after?: Date): Date

@@ -14,10 +14,10 @@ function applyTheme() {
 }
 
 // 初始应用主题
-applyTheme()
+// applyTheme()
 
 // 监听主题变化
-window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', applyTheme)
+// window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', applyTheme)
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

@@ -664,10 +664,21 @@ export async function onBackup({ api }) {
 const tasks = await api.scheduler.list();
 const pending = await api.scheduler.list({ status: 'pending' });
 
+// Pagination
+const page1 = await api.scheduler.list({ limit: 20, offset: 0 });
+const totalCount = await api.scheduler.count({ status: 'pending' });
+
 // Control tasks
 await api.scheduler.pause(taskId);
 await api.scheduler.resume(taskId);
 await api.scheduler.cancel(taskId);
+
+// Batch operations
+await api.scheduler.deleteTasks([taskId1, taskId2, taskId3]);
+
+// Cleanup old tasks (completed/failed/cancelled)
+await api.scheduler.cleanup();  // Default: 7 days ago
+await api.scheduler.cleanup(Date.now() - 30 * 24 * 60 * 60 * 1000);  // 30 days
 
 // Query
 const task = await api.scheduler.get(taskId);
