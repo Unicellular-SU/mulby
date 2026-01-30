@@ -138,7 +138,7 @@ export default function PluginDetails({ pluginName, onBack }: PluginDetailsProps
     const hasReadme = Boolean(readme && readme.trim().length > 0)
 
     return (
-        <div className="relative h-full overflow-hidden bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-100 no-drag">
+        <div className="relative h-full overflow-hidden bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-100">
             <div className="pointer-events-none absolute inset-0">
                 <div className="absolute -top-24 left-1/2 h-80 w-80 -translate-x-1/2 rounded-full bg-blue-200/40 blur-[120px] dark:bg-blue-500/20" />
                 <div className="absolute right-12 top-32 h-64 w-64 rounded-full bg-emerald-200/40 blur-[120px] dark:bg-emerald-400/10" />
@@ -184,8 +184,8 @@ export default function PluginDetails({ pluginName, onBack }: PluginDetailsProps
                     </div>
                 </div>
 
-                <div className="flex-1 min-h-0 overflow-auto no-drag">
-                    <div className="mx-auto max-w-6xl px-6 pb-16 pt-8">
+                <div className="flex-1 min-h-0 overflow-auto">
+                    <div className="mx-auto max-w-6xl px-6 pb-16 pt-8 no-drag">
                         <section className="grid gap-6 lg:grid-cols-[1.2fr_0.8fr]">
                             <div className="rounded-[28px] border border-slate-200/80 bg-white/80 p-6 shadow-[0_30px_80px_-60px_rgba(15,23,42,0.4)] backdrop-blur dark:border-slate-800/80 dark:bg-slate-900/70">
                                 <div className="flex flex-wrap items-start gap-4">

@@ -109,7 +109,7 @@ export default function PluginManagerView({ onBack, onOpenPluginDetails }: Plugi
   }, [plugins, pluginQuery, pluginFilter])
 
   return (
-    <div className="relative h-full overflow-hidden bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-100 no-drag">
+    <div className="relative h-full overflow-hidden bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-100">
       <div className="pointer-events-none absolute inset-0">
         <div className="absolute -top-28 left-1/2 h-80 w-80 -translate-x-1/2 rounded-full bg-blue-200/40 blur-[120px] dark:bg-blue-500/20" />
         <div className="absolute right-16 top-24 h-64 w-64 rounded-full bg-emerald-200/40 blur-[120px] dark:bg-emerald-400/10" />
@@ -136,7 +136,7 @@ export default function PluginManagerView({ onBack, onOpenPluginDetails }: Plugi
           </button>
         </div>
 
-        <div className="flex-1 min-h-0 overflow-auto">
+        <div className="flex-1 min-h-0 overflow-auto no-drag">
           <div className="mx-auto max-w-6xl px-6 pb-16 pt-8">
             <div className={`${cardClass} space-y-4`}>
               <div className="flex flex-wrap items-center justify-between gap-3">

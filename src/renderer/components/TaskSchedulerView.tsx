@@ -227,7 +227,7 @@ export default function TaskSchedulerView({ onBack }: TaskSchedulerViewProps) {
   const totalPages = Math.ceil(totalCount / pageSize)
 
   return (
-    <div className="relative h-full overflow-hidden bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-100 no-drag">
+    <div className="relative h-full overflow-hidden bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-100">
       {/* 背景装饰 */}
       <div className="pointer-events-none absolute inset-0">
         <div className="absolute -top-28 left-1/2 h-80 w-80 -translate-x-1/2 rounded-full bg-purple-200/40 blur-[120px] dark:bg-purple-500/20" />
@@ -278,7 +278,7 @@ export default function TaskSchedulerView({ onBack }: TaskSchedulerViewProps) {
         </div>
 
         {/* 内容区域 */}
-        <div className="flex-1 min-h-0 overflow-auto">
+        <div className="flex-1 min-h-0 overflow-auto no-drag">
           <div className="mx-auto max-w-6xl px-6 pb-16 pt-8">
             {/* 统计卡片 */}
             <div className={`${cardClass} space-y-4`}>

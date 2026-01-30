@@ -119,7 +119,7 @@ export default function LogViewerView({ onClose }: LogViewerViewProps) {
     const primaryPillClass = 'rounded-full border border-slate-900 bg-slate-900 px-3 py-1 text-xs text-white shadow-sm transition dark:border-white dark:bg-white dark:text-slate-900'
 
     return (
-        <div className="relative h-full overflow-hidden bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-100 no-drag">
+        <div className="relative h-full overflow-hidden bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-100">
             {/* 背景装饰 */}
             <div className="pointer-events-none absolute inset-0">
                 <div className="absolute -top-28 left-1/2 h-80 w-80 -translate-x-1/2 rounded-full bg-emerald-200/40 blur-[120px] dark:bg-emerald-500/20" />
@@ -215,7 +215,7 @@ export default function LogViewerView({ onClose }: LogViewerViewProps) {
                 {/* 日志列表 */}
                 <div
                     ref={logContainerRef}
-                    className="flex-1 overflow-auto bg-white/30 dark:bg-slate-900/30"
+                    className="flex-1 overflow-auto bg-white/30 dark:bg-slate-900/30 no-drag"
                 >
                     {loading ? (
                         <div className="flex items-center justify-center h-32 text-slate-500">

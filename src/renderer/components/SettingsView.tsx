@@ -340,7 +340,7 @@ export default function SettingsView({ section, onSectionChange, onClose, onOpen
   const actionButtonClass = 'rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-700 transition hover:border-slate-300 hover:text-slate-900 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-200'
 
   return (
-    <div className="relative h-full overflow-hidden bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-100 no-drag">
+    <div className="relative h-full overflow-hidden bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-100">
       <div className="pointer-events-none absolute inset-0">
         <div className="absolute -top-28 left-1/2 h-80 w-80 -translate-x-1/2 rounded-full bg-blue-200/40 blur-[120px] dark:bg-blue-500/20" />
         <div className="absolute right-16 top-24 h-64 w-64 rounded-full bg-emerald-200/40 blur-[120px] dark:bg-emerald-400/10" />
@@ -365,7 +365,7 @@ export default function SettingsView({ section, onSectionChange, onClose, onOpen
         </div>
 
         <div className="flex-1 flex min-h-0 overflow-hidden">
-          <aside className="w-56 shrink-0 border-r border-slate-200/70 bg-white/70 backdrop-blur dark:border-slate-800/80 dark:bg-slate-900/60">
+          <aside className="w-56 shrink-0 border-r border-slate-200/70 bg-white/70 backdrop-blur dark:border-slate-800/80 dark:bg-slate-900/60 no-drag">
             <nav className="flex flex-col gap-1 p-4">
               {SECTION_ITEMS.map(item => (
                 <button
@@ -382,7 +382,7 @@ export default function SettingsView({ section, onSectionChange, onClose, onOpen
             </nav>
           </aside>
 
-          <main className="flex-1 min-h-0 overflow-auto">
+          <main className="flex-1 min-h-0 overflow-auto no-drag">
             <div className="mx-auto max-w-5xl px-6 pb-16 pt-8">
               {section === 'general' && (
                 <div className="space-y-4">
