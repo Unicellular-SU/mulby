@@ -82,6 +82,30 @@ export default function App() {
     }
   }
 
+  // 测试直接导出的方法
+  const testDirectMethod = async () => {
+    try {
+      const result = await host.call('directMethod', '测试直接导出')
+      console.log('Direct method result:', result)
+      notification.show(`直接方法返回: ${result.data.message}`)
+    } catch (err: any) {
+      console.error('Failed to call direct method:', err)
+      notification.show(err.message || '调用失败', 'error')
+    }
+  }
+
+  // 测试 api 对象的方法
+  const testApiMethod = async () => {
+    try {
+      const result = await host.call('customMethod', { test: 'data', value: 123 })
+      console.log('API method result:', result)
+      notification.show(`API方法返回: ${JSON.stringify(result.data.received)}`)
+    } catch (err: any) {
+      console.error('Failed to call api method:', err)
+      notification.show(err.message || '调用失败', 'error')
+    }
+  }
+
   // 创建任务
   const createTask = async () => {
     try {
@@ -275,9 +299,21 @@ export default function App() {
           <div className="flex gap-2">
             <button
               onClick={testHostMethod}
-              className="btn-secondary flex items-center gap-2"
+              className="btn-secondary flex items-center gap-2 text-sm"
             >
-              测试Host方法
+              测试Host
+            </button>
+            <button
+              onClick={testDirectMethod}
+              className="btn-secondary flex items-center gap-2 text-sm"
+            >
+              测试直接导出
+            </button>
+            <button
+              onClick={testApiMethod}
+              className="btn-secondary flex items-center gap-2 text-sm"
+            >
+              测试API对象
             </button>
             <button
               onClick={loadTasks}

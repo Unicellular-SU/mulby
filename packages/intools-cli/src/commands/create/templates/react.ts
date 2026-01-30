@@ -221,7 +221,39 @@ export async function run(context: PluginContext) {
   notification.show('插件已启动')
 }
 
-const plugin = { onLoad, onUnload, onEnable, onDisable, run }
+// 导出 host 方法供 UI 调用
+// 支持三种导出方式（按优先级）：
+// 1. 直接导出函数: export async function myMethod(context, ...args) {}
+// 2. host 对象（推荐）: export const host = { myMethod(context, ...args) {} }
+// 3. 其他对象: export const api = { myMethod(context, ...args) {} }
+
+export const host = {
+  // 示例方法：处理数据
+  async processData(context: PluginContext, data: any) {
+    const { notification } = context.api
+    notification.show('处理数据中...')
+
+    // 处理逻辑
+    const result = {
+      ...data,
+      processed: true,
+      timestamp: Date.now()
+    }
+
+    return result
+  },
+
+  // 示例方法：获取配置
+  async getConfig(context: PluginContext) {
+    // 可以使用 context.api 中的所有 API
+    return {
+      version: '1.0.0',
+      settings: {}
+    }
+  }
+}
+
+const plugin = { onLoad, onUnload, onEnable, onDisable, run, host }
 export default plugin
 `
 }
@@ -287,7 +319,7 @@ export default function App() {
   const [output, setOutput] = useState('')
   const [theme, setTheme] = useState<'light' | 'dark'>('light')
   const [attachments, setAttachments] = useState<Attachment[]>([])
-  const { clipboard, notification } = useIntools('${name}')
+  const { clipboard, notification, host } = useIntools('${name}')
 
   useEffect(() => {
     // 获取初始主题（从 URL 参数）
@@ -322,6 +354,17 @@ export default function App() {
     // 复制到剪贴板并通知
     await clipboard.writeText(result)
     notification.show('已复制到剪贴板')
+  }
+
+  // 示例：调用后端 host 方法
+  const handleCallHost = async () => {
+    try {
+      const result = await host.call('processData', { value: input })
+      console.log('Host返回:', result.data)
+      notification.show('后端处理成功')
+    } catch (err: any) {
+      notification.show(\`错误: \${err.message}\`, 'error')
+    }
   }
 
   // 格式化文件大小
@@ -373,6 +416,9 @@ export default function App() {
         <div className="actions">
           <button className="btn-primary" onClick={handleProcess}>
             处理
+          </button>
+          <button className="btn-secondary" onClick={handleCallHost}>
+            调用后端
           </button>
         </div>
         <div className="field">
@@ -920,9 +966,12 @@ export function useIntools(pluginId?: string) {
 
     // Host API
     host: {
-      invoke: (pluginName: string, method: string, ...args: unknown[]) => window.intools?.host?.invoke(pluginName, method, ...args),
-      status: (pluginName: string) => window.intools?.host?.status(pluginName),
-      restart: (pluginName: string) => window.intools?.host?.restart(pluginName),
+      invoke: (method: string, ...args: unknown[]) =>
+        window.intools?.host?.invoke(pluginId || '', method, ...args),
+      call: (method: string, ...args: unknown[]) =>
+        window.intools?.host?.call?.(pluginId || '', method, ...args),
+      status: () => window.intools?.host?.status(pluginId || ''),
+      restart: () => window.intools?.host?.restart(pluginId || ''),
     },
 
     // InBrowser API
@@ -1457,6 +1506,7 @@ interface IntoolsFilesystem {
 
 interface IntoolsHost {
   invoke(pluginName: string, method: string, ...args: unknown[]): Promise<unknown>
+  call(pluginName: string, method: string, ...args: unknown[]): Promise<{ data: any }>
   status(pluginName: string): Promise<{ ready: boolean; active: boolean }>
   restart(pluginName: string): Promise<boolean>
 }

@@ -359,7 +359,10 @@ interface Geolocation {
 
 // host (R) - Call Backend from UI
 interface Host {
+  // Call main process API (e.g., clipboard.readText)
   invoke(pluginId: string, method: string, ...args: any[]): Promise<any>;
+  // Call plugin custom methods (exported in main.ts)
+  call(pluginId: string, method: string, ...args: any[]): Promise<{ data: any }>;
   status(pluginId: string): Promise<{ ready: boolean; active: boolean }>;
   restart(pluginId: string): Promise<boolean>;
 }
@@ -729,4 +732,67 @@ api.scheduler.describeCron('0 0 2 * * *');  // "每天凌晨2点"
 - `'0 0 2 * * *'` - Daily at 2 AM
 - `'0 0 9 * * 1-5'` - Weekdays at 9 AM
 - `'0 */30 * * * *'` - Every 30 minutes
+
+## 7. Host API - UI 调用后端方法
+
+Host API 允许插件 UI 调用后端（main.ts）中导出的自定义方法。
+
+### 7.1 后端导出方法
+
+支持三种导出方式（按优先级查找）：
+
+```typescript
+// 方式1：直接导出函数
+export async function quickAction(context: PluginContext, text: string) {
+  context.api.notification.show(`处理: ${text}`)
+  return { success: true }
+}
+
+// 方式2：host 对象（推荐）
+export const host = {
+  async processData(context: PluginContext, data: any) {
+    const { notification, storage } = context.api
+    notification.show('处理中...')
+    await storage.set('lastResult', data)
+    return { processed: true, result: data }
+  }
+}
+
+// 方式3：api/methods 等对象
+export const api = {
+  async customMethod(context: PluginContext, params: any) {
+    return { success: true, received: params }
+  }
+}
+```
+
+**注意**：所有方法的第一个参数必须是 `context`，包含 `context.api`。
+
+### 7.2 UI 中调用
+
+```typescript
+import { useIntools } from './hooks/useIntools'
+
+export default function App() {
+  const { host, notification } = useIntools('my-plugin')
+
+  const handleClick = async () => {
+    try {
+      // 调用后端方法
+      const result = await host.call('processData', { value: 123 })
+      console.log(result.data) // { processed: true, result: {...} }
+      notification.show('成功')
+    } catch (err) {
+      notification.show(`错误: ${err.message}`, 'error')
+    }
+  }
+
+  return <button onClick={handleClick}>处理数据</button>
+}
+```
+
+### 7.3 与 host.invoke 的区别
+
+- **host.call(method, ...args)** - 调用插件自定义方法（main.ts 中导出的）
+- **host.invoke(method, ...args)** - 调用主进程 API（如 clipboard.readText）
 

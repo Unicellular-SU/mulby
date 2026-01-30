@@ -304,21 +304,56 @@ async function handleCallHostMethod(request: any): Promise<void> {
   try {
     const module = loadModule() as any
 
-    // 检查是否有 host 对象
-    if (!module.host || typeof module.host !== 'object') {
-      throw new Error('Plugin does not export a host object')
+    // 方案1：按优先级查找方法
+    let targetMethod: Function | undefined
+
+    // 1. 首先检查是否直接导出了该方法名的函数
+    if (typeof module[method] === 'function') {
+      targetMethod = module[method]
+    }
+    // 2. 检查 host 对象（约定的默认导出对象）
+    else if (module.host && typeof module.host === 'object' && typeof module.host[method] === 'function') {
+      targetMethod = module.host[method]
+    }
+    // 3. 检查其他可能的导出对象（api, methods, exports 等常见名称）
+    else {
+      const commonNames = ['api', 'methods', 'exports', 'handlers']
+      for (const name of commonNames) {
+        if (module[name] && typeof module[name] === 'object' && typeof module[name][method] === 'function') {
+          targetMethod = module[name][method]
+          break
+        }
+      }
     }
 
-    // 获取 host 方法
-    const hostMethod = module.host[method]
-    if (typeof hostMethod !== 'function') {
-      throw new Error(`Host method not found: ${method}`)
+    // 如果找不到方法，抛出详细的错误信息
+    if (!targetMethod) {
+      const availableMethods: string[] = []
+
+      // 收集所有可用的方法名
+      Object.keys(module).forEach(key => {
+        if (typeof module[key] === 'function' && !['run', 'onLoad', 'onUnload', 'onEnable', 'onDisable', 'onBackground', 'onForeground'].includes(key)) {
+          availableMethods.push(key)
+        } else if (module[key] && typeof module[key] === 'object') {
+          Object.keys(module[key]).forEach(subKey => {
+            if (typeof module[key][subKey] === 'function') {
+              availableMethods.push(`${key}.${subKey}`)
+            }
+          })
+        }
+      })
+
+      throw new Error(
+        `Host method not found: ${method}\n` +
+        `Available methods: ${availableMethods.length > 0 ? availableMethods.join(', ') : 'none'}\n` +
+        `Tip: Export methods directly (export function ${method}), or in a 'host' object (export const host = { ${method} })`
+      )
     }
 
-    // 调用 host 方法，传入 context 和其他参数
+    // 调用方法，传入 context 和其他参数
     const api = createProxyAPI()
     const context = { api }
-    const result = await hostMethod(context, ...args)
+    const result = await targetMethod(context, ...args)
 
     // 序列化结果
     const serializedResult = cloneForMessage(result)

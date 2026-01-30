@@ -147,7 +147,20 @@ export async function run(context: PluginContext) {
   notification.show('任务调度演示插件')
 }
 
-// 导出 host 方法供 UI 调用
+// 方式1：直接导出函数（最简单）
+export async function directMethod(context: PluginContext, message: string) {
+  const { notification } = context.api
+  console.log('[scheduler-demo] directMethod called:', message)
+  notification.show(`直接导出方法: ${message}`)
+
+  return {
+    success: true,
+    message: `Direct export: ${message}`,
+    timestamp: new Date().toISOString()
+  }
+}
+
+// 方式2：导出 host 对象（推荐，语义清晰）
 export const host = {
   // 测试方法：返回当前时间和插件信息
   async testMethod(context: PluginContext, message: string) {
@@ -256,5 +269,20 @@ export const host = {
   }
 }
 
-const plugin = { onLoad, onUnload, onEnable, onDisable, run, onBackground, onBackgroundStop, onScheduledTask, onOnceTask, onDelayTask, host }
+// 方式3：导出 api 对象（也支持）
+export const api = {
+  async customMethod(context: PluginContext, data: any) {
+    const { notification } = context.api
+    console.log('[scheduler-demo] customMethod called:', data)
+    notification.show(`API方法: ${JSON.stringify(data)}`)
+
+    return {
+      success: true,
+      received: data,
+      processedAt: new Date().toISOString()
+    }
+  }
+}
+
+const plugin = { onLoad, onUnload, onEnable, onDisable, run, onBackground, onBackgroundStop, onScheduledTask, onOnceTask, onDelayTask, host, api, directMethod }
 export default plugin
