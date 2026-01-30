@@ -198,6 +198,39 @@ export class TaskScheduler extends EventEmitter {
   }
 
   /**
+   * 获取任务总数
+   */
+  async getTaskCount(filter?: Omit<TaskFilter, 'limit' | 'offset'>): Promise<number> {
+    return await this.store.getTaskCount(filter)
+  }
+
+  /**
+   * 批量删除任务
+   */
+  async deleteTasks(taskIds: string[]): Promise<number> {
+    let deletedCount = 0
+    for (const taskId of taskIds) {
+      try {
+        // 从队列中移除
+        this.queue.remove(taskId)
+        // 从数据库删除
+        await this.store.deleteTask(taskId)
+        deletedCount++
+      } catch (err) {
+        console.error(`[TaskScheduler] Failed to delete task ${taskId}:`, err)
+      }
+    }
+    return deletedCount
+  }
+
+  /**
+   * 清除已完成/失败/取消的任务
+   */
+  async cleanupTasks(olderThan?: number): Promise<number> {
+    return await this.store.cleanupTasks(olderThan)
+  }
+
+  /**
    * 获取执行历史
    */
   async getExecutions(taskId: string, limit?: number): Promise<TaskExecution[]> {

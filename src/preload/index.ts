@@ -167,13 +167,17 @@ const intoolsApi = {
 
   // 任务调度器 API
   scheduler: {
-    listTasks: (filter?: { pluginId?: string; status?: string; type?: string }) =>
+    listTasks: (filter?: { pluginId?: string; status?: string; type?: string; limit?: number; offset?: number }) =>
       ipcRenderer.invoke('scheduler:listTasks', filter),
+    getTaskCount: (filter?: { pluginId?: string; status?: string; type?: string }) =>
+      ipcRenderer.invoke('scheduler:getTaskCount', filter),
     getTask: (taskId: string) => ipcRenderer.invoke('scheduler:getTask', taskId),
     schedule: (task: any) => ipcRenderer.invoke('scheduler:schedule', task),
     cancelTask: (taskId: string) => ipcRenderer.invoke('scheduler:cancelTask', taskId),
     pauseTask: (taskId: string) => ipcRenderer.invoke('scheduler:pauseTask', taskId),
     resumeTask: (taskId: string) => ipcRenderer.invoke('scheduler:resumeTask', taskId),
+    deleteTasks: (taskIds: string[]) => ipcRenderer.invoke('scheduler:deleteTasks', taskIds),
+    cleanupTasks: (olderThan?: number) => ipcRenderer.invoke('scheduler:cleanupTasks', olderThan),
     getExecutions: (taskId: string, limit?: number) =>
       ipcRenderer.invoke('scheduler:getExecutions', taskId, limit),
     validateCron: (expression: string) => ipcRenderer.invoke('scheduler:validateCron', expression),

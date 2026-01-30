@@ -11,12 +11,47 @@ export function registerSchedulerHandlers(pluginManager: PluginManager) {
   }
 
   // 列出任务
-  ipcMain.handle('scheduler:listTasks', async (_, filter?: { pluginId?: string; status?: string; type?: string }) => {
+  ipcMain.handle('scheduler:listTasks', async (_, filter?: { pluginId?: string; status?: string; type?: string; limit?: number; offset?: number }) => {
     try {
       const scheduler = getScheduler()
       return await scheduler.listTasks(filter)
     } catch (err) {
       console.error('Failed to list tasks:', err)
+      throw err
+    }
+  })
+
+  // 获取任务总数
+  ipcMain.handle('scheduler:getTaskCount', async (_, filter?: { pluginId?: string; status?: string; type?: string }) => {
+    try {
+      const scheduler = getScheduler()
+      return await scheduler.getTaskCount(filter)
+    } catch (err) {
+      console.error('Failed to get task count:', err)
+      throw err
+    }
+  })
+
+  // 批量删除任务
+  ipcMain.handle('scheduler:deleteTasks', async (_, taskIds: string[]) => {
+    try {
+      const scheduler = getScheduler()
+      const deletedCount = await scheduler.deleteTasks(taskIds)
+      return { success: true, deletedCount }
+    } catch (err) {
+      console.error('Failed to delete tasks:', err)
+      throw err
+    }
+  })
+
+  // 清除任务记录
+  ipcMain.handle('scheduler:cleanupTasks', async (_, olderThan?: number) => {
+    try {
+      const scheduler = getScheduler()
+      const deletedCount = await scheduler.cleanupTasks(olderThan)
+      return { success: true, deletedCount }
+    } catch (err) {
+      console.error('Failed to cleanup tasks:', err)
       throw err
     }
   })

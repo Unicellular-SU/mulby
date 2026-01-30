@@ -287,12 +287,19 @@ export interface ElectronAPI {
     stopPlugin: (pluginId: string) => Promise<{ success: boolean }>
   }
   scheduler: {
-    listTasks: (filter?: { pluginId?: string; status?: string; type?: string }) => Promise<Task[]>
+    listTasks: (filter?: { pluginId?: string; status?: string; type?: string; limit?: number; offset?: number }) => Promise<Task[]>
+    getTaskCount: (filter?: { pluginId?: string; status?: string; type?: string }) => Promise<number>
     getTask: (taskId: string) => Promise<Task | null>
+    schedule: (task: any) => Promise<Task>
     cancelTask: (taskId: string) => Promise<{ success: boolean }>
     pauseTask: (taskId: string) => Promise<{ success: boolean }>
     resumeTask: (taskId: string) => Promise<{ success: boolean }>
+    deleteTasks: (taskIds: string[]) => Promise<{ success: boolean; deletedCount: number }>
+    cleanupTasks: (olderThan?: number) => Promise<{ success: boolean; deletedCount: number }>
     getExecutions: (taskId: string, limit?: number) => Promise<TaskExecution[]>
+    validateCron: (expression: string) => Promise<boolean>
+    getNextCronTime: (expression: string, after?: Date) => Promise<Date>
+    describeCron: (expression: string) => Promise<string>
   }
   onPluginInit: (callback: (data: { pluginName: string; featureCode: string; input: string; attachments?: InputAttachment[]; mode?: string }) => void) => void
   onPluginAttach: (callback: (data: { pluginName: string; displayName: string; featureCode: string; input: string; attachments?: InputAttachment[]; mode: 'panel' }) => void) => void

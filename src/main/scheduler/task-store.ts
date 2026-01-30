@@ -252,6 +252,48 @@ export class TaskStore {
   }
 
   /**
+   * 获取任务总数
+   */
+  async getTaskCount(filter?: Omit<TaskFilter, 'limit' | 'offset'>): Promise<number> {
+    let query = 'SELECT COUNT(*) as count FROM tasks WHERE 1=1'
+    const params: any[] = []
+
+    if (filter?.pluginId) {
+      query += ' AND plugin_id = ?'
+      params.push(filter.pluginId)
+    }
+
+    if (filter?.status) {
+      query += ' AND status = ?'
+      params.push(filter.status)
+    }
+
+    if (filter?.type) {
+      query += ' AND type = ?'
+      params.push(filter.type)
+    }
+
+    const stmt = this.db.prepare(query)
+    const result = stmt.get(...params) as any
+    return result.count
+  }
+
+  /**
+   * 清除已完成/失败/取消的任务
+   */
+  async cleanupTasks(olderThan?: number): Promise<number> {
+    const cutoffTime = olderThan || Date.now() - 7 * 24 * 60 * 60 * 1000 // 默认7天前
+
+    const stmt = this.db.prepare(`
+      DELETE FROM tasks
+      WHERE status IN ('completed', 'failed', 'cancelled')
+      AND updated_at < ?
+    `)
+    const result = stmt.run(cutoffTime)
+    return result.changes
+  }
+
+  /**
    * 获取待执行的任务
    */
   async getPendingTasks(): Promise<Task[]> {

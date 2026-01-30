@@ -75,17 +75,39 @@ export default function TaskSchedulerView({ onBack }: TaskSchedulerViewProps) {
   const [loading, setLoading] = useState(false)
   const [autoRefresh, setAutoRefresh] = useState(true)
   const [filter, setFilter] = useState<'all' | 'pending' | 'completed' | 'failed'>('all')
+  const [currentPage, setCurrentPage] = useState(1)
+  const [totalCount, setTotalCount] = useState(0)
+  const [selectedTaskIds, setSelectedTaskIds] = useState<Set<string>>(new Set())
+  const pageSize = 20
 
   const cardClass = 'rounded-[24px] border border-slate-200/80 bg-white/80 p-6 backdrop-blur dark:border-slate-800/80 dark:bg-slate-900/70'
   const cardClassTight = 'rounded-[24px] border border-slate-200/80 bg-white/80 p-5 backdrop-blur dark:border-slate-800/80 dark:bg-slate-900/70'
   const actionButtonClass = 'rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-700 transition hover:border-slate-300 hover:text-slate-900 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-200 disabled:opacity-50 disabled:cursor-not-allowed'
   const dangerButtonClass = 'rounded-full border border-red-200 bg-red-50 px-3 py-1.5 text-xs text-red-700 transition hover:border-red-300 hover:bg-red-100 dark:border-red-900/50 dark:bg-red-950/50 dark:text-red-400 dark:hover:bg-red-900/30'
 
+  const getFilterStatus = () => {
+    if (filter === 'pending') return 'pending'
+    if (filter === 'completed') return 'completed'
+    if (filter === 'failed') return 'failed'
+    return undefined
+  }
+
   const refreshTasks = async () => {
     setLoading(true)
     try {
-      const list = await window.intools.scheduler.listTasks()
+      const statusFilter = getFilterStatus()
+      const [list, count] = await Promise.all([
+        window.intools.scheduler.listTasks({
+          status: statusFilter,
+          limit: pageSize,
+          offset: (currentPage - 1) * pageSize
+        }),
+        window.intools.scheduler.getTaskCount({
+          status: statusFilter
+        })
+      ])
       setTasks(list)
+      setTotalCount(count)
     } catch (err) {
       console.error('Failed to list tasks:', err)
     } finally {
@@ -95,7 +117,7 @@ export default function TaskSchedulerView({ onBack }: TaskSchedulerViewProps) {
 
   useEffect(() => {
     void refreshTasks()
-  }, [])
+  }, [currentPage, filter])
 
   useEffect(() => {
     if (!autoRefresh) return
@@ -105,7 +127,7 @@ export default function TaskSchedulerView({ onBack }: TaskSchedulerViewProps) {
     }, 3000)
 
     return () => clearInterval(interval)
-  }, [autoRefresh])
+  }, [autoRefresh, currentPage, filter])
 
   const handleCancel = async (taskId: string) => {
     const confirmed = confirm('确定要取消此任务吗？')
@@ -150,20 +172,59 @@ export default function TaskSchedulerView({ onBack }: TaskSchedulerViewProps) {
     }
   }
 
-  const filteredTasks = tasks.filter(task => {
-    if (filter === 'all') return true
-    if (filter === 'pending') return task.status === 'pending' || task.status === 'running'
-    if (filter === 'completed') return task.status === 'completed'
-    if (filter === 'failed') return task.status === 'failed'
-    return true
-  })
+  const handleBatchDelete = async () => {
+    if (selectedTaskIds.size === 0) {
+      window.intools.notification.show('请先选择要删除的任务', 'warning')
+      return
+    }
 
-  const stats = {
-    total: tasks.length,
-    pending: tasks.filter(t => t.status === 'pending' || t.status === 'running').length,
-    completed: tasks.filter(t => t.status === 'completed').length,
-    failed: tasks.filter(t => t.status === 'failed').length
+    const confirmed = confirm(`确定要删除选中的 ${selectedTaskIds.size} 个任务吗？`)
+    if (!confirmed) return
+
+    try {
+      const result = await window.intools.scheduler.deleteTasks(Array.from(selectedTaskIds))
+      window.intools.notification.show(`已删除 ${result.deletedCount} 个任务`, 'success')
+      setSelectedTaskIds(new Set())
+      await refreshTasks()
+    } catch (err) {
+      window.intools.notification.show('批量删除失败', 'error')
+    }
   }
+
+  const handleCleanup = async () => {
+    const confirmed = confirm('确定要清除所有已完成、失败和已取消的任务吗？（保留最近7天）')
+    if (!confirmed) return
+
+    try {
+      const result = await window.intools.scheduler.cleanupTasks()
+      window.intools.notification.show(`已清除 ${result.deletedCount} 个任务`, 'success')
+      await refreshTasks()
+    } catch (err) {
+      window.intools.notification.show('清除失败', 'error')
+    }
+  }
+
+  const toggleSelectTask = (taskId: string) => {
+    const newSelected = new Set(selectedTaskIds)
+    if (newSelected.has(taskId)) {
+      newSelected.delete(taskId)
+    } else {
+      newSelected.add(taskId)
+    }
+    setSelectedTaskIds(newSelected)
+  }
+
+  const toggleSelectAll = () => {
+    if (selectedTaskIds.size === tasks.length) {
+      setSelectedTaskIds(new Set())
+    } else {
+      setSelectedTaskIds(new Set(tasks.map(t => t.id)))
+    }
+  }
+
+  const filteredTasks = tasks
+
+  const totalPages = Math.ceil(totalCount / pageSize)
 
   return (
     <div className="relative h-full overflow-hidden bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-100 no-drag">
@@ -190,6 +251,20 @@ export default function TaskSchedulerView({ onBack }: TaskSchedulerViewProps) {
             <div className="text-xs uppercase tracking-[0.35em] text-slate-500 dark:text-slate-400">Task Scheduler</div>
             <div className="text-lg font-semibold text-slate-900 dark:text-white">任务调度器</div>
           </div>
+          {selectedTaskIds.size > 0 && (
+            <button
+              className={dangerButtonClass}
+              onClick={handleBatchDelete}
+            >
+              删除选中 ({selectedTaskIds.size})
+            </button>
+          )}
+          <button
+            className={dangerButtonClass}
+            onClick={handleCleanup}
+          >
+            清除记录
+          </button>
           <button
             className={`${actionButtonClass} flex items-center gap-1.5`}
             onClick={() => setAutoRefresh(!autoRefresh)}
@@ -210,56 +285,44 @@ export default function TaskSchedulerView({ onBack }: TaskSchedulerViewProps) {
               <div>
                 <div className="text-sm font-medium text-slate-900 dark:text-white">任务概览</div>
                 <div className="text-xs text-slate-500 dark:text-slate-400">
-                  共有 {stats.total} 个任务
-                </div>
-              </div>
-
-              <div className="grid grid-cols-4 gap-4">
-                <div className="rounded-2xl bg-slate-50 p-4 dark:bg-slate-900/50">
-                  <div className="text-xs text-slate-500 dark:text-slate-400">总任务数</div>
-                  <div className="mt-1 text-2xl font-semibold text-slate-900 dark:text-white">
-                    {stats.total}
-                  </div>
-                </div>
-                <div className="rounded-2xl bg-blue-50 p-4 dark:bg-blue-950/30">
-                  <div className="text-xs text-blue-600 dark:text-blue-400">等待/运行</div>
-                  <div className="mt-1 text-2xl font-semibold text-blue-600 dark:text-blue-400">
-                    {stats.pending}
-                  </div>
-                </div>
-                <div className="rounded-2xl bg-emerald-50 p-4 dark:bg-emerald-950/30">
-                  <div className="text-xs text-emerald-600 dark:text-emerald-400">已完成</div>
-                  <div className="mt-1 text-2xl font-semibold text-emerald-600 dark:text-emerald-400">
-                    {stats.completed}
-                  </div>
-                </div>
-                <div className="rounded-2xl bg-red-50 p-4 dark:bg-red-950/30">
-                  <div className="text-xs text-red-600 dark:text-red-400">失败</div>
-                  <div className="mt-1 text-2xl font-semibold text-red-600 dark:text-red-400">
-                    {stats.failed}
-                  </div>
+                  {filter === 'all' ? `共有 ${totalCount} 个任务` : `筛选结果：${totalCount} 个任务`}
+                  {totalCount > 0 && ` · 第 ${currentPage}/${totalPages} 页`}
                 </div>
               </div>
             </div>
 
             {/* 过滤器 */}
-            <div className="mt-6 flex gap-2">
-              {(['all', 'pending', 'completed', 'failed'] as const).map(f => (
+            <div className="mt-6 flex items-center justify-between">
+              <div className="flex gap-2">
+                {(['all', 'pending', 'completed', 'failed'] as const).map(f => (
+                  <button
+                    key={f}
+                    onClick={() => {
+                      setFilter(f)
+                      setCurrentPage(1)
+                      setSelectedTaskIds(new Set())
+                    }}
+                    className={`rounded-full px-4 py-2 text-xs font-medium transition ${
+                      filter === f
+                        ? 'bg-slate-900 text-white dark:bg-white dark:text-slate-900'
+                        : 'bg-white text-slate-700 hover:bg-slate-100 dark:bg-slate-900 dark:text-slate-300 dark:hover:bg-slate-800'
+                    }`}
+                  >
+                    {f === 'all' && '全部'}
+                    {f === 'pending' && '进行中'}
+                    {f === 'completed' && '已完成'}
+                    {f === 'failed' && '失败'}
+                  </button>
+                ))}
+              </div>
+              {tasks.length > 0 && (
                 <button
-                  key={f}
-                  onClick={() => setFilter(f)}
-                  className={`rounded-full px-4 py-2 text-xs font-medium transition ${
-                    filter === f
-                      ? 'bg-slate-900 text-white dark:bg-white dark:text-slate-900'
-                      : 'bg-white text-slate-700 hover:bg-slate-100 dark:bg-slate-900 dark:text-slate-300 dark:hover:bg-slate-800'
-                  }`}
+                  className={actionButtonClass}
+                  onClick={toggleSelectAll}
                 >
-                  {f === 'all' && '全部'}
-                  {f === 'pending' && '进行中'}
-                  {f === 'completed' && '已完成'}
-                  {f === 'failed' && '失败'}
+                  {selectedTaskIds.size === tasks.length ? '取消全选' : '全选'}
                 </button>
-              ))}
+              )}
             </div>
 
             {/* 任务列表 */}
@@ -275,10 +338,17 @@ export default function TaskSchedulerView({ onBack }: TaskSchedulerViewProps) {
                 </div>
               </div>
             ) : (
-              <div className="mt-6 space-y-3">
+              <>
+                <div className="mt-6 space-y-3">
                 {filteredTasks.map(task => (
                   <div key={task.id} className={cardClassTight}>
                     <div className="flex items-start gap-4">
+                      <input
+                        type="checkbox"
+                        checked={selectedTaskIds.has(task.id)}
+                        onChange={() => toggleSelectTask(task.id)}
+                        className="mt-1 h-4 w-4 rounded border-slate-300 text-slate-900 focus:ring-slate-500 dark:border-slate-700 dark:bg-slate-800"
+                      />
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 mb-2">
                           <div className="font-medium text-slate-900 dark:text-white truncate">
@@ -368,8 +438,56 @@ export default function TaskSchedulerView({ onBack }: TaskSchedulerViewProps) {
                       </div>
                     </div>
                   </div>
-                ))}
-              </div>
+                  ))}
+                </div>
+
+                {/* 分页控制 */}
+                {totalPages > 1 && (
+                  <div className="mt-6 flex items-center justify-center gap-2">
+                  <button
+                    className={actionButtonClass}
+                    onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                    disabled={currentPage === 1}
+                  >
+                    上一页
+                  </button>
+                  <div className="flex items-center gap-1">
+                    {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                      let pageNum: number
+                      if (totalPages <= 5) {
+                        pageNum = i + 1
+                      } else if (currentPage <= 3) {
+                        pageNum = i + 1
+                      } else if (currentPage >= totalPages - 2) {
+                        pageNum = totalPages - 4 + i
+                      } else {
+                        pageNum = currentPage - 2 + i
+                      }
+                      return (
+                        <button
+                          key={pageNum}
+                          className={`h-8 w-8 rounded-full text-xs font-medium transition ${
+                            currentPage === pageNum
+                              ? 'bg-slate-900 text-white dark:bg-white dark:text-slate-900'
+                              : 'bg-white text-slate-700 hover:bg-slate-100 dark:bg-slate-900 dark:text-slate-300 dark:hover:bg-slate-800'
+                          }`}
+                          onClick={() => setCurrentPage(pageNum)}
+                        >
+                          {pageNum}
+                        </button>
+                      )
+                    })}
+                  </div>
+                  <button
+                    className={actionButtonClass}
+                    onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                    disabled={currentPage === totalPages}
+                  >
+                    下一页
+                  </button>
+                </div>
+              )}
+              </>
             )}
           </div>
         </div>

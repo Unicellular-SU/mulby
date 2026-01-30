@@ -158,17 +158,96 @@ const pendingTasks = await api.scheduler.list({ status: 'pending' })
 
 // 列出重复任务
 const repeatTasks = await api.scheduler.list({ type: 'repeat' })
+
+// 分页查询（每页20条）
+const page1 = await api.scheduler.list({ limit: 20, offset: 0 })
+const page2 = await api.scheduler.list({ limit: 20, offset: 20 })
 ```
 
 **参数**:
 - `filter` (object, 可选) - 过滤条件
   - `status` (string, 可选) - 按状态过滤
   - `type` (string, 可选) - 按类型过滤
-  - `limit` (number, 可选) - 限制数量
-  - `offset` (number, 可选) - 偏移量
+  - `limit` (number, 可选) - 限制数量（用于分页）
+  - `offset` (number, 可选) - 偏移量（用于分页）
 
 **返回值**:
 - `Promise<Task[]>` - 任务列表
+
+### count(filter?)
+[Backend]
+获取任务总数（仅统计当前插件创建的任务）。
+
+```javascript
+// 获取所有任务数量
+const total = await api.scheduler.count()
+
+// 获取等待中的任务数量
+const pendingCount = await api.scheduler.count({ status: 'pending' })
+
+// 获取失败的任务数量
+const failedCount = await api.scheduler.count({ status: 'failed' })
+```
+
+**参数**:
+- `filter` (object, 可选) - 过滤条件
+  - `status` (string, 可选) - 按状态过滤
+  - `type` (string, 可选) - 按类型过滤
+
+**返回值**:
+- `Promise<number>` - 任务总数
+
+### deleteTasks(taskIds)
+[Backend]
+批量删除任务。
+
+```javascript
+// 删除多个任务
+const result = await api.scheduler.deleteTasks([taskId1, taskId2, taskId3])
+console.log(`已删除 ${result.deletedCount} 个任务`)
+
+// 删除所有失败的任务
+const failedTasks = await api.scheduler.list({ status: 'failed' })
+const taskIds = failedTasks.map(t => t.id)
+await api.scheduler.deleteTasks(taskIds)
+```
+
+**参数**:
+- `taskIds` (string[]) - 任务 ID 数组
+
+**返回值**:
+- `Promise<{ success: boolean; deletedCount: number }>` - 删除结果
+  - `success` (boolean) - 是否成功
+  - `deletedCount` (number) - 实际删除的任务数量
+
+### cleanup(olderThan?)
+[Backend]
+清除已完成、失败或已取消的任务记录。
+
+```javascript
+// 清除7天前的任务记录（默认）
+const result = await api.scheduler.cleanup()
+console.log(`已清除 ${result.deletedCount} 个任务`)
+
+// 清除30天前的任务记录
+const thirtyDaysAgo = Date.now() - 30 * 24 * 60 * 60 * 1000
+await api.scheduler.cleanup(thirtyDaysAgo)
+
+// 清除所有已完成的任务
+await api.scheduler.cleanup(Date.now())
+```
+
+**参数**:
+- `olderThan` (number, 可选) - 时间戳（毫秒），清除此时间之前的任务，默认为7天前
+
+**返回值**:
+- `Promise<{ success: boolean; deletedCount: number }>` - 清除结果
+  - `success` (boolean) - 是否成功
+  - `deletedCount` (number) - 实际清除的任务数量
+
+**注意**:
+- 只清除状态为 `completed`、`failed`、`cancelled` 的任务
+- 不会清除 `pending`、`running`、`paused` 状态的任务
 
 ### getExecutions(taskId, limit?)
 [Backend]
@@ -613,8 +692,50 @@ await api.scheduler.schedule({
 4. 点击"打开任务调度器"按钮
 
 管理界面提供：
-- 查看所有任务列表
-- 过滤任务（全部、进行中、已完成、失败）
-- 查看任务详情和执行历史
-- 暂停/恢复/取消任务
-- 实时刷新任务状态
+- **查看任务列表**：支持分页显示（每页20条）
+- **过滤任务**：全部、进行中、已完成、失败
+- **批量操作**：
+  - 复选框选择任务
+  - 全选/取消全选
+  - 批量删除选中的任务
+- **清除记录**：一键清除已完成/失败/取消的任务（保留最近7天）
+- **任务详情**：查看任务配置和执行历史
+- **任务控制**：暂停/恢复/取消单个任务
+- **实时刷新**：自动刷新任务状态（可开关）
+- **分页导航**：上一页/下一页，页码快速跳转
+
+### 分页查询示例
+
+```javascript
+// 实现分页查询
+const pageSize = 20
+const currentPage = 1
+
+// 获取当前页数据
+const tasks = await api.scheduler.list({
+  status: 'pending',
+  limit: pageSize,
+  offset: (currentPage - 1) * pageSize
+})
+
+// 获取总数（用于计算总页数）
+const totalCount = await api.scheduler.count({ status: 'pending' })
+const totalPages = Math.ceil(totalCount / pageSize)
+
+console.log(`第 ${currentPage}/${totalPages} 页，共 ${totalCount} 个任务`)
+```
+
+### 批量管理示例
+
+```javascript
+// 批量删除失败的任务
+const failedTasks = await api.scheduler.list({ status: 'failed' })
+const taskIds = failedTasks.map(t => t.id)
+const result = await api.scheduler.deleteTasks(taskIds)
+console.log(`已删除 ${result.deletedCount} 个失败任务`)
+
+// 定期清理旧任务（保留最近30天）
+const thirtyDaysAgo = Date.now() - 30 * 24 * 60 * 60 * 1000
+const cleanupResult = await api.scheduler.cleanup(thirtyDaysAgo)
+console.log(`已清理 ${cleanupResult.deletedCount} 个旧任务`)
+```
