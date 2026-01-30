@@ -3,15 +3,16 @@
  * 使用 cron-parser 库解析和计算 cron 表达式
  */
 
-const cronParser = require('cron-parser')
+const { CronExpressionParser } = require('cron-parser')
 
 export class CronParser {
   /**
    * 验证 cron 表达式是否合法
+   * 支持 5 位格式（分 时 日 月 周）和 6 位格式（秒 分 时 日 月 周）
    */
   validate(expression: string): boolean {
     try {
-      cronParser.parseExpression(expression, {
+      CronExpressionParser.parse(expression, {
         tz: 'Asia/Shanghai'
       })
       return true
@@ -22,10 +23,11 @@ export class CronParser {
 
   /**
    * 计算下次执行时间
+   * 支持 5 位格式（分 时 日 月 周）和 6 位格式（秒 分 时 日 月 周）
    */
   getNextTime(expression: string, after?: Date): Date {
     try {
-      const interval = cronParser.parseExpression(expression, {
+      const interval = CronExpressionParser.parse(expression, {
         currentDate: after || new Date(),
         tz: 'Asia/Shanghai'
       })
@@ -37,18 +39,15 @@ export class CronParser {
 
   /**
    * 计算多个下次执行时间
+   * 支持 5 位格式（分 时 日 月 周）和 6 位格式（秒 分 时 日 月 周）
    */
   getNextTimes(expression: string, count: number, after?: Date): Date[] {
     try {
-      const interval = cronParser.parseExpression(expression, {
+      const interval = CronExpressionParser.parse(expression, {
         currentDate: after || new Date(),
         tz: 'Asia/Shanghai'
       })
-      const times: Date[] = []
-      for (let i = 0; i < count; i++) {
-        times.push(interval.next().toDate())
-      }
-      return times
+      return interval.take(count).map((date: any) => date.toDate())
     } catch (error) {
       throw new Error(`Invalid cron expression: ${expression}`)
     }
@@ -56,50 +55,62 @@ export class CronParser {
 
   /**
    * 获取 cron 表达式的可读描述
+   * 支持 5 位格式（分 时 日 月 周）和 6 位格式（秒 分 时 日 月 周）
    */
   describe(expression: string): string {
     try {
       const parts = expression.trim().split(/\s+/)
 
-      // 支持 6 位格式: 秒 分 时 日 月 周
-      if (parts.length !== 6) {
-        return '无效的 cron 表达式'
+      // 支持 5 位和 6 位格式
+      if (parts.length === 5) {
+        // 5 位格式: 分 时 日 月 周
+        const [min, hour, day, month, weekday] = parts
+        return this.describeInternal('0', min, hour, day, month, weekday)
+      } else if (parts.length === 6) {
+        // 6 位格式: 秒 分 时 日 月 周
+        const [sec, min, hour, day, month, weekday] = parts
+        return this.describeInternal(sec, min, hour, day, month, weekday)
+      } else {
+        return '无效的 cron 表达式（需要 5 位或 6 位）'
       }
-
-      const [sec, min, hour, day, month, weekday] = parts
-
-      // 构建描述
-      const descriptions: string[] = []
-
-      // 周期性描述
-      if (this.isEvery(sec, min, hour, day, month, weekday)) {
-        return this.describeEvery(sec, min, hour)
-      }
-
-      // 时间描述
-      if (hour !== '*' || min !== '*' || sec !== '*') {
-        descriptions.push(this.describeTime(sec, min, hour))
-      }
-
-      // 日期描述
-      if (day !== '*') {
-        descriptions.push(`每月${day}号`)
-      }
-
-      // 星期描述
-      if (weekday !== '*') {
-        descriptions.push(this.describeWeekday(weekday))
-      }
-
-      // 月份描述
-      if (month !== '*') {
-        descriptions.push(this.describeMonth(month))
-      }
-
-      return descriptions.join('，') || '每秒'
     } catch {
       return '无效的 cron 表达式'
     }
+  }
+
+  /**
+   * 内部描述方法
+   */
+  private describeInternal(sec: string, min: string, hour: string, day: string, month: string, weekday: string): string {
+    // 构建描述
+    const descriptions: string[] = []
+
+    // 周期性描述
+    if (this.isEvery(sec, min, hour, day, month, weekday)) {
+      return this.describeEvery(sec, min, hour)
+    }
+
+    // 时间描述
+    if (hour !== '*' || min !== '*' || sec !== '*') {
+      descriptions.push(this.describeTime(sec, min, hour))
+    }
+
+    // 日期描述
+    if (day !== '*') {
+      descriptions.push(`每月${day}号`)
+    }
+
+    // 星期描述
+    if (weekday !== '*') {
+      descriptions.push(this.describeWeekday(weekday))
+    }
+
+    // 月份描述
+    if (month !== '*') {
+      descriptions.push(this.describeMonth(month))
+    }
+
+    return descriptions.join('，') || '每秒'
   }
 
   /**

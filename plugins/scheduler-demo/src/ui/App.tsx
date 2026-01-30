@@ -93,7 +93,7 @@ export default function App() {
           payload: { message: taskMessage }
         })
       } else if (taskType === 'repeat') {
-        const isValid = scheduler.validateCron(taskCron)
+        const isValid = await scheduler.validateCron(taskCron)
         if (!isValid) {
           notification.show('无效的 Cron 表达式', 'error')
           return
@@ -160,9 +160,9 @@ export default function App() {
   // 验证并描述 Cron 表达式
   const validateAndDescribeCron = async (expression: string) => {
     try {
-      const isValid = scheduler.validateCron(expression)
+      const isValid = await scheduler.validateCron(expression)
       if (isValid) {
-        const desc = scheduler.describeCron(expression)
+        const desc = await scheduler.describeCron(expression)
         setCronDescription(desc)
       } else {
         setCronDescription('无效的 Cron 表达式')
