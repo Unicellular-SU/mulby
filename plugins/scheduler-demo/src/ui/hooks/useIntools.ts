@@ -342,9 +342,12 @@ export function useIntools(pluginId?: string) {
 
     // Host API
     host: {
-      invoke: (pluginName: string, method: string, ...args: unknown[]) => window.intools?.host?.invoke(pluginName, method, ...args),
-      status: (pluginName: string) => window.intools?.host?.status(pluginName),
-      restart: (pluginName: string) => window.intools?.host?.restart(pluginName),
+      invoke: (method: string, ...args: unknown[]) =>
+        window.intools?.host?.invoke(pluginId || 'scheduler-demo', method, ...args),
+      call: (method: string, ...args: unknown[]) =>
+        window.intools?.host?.call?.(pluginId || 'scheduler-demo', method, ...args),
+      status: () => window.intools?.host?.status(pluginId || 'scheduler-demo'),
+      restart: () => window.intools?.host?.restart(pluginId || 'scheduler-demo'),
     },
 
     // InBrowser API

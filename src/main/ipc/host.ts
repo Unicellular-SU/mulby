@@ -26,6 +26,22 @@ export function registerHostHandlers(pluginManager: PluginManager) {
     return await hostManager.invokePluginMethod(pluginName, method, args)
   })
 
+  // 插件 UI 调用 host 自定义方法
+  ipcMain.handle('host:call', async (_event, pluginName: string, method: string, ...args: unknown[]) => {
+    const plugin = pluginManager.get(pluginName)
+    if (!plugin) {
+      throw new Error(`Plugin not found: ${pluginName}`)
+    }
+
+    // 确保 Host 已初始化
+    if (!hostManager.isHostReady(pluginName)) {
+      await hostManager.initPlugin(plugin)
+    }
+
+    // 调用插件 host 对象的方法
+    return await hostManager.callHostMethod(pluginName, method, args)
+  })
+
   // 获取 Host 状态
   ipcMain.handle('host:status', async (_, pluginName: string) => {
     return {

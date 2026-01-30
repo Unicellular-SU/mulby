@@ -44,7 +44,7 @@ export default function App() {
   const [taskDateTime, setTaskDateTime] = useState('')
   const [taskCron, setTaskCron] = useState('0 */1 * * * *')
   const [cronDescription, setCronDescription] = useState('')
-  const { notification, scheduler } = useIntools('scheduler-demo')
+  const { notification, scheduler, host } = useIntools('scheduler-demo')
 
   // 加载任务列表
   const loadTasks = async () => {
@@ -67,6 +67,18 @@ export default function App() {
       setExecutions(result || [])
     } catch (err) {
       console.error('Failed to load executions:', err)
+    }
+  }
+
+  // 测试调用 host 方法
+  const testHostMethod = async () => {
+    try {
+      const result = await host.call('testMethod', '这是来自UI的测试消息')
+      console.log('Host method result:', result)
+      notification.show(`Host返回: ${result.data.message}`)
+    } catch (err: any) {
+      console.error('Failed to call host method:', err)
+      notification.show(err.message || '调用失败', 'error')
     }
   }
 
@@ -262,6 +274,12 @@ export default function App() {
           </div>
           <div className="flex gap-2">
             <button
+              onClick={testHostMethod}
+              className="btn-secondary flex items-center gap-2"
+            >
+              测试Host方法
+            </button>
+            <button
               onClick={loadTasks}
               disabled={loading}
               className="btn-secondary flex items-center gap-2"
@@ -292,11 +310,10 @@ export default function App() {
                 <div
                   key={task.id}
                   onClick={() => setSelectedTask(task)}
-                  className={`p-4 rounded-lg border cursor-pointer transition-colors ${
-                    selectedTask?.id === task.id
+                  className={`p-4 rounded-lg border cursor-pointer transition-colors ${selectedTask?.id === task.id
                       ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20'
                       : 'border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600'
-                  }`}
+                    }`}
                 >
                   <div className="flex items-start justify-between mb-2">
                     <div className="flex-1">
@@ -420,8 +437,8 @@ export default function App() {
                           <div className="flex justify-between items-start mb-1">
                             <span className={
                               exec.status === 'success' ? 'text-green-600 dark:text-green-400' :
-                              exec.status === 'failed' ? 'text-red-600 dark:text-red-400' :
-                              'text-yellow-600 dark:text-yellow-400'
+                                exec.status === 'failed' ? 'text-red-600 dark:text-red-400' :
+                                  'text-yellow-600 dark:text-yellow-400'
                             }>
                               {exec.status === 'success' ? '成功' : exec.status === 'failed' ? '失败' : '超时'}
                             </span>

@@ -472,6 +472,8 @@ const intoolsApi = {
   host: {
     invoke: (pluginName: string, method: string, ...args: unknown[]) =>
       ipcRenderer.invoke('host:invoke', pluginName, method, ...args),
+    call: (pluginName: string, method: string, ...args: unknown[]) =>
+      ipcRenderer.invoke('host:call', pluginName, method, ...args),
     status: (pluginName: string) =>
       ipcRenderer.invoke('host:status', pluginName),
     restart: (pluginName: string) =>

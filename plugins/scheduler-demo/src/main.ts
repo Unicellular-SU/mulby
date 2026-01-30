@@ -149,6 +149,22 @@ export async function run(context: PluginContext) {
 
 // 导出 host 方法供 UI 调用
 export const host = {
+  // 测试方法：返回当前时间和插件信息
+  async testMethod(context: PluginContext, message: string) {
+    const { notification } = context.api
+    const timestamp = new Date().toISOString()
+
+    console.log('[scheduler-demo] testMethod called with message:', message)
+    notification.show(`Host方法被调用: ${message}`)
+
+    return {
+      success: true,
+      message: `Hello from host! You said: ${message}`,
+      timestamp,
+      pluginName: 'scheduler-demo'
+    }
+  },
+
   // 获取所有任务
   async getTasks(context: PluginContext) {
     const { scheduler } = context.api

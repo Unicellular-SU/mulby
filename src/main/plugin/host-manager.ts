@@ -598,4 +598,27 @@ export class PluginHostManager extends EventEmitter {
 
     return await apiMethod(...args)
   }
+
+  /**
+   * 调用插件 host 方法（供 UI 窗口使用）
+   * @param pluginName 插件名称
+   * @param method host 方法名，如 'getTasks'
+   * @param args 参数列表
+   */
+  async callHostMethod(
+    pluginName: string,
+    method: string,
+    args: unknown[]
+  ): Promise<unknown> {
+    const host = this.hosts.get(pluginName)
+    if (!host || !host.ready) {
+      throw new Error(`Host not ready: ${pluginName}`)
+    }
+
+    return await this.sendRequest(pluginName, {
+      id: generateRequestId(),
+      type: 'callHostMethod',
+      payload: { method, args }
+    })
+  }
 }

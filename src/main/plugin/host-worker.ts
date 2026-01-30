@@ -297,6 +297,49 @@ async function handleCallTaskCallback(request: any): Promise<void> {
   }
 }
 
+/** 调用 host 方法 */
+async function handleCallHostMethod(request: any): Promise<void> {
+  const { method, args } = request.payload
+
+  try {
+    const module = loadModule() as any
+
+    // 检查是否有 host 对象
+    if (!module.host || typeof module.host !== 'object') {
+      throw new Error('Plugin does not export a host object')
+    }
+
+    // 获取 host 方法
+    const hostMethod = module.host[method]
+    if (typeof hostMethod !== 'function') {
+      throw new Error(`Host method not found: ${method}`)
+    }
+
+    // 调用 host 方法，传入 context 和其他参数
+    const api = createProxyAPI()
+    const context = { api }
+    const result = await hostMethod(context, ...args)
+
+    // 序列化结果
+    const serializedResult = cloneForMessage(result)
+
+    send({
+      id: request.id,
+      type: 'result',
+      payload: { success: true, data: serializedResult }
+    })
+  } catch (err) {
+    send({
+      id: request.id,
+      type: 'error',
+      payload: {
+        message: err instanceof Error ? err.message : 'Host method call failed',
+        stack: err instanceof Error ? err.stack : undefined
+      }
+    })
+  }
+}
+
 /** 处理 API 调用结果 */
 function handleApiResult(result: ApiResult): void {
   const pending = pendingApiCalls.get(result.id)
@@ -335,6 +378,9 @@ function handleMessage(message: HostRequest | ApiResult): void {
       break
     case 'callTaskCallback':
       handleCallTaskCallback(request)
+      break
+    case 'callHostMethod':
+      handleCallHostMethod(request)
       break
     case 'terminate':
       process.exit(0)
