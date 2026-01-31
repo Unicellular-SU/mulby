@@ -74,7 +74,7 @@ function App() {
   useEffect(() => {
     const SEARCH_BOX_HEIGHT = 62
     const BORDER_HEIGHT = 1
-    const EXPANDED_HEIGHT = 550
+    const EXPANDED_HEIGHT = 800
     const SYSTEM_PAGE_HEIGHT = 800
     const MANAGER_HEIGHT = managerMetrics.managerHeight
 

@@ -687,6 +687,9 @@ body {
   min-height: 0;
   overflow-y: auto;
   padding-right: 10px;
+  /* 添加 backdrop-filter 到容器而不是每个卡片 */
+  backdrop-filter: blur(var(--glass-blur));
+  -webkit-backdrop-filter: blur(var(--glass-blur));
 }
 
 .plugin-card {
@@ -698,23 +701,30 @@ body {
   border-radius: 12px;
   border: 1px solid var(--glass-border);
   background: var(--glass-bg-strong);
-  box-shadow: var(--glass-shadow);
   cursor: pointer;
-  transition: background 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease, color 0.15s ease;
-  backdrop-filter: blur(var(--glass-blur));
-  -webkit-backdrop-filter: blur(var(--glass-blur));
+  /* 使用 transform 和 opacity 替代 box-shadow 过渡 */
+  transition: transform 0.15s ease, background 0.15s ease, border-color 0.15s ease, opacity 0.15s ease;
   -webkit-app-region: no-drag;
+  /* 添加 CSS containment 优化渲染 */
+  contain: layout style paint;
+  /* 使用 will-change 提示浏览器优化 */
+  will-change: transform;
 }
 
 .plugin-card:hover {
   background: var(--glass-bg);
   border-color: rgba(59, 130, 246, 0.35);
+  /* 使用 transform 替代 box-shadow */
+  transform: translateY(-1px);
 }
 
 .plugin-card.selected {
   background: var(--glass-accent-bg);
   border-color: var(--glass-accent);
-  box-shadow: 0 0 0 1px var(--glass-accent), var(--glass-shadow);
+  /* 使用 border 替代 box-shadow */
+  border-width: 2px;
+  /* 补偿 border 增加的 1px，避免布局偏移 */
+  padding: 11px 5px;
 }
 
 .plugin-card.settings {

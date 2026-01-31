@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef, memo } from 'react'
+import { useState, useEffect, useCallback, useRef, memo, useMemo } from 'react'
 import { SearchResultItem } from '../../shared/types/electron'
 import type { InputPayload } from '../../shared/types/plugin'
 
@@ -7,6 +7,11 @@ interface PluginListProps {
   onResultsChange?: (count: number) => void
   onShowDetails?: (pluginName: string) => void
   onOpenSettings?: () => void
+}
+
+// 简单的哈希函数用于缓存键
+function hashPayload(payload: InputPayload): string {
+  return `${payload.text}|${payload.attachments.map(a => `${a.id}:${a.name}`).join(',')}`
 }
 
 // 插件图标组件 - 使用 Memo 避免无谓重渲染
@@ -87,6 +92,10 @@ function PluginList({ payload, onResultsChange, onShowDetails, onOpenSettings }:
   const [results, setResults] = useState<SearchResultItem[]>([])
   const [selectedIndex, setSelectedIndex] = useState(0)
 
+  // 搜索结果缓存
+  const cacheRef = useRef<Map<string, SearchResultItem[]>>(new Map())
+  const MAX_CACHE_SIZE = 50
+
   // 使用 ref 追踪最新的 payload，确保回调函数稳定
   const payloadRef = useRef(payload)
   useEffect(() => {
@@ -94,16 +103,49 @@ function PluginList({ payload, onResultsChange, onShowDetails, onOpenSettings }:
   }, [payload])
 
   // Grid 配置
-
   const MAX_ITEMS = 30 // 5行 × 6列
   const SEARCH_DEBOUNCE_MS = 150
+
+  // 使用 useMemo 计算 payload 哈希，避免每次渲染都计算
+  const payloadHash = useMemo(() => hashPayload(payload), [payload.text, payload.attachments.length])
+
+  // 使用 useCallback 包装 loadPlugins
+  const loadPlugins = useCallback(async () => {
+    const hash = hashPayload(payloadRef.current)
+
+    // 检查缓存
+    const cached = cacheRef.current.get(hash)
+    if (cached) {
+      setResults(cached)
+      setSelectedIndex(0)
+      onResultsChange?.(cached.length)
+      return
+    }
+
+    // 执行搜索
+    const result = await window.intools.plugin.search(payloadRef.current)
+    const combined = injectSettingsResult(result, payloadRef.current.text)
+
+    // 更新缓存（LRU 策略）
+    if (cacheRef.current.size >= MAX_CACHE_SIZE) {
+      const firstKey = cacheRef.current.keys().next().value as string | undefined
+      if (firstKey) {
+        cacheRef.current.delete(firstKey)
+      }
+    }
+    cacheRef.current.set(hash, combined)
+
+    setResults(combined)
+    setSelectedIndex(0)
+    onResultsChange?.(combined.length)
+  }, [onResultsChange])
 
   useEffect(() => {
     const timer = setTimeout(() => {
       loadPlugins()
     }, SEARCH_DEBOUNCE_MS)
     return () => clearTimeout(timer)
-  }, [payload])
+  }, [payloadHash, loadPlugins])
 
   // 键盘导航 - 支持四向移动
   useEffect(() => {
@@ -164,14 +206,6 @@ function PluginList({ payload, onResultsChange, onShowDetails, onOpenSettings }:
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
   }, [results, selectedIndex, onShowDetails])
-
-  const loadPlugins = async () => {
-    const result = await window.intools.plugin.search(payload)
-    const combined = injectSettingsResult(result, payload.text)
-    setResults(combined)
-    setSelectedIndex(0)
-    onResultsChange?.(combined.length)
-  }
 
   // 稳定的 handleRun 回调
   const handleRun = useCallback(async (item: SearchResultItem) => {
