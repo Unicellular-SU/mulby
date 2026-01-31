@@ -246,7 +246,7 @@ export class PluginPanelWindow {
     private syncScheduled = false
 
     // 配置
-    private readonly PANEL_HEIGHT = 550
+    private readonly PANEL_HEIGHT = 730
 
     constructor(mainWindow: BrowserWindow) {
         this.mainWindow = mainWindow
