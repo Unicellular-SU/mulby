@@ -74,13 +74,16 @@ function App() {
     const SEARCH_BOX_HEIGHT = 62
     const BORDER_HEIGHT = 1
     const EXPANDED_HEIGHT = 550
+    const SYSTEM_PAGE_HEIGHT = 800
     const MANAGER_HEIGHT = managerMetrics.managerHeight
 
     let height = SEARCH_BOX_HEIGHT
+    let allowResize = false
 
     if (viewMode !== 'home') {
-      // 设置/详情页高度
-      height = EXPANDED_HEIGHT
+      // 设置/详情页高度，允许自由调整大小
+      height = SYSTEM_PAGE_HEIGHT
+      allowResize = true
     } else if (pluginOpen) {
       // 插件面板打开时，主窗口只保持搜索框高度（插件 UI 在独立的 Panel 窗口中）
       height = SEARCH_BOX_HEIGHT
@@ -89,7 +92,7 @@ function App() {
     } else if ((query.length > 0 || attachments.length > 0) && resultCount > 0) {
       height = EXPANDED_HEIGHT
     }
-    window.intools.window.setExpendHeight(height)
+    window.intools.window.setExpendHeight(height, allowResize)
   }, [query, resultCount, pluginOpen, detailsPluginName, attachments.length, attachmentsManagerOpen, managerMetrics.managerHeight, viewMode])
 
   // 监听插件附着事件

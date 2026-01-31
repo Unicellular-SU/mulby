@@ -49,7 +49,7 @@ export function registerAllHandlers(
 ) {
   registerClipboardHandlers()
   registerNotificationHandlers()
-  registerWindowHandlers(getMainWindow, pluginWindowManager, themeManager, pluginManager)
+  registerWindowHandlers(getMainWindow, pluginWindowManager, themeManager, appSettingsManager, pluginManager)
   registerPluginHandlers(pluginManager)
   registerThemeHandlers(themeManager)
   registerScreenHandlers()

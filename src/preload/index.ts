@@ -16,7 +16,7 @@ const intoolsApi = {
     show: () => ipcRenderer.send('window:show'),
     setSize: (width: number, height: number) =>
       ipcRenderer.send('window:setSize', width, height),
-    setExpendHeight: (height: number) => ipcRenderer.send('window:setExpendHeight', height),
+    setExpendHeight: (height: number, allowResize?: boolean) => ipcRenderer.send('window:setExpendHeight', height, allowResize),
     center: () => ipcRenderer.send('window:center'),
     // 插件窗口控制
     detach: () => ipcRenderer.send('plugin:detach'),

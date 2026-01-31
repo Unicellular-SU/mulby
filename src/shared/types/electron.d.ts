@@ -213,7 +213,7 @@ export interface ElectronAPI {
   window: {
     hide: () => void
     setSize: (width: number, height: number) => void
-    setExpendHeight: (height: number) => void
+    setExpendHeight: (height: number, allowResize?: boolean) => void
     center: () => void
     detach: () => void
     close: () => void

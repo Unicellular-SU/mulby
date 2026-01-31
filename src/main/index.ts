@@ -148,6 +148,7 @@ function createWindow() {
       appSettingsManager.updateSettings({
         window: {
           width: bounds.width,
+          height: bounds.height,
           x: bounds.x,
           y: bounds.y
         }

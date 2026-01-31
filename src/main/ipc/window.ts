@@ -3,6 +3,7 @@ import { existsSync } from 'fs'
 import { PluginWindowManager } from '../plugin/window'
 import { ThemeManager } from '../services/theme'
 import { PluginManager } from '../plugin/manager'
+import { AppSettingsManager } from '../services/app-settings'
 import { InputPayload, Plugin, PluginFeature } from '../../shared/types/plugin'
 import {
   setSubInputState,
@@ -24,6 +25,7 @@ export function registerWindowHandlers(
   getMainWindow: () => BrowserWindow | null,
   pluginWindowManager: PluginWindowManager,
   themeManager: ThemeManager,
+  appSettingsManager: AppSettingsManager,
   pluginManager?: PluginManager
 ) {
   // =========================================
@@ -328,17 +330,32 @@ export function registerWindowHandlers(
   })
 
   // 设置展开高度（仅调整高度，宽度保持不变）
-  ipcMain.on('window:setExpendHeight', (event, height: number) => {
+  ipcMain.on('window:setExpendHeight', (event, height: number, allowResize?: boolean) => {
     const win = BrowserWindow.fromWebContents(event.sender)
     if (win) {
-      const [width] = win.getSize()
       const mainWin = getMainWindow()
       if (win === mainWin) {
-        // 更新最小/最大高度限制，锁定高度但允许宽度调整
-        win.setMinimumSize(400, height)
-        win.setMaximumSize(9999, height)
+        if (allowResize) {
+          // 允许自由调整大小（用于系统页面）
+          // 使用保存的尺寸，如果没有则使用默认值
+          const settings = appSettingsManager.getSettings()
+          const savedWidth = settings.window?.width || 800
+          const savedHeight = settings.window?.height || height
+
+          win.setMinimumSize(800, 500)
+          win.setMaximumSize(9999, 9999)
+          win.setSize(savedWidth, savedHeight)
+        } else {
+          // 更新最小/最大高度限制，锁定高度但允许宽度调整
+          const [width] = win.getSize()
+          win.setMinimumSize(400, height)
+          win.setMaximumSize(9999, height)
+          win.setSize(width, height)
+        }
+      } else {
+        const [width] = win.getSize()
+        win.setSize(width, height)
       }
-      win.setSize(width, height)
     }
   })
 
@@ -430,15 +447,21 @@ export function registerWindowHandlers(
     }
   })
 
-  ipcMain.on('window:setSize', (event, width: number, height: number) => {
+  ipcMain.on('window:setSize', (event, width: number, height: number, allowResize?: boolean) => {
     // 使用发送者窗口而非主窗口，以支持面板和独立窗口模式
     const win = BrowserWindow.fromWebContents(event.sender)
     if (win) {
       const mainWin = getMainWindow()
       if (win === mainWin) {
-        // 更新最小/最大高度限制，锁定高度但允许宽度调整
-        win.setMinimumSize(400, height)
-        win.setMaximumSize(9999, height)
+        if (allowResize) {
+          // 允许自由调整大小（用于系统页面）
+          win.setMinimumSize(800, 500)
+          win.setMaximumSize(9999, 9999)
+        } else {
+          // 更新最小/最大高度限制，锁定高度但允许宽度调整
+          win.setMinimumSize(400, height)
+          win.setMaximumSize(9999, height)
+        }
       }
       // 直接调整大小，无需切换 resizable 状态
       // setSize 在 macOS 上对无边框窗口也有效
