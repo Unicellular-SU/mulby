@@ -181,6 +181,7 @@ export class PluginWindowManager {
   // 关闭附着的插件
   closeAttached(): void {
     if (this.attachedPlugin || this.panelWindow?.isOpen()) {
+      const pluginId = this.attachedPlugin?.plugin.id
       this.attachedPlugin = null
 
       // 关闭 Panel 窗口
@@ -199,6 +200,13 @@ export class PluginWindowManager {
 
       // 关闭插件后聚焦主窗口，使搜索框获得焦点
       this.mainWindow?.focus()
+
+      // 触发窗口关闭回调（用于处理后台运行或销毁 Host）
+      if (pluginId && this.onWindowClosedCallback) {
+        this.onWindowClosedCallback(pluginId).catch(err => {
+          console.error('[PluginWindowManager] Error in window closed callback:', err)
+        })
+      }
     }
   }
 

@@ -70,7 +70,7 @@ export default function BackgroundPluginManagerView({ onBack }: BackgroundPlugin
 
     const interval = setInterval(() => {
       void refreshPlugins()
-    }, 3000) // 每 3 秒刷新一次
+    }, 1000) // 每 1 秒刷新一次
 
     return () => clearInterval(interval)
   }, [autoRefresh])
@@ -146,8 +146,8 @@ export default function BackgroundPluginManagerView({ onBack }: BackgroundPlugin
             <div className={`h-1.5 w-1.5 rounded-full transition-colors ${autoRefresh ? 'bg-emerald-500' : 'bg-slate-400'}`} />
             自动刷新
           </button>
-          <button className={actionButtonClass} onClick={refreshPlugins} disabled={loading}>
-            {loading ? '刷新中...' : '刷新'}
+          <button className={actionButtonClass} onClick={refreshPlugins}>
+            刷新
           </button>
           {plugins.length > 0 && (
             <button className={dangerButtonClass} onClick={handleStopAll}>

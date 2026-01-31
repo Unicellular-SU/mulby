@@ -582,7 +582,7 @@ export class PluginManager {
 
   /**
    * 处理窗口关闭事件
-   * 如果插件支持后台运行，则启动后台运行
+   * 如果插件支持后台运行，则启动后台运行；否则销毁 Host 进程
    */
   private async handleWindowClosed(pluginId: string): Promise<void> {
     const plugin = this.plugins.get(pluginId)
@@ -590,28 +590,37 @@ export class PluginManager {
 
     // 检查插件是否支持后台运行
     const supportsBackground = plugin.manifest.pluginSetting?.background === true
-    if (!supportsBackground) {
-      return
-    }
 
-    // 检查是否已经在后台运行
-    if (this.backgroundManager.isRunning(pluginId)) {
-      return
-    }
+    if (supportsBackground) {
+      // 检查是否已经在后台运行
+      if (this.backgroundManager.isRunning(pluginId)) {
+        return
+      }
 
-    // 调用 onBackground 钩子
-    try {
-      await this.callPluginHook(plugin, 'onBackground')
-    } catch (err) {
-      console.error(`[PluginManager] Failed to call onBackground for ${pluginId}:`, err)
-    }
+      // 调用 onBackground 钩子
+      try {
+        await this.callPluginHook(plugin, 'onBackground')
+      } catch (err) {
+        console.error(`[PluginManager] Failed to call onBackground for ${pluginId}:`, err)
+      }
 
-    // 启动后台运行（不再调用 onBackground，因为已经调用过了）
-    const success = await this.backgroundManager.start(plugin, false)
-    if (success) {
-      console.log(`[PluginManager] Plugin ${pluginId} started in background after window closed`)
+      // 启动后台运行（不再调用 onBackground，因为已经调用过了）
+      const success = await this.backgroundManager.start(plugin, false)
+      if (success) {
+        console.log(`[PluginManager] Plugin ${pluginId} started in background after window closed`)
+      } else {
+        console.warn(`[PluginManager] Failed to start plugin ${pluginId} in background`)
+        // 如果启动后台失败，销毁 Host 进程
+        if (this.useUtilityProcess && this.hostManager.isHostReady(pluginId)) {
+          await this.hostManager.destroyHost(pluginId)
+        }
+      }
     } else {
-      console.warn(`[PluginManager] Failed to start plugin ${pluginId} in background`)
+      // 不支持后台运行，销毁 Host 进程
+      if (this.useUtilityProcess && this.hostManager.isHostReady(pluginId)) {
+        console.log(`[PluginManager] Plugin ${pluginId} does not support background, destroying host`)
+        await this.hostManager.destroyHost(pluginId)
+      }
     }
   }
 

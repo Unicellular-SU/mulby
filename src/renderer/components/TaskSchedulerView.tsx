@@ -124,7 +124,7 @@ export default function TaskSchedulerView({ onBack }: TaskSchedulerViewProps) {
 
     const interval = setInterval(() => {
       void refreshTasks()
-    }, 3000)
+    }, 1000) // 每 1 秒刷新一次
 
     return () => clearInterval(interval)
   }, [autoRefresh, currentPage, filter])
@@ -272,8 +272,8 @@ export default function TaskSchedulerView({ onBack }: TaskSchedulerViewProps) {
             <div className={`h-1.5 w-1.5 rounded-full transition-colors ${autoRefresh ? 'bg-emerald-500' : 'bg-slate-400'}`} />
             自动刷新
           </button>
-          <button className={actionButtonClass} onClick={refreshTasks} disabled={loading}>
-            {loading ? '刷新中...' : '刷新'}
+          <button className={actionButtonClass} onClick={refreshTasks}>
+            刷新
           </button>
         </div>
 
