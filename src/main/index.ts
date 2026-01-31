@@ -19,6 +19,11 @@ if (isDev) {
   process.env['ELECTRON_DISABLE_SECURITY_WARNINGS'] = 'true'
 }
 
+// 强制启用硬件加速（提升性能）
+app.commandLine.appendSwitch('enable-gpu-rasterization')
+app.commandLine.appendSwitch('enable-zero-copy')
+app.commandLine.appendSwitch('disable-software-rasterizer')
+
 // 启动崩溃报告器（生成本地 crash dump，用于分析 Native 层崩溃）
 // 必须在 app 模块加载后尽早调用
 crashReporter.start({

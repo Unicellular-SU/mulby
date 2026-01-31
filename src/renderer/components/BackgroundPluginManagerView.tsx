@@ -44,8 +44,8 @@ export default function BackgroundPluginManagerView({ onBack }: BackgroundPlugin
   const [loading, setLoading] = useState(false)
   const [autoRefresh, setAutoRefresh] = useState(true)
 
-  const cardClass = 'rounded-[24px] border border-slate-200/80 bg-white/80 p-6 backdrop-blur dark:border-slate-800/80 dark:bg-slate-900/70'
-  const cardClassTight = 'rounded-[24px] border border-slate-200/80 bg-white/80 p-5 backdrop-blur dark:border-slate-800/80 dark:bg-slate-900/70'
+  const cardClass = 'rounded-[24px] border border-slate-200/80 bg-white/80 p-6  dark:border-slate-800/80 dark:bg-slate-900/70'
+  const cardClassTight = 'rounded-[24px] border border-slate-200/80 bg-white/80 p-5  dark:border-slate-800/80 dark:bg-slate-900/70'
   const actionButtonClass = 'rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-700 transition hover:border-slate-300 hover:text-slate-900 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-200 disabled:opacity-50 disabled:cursor-not-allowed'
   const dangerButtonClass = 'rounded-full border border-red-200 bg-red-50 px-3 py-1.5 text-xs text-red-700 transition hover:border-red-300 hover:bg-red-100 dark:border-red-900/50 dark:bg-red-950/50 dark:text-red-400 dark:hover:bg-red-900/30'
 
@@ -125,7 +125,7 @@ export default function BackgroundPluginManagerView({ onBack }: BackgroundPlugin
 
       <div className="relative flex h-full min-h-0 flex-col">
         {/* 头部 */}
-        <div className="flex items-center gap-3 border-b border-slate-200/70 bg-white/70 px-6 py-4 backdrop-blur dark:border-slate-800/80 dark:bg-slate-900/60">
+        <div className="flex items-center gap-3 border-b border-slate-200/70 bg-white/70 px-6 py-4  dark:border-slate-800/80 dark:bg-slate-900/60">
           <button
             onClick={onBack}
             className="flex h-10 w-10 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-600 transition hover:border-slate-300 hover:text-slate-900 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:text-white no-drag"

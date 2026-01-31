@@ -188,7 +188,7 @@ function ShortcutInput({
   const displayValue = recording ? (preview || '按下快捷键') : (value || '未设置')
 
   return (
-    <div className="rounded-2xl border border-slate-200/80 bg-white/80 p-4 backdrop-blur dark:border-slate-800/80 dark:bg-slate-900/70 sm:p-5">
+    <div className="rounded-2xl border border-slate-200/80 bg-white p-4 dark:border-slate-800/80 dark:bg-slate-900 sm:p-5">
       <div className="space-y-3">
         <div className="text-sm font-semibold text-slate-900 dark:text-white">{label}</div>
         <div className="text-xs text-slate-500 dark:text-slate-400">{description}</div>
@@ -333,8 +333,8 @@ export default function SettingsView({ section, onSectionChange, onClose, onOpen
     () => SECTION_ITEMS.find(item => item.id === section)?.label ?? '',
     [section]
   )
-  const cardClass = 'rounded-[24px] border border-slate-200/80 bg-white/80 p-6 backdrop-blur dark:border-slate-800/80 dark:bg-slate-900/70'
-  const cardClassTight = 'rounded-[24px] border border-slate-200/80 bg-white/80 p-5 backdrop-blur dark:border-slate-800/80 dark:bg-slate-900/70'
+  const cardClass = 'rounded-[24px] border border-slate-200/80 bg-white p-6 dark:border-slate-800/80 dark:bg-slate-900'
+  const cardClassTight = 'rounded-[24px] border border-slate-200/80 bg-white p-5 dark:border-slate-800/80 dark:bg-slate-900'
   const pillClass = 'rounded-full border border-slate-200 bg-white px-3 py-1 text-xs text-slate-600 shadow-sm transition hover:border-slate-300 hover:text-slate-900 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-300 dark:hover:text-white'
   const primaryPillClass = 'rounded-full border border-slate-900 bg-slate-900 px-3 py-1 text-xs text-white shadow-sm transition dark:border-white dark:bg-white dark:text-slate-900'
   const actionButtonClass = 'rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-700 transition hover:border-slate-300 hover:text-slate-900 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-200'
@@ -348,7 +348,7 @@ export default function SettingsView({ section, onSectionChange, onClose, onOpen
       </div>
 
       <div className="relative flex h-full min-h-0 flex-col">
-        <div className="flex items-center gap-3 border-b border-slate-200/70 bg-white/70 px-6 py-4 backdrop-blur dark:border-slate-800/80 dark:bg-slate-900/60">
+        <div className="flex items-center gap-3 border-b border-slate-200/70 bg-white px-6 py-4 dark:border-slate-800/80 dark:bg-slate-900">
           <button
             onClick={onClose}
             className="flex h-10 w-10 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-600 transition hover:border-slate-300 hover:text-slate-900 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:text-white no-drag"
@@ -365,7 +365,7 @@ export default function SettingsView({ section, onSectionChange, onClose, onOpen
         </div>
 
         <div className="flex-1 flex min-h-0 overflow-hidden">
-          <aside className="w-56 shrink-0 border-r border-slate-200/70 bg-white/70 backdrop-blur dark:border-slate-800/80 dark:bg-slate-900/60 no-drag">
+          <aside className="w-56 shrink-0 border-r border-slate-200/70 bg-white dark:border-slate-800/80 dark:bg-slate-900 no-drag">
             <nav className="flex flex-col gap-1 p-4">
               {SECTION_ITEMS.map(item => (
                 <button

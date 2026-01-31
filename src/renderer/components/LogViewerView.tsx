@@ -130,7 +130,7 @@ export default function LogViewerView({ onClose }: LogViewerViewProps) {
 
             <div className="relative flex h-full min-h-0 flex-col">
                 {/* 头部 */}
-                <div className="flex items-center gap-3 border-b border-slate-200/70 bg-white/70 px-6 py-4 backdrop-blur dark:border-slate-800/80 dark:bg-slate-900/60">
+                <div className="flex items-center gap-3 border-b border-slate-200/70 bg-white/70 px-6 py-4  dark:border-slate-800/80 dark:bg-slate-900/60">
                     <button
                         onClick={onClose}
                         className="flex h-10 w-10 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-600 transition hover:border-slate-300 hover:text-slate-900 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:text-white no-drag"
@@ -158,7 +158,7 @@ export default function LogViewerView({ onClose }: LogViewerViewProps) {
                 </div>
 
                 {/* 过滤器 */}
-                <div className="flex flex-wrap items-center gap-4 border-b border-slate-200/70 bg-white/50 px-6 py-3 backdrop-blur dark:border-slate-800/80 dark:bg-slate-900/40">
+                <div className="flex flex-wrap items-center gap-4 border-b border-slate-200/70 bg-white/50 px-6 py-3  dark:border-slate-800/80 dark:bg-slate-900/40">
                     {/* 级别过滤 */}
                     <div className="flex items-center gap-2">
                         <span className="text-xs text-slate-500 dark:text-slate-400">级别:</span>
@@ -232,7 +232,7 @@ export default function LogViewerView({ onClose }: LogViewerViewProps) {
                         </div>
                     ) : (
                         <table className="w-full text-xs">
-                            <thead className="sticky top-0 bg-slate-100/95 dark:bg-slate-800/95 backdrop-blur border-b border-slate-200 dark:border-slate-700">
+                            <thead className="sticky top-0 bg-slate-100/95 dark:bg-slate-800/95  border-b border-slate-200 dark:border-slate-700">
                                 <tr>
                                     <th className="px-4 py-2 text-left font-medium text-slate-500 dark:text-slate-400 w-24">时间</th>
                                     <th className="px-4 py-2 text-left font-medium text-slate-500 dark:text-slate-400 w-16">级别</th>
@@ -283,7 +283,7 @@ export default function LogViewerView({ onClose }: LogViewerViewProps) {
                 </div>
 
                 {/* 状态栏 */}
-                <div className="flex items-center justify-between border-t border-slate-200/70 bg-white/50 px-6 py-2 text-xs text-slate-500 backdrop-blur dark:border-slate-800/80 dark:bg-slate-900/40 dark:text-slate-400">
+                <div className="flex items-center justify-between border-t border-slate-200/70 bg-white/50 px-6 py-2 text-xs text-slate-500  dark:border-slate-800/80 dark:bg-slate-900/40 dark:text-slate-400">
                     <span>共 {filteredLogs.length} 条日志{filterLevel !== 'all' || filterPlugin !== 'all' || searchText ? ` (已过滤)` : ''}</span>
                     {logsDir && (
                         <span className="truncate max-w-[400px]" title={logsDir}>

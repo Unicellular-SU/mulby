@@ -144,7 +144,7 @@ function PluginDetailsPanel({ pluginName, onClose, onUninstall }: { pluginName: 
   return (
     <div className="flex h-full flex-col bg-white/50 dark:bg-slate-900/30">
       {/* 头部 */}
-      <div className="flex items-center gap-3 border-b border-slate-200/70 bg-white/70 px-6 py-4 backdrop-blur dark:border-slate-800/80 dark:bg-slate-900/60">
+      <div className="flex items-center gap-3 border-b border-slate-200/70 bg-white px-6 py-4 dark:border-slate-800/80 dark:bg-slate-900">
         <button
           onClick={onClose}
           className="flex h-8 w-8 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-600 transition hover:border-slate-300 hover:text-slate-900 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:text-white"
@@ -180,7 +180,7 @@ function PluginDetailsPanel({ pluginName, onClose, onUninstall }: { pluginName: 
       <div className="flex-1 overflow-y-auto">
         <div className="px-6 pb-8 pt-6">
           {/* 基本信息卡片 */}
-          <div className="rounded-2xl border border-slate-200/80 bg-white/80 p-5 backdrop-blur dark:border-slate-800/80 dark:bg-slate-900/70">
+          <div className="rounded-2xl border border-slate-200/80 bg-white p-5 dark:border-slate-800/80 dark:bg-slate-900">
             <div className="flex items-start gap-4">
               <PluginIcon icon={plugin.icon} name={plugin.displayName} size="lg" />
               <div className="flex-1 space-y-2">
@@ -239,7 +239,7 @@ function PluginDetailsPanel({ pluginName, onClose, onUninstall }: { pluginName: 
             <h4 className="mb-3 text-sm font-semibold text-slate-900 dark:text-white">功能与命令</h4>
             <div className="space-y-3">
               {plugin.features.map((feature) => (
-                <div key={feature.code} className="rounded-xl border border-slate-200/80 bg-white/80 p-4 backdrop-blur dark:border-slate-800/80 dark:bg-slate-900/70">
+                <div key={feature.code} className="rounded-xl border border-slate-200/80 bg-white p-4 dark:border-slate-800/80 dark:bg-slate-900">
                   <div className="flex items-start justify-between gap-3">
                     <div>
                       <div className="flex items-center gap-2">
@@ -301,7 +301,7 @@ function PluginDetailsPanel({ pluginName, onClose, onUninstall }: { pluginName: 
           {hasReadme && (
             <div className="mt-6">
               <h4 className="mb-3 text-sm font-semibold text-slate-900 dark:text-white">README 文档</h4>
-              <div className="rounded-2xl border border-slate-200/80 bg-white/80 p-5 backdrop-blur dark:border-slate-800/80 dark:bg-slate-900/70">
+              <div className="rounded-2xl border border-slate-200/80 bg-white p-5 dark:border-slate-800/80 dark:bg-slate-900">
                 <article className="prose prose-sm prose-slate max-w-none dark:prose-invert">
                   <ReactMarkdown remarkPlugins={[remarkGfm]}>
                     {readme || ''}
@@ -446,7 +446,7 @@ export default function PluginManagerView({ onBack }: PluginManagerViewProps) {
       </div>
 
       <div className="relative flex h-full min-h-0 flex-col">
-        <div className="flex items-center gap-3 border-b border-slate-200/70 bg-white/70 px-6 py-4 backdrop-blur dark:border-slate-800/80 dark:bg-slate-900/60">
+        <div className="flex items-center gap-3 border-b border-slate-200/70 bg-white px-6 py-4 dark:border-slate-800/80 dark:bg-slate-900">
           <button
             onClick={onBack}
             className="flex h-10 w-10 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-600 transition hover:border-slate-300 hover:text-slate-900 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:text-white no-drag"
@@ -471,7 +471,7 @@ export default function PluginManagerView({ onBack }: PluginManagerViewProps) {
 
         <div className="flex-1 min-h-0 flex no-drag">
           {/* 左侧插件列表 */}
-          <div className="w-80 border-r border-slate-200/70 bg-white/50 backdrop-blur dark:border-slate-800/80 dark:bg-slate-900/30 flex flex-col">
+          <div className="w-80 border-r border-slate-200/70 bg-white dark:border-slate-800/80 dark:bg-slate-900 flex flex-col">
             {/* 搜索和筛选 */}
             <div className="p-4 space-y-3 border-b border-slate-200/70 dark:border-slate-800/80">
               <div className="flex items-center justify-between">

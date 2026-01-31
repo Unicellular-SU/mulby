@@ -146,7 +146,7 @@ export default function PluginDetails({ pluginName, onBack }: PluginDetailsProps
             </div>
 
             <div className="relative flex h-full min-h-0 flex-col">
-                <div className="flex items-center gap-3 border-b border-slate-200/70 bg-white/70 px-6 py-4 backdrop-blur dark:border-slate-800/80 dark:bg-slate-900/60">
+                <div className="flex items-center gap-3 border-b border-slate-200/70 bg-white/70 px-6 py-4  dark:border-slate-800/80 dark:bg-slate-900/60">
                     <button
                         onClick={onBack}
                         className="flex h-10 w-10 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-600 transition hover:border-slate-300 hover:text-slate-900 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:text-white no-drag"
@@ -187,7 +187,7 @@ export default function PluginDetails({ pluginName, onBack }: PluginDetailsProps
                 <div className="flex-1 min-h-0 overflow-auto">
                     <div className="mx-auto max-w-6xl px-6 pb-16 pt-8 no-drag">
                         <section className="grid gap-6 lg:grid-cols-[1.2fr_0.8fr]">
-                            <div className="rounded-[28px] border border-slate-200/80 bg-white/80 p-6 shadow-[0_30px_80px_-60px_rgba(15,23,42,0.4)] backdrop-blur dark:border-slate-800/80 dark:bg-slate-900/70">
+                            <div className="rounded-[28px] border border-slate-200/80 bg-white/80 p-6 shadow-[0_30px_80px_-60px_rgba(15,23,42,0.4)]  dark:border-slate-800/80 dark:bg-slate-900/70">
                                 <div className="flex flex-wrap items-start gap-4">
                                     <PluginIcon icon={plugin.icon} name={plugin.displayName} />
                                     <div className="flex-1 space-y-2">
@@ -244,7 +244,7 @@ export default function PluginDetails({ pluginName, onBack }: PluginDetailsProps
                             </div>
 
                             <div className="space-y-6">
-                                <div className="rounded-[24px] border border-slate-200/80 bg-white/80 p-5 backdrop-blur dark:border-slate-800/80 dark:bg-slate-900/70">
+                                <div className="rounded-[24px] border border-slate-200/80 bg-white/80 p-5  dark:border-slate-800/80 dark:bg-slate-900/70">
                                     <h3 className="text-sm font-semibold text-slate-900 dark:text-white">运行信息</h3>
                                     <div className="mt-4 grid gap-4">
                                         <InfoItem label="状态" value={plugin.enabled ? '启用中' : '已禁用'} />
@@ -262,7 +262,7 @@ export default function PluginDetails({ pluginName, onBack }: PluginDetailsProps
                             </div>
                             <div className="grid gap-4">
                                 {plugin.features.map((feature) => (
-                                    <div key={feature.code} className="rounded-2xl border border-slate-200/80 bg-white/80 p-5 backdrop-blur dark:border-slate-800/80 dark:bg-slate-900/70">
+                                    <div key={feature.code} className="rounded-2xl border border-slate-200/80 bg-white/80 p-5  dark:border-slate-800/80 dark:bg-slate-900/70">
                                         <div className="flex flex-wrap items-start justify-between gap-3">
                                             <div>
                                                 <div className="flex items-center gap-2">
@@ -339,7 +339,7 @@ export default function PluginDetails({ pluginName, onBack }: PluginDetailsProps
                                 <h3 className="text-lg font-semibold text-slate-900 dark:text-white">README 文档</h3>
                                 <span className="text-xs text-slate-500 dark:text-slate-400">{hasReadme ? 'Markdown' : '无文档'}</span>
                             </div>
-                            <div className="mt-4 rounded-[28px] border border-slate-200/80 bg-white/80 p-6 shadow-[0_30px_80px_-60px_rgba(15,23,42,0.4)] backdrop-blur dark:border-slate-800/80 dark:bg-slate-900/70">
+                            <div className="mt-4 rounded-[28px] border border-slate-200/80 bg-white/80 p-6 shadow-[0_30px_80px_-60px_rgba(15,23,42,0.4)]  dark:border-slate-800/80 dark:bg-slate-900/70">
                                 {hasReadme ? (
                                     <article className="prose prose-slate max-w-none dark:prose-invert">
                                         <ReactMarkdown remarkPlugins={[remarkGfm]}>
