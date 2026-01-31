@@ -1,5 +1,5 @@
-import { useState, useEffect, useMemo, useCallback, useDeferredValue } from 'react'
-import SearchInput from './components/SearchInput'
+import { useState, useEffect, useMemo, useCallback, useDeferredValue, useRef } from 'react'
+import SearchInput, { SearchInputRef } from './components/SearchInput'
 import PluginList from './components/PluginList'
 import PluginDetails from './components/PluginDetails'
 import PluginManagerView from './components/PluginManagerView'
@@ -36,6 +36,9 @@ function App() {
   const [attachmentsManagerOpen, setAttachmentsManagerOpen] = useState(false)
   const payload = useMemo(() => buildPayload(query, attachments), [query, attachments])
   const deferredPayload = useDeferredValue(payload)
+
+  // 搜索框 ref
+  const searchInputRef = useRef<SearchInputRef>(null)
 
   const managerMetrics = useMemo(() => {
     const MANAGER_HEADER_HEIGHT = 34
@@ -104,6 +107,10 @@ function App() {
 
     const cleanupDetached = window.intools.onPluginDetached(() => {
       setPluginOpen(false)
+      // 插件关闭后，让搜索框重新获取焦点
+      setTimeout(() => {
+        searchInputRef.current?.focus()
+      }, 100)
     })
 
     return () => {
@@ -373,6 +380,7 @@ function App() {
     >
       <div className="search-box-container">
         <SearchInput
+          ref={searchInputRef}
           value={query}
           onChange={handleQueryChange}
           attachments={attachments}
@@ -405,6 +413,10 @@ function App() {
               onClick={() => {
                 window.intools.window.close()
                 setPluginOpen(false)
+                // 关闭插件后，让搜索框重新获取焦点
+                setTimeout(() => {
+                  searchInputRef.current?.focus()
+                }, 100)
               }}
               title="关闭插件"
             >

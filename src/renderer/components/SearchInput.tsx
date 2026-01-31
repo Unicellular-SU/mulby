@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect, useRef, useCallback, forwardRef, useImperativeHandle } from 'react'
 import type { InputAttachment } from '../../shared/types/plugin'
 
 interface SearchInputProps {
@@ -9,6 +9,13 @@ interface SearchInputProps {
   attachmentsManagerOpen: boolean
   onAttachmentsManagerOpen: () => void
   onAttachmentsManagerClose: () => void
+}
+
+// 暴露给父组件的方法
+export interface SearchInputRef {
+  focus: () => void
+  blur: () => void
+  select: () => void
 }
 
 // intoolsMain 类型声明
@@ -37,7 +44,7 @@ interface UiAttachment extends InputAttachment {
   previewUrl?: string
 }
 
-function SearchInput({
+const SearchInput = forwardRef<SearchInputRef, SearchInputProps>(function SearchInput({
   value,
   onChange,
   attachments,
@@ -45,10 +52,23 @@ function SearchInput({
   attachmentsManagerOpen,
   onAttachmentsManagerOpen,
   onAttachmentsManagerClose
-}: SearchInputProps) {
+}, ref) {
   const inputRef = useRef<HTMLTextAreaElement>(null)
   const [subInput, setSubInput] = useState<SubInputState>({ enabled: false, placeholder: '' })
   const [subInputValue, setSubInputValue] = useState('')
+
+  // 暴露方法给父组件
+  useImperativeHandle(ref, () => ({
+    focus: () => {
+      inputRef.current?.focus()
+    },
+    blur: () => {
+      inputRef.current?.blur()
+    },
+    select: () => {
+      inputRef.current?.select()
+    }
+  }), [])
 
   // 监听 SubInput 事件
   useEffect(() => {
@@ -232,7 +252,7 @@ function SearchInput({
       )}
     </div>
   )
-}
+})
 
 async function buildAttachments(files: File[], existing: UiAttachment[]): Promise<UiAttachment[]> {
   const next = [...existing]
