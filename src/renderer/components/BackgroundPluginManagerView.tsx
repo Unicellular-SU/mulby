@@ -140,17 +140,17 @@ export default function BackgroundPluginManagerView({ onBack }: BackgroundPlugin
             <div className="text-lg font-semibold text-slate-900 dark:text-white">运行中的插件</div>
           </div>
           <button
-            className={`${actionButtonClass} flex items-center gap-1.5`}
+            className={`${actionButtonClass} flex items-center gap-1.5 no-drag`}
             onClick={() => setAutoRefresh(!autoRefresh)}
           >
             <div className={`h-1.5 w-1.5 rounded-full transition-colors ${autoRefresh ? 'bg-emerald-500' : 'bg-slate-400'}`} />
             自动刷新
           </button>
-          <button className={actionButtonClass} onClick={refreshPlugins}>
+          <button className={`${actionButtonClass} no-drag`} onClick={refreshPlugins}>
             刷新
           </button>
           {plugins.length > 0 && (
-            <button className={dangerButtonClass} onClick={handleStopAll}>
+            <button className={`${dangerButtonClass} no-drag`} onClick={handleStopAll}>
               停止全部
             </button>
           )}

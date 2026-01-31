@@ -253,26 +253,26 @@ export default function TaskSchedulerView({ onBack }: TaskSchedulerViewProps) {
           </div>
           {selectedTaskIds.size > 0 && (
             <button
-              className={dangerButtonClass}
+              className={`${dangerButtonClass} no-drag`}
               onClick={handleBatchDelete}
             >
               删除选中 ({selectedTaskIds.size})
             </button>
           )}
           <button
-            className={dangerButtonClass}
+            className={`${dangerButtonClass} no-drag`}
             onClick={handleCleanup}
           >
             清除记录
           </button>
           <button
-            className={`${actionButtonClass} flex items-center gap-1.5`}
+            className={`${actionButtonClass} flex items-center gap-1.5 no-drag`}
             onClick={() => setAutoRefresh(!autoRefresh)}
           >
             <div className={`h-1.5 w-1.5 rounded-full transition-colors ${autoRefresh ? 'bg-emerald-500' : 'bg-slate-400'}`} />
             自动刷新
           </button>
-          <button className={actionButtonClass} onClick={refreshTasks}>
+          <button className={`${actionButtonClass} no-drag`} onClick={refreshTasks}>
             刷新
           </button>
         </div>
