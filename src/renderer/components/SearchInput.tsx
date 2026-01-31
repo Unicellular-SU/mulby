@@ -214,8 +214,31 @@ const SearchInput = forwardRef<SearchInputRef, SearchInputProps>(function Search
               return
             }
 
-            if (!isSummaryMode || subInput.enabled) return
-            if (e.key === 'Backspace' || e.key === 'Delete') {
+            // 处理 Backspace 删除附件
+            if (e.key === 'Backspace') {
+              // 如果是摘要模式，清空文本
+              if (isSummaryMode && !subInput.enabled) {
+                e.preventDefault()
+                onChange('')
+                return
+              }
+
+              // 如果文本为空且有附件，删除最后一个附件
+              const currentValue = subInput.enabled ? subInputValue : value
+              if (currentValue === '' && attachments.length > 0) {
+                e.preventDefault()
+                const lastAttachment = attachments[attachments.length - 1]
+                // 释放 blob URL
+                if (lastAttachment.previewUrl?.startsWith('blob:')) {
+                  URL.revokeObjectURL(lastAttachment.previewUrl)
+                }
+                // 删除最后一个附件
+                onAttachmentsChange(attachments.slice(0, -1))
+              }
+            }
+
+            // 处理 Delete 键（摘要模式）
+            if (e.key === 'Delete' && isSummaryMode && !subInput.enabled) {
               e.preventDefault()
               onChange('')
             }
