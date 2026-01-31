@@ -16,12 +16,12 @@ declare global {
   interface Window {
     intoolsMain?: {
       subInput: {
-        onEnabled: (callback: (data: { placeholder: string; isFocus: boolean }) => void) => void
-        onDisabled: (callback: () => void) => void
-        onSetValue: (callback: (text: string) => void) => void
-        onFocus: (callback: () => void) => void
-        onBlur: (callback: () => void) => void
-        onSelect: (callback: () => void) => void
+        onEnabled: (callback: (data: { placeholder: string; isFocus: boolean }) => void) => () => void
+        onDisabled: (callback: () => void) => () => void
+        onSetValue: (callback: (text: string) => void) => () => void
+        onFocus: (callback: () => void) => () => void
+        onBlur: (callback: () => void) => () => void
+        onSelect: (callback: () => void) => () => void
         sendChange: (text: string) => void
       }
     }
@@ -55,7 +55,7 @@ function SearchInput({
     const api = window.intoolsMain?.subInput
     if (!api) return
 
-    api.onEnabled((data) => {
+    const cleanupEnabled = api.onEnabled((data) => {
       setSubInput({ enabled: true, placeholder: data.placeholder })
       setSubInputValue('')
       if (data.isFocus && inputRef.current) {
@@ -63,26 +63,35 @@ function SearchInput({
       }
     })
 
-    api.onDisabled(() => {
+    const cleanupDisabled = api.onDisabled(() => {
       setSubInput({ enabled: false, placeholder: '' })
       setSubInputValue('')
     })
 
-    api.onSetValue((text) => {
+    const cleanupSetValue = api.onSetValue((text) => {
       setSubInputValue(text)
     })
 
-    api.onFocus(() => {
+    const cleanupFocus = api.onFocus(() => {
       inputRef.current?.focus()
     })
 
-    api.onBlur(() => {
+    const cleanupBlur = api.onBlur(() => {
       inputRef.current?.blur()
     })
 
-    api.onSelect(() => {
+    const cleanupSelect = api.onSelect(() => {
       inputRef.current?.select()
     })
+
+    return () => {
+      cleanupEnabled()
+      cleanupDisabled()
+      cleanupSetValue()
+      cleanupFocus()
+      cleanupBlur()
+      cleanupSelect()
+    }
   }, [])
 
   // 处理输入变化

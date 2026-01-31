@@ -225,11 +225,11 @@ export interface ElectronAPI {
     set: (mode: ThemeMode) => Promise<ThemeInfo>
     getActual: () => Promise<'light' | 'dark'>
   }
-  onThemeChange: (callback: (theme: 'light' | 'dark') => void) => void
+  onThemeChange: (callback: (theme: 'light' | 'dark') => void) => () => void
   app: {
-    onOpenSettings: (callback: () => void) => void
-    onOpenPluginStore: (callback: () => void) => void
-    onOpenPluginManager: (callback: () => void) => void
+    onOpenSettings: (callback: () => void) => () => void
+    onOpenPluginStore: (callback: () => void) => () => void
+    onOpenPluginManager: (callback: () => void) => () => void
   }
   clipboard: {
     readText: () => Promise<string>
@@ -301,9 +301,9 @@ export interface ElectronAPI {
     getNextCronTime: (expression: string, after?: Date) => Promise<Date>
     describeCron: (expression: string) => Promise<string>
   }
-  onPluginInit: (callback: (data: { pluginName: string; featureCode: string; input: string; attachments?: InputAttachment[]; mode?: string }) => void) => void
-  onPluginAttach: (callback: (data: { pluginName: string; displayName: string; featureCode: string; input: string; attachments?: InputAttachment[]; mode: 'panel' }) => void) => void
-  onPluginDetached: (callback: () => void) => void
+  onPluginInit: (callback: (data: { pluginName: string; featureCode: string; input: string; attachments?: InputAttachment[]; mode?: string }) => void) => () => void
+  onPluginAttach: (callback: (data: { pluginName: string; displayName: string; featureCode: string; input: string; attachments?: InputAttachment[]; mode: 'panel' }) => void) => () => void
+  onPluginDetached: (callback: () => void) => () => void
   screen: {
     getAllDisplays: () => Promise<DisplayInfo[]>
     getPrimaryDisplay: () => Promise<DisplayInfo>
@@ -360,7 +360,7 @@ export interface ElectronAPI {
     unregister: (accelerator: string) => Promise<void>
     unregisterAll: () => Promise<void>
     isRegistered: (accelerator: string) => Promise<boolean>
-    onTriggered: (callback: (accelerator: string) => void) => void
+    onTriggered: (callback: (accelerator: string) => void) => () => void
   }
   security: {
     isEncryptionAvailable: () => Promise<boolean>
@@ -378,12 +378,12 @@ export interface ElectronAPI {
     getSystemIdleState: (idleThreshold: number) => Promise<'active' | 'idle' | 'locked' | 'unknown'>
     isOnBatteryPower: () => Promise<boolean>
     getCurrentThermalState: () => Promise<'unknown' | 'nominal' | 'fair' | 'serious' | 'critical'>
-    onSuspend: (callback: () => void) => void
-    onResume: (callback: () => void) => void
-    onAC: (callback: () => void) => void
-    onBattery: (callback: () => void) => void
-    onLockScreen: (callback: () => void) => void
-    onUnlockScreen: (callback: () => void) => void
+    onSuspend: (callback: () => void) => () => void
+    onResume: (callback: () => void) => () => void
+    onAC: (callback: () => void) => () => void
+    onBattery: (callback: () => void) => () => void
+    onLockScreen: (callback: () => void) => () => void
+    onUnlockScreen: (callback: () => void) => () => void
   }
   tray: {
     create: (options: { icon: string; tooltip?: string; title?: string }) => Promise<boolean>
@@ -456,7 +456,7 @@ export interface ElectronAPI {
     clear: (pluginId?: string) => Promise<{ success: boolean }>
     getLogsDir: () => Promise<string>
     subscribe: () => Promise<{ success: boolean }>
-    onLog: (callback: (entry: LogEntry) => void) => void
+    onLog: (callback: (entry: LogEntry) => void) => () => void
   }
 }
 

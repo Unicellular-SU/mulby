@@ -67,9 +67,10 @@ export default function LogViewerView({ onClose }: LogViewerViewProps) {
     // 订阅实时日志
     useEffect(() => {
         window.intools.log.subscribe()
-        window.intools.log.onLog((entry: LogEntry) => {
+        const cleanup = window.intools.log.onLog((entry: LogEntry) => {
             setLogs(prev => [...prev.slice(-499), entry])
         })
+        return cleanup
     }, [])
 
     // 自动滚动到底部

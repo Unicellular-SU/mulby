@@ -48,7 +48,9 @@ const intoolsApi = {
     sendToParent: (channel: string, ...args: unknown[]) =>
       ipcRenderer.send('window:sendToParent', channel, ...args),
     onChildMessage: (callback: (channel: string, ...args: unknown[]) => void) => {
-      ipcRenderer.on('window:childMessage', (_, channel, ...args) => callback(channel, ...args))
+      const listener = (_: any, channel: string, ...args: unknown[]) => callback(channel, ...args)
+      ipcRenderer.on('window:childMessage', listener)
+      return () => ipcRenderer.removeListener('window:childMessage', listener)
     },
     // 页面内查找
     findInPage: (text: string, options?: { forward?: boolean; findNext?: boolean; matchCase?: boolean }) =>
@@ -69,7 +71,9 @@ const intoolsApi = {
     blur: () => ipcRenderer.send('subInput:blur'),
     select: () => ipcRenderer.send('subInput:select'),
     onChange: (callback: (data: { text: string }) => void) => {
-      ipcRenderer.on('subInput:onChange', (_, data) => callback(data))
+      const listener = (_: any, data: { text: string }) => callback(data)
+      ipcRenderer.on('subInput:onChange', listener)
+      return () => ipcRenderer.removeListener('subInput:onChange', listener)
     }
   },
 
@@ -83,25 +87,35 @@ const intoolsApi = {
 
   // 主题变化事件
   onThemeChange: (callback: (theme: 'light' | 'dark') => void) => {
-    ipcRenderer.on('theme:changed', (_, theme) => callback(theme))
+    const listener = (_: any, theme: 'light' | 'dark') => callback(theme)
+    ipcRenderer.on('theme:changed', listener)
+    return () => ipcRenderer.removeListener('theme:changed', listener)
   },
 
   // App events
   app: {
     onOpenSettings: (callback: () => void) => {
-      ipcRenderer.on('app:openSettings', () => callback())
+      const listener = () => callback()
+      ipcRenderer.on('app:openSettings', listener)
+      return () => ipcRenderer.removeListener('app:openSettings', listener)
     },
     onOpenPluginStore: (callback: () => void) => {
-      ipcRenderer.on('app:openPluginStore', () => callback())
+      const listener = () => callback()
+      ipcRenderer.on('app:openPluginStore', listener)
+      return () => ipcRenderer.removeListener('app:openPluginStore', listener)
     },
     onOpenPluginManager: (callback: () => void) => {
-      ipcRenderer.on('app:openPluginManager', () => callback())
+      const listener = () => callback()
+      ipcRenderer.on('app:openPluginManager', listener)
+      return () => ipcRenderer.removeListener('app:openPluginManager', listener)
     }
   },
 
   // 窗口状态变化事件
   onWindowStateChange: (callback: (state: { isMaximized: boolean }) => void) => {
-    ipcRenderer.on('window:stateChanged', (_, state) => callback(state))
+    const listener = (_: any, state: { isMaximized: boolean }) => callback(state)
+    ipcRenderer.on('window:stateChanged', listener)
+    return () => ipcRenderer.removeListener('window:stateChanged', listener)
   },
 
   // 剪贴板
@@ -188,17 +202,23 @@ const intoolsApi = {
 
   // 插件窗口事件
   onPluginInit: (callback: (data: { pluginName: string; featureCode: string; input: string; mode?: string }) => void) => {
-    ipcRenderer.on('plugin:init', (_, data) => callback(data))
+    const listener = (_: any, data: { pluginName: string; featureCode: string; input: string; mode?: string }) => callback(data)
+    ipcRenderer.on('plugin:init', listener)
+    return () => ipcRenderer.removeListener('plugin:init', listener)
   },
 
   // 插件附着事件（主窗口使用）
   onPluginAttach: (callback: (data: { pluginName: string; displayName: string; featureCode: string; input: string; uiPath: string; preloadPath: string }) => void) => {
-    ipcRenderer.on('plugin:attach', (_, data) => callback(data))
+    const listener = (_: any, data: { pluginName: string; displayName: string; featureCode: string; input: string; uiPath: string; preloadPath: string }) => callback(data)
+    ipcRenderer.on('plugin:attach', listener)
+    return () => ipcRenderer.removeListener('plugin:attach', listener)
   },
 
   // 插件分离事件（主窗口使用）
   onPluginDetached: (callback: () => void) => {
-    ipcRenderer.on('plugin:detached', () => callback())
+    const listener = () => callback()
+    ipcRenderer.on('plugin:detached', listener)
+    return () => ipcRenderer.removeListener('plugin:detached', listener)
   },
 
   // 屏幕 API
@@ -314,7 +334,9 @@ const intoolsApi = {
     unregisterAll: () => ipcRenderer.invoke('shortcut:unregisterAll'),
     isRegistered: (accelerator: string) => ipcRenderer.invoke('shortcut:isRegistered', accelerator),
     onTriggered: (callback: (accelerator: string) => void) => {
-      ipcRenderer.on('shortcut:triggered', (_, accelerator) => callback(accelerator))
+      const listener = (_: any, accelerator: string) => callback(accelerator)
+      ipcRenderer.on('shortcut:triggered', listener)
+      return () => ipcRenderer.removeListener('shortcut:triggered', listener)
     }
   },
 
@@ -367,22 +389,34 @@ const intoolsApi = {
     isOnBatteryPower: () => ipcRenderer.invoke('power:isOnBatteryPower'),
     getCurrentThermalState: () => ipcRenderer.invoke('power:getCurrentThermalState'),
     onSuspend: (callback: () => void) => {
-      ipcRenderer.on('power:suspend', () => callback())
+      const listener = () => callback()
+      ipcRenderer.on('power:suspend', listener)
+      return () => ipcRenderer.removeListener('power:suspend', listener)
     },
     onResume: (callback: () => void) => {
-      ipcRenderer.on('power:resume', () => callback())
+      const listener = () => callback()
+      ipcRenderer.on('power:resume', listener)
+      return () => ipcRenderer.removeListener('power:resume', listener)
     },
     onAC: (callback: () => void) => {
-      ipcRenderer.on('power:on-ac', () => callback())
+      const listener = () => callback()
+      ipcRenderer.on('power:on-ac', listener)
+      return () => ipcRenderer.removeListener('power:on-ac', listener)
     },
     onBattery: (callback: () => void) => {
-      ipcRenderer.on('power:on-battery', () => callback())
+      const listener = () => callback()
+      ipcRenderer.on('power:on-battery', listener)
+      return () => ipcRenderer.removeListener('power:on-battery', listener)
     },
     onLockScreen: (callback: () => void) => {
-      ipcRenderer.on('power:lock-screen', () => callback())
+      const listener = () => callback()
+      ipcRenderer.on('power:lock-screen', listener)
+      return () => ipcRenderer.removeListener('power:lock-screen', listener)
     },
     onUnlockScreen: (callback: () => void) => {
-      ipcRenderer.on('power:unlock-screen', () => callback())
+      const listener = () => callback()
+      ipcRenderer.on('power:unlock-screen', listener)
+      return () => ipcRenderer.removeListener('power:unlock-screen', listener)
     }
   },
 
@@ -661,7 +695,9 @@ const intoolsApi = {
     subscribe: () =>
       ipcRenderer.invoke('log:subscribe'),
     onLog: (callback: (entry: { timestamp: number; level: string; pluginId: string; message: string; args?: unknown[] }) => void) => {
-      ipcRenderer.on('log:new', (_, entry) => callback(entry))
+      const listener = (_: any, entry: { timestamp: number; level: string; pluginId: string; message: string; args?: unknown[] }) => callback(entry)
+      ipcRenderer.on('log:new', listener)
+      return () => ipcRenderer.removeListener('log:new', listener)
     }
   }
 }
@@ -671,22 +707,34 @@ const intoolsMainApi = {
   // SubInput 事件监听（主窗口接收插件发来的控制指令）
   subInput: {
     onEnabled: (callback: (data: { placeholder: string; isFocus: boolean }) => void) => {
-      ipcRenderer.on('subInput:enabled', (_, data) => callback(data))
+      const listener = (_: any, data: { placeholder: string; isFocus: boolean }) => callback(data)
+      ipcRenderer.on('subInput:enabled', listener)
+      return () => ipcRenderer.removeListener('subInput:enabled', listener)
     },
     onDisabled: (callback: () => void) => {
-      ipcRenderer.on('subInput:disabled', () => callback())
+      const listener = () => callback()
+      ipcRenderer.on('subInput:disabled', listener)
+      return () => ipcRenderer.removeListener('subInput:disabled', listener)
     },
     onSetValue: (callback: (text: string) => void) => {
-      ipcRenderer.on('subInput:setValue', (_, text) => callback(text))
+      const listener = (_: any, text: string) => callback(text)
+      ipcRenderer.on('subInput:setValue', listener)
+      return () => ipcRenderer.removeListener('subInput:setValue', listener)
     },
     onFocus: (callback: () => void) => {
-      ipcRenderer.on('subInput:focus', () => callback())
+      const listener = () => callback()
+      ipcRenderer.on('subInput:focus', listener)
+      return () => ipcRenderer.removeListener('subInput:focus', listener)
     },
     onBlur: (callback: () => void) => {
-      ipcRenderer.on('subInput:blur', () => callback())
+      const listener = () => callback()
+      ipcRenderer.on('subInput:blur', listener)
+      return () => ipcRenderer.removeListener('subInput:blur', listener)
     },
     onSelect: (callback: () => void) => {
-      ipcRenderer.on('subInput:select', () => callback())
+      const listener = () => callback()
+      ipcRenderer.on('subInput:select', listener)
+      return () => ipcRenderer.removeListener('subInput:select', listener)
     },
     // 主窗口输入变化时发送给主进程（转发给插件）
     sendChange: (text: string) => {

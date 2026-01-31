@@ -13,6 +13,12 @@ import { patchConsoleWithTimestamp } from '../shared/utils/console'
 
 patchConsoleWithTimestamp()
 
+// 开发模式下禁用安全警告（Vite HMR 需要 unsafe-eval）
+const isDev = !app.isPackaged
+if (isDev) {
+  process.env['ELECTRON_DISABLE_SECURITY_WARNINGS'] = 'true'
+}
+
 // 启动崩溃报告器（生成本地 crash dump，用于分析 Native 层崩溃）
 // 必须在 app 模块加载后尽早调用
 crashReporter.start({

@@ -61,7 +61,8 @@ function App() {
   // 初始化主题
   useEffect(() => {
     window.intools.theme.getActual().then(setTheme)
-    window.intools.onThemeChange(setTheme)
+    const cleanup = window.intools.onThemeChange(setTheme)
+    return cleanup
   }, [])
 
   // 应用主题到 document
@@ -97,13 +98,18 @@ function App() {
 
   // 监听插件附着事件
   useEffect(() => {
-    window.intools.onPluginAttach((_data: PluginInfo) => {
+    const cleanupAttach = window.intools.onPluginAttach((_data: PluginInfo) => {
       setPluginOpen(true)
     })
 
-    window.intools.onPluginDetached(() => {
+    const cleanupDetached = window.intools.onPluginDetached(() => {
       setPluginOpen(false)
     })
+
+    return () => {
+      cleanupAttach()
+      cleanupDetached()
+    }
   }, [])
 
   useEffect(() => {
@@ -203,21 +209,24 @@ function App() {
   }, [openSettings])
 
   useEffect(() => {
-    window.intools.app.onOpenSettings(() => {
+    const cleanup = window.intools.app.onOpenSettings(() => {
       openSettings()
     })
+    return cleanup
   }, [openSettings])
 
   useEffect(() => {
-    window.intools.app.onOpenPluginStore(() => {
+    const cleanup = window.intools.app.onOpenPluginStore(() => {
       openSettings('store')
     })
+    return cleanup
   }, [openSettings])
 
   useEffect(() => {
-    window.intools.app.onOpenPluginManager(() => {
+    const cleanup = window.intools.app.onOpenPluginManager(() => {
       openPluginManager('home')
     })
+    return cleanup
   }, [openPluginManager])
 
   const handleQueryChange = (value: string) => {
