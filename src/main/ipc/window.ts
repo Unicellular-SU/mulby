@@ -340,7 +340,9 @@ export function registerWindowHandlers(
           // 使用保存的尺寸，如果没有则使用默认值
           const settings = appSettingsManager.getSettings()
           const savedWidth = settings.window?.width || 800
-          const savedHeight = settings.window?.height || height
+          const savedHeight = settings.window?.height && settings.window.height >= 500
+            ? settings.window.height
+            : height
 
           win.setMinimumSize(800, 500)
           win.setMaximumSize(9999, 9999)

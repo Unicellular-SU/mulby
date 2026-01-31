@@ -145,14 +145,26 @@ function createWindow() {
     saveTimer = setTimeout(() => {
       if (!mainWindow || mainWindow.isDestroyed()) return
       const bounds = mainWindow.getBounds()
-      appSettingsManager.updateSettings({
-        window: {
-          width: bounds.width,
-          height: bounds.height,
-          x: bounds.x,
-          y: bounds.y
-        }
-      })
+      // 只保存系统页面模式的高度（高度 > 100 说明是展开状态）
+      // 搜索框模式只保存宽度和位置
+      if (bounds.height > 100) {
+        appSettingsManager.updateSettings({
+          window: {
+            width: bounds.width,
+            height: bounds.height,
+            x: bounds.x,
+            y: bounds.y
+          }
+        })
+      } else {
+        appSettingsManager.updateSettings({
+          window: {
+            width: bounds.width,
+            x: bounds.x,
+            y: bounds.y
+          }
+        })
+      }
     }, 500)
   }
 
