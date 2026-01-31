@@ -9,6 +9,7 @@ import { ThemeManager } from './services/theme'
 import { isIgnoringBlur, startIgnoringBlur, stopIgnoringBlur, setWindowsProvider } from './services/blur-manager'
 import { appSettingsManager } from './services/app-settings'
 import { AppShortcutManager } from './services/app-shortcuts'
+import { ClipboardMonitor } from './services/clipboard-monitor'
 import { patchConsoleWithTimestamp } from '../shared/utils/console'
 
 patchConsoleWithTimestamp()
@@ -39,6 +40,7 @@ let mainWindow: BrowserWindow | null = null
 const pluginManager = new PluginManager()
 const pluginWindowManager = new PluginWindowManager()
 const themeManager = new ThemeManager()
+const clipboardMonitor = new ClipboardMonitor()
 
 // 单实例锁：确保只有一个应用实例运行
 const gotTheLock = app.requestSingleInstanceLock()
@@ -265,6 +267,13 @@ function showMainWindow() {
     // 恢复之前隐藏的面板
     pluginWindowManager.showPanelWindow()
 
+    // 智能剪贴板自动粘贴
+    const appSettings = appSettingsManager.getSettings()
+    if (appSettings.input.autoPasteOnShow && clipboardMonitor.isRecentlyChanged(appSettings.input.autoPasteMaxAge)) {
+      // 通知渲染进程尝试自动粘贴
+      mainWindow.webContents.send('clipboard:autoPaste')
+    }
+
     // 延迟恢复 blur 监听（确保窗口完全获得焦点）
     stopIgnoringBlur()
 
@@ -310,6 +319,9 @@ app.whenReady().then(async () => {
   if (process.platform === 'darwin' && app.dock) {
     app.dock.hide()
   }
+
+  // 启动剪贴板监听器
+  clipboardMonitor.start()
 
   const appShortcutManager = new AppShortcutManager({
     toggleWindow: () => toggleWindow(),

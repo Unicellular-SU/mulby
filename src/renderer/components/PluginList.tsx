@@ -107,7 +107,7 @@ function PluginList({ payload, onResultsChange, onShowDetails, onOpenSettings }:
   const SEARCH_DEBOUNCE_MS = 150
 
   // 使用 useMemo 计算 payload 哈希，避免每次渲染都计算
-  const payloadHash = useMemo(() => hashPayload(payload), [payload.text, payload.attachments.length])
+  const payloadHash = useMemo(() => hashPayload(payload), [payload.text, payload.attachments])
 
   // 使用 useCallback 包装 loadPlugins
   const loadPlugins = useCallback(async () => {

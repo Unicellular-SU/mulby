@@ -238,7 +238,7 @@ export interface ElectronAPI {
     writeImage: (image: string | Buffer | ArrayBuffer | Uint8Array) => Promise<boolean>
     readFiles: () => Promise<FileInfo[]>
     writeFiles: (files: string | string[]) => Promise<boolean>
-    getFormat: () => Promise<'text' | 'image' | 'html' | 'empty'>
+    getFormat: () => Promise<'text' | 'image' | 'files' | 'html' | 'empty'>
   }
   input: {
     hideMainWindowPasteText: (text: string) => Promise<boolean>
@@ -550,6 +550,20 @@ export type SharpFunction = (
 declare global {
   interface Window {
     intools: ElectronAPI
+    intoolsMain?: {
+      subInput: {
+        onEnabled: (callback: (data: { placeholder: string; isFocus: boolean }) => void) => () => void
+        onDisabled: (callback: () => void) => () => void
+        onSetValue: (callback: (text: string) => void) => () => void
+        onFocus: (callback: () => void) => () => void
+        onBlur: (callback: () => void) => () => void
+        onSelect: (callback: () => void) => () => void
+        sendChange: (text: string) => void
+      }
+      clipboard: {
+        onAutoPaste: (callback: () => void) => () => void
+      }
+    }
   }
 }
 

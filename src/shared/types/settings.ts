@@ -20,6 +20,12 @@ export interface StoreSource {
 // 日志级别类型
 export type LogLevel = 'debug' | 'info' | 'warn' | 'error'
 
+// 输入设置
+export interface InputSettings {
+  autoPasteOnShow: boolean       // 窗口唤起时自动粘贴剪贴板内容
+  autoPasteMaxAge: number         // 剪贴板内容最大有效期（毫秒），默认 5000
+}
+
 // 开发者模式设置
 export interface DeveloperSettings {
   enabled: boolean           // 是否启用开发者模式
@@ -41,6 +47,7 @@ export interface AppSettings {
   storeSources: StoreSource[]
   developer: DeveloperSettings
   window?: WindowSettings
+  input: InputSettings
 }
 
 export interface ShortcutStatus {

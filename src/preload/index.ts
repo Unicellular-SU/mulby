@@ -740,6 +740,14 @@ const intoolsMainApi = {
     sendChange: (text: string) => {
       ipcRenderer.send('subInput:change', text)
     }
+  },
+  // 剪贴板自动粘贴事件
+  clipboard: {
+    onAutoPaste: (callback: () => void) => {
+      const listener = () => callback()
+      ipcRenderer.on('clipboard:autoPaste', listener)
+      return () => ipcRenderer.removeListener('clipboard:autoPaste', listener)
+    }
   }
 }
 

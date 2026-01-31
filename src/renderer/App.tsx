@@ -236,6 +236,93 @@ function App() {
     return cleanup
   }, [openPluginManager])
 
+  const clearAttachments = useCallback(() => {
+    attachments.forEach((attachment) => {
+      if (attachment.previewUrl?.startsWith('blob:')) {
+        URL.revokeObjectURL(attachment.previewUrl)
+      }
+    })
+    setAttachments([])
+  }, [attachments])
+
+  // 监听自动粘贴事件
+  useEffect(() => {
+    if (!window.intoolsMain?.clipboard?.onAutoPaste) return
+
+    const cleanup = window.intoolsMain.clipboard.onAutoPaste(async () => {
+      // 条件1：没有打开插件
+      if (pluginOpen) {
+        return
+      }
+
+      // 执行自动粘贴
+      try {
+        const format = await window.intools.clipboard.getFormat()
+
+        if (format === 'text') {
+          // 粘贴文本
+          const text = await window.intools.clipboard.readText()
+          if (text && text.trim()) {
+            // 如果搜索框为空，直接设置；否则不覆盖用户输入
+            if (query === '') {
+              setQuery(text)
+            }
+          }
+        } else if (format === 'image') {
+          // 粘贴图片 - 总是替换附件
+          const imageBuffer = await window.intools.clipboard.readImage()
+          if (imageBuffer) {
+            // 清理旧的附件
+            clearAttachments()
+
+            const uint8Array = new Uint8Array(imageBuffer)
+            const blob = new Blob([uint8Array], { type: 'image/png' })
+            const file = new File([blob], 'clipboard.png', { type: 'image/png' })
+            const dataUrl = await readFileAsDataUrl(file)
+            const previewUrl = URL.createObjectURL(blob)
+
+            const attachment: UiAttachment = {
+              id: crypto.randomUUID?.() || `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`,
+              name: 'clipboard.png',
+              size: blob.size,
+              kind: 'image',
+              mime: 'image/png',
+              ext: '.png',
+              dataUrl,
+              previewUrl
+            }
+            setAttachments([attachment])
+            // 清空搜索框，让用户专注于附件
+            setQuery('')
+          }
+        } else if (format === 'files') {
+          // 粘贴文件 - 总是替换附件
+          const files = await window.intools.clipboard.readFiles()
+          if (files && files.length > 0) {
+            // 清理旧的附件
+            clearAttachments()
+
+            const newAttachments: UiAttachment[] = files.map(file => ({
+              id: crypto.randomUUID?.() || `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`,
+              name: file.name,
+              size: file.size,
+              kind: file.isDirectory ? 'file' : (file.type?.startsWith('image/') ? 'image' : 'file'),
+              mime: file.type,
+              path: file.path
+            }))
+            setAttachments(newAttachments)
+            // 清空搜索框，让用户专注于附件
+            setQuery('')
+          }
+        }
+      } catch (err) {
+        console.error('Auto paste failed:', err)
+      }
+    })
+
+    return cleanup
+  }, [query, pluginOpen, clearAttachments])
+
   const handleQueryChange = (value: string) => {
     // 如果有附着的插件，先关闭它
     if (pluginOpen) {
@@ -264,15 +351,6 @@ function App() {
       setDetailsPluginName(null)
       setViewMode('home')
     }
-  }
-
-  const clearAttachments = () => {
-    attachments.forEach((attachment) => {
-      if (attachment.previewUrl?.startsWith('blob:')) {
-        URL.revokeObjectURL(attachment.previewUrl)
-      }
-    })
-    setAttachments([])
   }
 
   // 拖拽安装插件
@@ -459,6 +537,17 @@ function buildPayload(text: string, attachments: UiAttachment[]): InputPayload {
     text,
     attachments: attachments.map(({ previewUrl, ...rest }) => rest)
   }
+}
+
+function readFileAsDataUrl(file: File): Promise<string | undefined> {
+  return new Promise((resolve) => {
+    const reader = new FileReader()
+    reader.onload = () => {
+      resolve(typeof reader.result === 'string' ? reader.result : undefined)
+    }
+    reader.onerror = () => resolve(undefined)
+    reader.readAsDataURL(file)
+  })
 }
 
 export default App

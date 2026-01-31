@@ -21,6 +21,10 @@ const DEFAULT_SETTINGS: AppSettings = {
   },
   window: {
     width: 800
+  },
+  input: {
+    autoPasteOnShow: true,
+    autoPasteMaxAge: 5000
   }
 }
 
@@ -46,6 +50,10 @@ function mergeSettings(current: AppSettings, next: Partial<AppSettings>): AppSet
     window: {
       ...(current.window || { width: 800 }),
       ...(next.window || {})
+    },
+    input: {
+      ...current.input,
+      ...(next.input || {})
     }
   }
 }
