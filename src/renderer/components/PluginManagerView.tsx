@@ -2,7 +2,8 @@ import { useEffect, useMemo, useState } from 'react'
 import type { ReactNode } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
-import type { PluginInfo, BackgroundPluginInfo } from '../../shared/types/electron'
+import type { PluginInfo } from '../../shared/types/electron'
+import type { BackgroundPluginInfo } from '../../shared/types/plugin'
 
 interface PluginManagerViewProps {
   onBack: () => void
@@ -346,25 +347,6 @@ export default function PluginManagerView({ onBack }: PluginManagerViewProps) {
       setRunningPlugins(list)
     } catch (err) {
       console.error('Failed to get running plugins:', err)
-    }
-  }
-
-  const handleTogglePlugin = async (plugin: PluginInfo) => {
-    if (plugin.builtin) {
-      window.intools.notification.show('内置插件不可禁用', 'error')
-      return
-    }
-    const result = plugin.enabled
-      ? await window.intools.plugin.disable(plugin.name)
-      : await window.intools.plugin.enable(plugin.name)
-    if (result.success) {
-      setPlugins((prev) =>
-        prev.map((item) =>
-          item.name === plugin.name ? { ...item, enabled: !plugin.enabled } : item
-        )
-      )
-    } else {
-      window.intools.notification.show(result.error || '操作失败', 'error')
     }
   }
 

@@ -371,21 +371,50 @@ function App() {
       onDragLeave={() => setIsDragging(false)}
       onDrop={handleDrop}
     >
-      <SearchInput
-        value={query}
-        onChange={handleQueryChange}
-        attachments={attachments}
-        onAttachmentsChange={handleAttachmentsChange}
-        attachmentsManagerOpen={attachmentsManagerOpen}
-        onAttachmentsManagerOpen={() => {
-          if (pluginOpen) {
-            window.intools.window.close()
-            setPluginOpen(false)
-          }
-          setAttachmentsManagerOpen(true)
-        }}
-        onAttachmentsManagerClose={() => setAttachmentsManagerOpen(false)}
-      />
+      <div className="search-box-container">
+        <SearchInput
+          value={query}
+          onChange={handleQueryChange}
+          attachments={attachments}
+          onAttachmentsChange={handleAttachmentsChange}
+          attachmentsManagerOpen={attachmentsManagerOpen}
+          onAttachmentsManagerOpen={() => {
+            if (pluginOpen) {
+              window.intools.window.close()
+              setPluginOpen(false)
+            }
+            setAttachmentsManagerOpen(true)
+          }}
+          onAttachmentsManagerClose={() => setAttachmentsManagerOpen(false)}
+        />
+        {pluginOpen && (
+          <div className="plugin-controls">
+            <button
+              className="plugin-control-btn plugin-detach-btn"
+              onClick={() => {
+                window.intools.window.detach()
+              }}
+              title="转为独立窗口"
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M21 9V3h-6M3 15v6h6M21 3l-7 7M3 21l7-7" />
+              </svg>
+            </button>
+            <button
+              className="plugin-control-btn plugin-close-btn"
+              onClick={() => {
+                window.intools.window.close()
+                setPluginOpen(false)
+              }}
+              title="关闭插件"
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M18 6L6 18M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+        )}
+      </div>
       {attachmentsManagerOpen && attachments.length > 0 && (
         <AttachmentManager
           attachments={attachments}

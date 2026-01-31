@@ -41,7 +41,6 @@ function HealthIndicator({ healthy }: { healthy: boolean }) {
 
 export default function BackgroundPluginManagerView({ onBack }: BackgroundPluginManagerViewProps) {
   const [plugins, setPlugins] = useState<BackgroundPluginInfo[]>([])
-  const [loading, setLoading] = useState(false)
   const [autoRefresh, setAutoRefresh] = useState(true)
 
   const cardClass = 'rounded-[24px] border border-slate-200/80 bg-white/80 p-6  dark:border-slate-800/80 dark:bg-slate-900/70'
@@ -50,14 +49,11 @@ export default function BackgroundPluginManagerView({ onBack }: BackgroundPlugin
   const dangerButtonClass = 'rounded-full border border-red-200 bg-red-50 px-3 py-1.5 text-xs text-red-700 transition hover:border-red-300 hover:bg-red-100 dark:border-red-900/50 dark:bg-red-950/50 dark:text-red-400 dark:hover:bg-red-900/30'
 
   const refreshPlugins = async () => {
-    setLoading(true)
     try {
       const list = await window.intools.plugin.listBackground()
       setPlugins(list)
     } catch (err) {
       console.error('Failed to list background plugins:', err)
-    } finally {
-      setLoading(false)
     }
   }
 

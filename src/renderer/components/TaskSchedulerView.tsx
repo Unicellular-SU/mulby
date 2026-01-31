@@ -72,7 +72,6 @@ export default function TaskSchedulerView({ onBack }: TaskSchedulerViewProps) {
   const [tasks, setTasks] = useState<Task[]>([])
   const [selectedTask, setSelectedTask] = useState<Task | null>(null)
   const [executions, setExecutions] = useState<TaskExecution[]>([])
-  const [loading, setLoading] = useState(false)
   const [autoRefresh, setAutoRefresh] = useState(true)
   const [filter, setFilter] = useState<'all' | 'pending' | 'completed' | 'failed'>('all')
   const [currentPage, setCurrentPage] = useState(1)
@@ -93,7 +92,6 @@ export default function TaskSchedulerView({ onBack }: TaskSchedulerViewProps) {
   }
 
   const refreshTasks = async () => {
-    setLoading(true)
     try {
       const statusFilter = getFilterStatus()
       const [list, count] = await Promise.all([
@@ -110,8 +108,6 @@ export default function TaskSchedulerView({ onBack }: TaskSchedulerViewProps) {
       setTotalCount(count)
     } catch (err) {
       console.error('Failed to list tasks:', err)
-    } finally {
-      setLoading(false)
     }
   }
 

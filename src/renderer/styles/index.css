@@ -243,12 +243,12 @@ body {
   border-color: rgba(59, 130, 246, 0.35);
 }
 
-.search-box {
+.search-box-container {
   display: flex;
   align-items: center;
-  height: 62px;
+  gap: 8px;
   padding: 0 18px;
-  gap: 12px;
+  height: 62px;
   -webkit-app-region: drag;
   background: var(--glass-bg-strong);
   border: 1px solid var(--glass-border);
@@ -256,6 +256,13 @@ body {
   backdrop-filter: blur(var(--glass-blur));
   -webkit-backdrop-filter: blur(var(--glass-blur));
   transition: background-color 0.2s ease-out;
+}
+
+.search-box {
+  display: flex;
+  align-items: center;
+  flex: 1;
+  gap: 12px;
 }
 
 .search-icon {
@@ -938,6 +945,53 @@ body {
 }
 
 .close-btn:active {
+  background: rgba(239, 68, 68, 0.25);
+}
+
+.plugin-controls {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  -webkit-app-region: no-drag;
+}
+
+.plugin-control-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  background: transparent;
+  color: var(--text-secondary);
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s ease-out;
+}
+
+.plugin-control-btn:hover {
+  background: var(--bg-secondary);
+}
+
+.plugin-control-btn:active {
+  transform: scale(0.95);
+}
+
+.plugin-detach-btn:hover {
+  background: rgba(59, 130, 246, 0.15);
+  color: #3b82f6;
+}
+
+.plugin-detach-btn:active {
+  background: rgba(59, 130, 246, 0.25);
+}
+
+.plugin-close-btn:hover {
+  background: rgba(239, 68, 68, 0.15);
+  color: #ef4444;
+}
+
+.plugin-close-btn:active {
   background: rgba(239, 68, 68, 0.25);
 }
 
