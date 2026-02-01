@@ -1,5 +1,6 @@
 import { BrowserWindow } from 'electron'
 import { registerClipboardHandlers } from './clipboard'
+import { registerClipboardHistoryHandlers } from './clipboard-history'
 import { registerNotificationHandlers } from './notification'
 import { registerWindowHandlers } from './window'
 import { registerPluginHandlers } from './plugin'
@@ -37,6 +38,7 @@ import { AppShortcutManager } from '../services/app-shortcuts'
 import { registerDeveloperHandlers } from './developer'
 import { registerLogIpc, setDeveloperModeGetter } from './log'
 import { registerSchedulerHandlers } from './scheduler'
+import { ClipboardHistoryManager } from '../services/clipboard-history'
 
 
 export function registerAllHandlers(
@@ -45,9 +47,11 @@ export function registerAllHandlers(
   pluginWindowManager: PluginWindowManager,
   themeManager: ThemeManager,
   appSettingsManager: AppSettingsManager,
-  appShortcutManager: AppShortcutManager
+  appShortcutManager: AppShortcutManager,
+  clipboardHistoryManager: ClipboardHistoryManager
 ) {
   registerClipboardHandlers()
+  registerClipboardHistoryHandlers(clipboardHistoryManager)
   registerNotificationHandlers()
   registerWindowHandlers(getMainWindow, pluginWindowManager, themeManager, appSettingsManager, pluginManager)
   registerPluginHandlers(pluginManager)

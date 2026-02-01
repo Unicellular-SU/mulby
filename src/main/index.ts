@@ -10,6 +10,7 @@ import { isIgnoringBlur, startIgnoringBlur, stopIgnoringBlur, setWindowsProvider
 import { appSettingsManager } from './services/app-settings'
 import { AppShortcutManager } from './services/app-shortcuts'
 import { ClipboardWatcher } from './services/clipboard-watcher-v2'
+import { ClipboardHistoryManager } from './services/clipboard-history'
 import { patchConsoleWithTimestamp } from '../shared/utils/console'
 
 patchConsoleWithTimestamp()
@@ -41,6 +42,7 @@ const pluginManager = new PluginManager()
 const pluginWindowManager = new PluginWindowManager()
 const themeManager = new ThemeManager()
 const clipboardWatcher = new ClipboardWatcher()
+const clipboardHistoryManager = new ClipboardHistoryManager()
 
 // 单实例锁：确保只有一个应用实例运行
 const gotTheLock = app.requestSingleInstanceLock()
@@ -324,6 +326,10 @@ app.whenReady().then(async () => {
   clipboardWatcher.start()
   console.log(`[ClipboardWatcher] Started - Mode: ${clipboardWatcher.isNativeMode() ? 'Native (zero overhead)' : 'Polling (fallback)'}`)
 
+  // 启动剪贴板历史记录管理器
+  clipboardHistoryManager.start()
+  console.log('[ClipboardHistory] Started')
+
   const appShortcutManager = new AppShortcutManager({
     toggleWindow: () => toggleWindow(),
     openSettings: () => {
@@ -374,7 +380,8 @@ app.whenReady().then(async () => {
     pluginWindowManager,
     themeManager,
     appSettingsManager,
-    appShortcutManager
+    appShortcutManager,
+    clipboardHistoryManager
   )
 
   createWindow()

@@ -136,6 +136,21 @@ export function buildBackendMain(name: string) {
       readImage: () => ArrayBuffer | null
       getFormat: () => string
     }
+    clipboardHistory: {
+      query: (options?: {
+        type?: 'text' | 'image' | 'files'
+        search?: string
+        favorite?: boolean
+        limit?: number
+        offset?: number
+      }) => Promise<any[]>
+      get: (id: string) => Promise<any>
+      copy: (id: string) => Promise<{ success: boolean; error?: string }>
+      toggleFavorite: (id: string) => Promise<{ success: boolean }>
+      delete: (id: string) => Promise<{ success: boolean }>
+      clear: () => Promise<{ success: boolean }>
+      stats: () => Promise<{ total: number; text: number; image: number; files: number; favorite: number }>
+    }
     notification: {
       show: (message: string, type?: string) => void
     }
@@ -635,6 +650,23 @@ export function useIntools(pluginId?: string) {
       getFormat: () => window.intools?.clipboard?.getFormat(),
     },
 
+    // Clipboard History API
+    clipboardHistory: {
+      query: (options?: {
+        type?: 'text' | 'image' | 'files'
+        search?: string
+        favorite?: boolean
+        limit?: number
+        offset?: number
+      }) => window.intools?.clipboardHistory?.query(options),
+      get: (id: string) => window.intools?.clipboardHistory?.get(id),
+      copy: (id: string) => window.intools?.clipboardHistory?.copy(id),
+      toggleFavorite: (id: string) => window.intools?.clipboardHistory?.toggleFavorite(id),
+      delete: (id: string) => window.intools?.clipboardHistory?.delete(id),
+      clear: () => window.intools?.clipboardHistory?.clear(),
+      stats: () => window.intools?.clipboardHistory?.stats(),
+    },
+
     // Input API
     input: {
       hideMainWindowPasteText: (text: string) => window.intools?.input?.hideMainWindowPasteText(text),
@@ -1084,6 +1116,42 @@ interface IntoolsClipboard {
   readFiles(): Promise<ClipboardFileInfo[]>
   writeFiles(files: string | string[]): Promise<boolean>
   getFormat(): Promise<'text' | 'image' | 'files' | 'empty'>
+}
+
+interface ClipboardHistoryItem {
+  id: string
+  type: 'text' | 'image' | 'files'
+  content: string
+  plainText?: string
+  files?: string[]
+  timestamp: number
+  size: number
+  favorite: boolean
+  tags?: string[]
+}
+
+interface ClipboardHistoryStats {
+  total: number
+  text: number
+  image: number
+  files: number
+  favorite: number
+}
+
+interface IntoolsClipboardHistory {
+  query(options?: {
+    type?: 'text' | 'image' | 'files'
+    search?: string
+    favorite?: boolean
+    limit?: number
+    offset?: number
+  }): Promise<ClipboardHistoryItem[]>
+  get(id: string): Promise<ClipboardHistoryItem | null>
+  copy(id: string): Promise<{ success: boolean; error?: string }>
+  toggleFavorite(id: string): Promise<{ success: boolean }>
+  delete(id: string): Promise<{ success: boolean }>
+  clear(): Promise<{ success: boolean }>
+  stats(): Promise<ClipboardHistoryStats>
 }
 
 interface IntoolsInput {
@@ -1566,6 +1634,7 @@ interface PluginInitData {
 
 interface IntoolsAPI {
   clipboard: IntoolsClipboard
+  clipboardHistory: IntoolsClipboardHistory
   input: IntoolsInput
   notification: IntoolsNotification
   window: IntoolsWindow
