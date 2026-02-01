@@ -25,6 +25,28 @@ export interface FileInfo {
   isDirectory: boolean
 }
 
+// 剪贴板历史条目
+export interface ClipboardHistoryItem {
+  id: string
+  type: 'text' | 'image' | 'files'
+  content: string
+  plainText?: string
+  files?: string[]
+  timestamp: number
+  size: number
+  favorite: boolean
+  tags?: string[]
+}
+
+// 剪贴板历史统计
+export interface ClipboardHistoryStats {
+  total: number
+  text: number
+  image: number
+  files: number
+  favorite: number
+}
+
 // 搜索结果项（功能入口）
 export interface SearchResultItem {
   pluginId: string
@@ -239,6 +261,21 @@ export interface ElectronAPI {
     readFiles: () => Promise<FileInfo[]>
     writeFiles: (files: string | string[]) => Promise<boolean>
     getFormat: () => Promise<'text' | 'image' | 'files' | 'html' | 'empty'>
+  }
+  clipboardHistory: {
+    query: (options?: {
+      type?: 'text' | 'image' | 'files'
+      search?: string
+      favorite?: boolean
+      limit?: number
+      offset?: number
+    }) => Promise<ClipboardHistoryItem[]>
+    get: (id: string) => Promise<ClipboardHistoryItem | null>
+    copy: (id: string) => Promise<{ success: boolean; error?: string }>
+    toggleFavorite: (id: string) => Promise<{ success: boolean }>
+    delete: (id: string) => Promise<{ success: boolean }>
+    clear: () => Promise<{ success: boolean }>
+    stats: () => Promise<ClipboardHistoryStats>
   }
   input: {
     hideMainWindowPasteText: (text: string) => Promise<boolean>

@@ -1,0 +1,5 @@
+{
+  "scripts": {
+    "postinstall": "cd native && node-gyp rebuild || echo 'Native addon build failed, will use polling mode'"
+  }
+}

@@ -260,13 +260,15 @@ function App() {
         const format = await window.intools.clipboard.getFormat()
 
         if (format === 'text') {
-          // 粘贴文本
+          // 粘贴文本 - 清空附件
           const text = await window.intools.clipboard.readText()
           if (text && text.trim()) {
-            // 如果搜索框为空，直接设置；否则不覆盖用户输入
-            if (query === '') {
-              setQuery(text)
+            // 清空旧的附件
+            if (attachments.length > 0) {
+              clearAttachments()
             }
+            // 设置文本（如果搜索框为空，或者覆盖旧文本）
+            setQuery(text)
           }
         } else if (format === 'image') {
           // 粘贴图片 - 总是替换附件

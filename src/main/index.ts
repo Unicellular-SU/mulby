@@ -9,7 +9,7 @@ import { ThemeManager } from './services/theme'
 import { isIgnoringBlur, startIgnoringBlur, stopIgnoringBlur, setWindowsProvider } from './services/blur-manager'
 import { appSettingsManager } from './services/app-settings'
 import { AppShortcutManager } from './services/app-shortcuts'
-import { ClipboardMonitor } from './services/clipboard-monitor'
+import { ClipboardWatcher } from './services/clipboard-watcher-v2'
 import { patchConsoleWithTimestamp } from '../shared/utils/console'
 
 patchConsoleWithTimestamp()
@@ -40,7 +40,7 @@ let mainWindow: BrowserWindow | null = null
 const pluginManager = new PluginManager()
 const pluginWindowManager = new PluginWindowManager()
 const themeManager = new ThemeManager()
-const clipboardMonitor = new ClipboardMonitor()
+const clipboardWatcher = new ClipboardWatcher()
 
 // 单实例锁：确保只有一个应用实例运行
 const gotTheLock = app.requestSingleInstanceLock()
@@ -269,7 +269,7 @@ function showMainWindow() {
 
     // 智能剪贴板自动粘贴
     const appSettings = appSettingsManager.getSettings()
-    if (appSettings.input.autoPasteOnShow && clipboardMonitor.isRecentlyChanged(appSettings.input.autoPasteMaxAge)) {
+    if (appSettings.input.autoPasteOnShow && clipboardWatcher.isRecentlyChanged(appSettings.input.autoPasteMaxAge)) {
       // 通知渲染进程尝试自动粘贴
       mainWindow.webContents.send('clipboard:autoPaste')
     }
@@ -321,7 +321,8 @@ app.whenReady().then(async () => {
   }
 
   // 启动剪贴板监听器
-  clipboardMonitor.start()
+  clipboardWatcher.start()
+  console.log(`[ClipboardWatcher] Started - Mode: ${clipboardWatcher.isNativeMode() ? 'Native (zero overhead)' : 'Polling (fallback)'}`)
 
   const appShortcutManager = new AppShortcutManager({
     toggleWindow: () => toggleWindow(),
