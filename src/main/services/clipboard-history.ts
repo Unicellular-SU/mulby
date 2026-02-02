@@ -1,6 +1,7 @@
-import { clipboard } from 'electron'
+import { clipboard, nativeImage } from 'electron'
 import db from '../db'
 import { ClipboardWatcher } from './clipboard-watcher-v2'
+import { readFileSync } from 'fs'
 
 /**
  * 剪贴板历史条目
@@ -8,9 +9,10 @@ import { ClipboardWatcher } from './clipboard-watcher-v2'
 export interface ClipboardHistoryItem {
   id: string
   type: 'text' | 'image' | 'files'
-  content: string // 文本内容或 base64 图片
+  content: string // 文本内容或小缩略图 base64
   plainText?: string // 纯文本（用于搜索）
   files?: string[] // 文件路径列表
+  filePath?: string // 图片文件的原始路径（用于加载大图）
   timestamp: number
   size: number // 字节数
   favorite: boolean // 是否收藏
@@ -44,6 +46,7 @@ export class ClipboardHistoryManager {
    * 初始化数据库表
    */
   private initDatabase() {
+    // 创建表（如果不存在）
     db.exec(`
       CREATE TABLE IF NOT EXISTS clipboard_history (
         id TEXT PRIMARY KEY,
@@ -51,6 +54,7 @@ export class ClipboardHistoryManager {
         content TEXT NOT NULL,
         plain_text TEXT,
         files TEXT,
+        file_path TEXT,
         timestamp INTEGER NOT NULL,
         size INTEGER NOT NULL,
         favorite INTEGER DEFAULT 0,
@@ -58,6 +62,17 @@ export class ClipboardHistoryManager {
         created_at INTEGER NOT NULL
       )
     `)
+
+    // 迁移：添加 file_path 列（如果不存在）
+    try {
+      db.exec(`ALTER TABLE clipboard_history ADD COLUMN file_path TEXT`)
+      console.log('[ClipboardHistory] Added file_path column')
+    } catch (err: any) {
+      // 列已存在，忽略错误
+      if (!err.message.includes('duplicate column name')) {
+        console.error('[ClipboardHistory] Migration error:', err)
+      }
+    }
 
     // 创建索引
     db.exec(`
@@ -84,6 +99,7 @@ export class ClipboardHistoryManager {
   private async captureClipboard() {
     try {
       const format = this.getClipboardFormat()
+      console.log('[ClipboardHistory] Detected format:', format)
 
       if (format === 'text') {
         const text = clipboard.readText()
@@ -100,8 +116,37 @@ export class ClipboardHistoryManager {
         await this.addImageItem(buffer)
       } else if (format === 'files') {
         const files = this.readFiles()
+        console.log('[ClipboardHistory] Read files:', files)
         if (files.length === 0) return
 
+        // 检查是否为图片文件
+        const imageExtensions = ['.png', '.jpg', '.jpeg', '.gif', '.bmp', '.webp', '.svg', '.ico']
+        const isImageFile = files.length === 1 && imageExtensions.some(ext =>
+          files[0].toLowerCase().endsWith(ext)
+        )
+
+        if (isImageFile) {
+          // 如果是图片文件，生成缩略图并保存文件路径
+          try {
+            console.log('[ClipboardHistory] Reading image from file:', files[0])
+            const imageBuffer = readFileSync(files[0])
+            const image = nativeImage.createFromBuffer(imageBuffer)
+
+            if (!image.isEmpty()) {
+              // 生成小缩略图（100x100）用于列表显示
+              const thumbnail = image.resize({ width: 100, height: 100 })
+              const thumbnailBuffer = thumbnail.toPNG()
+
+              console.log('[ClipboardHistory] Generated thumbnail for image file')
+              await this.addImageItemWithPath(thumbnailBuffer, files[0], imageBuffer.length)
+              return
+            }
+          } catch (err) {
+            console.error('[ClipboardHistory] Failed to read image from file:', err)
+          }
+        }
+
+        // 否则作为文件处理
         await this.addFilesItem(files)
       }
     } catch (err) {
@@ -113,14 +158,39 @@ export class ClipboardHistoryManager {
    * 获取剪贴板格式
    */
   private getClipboardFormat(): 'text' | 'image' | 'files' | 'empty' {
-    if (!clipboard.readImage().isEmpty()) return 'image'
-
     const formats = clipboard.availableFormats()
-    if (formats.includes('text/uri-list') || formats.includes('NSFilenamesPboardType')) {
-      return 'files'
+    console.log('[ClipboardHistory] Available formats:', formats)
+
+    // macOS: 检查文件格式（优先级最高）
+    if (process.platform === 'darwin') {
+      // 检查是否有文件 URL
+      const fileUrl = clipboard.read('public.file-url')
+      if (fileUrl && fileUrl.startsWith('file://')) {
+        console.log('[ClipboardHistory] Found file URL:', fileUrl)
+        return 'files'
+      }
+
+      // 检查 NSFilenamesPboardType
+      if (formats.includes('NSFilenamesPboardType')) {
+        return 'files'
+      }
+    } else {
+      // Windows/Linux
+      if (formats.includes('text/uri-list') || formats.some(f => f.includes('FileNameW'))) {
+        return 'files'
+      }
     }
 
-    if (clipboard.readText()) return 'text'
+    // 检查图片（第二优先级）
+    if (!clipboard.readImage().isEmpty()) {
+      return 'image'
+    }
+
+    // 检查文本（最后）
+    const text = clipboard.readText()
+    if (text && text.trim()) {
+      return 'text'
+    }
 
     return 'empty'
   }
@@ -129,7 +199,65 @@ export class ClipboardHistoryManager {
    * 读取文件列表
    */
   private readFiles(): string[] {
-    // 简化实现，实际应该从 clipboard 读取
+    try {
+      // macOS: 通过 file URL 读取
+      if (process.platform === 'darwin') {
+        const rawFiles = clipboard.read('public.file-url')
+        if (rawFiles) {
+          let filePath = decodeURIComponent(rawFiles.replace('file://', ''))
+
+          // macOS 使用 /.file/id= 格式，需要转换为真实路径
+          if (filePath.startsWith('/.file/id=')) {
+            // 尝试从 text/uri-list 获取真实路径
+            const formats = clipboard.availableFormats()
+            if (formats.includes('text/uri-list')) {
+              const uriList = clipboard.read('text/uri-list')
+              if (uriList) {
+                const uris = uriList.split('\n').filter(u => u.trim())
+                const realPaths = uris.map(uri => {
+                  const decoded = decodeURIComponent(uri.replace('file://', ''))
+                  return decoded
+                }).filter(p => p && !p.startsWith('/.file/id='))
+
+                if (realPaths.length > 0) {
+                  console.log('[ClipboardHistory] Resolved real paths:', realPaths)
+                  return realPaths
+                }
+              }
+            }
+
+            // 如果无法解析，尝试使用 NSFilenamesPboardType
+            try {
+              const nsFiles = clipboard.read('NSFilenamesPboardType')
+              if (nsFiles) {
+                console.log('[ClipboardHistory] NSFilenamesPboardType:', nsFiles)
+                // NSFilenamesPboardType 返回 plist 格式
+                const matches = nsFiles.match(/<string>(.*?)<\/string>/g)
+                if (matches) {
+                  const paths = matches.map(m => m.replace(/<\/?string>/g, ''))
+                  console.log('[ClipboardHistory] Parsed paths from plist:', paths)
+                  return paths
+                }
+              }
+            } catch (err) {
+              console.error('[ClipboardHistory] Failed to read NSFilenamesPboardType:', err)
+            }
+          }
+
+          return filePath ? [filePath] : []
+        }
+      }
+
+      // Windows/Linux: 通过 buffer 读取
+      const rawFilePaths = clipboard.readBuffer('FileNameW')
+      if (rawFilePaths && rawFilePaths.length > 0) {
+        const paths = rawFilePaths.toString('ucs2').replace(/\0+$/, '').split('\0')
+        return paths.filter(p => p && p.trim())
+      }
+    } catch (err) {
+      console.error('Failed to read files from clipboard:', err)
+    }
+
     return []
   }
 
@@ -152,6 +280,11 @@ export class ClipboardHistoryManager {
    * 添加文本条目
    */
   private async addTextItem(text: string) {
+    // 检查是否与最近的记录重复
+    if (this.isDuplicate('text', text)) {
+      return
+    }
+
     const id = this.generateId()
     const item: ClipboardHistoryItem = {
       id,
@@ -168,18 +301,51 @@ export class ClipboardHistoryManager {
   }
 
   /**
-   * 添加图片条目
+   * 添加图片条目（从剪贴板截图/粘贴）
    */
   private async addImageItem(buffer: Buffer) {
-    const id = this.generateId()
     const base64 = buffer.toString('base64')
+    const content = `data:image/png;base64,${base64}`
 
+    // 检查是否与最近的记录重复
+    if (this.isDuplicate('image', content)) {
+      return
+    }
+
+    const id = this.generateId()
     const item: ClipboardHistoryItem = {
       id,
       type: 'image',
-      content: `data:image/png;base64,${base64}`,
+      content, // 完整图片 base64（因为没有文件路径）
       timestamp: Date.now(),
       size: buffer.length,
+      favorite: false
+    }
+
+    this.saveItem(item)
+    this.cleanupOldItems()
+  }
+
+  /**
+   * 添加图片条目（从文件）
+   */
+  private async addImageItemWithPath(thumbnailBuffer: Buffer, filePath: string, originalSize: number) {
+    const base64 = thumbnailBuffer.toString('base64')
+    const thumbnail = `data:image/png;base64,${base64}`
+
+    // 检查是否与最近的记录重复（使用文件路径）
+    if (this.isDuplicate('image', filePath)) {
+      return
+    }
+
+    const id = this.generateId()
+    const item: ClipboardHistoryItem = {
+      id,
+      type: 'image',
+      content: thumbnail, // 小缩略图
+      filePath, // 原始文件路径
+      timestamp: Date.now(),
+      size: originalSize,
       favorite: false
     }
 
@@ -191,11 +357,18 @@ export class ClipboardHistoryManager {
    * 添加文件条目
    */
   private async addFilesItem(files: string[]) {
+    const content = files.join('\n')
+
+    // 检查是否与最近的记录重复
+    if (this.isDuplicate('files', content)) {
+      return
+    }
+
     const id = this.generateId()
     const item: ClipboardHistoryItem = {
       id,
       type: 'files',
-      content: files.join('\n'),
+      content,
       files,
       timestamp: Date.now(),
       size: files.length,
@@ -207,13 +380,28 @@ export class ClipboardHistoryManager {
   }
 
   /**
+   * 检查是否与最近的记录重复
+   */
+  private isDuplicate(type: string, content: string): boolean {
+    const stmt = db.prepare(`
+      SELECT content FROM clipboard_history
+      WHERE type = ?
+      ORDER BY timestamp DESC
+      LIMIT 1
+    `)
+    const row = stmt.get(type) as { content: string } | undefined
+
+    return row ? row.content === content : false
+  }
+
+  /**
    * 保存条目到数据库
    */
   private saveItem(item: ClipboardHistoryItem) {
     const stmt = db.prepare(`
       INSERT OR REPLACE INTO clipboard_history
-      (id, type, content, plain_text, files, timestamp, size, favorite, tags, created_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      (id, type, content, plain_text, files, file_path, timestamp, size, favorite, tags, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `)
 
     stmt.run(
@@ -222,6 +410,7 @@ export class ClipboardHistoryManager {
       item.content,
       item.plainText || null,
       item.files ? JSON.stringify(item.files) : null,
+      item.filePath || null,
       item.timestamp,
       item.size,
       item.favorite ? 1 : 0,
@@ -304,6 +493,7 @@ export class ClipboardHistoryManager {
       content: row.content,
       plainText: row.plain_text,
       files: row.files ? JSON.parse(row.files) : undefined,
+      filePath: row.file_path,
       timestamp: row.timestamp,
       size: row.size,
       favorite: row.favorite === 1,

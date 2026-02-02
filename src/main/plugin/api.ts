@@ -21,13 +21,14 @@ import type { DynamicFeatureInput, PluginMessage } from '../../shared/types/plug
 import type { PluginMessageBus } from './message-bus'
 import type { TaskScheduler } from '../scheduler'
 import type { TaskInput, TaskFilter } from '../scheduler/types'
+import type { ClipboardHistoryManager } from '../services/clipboard-history'
 
 const pluginStorage = new PluginStorage()
 const pluginFilesystem = new PluginFilesystem()
 const pluginHttp = new PluginHttp()
 
 // 创建插件可用的 API 上下文
-export function createPluginAPI(pluginName: string, messageBus?: PluginMessageBus, taskScheduler?: TaskScheduler) {
+export function createPluginAPI(pluginName: string, messageBus?: PluginMessageBus, taskScheduler?: TaskScheduler, clipboardHistoryManager?: ClipboardHistoryManager) {
   return {
     clipboard: {
       readText: () => clipboard.readText(),
@@ -88,6 +89,102 @@ export function createPluginAPI(pluginName: string, messageBus?: PluginMessageBu
         if (clipboard.availableFormats().some(f => f.includes('file'))) return 'files'
         if (clipboard.readText()) return 'text'
         return 'empty'
+      }
+    },
+    clipboardHistory: {
+      query: async (options?: {
+        type?: 'text' | 'image' | 'files'
+        search?: string
+        favorite?: boolean
+        limit?: number
+        offset?: number
+      }) => {
+        if (!clipboardHistoryManager) {
+          throw new Error('Clipboard history not available')
+        }
+        return clipboardHistoryManager.query(options || {})
+      },
+      get: async (id: string) => {
+        if (!clipboardHistoryManager) {
+          throw new Error('Clipboard history not available')
+        }
+        const items = clipboardHistoryManager.query({ limit: 1 })
+        return items.find(item => item.id === id) || null
+      },
+      copy: async (id: string) => {
+        if (!clipboardHistoryManager) {
+          throw new Error('Clipboard history not available')
+        }
+        const items = clipboardHistoryManager.query({ limit: 1000 })
+        const item = items.find(i => i.id === id)
+
+        if (!item) return { success: false, error: 'Item not found' }
+
+        try {
+          if (item.type === 'text') {
+            clipboard.writeText(item.content)
+          } else if (item.type === 'image') {
+            const base64 = item.content.replace(/^data:image\/\w+;base64,/, '')
+            const buffer = Buffer.from(base64, 'base64')
+            const image = nativeImage.createFromBuffer(buffer)
+            clipboard.writeImage(image)
+          } else if (item.type === 'files' && item.files) {
+            // 文件复制需要特殊处理
+            if (process.platform === 'darwin') {
+              const plist = `<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<array>
+${item.files.map(p => `    <string>${p}</string>`).join('\n')}
+</array>
+</plist>`
+              clipboard.writeBuffer('NSFilenamesPboardType', Buffer.from(plist))
+            }
+          }
+
+          return { success: true }
+        } catch (err) {
+          return { success: false, error: String(err) }
+        }
+      },
+      toggleFavorite: async (id: string) => {
+        if (!clipboardHistoryManager) {
+          throw new Error('Clipboard history not available')
+        }
+        clipboardHistoryManager.toggleFavorite(id)
+        return { success: true }
+      },
+      delete: async (id: string) => {
+        if (!clipboardHistoryManager) {
+          throw new Error('Clipboard history not available')
+        }
+        clipboardHistoryManager.delete(id)
+        return { success: true }
+      },
+      clear: async () => {
+        if (!clipboardHistoryManager) {
+          throw new Error('Clipboard history not available')
+        }
+        clipboardHistoryManager.clear()
+        return { success: true }
+      },
+      stats: async () => {
+        if (!clipboardHistoryManager) {
+          throw new Error('Clipboard history not available')
+        }
+        const all = clipboardHistoryManager.query({ limit: 10000 })
+        const text = all.filter(i => i.type === 'text').length
+        const image = all.filter(i => i.type === 'image').length
+        const files = all.filter(i => i.type === 'files').length
+        const favorite = all.filter(i => i.favorite).length
+
+        return {
+          total: all.length,
+          text,
+          image,
+          files,
+          favorite
+        }
       }
     },
     notification: {

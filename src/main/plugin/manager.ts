@@ -50,6 +50,13 @@ export class PluginManager {
     this.hostManager.setTaskScheduler(this.taskScheduler)
   }
 
+  /**
+   * 设置剪贴板历史管理器
+   */
+  setClipboardHistoryManager(manager: any): void {
+    this.hostManager.setClipboardHistoryManager(manager)
+  }
+
   // 设置窗口管理器
   setWindowManager(windowManager: PluginWindowManager) {
     this.windowManager = windowManager

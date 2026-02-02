@@ -330,6 +330,9 @@ app.whenReady().then(async () => {
   clipboardHistoryManager.start()
   console.log('[ClipboardHistory] Started')
 
+  // 设置剪贴板历史管理器到插件管理器
+  pluginManager.setClipboardHistoryManager(clipboardHistoryManager)
+
   const appShortcutManager = new AppShortcutManager({
     toggleWindow: () => toggleWindow(),
     openSettings: () => {
