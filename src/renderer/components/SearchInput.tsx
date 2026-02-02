@@ -169,6 +169,17 @@ const SearchInput = forwardRef<SearchInputRef, SearchInputProps>(function Search
     }
   }, [attachmentsManagerOpen, onAttachmentsManagerClose, onAttachmentsManagerOpen])
 
+  const handleClearAttachments = useCallback(() => {
+    // 释放所有 blob URLs
+    attachments.forEach((attachment) => {
+      if (attachment.previewUrl?.startsWith('blob:')) {
+        URL.revokeObjectURL(attachment.previewUrl)
+      }
+    })
+    // 清空附件列表
+    onAttachmentsChange([])
+  }, [attachments, onAttachmentsChange])
+
   const isSummaryMode = !subInput.enabled && value.length > SUMMARY_THRESHOLD
   const displayValue = subInput.enabled ? subInputValue : (isSummaryMode ? '' : value)
   const summary = isSummaryMode ? buildSummary(value) : null
@@ -257,6 +268,17 @@ const SearchInput = forwardRef<SearchInputRef, SearchInputProps>(function Search
               附件 {attachments.length} · {formatBytes(totalAttachmentSize)}
             </div>
             <div className="attachment-summary-actions">
+              <button
+                type="button"
+                className="attachment-summary-clear"
+                onClick={handleClearAttachments}
+                aria-label="清空附件"
+                title="清空附件"
+              >
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M18 6L6 18M6 6l12 12" />
+                </svg>
+              </button>
               <button
                 type="button"
                 className="attachment-summary-manage"

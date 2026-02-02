@@ -454,6 +454,29 @@ body {
   transition: background-color 0.15s ease-out, color 0.15s ease-out;
 }
 
+.attachment-summary-clear {
+  border: 1px solid var(--border);
+  background: var(--bg-primary);
+  color: var(--text-secondary);
+  padding: 2px 4px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background-color 0.15s ease-out, color 0.15s ease-out;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.attachment-summary-clear svg {
+  width: 14px;
+  height: 14px;
+}
+
+.attachment-summary-clear:hover {
+  color: var(--text-primary);
+  background: var(--bg-selected);
+}
+
 .attachment-summary-actions {
   display: flex;
   align-items: center;
