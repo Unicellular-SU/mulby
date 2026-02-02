@@ -247,7 +247,7 @@ function App() {
 
   // 监听自动粘贴事件
   useEffect(() => {
-    if (!window.intoolsMain?.clipboard?.onAutoPaste) return
+    if (!window.intoolsMain?.clipboard) return
 
     const cleanup = window.intoolsMain.clipboard.onAutoPaste(async () => {
       // 条件1：没有打开插件

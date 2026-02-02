@@ -31,6 +31,9 @@ declare global {
         onSelect: (callback: () => void) => () => void
         sendChange: (text: string) => void
       }
+      clipboard: {
+        onAutoPaste: (callback: () => void) => () => void
+      }
     }
   }
 }
