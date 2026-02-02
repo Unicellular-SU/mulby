@@ -38,6 +38,7 @@ export interface DeveloperSettings {
 // 窗口设置
 export interface WindowSettings {
   width: number
+  height?: number
   x?: number
   y?: number
 }

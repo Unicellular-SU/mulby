@@ -1,7 +1,7 @@
 import { clipboard, nativeImage } from 'electron'
 import db from '../db'
 import { ClipboardWatcher } from './clipboard-watcher-v2'
-import { readFileSync } from 'fs'
+import { readFile } from 'fs/promises'
 
 /**
  * 剪贴板历史条目
@@ -36,6 +36,11 @@ export class ClipboardHistoryManager {
   private maxImageSize: number = 5 * 1024 * 1024 // 图片最大 5MB
   private ignorePatterns: RegExp[] = [] // 忽略的内容模式（如密码）
 
+  // 批量写入优化
+  private pendingItems: ClipboardHistoryItem[] = []
+  private writeTimer: NodeJS.Timeout | null = null
+  private writeBatchDelay: number = 100 // 100ms 批量写入
+
   constructor() {
     this.watcher = new ClipboardWatcher()
     this.initDatabase()
@@ -66,7 +71,6 @@ export class ClipboardHistoryManager {
     // 迁移：添加 file_path 列（如果不存在）
     try {
       db.exec(`ALTER TABLE clipboard_history ADD COLUMN file_path TEXT`)
-      console.log('[ClipboardHistory] Added file_path column')
     } catch (err: any) {
       // 列已存在，忽略错误
       if (!err.message.includes('duplicate column name')) {
@@ -126,10 +130,10 @@ export class ClipboardHistoryManager {
         )
 
         if (isImageFile) {
-          // 如果是图片文件，生成缩略图并保存文件路径
+          // 如果是图片文件，异步生成缩略图并保存文件路径
           try {
             console.log('[ClipboardHistory] Reading image from file:', files[0])
-            const imageBuffer = readFileSync(files[0])
+            const imageBuffer = await readFile(files[0])
             const image = nativeImage.createFromBuffer(imageBuffer)
 
             if (!image.isEmpty()) {
@@ -159,14 +163,12 @@ export class ClipboardHistoryManager {
    */
   private getClipboardFormat(): 'text' | 'image' | 'files' | 'empty' {
     const formats = clipboard.availableFormats()
-    console.log('[ClipboardHistory] Available formats:', formats)
 
     // macOS: 检查文件格式（优先级最高）
     if (process.platform === 'darwin') {
       // 检查是否有文件 URL
       const fileUrl = clipboard.read('public.file-url')
       if (fileUrl && fileUrl.startsWith('file://')) {
-        console.log('[ClipboardHistory] Found file URL:', fileUrl)
         return 'files'
       }
 
@@ -220,7 +222,6 @@ export class ClipboardHistoryManager {
                 }).filter(p => p && !p.startsWith('/.file/id='))
 
                 if (realPaths.length > 0) {
-                  console.log('[ClipboardHistory] Resolved real paths:', realPaths)
                   return realPaths
                 }
               }
@@ -230,17 +231,15 @@ export class ClipboardHistoryManager {
             try {
               const nsFiles = clipboard.read('NSFilenamesPboardType')
               if (nsFiles) {
-                console.log('[ClipboardHistory] NSFilenamesPboardType:', nsFiles)
                 // NSFilenamesPboardType 返回 plist 格式
                 const matches = nsFiles.match(/<string>(.*?)<\/string>/g)
                 if (matches) {
                   const paths = matches.map(m => m.replace(/<\/?string>/g, ''))
-                  console.log('[ClipboardHistory] Parsed paths from plist:', paths)
                   return paths
                 }
               }
             } catch (err) {
-              console.error('[ClipboardHistory] Failed to read NSFilenamesPboardType:', err)
+              // 忽略错误
             }
           }
 
@@ -297,7 +296,7 @@ export class ClipboardHistoryManager {
     }
 
     this.saveItem(item)
-    this.cleanupOldItems()
+    // 清理操作移到批量写入后
   }
 
   /**
@@ -323,7 +322,7 @@ export class ClipboardHistoryManager {
     }
 
     this.saveItem(item)
-    this.cleanupOldItems()
+    // 清理操作移到批量写入后
   }
 
   /**
@@ -350,7 +349,7 @@ export class ClipboardHistoryManager {
     }
 
     this.saveItem(item)
-    this.cleanupOldItems()
+    // 清理操作移到批量写入后
   }
 
   /**
@@ -376,7 +375,7 @@ export class ClipboardHistoryManager {
     }
 
     this.saveItem(item)
-    this.cleanupOldItems()
+    // 清理操作移到批量写入后
   }
 
   /**
@@ -395,28 +394,70 @@ export class ClipboardHistoryManager {
   }
 
   /**
-   * 保存条目到数据库
+   * 保存条目到数据库（批量写入优化）
    */
   private saveItem(item: ClipboardHistoryItem) {
-    const stmt = db.prepare(`
-      INSERT OR REPLACE INTO clipboard_history
-      (id, type, content, plain_text, files, file_path, timestamp, size, favorite, tags, created_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `)
+    // 加入待写入队列
+    this.pendingItems.push(item)
 
-    stmt.run(
-      item.id,
-      item.type,
-      item.content,
-      item.plainText || null,
-      item.files ? JSON.stringify(item.files) : null,
-      item.filePath || null,
-      item.timestamp,
-      item.size,
-      item.favorite ? 1 : 0,
-      item.tags ? JSON.stringify(item.tags) : null,
-      Date.now()
-    )
+    // 调度批量写入
+    this.scheduleBatchWrite()
+  }
+
+  /**
+   * 调度批量写入
+   */
+  private scheduleBatchWrite() {
+    if (this.writeTimer) return
+
+    this.writeTimer = setTimeout(() => {
+      this.flushPendingItems()
+      this.writeTimer = null
+    }, this.writeBatchDelay)
+  }
+
+  /**
+   * 批量写入待处理的条目
+   */
+  private flushPendingItems() {
+    if (this.pendingItems.length === 0) return
+
+    const items = [...this.pendingItems]
+    this.pendingItems = []
+
+    try {
+      // 使用事务批量写入
+      const insertStmt = db.prepare(`
+        INSERT OR REPLACE INTO clipboard_history
+        (id, type, content, plain_text, files, file_path, timestamp, size, favorite, tags, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `)
+
+      const transaction = db.transaction((items: ClipboardHistoryItem[]) => {
+        for (const item of items) {
+          insertStmt.run(
+            item.id,
+            item.type,
+            item.content,
+            item.plainText || null,
+            item.files ? JSON.stringify(item.files) : null,
+            item.filePath || null,
+            item.timestamp,
+            item.size,
+            item.favorite ? 1 : 0,
+            item.tags ? JSON.stringify(item.tags) : null,
+            Date.now()
+          )
+        }
+      })
+
+      transaction(items)
+
+      // 批量写入后执行一次清理
+      this.cleanupOldItems()
+    } catch (err) {
+      console.error('[ClipboardHistory] Batch write failed:', err)
+    }
   }
 
   /**
@@ -543,6 +584,13 @@ export class ClipboardHistoryManager {
   stop() {
     this.enabled = false
     this.watcher.stop()
+
+    // 停止时刷新所有待处理的数据
+    if (this.writeTimer) {
+      clearTimeout(this.writeTimer)
+      this.writeTimer = null
+    }
+    this.flushPendingItems()
   }
 
   /**
