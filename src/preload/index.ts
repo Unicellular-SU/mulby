@@ -91,6 +91,116 @@ const intoolsApi = {
     ipcRenderer.on('theme:changed', listener)
     return () => ipcRenderer.removeListener('theme:changed', listener)
   },
+  // AI
+  ai: (() => {
+    const call = (option: any, streamCallback?: (chunk: any) => void) => {
+      if (!streamCallback) {
+        const promise = ipcRenderer.invoke('ai:call', option)
+        ;(promise as any).abort = () => {}
+        return promise as any
+      }
+
+      let abortFn = () => {}
+      const promise = ipcRenderer.invoke('ai:stream', option).then(({ requestId }) => {
+        abortFn = () => ipcRenderer.invoke('ai:abort', requestId)
+
+        return new Promise((resolve, reject) => {
+          const onChunk = (_: any, id: string, chunk: any) => {
+            if (id !== requestId) return
+            streamCallback(chunk)
+          }
+          const onEnd = (_: any, id: string, message: any) => {
+            if (id !== requestId) return
+            cleanup()
+            resolve(message)
+          }
+          const onError = (_: any, id: string, error: string) => {
+            if (id !== requestId) return
+            cleanup()
+            reject(new Error(error))
+          }
+
+          const cleanup = () => {
+            ipcRenderer.removeListener('ai:stream:chunk', onChunk)
+            ipcRenderer.removeListener('ai:stream:end', onEnd)
+            ipcRenderer.removeListener('ai:stream:error', onError)
+          }
+
+          ipcRenderer.on('ai:stream:chunk', onChunk)
+          ipcRenderer.on('ai:stream:end', onEnd)
+          ipcRenderer.on('ai:stream:error', onError)
+        })
+      })
+
+      ;(promise as any).abort = () => abortFn()
+      return promise as any
+    }
+
+    return {
+      call,
+      allModels: () => ipcRenderer.invoke('ai:models:all'),
+      testConnection: (input: any) => ipcRenderer.invoke('ai:test', input),
+      testConnectionStream: (input: any, onChunk: (chunk: { type: 'content' | 'reasoning'; text: string }) => void) => {
+        let abortFn = () => {}
+        const promise = ipcRenderer.invoke('ai:test:stream', input).then(({ requestId }) => {
+          abortFn = () => ipcRenderer.invoke('ai:abort', requestId)
+
+          return new Promise((resolve, reject) => {
+            const onData = (_: any, id: string, chunk: { type: 'content' | 'reasoning'; text: string }) => {
+              if (id !== requestId) return
+              onChunk(chunk)
+            }
+            const onEnd = (_: any, id: string, result: any) => {
+              if (id !== requestId) return
+              cleanup()
+              resolve(result)
+            }
+            const onError = (_: any, id: string, error: string) => {
+              if (id !== requestId) return
+              cleanup()
+              reject(new Error(error))
+            }
+
+            const cleanup = () => {
+              ipcRenderer.removeListener('ai:test:chunk', onData)
+              ipcRenderer.removeListener('ai:test:end', onEnd)
+              ipcRenderer.removeListener('ai:test:error', onError)
+            }
+
+            ipcRenderer.on('ai:test:chunk', onData)
+            ipcRenderer.on('ai:test:end', onEnd)
+            ipcRenderer.on('ai:test:error', onError)
+          })
+        })
+
+        ;(promise as any).abort = () => abortFn()
+        return promise as any
+      },
+      models: {
+        fetch: (input: any) => ipcRenderer.invoke('ai:models:fetch', input)
+      },
+      abort: (requestId: string) => ipcRenderer.invoke('ai:abort', requestId),
+      settings: {
+        get: () => ipcRenderer.invoke('ai:settings:get'),
+        update: (next: any) => ipcRenderer.invoke('ai:settings:update', next)
+      },
+      attachments: {
+        upload: (input: any) => ipcRenderer.invoke('ai:attachments:upload', input),
+        get: (attachmentId: string) => ipcRenderer.invoke('ai:attachments:get', attachmentId),
+        delete: (attachmentId: string) => ipcRenderer.invoke('ai:attachments:delete', attachmentId)
+      },
+      cost: {
+        estimate: (input: any) => ipcRenderer.invoke('ai:cost:estimate', input)
+      },
+      images: {
+        generate: (input: any) => ipcRenderer.invoke('ai:images:generate', input),
+        edit: (input: any) => ipcRenderer.invoke('ai:images:edit', input)
+      },
+      videos: {
+        generate: (input: any) => ipcRenderer.invoke('ai:videos:generate', input)
+      }
+    }
+  })(),
 
   // App events
   app: {

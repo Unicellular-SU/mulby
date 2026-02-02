@@ -17,6 +17,7 @@ import { pluginNetwork } from './network'
 import { pluginInput } from './input'
 import { permissionManager } from './permission-manager'
 import { pluginFeatureStore, redirectHotKeySetting, redirectAiModelsSetting } from './dynamic-features'
+import { aiService } from '../ai'
 import type { DynamicFeatureInput, PluginMessage } from '../../shared/types/plugin'
 import type { PluginMessageBus } from './message-bus'
 import type { TaskScheduler } from '../scheduler'
@@ -328,6 +329,26 @@ ${item.files.map(p => `    <string>${p}</string>`).join('\n')}
           throw new Error('Message bus not available')
         }
         messageBus.unsubscribe(pluginName, handler)
+      }
+    },
+    ai: {
+      call: async (option) => await aiService.call(option),
+      allModels: async () => aiService.allModels(),
+      abort: (requestId: string) => aiService.abort(requestId),
+      attachments: {
+        upload: async (input) => await aiService.uploadAttachment(input),
+        get: async (attachmentId: string) => await aiService.getAttachment(attachmentId),
+        delete: async (attachmentId: string) => await aiService.deleteAttachment(attachmentId)
+      },
+      cost: {
+        estimate: async (input) => await aiService.estimateCost(input)
+      },
+      images: {
+        generate: async (input) => await aiService.generateImages(input),
+        edit: async (input) => await aiService.editImage(input)
+      },
+      videos: {
+        generate: async (input) => await aiService.generateVideo(input)
       }
     },
     // Task Scheduler API

@@ -39,6 +39,7 @@ import { registerDeveloperHandlers } from './developer'
 import { registerLogIpc, setDeveloperModeGetter } from './log'
 import { registerSchedulerHandlers } from './scheduler'
 import { ClipboardHistoryManager } from '../services/clipboard-history'
+import { registerAiHandlers } from './ai'
 
 
 export function registerAllHandlers(
@@ -83,6 +84,7 @@ export function registerAllHandlers(
   registerSettingsHandlers(appSettingsManager, appShortcutManager)
   registerDeveloperHandlers(pluginManager)
   registerSchedulerHandlers(pluginManager)
+  registerAiHandlers()
 
   // 注册日志 IPC 处理器，并设置开发者模式获取器
   setDeveloperModeGetter(() => appSettingsManager.getSettings().developer.enabled)

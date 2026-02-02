@@ -1,5 +1,6 @@
 import { InBrowser } from './inbrowser'
 import type { InputPayload, InputAttachment, BackgroundPluginInfo } from './plugin'
+import type { AiApi } from './ai'
 import type { AppSettings, ShortcutStatusMap } from './settings'
 import type { Task, TaskExecution } from './task'
 
@@ -248,6 +249,7 @@ export interface ElectronAPI {
     getActual: () => Promise<'light' | 'dark'>
   }
   onThemeChange: (callback: (theme: 'light' | 'dark') => void) => () => void
+  ai: AiApi
   app: {
     onOpenSettings: (callback: () => void) => () => void
     onOpenPluginStore: (callback: () => void) => () => void

@@ -1,3 +1,5 @@
+import type { AiAttachmentRef, AiCostBreakdown, AiMessage, AiModel, AiOption } from './ai'
+
 // 插件类型
 export type PluginType =
   | 'utility'      // 实用工具（计算器、格式转换）
@@ -301,6 +303,26 @@ export interface PluginAPI {
     broadcast: (type: string, payload: unknown) => Promise<void>
     on: (handler: (message: PluginMessage) => void | Promise<void>) => void
     off: (handler: (message: PluginMessage) => void | Promise<void>) => void
+  }
+  ai: {
+    call: (option: AiOption) => Promise<AiMessage>
+    allModels: () => Promise<AiModel[]>
+    abort: (requestId: string) => void
+    attachments: {
+      upload: (input: { filePath?: string; buffer?: ArrayBuffer; mimeType: string; purpose?: string }) => Promise<AiAttachmentRef>
+      get: (attachmentId: string) => Promise<AiAttachmentRef | null>
+      delete: (attachmentId: string) => Promise<void>
+    }
+    cost: {
+      estimate: (input: { model: string; messages: AiMessage[]; attachments?: AiAttachmentRef[] }) => Promise<AiCostBreakdown>
+    }
+    images: {
+      generate: (input: { prompt: string; model: string; size?: string; count?: number }) => Promise<{ images: string[]; cost: AiCostBreakdown }>
+      edit: (input: { imageAttachmentId: string; prompt: string; model: string }) => Promise<{ images: string[]; cost: AiCostBreakdown }>
+    }
+    videos: {
+      generate: (input: { prompt: string; model: string; duration?: number; size?: string }) => Promise<{ videos: string[]; cost: AiCostBreakdown }>
+    }
   }
 }
 

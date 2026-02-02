@@ -17,6 +17,7 @@ interface SettingsViewProps {
   onOpenBackgroundPluginManager?: () => void
   onOpenTaskScheduler?: () => void
   onOpenLogViewer?: () => void
+  onOpenAiSettings?: () => void
 }
 
 const SECTION_ITEMS: { id: SettingsSection; label: string }[] = [
@@ -218,7 +219,7 @@ function ShortcutInput({
   )
 }
 
-export default function SettingsView({ section, onSectionChange, onClose, onOpenPluginManager, onOpenBackgroundPluginManager, onOpenTaskScheduler, onOpenLogViewer }: SettingsViewProps) {
+export default function SettingsView({ section, onSectionChange, onClose, onOpenPluginManager, onOpenBackgroundPluginManager, onOpenTaskScheduler, onOpenLogViewer, onOpenAiSettings }: SettingsViewProps) {
   const [settings, setSettings] = useState<AppSettings | null>(null)
   const [themeMode, setThemeMode] = useState<'light' | 'dark' | 'system'>('system')
   const [shortcutStatus, setShortcutStatus] = useState<ShortcutStatusMap | null>(null)
@@ -389,6 +390,17 @@ export default function SettingsView({ section, onSectionChange, onClose, onOpen
                   <div className={`${cardClass} text-sm text-slate-600 dark:text-slate-300`}>
                     通用设置将在后续版本提供。
                   </div>
+                  {onOpenAiSettings && (
+                    <div className={`${cardClass} flex items-center justify-between gap-4`}>
+                      <div>
+                        <div className="text-sm font-medium text-slate-900 dark:text-white">AI 设置中心</div>
+                        <div className="text-xs text-slate-500 dark:text-slate-400">配置 Provider、模型与默认策略</div>
+                      </div>
+                      <button className={primaryPillClass} onClick={onOpenAiSettings}>
+                        打开 AI 设置
+                      </button>
+                    </div>
+                  )}
                   <div className={`${cardClass} flex items-center justify-between gap-4`}>
                     <div>
                       <div className="text-sm font-medium text-slate-900 dark:text-white">插件管理</div>
@@ -529,6 +541,7 @@ export default function SettingsView({ section, onSectionChange, onClose, onOpen
                   </div>
                 </div>
               )}
+
 
               {section === 'permissions' && (
                 <div className="space-y-3">
