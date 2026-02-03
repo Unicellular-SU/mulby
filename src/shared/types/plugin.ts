@@ -1,4 +1,4 @@
-import type { AiAttachmentRef, AiCostBreakdown, AiMessage, AiModel, AiOption } from './ai'
+import type { AiAttachmentRef, AiMessage, AiModel, AiOption, AiTokenBreakdown } from './ai'
 
 // 插件类型
 export type PluginType =
@@ -313,15 +313,15 @@ export interface PluginAPI {
       get: (attachmentId: string) => Promise<AiAttachmentRef | null>
       delete: (attachmentId: string) => Promise<void>
     }
-    cost: {
-      estimate: (input: { model: string; messages: AiMessage[]; attachments?: AiAttachmentRef[] }) => Promise<AiCostBreakdown>
+    tokens: {
+      estimate: (input: { model: string; messages: AiMessage[]; attachments?: AiAttachmentRef[] }) => Promise<AiTokenBreakdown>
     }
     images: {
-      generate: (input: { prompt: string; model: string; size?: string; count?: number }) => Promise<{ images: string[]; cost: AiCostBreakdown }>
-      edit: (input: { imageAttachmentId: string; prompt: string; model: string }) => Promise<{ images: string[]; cost: AiCostBreakdown }>
+      generate: (input: { prompt: string; model: string; size?: string; count?: number }) => Promise<{ images: string[]; tokens: AiTokenBreakdown }>
+      edit: (input: { imageAttachmentId: string; prompt: string; model: string }) => Promise<{ images: string[]; tokens: AiTokenBreakdown }>
     }
     videos: {
-      generate: (input: { prompt: string; model: string; duration?: number; size?: string }) => Promise<{ videos: string[]; cost: AiCostBreakdown }>
+      generate: (input: { prompt: string; model: string; duration?: number; size?: string }) => Promise<{ videos: string[]; tokens: AiTokenBreakdown }>
     }
   }
 }

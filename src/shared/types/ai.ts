@@ -50,7 +50,7 @@ export interface AiModel {
   label: string
   description: string
   icon?: string
-  cost: number
+  providerLabel?: string
 }
 
 export type AiProviderId = 'openai' | 'anthropic' | 'google' | 'custom'
@@ -62,11 +62,11 @@ export interface AiProviderConfig {
   apiKey?: string
   baseURL?: string
   headers?: Record<string, string>
+  defaultModel?: string
 }
 
 export interface AiSettings {
   providers: AiProviderConfig[]
-  defaultModel?: string
   models?: AiModel[]
 }
 
@@ -79,11 +79,9 @@ export interface AiAttachmentRef {
   purpose?: string
 }
 
-export interface AiCostBreakdown {
+export interface AiTokenBreakdown {
   inputTokens: number
   outputTokens: number
-  attachmentCost: number
-  totalCost: number
 }
 
 export interface AiPromiseLike<T> extends Promise<T> {
@@ -111,14 +109,14 @@ export interface AiApi {
     get: (attachmentId: string) => Promise<AiAttachmentRef | null>
     delete: (attachmentId: string) => Promise<void>
   }
-  cost: {
-    estimate: (input: { model: string; messages: AiMessage[]; attachments?: AiAttachmentRef[] }) => Promise<AiCostBreakdown>
+  tokens: {
+    estimate: (input: { model: string; messages: AiMessage[]; attachments?: AiAttachmentRef[] }) => Promise<AiTokenBreakdown>
   }
   images: {
-    generate: (input: { prompt: string; model: string; size?: string; count?: number }) => Promise<{ images: string[]; cost: AiCostBreakdown }>
-    edit: (input: { imageAttachmentId: string; prompt: string; model: string }) => Promise<{ images: string[]; cost: AiCostBreakdown }>
+    generate: (input: { prompt: string; model: string; size?: string; count?: number }) => Promise<{ images: string[]; tokens: AiTokenBreakdown }>
+    edit: (input: { imageAttachmentId: string; prompt: string; model: string }) => Promise<{ images: string[]; tokens: AiTokenBreakdown }>
   }
   videos: {
-    generate: (input: { prompt: string; model: string; duration?: number; size?: string }) => Promise<{ videos: string[]; cost: AiCostBreakdown }>
+    generate: (input: { prompt: string; model: string; duration?: number; size?: string }) => Promise<{ videos: string[]; tokens: AiTokenBreakdown }>
   }
 }

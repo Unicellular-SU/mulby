@@ -27,13 +27,29 @@ export function loadAiSettings(): AiSettings {
   }
   try {
     const raw = readFileSync(path, 'utf-8')
-    const parsed = JSON.parse(raw) as AiSettings
-    settingsCache.value = {
+    const parsed = JSON.parse(raw) as AiSettings & { defaultModel?: string }
+    const next: AiSettings = {
       ...DEFAULT_SETTINGS,
       ...parsed,
       providers: parsed.providers || [],
       models: parsed.models || []
     }
+    if (parsed.defaultModel && next.providers.length > 0) {
+      const model = next.models?.find((item) => item.id === parsed.defaultModel)
+      if (model?.providerLabel) {
+        const provider = next.providers.find((item) => (item.label || item.id) === model.providerLabel)
+        if (provider && !provider.defaultModel) {
+          provider.defaultModel = parsed.defaultModel
+        }
+      } else {
+        const providerId = parsed.defaultModel.split(':')[0]
+        const provider = next.providers.find((item) => item.id === providerId)
+        if (provider && !provider.defaultModel) {
+          provider.defaultModel = parsed.defaultModel
+        }
+      }
+    }
+    settingsCache.value = next
     return settingsCache.value
   } catch (err) {
     console.error('[AI] Failed to load settings:', err)

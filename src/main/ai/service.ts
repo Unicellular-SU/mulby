@@ -1,7 +1,7 @@
 import { generateText, streamText, generateImage } from 'ai'
-import type { AiAttachmentRef, AiMessage, AiOption, AiCostBreakdown } from '../../shared/types/ai'
+import type { AiAttachmentRef, AiMessage, AiOption, AiTokenBreakdown } from '../../shared/types/ai'
 import { attachmentStore } from './attachments'
-import { estimateCost } from './cost'
+import { estimateTokens } from './tokens'
 import { getAllModels, resolveModelId } from './models'
 import { getAiSettings } from './config'
 import { getProviderRegistry, hasProvider, buildProvider } from './providers'
@@ -102,8 +102,8 @@ export class AiService {
     }
   }
 
-  async estimateCost(input: { model: string; messages: AiMessage[] }): Promise<AiCostBreakdown> {
-    return await estimateCost(input)
+  async estimateTokens(input: { model: string; messages: AiMessage[] }): Promise<AiTokenBreakdown> {
+    return await estimateTokens(input)
   }
 
   async uploadAttachment(input: { filePath?: string; buffer?: ArrayBuffer; mimeType: string; purpose?: string }): Promise<AiAttachmentRef> {
@@ -118,7 +118,7 @@ export class AiService {
     await attachmentStore.delete(attachmentId)
   }
 
-  async generateImages(input: { prompt: string; model: string; size?: string; count?: number }): Promise<{ images: string[]; cost: AiCostBreakdown }> {
+  async generateImages(input: { prompt: string; model: string; size?: string; count?: number }): Promise<{ images: string[]; tokens: AiTokenBreakdown }> {
     const { modelKey } = this.resolveImageModel(input.model)
     const result = await generateImage({
       model: modelKey,
@@ -128,11 +128,11 @@ export class AiService {
     } as any)
 
     const images = (result as any).images?.map((img: any) => img.base64) || []
-    const cost = await this.estimateCost({ model: input.model, messages: [] })
-    return { images, cost }
+    const tokens = await this.estimateTokens({ model: input.model, messages: [] })
+    return { images, tokens }
   }
 
-  async editImage(input: { imageAttachmentId: string; prompt: string; model: string }): Promise<{ images: string[]; cost: AiCostBreakdown }> {
+  async editImage(input: { imageAttachmentId: string; prompt: string; model: string }): Promise<{ images: string[]; tokens: AiTokenBreakdown }> {
     const { modelKey } = this.resolveImageModel(input.model)
     const image = await attachmentStore.read(input.imageAttachmentId)
 
@@ -145,11 +145,11 @@ export class AiService {
     } as any)
 
     const images = (result as any).images?.map((img: any) => img.base64) || []
-    const cost = await this.estimateCost({ model: input.model, messages: [] })
-    return { images, cost }
+    const tokens = await this.estimateTokens({ model: input.model, messages: [] })
+    return { images, tokens }
   }
 
-  async generateVideo(_input?: { prompt: string; model: string; duration?: number; size?: string }): Promise<{ videos: string[]; cost: AiCostBreakdown }> {
+  async generateVideo(_input?: { prompt: string; model: string; duration?: number; size?: string }): Promise<{ videos: string[]; tokens: AiTokenBreakdown }> {
     throw new Error('Video generation is not supported yet')
   }
 
@@ -359,8 +359,7 @@ export class AiService {
       const models = (data.data || []).map((item) => ({
         id: `${input.providerId}:${item.id}`,
         label: item.id,
-        description: '',
-        cost: 1
+        description: ''
       }))
       console.info('[AI] fetchModels:success', { count: models.length })
       return { models }

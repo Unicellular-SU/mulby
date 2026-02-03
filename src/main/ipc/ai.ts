@@ -84,8 +84,8 @@ export function registerAiHandlers() {
     return await aiService.deleteAttachment(attachmentId)
   })
 
-  ipcMain.handle('ai:cost:estimate', async (_event, input) => {
-    return await aiService.estimateCost(input)
+  ipcMain.handle('ai:tokens:estimate', async (_event, input) => {
+    return await aiService.estimateTokens(input)
   })
 
   ipcMain.handle('ai:images:generate', async (_event, input) => {

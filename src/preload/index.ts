@@ -189,8 +189,8 @@ const intoolsApi = {
         get: (attachmentId: string) => ipcRenderer.invoke('ai:attachments:get', attachmentId),
         delete: (attachmentId: string) => ipcRenderer.invoke('ai:attachments:delete', attachmentId)
       },
-      cost: {
-        estimate: (input: any) => ipcRenderer.invoke('ai:cost:estimate', input)
+      tokens: {
+        estimate: (input: any) => ipcRenderer.invoke('ai:tokens:estimate', input)
       },
       images: {
         generate: (input: any) => ipcRenderer.invoke('ai:images:generate', input),

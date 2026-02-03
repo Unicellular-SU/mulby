@@ -340,8 +340,8 @@ ${item.files.map(p => `    <string>${p}</string>`).join('\n')}
         get: async (attachmentId: string) => await aiService.getAttachment(attachmentId),
         delete: async (attachmentId: string) => await aiService.deleteAttachment(attachmentId)
       },
-      cost: {
-        estimate: async (input) => await aiService.estimateCost(input)
+      tokens: {
+        estimate: async (input) => await aiService.estimateTokens(input)
       },
       images: {
         generate: async (input) => await aiService.generateImages(input),

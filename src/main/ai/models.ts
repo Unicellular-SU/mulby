@@ -19,7 +19,6 @@ const DEFAULT_MODELS: ModelInfo[] = [
     label: 'gpt-4o-mini',
     description: 'OpenAI small multimodal model',
     icon: '',
-    cost: 1,
     providerId: 'openai',
     modelId: 'gpt-4o-mini',
     capabilities: ['chat', 'tools', 'vision', 'json_mode'],
@@ -30,13 +29,24 @@ const DEFAULT_MODELS: ModelInfo[] = [
 export function getAllModels(): ModelInfo[] {
   const settings = getAiSettings()
   if (settings.models && settings.models.length > 0) {
-    return settings.models.map((model) => ({
-      ...model,
-      providerId: model.id.split(':')[0] || 'custom',
-      modelId: model.id.split(':')[1] || model.id,
-      capabilities: [],
-      pricing: { inputPer1k: 0, outputPer1k: 0 }
-    }))
+    const providers = settings.providers || []
+    return settings.models.map((model) => {
+      const [rawProviderId, rawModelId] = model.id.includes(':') ? model.id.split(':', 2) : [model.id, model.id]
+      let providerId = rawProviderId || 'custom'
+      if (model.providerLabel) {
+        const provider = providers.find((item) => (item.label || item.id) === model.providerLabel)
+        if (provider?.id) {
+          providerId = provider.id
+        }
+      }
+      return {
+        ...model,
+        providerId,
+        modelId: rawModelId || model.id,
+        capabilities: [],
+        pricing: { inputPer1k: 0, outputPer1k: 0 }
+      }
+    })
   }
   return DEFAULT_MODELS
 }
@@ -49,7 +59,9 @@ export function getModelById(id: string): ModelInfo | null {
 export function resolveModelId(input?: string): { providerId: string; modelId: string; model: ModelInfo } {
   const models = getAllModels()
   const defaultModel = models[0]
-  const raw = input || defaultModel?.id
+  const settings = getAiSettings()
+  const providerDefault = settings.providers.find((provider) => provider.defaultModel)?.defaultModel
+  const raw = input || providerDefault || defaultModel?.id
   if (!raw) {
     throw new Error('AI model is not configured')
   }
