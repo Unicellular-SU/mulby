@@ -5,7 +5,16 @@ import type { AiSettings, AiProviderConfig, AiProviderId } from '../../shared/ty
 
 const DEFAULT_SETTINGS: AiSettings = {
   providers: [],
-  models: []
+  models: [],
+  defaultParams: {
+    contextWindow: 8,
+    temperatureEnabled: false,
+    topPEnabled: false,
+    maxOutputTokensEnabled: false,
+    temperature: 0.7,
+    topP: 1,
+    maxOutputTokens: 1024
+  }
 }
 
 const settingsCache: { value: AiSettings | null } = { value: null }

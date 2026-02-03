@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
-import type { AiModel, AiProviderConfig, AiSettings } from '../../shared/types/ai'
+import type { AiModel, AiModelParameters, AiProviderConfig, AiSettings } from '../../shared/types/ai'
+import SliderWithTicks from './SliderWithTicks'
 
 interface AiSettingsViewProps {
   onBack: () => void
@@ -42,6 +43,33 @@ export default function AiSettingsView({ onBack }: AiSettingsViewProps) {
   const actionButtonClass = 'rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-700 transition hover:border-slate-300 hover:text-slate-900 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-200'
   const inputClass = 'w-full rounded-2xl border border-slate-200 bg-white px-4 py-2 text-sm text-slate-700 shadow-sm outline-none transition focus:border-slate-300 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-200'
   const selectClass = 'w-full appearance-none rounded-2xl border border-slate-200 bg-white px-4 py-2 pr-10 text-sm text-slate-700 shadow-sm outline-none transition focus:border-slate-300 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-200'
+
+  const toggleButtonClass = 'flex h-5 w-9 items-center rounded-full border border-slate-200 bg-white px-0.5 transition dark:border-slate-700 dark:bg-slate-950'
+  const toggleButtonOnClass = 'bg-slate-900 border-slate-900 dark:bg-white dark:border-white'
+  const toggleDotClass = 'h-4 w-4 rounded-full bg-slate-400 shadow transition'
+  const toggleDotOnClass = 'translate-x-4 bg-white'
+  const miniInputClass = 'w-24 rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 shadow-sm outline-none transition focus:border-slate-300 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-200'
+  const tipWrapClass = 'relative inline-flex items-center gap-1 text-xs text-slate-500 dark:text-slate-400 group'
+  const tipBubbleClass = 'pointer-events-none absolute left-1/2 top-full z-10 mt-2 w-56 -translate-x-1/2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-[11px] text-slate-600 opacity-0 shadow-lg transition group-hover:opacity-100 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-300'
+  const DEFAULT_TEMPERATURE = 0.7
+  const DEFAULT_TOP_P = 1
+  const DEFAULT_CONTEXT_WINDOW = 8
+
+  const formatNumber = (value?: number) => (value === undefined || Number.isNaN(value) ? '' : String(value))
+  const parseOptionalNumber = (value: string) => {
+    const trimmed = value.trim()
+    if (!trimmed) return undefined
+    const num = Number(trimmed)
+    return Number.isFinite(num) ? num : undefined
+  }
+  const formatStopSequences = (value?: string[]) => (value && value.length > 0 ? value.join('\n') : '')
+  const parseStopSequences = (value: string) => {
+    const items = value
+      .split(/[\n,]+/)
+      .map((item) => item.trim())
+      .filter(Boolean)
+    return items.length > 0 ? items : undefined
+  }
 
   const getProviderKey = (provider: AiProviderConfig) => {
     const label = (provider.label || '').trim()
@@ -204,6 +232,112 @@ export default function AiSettingsView({ onBack }: AiSettingsViewProps) {
     updateAiDraft({ models })
   }
 
+  const handleUpdateDefaultParams = (patch: Partial<AiModelParameters>) => {
+    if (!aiDraft) return
+    const defaultParams = { ...(aiDraft.defaultParams || {}), ...patch }
+    updateAiDraft({ defaultParams })
+  }
+
+  const handleToggleDefaultParam = (key: 'temperatureEnabled' | 'topPEnabled') => {
+    if (!aiDraft) return
+    const current = aiDraft.defaultParams || {}
+    const nextEnabled = !(current[key] ?? false)
+    const patch: Partial<AiModelParameters> = { [key]: nextEnabled }
+    if (nextEnabled && key === 'temperatureEnabled' && current.temperature === undefined) {
+      patch.temperature = DEFAULT_TEMPERATURE
+    }
+    if (nextEnabled && key === 'topPEnabled' && current.topP === undefined) {
+      patch.topP = DEFAULT_TOP_P
+    }
+    handleUpdateDefaultParams(patch)
+  }
+
+  const handleToggleDefaultMaxTokens = () => {
+    if (!aiDraft) return
+    const current = aiDraft.defaultParams || {}
+    const nextEnabled = !(current.maxOutputTokensEnabled ?? false)
+    const patch: Partial<AiModelParameters> = { maxOutputTokensEnabled: nextEnabled }
+    if (nextEnabled && current.maxOutputTokens === undefined) {
+      patch.maxOutputTokens = 1024
+    }
+    handleUpdateDefaultParams(patch)
+  }
+
+  const handleUpdateProviderParams = (index: number, patch: Partial<AiModelParameters>) => {
+    if (!aiDraft) return
+    const provider = aiDraft.providers[index]
+    if (!provider) return
+    handleUpdateProvider(index, { defaultParams: { ...(provider.defaultParams || {}), ...patch } })
+  }
+
+  const handleToggleProviderParam = (index: number, key: 'temperatureEnabled' | 'topPEnabled') => {
+    if (!aiDraft) return
+    const provider = aiDraft.providers[index]
+    if (!provider) return
+    const current = provider.defaultParams || {}
+    const nextEnabled = !(current[key] ?? false)
+    const patch: Partial<AiModelParameters> = { [key]: nextEnabled }
+    if (nextEnabled && key === 'temperatureEnabled' && current.temperature === undefined) {
+      patch.temperature = DEFAULT_TEMPERATURE
+    }
+    if (nextEnabled && key === 'topPEnabled' && current.topP === undefined) {
+      patch.topP = DEFAULT_TOP_P
+    }
+    handleUpdateProviderParams(index, patch)
+  }
+
+  const handleToggleProviderMaxTokens = (index: number) => {
+    if (!aiDraft) return
+    const provider = aiDraft.providers[index]
+    if (!provider) return
+    const current = provider.defaultParams || {}
+    const nextEnabled = !(current.maxOutputTokensEnabled ?? false)
+    const patch: Partial<AiModelParameters> = { maxOutputTokensEnabled: nextEnabled }
+    if (nextEnabled && current.maxOutputTokens === undefined) {
+      patch.maxOutputTokens = 1024
+    }
+    handleUpdateProviderParams(index, patch)
+  }
+
+  const handleUpdateModelParams = (modelId: string, patch: Partial<AiModelParameters>) => {
+    if (!aiDraft?.models) return
+    const actualIndex = aiDraft.models.findIndex((item) => item.id === modelId)
+    if (actualIndex < 0) return
+    const model = aiDraft.models[actualIndex]
+    handleUpdateModel(actualIndex, { params: { ...(model.params || {}), ...patch } })
+  }
+
+  const handleToggleModelParam = (modelId: string, key: 'temperatureEnabled' | 'topPEnabled') => {
+    if (!aiDraft?.models) return
+    const actualIndex = aiDraft.models.findIndex((item) => item.id === modelId)
+    if (actualIndex < 0) return
+    const model = aiDraft.models[actualIndex]
+    const current = model.params || {}
+    const nextEnabled = !(current[key] ?? false)
+    const patch: Partial<AiModelParameters> = { [key]: nextEnabled }
+    if (nextEnabled && key === 'temperatureEnabled' && current.temperature === undefined) {
+      patch.temperature = DEFAULT_TEMPERATURE
+    }
+    if (nextEnabled && key === 'topPEnabled' && current.topP === undefined) {
+      patch.topP = DEFAULT_TOP_P
+    }
+    handleUpdateModelParams(modelId, patch)
+  }
+
+  const handleToggleModelMaxTokens = (modelId: string) => {
+    if (!aiDraft?.models) return
+    const actualIndex = aiDraft.models.findIndex((item) => item.id === modelId)
+    if (actualIndex < 0) return
+    const model = aiDraft.models[actualIndex]
+    const current = model.params || {}
+    const nextEnabled = !(current.maxOutputTokensEnabled ?? false)
+    const patch: Partial<AiModelParameters> = { maxOutputTokensEnabled: nextEnabled }
+    if (nextEnabled && current.maxOutputTokens === undefined) {
+      patch.maxOutputTokens = 1024
+    }
+    handleUpdateModelParams(modelId, patch)
+  }
+
   const handleFetchModels = async (provider: AiProviderConfig) => {
     setAiInfo(null)
     setAiError(null)
@@ -341,16 +475,217 @@ export default function AiSettingsView({ onBack }: AiSettingsViewProps) {
             </div>
           )}
 
-          <div className={`${cardClass} grid grid-cols-1 gap-4 sm:grid-cols-2`}>
-            <div>
-              <div className="text-xs uppercase tracking-[0.2em] text-slate-500 dark:text-slate-400">供应商</div>
-              <div className="mt-2 text-sm font-medium text-slate-900 dark:text-white">{aiDraft?.providers.length ?? 0}</div>
+          <details className={`${cardClass} space-y-4`} open={false}>
+            <summary className="flex cursor-pointer items-center justify-between text-sm font-medium text-slate-900 dark:text-white">
+              <span>默认参数</span>
+              <span className="text-xs text-slate-500 dark:text-slate-400">点击展开</span>
+            </summary>
+            <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
+              <div className="text-xs text-slate-500 dark:text-slate-400">空值表示继承模型或供应商参数</div>
+              <span className={tipWrapClass}>
+                <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <circle cx="12" cy="12" r="9" />
+                  <path d="M12 8h.01M11 12h1v4h-1" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+                <span className={tipBubbleClass}>token 为估算值，仅供参考</span>
+              </span>
             </div>
-            <div>
-              <div className="text-xs uppercase tracking-[0.2em] text-slate-500 dark:text-slate-400">模型数量</div>
-              <div className="mt-2 text-sm font-medium text-slate-900 dark:text-white">{aiDraft?.models?.length ?? 0}</div>
+
+            <div className="mt-3 space-y-4">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-[180px_1fr_120px] items-center">
+                <div className="flex items-center gap-2">
+                  <span className="text-xs text-slate-600 dark:text-slate-300">上下文条数</span>
+                  <span className={tipWrapClass}>
+                    <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <circle cx="12" cy="12" r="9" />
+                      <path d="M12 8h.01M11 12h1v4h-1" strokeLinecap="round" strokeLinejoin="round" />
+                    </svg>
+                    <span className={tipBubbleClass}>保留最近的消息条数，100 表示不限，普通聊天建议 5–10</span>
+                  </span>
+                </div>
+                <SliderWithTicks
+                  value={aiDraft?.defaultParams?.contextWindow ?? DEFAULT_CONTEXT_WINDOW}
+                  min={0}
+                  max={100}
+                  step={1}
+                  ticks={[
+                    { value: 0 },
+                    { value: 5 },
+                    { value: 10 },
+                    { value: 20 },
+                    { value: 50 },
+                    { value: 100, label: '∞' }
+                  ]}
+                  snapToTicks
+                  onChange={(next) => handleUpdateDefaultParams({ contextWindow: next })}
+                />
+                <input
+                  className={miniInputClass}
+                  type="number"
+                  min="0"
+                  step="1"
+                  value={formatNumber(aiDraft?.defaultParams?.contextWindow)}
+                  onChange={(e) => handleUpdateDefaultParams({ contextWindow: parseOptionalNumber(e.target.value) })}
+                />
+              </div>
+
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <div className="rounded-2xl border border-slate-200/80 bg-white p-3 dark:border-slate-800/80 dark:bg-slate-950">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs text-slate-600 dark:text-slate-300">温度</span>
+                    <button
+                      type="button"
+                      className={`${toggleButtonClass} ${aiDraft?.defaultParams?.temperatureEnabled ? toggleButtonOnClass : ''}`}
+                      onClick={() => handleToggleDefaultParam('temperatureEnabled')}
+                      aria-pressed={aiDraft?.defaultParams?.temperatureEnabled ?? false}
+                    >
+                      <span className={`${toggleDotClass} ${aiDraft?.defaultParams?.temperatureEnabled ? toggleDotOnClass : ''}`} />
+                    </button>
+                  </div>
+                  <div className="mt-2 flex flex-col gap-2">
+                    <SliderWithTicks
+                      value={aiDraft?.defaultParams?.temperature ?? DEFAULT_TEMPERATURE}
+                      min={0}
+                      max={2}
+                      step={0.05}
+                      ticks={[
+                        { value: 0 },
+                        { value: 0.5 },
+                        { value: 1 },
+                        { value: 1.5 },
+                        { value: 2 }
+                      ]}
+                      snapToTicks
+                      disabled={!(aiDraft?.defaultParams?.temperatureEnabled ?? false)}
+                      onChange={(next) => handleUpdateDefaultParams({ temperature: next })}
+                    />
+                    <input
+                      className={miniInputClass}
+                      type="number"
+                      min="0"
+                      max="2"
+                      step="0.05"
+                      value={formatNumber(aiDraft?.defaultParams?.temperature)}
+                      onChange={(e) => handleUpdateDefaultParams({ temperature: parseOptionalNumber(e.target.value) })}
+                      disabled={!(aiDraft?.defaultParams?.temperatureEnabled ?? false)}
+                    />
+                  </div>
+                </div>
+
+                <div className="rounded-2xl border border-slate-200/80 bg-white p-3 dark:border-slate-800/80 dark:bg-slate-950">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs text-slate-600 dark:text-slate-300">Top-P</span>
+                    <button
+                      type="button"
+                      className={`${toggleButtonClass} ${aiDraft?.defaultParams?.topPEnabled ? toggleButtonOnClass : ''}`}
+                      onClick={() => handleToggleDefaultParam('topPEnabled')}
+                      aria-pressed={aiDraft?.defaultParams?.topPEnabled ?? false}
+                    >
+                      <span className={`${toggleDotClass} ${aiDraft?.defaultParams?.topPEnabled ? toggleDotOnClass : ''}`} />
+                    </button>
+                  </div>
+                  <div className="mt-2 flex flex-col gap-2">
+                    <SliderWithTicks
+                      value={aiDraft?.defaultParams?.topP ?? DEFAULT_TOP_P}
+                      min={0}
+                      max={1}
+                      step={0.05}
+                      ticks={[
+                        { value: 0 },
+                        { value: 0.25 },
+                        { value: 0.5 },
+                        { value: 0.75 },
+                        { value: 1 }
+                      ]}
+                      snapToTicks
+                      disabled={!(aiDraft?.defaultParams?.topPEnabled ?? false)}
+                      onChange={(next) => handleUpdateDefaultParams({ topP: next })}
+                    />
+                    <input
+                      className={miniInputClass}
+                      type="number"
+                      min="0"
+                      max="1"
+                      step="0.05"
+                      value={formatNumber(aiDraft?.defaultParams?.topP)}
+                      onChange={(e) => handleUpdateDefaultParams({ topP: parseOptionalNumber(e.target.value) })}
+                      disabled={!(aiDraft?.defaultParams?.topPEnabled ?? false)}
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-[180px_1fr_120px] items-center">
+                <div className="flex items-center gap-2">
+                  <span className="text-xs text-slate-600 dark:text-slate-300">最大输出 tokens</span>
+                  <span className={tipWrapClass}>
+                    <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <circle cx="12" cy="12" r="9" />
+                      <path d="M12 8h.01M11 12h1v4h-1" strokeLinecap="round" strokeLinejoin="round" />
+                    </svg>
+                    <span className={tipBubbleClass}>单次最大输出 token，过大可能报错。关闭表示不限制。</span>
+                  </span>
+                </div>
+                <div className="flex items-center gap-3">
+                  <button
+                    type="button"
+                    className={`${toggleButtonClass} ${aiDraft?.defaultParams?.maxOutputTokensEnabled ? toggleButtonOnClass : ''}`}
+                    onClick={handleToggleDefaultMaxTokens}
+                    aria-pressed={aiDraft?.defaultParams?.maxOutputTokensEnabled ?? false}
+                  >
+                    <span className={`${toggleDotClass} ${aiDraft?.defaultParams?.maxOutputTokensEnabled ? toggleDotOnClass : ''}`} />
+                  </button>
+                  <input
+                    className={miniInputClass}
+                    type="number"
+                    min="1"
+                    step="1"
+                    value={formatNumber(aiDraft?.defaultParams?.maxOutputTokens)}
+                    onChange={(e) => handleUpdateDefaultParams({ maxOutputTokens: parseOptionalNumber(e.target.value) })}
+                    disabled={!(aiDraft?.defaultParams?.maxOutputTokensEnabled ?? false)}
+                  />
+                </div>
+                <div />
+              </div>
             </div>
-          </div>
+
+            <details className="rounded-2xl border border-slate-200/80 bg-slate-50 px-4 py-3 text-sm text-slate-700 dark:border-slate-800/80 dark:bg-slate-900/50 dark:text-slate-200">
+              <summary className="cursor-pointer text-sm font-medium text-slate-700 dark:text-slate-200">高级参数</summary>
+              <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-3">
+                <input
+                  className={inputClass}
+                  placeholder="Top-K"
+                  value={formatNumber(aiDraft?.defaultParams?.topK)}
+                  onChange={(e) => handleUpdateDefaultParams({ topK: parseOptionalNumber(e.target.value) })}
+                />
+                <input
+                  className={inputClass}
+                  placeholder="Presence Penalty (-2~2)"
+                  value={formatNumber(aiDraft?.defaultParams?.presencePenalty)}
+                  onChange={(e) => handleUpdateDefaultParams({ presencePenalty: parseOptionalNumber(e.target.value) })}
+                />
+                <input
+                  className={inputClass}
+                  placeholder="Frequency Penalty (-2~2)"
+                  value={formatNumber(aiDraft?.defaultParams?.frequencyPenalty)}
+                  onChange={(e) => handleUpdateDefaultParams({ frequencyPenalty: parseOptionalNumber(e.target.value) })}
+                />
+                <input
+                  className={inputClass}
+                  placeholder="Seed"
+                  value={formatNumber(aiDraft?.defaultParams?.seed)}
+                  onChange={(e) => handleUpdateDefaultParams({ seed: parseOptionalNumber(e.target.value) })}
+                />
+                <textarea
+                  className={`${inputClass} min-h-[84px] sm:col-span-2`}
+                  placeholder="Stop sequences (换行或逗号分隔)"
+                  value={formatStopSequences(aiDraft?.defaultParams?.stopSequences)}
+                  onChange={(e) => handleUpdateDefaultParams({ stopSequences: parseStopSequences(e.target.value) })}
+                />
+              </div>
+            </details>
+
+          </details>
 
           <div className={`${cardClass} space-y-4`}>
             <div className="flex items-center justify-between gap-2">
@@ -494,6 +829,189 @@ export default function AiSettingsView({ onBack }: AiSettingsViewProps) {
                       />
                     </div>
 
+                    <details className="rounded-2xl border border-slate-200/80 bg-slate-50 px-4 py-3 text-sm text-slate-700 dark:border-slate-800/80 dark:bg-slate-900/50 dark:text-slate-200">
+                      <summary className="cursor-pointer text-sm font-medium text-slate-700 dark:text-slate-200">供应商默认参数</summary>
+                      <div className="mt-3 space-y-4">
+                        <div className="rounded-2xl border border-slate-200/80 bg-white p-4 dark:border-slate-800/80 dark:bg-slate-950">
+                          <div className="mb-2 text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">上下文条数</div>
+                          <SliderWithTicks
+                            value={selectedProvider.defaultParams?.contextWindow ?? aiDraft?.defaultParams?.contextWindow ?? DEFAULT_CONTEXT_WINDOW}
+                            min={0}
+                            max={100}
+                            step={1}
+                            ticks={[
+                              { value: 0 },
+                              { value: 5 },
+                              { value: 10 },
+                              { value: 20 },
+                              { value: 50 },
+                              { value: 100, label: '∞' }
+                            ]}
+                            snapToTicks
+                            onChange={(next) => handleUpdateProviderParams(selectedProviderIndex, { contextWindow: next })}
+                          />
+                          <div className="mt-2 flex items-center justify-between">
+                            <span className="text-xs text-slate-500 dark:text-slate-400">100 表示不限</span>
+                            <input
+                              className={miniInputClass}
+                              type="number"
+                              min="0"
+                              step="1"
+                              value={formatNumber(selectedProvider.defaultParams?.contextWindow)}
+                              onChange={(e) => handleUpdateProviderParams(selectedProviderIndex, { contextWindow: parseOptionalNumber(e.target.value) })}
+                            />
+                          </div>
+                        </div>
+
+                        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                          <div className="rounded-2xl border border-slate-200/80 bg-white p-3 dark:border-slate-800/80 dark:bg-slate-950">
+                            <div className="flex items-center justify-between">
+                              <span className="text-xs text-slate-600 dark:text-slate-300">温度</span>
+                              <button
+                                type="button"
+                                className={`${toggleButtonClass} ${selectedProvider.defaultParams?.temperatureEnabled ? toggleButtonOnClass : ''}`}
+                                onClick={() => handleToggleProviderParam(selectedProviderIndex, 'temperatureEnabled')}
+                                aria-pressed={selectedProvider.defaultParams?.temperatureEnabled ?? false}
+                              >
+                                <span className={`${toggleDotClass} ${selectedProvider.defaultParams?.temperatureEnabled ? toggleDotOnClass : ''}`} />
+                              </button>
+                            </div>
+                            <div className="mt-2 flex flex-col gap-2">
+                              <SliderWithTicks
+                                value={selectedProvider.defaultParams?.temperature ?? DEFAULT_TEMPERATURE}
+                                min={0}
+                                max={2}
+                                step={0.05}
+                                ticks={[
+                                  { value: 0 },
+                                  { value: 0.5 },
+                                  { value: 1 },
+                                  { value: 1.5 },
+                                  { value: 2 }
+                                ]}
+                                snapToTicks
+                                disabled={!(selectedProvider.defaultParams?.temperatureEnabled ?? false)}
+                                onChange={(next) => handleUpdateProviderParams(selectedProviderIndex, { temperature: next })}
+                              />
+                              <input
+                                className={miniInputClass}
+                                type="number"
+                                min="0"
+                                max="2"
+                                step="0.05"
+                                value={formatNumber(selectedProvider.defaultParams?.temperature)}
+                                onChange={(e) => handleUpdateProviderParams(selectedProviderIndex, { temperature: parseOptionalNumber(e.target.value) })}
+                                disabled={!(selectedProvider.defaultParams?.temperatureEnabled ?? false)}
+                              />
+                            </div>
+                          </div>
+                          <div className="rounded-2xl border border-slate-200/80 bg-white p-3 dark:border-slate-800/80 dark:bg-slate-950">
+                            <div className="flex items-center justify-between">
+                              <span className="text-xs text-slate-600 dark:text-slate-300">Top-P</span>
+                              <button
+                                type="button"
+                                className={`${toggleButtonClass} ${selectedProvider.defaultParams?.topPEnabled ? toggleButtonOnClass : ''}`}
+                                onClick={() => handleToggleProviderParam(selectedProviderIndex, 'topPEnabled')}
+                                aria-pressed={selectedProvider.defaultParams?.topPEnabled ?? false}
+                              >
+                                <span className={`${toggleDotClass} ${selectedProvider.defaultParams?.topPEnabled ? toggleDotOnClass : ''}`} />
+                              </button>
+                            </div>
+                            <div className="mt-2 flex flex-col gap-2">
+                              <SliderWithTicks
+                                value={selectedProvider.defaultParams?.topP ?? DEFAULT_TOP_P}
+                                min={0}
+                                max={1}
+                                step={0.05}
+                                ticks={[
+                                  { value: 0 },
+                                  { value: 0.25 },
+                                  { value: 0.5 },
+                                  { value: 0.75 },
+                                  { value: 1 }
+                                ]}
+                                snapToTicks
+                                disabled={!(selectedProvider.defaultParams?.topPEnabled ?? false)}
+                                onChange={(next) => handleUpdateProviderParams(selectedProviderIndex, { topP: next })}
+                              />
+                              <input
+                                className={miniInputClass}
+                                type="number"
+                                min="0"
+                                max="1"
+                                step="0.05"
+                                value={formatNumber(selectedProvider.defaultParams?.topP)}
+                                onChange={(e) => handleUpdateProviderParams(selectedProviderIndex, { topP: parseOptionalNumber(e.target.value) })}
+                                disabled={!(selectedProvider.defaultParams?.topPEnabled ?? false)}
+                              />
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="rounded-2xl border border-slate-200/80 bg-white p-4 dark:border-slate-800/80 dark:bg-slate-950">
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                              <span className="text-xs text-slate-600 dark:text-slate-300">最大输出 tokens</span>
+                              <span className={tipWrapClass}>
+                                <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                  <circle cx="12" cy="12" r="9" />
+                                  <path d="M12 8h.01M11 12h1v4h-1" strokeLinecap="round" strokeLinejoin="round" />
+                                </svg>
+                                <span className={tipBubbleClass}>单次最大输出 token，过大可能报错。关闭表示不限制。</span>
+                              </span>
+                            </div>
+                            <button
+                              type="button"
+                              className={`${toggleButtonClass} ${selectedProvider.defaultParams?.maxOutputTokensEnabled ? toggleButtonOnClass : ''}`}
+                              onClick={() => handleToggleProviderMaxTokens(selectedProviderIndex)}
+                              aria-pressed={selectedProvider.defaultParams?.maxOutputTokensEnabled ?? false}
+                            >
+                              <span className={`${toggleDotClass} ${selectedProvider.defaultParams?.maxOutputTokensEnabled ? toggleDotOnClass : ''}`} />
+                            </button>
+                          </div>
+                          <div className="mt-3 flex items-center justify-between">
+                            <span className="text-xs text-slate-500 dark:text-slate-400">关闭表示不限制</span>
+                            <input
+                              className={miniInputClass}
+                              type="number"
+                              min="1"
+                              step="1"
+                              value={formatNumber(selectedProvider.defaultParams?.maxOutputTokens)}
+                              onChange={(e) => handleUpdateProviderParams(selectedProviderIndex, { maxOutputTokens: parseOptionalNumber(e.target.value) })}
+                              disabled={!(selectedProvider.defaultParams?.maxOutputTokensEnabled ?? false)}
+                            />
+                          </div>
+                        </div>
+
+                        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                          <input
+                            className={inputClass}
+                            placeholder="Presence Penalty (-2~2)"
+                            value={formatNumber(selectedProvider.defaultParams?.presencePenalty)}
+                            onChange={(e) => handleUpdateProviderParams(selectedProviderIndex, { presencePenalty: parseOptionalNumber(e.target.value) })}
+                          />
+                          <input
+                            className={inputClass}
+                            placeholder="Frequency Penalty (-2~2)"
+                            value={formatNumber(selectedProvider.defaultParams?.frequencyPenalty)}
+                            onChange={(e) => handleUpdateProviderParams(selectedProviderIndex, { frequencyPenalty: parseOptionalNumber(e.target.value) })}
+                          />
+                          <input
+                            className={inputClass}
+                            placeholder="Seed"
+                            value={formatNumber(selectedProvider.defaultParams?.seed)}
+                            onChange={(e) => handleUpdateProviderParams(selectedProviderIndex, { seed: parseOptionalNumber(e.target.value) })}
+                          />
+                          <textarea
+                            className={`${inputClass} min-h-[72px] sm:col-span-3`}
+                            placeholder="Stop sequences (换行或逗号分隔)"
+                            value={formatStopSequences(selectedProvider.defaultParams?.stopSequences)}
+                            onChange={(e) => handleUpdateProviderParams(selectedProviderIndex, { stopSequences: parseStopSequences(e.target.value) })}
+                          />
+                        </div>
+                      </div>
+                    </details>
+
                     <div className="rounded-2xl bg-slate-50 p-4 dark:bg-slate-900/50">
                       <div className="flex flex-wrap items-center justify-between gap-2">
                         <div>
@@ -596,6 +1114,201 @@ export default function AiSettingsView({ onBack }: AiSettingsViewProps) {
                                     handleUpdateModel(actualIndex, { description: e.target.value })
                                   }}
                                 />
+                              </div>
+
+                              <div className="mt-3">
+                                <div className="text-xs uppercase tracking-[0.2em] text-slate-400">参数覆盖</div>
+                                <div className="mt-2 space-y-4">
+                                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-[180px_1fr_120px] items-center">
+                                    <div className="flex items-center gap-2">
+                                      <span className="text-xs text-slate-600 dark:text-slate-300">上下文条数</span>
+                                      <span className={tipWrapClass}>
+                                        <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                          <circle cx="12" cy="12" r="9" />
+                                          <path d="M12 8h.01M11 12h1v4h-1" strokeLinecap="round" strokeLinejoin="round" />
+                                        </svg>
+                                        <span className={tipBubbleClass}>100 表示不限，普通聊天建议 5–10</span>
+                                      </span>
+                                    </div>
+                                    <SliderWithTicks
+                                      value={model.params?.contextWindow ?? selectedProvider?.defaultParams?.contextWindow ?? aiDraft?.defaultParams?.contextWindow ?? DEFAULT_CONTEXT_WINDOW}
+                                      min={0}
+                                      max={100}
+                                      step={1}
+                                      ticks={[
+                                        { value: 0 },
+                                        { value: 5 },
+                                        { value: 10 },
+                                        { value: 20 },
+                                        { value: 50 },
+                                        { value: 100, label: '∞' }
+                                      ]}
+                                      snapToTicks
+                                      onChange={(next) => handleUpdateModelParams(model.id, { contextWindow: next })}
+                                    />
+                                    <input
+                                      className={miniInputClass}
+                                      type="number"
+                                      min="0"
+                                      step="1"
+                                      value={formatNumber(model.params?.contextWindow)}
+                                      onChange={(e) => handleUpdateModelParams(model.id, { contextWindow: parseOptionalNumber(e.target.value) })}
+                                    />
+                                  </div>
+
+                                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                                    <div className="rounded-2xl border border-slate-200/80 bg-white p-3 dark:border-slate-800/80 dark:bg-slate-950">
+                                      <div className="flex items-center justify-between">
+                                        <span className="text-xs text-slate-600 dark:text-slate-300">温度</span>
+                                        <button
+                                          type="button"
+                                          className={`${toggleButtonClass} ${model.params?.temperatureEnabled ? toggleButtonOnClass : ''}`}
+                                          onClick={() => handleToggleModelParam(model.id, 'temperatureEnabled')}
+                                          aria-pressed={model.params?.temperatureEnabled ?? false}
+                                        >
+                                          <span className={`${toggleDotClass} ${model.params?.temperatureEnabled ? toggleDotOnClass : ''}`} />
+                                        </button>
+                                      </div>
+                                      <div className="mt-2 flex flex-col gap-2">
+                                        <SliderWithTicks
+                                          value={model.params?.temperature ?? DEFAULT_TEMPERATURE}
+                                          min={0}
+                                          max={2}
+                                          step={0.05}
+                                          ticks={[
+                                            { value: 0 },
+                                            { value: 0.5 },
+                                            { value: 1 },
+                                            { value: 1.5 },
+                                            { value: 2 }
+                                          ]}
+                                          snapToTicks
+                                          disabled={!(model.params?.temperatureEnabled ?? false)}
+                                          onChange={(next) => handleUpdateModelParams(model.id, { temperature: next })}
+                                        />
+                                        <input
+                                          className={miniInputClass}
+                                          type="number"
+                                          min="0"
+                                          max="2"
+                                          step="0.05"
+                                          value={formatNumber(model.params?.temperature)}
+                                          onChange={(e) => handleUpdateModelParams(model.id, { temperature: parseOptionalNumber(e.target.value) })}
+                                          disabled={!(model.params?.temperatureEnabled ?? false)}
+                                        />
+                                      </div>
+                                    </div>
+                                    <div className="rounded-2xl border border-slate-200/80 bg-white p-3 dark:border-slate-800/80 dark:bg-slate-950">
+                                      <div className="flex items-center justify-between">
+                                        <span className="text-xs text-slate-600 dark:text-slate-300">Top-P</span>
+                                        <button
+                                          type="button"
+                                          className={`${toggleButtonClass} ${model.params?.topPEnabled ? toggleButtonOnClass : ''}`}
+                                          onClick={() => handleToggleModelParam(model.id, 'topPEnabled')}
+                                          aria-pressed={model.params?.topPEnabled ?? false}
+                                        >
+                                          <span className={`${toggleDotClass} ${model.params?.topPEnabled ? toggleDotOnClass : ''}`} />
+                                        </button>
+                                      </div>
+                                      <div className="mt-2 flex flex-col gap-2">
+                                        <SliderWithTicks
+                                          value={model.params?.topP ?? DEFAULT_TOP_P}
+                                          min={0}
+                                          max={1}
+                                          step={0.05}
+                                          ticks={[
+                                            { value: 0 },
+                                            { value: 0.25 },
+                                            { value: 0.5 },
+                                            { value: 0.75 },
+                                            { value: 1 }
+                                          ]}
+                                          snapToTicks
+                                          disabled={!(model.params?.topPEnabled ?? false)}
+                                          onChange={(next) => handleUpdateModelParams(model.id, { topP: next })}
+                                        />
+                                        <input
+                                          className={miniInputClass}
+                                          type="number"
+                                          min="0"
+                                          max="1"
+                                          step="0.05"
+                                          value={formatNumber(model.params?.topP)}
+                                          onChange={(e) => handleUpdateModelParams(model.id, { topP: parseOptionalNumber(e.target.value) })}
+                                          disabled={!(model.params?.topPEnabled ?? false)}
+                                        />
+                                      </div>
+                                    </div>
+                                  </div>
+
+                                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-[180px_1fr_120px] items-center">
+                                    <div className="flex items-center gap-2">
+                                      <span className="text-xs text-slate-600 dark:text-slate-300">最大输出 tokens</span>
+                                      <span className={tipWrapClass}>
+                                        <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                          <circle cx="12" cy="12" r="9" />
+                                          <path d="M12 8h.01M11 12h1v4h-1" strokeLinecap="round" strokeLinejoin="round" />
+                                        </svg>
+                                        <span className={tipBubbleClass}>单次最大输出 token，过大可能报错。关闭表示不限制。</span>
+                                      </span>
+                                    </div>
+                                    <div className="flex items-center gap-3">
+                                      <button
+                                        type="button"
+                                        className={`${toggleButtonClass} ${model.params?.maxOutputTokensEnabled ? toggleButtonOnClass : ''}`}
+                                        onClick={() => handleToggleModelMaxTokens(model.id)}
+                                        aria-pressed={model.params?.maxOutputTokensEnabled ?? false}
+                                      >
+                                        <span className={`${toggleDotClass} ${model.params?.maxOutputTokensEnabled ? toggleDotOnClass : ''}`} />
+                                      </button>
+                                      <input
+                                        className={miniInputClass}
+                                        type="number"
+                                        min="1"
+                                        step="1"
+                                        value={formatNumber(model.params?.maxOutputTokens)}
+                                        onChange={(e) => handleUpdateModelParams(model.id, { maxOutputTokens: parseOptionalNumber(e.target.value) })}
+                                        disabled={!(model.params?.maxOutputTokensEnabled ?? false)}
+                                      />
+                                    </div>
+                                    <div />
+                                  </div>
+                                </div>
+                                <details className="mt-3 rounded-2xl border border-slate-200/80 bg-slate-50 px-4 py-3 text-sm text-slate-700 dark:border-slate-800/80 dark:bg-slate-900/50 dark:text-slate-200">
+                                  <summary className="cursor-pointer text-sm font-medium text-slate-700 dark:text-slate-200">高级参数</summary>
+                                  <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-3">
+                                    <input
+                                      className={inputClass}
+                                      placeholder="Top-K"
+                                      value={formatNumber(model.params?.topK)}
+                                      onChange={(e) => handleUpdateModelParams(model.id, { topK: parseOptionalNumber(e.target.value) })}
+                                    />
+                                    <input
+                                      className={inputClass}
+                                      placeholder="Presence Penalty (-2~2)"
+                                      value={formatNumber(model.params?.presencePenalty)}
+                                      onChange={(e) => handleUpdateModelParams(model.id, { presencePenalty: parseOptionalNumber(e.target.value) })}
+                                    />
+                                    <input
+                                      className={inputClass}
+                                      placeholder="Frequency Penalty (-2~2)"
+                                      value={formatNumber(model.params?.frequencyPenalty)}
+                                      onChange={(e) => handleUpdateModelParams(model.id, { frequencyPenalty: parseOptionalNumber(e.target.value) })}
+                                    />
+                                    <input
+                                      className={inputClass}
+                                      placeholder="Seed"
+                                      value={formatNumber(model.params?.seed)}
+                                      onChange={(e) => handleUpdateModelParams(model.id, { seed: parseOptionalNumber(e.target.value) })}
+                                    />
+                                    <textarea
+                                      className={`${inputClass} min-h-[72px] sm:col-span-3`}
+                                      placeholder="Stop sequences (换行或逗号分隔)"
+                                      value={formatStopSequences(model.params?.stopSequences)}
+                                      onChange={(e) => handleUpdateModelParams(model.id, { stopSequences: parseStopSequences(e.target.value) })}
+                                    />
+                                  </div>
+                                </details>
                               </div>
                             </details>
                           ))

@@ -1,11 +1,10 @@
 import { generateText, streamText, generateImage } from 'ai'
-import type { AiAttachmentRef, AiMessage, AiOption, AiTokenBreakdown } from '../../shared/types/ai'
+import type { AiAttachmentRef, AiMessage, AiModel, AiModelParameters, AiOption, AiProviderConfig, AiTokenBreakdown } from '../../shared/types/ai'
 import { attachmentStore } from './attachments'
 import { estimateTokens } from './tokens'
 import { getAllModels, resolveModelId } from './models'
 import { getAiSettings } from './config'
 import { getProviderRegistry, hasProvider, buildProvider } from './providers'
-import type { AiProviderConfig } from '../../shared/types/ai'
 import { createProviderRegistry } from 'ai'
 
 interface StreamCallbacks {
@@ -38,11 +37,13 @@ export class AiService {
       }
 
       const { modelKey } = this.resolveLanguageModel(option.model)
-      const messages = await this.toSdkMessages(option.messages)
+      const params = this.resolveGenerationParams(option, option.model)
+      const messages = await this.toSdkMessages(this.applyContextWindow(option.messages, params.contextWindow))
       const result = await generateText({
         model: modelKey,
         messages,
-        abortSignal: controller.signal
+        abortSignal: controller.signal,
+        ...params
       })
 
       return {
@@ -69,11 +70,13 @@ export class AiService {
 
     try {
       const { modelKey } = this.resolveLanguageModel(option.model)
-      const messages = await this.toSdkMessages(option.messages)
+      const params = this.resolveGenerationParams(option, option.model)
+      const messages = await this.toSdkMessages(this.applyContextWindow(option.messages, params.contextWindow))
       const result = await streamText({
         model: modelKey,
         messages,
-        abortSignal: controller.signal
+        abortSignal: controller.signal,
+        ...params
       })
 
       let fullText = ''
@@ -156,6 +159,7 @@ export class AiService {
   async testConnection(input?: { model?: string; providerId?: string; apiKey?: string; baseURL?: string }): Promise<{ success: boolean; message?: string }> {
     try {
       const { modelKey } = this.resolveTestModel(input)
+      const params = this.resolveGenerationParams({ model: input?.model, messages: [] }, input?.model)
       console.info('[AI] testConnection:start', {
         providerId: input?.providerId,
         model: input?.model,
@@ -164,7 +168,8 @@ export class AiService {
       const result = await generateText({
         model: modelKey,
         messages: [{ role: 'user', content: 'ping' }],
-        maxTokens: 8
+        ...params,
+        maxOutputTokens: Math.min(params.maxOutputTokens ?? 8, 32)
       } as any)
       console.info('[AI] testConnection:success', {
         providerId: input?.providerId,
@@ -204,10 +209,12 @@ export class AiService {
       }
 
       const { modelKey } = this.resolveTestModel(input)
+      const params = this.resolveGenerationParams({ model: input?.model, messages: [] }, input?.model)
       const result = await streamText({
         model: modelKey,
         messages: [{ role: 'user', content: 'ping' }],
-        maxTokens: 32
+        ...params,
+        maxOutputTokens: Math.min(params.maxOutputTokens ?? 32, 64)
       } as any)
 
       let fullText = ''
@@ -244,6 +251,7 @@ export class AiService {
       throw new Error('Model is required for provider test')
     }
 
+    const params = this.resolveGenerationParams({ model: input?.model, messages: [] }, input?.model)
     const res = await fetch(url, {
       method: 'POST',
       headers: {
@@ -253,7 +261,14 @@ export class AiService {
       body: JSON.stringify({
         model: modelId,
         stream: true,
-        messages: [{ role: 'user', content: 'ping' }]
+        messages: [{ role: 'user', content: 'ping' }],
+        temperature: params.temperature,
+        top_p: params.topP,
+        max_tokens: params.maxOutputTokens ? Math.min(params.maxOutputTokens, 64) : 32,
+        presence_penalty: params.presencePenalty,
+        frequency_penalty: params.frequencyPenalty,
+        stop: params.stopSequences,
+        seed: params.seed
       })
     })
 
@@ -375,8 +390,7 @@ export class AiService {
     if (!hasProvider(providerId as any)) {
       throw new Error(`AI provider not available: ${providerId}`)
     }
-    const settings = getAiSettings()
-    const providerConfig = settings.providers.find((item) => item.id === providerId)
+    const providerConfig = this.resolveProviderConfig(modelId, providerId)
     if (providerId === 'openai' && shouldUseChatApi(providerConfig?.baseURL)) {
       const provider = buildProvider({
         id: providerId,
@@ -435,6 +449,93 @@ export class AiService {
   private createRequestId(): string {
     return `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
   }
+
+  private applyContextWindow(messages: AiMessage[], limit?: number): AiMessage[] {
+    if (limit === undefined || limit <= 0 || limit >= 100) return messages
+    const systemMessages = messages.filter((message) => message.role === 'system')
+    const otherMessages = messages.filter((message) => message.role !== 'system')
+    const trimmed = otherMessages.slice(Math.max(0, otherMessages.length - limit))
+    return [...systemMessages, ...trimmed]
+  }
+
+  private resolveGenerationParams(option: AiOption, modelId?: string): AiModelParameters {
+    const settings = getAiSettings()
+    const modelConfig = this.resolveModelConfig(modelId)
+    const providerConfig = this.resolveProviderConfig(modelId)
+    const merged = mergeModelParams(
+      settings.defaultParams,
+      providerConfig?.defaultParams,
+      modelConfig?.params,
+      option.params
+    )
+    return normalizeModelParams(merged)
+  }
+
+  private resolveModelConfig(modelId?: string): AiModel | undefined {
+    if (!modelId) return undefined
+    const settings = getAiSettings()
+    return settings.models?.find((model) => model.id === modelId)
+  }
+
+  private resolveProviderConfig(modelId?: string, providerIdOverride?: string): AiProviderConfig | undefined {
+    const settings = getAiSettings()
+    if (!settings.providers || settings.providers.length === 0) return undefined
+    const modelConfig = this.resolveModelConfig(modelId)
+    if (modelConfig?.providerLabel) {
+      const match = settings.providers.find((provider) => (provider.label || provider.id) === modelConfig.providerLabel)
+      if (match) return match
+    }
+    const providerId = providerIdOverride || (modelId?.includes(':') ? modelId.split(':', 2)[0] : undefined)
+    if (providerId) {
+      const match = settings.providers.find((provider) => String(provider.id) === String(providerId))
+      if (match) return match
+    }
+    return settings.providers[0]
+  }
+}
+
+function mergeModelParams(...params: Array<AiModelParameters | undefined>) {
+  const result: AiModelParameters = {}
+  for (const item of params) {
+    if (!item) continue
+    for (const [key, value] of Object.entries(item)) {
+      if (value === undefined || value === null) continue
+      if (Array.isArray(value) && value.length === 0) continue
+      ;(result as any)[key] = value
+    }
+  }
+  return result
+}
+
+function clampNumber(value: number, min: number, max: number) {
+  if (Number.isNaN(value)) return undefined
+  return Math.min(Math.max(value, min), max)
+}
+
+function normalizeModelParams(params: AiModelParameters): AiModelParameters {
+  const normalized: AiModelParameters = {}
+  if (params.contextWindow !== undefined) {
+    const value = Math.max(0, Math.floor(params.contextWindow))
+    if (value >= 0) normalized.contextWindow = value
+  }
+  if (params.temperatureEnabled !== undefined) normalized.temperatureEnabled = params.temperatureEnabled
+  if (params.topPEnabled !== undefined) normalized.topPEnabled = params.topPEnabled
+  if (params.maxOutputTokensEnabled !== undefined) normalized.maxOutputTokensEnabled = params.maxOutputTokensEnabled
+  if (params.temperatureEnabled !== false && params.temperature !== undefined) {
+    normalized.temperature = clampNumber(params.temperature, 0, 2)
+  }
+  if (params.topPEnabled !== false && params.topP !== undefined) {
+    normalized.topP = clampNumber(params.topP, 0, 1)
+  }
+  if (params.topK !== undefined) normalized.topK = Math.max(0, params.topK)
+  if (params.maxOutputTokensEnabled !== false && params.maxOutputTokens !== undefined) {
+    normalized.maxOutputTokens = Math.max(1, params.maxOutputTokens)
+  }
+  if (params.presencePenalty !== undefined) normalized.presencePenalty = clampNumber(params.presencePenalty, -2, 2)
+  if (params.frequencyPenalty !== undefined) normalized.frequencyPenalty = clampNumber(params.frequencyPenalty, -2, 2)
+  if (params.stopSequences) normalized.stopSequences = params.stopSequences.filter((item) => item && item.trim().length > 0)
+  if (params.seed !== undefined) normalized.seed = Math.floor(params.seed)
+  return normalized
 }
 
 function normalizeOpenAIBaseURL(baseURL?: string): string | undefined {

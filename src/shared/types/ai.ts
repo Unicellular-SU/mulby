@@ -43,6 +43,22 @@ export interface AiOption {
   model?: string
   messages: AiMessage[]
   tools?: AiTool[]
+  params?: AiModelParameters
+}
+
+export interface AiModelParameters {
+  contextWindow?: number
+  temperatureEnabled?: boolean
+  topPEnabled?: boolean
+  maxOutputTokensEnabled?: boolean
+  temperature?: number
+  topP?: number
+  topK?: number
+  maxOutputTokens?: number
+  presencePenalty?: number
+  frequencyPenalty?: number
+  stopSequences?: string[]
+  seed?: number
 }
 
 export interface AiModel {
@@ -51,6 +67,7 @@ export interface AiModel {
   description: string
   icon?: string
   providerLabel?: string
+  params?: AiModelParameters
 }
 
 export type AiProviderId = 'openai' | 'anthropic' | 'google' | 'custom'
@@ -63,11 +80,13 @@ export interface AiProviderConfig {
   baseURL?: string
   headers?: Record<string, string>
   defaultModel?: string
+  defaultParams?: AiModelParameters
 }
 
 export interface AiSettings {
   providers: AiProviderConfig[]
   models?: AiModel[]
+  defaultParams?: AiModelParameters
 }
 
 export interface AiAttachmentRef {
