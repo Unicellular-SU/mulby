@@ -2,6 +2,19 @@ import { useEffect, useState } from 'react'
 import type { AiModel, AiModelParameters, AiProviderConfig, AiSettings } from '../../shared/types/ai'
 import SliderWithTicks from './SliderWithTicks'
 
+function Switch({ checked, onChange }: { checked: boolean; onChange: () => void }) {
+  return (
+    <button
+      type="button"
+      className={`relative w-11 h-6 rounded-full transition-colors ${checked ? 'bg-blue-500' : 'bg-gray-300 dark:bg-gray-600'}`}
+      onClick={onChange}
+    >
+      <span className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${checked ? 'translate-x-5' : ''}`} />
+    </button>
+  )
+}
+
+
 interface AiSettingsViewProps {
   onBack: () => void
 }
@@ -44,10 +57,7 @@ export default function AiSettingsView({ onBack }: AiSettingsViewProps) {
   const inputClass = 'w-full rounded-2xl border border-slate-200 bg-white px-4 py-2 text-sm text-slate-700 shadow-sm outline-none transition focus:border-slate-300 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-200'
   const selectClass = 'w-full appearance-none rounded-2xl border border-slate-200 bg-white px-4 py-2 pr-10 text-sm text-slate-700 shadow-sm outline-none transition focus:border-slate-300 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-200'
 
-  const toggleButtonClass = 'flex h-5 w-9 items-center rounded-full border border-slate-200 bg-white px-0.5 transition dark:border-slate-700 dark:bg-slate-950'
-  const toggleButtonOnClass = 'bg-slate-900 border-slate-900 dark:bg-white dark:border-white'
-  const toggleDotClass = 'h-4 w-4 rounded-full bg-slate-400 shadow transition'
-  const toggleDotOnClass = 'translate-x-4 bg-white'
+
   const miniInputClass = 'w-24 rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 shadow-sm outline-none transition focus:border-slate-300 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-200'
   const tipWrapClass = 'relative inline-flex items-center gap-1 text-xs text-slate-500 dark:text-slate-400 group'
   const tipBubbleClass = 'pointer-events-none absolute left-1/2 top-full z-10 mt-2 w-56 -translate-x-1/2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-[11px] text-slate-600 opacity-0 shadow-lg transition group-hover:opacity-100 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-300'
@@ -533,14 +543,10 @@ export default function AiSettingsView({ onBack }: AiSettingsViewProps) {
                 <div className="rounded-2xl border border-slate-200/80 bg-white p-3 dark:border-slate-800/80 dark:bg-slate-950">
                   <div className="flex items-center justify-between">
                     <span className="text-xs text-slate-600 dark:text-slate-300">温度</span>
-                    <button
-                      type="button"
-                      className={`${toggleButtonClass} ${aiDraft?.defaultParams?.temperatureEnabled ? toggleButtonOnClass : ''}`}
-                      onClick={() => handleToggleDefaultParam('temperatureEnabled')}
-                      aria-pressed={aiDraft?.defaultParams?.temperatureEnabled ?? false}
-                    >
-                      <span className={`${toggleDotClass} ${aiDraft?.defaultParams?.temperatureEnabled ? toggleDotOnClass : ''}`} />
-                    </button>
+                    <Switch
+                      checked={aiDraft?.defaultParams?.temperatureEnabled ?? false}
+                      onChange={() => handleToggleDefaultParam('temperatureEnabled')}
+                    />
                   </div>
                   <div className="mt-2 flex flex-col gap-2">
                     <SliderWithTicks
@@ -575,14 +581,10 @@ export default function AiSettingsView({ onBack }: AiSettingsViewProps) {
                 <div className="rounded-2xl border border-slate-200/80 bg-white p-3 dark:border-slate-800/80 dark:bg-slate-950">
                   <div className="flex items-center justify-between">
                     <span className="text-xs text-slate-600 dark:text-slate-300">Top-P</span>
-                    <button
-                      type="button"
-                      className={`${toggleButtonClass} ${aiDraft?.defaultParams?.topPEnabled ? toggleButtonOnClass : ''}`}
-                      onClick={() => handleToggleDefaultParam('topPEnabled')}
-                      aria-pressed={aiDraft?.defaultParams?.topPEnabled ?? false}
-                    >
-                      <span className={`${toggleDotClass} ${aiDraft?.defaultParams?.topPEnabled ? toggleDotOnClass : ''}`} />
-                    </button>
+                    <Switch
+                      checked={aiDraft?.defaultParams?.topPEnabled ?? false}
+                      onChange={() => handleToggleDefaultParam('topPEnabled')}
+                    />
                   </div>
                   <div className="mt-2 flex flex-col gap-2">
                     <SliderWithTicks
@@ -627,14 +629,10 @@ export default function AiSettingsView({ onBack }: AiSettingsViewProps) {
                   </span>
                 </div>
                 <div className="flex items-center gap-3">
-                  <button
-                    type="button"
-                    className={`${toggleButtonClass} ${aiDraft?.defaultParams?.maxOutputTokensEnabled ? toggleButtonOnClass : ''}`}
-                    onClick={handleToggleDefaultMaxTokens}
-                    aria-pressed={aiDraft?.defaultParams?.maxOutputTokensEnabled ?? false}
-                  >
-                    <span className={`${toggleDotClass} ${aiDraft?.defaultParams?.maxOutputTokensEnabled ? toggleDotOnClass : ''}`} />
-                  </button>
+                  <Switch
+                    checked={aiDraft?.defaultParams?.maxOutputTokensEnabled ?? false}
+                    onChange={handleToggleDefaultMaxTokens}
+                  />
                   <input
                     className={miniInputClass}
                     type="number"
@@ -867,14 +865,10 @@ export default function AiSettingsView({ onBack }: AiSettingsViewProps) {
                           <div className="rounded-2xl border border-slate-200/80 bg-white p-3 dark:border-slate-800/80 dark:bg-slate-950">
                             <div className="flex items-center justify-between">
                               <span className="text-xs text-slate-600 dark:text-slate-300">温度</span>
-                              <button
-                                type="button"
-                                className={`${toggleButtonClass} ${selectedProvider.defaultParams?.temperatureEnabled ? toggleButtonOnClass : ''}`}
-                                onClick={() => handleToggleProviderParam(selectedProviderIndex, 'temperatureEnabled')}
-                                aria-pressed={selectedProvider.defaultParams?.temperatureEnabled ?? false}
-                              >
-                                <span className={`${toggleDotClass} ${selectedProvider.defaultParams?.temperatureEnabled ? toggleDotOnClass : ''}`} />
-                              </button>
+                              <Switch
+                                checked={selectedProvider.defaultParams?.temperatureEnabled ?? false}
+                                onChange={() => handleToggleProviderParam(selectedProviderIndex, 'temperatureEnabled')}
+                              />
                             </div>
                             <div className="mt-2 flex flex-col gap-2">
                               <SliderWithTicks
@@ -908,14 +902,10 @@ export default function AiSettingsView({ onBack }: AiSettingsViewProps) {
                           <div className="rounded-2xl border border-slate-200/80 bg-white p-3 dark:border-slate-800/80 dark:bg-slate-950">
                             <div className="flex items-center justify-between">
                               <span className="text-xs text-slate-600 dark:text-slate-300">Top-P</span>
-                              <button
-                                type="button"
-                                className={`${toggleButtonClass} ${selectedProvider.defaultParams?.topPEnabled ? toggleButtonOnClass : ''}`}
-                                onClick={() => handleToggleProviderParam(selectedProviderIndex, 'topPEnabled')}
-                                aria-pressed={selectedProvider.defaultParams?.topPEnabled ?? false}
-                              >
-                                <span className={`${toggleDotClass} ${selectedProvider.defaultParams?.topPEnabled ? toggleDotOnClass : ''}`} />
-                              </button>
+                              <Switch
+                                checked={selectedProvider.defaultParams?.topPEnabled ?? false}
+                                onChange={() => handleToggleProviderParam(selectedProviderIndex, 'topPEnabled')}
+                              />
                             </div>
                             <div className="mt-2 flex flex-col gap-2">
                               <SliderWithTicks
@@ -960,14 +950,10 @@ export default function AiSettingsView({ onBack }: AiSettingsViewProps) {
                                 <span className={tipBubbleClass}>单次最大输出 token，过大可能报错。关闭表示不限制。</span>
                               </span>
                             </div>
-                            <button
-                              type="button"
-                              className={`${toggleButtonClass} ${selectedProvider.defaultParams?.maxOutputTokensEnabled ? toggleButtonOnClass : ''}`}
-                              onClick={() => handleToggleProviderMaxTokens(selectedProviderIndex)}
-                              aria-pressed={selectedProvider.defaultParams?.maxOutputTokensEnabled ?? false}
-                            >
-                              <span className={`${toggleDotClass} ${selectedProvider.defaultParams?.maxOutputTokensEnabled ? toggleDotOnClass : ''}`} />
-                            </button>
+                            <Switch
+                              checked={selectedProvider.defaultParams?.maxOutputTokensEnabled ?? false}
+                              onChange={() => handleToggleProviderMaxTokens(selectedProviderIndex)}
+                            />
                           </div>
                           <div className="mt-3 flex items-center justify-between">
                             <span className="text-xs text-slate-500 dark:text-slate-400">关闭表示不限制</span>
@@ -1160,14 +1146,10 @@ export default function AiSettingsView({ onBack }: AiSettingsViewProps) {
                                     <div className="rounded-2xl border border-slate-200/80 bg-white p-3 dark:border-slate-800/80 dark:bg-slate-950">
                                       <div className="flex items-center justify-between">
                                         <span className="text-xs text-slate-600 dark:text-slate-300">温度</span>
-                                        <button
-                                          type="button"
-                                          className={`${toggleButtonClass} ${model.params?.temperatureEnabled ? toggleButtonOnClass : ''}`}
-                                          onClick={() => handleToggleModelParam(model.id, 'temperatureEnabled')}
-                                          aria-pressed={model.params?.temperatureEnabled ?? false}
-                                        >
-                                          <span className={`${toggleDotClass} ${model.params?.temperatureEnabled ? toggleDotOnClass : ''}`} />
-                                        </button>
+                                        <Switch
+                                          checked={model.params?.temperatureEnabled ?? false}
+                                          onChange={() => handleToggleModelParam(model.id, 'temperatureEnabled')}
+                                        />
                                       </div>
                                       <div className="mt-2 flex flex-col gap-2">
                                         <SliderWithTicks
@@ -1201,14 +1183,10 @@ export default function AiSettingsView({ onBack }: AiSettingsViewProps) {
                                     <div className="rounded-2xl border border-slate-200/80 bg-white p-3 dark:border-slate-800/80 dark:bg-slate-950">
                                       <div className="flex items-center justify-between">
                                         <span className="text-xs text-slate-600 dark:text-slate-300">Top-P</span>
-                                        <button
-                                          type="button"
-                                          className={`${toggleButtonClass} ${model.params?.topPEnabled ? toggleButtonOnClass : ''}`}
-                                          onClick={() => handleToggleModelParam(model.id, 'topPEnabled')}
-                                          aria-pressed={model.params?.topPEnabled ?? false}
-                                        >
-                                          <span className={`${toggleDotClass} ${model.params?.topPEnabled ? toggleDotOnClass : ''}`} />
-                                        </button>
+                                        <Switch
+                                          checked={model.params?.topPEnabled ?? false}
+                                          onChange={() => handleToggleModelParam(model.id, 'topPEnabled')}
+                                        />
                                       </div>
                                       <div className="mt-2 flex flex-col gap-2">
                                         <SliderWithTicks
@@ -1253,14 +1231,10 @@ export default function AiSettingsView({ onBack }: AiSettingsViewProps) {
                                       </span>
                                     </div>
                                     <div className="flex items-center gap-3">
-                                      <button
-                                        type="button"
-                                        className={`${toggleButtonClass} ${model.params?.maxOutputTokensEnabled ? toggleButtonOnClass : ''}`}
-                                        onClick={() => handleToggleModelMaxTokens(model.id)}
-                                        aria-pressed={model.params?.maxOutputTokensEnabled ?? false}
-                                      >
-                                        <span className={`${toggleDotClass} ${model.params?.maxOutputTokensEnabled ? toggleDotOnClass : ''}`} />
-                                      </button>
+                                      <Switch
+                                        checked={model.params?.maxOutputTokensEnabled ?? false}
+                                        onChange={() => handleToggleModelMaxTokens(model.id)}
+                                      />
                                       <input
                                         className={miniInputClass}
                                         type="number"
