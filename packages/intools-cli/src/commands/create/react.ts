@@ -18,7 +18,7 @@ import {
   buildReactReadme,
   buildPostcssConfig,
   buildTailwindConfig
-} from './templates/react'
+} from './templates/react/index.js'
 
 export async function createReactProject(targetDir: string, name: string) {
   fs.mkdirSync(targetDir, { recursive: true })
