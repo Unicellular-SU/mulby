@@ -621,9 +621,7 @@ function normalizeModelParams(params: AiModelParameters): AiModelParameters {
 
 function normalizeOpenAIBaseURL(baseURL?: string): string | undefined {
   if (!baseURL) return undefined
-  const trimmed = baseURL.replace(/\/+$/, '')
-  if (trimmed.endsWith('/v1')) return trimmed
-  return `${trimmed}/v1`
+  return baseURL.replace(/\/+$/, '')
 }
 
 function shouldUseChatApi(baseURL?: string): boolean {
