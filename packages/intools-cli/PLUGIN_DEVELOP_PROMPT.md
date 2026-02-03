@@ -204,6 +204,76 @@ interface Http {
   delete(url: string, headers?: any): Promise<HttpResponse>;
 }
 
+// ai (R/B) - AI (tools only in backend)
+interface Ai {
+  call(option: AiOption, onChunk?: (chunk: AiMessage) => void): Promise<AiMessage>;
+  allModels(): Promise<AiModel[]>;
+  tokens: {
+    estimate(input: { model?: string; messages: AiMessage[] }): Promise<{ inputTokens: number; outputTokens: number }>;
+  };
+  attachments: {
+    upload(input: { filePath?: string; buffer?: ArrayBuffer; mimeType: string; purpose?: string }): Promise<AiAttachmentRef>;
+    get(attachmentId: string): Promise<AiAttachmentRef | null>;
+    delete(attachmentId: string): Promise<void>;
+  };
+  images: {
+    generate(input: { model: string; prompt: string; size?: string; count?: number }): Promise<{ images: string[]; tokens: AiTokenBreakdown }>;
+    edit(input: { model: string; imageAttachmentId: string; prompt: string }): Promise<{ images: string[]; tokens: AiTokenBreakdown }>;
+  };
+  videos: {
+    generate(input: { model: string; prompt: string; duration?: number; size?: string }): Promise<void>;
+  };
+  // Renderer-only helpers
+  models?: {
+    fetch(input: { providerId: string; baseURL?: string; apiKey?: string }): Promise<{ models: AiModel[]; message?: string }>;
+  };
+  testConnection?: (input?: { providerId?: string; model?: string; baseURL?: string; apiKey?: string }) => Promise<{ success: boolean; message?: string }>;
+  testConnectionStream?: (
+    input: { providerId?: string; model?: string; baseURL?: string; apiKey?: string },
+    onChunk: (chunk: { type: 'reasoning' | 'content'; text: string }) => void
+  ) => Promise<{ success: boolean; message?: string; reasoning?: string }>;
+  settings?: {
+    get(): Promise<AiSettings>;
+    update(next: Partial<AiSettings>): Promise<AiSettings>;
+  };
+}
+
+type AiMessage = { role: 'system' | 'user' | 'assistant'; content?: string | AiMessageContent[]; reasoning_content?: string };
+type AiMessageContent =
+  | { type: 'text'; text: string }
+  | { type: 'image'; attachmentId: string; mimeType?: string }
+  | { type: 'file'; attachmentId: string; mimeType?: string; filename?: string };
+type AiOption = { model?: string; messages: AiMessage[]; tools?: AiTool[]; params?: AiModelParameters };
+type AiTool = { type: 'function'; function: { name: string; description?: string; parameters?: object } };
+type AiModelParameters = {
+  contextWindow?: number;
+  temperatureEnabled?: boolean;
+  topPEnabled?: boolean;
+  maxOutputTokensEnabled?: boolean;
+  temperature?: number;
+  topP?: number;
+  topK?: number;
+  maxOutputTokens?: number;
+  presencePenalty?: number;
+  frequencyPenalty?: number;
+  stopSequences?: string[];
+  seed?: number;
+};
+type AiModel = { id: string; label: string; description: string; icon?: string; providerLabel?: string; params?: AiModelParameters };
+type AiSettings = { providers: AiProviderConfig[]; models?: AiModel[]; defaultParams?: AiModelParameters };
+type AiProviderConfig = {
+  id: string;
+  label?: string;
+  enabled: boolean;
+  apiKey?: string;
+  baseURL?: string;
+  headers?: Record<string, string>;
+  defaultModel?: string;
+  defaultParams?: AiModelParameters;
+};
+type AiAttachmentRef = { attachmentId: string; mimeType: string; size: number; filename?: string; expiresAt?: string; purpose?: string };
+type AiTokenBreakdown = { inputTokens?: number; outputTokens?: number; totalTokens?: number };
+
 // clipboard (R/B)
 interface Clipboard {
   readText(): Promise<string>;
@@ -795,4 +865,3 @@ export default function App() {
 
 - **host.call(method, ...args)** - 调用插件自定义方法（main.ts 中导出的）
 - **host.invoke(method, ...args)** - 调用主进程 API（如 clipboard.readText）
-

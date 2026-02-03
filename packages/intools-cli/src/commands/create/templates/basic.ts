@@ -72,6 +72,30 @@ export function buildBasicMain(name: string) {
       getNextCronTime: (expression: string, after?: Date) => Date
       describeCron: (expression: string) => string
     }
+    ai: {
+      call: (option: {
+        model?: string
+        messages: Array<{ role: 'system' | 'user' | 'assistant'; content?: string | Array<any> }>
+        tools?: Array<{ type: 'function'; function: { name: string; description?: string; parameters?: object } }>
+        params?: any
+      }, onChunk?: (chunk: any) => void) => Promise<{ role: 'assistant'; content?: string }>
+      allModels: () => Promise<any[]>
+      tokens: {
+        estimate: (input: { model?: string; messages: Array<any> }) => Promise<{ inputTokens: number; outputTokens: number }>
+      }
+      attachments: {
+        upload: (input: { filePath?: string; buffer?: ArrayBuffer; mimeType: string; purpose?: string }) => Promise<any>
+        get: (attachmentId: string) => Promise<any>
+        delete: (attachmentId: string) => Promise<void>
+      }
+      images: {
+        generate: (input: { model: string; prompt: string; size?: string; count?: number }) => Promise<{ images: string[] }>
+        edit: (input: { model: string; imageAttachmentId: string; prompt: string }) => Promise<{ images: string[] }>
+      }
+      videos: {
+        generate: (input: { model: string; prompt: string; duration?: number; size?: string }) => Promise<void>
+      }
+    }
   }
   input?: string
   featureCode?: string

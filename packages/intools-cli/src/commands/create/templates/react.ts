@@ -186,6 +186,30 @@ export function buildBackendMain(name: string) {
       getNextCronTime: (expression: string, after?: Date) => Date
       describeCron: (expression: string) => string
     }
+    ai: {
+      call: (option: {
+        model?: string
+        messages: Array<{ role: 'system' | 'user' | 'assistant'; content?: string | Array<any> }>
+        tools?: Array<{ type: 'function'; function: { name: string; description?: string; parameters?: object } }>
+        params?: any
+      }, onChunk?: (chunk: any) => void) => Promise<{ role: 'assistant'; content?: string }>
+      allModels: () => Promise<any[]>
+      tokens: {
+        estimate: (input: { model?: string; messages: Array<any> }) => Promise<{ inputTokens: number; outputTokens: number }>
+      }
+      attachments: {
+        upload: (input: { filePath?: string; buffer?: ArrayBuffer; mimeType: string; purpose?: string }) => Promise<any>
+        get: (attachmentId: string) => Promise<any>
+        delete: (attachmentId: string) => Promise<void>
+      }
+      images: {
+        generate: (input: { model: string; prompt: string; size?: string; count?: number }) => Promise<{ images: string[] }>
+        edit: (input: { model: string; imageAttachmentId: string; prompt: string }) => Promise<{ images: string[] }>
+      }
+      videos: {
+        generate: (input: { model: string; prompt: string; duration?: number; size?: string }) => Promise<void>
+      }
+    }
     features?: {
       getFeatures: (codes?: string[]) => Array<{ code: string }>
       setFeature: (feature: {
@@ -687,6 +711,37 @@ export function useIntools(pluginId?: string) {
       get: (key: string) => window.intools?.storage?.get(key, pluginId),
       set: (key: string, value: unknown) => window.intools?.storage?.set(key, value, pluginId),
       remove: (key: string) => window.intools?.storage?.remove(key, pluginId),
+    },
+
+    // AI API
+    ai: {
+      call: (option: any, onChunk?: (chunk: any) => void) => window.intools?.ai?.call(option, onChunk),
+      allModels: () => window.intools?.ai?.allModels?.(),
+      tokens: {
+        estimate: (input: any) => window.intools?.ai?.tokens?.estimate(input),
+      },
+      attachments: {
+        upload: (input: any) => window.intools?.ai?.attachments?.upload(input),
+        get: (attachmentId: string) => window.intools?.ai?.attachments?.get(attachmentId),
+        delete: (attachmentId: string) => window.intools?.ai?.attachments?.delete(attachmentId),
+      },
+      images: {
+        generate: (input: any) => window.intools?.ai?.images?.generate(input),
+        edit: (input: any) => window.intools?.ai?.images?.edit(input),
+      },
+      videos: {
+        generate: (input: any) => window.intools?.ai?.videos?.generate(input),
+      },
+      models: {
+        fetch: (input: any) => window.intools?.ai?.models?.fetch(input),
+      },
+      testConnection: (input?: any) => window.intools?.ai?.testConnection?.(input),
+      testConnectionStream: (input: any, onChunk: (chunk: any) => void) =>
+        window.intools?.ai?.testConnectionStream?.(input, onChunk),
+      settings: {
+        get: () => window.intools?.ai?.settings?.get(),
+        update: (next: any) => window.intools?.ai?.settings?.update(next),
+      },
     },
 
     // Messaging API
@@ -1550,6 +1605,74 @@ interface IntoolsHttp {
   delete(url: string, headers?: Record<string, string>): Promise<HttpResponse>
 }
 
+type AiMessage = { role: 'system' | 'user' | 'assistant'; content?: string | AiMessageContent[]; reasoning_content?: string }
+type AiMessageContent =
+  | { type: 'text'; text: string }
+  | { type: 'image'; attachmentId: string; mimeType?: string }
+  | { type: 'file'; attachmentId: string; mimeType?: string; filename?: string }
+type AiTool = { type: 'function'; function: { name: string; description?: string; parameters?: object } }
+type AiModelParameters = {
+  contextWindow?: number
+  temperatureEnabled?: boolean
+  topPEnabled?: boolean
+  maxOutputTokensEnabled?: boolean
+  temperature?: number
+  topP?: number
+  topK?: number
+  maxOutputTokens?: number
+  presencePenalty?: number
+  frequencyPenalty?: number
+  stopSequences?: string[]
+  seed?: number
+}
+type AiOption = { model?: string; messages: AiMessage[]; tools?: AiTool[]; params?: AiModelParameters }
+type AiModel = { id: string; label: string; description: string; icon?: string; providerLabel?: string; params?: AiModelParameters }
+type AiProviderConfig = {
+  id: string
+  label?: string
+  enabled: boolean
+  apiKey?: string
+  baseURL?: string
+  headers?: Record<string, string>
+  defaultModel?: string
+  defaultParams?: AiModelParameters
+}
+type AiSettings = { providers: AiProviderConfig[]; models?: AiModel[]; defaultParams?: AiModelParameters }
+type AiAttachmentRef = { attachmentId: string; mimeType: string; size: number; filename?: string; expiresAt?: string; purpose?: string }
+type AiTokenBreakdown = { inputTokens?: number; outputTokens?: number; totalTokens?: number }
+
+interface IntoolsAi {
+  call(option: AiOption, onChunk?: (chunk: AiMessage) => void): Promise<AiMessage>
+  allModels(): Promise<AiModel[]>
+  tokens: {
+    estimate(input: { model?: string; messages: AiMessage[] }): Promise<{ inputTokens: number; outputTokens: number }>
+  }
+  attachments: {
+    upload(input: { filePath?: string; buffer?: ArrayBuffer; mimeType: string; purpose?: string }): Promise<AiAttachmentRef>
+    get(attachmentId: string): Promise<AiAttachmentRef | null>
+    delete(attachmentId: string): Promise<void>
+  }
+  images: {
+    generate(input: { model: string; prompt: string; size?: string; count?: number }): Promise<{ images: string[]; tokens: AiTokenBreakdown }>
+    edit(input: { model: string; imageAttachmentId: string; prompt: string }): Promise<{ images: string[]; tokens: AiTokenBreakdown }>
+  }
+  videos: {
+    generate(input: { model: string; prompt: string; duration?: number; size?: string }): Promise<void>
+  }
+  models: {
+    fetch(input: { providerId: string; baseURL?: string; apiKey?: string }): Promise<{ models: AiModel[]; message?: string }>
+  }
+  testConnection(input?: { providerId?: string; model?: string; baseURL?: string; apiKey?: string }): Promise<{ success: boolean; message?: string }>
+  testConnectionStream(
+    input: { providerId?: string; model?: string; baseURL?: string; apiKey?: string },
+    onChunk: (chunk: { type: 'reasoning' | 'content'; text: string }) => void
+  ): Promise<{ success: boolean; message?: string; reasoning?: string }>
+  settings: {
+    get(): Promise<AiSettings>
+    update(next: Partial<AiSettings>): Promise<AiSettings>
+  }
+}
+
 interface FileStat {
   name: string
   path: string
@@ -1641,6 +1764,7 @@ interface IntoolsAPI {
   subInput: IntoolsSubInput
   plugin: IntoolsPlugin
   theme?: IntoolsTheme
+  ai: IntoolsAi
   screen: IntoolsScreen
   shell: IntoolsShell
   dialog: IntoolsDialog
