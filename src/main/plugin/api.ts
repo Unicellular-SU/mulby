@@ -23,6 +23,7 @@ import type { PluginMessageBus } from './message-bus'
 import type { TaskScheduler } from '../scheduler'
 import type { TaskInput, TaskFilter } from '../scheduler/types'
 import type { ClipboardHistoryManager } from '../services/clipboard-history'
+import type { AiOption, AiMessage } from '../../shared/types/ai'
 
 const pluginStorage = new PluginStorage()
 const pluginFilesystem = new PluginFilesystem()
@@ -332,23 +333,23 @@ ${item.files.map(p => `    <string>${p}</string>`).join('\n')}
       }
     },
     ai: {
-      call: async (option) => await aiService.call(option),
+      call: async (option: AiOption, onChunk?: (chunk: AiMessage) => void) => await aiService.call(option, onChunk),
       allModels: async () => aiService.allModels(),
       abort: (requestId: string) => aiService.abort(requestId),
       attachments: {
-        upload: async (input) => await aiService.uploadAttachment(input),
+        upload: async (input: { filePath?: string; buffer?: ArrayBuffer; mimeType: string; purpose?: string }) => await aiService.uploadAttachment(input),
         get: async (attachmentId: string) => await aiService.getAttachment(attachmentId),
         delete: async (attachmentId: string) => await aiService.deleteAttachment(attachmentId)
       },
       tokens: {
-        estimate: async (input) => await aiService.estimateTokens(input)
+        estimate: async (input: { model: string; messages: AiMessage[] }) => await aiService.estimateTokens(input)
       },
       images: {
-        generate: async (input) => await aiService.generateImages(input),
-        edit: async (input) => await aiService.editImage(input)
+        generate: async (input: { prompt: string; model: string; size?: string; count?: number }) => await aiService.generateImages(input),
+        edit: async (input: { imageAttachmentId: string; prompt: string; model: string }) => await aiService.editImage(input)
       },
       videos: {
-        generate: async (input) => await aiService.generateVideo(input)
+        generate: async (input: { prompt: string; model: string; duration?: number; size?: string }) => await aiService.generateVideo(input)
       }
     },
     // Task Scheduler API
