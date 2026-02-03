@@ -80,12 +80,30 @@ export class AiService {
       })
 
       let fullText = ''
-      for await (const chunk of result.textStream) {
-        fullText += chunk
-        callbacks.onChunk?.({ role: 'assistant', content: chunk })
+      let reasoningText = ''
+
+      if ((result as any).fullStream) {
+        for await (const part of (result as any).fullStream) {
+          if (part?.type === 'text-delta') {
+            fullText += part.delta || ''
+            callbacks.onChunk?.({ role: 'assistant', content: part.delta || '' })
+          } else if (part?.type === 'reasoning-delta') {
+            reasoningText += part.delta || ''
+            callbacks.onChunk?.({ role: 'assistant', reasoning_content: part.delta || '' })
+          }
+        }
+      } else {
+        for await (const chunk of result.textStream) {
+          fullText += chunk
+          callbacks.onChunk?.({ role: 'assistant', content: chunk })
+        }
       }
 
-      const finalMessage: AiMessage = { role: 'assistant', content: fullText }
+      const finalMessage: AiMessage = {
+        role: 'assistant',
+        content: fullText,
+        reasoning_content: reasoningText || undefined
+      }
       callbacks.onEnd?.(finalMessage)
       return finalMessage
     } catch (err) {
@@ -197,41 +215,61 @@ export class AiService {
     onChunk: (chunk: { type: 'content' | 'reasoning'; text: string }) => void
   ): Promise<{ success: boolean; message?: string; reasoning?: string }> {
     try {
+      const resolvedInput = this.resolveTestInput(input)
       console.info('[AI] testConnectionStream:start', {
-        providerId: input?.providerId,
-        model: input?.model,
-        baseURL: input?.baseURL
+        providerId: resolvedInput?.providerId,
+        model: resolvedInput?.model,
+        baseURL: resolvedInput?.baseURL
       })
 
-      if (input?.providerId === 'openai' && shouldUseChatApi(input?.baseURL)) {
-        const { content, reasoning } = await this.streamOpenAICompat(input, onChunk)
+      if (resolvedInput?.providerId === 'openai' && shouldUseChatApi(resolvedInput?.baseURL)) {
+        const { content, reasoning } = await this.streamOpenAICompat(resolvedInput, onChunk)
         console.info('[AI] testConnectionStream:success', {
-          providerId: input?.providerId,
-          model: input?.model
+          providerId: resolvedInput?.providerId,
+          model: resolvedInput?.model
         })
         return { success: true, message: content || 'ok', reasoning }
       }
 
-      const { modelKey } = this.resolveTestModel(input)
-      const params = this.resolveGenerationParams({ model: input?.model, messages: [] }, input?.model)
+      const { modelKey } = this.resolveTestModel(resolvedInput)
+      const params = this.resolveGenerationParams({ model: resolvedInput?.model, messages: [] }, resolvedInput?.model)
       const result = await streamText({
         model: modelKey,
         messages: [{ role: 'user', content: 'ping' }],
         ...params,
-        maxOutputTokens: Math.min(params.maxOutputTokens ?? 32, 64)
+        maxOutputTokens: Math.min(params.maxOutputTokens ?? 128, 256)
       } as any)
 
       let fullText = ''
-      for await (const chunk of result.textStream) {
-        fullText += chunk
-        onChunk({ type: 'content', text: chunk })
+      let reasoning = ''
+
+      if ((result as any).fullStream) {
+        for await (const part of (result as any).fullStream) {
+          console.info('[AI] testConnectionStream:chunk', {
+            type: part?.type,
+            delta: typeof part?.delta === 'string' ? part.delta.slice(0, 120) : undefined,
+            hasDelta: typeof part?.delta === 'string' ? part.delta.length : 0
+          })
+          if (part?.type === 'text-delta') {
+            fullText += part.delta || ''
+            onChunk({ type: 'content', text: part.delta || '' })
+          } else if (part?.type === 'reasoning-delta') {
+            reasoning += part.delta || ''
+            onChunk({ type: 'reasoning', text: part.delta || '' })
+          }
+        }
+      } else {
+        for await (const chunk of result.textStream) {
+          fullText += chunk
+          onChunk({ type: 'content', text: chunk })
+        }
       }
 
       console.info('[AI] testConnectionStream:success', {
-        providerId: input?.providerId,
-        model: input?.model
+        providerId: resolvedInput?.providerId,
+        model: resolvedInput?.model
       })
-      return { success: true, message: fullText || 'ok' }
+      return { success: true, message: fullText || 'ok', reasoning }
     } catch (err) {
       const message = err instanceof Error ? err.message : 'AI connection failed'
       console.error('[AI] testConnectionStream:fail', {
@@ -268,7 +306,7 @@ export class AiService {
         messages: [{ role: 'user', content: 'ping' }],
         temperature: params.temperature,
         top_p: params.topP,
-        max_tokens: params.maxOutputTokens ? Math.min(params.maxOutputTokens, 64) : 32,
+        max_tokens: params.maxOutputTokens ? Math.min(params.maxOutputTokens, 256) : 128,
         presence_penalty: params.presencePenalty,
         frequency_penalty: params.frequencyPenalty,
         stop: params.stopSequences,
@@ -354,6 +392,19 @@ export class AiService {
 
     const registry = createProviderRegistry({ [input.providerId]: provider })
     return { modelKey: registry.languageModel(`${input.providerId}:${modelId}`) }
+  }
+
+  private resolveTestInput(input?: { model?: string; providerId?: string; apiKey?: string; baseURL?: string }) {
+    if (!input?.model || input.providerId) return input
+    const providerConfig = this.resolveProviderConfig(input.model)
+    if (!providerConfig?.id) return input
+
+    return {
+      ...input,
+      providerId: providerConfig.id,
+      apiKey: input.apiKey ?? providerConfig.apiKey,
+      baseURL: input.baseURL ?? providerConfig.baseURL
+    }
   }
 
   private buildTools(tools?: AiTool[], context?: AiToolContext) {
