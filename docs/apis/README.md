@@ -9,6 +9,7 @@
 - [Tray API (tray)](./tray.md)
 - [权限 API (permission)](./permission.md)
 - [Security API (security)](./security.md)
+- [AI API (ai)](./ai.md)
 
 ## 窗口与界面
 

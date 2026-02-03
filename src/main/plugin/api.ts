@@ -333,7 +333,8 @@ ${item.files.map(p => `    <string>${p}</string>`).join('\n')}
       }
     },
     ai: {
-      call: async (option: AiOption, onChunk?: (chunk: AiMessage) => void) => await aiService.call(option, onChunk),
+      call: async (option: AiOption, onChunk?: (chunk: AiMessage) => void) =>
+        await aiService.call({ ...option, toolContext: { ...(option as any).toolContext, pluginName } }, onChunk),
       allModels: async () => aiService.allModels(),
       abort: (requestId: string) => aiService.abort(requestId),
       attachments: {

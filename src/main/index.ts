@@ -3,6 +3,7 @@ import http from 'http'
 import https from 'https'
 import { join } from 'path'
 import { registerAllHandlers } from './ipc'
+import { setAiToolExecutor } from './ai'
 import { PluginManager } from './plugin'
 import { PluginWindowManager } from './plugin/window'
 import { ThemeManager } from './services/theme'
@@ -43,6 +44,15 @@ const pluginWindowManager = new PluginWindowManager()
 const themeManager = new ThemeManager()
 const clipboardWatcher = new ClipboardWatcher()
 const clipboardHistoryManager = new ClipboardHistoryManager()
+
+setAiToolExecutor(async ({ name, args, context }) => {
+  const pluginName = context?.pluginName
+  if (!pluginName) {
+    throw new Error('AI tool execution requires plugin context')
+  }
+  const hostManager = pluginManager.getHostManager()
+  return await hostManager.callHostMethod(pluginName, name, [args])
+})
 
 // 单实例锁：确保只有一个应用实例运行
 const gotTheLock = app.requestSingleInstanceLock()

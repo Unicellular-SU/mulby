@@ -1,5 +1,6 @@
 import { generateText, streamText, generateImage } from 'ai'
-import type { AiAttachmentRef, AiMessage, AiModel, AiModelParameters, AiOption, AiProviderConfig, AiTokenBreakdown } from '../../shared/types/ai'
+import { jsonSchema, tool } from '@ai-sdk/provider-utils'
+import type { AiAttachmentRef, AiMessage, AiModel, AiModelParameters, AiOption, AiProviderConfig, AiTokenBreakdown, AiToolContext, AiTool } from '../../shared/types/ai'
 import { attachmentStore } from './attachments'
 import { estimateTokens } from './tokens'
 import { getAllModels, resolveModelId } from './models'
@@ -15,6 +16,7 @@ interface StreamCallbacks {
 
 export class AiService {
   private controllers = new Map<string, AbortController>()
+  private toolExecutor?: (input: { name: string; args: unknown; context?: AiToolContext }) => Promise<unknown>
 
   allModels() {
     return getAllModels()
@@ -24,9 +26,7 @@ export class AiService {
     if (!option.messages || option.messages.length === 0) {
       throw new Error('AI messages are required')
     }
-    if (option.tools && option.tools.length > 0) {
-      console.warn('[AI] Function calling tools are not supported yet and will be ignored.')
-    }
+    const tools = this.buildTools(option.tools, option.toolContext)
     const requestId = this.createRequestId()
     const controller = new AbortController()
     this.controllers.set(requestId, controller)
@@ -43,6 +43,7 @@ export class AiService {
         model: modelKey,
         messages,
         abortSignal: controller.signal,
+        tools,
         ...params
       })
 
@@ -60,9 +61,7 @@ export class AiService {
     if (!option.messages || option.messages.length === 0) {
       throw new Error('AI messages are required')
     }
-    if (option.tools && option.tools.length > 0) {
-      console.warn('[AI] Function calling tools are not supported yet and will be ignored.')
-    }
+    const tools = this.buildTools(option.tools, option.toolContext)
 
     const id = requestId || this.createRequestId()
     const controller = new AbortController()
@@ -76,6 +75,7 @@ export class AiService {
         model: modelKey,
         messages,
         abortSignal: controller.signal,
+        tools,
         ...params
       })
 
@@ -107,6 +107,10 @@ export class AiService {
 
   async estimateTokens(input: { model: string; messages: AiMessage[] }): Promise<AiTokenBreakdown> {
     return await estimateTokens(input)
+  }
+
+  setToolExecutor(executor?: (input: { name: string; args: unknown; context?: AiToolContext }) => Promise<unknown>): void {
+    this.toolExecutor = executor
   }
 
   async uploadAttachment(input: { filePath?: string; buffer?: ArrayBuffer; mimeType: string; purpose?: string }): Promise<AiAttachmentRef> {
@@ -350,6 +354,32 @@ export class AiService {
 
     const registry = createProviderRegistry({ [input.providerId]: provider })
     return { modelKey: registry.languageModel(`${input.providerId}:${modelId}`) }
+  }
+
+  private buildTools(tools?: AiTool[], context?: AiToolContext) {
+    if (!tools || tools.length === 0) return undefined
+    if (!this.toolExecutor) {
+      throw new Error('AI tool executor is not configured')
+    }
+    const toolEntries = tools
+      .map((item) => (item?.type === 'function' ? item.function : undefined))
+      .filter((item): item is NonNullable<AiTool['function']> => !!item && !!item.name)
+      .map((fn) => {
+        const schema = fn.parameters || { type: 'object', properties: {} }
+        return [
+          fn.name,
+          tool({
+            description: fn.description,
+            inputSchema: jsonSchema(schema as any),
+            execute: async (input: unknown) => {
+              return await this.toolExecutor?.({ name: fn.name, args: input, context })
+            }
+          })
+        ] as const
+      })
+
+    if (toolEntries.length === 0) return undefined
+    return Object.fromEntries(toolEntries)
   }
 
   async fetchModels(input: { providerId: string; baseURL?: string; apiKey?: string }): Promise<{ models: AiModel[]; message?: string }> {

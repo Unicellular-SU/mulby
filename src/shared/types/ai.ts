@@ -44,6 +44,11 @@ export interface AiOption {
   messages: AiMessage[]
   tools?: AiTool[]
   params?: AiModelParameters
+  toolContext?: AiToolContext
+}
+
+export interface AiToolContext {
+  pluginName?: string
 }
 
 export interface AiModelParameters {
