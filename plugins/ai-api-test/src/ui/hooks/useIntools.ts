@@ -63,6 +63,7 @@ export function useIntools(pluginId?: string) {
         upload: (input: any) => window.intools?.ai?.attachments?.upload(input),
         get: (attachmentId: string) => window.intools?.ai?.attachments?.get(attachmentId),
         delete: (attachmentId: string) => window.intools?.ai?.attachments?.delete(attachmentId),
+        uploadToProvider: (input: any) => window.intools?.ai?.attachments?.uploadToProvider?.(input),
       },
       images: {
         generate: (input: any) => window.intools?.ai?.images?.generate(input),

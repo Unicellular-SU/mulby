@@ -470,7 +470,15 @@ type AiModelParameters = {
   seed?: number
 }
 type AiOption = { model?: string; messages: AiMessage[]; tools?: AiTool[]; params?: AiModelParameters }
-type AiModel = { id: string; label: string; description: string; icon?: string; providerLabel?: string; params?: AiModelParameters }
+type AiModel = {
+  id: string
+  label: string
+  description: string
+  icon?: string
+  providerLabel?: string
+  params?: AiModelParameters
+  capabilities?: AiModelCapability[]
+}
 type AiProviderConfig = {
   id: string
   label?: string
@@ -484,6 +492,8 @@ type AiProviderConfig = {
 type AiSettings = { providers: AiProviderConfig[]; models?: AiModel[]; defaultParams?: AiModelParameters }
 type AiAttachmentRef = { attachmentId: string; mimeType: string; size: number; filename?: string; expiresAt?: string; purpose?: string }
 type AiTokenBreakdown = { inputTokens?: number; outputTokens?: number; totalTokens?: number }
+type AiModelType = 'text' | 'vision' | 'embedding' | 'reasoning' | 'function_calling' | 'web_search' | 'rerank'
+type AiModelCapability = { type: AiModelType; isUserSelected?: boolean }
 
 interface IntoolsAi {
   call(option: AiOption, onChunk?: (chunk: AiMessage) => void): Promise<AiMessage>
@@ -495,6 +505,12 @@ interface IntoolsAi {
     upload(input: { filePath?: string; buffer?: ArrayBuffer; mimeType: string; purpose?: string }): Promise<AiAttachmentRef>
     get(attachmentId: string): Promise<AiAttachmentRef | null>
     delete(attachmentId: string): Promise<void>
+    uploadToProvider(input: {
+      attachmentId: string
+      model?: string
+      providerId?: string
+      purpose?: string
+    }): Promise<{ providerId: string; fileId: string; uri?: string }>
   }
   images: {
     generate(input: { model: string; prompt: string; size?: string; count?: number }): Promise<{ images: string[]; tokens: AiTokenBreakdown }>

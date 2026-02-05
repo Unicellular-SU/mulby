@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import type { AiModel, AiModelParameters, AiProviderConfig, AiSettings } from '../../shared/types/ai'
+import type { AiModel, AiModelCapability, AiModelParameters, AiModelType, AiProviderConfig, AiSettings } from '../../shared/types/ai'
 import SliderWithTicks from './SliderWithTicks'
 
 function Switch({ checked, onChange }: { checked: boolean; onChange: () => void }) {
@@ -64,6 +64,14 @@ export default function AiSettingsView({ onBack }: AiSettingsViewProps) {
   const DEFAULT_TEMPERATURE = 0.7
   const DEFAULT_TOP_P = 1
   const DEFAULT_CONTEXT_WINDOW = 8
+  const MODEL_CAPABILITIES: Array<{ type: AiModelType; label: string }> = [
+    { type: 'vision', label: '视觉' },
+    { type: 'reasoning', label: '推理' },
+    { type: 'function_calling', label: '工具' },
+    { type: 'web_search', label: '联网' },
+    { type: 'embedding', label: '嵌入' },
+    { type: 'rerank', label: '重排' }
+  ]
 
   const formatNumber = (value?: number) => (value === undefined || Number.isNaN(value) ? '' : String(value))
   const parseOptionalNumber = (value: string) => {
@@ -104,6 +112,7 @@ export default function AiSettingsView({ onBack }: AiSettingsViewProps) {
         .then((next) => {
           setAiSettings(next)
           setAiDraft(next)
+          loadInferredCapabilities()
         })
         .catch((err) => {
           console.error('Failed to load AI settings:', err)
@@ -113,6 +122,62 @@ export default function AiSettingsView({ onBack }: AiSettingsViewProps) {
       setAiError('AI 接口未就绪，请重启应用')
     }
   }, [])
+
+  const [inferredCapabilities, setInferredCapabilities] = useState<Record<string, Set<AiModelType>>>({})
+
+  const loadInferredCapabilities = async () => {
+    if (!window.intools?.ai?.allModels) return
+    try {
+      const list = await window.intools.ai.allModels()
+      const next: Record<string, Set<AiModelType>> = {}
+      if (Array.isArray(list)) {
+        list.forEach((item) => {
+          const caps = (item.capabilities || []).map((cap: AiModelCapability) => cap.type)
+          next[item.id] = new Set(caps)
+        })
+      }
+      setInferredCapabilities(next)
+    } catch (err) {
+      console.warn('Failed to load inferred model capabilities', err)
+    }
+  }
+
+  const getModelCapabilityState = (model: AiModel, type: AiModelType) => {
+    const caps = model.capabilities || []
+    const item = caps.find((cap) => cap.type === type)
+    if (item) {
+      return item.isUserSelected !== false
+    }
+    const inferred = inferredCapabilities[model.id]
+    if (inferred) {
+      return inferred.has(type)
+    }
+    return false
+  }
+
+  const isCapabilityAuto = (model: AiModel, type: AiModelType) => {
+    const caps = model.capabilities || []
+    const item = caps.find((cap) => cap.type === type)
+    return !item
+  }
+
+  const updateModelCapabilities = (modelId: string, type: AiModelType, enabled: boolean) => {
+    const actualIndex = (aiDraft?.models || []).findIndex((item) => item.id === modelId)
+    if (actualIndex < 0) return
+    const model = (aiDraft?.models || [])[actualIndex]
+    const prev = model?.capabilities || []
+    const next = prev.filter((cap) => cap.type !== type)
+    next.push({ type, isUserSelected: enabled })
+    handleUpdateModel(actualIndex, { capabilities: next })
+  }
+
+  const updateNewModelCapability = (type: AiModelType, enabled: boolean) => {
+    setNewModel((prev) => {
+      const nextCaps = (prev.capabilities || []).filter((cap) => cap.type !== type)
+      nextCaps.push({ type, isUserSelected: enabled } as AiModelCapability)
+      return { ...prev, capabilities: nextCaps }
+    })
+  }
 
   const updateAiDraft = (patch: Partial<AiSettings>) => {
     setAiDraft((prev) => {
@@ -136,6 +201,7 @@ export default function AiSettingsView({ onBack }: AiSettingsViewProps) {
       const next = await window.intools.ai.settings.update(aiDraft)
       setAiSettings(next)
       setAiDraft(next)
+      loadInferredCapabilities()
       setAiError(null)
       setAiInfo('已保存 AI 配置')
     } catch (err) {
@@ -1103,6 +1169,32 @@ export default function AiSettingsView({ onBack }: AiSettingsViewProps) {
                               </div>
 
                               <div className="mt-3">
+                                <div className="text-xs uppercase tracking-[0.2em] text-slate-400">模型能力</div>
+                                <div className="mt-2 text-xs text-slate-500 dark:text-slate-400">
+                                  默认自动推断，建议不要手动修改，配置错误可能导致模型不可用。
+                                </div>
+                                <div className="mt-2 flex flex-wrap gap-2">
+                                  {MODEL_CAPABILITIES.map((cap) => {
+                                    const enabled = getModelCapabilityState(model, cap.type)
+                                    const isAuto = isCapabilityAuto(model, cap.type)
+                                    return (
+                                      <button
+                                        key={`${model.id}-${cap.type}`}
+                                        className={enabled ? primaryPillClass : pillClass}
+                                        onClick={(e) => {
+                                          e.preventDefault()
+                                          updateModelCapabilities(model.id, cap.type, !enabled)
+                                        }}
+                                      >
+                                        <span>{cap.label}</span>
+                                        {isAuto ? <span className="ml-2 rounded-full bg-slate-200 px-2 py-0.5 text-[10px] text-slate-600 dark:bg-slate-700 dark:text-slate-200">自动</span> : null}
+                                      </button>
+                                    )
+                                  })}
+                                </div>
+                              </div>
+
+                              <div className="mt-3">
                                 <div className="text-xs uppercase tracking-[0.2em] text-slate-400">参数覆盖</div>
                                 <div className="mt-2 space-y-4">
                                   <div className="grid grid-cols-1 gap-3 sm:grid-cols-[180px_1fr_120px] items-center">
@@ -1501,6 +1593,29 @@ export default function AiSettingsView({ onBack }: AiSettingsViewProps) {
                 value={newModel.description}
                 onChange={(e) => setNewModel((prev) => ({ ...prev, description: e.target.value }))}
               />
+            </div>
+
+            <div className="mt-4">
+              <div className="text-xs uppercase tracking-[0.2em] text-slate-400">模型能力</div>
+              <div className="mt-2 text-xs text-slate-500 dark:text-slate-400">
+                默认自动推断，建议不要手动修改，配置错误可能导致模型不可用。
+              </div>
+              <div className="mt-2 flex flex-wrap gap-2">
+                {MODEL_CAPABILITIES.map((cap) => {
+                  const enabled = getModelCapabilityState(newModel, cap.type)
+                  const isAuto = isCapabilityAuto(newModel, cap.type)
+                  return (
+                    <button
+                      key={`new-${cap.type}`}
+                      className={enabled ? primaryPillClass : pillClass}
+                      onClick={() => updateNewModelCapability(cap.type, !enabled)}
+                    >
+                      <span>{cap.label}</span>
+                      {isAuto ? <span className="ml-2 rounded-full bg-slate-200 px-2 py-0.5 text-[10px] text-slate-600 dark:bg-slate-700 dark:text-slate-200">自动</span> : null}
+                    </button>
+                  )
+                })}
+              </div>
             </div>
 
             <div className="mt-5 flex items-center justify-end gap-2">

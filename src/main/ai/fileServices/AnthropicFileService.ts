@@ -10,7 +10,7 @@ export class AnthropicFileService extends BaseFileService {
   constructor(provider: AiProviderConfig) {
     super(provider)
     if (!provider.baseURL) {
-      throw new Error('Anthropic file upload requires baseURL (include /v1)')
+      throw new Error('Anthropic file upload requires baseURL')
     }
     this.baseURL = provider.baseURL.replace(/\/+$/, '')
   }

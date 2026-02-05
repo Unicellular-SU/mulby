@@ -7,7 +7,7 @@
  * 生成 useIntools.ts Hook 内容
  */
 export function buildUseIntools() {
-    return `import { useMemo } from 'react'
+  return `import { useMemo } from 'react'
 
 export function useIntools(pluginId?: string) {
   return useMemo(() => ({
@@ -72,6 +72,7 @@ export function useIntools(pluginId?: string) {
         upload: (input: any) => window.intools?.ai?.attachments?.upload(input),
         get: (attachmentId: string) => window.intools?.ai?.attachments?.get(attachmentId),
         delete: (attachmentId: string) => window.intools?.ai?.attachments?.delete(attachmentId),
+        uploadToProvider: (input: any) => window.intools?.ai?.attachments?.uploadToProvider?.(input),
       },
       images: {
         generate: (input: any) => window.intools?.ai?.images?.generate(input),

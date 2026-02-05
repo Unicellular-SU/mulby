@@ -1,10 +1,11 @@
-import type { AiModel } from '../../shared/types/ai'
+import type { AiModel, AiModelCapability } from '../../shared/types/ai'
 import { getAiSettings } from './config'
+import { getEffectiveCapabilities } from './modelCapabilities'
 
 export interface ModelInfo extends AiModel {
   providerId: string
   modelId: string
-  capabilities: string[]
+  capabilities: AiModelCapability[]
   pricing: {
     inputPer1k: number
     outputPer1k: number
@@ -21,7 +22,7 @@ const DEFAULT_MODELS: ModelInfo[] = [
     icon: '',
     providerId: 'openai',
     modelId: 'gpt-4o-mini',
-    capabilities: ['chat', 'tools', 'vision', 'json_mode'],
+    capabilities: [{ type: 'vision' }, { type: 'function_calling' }],
     pricing: { inputPer1k: 0, outputPer1k: 0 }
   }
 ]
@@ -39,11 +40,13 @@ export function getAllModels(): ModelInfo[] {
           providerId = provider.id
         }
       }
+      const providerConfig = providers.find((item) => String(item.id) === String(providerId)) || providers[0]
+      const effectiveCapabilities = getEffectiveCapabilities(model.id, providerConfig)
       return {
         ...model,
         providerId,
         modelId: rawModelId || model.id,
-        capabilities: [],
+        capabilities: effectiveCapabilities,
         pricing: { inputPer1k: 0, outputPer1k: 0 }
       }
     })

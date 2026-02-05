@@ -10,7 +10,7 @@ type AiAttachmentRef = {
   purpose?: string
 }
 
-type ModelItem = { id: string; label?: string; description?: string }
+type ModelItem = { id: string; label?: string; description?: string; providerLabel?: string; capabilities?: Array<{ type: string; isUserSelected?: boolean }> }
 
 const defaultSystemPrompt = '你是一个专业的 AI API 测试助手。'
 const defaultUserPrompt = '请用简短中文说明今天的测试进度，并给一个下一步建议。'
@@ -56,6 +56,9 @@ export default function App() {
   const [attachments, setAttachments] = useState<AiAttachmentRef[]>([])
   const [attachmentInfo, setAttachmentInfo] = useState('')
   const [attachmentPurpose, setAttachmentPurpose] = useState('vision')
+  const [providerOverride, setProviderOverride] = useState('')
+  const [providerUploadPurpose, setProviderUploadPurpose] = useState('agent')
+  const [providerUploadInfo, setProviderUploadInfo] = useState('')
 
   const [imageGenPrompt, setImageGenPrompt] = useState('A cute robot in watercolor style')
   const [imageGenModel, setImageGenModel] = useState('openai:gpt-image-1')
@@ -99,10 +102,26 @@ export default function App() {
     try {
       const list = await ai?.allModels?.()
       const normalized = Array.isArray(list)
-        ? list.map((item: any) => ({ id: item.id, label: item.label, description: item.description }))
+        ? list.map((item: any) => ({
+            id: item.id,
+            label: item.label,
+            description: item.description,
+            providerLabel: item.providerLabel,
+            capabilities: item.capabilities || []
+          }))
         : []
       setModels(normalized)
-      setModelsJson(JSON.stringify(normalized, null, 2))
+      const withProviderDisplay = normalized.map((item) => {
+        const providerId = item.id.includes(':') ? item.id.split(':', 2)[0] : 'unknown'
+        return {
+          ...item,
+          providerId,
+          providerLabel: item.providerLabel,
+          provider: item.providerLabel || providerId,
+          capabilities: item.capabilities || []
+        }
+      })
+      setModelsJson(JSON.stringify(withProviderDisplay, null, 2))
       if (!selectedModel && normalized.length > 0) {
         setSelectedModel(normalized[0].id)
       }
@@ -238,6 +257,26 @@ export default function App() {
       setAttachmentInfo(JSON.stringify(info, null, 2))
     } catch (err: any) {
       notification?.show?.(err?.message || '获取附件信息失败', 'error')
+    }
+  }
+
+  const handleAttachmentUploadToProvider = async (id: string) => {
+    if (!selectedModel && !providerOverride) {
+      notification?.show?.('请先选择模型或填写 Provider ID', 'warning')
+      return
+    }
+    try {
+      const result = await ai?.attachments?.uploadToProvider({
+        attachmentId: id,
+        model: selectedModel || undefined,
+        providerId: providerOverride || undefined,
+        purpose: providerUploadPurpose || undefined
+      })
+      setProviderUploadInfo(JSON.stringify(result, null, 2))
+      notification?.show?.('已上传到 Provider', 'success')
+    } catch (err: any) {
+      console.error('[ai-api-test] uploadToProvider failed', err)
+      setProviderUploadInfo(String(err?.message || err || '上传到 Provider 失败'))
     }
   }
 
@@ -380,6 +419,17 @@ export default function App() {
     return attachments.filter((item) => item.mimeType?.startsWith('image/'))
   }, [attachments])
 
+  const selectedModelInfo = useMemo(() => {
+    return models.find((item) => item.id === selectedModel)
+  }, [models, selectedModel])
+
+  const selectedCapabilities = useMemo(() => {
+    const caps = selectedModelInfo?.capabilities || []
+    return caps
+      .filter((cap) => cap?.type && cap.isUserSelected !== false)
+      .map((cap) => cap.type)
+  }, [selectedModelInfo])
+
   return (
     <div className="app">
       <div className="header">
@@ -400,17 +450,25 @@ export default function App() {
             <label>可用模型（来自全局 AI 设置）</label>
             <select value={selectedModel} onChange={(e) => setSelectedModel(e.target.value)}>
               <option value="">请选择模型</option>
-              {models.map((model) => (
-                <option key={model.id} value={model.id}>
-                  {model.label || model.id}
-                </option>
-              ))}
+              {models.map((model) => {
+                const providerId = model.id.includes(':') ? model.id.split(':', 2)[0] : 'unknown'
+                const providerText = model.providerLabel || providerId
+                const labelText = model.label || model.id
+                return (
+                  <option key={model.id} value={model.id}>
+                    {providerText} · {labelText}
+                  </option>
+                )
+              })}
             </select>
           </div>
           <div className="actions">
             <button className="btn-ghost" onClick={handleTestConnectionStream}>
               流式连接测试
             </button>
+          </div>
+          <div className="mt-2 text-xs text-slate-500">
+            能力：{selectedCapabilities.length > 0 ? selectedCapabilities.join(' / ') : '未标记'}
           </div>
           <textarea className="output" value={modelsJson} readOnly placeholder="模型列表" />
           <div className="split">
@@ -490,6 +548,14 @@ export default function App() {
               </div>
             </div>
           </div>
+          <div className="field">
+            <label>Provider ID (可选，未填则使用所选模型)</label>
+            <input value={providerOverride} onChange={(e) => setProviderOverride(e.target.value)} placeholder="anthropic / google / openai" />
+          </div>
+          <div className="field">
+            <label>Provider 上传用途 (purpose)</label>
+            <input value={providerUploadPurpose} onChange={(e) => setProviderUploadPurpose(e.target.value)} placeholder="agent / code-interpreter / batch" />
+          </div>
           <div className="list">
             {attachments.length === 0 && <div className="empty">暂无附件</div>}
             {attachments.map((item) => (
@@ -499,6 +565,9 @@ export default function App() {
                   <div className="list-sub">{item.mimeType} · {item.size} bytes</div>
                 </div>
                 <div className="actions">
+                  <button className="btn-ghost" onClick={() => handleAttachmentUploadToProvider(item.attachmentId)}>
+                    上传到 Provider
+                  </button>
                   <button className="btn-ghost" onClick={() => handleAttachmentInfo(item.attachmentId)}>
                     信息
                   </button>
@@ -510,6 +579,7 @@ export default function App() {
             ))}
           </div>
           <textarea className="output" value={attachmentInfo} readOnly placeholder="附件详情" />
+          <textarea className="output" value={providerUploadInfo} readOnly placeholder="Provider 文件信息 (fileId / uri)" />
         </section>
 
         <section className="card">

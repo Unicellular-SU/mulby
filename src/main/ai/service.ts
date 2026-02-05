@@ -3,7 +3,17 @@ import { jsonSchema, tool } from '@ai-sdk/provider-utils'
 import type { AiAttachmentRef, AiMessage, AiModel, AiModelParameters, AiOption, AiProviderConfig, AiTokenBreakdown, AiToolContext, AiTool } from '../../shared/types/ai'
 import { attachmentStore } from './attachments'
 import { FileServiceManager } from './fileServices/FileServiceManager'
-import { getFileSizeLimit, supportsImageInput, supportsLargeFileUpload, supportsPdfInput } from './modelCapabilities'
+import {
+  getFileSizeLimit,
+  supportsEmbedding,
+  supportsFunctionCalling,
+  supportsImageInput,
+  supportsLargeFileUpload,
+  supportsPdfInput,
+  supportsReasoning,
+  supportsRerank,
+  supportsWebSearch
+} from './modelCapabilities'
 import { estimateTokens } from './tokens'
 import { getAllModels, resolveModelId } from './models'
 import { getAiSettings } from './config'
@@ -28,7 +38,7 @@ export class AiService {
     if (!option.messages || option.messages.length === 0) {
       throw new Error('AI messages are required')
     }
-    const tools = this.buildTools(option.tools, option.toolContext)
+    const tools = this.buildTools(option.tools, option.toolContext, option.model)
     const requestId = this.createRequestId()
     const controller = new AbortController()
     this.controllers.set(requestId, controller)
@@ -73,7 +83,7 @@ export class AiService {
       return {
         role: 'assistant',
         content: result.text,
-        reasoning_content: (result as any).reasoning
+        reasoning_content: supportsReasoning(option.model) ? (result as any).reasoning : undefined
       }
     } finally {
       this.controllers.delete(requestId)
@@ -84,7 +94,7 @@ export class AiService {
     if (!option.messages || option.messages.length === 0) {
       throw new Error('AI messages are required')
     }
-    const tools = this.buildTools(option.tools, option.toolContext)
+    const tools = this.buildTools(option.tools, option.toolContext, option.model)
 
     const id = requestId || this.createRequestId()
     const controller = new AbortController()
@@ -147,6 +157,7 @@ export class AiService {
 
       let fullText = ''
       let reasoningText = ''
+      const allowReasoning = supportsReasoning(option.model)
 
       if ((result as any).fullStream) {
         for await (const part of (result as any).fullStream) {
@@ -156,7 +167,7 @@ export class AiService {
               callbacks.onChunk?.({ role: 'assistant', content: part.delta })
             }
           } else if (part?.type === 'reasoning-delta') {
-            if (part.delta) {
+            if (part.delta && allowReasoning) {
               reasoningText += part.delta
               callbacks.onChunk?.({ role: 'assistant', reasoning_content: part.delta })
             }
@@ -173,14 +184,14 @@ export class AiService {
       if (!fullText && (result as any).text) {
         fullText = await (result as any).text
       }
-      if (!reasoningText && (result as any).reasoningText) {
+      if (!reasoningText && (result as any).reasoningText && allowReasoning) {
         reasoningText = (await (result as any).reasoningText) || ''
       }
 
       const finalMessage: AiMessage = {
         role: 'assistant',
         content: fullText || '',
-        reasoning_content: reasoningText || undefined
+        reasoning_content: allowReasoning ? reasoningText || undefined : undefined
       }
       callbacks.onEnd?.(finalMessage)
       return finalMessage
@@ -293,6 +304,7 @@ export class AiService {
     onChunk: (chunk: { type: 'content' | 'reasoning'; text: string }) => void
   ): Promise<{ success: boolean; message?: string; reasoning?: string }> {
     try {
+      const allowReasoning = supportsReasoning(input?.model)
       const resolvedInput = this.resolveTestInput(input)
       console.info('[AI] testConnectionStream:start', {
         providerId: resolvedInput?.providerId,
@@ -301,12 +313,15 @@ export class AiService {
       })
 
       if (resolvedInput?.providerId === 'openai' && shouldUseChatApi(resolvedInput?.baseURL)) {
-        const { content, reasoning } = await this.streamOpenAICompat(resolvedInput, onChunk)
+        const { content, reasoning } = await this.streamOpenAICompat(resolvedInput, (chunk) => {
+          if (chunk.type === 'reasoning' && !allowReasoning) return
+          onChunk(chunk)
+        })
         console.info('[AI] testConnectionStream:success', {
           providerId: resolvedInput?.providerId,
           model: resolvedInput?.model
         })
-        return { success: true, message: content || 'ok', reasoning }
+        return { success: true, message: content || 'ok', reasoning: allowReasoning ? reasoning : '' }
       }
 
       const { modelKey } = this.resolveTestModel(resolvedInput)
@@ -332,6 +347,7 @@ export class AiService {
             fullText += part.delta || ''
             onChunk({ type: 'content', text: part.delta || '' })
           } else if (part?.type === 'reasoning-delta') {
+            if (!allowReasoning) continue
             reasoning += part.delta || ''
             onChunk({ type: 'reasoning', text: part.delta || '' })
           }
@@ -347,7 +363,7 @@ export class AiService {
         providerId: resolvedInput?.providerId,
         model: resolvedInput?.model
       })
-      return { success: true, message: fullText || 'ok', reasoning }
+      return { success: true, message: fullText || 'ok', reasoning: allowReasoning ? reasoning : '' }
     } catch (err) {
       const message = err instanceof Error ? err.message : 'AI connection failed'
       console.error('[AI] testConnectionStream:fail', {
@@ -364,6 +380,7 @@ export class AiService {
     input: { model?: string; providerId?: string; apiKey?: string; baseURL?: string },
     onChunk: (chunk: { type: 'content' | 'reasoning'; text: string }) => void
   ): Promise<{ content: string; reasoning: string }> {
+    const allowReasoning = supportsReasoning(input.model)
     const baseURL = (input.baseURL || 'https://api.openai.com/v1').replace(/\/+$/, '')
     const url = `${baseURL.replace(/\/$/, '')}/chat/completions`
     const modelId = input.model?.includes(':') ? input.model.split(':', 2)[1] : input.model
@@ -425,7 +442,7 @@ export class AiService {
           const reasoningChunk = delta.reasoning_content || delta.reasoning
           const contentChunk = delta.content
 
-          if (reasoningChunk) {
+          if (reasoningChunk && allowReasoning) {
             reasoning += reasoningChunk
             onChunk({ type: 'reasoning', text: reasoningChunk })
           }
@@ -462,6 +479,7 @@ export class AiService {
     onChunk?: (chunk: AiMessage) => void,
     abortSignal?: AbortSignal
   ): Promise<{ content: string; reasoning: string }> {
+    const allowReasoning = supportsReasoning(`openai:${input.model}`)
     const baseURL = (input.baseURL || 'https://api.openai.com/v1').replace(/\/+$/, '')
     const url = `${baseURL}/chat/completions`
     const res = await fetch(url, {
@@ -519,7 +537,7 @@ export class AiService {
           const reasoningChunk = delta.reasoning_content || delta.reasoning
           const contentChunk = delta.content
 
-          if (reasoningChunk) {
+          if (reasoningChunk && allowReasoning) {
             reasoning += reasoningChunk
             onChunk?.({ role: 'assistant', reasoning_content: reasoningChunk })
           }
@@ -647,8 +665,32 @@ export class AiService {
     return results
   }
 
-  private buildTools(tools?: AiTool[], context?: AiToolContext) {
+  private buildTools(tools?: AiTool[], context?: AiToolContext, modelId?: string) {
     if (!tools || tools.length === 0) return undefined
+    if (modelId && !supportsFunctionCalling(modelId)) {
+      return undefined
+    }
+    if (modelId) {
+      const toolNames = tools
+        .map((item) => item?.type === 'function' ? item.function?.name : undefined)
+        .filter((name): name is string => !!name)
+        .map((name) => name.toLowerCase())
+      if (toolNames.some((name) => name.includes('web_search') || name.includes('web-search'))) {
+        if (!supportsWebSearch(modelId)) {
+          throw new Error('Model does not support web_search capability')
+        }
+      }
+      if (toolNames.some((name) => name.includes('embedding') || name.includes('embed'))) {
+        if (!supportsEmbedding(modelId)) {
+          throw new Error('Model does not support embedding capability')
+        }
+      }
+      if (toolNames.some((name) => name.includes('rerank') || name.includes('re-rank'))) {
+        if (!supportsRerank(modelId)) {
+          throw new Error('Model does not support rerank capability')
+        }
+      }
+    }
     if (!this.toolExecutor) {
       throw new Error('AI tool executor is not configured')
     }
@@ -1068,19 +1110,39 @@ export class AiService {
       ? this.resolveProviderConfig(input.model)
       : this.resolveProviderById(input.providerId)
     if (!providerConfig) {
+      console.error('[AI] uploadAttachmentToProvider:provider_not_found', { input })
       throw new Error('Provider config not found for attachment upload')
     }
     const attachment = attachmentStore.get(input.attachmentId)
+    if (!attachment) {
+      console.error('[AI] uploadAttachmentToProvider:attachment_not_found', { attachmentId: input.attachmentId })
+      throw new Error(`Attachment not found: ${input.attachmentId}`)
+    }
     const filename = attachment?.filename || 'attachment'
     const mimeType = attachment?.mimeType || 'application/octet-stream'
-    const remote = await this.uploadAttachmentToProviderInternal(
-      { attachmentId: input.attachmentId, filename, mimeType, purpose: input.purpose },
-      providerConfig
-    )
-    if (!remote?.fileId) {
-      throw new Error('Failed to upload attachment to provider')
+    try {
+      const remote = await this.uploadAttachmentToProviderInternal(
+        { attachmentId: input.attachmentId, filename, mimeType, purpose: input.purpose },
+        providerConfig
+      )
+      if (!remote?.fileId) {
+        console.error('[AI] uploadAttachmentToProvider:missing_file_id', {
+          providerId: providerConfig.id,
+          attachmentId: input.attachmentId
+        })
+        throw new Error('Failed to upload attachment to provider: missing file id')
+      }
+      return { providerId: String(providerConfig.id), fileId: remote.fileId, uri: remote.uri }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err)
+      console.error('[AI] uploadAttachmentToProvider:fail', {
+        providerId: providerConfig.id,
+        attachmentId: input.attachmentId,
+        baseURL: providerConfig.baseURL,
+        error: message
+      })
+      throw new Error(message)
     }
-    return { providerId: String(providerConfig.id), fileId: remote.fileId, uri: remote.uri }
   }
 
   private async uploadAttachmentToProviderInternal(
@@ -1088,7 +1150,14 @@ export class AiService {
     providerConfig?: AiProviderConfig
   ): Promise<{ fileId: string; uri?: string } | null> {
     if (!providerConfig) return null
-    if (!providerConfig.apiKey || !providerConfig.baseURL) return null
+    if (!providerConfig.apiKey || !providerConfig.baseURL) {
+      console.warn('[AI] uploadAttachmentToProvider:missing_credentials', {
+        providerId: providerConfig.id,
+        hasApiKey: Boolean(providerConfig.apiKey),
+        hasBaseURL: Boolean(providerConfig.baseURL)
+      })
+      return null
+    }
     const cached = attachmentStore.getRemote(input.attachmentId, {
       providerId: String(providerConfig.id),
       purpose: input.purpose
@@ -1117,7 +1186,7 @@ export class AiService {
       }
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err)
-      console.warn('[AI] uploadAttachmentToProvider:fail', {
+      console.warn('[AI] uploadAttachmentToProvider:service_fail', {
         providerId: providerConfig.id,
         attachmentId: input.attachmentId,
         error: message
