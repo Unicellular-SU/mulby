@@ -29,6 +29,7 @@ const message = await ai.call({
   - `messages` (AiMessage[]) - 对话消息
   - `params` (AiModelParameters) - 覆盖参数（可选）
   - `tools` (AiTool[]) - 工具定义（Function Calling）
+  - `maxToolSteps` (number) - 工具调用的最大步骤数（默认 10，范围 1-20）
   - `onChunk` (function) - 流式回调 (可选)
 
 **返回值**:
@@ -85,7 +86,8 @@ export const host = {
     return await context.api.ai.call({
       model: 'openai:gpt-4o-mini',
       messages: input.messages,
-      tools
+      tools,
+      maxToolSteps: 5  // 设置最大工具调用步骤数为 5
     });
   }
 };
@@ -396,6 +398,7 @@ type AiOption = {
   messages: AiMessage[];
   tools?: AiTool[];
   params?: AiModelParameters;
+  maxToolSteps?: number;  // 工具调用的最大步骤数，默认为 10
 };
 ```
 

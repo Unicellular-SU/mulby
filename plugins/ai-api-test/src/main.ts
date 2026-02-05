@@ -199,8 +199,9 @@ export const host = {
         { role: 'system', content: '你是一个工具调用测试助手。' },
         { role: 'user', content: payload.prompt }
       ],
-      tools
-    })
+      tools,
+      maxToolSteps: 5  // 设置最大工具调用步骤数为 5
+    } as any)
 
     console.log('[ai-api-test] AI 调用结果', result)
     return result

@@ -63,6 +63,12 @@ export function useIntools(pluginId?: string) {
 
     // AI API
     ai: {
+      // option 参数支持：
+      // - model: 模型 ID
+      // - messages: 消息数组
+      // - tools: 工具定义数组
+      // - params: 模型参数
+      // - maxToolSteps: 工具调用的最大步骤数（默认 10）
       call: (option: any, onChunk?: (chunk: any) => void) => window.intools?.ai?.call(option, onChunk),
       allModels: () => window.intools?.ai?.allModels?.(),
       abort: (requestId: string) => window.intools?.ai?.abort?.(requestId),

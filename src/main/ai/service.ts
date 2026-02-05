@@ -88,12 +88,13 @@ export class AiService {
 
       console.log('[AI] call: 使用 Vercel AI SDK generateText', { hasTools: !!tools })
       const messages = await this.toSdkMessages(trimmedMessages, option.model)
+      const maxSteps = option.maxToolSteps ?? 10
       const result = await generateText({
         model: modelKey,
         messages,
         abortSignal: controller.signal,
         tools,
-        stopWhen: tools ? stepCountIs(10) : undefined,
+        stopWhen: tools ? stepCountIs(maxSteps) : undefined,
         ...params
       })
 
@@ -197,7 +198,7 @@ export class AiService {
         messages,
         abortSignal: controller.signal,
         tools,
-        stopWhen: tools ? stepCountIs(10) : undefined,
+        stopWhen: tools ? stepCountIs(option.maxToolSteps ?? 10) : undefined,
         ...params
       })
 
