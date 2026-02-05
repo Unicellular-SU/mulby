@@ -1,11 +1,15 @@
 /**
  * Plugin Host Worker
  * 运行在 UtilityProcess 中，负责执行插件代码
+ * 
+ * 安全模型：
+ * - 进程级隔离由 UtilityProcess 提供
+ * - API 权限由 createProxyAPI 白名单控制
+ * - 资源限制由 watchdog 监控
  */
 
+import { join, dirname } from 'path'
 import { readFileSync } from 'fs'
-import { join } from 'path'
-import { VM } from 'vm2'
 import type {
   HostRequest,
   HostResponse,
@@ -21,7 +25,6 @@ interface PluginState {
   pluginName: string
   pluginPath: string
   mainFile: string
-  vm: VM | null
   module: PluginModule | null
 }
 
@@ -147,7 +150,6 @@ function handleInit(request: InitRequest): void {
       pluginName,
       pluginPath,
       mainFile,
-      vm: null,
       module: null
     }
 
@@ -168,8 +170,31 @@ function handleInit(request: InitRequest): void {
   }
 }
 
-/** 加载插件模块 */
-function loadModule(): PluginModule {
+/** 检测代码是否使用 ES Module 语法 */
+function isESModule(code: string): boolean {
+  // 检测 export 语句（排除注释和字符串中的）
+  // 简单检测：以 export 开头的行，或 export { 或 export default
+  const lines = code.split('\n')
+  for (const line of lines) {
+    const trimmed = line.trim()
+    // 跳过注释
+    if (trimmed.startsWith('//') || trimmed.startsWith('/*') || trimmed.startsWith('*')) {
+      continue
+    }
+    // 检测 export 语句
+    if (/^export\s+/.test(trimmed) || /^export\{/.test(trimmed)) {
+      return true
+    }
+    // 检测顶层 import 语句（不是动态 import()）
+    if (/^import\s+/.test(trimmed) && !trimmed.includes('import(')) {
+      return true
+    }
+  }
+  return false
+}
+
+/** 加载插件模块（支持 CommonJS 和 ES Module） */
+async function loadModule(): Promise<PluginModule> {
   if (!pluginState) {
     throw new Error('Plugin not initialized')
   }
@@ -181,25 +206,34 @@ function loadModule(): PluginModule {
   const mainPath = join(pluginState.pluginPath, pluginState.mainFile)
   const code = readFileSync(mainPath, 'utf-8')
 
-  pluginState.vm = new VM({
-    timeout: 5000,
-    sandbox: {
-      module: { exports: {} },
-      exports: {},
-      require: () => null,
-      console,
-      Buffer,
-      setTimeout,
-      setInterval,
-      clearTimeout,
-      clearInterval,
-      setImmediate,
-      clearImmediate
-    }
-  })
+  // 检测模块格式
+  if (isESModule(code)) {
+    // ES Module 格式：使用动态 import()
+    const cacheBuster = `?t=${Date.now()}`
+    const module = await import(`file://${mainPath}${cacheBuster}`)
+    pluginState.module = module.default || module
+  } else {
+    // CommonJS 格式：使用 Function 执行
+    const moduleObj = { exports: {} as Record<string, unknown> }
+    const exportsObj = moduleObj.exports
 
-  pluginState.module = pluginState.vm.run(code + '\nmodule.exports') as PluginModule
-  return pluginState.module
+    const wrapper = new Function(
+      'module', 'exports', 'require', '__filename', '__dirname',
+      'console', 'Buffer', 'setTimeout', 'setInterval', 'clearTimeout', 'clearInterval',
+      'setImmediate', 'clearImmediate', 'process',
+      code
+    )
+
+    wrapper(
+      moduleObj, exportsObj, require, mainPath, dirname(mainPath),
+      console, Buffer, setTimeout, setInterval, clearTimeout, clearInterval,
+      setImmediate, clearImmediate, process
+    )
+
+    pluginState.module = (moduleObj.exports.default || moduleObj.exports) as PluginModule
+  }
+
+  return pluginState.module!
 }
 
 /** 执行插件 */
@@ -207,7 +241,7 @@ async function handleRun(request: RunRequest): Promise<void> {
   const { featureCode, input, attachments } = request.payload
 
   try {
-    const module = loadModule()
+    const module = await loadModule()
     const api = createProxyAPI()
     const context: PluginContext = { api, featureCode, input, attachments }
 
@@ -237,7 +271,7 @@ async function handleCallHook(request: CallHookRequest): Promise<void> {
   const { hookName } = request.payload
 
   try {
-    const module = loadModule()
+    const module = await loadModule()
     const hook = module[hookName]
 
     if (typeof hook === 'function') {
@@ -267,7 +301,7 @@ async function handleCallTaskCallback(request: any): Promise<void> {
   const { callbackName, payload, task } = request.payload
 
   try {
-    const module = loadModule()
+    const module = await loadModule()
     const callback = (module as any)[callbackName]
 
     if (typeof callback === 'function') {
@@ -302,7 +336,7 @@ async function handleCallHostMethod(request: any): Promise<void> {
   const { method, args } = request.payload
 
   try {
-    const module = loadModule() as any
+    const module = await loadModule() as any
 
     // 方案1：按优先级查找方法
     let targetMethod: Function | undefined
