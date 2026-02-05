@@ -100,9 +100,16 @@ const intoolsApi = {
         return promise as any
       }
 
-      let abortFn = () => {}
-      const promise = ipcRenderer.invoke('ai:stream', option).then(({ requestId }) => {
-        abortFn = () => ipcRenderer.invoke('ai:abort', requestId)
+      let requestIdValue: string | null = null
+      const requestIdPromise = ipcRenderer.invoke('ai:stream', option)
+      const promise = requestIdPromise.then(({ requestId }) => {
+        requestIdValue = requestId
+        ;(promise as any).requestId = requestId
+        try {
+          streamCallback({ __requestId: requestId })
+        } catch {
+          // ignore
+        }
 
         return new Promise((resolve, reject) => {
           const onChunk = (_: any, id: string, chunk: any) => {
@@ -132,7 +139,13 @@ const intoolsApi = {
         })
       })
 
-      ;(promise as any).abort = () => abortFn()
+      ;(promise as any).abort = () => {
+        if (requestIdValue) {
+          ipcRenderer.invoke('ai:abort', requestIdValue)
+          return
+        }
+        requestIdPromise.then(({ requestId }) => ipcRenderer.invoke('ai:abort', requestId)).catch(() => {})
+      }
       return promise as any
     }
 

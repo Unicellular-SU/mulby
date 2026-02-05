@@ -333,8 +333,25 @@ ${item.files.map(p => `    <string>${p}</string>`).join('\n')}
       }
     },
     ai: {
-      call: async (option: AiOption, onChunk?: (chunk: AiMessage) => void) =>
-        await aiService.call({ ...option, toolContext: { ...(option as any).toolContext, pluginName } }, onChunk),
+      call: (option: AiOption, onChunk?: (chunk: AiMessage) => void) => {
+        if (!onChunk) {
+          const promise = aiService.call({ ...option, toolContext: { ...(option as any).toolContext, pluginName } })
+          ;(promise as any).abort = () => {}
+          return promise as any
+        }
+
+        const requestId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+        const promise = aiService
+          .stream(
+            { ...option, toolContext: { ...(option as any).toolContext, pluginName } },
+            {
+              onChunk: (chunk: AiMessage) => onChunk(chunk)
+            },
+            requestId
+          )
+        ;(promise as any).abort = () => aiService.abort(requestId)
+        return promise as any
+      },
       allModels: async () => aiService.allModels(),
       abort: (requestId: string) => aiService.abort(requestId),
       attachments: {

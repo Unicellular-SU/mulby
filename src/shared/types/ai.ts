@@ -22,6 +22,7 @@ export interface AiMessage {
   role: 'system' | 'user' | 'assistant'
   content?: string | AiMessageContent[]
   reasoning_content?: string
+  usage?: AiTokenBreakdown
 }
 
 export interface AiToolFunction {
@@ -146,7 +147,12 @@ export interface AiApi {
     uploadToProvider: (input: { attachmentId: string; model?: string; providerId?: string; purpose?: string }) => Promise<{ providerId: string; fileId: string; uri?: string }>
   }
   tokens: {
-    estimate: (input: { model: string; messages: AiMessage[]; attachments?: AiAttachmentRef[] }) => Promise<AiTokenBreakdown>
+    estimate: (input: {
+      model?: string
+      messages: AiMessage[]
+      attachments?: AiAttachmentRef[]
+      outputText?: string
+    }) => Promise<AiTokenBreakdown>
   }
   images: {
     generate: (input: { prompt: string; model: string; size?: string; count?: number }) => Promise<{ images: string[]; tokens: AiTokenBreakdown }>

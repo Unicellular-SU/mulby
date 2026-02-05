@@ -449,7 +449,12 @@ interface IntoolsHttp {
   delete(url: string, headers?: Record<string, string>): Promise<HttpResponse>
 }
 
-type AiMessage = { role: 'system' | 'user' | 'assistant'; content?: string | AiMessageContent[]; reasoning_content?: string }
+type AiMessage = {
+  role: 'system' | 'user' | 'assistant'
+  content?: string | AiMessageContent[]
+  reasoning_content?: string
+  usage?: { inputTokens: number; outputTokens: number }
+}
 type AiMessageContent =
   | { type: 'text'; text: string }
   | { type: 'image'; attachmentId: string; mimeType?: string }
@@ -499,7 +504,7 @@ interface IntoolsAi {
   call(option: AiOption, onChunk?: (chunk: AiMessage) => void): Promise<AiMessage>
   allModels(): Promise<AiModel[]>
   tokens: {
-    estimate(input: { model?: string; messages: AiMessage[] }): Promise<{ inputTokens: number; outputTokens: number }>
+    estimate(input: { model?: string; messages: AiMessage[]; outputText?: string }): Promise<{ inputTokens: number; outputTokens: number }>
   }
   attachments: {
     upload(input: { filePath?: string; buffer?: ArrayBuffer; mimeType: string; purpose?: string }): Promise<AiAttachmentRef>

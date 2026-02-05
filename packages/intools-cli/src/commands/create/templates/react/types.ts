@@ -458,7 +458,12 @@ interface IntoolsHttp {
   delete(url: string, headers?: Record<string, string>): Promise<HttpResponse>
 }
 
-type AiMessage = { role: 'system' | 'user' | 'assistant'; content?: string | AiMessageContent[]; reasoning_content?: string }
+type AiMessage = {
+  role: 'system' | 'user' | 'assistant'
+  content?: string | AiMessageContent[]
+  reasoning_content?: string
+  usage?: { inputTokens: number; outputTokens: number }
+}
 type AiMessageContent =
   | { type: 'text'; text: string }
   | { type: 'image'; attachmentId: string; mimeType?: string }
@@ -500,15 +505,16 @@ type AiProviderConfig = {
 }
 type AiSettings = { providers: AiProviderConfig[]; models?: AiModel[]; defaultParams?: AiModelParameters }
 type AiAttachmentRef = { attachmentId: string; mimeType: string; size: number; filename?: string; expiresAt?: string; purpose?: string }
-type AiTokenBreakdown = { inputTokens?: number; outputTokens?: number; totalTokens?: number }
+type AiTokenBreakdown = { inputTokens: number; outputTokens: number }
 type AiModelType = 'text' | 'vision' | 'embedding' | 'reasoning' | 'function_calling' | 'web_search' | 'rerank'
 type AiModelCapability = { type: AiModelType; isUserSelected?: boolean }
 
 interface IntoolsAi {
   call(option: AiOption, onChunk?: (chunk: AiMessage) => void): Promise<AiMessage>
   allModels(): Promise<AiModel[]>
+  abort(requestId: string): Promise<void>
   tokens: {
-    estimate(input: { model?: string; messages: AiMessage[] }): Promise<{ inputTokens: number; outputTokens: number }>
+    estimate(input: { model?: string; messages: AiMessage[]; outputText?: string }): Promise<{ inputTokens: number; outputTokens: number }>
   }
   attachments: {
     upload(input: { filePath?: string; buffer?: ArrayBuffer; mimeType: string; purpose?: string }): Promise<AiAttachmentRef>

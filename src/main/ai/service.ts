@@ -14,7 +14,7 @@ import {
   supportsRerank,
   supportsWebSearch
 } from './modelCapabilities'
-import { estimateTokens } from './tokens'
+import { countTokensForText, countTokensFromMessages, estimateTokens } from './tokens'
 import { getAllModels, resolveModelId } from './models'
 import { getAiSettings } from './config'
 import { getProviderRegistry, hasProvider, buildProvider } from './providers'
@@ -64,10 +64,16 @@ export class AiService {
           baseURL: providerConfig?.baseURL,
           params
         })
+        const usage = normalizeUsage(
+          undefined,
+          countTokensFromMessages(trimmedMessages, option.model),
+          countTokensForText(`${reasoning || ''}${content || ''}`, option.model)
+        )
         return {
           role: 'assistant',
           content,
-          reasoning_content: reasoning || undefined
+          reasoning_content: reasoning || undefined,
+          usage
         }
       }
 
@@ -80,10 +86,18 @@ export class AiService {
         ...params
       })
 
+      const reasoning = supportsReasoning(option.model) ? (result as any).reasoning : undefined
+      const usage = normalizeUsage(
+        extractUsage(result),
+        countTokensFromMessages(trimmedMessages, option.model),
+        countTokensForText(`${reasoning || ''}${result.text || ''}`, option.model)
+      )
+
       return {
         role: 'assistant',
         content: result.text,
-        reasoning_content: supportsReasoning(option.model) ? (result as any).reasoning : undefined
+        reasoning_content: reasoning,
+        usage
       }
     } finally {
       this.controllers.delete(requestId)
@@ -119,10 +133,16 @@ export class AiService {
           params
         }, callbacks.onChunk, controller.signal)
 
+        const usage = normalizeUsage(
+          undefined,
+          countTokensFromMessages(trimmedMessages, option.model),
+          countTokensForText(`${reasoning || ''}${content || ''}`, option.model)
+        )
         const finalMessage: AiMessage = {
           role: 'assistant',
           content,
-          reasoning_content: reasoning || undefined
+          reasoning_content: reasoning || undefined,
+          usage
         }
         callbacks.onEnd?.(finalMessage)
         return finalMessage
@@ -138,10 +158,16 @@ export class AiService {
           tools: option.tools
         }, callbacks.onChunk, controller.signal)
 
+        const usage = normalizeUsage(
+          undefined,
+          countTokensFromMessages(trimmedMessages, option.model),
+          countTokensForText(`${reasoning || ''}${content || ''}`, option.model)
+        )
         const finalMessage: AiMessage = {
           role: 'assistant',
           content,
-          reasoning_content: reasoning || undefined
+          reasoning_content: reasoning || undefined,
+          usage
         }
         callbacks.onEnd?.(finalMessage)
         return finalMessage
@@ -188,10 +214,17 @@ export class AiService {
         reasoningText = (await (result as any).reasoningText) || ''
       }
 
+      const usage = normalizeUsage(
+        extractUsage(result),
+        countTokensFromMessages(trimmedMessages, option.model),
+        countTokensForText(`${reasoningText || ''}${fullText || ''}`, option.model)
+      )
+
       const finalMessage: AiMessage = {
         role: 'assistant',
         content: fullText || '',
-        reasoning_content: allowReasoning ? reasoningText || undefined : undefined
+        reasoning_content: allowReasoning ? reasoningText || undefined : undefined,
+        usage
       }
       callbacks.onEnd?.(finalMessage)
       return finalMessage
@@ -212,8 +245,10 @@ export class AiService {
     }
   }
 
-  async estimateTokens(input: { model: string; messages: AiMessage[] }): Promise<AiTokenBreakdown> {
-    return await estimateTokens(input)
+  async estimateTokens(input: { model?: string; messages: AiMessage[]; outputText?: string }): Promise<AiTokenBreakdown> {
+    const params = this.resolveGenerationParams({ model: input.model, messages: input.messages }, input.model)
+    const maxOutputTokens = params.maxOutputTokensEnabled === false ? undefined : params.maxOutputTokens
+    return await estimateTokens({ ...input, maxOutputTokens })
   }
 
   setToolExecutor(executor?: (input: { name: string; args: unknown; context?: AiToolContext }) => Promise<unknown>): void {
@@ -1306,4 +1341,37 @@ function normalizeModelParams(params: AiModelParameters): AiModelParameters {
 function shouldUseChatApi(baseURL?: string): boolean {
   if (!baseURL) return false
   return !baseURL.includes('api.openai.com')
+}
+
+function extractUsage(result: any): { inputTokens?: number; outputTokens?: number } | undefined {
+  const usage = result?.usage || result?.response?.usage || result?.metadata?.usage
+  if (!usage) return undefined
+  const inputTokens =
+    usage.inputTokens ??
+    usage.promptTokens ??
+    usage.prompt_tokens ??
+    usage.input_tokens ??
+    usage.totalTokens ??
+    usage.total_tokens
+  const outputTokens =
+    usage.outputTokens ??
+    usage.completionTokens ??
+    usage.completion_tokens ??
+    usage.output_tokens
+  if (inputTokens === undefined && outputTokens === undefined) return undefined
+  return {
+    inputTokens: inputTokens !== undefined ? Number(inputTokens) : undefined,
+    outputTokens: outputTokens !== undefined ? Number(outputTokens) : undefined
+  }
+}
+
+function normalizeUsage(
+  usage: { inputTokens?: number; outputTokens?: number } | undefined,
+  fallbackInput: number,
+  fallbackOutput: number
+): AiTokenBreakdown {
+  return {
+    inputTokens: usage?.inputTokens !== undefined ? usage.inputTokens : fallbackInput,
+    outputTokens: usage?.outputTokens !== undefined ? usage.outputTokens : fallbackOutput
+  }
 }

@@ -56,6 +56,7 @@ export function useIntools(pluginId?: string) {
     ai: {
       call: (option: any, onChunk?: (chunk: any) => void) => window.intools?.ai?.call(option, onChunk),
       allModels: () => window.intools?.ai?.allModels?.(),
+      abort: (requestId: string) => window.intools?.ai?.abort?.(requestId),
       tokens: {
         estimate: (input: any) => window.intools?.ai?.tokens?.estimate(input),
       },

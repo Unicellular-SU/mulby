@@ -51,6 +51,7 @@ export default function App() {
   const [isStreaming, setIsStreaming] = useState(false)
 
   const [tokenEstimate, setTokenEstimate] = useState('')
+  const [tokenActual, setTokenActual] = useState('')
   const [settingsJson, setSettingsJson] = useState('')
 
   const [attachments, setAttachments] = useState<AiAttachmentRef[]>([])
@@ -85,6 +86,7 @@ export default function App() {
 
   const fileInputRef = useRef<HTMLInputElement | null>(null)
   const streamRequestRef = useRef<any>(null)
+  const streamRequestIdRef = useRef<string | null>(null)
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search)
@@ -142,6 +144,7 @@ export default function App() {
     }
     setReasoningOutput('')
     setStreamOutput('')
+    setTokenActual('')
     setIsStreaming(true)
 
     try {
@@ -156,6 +159,10 @@ export default function App() {
         },
         (chunk: any) => {
           console.info('[ai-api-test] stream chunk', chunk)
+          if (chunk?.__requestId) {
+            streamRequestIdRef.current = chunk.__requestId
+            console.info('[ai-api-test] stream requestId set', chunk.__requestId)
+          }
           if (chunk?.reasoning_content) {
             setReasoningOutput((prev) => prev + chunk.reasoning_content)
           }
@@ -167,6 +174,7 @@ export default function App() {
       )
 
       streamRequestRef.current = req
+      streamRequestIdRef.current = (req as any)?.requestId ?? null
       const finalMessage = await req
       console.info('[ai-api-test] stream end', finalMessage)
       if (finalMessage?.reasoning_content) {
@@ -176,7 +184,11 @@ export default function App() {
       if (finalText) {
         setStreamOutput(finalText)
       }
+      if (finalMessage?.usage) {
+        setTokenActual(JSON.stringify(finalMessage.usage, null, 2))
+      }
       streamRequestRef.current = null
+      streamRequestIdRef.current = null
       setIsStreaming(false)
     } catch (err: any) {
       setIsStreaming(false)
@@ -185,9 +197,24 @@ export default function App() {
   }
 
   const stopStream = () => {
+    console.info('[ai-api-test] stop stream', {
+      hasAbort: !!streamRequestRef.current?.abort,
+      requestId: streamRequestIdRef.current,
+      promiseRequestId: (streamRequestRef.current as any)?.requestId
+    })
     if (streamRequestRef.current?.abort) {
       streamRequestRef.current.abort()
       streamRequestRef.current = null
+      streamRequestIdRef.current = null
+      setIsStreaming(false)
+      notification?.show?.('已停止流式输出', 'warning')
+      return
+    }
+    const requestId = (streamRequestRef.current as any)?.requestId || streamRequestIdRef.current
+    if (requestId && ai?.abort) {
+      ai.abort(requestId)
+      streamRequestRef.current = null
+      streamRequestIdRef.current = null
       setIsStreaming(false)
       notification?.show?.('已停止流式输出', 'warning')
       return
@@ -197,9 +224,14 @@ export default function App() {
 
   const handleEstimateTokens = async () => {
     try {
+      const outputText = `${reasoningOutput || ''}${streamOutput || ''}`.trim()
       const result = await ai?.tokens?.estimate({
         model: selectedModel || undefined,
-        messages: [{ role: 'user', content: userPrompt }]
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: userPrompt }
+        ],
+        outputText: outputText.length > 0 ? outputText : undefined
       })
       setTokenEstimate(JSON.stringify(result, null, 2))
     } catch (err: any) {
@@ -515,7 +547,10 @@ export default function App() {
               <textarea className="output" value={streamOutput} readOnly placeholder="streaming..." />
             </div>
           </div>
-          <textarea className="output" value={tokenEstimate} readOnly placeholder="Token 估算结果" />
+          <div className="split">
+            <textarea className="output" value={tokenEstimate} readOnly placeholder="Token 估算结果" />
+            <textarea className="output" value={tokenActual} readOnly placeholder="Token 实际结果" />
+          </div>
         </section>
 
         <section className="card">

@@ -32,7 +32,7 @@ const message = await ai.call({
   - `onChunk` (function) - 流式回调 (可选)
 
 **返回值**:
-- `Promise<AiMessage>` - 最终消息
+- `Promise<AiMessage>` - 最终消息（包含可选 `usage`）
 - 渲染进程返回的 Promise 附带 `abort()` 方法（仅 `onChunk` 模式有效）
 
 ```javascript
@@ -290,12 +290,19 @@ const remote = await ai.attachments.uploadToProvider({
 
 ### tokens.estimate(input)
 [Renderer] [Backend]
-估算输入 token 数量（当前为近似估算）。
+估算 token 数量（输入使用分词器，输出可基于实际输出文本或上限估算）。
 
 ```javascript
 const tokens = await ai.tokens.estimate({
   model: 'openai:gpt-4o-mini',
   messages: [{ role: 'user', content: 'Hello' }]
+});
+
+// 基于实际输出文本估算（推荐用于“完成后计算”）
+const tokens2 = await ai.tokens.estimate({
+  model: 'openai:gpt-4o-mini',
+  messages: [{ role: 'user', content: 'Hello' }],
+  outputText: 'Hi there!'
 });
 ```
 
@@ -306,6 +313,9 @@ const tokens = await ai.tokens.estimate({
   outputTokens: number;
 }
 ```
+**说明**:
+- `outputText` 传入时，`outputTokens` 会按实际输出文本分词计算。
+- `outputText` 未传时，`outputTokens` 会使用 `maxOutputTokens`（若开启）或启发式估算。
 
 ---
 
@@ -367,6 +377,7 @@ type AiMessage = {
   role: 'system' | 'user' | 'assistant';
   content?: string | AiMessageContent[];
   reasoning_content?: string;
+  usage?: { inputTokens: number; outputTokens: number };
 };
 ```
 

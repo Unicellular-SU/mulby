@@ -45,6 +45,7 @@
     "electron-get-location": "^1.0.1",
     "electron-log": "^5.0.0",
     "extract-zip": "^2.0.1",
+    "js-tiktoken": "^1.0.21",
     "lucide-react": "^0.562.0",
     "node-addon-api": "^8.5.0",
     "node-mac-permissions": "^2.5.0",
