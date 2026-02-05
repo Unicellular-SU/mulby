@@ -51,7 +51,14 @@ setAiToolExecutor(async ({ name, args, context }) => {
     throw new Error('AI tool execution requires plugin context')
   }
   const hostManager = pluginManager.getHostManager()
-  return await hostManager.callHostMethod(pluginName, name, [args])
+  const result = await hostManager.callHostMethod(pluginName, name, [args])
+
+  // 解包 host 返回的结果：{ success: true, data: {...} } -> {...}
+  if (result && typeof result === 'object' && 'success' in result && 'data' in result) {
+    return (result as any).data
+  }
+
+  return result
 })
 
 // 单实例锁：确保只有一个应用实例运行

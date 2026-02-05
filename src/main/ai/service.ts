@@ -1,4 +1,4 @@
-import { generateText, streamText, generateImage } from 'ai'
+import { generateText, streamText, generateImage, stepCountIs } from 'ai'
 import { jsonSchema, tool } from '@ai-sdk/provider-utils'
 import type { AiAttachmentRef, AiMessage, AiModel, AiModelParameters, AiOption, AiProviderConfig, AiTokenBreakdown, AiToolContext, AiTool } from '../../shared/types/ai'
 import { attachmentStore } from './attachments'
@@ -38,6 +38,13 @@ export class AiService {
     if (!option.messages || option.messages.length === 0) {
       throw new Error('AI messages are required')
     }
+    console.log('[AI] call 开始', {
+      model: option.model,
+      messageCount: option.messages.length,
+      hasTools: !!option.tools && option.tools.length > 0,
+      toolContext: option.toolContext,
+      hasOnChunk: !!onChunk
+    })
     const tools = this.buildTools(option.tools, option.toolContext, option.model)
     const requestId = this.createRequestId()
     const controller = new AbortController()
@@ -45,6 +52,7 @@ export class AiService {
 
     try {
       if (onChunk) {
+        console.log('[AI] call: 使用流式模式')
         return await this.stream(option, { onChunk }, requestId)
       }
 
@@ -55,6 +63,7 @@ export class AiService {
       const resolved = resolveModelId(option.model)
 
       if (resolved.providerId === 'anthropic' && this.hasMultimodalContent(trimmedMessages)) {
+        console.log('[AI] call: 使用 Anthropic 原生 API')
         const anthropicPayload = await this.toAnthropicMessages(trimmedMessages, option.model, providerConfig)
         const { content, reasoning } = await this.callAnthropicMessages({
           model: resolved.modelId,
@@ -77,13 +86,23 @@ export class AiService {
         }
       }
 
+      console.log('[AI] call: 使用 Vercel AI SDK generateText', { hasTools: !!tools })
       const messages = await this.toSdkMessages(trimmedMessages, option.model)
       const result = await generateText({
         model: modelKey,
         messages,
         abortSignal: controller.signal,
         tools,
+        stopWhen: tools ? stepCountIs(10) : undefined,
         ...params
+      })
+
+      console.log('[AI] call: generateText 完成', {
+        text: result.text?.substring(0, 100),
+        hasToolCalls: !!(result as any).toolCalls,
+        toolCallsCount: (result as any).toolCalls?.length,
+        steps: (result as any).steps?.length,
+        finishReason: result.finishReason
       })
 
       const reasoning = supportsReasoning(option.model) ? (result as any).reasoning : undefined
@@ -178,6 +197,7 @@ export class AiService {
         messages,
         abortSignal: controller.signal,
         tools,
+        stopWhen: tools ? stepCountIs(10) : undefined,
         ...params
       })
 
@@ -703,6 +723,7 @@ export class AiService {
   private buildTools(tools?: AiTool[], context?: AiToolContext, modelId?: string) {
     if (!tools || tools.length === 0) return undefined
     if (modelId && !supportsFunctionCalling(modelId)) {
+      console.log('[AI] buildTools: 模型不支持 function calling', { modelId })
       return undefined
     }
     if (modelId) {
@@ -727,8 +748,15 @@ export class AiService {
       }
     }
     if (!this.toolExecutor) {
+      console.error('[AI] buildTools: toolExecutor 未配置')
       throw new Error('AI tool executor is not configured')
     }
+    console.log('[AI] buildTools: 构建工具', {
+      toolCount: tools.length,
+      toolNames: tools.map(t => t.function?.name),
+      hasExecutor: !!this.toolExecutor,
+      context
+    })
     const toolEntries = tools
       .map((item) => (item?.type === 'function' ? item.function : undefined))
       .filter((item): item is NonNullable<AiTool['function']> => !!item && !!item.name)
@@ -740,7 +768,10 @@ export class AiService {
             description: fn.description,
             inputSchema: jsonSchema(schema as any),
             execute: async (input: unknown) => {
-              return await this.toolExecutor?.({ name: fn.name, args: input, context })
+              console.log('[AI] 工具执行开始', { toolName: fn.name, input, context })
+              const result = await this.toolExecutor?.({ name: fn.name, args: input, context })
+              console.log('[AI] 工具执行完成', { toolName: fn.name, result })
+              return result
             }
           })
         ] as const

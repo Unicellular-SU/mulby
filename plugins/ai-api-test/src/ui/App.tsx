@@ -81,7 +81,7 @@ export default function App() {
   const [connectionStream, setConnectionStream] = useState('')
   const [connectionReasoning, setConnectionReasoning] = useState('')
 
-  const [toolPrompt, setToolPrompt] = useState('请先调用 sumNumbers 计算 12 + 30，再告诉我结果。')
+  const [toolPrompt, setToolPrompt] = useState('请先调用 sumNumbers 计算 12 + 30，然后再调用getSystemInfo返回给我系统信息，最后以“计算结果:xx；系统信息:”的格式返回给我')
   const [toolResult, setToolResult] = useState('')
 
   const fileInputRef = useRef<HTMLInputElement | null>(null)
@@ -105,12 +105,12 @@ export default function App() {
       const list = await ai?.allModels?.()
       const normalized = Array.isArray(list)
         ? list.map((item: any) => ({
-            id: item.id,
-            label: item.label,
-            description: item.description,
-            providerLabel: item.providerLabel,
-            capabilities: item.capabilities || []
-          }))
+          id: item.id,
+          label: item.label,
+          description: item.description,
+          providerLabel: item.providerLabel,
+          capabilities: item.capabilities || []
+        }))
         : []
       setModels(normalized)
       const withProviderDisplay = normalized.map((item) => {

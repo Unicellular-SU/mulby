@@ -139,21 +139,29 @@ export async function run(context: PluginContext) {
 
 export const host = {
   async sumNumbers(context: PluginContext, input: ToolInput) {
+    console.log('[ai-api-test] sumNumbers 被调用', { input })
     const a = Number(input?.a ?? 0)
     const b = Number(input?.b ?? 0)
-    return { result: a + b }
+    const result = { result: a + b }
+    console.log('[ai-api-test] sumNumbers 返回', result)
+    return result
   },
 
   async getSystemInfo(context: PluginContext) {
+    console.log('[ai-api-test] getSystemInfo 被调用')
     const os = await import('node:os')
-    return {
+    const result = {
       platform: os.platform(),
       release: os.release(),
       arch: os.arch()
     }
+    console.log('[ai-api-test] getSystemInfo 返回', result)
+    return result
   },
 
   async runToolCall(context: PluginContext, payload: ToolCallPayload) {
+    console.log('[ai-api-test] runToolCall 开始', { model: payload.model, prompt: payload.prompt })
+
     const tools: Array<{ type: 'function'; function: { name: string; description?: string; parameters?: object } }> = [
       {
         type: 'function',
@@ -183,6 +191,8 @@ export const host = {
       }
     ]
 
+    console.log('[ai-api-test] 工具定义', tools)
+
     const result = await context.api.ai.call({
       model: payload.model,
       messages: [
@@ -192,6 +202,7 @@ export const host = {
       tools
     })
 
+    console.log('[ai-api-test] AI 调用结果', result)
     return result
   }
 }
