@@ -132,6 +132,7 @@ export interface AiApi {
     upload: (input: { filePath?: string; buffer?: ArrayBuffer; mimeType: string; purpose?: string }) => Promise<AiAttachmentRef>
     get: (attachmentId: string) => Promise<AiAttachmentRef | null>
     delete: (attachmentId: string) => Promise<void>
+    uploadToProvider: (input: { attachmentId: string; model?: string; providerId?: string; purpose?: string }) => Promise<{ providerId: string; fileId: string; uri?: string }>
   }
   tokens: {
     estimate: (input: { model: string; messages: AiMessage[]; attachments?: AiAttachmentRef[] }) => Promise<AiTokenBreakdown>

@@ -7,6 +7,13 @@ import type { AiAttachmentRef } from '../../shared/types/ai'
 interface AttachmentRecord extends AiAttachmentRef {
   filePath: string
   createdAt: number
+  remote?: Array<{
+    providerId: string
+    fileId: string
+    purpose?: string
+    uri?: string
+    createdAt: number
+  }>
 }
 
 function getAttachmentDir(): string {
@@ -64,6 +71,41 @@ export class AttachmentStore {
     const record = this.records.get(attachmentId)
     if (!record) return null
     return record
+  }
+
+  getPath(attachmentId: string): string | null {
+    const record = this.records.get(attachmentId)
+    return record ? record.filePath : null
+  }
+
+  getRemote(
+    attachmentId: string,
+    input: { providerId: string; purpose?: string }
+  ): { providerId: string; fileId: string; purpose?: string; uri?: string } | null {
+    const record = this.records.get(attachmentId)
+    if (!record?.remote || record.remote.length === 0) return null
+    const match = record.remote.find((item) => item.providerId === input.providerId && item.purpose === input.purpose)
+    return match ? { providerId: match.providerId, fileId: match.fileId, purpose: match.purpose, uri: match.uri } : null
+  }
+
+  setRemote(
+    attachmentId: string,
+    remote: { providerId: string; fileId: string; purpose?: string; uri?: string }
+  ): void {
+    const record = this.records.get(attachmentId)
+    if (!record) return
+    if (!record.remote) {
+      record.remote = []
+    }
+    const existing = record.remote.findIndex(
+      (item) => item.providerId === remote.providerId && item.purpose === remote.purpose
+    )
+    const payload = { ...remote, createdAt: Date.now() }
+    if (existing >= 0) {
+      record.remote[existing] = payload
+    } else {
+      record.remote.push(payload)
+    }
   }
 
   async read(attachmentId: string): Promise<Buffer> {

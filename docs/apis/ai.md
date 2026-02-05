@@ -256,6 +256,32 @@ await ai.attachments.delete(attachmentId);
 
 **返回值**: `void`
 
+### attachments.uploadToProvider(input)
+[Renderer] [Backend]
+将已上传的附件进一步上传到指定 Provider 的文件服务，返回 `fileId/uri`。
+
+```javascript
+const remote = await ai.attachments.uploadToProvider({
+  attachmentId,
+  providerId: 'anthropic'
+});
+```
+
+**参数**:
+- `attachmentId` (string)
+- `model` (string, optional)
+- `providerId` (string, optional)
+- `purpose` (string, optional)
+
+**返回值**:
+```typescript
+{
+  providerId: string;
+  fileId: string;
+  uri?: string;
+}
+```
+
 > 附件存储目录：`<userData>/ai/attachments`
 
 ---

@@ -2,6 +2,8 @@ import { generateText, streamText, generateImage } from 'ai'
 import { jsonSchema, tool } from '@ai-sdk/provider-utils'
 import type { AiAttachmentRef, AiMessage, AiModel, AiModelParameters, AiOption, AiProviderConfig, AiTokenBreakdown, AiToolContext, AiTool } from '../../shared/types/ai'
 import { attachmentStore } from './attachments'
+import { FileServiceManager } from './fileServices/FileServiceManager'
+import { getFileSizeLimit, supportsImageInput, supportsLargeFileUpload, supportsPdfInput } from './modelCapabilities'
 import { estimateTokens } from './tokens'
 import { getAllModels, resolveModelId } from './models'
 import { getAiSettings } from './config'
@@ -38,7 +40,28 @@ export class AiService {
 
       const { modelKey } = this.resolveLanguageModel(option.model)
       const params = this.resolveGenerationParams(option, option.model)
-      const messages = await this.toSdkMessages(this.applyContextWindow(option.messages, params.contextWindow))
+      const trimmedMessages = this.applyContextWindow(option.messages, params.contextWindow)
+      const providerConfig = this.resolveProviderConfig(option.model)
+      const resolved = resolveModelId(option.model)
+
+      if (resolved.providerId === 'anthropic' && this.hasMultimodalContent(trimmedMessages)) {
+        const anthropicPayload = await this.toAnthropicMessages(trimmedMessages, option.model, providerConfig)
+        const { content, reasoning } = await this.callAnthropicMessages({
+          model: resolved.modelId,
+          messages: anthropicPayload.messages,
+          system: anthropicPayload.system,
+          apiKey: providerConfig?.apiKey,
+          baseURL: providerConfig?.baseURL,
+          params
+        })
+        return {
+          role: 'assistant',
+          content,
+          reasoning_content: reasoning || undefined
+        }
+      }
+
+      const messages = await this.toSdkMessages(trimmedMessages, option.model)
       const result = await generateText({
         model: modelKey,
         messages,
@@ -70,14 +93,35 @@ export class AiService {
     try {
       const { modelKey } = this.resolveLanguageModel(option.model)
       const params = this.resolveGenerationParams(option, option.model)
-      const messages = await this.toSdkMessages(this.applyContextWindow(option.messages, params.contextWindow))
+      const trimmedMessages = this.applyContextWindow(option.messages, params.contextWindow)
+      const messages = await this.toSdkMessages(trimmedMessages, option.model)
       const providerConfig = this.resolveProviderConfig(option.model)
       const resolved = resolveModelId(option.model)
+
+      if (resolved.providerId === 'anthropic' && this.hasMultimodalContent(trimmedMessages)) {
+        const anthropicPayload = await this.toAnthropicMessages(trimmedMessages, option.model, providerConfig)
+        const { content, reasoning } = await this.streamAnthropicMessages({
+          model: resolved.modelId,
+          messages: anthropicPayload.messages,
+          system: anthropicPayload.system,
+          apiKey: providerConfig?.apiKey,
+          baseURL: providerConfig?.baseURL,
+          params
+        }, callbacks.onChunk, controller.signal)
+
+        const finalMessage: AiMessage = {
+          role: 'assistant',
+          content,
+          reasoning_content: reasoning || undefined
+        }
+        callbacks.onEnd?.(finalMessage)
+        return finalMessage
+      }
 
       if (resolved.providerId === 'openai' && shouldUseChatApi(providerConfig?.baseURL)) {
         const { content, reasoning } = await this.streamOpenAICompatChat({
           model: resolved.modelId,
-          messages: await this.toOpenAIChatMessages(option.messages),
+          messages: await this.toOpenAIChatMessages(option.messages, option.model),
           apiKey: providerConfig?.apiKey,
           baseURL: providerConfig?.baseURL,
           params,
@@ -535,8 +579,10 @@ export class AiService {
     }
   }
 
-  private async toOpenAIChatMessages(messages: AiMessage[]) {
+  private async toOpenAIChatMessages(messages: AiMessage[], modelId?: string) {
     const maxFileBytes = 512 * 1024
+    const providerConfig = this.resolveProviderConfig(modelId)
+    const allowImages = supportsImageInput(modelId, providerConfig)
     const results: Array<{
       role: 'system' | 'user' | 'assistant'
       content:
@@ -564,6 +610,10 @@ export class AiService {
           continue
         }
         if (part.type === 'image') {
+          if (!allowImages) {
+            parts.push({ type: 'text', text: '[image omitted: provider/model does not support image input]' })
+            continue
+          }
           const data = await attachmentStore.read(part.attachmentId)
           const mimeType = part.mimeType || 'image/png'
           const base64 = Buffer.from(data as any).toString('base64')
@@ -571,10 +621,11 @@ export class AiService {
           continue
         }
         if (part.type === 'file') {
+          const attachment = attachmentStore.get(part.attachmentId)
           const data = await attachmentStore.read(part.attachmentId)
           const buffer = Buffer.from(data as any)
-          const filename = part.filename || 'attachment'
-          const mimeType = part.mimeType || 'application/octet-stream'
+          const filename = part.filename || attachment?.filename || 'attachment'
+          const mimeType = part.mimeType || attachment?.mimeType || 'application/octet-stream'
           if (buffer.length > maxFileBytes) {
             parts.push({
               type: 'text',
@@ -689,7 +740,8 @@ export class AiService {
     return { model: `${providerId}:${resolvedId}`, modelKey }
   }
 
-  private async toSdkMessages(messages: AiMessage[]) {
+  private async toSdkMessages(messages: AiMessage[], modelId?: string) {
+    const providerConfig = this.resolveProviderConfig(modelId)
     const results: any[] = []
     for (const message of messages) {
       if (typeof message.content === 'string' || message.content === undefined) {
@@ -702,11 +754,56 @@ export class AiService {
         if (part.type === 'text') {
           parts.push({ type: 'text', text: part.text })
         } else if (part.type === 'image') {
+          if (!supportsImageInput(modelId, providerConfig)) {
+            parts.push({ type: 'text', text: '[image omitted: provider/model does not support image input]' })
+            continue
+          }
           const image = await attachmentStore.read(part.attachmentId)
-          parts.push({ type: 'image', image, mediaType: part.mimeType })
+          let mediaType = part.mimeType
+          if (providerConfig?.id === 'anthropic' && mediaType === 'image/jpg') {
+            mediaType = 'image/jpeg'
+          }
+          parts.push({ type: 'image', image, mediaType })
         } else if (part.type === 'file') {
+          const attachment = attachmentStore.get(part.attachmentId)
+          const filename = part.filename || attachment?.filename || 'attachment'
+          const mimeType = part.mimeType || attachment?.mimeType || 'application/octet-stream'
+          const size = attachment?.size ?? 0
+          const sizeLimit = getFileSizeLimit(modelId, providerConfig, mimeType)
+
+          if (mimeType === 'application/pdf' && supportsPdfInput(modelId, providerConfig)) {
+            if (size > sizeLimit && supportsLargeFileUpload(modelId, providerConfig)) {
+              const remote = await this.uploadAttachmentToProviderInternal({
+                attachmentId: part.attachmentId,
+                filename,
+                mimeType,
+                purpose: this.getUploadPurpose(modelId)
+              }, providerConfig)
+              if (remote) {
+                if (providerConfig?.id === 'openai') {
+                  parts.push({
+                    type: 'file',
+                    data: `fileid://${remote.fileId}`,
+                    mediaType: mimeType,
+                    filename
+                  })
+                  continue
+                }
+                if (remote.uri) {
+                  parts.push({
+                    type: 'file',
+                    data: remote.uri,
+                    mediaType: mimeType,
+                    filename
+                  })
+                  continue
+                }
+              }
+            }
+          }
+
           const data = await attachmentStore.read(part.attachmentId)
-          parts.push({ type: 'file', data, mediaType: part.mimeType, filename: part.filename })
+          parts.push({ type: 'file', data, mediaType: mimeType, filename })
         }
       }
 
@@ -714,6 +811,330 @@ export class AiService {
     }
 
     return results
+  }
+
+  private hasMultimodalContent(messages: AiMessage[]): boolean {
+    return messages.some((message) => Array.isArray(message.content) && message.content.some((part) => part.type !== 'text'))
+  }
+
+  private async toAnthropicMessages(messages: AiMessage[], modelId: string | undefined, providerConfig?: AiProviderConfig) {
+    let systemText = ''
+    const results: Array<{
+      role: 'user' | 'assistant'
+      content: Array<
+        | { type: 'text'; text: string }
+        | { type: 'image'; source: { type: 'base64'; media_type: string; data: string } }
+        | { type: 'document'; source: { type: 'base64'; media_type: string; data: string } | { type: 'file'; file_id: string }; title?: string }
+      >
+    }> = []
+
+    for (const message of messages) {
+      if (typeof message.content === 'string' || message.content === undefined) {
+        if (message.role === 'system') {
+          systemText += `${message.content || ''}\n`
+          continue
+        }
+        results.push({ role: message.role, content: [{ type: 'text', text: message.content || '' }] })
+        continue
+      }
+
+      const parts: Array<any> = []
+      for (const part of message.content) {
+        if (part.type === 'text') {
+          parts.push({ type: 'text', text: part.text })
+          continue
+        }
+        if (part.type === 'image') {
+          const image = await attachmentStore.read(part.attachmentId)
+          let mediaType = part.mimeType || 'image/png'
+          if (mediaType === 'image/jpg') mediaType = 'image/jpeg'
+          parts.push({
+            type: 'image',
+            source: { type: 'base64', media_type: mediaType, data: Buffer.from(image).toString('base64') }
+          })
+          continue
+        }
+        if (part.type === 'file') {
+          const attachment = attachmentStore.get(part.attachmentId)
+          const filename = part.filename || attachment?.filename || 'document'
+          const mimeType = part.mimeType || attachment?.mimeType || 'application/octet-stream'
+
+          if (mimeType === 'application/pdf' || mimeType === 'text/plain') {
+            const remote = await this.uploadAttachmentToProviderInternal({
+              attachmentId: part.attachmentId,
+              filename,
+              mimeType,
+              purpose: this.getUploadPurpose(modelId)
+            }, providerConfig)
+
+            if (remote?.fileId) {
+              parts.push({
+                type: 'document',
+                source: { type: 'file', file_id: remote.fileId },
+                title: filename
+              })
+              continue
+            }
+
+            const data = await attachmentStore.read(part.attachmentId)
+            if (mimeType === 'text/plain') {
+              parts.push({
+                type: 'document',
+                source: { type: 'base64', media_type: 'text/plain', data: Buffer.from(data).toString('base64') },
+                title: filename
+              })
+              continue
+            }
+            parts.push({
+              type: 'document',
+              source: { type: 'base64', media_type: 'application/pdf', data: Buffer.from(data).toString('base64') },
+              title: filename
+            })
+            continue
+          }
+
+          parts.push({ type: 'text', text: `[file omitted: ${filename} (${mimeType}) is not supported by Anthropic]` })
+        }
+      }
+
+      if (message.role === 'system') {
+        const merged = parts
+          .map((p) => (p.type === 'text' && typeof p.text === 'string' ? p.text : ''))
+          .filter(Boolean)
+          .join('\n')
+        systemText += `${merged}\n`
+        continue
+      }
+
+      results.push({ role: message.role, content: parts.length > 0 ? parts : [{ type: 'text', text: '' }] })
+    }
+
+    return { system: systemText.trim() || undefined, messages: results }
+  }
+
+  private async callAnthropicMessages(input: {
+    model: string
+    messages: Array<any>
+    system?: string
+    apiKey?: string
+    baseURL?: string
+    params: AiModelParameters
+  }): Promise<{ content: string; reasoning: string }> {
+    const baseURL = (input.baseURL || 'https://api.anthropic.com/v1').replace(/\/+$/, '')
+    const url = `${baseURL}/messages`
+    const apiKey = input.apiKey
+    if (!apiKey) {
+      throw new Error('Anthropic API key is required')
+    }
+
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': apiKey,
+        'anthropic-version': '2023-06-01',
+        'anthropic-beta': 'files-api-2025-04-14'
+      },
+      body: JSON.stringify({
+        model: input.model,
+        messages: input.messages,
+        system: input.system,
+        max_tokens: input.params.maxOutputTokens ?? 512,
+        temperature: input.params.temperature,
+        top_p: input.params.topP,
+        stop_sequences: input.params.stopSequences,
+        stream: false
+      })
+    })
+
+    if (!res.ok) {
+      const body = await res.text().catch(() => '')
+      throw new Error(`Anthropic request failed: ${res.status} ${res.statusText}${body ? ` - ${body}` : ''}`)
+    }
+
+    const data = (await res.json()) as { content?: Array<{ type: string; text?: string; thinking?: string }> }
+    let content = ''
+    let reasoning = ''
+    for (const block of data.content || []) {
+      if (block.type === 'text' && block.text) content += block.text
+      if (block.type === 'thinking' && block.thinking) reasoning += block.thinking
+    }
+    return { content, reasoning }
+  }
+
+  private async streamAnthropicMessages(
+    input: {
+      model: string
+      messages: Array<any>
+      system?: string
+      apiKey?: string
+      baseURL?: string
+      params: AiModelParameters
+    },
+    onChunk?: (chunk: AiMessage) => void,
+    abortSignal?: AbortSignal
+  ): Promise<{ content: string; reasoning: string }> {
+    const baseURL = (input.baseURL || 'https://api.anthropic.com/v1').replace(/\/+$/, '')
+    const url = `${baseURL}/messages`
+    const apiKey = input.apiKey
+    if (!apiKey) {
+      throw new Error('Anthropic API key is required')
+    }
+
+    const res = await fetch(url, {
+      method: 'POST',
+      signal: abortSignal,
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': apiKey,
+        'anthropic-version': '2023-06-01',
+        'anthropic-beta': 'files-api-2025-04-14'
+      },
+      body: JSON.stringify({
+        model: input.model,
+        messages: input.messages,
+        system: input.system,
+        max_tokens: input.params.maxOutputTokens ?? 512,
+        temperature: input.params.temperature,
+        top_p: input.params.topP,
+        stop_sequences: input.params.stopSequences,
+        stream: true
+      })
+    })
+
+    if (!res.ok || !res.body) {
+      const body = await res.text().catch(() => '')
+      throw new Error(`Anthropic request failed: ${res.status} ${res.statusText}${body ? ` - ${body}` : ''}`)
+    }
+
+    const reader = res.body.getReader()
+    const decoder = new TextDecoder()
+    let buffer = ''
+    let content = ''
+    let reasoning = ''
+
+    while (true) {
+      const { value, done } = await reader.read()
+      if (done) break
+      buffer += decoder.decode(value, { stream: true })
+
+      let newlineIndex = buffer.indexOf('\n')
+      while (newlineIndex >= 0) {
+        const line = buffer.slice(0, newlineIndex).trim()
+        buffer = buffer.slice(newlineIndex + 1)
+        newlineIndex = buffer.indexOf('\n')
+
+        if (!line || !line.startsWith('data:')) continue
+        const data = line.slice(5).trim()
+        if (data === '[DONE]') {
+          return { content, reasoning }
+        }
+        try {
+          const json = JSON.parse(data)
+          const type = json.type
+          if (type === 'content_block_delta') {
+            const delta = json.delta || {}
+            if (delta.text) {
+              content += delta.text
+              onChunk?.({ role: 'assistant', content: delta.text })
+            }
+            if (delta.thinking) {
+              reasoning += delta.thinking
+              onChunk?.({ role: 'assistant', reasoning_content: delta.thinking })
+            }
+          }
+        } catch {
+          // ignore malformed chunks
+        }
+      }
+    }
+
+    return { content, reasoning }
+  }
+
+  private getUploadPurpose(modelId?: string): string | undefined {
+    if (!modelId) return undefined
+    const normalized = modelId.toLowerCase()
+    if (normalized.includes('qwen-long') || normalized.includes('qwen-doc')) {
+      return 'file-extract'
+    }
+    return 'assistants'
+  }
+
+  async uploadAttachmentToProvider(
+    input: { attachmentId: string; model?: string; providerId?: string; purpose?: string }
+  ): Promise<{ providerId: string; fileId: string; uri?: string }> {
+    const providerConfig = input.model
+      ? this.resolveProviderConfig(input.model)
+      : this.resolveProviderById(input.providerId)
+    if (!providerConfig) {
+      throw new Error('Provider config not found for attachment upload')
+    }
+    const attachment = attachmentStore.get(input.attachmentId)
+    const filename = attachment?.filename || 'attachment'
+    const mimeType = attachment?.mimeType || 'application/octet-stream'
+    const remote = await this.uploadAttachmentToProviderInternal(
+      { attachmentId: input.attachmentId, filename, mimeType, purpose: input.purpose },
+      providerConfig
+    )
+    if (!remote?.fileId) {
+      throw new Error('Failed to upload attachment to provider')
+    }
+    return { providerId: String(providerConfig.id), fileId: remote.fileId, uri: remote.uri }
+  }
+
+  private async uploadAttachmentToProviderInternal(
+    input: { attachmentId: string; filename: string; mimeType: string; purpose?: string },
+    providerConfig?: AiProviderConfig
+  ): Promise<{ fileId: string; uri?: string } | null> {
+    if (!providerConfig) return null
+    if (!providerConfig.apiKey || !providerConfig.baseURL) return null
+    const cached = attachmentStore.getRemote(input.attachmentId, {
+      providerId: String(providerConfig.id),
+      purpose: input.purpose
+    })
+    if (cached?.fileId) {
+      return { fileId: cached.fileId, uri: cached.uri }
+    }
+
+    try {
+      const service = FileServiceManager.getInstance().getService(providerConfig)
+      const buffer = await attachmentStore.read(input.attachmentId)
+      const result = await service.uploadFile({
+        buffer,
+        filename: input.filename,
+        mimeType: input.mimeType,
+        purpose: input.purpose
+      })
+      if (result?.fileId) {
+        attachmentStore.setRemote(input.attachmentId, {
+          providerId: String(providerConfig.id),
+          fileId: result.fileId,
+          purpose: input.purpose,
+          uri: result.uri
+        })
+        return { fileId: result.fileId, uri: result.uri }
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err)
+      console.warn('[AI] uploadAttachmentToProvider:fail', {
+        providerId: providerConfig.id,
+        attachmentId: input.attachmentId,
+        error: message
+      })
+    }
+
+    return null
+  }
+
+  private resolveProviderById(providerId?: string): AiProviderConfig | undefined {
+    if (!providerId) return undefined
+    const settings = getAiSettings()
+    const matches = settings.providers.filter((provider) => String(provider.id) === String(providerId))
+    if (matches.length === 1) return matches[0]
+    if (matches.length > 0) return matches[0]
+    const byLabel = settings.providers.find((provider) => (provider.label || provider.id) === providerId)
+    return byLabel
   }
 
   private createRequestId(): string {

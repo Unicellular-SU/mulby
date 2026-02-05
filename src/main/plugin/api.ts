@@ -340,7 +340,9 @@ ${item.files.map(p => `    <string>${p}</string>`).join('\n')}
       attachments: {
         upload: async (input: { filePath?: string; buffer?: ArrayBuffer; mimeType: string; purpose?: string }) => await aiService.uploadAttachment(input),
         get: async (attachmentId: string) => await aiService.getAttachment(attachmentId),
-        delete: async (attachmentId: string) => await aiService.deleteAttachment(attachmentId)
+        delete: async (attachmentId: string) => await aiService.deleteAttachment(attachmentId),
+        uploadToProvider: async (input: { attachmentId: string; model?: string; providerId?: string; purpose?: string }) =>
+          await aiService.uploadAttachmentToProvider(input)
       },
       tokens: {
         estimate: async (input: { model: string; messages: AiMessage[] }) => await aiService.estimateTokens(input)

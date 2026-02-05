@@ -84,6 +84,10 @@ export function registerAiHandlers() {
     return await aiService.deleteAttachment(attachmentId)
   })
 
+  ipcMain.handle('ai:attachments:upload-provider', async (_event, input) => {
+    return await aiService.uploadAttachmentToProvider(input)
+  })
+
   ipcMain.handle('ai:tokens:estimate', async (_event, input) => {
     return await aiService.estimateTokens(input)
   })
