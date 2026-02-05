@@ -71,6 +71,28 @@ export class AiService {
       const { modelKey } = this.resolveLanguageModel(option.model)
       const params = this.resolveGenerationParams(option, option.model)
       const messages = await this.toSdkMessages(this.applyContextWindow(option.messages, params.contextWindow))
+      const providerConfig = this.resolveProviderConfig(option.model)
+      const resolved = resolveModelId(option.model)
+
+      if (resolved.providerId === 'openai' && shouldUseChatApi(providerConfig?.baseURL)) {
+        const { content, reasoning } = await this.streamOpenAICompatChat({
+          model: resolved.modelId,
+          messages: await this.toOpenAIChatMessages(option.messages),
+          apiKey: providerConfig?.apiKey,
+          baseURL: providerConfig?.baseURL,
+          params,
+          tools: option.tools
+        }, callbacks.onChunk, controller.signal)
+
+        const finalMessage: AiMessage = {
+          role: 'assistant',
+          content,
+          reasoning_content: reasoning || undefined
+        }
+        callbacks.onEnd?.(finalMessage)
+        return finalMessage
+      }
+
       const result = await streamText({
         model: modelKey,
         messages,
@@ -85,23 +107,35 @@ export class AiService {
       if ((result as any).fullStream) {
         for await (const part of (result as any).fullStream) {
           if (part?.type === 'text-delta') {
-            fullText += part.delta || ''
-            callbacks.onChunk?.({ role: 'assistant', content: part.delta || '' })
+            if (part.delta) {
+              fullText += part.delta
+              callbacks.onChunk?.({ role: 'assistant', content: part.delta })
+            }
           } else if (part?.type === 'reasoning-delta') {
-            reasoningText += part.delta || ''
-            callbacks.onChunk?.({ role: 'assistant', reasoning_content: part.delta || '' })
+            if (part.delta) {
+              reasoningText += part.delta
+              callbacks.onChunk?.({ role: 'assistant', reasoning_content: part.delta })
+            }
           }
         }
       } else {
         for await (const chunk of result.textStream) {
+          if (!chunk) continue
           fullText += chunk
           callbacks.onChunk?.({ role: 'assistant', content: chunk })
         }
       }
 
+      if (!fullText && (result as any).text) {
+        fullText = await (result as any).text
+      }
+      if (!reasoningText && (result as any).reasoningText) {
+        reasoningText = (await (result as any).reasoningText) || ''
+      }
+
       const finalMessage: AiMessage = {
         role: 'assistant',
-        content: fullText,
+        content: fullText || '',
         reasoning_content: reasoningText || undefined
       }
       callbacks.onEnd?.(finalMessage)
@@ -286,7 +320,7 @@ export class AiService {
     input: { model?: string; providerId?: string; apiKey?: string; baseURL?: string },
     onChunk: (chunk: { type: 'content' | 'reasoning'; text: string }) => void
   ): Promise<{ content: string; reasoning: string }> {
-    const baseURL = normalizeOpenAIBaseURL(input.baseURL) || 'https://api.openai.com/v1'
+    const baseURL = (input.baseURL || 'https://api.openai.com/v1').replace(/\/+$/, '')
     const url = `${baseURL.replace(/\/$/, '')}/chat/completions`
     const modelId = input.model?.includes(':') ? input.model.split(':', 2)[1] : input.model
     if (!modelId) {
@@ -364,6 +398,100 @@ export class AiService {
     return { content, reasoning }
   }
 
+  private async streamOpenAICompatChat(
+    input: {
+      model: string
+      messages: Array<{
+        role: 'system' | 'user' | 'assistant'
+        content:
+          | string
+          | Array<
+              | { type: 'text'; text: string }
+              | { type: 'image_url'; image_url: { url: string } }
+            >
+      }>
+      apiKey?: string
+      baseURL?: string
+      params: AiModelParameters
+      tools?: AiTool[]
+    },
+    onChunk?: (chunk: AiMessage) => void,
+    abortSignal?: AbortSignal
+  ): Promise<{ content: string; reasoning: string }> {
+    const baseURL = (input.baseURL || 'https://api.openai.com/v1').replace(/\/+$/, '')
+    const url = `${baseURL}/chat/completions`
+    const res = await fetch(url, {
+      method: 'POST',
+      signal: abortSignal,
+      headers: {
+        'Content-Type': 'application/json',
+        ...(input.apiKey ? { Authorization: `Bearer ${input.apiKey}` } : {})
+      },
+      body: JSON.stringify({
+        model: input.model,
+        stream: true,
+        messages: input.messages,
+        tools: input.tools,
+        temperature: input.params.temperature,
+        top_p: input.params.topP,
+        max_tokens: input.params.maxOutputTokens,
+        presence_penalty: input.params.presencePenalty,
+        frequency_penalty: input.params.frequencyPenalty,
+        stop: input.params.stopSequences,
+        seed: input.params.seed
+      })
+    })
+
+    if (!res.ok || !res.body) {
+      const body = await res.text().catch(() => '')
+      throw new Error(`HTTP ${res.status} ${res.statusText}${body ? ` - ${body}` : ''}`)
+    }
+
+    const reader = res.body.getReader()
+    const decoder = new TextDecoder()
+    let buffer = ''
+    let content = ''
+    let reasoning = ''
+
+    while (true) {
+      const { value, done } = await reader.read()
+      if (done) break
+      buffer += decoder.decode(value, { stream: true })
+
+      let newlineIndex = buffer.indexOf('\n')
+      while (newlineIndex >= 0) {
+        const line = buffer.slice(0, newlineIndex).trim()
+        buffer = buffer.slice(newlineIndex + 1)
+        newlineIndex = buffer.indexOf('\n')
+
+        if (!line || !line.startsWith('data:')) continue
+        const data = line.slice(5).trim()
+        if (data === '[DONE]') {
+          return { content, reasoning }
+        }
+        try {
+          const json = JSON.parse(data)
+          const delta = json.choices?.[0]?.delta || {}
+          const reasoningChunk = delta.reasoning_content || delta.reasoning
+          const contentChunk = delta.content
+
+          if (reasoningChunk) {
+            reasoning += reasoningChunk
+            onChunk?.({ role: 'assistant', reasoning_content: reasoningChunk })
+          }
+          if (contentChunk) {
+            content += contentChunk
+            onChunk?.({ role: 'assistant', content: contentChunk })
+          }
+        } catch {
+          // ignore malformed chunks
+        }
+      }
+    }
+
+    return { content, reasoning }
+  }
+
   private resolveTestModel(input?: { model?: string; providerId?: string; apiKey?: string; baseURL?: string }) {
     if (!input?.providerId) {
       return this.resolveLanguageModel(input?.model)
@@ -407,6 +535,67 @@ export class AiService {
     }
   }
 
+  private async toOpenAIChatMessages(messages: AiMessage[]) {
+    const maxFileBytes = 512 * 1024
+    const results: Array<{
+      role: 'system' | 'user' | 'assistant'
+      content:
+        | string
+        | Array<
+            | { type: 'text'; text: string }
+            | { type: 'image_url'; image_url: { url: string } }
+          >
+    }> = []
+
+    for (const message of messages) {
+      if (typeof message.content === 'string' || message.content === undefined) {
+        results.push({ role: message.role, content: message.content || '' })
+        continue
+      }
+
+      const parts: Array<
+        | { type: 'text'; text: string }
+        | { type: 'image_url'; image_url: { url: string } }
+      > = []
+
+      for (const part of message.content) {
+        if (part.type === 'text') {
+          parts.push({ type: 'text', text: part.text })
+          continue
+        }
+        if (part.type === 'image') {
+          const data = await attachmentStore.read(part.attachmentId)
+          const mimeType = part.mimeType || 'image/png'
+          const base64 = Buffer.from(data as any).toString('base64')
+          parts.push({ type: 'image_url', image_url: { url: `data:${mimeType};base64,${base64}` } })
+          continue
+        }
+        if (part.type === 'file') {
+          const data = await attachmentStore.read(part.attachmentId)
+          const buffer = Buffer.from(data as any)
+          const filename = part.filename || 'attachment'
+          const mimeType = part.mimeType || 'application/octet-stream'
+          if (buffer.length > maxFileBytes) {
+            parts.push({
+              type: 'text',
+              text: `File ${filename} (${mimeType}) is too large to inline (${buffer.length} bytes).`
+            })
+            continue
+          }
+          const base64 = buffer.toString('base64')
+          parts.push({
+            type: 'text',
+            text: `File ${filename} (${mimeType}) base64:\\n${base64}`
+          })
+        }
+      }
+
+      results.push({ role: message.role, content: parts.length > 0 ? parts : '' })
+    }
+
+    return results
+  }
+
   private buildTools(tools?: AiTool[], context?: AiToolContext) {
     if (!tools || tools.length === 0) return undefined
     if (!this.toolExecutor) {
@@ -438,7 +627,7 @@ export class AiService {
       return { models: [], message: '当前仅支持 OpenAI 兼容接口拉取模型列表' }
     }
 
-    const baseURL = normalizeOpenAIBaseURL(input.baseURL) || 'https://api.openai.com/v1'
+    const baseURL = (input.baseURL || 'https://api.openai.com/v1').replace(/\/+$/, '')
     const url = `${baseURL.replace(/\/$/, '')}/models`
 
     try {
@@ -568,8 +757,13 @@ export class AiService {
     }
     const providerId = providerIdOverride || (modelId?.includes(':') ? modelId.split(':', 2)[0] : undefined)
     if (providerId) {
-      const match = settings.providers.find((provider) => String(provider.id) === String(providerId))
-      if (match) return match
+      const matches = settings.providers.filter((provider) => String(provider.id) === String(providerId))
+      if (matches.length === 1) return matches[0]
+      if (matches.length > 1 && modelId) {
+        const byDefaultModel = matches.find((provider) => provider.defaultModel === modelId)
+        if (byDefaultModel) return byDefaultModel
+      }
+      if (matches.length > 0) return matches[0]
     }
     return settings.providers[0]
   }
@@ -619,14 +813,7 @@ function normalizeModelParams(params: AiModelParameters): AiModelParameters {
   return normalized
 }
 
-function normalizeOpenAIBaseURL(baseURL?: string): string | undefined {
-  if (!baseURL) return undefined
-  return baseURL.replace(/\/+$/, '')
-}
-
 function shouldUseChatApi(baseURL?: string): boolean {
   if (!baseURL) return false
-  const normalized = normalizeOpenAIBaseURL(baseURL)
-  if (!normalized) return false
-  return !normalized.includes('api.openai.com')
+  return !baseURL.includes('api.openai.com')
 }

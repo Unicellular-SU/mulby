@@ -10,7 +10,11 @@ let registry: ReturnType<typeof createProviderRegistry> | null = null
 function normalizeOpenAIBaseURL(baseURL?: string): string | undefined {
   if (!baseURL) return undefined
   const trimmed = baseURL.replace(/\/+$/, '')
-  if (trimmed.endsWith('/v1')) return trimmed
+
+  // 如果已经包含 /v1、/v2、/v3、/v4 等版本号，直接返回
+  if (/\/v\d+$/.test(trimmed)) return trimmed
+
+  // 否则添加 /v1
   return `${trimmed}/v1`
 }
 

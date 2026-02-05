@@ -126,6 +126,7 @@ export default function App() {
     setIsStreaming(true)
 
     try {
+      console.info('[ai-api-test] stream start', { model: selectedModel })
       const req = ai?.call(
         {
           model: selectedModel,
@@ -135,6 +136,7 @@ export default function App() {
           ]
         },
         (chunk: any) => {
+          console.info('[ai-api-test] stream chunk', chunk)
           if (chunk?.reasoning_content) {
             setReasoningOutput((prev) => prev + chunk.reasoning_content)
           }
@@ -146,7 +148,15 @@ export default function App() {
       )
 
       streamRequestRef.current = req
-      await req
+      const finalMessage = await req
+      console.info('[ai-api-test] stream end', finalMessage)
+      if (finalMessage?.reasoning_content) {
+        setReasoningOutput(finalMessage.reasoning_content)
+      }
+      const finalText = extractText(finalMessage?.content)
+      if (finalText) {
+        setStreamOutput(finalText)
+      }
       streamRequestRef.current = null
       setIsStreaming(false)
     } catch (err: any) {
