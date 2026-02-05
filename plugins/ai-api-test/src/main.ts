@@ -149,14 +149,15 @@ export const host = {
 
   async getSystemInfo(context: PluginContext) {
     console.log('[ai-api-test] getSystemInfo 被调用')
-    const os = await import('node:os')
-    const result = {
-      platform: os.platform(),
-      release: os.release(),
-      arch: os.arch()
+    try {
+      // 使用 context.api.system.getSystemInfo() 而不是直接 require('node:os')
+      const systemInfo = await context.api.system.getSystemInfo()
+      console.log('[ai-api-test] getSystemInfo 返回', systemInfo)
+      return systemInfo
+    } catch (error) {
+      console.error('[ai-api-test] getSystemInfo 错误', error)
+      throw error
     }
-    console.log('[ai-api-test] getSystemInfo 返回', result)
-    return result
   },
 
   async runToolCall(context: PluginContext, payload: ToolCallPayload) {
