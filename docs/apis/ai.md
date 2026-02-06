@@ -354,23 +354,6 @@ const result = await ai.images.edit({
 
 ---
 
-## 视频生成
-
-### videos.generate(input)
-[Renderer] [Backend]
-视频生成（当前实现会抛出 “Video generation is not supported yet”）。
-
-```javascript
-await ai.videos.generate({
-  model: 'openai:sora-1',
-  prompt: 'A drone flying over mountains',
-  duration: 5,
-  size: '1280x720'
-});
-```
-
----
-
 ## 数据结构
 
 ### AiMessage

@@ -209,9 +209,6 @@ const intoolsApi = {
       images: {
         generate: (input: any) => ipcRenderer.invoke('ai:images:generate', input),
         edit: (input: any) => ipcRenderer.invoke('ai:images:edit', input)
-      },
-      videos: {
-        generate: (input: any) => ipcRenderer.invoke('ai:videos:generate', input)
       }
     }
   })(),

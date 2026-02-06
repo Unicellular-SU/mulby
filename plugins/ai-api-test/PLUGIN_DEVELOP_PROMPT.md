@@ -220,9 +220,6 @@ interface Ai {
     generate(input: { model: string; prompt: string; size?: string; count?: number }): Promise<{ images: string[]; tokens: AiTokenBreakdown }>;
     edit(input: { model: string; imageAttachmentId: string; prompt: string }): Promise<{ images: string[]; tokens: AiTokenBreakdown }>;
   };
-  videos: {
-    generate(input: { model: string; prompt: string; duration?: number; size?: string }): Promise<void>;
-  };
   // Renderer-only helpers
   models?: {
     fetch(input: { providerId: string; baseURL?: string; apiKey?: string }): Promise<{ models: AiModel[]; message?: string }>;

@@ -99,8 +99,4 @@ export function registerAiHandlers() {
   ipcMain.handle('ai:images:edit', async (_event, input) => {
     return await aiService.editImage(input)
   })
-
-  ipcMain.handle('ai:videos:generate', async (_event, input) => {
-    return await aiService.generateVideo(input)
-  })
 }

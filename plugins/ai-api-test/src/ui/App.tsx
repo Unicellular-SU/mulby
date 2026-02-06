@@ -82,12 +82,6 @@ export default function App() {
   const [selectedImageAttachment, setSelectedImageAttachment] = useState('')
   const [editedImages, setEditedImages] = useState<string[]>([])
 
-  const [videoPrompt, setVideoPrompt] = useState('A drone flying over mountains at sunrise')
-  const [videoModel, setVideoModel] = useState('openai:sora-1')
-  const [videoDuration, setVideoDuration] = useState(5)
-  const [videoSize, setVideoSize] = useState('1280x720')
-  const [videoResult, setVideoResult] = useState('')
-
   const [connectionStream, setConnectionStream] = useState('')
   const [connectionReasoning, setConnectionReasoning] = useState('')
 
@@ -384,20 +378,6 @@ export default function App() {
       setEditedImages(result?.images || [])
     } catch (err: any) {
       notification?.show?.(err?.message || '图片编辑失败', 'error')
-    }
-  }
-
-  const handleVideoGenerate = async () => {
-    try {
-      await ai?.videos?.generate({
-        model: videoModel,
-        prompt: videoPrompt,
-        duration: Number(videoDuration),
-        size: videoSize
-      })
-      setVideoResult('视频任务提交成功 (如支持)')
-    } catch (err: any) {
-      setVideoResult(err?.message || '视频生成失败')
     }
   }
 
@@ -842,32 +822,6 @@ export default function App() {
               <img key={index} src={`data:image/png;base64,${img}`} alt={`edited-${index}`} />
             ))}
           </div>
-        </section>
-
-        <section className="card">
-          <div className="card-title">视频生成</div>
-          <div className="field">
-            <label>模型</label>
-            <input value={videoModel} onChange={(e) => setVideoModel(e.target.value)} />
-          </div>
-          <div className="field">
-            <label>提示词</label>
-            <textarea value={videoPrompt} onChange={(e) => setVideoPrompt(e.target.value)} rows={3} />
-          </div>
-          <div className="split">
-            <div className="field">
-              <label>时长 (秒)</label>
-              <input type="number" min={1} value={videoDuration} onChange={(e) => setVideoDuration(Number(e.target.value))} />
-            </div>
-            <div className="field">
-              <label>尺寸</label>
-              <input value={videoSize} onChange={(e) => setVideoSize(e.target.value)} />
-            </div>
-          </div>
-          <button className="btn-primary" onClick={handleVideoGenerate}>
-            生成视频
-          </button>
-          <textarea className="output" value={videoResult} readOnly placeholder="视频生成结果" />
         </section>
 
         <section className="card">

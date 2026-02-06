@@ -320,9 +320,6 @@ export interface PluginAPI {
       generate: (input: { prompt: string; model: string; size?: string; count?: number }) => Promise<{ images: string[]; tokens: AiTokenBreakdown }>
       edit: (input: { imageAttachmentId: string; prompt: string; model: string }) => Promise<{ images: string[]; tokens: AiTokenBreakdown }>
     }
-    videos: {
-      generate: (input: { prompt: string; model: string; duration?: number; size?: string }) => Promise<{ videos: string[]; tokens: AiTokenBreakdown }>
-    }
   }
 }
 

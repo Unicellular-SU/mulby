@@ -367,9 +367,6 @@ ${item.files.map(p => `    <string>${p}</string>`).join('\n')}
       images: {
         generate: async (input: { prompt: string; model: string; size?: string; count?: number }) => await aiService.generateImages(input),
         edit: async (input: { imageAttachmentId: string; prompt: string; model: string }) => await aiService.editImage(input)
-      },
-      videos: {
-        generate: async (input: { prompt: string; model: string; duration?: number; size?: string }) => await aiService.generateVideo(input)
       }
     },
     // Task Scheduler API

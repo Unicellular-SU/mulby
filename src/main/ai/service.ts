@@ -366,10 +366,6 @@ export class AiService {
     return { images, tokens }
   }
 
-  async generateVideo(_input?: { prompt: string; model: string; duration?: number; size?: string }): Promise<{ videos: string[]; tokens: AiTokenBreakdown }> {
-    throw new Error('Video generation is not supported yet')
-  }
-
   async testConnection(input?: { model?: string; providerId?: string; apiKey?: string; baseURL?: string }): Promise<{ success: boolean; message?: string }> {
     try {
       const { modelKey } = this.resolveTestModel(input)

@@ -85,9 +85,6 @@ export function useIntools(pluginId?: string) {
         generate: (input: any) => window.intools?.ai?.images?.generate(input),
         edit: (input: any) => window.intools?.ai?.images?.edit(input),
       },
-      videos: {
-        generate: (input: any) => window.intools?.ai?.videos?.generate(input),
-      },
       models: {
         fetch: (input: any) => window.intools?.ai?.models?.fetch(input),
       },

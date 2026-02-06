@@ -76,9 +76,6 @@ interface PluginContext {
         generate: (input: { model: string; prompt: string; size?: string; count?: number }) => Promise<{ images: string[] }>
         edit: (input: { model: string; imageAttachmentId: string; prompt: string }) => Promise<{ images: string[] }>
       }
-      videos: {
-        generate: (input: { model: string; prompt: string; duration?: number; size?: string }) => Promise<void>
-      }
     }
     features?: {
       getFeatures: (codes?: string[]) => Array<{ code: string }>
