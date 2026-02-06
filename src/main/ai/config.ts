@@ -5,10 +5,11 @@ import type { AiSettings, AiProviderConfig, AiProviderId, AiModel } from '../../
 import { inferProviderType } from './providerCatalog'
 import { resolveProviderBaseURL } from '../../shared/ai/providerDefaults'
 import { getSystemDefaultProviders, mergeWithSystemDefaultProviders } from '../../shared/ai/systemProviders'
+import { getSystemDefaultModels, mergeWithSystemDefaultModels } from '../../shared/ai/systemModels'
 
 const DEFAULT_SETTINGS: AiSettings = {
   providers: getSystemDefaultProviders(),
-  models: [],
+  models: getSystemDefaultModels(),
   defaultParams: {
     contextWindow: 8,
     temperatureEnabled: false,
@@ -108,7 +109,9 @@ export function loadAiSettings(): AiSettings {
     const normalizedProviders = normalizeProviders(
       (parsed.providers || []).map((provider, index) => normalizeProvider(provider, index))
     )
-    const normalizedModels = (parsed.models || []).map((model) => normalizeModel(model, normalizedProviders))
+    const normalizedModels = mergeWithSystemDefaultModels(parsed.models || []).map((model) =>
+      normalizeModel(model, normalizedProviders)
+    )
     const next: AiSettings = {
       ...DEFAULT_SETTINGS,
       ...parsed,
@@ -160,7 +163,9 @@ export function updateAiSettings(partial: Partial<AiSettings>): AiSettings {
   const providers = normalizeProviders(
     (partial.providers ?? current.providers).map((provider, index) => normalizeProvider(provider, index))
   )
-  const models = (partial.models ?? current.models ?? []).map((model) => normalizeModel(model, providers))
+  const models = mergeWithSystemDefaultModels(partial.models ?? current.models ?? []).map((model) =>
+    normalizeModel(model, providers)
+  )
   const next: AiSettings = {
     ...current,
     ...partial,
