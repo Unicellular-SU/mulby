@@ -72,13 +72,13 @@ export default function App() {
   const [providerUploadInfo, setProviderUploadInfo] = useState('')
 
   const [imageGenPrompt, setImageGenPrompt] = useState('A cute robot in watercolor style')
-  const [imageGenModel, setImageGenModel] = useState('openai:gpt-image-1')
+  const [imageGenModel, setImageGenModel] = useState('')
   const [imageGenSize, setImageGenSize] = useState('1024x1024')
   const [imageGenCount, setImageGenCount] = useState(1)
   const [generatedImages, setGeneratedImages] = useState<string[]>([])
 
   const [imageEditPrompt, setImageEditPrompt] = useState('Add a red scarf')
-  const [imageEditModel, setImageEditModel] = useState('openai:gpt-image-1')
+  const [imageEditModel, setImageEditModel] = useState('')
   const [selectedImageAttachment, setSelectedImageAttachment] = useState('')
   const [editedImages, setEditedImages] = useState<string[]>([])
 
@@ -140,6 +140,11 @@ export default function App() {
       if (!selectedModel && normalized.length > 0) {
         setSelectedModel(normalized[0].id)
       }
+      const fallbackModel = selectedModel || normalized[0]?.id || ''
+      if (fallbackModel) {
+        setImageGenModel((prev) => prev || fallbackModel)
+        setImageEditModel((prev) => prev || fallbackModel)
+      }
       notification?.show?.('模型列表已加载', 'success')
     } catch (err: any) {
       notification?.show?.(err?.message || '模型列表加载失败', 'error')
@@ -149,6 +154,12 @@ export default function App() {
   useEffect(() => {
     loadModels()
   }, [])
+
+  useEffect(() => {
+    if (!selectedModel) return
+    if (!imageGenModel) setImageGenModel(selectedModel)
+    if (!imageEditModel) setImageEditModel(selectedModel)
+  }, [selectedModel, imageGenModel, imageEditModel])
 
   const startStream = async () => {
     if (!selectedModel) {
@@ -336,9 +347,14 @@ export default function App() {
   }
 
   const handleImageGenerate = async () => {
+    const model = imageGenModel || selectedModel
+    if (!model) {
+      notification?.show?.('请先选择图片模型或上方全局模型', 'warning')
+      return
+    }
     try {
       const result = await ai?.images?.generate({
-        model: imageGenModel,
+        model,
         prompt: imageGenPrompt,
         size: imageGenSize,
         count: Number(imageGenCount)
@@ -350,13 +366,18 @@ export default function App() {
   }
 
   const handleImageEdit = async () => {
+    const model = imageEditModel || selectedModel
+    if (!model) {
+      notification?.show?.('请先选择图片模型或上方全局模型', 'warning')
+      return
+    }
     if (!selectedImageAttachment) {
       notification?.show?.('请选择图片附件', 'warning')
       return
     }
     try {
       const result = await ai?.images?.edit({
-        model: imageEditModel,
+        model,
         imageAttachmentId: selectedImageAttachment,
         prompt: imageEditPrompt
       })
@@ -744,7 +765,14 @@ export default function App() {
           <div className="card-title">图片生成</div>
           <div className="field">
             <label>模型</label>
-            <input value={imageGenModel} onChange={(e) => setImageGenModel(e.target.value)} />
+            <select value={imageGenModel} onChange={(e) => setImageGenModel(e.target.value)}>
+              <option value="">跟随上方“模型与连接”当前模型</option>
+              {models.map((model) => (
+                <option key={model.id} value={model.id}>
+                  {model.providerLabel || model.id.split(':', 2)[0] || 'unknown'} · {model.label || model.id}
+                </option>
+              ))}
+            </select>
           </div>
           <div className="field">
             <label>提示词</label>
@@ -781,7 +809,14 @@ export default function App() {
           <div className="card-title">图片编辑</div>
           <div className="field">
             <label>模型</label>
-            <input value={imageEditModel} onChange={(e) => setImageEditModel(e.target.value)} />
+            <select value={imageEditModel} onChange={(e) => setImageEditModel(e.target.value)}>
+              <option value="">跟随上方“模型与连接”当前模型</option>
+              {models.map((model) => (
+                <option key={model.id} value={model.id}>
+                  {model.providerLabel || model.id.split(':', 2)[0] || 'unknown'} · {model.label || model.id}
+                </option>
+              ))}
+            </select>
           </div>
           <div className="field">
             <label>图片附件</label>

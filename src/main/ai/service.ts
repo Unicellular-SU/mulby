@@ -325,7 +325,13 @@ export class AiService {
   }
 
   async generateImages(input: { prompt: string; model: string; size?: string; count?: number }): Promise<{ images: string[]; tokens: AiTokenBreakdown }> {
-    const { modelKey } = this.resolveImageModel(input.model)
+    const { modelKey, model } = this.resolveImageModel(input.model)
+    console.info('[AI] generateImages:start', {
+      modelInput: input.model,
+      resolvedModel: model,
+      size: input.size,
+      count: input.count
+    })
     const result = await generateImage({
       model: modelKey,
       prompt: input.prompt,
@@ -339,7 +345,12 @@ export class AiService {
   }
 
   async editImage(input: { imageAttachmentId: string; prompt: string; model: string }): Promise<{ images: string[]; tokens: AiTokenBreakdown }> {
-    const { modelKey } = this.resolveImageModel(input.model)
+    const { modelKey, model } = this.resolveImageModel(input.model)
+    console.info('[AI] editImage:start', {
+      modelInput: input.model,
+      resolvedModel: model,
+      imageAttachmentId: input.imageAttachmentId
+    })
     const image = await attachmentStore.read(input.imageAttachmentId)
 
     const result = await generateImage({
@@ -880,6 +891,29 @@ export class AiService {
     if (!hasProvider(providerId as any)) {
       throw new Error(`AI provider not available: ${providerId}`)
     }
+
+    const providerConfig = this.resolveProviderConfig(modelId, providerId)
+    const provider = buildProvider({
+      id: providerId,
+      enabled: true,
+      apiKey: providerConfig?.apiKey,
+      baseURL: providerConfig?.baseURL,
+      headers: providerConfig?.headers
+    })
+    console.info('[AI] resolveImageModel', {
+      modelInput: modelId,
+      resolvedModel: `${providerId}:${resolvedId}`,
+      providerId,
+      providerLabel: providerConfig?.label || providerConfig?.id,
+      baseURL: providerConfig?.baseURL
+    })
+    if (provider) {
+      const imageModelFactory = (provider as any).imageModel || (provider as any).image
+      if (typeof imageModelFactory === 'function') {
+        return { model: `${providerId}:${resolvedId}`, modelKey: imageModelFactory.call(provider, resolvedId) }
+      }
+    }
+
     const registry = getProviderRegistry()
     const modelKey = registry.imageModel(`${providerId}:${resolvedId}`)
     return { model: `${providerId}:${resolvedId}`, modelKey }
