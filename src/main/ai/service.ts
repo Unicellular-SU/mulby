@@ -219,19 +219,41 @@ export class AiService {
         for await (const part of (result as any).fullStream) {
           console.log('[AI] stream part:', part?.type, part)
           if (part?.type === 'text-delta') {
-            if (part.delta) {
-              fullText += part.delta
-              callbacks.onChunk?.({ role: 'assistant', content: part.delta })
+            const textDelta = typeof (part as any).delta === 'string'
+              ? (part as any).delta
+              : (typeof (part as any).text === 'string' ? (part as any).text : '')
+            if (textDelta) {
+              fullText += textDelta
+              callbacks.onChunk?.({ role: 'assistant', content: textDelta })
             }
           } else if (part?.type === 'reasoning-delta') {
-            if (part.delta && allowReasoning) {
-              reasoningText += part.delta
-              callbacks.onChunk?.({ role: 'assistant', reasoning_content: part.delta })
+            const reasoningDelta = typeof (part as any).delta === 'string'
+              ? (part as any).delta
+              : (typeof (part as any).text === 'string' ? (part as any).text : '')
+            if (reasoningDelta && allowReasoning) {
+              reasoningText += reasoningDelta
+              callbacks.onChunk?.({ role: 'assistant', reasoning_content: reasoningDelta })
             }
           } else if (part?.type === 'tool-call') {
             console.log('[AI] tool-call detected:', part)
+            callbacks.onChunk?.({
+              role: 'assistant',
+              tool_call: {
+                id: part.toolCallId,
+                name: part.toolName,
+                args: (part as any).input ?? (part as any).args
+              }
+            } as any)
           } else if (part?.type === 'tool-result') {
             console.log('[AI] tool-result detected:', part)
+            callbacks.onChunk?.({
+              role: 'assistant',
+              tool_result: {
+                id: part.toolCallId,
+                name: part.toolName,
+                result: (part as any).result
+              }
+            } as any)
           }
         }
       } else {

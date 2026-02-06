@@ -36,6 +36,16 @@ const extractText = (content?: string | Array<any>) => {
   return ''
 }
 
+const toPreview = (value: unknown, maxLength = 180) => {
+  try {
+    const text = typeof value === 'string' ? value : JSON.stringify(value)
+    if (!text) return ''
+    return text.length > maxLength ? `${text.slice(0, maxLength)}...` : text
+  } catch {
+    return '[unserializable]'
+  }
+}
+
 export default function App() {
   const { ai, notification, host, dialog } = useIntools('ai-api-test') as any
 
@@ -85,6 +95,7 @@ export default function App() {
   const [toolResult, setToolResult] = useState('')
   const [toolStreamOutput, setToolStreamOutput] = useState('')
   const [isToolStreaming, setIsToolStreaming] = useState(false)
+  const toolStreamBufferRef = useRef('')
 
   const fileInputRef = useRef<HTMLInputElement | null>(null)
   const streamRequestRef = useRef<any>(null)
@@ -455,8 +466,15 @@ export default function App() {
       return
     }
     setToolStreamOutput('')
+    toolStreamBufferRef.current = ''
     setToolResult('')
     setIsToolStreaming(true)
+
+    const appendToolStream = (text: string) => {
+      if (!text) return
+      toolStreamBufferRef.current += text
+      setToolStreamOutput(toolStreamBufferRef.current)
+    }
 
     try {
       // 定义工具
@@ -503,16 +521,29 @@ export default function App() {
         },
         (chunk: any) => {
           console.log('[ai-api-test] stream chunk', chunk)
+          if (chunk?.tool_call?.name) {
+            const argsText = toPreview(chunk?.tool_call?.args)
+            appendToolStream(`\n[调用工具] ${chunk.tool_call.name}${argsText ? ` args=${argsText}` : ''}\n`)
+          }
+          if (chunk?.tool_result?.name) {
+            const resultText = toPreview(chunk?.tool_result?.result)
+            appendToolStream(`\n[工具结果] ${chunk.tool_result.name}${resultText ? ` => ${resultText}` : ''}\n`)
+          }
           const text = extractText(chunk?.content)
           if (text) {
-            setToolStreamOutput((prev) => prev + text)
+            appendToolStream(text)
           }
         }
       )
 
       const finalText = extractText(result?.content)
       if (finalText) {
-        setToolStreamOutput(finalText)
+        if (!toolStreamBufferRef.current) {
+          toolStreamBufferRef.current = finalText
+          setToolStreamOutput(finalText)
+        } else if (!toolStreamBufferRef.current.includes(finalText)) {
+          appendToolStream(`\n${finalText}`)
+        }
       }
       setToolResult(JSON.stringify(result, null, 2))
       setIsToolStreaming(false)
