@@ -168,7 +168,8 @@ export class AiService {
         return finalMessage
       }
 
-      if (resolved.providerId === 'openai' && shouldUseChatApi(providerConfig?.baseURL)) {
+      const useOpenAICompatChat = resolved.providerId === 'openai' && shouldUseChatApi(providerConfig?.baseURL)
+      if (useOpenAICompatChat && !tools) {
         const { content, reasoning } = await this.streamOpenAICompatChat({
           model: resolved.modelId,
           messages: await this.toOpenAIChatMessages(option.messages, option.model),
@@ -192,6 +193,14 @@ export class AiService {
         callbacks.onEnd?.(finalMessage)
         return finalMessage
       }
+      if (useOpenAICompatChat && tools) {
+        // 兼容 chat/completions 流式分支当前仅解析文本，不处理 tool_calls。
+        // 启用工具时回退到 AI SDK 的 streamText，以支持工具执行与多步调用。
+        console.log('[AI] stream: 检测到工具调用，使用 AI SDK streamText 分支', {
+          model: option.model,
+          maxToolSteps: option.maxToolSteps ?? 10
+        })
+      }
 
       const result = await streamText({
         model: modelKey,
@@ -208,6 +217,7 @@ export class AiService {
 
       if ((result as any).fullStream) {
         for await (const part of (result as any).fullStream) {
+          console.log('[AI] stream part:', part?.type, part)
           if (part?.type === 'text-delta') {
             if (part.delta) {
               fullText += part.delta
@@ -218,6 +228,10 @@ export class AiService {
               reasoningText += part.delta
               callbacks.onChunk?.({ role: 'assistant', reasoning_content: part.delta })
             }
+          } else if (part?.type === 'tool-call') {
+            console.log('[AI] tool-call detected:', part)
+          } else if (part?.type === 'tool-result') {
+            console.log('[AI] tool-result detected:', part)
           }
         }
       } else {

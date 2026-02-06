@@ -206,6 +206,54 @@ export const host = {
 
     console.log('[ai-api-test] AI 调用结果', result)
     return result
+  },
+
+  async runToolCallStream(context: PluginContext, payload: ToolCallPayload, onChunk: (chunk: any) => void) {
+    console.log('[ai-api-test] runToolCallStream 开始', { model: payload.model, prompt: payload.prompt })
+
+    const tools: Array<{ type: 'function'; function: { name: string; description?: string; parameters?: object } }> = [
+      {
+        type: 'function',
+        function: {
+          name: 'sumNumbers',
+          description: '计算两数之和',
+          parameters: {
+            type: 'object',
+            properties: {
+              a: { type: 'number', description: '第一个数字' },
+              b: { type: 'number', description: '第二个数字' }
+            },
+            required: ['a', 'b']
+          }
+        }
+      },
+      {
+        type: 'function',
+        function: {
+          name: 'getSystemInfo',
+          description: '获取系统信息',
+          parameters: {
+            type: 'object',
+            properties: {}
+          }
+        }
+      }
+    ]
+
+    console.log('[ai-api-test] 工具定义', tools)
+
+    const result = await context.api.ai.call({
+      model: payload.model,
+      messages: [
+        { role: 'system', content: '你是一个工具调用测试助手。' },
+        { role: 'user', content: payload.prompt }
+      ],
+      tools,
+      maxToolSteps: 5  // 设置最大工具调用步骤数为 5
+    } as any, onChunk)
+
+    console.log('[ai-api-test] AI 调用结果', result)
+    return result
   }
 }
 

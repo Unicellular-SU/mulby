@@ -81,8 +81,10 @@ export default function App() {
   const [connectionStream, setConnectionStream] = useState('')
   const [connectionReasoning, setConnectionReasoning] = useState('')
 
-  const [toolPrompt, setToolPrompt] = useState('请先调用 sumNumbers 计算 12 + 30，然后再调用getSystemInfo返回给我系统信息，最后以“计算结果:xx；系统信息:”的格式返回给我')
+  const [toolPrompt, setToolPrompt] = useState('请先调用 sumNumbers 计算 12 + 30，然后再调用getSystemInfo返回给我系统信息，最后以"计算结果:xx；系统信息:"的格式返回给我')
   const [toolResult, setToolResult] = useState('')
+  const [toolStreamOutput, setToolStreamOutput] = useState('')
+  const [isToolStreaming, setIsToolStreaming] = useState(false)
 
   const fileInputRef = useRef<HTMLInputElement | null>(null)
   const streamRequestRef = useRef<any>(null)
@@ -447,6 +449,80 @@ export default function App() {
     }
   }
 
+  const handleToolCallStream = async () => {
+    if (!selectedModel) {
+      notification?.show?.('请先选择模型', 'warning')
+      return
+    }
+    setToolStreamOutput('')
+    setToolResult('')
+    setIsToolStreaming(true)
+
+    try {
+      // 定义工具
+      const tools = [
+        {
+          type: 'function' as const,
+          function: {
+            name: 'sumNumbers',
+            description: '计算两数之和',
+            parameters: {
+              type: 'object',
+              properties: {
+                a: { type: 'number', description: '第一个数' },
+                b: { type: 'number', description: '第二个数' }
+              },
+              required: ['a', 'b']
+            }
+          }
+        },
+        {
+          type: 'function' as const,
+          function: {
+            name: 'getSystemInfo',
+            description: '获取系统信息',
+            parameters: {
+              type: 'object',
+              properties: {}
+            }
+          }
+        }
+      ]
+
+      // 调用带工具的流式 API
+      const result = await ai?.call(
+        {
+          model: selectedModel,
+          messages: [
+            { role: 'system', content: '你是一个助手，可以调用工具来完成任务。' },
+            { role: 'user', content: toolPrompt }
+          ],
+          tools,
+          toolContext: { pluginName: 'ai-api-test' },
+          maxToolSteps: 5
+        },
+        (chunk: any) => {
+          console.log('[ai-api-test] stream chunk', chunk)
+          const text = extractText(chunk?.content)
+          if (text) {
+            setToolStreamOutput((prev) => prev + text)
+          }
+        }
+      )
+
+      const finalText = extractText(result?.content)
+      if (finalText) {
+        setToolStreamOutput(finalText)
+      }
+      setToolResult(JSON.stringify(result, null, 2))
+      setIsToolStreaming(false)
+      notification?.show?.('流式工具调用完成', 'success')
+    } catch (err: any) {
+      setToolResult(err?.message || '流式工具调用失败')
+      setIsToolStreaming(false)
+    }
+  }
+
   const imageAttachmentOptions = useMemo(() => {
     return attachments.filter((item) => item.mimeType?.startsWith('image/'))
   }, [attachments])
@@ -559,10 +635,26 @@ export default function App() {
             <label>工具提示词</label>
             <textarea value={toolPrompt} onChange={(e) => setToolPrompt(e.target.value)} rows={3} />
           </div>
-          <button className="btn-primary" onClick={handleToolCall}>
-            触发工具调用
-          </button>
-          <textarea className="output" value={toolResult} readOnly placeholder="工具调用结果" />
+          <div className="actions">
+            <button className="btn-primary" onClick={handleToolCall} disabled={isToolStreaming}>
+              触发工具调用
+            </button>
+            <button className="btn-secondary" onClick={handleToolCallStream} disabled={isToolStreaming}>
+              <Play size={16} className="icon" />
+              流式工具调用
+            </button>
+          </div>
+          <div className="text-xs text-slate-500 mt-2">
+            两种模式都支持工具调用（sumNumbers、getSystemInfo），流式模式可以实时看到输出
+          </div>
+          <div className="field">
+            <label>流式输出</label>
+            <textarea className="output" value={toolStreamOutput} readOnly placeholder="流式输出内容..." />
+          </div>
+          <div className="field">
+            <label>最终结果</label>
+            <textarea className="output" value={toolResult} readOnly placeholder="工具调用结果" />
+          </div>
         </section>
 
         <section className="card">
