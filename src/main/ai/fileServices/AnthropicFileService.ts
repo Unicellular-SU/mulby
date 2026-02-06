@@ -22,7 +22,7 @@ export class AnthropicFileService extends BaseFileService {
     }
     const url = `${this.baseURL}/files`
     const form = new FormData()
-    const blob = new Blob([input.buffer], { type: input.mimeType || 'application/octet-stream' })
+    const blob = new Blob([new Uint8Array(input.buffer)], { type: input.mimeType || 'application/octet-stream' })
     form.append('file', blob, input.filename)
 
     const res = await fetch(url, {

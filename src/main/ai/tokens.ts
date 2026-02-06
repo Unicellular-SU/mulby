@@ -1,5 +1,5 @@
 import type { AiMessage, AiTokenBreakdown } from '../../shared/types/ai'
-import { encodingForModel, getEncoding, type Tiktoken } from 'js-tiktoken'
+import { encodingForModel, getEncoding, type Tiktoken, type TiktokenEncoding } from 'js-tiktoken'
 
 const encodingCache = new Map<string, Tiktoken>()
 
@@ -25,7 +25,7 @@ function getEncodingForModel(model?: string): Tiktoken | null {
     // ignore and fallback
   }
 
-  let fallbackName = 'cl100k_base'
+  let fallbackName: TiktokenEncoding = 'cl100k_base'
   if (normalized && /gpt-4o|o1|o3|o4|4\.1/i.test(normalized)) {
     fallbackName = 'o200k_base'
   }

@@ -2,6 +2,7 @@ import { createProviderRegistry } from 'ai'
 import { openai, createOpenAI } from '@ai-sdk/openai'
 import { anthropic, createAnthropic } from '@ai-sdk/anthropic'
 import { google, createGoogleGenerativeAI } from '@ai-sdk/google'
+import type { ProviderV3 } from '@ai-sdk/provider'
 import { getAiSettings } from './config'
 import type { AiProviderConfig, AiProviderId } from '../../shared/types/ai'
 
@@ -26,7 +27,7 @@ export function buildProvider(config: AiProviderConfig) {
   }
 }
 
-function buildDefaultProviders(): Record<string, unknown> {
+function buildDefaultProviders(): Record<string, ProviderV3> {
   return {
     openai,
     anthropic,
@@ -38,7 +39,7 @@ export function getProviderRegistry() {
   if (registry) return registry
 
   const settings = getAiSettings()
-  const providerMap: Record<string, unknown> = {}
+  const providerMap: Record<string, ProviderV3> = {}
 
   if (settings.providers.length === 0) {
     Object.assign(providerMap, buildDefaultProviders())

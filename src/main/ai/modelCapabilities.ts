@@ -97,7 +97,7 @@ export function getEffectiveCapabilities(modelId?: string, provider?: AiProvider
     .map((type) => ({ type }))
 }
 
-export function getFileSizeLimit(modelId: string | undefined, provider: AiProviderConfig | undefined, mimeType: string | undefined): number {
+export function getFileSizeLimit(_modelId: string | undefined, provider: AiProviderConfig | undefined, mimeType: string | undefined): number {
   const providerId = String(provider?.id || '')
   if (providerId === 'anthropic' && mimeType === 'application/pdf') {
     return 32 * 1024 * 1024

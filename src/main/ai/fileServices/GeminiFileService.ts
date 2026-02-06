@@ -66,7 +66,7 @@ export class GeminiFileService extends BaseFileService {
         'X-Goog-Upload-Offset': '0',
         'Content-Type': input.mimeType || 'application/octet-stream'
       },
-      body: input.buffer
+      body: new Uint8Array(input.buffer)
     })
 
     if (!uploadRes.ok) {
