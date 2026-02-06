@@ -4,9 +4,10 @@ import { join } from 'path'
 import type { AiSettings, AiProviderConfig, AiProviderId, AiModel } from '../../shared/types/ai'
 import { inferProviderType } from './providerCatalog'
 import { resolveProviderBaseURL } from '../../shared/ai/providerDefaults'
+import { getSystemDefaultProviders, mergeWithSystemDefaultProviders } from '../../shared/ai/systemProviders'
 
 const DEFAULT_SETTINGS: AiSettings = {
-  providers: [],
+  providers: getSystemDefaultProviders(),
   models: [],
   defaultParams: {
     contextWindow: 8,
@@ -38,8 +39,9 @@ function normalizeProvider(provider: AiProviderConfig, index: number): AiProvide
 }
 
 function normalizeProviders(providers: AiProviderConfig[]): AiProviderConfig[] {
+  const withSystemDefaults = mergeWithSystemDefaultProviders(providers)
   const used = new Set<string>()
-  return providers.map((provider, index) => {
+  return withSystemDefaults.map((provider, index) => {
     const base = String(provider.id || '').trim() || `provider-${index + 1}`
     let id = base
     let suffix = 2

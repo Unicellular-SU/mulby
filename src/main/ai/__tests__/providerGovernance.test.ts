@@ -123,4 +123,17 @@ describe('provider governance', () => {
     assert.equal(result.canTestConnection, true)
     assert.deepEqual(result.issues, [])
   })
+
+  it('validation: disabled provider does not block save when apiKey is empty', () => {
+    const provider = {
+      id: 'moonshot',
+      type: 'openai-compatible',
+      enabled: false,
+      baseURL: 'https://api.moonshot.cn/v1'
+    }
+    const result = validateProviderConfig(provider as any, buildProviderIdCounts([provider as any]))
+    assert.deepEqual(result.issues, [])
+    assert.equal(result.canTestConnection, false)
+    assert.match(result.testConnectionHint || '', /停用/)
+  })
 })

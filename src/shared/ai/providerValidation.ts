@@ -44,6 +44,7 @@ export function validateProviderConfig(
   const providerType = inferProviderType(provider)
   const providerId = String(provider.id || '').trim()
   const issueSet = new Set<string>()
+  const enabled = provider.enabled !== false
   const hasApiKey = !!String(provider.apiKey || '').trim()
   const hasBaseURL = !!String(
     resolveProviderBaseURL({
@@ -60,17 +61,19 @@ export function validateProviderConfig(
   if (providerId && providerIdCounts && (providerIdCounts.get(providerId) || 0) > 1) {
     issueSet.add(`Provider 实例 ID "${providerId}" 重复，请修改为唯一值`)
   }
-  if (profile.requiresApiKey && !hasApiKey) {
-    issueSet.add(profile.apiKeyRequiredReason || '缺少 API Key')
-  }
-  if (profile.requiresBaseURL && !hasBaseURL) {
-    issueSet.add(profile.baseURLRequiredReason || `Provider 类型 ${providerType} 需要填写 Base URL`)
+  if (enabled) {
+    if (profile.requiresApiKey && !hasApiKey) {
+      issueSet.add(profile.apiKeyRequiredReason || '缺少 API Key')
+    }
+    if (profile.requiresBaseURL && !hasBaseURL) {
+      issueSet.add(profile.baseURLRequiredReason || `Provider 类型 ${providerType} 需要填写 Base URL`)
+    }
   }
 
   const issues = Array.from(issueSet)
-  const canTestConnection = issues.length === 0
+  const canTestConnection = enabled && issues.length === 0
   const supportsFetchModels = profile.supportsModelFetch
-  const canFetchModels = canTestConnection && supportsFetchModels
+  const canFetchModels = enabled && canTestConnection && supportsFetchModels
 
   return {
     providerType,
@@ -79,11 +82,15 @@ export function validateProviderConfig(
     hasBaseURL,
     canTestConnection,
     canFetchModels,
-    testConnectionHint: canTestConnection ? undefined : issues[0] || 'Provider 配置不完整',
+    testConnectionHint: canTestConnection
+      ? undefined
+      : (!enabled ? 'Provider 已停用，请先启用' : (issues[0] || 'Provider 配置不完整')),
     fetchModelsHint: canFetchModels
       ? undefined
-      : (supportsFetchModels
+      : (!enabled
+          ? 'Provider 已停用，请先启用'
+          : (supportsFetchModels
           ? (issues[0] || 'Provider 配置不完整')
-          : (profile.modelFetchDisabledReason || `Provider 类型 ${providerType} 暂不支持自动拉取模型`))
+          : (profile.modelFetchDisabledReason || `Provider 类型 ${providerType} 暂不支持自动拉取模型`)))
   }
 }

@@ -2,10 +2,9 @@ import { useEffect, useState } from 'react'
 import type { AiEndpointType, AiModel, AiModelCapability, AiModelParameters, AiModelType, AiProviderConfig, AiSettings } from '../../shared/types/ai'
 import { BUILTIN_PROVIDER_TYPES, inferProviderType } from '../../shared/ai/providerType'
 import { buildProviderIdCounts, validateProviderConfig } from '../../shared/ai/providerValidation'
-import { getProviderCapabilityRuleRows } from '../../shared/ai/providerProfiles'
-import { getProviderProtocolCapabilityRules } from '../../shared/ai/providerCapabilityGovernance'
 import { getProviderDefaultBaseURL } from '../../shared/ai/providerDefaults'
 import { getProviderPreset } from '../../shared/ai/providerPresets'
+import { isSystemDefaultProviderId } from '../../shared/ai/systemProviders'
 import SliderWithTicks from './SliderWithTicks'
 
 const PROVIDER_TYPE_OPTIONS = [...BUILTIN_PROVIDER_TYPES] as string[]
@@ -111,21 +110,6 @@ export default function AiSettingsView({ onBack }: AiSettingsViewProps) {
     { type: 'embedding', label: '嵌入' },
     { type: 'rerank', label: '重排' }
   ]
-  const CAPABILITY_LABELS: Record<AiModelType, string> = {
-    text: '文本',
-    vision: '视觉',
-    embedding: '嵌入',
-    reasoning: '推理',
-    function_calling: '工具',
-    web_search: '联网',
-    rerank: '重排'
-  }
-  const CAPABILITY_SOURCE_LABELS: Record<'profile' | 'config' | 'model', string> = {
-    profile: 'profile 禁用',
-    config: '配置缺失',
-    model: '模型决定'
-  }
-
   const formatNumber = (value?: number) => (value === undefined || Number.isNaN(value) ? '' : String(value))
   const parseOptionalNumber = (value: string) => {
     const trimmed = value.trim()
@@ -190,6 +174,7 @@ export default function AiSettingsView({ onBack }: AiSettingsViewProps) {
   }
 
   const selectedProvider = (aiDraft?.providers || [])[selectedProviderIndex] || null
+  const selectedProviderIsSystemDefault = selectedProvider ? isSystemDefaultProviderId(String(selectedProvider.id)) : false
   const selectedProviderType = selectedProvider ? getProviderTypeLabel(selectedProvider) : ''
   const selectedProviderSupportsEndpointRouting = isEndpointRoutedProviderType(selectedProviderType)
   const selectedProviderPreset = getProviderPreset(selectedProviderType || undefined)
@@ -198,8 +183,6 @@ export default function AiSettingsView({ onBack }: AiSettingsViewProps) {
   const newProviderDefaultBaseURL = newProviderPreset.defaultBaseURL || getProviderDefaultBaseURL(newProvider)
   const providerIdCounts = buildProviderIdCounts(aiDraft?.providers || [])
   const selectedProviderValidation = validateProviderConfig(selectedProvider, providerIdCounts)
-  const selectedProviderCapabilityRules = getProviderCapabilityRuleRows(selectedProvider || undefined)
-  const selectedProviderProtocolCapabilities = getProviderProtocolCapabilityRules(selectedProvider, providerIdCounts)
   const hasProviderBlockingIssues = (aiDraft?.providers || []).some((provider) => {
     return validateProviderConfig(provider, providerIdCounts).issues.length > 0
   })
@@ -399,6 +382,11 @@ export default function AiSettingsView({ onBack }: AiSettingsViewProps) {
 
   const handleRemoveProvider = (index: number) => {
     if (!aiDraft) return
+    const target = aiDraft.providers[index]
+    if (target && isSystemDefaultProviderId(String(target.id))) {
+      setAiInfo('系统默认供应商不可删除，可改为停用')
+      return
+    }
     const providers = aiDraft.providers.filter((_, i) => i !== index)
     updateAiDraft({ providers })
   }
@@ -981,9 +969,11 @@ export default function AiSettingsView({ onBack }: AiSettingsViewProps) {
                           {getProviderTypeLabel(provider)} · {provider.id}
                         </div>
                       </div>
-                      <span className={`rounded-full px-2 py-0.5 text-[11px] ${provider.enabled ? (index === selectedProviderIndex ? 'bg-white/20 text-white' : 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-200') : (index === selectedProviderIndex ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-300')}`}>
-                        {provider.enabled ? '启用' : '停用'}
-                      </span>
+                      <span
+                        className={`inline-block h-2.5 w-2.5 shrink-0 rounded-full ${provider.enabled ? 'bg-emerald-500' : 'bg-rose-500'}`}
+                        title={provider.enabled ? '已启用' : '已停用'}
+                        aria-label={provider.enabled ? '已启用' : '已停用'}
+                      />
                     </button>
                   ))
                 )}
@@ -1069,7 +1059,14 @@ export default function AiSettingsView({ onBack }: AiSettingsViewProps) {
                         >
                           {selectedProvider.enabled ? '已启用' : '已停用'}
                         </button>
-                        <button className={actionButtonClass} onClick={() => handleRemoveProvider(selectedProviderIndex)}>删除</button>
+                        <button
+                          className={actionButtonClass}
+                          onClick={() => handleRemoveProvider(selectedProviderIndex)}
+                          disabled={selectedProviderIsSystemDefault}
+                          title={selectedProviderIsSystemDefault ? '系统默认供应商不可删除，可改为停用' : '删除'}
+                        >
+                          删除
+                        </button>
                       </div>
                     </div>
                     <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
@@ -1149,45 +1146,6 @@ export default function AiSettingsView({ onBack }: AiSettingsViewProps) {
                         {selectedProviderValidation.issues.join('；')}
                       </div>
                     )}
-                    <div className="rounded-2xl border border-slate-200/80 bg-slate-50 px-4 py-3 dark:border-slate-800/80 dark:bg-slate-900/50">
-                      <div className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">Provider 能力矩阵</div>
-                      <div className="mt-3 space-y-2">
-                        {selectedProviderProtocolCapabilities.map((item) => (
-                          <div
-                            key={item.capability}
-                            className="grid grid-cols-1 gap-2 rounded-2xl border border-slate-200/80 bg-white p-3 sm:grid-cols-[160px_72px_92px_1fr] sm:items-center dark:border-slate-800/80 dark:bg-slate-950"
-                          >
-                            <div className="text-xs font-medium text-slate-700 dark:text-slate-200">{item.label}</div>
-                            <span className={`inline-flex w-fit rounded-full px-2 py-0.5 text-[11px] ${item.enabled ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-200' : 'bg-rose-100 text-rose-700 dark:bg-rose-900/40 dark:text-rose-200'}`}>
-                              {item.enabled ? '可用' : '禁用'}
-                            </span>
-                            <span className={`inline-flex w-fit rounded-full px-2 py-0.5 text-[11px] ${item.source === 'profile' ? 'bg-rose-100 text-rose-700 dark:bg-rose-900/40 dark:text-rose-200' : item.source === 'config' ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-200' : 'bg-sky-100 text-sky-700 dark:bg-sky-900/40 dark:text-sky-200'}`}>
-                              {CAPABILITY_SOURCE_LABELS[item.source]}
-                            </span>
-                            <div className="text-xs text-slate-500 dark:text-slate-400">{item.reason}</div>
-                          </div>
-                        ))}
-                      </div>
-                      <div className="mt-3 text-xs font-medium text-slate-500 dark:text-slate-400">模型能力治理规则</div>
-                      <div className="mt-2 space-y-2">
-                        {selectedProviderCapabilityRules.map((rule) => (
-                          <div
-                            key={rule.capability}
-                            className="grid grid-cols-1 gap-2 rounded-2xl border border-slate-200/80 bg-white p-3 sm:grid-cols-[120px_72px_92px_1fr] sm:items-center dark:border-slate-800/80 dark:bg-slate-950"
-                          >
-                            <div className="text-xs font-medium text-slate-700 dark:text-slate-200">{CAPABILITY_LABELS[rule.capability] || rule.capability}</div>
-                            <span className={`inline-flex w-fit rounded-full px-2 py-0.5 text-[11px] ${rule.status === 'blocked' ? 'bg-rose-100 text-rose-700 dark:bg-rose-900/40 dark:text-rose-200' : 'bg-sky-100 text-sky-700 dark:bg-sky-900/40 dark:text-sky-200'}`}>
-                              {rule.status === 'blocked' ? '禁用' : '模型决定'}
-                            </span>
-                            <span className={`inline-flex w-fit rounded-full px-2 py-0.5 text-[11px] ${rule.source === 'profile' ? 'bg-rose-100 text-rose-700 dark:bg-rose-900/40 dark:text-rose-200' : 'bg-sky-100 text-sky-700 dark:bg-sky-900/40 dark:text-sky-200'}`}>
-                              {rule.source === 'profile' ? CAPABILITY_SOURCE_LABELS.profile : CAPABILITY_SOURCE_LABELS.model}
-                            </span>
-                            <div className="text-xs text-slate-500 dark:text-slate-400">{rule.reason}</div>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-
                     <details className="rounded-2xl border border-slate-200/80 bg-slate-50 px-4 py-3 text-sm text-slate-700 dark:border-slate-800/80 dark:bg-slate-900/50 dark:text-slate-200">
                       <summary className="cursor-pointer text-sm font-medium text-slate-700 dark:text-slate-200">供应商默认参数</summary>
                       <div className="mt-3 space-y-4">
