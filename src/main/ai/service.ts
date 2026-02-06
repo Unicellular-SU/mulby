@@ -26,6 +26,7 @@ import { getProviderProtocolCapabilityRule } from '../../shared/ai/providerCapab
 import { getSystemDefaultModels } from '../../shared/ai/systemModels'
 import { shouldUseCompatToolLoop } from './toolLoopStrategy'
 import { classifyAiStreamError } from '../../shared/ai/streamDiagnostics'
+import { classifyAiImageError } from '../../shared/ai/imageDiagnostics'
 import { resolveProviderBaseURL } from '../../shared/ai/providerDefaults'
 import { buildEndpointRoutedProviderConfig, resolveEndpointRoutedProviderType } from '../../shared/ai/providerEndpointRouting'
 import {
@@ -570,14 +571,24 @@ export class AiService {
           size: input.size,
           count: input.count
         })
-        const result = await generateImage({
-          model: modelKey,
-          prompt: input.prompt,
-          size: input.size,
-          n: input.count
-        } as any)
+        const result = await this.executeImageWithRetry(
+          'generateImages',
+          async () =>
+            await this.generateImageWithDecodeFallback({
+              modelKey,
+              prompt: input.prompt,
+              size: input.size,
+              n: input.count
+            }),
+          {
+            modelInput: input.model,
+            resolvedModel: model,
+            size: input.size,
+            count: input.count
+          }
+        )
 
-        const images = (result as any).images?.map((img: any) => img.base64) || []
+        const images = result.images || []
         const tokens = await this.estimateTokens({ model: input.model, messages: [] })
         return { images, tokens }
       },
@@ -622,15 +633,24 @@ export class AiService {
         })
         const image = await attachmentStore.read(input.imageAttachmentId)
 
-        const result = await generateImage({
-          model: modelKey,
-          prompt: {
-            text: input.prompt,
-            images: [image]
+        const result = await this.executeImageWithRetry(
+          'editImage',
+          async () =>
+            await this.generateImageWithDecodeFallback({
+              modelKey,
+              prompt: {
+                text: input.prompt,
+                images: [image]
+              }
+            }),
+          {
+            modelInput: input.model,
+            resolvedModel: model,
+            imageAttachmentId: input.imageAttachmentId
           }
-        } as any)
+        )
 
-        const images = (result as any).images?.map((img: any) => img.base64) || []
+        const images = result.images || []
         const tokens = await this.estimateTokens({ model: input.model, messages: [] })
         return { images, tokens }
       }
@@ -1718,6 +1738,246 @@ export class AiService {
     }
   }
 
+  private async executeImageWithRetry<T>(
+    stage: 'generateImages' | 'editImage',
+    execute: () => Promise<T>,
+    context: Record<string, unknown>
+  ): Promise<T> {
+    const maxAttempts = 2
+    let attempt = 0
+    while (attempt < maxAttempts) {
+      attempt += 1
+      try {
+        return await execute()
+      } catch (error) {
+        const classified = classifyAiImageError(error)
+        const finalAttempt = attempt >= maxAttempts
+        if (!classified.retryable || finalAttempt) {
+          if (classified.retryable && finalAttempt) {
+            console.warn('[AI] image:retry:exhausted', {
+              stage,
+              attempt,
+              maxAttempts,
+              code: classified.code,
+              statusCode: classified.statusCode,
+              message: classified.message,
+              ...context
+            })
+          }
+          throw error
+        }
+
+        const delayMs = attempt * 800
+        console.warn('[AI] image:retry', {
+          stage,
+          attempt,
+          maxAttempts,
+          delayMs,
+          code: classified.code,
+          statusCode: classified.statusCode,
+          message: classified.message,
+          ...context
+        })
+        await sleep(delayMs)
+      }
+    }
+
+    throw new Error('Unexpected image retry state')
+  }
+
+  private async generateImageWithDecodeFallback(input: {
+    modelKey: any
+    prompt: string | { text?: string; images?: unknown[]; mask?: unknown }
+    size?: string
+    n?: number
+  }): Promise<{ images: string[] }> {
+    const directStart = Date.now()
+    try {
+      const images = await this.generateImageByDirectModelCall(input)
+      console.info('[AI] image:generate:result', {
+        stage: 'direct',
+        count: images.length,
+        firstPreview: images[0] ? String(images[0]).slice(0, 24) : '',
+        durationMs: Date.now() - directStart
+      })
+      return { images }
+    } catch (error) {
+      console.warn('[AI] image:direct:failed', {
+        message: getErrorMessageForLog(error),
+        size: input.size,
+        count: input.n
+      })
+
+      const sdkStart = Date.now()
+      try {
+        const result = await generateImage({
+          model: input.modelKey,
+          prompt: input.prompt as any,
+          size: input.size as any,
+          n: input.n
+        } as any)
+        const images = (result as any).images?.map((img: any) => img.base64) || []
+        console.info('[AI] image:generate:result', {
+          stage: 'sdk',
+          count: images.length,
+          firstPreview: images[0] ? String(images[0]).slice(0, 24) : '',
+          durationMs: Date.now() - sdkStart
+        })
+        return { images }
+      } catch (sdkError) {
+        if (!isImageBase64DecodeError(sdkError)) {
+          throw sdkError
+        }
+        console.warn('[AI] image:decode:fallback', {
+          message: getErrorMessageForLog(sdkError),
+          size: input.size,
+          count: input.n
+        })
+        const images = await this.generateImageByDirectModelCall(input)
+        console.info('[AI] image:generate:result', {
+          stage: 'fallback',
+          count: images.length,
+          firstPreview: images[0] ? String(images[0]).slice(0, 24) : '',
+          durationMs: Date.now() - sdkStart
+        })
+        return { images }
+      }
+    }
+  }
+
+  private async generateImageByDirectModelCall(input: {
+    modelKey: any
+    prompt: string | { text?: string; images?: unknown[]; mask?: unknown }
+    size?: string
+    n?: number
+  }): Promise<string[]> {
+    const model = input.modelKey as { doGenerate?: (options: any) => Promise<any> }
+    if (!model || typeof model.doGenerate !== 'function') {
+      throw new Error('Image model does not support direct doGenerate fallback')
+    }
+
+    const promptPayload = this.toDirectImagePrompt(input.prompt)
+    const response = await model.doGenerate({
+      prompt: promptPayload.prompt,
+      files: promptPayload.files,
+      mask: promptPayload.mask,
+      n: Math.max(1, Number(input.n || 1)),
+      size: input.size,
+      aspectRatio: undefined,
+      seed: undefined,
+      providerOptions: {},
+      headers: undefined
+    })
+    return await this.normalizeRawGeneratedImages(response?.images)
+  }
+
+  private toDirectImagePrompt(
+    prompt: string | { text?: string; images?: unknown[]; mask?: unknown }
+  ): { prompt?: string; files?: Array<{ type: 'file' | 'url'; mediaType?: string; data?: string | Uint8Array; url?: string }>; mask?: { type: 'file'; mediaType: string; data: string | Uint8Array } } {
+    if (typeof prompt === 'string') {
+      return { prompt }
+    }
+
+    const files = Array.isArray(prompt.images)
+      ? prompt.images.map((item) => this.toDirectImageFile(item))
+      : undefined
+    const mask = prompt.mask ? this.toDirectImageMask(prompt.mask) : undefined
+    return {
+      prompt: prompt.text,
+      files: files && files.length > 0 ? files : undefined,
+      mask
+    }
+  }
+
+  private toDirectImageFile(
+    image: unknown
+  ): { type: 'file'; mediaType: string; data: string | Uint8Array } | { type: 'url'; url: string } {
+    if (typeof image === 'string') {
+      const value = image.trim()
+      if (isHttpUrl(value)) {
+        return { type: 'url', url: value }
+      }
+      const dataUrl = parseDataUrl(value)
+      if (dataUrl) {
+        return {
+          type: 'file',
+          mediaType: dataUrl.mediaType || 'image/png',
+          data: dataUrl.base64
+        }
+      }
+      const normalized = normalizeBase64Text(value)
+      if (normalized) {
+        return { type: 'file', mediaType: 'image/png', data: normalized }
+      }
+      throw new Error('Unsupported image input string format for direct image fallback')
+    }
+
+    if (Buffer.isBuffer(image)) {
+      const bytes = new Uint8Array(image)
+      return { type: 'file', mediaType: detectImageMimeTypeFromBytes(bytes), data: bytes }
+    }
+    if (image instanceof Uint8Array) {
+      return { type: 'file', mediaType: detectImageMimeTypeFromBytes(image), data: image }
+    }
+    if (image instanceof ArrayBuffer) {
+      const bytes = new Uint8Array(image)
+      return { type: 'file', mediaType: detectImageMimeTypeFromBytes(bytes), data: bytes }
+    }
+
+    throw new Error('Unsupported image input payload for direct image fallback')
+  }
+
+  private toDirectImageMask(mask: unknown): { type: 'file'; mediaType: string; data: string | Uint8Array } {
+    const file = this.toDirectImageFile(mask)
+    if (file.type === 'url') {
+      throw new Error('Mask URL is not supported in direct image fallback')
+    }
+    return file
+  }
+
+  private async normalizeRawGeneratedImages(images: unknown): Promise<string[]> {
+    if (!Array.isArray(images) || images.length === 0) {
+      throw new Error('Image provider returned empty images payload')
+    }
+
+    const results: string[] = []
+    for (const item of images) {
+      if (item instanceof Uint8Array) {
+        results.push(Buffer.from(item).toString('base64'))
+        continue
+      }
+
+      if (typeof item === 'string') {
+        const value = item.trim()
+        const dataUrl = parseDataUrl(value)
+        if (dataUrl) {
+          results.push(dataUrl.base64)
+          continue
+        }
+
+        const normalized = normalizeBase64Text(value)
+        if (normalized) {
+          results.push(normalized)
+          continue
+        }
+
+        if (isHttpUrl(value)) {
+          const response = await fetch(value)
+          if (!response.ok) {
+            throw new Error(`Failed to fetch image URL payload: ${response.status} ${response.statusText}`)
+          }
+          const bytes = new Uint8Array(await response.arrayBuffer())
+          results.push(Buffer.from(bytes).toString('base64'))
+          continue
+        }
+      }
+
+      throw new Error('Unsupported image output payload for direct image fallback')
+    }
+
+    return results
+  }
+
   private resolveLanguageModel(modelId?: string): { model: string; modelKey: any } {
     const { providerId, modelId: resolvedId } = resolveModelId(modelId)
     if (!hasProvider(providerId)) {
@@ -2356,6 +2616,130 @@ function mergeModelParams(...params: Array<AiModelParameters | undefined>) {
 function clampNumber(value: number, min: number, max: number) {
   if (Number.isNaN(value)) return undefined
   return Math.min(Math.max(value, min), max)
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms))
+}
+
+function getErrorMessageForLog(error: unknown): string {
+  if (error instanceof Error) return error.message || error.name || 'Unknown error'
+  if (typeof error === 'string') return error
+  if (error && typeof error === 'object' && typeof (error as any).message === 'string') {
+    return (error as any).message
+  }
+  return 'Unknown error'
+}
+
+function collectErrorSignals(error: unknown, depth = 0, bucket: string[] = []): string[] {
+  if (!error || depth > 6) return bucket
+  if (typeof error === 'string') {
+    bucket.push(error)
+    return bucket
+  }
+  if (error instanceof Error) {
+    if (error.name) bucket.push(error.name)
+    if (error.message) bucket.push(error.message)
+    const cause = (error as any).cause
+    if (cause) collectErrorSignals(cause, depth + 1, bucket)
+    return bucket
+  }
+  if (typeof error === 'object') {
+    const item = error as any
+    if (typeof item.name === 'string') bucket.push(item.name)
+    if (typeof item.message === 'string') bucket.push(item.message)
+    if (typeof item.code === 'string') bucket.push(item.code)
+    if (item.cause) collectErrorSignals(item.cause, depth + 1, bucket)
+  }
+  return bucket
+}
+
+function isImageBase64DecodeError(error: unknown): boolean {
+  const normalized = collectErrorSignals(error).join(' | ').toLowerCase()
+  return (
+    normalized.includes('invalidcharactererror') ||
+    normalized.includes('invalid character') ||
+    normalized.includes('convertbase64touint8array') ||
+    normalized.includes('failed to process successful response')
+  )
+}
+
+function isHttpUrl(value: string): boolean {
+  return /^https?:\/\//i.test(value)
+}
+
+function detectImageMimeTypeFromBytes(data: Uint8Array): string {
+  if (data.length >= 8) {
+    if (
+      data[0] === 0x89 &&
+      data[1] === 0x50 &&
+      data[2] === 0x4e &&
+      data[3] === 0x47 &&
+      data[4] === 0x0d &&
+      data[5] === 0x0a &&
+      data[6] === 0x1a &&
+      data[7] === 0x0a
+    ) {
+      return 'image/png'
+    }
+  }
+  if (data.length >= 3 && data[0] === 0xff && data[1] === 0xd8 && data[2] === 0xff) {
+    return 'image/jpeg'
+  }
+  if (
+    data.length >= 12 &&
+    data[0] === 0x52 &&
+    data[1] === 0x49 &&
+    data[2] === 0x46 &&
+    data[3] === 0x46 &&
+    data[8] === 0x57 &&
+    data[9] === 0x45 &&
+    data[10] === 0x42 &&
+    data[11] === 0x50
+  ) {
+    return 'image/webp'
+  }
+  if (
+    data.length >= 6 &&
+    data[0] === 0x47 &&
+    data[1] === 0x49 &&
+    data[2] === 0x46 &&
+    data[3] === 0x38 &&
+    (data[4] === 0x37 || data[4] === 0x39) &&
+    data[5] === 0x61
+  ) {
+    return 'image/gif'
+  }
+  return 'image/png'
+}
+
+function parseDataUrl(value: string): { mediaType?: string; base64: string } | null {
+  const matched = value.match(/^data:([^;,]+)?(?:;charset=[^;,]+)?(?:;(base64))?,(.*)$/i)
+  if (!matched) return null
+  const mediaType = matched[1] || undefined
+  const isBase64 = matched[2]?.toLowerCase() === 'base64'
+  const rawData = matched[3] || ''
+  if (!rawData) return null
+  if (!isBase64) {
+    return {
+      mediaType,
+      base64: Buffer.from(decodeURIComponent(rawData), 'utf8').toString('base64')
+    }
+  }
+  const normalized = normalizeBase64Text(rawData)
+  if (!normalized) return null
+  return { mediaType, base64: normalized }
+}
+
+function normalizeBase64Text(input: string): string | null {
+  const compact = input.replace(/\s+/g, '')
+  if (!compact) return null
+
+  const normalized = compact.replace(/-/g, '+').replace(/_/g, '/')
+  const mod = normalized.length % 4
+  const padded = mod === 0 ? normalized : normalized + '='.repeat(4 - mod)
+  if (!/^[A-Za-z0-9+/]+=*$/.test(padded)) return null
+  return padded
 }
 
 function normalizeModelParams(params: AiModelParameters): AiModelParameters {

@@ -46,6 +46,24 @@ const toPreview = (value: unknown, maxLength = 180) => {
   }
 }
 
+const inferImageMimeFromBase64 = (value: string) => {
+  const normalized = value.trim().replace(/\s+/g, '')
+  if (normalized.startsWith('/9j/')) return 'image/jpeg'
+  if (normalized.startsWith('iVBORw0KGgo')) return 'image/png'
+  if (normalized.startsWith('UklGR')) return 'image/webp'
+  if (normalized.startsWith('R0lGOD')) return 'image/gif'
+  return 'image/png'
+}
+
+const toImageSrc = (value: string) => {
+  const raw = String(value || '').trim()
+  if (!raw) return ''
+  if (raw.startsWith('data:')) return raw
+  if (/^https?:\/\//i.test(raw)) return raw
+  const mime = inferImageMimeFromBase64(raw)
+  return `data:${mime};base64,${raw}`
+}
+
 export default function App() {
   const { ai, notification, host, dialog } = useIntools('ai-api-test') as any
 
@@ -364,7 +382,9 @@ export default function App() {
         size: imageGenSize,
         count: Number(imageGenCount)
       })
-      setGeneratedImages(result?.images || [])
+      const list = result?.images || []
+      setGeneratedImages(list)
+      notification?.show?.(`生成完成，返回 ${list.length} 张`, 'success')
     } catch (err: any) {
       notification?.show?.(err?.message || '图片生成失败', 'error')
     }
@@ -386,7 +406,9 @@ export default function App() {
         imageAttachmentId: selectedImageAttachment,
         prompt: imageEditPrompt
       })
-      setEditedImages(result?.images || [])
+      const list = result?.images || []
+      setEditedImages(list)
+      notification?.show?.(`编辑完成，返回 ${list.length} 张`, 'success')
     } catch (err: any) {
       notification?.show?.(err?.message || '图片编辑失败', 'error')
     }
@@ -810,7 +832,7 @@ export default function App() {
           </button>
           <div className="image-grid">
             {generatedImages.map((img, index) => (
-              <img key={index} src={`data:image/png;base64,${img}`} alt={`generated-${index}`} />
+              <img key={index} src={toImageSrc(img)} alt={`generated-${index}`} />
             ))}
           </div>
         </section>
@@ -849,7 +871,7 @@ export default function App() {
           </button>
           <div className="image-grid">
             {editedImages.map((img, index) => (
-              <img key={index} src={`data:image/png;base64,${img}`} alt={`edited-${index}`} />
+              <img key={index} src={toImageSrc(img)} alt={`edited-${index}`} />
             ))}
           </div>
         </section>
