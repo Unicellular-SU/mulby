@@ -1,6 +1,17 @@
 import { useEffect, useState } from 'react'
 import type { AiModel, AiModelCapability, AiModelParameters, AiModelType, AiProviderConfig, AiSettings } from '../../shared/types/ai'
+import { BUILTIN_PROVIDER_TYPES, inferProviderType } from '../../shared/ai/providerType'
+import { buildProviderIdCounts, validateProviderConfig } from '../../shared/ai/providerValidation'
 import SliderWithTicks from './SliderWithTicks'
+
+const PROVIDER_TYPE_OPTIONS = [...BUILTIN_PROVIDER_TYPES] as string[]
+
+function getProviderTypeOptions(currentType?: string): string[] {
+  const normalized = String(currentType || '').trim().toLowerCase()
+  const base = [...PROVIDER_TYPE_OPTIONS]
+  if (!normalized || base.includes(normalized)) return base
+  return [normalized, ...base]
+}
 
 function Switch({ checked, onChange }: { checked: boolean; onChange: () => void }) {
   return (
@@ -37,7 +48,8 @@ export default function AiSettingsView({ onBack }: AiSettingsViewProps) {
   const [newModelProviderIndex, setNewModelProviderIndex] = useState<number>(0)
   const [selectedProviderIndex, setSelectedProviderIndex] = useState<number>(0)
   const [newProvider, setNewProvider] = useState<AiProviderConfig>({
-    id: 'openai',
+    id: '',
+    type: 'openai-compatible',
     label: '',
     enabled: true,
     apiKey: '',
@@ -94,13 +106,45 @@ export default function AiSettingsView({ onBack }: AiSettingsViewProps) {
     return label ? label : String(provider.id)
   }
 
+  const getProviderTypeLabel = (provider: AiProviderConfig) => inferProviderType(provider)
+
   const modelBelongsToProvider = (model: AiModel, provider: AiProviderConfig) => {
+    if (model.providerRef) return String(model.providerRef) === String(provider.id)
     const providerKey = getProviderKey(provider)
     if (model.providerLabel) return model.providerLabel === providerKey
+    const providerType = getProviderTypeLabel(provider)
+    if (model.id.includes(':')) {
+      const providerToken = model.id.split(':', 2)[0]
+      return providerToken === String(provider.id) || providerToken === providerType
+    }
     return model.id.startsWith(`${provider.id}:`)
   }
 
+  const resolveProviderIdFromModel = (model: AiModel) => {
+    const providers = aiDraft?.providers || []
+    if (model.providerRef && providers.some((provider) => String(provider.id) === String(model.providerRef))) {
+      return String(model.providerRef)
+    }
+    if (model.providerLabel) {
+      const byLabel = providers.find((provider) => getProviderKey(provider) === model.providerLabel)
+      if (byLabel) return String(byLabel.id)
+    }
+    if (model.id.includes(':')) {
+      const providerToken = model.id.split(':', 2)[0]
+      const byToken = providers.find((provider) =>
+        String(provider.id) === providerToken || getProviderTypeLabel(provider) === providerToken
+      )
+      if (byToken) return String(byToken.id)
+    }
+    return ''
+  }
+
   const selectedProvider = (aiDraft?.providers || [])[selectedProviderIndex] || null
+  const providerIdCounts = buildProviderIdCounts(aiDraft?.providers || [])
+  const selectedProviderValidation = validateProviderConfig(selectedProvider, providerIdCounts)
+  const hasProviderBlockingIssues = (aiDraft?.providers || []).some((provider) => {
+    return validateProviderConfig(provider, providerIdCounts).issues.length > 0
+  })
   const filteredModels = (aiDraft?.models || []).filter((model) => {
     if (!selectedProvider) return false
     return modelBelongsToProvider(model, selectedProvider)
@@ -227,15 +271,24 @@ export default function AiSettingsView({ onBack }: AiSettingsViewProps) {
     }
   }, [aiDraft, selectedProviderIndex])
 
+  const buildProviderInstanceId = (preferred: string, type: string) => {
+    const providers = aiDraft?.providers || []
+    const seed = (preferred || type || 'provider').trim().toLowerCase().replace(/\s+/g, '-')
+    const base = seed || 'provider'
+    const existing = new Set(providers.map((provider) => String(provider.id)))
+    if (!existing.has(base)) return base
+    let index = 2
+    while (existing.has(`${base}-${index}`)) index += 1
+    return `${base}-${index}`
+  }
+
   const handleAddProvider = () => {
     if (!aiDraft) return
-    if (!newProvider.id) {
-      setAiError('请填写提供商 ID')
-      return
-    }
-    const providers = [...aiDraft.providers, { ...newProvider }]
+    const providerType = inferProviderType(newProvider)
+    const providerId = buildProviderInstanceId(String(newProvider.id || ''), providerType)
+    const providers = [...aiDraft.providers, { ...newProvider, id: providerId, type: providerType }]
     updateAiDraft({ providers })
-    setNewProvider({ id: 'openai', label: '', enabled: true, apiKey: '', baseURL: '' })
+    setNewProvider({ id: '', type: 'openai-compatible', label: '', enabled: true, apiKey: '', baseURL: '' })
     setShowAddProviderModal(false)
   }
 
@@ -251,13 +304,28 @@ export default function AiSettingsView({ onBack }: AiSettingsViewProps) {
       if (!prev) return prev
       const currentProvider = prev.providers[index]
       if (!currentProvider) return prev
-      const nextProvider = { ...currentProvider, ...patch }
+      const mergedProvider = { ...currentProvider, ...patch }
+      const nextProvider = {
+        ...mergedProvider,
+        type: inferProviderType(mergedProvider)
+      }
       const providers = prev.providers.map((provider, i) => (i === index ? nextProvider : provider))
       let models = prev.models
+      const beforeId = String(currentProvider.id)
+      const afterId = String(nextProvider.id)
       const beforeKey = getProviderKey(currentProvider)
       const afterKey = getProviderKey(nextProvider)
-      if (beforeKey !== afterKey && prev.models && prev.models.length > 0) {
-        models = prev.models.map((model) => (model.providerLabel === beforeKey ? { ...model, providerLabel: afterKey } : model))
+      if (prev.models && prev.models.length > 0) {
+        models = prev.models.map((model) => {
+          const patchModel: Partial<AiModel> = {}
+          if (beforeId !== afterId && model.providerRef === beforeId) {
+            patchModel.providerRef = afterId
+          }
+          if (beforeKey !== afterKey && model.providerLabel === beforeKey) {
+            patchModel.providerLabel = afterKey
+          }
+          return Object.keys(patchModel).length > 0 ? { ...model, ...patchModel } : model
+        })
       }
       return {
         ...prev,
@@ -274,8 +342,9 @@ export default function AiSettingsView({ onBack }: AiSettingsViewProps) {
       return
     }
     const provider = aiDraft.providers[newModelProviderIndex]
+    const providerRef = provider ? String(provider.id) : undefined
     const providerLabel = provider ? getProviderKey(provider) : undefined
-    const models = [...(aiDraft.models || []), { ...newModel, providerLabel }]
+    const models = [...(aiDraft.models || []), { ...newModel, providerRef, providerLabel }]
     updateAiDraft({ models })
     setNewModel({ id: '', label: '', description: '' })
     setNewModelProviderIndex(0)
@@ -447,6 +516,7 @@ export default function AiSettingsView({ onBack }: AiSettingsViewProps) {
 
       setFetchedModels(result.models.map((model) => ({
         ...model,
+        providerRef: String(provider.id),
         providerLabel: getProviderKey(provider)
       })))
       setSelectedFetchedModelIds(new Set())
@@ -497,7 +567,7 @@ export default function AiSettingsView({ onBack }: AiSettingsViewProps) {
 
   const handleAddFetchedModels = () => {
     if (!aiDraft) return
-    const modelKey = (model: AiModel) => `${model.id}::${model.providerLabel || ''}`
+    const modelKey = (model: AiModel) => `${model.id}::${model.providerRef || model.providerLabel || ''}`
     const existing = new Set((aiDraft.models || []).map((model) => modelKey(model)))
     const toAdd = fetchedModels.filter((model) => selectedFetchedModelIds.has(model.id) && !existing.has(modelKey(model)))
     if (toAdd.length === 0) {
@@ -528,7 +598,14 @@ export default function AiSettingsView({ onBack }: AiSettingsViewProps) {
         </div>
         <div className="flex items-center gap-2">
           <button className={`${pillClass} no-drag`} onClick={handleResetAiSettings} title="恢复到上次保存的配置">恢复</button>
-          <button className={`${primaryPillClass} no-drag`} onClick={handleSaveAiSettings}>保存</button>
+          <button
+            className={`${primaryPillClass} no-drag disabled:cursor-not-allowed disabled:opacity-60`}
+            onClick={handleSaveAiSettings}
+            disabled={hasProviderBlockingIssues}
+            title={hasProviderBlockingIssues ? '存在 Provider 配置错误，请先修复' : '保存'}
+          >
+            保存
+          </button>
         </div>
       </div>
 
@@ -542,6 +619,11 @@ export default function AiSettingsView({ onBack }: AiSettingsViewProps) {
           {aiInfo && (
             <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-xs text-emerald-700 dark:border-emerald-900/60 dark:bg-emerald-900/20 dark:text-emerald-300">
               {aiInfo}
+            </div>
+          )}
+          {hasProviderBlockingIssues && (
+            <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-700 dark:border-amber-900/60 dark:bg-amber-900/20 dark:text-amber-200">
+              检测到 Provider 配置问题（重复实例 ID 或缺少 API Key / Base URL），请先修复后再保存。
             </div>
           )}
           {aiReasoning && (
@@ -776,7 +858,9 @@ export default function AiSettingsView({ onBack }: AiSettingsViewProps) {
                     >
                       <div className="min-w-0">
                         <div className="truncate text-sm font-medium">{getProviderKey(provider)}</div>
-                        <div className={`truncate text-xs ${index === selectedProviderIndex ? 'text-white/70 dark:text-slate-600' : 'text-slate-400 dark:text-slate-500'}`}>{provider.id}</div>
+                        <div className={`truncate text-xs ${index === selectedProviderIndex ? 'text-white/70 dark:text-slate-600' : 'text-slate-400 dark:text-slate-500'}`}>
+                          {getProviderTypeLabel(provider)} · {provider.id}
+                        </div>
                       </div>
                       <span className={`rounded-full px-2 py-0.5 text-[11px] ${provider.enabled ? (index === selectedProviderIndex ? 'bg-white/20 text-white' : 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-200') : (index === selectedProviderIndex ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-300')}`}>
                         {provider.enabled ? '启用' : '停用'}
@@ -796,7 +880,9 @@ export default function AiSettingsView({ onBack }: AiSettingsViewProps) {
                     <div className="flex flex-wrap items-center justify-between gap-3">
                       <div className="min-w-[160px]">
                         <div className="text-sm font-medium text-slate-900 dark:text-white">{getProviderKey(selectedProvider)}</div>
-                        <div className="text-xs text-slate-500 dark:text-slate-400">{selectedProvider.id}</div>
+                        <div className="text-xs text-slate-500 dark:text-slate-400">
+                          {getProviderTypeLabel(selectedProvider)} · {selectedProvider.id}
+                        </div>
                       </div>
                       <div className="flex items-center gap-2">
                         <button
@@ -853,7 +939,8 @@ export default function AiSettingsView({ onBack }: AiSettingsViewProps) {
                               setIsTestingConnection(false)
                             }
                           }}
-                          disabled={isTestingConnection}
+                          disabled={isTestingConnection || !selectedProviderValidation.canTestConnection}
+                          title={selectedProviderValidation.testConnectionHint || '测试连接'}
                         >
                           {isTestingConnection ? '测试中…' : '测试连接'}
                         </button>
@@ -867,17 +954,33 @@ export default function AiSettingsView({ onBack }: AiSettingsViewProps) {
                       </div>
                     </div>
                     <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                      <div className="relative">
+                        <select
+                          className={selectClass}
+                          value={getProviderTypeLabel(selectedProvider)}
+                          onChange={(e) => handleUpdateProvider(selectedProviderIndex, { type: e.target.value })}
+                        >
+                          {getProviderTypeOptions(getProviderTypeLabel(selectedProvider)).map((type) => (
+                            <option key={type} value={type}>
+                              {type}
+                            </option>
+                          ))}
+                        </select>
+                        <svg className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                          <path d="m6 9 6 6 6-6" strokeLinecap="round" strokeLinejoin="round" />
+                        </svg>
+                      </div>
+                      <input
+                        className={inputClass}
+                        placeholder="Provider 实例 ID（如 v3-openai）"
+                        value={selectedProvider.id}
+                        onChange={(e) => handleUpdateProvider(selectedProviderIndex, { id: e.target.value })}
+                      />
                       <input
                         className={inputClass}
                         placeholder="显示名称（可选）"
                         value={selectedProvider.label || ''}
                         onChange={(e) => handleUpdateProvider(selectedProviderIndex, { label: e.target.value })}
-                      />
-                      <input
-                        className={inputClass}
-                        placeholder="Provider ID（如 openai）"
-                        value={selectedProvider.id}
-                        onChange={(e) => handleUpdateProvider(selectedProviderIndex, { id: e.target.value })}
                       />
                       <input
                         className={inputClass}
@@ -892,6 +995,11 @@ export default function AiSettingsView({ onBack }: AiSettingsViewProps) {
                         onChange={(e) => handleUpdateProvider(selectedProviderIndex, { baseURL: e.target.value })}
                       />
                     </div>
+                    {selectedProviderValidation.issues.length > 0 && (
+                      <div className="rounded-2xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-700 dark:border-amber-900/60 dark:bg-amber-900/20 dark:text-amber-200">
+                        {selectedProviderValidation.issues.join('；')}
+                      </div>
+                    )}
 
                     <details className="rounded-2xl border border-slate-200/80 bg-slate-50 px-4 py-3 text-sm text-slate-700 dark:border-slate-800/80 dark:bg-slate-900/50 dark:text-slate-200">
                       <summary className="cursor-pointer text-sm font-medium text-slate-700 dark:text-slate-200">供应商默认参数</summary>
@@ -1076,7 +1184,8 @@ export default function AiSettingsView({ onBack }: AiSettingsViewProps) {
                           <button
                             className={`${primaryPillClass} no-drag`}
                             onClick={() => handleFetchModels(selectedProvider)}
-                            disabled={isFetchingModels}
+                            disabled={isFetchingModels || !selectedProviderValidation.canFetchModels}
+                            title={selectedProviderValidation.fetchModelsHint || '拉取模型'}
                           >
                             {isFetchingModels ? '拉取中…' : '拉取模型'}
                           </button>
@@ -1138,15 +1247,20 @@ export default function AiSettingsView({ onBack }: AiSettingsViewProps) {
                                 <div className="relative">
                                   <select
                                     className={selectClass}
-                                    value={model.providerLabel || ''}
+                                    value={resolveProviderIdFromModel(model)}
                                     onChange={(e) => {
                                       const actualIndex = (aiDraft?.models || []).findIndex((item) => item.id === model.id)
-                                      handleUpdateModel(actualIndex, { providerLabel: e.target.value || undefined })
+                                      const providerRef = e.target.value || undefined
+                                      const provider = (aiDraft?.providers || []).find((item) => String(item.id) === providerRef)
+                                      handleUpdateModel(actualIndex, {
+                                        providerRef,
+                                        providerLabel: provider ? getProviderKey(provider) : undefined
+                                      })
                                     }}
                                   >
                                     <option value="">未绑定 Provider</option>
                                     {(aiDraft?.providers || []).map((provider, providerIndex) => (
-                                      <option key={`${provider.id}-${providerIndex}`} value={getProviderKey(provider)}>
+                                      <option key={`${provider.id}-${providerIndex}`} value={String(provider.id)}>
                                         {getProviderKey(provider)}
                                       </option>
                                     ))}
@@ -1489,18 +1603,25 @@ export default function AiSettingsView({ onBack }: AiSettingsViewProps) {
               <div className="relative">
                 <select
                   className={selectClass}
-                  value={newProvider.id}
-                  onChange={(e) => setNewProvider((prev) => ({ ...prev, id: e.target.value }))}
+                  value={inferProviderType(newProvider)}
+                  onChange={(e) => setNewProvider((prev) => ({ ...prev, type: e.target.value }))}
                 >
-                  <option value="openai">openai</option>
-                  <option value="anthropic">anthropic</option>
-                  <option value="google">google</option>
-                  <option value="custom">custom</option>
+                  {PROVIDER_TYPE_OPTIONS.map((type) => (
+                    <option key={type} value={type}>
+                      {type}
+                    </option>
+                  ))}
                 </select>
                 <svg className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                   <path d="m6 9 6 6 6-6" strokeLinecap="round" strokeLinejoin="round" />
                 </svg>
               </div>
+              <input
+                className={inputClass}
+                placeholder="Provider 实例 ID（可选，留空自动生成）"
+                value={newProvider.id || ''}
+                onChange={(e) => setNewProvider((prev) => ({ ...prev, id: e.target.value }))}
+              />
               <input
                 className={inputClass}
                 placeholder="显示名称（可选）"

@@ -1,6 +1,7 @@
 import type { AiModel, AiModelCapability } from '../../shared/types/ai'
 import { getAiSettings } from './config'
 import { getEffectiveCapabilities } from './modelCapabilities'
+import { inferProviderType } from './providerCatalog'
 
 export interface ModelInfo extends AiModel {
   providerId: string
@@ -27,25 +28,66 @@ const DEFAULT_MODELS: ModelInfo[] = [
   }
 ]
 
+function resolveProviderForModel(
+  model: AiModel,
+  providers: ReturnType<typeof getAiSettings>['providers'],
+  fallbackProviderId?: string
+) {
+  if (model.providerRef) {
+    const byRef = providers.find((item) => String(item.id) === String(model.providerRef))
+    if (byRef) return byRef
+  }
+  if (model.providerLabel) {
+    const byLabel = providers.find((item) => (item.label || item.id) === model.providerLabel)
+    if (byLabel) return byLabel
+  }
+  if (fallbackProviderId) {
+    const byId = providers.find((item) => String(item.id) === String(fallbackProviderId))
+    if (byId) return byId
+    const byType = providers.find((item) => inferProviderType(item) === String(fallbackProviderId))
+    if (byType) return byType
+  }
+  return providers[0]
+}
+
+function parseModelKey(raw: string): { providerToken: string; modelToken: string } {
+  if (raw.includes(':')) {
+    const [providerToken, modelToken] = raw.split(':', 2)
+    return { providerToken, modelToken }
+  }
+  if (raw.includes('/')) {
+    const [providerToken, modelToken] = raw.split('/', 2)
+    return { providerToken, modelToken }
+  }
+  return { providerToken: raw, modelToken: raw }
+}
+
+function toFallbackModelInfo(inputRaw: string): ModelInfo {
+  const { providerToken, modelToken } = parseModelKey(inputRaw)
+  return {
+    id: inputRaw,
+    label: modelToken || inputRaw,
+    description: '',
+    providerId: providerToken || 'openai',
+    modelId: modelToken || inputRaw,
+    capabilities: [],
+    pricing: { inputPer1k: 0, outputPer1k: 0 }
+  }
+}
+
 export function getAllModels(): ModelInfo[] {
   const settings = getAiSettings()
   if (settings.models && settings.models.length > 0) {
     const providers = settings.providers || []
     return settings.models.map((model) => {
-      const [rawProviderId, rawModelId] = model.id.includes(':') ? model.id.split(':', 2) : [model.id, model.id]
-      let providerId = rawProviderId || 'custom'
-      if (model.providerLabel) {
-        const provider = providers.find((item) => (item.label || item.id) === model.providerLabel)
-        if (provider?.id) {
-          providerId = provider.id
-        }
-      }
-      const providerConfig = providers.find((item) => String(item.id) === String(providerId)) || providers[0]
+      const { providerToken, modelToken } = parseModelKey(model.id)
+      const providerConfig = resolveProviderForModel(model, providers, providerToken)
+      const providerId = providerConfig ? inferProviderType(providerConfig) : providerToken || 'openai-compatible'
       const effectiveCapabilities = getEffectiveCapabilities(model.id, providerConfig)
       return {
         ...model,
         providerId,
-        modelId: rawModelId || model.id,
+        modelId: modelToken || model.id,
         capabilities: effectiveCapabilities,
         pricing: { inputPer1k: 0, outputPer1k: 0 }
       }
@@ -69,10 +111,19 @@ export function resolveModelId(input?: string): { providerId: string; modelId: s
     throw new Error('AI model is not configured')
   }
 
-  const [providerId, modelId] = raw.includes(':') ? raw.split(':', 2) : raw.split('/', 2)
-  const model = getModelById(raw) || models.find((m) => m.providerId === providerId && m.modelId === modelId) || defaultModel
+  const { providerToken, modelToken } = parseModelKey(raw)
+  const model = getModelById(raw) || models.find((m) => m.modelId === modelToken && (m.id === raw || m.providerId === providerToken))
   if (!model) {
-    throw new Error(`AI model not found: ${raw}`)
+    const fallback = defaultModel || toFallbackModelInfo(raw)
+    const providerConfig =
+      settings.providers.find((provider) => String(provider.id) === providerToken) ||
+      settings.providers.find((provider) => inferProviderType(provider) === providerToken)
+    const providerId = providerConfig ? inferProviderType(providerConfig) : providerToken || fallback.providerId
+    return {
+      providerId,
+      modelId: modelToken || fallback.modelId,
+      model: fallback
+    }
   }
   return { providerId: model.providerId, modelId: model.modelId, model }
 }

@@ -83,15 +83,34 @@ export interface AiModel {
   label: string
   description: string
   icon?: string
+  /**
+   * 绑定的 Provider 实例 ID（优先级高于 providerLabel）。
+   */
+  providerRef?: string
   providerLabel?: string
   params?: AiModelParameters
   capabilities?: AiModelCapability[]
 }
 
-export type AiProviderId = 'openai' | 'anthropic' | 'google' | 'custom'
+export type AiProviderId =
+  | 'openai'
+  | 'openai-compatible'
+  | 'anthropic'
+  | 'google'
+  | 'deepseek'
+  | 'openrouter'
+  | 'azure'
+  | 'custom'
 
 export interface AiProviderConfig {
+  /**
+   * Provider 实例 ID（用于区分多个同类型实例，如 v3-openai / official-openai）。
+   */
   id: AiProviderId | string
+  /**
+   * Provider 实现类型（不填时向后兼容为 id）。
+   */
+  type?: AiProviderId | string
   label?: string
   enabled: boolean
   apiKey?: string

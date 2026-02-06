@@ -3,6 +3,7 @@ import { BaseFileService } from './BaseFileService'
 import { OpenAIFileService } from './OpenAIFileService'
 import { GeminiFileService } from './GeminiFileService'
 import { AnthropicFileService } from './AnthropicFileService'
+import { getProviderAdapter } from '../providerAdapterCatalog'
 
 export class FileServiceManager {
   private static instance: FileServiceManager
@@ -22,8 +23,9 @@ export class FileServiceManager {
     const existing = this.services.get(key)
     if (existing) return existing
 
+    const adapter = getProviderAdapter(provider)
     let service: BaseFileService
-    switch (provider.id) {
+    switch (adapter.fileServiceKind) {
       case 'openai':
         service = new OpenAIFileService(provider)
         break
@@ -34,7 +36,7 @@ export class FileServiceManager {
         service = new AnthropicFileService(provider)
         break
       default:
-        throw new Error(`File service not supported for provider: ${provider.id}`)
+        throw new Error(`File service not supported for provider type: ${adapter.type}`)
     }
 
     this.services.set(key, service)

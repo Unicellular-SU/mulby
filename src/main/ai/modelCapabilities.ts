@@ -2,6 +2,7 @@ import type { AiProviderConfig, AiModel, AiModelCapability, AiModelType } from '
 import { resolveModelId } from './models'
 import { getAiSettings } from './config'
 import { inferCapability } from './capabilityInference'
+import { getProviderAdapter } from './providerAdapterCatalog'
 
 function modelName(modelId?: string): string {
   if (!modelId) return ''
@@ -53,7 +54,7 @@ function hasCapability(modelId: string | undefined, type: AiModelType, provider?
 }
 
 export function supportsPdfInput(modelId?: string, provider?: AiProviderConfig): boolean {
-  const providerId = String(provider?.id || '')
+  const providerId = getProviderAdapter(provider).type
   const name = modelName(modelId)
   if (name.includes('qwen-long') || name.includes('qwen-doc')) return true
   return ['openai', 'anthropic', 'google'].includes(providerId)
@@ -64,7 +65,7 @@ export function supportsImageInput(modelId?: string, provider?: AiProviderConfig
 }
 
 export function supportsLargeFileUpload(modelId?: string, provider?: AiProviderConfig): boolean {
-  const providerId = String(provider?.id || '')
+  const providerId = getProviderAdapter(provider).type
   const name = modelName(modelId)
   if (name.includes('qwen-long') || name.includes('qwen-doc')) return true
   return ['openai', 'google'].includes(providerId)
@@ -98,7 +99,7 @@ export function getEffectiveCapabilities(modelId?: string, provider?: AiProvider
 }
 
 export function getFileSizeLimit(_modelId: string | undefined, provider: AiProviderConfig | undefined, mimeType: string | undefined): number {
-  const providerId = String(provider?.id || '')
+  const providerId = getProviderAdapter(provider).type
   if (providerId === 'anthropic' && mimeType === 'application/pdf') {
     return 32 * 1024 * 1024
   }

@@ -1,30 +1,27 @@
 import { createProviderRegistry } from 'ai'
-import { openai, createOpenAI } from '@ai-sdk/openai'
-import { anthropic, createAnthropic } from '@ai-sdk/anthropic'
-import { google, createGoogleGenerativeAI } from '@ai-sdk/google'
+import { openai } from '@ai-sdk/openai'
+import { anthropic } from '@ai-sdk/anthropic'
+import { google } from '@ai-sdk/google'
 import type { ProviderV3 } from '@ai-sdk/provider'
 import { getAiSettings } from './config'
-import type { AiProviderConfig, AiProviderId } from '../../shared/types/ai'
+import type { AiProviderConfig } from '../../shared/types/ai'
+import { buildProviderByType, inferProviderType } from './providerCatalog'
 
 let registry: ReturnType<typeof createProviderRegistry> | null = null
 
 export function buildProvider(config: AiProviderConfig) {
-  switch (config.id) {
-    case 'openai':
-      return config.apiKey || config.baseURL || config.headers
-        ? createOpenAI({ apiKey: config.apiKey, baseURL: config.baseURL, headers: config.headers })
-        : openai
-    case 'anthropic':
-      return config.apiKey || config.baseURL || config.headers
-        ? createAnthropic({ apiKey: config.apiKey, baseURL: config.baseURL, headers: config.headers })
-        : anthropic
-    case 'google':
-      return config.apiKey || config.baseURL || config.headers
-        ? createGoogleGenerativeAI({ apiKey: config.apiKey, baseURL: config.baseURL, headers: config.headers })
-        : google
-    default:
-      return null
-  }
+  const type = getProviderType(config)
+  return buildProviderByType(type, config)
+}
+
+export function getProviderType(config: AiProviderConfig | undefined): string {
+  if (!config) return ''
+  return inferProviderType(config)
+}
+
+function toProviderKey(config: AiProviderConfig, index: number) {
+  const base = String(config.id || '').trim() || `provider-${index}`
+  return `${base}__${index}`
 }
 
 function buildDefaultProviders(): Record<string, ProviderV3> {
@@ -44,10 +41,23 @@ export function getProviderRegistry() {
   if (settings.providers.length === 0) {
     Object.assign(providerMap, buildDefaultProviders())
   } else {
-    for (const config of settings.providers) {
+    for (const [index, config] of settings.providers.entries()) {
       if (!config.enabled) continue
       const provider = buildProvider(config)
-      if (provider) providerMap[config.id] = provider
+      if (!provider) continue
+
+      const uniqueKey = toProviderKey(config, index)
+      providerMap[uniqueKey] = provider
+
+      const idKey = String(config.id || '').trim()
+      if (idKey && !providerMap[idKey]) {
+        providerMap[idKey] = provider
+      }
+
+      const typeKey = getProviderType(config)
+      if (typeKey && !providerMap[typeKey]) {
+        providerMap[typeKey] = provider
+      }
     }
   }
 
@@ -63,8 +73,11 @@ export function resetProviderRegistry(): void {
   registry = null
 }
 
-export function hasProvider(id: AiProviderId): boolean {
+export function hasProvider(id: string): boolean {
   const settings = getAiSettings()
   if (settings.providers.length === 0) return id === 'openai' || id === 'anthropic' || id === 'google'
-  return settings.providers.some((provider) => provider.id === id && provider.enabled)
+  return settings.providers.some((provider) => {
+    if (!provider.enabled) return false
+    return String(provider.id) === String(id) || getProviderType(provider) === String(id)
+  })
 }

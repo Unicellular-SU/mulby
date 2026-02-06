@@ -489,12 +489,14 @@ type AiModel = {
   label: string
   description: string
   icon?: string
+  providerRef?: string
   providerLabel?: string
   params?: AiModelParameters
   capabilities?: AiModelCapability[]
 }
 type AiProviderConfig = {
   id: string
+  type?: string
   label?: string
   enabled: boolean
   apiKey?: string

@@ -17,8 +17,11 @@ import {
 import { countTokensForText, countTokensFromMessages, estimateTokens } from './tokens'
 import { getAllModels, resolveModelId } from './models'
 import { getAiSettings } from './config'
-import { getProviderRegistry, hasProvider, buildProvider } from './providers'
-import { createProviderRegistry } from 'ai'
+import { getProviderRegistry, hasProvider, getProviderType } from './providers'
+import { isOpenAICompatibleProvider, shouldUseChatCompletions } from './providerAdapterCatalog'
+import { createProviderRuntime, resolveImageModelKey, resolveLanguageModelKey } from './providerRuntime'
+import { getProviderMethodAdapter } from './providerMethodAdapters'
+import { buildProviderIdCounts, validateProviderConfig } from '../../shared/ai/providerValidation'
 
 interface StreamCallbacks {
   onChunk?: (chunk: AiMessage) => void
@@ -61,95 +64,100 @@ export class AiService {
       const trimmedMessages = this.applyContextWindow(option.messages, params.contextWindow)
       const providerConfig = this.resolveProviderConfig(option.model)
       const resolved = resolveModelId(option.model)
-      const useOpenAICompatChat = resolved.providerId === 'openai' && shouldUseChatApi(providerConfig?.baseURL)
-
-      if (resolved.providerId === 'anthropic' && this.hasMultimodalContent(trimmedMessages)) {
-        console.log('[AI] call: 使用 Anthropic 原生 API')
-        const anthropicPayload = await this.toAnthropicMessages(trimmedMessages, option.model, providerConfig)
-        const { content, reasoning } = await this.callAnthropicMessages({
-          model: resolved.modelId,
-          messages: anthropicPayload.messages,
-          system: anthropicPayload.system,
-          apiKey: providerConfig?.apiKey,
-          baseURL: providerConfig?.baseURL,
-          params
-        })
-        const usage = normalizeUsage(
-          undefined,
-          countTokensFromMessages(trimmedMessages, option.model),
-          countTokensForText(`${reasoning || ''}${content || ''}`, option.model)
-        )
-        return {
-          role: 'assistant',
-          content,
-          reasoning_content: reasoning || undefined,
-          usage
-        }
-      }
-
-      if (useOpenAICompatChat && tools && shouldUseCompatToolLoop(option.model, providerConfig?.baseURL)) {
-        console.log('[AI] call: 使用 OpenAI 兼容工具调用分支（DeepSeek reasoning 兼容）', {
-          model: option.model,
-          maxToolSteps: option.maxToolSteps ?? 10
-        })
-        const chatMessages = await this.toOpenAIChatMessages(trimmedMessages, option.model, { includeReasoningContent: true })
-        const { content, reasoning, usage } = await this.runOpenAICompatToolLoop({
-          model: resolved.modelId,
-          messages: chatMessages,
-          apiKey: providerConfig?.apiKey,
-          baseURL: providerConfig?.baseURL,
-          params,
-          tools: option.tools || [],
-          maxToolSteps: option.maxToolSteps,
-          toolContext: option.toolContext,
-          allowReasoning: supportsReasoning(option.model)
-        }, undefined, controller.signal)
-
-        return {
-          role: 'assistant',
-          content,
-          reasoning_content: reasoning || undefined,
-          usage: normalizeUsage(
-            usage,
+      const providerType = getProviderType(providerConfig) || resolved.providerId
+      const methodAdapter = getProviderMethodAdapter(providerType)
+      return await methodAdapter.call({
+        hasTools: !!tools,
+        hasMultimodalContent: this.hasMultimodalContent(trimmedMessages),
+        shouldUseCompatToolLoop: shouldUseCompatToolLoop(option.model, providerConfig?.baseURL),
+        executeAnthropicCall: async () => {
+          console.log('[AI] call: 使用 Anthropic 原生 API')
+          const anthropicPayload = await this.toAnthropicMessages(trimmedMessages, option.model, providerConfig)
+          const { content, reasoning } = await this.callAnthropicMessages({
+            model: resolved.modelId,
+            messages: anthropicPayload.messages,
+            system: anthropicPayload.system,
+            apiKey: providerConfig?.apiKey,
+            baseURL: providerConfig?.baseURL,
+            params
+          })
+          const usage = normalizeUsage(
+            undefined,
             countTokensFromMessages(trimmedMessages, option.model),
             countTokensForText(`${reasoning || ''}${content || ''}`, option.model)
           )
+          return {
+            role: 'assistant',
+            content,
+            reasoning_content: reasoning || undefined,
+            usage
+          }
+        },
+        executeCompatToolLoopCall: async () => {
+          console.log('[AI] call: 使用 OpenAI 兼容工具调用分支（DeepSeek reasoning 兼容）', {
+            model: option.model,
+            maxToolSteps: option.maxToolSteps ?? 10
+          })
+          const chatMessages = await this.toOpenAIChatMessages(trimmedMessages, option.model, { includeReasoningContent: true })
+          const { content, reasoning, usage } = await this.runOpenAICompatToolLoop({
+            model: resolved.modelId,
+            messages: chatMessages,
+            apiKey: providerConfig?.apiKey,
+            baseURL: providerConfig?.baseURL,
+            params,
+            tools: option.tools || [],
+            maxToolSteps: option.maxToolSteps,
+            toolContext: option.toolContext,
+            allowReasoning: supportsReasoning(option.model)
+          }, undefined, controller.signal)
+
+          return {
+            role: 'assistant',
+            content,
+            reasoning_content: reasoning || undefined,
+            usage: normalizeUsage(
+              usage,
+              countTokensFromMessages(trimmedMessages, option.model),
+              countTokensForText(`${reasoning || ''}${content || ''}`, option.model)
+            )
+          }
+        },
+        executeSdkCall: async () => {
+          console.log('[AI] call: 使用 Vercel AI SDK generateText', { hasTools: !!tools })
+          const messages = await this.toSdkMessages(trimmedMessages, option.model)
+          const maxSteps = option.maxToolSteps ?? 10
+          const result = await generateText({
+            model: modelKey,
+            messages,
+            abortSignal: controller.signal,
+            tools,
+            stopWhen: tools ? stepCountIs(maxSteps) : undefined,
+            ...params
+          })
+
+          console.log('[AI] call: generateText 完成', {
+            text: result.text?.substring(0, 100),
+            hasToolCalls: !!(result as any).toolCalls,
+            toolCallsCount: (result as any).toolCalls?.length,
+            steps: (result as any).steps?.length,
+            finishReason: result.finishReason
+          })
+
+          const reasoning = supportsReasoning(option.model) ? (result as any).reasoning : undefined
+          const usage = normalizeUsage(
+            extractUsage(result),
+            countTokensFromMessages(trimmedMessages, option.model),
+            countTokensForText(`${reasoning || ''}${result.text || ''}`, option.model)
+          )
+
+          return {
+            role: 'assistant',
+            content: result.text,
+            reasoning_content: reasoning,
+            usage
+          }
         }
-      }
-
-      console.log('[AI] call: 使用 Vercel AI SDK generateText', { hasTools: !!tools })
-      const messages = await this.toSdkMessages(trimmedMessages, option.model)
-      const maxSteps = option.maxToolSteps ?? 10
-      const result = await generateText({
-        model: modelKey,
-        messages,
-        abortSignal: controller.signal,
-        tools,
-        stopWhen: tools ? stepCountIs(maxSteps) : undefined,
-        ...params
       })
-
-      console.log('[AI] call: generateText 完成', {
-        text: result.text?.substring(0, 100),
-        hasToolCalls: !!(result as any).toolCalls,
-        toolCallsCount: (result as any).toolCalls?.length,
-        steps: (result as any).steps?.length,
-        finishReason: result.finishReason
-      })
-
-      const reasoning = supportsReasoning(option.model) ? (result as any).reasoning : undefined
-      const usage = normalizeUsage(
-        extractUsage(result),
-        countTokensFromMessages(trimmedMessages, option.model),
-        countTokensForText(`${reasoning || ''}${result.text || ''}`, option.model)
-      )
-
-      return {
-        role: 'assistant',
-        content: result.text,
-        reasoning_content: reasoning,
-        usage
-      }
     } finally {
       this.controllers.delete(requestId)
     }
@@ -169,184 +177,189 @@ export class AiService {
       const { modelKey } = this.resolveLanguageModel(option.model)
       const params = this.resolveGenerationParams(option, option.model)
       const trimmedMessages = this.applyContextWindow(option.messages, params.contextWindow)
-      const messages = await this.toSdkMessages(trimmedMessages, option.model)
       const providerConfig = this.resolveProviderConfig(option.model)
       const resolved = resolveModelId(option.model)
+      const providerType = getProviderType(providerConfig) || resolved.providerId
+      const methodAdapter = getProviderMethodAdapter(providerType)
+      return await methodAdapter.stream({
+        hasTools: !!tools,
+        hasMultimodalContent: this.hasMultimodalContent(trimmedMessages),
+        shouldUseCompatToolLoop: shouldUseCompatToolLoop(option.model, providerConfig?.baseURL),
+        executeAnthropicStream: async () => {
+          const anthropicPayload = await this.toAnthropicMessages(trimmedMessages, option.model, providerConfig)
+          const { content, reasoning } = await this.streamAnthropicMessages({
+            model: resolved.modelId,
+            messages: anthropicPayload.messages,
+            system: anthropicPayload.system,
+            apiKey: providerConfig?.apiKey,
+            baseURL: providerConfig?.baseURL,
+            params
+          }, callbacks.onChunk, controller.signal)
 
-      if (resolved.providerId === 'anthropic' && this.hasMultimodalContent(trimmedMessages)) {
-        const anthropicPayload = await this.toAnthropicMessages(trimmedMessages, option.model, providerConfig)
-        const { content, reasoning } = await this.streamAnthropicMessages({
-          model: resolved.modelId,
-          messages: anthropicPayload.messages,
-          system: anthropicPayload.system,
-          apiKey: providerConfig?.apiKey,
-          baseURL: providerConfig?.baseURL,
-          params
-        }, callbacks.onChunk, controller.signal)
-
-        const usage = normalizeUsage(
-          undefined,
-          countTokensFromMessages(trimmedMessages, option.model),
-          countTokensForText(`${reasoning || ''}${content || ''}`, option.model)
-        )
-        const finalMessage: AiMessage = {
-          role: 'assistant',
-          content,
-          reasoning_content: reasoning || undefined,
-          usage
-        }
-        callbacks.onEnd?.(finalMessage)
-        return finalMessage
-      }
-
-      const useOpenAICompatChat = resolved.providerId === 'openai' && shouldUseChatApi(providerConfig?.baseURL)
-      if (useOpenAICompatChat && !tools) {
-        const { content, reasoning } = await this.streamOpenAICompatChat({
-          model: resolved.modelId,
-          messages: await this.toOpenAIChatMessages(option.messages, option.model),
-          apiKey: providerConfig?.apiKey,
-          baseURL: providerConfig?.baseURL,
-          params,
-          tools: option.tools
-        }, callbacks.onChunk, controller.signal)
-
-        const usage = normalizeUsage(
-          undefined,
-          countTokensFromMessages(trimmedMessages, option.model),
-          countTokensForText(`${reasoning || ''}${content || ''}`, option.model)
-        )
-        const finalMessage: AiMessage = {
-          role: 'assistant',
-          content,
-          reasoning_content: reasoning || undefined,
-          usage
-        }
-        callbacks.onEnd?.(finalMessage)
-        return finalMessage
-      }
-      if (useOpenAICompatChat && tools && shouldUseCompatToolLoop(option.model, providerConfig?.baseURL)) {
-        console.log('[AI] stream: 使用 OpenAI 兼容工具调用分支（DeepSeek reasoning 兼容）', {
-          model: option.model,
-          maxToolSteps: option.maxToolSteps ?? 10
-        })
-        const chatMessages = await this.toOpenAIChatMessages(trimmedMessages, option.model, { includeReasoningContent: true })
-        const { content, reasoning, usage } = await this.runOpenAICompatToolLoop({
-          model: resolved.modelId,
-          messages: chatMessages,
-          apiKey: providerConfig?.apiKey,
-          baseURL: providerConfig?.baseURL,
-          params,
-          tools: option.tools || [],
-          maxToolSteps: option.maxToolSteps,
-          toolContext: option.toolContext,
-          allowReasoning: supportsReasoning(option.model)
-        }, callbacks.onChunk, controller.signal)
-
-        const finalMessage: AiMessage = {
-          role: 'assistant',
-          content,
-          reasoning_content: supportsReasoning(option.model) ? reasoning || undefined : undefined,
-          usage: normalizeUsage(
-            usage,
+          const usage = normalizeUsage(
+            undefined,
             countTokensFromMessages(trimmedMessages, option.model),
             countTokensForText(`${reasoning || ''}${content || ''}`, option.model)
           )
-        }
-        callbacks.onEnd?.(finalMessage)
-        return finalMessage
-      }
-      if (useOpenAICompatChat && tools) {
-        // 兼容 chat/completions 流式分支当前仅解析文本，不处理 tool_calls。
-        // 启用工具时回退到 AI SDK 的 streamText，以支持工具执行与多步调用。
-        console.log('[AI] stream: 检测到工具调用，使用 AI SDK streamText 分支', {
-          model: option.model,
-          maxToolSteps: option.maxToolSteps ?? 10
-        })
-      }
-
-      const result = await streamText({
-        model: modelKey,
-        messages,
-        abortSignal: controller.signal,
-        tools,
-        stopWhen: tools ? stepCountIs(option.maxToolSteps ?? 10) : undefined,
-        ...params
-      })
-
-      let fullText = ''
-      let reasoningText = ''
-      const allowReasoning = supportsReasoning(option.model)
-
-      if ((result as any).fullStream) {
-        for await (const part of (result as any).fullStream) {
-          console.log('[AI] stream part:', part?.type, part)
-          if (part?.type === 'text-delta') {
-            const textDelta = typeof (part as any).delta === 'string'
-              ? (part as any).delta
-              : (typeof (part as any).text === 'string' ? (part as any).text : '')
-            if (textDelta) {
-              fullText += textDelta
-              callbacks.onChunk?.({ role: 'assistant', content: textDelta })
-            }
-          } else if (part?.type === 'reasoning-delta') {
-            const reasoningDelta = typeof (part as any).delta === 'string'
-              ? (part as any).delta
-              : (typeof (part as any).text === 'string' ? (part as any).text : '')
-            if (reasoningDelta && allowReasoning) {
-              reasoningText += reasoningDelta
-              callbacks.onChunk?.({ role: 'assistant', reasoning_content: reasoningDelta })
-            }
-          } else if (part?.type === 'tool-call') {
-            console.log('[AI] tool-call detected:', part)
-            callbacks.onChunk?.({
-              role: 'assistant',
-              tool_call: {
-                id: part.toolCallId,
-                name: part.toolName,
-                args: (part as any).input ?? (part as any).args
-              }
-            } as any)
-          } else if (part?.type === 'tool-result') {
-            console.log('[AI] tool-result detected:', part)
-            callbacks.onChunk?.({
-              role: 'assistant',
-              tool_result: {
-                id: part.toolCallId,
-                name: part.toolName,
-                result: (part as any).result ?? (part as any).output
-              }
-            } as any)
+          const finalMessage: AiMessage = {
+            role: 'assistant',
+            content,
+            reasoning_content: reasoning || undefined,
+            usage
           }
+          callbacks.onEnd?.(finalMessage)
+          return finalMessage
+        },
+        executeCompatChatStream: async () => {
+          const { content, reasoning } = await this.streamOpenAICompatChat({
+            model: resolved.modelId,
+            messages: await this.toOpenAIChatMessages(option.messages, option.model),
+            apiKey: providerConfig?.apiKey,
+            baseURL: providerConfig?.baseURL,
+            params,
+            tools: option.tools
+          }, callbacks.onChunk, controller.signal)
+
+          const usage = normalizeUsage(
+            undefined,
+            countTokensFromMessages(trimmedMessages, option.model),
+            countTokensForText(`${reasoning || ''}${content || ''}`, option.model)
+          )
+          const finalMessage: AiMessage = {
+            role: 'assistant',
+            content,
+            reasoning_content: reasoning || undefined,
+            usage
+          }
+          callbacks.onEnd?.(finalMessage)
+          return finalMessage
+        },
+        executeCompatToolLoopStream: async () => {
+          console.log('[AI] stream: 使用 OpenAI 兼容工具调用分支（DeepSeek reasoning 兼容）', {
+            model: option.model,
+            maxToolSteps: option.maxToolSteps ?? 10
+          })
+          const chatMessages = await this.toOpenAIChatMessages(trimmedMessages, option.model, { includeReasoningContent: true })
+          const { content, reasoning, usage } = await this.runOpenAICompatToolLoop({
+            model: resolved.modelId,
+            messages: chatMessages,
+            apiKey: providerConfig?.apiKey,
+            baseURL: providerConfig?.baseURL,
+            params,
+            tools: option.tools || [],
+            maxToolSteps: option.maxToolSteps,
+            toolContext: option.toolContext,
+            allowReasoning: supportsReasoning(option.model)
+          }, callbacks.onChunk, controller.signal)
+
+          const finalMessage: AiMessage = {
+            role: 'assistant',
+            content,
+            reasoning_content: supportsReasoning(option.model) ? reasoning || undefined : undefined,
+            usage: normalizeUsage(
+              usage,
+              countTokensFromMessages(trimmedMessages, option.model),
+              countTokensForText(`${reasoning || ''}${content || ''}`, option.model)
+            )
+          }
+          callbacks.onEnd?.(finalMessage)
+          return finalMessage
+        },
+        executeSdkStream: async () => {
+          if (isOpenAICompatibleProvider(providerType) && shouldUseChatCompletions(providerType, providerConfig?.baseURL) && tools) {
+            // 兼容 chat/completions 流式分支当前仅解析文本，不处理 tool_calls。
+            // 启用工具时回退到 AI SDK 的 streamText，以支持工具执行与多步调用。
+            console.log('[AI] stream: 检测到工具调用，使用 AI SDK streamText 分支', {
+              model: option.model,
+              maxToolSteps: option.maxToolSteps ?? 10
+            })
+          }
+          const messages = await this.toSdkMessages(trimmedMessages, option.model)
+          const result = await streamText({
+            model: modelKey,
+            messages,
+            abortSignal: controller.signal,
+            tools,
+            stopWhen: tools ? stepCountIs(option.maxToolSteps ?? 10) : undefined,
+            ...params
+          })
+
+          let fullText = ''
+          let reasoningText = ''
+          const allowReasoning = supportsReasoning(option.model)
+
+          if ((result as any).fullStream) {
+            for await (const part of (result as any).fullStream) {
+              console.log('[AI] stream part:', part?.type, part)
+              if (part?.type === 'text-delta') {
+                const textDelta = typeof (part as any).delta === 'string'
+                  ? (part as any).delta
+                  : (typeof (part as any).text === 'string' ? (part as any).text : '')
+                if (textDelta) {
+                  fullText += textDelta
+                  callbacks.onChunk?.({ role: 'assistant', content: textDelta })
+                }
+              } else if (part?.type === 'reasoning-delta') {
+                const reasoningDelta = typeof (part as any).delta === 'string'
+                  ? (part as any).delta
+                  : (typeof (part as any).text === 'string' ? (part as any).text : '')
+                if (reasoningDelta && allowReasoning) {
+                  reasoningText += reasoningDelta
+                  callbacks.onChunk?.({ role: 'assistant', reasoning_content: reasoningDelta })
+                }
+              } else if (part?.type === 'tool-call') {
+                console.log('[AI] tool-call detected:', part)
+                callbacks.onChunk?.({
+                  role: 'assistant',
+                  tool_call: {
+                    id: part.toolCallId,
+                    name: part.toolName,
+                    args: (part as any).input ?? (part as any).args
+                  }
+                } as any)
+              } else if (part?.type === 'tool-result') {
+                console.log('[AI] tool-result detected:', part)
+                callbacks.onChunk?.({
+                  role: 'assistant',
+                  tool_result: {
+                    id: part.toolCallId,
+                    name: part.toolName,
+                    result: (part as any).result ?? (part as any).output
+                  }
+                } as any)
+              }
+            }
+          } else {
+            for await (const chunk of result.textStream) {
+              if (!chunk) continue
+              fullText += chunk
+              callbacks.onChunk?.({ role: 'assistant', content: chunk })
+            }
+          }
+
+          if (!fullText && (result as any).text) {
+            fullText = await (result as any).text
+          }
+          if (!reasoningText && (result as any).reasoningText && allowReasoning) {
+            reasoningText = (await (result as any).reasoningText) || ''
+          }
+
+          const usage = normalizeUsage(
+            extractUsage(result),
+            countTokensFromMessages(trimmedMessages, option.model),
+            countTokensForText(`${reasoningText || ''}${fullText || ''}`, option.model)
+          )
+
+          const finalMessage: AiMessage = {
+            role: 'assistant',
+            content: fullText || '',
+            reasoning_content: allowReasoning ? reasoningText || undefined : undefined,
+            usage
+          }
+          callbacks.onEnd?.(finalMessage)
+          return finalMessage
         }
-      } else {
-        for await (const chunk of result.textStream) {
-          if (!chunk) continue
-          fullText += chunk
-          callbacks.onChunk?.({ role: 'assistant', content: chunk })
-        }
-      }
-
-      if (!fullText && (result as any).text) {
-        fullText = await (result as any).text
-      }
-      if (!reasoningText && (result as any).reasoningText && allowReasoning) {
-        reasoningText = (await (result as any).reasoningText) || ''
-      }
-
-      const usage = normalizeUsage(
-        extractUsage(result),
-        countTokensFromMessages(trimmedMessages, option.model),
-        countTokensForText(`${reasoningText || ''}${fullText || ''}`, option.model)
-      )
-
-      const finalMessage: AiMessage = {
-        role: 'assistant',
-        content: fullText || '',
-        reasoning_content: allowReasoning ? reasoningText || undefined : undefined,
-        usage
-      }
-      callbacks.onEnd?.(finalMessage)
-      return finalMessage
+      })
     } catch (err) {
       const error = err instanceof Error ? err : new Error('AI stream failed')
       callbacks.onError?.(error)
@@ -387,49 +400,83 @@ export class AiService {
   }
 
   async generateImages(input: { prompt: string; model: string; size?: string; count?: number }): Promise<{ images: string[]; tokens: AiTokenBreakdown }> {
-    const { modelKey, model } = this.resolveImageModel(input.model)
-    console.info('[AI] generateImages:start', {
-      modelInput: input.model,
-      resolvedModel: model,
-      size: input.size,
-      count: input.count
-    })
-    const result = await generateImage({
-      model: modelKey,
-      prompt: input.prompt,
-      size: input.size,
-      n: input.count
-    } as any)
+    const providerType = this.resolveProviderTypeForModel(input.model)
+    const methodAdapter = getProviderMethodAdapter(providerType)
+    return await methodAdapter.generateImages({
+      executeSdkGenerate: async () => {
+        const { modelKey, model } = this.resolveImageModel(input.model)
+        console.info('[AI] generateImages:start', {
+          modelInput: input.model,
+          resolvedModel: model,
+          size: input.size,
+          count: input.count
+        })
+        const result = await generateImage({
+          model: modelKey,
+          prompt: input.prompt,
+          size: input.size,
+          n: input.count
+        } as any)
 
-    const images = (result as any).images?.map((img: any) => img.base64) || []
-    const tokens = await this.estimateTokens({ model: input.model, messages: [] })
-    return { images, tokens }
+        const images = (result as any).images?.map((img: any) => img.base64) || []
+        const tokens = await this.estimateTokens({ model: input.model, messages: [] })
+        return { images, tokens }
+      },
+      executeSdkEdit: async () => {
+        throw new Error('Unsupported path')
+      }
+    })
   }
 
   async editImage(input: { imageAttachmentId: string; prompt: string; model: string }): Promise<{ images: string[]; tokens: AiTokenBreakdown }> {
-    const { modelKey, model } = this.resolveImageModel(input.model)
-    console.info('[AI] editImage:start', {
-      modelInput: input.model,
-      resolvedModel: model,
-      imageAttachmentId: input.imageAttachmentId
-    })
-    const image = await attachmentStore.read(input.imageAttachmentId)
+    const providerType = this.resolveProviderTypeForModel(input.model)
+    const methodAdapter = getProviderMethodAdapter(providerType)
+    return await methodAdapter.editImage({
+      executeSdkGenerate: async () => {
+        throw new Error('Unsupported path')
+      },
+      executeSdkEdit: async () => {
+        const { modelKey, model } = this.resolveImageModel(input.model)
+        console.info('[AI] editImage:start', {
+          modelInput: input.model,
+          resolvedModel: model,
+          imageAttachmentId: input.imageAttachmentId
+        })
+        const image = await attachmentStore.read(input.imageAttachmentId)
 
-    const result = await generateImage({
-      model: modelKey,
-      prompt: {
-        text: input.prompt,
-        images: [image]
+        const result = await generateImage({
+          model: modelKey,
+          prompt: {
+            text: input.prompt,
+            images: [image]
+          }
+        } as any)
+
+        const images = (result as any).images?.map((img: any) => img.base64) || []
+        const tokens = await this.estimateTokens({ model: input.model, messages: [] })
+        return { images, tokens }
       }
-    } as any)
-
-    const images = (result as any).images?.map((img: any) => img.base64) || []
-    const tokens = await this.estimateTokens({ model: input.model, messages: [] })
-    return { images, tokens }
+    })
   }
 
   async testConnection(input?: { model?: string; providerId?: string; apiKey?: string; baseURL?: string }): Promise<{ success: boolean; message?: string }> {
     try {
+      if (input?.providerId) {
+        const provider = this.resolveProviderById(input.providerId)
+        const providerType = getProviderType(provider) || String(input.providerId)
+        const mergedProvider: AiProviderConfig = {
+          id: String(input.providerId),
+          type: providerType,
+          enabled: true,
+          apiKey: input.apiKey ?? provider?.apiKey,
+          baseURL: input.baseURL ?? provider?.baseURL,
+          headers: provider?.headers
+        }
+        const validation = validateProviderConfig(mergedProvider, buildProviderIdCounts(getAiSettings().providers))
+        if (!validation.canTestConnection) {
+          return { success: false, message: validation.testConnectionHint || 'Provider 配置不完整' }
+        }
+      }
       const { modelKey } = this.resolveTestModel(input)
       const params = this.resolveGenerationParams({ model: input?.model, messages: [] }, input?.model)
       console.info('[AI] testConnection:start', {
@@ -466,14 +513,40 @@ export class AiService {
   ): Promise<{ success: boolean; message?: string; reasoning?: string }> {
     try {
       const allowReasoning = supportsReasoning(input?.model)
-      const resolvedInput = this.resolveTestInput(input)
+      const resolvedInput = this.resolveTestInput(input) || {}
+      const resolvedProvider = this.resolveProviderById(resolvedInput?.providerId)
+      const resolvedProviderType = getProviderType(
+        resolvedProvider || {
+          id: String(resolvedInput?.providerId || ''),
+          type: String(resolvedInput?.providerId || ''),
+          enabled: true,
+          baseURL: resolvedInput?.baseURL,
+          apiKey: resolvedInput?.apiKey
+        }
+      )
+      if (resolvedInput?.providerId) {
+        const validation = validateProviderConfig(
+          {
+            id: String(resolvedInput.providerId),
+            type: resolvedProviderType,
+            enabled: true,
+            apiKey: resolvedInput.apiKey ?? resolvedProvider?.apiKey,
+            baseURL: resolvedInput.baseURL ?? resolvedProvider?.baseURL,
+            headers: resolvedProvider?.headers
+          },
+          buildProviderIdCounts(getAiSettings().providers)
+        )
+        if (!validation.canTestConnection) {
+          return { success: false, message: validation.testConnectionHint || 'Provider 配置不完整' }
+        }
+      }
       console.info('[AI] testConnectionStream:start', {
         providerId: resolvedInput?.providerId,
         model: resolvedInput?.model,
         baseURL: resolvedInput?.baseURL
       })
 
-      if (resolvedInput?.providerId === 'openai' && shouldUseChatApi(resolvedInput?.baseURL)) {
+      if (isOpenAICompatibleProvider(resolvedProviderType) && shouldUseChatCompletions(resolvedProviderType, resolvedInput?.baseURL)) {
         const { content, reasoning } = await this.streamOpenAICompat(resolvedInput, (chunk) => {
           if (chunk.type === 'reasoning' && !allowReasoning) return
           onChunk(chunk)
@@ -1004,24 +1077,25 @@ export class AiService {
       throw new Error('Model is required for provider test')
     }
 
+    const configured = this.resolveProviderById(input.providerId)
+    const resolvedType = getProviderType(configured) || String(input.providerId)
     const providerConfig: AiProviderConfig = {
       id: input.providerId,
+      type: resolvedType,
       enabled: true,
-      apiKey: input.apiKey,
-      baseURL: input.baseURL
+      apiKey: input.apiKey ?? configured?.apiKey,
+      baseURL: input.baseURL ?? configured?.baseURL,
+      headers: configured?.headers
     }
-
-    const provider = buildProvider(providerConfig)
-    if (!provider) {
+    const runtime = createProviderRuntime(providerConfig, resolvedType)
+    if (!runtime.provider) {
       throw new Error(`Provider not supported: ${input.providerId}`)
     }
-
-    if (input.providerId === 'openai' && shouldUseChatApi(input.baseURL) && (provider as any).chat) {
-      return { modelKey: (provider as any).chat(modelId) }
+    const modelKey = resolveLanguageModelKey(runtime, modelId)
+    if (!modelKey) {
+      throw new Error(`Provider model resolver failed: ${input.providerId}`)
     }
-
-    const registry = createProviderRegistry({ [input.providerId]: provider })
-    return { modelKey: registry.languageModel(`${input.providerId}:${modelId}`) }
+    return { modelKey }
   }
 
   private resolveTestInput(input?: { model?: string; providerId?: string; apiKey?: string; baseURL?: string }) {
@@ -1179,97 +1253,112 @@ export class AiService {
   }
 
   async fetchModels(input: { providerId: string; baseURL?: string; apiKey?: string }): Promise<{ models: AiModel[]; message?: string }> {
-    if (input.providerId !== 'openai') {
-      return { models: [], message: '当前仅支持 OpenAI 兼容接口拉取模型列表' }
-    }
-
-    const baseURL = (input.baseURL || 'https://api.openai.com/v1').replace(/\/+$/, '')
-    const url = `${baseURL.replace(/\/$/, '')}/models`
-
-    try {
-      console.info('[AI] fetchModels:start', { providerId: input.providerId, url })
-      const res = await fetch(url, {
-        headers: input.apiKey ? { Authorization: `Bearer ${input.apiKey}` } : undefined
-      })
-      if (!res.ok) {
-        const body = await res.text().catch(() => '')
-        console.warn('[AI] fetchModels:fail', { status: res.status, statusText: res.statusText, body })
-        return { models: [], message: `拉取失败：${res.status} ${res.statusText}${body ? ` - ${body}` : ''}` }
+    const configuredProvider = this.resolveProviderById(input.providerId)
+    const providerType = getProviderType(
+      configuredProvider || {
+        id: input.providerId,
+        type: input.providerId,
+        enabled: true,
+        baseURL: input.baseURL,
+        apiKey: input.apiKey
       }
-      const data = await res.json() as { data?: { id: string }[] }
-      const models = (data.data || []).map((item) => ({
-        id: `${input.providerId}:${item.id}`,
-        label: item.id,
-        description: ''
-      }))
-      console.info('[AI] fetchModels:success', { count: models.length })
-      return { models }
-    } catch (err) {
-      const message = err instanceof Error ? err.message : '拉取模型失败'
-      console.error('[AI] fetchModels:error', { error: message })
-      return { models: [], message }
+    )
+    const validation = validateProviderConfig(
+      {
+        id: String(configuredProvider?.id || input.providerId),
+        type: providerType,
+        enabled: true,
+        apiKey: input.apiKey || configuredProvider?.apiKey,
+        baseURL: input.baseURL || configuredProvider?.baseURL,
+        headers: configuredProvider?.headers
+      },
+      buildProviderIdCounts(getAiSettings().providers)
+    )
+    if (!validation.canFetchModels) {
+      return { models: [], message: validation.fetchModelsHint || 'Provider 配置不完整或不支持拉取模型' }
     }
+    const methodAdapter = getProviderMethodAdapter(providerType)
+    const providerId = String(configuredProvider?.id || input.providerId)
+    const baseURL = (input.baseURL || configuredProvider?.baseURL || 'https://api.openai.com/v1').replace(/\/+$/, '')
+    return await methodAdapter.fetchModels({
+      executeOpenAICompatFetch: async (endpoint) => {
+        const url = `${baseURL.replace(/\/$/, '')}${endpoint}`
+        try {
+          const apiKey = input.apiKey || configuredProvider?.apiKey
+          console.info('[AI] fetchModels:start', { providerId, providerType, url })
+          const res = await fetch(url, {
+            headers: apiKey ? { Authorization: `Bearer ${apiKey}` } : undefined
+          })
+          if (!res.ok) {
+            const body = await res.text().catch(() => '')
+            console.warn('[AI] fetchModels:fail', { status: res.status, statusText: res.statusText, body })
+            return { models: [], message: `拉取失败：${res.status} ${res.statusText}${body ? ` - ${body}` : ''}` }
+          }
+          const data = await res.json() as { data?: { id: string }[] }
+          const models = (data.data || []).map((item) => ({
+            id: `${providerId}:${item.id}`,
+            label: item.id,
+            description: '',
+            providerRef: providerId
+          }))
+          console.info('[AI] fetchModels:success', { count: models.length })
+          return { models }
+        } catch (err) {
+          const message = err instanceof Error ? err.message : '拉取模型失败'
+          console.error('[AI] fetchModels:error', { error: message })
+          return { models: [], message }
+        }
+      }
+    })
   }
 
   private resolveLanguageModel(modelId?: string): { model: string; modelKey: any } {
     const { providerId, modelId: resolvedId } = resolveModelId(modelId)
-    if (!hasProvider(providerId as any)) {
+    if (!hasProvider(providerId)) {
       throw new Error(`AI provider not available: ${providerId}`)
     }
     const providerConfig = this.resolveProviderConfig(modelId, providerId)
-    if (providerId === 'openai' && shouldUseChatApi(providerConfig?.baseURL)) {
-      const provider = buildProvider({
-        id: providerId,
-        enabled: true,
-        apiKey: providerConfig?.apiKey,
-        baseURL: providerConfig?.baseURL,
-        headers: providerConfig?.headers
-      })
-      if (provider && (provider as any).chat) {
-        return { model: `${providerId}:${resolvedId}`, modelKey: (provider as any).chat(resolvedId) }
-      }
+    const runtime = createProviderRuntime(providerConfig, providerId)
+    const providerType = runtime.type
+    const resolvedKey = resolveLanguageModelKey(runtime, resolvedId)
+    if (resolvedKey) {
+      return { model: `${providerType}:${resolvedId}`, modelKey: resolvedKey }
     }
 
     const registry = getProviderRegistry()
-    const modelKey = registry.languageModel(`${providerId}:${resolvedId}`)
-    return { model: `${providerId}:${resolvedId}`, modelKey }
+    const modelKey = registry.languageModel(`${providerType}:${resolvedId}`)
+    return { model: `${providerType}:${resolvedId}`, modelKey }
   }
 
   private resolveImageModel(modelId?: string): { model: string; modelKey: any } {
     const { providerId, modelId: resolvedId } = resolveModelId(modelId)
-    if (!hasProvider(providerId as any)) {
+    if (!hasProvider(providerId)) {
       throw new Error(`AI provider not available: ${providerId}`)
     }
 
     const providerConfig = this.resolveProviderConfig(modelId, providerId)
-    const provider = buildProvider({
-      id: providerId,
-      enabled: true,
-      apiKey: providerConfig?.apiKey,
-      baseURL: providerConfig?.baseURL,
-      headers: providerConfig?.headers
-    })
+    const runtime = createProviderRuntime(providerConfig, providerId)
+    const providerType = runtime.type
     console.info('[AI] resolveImageModel', {
       modelInput: modelId,
-      resolvedModel: `${providerId}:${resolvedId}`,
-      providerId,
+      resolvedModel: `${providerType}:${resolvedId}`,
+      providerId: providerType,
       providerLabel: providerConfig?.label || providerConfig?.id,
       baseURL: providerConfig?.baseURL
     })
-    if (provider) {
-      const imageModelFactory = (provider as any).imageModel || (provider as any).image
-      if (typeof imageModelFactory === 'function') {
-        return { model: `${providerId}:${resolvedId}`, modelKey: imageModelFactory.call(provider, resolvedId) }
-      }
+    const resolvedKey = resolveImageModelKey(runtime, resolvedId)
+    if (resolvedKey) {
+      return { model: `${providerType}:${resolvedId}`, modelKey: resolvedKey }
     }
 
     const registry = getProviderRegistry()
-    const modelKey = registry.imageModel(`${providerId}:${resolvedId}`)
-    return { model: `${providerId}:${resolvedId}`, modelKey }
+    const modelKey = registry.imageModel(`${providerType}:${resolvedId}`)
+    return { model: `${providerType}:${resolvedId}`, modelKey }
   }
 
   private async toSdkMessages(messages: AiMessage[], modelId?: string) {
     const providerConfig = this.resolveProviderConfig(modelId)
+    const providerType = getProviderType(providerConfig)
     const results: any[] = []
     for (const message of messages) {
       if (typeof message.content === 'string' || message.content === undefined) {
@@ -1288,7 +1377,7 @@ export class AiService {
           }
           const image = await attachmentStore.read(part.attachmentId)
           let mediaType = part.mimeType
-          if (providerConfig?.id === 'anthropic' && mediaType === 'image/jpg') {
+          if (providerType === 'anthropic' && mediaType === 'image/jpg') {
             mediaType = 'image/jpeg'
           }
           parts.push({ type: 'image', image, mediaType })
@@ -1308,7 +1397,7 @@ export class AiService {
                 purpose: this.getUploadPurpose(modelId)
               }, providerConfig)
               if (remote) {
-                if (providerConfig?.id === 'openai') {
+                if (providerType === 'openai') {
                   parts.push({
                     type: 'file',
                     data: `fileid://${remote.fileId}`,
@@ -1689,7 +1778,9 @@ export class AiService {
     if (matches.length === 1) return matches[0]
     if (matches.length > 0) return matches[0]
     const byLabel = settings.providers.find((provider) => (provider.label || provider.id) === providerId)
-    return byLabel
+    if (byLabel) return byLabel
+    const byType = settings.providers.find((provider) => getProviderType(provider) === String(providerId))
+    return byType
   }
 
   private createRequestId(): string {
@@ -1723,17 +1814,29 @@ export class AiService {
     return settings.models?.find((model) => model.id === modelId)
   }
 
+  private resolveProviderTypeForModel(modelId?: string): string {
+    const resolved = resolveModelId(modelId)
+    const providerConfig = this.resolveProviderConfig(modelId, resolved.providerId)
+    return getProviderType(providerConfig) || resolved.providerId
+  }
+
   private resolveProviderConfig(modelId?: string, providerIdOverride?: string): AiProviderConfig | undefined {
     const settings = getAiSettings()
     if (!settings.providers || settings.providers.length === 0) return undefined
     const modelConfig = this.resolveModelConfig(modelId)
+    if (modelConfig?.providerRef) {
+      const byRef = settings.providers.find((provider) => String(provider.id) === String(modelConfig.providerRef))
+      if (byRef) return byRef
+    }
     if (modelConfig?.providerLabel) {
       const match = settings.providers.find((provider) => (provider.label || provider.id) === modelConfig.providerLabel)
       if (match) return match
     }
     const providerId = providerIdOverride || (modelId?.includes(':') ? modelId.split(':', 2)[0] : undefined)
     if (providerId) {
-      const matches = settings.providers.filter((provider) => String(provider.id) === String(providerId))
+      const matches = settings.providers.filter((provider) =>
+        String(provider.id) === String(providerId) || getProviderType(provider) === String(providerId)
+      )
       if (matches.length === 1) return matches[0]
       if (matches.length > 1 && modelId) {
         const byDefaultModel = matches.find((provider) => provider.defaultModel === modelId)
@@ -1787,11 +1890,6 @@ function normalizeModelParams(params: AiModelParameters): AiModelParameters {
   if (params.stopSequences) normalized.stopSequences = params.stopSequences.filter((item) => item && item.trim().length > 0)
   if (params.seed !== undefined) normalized.seed = Math.floor(params.seed)
   return normalized
-}
-
-function shouldUseChatApi(baseURL?: string): boolean {
-  if (!baseURL) return false
-  return !baseURL.includes('api.openai.com')
 }
 
 function shouldUseCompatToolLoop(modelId?: string, baseURL?: string): boolean {

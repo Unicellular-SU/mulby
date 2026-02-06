@@ -256,10 +256,11 @@ type AiModelParameters = {
   stopSequences?: string[];
   seed?: number;
 };
-type AiModel = { id: string; label: string; description: string; icon?: string; providerLabel?: string; params?: AiModelParameters };
+type AiModel = { id: string; label: string; description: string; icon?: string; providerRef?: string; providerLabel?: string; params?: AiModelParameters };
 type AiSettings = { providers: AiProviderConfig[]; models?: AiModel[]; defaultParams?: AiModelParameters };
 type AiProviderConfig = {
   id: string;
+  type?: string;
   label?: string;
   enabled: boolean;
   apiKey?: string;
