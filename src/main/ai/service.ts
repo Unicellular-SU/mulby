@@ -580,6 +580,7 @@ export class AiService {
         const declaredProviderType = getProviderType(provider) || String(input.providerId)
         const routedProviderType = resolveEndpointRoutedProviderType({
           providerType: declaredProviderType,
+          provider,
           model: this.resolveModelConfig(input.model)
         })
         const mergedProvider: AiProviderConfig = {
@@ -654,6 +655,7 @@ export class AiService {
       )
       const resolvedProviderType = resolveEndpointRoutedProviderType({
         providerType: declaredProviderType,
+        provider: resolvedProvider,
         model: this.resolveModelConfig(resolvedInput?.model)
       })
       if (resolvedInput?.providerId) {
@@ -1231,12 +1233,12 @@ export class AiService {
       baseURL: input.baseURL ?? configured?.baseURL,
       apiVersion: configured?.apiVersion,
       anthropicBaseURL: configured?.anthropicBaseURL,
-      geminiBaseURL: configured?.geminiBaseURL,
       headers: configured?.headers
     }
     const resolvedModelConfig = this.resolveModelConfig(input.model)
     const routedType = resolveEndpointRoutedProviderType({
       providerType: resolvedType,
+      provider: declaredProvider,
       model: resolvedModelConfig
     })
     const providerConfig = buildEndpointRoutedProviderConfig(declaredProvider, routedType)
@@ -2059,6 +2061,7 @@ export class AiService {
     const modelConfig = this.resolveModelConfig(modelId)
     const providerType = resolveEndpointRoutedProviderType({
       providerType: declaredProviderType,
+      provider: providerConfig,
       model: modelConfig
     })
     return {

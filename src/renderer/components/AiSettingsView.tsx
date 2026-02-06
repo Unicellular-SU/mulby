@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react'
 import type { AiEndpointType, AiModel, AiModelCapability, AiModelParameters, AiModelType, AiProviderConfig, AiSettings } from '../../shared/types/ai'
 import { BUILTIN_PROVIDER_TYPES, inferProviderType } from '../../shared/ai/providerType'
+import { isEndpointRoutedProviderType, supportsProviderEndpointRouting } from '../../shared/ai/providerEndpointRouting'
 import { buildProviderIdCounts, validateProviderConfig } from '../../shared/ai/providerValidation'
 import { getProviderDefaultBaseURL } from '../../shared/ai/providerDefaults'
 import { getProviderPreset } from '../../shared/ai/providerPresets'
-import { isSystemDefaultProviderId } from '../../shared/ai/systemProviders'
+import { getSystemDefaultProviderById, isSystemDefaultProviderId } from '../../shared/ai/systemProviders'
 import SliderWithTicks from './SliderWithTicks'
 
 const PROVIDER_TYPE_OPTIONS = [...BUILTIN_PROVIDER_TYPES] as string[]
@@ -22,11 +23,6 @@ const PROVIDER_TYPE_LABELS: Record<string, string> = {
   'openai-compatible': 'OpenAI Compatible'
 }
 const ENDPOINT_TYPE_OPTIONS: AiEndpointType[] = ['openai', 'openai-response', 'anthropic', 'gemini', 'image-generation', 'jina-rerank']
-
-function isEndpointRoutedProviderType(providerType?: string): boolean {
-  const normalized = String(providerType || '').trim().toLowerCase()
-  return normalized === 'new-api' || normalized === 'cherryin'
-}
 
 function getProviderTypeOptions(currentType?: string): string[] {
   const normalized = String(currentType || '').trim().toLowerCase()
@@ -78,8 +74,7 @@ export default function AiSettingsView({ onBack }: AiSettingsViewProps) {
     apiKey: '',
     baseURL: initialProviderPreset.defaultBaseURL || '',
     apiVersion: '',
-    anthropicBaseURL: '',
-    geminiBaseURL: ''
+    anthropicBaseURL: ''
   })
   const [newModel, setNewModel] = useState<AiModel>({
     id: '',
@@ -141,6 +136,9 @@ export default function AiSettingsView({ onBack }: AiSettingsViewProps) {
   }
 
   const getProviderTypeLabel = (provider: AiProviderConfig) => inferProviderType(provider)
+  const getDefaultAnthropicBaseURL = (providerId?: string) => {
+    return getSystemDefaultProviderById(providerId)?.anthropicBaseURL || ''
+  }
 
   const modelBelongsToProvider = (model: AiModel, provider: AiProviderConfig) => {
     if (model.providerRef) return String(model.providerRef) === String(provider.id)
@@ -176,11 +174,13 @@ export default function AiSettingsView({ onBack }: AiSettingsViewProps) {
   const selectedProvider = (aiDraft?.providers || [])[selectedProviderIndex] || null
   const selectedProviderIsSystemDefault = selectedProvider ? isSystemDefaultProviderId(String(selectedProvider.id)) : false
   const selectedProviderType = selectedProvider ? getProviderTypeLabel(selectedProvider) : ''
-  const selectedProviderSupportsEndpointRouting = isEndpointRoutedProviderType(selectedProviderType)
+  const selectedProviderSupportsEndpointRouting = selectedProvider ? supportsProviderEndpointRouting(selectedProvider) : false
   const selectedProviderPreset = getProviderPreset(selectedProviderType || undefined)
   const selectedProviderDefaultBaseURL = selectedProviderPreset.defaultBaseURL || getProviderDefaultBaseURL(selectedProviderType)
+  const selectedProviderDefaultAnthropicBaseURL = selectedProvider ? getDefaultAnthropicBaseURL(String(selectedProvider.id)) : ''
   const newProviderPreset = getProviderPreset(newProvider)
   const newProviderDefaultBaseURL = newProviderPreset.defaultBaseURL || getProviderDefaultBaseURL(newProvider)
+  const newProviderDefaultAnthropicBaseURL = getDefaultAnthropicBaseURL(String(newProvider.id || newProviderPreset.defaultId))
   const providerIdCounts = buildProviderIdCounts(aiDraft?.providers || [])
   const selectedProviderValidation = validateProviderConfig(selectedProvider, providerIdCounts)
   const hasProviderBlockingIssues = (aiDraft?.providers || []).some((provider) => {
@@ -191,8 +191,7 @@ export default function AiSettingsView({ onBack }: AiSettingsViewProps) {
     return modelBelongsToProvider(model, selectedProvider)
   })
   const newModelProvider = aiDraft?.providers?.[newModelProviderIndex]
-  const newModelProviderType = newModelProvider ? getProviderTypeLabel(newModelProvider) : ''
-  const newModelNeedsEndpointType = isEndpointRoutedProviderType(newModelProviderType)
+  const newModelNeedsEndpointType = newModelProvider ? supportsProviderEndpointRouting(newModelProvider) : false
 
   useEffect(() => {
     if (window.intools?.ai?.settings?.get) {
@@ -338,6 +337,13 @@ export default function AiSettingsView({ onBack }: AiSettingsViewProps) {
     const replaceLabel = !currentLabel || currentLabel === currentPreset.defaultLabel
     const replaceBaseURL = !currentBaseURL || (currentPreset.defaultBaseURL && currentBaseURL === currentPreset.defaultBaseURL)
 
+    const currentAnthropicBaseURL = String(input.anthropicBaseURL || '').trim()
+    const currentDefaultAnthropicBaseURL = getDefaultAnthropicBaseURL(currentId || currentPreset.defaultId)
+    const nextProviderId = String(replaceId ? nextPreset.defaultId : (input.id || '')).trim()
+    const nextDefaultAnthropicBaseURL = getDefaultAnthropicBaseURL(nextProviderId)
+    const replaceAnthropicBaseURL = !currentAnthropicBaseURL
+      || (currentDefaultAnthropicBaseURL && currentAnthropicBaseURL === currentDefaultAnthropicBaseURL)
+
     const nextProvider: AiProviderConfig = {
       ...input,
       type: nextPreset.type,
@@ -350,7 +356,8 @@ export default function AiSettingsView({ onBack }: AiSettingsViewProps) {
     }
     if (!isEndpointRoutedProviderType(nextPreset.type)) {
       nextProvider.anthropicBaseURL = ''
-      nextProvider.geminiBaseURL = ''
+    } else if (replaceAnthropicBaseURL) {
+      nextProvider.anthropicBaseURL = nextDefaultAnthropicBaseURL || ''
     }
     return nextProvider
   }
@@ -363,7 +370,12 @@ export default function AiSettingsView({ onBack }: AiSettingsViewProps) {
     if (!aiDraft) return
     const providerType = inferProviderType(newProvider)
     const providerId = buildProviderInstanceId(String(newProvider.id || ''), providerType)
-    const providers = [...aiDraft.providers, { ...newProvider, id: providerId, type: providerType }]
+    const providers = [...aiDraft.providers, {
+      ...newProvider,
+      id: providerId,
+      type: providerType,
+      anthropicBaseURL: newProvider.anthropicBaseURL || getDefaultAnthropicBaseURL(providerId)
+    }]
     updateAiDraft({ providers })
     const resetPreset = getProviderPreset('openai')
     setNewProvider({
@@ -374,8 +386,7 @@ export default function AiSettingsView({ onBack }: AiSettingsViewProps) {
       apiKey: '',
       baseURL: resetPreset.defaultBaseURL || '',
       apiVersion: '',
-      anthropicBaseURL: '',
-      geminiBaseURL: ''
+      anthropicBaseURL: ''
     })
     setShowAddProviderModal(false)
   }
@@ -435,9 +446,9 @@ export default function AiSettingsView({ onBack }: AiSettingsViewProps) {
       return
     }
     const provider = aiDraft.providers[newModelProviderIndex]
-    const providerType = provider ? getProviderTypeLabel(provider) : ''
-    if (isEndpointRoutedProviderType(providerType) && !newModel.endpointType) {
-      setAiError('new-api / CherryIN 类型模型需要设置 endpoint type')
+    const providerSupportsEndpointRouting = provider ? supportsProviderEndpointRouting(provider) : false
+    if (providerSupportsEndpointRouting && !newModel.endpointType) {
+      setAiError('当前 Provider 类型模型需要设置 endpoint type')
       return
     }
     const providerRef = provider ? String(provider.id) : undefined
@@ -458,11 +469,11 @@ export default function AiSettingsView({ onBack }: AiSettingsViewProps) {
     }
     const setIndex = aiDraft.providers[selectedProviderIndex] ? selectedProviderIndex : 0
     const provider = aiDraft.providers[setIndex]
-    const providerType = provider ? getProviderTypeLabel(provider) : ''
+    const providerSupportsEndpointRouting = provider ? supportsProviderEndpointRouting(provider) : false
     setNewModel((prev) => ({
       ...prev,
-      endpointType: isEndpointRoutedProviderType(providerType) ? (prev.endpointType || 'openai') : undefined,
-      supportedEndpointTypes: isEndpointRoutedProviderType(providerType) ? prev.supportedEndpointTypes : undefined
+      endpointType: providerSupportsEndpointRouting ? (prev.endpointType || 'openai') : undefined,
+      supportedEndpointTypes: providerSupportsEndpointRouting ? prev.supportedEndpointTypes : undefined
     }))
     if (aiDraft.providers[selectedProviderIndex]) {
       setNewModelProviderIndex(selectedProviderIndex)
@@ -1116,6 +1127,19 @@ export default function AiSettingsView({ onBack }: AiSettingsViewProps) {
                       <div className="text-[11px] text-slate-500 dark:text-slate-400">
                         默认 Base URL：{selectedProviderDefaultBaseURL || '无（需手动填写）'}
                       </div>
+                      {selectedProviderSupportsEndpointRouting && (
+                        <>
+                          <input
+                            className={inputClass}
+                            placeholder="Anthropic Base URL（可选）"
+                            value={selectedProvider.anthropicBaseURL || selectedProviderDefaultAnthropicBaseURL || ''}
+                            onChange={(e) => handleUpdateProvider(selectedProviderIndex, { anthropicBaseURL: e.target.value })}
+                          />
+                          <div className="text-[11px] text-slate-500 dark:text-slate-400">
+                            默认 Anthropic Base URL：{selectedProviderDefaultAnthropicBaseURL || '无（将使用 Base URL）'}
+                          </div>
+                        </>
+                      )}
                       {(selectedProviderType === 'azure-openai' || selectedProviderType === 'azure') && (
                         <input
                           className={inputClass}
@@ -1123,22 +1147,6 @@ export default function AiSettingsView({ onBack }: AiSettingsViewProps) {
                           value={selectedProvider.apiVersion || ''}
                           onChange={(e) => handleUpdateProvider(selectedProviderIndex, { apiVersion: e.target.value })}
                         />
-                      )}
-                      {selectedProviderSupportsEndpointRouting && (
-                        <>
-                          <input
-                            className={inputClass}
-                            placeholder="Anthropic Base URL（可选）"
-                            value={selectedProvider.anthropicBaseURL || ''}
-                            onChange={(e) => handleUpdateProvider(selectedProviderIndex, { anthropicBaseURL: e.target.value })}
-                          />
-                          <input
-                            className={inputClass}
-                            placeholder="Gemini Base URL（可选）"
-                            value={selectedProvider.geminiBaseURL || ''}
-                            onChange={(e) => handleUpdateProvider(selectedProviderIndex, { geminiBaseURL: e.target.value })}
-                          />
-                        </>
                       )}
                     </div>
                     {selectedProviderValidation.issues.length > 0 && (
@@ -1820,6 +1828,19 @@ export default function AiSettingsView({ onBack }: AiSettingsViewProps) {
               <div className="text-[11px] text-slate-500 dark:text-slate-400">
                 默认 Base URL：{newProviderDefaultBaseURL || '无（需手动填写）'}
               </div>
+              {supportsProviderEndpointRouting(newProvider) && (
+                <>
+                  <input
+                    className={inputClass}
+                    placeholder="Anthropic Base URL（可选）"
+                    value={newProvider.anthropicBaseURL || newProviderDefaultAnthropicBaseURL || ''}
+                    onChange={(e) => setNewProvider((prev) => ({ ...prev, anthropicBaseURL: e.target.value }))}
+                  />
+                  <div className="text-[11px] text-slate-500 dark:text-slate-400">
+                    默认 Anthropic Base URL：{newProviderDefaultAnthropicBaseURL || '无（将使用 Base URL）'}
+                  </div>
+                </>
+              )}
               {(inferProviderType(newProvider) === 'azure-openai' || inferProviderType(newProvider) === 'azure') && (
                 <input
                   className={inputClass}
@@ -1827,22 +1848,6 @@ export default function AiSettingsView({ onBack }: AiSettingsViewProps) {
                   value={newProvider.apiVersion || ''}
                   onChange={(e) => setNewProvider((prev) => ({ ...prev, apiVersion: e.target.value }))}
                 />
-              )}
-              {isEndpointRoutedProviderType(inferProviderType(newProvider)) && (
-                <>
-                  <input
-                    className={inputClass}
-                    placeholder="Anthropic Base URL（可选）"
-                    value={newProvider.anthropicBaseURL || ''}
-                    onChange={(e) => setNewProvider((prev) => ({ ...prev, anthropicBaseURL: e.target.value }))}
-                  />
-                  <input
-                    className={inputClass}
-                    placeholder="Gemini Base URL（可选）"
-                    value={newProvider.geminiBaseURL || ''}
-                    onChange={(e) => setNewProvider((prev) => ({ ...prev, geminiBaseURL: e.target.value }))}
-                  />
-                </>
               )}
             </div>
 
@@ -1899,11 +1904,11 @@ export default function AiSettingsView({ onBack }: AiSettingsViewProps) {
                     const nextIndex = Number(e.target.value)
                     setNewModelProviderIndex(nextIndex)
                     const nextProvider = (aiDraft?.providers || [])[nextIndex]
-                    const nextType = nextProvider ? getProviderTypeLabel(nextProvider) : ''
+                    const nextProviderSupportsEndpointRouting = nextProvider ? supportsProviderEndpointRouting(nextProvider) : false
                     setNewModel((prev) => ({
                       ...prev,
-                      endpointType: isEndpointRoutedProviderType(nextType) ? (prev.endpointType || 'openai') : undefined,
-                      supportedEndpointTypes: isEndpointRoutedProviderType(nextType) ? prev.supportedEndpointTypes : undefined
+                      endpointType: nextProviderSupportsEndpointRouting ? (prev.endpointType || 'openai') : undefined,
+                      supportedEndpointTypes: nextProviderSupportsEndpointRouting ? prev.supportedEndpointTypes : undefined
                     }))
                   }}
                   disabled={!aiDraft || aiDraft.providers.length === 0}

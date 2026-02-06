@@ -160,7 +160,6 @@ export interface AiProviderConfig {
   baseURL?: string
   apiVersion?: string
   anthropicBaseURL?: string
-  geminiBaseURL?: string
   headers?: Record<string, string>
   defaultModel?: string
   defaultParams?: AiModelParameters

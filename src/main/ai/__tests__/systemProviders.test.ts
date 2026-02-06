@@ -1,6 +1,11 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
-import { getSystemDefaultProviders, isSystemDefaultProviderId, mergeWithSystemDefaultProviders } from '../../../shared/ai/systemProviders'
+import {
+  getSystemDefaultProviderById,
+  getSystemDefaultProviders,
+  isSystemDefaultProviderId,
+  mergeWithSystemDefaultProviders
+} from '../../../shared/ai/systemProviders'
 
 describe('system default providers', () => {
   it('contains requested built-in providers', () => {
@@ -46,5 +51,25 @@ describe('system default providers', () => {
     assert.equal(isSystemDefaultProviderId('openai'), true)
     assert.equal(isSystemDefaultProviderId('mimo'), true)
     assert.equal(isSystemDefaultProviderId('custom-provider'), false)
+  })
+
+  it('uses cherry-studio-like anthropic baseURL defaults on compatible providers', () => {
+    const providers = getSystemDefaultProviders()
+    const byId = new Map(providers.map((provider) => [String(provider.id), provider]))
+    assert.equal(byId.get('deepseek')?.anthropicBaseURL, 'https://api.deepseek.com/anthropic')
+    assert.equal(byId.get('zhipu')?.anthropicBaseURL, 'https://open.bigmodel.cn/api/anthropic')
+    assert.equal(byId.get('dashscope')?.anthropicBaseURL, 'https://dashscope.aliyuncs.com/apps/anthropic')
+    assert.equal(byId.get('mimo')?.anthropicBaseURL, 'https://api.xiaomimimo.com/anthropic')
+  })
+
+  it('returns cloned default provider by id', () => {
+    const provider = getSystemDefaultProviderById('deepseek')
+    assert.equal(provider?.id, 'deepseek')
+    assert.equal(provider?.anthropicBaseURL, 'https://api.deepseek.com/anthropic')
+    if (provider) {
+      provider.baseURL = 'https://modified.example'
+    }
+    const next = getSystemDefaultProviderById('deepseek')
+    assert.equal(next?.baseURL, 'https://api.deepseek.com')
   })
 })

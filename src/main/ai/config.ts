@@ -4,7 +4,7 @@ import { join } from 'path'
 import type { AiSettings, AiProviderConfig, AiProviderId, AiModel } from '../../shared/types/ai'
 import { inferProviderType } from './providerCatalog'
 import { resolveProviderBaseURL } from '../../shared/ai/providerDefaults'
-import { getSystemDefaultProviders, mergeWithSystemDefaultProviders } from '../../shared/ai/systemProviders'
+import { getSystemDefaultProviderById, getSystemDefaultProviders, mergeWithSystemDefaultProviders } from '../../shared/ai/systemProviders'
 import { getSystemDefaultModels, mergeWithSystemDefaultModels } from '../../shared/ai/systemModels'
 
 const DEFAULT_SETTINGS: AiSettings = {
@@ -25,17 +25,22 @@ const settingsCache: { value: AiSettings | null } = { value: null }
 
 function normalizeProvider(provider: AiProviderConfig, index: number): AiProviderConfig {
   const id = String(provider.id || '').trim() || `provider-${index + 1}`
+  const systemDefaultProvider = getSystemDefaultProviderById(id)
   const type = inferProviderType({ ...provider, id })
   const baseURL = String(
     provider.baseURL ||
       resolveProviderBaseURL({ providerType: type, provider, baseURL: provider.baseURL }) ||
       ''
   ).trim()
+  const anthropicBaseURL = String(
+    provider.anthropicBaseURL || systemDefaultProvider?.anthropicBaseURL || ''
+  ).trim()
   return {
     ...provider,
     id,
     type,
-    baseURL
+    baseURL,
+    anthropicBaseURL
   }
 }
 
