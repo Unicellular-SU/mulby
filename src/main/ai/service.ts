@@ -42,6 +42,12 @@ import {
   markAiStreamRoute,
   recordAiStreamChunk
 } from './streamMetrics'
+import {
+  createThinkTagStreamState,
+  finalizeThinkTagStream,
+  parseThinkTaggedChunk,
+  splitThinkTaggedText
+} from './thinkTagParser'
 
 interface StreamCallbacks {
   onChunk?: (chunk: AiMessage) => void
@@ -163,17 +169,26 @@ export class AiService {
             finishReason: result.finishReason
           })
 
-          const reasoning = supportsReasoning(option.model) ? (result as any).reasoning : undefined
+          const allowReasoning = supportsReasoning(option.model)
+          let contentText = result.text || ''
+          let reasoningText = allowReasoning ? String((result as any).reasoning || '') : ''
+          if (allowReasoning) {
+            const parsed = splitThinkTaggedText(contentText, option.model)
+            contentText = parsed.content
+            if (!reasoningText && parsed.reasoning) {
+              reasoningText = parsed.reasoning
+            }
+          }
           const usage = normalizeUsage(
             extractUsage(result),
             countTokensFromMessages(trimmedMessages, option.model),
-            countTokensForText(`${reasoning || ''}${result.text || ''}`, option.model)
+            countTokensForText(`${reasoningText || ''}${contentText || ''}`, option.model)
           )
 
           return {
             role: 'assistant',
-            content: result.text,
-            reasoning_content: reasoning,
+            content: contentText,
+            reasoning_content: allowReasoning ? reasoningText || undefined : undefined,
             usage
           }
         }
@@ -339,6 +354,8 @@ export class AiService {
           let fullText = ''
           let reasoningText = ''
           const allowReasoning = supportsReasoning(option.model)
+          const thinkTagState = allowReasoning ? createThinkTagStreamState(option.model) : undefined
+          let hasStructuredReasoningSignal = false
 
           if ((result as any).fullStream) {
             for await (const part of (result as any).fullStream) {
@@ -348,14 +365,27 @@ export class AiService {
                   ? (part as any).delta
                   : (typeof (part as any).text === 'string' ? (part as any).text : '')
                 if (textDelta) {
-                  fullText += textDelta
-                  this.emitTextChunk(trackedOnChunk, textDelta)
+                  if (allowReasoning && thinkTagState) {
+                    const parsed = parseThinkTaggedChunk(textDelta, thinkTagState)
+                    if (parsed.reasoning && !hasStructuredReasoningSignal) {
+                      reasoningText += parsed.reasoning
+                      this.emitReasoningChunk(trackedOnChunk, parsed.reasoning)
+                    }
+                    if (parsed.content) {
+                      fullText += parsed.content
+                      this.emitTextChunk(trackedOnChunk, parsed.content)
+                    }
+                  } else {
+                    fullText += textDelta
+                    this.emitTextChunk(trackedOnChunk, textDelta)
+                  }
                 }
               } else if (part?.type === 'reasoning-delta') {
                 const reasoningDelta = typeof (part as any).delta === 'string'
                   ? (part as any).delta
                   : (typeof (part as any).text === 'string' ? (part as any).text : '')
                 if (reasoningDelta && allowReasoning) {
+                  hasStructuredReasoningSignal = true
                   reasoningText += reasoningDelta
                   this.emitReasoningChunk(trackedOnChunk, reasoningDelta)
                 }
@@ -378,13 +408,46 @@ export class AiService {
           } else {
             for await (const chunk of result.textStream) {
               if (!chunk) continue
-              fullText += chunk
-              this.emitTextChunk(trackedOnChunk, chunk)
+              if (allowReasoning && thinkTagState) {
+                const parsed = parseThinkTaggedChunk(chunk, thinkTagState)
+                if (parsed.reasoning) {
+                  reasoningText += parsed.reasoning
+                  this.emitReasoningChunk(trackedOnChunk, parsed.reasoning)
+                }
+                if (parsed.content) {
+                  fullText += parsed.content
+                  this.emitTextChunk(trackedOnChunk, parsed.content)
+                }
+              } else {
+                fullText += chunk
+                this.emitTextChunk(trackedOnChunk, chunk)
+              }
+            }
+          }
+
+          if (allowReasoning && thinkTagState) {
+            const tail = finalizeThinkTagStream(thinkTagState)
+            if (tail.reasoning) {
+              reasoningText += tail.reasoning
+              this.emitReasoningChunk(trackedOnChunk, tail.reasoning)
+            }
+            if (tail.content) {
+              fullText += tail.content
+              this.emitTextChunk(trackedOnChunk, tail.content)
             }
           }
 
           if (!fullText && (result as any).text) {
-            fullText = await (result as any).text
+            const fallbackText = String((await (result as any).text) || '')
+            if (allowReasoning) {
+              const parsed = splitThinkTaggedText(fallbackText, option.model)
+              fullText = parsed.content
+              if (!reasoningText && parsed.reasoning) {
+                reasoningText = parsed.reasoning
+              }
+            } else {
+              fullText = fallbackText
+            }
           }
           if (!reasoningText && (result as any).reasoningText && allowReasoning) {
             reasoningText = (await (result as any).reasoningText) || ''
@@ -619,11 +682,15 @@ export class AiService {
         ...params,
         maxOutputTokens: Math.min(params.maxOutputTokens ?? 8, 32)
       } as any)
+      const allowReasoning = supportsReasoning(input?.model)
+      const parsed = allowReasoning && typeof result.text === 'string'
+        ? splitThinkTaggedText(result.text, input?.model)
+        : undefined
       console.info('[AI] testConnection:success', {
         providerId: input?.providerId,
         model: input?.model
       })
-      return { success: true, message: result.text || 'ok' }
+      return { success: true, message: parsed ? (parsed.content || 'ok') : (result.text || 'ok') }
     } catch (err) {
       const message = err instanceof Error ? err.message : 'AI connection failed'
       console.error('[AI] testConnection:fail', {
@@ -711,6 +778,8 @@ export class AiService {
 
       let fullText = ''
       let reasoning = ''
+      const thinkTagState = allowReasoning ? createThinkTagStreamState(resolvedInput?.model) : undefined
+      let hasStructuredReasoningSignal = false
 
       if ((result as any).fullStream) {
         for await (const part of (result as any).fullStream) {
@@ -720,18 +789,56 @@ export class AiService {
             hasDelta: typeof part?.delta === 'string' ? part.delta.length : 0
           })
           if (part?.type === 'text-delta') {
-            fullText += part.delta || ''
-            onChunk({ type: 'content', text: part.delta || '' })
+            const textDelta = String(part.delta || '')
+            if (allowReasoning && thinkTagState) {
+              const parsed = parseThinkTaggedChunk(textDelta, thinkTagState)
+              if (parsed.reasoning && !hasStructuredReasoningSignal) {
+                reasoning += parsed.reasoning
+                onChunk({ type: 'reasoning', text: parsed.reasoning })
+              }
+              if (parsed.content) {
+                fullText += parsed.content
+                onChunk({ type: 'content', text: parsed.content })
+              }
+            } else {
+              fullText += textDelta
+              onChunk({ type: 'content', text: textDelta })
+            }
           } else if (part?.type === 'reasoning-delta') {
             if (!allowReasoning) continue
+            hasStructuredReasoningSignal = true
             reasoning += part.delta || ''
             onChunk({ type: 'reasoning', text: part.delta || '' })
           }
         }
       } else {
         for await (const chunk of result.textStream) {
-          fullText += chunk
-          onChunk({ type: 'content', text: chunk })
+          if (allowReasoning && thinkTagState) {
+            const parsed = parseThinkTaggedChunk(chunk, thinkTagState)
+            if (parsed.reasoning) {
+              reasoning += parsed.reasoning
+              onChunk({ type: 'reasoning', text: parsed.reasoning })
+            }
+            if (parsed.content) {
+              fullText += parsed.content
+              onChunk({ type: 'content', text: parsed.content })
+            }
+          } else {
+            fullText += chunk
+            onChunk({ type: 'content', text: chunk })
+          }
+        }
+      }
+
+      if (allowReasoning && thinkTagState) {
+        const tail = finalizeThinkTagStream(thinkTagState)
+        if (tail.reasoning) {
+          reasoning += tail.reasoning
+          onChunk({ type: 'reasoning', text: tail.reasoning })
+        }
+        if (tail.content) {
+          fullText += tail.content
+          onChunk({ type: 'content', text: tail.content })
         }
       }
 
@@ -795,6 +902,7 @@ export class AiService {
     let buffer = ''
     let content = ''
     let reasoning = ''
+    const thinkTagState = allowReasoning ? createThinkTagStreamState(input.model) : undefined
 
     while (true) {
       const { value, done } = await reader.read()
@@ -810,6 +918,17 @@ export class AiService {
         if (!line || !line.startsWith('data:')) continue
         const data = line.slice(5).trim()
         if (data === '[DONE]') {
+          if (allowReasoning && thinkTagState) {
+            const tail = finalizeThinkTagStream(thinkTagState)
+            if (tail.reasoning) {
+              reasoning += tail.reasoning
+              onChunk({ type: 'reasoning', text: tail.reasoning })
+            }
+            if (tail.content) {
+              content += tail.content
+              onChunk({ type: 'content', text: tail.content })
+            }
+          }
           return { content, reasoning }
         }
         try {
@@ -817,18 +936,44 @@ export class AiService {
           const delta = json.choices?.[0]?.delta || {}
           const reasoningChunk = delta.reasoning_content || delta.reasoning
           const contentChunk = delta.content
+          const hasStructuredReasoning = !!reasoningChunk && allowReasoning
 
           if (reasoningChunk && allowReasoning) {
             reasoning += reasoningChunk
             onChunk({ type: 'reasoning', text: reasoningChunk })
           }
           if (contentChunk) {
-            content += contentChunk
-            onChunk({ type: 'content', text: contentChunk })
+            const contentText = String(contentChunk)
+            if (allowReasoning && thinkTagState) {
+              const parsed = parseThinkTaggedChunk(contentText, thinkTagState)
+              if (parsed.reasoning && !hasStructuredReasoning) {
+                reasoning += parsed.reasoning
+                onChunk({ type: 'reasoning', text: parsed.reasoning })
+              }
+              if (parsed.content) {
+                content += parsed.content
+                onChunk({ type: 'content', text: parsed.content })
+              }
+            } else {
+              content += contentText
+              onChunk({ type: 'content', text: contentText })
+            }
           }
         } catch {
           // ignore malformed chunks
         }
+      }
+    }
+
+    if (allowReasoning && thinkTagState) {
+      const tail = finalizeThinkTagStream(thinkTagState)
+      if (tail.reasoning) {
+        reasoning += tail.reasoning
+        onChunk({ type: 'reasoning', text: tail.reasoning })
+      }
+      if (tail.content) {
+        content += tail.content
+        onChunk({ type: 'content', text: tail.content })
       }
     }
 
@@ -891,6 +1036,7 @@ export class AiService {
     let buffer = ''
     let content = ''
     let reasoning = ''
+    const thinkTagState = allowReasoning ? createThinkTagStreamState(input.model) : undefined
 
     while (true) {
       const { value, done } = await reader.read()
@@ -906,6 +1052,17 @@ export class AiService {
         if (!line || !line.startsWith('data:')) continue
         const data = line.slice(5).trim()
         if (data === '[DONE]') {
+          if (allowReasoning && thinkTagState) {
+            const tail = finalizeThinkTagStream(thinkTagState)
+            if (tail.reasoning) {
+              reasoning += tail.reasoning
+              this.emitReasoningChunk(onChunk, tail.reasoning)
+            }
+            if (tail.content) {
+              content += tail.content
+              this.emitTextChunk(onChunk, tail.content)
+            }
+          }
           return { content, reasoning }
         }
         try {
@@ -913,18 +1070,44 @@ export class AiService {
           const delta = json.choices?.[0]?.delta || {}
           const reasoningChunk = delta.reasoning_content || delta.reasoning
           const contentChunk = delta.content
+          const hasStructuredReasoning = !!reasoningChunk && allowReasoning
 
           if (reasoningChunk && allowReasoning) {
             reasoning += reasoningChunk
             this.emitReasoningChunk(onChunk, reasoningChunk)
           }
           if (contentChunk) {
-            content += contentChunk
-            this.emitTextChunk(onChunk, contentChunk)
+            const contentText = String(contentChunk)
+            if (allowReasoning && thinkTagState) {
+              const parsed = parseThinkTaggedChunk(contentText, thinkTagState)
+              if (parsed.reasoning && !hasStructuredReasoning) {
+                reasoning += parsed.reasoning
+                this.emitReasoningChunk(onChunk, parsed.reasoning)
+              }
+              if (parsed.content) {
+                content += parsed.content
+                this.emitTextChunk(onChunk, parsed.content)
+              }
+            } else {
+              content += contentText
+              this.emitTextChunk(onChunk, contentText)
+            }
           }
         } catch {
           // ignore malformed chunks
         }
+      }
+    }
+
+    if (allowReasoning && thinkTagState) {
+      const tail = finalizeThinkTagStream(thinkTagState)
+      if (tail.reasoning) {
+        reasoning += tail.reasoning
+        this.emitReasoningChunk(onChunk, tail.reasoning)
+      }
+      if (tail.content) {
+        content += tail.content
+        this.emitTextChunk(onChunk, tail.content)
       }
     }
 
@@ -1113,6 +1296,7 @@ export class AiService {
     let reasoning = ''
     let finishReason: string | undefined
     let usage: { inputTokens?: number; outputTokens?: number } | undefined
+    const thinkTagState = input.allowReasoning ? createThinkTagStreamState(input.model) : undefined
     const toolCallsMap = new Map<number, { id: string; type: 'function'; function: { name: string; arguments: string } }>()
 
     while (true) {
@@ -1129,6 +1313,17 @@ export class AiService {
         if (!line || !line.startsWith('data:')) continue
         const data = line.slice(5).trim()
         if (data === '[DONE]') {
+          if (input.allowReasoning && thinkTagState) {
+            const tail = finalizeThinkTagStream(thinkTagState)
+            if (tail.reasoning) {
+              reasoning += tail.reasoning
+              this.emitReasoningChunk(onChunk, tail.reasoning)
+            }
+            if (tail.content) {
+              content += tail.content
+              this.emitTextChunk(onChunk, tail.content)
+            }
+          }
           const toolCalls = [...toolCallsMap.entries()]
             .sort((a, b) => a[0] - b[0])
             .map(([index, call]) => ({
@@ -1160,6 +1355,7 @@ export class AiService {
           }
 
           const reasoningChunk = contentSource.reasoning_content || contentSource.reasoning
+          const hasStructuredReasoning = !!reasoningChunk && input.allowReasoning
           if (reasoningChunk && input.allowReasoning) {
             const reasoningText = String(reasoningChunk)
             reasoning += reasoningText
@@ -1168,8 +1364,20 @@ export class AiService {
 
           const contentChunk = extractOpenAICompatContentText(contentSource.content)
           if (contentChunk) {
-            content += contentChunk
-            this.emitTextChunk(onChunk, contentChunk)
+            if (input.allowReasoning && thinkTagState) {
+              const parsed = parseThinkTaggedChunk(contentChunk, thinkTagState)
+              if (parsed.reasoning && !hasStructuredReasoning) {
+                reasoning += parsed.reasoning
+                this.emitReasoningChunk(onChunk, parsed.reasoning)
+              }
+              if (parsed.content) {
+                content += parsed.content
+                this.emitTextChunk(onChunk, parsed.content)
+              }
+            } else {
+              content += contentChunk
+              this.emitTextChunk(onChunk, contentChunk)
+            }
           }
 
           if (Array.isArray(contentSource.tool_calls)) {
@@ -1203,6 +1411,18 @@ export class AiService {
         ...call,
         id: call.id || `call_${index}`
       }))
+
+    if (input.allowReasoning && thinkTagState) {
+      const tail = finalizeThinkTagStream(thinkTagState)
+      if (tail.reasoning) {
+        reasoning += tail.reasoning
+        this.emitReasoningChunk(onChunk, tail.reasoning)
+      }
+      if (tail.content) {
+        content += tail.content
+        this.emitTextChunk(onChunk, tail.content)
+      }
+    }
 
     return {
       content,
