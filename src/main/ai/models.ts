@@ -77,23 +77,35 @@ function toFallbackModelInfo(inputRaw: string): ModelInfo {
 
 export function getAllModels(): ModelInfo[] {
   const settings = getAiSettings()
+  const providers = settings.providers || []
   if (settings.models && settings.models.length > 0) {
-    const providers = settings.providers || []
-    return settings.models.map((model) => {
-      const { providerToken, modelToken } = parseModelKey(model.id)
-      const providerConfig = resolveProviderForModel(model, providers, providerToken)
-      const providerId = providerConfig ? inferProviderType(providerConfig) : providerToken || 'openai-compatible'
-      const effectiveCapabilities = getEffectiveCapabilities(model.id, providerConfig)
-      return {
-        ...model,
-        providerId,
-        modelId: modelToken || model.id,
-        capabilities: effectiveCapabilities,
-        pricing: { inputPer1k: 0, outputPer1k: 0 }
-      }
-    })
+    return settings.models
+      .map((model) => {
+        const { providerToken, modelToken } = parseModelKey(model.id)
+        const providerConfig = resolveProviderForModel(model, providers, providerToken)
+        if (providerConfig && providerConfig.enabled === false) {
+          return null
+        }
+        const providerId = providerConfig ? inferProviderType(providerConfig) : providerToken || 'openai-compatible'
+        const effectiveCapabilities = getEffectiveCapabilities(model.id, providerConfig)
+        return {
+          ...model,
+          providerId,
+          modelId: modelToken || model.id,
+          capabilities: effectiveCapabilities,
+          pricing: { inputPer1k: 0, outputPer1k: 0 }
+        }
+      })
+      .filter((model): model is ModelInfo => model !== null)
   }
-  return DEFAULT_MODELS
+  return DEFAULT_MODELS.filter((model) => {
+    const providerConfig = providers.find((provider) => {
+      const providerId = String(provider.id || '')
+      return providerId === model.providerId || inferProviderType(provider) === model.providerId
+    })
+    if (!providerConfig) return true
+    return providerConfig.enabled !== false
+  })
 }
 
 export function getModelById(id: string): ModelInfo | null {
