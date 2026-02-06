@@ -61,6 +61,7 @@ export class AiService {
       const trimmedMessages = this.applyContextWindow(option.messages, params.contextWindow)
       const providerConfig = this.resolveProviderConfig(option.model)
       const resolved = resolveModelId(option.model)
+      const useOpenAICompatChat = resolved.providerId === 'openai' && shouldUseChatApi(providerConfig?.baseURL)
 
       if (resolved.providerId === 'anthropic' && this.hasMultimodalContent(trimmedMessages)) {
         console.log('[AI] call: 使用 Anthropic 原生 API')
@@ -83,6 +84,36 @@ export class AiService {
           content,
           reasoning_content: reasoning || undefined,
           usage
+        }
+      }
+
+      if (useOpenAICompatChat && tools && shouldUseCompatToolLoop(option.model, providerConfig?.baseURL)) {
+        console.log('[AI] call: 使用 OpenAI 兼容工具调用分支（DeepSeek reasoning 兼容）', {
+          model: option.model,
+          maxToolSteps: option.maxToolSteps ?? 10
+        })
+        const chatMessages = await this.toOpenAIChatMessages(trimmedMessages, option.model, { includeReasoningContent: true })
+        const { content, reasoning, usage } = await this.runOpenAICompatToolLoop({
+          model: resolved.modelId,
+          messages: chatMessages,
+          apiKey: providerConfig?.apiKey,
+          baseURL: providerConfig?.baseURL,
+          params,
+          tools: option.tools || [],
+          maxToolSteps: option.maxToolSteps,
+          toolContext: option.toolContext,
+          allowReasoning: supportsReasoning(option.model)
+        }, undefined, controller.signal)
+
+        return {
+          role: 'assistant',
+          content,
+          reasoning_content: reasoning || undefined,
+          usage: normalizeUsage(
+            usage,
+            countTokensFromMessages(trimmedMessages, option.model),
+            countTokensForText(`${reasoning || ''}${content || ''}`, option.model)
+          )
         }
       }
 
@@ -193,6 +224,37 @@ export class AiService {
         callbacks.onEnd?.(finalMessage)
         return finalMessage
       }
+      if (useOpenAICompatChat && tools && shouldUseCompatToolLoop(option.model, providerConfig?.baseURL)) {
+        console.log('[AI] stream: 使用 OpenAI 兼容工具调用分支（DeepSeek reasoning 兼容）', {
+          model: option.model,
+          maxToolSteps: option.maxToolSteps ?? 10
+        })
+        const chatMessages = await this.toOpenAIChatMessages(trimmedMessages, option.model, { includeReasoningContent: true })
+        const { content, reasoning, usage } = await this.runOpenAICompatToolLoop({
+          model: resolved.modelId,
+          messages: chatMessages,
+          apiKey: providerConfig?.apiKey,
+          baseURL: providerConfig?.baseURL,
+          params,
+          tools: option.tools || [],
+          maxToolSteps: option.maxToolSteps,
+          toolContext: option.toolContext,
+          allowReasoning: supportsReasoning(option.model)
+        }, callbacks.onChunk, controller.signal)
+
+        const finalMessage: AiMessage = {
+          role: 'assistant',
+          content,
+          reasoning_content: supportsReasoning(option.model) ? reasoning || undefined : undefined,
+          usage: normalizeUsage(
+            usage,
+            countTokensFromMessages(trimmedMessages, option.model),
+            countTokensForText(`${reasoning || ''}${content || ''}`, option.model)
+          )
+        }
+        callbacks.onEnd?.(finalMessage)
+        return finalMessage
+      }
       if (useOpenAICompatChat && tools) {
         // 兼容 chat/completions 流式分支当前仅解析文本，不处理 tool_calls。
         // 启用工具时回退到 AI SDK 的 streamText，以支持工具执行与多步调用。
@@ -251,7 +313,7 @@ export class AiService {
               tool_result: {
                 id: part.toolCallId,
                 name: part.toolName,
-                result: (part as any).result
+                result: (part as any).result ?? (part as any).output
               }
             } as any)
           }
@@ -653,6 +715,285 @@ export class AiService {
     return { content, reasoning }
   }
 
+  private async runOpenAICompatToolLoop(
+    input: {
+      model: string
+      messages: any[]
+      apiKey?: string
+      baseURL?: string
+      params: AiModelParameters
+      tools: AiTool[]
+      maxToolSteps?: number
+      toolContext?: AiToolContext
+      allowReasoning: boolean
+    },
+    onChunk?: (chunk: AiMessage) => void,
+    abortSignal?: AbortSignal
+  ): Promise<{ content: string; reasoning: string; usage?: { inputTokens?: number; outputTokens?: number } }> {
+    const maxSteps = Math.min(Math.max(Math.floor(input.maxToolSteps ?? 10), 1), 20)
+    const conversationMessages = [...input.messages]
+    let fullContent = ''
+    let fullReasoning = ''
+    let inputTokens = 0
+    let outputTokens = 0
+    let hasInputUsage = false
+    let hasOutputUsage = false
+
+    for (let step = 0; step < maxSteps; step += 1) {
+      const stepResult = await this.streamOpenAICompatToolStep({
+        model: input.model,
+        messages: conversationMessages,
+        apiKey: input.apiKey,
+        baseURL: input.baseURL,
+        params: input.params,
+        tools: input.tools,
+        allowReasoning: input.allowReasoning
+      }, onChunk, abortSignal)
+
+      if (stepResult.usage?.inputTokens !== undefined) {
+        inputTokens += stepResult.usage.inputTokens
+        hasInputUsage = true
+      }
+      if (stepResult.usage?.outputTokens !== undefined) {
+        outputTokens += stepResult.usage.outputTokens
+        hasOutputUsage = true
+      }
+
+      if (stepResult.content) fullContent += stepResult.content
+      if (stepResult.reasoning && input.allowReasoning) fullReasoning += stepResult.reasoning
+
+      const assistantMessage: any = {
+        role: 'assistant',
+        content: stepResult.content || ''
+      }
+      if (input.allowReasoning && stepResult.reasoning) {
+        assistantMessage.reasoning_content = stepResult.reasoning
+      }
+      if (stepResult.toolCalls.length > 0) {
+        assistantMessage.tool_calls = stepResult.toolCalls
+      }
+      conversationMessages.push(assistantMessage)
+
+      const needsToolRound = stepResult.finishReason === 'tool_calls' || stepResult.toolCalls.length > 0
+      if (!needsToolRound) {
+        return {
+          content: fullContent,
+          reasoning: fullReasoning,
+          usage: hasInputUsage || hasOutputUsage
+            ? {
+                inputTokens: hasInputUsage ? inputTokens : undefined,
+                outputTokens: hasOutputUsage ? outputTokens : undefined
+              }
+            : undefined
+        }
+      }
+
+      if (!this.toolExecutor) {
+        throw new Error('AI tool executor is not configured')
+      }
+
+      for (const call of stepResult.toolCalls) {
+        const toolName = call.function?.name
+        if (!toolName) continue
+
+        const rawArgs = call.function?.arguments || '{}'
+        let parsedArgs: unknown = {}
+        try {
+          parsedArgs = rawArgs ? JSON.parse(rawArgs) : {}
+        } catch {
+          parsedArgs = rawArgs
+        }
+
+        onChunk?.({
+          role: 'assistant',
+          tool_call: {
+            id: call.id,
+            name: toolName,
+            args: parsedArgs
+          }
+        } as any)
+
+        console.log('[AI] 工具执行开始', { toolName, input: parsedArgs, context: input.toolContext })
+        const result = await this.toolExecutor({ name: toolName, args: parsedArgs, context: input.toolContext })
+        console.log('[AI] 工具执行完成', { toolName, result })
+
+        onChunk?.({
+          role: 'assistant',
+          tool_result: {
+            id: call.id,
+            name: toolName,
+            result
+          }
+        } as any)
+
+        conversationMessages.push({
+          role: 'tool',
+          tool_call_id: call.id,
+          content: stringifyToolResult(result)
+        })
+      }
+    }
+
+    throw new Error(`Tool execution exceeded maxToolSteps (${maxSteps})`)
+  }
+
+  private async streamOpenAICompatToolStep(
+    input: {
+      model: string
+      messages: any[]
+      apiKey?: string
+      baseURL?: string
+      params: AiModelParameters
+      tools: AiTool[]
+      allowReasoning: boolean
+    },
+    onChunk?: (chunk: AiMessage) => void,
+    abortSignal?: AbortSignal
+  ): Promise<{
+    content: string
+    reasoning: string
+    toolCalls: Array<{ id: string; type: 'function'; function: { name: string; arguments: string } }>
+    finishReason?: string
+    usage?: { inputTokens?: number; outputTokens?: number }
+  }> {
+    const baseURL = (input.baseURL || 'https://api.openai.com/v1').replace(/\/+$/, '')
+    const url = `${baseURL}/chat/completions`
+    const res = await fetch(url, {
+      method: 'POST',
+      signal: abortSignal,
+      headers: {
+        'Content-Type': 'application/json',
+        ...(input.apiKey ? { Authorization: `Bearer ${input.apiKey}` } : {})
+      },
+      body: JSON.stringify({
+        model: input.model,
+        stream: true,
+        stream_options: { include_usage: true },
+        messages: input.messages,
+        tools: input.tools,
+        tool_choice: 'auto',
+        temperature: input.params.temperature,
+        top_p: input.params.topP,
+        max_tokens: input.params.maxOutputTokens,
+        presence_penalty: input.params.presencePenalty,
+        frequency_penalty: input.params.frequencyPenalty,
+        stop: input.params.stopSequences,
+        seed: input.params.seed
+      })
+    })
+
+    if (!res.ok || !res.body) {
+      const body = await res.text().catch(() => '')
+      throw new Error(`HTTP ${res.status} ${res.statusText}${body ? ` - ${body}` : ''}`)
+    }
+
+    const reader = res.body.getReader()
+    const decoder = new TextDecoder()
+    let buffer = ''
+    let content = ''
+    let reasoning = ''
+    let finishReason: string | undefined
+    let usage: { inputTokens?: number; outputTokens?: number } | undefined
+    const toolCallsMap = new Map<number, { id: string; type: 'function'; function: { name: string; arguments: string } }>()
+
+    while (true) {
+      const { value, done } = await reader.read()
+      if (done) break
+      buffer += decoder.decode(value, { stream: true })
+
+      let newlineIndex = buffer.indexOf('\n')
+      while (newlineIndex >= 0) {
+        const line = buffer.slice(0, newlineIndex).trim()
+        buffer = buffer.slice(newlineIndex + 1)
+        newlineIndex = buffer.indexOf('\n')
+
+        if (!line || !line.startsWith('data:')) continue
+        const data = line.slice(5).trim()
+        if (data === '[DONE]') {
+          const toolCalls = [...toolCallsMap.entries()]
+            .sort((a, b) => a[0] - b[0])
+            .map(([index, call]) => ({
+              ...call,
+              id: call.id || `call_${index}`
+            }))
+
+          return {
+            content,
+            reasoning,
+            toolCalls,
+            finishReason: finishReason || (toolCalls.length > 0 ? 'tool_calls' : undefined),
+            usage
+          }
+        }
+
+        try {
+          const json = JSON.parse(data)
+          usage = extractUsage(json) || usage
+
+          const choice = json.choices?.[0]
+          if (!choice) continue
+          const contentSource = pickOpenAICompatContentSource(choice)
+          if (!contentSource) {
+            if (choice.finish_reason) {
+              finishReason = choice.finish_reason
+            }
+            continue
+          }
+
+          const reasoningChunk = contentSource.reasoning_content || contentSource.reasoning
+          if (reasoningChunk && input.allowReasoning) {
+            const reasoningText = String(reasoningChunk)
+            reasoning += reasoningText
+            onChunk?.({ role: 'assistant', reasoning_content: reasoningText })
+          }
+
+          const contentChunk = extractOpenAICompatContentText(contentSource.content)
+          if (contentChunk) {
+            content += contentChunk
+            onChunk?.({ role: 'assistant', content: contentChunk })
+          }
+
+          if (Array.isArray(contentSource.tool_calls)) {
+            for (const chunk of contentSource.tool_calls) {
+              const index = typeof chunk?.index === 'number' ? chunk.index : 0
+              const current = toolCallsMap.get(index) || {
+                id: '',
+                type: 'function' as const,
+                function: { name: '', arguments: '' }
+              }
+              if (chunk?.id) current.id = chunk.id
+              if (chunk?.type === 'function') current.type = 'function'
+              if (chunk?.function?.name) current.function.name += chunk.function.name
+              if (chunk?.function?.arguments) current.function.arguments += chunk.function.arguments
+              toolCallsMap.set(index, current)
+            }
+          }
+
+          if (choice.finish_reason) {
+            finishReason = choice.finish_reason
+          }
+        } catch {
+          // ignore malformed chunks
+        }
+      }
+    }
+
+    const toolCalls = [...toolCallsMap.entries()]
+      .sort((a, b) => a[0] - b[0])
+      .map(([index, call]) => ({
+        ...call,
+        id: call.id || `call_${index}`
+      }))
+
+    return {
+      content,
+      reasoning,
+      toolCalls,
+      finishReason: finishReason || (toolCalls.length > 0 ? 'tool_calls' : undefined),
+      usage
+    }
+  }
+
   private resolveTestModel(input?: { model?: string; providerId?: string; apiKey?: string; baseURL?: string }) {
     if (!input?.providerId) {
       return this.resolveLanguageModel(input?.model)
@@ -696,7 +1037,11 @@ export class AiService {
     }
   }
 
-  private async toOpenAIChatMessages(messages: AiMessage[], modelId?: string) {
+  private async toOpenAIChatMessages(
+    messages: AiMessage[],
+    modelId?: string,
+    options?: { includeReasoningContent?: boolean }
+  ) {
     const maxFileBytes = 512 * 1024
     const providerConfig = this.resolveProviderConfig(modelId)
     const allowImages = supportsImageInput(modelId, providerConfig)
@@ -712,7 +1057,11 @@ export class AiService {
 
     for (const message of messages) {
       if (typeof message.content === 'string' || message.content === undefined) {
-        results.push({ role: message.role, content: message.content || '' })
+        const chatMessage: any = { role: message.role, content: message.content || '' }
+        if (options?.includeReasoningContent && message.role === 'assistant' && message.reasoning_content) {
+          chatMessage.reasoning_content = message.reasoning_content
+        }
+        results.push(chatMessage)
         continue
       }
 
@@ -758,7 +1107,11 @@ export class AiService {
         }
       }
 
-      results.push({ role: message.role, content: parts.length > 0 ? parts : '' })
+      const chatMessage: any = { role: message.role, content: parts.length > 0 ? parts : '' }
+      if (options?.includeReasoningContent && message.role === 'assistant' && message.reasoning_content) {
+        chatMessage.reasoning_content = message.reasoning_content
+      }
+      results.push(chatMessage)
     }
 
     return results
@@ -1439,6 +1792,64 @@ function normalizeModelParams(params: AiModelParameters): AiModelParameters {
 function shouldUseChatApi(baseURL?: string): boolean {
   if (!baseURL) return false
   return !baseURL.includes('api.openai.com')
+}
+
+function shouldUseCompatToolLoop(modelId?: string, baseURL?: string): boolean {
+  const model = (modelId || '').toLowerCase()
+  const url = (baseURL || '').toLowerCase()
+  if (model.includes('deepseek-reasoner') || model.includes('deepseek-r1')) {
+    return true
+  }
+  return url.includes('deepseek.com') && (model.includes('reasoner') || model.includes('-r1') || model.includes('/r1'))
+}
+
+function stringifyToolResult(result: unknown): string {
+  if (typeof result === 'string') return result
+  if (result === undefined) return 'null'
+  try {
+    return JSON.stringify(result)
+  } catch {
+    return String(result)
+  }
+}
+
+function pickOpenAICompatContentSource(choice: any):
+  | {
+      content?: unknown
+      reasoning_content?: unknown
+      reasoning?: unknown
+      tool_calls?: any[]
+    }
+  | undefined {
+  const hasUsefulData = (source: any): boolean => {
+    if (!source || typeof source !== 'object') return false
+    if (typeof source.content === 'string' && source.content.length > 0) return true
+    if (Array.isArray(source.content) && source.content.length > 0) return true
+    if (typeof source.reasoning_content === 'string' && source.reasoning_content.length > 0) return true
+    if (typeof source.reasoning === 'string' && source.reasoning.length > 0) return true
+    if (Array.isArray(source.tool_calls) && source.tool_calls.length > 0) return true
+    return false
+  }
+
+  if (hasUsefulData(choice?.delta)) return choice.delta
+  if (hasUsefulData(choice?.message)) return choice.message
+  return undefined
+}
+
+function extractOpenAICompatContentText(content: unknown): string {
+  if (typeof content === 'string') return content
+  if (Array.isArray(content)) {
+    return content
+      .map((part) => {
+        if (typeof part === 'string') return part
+        if (part && typeof part === 'object' && typeof (part as any).text === 'string') {
+          return (part as any).text
+        }
+        return ''
+      })
+      .join('')
+  }
+  return ''
 }
 
 function extractUsage(result: any): { inputTokens?: number; outputTokens?: number } | undefined {

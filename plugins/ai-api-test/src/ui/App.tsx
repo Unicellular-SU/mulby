@@ -90,6 +90,7 @@ export default function App() {
   const [toolStreamOutput, setToolStreamOutput] = useState('')
   const [isToolStreaming, setIsToolStreaming] = useState(false)
   const toolStreamBufferRef = useRef('')
+  const toolReasoningOpenedRef = useRef(false)
 
   const fileInputRef = useRef<HTMLInputElement | null>(null)
   const streamRequestRef = useRef<any>(null)
@@ -468,6 +469,7 @@ export default function App() {
     }
     setToolStreamOutput('')
     toolStreamBufferRef.current = ''
+    toolReasoningOpenedRef.current = false
     setToolResult('')
     setIsToolStreaming(true)
 
@@ -522,6 +524,16 @@ export default function App() {
         },
         (chunk: any) => {
           console.log('[ai-api-test] stream chunk', chunk)
+          if (chunk?.reasoning_content) {
+            if (!toolReasoningOpenedRef.current) {
+              appendToolStream('\n[思考] ')
+              toolReasoningOpenedRef.current = true
+            }
+            appendToolStream(chunk.reasoning_content)
+          } else if (toolReasoningOpenedRef.current) {
+            appendToolStream('\n')
+            toolReasoningOpenedRef.current = false
+          }
           if (chunk?.tool_call?.name) {
             const argsText = toPreview(chunk?.tool_call?.args)
             appendToolStream(`\n[调用工具] ${chunk.tool_call.name}${argsText ? ` args=${argsText}` : ''}\n`)
