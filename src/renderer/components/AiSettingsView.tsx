@@ -6,6 +6,7 @@ import { buildProviderIdCounts, validateProviderConfig } from '../../shared/ai/p
 import { getProviderDefaultBaseURL } from '../../shared/ai/providerDefaults'
 import { getProviderPreset } from '../../shared/ai/providerPresets'
 import { getSystemDefaultProviderById, isSystemDefaultProviderId } from '../../shared/ai/systemProviders'
+import { getSystemDefaultModels } from '../../shared/ai/systemModels'
 import SliderWithTicks from './SliderWithTicks'
 
 const PROVIDER_TYPE_OPTIONS = [...BUILTIN_PROVIDER_TYPES] as string[]
@@ -151,6 +152,8 @@ export default function AiSettingsView({ onBack }: AiSettingsViewProps) {
     }
     return model.id.startsWith(`${provider.id}:`)
   }
+
+  const modelKey = (model: AiModel) => `${model.id}::${model.providerRef || model.providerLabel || ''}`
 
   const resolveProviderIdFromModel = (model: AiModel) => {
     const providers = aiDraft?.providers || []
@@ -632,12 +635,32 @@ export default function AiSettingsView({ onBack }: AiSettingsViewProps) {
         return
       }
 
-      setFetchedModels(result.models.map((model) => ({
+      const normalizedFetchedModels = result.models.map((model) => ({
         ...model,
         providerRef: String(provider.id),
         providerLabel: getProviderKey(provider)
-      })))
-      setSelectedFetchedModelIds(new Set())
+      }))
+      const localDefaultModels = getSystemDefaultModels()
+        .filter((model) => String(model.providerRef || '') === String(provider.id))
+        .map((model) => ({
+          ...model,
+          providerRef: String(provider.id),
+          providerLabel: getProviderKey(provider)
+        }))
+      const mergedModels: AiModel[] = []
+      const seen = new Set<string>()
+      ;[...normalizedFetchedModels, ...localDefaultModels].forEach((model) => {
+        const key = modelKey(model)
+        if (seen.has(key)) return
+        seen.add(key)
+        mergedModels.push(model)
+      })
+      const existing = new Set((aiDraft?.models || []).map((model) => modelKey(model)))
+      const selectedIds = mergedModels
+        .filter((model) => existing.has(modelKey(model)))
+        .map((model) => model.id)
+      setFetchedModels(mergedModels)
+      setSelectedFetchedModelIds(new Set(selectedIds))
       setShowModelModal(true)
     } catch (err) {
       console.error('Failed to fetch models:', err)
@@ -685,16 +708,29 @@ export default function AiSettingsView({ onBack }: AiSettingsViewProps) {
 
   const handleAddFetchedModels = () => {
     if (!aiDraft) return
-    const modelKey = (model: AiModel) => `${model.id}::${model.providerRef || model.providerLabel || ''}`
-    const existing = new Set((aiDraft.models || []).map((model) => modelKey(model)))
-    const toAdd = fetchedModels.filter((model) => selectedFetchedModelIds.has(model.id) && !existing.has(modelKey(model)))
-    if (toAdd.length === 0) {
-      setAiInfo('没有可新增的模型')
-      setShowModelModal(false)
-      return
+
+    const fetchedKeySet = new Set(fetchedModels.map((model) => modelKey(model)))
+    const selectedFetchedModels = fetchedModels.filter((model) => selectedFetchedModelIds.has(model.id))
+    const selectedFetchedKeySet = new Set(selectedFetchedModels.map((model) => modelKey(model)))
+
+    const currentModels = aiDraft.models || []
+    const keptModels = currentModels.filter((model) => {
+      const key = modelKey(model)
+      if (!fetchedKeySet.has(key)) return true
+      return selectedFetchedKeySet.has(key)
+    })
+    const keptKeySet = new Set(keptModels.map((model) => modelKey(model)))
+    const toAdd = selectedFetchedModels.filter((model) => !keptKeySet.has(modelKey(model)))
+    const nextModels = [...keptModels, ...toAdd]
+
+    const removedCount = currentModels.length - keptModels.length
+    const addedCount = toAdd.length
+    updateAiDraft({ models: nextModels })
+    if (addedCount > 0 || removedCount > 0) {
+      setAiInfo(`模型已同步：新增 ${addedCount} 个，移除 ${removedCount} 个`)
+    } else {
+      setAiInfo('模型无变化')
     }
-    updateAiDraft({ models: [...(aiDraft.models || []), ...toAdd] })
-    setAiInfo(`已添加 ${toAdd.length} 个模型`)
     setShowModelModal(false)
   }
 

@@ -5,7 +5,7 @@ import type { AiSettings, AiProviderConfig, AiProviderId, AiModel } from '../../
 import { inferProviderType } from './providerCatalog'
 import { resolveProviderBaseURL } from '../../shared/ai/providerDefaults'
 import { getSystemDefaultProviderById, getSystemDefaultProviders, mergeWithSystemDefaultProviders } from '../../shared/ai/systemProviders'
-import { getSystemDefaultModels, mergeWithSystemDefaultModels } from '../../shared/ai/systemModels'
+import { getSystemDefaultModels } from '../../shared/ai/systemModels'
 
 const DEFAULT_SETTINGS: AiSettings = {
   providers: getSystemDefaultProviders(),
@@ -114,7 +114,9 @@ export function loadAiSettings(): AiSettings {
     const normalizedProviders = normalizeProviders(
       (parsed.providers || []).map((provider, index) => normalizeProvider(provider, index))
     )
-    const normalizedModels = mergeWithSystemDefaultModels(parsed.models || []).map((model) =>
+    // 仅在旧配置缺失 models 字段时注入系统默认模型；不覆盖用户显式删除的默认模型。
+    const inputModels = Array.isArray(parsed.models) ? parsed.models : getSystemDefaultModels()
+    const normalizedModels = inputModels.map((model) =>
       normalizeModel(model, normalizedProviders)
     )
     const next: AiSettings = {
@@ -168,7 +170,7 @@ export function updateAiSettings(partial: Partial<AiSettings>): AiSettings {
   const providers = normalizeProviders(
     (partial.providers ?? current.providers).map((provider, index) => normalizeProvider(provider, index))
   )
-  const models = mergeWithSystemDefaultModels(partial.models ?? current.models ?? []).map((model) =>
+  const models = (partial.models ?? current.models ?? []).map((model) =>
     normalizeModel(model, providers)
   )
   const next: AiSettings = {

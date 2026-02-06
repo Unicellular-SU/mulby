@@ -23,6 +23,7 @@ import { createProviderRuntime, resolveImageModelKey, resolveLanguageModelKey } 
 import { getProviderMethodAdapter } from './providerMethodAdapters'
 import { buildProviderIdCounts } from '../../shared/ai/providerValidation'
 import { getProviderProtocolCapabilityRule } from '../../shared/ai/providerCapabilityGovernance'
+import { getSystemDefaultModels } from '../../shared/ai/systemModels'
 import { shouldUseCompatToolLoop } from './toolLoopStrategy'
 import { classifyAiStreamError } from '../../shared/ai/streamDiagnostics'
 import { resolveProviderBaseURL } from '../../shared/ai/providerDefaults'
@@ -1669,7 +1670,7 @@ export class AiService {
     const methodAdapter = getProviderMethodAdapter(providerType)
     const providerId = String(configuredProvider?.id || input.providerId)
     const baseURL = this.resolveModelDiscoveryBaseURL(input.baseURL || configuredProvider?.baseURL, providerType)
-    return await methodAdapter.fetchModels({
+    const result = await methodAdapter.fetchModels({
       executeModelDiscovery: async ({ endpoint, parseModelIds }) => {
         const url = `${baseURL.replace(/\/$/, '')}${endpoint}`
         try {
@@ -1700,6 +1701,21 @@ export class AiService {
         }
       }
     })
+    if (result.models.length > 0) {
+      return result
+    }
+
+    const fallbackModels = this.getSystemFallbackModels(providerId)
+    if (fallbackModels.length === 0) {
+      return result
+    }
+
+    console.info('[AI] fetchModels:fallback', { providerId, providerType, count: fallbackModels.length })
+    const fallbackMessage = `自动发现失败，已回退到内置模型（${fallbackModels.length} 个）`
+    return {
+      models: fallbackModels,
+      message: result.message ? `${result.message}；${fallbackMessage}` : fallbackMessage
+    }
   }
 
   private resolveLanguageModel(modelId?: string): { model: string; modelKey: any } {
@@ -1889,6 +1905,12 @@ export class AiService {
       return baseURL.replace(/\/v1$/i, '')
     }
     return baseURL
+  }
+
+  private getSystemFallbackModels(providerId: string): AiModel[] {
+    const normalizedProviderId = String(providerId || '').trim()
+    if (!normalizedProviderId) return []
+    return getSystemDefaultModels().filter((model) => String(model.providerRef || '') === normalizedProviderId)
   }
 
   private async toAnthropicMessages(messages: AiMessage[], modelId: string | undefined, providerConfig?: AiProviderConfig) {
