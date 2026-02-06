@@ -1,0 +1,63 @@
+import assert from 'node:assert/strict'
+import { describe, it } from 'node:test'
+import {
+  createEndChunk,
+  createErrorChunk,
+  createReasoningChunk,
+  createTextChunk,
+  createToolCallChunk,
+  createToolResultChunk
+} from '../streamChunkProtocol'
+
+describe('streamChunkProtocol', () => {
+  it('creates text chunk with standardized chunkType', () => {
+    const chunk = createTextChunk('hello')
+    assert.equal(chunk.chunkType, 'text')
+    assert.equal(chunk.content, 'hello')
+  })
+
+  it('creates reasoning chunk with standardized chunkType', () => {
+    const chunk = createReasoningChunk('think')
+    assert.equal(chunk.chunkType, 'reasoning')
+    assert.equal(chunk.reasoning_content, 'think')
+  })
+
+  it('creates tool call/result chunks', () => {
+    const callChunk = createToolCallChunk({ id: 'c1', name: 'sumNumbers', args: { a: 1, b: 2 } })
+    assert.equal(callChunk.chunkType, 'tool-call')
+    assert.equal(callChunk.tool_call?.name, 'sumNumbers')
+
+    const resultChunk = createToolResultChunk({ id: 'c1', name: 'sumNumbers', result: { result: 3 } })
+    assert.equal(resultChunk.chunkType, 'tool-result')
+    assert.equal((resultChunk.tool_result?.result as any)?.result, 3)
+  })
+
+  it('creates error chunk and end chunk (without duplicated content payload)', () => {
+    const errorChunk = createErrorChunk(new Error('boom'))
+    assert.equal(errorChunk.chunkType, 'error')
+    assert.equal(errorChunk.error?.message, 'boom')
+    assert.equal(errorChunk.error?.code, undefined)
+
+    const classifiedErrorChunk = createErrorChunk(new Error('bad gateway'), {
+      code: 'AI_STREAM_HTTP_5XX',
+      category: 'http',
+      retryable: true,
+      statusCode: 502,
+      message: 'HTTP 502 Bad Gateway'
+    })
+    assert.equal(classifiedErrorChunk.error?.code, 'AI_STREAM_HTTP_5XX')
+    assert.equal(classifiedErrorChunk.error?.statusCode, 502)
+    assert.equal(classifiedErrorChunk.error?.retryable, true)
+
+    const endChunk = createEndChunk({
+      role: 'assistant',
+      content: 'final',
+      reasoning_content: 'reasoning',
+      usage: { inputTokens: 1, outputTokens: 2 }
+    })
+    assert.equal(endChunk.chunkType, 'end')
+    assert.deepEqual(endChunk.usage, { inputTokens: 1, outputTokens: 2 })
+    assert.equal(endChunk.content, undefined)
+    assert.equal(endChunk.reasoning_content, undefined)
+  })
+})

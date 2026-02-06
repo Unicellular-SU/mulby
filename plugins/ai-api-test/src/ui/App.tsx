@@ -182,6 +182,16 @@ export default function App() {
             streamRequestIdRef.current = chunk.__requestId
             console.info('[ai-api-test] stream requestId set', chunk.__requestId)
           }
+          if (chunk?.chunkType === 'end') {
+            if (chunk?.usage) {
+              setTokenActual(JSON.stringify(chunk.usage, null, 2))
+            }
+            return
+          }
+          if (chunk?.chunkType === 'error') {
+            notification?.show?.(chunk?.error?.message || '流式请求出错', 'error')
+            return
+          }
           if (chunk?.reasoning_content) {
             setReasoningOutput((prev) => prev + chunk.reasoning_content)
           }
@@ -524,21 +534,29 @@ export default function App() {
         },
         (chunk: any) => {
           console.log('[ai-api-test] stream chunk', chunk)
-          if (chunk?.reasoning_content) {
+          if (chunk?.chunkType === 'end') {
+            return
+          }
+          if (chunk?.chunkType === 'error') {
+            appendToolStream(`\n[错误] ${chunk?.error?.message || '流式错误'}\n`)
+            return
+          }
+          const isReasoningChunk = chunk?.chunkType === 'reasoning' || !!chunk?.reasoning_content
+          if (isReasoningChunk) {
             if (!toolReasoningOpenedRef.current) {
               appendToolStream('\n[思考] ')
               toolReasoningOpenedRef.current = true
             }
             appendToolStream(chunk.reasoning_content)
-          } else if (toolReasoningOpenedRef.current) {
+          } else if (toolReasoningOpenedRef.current && chunk?.chunkType !== 'reasoning') {
             appendToolStream('\n')
             toolReasoningOpenedRef.current = false
           }
-          if (chunk?.tool_call?.name) {
+          if (chunk?.chunkType === 'tool-call' || chunk?.tool_call?.name) {
             const argsText = toPreview(chunk?.tool_call?.args)
             appendToolStream(`\n[调用工具] ${chunk.tool_call.name}${argsText ? ` args=${argsText}` : ''}\n`)
           }
-          if (chunk?.tool_result?.name) {
+          if (chunk?.chunkType === 'tool-result' || chunk?.tool_result?.name) {
             const resultText = toPreview(chunk?.tool_result?.result)
             appendToolStream(`\n[工具结果] ${chunk.tool_result.name}${resultText ? ` => ${resultText}` : ''}\n`)
           }

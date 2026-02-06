@@ -27,8 +27,10 @@ function toProviderKey(config: AiProviderConfig, index: number) {
 function buildDefaultProviders(): Record<string, ProviderV3> {
   return {
     openai,
+    'openai-response': openai,
     anthropic,
-    google
+    google,
+    gemini: google
   }
 }
 
@@ -75,7 +77,9 @@ export function resetProviderRegistry(): void {
 
 export function hasProvider(id: string): boolean {
   const settings = getAiSettings()
-  if (settings.providers.length === 0) return id === 'openai' || id === 'anthropic' || id === 'google'
+  if (settings.providers.length === 0) {
+    return ['openai', 'openai-response', 'anthropic', 'google', 'gemini'].includes(String(id))
+  }
   return settings.providers.some((provider) => {
     if (!provider.enabled) return false
     return String(provider.id) === String(id) || getProviderType(provider) === String(id)

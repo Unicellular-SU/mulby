@@ -1,10 +1,33 @@
 import { useEffect, useState } from 'react'
-import type { AiModel, AiModelCapability, AiModelParameters, AiModelType, AiProviderConfig, AiSettings } from '../../shared/types/ai'
+import type { AiEndpointType, AiModel, AiModelCapability, AiModelParameters, AiModelType, AiProviderConfig, AiSettings } from '../../shared/types/ai'
 import { BUILTIN_PROVIDER_TYPES, inferProviderType } from '../../shared/ai/providerType'
 import { buildProviderIdCounts, validateProviderConfig } from '../../shared/ai/providerValidation'
+import { getProviderCapabilityRuleRows } from '../../shared/ai/providerProfiles'
+import { getProviderProtocolCapabilityRules } from '../../shared/ai/providerCapabilityGovernance'
+import { getProviderDefaultBaseURL } from '../../shared/ai/providerDefaults'
+import { getProviderPreset } from '../../shared/ai/providerPresets'
 import SliderWithTicks from './SliderWithTicks'
 
 const PROVIDER_TYPE_OPTIONS = [...BUILTIN_PROVIDER_TYPES] as string[]
+const PROVIDER_TYPE_LABELS: Record<string, string> = {
+  openai: 'OpenAI',
+  'openai-response': 'OpenAI-Response',
+  gemini: 'Gemini',
+  anthropic: 'Anthropic',
+  'azure-openai': 'Azure OpenAI',
+  'new-api': 'New API',
+  cherryin: 'CherryIN',
+  ollama: 'Ollama',
+  deepseek: 'DeepSeek',
+  openrouter: 'OpenRouter',
+  'openai-compatible': 'OpenAI Compatible'
+}
+const ENDPOINT_TYPE_OPTIONS: AiEndpointType[] = ['openai', 'openai-response', 'anthropic', 'gemini', 'image-generation', 'jina-rerank']
+
+function isEndpointRoutedProviderType(providerType?: string): boolean {
+  const normalized = String(providerType || '').trim().toLowerCase()
+  return normalized === 'new-api' || normalized === 'cherryin'
+}
 
 function getProviderTypeOptions(currentType?: string): string[] {
   const normalized = String(currentType || '').trim().toLowerCase()
@@ -31,6 +54,7 @@ interface AiSettingsViewProps {
 }
 
 export default function AiSettingsView({ onBack }: AiSettingsViewProps) {
+  const initialProviderPreset = getProviderPreset('openai')
   const [aiSettings, setAiSettings] = useState<AiSettings | null>(null)
   const [aiDraft, setAiDraft] = useState<AiSettings | null>(null)
   const [aiError, setAiError] = useState<string | null>(null)
@@ -48,12 +72,15 @@ export default function AiSettingsView({ onBack }: AiSettingsViewProps) {
   const [newModelProviderIndex, setNewModelProviderIndex] = useState<number>(0)
   const [selectedProviderIndex, setSelectedProviderIndex] = useState<number>(0)
   const [newProvider, setNewProvider] = useState<AiProviderConfig>({
-    id: '',
-    type: 'openai-compatible',
-    label: '',
+    id: initialProviderPreset.defaultId,
+    type: initialProviderPreset.type,
+    label: initialProviderPreset.defaultLabel,
     enabled: true,
     apiKey: '',
-    baseURL: ''
+    baseURL: initialProviderPreset.defaultBaseURL || '',
+    apiVersion: '',
+    anthropicBaseURL: '',
+    geminiBaseURL: ''
   })
   const [newModel, setNewModel] = useState<AiModel>({
     id: '',
@@ -84,6 +111,20 @@ export default function AiSettingsView({ onBack }: AiSettingsViewProps) {
     { type: 'embedding', label: '嵌入' },
     { type: 'rerank', label: '重排' }
   ]
+  const CAPABILITY_LABELS: Record<AiModelType, string> = {
+    text: '文本',
+    vision: '视觉',
+    embedding: '嵌入',
+    reasoning: '推理',
+    function_calling: '工具',
+    web_search: '联网',
+    rerank: '重排'
+  }
+  const CAPABILITY_SOURCE_LABELS: Record<'profile' | 'config' | 'model', string> = {
+    profile: 'profile 禁用',
+    config: '配置缺失',
+    model: '模型决定'
+  }
 
   const formatNumber = (value?: number) => (value === undefined || Number.isNaN(value) ? '' : String(value))
   const parseOptionalNumber = (value: string) => {
@@ -99,6 +140,15 @@ export default function AiSettingsView({ onBack }: AiSettingsViewProps) {
       .map((item) => item.trim())
       .filter(Boolean)
     return items.length > 0 ? items : undefined
+  }
+  const formatEndpointTypes = (value?: AiEndpointType[]) => (value && value.length > 0 ? value.join(', ') : '')
+  const parseEndpointTypes = (value: string): AiEndpointType[] | undefined => {
+    const allowed = new Set<AiEndpointType>(ENDPOINT_TYPE_OPTIONS)
+    const items = value
+      .split(/[\n,]+/)
+      .map((item) => item.trim())
+      .filter((item): item is AiEndpointType => allowed.has(item as AiEndpointType))
+    return items.length > 0 ? Array.from(new Set(items)) : undefined
   }
 
   const getProviderKey = (provider: AiProviderConfig) => {
@@ -140,8 +190,16 @@ export default function AiSettingsView({ onBack }: AiSettingsViewProps) {
   }
 
   const selectedProvider = (aiDraft?.providers || [])[selectedProviderIndex] || null
+  const selectedProviderType = selectedProvider ? getProviderTypeLabel(selectedProvider) : ''
+  const selectedProviderSupportsEndpointRouting = isEndpointRoutedProviderType(selectedProviderType)
+  const selectedProviderPreset = getProviderPreset(selectedProviderType || undefined)
+  const selectedProviderDefaultBaseURL = selectedProviderPreset.defaultBaseURL || getProviderDefaultBaseURL(selectedProviderType)
+  const newProviderPreset = getProviderPreset(newProvider)
+  const newProviderDefaultBaseURL = newProviderPreset.defaultBaseURL || getProviderDefaultBaseURL(newProvider)
   const providerIdCounts = buildProviderIdCounts(aiDraft?.providers || [])
   const selectedProviderValidation = validateProviderConfig(selectedProvider, providerIdCounts)
+  const selectedProviderCapabilityRules = getProviderCapabilityRuleRows(selectedProvider || undefined)
+  const selectedProviderProtocolCapabilities = getProviderProtocolCapabilityRules(selectedProvider, providerIdCounts)
   const hasProviderBlockingIssues = (aiDraft?.providers || []).some((provider) => {
     return validateProviderConfig(provider, providerIdCounts).issues.length > 0
   })
@@ -149,6 +207,9 @@ export default function AiSettingsView({ onBack }: AiSettingsViewProps) {
     if (!selectedProvider) return false
     return modelBelongsToProvider(model, selectedProvider)
   })
+  const newModelProvider = aiDraft?.providers?.[newModelProviderIndex]
+  const newModelProviderType = newModelProvider ? getProviderTypeLabel(newModelProvider) : ''
+  const newModelNeedsEndpointType = isEndpointRoutedProviderType(newModelProviderType)
 
   useEffect(() => {
     if (window.intools?.ai?.settings?.get) {
@@ -282,13 +343,57 @@ export default function AiSettingsView({ onBack }: AiSettingsViewProps) {
     return `${base}-${index}`
   }
 
+  const applyProviderTypePreset = (input: AiProviderConfig, nextType: string): AiProviderConfig => {
+    const currentType = inferProviderType(input)
+    const currentPreset = getProviderPreset(currentType)
+    const nextPreset = getProviderPreset(nextType)
+    const currentId = String(input.id || '').trim()
+    const currentLabel = String(input.label || '').trim()
+    const currentBaseURL = String(input.baseURL || '').trim()
+
+    const replaceId = !currentId || currentId === currentPreset.defaultId
+    const replaceLabel = !currentLabel || currentLabel === currentPreset.defaultLabel
+    const replaceBaseURL = !currentBaseURL || (currentPreset.defaultBaseURL && currentBaseURL === currentPreset.defaultBaseURL)
+
+    const nextProvider: AiProviderConfig = {
+      ...input,
+      type: nextPreset.type,
+      id: replaceId ? nextPreset.defaultId : input.id,
+      label: replaceLabel ? nextPreset.defaultLabel : input.label,
+      baseURL: replaceBaseURL ? (nextPreset.defaultBaseURL || '') : input.baseURL
+    }
+    if (nextPreset.type !== 'azure-openai') {
+      nextProvider.apiVersion = ''
+    }
+    if (!isEndpointRoutedProviderType(nextPreset.type)) {
+      nextProvider.anthropicBaseURL = ''
+      nextProvider.geminiBaseURL = ''
+    }
+    return nextProvider
+  }
+
+  const handleNewProviderTypeChange = (nextType: string) => {
+    setNewProvider((prev) => applyProviderTypePreset(prev, nextType))
+  }
+
   const handleAddProvider = () => {
     if (!aiDraft) return
     const providerType = inferProviderType(newProvider)
     const providerId = buildProviderInstanceId(String(newProvider.id || ''), providerType)
     const providers = [...aiDraft.providers, { ...newProvider, id: providerId, type: providerType }]
     updateAiDraft({ providers })
-    setNewProvider({ id: '', type: 'openai-compatible', label: '', enabled: true, apiKey: '', baseURL: '' })
+    const resetPreset = getProviderPreset('openai')
+    setNewProvider({
+      id: resetPreset.defaultId,
+      type: resetPreset.type,
+      label: resetPreset.defaultLabel,
+      enabled: true,
+      apiKey: '',
+      baseURL: resetPreset.defaultBaseURL || '',
+      apiVersion: '',
+      anthropicBaseURL: '',
+      geminiBaseURL: ''
+    })
     setShowAddProviderModal(false)
   }
 
@@ -342,11 +447,16 @@ export default function AiSettingsView({ onBack }: AiSettingsViewProps) {
       return
     }
     const provider = aiDraft.providers[newModelProviderIndex]
+    const providerType = provider ? getProviderTypeLabel(provider) : ''
+    if (isEndpointRoutedProviderType(providerType) && !newModel.endpointType) {
+      setAiError('new-api / CherryIN 类型模型需要设置 endpoint type')
+      return
+    }
     const providerRef = provider ? String(provider.id) : undefined
     const providerLabel = provider ? getProviderKey(provider) : undefined
     const models = [...(aiDraft.models || []), { ...newModel, providerRef, providerLabel }]
     updateAiDraft({ models })
-    setNewModel({ id: '', label: '', description: '' })
+    setNewModel({ id: '', label: '', description: '', endpointType: undefined, supportedEndpointTypes: undefined })
     setNewModelProviderIndex(0)
     setShowAddModelModal(false)
   }
@@ -354,9 +464,18 @@ export default function AiSettingsView({ onBack }: AiSettingsViewProps) {
   const openAddModelModal = () => {
     if (!aiDraft || aiDraft.providers.length === 0) {
       setNewModelProviderIndex(0)
+      setNewModel((prev) => ({ ...prev, endpointType: undefined, supportedEndpointTypes: undefined }))
       setShowAddModelModal(true)
       return
     }
+    const setIndex = aiDraft.providers[selectedProviderIndex] ? selectedProviderIndex : 0
+    const provider = aiDraft.providers[setIndex]
+    const providerType = provider ? getProviderTypeLabel(provider) : ''
+    setNewModel((prev) => ({
+      ...prev,
+      endpointType: isEndpointRoutedProviderType(providerType) ? (prev.endpointType || 'openai') : undefined,
+      supportedEndpointTypes: isEndpointRoutedProviderType(providerType) ? prev.supportedEndpointTypes : undefined
+    }))
     if (aiDraft.providers[selectedProviderIndex]) {
       setNewModelProviderIndex(selectedProviderIndex)
     } else {
@@ -958,11 +1077,14 @@ export default function AiSettingsView({ onBack }: AiSettingsViewProps) {
                         <select
                           className={selectClass}
                           value={getProviderTypeLabel(selectedProvider)}
-                          onChange={(e) => handleUpdateProvider(selectedProviderIndex, { type: e.target.value })}
+                          onChange={(e) => {
+                            const nextProvider = applyProviderTypePreset(selectedProvider, e.target.value)
+                            handleUpdateProvider(selectedProviderIndex, nextProvider)
+                          }}
                         >
                           {getProviderTypeOptions(getProviderTypeLabel(selectedProvider)).map((type) => (
                             <option key={type} value={type}>
-                              {type}
+                              {PROVIDER_TYPE_LABELS[type] || type}
                             </option>
                           ))}
                         </select>
@@ -994,12 +1116,77 @@ export default function AiSettingsView({ onBack }: AiSettingsViewProps) {
                         value={selectedProvider.baseURL || ''}
                         onChange={(e) => handleUpdateProvider(selectedProviderIndex, { baseURL: e.target.value })}
                       />
+                      <div className="text-[11px] text-slate-500 dark:text-slate-400">
+                        默认 Base URL：{selectedProviderDefaultBaseURL || '无（需手动填写）'}
+                      </div>
+                      {(selectedProviderType === 'azure-openai' || selectedProviderType === 'azure') && (
+                        <input
+                          className={inputClass}
+                          placeholder="API Version（Azure OpenAI）"
+                          value={selectedProvider.apiVersion || ''}
+                          onChange={(e) => handleUpdateProvider(selectedProviderIndex, { apiVersion: e.target.value })}
+                        />
+                      )}
+                      {selectedProviderSupportsEndpointRouting && (
+                        <>
+                          <input
+                            className={inputClass}
+                            placeholder="Anthropic Base URL（可选）"
+                            value={selectedProvider.anthropicBaseURL || ''}
+                            onChange={(e) => handleUpdateProvider(selectedProviderIndex, { anthropicBaseURL: e.target.value })}
+                          />
+                          <input
+                            className={inputClass}
+                            placeholder="Gemini Base URL（可选）"
+                            value={selectedProvider.geminiBaseURL || ''}
+                            onChange={(e) => handleUpdateProvider(selectedProviderIndex, { geminiBaseURL: e.target.value })}
+                          />
+                        </>
+                      )}
                     </div>
                     {selectedProviderValidation.issues.length > 0 && (
                       <div className="rounded-2xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-700 dark:border-amber-900/60 dark:bg-amber-900/20 dark:text-amber-200">
                         {selectedProviderValidation.issues.join('；')}
                       </div>
                     )}
+                    <div className="rounded-2xl border border-slate-200/80 bg-slate-50 px-4 py-3 dark:border-slate-800/80 dark:bg-slate-900/50">
+                      <div className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">Provider 能力矩阵</div>
+                      <div className="mt-3 space-y-2">
+                        {selectedProviderProtocolCapabilities.map((item) => (
+                          <div
+                            key={item.capability}
+                            className="grid grid-cols-1 gap-2 rounded-2xl border border-slate-200/80 bg-white p-3 sm:grid-cols-[160px_72px_92px_1fr] sm:items-center dark:border-slate-800/80 dark:bg-slate-950"
+                          >
+                            <div className="text-xs font-medium text-slate-700 dark:text-slate-200">{item.label}</div>
+                            <span className={`inline-flex w-fit rounded-full px-2 py-0.5 text-[11px] ${item.enabled ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-200' : 'bg-rose-100 text-rose-700 dark:bg-rose-900/40 dark:text-rose-200'}`}>
+                              {item.enabled ? '可用' : '禁用'}
+                            </span>
+                            <span className={`inline-flex w-fit rounded-full px-2 py-0.5 text-[11px] ${item.source === 'profile' ? 'bg-rose-100 text-rose-700 dark:bg-rose-900/40 dark:text-rose-200' : item.source === 'config' ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-200' : 'bg-sky-100 text-sky-700 dark:bg-sky-900/40 dark:text-sky-200'}`}>
+                              {CAPABILITY_SOURCE_LABELS[item.source]}
+                            </span>
+                            <div className="text-xs text-slate-500 dark:text-slate-400">{item.reason}</div>
+                          </div>
+                        ))}
+                      </div>
+                      <div className="mt-3 text-xs font-medium text-slate-500 dark:text-slate-400">模型能力治理规则</div>
+                      <div className="mt-2 space-y-2">
+                        {selectedProviderCapabilityRules.map((rule) => (
+                          <div
+                            key={rule.capability}
+                            className="grid grid-cols-1 gap-2 rounded-2xl border border-slate-200/80 bg-white p-3 sm:grid-cols-[120px_72px_92px_1fr] sm:items-center dark:border-slate-800/80 dark:bg-slate-950"
+                          >
+                            <div className="text-xs font-medium text-slate-700 dark:text-slate-200">{CAPABILITY_LABELS[rule.capability] || rule.capability}</div>
+                            <span className={`inline-flex w-fit rounded-full px-2 py-0.5 text-[11px] ${rule.status === 'blocked' ? 'bg-rose-100 text-rose-700 dark:bg-rose-900/40 dark:text-rose-200' : 'bg-sky-100 text-sky-700 dark:bg-sky-900/40 dark:text-sky-200'}`}>
+                              {rule.status === 'blocked' ? '禁用' : '模型决定'}
+                            </span>
+                            <span className={`inline-flex w-fit rounded-full px-2 py-0.5 text-[11px] ${rule.source === 'profile' ? 'bg-rose-100 text-rose-700 dark:bg-rose-900/40 dark:text-rose-200' : 'bg-sky-100 text-sky-700 dark:bg-sky-900/40 dark:text-sky-200'}`}>
+                              {rule.source === 'profile' ? CAPABILITY_SOURCE_LABELS.profile : CAPABILITY_SOURCE_LABELS.model}
+                            </span>
+                            <div className="text-xs text-slate-500 dark:text-slate-400">{rule.reason}</div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
 
                     <details className="rounded-2xl border border-slate-200/80 bg-slate-50 px-4 py-3 text-sm text-slate-700 dark:border-slate-800/80 dark:bg-slate-900/50 dark:text-slate-200">
                       <summary className="cursor-pointer text-sm font-medium text-slate-700 dark:text-slate-200">供应商默认参数</summary>
@@ -1281,6 +1468,38 @@ export default function AiSettingsView({ onBack }: AiSettingsViewProps) {
                                   }}
                                 />
                               </div>
+                              {selectedProviderSupportsEndpointRouting && (
+                                <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
+                                  <div className="relative">
+                                    <select
+                                      className={selectClass}
+                                      value={model.endpointType || 'openai'}
+                                      onChange={(e) => {
+                                        const actualIndex = (aiDraft?.models || []).findIndex((item) => item.id === model.id)
+                                        handleUpdateModel(actualIndex, { endpointType: e.target.value as AiEndpointType })
+                                      }}
+                                    >
+                                      {ENDPOINT_TYPE_OPTIONS.map((endpointType) => (
+                                        <option key={endpointType} value={endpointType}>
+                                          {endpointType}
+                                        </option>
+                                      ))}
+                                    </select>
+                                    <svg className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                      <path d="m6 9 6 6 6-6" strokeLinecap="round" strokeLinejoin="round" />
+                                    </svg>
+                                  </div>
+                                  <input
+                                    className={inputClass}
+                                    placeholder="supported endpoint types（逗号分隔，可选）"
+                                    value={formatEndpointTypes(model.supportedEndpointTypes)}
+                                    onChange={(e) => {
+                                      const actualIndex = (aiDraft?.models || []).findIndex((item) => item.id === model.id)
+                                      handleUpdateModel(actualIndex, { supportedEndpointTypes: parseEndpointTypes(e.target.value) })
+                                    }}
+                                  />
+                                </div>
+                              )}
 
                               <div className="mt-3">
                                 <div className="text-xs uppercase tracking-[0.2em] text-slate-400">模型能力</div>
@@ -1604,11 +1823,11 @@ export default function AiSettingsView({ onBack }: AiSettingsViewProps) {
                 <select
                   className={selectClass}
                   value={inferProviderType(newProvider)}
-                  onChange={(e) => setNewProvider((prev) => ({ ...prev, type: e.target.value }))}
+                  onChange={(e) => handleNewProviderTypeChange(e.target.value)}
                 >
                   {PROVIDER_TYPE_OPTIONS.map((type) => (
                     <option key={type} value={type}>
-                      {type}
+                      {PROVIDER_TYPE_LABELS[type] || type}
                     </option>
                   ))}
                 </select>
@@ -1640,6 +1859,33 @@ export default function AiSettingsView({ onBack }: AiSettingsViewProps) {
                 value={newProvider.baseURL || ''}
                 onChange={(e) => setNewProvider((prev) => ({ ...prev, baseURL: e.target.value }))}
               />
+              <div className="text-[11px] text-slate-500 dark:text-slate-400">
+                默认 Base URL：{newProviderDefaultBaseURL || '无（需手动填写）'}
+              </div>
+              {(inferProviderType(newProvider) === 'azure-openai' || inferProviderType(newProvider) === 'azure') && (
+                <input
+                  className={inputClass}
+                  placeholder="API Version（Azure OpenAI）"
+                  value={newProvider.apiVersion || ''}
+                  onChange={(e) => setNewProvider((prev) => ({ ...prev, apiVersion: e.target.value }))}
+                />
+              )}
+              {isEndpointRoutedProviderType(inferProviderType(newProvider)) && (
+                <>
+                  <input
+                    className={inputClass}
+                    placeholder="Anthropic Base URL（可选）"
+                    value={newProvider.anthropicBaseURL || ''}
+                    onChange={(e) => setNewProvider((prev) => ({ ...prev, anthropicBaseURL: e.target.value }))}
+                  />
+                  <input
+                    className={inputClass}
+                    placeholder="Gemini Base URL（可选）"
+                    value={newProvider.geminiBaseURL || ''}
+                    onChange={(e) => setNewProvider((prev) => ({ ...prev, geminiBaseURL: e.target.value }))}
+                  />
+                </>
+              )}
             </div>
 
             <div className="mt-5 flex items-center justify-end gap-2">
@@ -1691,7 +1937,17 @@ export default function AiSettingsView({ onBack }: AiSettingsViewProps) {
                 <select
                   className={selectClass}
                   value={String(newModelProviderIndex)}
-                  onChange={(e) => setNewModelProviderIndex(Number(e.target.value))}
+                  onChange={(e) => {
+                    const nextIndex = Number(e.target.value)
+                    setNewModelProviderIndex(nextIndex)
+                    const nextProvider = (aiDraft?.providers || [])[nextIndex]
+                    const nextType = nextProvider ? getProviderTypeLabel(nextProvider) : ''
+                    setNewModel((prev) => ({
+                      ...prev,
+                      endpointType: isEndpointRoutedProviderType(nextType) ? (prev.endpointType || 'openai') : undefined,
+                      supportedEndpointTypes: isEndpointRoutedProviderType(nextType) ? prev.supportedEndpointTypes : undefined
+                    }))
+                  }}
                   disabled={!aiDraft || aiDraft.providers.length === 0}
                 >
                   {(aiDraft?.providers || []).length === 0 ? (
@@ -1714,6 +1970,32 @@ export default function AiSettingsView({ onBack }: AiSettingsViewProps) {
                 value={newModel.description}
                 onChange={(e) => setNewModel((prev) => ({ ...prev, description: e.target.value }))}
               />
+              {newModelNeedsEndpointType && (
+                <>
+                  <div className="relative">
+                    <select
+                      className={selectClass}
+                      value={newModel.endpointType || 'openai'}
+                      onChange={(e) => setNewModel((prev) => ({ ...prev, endpointType: e.target.value as AiEndpointType }))}
+                    >
+                      {ENDPOINT_TYPE_OPTIONS.map((endpointType) => (
+                        <option key={endpointType} value={endpointType}>
+                          {endpointType}
+                        </option>
+                      ))}
+                    </select>
+                    <svg className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <path d="m6 9 6 6 6-6" strokeLinecap="round" strokeLinejoin="round" />
+                    </svg>
+                  </div>
+                  <input
+                    className={inputClass}
+                    placeholder="supported endpoint types（逗号分隔，可选）"
+                    value={formatEndpointTypes(newModel.supportedEndpointTypes)}
+                    onChange={(e) => setNewModel((prev) => ({ ...prev, supportedEndpointTypes: parseEndpointTypes(e.target.value) }))}
+                  />
+                </>
+              )}
             </div>
 
             <div className="mt-4">

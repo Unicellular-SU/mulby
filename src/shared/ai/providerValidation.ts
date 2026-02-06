@@ -1,8 +1,7 @@
 import type { AiProviderConfig } from '../types/ai'
 import { inferProviderType } from './providerType'
-
-export const PROVIDER_TYPES_REQUIRE_BASE_URL = new Set(['openai-compatible', 'deepseek', 'openrouter', 'azure'])
-export const PROVIDER_TYPES_SUPPORT_FETCH_MODELS = new Set(['openai', 'openai-compatible', 'deepseek', 'openrouter'])
+import { getProviderProfile } from './providerProfiles'
+import { resolveProviderBaseURL } from './providerDefaults'
 
 export interface ProviderValidationResult {
   providerType: string
@@ -46,7 +45,14 @@ export function validateProviderConfig(
   const providerId = String(provider.id || '').trim()
   const issueSet = new Set<string>()
   const hasApiKey = !!String(provider.apiKey || '').trim()
-  const hasBaseURL = !!String(provider.baseURL || '').trim()
+  const hasBaseURL = !!String(
+    resolveProviderBaseURL({
+      providerType,
+      provider,
+      baseURL: provider.baseURL
+    }) || ''
+  ).trim()
+  const profile = getProviderProfile(providerType)
 
   if (!providerId) {
     issueSet.add('Provider 实例 ID 不能为空')
@@ -54,16 +60,16 @@ export function validateProviderConfig(
   if (providerId && providerIdCounts && (providerIdCounts.get(providerId) || 0) > 1) {
     issueSet.add(`Provider 实例 ID "${providerId}" 重复，请修改为唯一值`)
   }
-  if (!hasApiKey) {
-    issueSet.add('缺少 API Key')
+  if (profile.requiresApiKey && !hasApiKey) {
+    issueSet.add(profile.apiKeyRequiredReason || '缺少 API Key')
   }
-  if (PROVIDER_TYPES_REQUIRE_BASE_URL.has(providerType) && !hasBaseURL) {
-    issueSet.add(`Provider 类型 ${providerType} 需要填写 Base URL`)
+  if (profile.requiresBaseURL && !hasBaseURL) {
+    issueSet.add(profile.baseURLRequiredReason || `Provider 类型 ${providerType} 需要填写 Base URL`)
   }
 
   const issues = Array.from(issueSet)
   const canTestConnection = issues.length === 0
-  const supportsFetchModels = PROVIDER_TYPES_SUPPORT_FETCH_MODELS.has(providerType)
+  const supportsFetchModels = profile.supportsModelFetch
   const canFetchModels = canTestConnection && supportsFetchModels
 
   return {
@@ -76,7 +82,8 @@ export function validateProviderConfig(
     testConnectionHint: canTestConnection ? undefined : issues[0] || 'Provider 配置不完整',
     fetchModelsHint: canFetchModels
       ? undefined
-      : (supportsFetchModels ? (issues[0] || 'Provider 配置不完整') : `Provider 类型 ${providerType} 暂不支持自动拉取模型`)
+      : (supportsFetchModels
+          ? (issues[0] || 'Provider 配置不完整')
+          : (profile.modelFetchDisabledReason || `Provider 类型 ${providerType} 暂不支持自动拉取模型`))
   }
 }
-

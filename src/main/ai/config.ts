@@ -3,6 +3,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'fs'
 import { join } from 'path'
 import type { AiSettings, AiProviderConfig, AiProviderId, AiModel } from '../../shared/types/ai'
 import { inferProviderType } from './providerCatalog'
+import { resolveProviderBaseURL } from '../../shared/ai/providerDefaults'
 
 const DEFAULT_SETTINGS: AiSettings = {
   providers: [],
@@ -23,10 +24,16 @@ const settingsCache: { value: AiSettings | null } = { value: null }
 function normalizeProvider(provider: AiProviderConfig, index: number): AiProviderConfig {
   const id = String(provider.id || '').trim() || `provider-${index + 1}`
   const type = inferProviderType({ ...provider, id })
+  const baseURL = String(
+    provider.baseURL ||
+      resolveProviderBaseURL({ providerType: type, provider, baseURL: provider.baseURL }) ||
+      ''
+  ).trim()
   return {
     ...provider,
     id,
-    type
+    type,
+    baseURL
   }
 }
 

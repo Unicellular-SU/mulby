@@ -21,7 +21,27 @@ import { getProviderRegistry, hasProvider, getProviderType } from './providers'
 import { isOpenAICompatibleProvider, shouldUseChatCompletions } from './providerAdapterCatalog'
 import { createProviderRuntime, resolveImageModelKey, resolveLanguageModelKey } from './providerRuntime'
 import { getProviderMethodAdapter } from './providerMethodAdapters'
-import { buildProviderIdCounts, validateProviderConfig } from '../../shared/ai/providerValidation'
+import { buildProviderIdCounts } from '../../shared/ai/providerValidation'
+import { getProviderProtocolCapabilityRule } from '../../shared/ai/providerCapabilityGovernance'
+import { shouldUseCompatToolLoop } from './toolLoopStrategy'
+import { classifyAiStreamError } from '../../shared/ai/streamDiagnostics'
+import { resolveProviderBaseURL } from '../../shared/ai/providerDefaults'
+import { buildEndpointRoutedProviderConfig, resolveEndpointRoutedProviderType } from '../../shared/ai/providerEndpointRouting'
+import {
+  createEndChunk,
+  createErrorChunk,
+  createReasoningChunk,
+  createTextChunk,
+  createToolCallChunk,
+  createToolResultChunk
+} from './streamChunkProtocol'
+import {
+  createAiStreamMetrics,
+  finishAiStreamMetricsError,
+  finishAiStreamMetricsSuccess,
+  markAiStreamRoute,
+  recordAiStreamChunk
+} from './streamMetrics'
 
 interface StreamCallbacks {
   onChunk?: (chunk: AiMessage) => void
@@ -62,14 +82,13 @@ export class AiService {
       const { modelKey } = this.resolveLanguageModel(option.model)
       const params = this.resolveGenerationParams(option, option.model)
       const trimmedMessages = this.applyContextWindow(option.messages, params.contextWindow)
-      const providerConfig = this.resolveProviderConfig(option.model)
       const resolved = resolveModelId(option.model)
-      const providerType = getProviderType(providerConfig) || resolved.providerId
+      const { providerType, providerConfig } = this.resolveExecutionProviderContext(option.model, resolved.providerId)
       const methodAdapter = getProviderMethodAdapter(providerType)
       return await methodAdapter.call({
         hasTools: !!tools,
         hasMultimodalContent: this.hasMultimodalContent(trimmedMessages),
-        shouldUseCompatToolLoop: shouldUseCompatToolLoop(option.model, providerConfig?.baseURL),
+        shouldUseCompatToolLoop: shouldUseCompatToolLoop(option.model, providerConfig),
         executeAnthropicCall: async () => {
           console.log('[AI] call: 使用 Anthropic 原生 API')
           const anthropicPayload = await this.toAnthropicMessages(trimmedMessages, option.model, providerConfig)
@@ -101,6 +120,7 @@ export class AiService {
           const chatMessages = await this.toOpenAIChatMessages(trimmedMessages, option.model, { includeReasoningContent: true })
           const { content, reasoning, usage } = await this.runOpenAICompatToolLoop({
             model: resolved.modelId,
+            providerType,
             messages: chatMessages,
             apiKey: providerConfig?.apiKey,
             baseURL: providerConfig?.baseURL,
@@ -172,20 +192,44 @@ export class AiService {
     const id = requestId || this.createRequestId()
     const controller = new AbortController()
     this.controllers.set(id, controller)
+    let trackedOnChunk: ((chunk: AiMessage) => void) | undefined
+    let metrics: ReturnType<typeof createAiStreamMetrics> | undefined
 
     try {
       const { modelKey } = this.resolveLanguageModel(option.model)
       const params = this.resolveGenerationParams(option, option.model)
       const trimmedMessages = this.applyContextWindow(option.messages, params.contextWindow)
-      const providerConfig = this.resolveProviderConfig(option.model)
       const resolved = resolveModelId(option.model)
-      const providerType = getProviderType(providerConfig) || resolved.providerId
+      const { providerType, providerConfig } = this.resolveExecutionProviderContext(option.model, resolved.providerId)
       const methodAdapter = getProviderMethodAdapter(providerType)
-      return await methodAdapter.stream({
+      const compatToolLoop = shouldUseCompatToolLoop(option.model, providerConfig)
+      metrics = createAiStreamMetrics({
+        requestId: id,
+        providerType,
+        model: option.model,
+        hasTools: !!tools,
+        compatToolLoop,
+        maxToolSteps: option.maxToolSteps ?? 10
+      })
+      trackedOnChunk = (chunk: AiMessage) => {
+        recordAiStreamChunk(metrics!, chunk)
+        callbacks.onChunk?.(chunk)
+      }
+      console.info('[AI] stream:metrics:start', {
+        requestId: id,
+        providerType,
+        model: option.model,
+        hasTools: metrics.hasTools,
+        compatToolLoop: metrics.compatToolLoop,
+        maxToolSteps: metrics.maxToolSteps
+      })
+
+      const finalMessage = await methodAdapter.stream({
         hasTools: !!tools,
         hasMultimodalContent: this.hasMultimodalContent(trimmedMessages),
-        shouldUseCompatToolLoop: shouldUseCompatToolLoop(option.model, providerConfig?.baseURL),
+        shouldUseCompatToolLoop: compatToolLoop,
         executeAnthropicStream: async () => {
+          markAiStreamRoute(metrics!, 'anthropic-native')
           const anthropicPayload = await this.toAnthropicMessages(trimmedMessages, option.model, providerConfig)
           const { content, reasoning } = await this.streamAnthropicMessages({
             model: resolved.modelId,
@@ -194,7 +238,7 @@ export class AiService {
             apiKey: providerConfig?.apiKey,
             baseURL: providerConfig?.baseURL,
             params
-          }, callbacks.onChunk, controller.signal)
+          }, trackedOnChunk, controller.signal)
 
           const usage = normalizeUsage(
             undefined,
@@ -207,18 +251,21 @@ export class AiService {
             reasoning_content: reasoning || undefined,
             usage
           }
+          this.emitEndChunk(trackedOnChunk, finalMessage)
           callbacks.onEnd?.(finalMessage)
           return finalMessage
         },
         executeCompatChatStream: async () => {
+          markAiStreamRoute(metrics!, 'openai-compat-chat')
           const { content, reasoning } = await this.streamOpenAICompatChat({
             model: resolved.modelId,
+            providerType,
             messages: await this.toOpenAIChatMessages(option.messages, option.model),
             apiKey: providerConfig?.apiKey,
             baseURL: providerConfig?.baseURL,
             params,
             tools: option.tools
-          }, callbacks.onChunk, controller.signal)
+          }, trackedOnChunk, controller.signal)
 
           const usage = normalizeUsage(
             undefined,
@@ -231,10 +278,12 @@ export class AiService {
             reasoning_content: reasoning || undefined,
             usage
           }
+          this.emitEndChunk(trackedOnChunk, finalMessage)
           callbacks.onEnd?.(finalMessage)
           return finalMessage
         },
         executeCompatToolLoopStream: async () => {
+          markAiStreamRoute(metrics!, 'openai-compat-tool-loop')
           console.log('[AI] stream: 使用 OpenAI 兼容工具调用分支（DeepSeek reasoning 兼容）', {
             model: option.model,
             maxToolSteps: option.maxToolSteps ?? 10
@@ -242,6 +291,7 @@ export class AiService {
           const chatMessages = await this.toOpenAIChatMessages(trimmedMessages, option.model, { includeReasoningContent: true })
           const { content, reasoning, usage } = await this.runOpenAICompatToolLoop({
             model: resolved.modelId,
+            providerType,
             messages: chatMessages,
             apiKey: providerConfig?.apiKey,
             baseURL: providerConfig?.baseURL,
@@ -250,7 +300,7 @@ export class AiService {
             maxToolSteps: option.maxToolSteps,
             toolContext: option.toolContext,
             allowReasoning: supportsReasoning(option.model)
-          }, callbacks.onChunk, controller.signal)
+          }, trackedOnChunk, controller.signal)
 
           const finalMessage: AiMessage = {
             role: 'assistant',
@@ -259,13 +309,15 @@ export class AiService {
             usage: normalizeUsage(
               usage,
               countTokensFromMessages(trimmedMessages, option.model),
-              countTokensForText(`${reasoning || ''}${content || ''}`, option.model)
+                countTokensForText(`${reasoning || ''}${content || ''}`, option.model)
             )
           }
+          this.emitEndChunk(trackedOnChunk, finalMessage)
           callbacks.onEnd?.(finalMessage)
           return finalMessage
         },
         executeSdkStream: async () => {
+          markAiStreamRoute(metrics!, 'ai-sdk-stream')
           if (isOpenAICompatibleProvider(providerType) && shouldUseChatCompletions(providerType, providerConfig?.baseURL) && tools) {
             // 兼容 chat/completions 流式分支当前仅解析文本，不处理 tool_calls。
             // 启用工具时回退到 AI SDK 的 streamText，以支持工具执行与多步调用。
@@ -297,7 +349,7 @@ export class AiService {
                   : (typeof (part as any).text === 'string' ? (part as any).text : '')
                 if (textDelta) {
                   fullText += textDelta
-                  callbacks.onChunk?.({ role: 'assistant', content: textDelta })
+                  this.emitTextChunk(trackedOnChunk, textDelta)
                 }
               } else if (part?.type === 'reasoning-delta') {
                 const reasoningDelta = typeof (part as any).delta === 'string'
@@ -305,35 +357,29 @@ export class AiService {
                   : (typeof (part as any).text === 'string' ? (part as any).text : '')
                 if (reasoningDelta && allowReasoning) {
                   reasoningText += reasoningDelta
-                  callbacks.onChunk?.({ role: 'assistant', reasoning_content: reasoningDelta })
+                  this.emitReasoningChunk(trackedOnChunk, reasoningDelta)
                 }
               } else if (part?.type === 'tool-call') {
                 console.log('[AI] tool-call detected:', part)
-                callbacks.onChunk?.({
-                  role: 'assistant',
-                  tool_call: {
-                    id: part.toolCallId,
-                    name: part.toolName,
-                    args: (part as any).input ?? (part as any).args
-                  }
-                } as any)
+                this.emitToolCallChunk(trackedOnChunk, {
+                  id: part.toolCallId,
+                  name: part.toolName,
+                  args: (part as any).input ?? (part as any).args
+                })
               } else if (part?.type === 'tool-result') {
                 console.log('[AI] tool-result detected:', part)
-                callbacks.onChunk?.({
-                  role: 'assistant',
-                  tool_result: {
-                    id: part.toolCallId,
-                    name: part.toolName,
-                    result: (part as any).result ?? (part as any).output
-                  }
-                } as any)
+                this.emitToolResultChunk(trackedOnChunk, {
+                  id: part.toolCallId,
+                  name: part.toolName,
+                  result: (part as any).result ?? (part as any).output
+                })
               }
             }
           } else {
             for await (const chunk of result.textStream) {
               if (!chunk) continue
               fullText += chunk
-              callbacks.onChunk?.({ role: 'assistant', content: chunk })
+              this.emitTextChunk(trackedOnChunk, chunk)
             }
           }
 
@@ -356,13 +402,43 @@ export class AiService {
             reasoning_content: allowReasoning ? reasoningText || undefined : undefined,
             usage
           }
+          this.emitEndChunk(trackedOnChunk, finalMessage)
           callbacks.onEnd?.(finalMessage)
           return finalMessage
         }
       })
+      const successMetrics = finishAiStreamMetricsSuccess(metrics, finalMessage.usage)
+      console.info('[AI] stream:metrics:end', successMetrics)
+      return finalMessage
     } catch (err) {
-      const error = err instanceof Error ? err : new Error('AI stream failed')
+      const classification = classifyAiStreamError(err)
+      const error = err instanceof Error ? err : new Error(classification.message || 'AI stream failed')
+      this.emitErrorChunk(trackedOnChunk || callbacks.onChunk, error, classification)
       callbacks.onError?.(error)
+      if (metrics) {
+        const finalizedMetrics = finishAiStreamMetricsError(metrics, classification)
+        console.error('[AI] stream:error', {
+          requestId: id,
+          providerType: metrics.providerType,
+          model: option.model,
+          code: classification.code,
+          category: classification.category,
+          retryable: classification.retryable,
+          statusCode: classification.statusCode,
+          message: classification.message
+        })
+        console.info('[AI] stream:metrics:end', finalizedMetrics)
+      } else {
+        console.error('[AI] stream:error', {
+          requestId: id,
+          model: option.model,
+          code: classification.code,
+          category: classification.category,
+          retryable: classification.retryable,
+          statusCode: classification.statusCode,
+          message: classification.message
+        })
+      }
       throw error
     } finally {
       this.controllers.delete(id)
@@ -400,7 +476,26 @@ export class AiService {
   }
 
   async generateImages(input: { prompt: string; model: string; size?: string; count?: number }): Promise<{ images: string[]; tokens: AiTokenBreakdown }> {
-    const providerType = this.resolveProviderTypeForModel(input.model)
+    const { providerType, providerConfig } = this.resolveExecutionProviderContext(input.model)
+    const providerForCapability: AiProviderConfig = providerConfig || {
+      id: providerType,
+      type: providerType,
+      enabled: true
+    }
+    const providerIdCounts = buildProviderIdCounts(getAiSettings().providers)
+    const imageCapability = getProviderProtocolCapabilityRule(providerForCapability, 'image', providerIdCounts)
+    console.info('[AI] capability:protocol', {
+      stage: 'generateImages',
+      providerType,
+      model: input.model,
+      capability: imageCapability.capability,
+      enabled: imageCapability.enabled,
+      source: imageCapability.source,
+      reason: imageCapability.reason
+    })
+    if (!imageCapability.enabled) {
+      throw new Error(imageCapability.reason)
+    }
     const methodAdapter = getProviderMethodAdapter(providerType)
     return await methodAdapter.generateImages({
       executeSdkGenerate: async () => {
@@ -429,7 +524,26 @@ export class AiService {
   }
 
   async editImage(input: { imageAttachmentId: string; prompt: string; model: string }): Promise<{ images: string[]; tokens: AiTokenBreakdown }> {
-    const providerType = this.resolveProviderTypeForModel(input.model)
+    const { providerType, providerConfig } = this.resolveExecutionProviderContext(input.model)
+    const providerForCapability: AiProviderConfig = providerConfig || {
+      id: providerType,
+      type: providerType,
+      enabled: true
+    }
+    const providerIdCounts = buildProviderIdCounts(getAiSettings().providers)
+    const imageCapability = getProviderProtocolCapabilityRule(providerForCapability, 'image', providerIdCounts)
+    console.info('[AI] capability:protocol', {
+      stage: 'editImage',
+      providerType,
+      model: input.model,
+      capability: imageCapability.capability,
+      enabled: imageCapability.enabled,
+      source: imageCapability.source,
+      reason: imageCapability.reason
+    })
+    if (!imageCapability.enabled) {
+      throw new Error(imageCapability.reason)
+    }
     const methodAdapter = getProviderMethodAdapter(providerType)
     return await methodAdapter.editImage({
       executeSdkGenerate: async () => {
@@ -463,18 +577,32 @@ export class AiService {
     try {
       if (input?.providerId) {
         const provider = this.resolveProviderById(input.providerId)
-        const providerType = getProviderType(provider) || String(input.providerId)
+        const declaredProviderType = getProviderType(provider) || String(input.providerId)
+        const routedProviderType = resolveEndpointRoutedProviderType({
+          providerType: declaredProviderType,
+          model: this.resolveModelConfig(input.model)
+        })
         const mergedProvider: AiProviderConfig = {
           id: String(input.providerId),
-          type: providerType,
+          type: routedProviderType,
           enabled: true,
           apiKey: input.apiKey ?? provider?.apiKey,
           baseURL: input.baseURL ?? provider?.baseURL,
           headers: provider?.headers
         }
-        const validation = validateProviderConfig(mergedProvider, buildProviderIdCounts(getAiSettings().providers))
-        if (!validation.canTestConnection) {
-          return { success: false, message: validation.testConnectionHint || 'Provider 配置不完整' }
+        const providerIdCounts = buildProviderIdCounts(getAiSettings().providers)
+        const chatCapability = getProviderProtocolCapabilityRule(mergedProvider, 'chat', providerIdCounts)
+        console.info('[AI] capability:protocol', {
+          stage: 'testConnection',
+          providerId: input.providerId,
+          providerType: routedProviderType,
+          capability: chatCapability.capability,
+          enabled: chatCapability.enabled,
+          source: chatCapability.source,
+          reason: chatCapability.reason
+        })
+        if (!chatCapability.enabled) {
+          return { success: false, message: chatCapability.reason }
         }
       }
       const { modelKey } = this.resolveTestModel(input)
@@ -515,7 +643,7 @@ export class AiService {
       const allowReasoning = supportsReasoning(input?.model)
       const resolvedInput = this.resolveTestInput(input) || {}
       const resolvedProvider = this.resolveProviderById(resolvedInput?.providerId)
-      const resolvedProviderType = getProviderType(
+      const declaredProviderType = getProviderType(
         resolvedProvider || {
           id: String(resolvedInput?.providerId || ''),
           type: String(resolvedInput?.providerId || ''),
@@ -524,20 +652,32 @@ export class AiService {
           apiKey: resolvedInput?.apiKey
         }
       )
+      const resolvedProviderType = resolveEndpointRoutedProviderType({
+        providerType: declaredProviderType,
+        model: this.resolveModelConfig(resolvedInput?.model)
+      })
       if (resolvedInput?.providerId) {
-        const validation = validateProviderConfig(
-          {
-            id: String(resolvedInput.providerId),
-            type: resolvedProviderType,
-            enabled: true,
-            apiKey: resolvedInput.apiKey ?? resolvedProvider?.apiKey,
-            baseURL: resolvedInput.baseURL ?? resolvedProvider?.baseURL,
-            headers: resolvedProvider?.headers
-          },
-          buildProviderIdCounts(getAiSettings().providers)
-        )
-        if (!validation.canTestConnection) {
-          return { success: false, message: validation.testConnectionHint || 'Provider 配置不完整' }
+        const mergedProvider: AiProviderConfig = {
+          id: String(resolvedInput.providerId),
+          type: resolvedProviderType,
+          enabled: true,
+          apiKey: resolvedInput.apiKey ?? resolvedProvider?.apiKey,
+          baseURL: resolvedInput.baseURL ?? resolvedProvider?.baseURL,
+          headers: resolvedProvider?.headers
+        }
+        const providerIdCounts = buildProviderIdCounts(getAiSettings().providers)
+        const chatCapability = getProviderProtocolCapabilityRule(mergedProvider, 'chat', providerIdCounts)
+        console.info('[AI] capability:protocol', {
+          stage: 'testConnectionStream',
+          providerId: resolvedInput.providerId,
+          providerType: resolvedProviderType,
+          capability: chatCapability.capability,
+          enabled: chatCapability.enabled,
+          source: chatCapability.source,
+          reason: chatCapability.reason
+        })
+        if (!chatCapability.enabled) {
+          return { success: false, message: chatCapability.reason }
         }
       }
       console.info('[AI] testConnectionStream:start', {
@@ -547,7 +687,7 @@ export class AiService {
       })
 
       if (isOpenAICompatibleProvider(resolvedProviderType) && shouldUseChatCompletions(resolvedProviderType, resolvedInput?.baseURL)) {
-        const { content, reasoning } = await this.streamOpenAICompat(resolvedInput, (chunk) => {
+        const { content, reasoning } = await this.streamOpenAICompat({ ...resolvedInput, providerType: resolvedProviderType }, (chunk) => {
           if (chunk.type === 'reasoning' && !allowReasoning) return
           onChunk(chunk)
         })
@@ -611,11 +751,11 @@ export class AiService {
   }
 
   private async streamOpenAICompat(
-    input: { model?: string; providerId?: string; apiKey?: string; baseURL?: string },
+    input: { model?: string; providerId?: string; providerType?: string; apiKey?: string; baseURL?: string },
     onChunk: (chunk: { type: 'content' | 'reasoning'; text: string }) => void
   ): Promise<{ content: string; reasoning: string }> {
     const allowReasoning = supportsReasoning(input.model)
-    const baseURL = (input.baseURL || 'https://api.openai.com/v1').replace(/\/+$/, '')
+    const baseURL = this.resolveCompatBaseURL(input.baseURL, input.providerType || input.providerId)
     const url = `${baseURL.replace(/\/$/, '')}/chat/completions`
     const modelId = input.model?.includes(':') ? input.model.split(':', 2)[1] : input.model
     if (!modelId) {
@@ -696,6 +836,7 @@ export class AiService {
   private async streamOpenAICompatChat(
     input: {
       model: string
+      providerType?: string
       messages: Array<{
         role: 'system' | 'user' | 'assistant'
         content:
@@ -714,7 +855,7 @@ export class AiService {
     abortSignal?: AbortSignal
   ): Promise<{ content: string; reasoning: string }> {
     const allowReasoning = supportsReasoning(`openai:${input.model}`)
-    const baseURL = (input.baseURL || 'https://api.openai.com/v1').replace(/\/+$/, '')
+    const baseURL = this.resolveCompatBaseURL(input.baseURL, input.providerType)
     const url = `${baseURL}/chat/completions`
     const res = await fetch(url, {
       method: 'POST',
@@ -773,11 +914,11 @@ export class AiService {
 
           if (reasoningChunk && allowReasoning) {
             reasoning += reasoningChunk
-            onChunk?.({ role: 'assistant', reasoning_content: reasoningChunk })
+            this.emitReasoningChunk(onChunk, reasoningChunk)
           }
           if (contentChunk) {
             content += contentChunk
-            onChunk?.({ role: 'assistant', content: contentChunk })
+            this.emitTextChunk(onChunk, contentChunk)
           }
         } catch {
           // ignore malformed chunks
@@ -791,6 +932,7 @@ export class AiService {
   private async runOpenAICompatToolLoop(
     input: {
       model: string
+      providerType?: string
       messages: any[]
       apiKey?: string
       baseURL?: string
@@ -815,6 +957,7 @@ export class AiService {
     for (let step = 0; step < maxSteps; step += 1) {
       const stepResult = await this.streamOpenAICompatToolStep({
         model: input.model,
+        providerType: input.providerType,
         messages: conversationMessages,
         apiKey: input.apiKey,
         baseURL: input.baseURL,
@@ -877,27 +1020,27 @@ export class AiService {
           parsedArgs = rawArgs
         }
 
-        onChunk?.({
-          role: 'assistant',
-          tool_call: {
-            id: call.id,
-            name: toolName,
-            args: parsedArgs
-          }
-        } as any)
+        this.emitToolCallChunk(onChunk, {
+          id: call.id,
+          name: toolName,
+          args: parsedArgs
+        })
 
         console.log('[AI] 工具执行开始', { toolName, input: parsedArgs, context: input.toolContext })
-        const result = await this.toolExecutor({ name: toolName, args: parsedArgs, context: input.toolContext })
+        let result: unknown
+        try {
+          result = await this.toolExecutor({ name: toolName, args: parsedArgs, context: input.toolContext })
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error)
+          throw new Error(`[AI_TOOL_EXECUTION_ERROR] ${toolName}: ${message}`)
+        }
         console.log('[AI] 工具执行完成', { toolName, result })
 
-        onChunk?.({
-          role: 'assistant',
-          tool_result: {
-            id: call.id,
-            name: toolName,
-            result
-          }
-        } as any)
+        this.emitToolResultChunk(onChunk, {
+          id: call.id,
+          name: toolName,
+          result
+        })
 
         conversationMessages.push({
           role: 'tool',
@@ -913,6 +1056,7 @@ export class AiService {
   private async streamOpenAICompatToolStep(
     input: {
       model: string
+      providerType?: string
       messages: any[]
       apiKey?: string
       baseURL?: string
@@ -929,7 +1073,7 @@ export class AiService {
     finishReason?: string
     usage?: { inputTokens?: number; outputTokens?: number }
   }> {
-    const baseURL = (input.baseURL || 'https://api.openai.com/v1').replace(/\/+$/, '')
+    const baseURL = this.resolveCompatBaseURL(input.baseURL, input.providerType)
     const url = `${baseURL}/chat/completions`
     const res = await fetch(url, {
       method: 'POST',
@@ -1017,13 +1161,13 @@ export class AiService {
           if (reasoningChunk && input.allowReasoning) {
             const reasoningText = String(reasoningChunk)
             reasoning += reasoningText
-            onChunk?.({ role: 'assistant', reasoning_content: reasoningText })
+            this.emitReasoningChunk(onChunk, reasoningText)
           }
 
           const contentChunk = extractOpenAICompatContentText(contentSource.content)
           if (contentChunk) {
             content += contentChunk
-            onChunk?.({ role: 'assistant', content: contentChunk })
+            this.emitTextChunk(onChunk, contentChunk)
           }
 
           if (Array.isArray(contentSource.tool_calls)) {
@@ -1079,15 +1223,24 @@ export class AiService {
 
     const configured = this.resolveProviderById(input.providerId)
     const resolvedType = getProviderType(configured) || String(input.providerId)
-    const providerConfig: AiProviderConfig = {
+    const declaredProvider: AiProviderConfig = {
       id: input.providerId,
       type: resolvedType,
       enabled: true,
       apiKey: input.apiKey ?? configured?.apiKey,
       baseURL: input.baseURL ?? configured?.baseURL,
+      apiVersion: configured?.apiVersion,
+      anthropicBaseURL: configured?.anthropicBaseURL,
+      geminiBaseURL: configured?.geminiBaseURL,
       headers: configured?.headers
     }
-    const runtime = createProviderRuntime(providerConfig, resolvedType)
+    const resolvedModelConfig = this.resolveModelConfig(input.model)
+    const routedType = resolveEndpointRoutedProviderType({
+      providerType: resolvedType,
+      model: resolvedModelConfig
+    })
+    const providerConfig = buildEndpointRoutedProviderConfig(declaredProvider, routedType)
+    const runtime = createProviderRuntime(providerConfig, routedType)
     if (!runtime.provider) {
       throw new Error(`Provider not supported: ${input.providerId}`)
     }
@@ -1117,7 +1270,7 @@ export class AiService {
     options?: { includeReasoningContent?: boolean }
   ) {
     const maxFileBytes = 512 * 1024
-    const providerConfig = this.resolveProviderConfig(modelId)
+    const { providerConfig } = this.resolveExecutionProviderContext(modelId)
     const allowImages = supportsImageInput(modelId, providerConfig)
     const results: Array<{
       role: 'system' | 'user' | 'assistant'
@@ -1237,15 +1390,21 @@ export class AiService {
           fn.name,
           tool({
             description: fn.description,
-            inputSchema: jsonSchema(schema as any),
-            execute: async (input: unknown) => {
-              console.log('[AI] 工具执行开始', { toolName: fn.name, input, context })
-              const result = await this.toolExecutor?.({ name: fn.name, args: input, context })
-              console.log('[AI] 工具执行完成', { toolName: fn.name, result })
-              return result
+          inputSchema: jsonSchema(schema as any),
+          execute: async (input: unknown) => {
+            console.log('[AI] 工具执行开始', { toolName: fn.name, input, context })
+            let result: unknown
+            try {
+              result = await this.toolExecutor?.({ name: fn.name, args: input, context })
+            } catch (error) {
+              const message = error instanceof Error ? error.message : String(error)
+              throw new Error(`[AI_TOOL_EXECUTION_ERROR] ${fn.name}: ${message}`)
             }
-          })
-        ] as const
+            console.log('[AI] 工具执行完成', { toolName: fn.name, result })
+            return result
+          }
+        })
+      ] as const
       })
 
     if (toolEntries.length === 0) return undefined
@@ -1263,25 +1422,33 @@ export class AiService {
         apiKey: input.apiKey
       }
     )
-    const validation = validateProviderConfig(
-      {
-        id: String(configuredProvider?.id || input.providerId),
-        type: providerType,
-        enabled: true,
-        apiKey: input.apiKey || configuredProvider?.apiKey,
-        baseURL: input.baseURL || configuredProvider?.baseURL,
-        headers: configuredProvider?.headers
-      },
-      buildProviderIdCounts(getAiSettings().providers)
-    )
-    if (!validation.canFetchModels) {
-      return { models: [], message: validation.fetchModelsHint || 'Provider 配置不完整或不支持拉取模型' }
+    const mergedProvider: AiProviderConfig = {
+      id: String(configuredProvider?.id || input.providerId),
+      type: providerType,
+      enabled: true,
+      apiKey: input.apiKey || configuredProvider?.apiKey,
+      baseURL: input.baseURL || configuredProvider?.baseURL,
+      headers: configuredProvider?.headers
+    }
+    const providerIdCounts = buildProviderIdCounts(getAiSettings().providers)
+    const fetchCapability = getProviderProtocolCapabilityRule(mergedProvider, 'models-fetch', providerIdCounts)
+    console.info('[AI] capability:protocol', {
+      stage: 'fetchModels',
+      providerId: input.providerId,
+      providerType,
+      capability: fetchCapability.capability,
+      enabled: fetchCapability.enabled,
+      source: fetchCapability.source,
+      reason: fetchCapability.reason
+    })
+    if (!fetchCapability.enabled) {
+      return { models: [], message: fetchCapability.reason }
     }
     const methodAdapter = getProviderMethodAdapter(providerType)
     const providerId = String(configuredProvider?.id || input.providerId)
-    const baseURL = (input.baseURL || configuredProvider?.baseURL || 'https://api.openai.com/v1').replace(/\/+$/, '')
+    const baseURL = this.resolveModelDiscoveryBaseURL(input.baseURL || configuredProvider?.baseURL, providerType)
     return await methodAdapter.fetchModels({
-      executeOpenAICompatFetch: async (endpoint) => {
+      executeModelDiscovery: async ({ endpoint, parseModelIds }) => {
         const url = `${baseURL.replace(/\/$/, '')}${endpoint}`
         try {
           const apiKey = input.apiKey || configuredProvider?.apiKey
@@ -1294,10 +1461,11 @@ export class AiService {
             console.warn('[AI] fetchModels:fail', { status: res.status, statusText: res.statusText, body })
             return { models: [], message: `拉取失败：${res.status} ${res.statusText}${body ? ` - ${body}` : ''}` }
           }
-          const data = await res.json() as { data?: { id: string }[] }
-          const models = (data.data || []).map((item) => ({
-            id: `${providerId}:${item.id}`,
-            label: item.id,
+          const payload = await res.json()
+          const modelIds = parseModelIds(payload)
+          const models = modelIds.map((id) => ({
+            id: `${providerId}:${id}`,
+            label: id,
             description: '',
             providerRef: providerId
           }))
@@ -1317,17 +1485,17 @@ export class AiService {
     if (!hasProvider(providerId)) {
       throw new Error(`AI provider not available: ${providerId}`)
     }
-    const providerConfig = this.resolveProviderConfig(modelId, providerId)
-    const runtime = createProviderRuntime(providerConfig, providerId)
-    const providerType = runtime.type
+    const { providerType, providerConfig } = this.resolveExecutionProviderContext(modelId, providerId)
+    const runtime = createProviderRuntime(providerConfig, providerType)
+    const runtimeType = runtime.type
     const resolvedKey = resolveLanguageModelKey(runtime, resolvedId)
     if (resolvedKey) {
-      return { model: `${providerType}:${resolvedId}`, modelKey: resolvedKey }
+      return { model: `${runtimeType}:${resolvedId}`, modelKey: resolvedKey }
     }
 
     const registry = getProviderRegistry()
-    const modelKey = registry.languageModel(`${providerType}:${resolvedId}`)
-    return { model: `${providerType}:${resolvedId}`, modelKey }
+    const modelKey = registry.languageModel(`${runtimeType}:${resolvedId}`)
+    return { model: `${runtimeType}:${resolvedId}`, modelKey }
   }
 
   private resolveImageModel(modelId?: string): { model: string; modelKey: any } {
@@ -1336,29 +1504,28 @@ export class AiService {
       throw new Error(`AI provider not available: ${providerId}`)
     }
 
-    const providerConfig = this.resolveProviderConfig(modelId, providerId)
-    const runtime = createProviderRuntime(providerConfig, providerId)
-    const providerType = runtime.type
+    const { providerType, providerConfig } = this.resolveExecutionProviderContext(modelId, providerId)
+    const runtime = createProviderRuntime(providerConfig, providerType)
+    const runtimeType = runtime.type
     console.info('[AI] resolveImageModel', {
       modelInput: modelId,
-      resolvedModel: `${providerType}:${resolvedId}`,
-      providerId: providerType,
+      resolvedModel: `${runtimeType}:${resolvedId}`,
+      providerId: runtimeType,
       providerLabel: providerConfig?.label || providerConfig?.id,
       baseURL: providerConfig?.baseURL
     })
     const resolvedKey = resolveImageModelKey(runtime, resolvedId)
     if (resolvedKey) {
-      return { model: `${providerType}:${resolvedId}`, modelKey: resolvedKey }
+      return { model: `${runtimeType}:${resolvedId}`, modelKey: resolvedKey }
     }
 
     const registry = getProviderRegistry()
-    const modelKey = registry.imageModel(`${providerType}:${resolvedId}`)
-    return { model: `${providerType}:${resolvedId}`, modelKey }
+    const modelKey = registry.imageModel(`${runtimeType}:${resolvedId}`)
+    return { model: `${runtimeType}:${resolvedId}`, modelKey }
   }
 
   private async toSdkMessages(messages: AiMessage[], modelId?: string) {
-    const providerConfig = this.resolveProviderConfig(modelId)
-    const providerType = getProviderType(providerConfig)
+    const { providerType, providerConfig } = this.resolveExecutionProviderContext(modelId)
     const results: any[] = []
     for (const message of messages) {
       if (typeof message.content === 'string' || message.content === undefined) {
@@ -1432,6 +1599,74 @@ export class AiService {
 
   private hasMultimodalContent(messages: AiMessage[]): boolean {
     return messages.some((message) => Array.isArray(message.content) && message.content.some((part) => part.type !== 'text'))
+  }
+
+  private emitChunk(onChunk: ((chunk: AiMessage) => void) | undefined, chunk: AiMessage): void {
+    if (!onChunk) return
+    onChunk(chunk)
+  }
+
+  private emitTextChunk(onChunk: ((chunk: AiMessage) => void) | undefined, text: string): void {
+    this.emitChunk(onChunk, createTextChunk(text))
+  }
+
+  private emitReasoningChunk(onChunk: ((chunk: AiMessage) => void) | undefined, text: string): void {
+    this.emitChunk(onChunk, createReasoningChunk(text))
+  }
+
+  private emitToolCallChunk(
+    onChunk: ((chunk: AiMessage) => void) | undefined,
+    toolCall: { id: string; name: string; args?: unknown }
+  ): void {
+    this.emitChunk(onChunk, createToolCallChunk(toolCall))
+  }
+
+  private emitToolResultChunk(
+    onChunk: ((chunk: AiMessage) => void) | undefined,
+    toolResult: { id: string; name: string; result?: unknown }
+  ): void {
+    this.emitChunk(onChunk, createToolResultChunk(toolResult))
+  }
+
+  private emitErrorChunk(
+    onChunk: ((chunk: AiMessage) => void) | undefined,
+    error: Error,
+    classification?: Parameters<typeof createErrorChunk>[1]
+  ): void {
+    this.emitChunk(onChunk, createErrorChunk(error, classification))
+  }
+
+  private emitEndChunk(onChunk: ((chunk: AiMessage) => void) | undefined, message: AiMessage): void {
+    this.emitChunk(onChunk, createEndChunk(message))
+  }
+
+  private resolveCompatBaseURL(explicitBaseURL?: string, providerType?: string): string {
+    const normalizedType = String(providerType || '').trim().toLowerCase()
+    const resolved = resolveProviderBaseURL({
+      providerType,
+      baseURL: explicitBaseURL
+    })
+    if (resolved) {
+      const normalizedResolved = resolved.replace(/\/+$/, '')
+      if (normalizedType === 'ollama') {
+        return /\/v1$/i.test(normalizedResolved) ? normalizedResolved : `${normalizedResolved}/v1`
+      }
+      return normalizedResolved
+    }
+    if (normalizedType === 'openai-compatible' || normalizedType === 'azure' || normalizedType === 'azure-openai') {
+      throw new Error(`Provider 类型 ${normalizedType} 需要填写 Base URL`)
+    }
+    const fallback = 'https://api.openai.com/v1'
+    return fallback.replace(/\/+$/, '')
+  }
+
+  private resolveModelDiscoveryBaseURL(explicitBaseURL?: string, providerType?: string): string {
+    const baseURL = this.resolveCompatBaseURL(explicitBaseURL, providerType)
+    const normalizedType = String(providerType || '').trim().toLowerCase()
+    if (normalizedType === 'ollama') {
+      return baseURL.replace(/\/v1$/i, '')
+    }
+    return baseURL
   }
 
   private async toAnthropicMessages(messages: AiMessage[], modelId: string | undefined, providerConfig?: AiProviderConfig) {
@@ -1653,11 +1888,11 @@ export class AiService {
             const delta = json.delta || {}
             if (delta.text) {
               content += delta.text
-              onChunk?.({ role: 'assistant', content: delta.text })
+              this.emitTextChunk(onChunk, delta.text)
             }
             if (delta.thinking) {
               reasoning += delta.thinking
-              onChunk?.({ role: 'assistant', reasoning_content: delta.thinking })
+              this.emitReasoningChunk(onChunk, delta.thinking)
             }
           }
         } catch {
@@ -1682,7 +1917,7 @@ export class AiService {
     input: { attachmentId: string; model?: string; providerId?: string; purpose?: string }
   ): Promise<{ providerId: string; fileId: string; uri?: string }> {
     const providerConfig = input.model
-      ? this.resolveProviderConfig(input.model)
+      ? this.resolveExecutionProviderContext(input.model).providerConfig
       : this.resolveProviderById(input.providerId)
     if (!providerConfig) {
       console.error('[AI] uploadAttachmentToProvider:provider_not_found', { input })
@@ -1814,10 +2049,22 @@ export class AiService {
     return settings.models?.find((model) => model.id === modelId)
   }
 
-  private resolveProviderTypeForModel(modelId?: string): string {
+  private resolveExecutionProviderContext(
+    modelId?: string,
+    providerIdOverride?: string
+  ): { providerType: string; providerConfig?: AiProviderConfig } {
     const resolved = resolveModelId(modelId)
-    const providerConfig = this.resolveProviderConfig(modelId, resolved.providerId)
-    return getProviderType(providerConfig) || resolved.providerId
+    const providerConfig = this.resolveProviderConfig(modelId, providerIdOverride || resolved.providerId)
+    const declaredProviderType = getProviderType(providerConfig) || providerIdOverride || resolved.providerId
+    const modelConfig = this.resolveModelConfig(modelId)
+    const providerType = resolveEndpointRoutedProviderType({
+      providerType: declaredProviderType,
+      model: modelConfig
+    })
+    return {
+      providerType,
+      providerConfig: buildEndpointRoutedProviderConfig(providerConfig, providerType)
+    }
   }
 
   private resolveProviderConfig(modelId?: string, providerIdOverride?: string): AiProviderConfig | undefined {
@@ -1890,15 +2137,6 @@ function normalizeModelParams(params: AiModelParameters): AiModelParameters {
   if (params.stopSequences) normalized.stopSequences = params.stopSequences.filter((item) => item && item.trim().length > 0)
   if (params.seed !== undefined) normalized.seed = Math.floor(params.seed)
   return normalized
-}
-
-function shouldUseCompatToolLoop(modelId?: string, baseURL?: string): boolean {
-  const model = (modelId || '').toLowerCase()
-  const url = (baseURL || '').toLowerCase()
-  if (model.includes('deepseek-reasoner') || model.includes('deepseek-r1')) {
-    return true
-  }
-  return url.includes('deepseek.com') && (model.includes('reasoner') || model.includes('-r1') || model.includes('/r1'))
 }
 
 function stringifyToolResult(result: unknown): string {

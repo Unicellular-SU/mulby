@@ -22,6 +22,27 @@ export interface AiMessage {
   role: 'system' | 'user' | 'assistant'
   content?: string | AiMessageContent[]
   reasoning_content?: string
+  /**
+   * 流式事件类型（仅 onChunk 过程中出现），用于统一 text/reasoning/tool/error/end 协议。
+   */
+  chunkType?: 'text' | 'reasoning' | 'tool-call' | 'tool-result' | 'error' | 'end'
+  tool_call?: {
+    id: string
+    name: string
+    args?: unknown
+  }
+  tool_result?: {
+    id: string
+    name: string
+    result?: unknown
+  }
+  error?: {
+    message: string
+    code?: string
+    category?: string
+    retryable?: boolean
+    statusCode?: number
+  }
   usage?: AiTokenBreakdown
 }
 
@@ -88,19 +109,41 @@ export interface AiModel {
    */
   providerRef?: string
   providerLabel?: string
+  /**
+   * new-api / cherryin 族模型的协议路由类型。
+   */
+  endpointType?: AiEndpointType
+  /**
+   * 模型声明支持的 endpoint 类型列表（可选）。
+   */
+  supportedEndpointTypes?: AiEndpointType[]
   params?: AiModelParameters
   capabilities?: AiModelCapability[]
 }
 
 export type AiProviderId =
   | 'openai'
+  | 'openai-response'
   | 'openai-compatible'
   | 'anthropic'
   | 'google'
+  | 'gemini'
   | 'deepseek'
   | 'openrouter'
   | 'azure'
+  | 'azure-openai'
+  | 'new-api'
+  | 'cherryin'
+  | 'ollama'
   | 'custom'
+
+export type AiEndpointType =
+  | 'openai'
+  | 'openai-response'
+  | 'anthropic'
+  | 'gemini'
+  | 'image-generation'
+  | 'jina-rerank'
 
 export interface AiProviderConfig {
   /**
@@ -115,6 +158,9 @@ export interface AiProviderConfig {
   enabled: boolean
   apiKey?: string
   baseURL?: string
+  apiVersion?: string
+  anthropicBaseURL?: string
+  geminiBaseURL?: string
   headers?: Record<string, string>
   defaultModel?: string
   defaultParams?: AiModelParameters

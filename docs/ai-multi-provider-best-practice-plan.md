@@ -16,6 +16,9 @@
 - UI 校验反馈：已加入 Provider 实时校验与能力门控（重复实例 ID、缺少 API Key、缺少必要 Base URL；测试连接/拉取模型按钮按能力自动禁用）。
 - Shared Validation：已抽取 `src/shared/ai/providerType.ts` + `src/shared/ai/providerValidation.ts`，主进程与 UI 共用同一套 provider 校验与类型推断规则。
 - Unit Tests：已新增 `providerMethodAdapters` 单元测试，覆盖 call/stream 路由决策与 fetchModels 能力门控。
+- Phase 4（已完成核心项）：`models.fetch` 已升级为“endpoint + parser”声明式发现策略，并支持 provider-specific 多 endpoint fallback；parser 已细化覆盖非标准 payload（如 `result.list`、`model/name/slug` 字段）；provider capability 已通过 shared profile 声明并接入能力合并逻辑，UI 已新增 provider 能力矩阵与能力来源标记（profile 禁用 / 配置缺失 / 模型决定）。
+- 来源判定统一：已新增 shared `providerCapabilityGovernance`，UI 能力矩阵与主进程门控日志均复用同一来源分类函数（profile/config/model）。
+- Phase 5（进行中）：主进程流式回调已统一 chunk 事件协议（`text/reasoning/tool-call/tool-result/error/end`），DeepSeek 工具调用策略已下沉为 provider feature flag（`requiresReasoningReplayOnToolCalls`），并新增统一异常归因错误码与结构化流式指标日志（`stream:metrics:start/end`）。
 - 后续待推进：按 Phase 3/4 拆分 adapter、统一 provider capability 声明与 models.fetch 能力门控。
 
 ## 当前现状（基于项目代码）
@@ -131,6 +134,23 @@
 - 验收：
   - DeepSeek reasoner、OpenAI-compatible 常见供应商的工具流式稳定运行。
   - ai-api-test 页面实时显示一致。
+
+### Phase 5 准备状态（2026-02-06）
+
+- 已具备统一 provider 能力门控与来源日志，可在流式/工具调用异常时快速判断是 profile 限制、配置缺失还是模型层行为。
+- `call/stream/fetchModels` 的 adapter 路由与 discovery 逻辑已有单元测试，可在 Phase 5 中聚焦流式 chunk 协议一致性与 tool loop 稳定性。
+
+### Phase 5 当前进度（2026-02-06）
+
+- 已完成：`AiMessage` 增加 `chunkType` 与工具/错误事件字段，`aiService.stream` 全链路按统一 chunk 事件发出；结束事件通过 `chunkType=end` 输出 usage，不重复正文。
+- 已完成：tool loop 决策抽到 `toolLoopStrategy`，并通过 provider feature flags 声明 DeepSeek 推理模型必须走 reasoning replay 兼容分支。
+- 已完成：`ai-api-test` 流式工具调用面板支持基于 `chunkType` 的回显（包含 error/end 处理）。
+- 已完成：新增 `streamChunkProtocol` 与 `toolLoopStrategy` 单元测试，覆盖 chunk 规范与 compat tool loop 路由决策。
+- 已完成：补充 stream/tool-call 的细粒度回归测试（多步工具、reasoning 与正文交错、异常中断、abort）与验收脚本。
+- 已完成：新增 shared `streamDiagnostics`，将 stream/tool 异常统一归类为错误码（如 `AI_STREAM_ABORTED`、`AI_STREAM_TOOL_EXECUTION_ERROR`、`AI_STREAM_HTTP_4XX/5XX` 等），并在 error chunk 回传错误码元数据。
+- 已完成：新增 `streamMetrics`，对流式请求输出结构化统计（provider/model/route、chunk 计数、字符计数、耗时、usage、异常分类），日志统一为 `stream:metrics:start/end` 与 `stream:error`。
+- 已完成：工具执行异常统一包装为 `[AI_TOOL_EXECUTION_ERROR]` 前缀，确保 SDK tool 与 compat tool loop 两条链路可被同一分类器稳定识别。
+- 产物：`scripts/phase5-regression.sh`、`docs/phase5-stream-tool-regression-checklist.md`。
 
 ## Phase 6: 测试与发布治理
 

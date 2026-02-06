@@ -83,6 +83,34 @@ describe('providerMethodAdapters', () => {
     assert.deepEqual(calls, ['compat-chat-stream'])
   })
 
+  it('stream: openai-response + no tools keeps sdk stream route', async () => {
+    const adapter = getProviderMethodAdapter('openai-response')
+    const calls: string[] = []
+    const result = await adapter.stream({
+      hasTools: false,
+      hasMultimodalContent: false,
+      shouldUseCompatToolLoop: false,
+      executeAnthropicStream: async () => {
+        calls.push('anthropic-stream')
+        return assistantMessage('anthropic-stream')
+      },
+      executeCompatChatStream: async () => {
+        calls.push('compat-chat-stream')
+        return assistantMessage('compat-chat-stream')
+      },
+      executeCompatToolLoopStream: async () => {
+        calls.push('compat-tool-loop-stream')
+        return assistantMessage('compat-tool-loop-stream')
+      },
+      executeSdkStream: async () => {
+        calls.push('sdk-stream')
+        return assistantMessage('sdk-stream')
+      }
+    })
+    assert.equal(result.content, 'sdk-stream')
+    assert.deepEqual(calls, ['sdk-stream'])
+  })
+
   it('stream: openai-compatible + tools without compat loop falls back to sdk stream', async () => {
     const adapter = getProviderMethodAdapter('openrouter')
     const calls: string[] = []
@@ -115,7 +143,7 @@ describe('providerMethodAdapters', () => {
     const adapter = getProviderMethodAdapter('google')
     let called = false
     const result = await adapter.fetchModels({
-      executeOpenAICompatFetch: async () => {
+      executeModelDiscovery: async () => {
         called = true
         return { models: [] }
       }
@@ -128,15 +156,35 @@ describe('providerMethodAdapters', () => {
   it('fetchModels: openai-compatible provider passes endpoint to fetch executor', async () => {
     const adapter = getProviderMethodAdapter('openai-compatible')
     let endpoint = ''
+    let parserResultLength = 0
     const result = await adapter.fetchModels({
-      executeOpenAICompatFetch: async (inputEndpoint) => {
+      executeModelDiscovery: async ({ endpoint: inputEndpoint, parseModelIds }) => {
         endpoint = inputEndpoint
+        parserResultLength = parseModelIds({ data: [{ id: 'model-from-parser' }] }).length
         return { models: [{ id: 'demo:model-a', label: 'model-a', description: '', providerRef: 'demo' }] }
       }
     })
     assert.equal(endpoint, '/models')
+    assert.equal(parserResultLength, 1)
     assert.equal(result.models.length, 1)
     assert.equal(result.models[0]?.id, 'demo:model-a')
   })
-})
 
+  it('fetchModels: provider-specific multi-endpoint fallback uses next endpoint on empty result', async () => {
+    const adapter = getProviderMethodAdapter('openrouter')
+    const calledEndpoints: string[] = []
+    const result = await adapter.fetchModels({
+      executeModelDiscovery: async ({ endpoint }) => {
+        calledEndpoints.push(endpoint)
+        if (endpoint === '/models') return { models: [] }
+        if (endpoint === '/api/v1/models') {
+          return { models: [{ id: 'or:model-b', label: 'model-b', description: '', providerRef: 'or' }] }
+        }
+        return { models: [] }
+      }
+    })
+    assert.deepEqual(calledEndpoints, ['/models', '/api/v1/models'])
+    assert.equal(result.models.length, 1)
+    assert.equal(result.models[0]?.id, 'or:model-b')
+  })
+})

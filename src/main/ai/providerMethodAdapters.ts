@@ -26,7 +26,10 @@ export interface ProviderImageAdapterArgs {
 }
 
 export interface ProviderFetchModelsAdapterArgs {
-  executeOpenAICompatFetch: (endpoint: string) => Promise<{ models: AiModel[]; message?: string }>
+  executeModelDiscovery: (input: {
+    endpoint: string
+    parseModelIds: (payload: unknown) => string[]
+  }) => Promise<{ models: AiModel[]; message?: string }>
 }
 
 export interface ProviderMethodAdapter {
@@ -55,7 +58,7 @@ function createProviderMethodAdapter(type: string): ProviderMethodAdapter {
       if (adapter.type === 'anthropic' && args.hasMultimodalContent) {
         return args.executeAnthropicStream()
       }
-      if (adapter.openAICompatible && !args.hasTools) {
+      if (adapter.openAICompatible && adapter.preferCompatTextStream && !args.hasTools) {
         return args.executeCompatChatStream()
       }
       if (adapter.openAICompatible && args.hasTools && args.shouldUseCompatToolLoop) {
@@ -76,10 +79,19 @@ function createProviderMethodAdapter(type: string): ProviderMethodAdapter {
       return args.executeSdkEdit()
     },
     async fetchModels(args) {
-      if (!adapter.supportsModelFetch || !adapter.modelListEndpoint) {
+      if (!adapter.supportsModelFetch || !adapter.modelDiscovery || adapter.modelDiscovery.endpoints.length === 0) {
         return { models: [], message: `当前 provider 类型 (${adapter.type}) 暂不支持自动拉取模型列表` }
       }
-      return args.executeOpenAICompatFetch(adapter.modelListEndpoint)
+      let fallback: { models: AiModel[]; message?: string } = { models: [] }
+      for (const endpoint of adapter.modelDiscovery.endpoints) {
+        const result = await args.executeModelDiscovery({
+          endpoint,
+          parseModelIds: adapter.modelDiscovery.parseModelIds
+        })
+        if (result.models.length > 0) return result
+        if (result.message) fallback = result
+      }
+      return fallback
     }
   }
 }
@@ -94,4 +106,3 @@ export function getProviderMethodAdapter(type?: string): ProviderMethodAdapter {
   methodAdapterCache.set(normalized, next)
   return next
 }
-

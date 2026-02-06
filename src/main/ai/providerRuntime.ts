@@ -23,6 +23,12 @@ export function createProviderRuntime(config?: AiProviderConfig, fallbackType?: 
 
 export function resolveLanguageModelKey(runtime: ProviderRuntime, modelId: string): any | null {
   if (!runtime.provider) return null
+  if (runtime.adapter.languageModelMode === 'responses' && (runtime.provider as any).responses) {
+    return (runtime.provider as any).responses(modelId)
+  }
+  if (runtime.adapter.languageModelMode === 'chat' && (runtime.provider as any).chat) {
+    return (runtime.provider as any).chat(modelId)
+  }
   if (
     runtime.adapter.openAICompatible &&
     shouldUseChatCompletions(runtime.type, runtime.config?.baseURL) &&
@@ -47,4 +53,3 @@ export function resolveImageModelKey(runtime: ProviderRuntime, modelId: string):
     return null
   }
 }
-
