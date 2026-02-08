@@ -1,11 +1,19 @@
 import { useEffect, useMemo, useState } from 'react'
-import type { AppSettings, AppShortcutAction, ShortcutStatusMap, StoreSource } from '../../shared/types/settings'
+import type {
+  AppSettings,
+  AppShortcutAction,
+  CommandAuditItem,
+  CommandRule,
+  ShortcutStatusMap,
+  StoreSource
+} from '../../shared/types/settings'
 type SettingsSection =
   | 'general'
   | 'appearance'
   | 'shortcuts'
   | 'store'
   | 'permissions'
+  | 'security'
   | 'developer'
   | 'about'
 
@@ -26,6 +34,7 @@ const SECTION_ITEMS: { id: SettingsSection; label: string }[] = [
   { id: 'shortcuts', label: '快捷键' },
   { id: 'store', label: '插件商店' },
   { id: 'permissions', label: '权限' },
+  { id: 'security', label: '命令执行' },
   { id: 'developer', label: '开发者' },
   { id: 'about', label: '关于' }
 ]
@@ -224,6 +233,15 @@ export default function SettingsView({ section, onSectionChange, onClose, onOpen
   const [themeMode, setThemeMode] = useState<'light' | 'dark' | 'system'>('system')
   const [shortcutStatus, setShortcutStatus] = useState<ShortcutStatusMap | null>(null)
   const [permissionStatus, setPermissionStatus] = useState<Record<string, string>>({})
+  const [commandAudit, setCommandAudit] = useState<CommandAuditItem[]>([])
+  const [allowRuleDraft, setAllowRuleDraft] = useState<{ mode: 'exact' | 'prefix'; value: string }>({
+    mode: 'exact',
+    value: ''
+  })
+  const [denyRuleDraft, setDenyRuleDraft] = useState<{ mode: 'exact' | 'prefix'; value: string }>({
+    mode: 'exact',
+    value: ''
+  })
   const [appInfo, setAppInfo] = useState<{ name: string; version: string; userDataPath: string } | null>(null)
   const [newSource, setNewSource] = useState<{ name: string; url: string }>({ name: '', url: '' })
   const [sourceError, setSourceError] = useState<string | null>(null)
@@ -252,12 +270,79 @@ export default function SettingsView({ section, onSectionChange, onClose, onOpen
     void load()
   }, [section])
 
+  useEffect(() => {
+    if (section !== 'security') return
+    const loadAudit = async () => {
+      if (!window.intools?.shell?.listRunCommandAudit) {
+        setCommandAudit([])
+        return
+      }
+      try {
+        const records = await window.intools.shell.listRunCommandAudit(100)
+        setCommandAudit(records)
+      } catch {
+        setCommandAudit([])
+      }
+    }
+    void loadAudit()
+  }, [section, settings?.commandRunner.audit.records.length])
+
   const sources = settings?.storeSources ?? []
 
   const updateSettings = async (partial: Partial<AppSettings>) => {
     const result = await window.intools.settings.update(partial)
     setSettings(result.settings)
     setShortcutStatus(result.shortcutStatus)
+  }
+
+  const reloadSettings = async () => {
+    const result = await window.intools.settings.get()
+    setSettings(result.settings)
+    setShortcutStatus(result.shortcutStatus)
+  }
+
+  const updateCommandRunner = async (patch: Partial<AppSettings['commandRunner']>) => {
+    if (!settings) return
+    await updateSettings({
+      commandRunner: {
+        ...settings.commandRunner,
+        ...patch
+      }
+    })
+  }
+
+  const addCommandRule = async (type: 'allowList' | 'denyList') => {
+    if (!settings) return
+    const draft = type === 'allowList' ? allowRuleDraft : denyRuleDraft
+    const value = draft.value.trim()
+    if (!value) return
+    const nextRule: CommandRule = {
+      id: `${type}-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+      mode: draft.mode,
+      value,
+      enabled: true
+    }
+    const nextRules = [...(settings.commandRunner[type] || []), nextRule]
+    await updateCommandRunner({ [type]: nextRules })
+    if (type === 'allowList') {
+      setAllowRuleDraft({ mode: draft.mode, value: '' })
+    } else {
+      setDenyRuleDraft({ mode: draft.mode, value: '' })
+    }
+  }
+
+  const removeCommandRule = async (type: 'allowList' | 'denyList', ruleId: string) => {
+    if (!settings) return
+    const nextRules = (settings.commandRunner[type] || []).filter((item) => item.id !== ruleId)
+    await updateCommandRunner({ [type]: nextRules })
+  }
+
+  const patchCommandRule = async (type: 'allowList' | 'denyList', ruleId: string, patch: Partial<CommandRule>) => {
+    if (!settings) return
+    const nextRules = (settings.commandRunner[type] || []).map((item) => (
+      item.id === ruleId ? { ...item, ...patch } : item
+    ))
+    await updateCommandRunner({ [type]: nextRules })
   }
 
   const handleRecordStart = async () => {
@@ -566,6 +651,304 @@ export default function SettingsView({ section, onSectionChange, onClose, onOpen
                       </div>
                     </div>
                   ))}
+                </div>
+              )}
+
+              {section === 'security' && settings && (
+                <div className="space-y-5">
+                  <div className={`${cardClass} space-y-4`}>
+                    <div className="text-sm font-medium text-slate-900 dark:text-white">命令执行总开关</div>
+                    <div className="flex items-center justify-between border-b border-slate-200/80 pb-3 dark:border-slate-800/80">
+                      <div>
+                        <div className="text-sm text-slate-900 dark:text-white">启用 runCommand</div>
+                        <div className="text-xs text-slate-500 dark:text-slate-400">关闭后将拒绝所有命令执行请求</div>
+                      </div>
+                      <button
+                        className={`relative w-11 h-6 rounded-full transition-colors ${settings.commandRunner.enabled
+                          ? 'bg-blue-500'
+                          : 'bg-gray-300 dark:bg-gray-600'
+                          }`}
+                        onClick={() => void updateCommandRunner({ enabled: !settings.commandRunner.enabled })}
+                      >
+                        <span
+                          className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${settings.commandRunner.enabled ? 'translate-x-5' : ''}`}
+                        />
+                      </button>
+                    </div>
+                    <div className="flex items-center justify-between border-b border-slate-200/80 pb-3 dark:border-slate-800/80">
+                      <div>
+                        <div className="text-sm text-slate-900 dark:text-white">首次启用确认</div>
+                        <div className="text-xs text-slate-500 dark:text-slate-400">同一命令指纹首次执行时弹窗确认</div>
+                      </div>
+                      <button
+                        className={`relative w-11 h-6 rounded-full transition-colors ${settings.commandRunner.requireConsent
+                          ? 'bg-blue-500'
+                          : 'bg-gray-300 dark:bg-gray-600'
+                          }`}
+                        onClick={() => void updateCommandRunner({ requireConsent: !settings.commandRunner.requireConsent })}
+                      >
+                        <span
+                          className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${settings.commandRunner.requireConsent ? 'translate-x-5' : ''}`}
+                        />
+                      </button>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <div className="text-sm text-slate-900 dark:text-white">允许 shell=true</div>
+                        <div className="text-xs text-slate-500 dark:text-slate-400">启用后可执行 shell 解析命令，风险更高</div>
+                      </div>
+                      <button
+                        className={`relative w-11 h-6 rounded-full transition-colors ${settings.commandRunner.allowShell
+                          ? 'bg-amber-500'
+                          : 'bg-gray-300 dark:bg-gray-600'
+                          }`}
+                        onClick={() => void updateCommandRunner({ allowShell: !settings.commandRunner.allowShell })}
+                      >
+                        <span
+                          className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${settings.commandRunner.allowShell ? 'translate-x-5' : ''}`}
+                        />
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className={`${cardClass} space-y-4`}>
+                    <div className="text-sm font-medium text-slate-900 dark:text-white">执行限制</div>
+                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                      <label className="space-y-1">
+                        <div className="text-xs text-slate-500 dark:text-slate-400">默认超时（ms）</div>
+                        <input
+                          type="number"
+                          min={1000}
+                          className="w-full rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-200"
+                          value={settings.commandRunner.defaultTimeoutMs}
+                          onChange={(e) => void updateCommandRunner({ defaultTimeoutMs: Number(e.target.value || 0) })}
+                        />
+                      </label>
+                      <label className="space-y-1">
+                        <div className="text-xs text-slate-500 dark:text-slate-400">最大超时（ms）</div>
+                        <input
+                          type="number"
+                          min={1000}
+                          className="w-full rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-200"
+                          value={settings.commandRunner.maxTimeoutMs}
+                          onChange={(e) => void updateCommandRunner({ maxTimeoutMs: Number(e.target.value || 0) })}
+                        />
+                      </label>
+                      <label className="space-y-1">
+                        <div className="text-xs text-slate-500 dark:text-slate-400">最大输出（bytes）</div>
+                        <input
+                          type="number"
+                          min={8192}
+                          className="w-full rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-200"
+                          value={settings.commandRunner.maxOutputBytes}
+                          onChange={(e) => void updateCommandRunner({ maxOutputBytes: Number(e.target.value || 0) })}
+                        />
+                      </label>
+                      <label className="space-y-1">
+                        <div className="text-xs text-slate-500 dark:text-slate-400">最大并发</div>
+                        <input
+                          type="number"
+                          min={1}
+                          className="w-full rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-200"
+                          value={settings.commandRunner.maxConcurrent}
+                          onChange={(e) => void updateCommandRunner({ maxConcurrent: Number(e.target.value || 0) })}
+                        />
+                      </label>
+                      <label className="space-y-1 sm:col-span-2">
+                        <div className="text-xs text-slate-500 dark:text-slate-400">审计保留条数</div>
+                        <input
+                          type="number"
+                          min={50}
+                          className="w-full rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-200"
+                          value={settings.commandRunner.audit.maxItems}
+                          onChange={(e) => void updateCommandRunner({
+                            audit: {
+                              ...settings.commandRunner.audit,
+                              maxItems: Number(e.target.value || 0)
+                            }
+                          })}
+                        />
+                      </label>
+                    </div>
+                  </div>
+
+                  <div className={`${cardClass} space-y-4`}>
+                    <div className="flex items-center justify-between">
+                      <div className="text-sm font-medium text-slate-900 dark:text-white">白名单规则</div>
+                      <span className="text-xs text-slate-500 dark:text-slate-400">{settings.commandRunner.allowList.length}</span>
+                    </div>
+                    <div className="space-y-2">
+                      {settings.commandRunner.allowList.map((rule) => (
+                        <div key={rule.id} className="grid grid-cols-1 gap-2 rounded-2xl border border-slate-200/80 bg-white/70 p-3 dark:border-slate-800 dark:bg-slate-950/70 sm:grid-cols-[110px_minmax(0,1fr)_80px_70px]">
+                          <select
+                            className="rounded-xl border border-slate-200 bg-white px-2 py-1 text-xs dark:border-slate-800 dark:bg-slate-950"
+                            value={rule.mode}
+                            onChange={(e) => void patchCommandRule('allowList', rule.id, { mode: e.target.value as 'exact' | 'prefix' })}
+                          >
+                            <option value="exact">exact</option>
+                            <option value="prefix">prefix</option>
+                          </select>
+                          <input
+                            className="rounded-xl border border-slate-200 bg-white px-2 py-1 text-xs dark:border-slate-800 dark:bg-slate-950"
+                            value={rule.value}
+                            onChange={(e) => void patchCommandRule('allowList', rule.id, { value: e.target.value })}
+                          />
+                          <button
+                            className={rule.enabled === false ? pillClass : primaryPillClass}
+                            onClick={() => void patchCommandRule('allowList', rule.id, { enabled: rule.enabled === false })}
+                          >
+                            {rule.enabled === false ? '启用' : '停用'}
+                          </button>
+                          <button className={actionButtonClass} onClick={() => void removeCommandRule('allowList', rule.id)}>删除</button>
+                        </div>
+                      ))}
+                      {settings.commandRunner.allowList.length === 0 && (
+                        <div className="text-xs text-slate-500 dark:text-slate-400">为空时表示不启用白名单强约束。</div>
+                      )}
+                    </div>
+                    <div className="grid grid-cols-1 gap-2 sm:grid-cols-[110px_minmax(0,1fr)_100px]">
+                      <select
+                        className="rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm dark:border-slate-800 dark:bg-slate-950"
+                        value={allowRuleDraft.mode}
+                        onChange={(e) => setAllowRuleDraft((prev) => ({ ...prev, mode: e.target.value as 'exact' | 'prefix' }))}
+                      >
+                        <option value="exact">exact</option>
+                        <option value="prefix">prefix</option>
+                      </select>
+                      <input
+                        className="rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm dark:border-slate-800 dark:bg-slate-950"
+                        placeholder="command 或 command + args 前缀"
+                        value={allowRuleDraft.value}
+                        onChange={(e) => setAllowRuleDraft((prev) => ({ ...prev, value: e.target.value }))}
+                      />
+                      <button className={actionButtonClass} onClick={() => void addCommandRule('allowList')}>新增</button>
+                    </div>
+                  </div>
+
+                  <div className={`${cardClass} space-y-4`}>
+                    <div className="flex items-center justify-between">
+                      <div className="text-sm font-medium text-slate-900 dark:text-white">黑名单规则</div>
+                      <span className="text-xs text-slate-500 dark:text-slate-400">{settings.commandRunner.denyList.length}</span>
+                    </div>
+                    <div className="space-y-2">
+                      {settings.commandRunner.denyList.map((rule) => (
+                        <div key={rule.id} className="grid grid-cols-1 gap-2 rounded-2xl border border-slate-200/80 bg-white/70 p-3 dark:border-slate-800 dark:bg-slate-950/70 sm:grid-cols-[110px_minmax(0,1fr)_80px_70px]">
+                          <select
+                            className="rounded-xl border border-slate-200 bg-white px-2 py-1 text-xs dark:border-slate-800 dark:bg-slate-950"
+                            value={rule.mode}
+                            onChange={(e) => void patchCommandRule('denyList', rule.id, { mode: e.target.value as 'exact' | 'prefix' })}
+                          >
+                            <option value="exact">exact</option>
+                            <option value="prefix">prefix</option>
+                          </select>
+                          <input
+                            className="rounded-xl border border-slate-200 bg-white px-2 py-1 text-xs dark:border-slate-800 dark:bg-slate-950"
+                            value={rule.value}
+                            onChange={(e) => void patchCommandRule('denyList', rule.id, { value: e.target.value })}
+                          />
+                          <button
+                            className={rule.enabled === false ? pillClass : primaryPillClass}
+                            onClick={() => void patchCommandRule('denyList', rule.id, { enabled: rule.enabled === false })}
+                          >
+                            {rule.enabled === false ? '启用' : '停用'}
+                          </button>
+                          <button className={actionButtonClass} onClick={() => void removeCommandRule('denyList', rule.id)}>删除</button>
+                        </div>
+                      ))}
+                    </div>
+                    <div className="grid grid-cols-1 gap-2 sm:grid-cols-[110px_minmax(0,1fr)_100px]">
+                      <select
+                        className="rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm dark:border-slate-800 dark:bg-slate-950"
+                        value={denyRuleDraft.mode}
+                        onChange={(e) => setDenyRuleDraft((prev) => ({ ...prev, mode: e.target.value as 'exact' | 'prefix' }))}
+                      >
+                        <option value="exact">exact</option>
+                        <option value="prefix">prefix</option>
+                      </select>
+                      <input
+                        className="rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm dark:border-slate-800 dark:bg-slate-950"
+                        placeholder="command 或 command + args 前缀"
+                        value={denyRuleDraft.value}
+                        onChange={(e) => setDenyRuleDraft((prev) => ({ ...prev, value: e.target.value }))}
+                      />
+                      <button className={actionButtonClass} onClick={() => void addCommandRule('denyList')}>新增</button>
+                    </div>
+                  </div>
+
+                  <div className={`${cardClass} space-y-4`}>
+                    <div className="flex items-center justify-between">
+                      <div className="text-sm font-medium text-slate-900 dark:text-white">信任与审计</div>
+                      <div className="flex items-center gap-2">
+                        <button
+                          className={actionButtonClass}
+                          onClick={async () => {
+                            if (!window.intools?.shell?.clearRunCommandTrusted) return
+                            await window.intools.shell.clearRunCommandTrusted()
+                            await reloadSettings()
+                          }}
+                        >
+                          清空已信任命令
+                        </button>
+                        <button
+                          className={actionButtonClass}
+                          onClick={async () => {
+                            if (!window.intools?.shell?.clearRunCommandAudit) return
+                            await window.intools.shell.clearRunCommandAudit()
+                            await reloadSettings()
+                            setCommandAudit([])
+                          }}
+                        >
+                          清空审计
+                        </button>
+                        <button
+                          className={actionButtonClass}
+                          onClick={async () => {
+                            if (!window.intools?.shell?.listRunCommandAudit) return
+                            const records = await window.intools.shell.listRunCommandAudit(100)
+                            setCommandAudit(records)
+                          }}
+                        >
+                          刷新
+                        </button>
+                      </div>
+                    </div>
+                    <div className="text-xs text-slate-500 dark:text-slate-400">
+                      已信任命令指纹：{settings.commandRunner.trustedFingerprints.length} 条
+                    </div>
+                    <div className="max-h-72 space-y-2 overflow-auto">
+                      {(commandAudit.length > 0 ? commandAudit : [...settings.commandRunner.audit.records].reverse()).slice(0, 100).map((item) => (
+                        <div key={item.id} className="rounded-2xl border border-slate-200/80 bg-white/70 px-3 py-2 text-xs dark:border-slate-800 dark:bg-slate-950/70">
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="font-medium text-slate-800 dark:text-slate-100">{item.command}</span>
+                            <span className={`rounded-full px-2 py-0.5 ${item.status === 'allowed'
+                              ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300'
+                              : item.status === 'blocked'
+                                ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300'
+                                : item.status === 'timeout'
+                                  ? 'bg-orange-100 text-orange-700 dark:bg-orange-900/40 dark:text-orange-300'
+                                  : 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300'
+                              }`}>
+                              {item.status}
+                            </span>
+                          </div>
+                          <div className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">
+                            {item.source === 'plugin' ? `插件: ${item.pluginId || 'unknown'}` : '来源: app'}
+                            {' | 退出码: '}
+                            {item.exitCode ?? 'null'}
+                            {' | 耗时: '}
+                            {item.durationMs || 0}
+                            ms
+                          </div>
+                          {item.reason && (
+                            <div className="mt-1 text-[11px] text-red-500 dark:text-red-300">{item.reason}</div>
+                          )}
+                        </div>
+                      ))}
+                      {(commandAudit.length === 0 && settings.commandRunner.audit.records.length === 0) && (
+                        <div className="text-xs text-slate-500 dark:text-slate-400">暂无审计记录</div>
+                      )}
+                    </div>
+                  </div>
                 </div>
               )}
 

@@ -1,7 +1,7 @@
 import { InBrowser } from './inbrowser'
 import type { InputPayload, InputAttachment, BackgroundPluginInfo } from './plugin'
 import type { AiApi } from './ai'
-import type { AppSettings, ShortcutStatusMap } from './settings'
+import type { AppSettings, CommandAuditItem, CommandRunnerSettings, ShortcutStatusMap } from './settings'
 import type { Task, TaskExecution } from './task'
 
 // 日志条目接口
@@ -208,6 +208,30 @@ export interface MessageBoxOptions {
   cancelId?: number
 }
 
+export interface RunCommandInput {
+  command: string
+  args?: string[]
+  cwd?: string
+  env?: Record<string, string>
+  timeoutMs?: number
+  shell?: boolean
+}
+
+export interface RunCommandResult {
+  success: boolean
+  command: string
+  args: string[]
+  cwd?: string
+  shell: boolean
+  stdout: string
+  stderr: string
+  exitCode: number | null
+  signal: string | null
+  durationMs: number
+  timedOut: boolean
+  truncated: boolean
+}
+
 // System API 类型
 export interface SystemInfo {
   platform: string
@@ -366,6 +390,12 @@ export interface ElectronAPI {
     openFolder: (path: string) => Promise<string>
     trashItem: (path: string) => Promise<void>
     beep: () => Promise<void>
+    runCommand: (input: RunCommandInput) => Promise<RunCommandResult>
+    getRunCommandPolicy: () => Promise<CommandRunnerSettings>
+    updateRunCommandPolicy: (patch: Partial<CommandRunnerSettings>) => Promise<CommandRunnerSettings>
+    listRunCommandAudit: (limit?: number) => Promise<CommandAuditItem[]>
+    clearRunCommandAudit: () => Promise<CommandRunnerSettings>
+    clearRunCommandTrusted: () => Promise<CommandRunnerSettings>
   }
   dialog: {
     showOpenDialog: (options?: OpenDialogOptions) => Promise<string[]>

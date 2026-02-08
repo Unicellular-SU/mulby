@@ -25,13 +25,25 @@ import type { TaskScheduler } from '../scheduler'
 import type { TaskInput, TaskFilter } from '../scheduler/types'
 import type { ClipboardHistoryManager } from '../services/clipboard-history'
 import type { AiOption, AiMessage, AiImageGenerateProgressChunk } from '../../shared/types/ai'
+import { commandRunnerService } from '../services/command-runner'
 
 const pluginStorage = new PluginStorage()
 const pluginFilesystem = new PluginFilesystem()
 const pluginHttp = new PluginHttp()
 
+interface CreatePluginApiOptions {
+  runCommandAllowed?: boolean
+}
+
 // 创建插件可用的 API 上下文
-export function createPluginAPI(pluginName: string, messageBus?: PluginMessageBus, taskScheduler?: TaskScheduler, clipboardHistoryManager?: ClipboardHistoryManager) {
+export function createPluginAPI(
+  pluginName: string,
+  messageBus?: PluginMessageBus,
+  taskScheduler?: TaskScheduler,
+  clipboardHistoryManager?: ClipboardHistoryManager,
+  options?: CreatePluginApiOptions
+) {
+  const runCommandAllowed = options?.runCommandAllowed === true
   return {
     clipboard: {
       readText: () => clipboard.readText(),
@@ -249,7 +261,34 @@ ${item.files.map(p => `    <string>${p}</string>`).join('\n')}
       showItemInFolder: (path: string) => pluginShell.showItemInFolder(path),
       openFolder: (path: string) => pluginShell.openFolder(path),
       trashItem: (path: string) => pluginShell.trashItem(path),
-      beep: () => pluginShell.beep()
+      beep: () => pluginShell.beep(),
+      runCommand: async (input: {
+        command: string
+        args?: string[]
+        cwd?: string
+        env?: Record<string, string>
+        timeoutMs?: number
+        shell?: boolean
+      }) => {
+        return await commandRunnerService.runCommand(input, {
+          source: 'plugin',
+          pluginId: pluginName,
+          runCommandAllowed
+        })
+      },
+      getRunCommandPolicy: async () => {
+        const policy = commandRunnerService.getPolicy()
+        return {
+          enabled: policy.enabled,
+          requireConsent: policy.requireConsent,
+          allowShell: policy.allowShell,
+          allowList: policy.allowList,
+          denyList: policy.denyList
+        }
+      },
+      listRunCommandAudit: async (limit?: number) => {
+        return commandRunnerService.listAudit(limit, pluginName)
+      }
     },
     dialog: {
       showOpenDialog: (options?: OpenDialogOptions) => pluginDialog.showOpenDialog(options),

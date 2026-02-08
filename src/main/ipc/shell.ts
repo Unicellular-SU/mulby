@@ -1,5 +1,6 @@
 import { ipcMain } from 'electron'
 import { pluginShell } from '../plugin/shell'
+import { commandRunnerService } from '../services/command-runner'
 
 export function registerShellHandlers() {
   // 打开文件
@@ -30,5 +31,31 @@ export function registerShellHandlers() {
   // 播放提示音
   ipcMain.handle('shell:beep', () => {
     pluginShell.beep()
+  })
+
+  ipcMain.handle('shell:runCommand', async (_event, input) => {
+    return await commandRunnerService.runCommand(input, {
+      source: 'app'
+    })
+  })
+
+  ipcMain.handle('shell:getRunCommandPolicy', () => {
+    return commandRunnerService.getPolicy()
+  })
+
+  ipcMain.handle('shell:updateRunCommandPolicy', (_event, patch) => {
+    return commandRunnerService.updatePolicy(patch || {})
+  })
+
+  ipcMain.handle('shell:listRunCommandAudit', (_event, limit?: number) => {
+    return commandRunnerService.listAudit(limit)
+  })
+
+  ipcMain.handle('shell:clearRunCommandAudit', () => {
+    return commandRunnerService.clearAudit()
+  })
+
+  ipcMain.handle('shell:clearRunCommandTrusted', () => {
+    return commandRunnerService.clearTrustedFingerprints()
   })
 }

@@ -8,6 +8,7 @@ import type {
   AiSkillRecord,
   AiTokenBreakdown
 } from './ai'
+import type { CommandAuditItem, CommandRunnerSettings } from './settings'
 
 // 插件类型
 export type PluginType =
@@ -194,6 +195,10 @@ export interface PluginSetting {
   resourceLimits?: ResourceLimits | ResourceLimitPreset  // 资源限制配置或预设
 }
 
+export interface PluginPermissions {
+  runCommand?: boolean
+}
+
 // 插件清单
 export interface PluginManifest {
   id?: string  // 唯一标识符（推荐格式：@scope/name 或 com.example.name）
@@ -208,9 +213,34 @@ export interface PluginManifest {
   ui?: string  // UI 文件路径（可选）
   preload?: string  // 自定义 preload 脚本路径（可选）
   icon?: PluginIcon  // 插件图标（可选）
+  permissions?: PluginPermissions  // 权限声明（可选）
   features: PluginFeature[]
   window?: WindowOptions  // 独立窗口配置（可选）
   pluginSetting?: PluginSetting  // 插件行为设置（可选）
+}
+
+export interface PluginRunCommandInput {
+  command: string
+  args?: string[]
+  cwd?: string
+  env?: Record<string, string>
+  timeoutMs?: number
+  shell?: boolean
+}
+
+export interface PluginRunCommandResult {
+  success: boolean
+  command: string
+  args: string[]
+  cwd?: string
+  shell: boolean
+  stdout: string
+  stderr: string
+  exitCode: number | null
+  signal: string | null
+  durationMs: number
+  timedOut: boolean
+  truncated: boolean
 }
 
 // 插件实例
@@ -299,6 +329,17 @@ export interface PluginAPI {
     post: (url: string, body?: string | object, headers?: Record<string, string>) => Promise<HttpResponse>
     put: (url: string, body?: string | object, headers?: Record<string, string>) => Promise<HttpResponse>
     delete: (url: string, headers?: Record<string, string>) => Promise<HttpResponse>
+  }
+  shell: {
+    openPath: (path: string) => Promise<string>
+    openExternal: (url: string) => Promise<void>
+    showItemInFolder: (path: string) => void
+    openFolder: (path: string) => Promise<string>
+    trashItem: (path: string) => Promise<void>
+    beep: () => void
+    runCommand: (input: PluginRunCommandInput) => Promise<PluginRunCommandResult>
+    getRunCommandPolicy: () => Promise<Pick<CommandRunnerSettings, 'enabled' | 'requireConsent' | 'allowShell' | 'allowList' | 'denyList'>>
+    listRunCommandAudit: (limit?: number) => Promise<CommandAuditItem[]>
   }
   features: {
     getFeatures: (codes?: string[]) => DynamicFeature[]

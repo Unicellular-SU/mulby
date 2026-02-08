@@ -17,6 +17,67 @@ export interface StoreSource {
   lastError?: string
 }
 
+export type CommandRuleMode = 'exact' | 'prefix'
+
+export interface CommandRule {
+  id: string
+  mode: CommandRuleMode
+  value: string
+  enabled?: boolean
+}
+
+export type CommandCallerSource = 'app' | 'plugin'
+
+export interface CommandTrustRecord {
+  fingerprint: string
+  source: CommandCallerSource
+  pluginId?: string
+  command: string
+  args?: string[]
+  shell?: boolean
+  createdAt: number
+  lastUsedAt: number
+}
+
+export type CommandAuditStatus = 'allowed' | 'blocked' | 'error' | 'timeout'
+
+export interface CommandAuditItem {
+  id: string
+  timestamp: number
+  source: CommandCallerSource
+  pluginId?: string
+  command: string
+  args?: string[]
+  cwd?: string
+  shell?: boolean
+  timeoutMs?: number
+  durationMs?: number
+  exitCode?: number | null
+  signal?: string | null
+  status: CommandAuditStatus
+  reason?: string
+  success?: boolean
+  timedOut?: boolean
+  truncated?: boolean
+}
+
+export interface CommandRunnerSettings {
+  enabled: boolean
+  requireConsent: boolean
+  allowShell: boolean
+  defaultTimeoutMs: number
+  maxTimeoutMs: number
+  maxOutputBytes: number
+  maxConcurrent: number
+  allowList: CommandRule[]
+  denyList: CommandRule[]
+  trustedFingerprints: CommandTrustRecord[]
+  audit: {
+    maxItems: number
+    records: CommandAuditItem[]
+  }
+}
+
 // 日志级别类型
 export type LogLevel = 'debug' | 'info' | 'warn' | 'error'
 
@@ -47,6 +108,7 @@ export interface AppSettings {
   shortcuts: AppShortcutSettings
   storeSources: StoreSource[]
   developer: DeveloperSettings
+  commandRunner: CommandRunnerSettings
   window?: WindowSettings
   input: InputSettings
 }

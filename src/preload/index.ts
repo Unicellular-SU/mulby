@@ -474,7 +474,13 @@ const intoolsApi = {
     showItemInFolder: (path: string) => ipcRenderer.invoke('shell:showItemInFolder', path),
     openFolder: (path: string) => ipcRenderer.invoke('shell:openFolder', path),
     trashItem: (path: string) => ipcRenderer.invoke('shell:trashItem', path),
-    beep: () => ipcRenderer.invoke('shell:beep')
+    beep: () => ipcRenderer.invoke('shell:beep'),
+    runCommand: (input: any) => ipcRenderer.invoke('shell:runCommand', input),
+    getRunCommandPolicy: () => ipcRenderer.invoke('shell:getRunCommandPolicy'),
+    updateRunCommandPolicy: (patch: any) => ipcRenderer.invoke('shell:updateRunCommandPolicy', patch),
+    listRunCommandAudit: (limit?: number) => ipcRenderer.invoke('shell:listRunCommandAudit', limit),
+    clearRunCommandAudit: () => ipcRenderer.invoke('shell:clearRunCommandAudit'),
+    clearRunCommandTrusted: () => ipcRenderer.invoke('shell:clearRunCommandTrusted')
   },
 
   // Desktop API

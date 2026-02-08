@@ -24,6 +24,7 @@ import type { TaskScheduler } from '../scheduler'
 interface PluginHost {
   process: UtilityProcess
   pluginName: string
+  runCommandAllowed: boolean
   ready: boolean
   activeRequests: number  // 活跃请求计数器
   startedAt: number       // 启动时间戳
@@ -114,6 +115,7 @@ export class PluginHostManager extends EventEmitter {
       const host: PluginHost = {
         process: child,
         pluginName,
+        runCommandAllowed: plugin.manifest.permissions?.runCommand === true,
         ready: false,
         activeRequests: 0,
         startedAt: Date.now(),
@@ -250,7 +252,13 @@ export class PluginHostManager extends EventEmitter {
     const [namespace, method] = api.split('.')
 
     try {
-      const pluginApi = createPluginAPI(plugin.id, this.messageBus, this.taskScheduler, this.clipboardHistoryManager)
+      const pluginApi = createPluginAPI(
+        plugin.id,
+        this.messageBus,
+        this.taskScheduler,
+        this.clipboardHistoryManager,
+        { runCommandAllowed: host.runCommandAllowed }
+      )
       const apiNamespace = pluginApi[namespace as keyof typeof pluginApi]
 
       if (!apiNamespace || typeof apiNamespace !== 'object') {
@@ -592,7 +600,13 @@ export class PluginHostManager extends EventEmitter {
 
     // 直接调用主进程的 API（因为 API 实现在主进程中）
     const [namespace, methodName] = method.split('.')
-    const pluginApi = createPluginAPI(pluginName, this.messageBus, this.taskScheduler, this.clipboardHistoryManager)
+    const pluginApi = createPluginAPI(
+      pluginName,
+      this.messageBus,
+      this.taskScheduler,
+      this.clipboardHistoryManager,
+      { runCommandAllowed: host.runCommandAllowed }
+    )
     const apiNamespace = pluginApi[namespace as keyof typeof pluginApi]
 
     if (!apiNamespace || typeof apiNamespace !== 'object') {

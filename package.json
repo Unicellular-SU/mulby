@@ -10,7 +10,7 @@
     "electron:build": "vite build && electron-builder",
     "lint": "eslint src",
     "typecheck": "tsc --noEmit",
-    "test:unit": "node --import tsx --test src/main/ai/__tests__/*.test.ts"
+    "test:unit": "node --import tsx --test src/main/ai/__tests__/*.test.ts src/main/services/__tests__/*.test.ts"
   },
   "author": "",
   "license": "MIT",

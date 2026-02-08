@@ -80,7 +80,9 @@ export class PluginRunner {
   // 执行插件
   async run(featureCode: string, input?: string, attachments?: InputAttachment[]): Promise<void> {
     const pluginModule = await this.loadModule()
-    const api = createPluginAPI(this.plugin.id)
+    const api = createPluginAPI(this.plugin.id, undefined, undefined, undefined, {
+      runCommandAllowed: this.plugin.manifest.permissions?.runCommand === true
+    })
     const context = { api, featureCode, input: input || '', attachments }
 
     try {
