@@ -1,6 +1,17 @@
 import { generateText, streamText, generateImage, stepCountIs } from 'ai'
 import { jsonSchema, tool } from '@ai-sdk/provider-utils'
-import type { AiAttachmentRef, AiMessage, AiModel, AiModelParameters, AiOption, AiProviderConfig, AiTokenBreakdown, AiToolContext, AiTool } from '../../shared/types/ai'
+import type {
+  AiAttachmentRef,
+  AiImageGenerateProgressChunk,
+  AiMessage,
+  AiModel,
+  AiModelParameters,
+  AiOption,
+  AiProviderConfig,
+  AiTokenBreakdown,
+  AiToolContext,
+  AiTool
+} from '../../shared/types/ai'
 import { attachmentStore } from './attachments'
 import { FileServiceManager } from './fileServices/FileServiceManager'
 import {
@@ -596,6 +607,93 @@ export class AiService {
         throw new Error('Unsupported path')
       }
     })
+  }
+
+  async generateImagesStream(
+    input: { prompt: string; model: string; size?: string; count?: number },
+    onChunk: (chunk: AiImageGenerateProgressChunk) => void,
+    requestId?: string
+  ): Promise<{ images: string[]; tokens: AiTokenBreakdown }> {
+    const id = requestId || this.createRequestId()
+    const controller = new AbortController()
+    this.controllers.set(id, controller)
+
+    try {
+      const { providerType, providerConfig } = this.resolveExecutionProviderContext(input.model)
+      const providerForCapability: AiProviderConfig = providerConfig || {
+        id: providerType,
+        type: providerType,
+        enabled: true
+      }
+      const providerIdCounts = buildProviderIdCounts(getAiSettings().providers)
+      const imageCapability = getProviderProtocolCapabilityRule(providerForCapability, 'image', providerIdCounts)
+      console.info('[AI] capability:protocol', {
+        stage: 'generateImagesStream',
+        providerType,
+        model: input.model,
+        capability: imageCapability.capability,
+        enabled: imageCapability.enabled,
+        source: imageCapability.source,
+        reason: imageCapability.reason
+      })
+      if (!imageCapability.enabled) {
+        throw new Error(imageCapability.reason)
+      }
+
+      const methodAdapter = getProviderMethodAdapter(providerType)
+      return await methodAdapter.generateImages({
+        executeSdkGenerate: async () => {
+          const { modelKey, model } = this.resolveImageModel(input.model)
+          console.info('[AI] generateImagesStream:start', {
+            modelInput: input.model,
+            resolvedModel: model,
+            size: input.size,
+            count: input.count
+          })
+          onChunk({
+            type: 'status',
+            stage: 'start',
+            message: '开始生成图片...'
+          })
+
+          const result = await this.executeImageWithRetry(
+            'generateImages',
+            async () =>
+              await this.generateImageWithProgress({
+                modelKey,
+                prompt: input.prompt,
+                size: input.size,
+                n: input.count,
+                providerType,
+                providerConfig,
+                abortSignal: controller.signal,
+                onChunk
+              }),
+            {
+              modelInput: input.model,
+              resolvedModel: model,
+              size: input.size,
+              count: input.count
+            }
+          )
+
+          const tokens = await this.estimateTokens({ model: input.model, messages: [] })
+          onChunk({
+            type: 'status',
+            stage: 'completed',
+            message: `生成完成，返回 ${result.images.length} 张`,
+            received: result.images.length,
+            total: input.count || result.images.length
+          })
+          return { images: result.images, tokens }
+        },
+        executeSdkEdit: async () => {
+          throw new Error('Unsupported path')
+        }
+      })
+    } finally {
+      this.controllers.delete(id)
+    }
   }
 
   async editImage(input: { imageAttachmentId: string; prompt: string; model: string }): Promise<{ images: string[]; tokens: AiTokenBreakdown }> {
@@ -1785,11 +1883,232 @@ export class AiService {
     throw new Error('Unexpected image retry state')
   }
 
+  private async generateImageWithProgress(input: {
+    modelKey: any
+    prompt: string | { text?: string; images?: unknown[]; mask?: unknown }
+    size?: string
+    n?: number
+    providerType?: string
+    providerConfig?: AiProviderConfig
+    abortSignal?: AbortSignal
+    onChunk?: (chunk: AiImageGenerateProgressChunk) => void
+  }): Promise<{ images: string[] }> {
+    let streamed: { images: string[] } | null = null
+    try {
+      streamed = await this.streamOpenAIImageGeneration({
+        modelId: getImageModelIdFromModelKey(input.modelKey),
+        prompt: typeof input.prompt === 'string' ? input.prompt : input.prompt.text || '',
+        size: input.size,
+        n: input.n,
+        providerType: input.providerType,
+        providerConfig: input.providerConfig,
+        abortSignal: input.abortSignal,
+        onChunk: input.onChunk
+      })
+    } catch (error) {
+      if (input.abortSignal?.aborted) {
+        throw error
+      }
+      console.warn('[AI] image:stream:unavailable', {
+        message: getErrorMessageForLog(error),
+        size: input.size,
+        count: input.n
+      })
+    }
+
+    if (streamed && streamed.images.length > 0) {
+      return { images: streamed.images }
+    }
+
+    input.onChunk?.({
+      type: 'status',
+      stage: 'fallback',
+      message: '流式进度不可用，回退到普通生成...'
+    })
+
+    return await this.generateImageWithDecodeFallback(input)
+  }
+
+  private async streamOpenAIImageGeneration(input: {
+    modelId?: string
+    prompt: string
+    size?: string
+    n?: number
+    providerType?: string
+    providerConfig?: AiProviderConfig
+    abortSignal?: AbortSignal
+    onChunk?: (chunk: AiImageGenerateProgressChunk) => void
+  }): Promise<{ images: string[] } | null> {
+    if (!input.modelId || !input.prompt) return null
+
+    const type = String(input.providerType || '').trim().toLowerCase()
+    if (
+      !['openai', 'openai-response', 'openai-compatible', 'new-api', 'cherryin', 'deepseek', 'openrouter', 'azure-openai', 'azure', 'ollama'].includes(type)
+    ) {
+      return null
+    }
+
+    const baseURL = this.resolveCompatBaseURL(input.providerConfig?.baseURL, input.providerType)
+    const url = `${baseURL.replace(/\/$/, '')}/images/generations`
+
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+      ...(input.providerConfig?.headers || {})
+    }
+    if (input.providerConfig?.apiKey) {
+      headers.Authorization = `Bearer ${input.providerConfig.apiKey}`
+    }
+
+    const streamController = new AbortController()
+    const relayAbort = () => streamController.abort(input.abortSignal?.reason)
+    if (input.abortSignal) {
+      if (input.abortSignal.aborted) {
+        streamController.abort(input.abortSignal.reason)
+      } else {
+        input.abortSignal.addEventListener('abort', relayAbort, { once: true })
+      }
+    }
+
+    const firstByteTimeoutMs = 12000
+    let firstByteReceived = false
+    const firstByteTimer = setTimeout(() => {
+      if (!firstByteReceived) {
+        streamController.abort(new Error(`AI_IMAGE_STREAM_FIRST_BYTE_TIMEOUT_${firstByteTimeoutMs}ms`))
+      }
+    }, firstByteTimeoutMs)
+
+    const response = await fetch(url, {
+      method: 'POST',
+      headers,
+      signal: streamController.signal,
+      body: JSON.stringify({
+        model: input.modelId,
+        prompt: input.prompt,
+        n: Math.max(1, Number(input.n || 1)),
+        size: input.size,
+        response_format: 'b64_json',
+        stream: true,
+        partial_images: 2
+      })
+    })
+
+    if (!response.ok) {
+      clearTimeout(firstByteTimer)
+      if (input.abortSignal) input.abortSignal.removeEventListener('abort', relayAbort)
+      const body = await response.text().catch(() => '')
+      throw new Error(`HTTP ${response.status} ${response.statusText}${body ? ` - ${body}` : ''}`)
+    }
+    if (!response.body) {
+      clearTimeout(firstByteTimer)
+      if (input.abortSignal) input.abortSignal.removeEventListener('abort', relayAbort)
+      return null
+    }
+
+    const reader = response.body.getReader()
+    const decoder = new TextDecoder()
+    const partialImages = new Map<number, string>()
+    const finalRaw: string[] = []
+    let buffer = ''
+    let sawSseData = false
+    const heartbeatStartAt = Date.now()
+    const heartbeatTimer = setInterval(() => {
+      input.onChunk?.({
+        type: 'status',
+        stage: 'partial',
+        message: `生成中... ${Math.floor((Date.now() - heartbeatStartAt) / 1000)}s`
+      })
+    }, 3000)
+
+    try {
+      while (true) {
+        const { value, done } = await reader.read()
+        if (done) break
+        if (!firstByteReceived) {
+          firstByteReceived = true
+          clearTimeout(firstByteTimer)
+          input.onChunk?.({
+            type: 'status',
+            stage: 'partial',
+            message: '已建立流式连接，等待分片...'
+          })
+        }
+        buffer += decoder.decode(value, { stream: true })
+
+        let newlineIndex = buffer.indexOf('\n')
+        while (newlineIndex >= 0) {
+          const line = buffer.slice(0, newlineIndex).trim()
+          buffer = buffer.slice(newlineIndex + 1)
+          newlineIndex = buffer.indexOf('\n')
+
+          if (!line || !line.startsWith('data:')) continue
+          sawSseData = true
+          const data = line.slice(5).trim()
+          if (!data || data === '[DONE]') continue
+
+          let payload: any
+          try {
+            payload = JSON.parse(data)
+          } catch {
+            continue
+          }
+
+          const parsed = extractOpenAIImageStreamPayload(payload)
+          for (const partial of parsed.partials) {
+            const index = partialImages.size
+            partialImages.set(index, partial)
+            input.onChunk?.({
+              type: 'preview',
+              stage: 'partial',
+              image: partial,
+              index,
+              received: partialImages.size,
+              total: input.n || 1
+            })
+          }
+          for (const item of parsed.finals) {
+            finalRaw.push(item)
+          }
+        }
+      }
+
+      if (!sawSseData) {
+        const payloadText = buffer.trim()
+        if (!payloadText) return null
+        let payload: any
+        try {
+          payload = JSON.parse(payloadText)
+        } catch {
+          return null
+        }
+        const parsed = extractOpenAIImageStreamPayload(payload)
+        finalRaw.push(...parsed.finals)
+      }
+
+      input.onChunk?.({
+        type: 'status',
+        stage: 'finalizing',
+        message: '正在整理最终图片...'
+      })
+
+      const normalized = finalRaw.length > 0
+        ? await this.normalizeRawGeneratedImages(finalRaw, input.abortSignal)
+        : await this.normalizeRawGeneratedImages([...partialImages.values()], input.abortSignal)
+
+      if (normalized.length === 0) return null
+      return { images: normalized }
+    } finally {
+      clearTimeout(firstByteTimer)
+      clearInterval(heartbeatTimer)
+      if (input.abortSignal) input.abortSignal.removeEventListener('abort', relayAbort)
+    }
+  }
+
   private async generateImageWithDecodeFallback(input: {
     modelKey: any
     prompt: string | { text?: string; images?: unknown[]; mask?: unknown }
     size?: string
     n?: number
+    abortSignal?: AbortSignal
   }): Promise<{ images: string[] }> {
     const directStart = Date.now()
     try {
@@ -1814,7 +2133,8 @@ export class AiService {
           model: input.modelKey,
           prompt: input.prompt as any,
           size: input.size as any,
-          n: input.n
+          n: input.n,
+          abortSignal: input.abortSignal
         } as any)
         const images = (result as any).images?.map((img: any) => img.base64) || []
         console.info('[AI] image:generate:result', {
@@ -1850,6 +2170,7 @@ export class AiService {
     prompt: string | { text?: string; images?: unknown[]; mask?: unknown }
     size?: string
     n?: number
+    abortSignal?: AbortSignal
   }): Promise<string[]> {
     const model = input.modelKey as { doGenerate?: (options: any) => Promise<any> }
     if (!model || typeof model.doGenerate !== 'function') {
@@ -1866,9 +2187,10 @@ export class AiService {
       aspectRatio: undefined,
       seed: undefined,
       providerOptions: {},
-      headers: undefined
+      headers: undefined,
+      abortSignal: input.abortSignal
     })
-    return await this.normalizeRawGeneratedImages(response?.images)
+    return await this.normalizeRawGeneratedImages(response?.images, input.abortSignal)
   }
 
   private toDirectImagePrompt(
@@ -1935,7 +2257,7 @@ export class AiService {
     return file
   }
 
-  private async normalizeRawGeneratedImages(images: unknown): Promise<string[]> {
+  private async normalizeRawGeneratedImages(images: unknown, abortSignal?: AbortSignal): Promise<string[]> {
     if (!Array.isArray(images) || images.length === 0) {
       throw new Error('Image provider returned empty images payload')
     }
@@ -1962,7 +2284,7 @@ export class AiService {
         }
 
         if (isHttpUrl(value)) {
-          const response = await fetch(value)
+          const response = await fetch(value, { signal: abortSignal })
           if (!response.ok) {
             throw new Error(`Failed to fetch image URL payload: ${response.status} ${response.statusText}`)
           }
@@ -2666,6 +2988,55 @@ function isImageBase64DecodeError(error: unknown): boolean {
 
 function isHttpUrl(value: string): boolean {
   return /^https?:\/\//i.test(value)
+}
+
+function getImageModelIdFromModelKey(modelKey: any): string | undefined {
+  const modelId = (modelKey as any)?.modelId
+  if (typeof modelId === 'string' && modelId.trim()) return modelId.trim()
+  return undefined
+}
+
+function extractOpenAIImageStreamPayload(payload: any): { partials: string[]; finals: string[] } {
+  const partials: string[] = []
+  const finals: string[] = []
+
+  const pushMaybeImage = (value: unknown, target: 'partial' | 'final') => {
+    if (typeof value !== 'string') return
+    const text = value.trim()
+    if (!text) return
+    if (target === 'partial') {
+      partials.push(text)
+    } else {
+      finals.push(text)
+    }
+  }
+
+  pushMaybeImage(payload?.partial_image_b64, 'partial')
+  pushMaybeImage(payload?.b64_json, 'final')
+  pushMaybeImage(payload?.image, 'final')
+  pushMaybeImage(payload?.result, payload?.type?.includes?.('partial') ? 'partial' : 'final')
+
+  if (Array.isArray(payload?.data)) {
+    for (const item of payload.data) {
+      pushMaybeImage(item?.b64_json, 'final')
+      pushMaybeImage(item?.url, 'final')
+      pushMaybeImage(item?.image, 'final')
+      pushMaybeImage(item?.result, 'final')
+    }
+  }
+
+  const item = payload?.item
+  if (item && typeof item === 'object') {
+    pushMaybeImage(item?.result, 'final')
+    if (Array.isArray(item?.data)) {
+      for (const dataItem of item.data) {
+        pushMaybeImage(dataItem?.b64_json, 'final')
+        pushMaybeImage(dataItem?.url, 'final')
+      }
+    }
+  }
+
+  return { partials, finals }
 }
 
 function detectImageMimeTypeFromBytes(data: Uint8Array): string {

@@ -74,6 +74,8 @@ export function useIntools(pluginId?: string) {
       },
       images: {
         generate: (input: any) => window.intools?.ai?.images?.generate(input),
+        generateStream: (input: any, onChunk: (chunk: any) => void) =>
+          window.intools?.ai?.images?.generateStream?.(input, onChunk),
         edit: (input: any) => window.intools?.ai?.images?.edit(input),
       },
       models: {

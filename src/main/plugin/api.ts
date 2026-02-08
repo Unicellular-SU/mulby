@@ -23,7 +23,7 @@ import type { PluginMessageBus } from './message-bus'
 import type { TaskScheduler } from '../scheduler'
 import type { TaskInput, TaskFilter } from '../scheduler/types'
 import type { ClipboardHistoryManager } from '../services/clipboard-history'
-import type { AiOption, AiMessage } from '../../shared/types/ai'
+import type { AiOption, AiMessage, AiImageGenerateProgressChunk } from '../../shared/types/ai'
 
 const pluginStorage = new PluginStorage()
 const pluginFilesystem = new PluginFilesystem()
@@ -366,6 +366,15 @@ ${item.files.map(p => `    <string>${p}</string>`).join('\n')}
       },
       images: {
         generate: async (input: { prompt: string; model: string; size?: string; count?: number }) => await aiService.generateImages(input),
+        generateStream: (
+          input: { prompt: string; model: string; size?: string; count?: number },
+          onChunk: (chunk: AiImageGenerateProgressChunk) => void
+        ) => {
+          const requestId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+          const promise = aiService.generateImagesStream(input, onChunk, requestId)
+          ;(promise as any).abort = () => aiService.abort(requestId)
+          return promise as any
+        },
         edit: async (input: { imageAttachmentId: string; prompt: string; model: string }) => await aiService.editImage(input)
       }
     },

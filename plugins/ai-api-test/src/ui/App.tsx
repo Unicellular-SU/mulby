@@ -93,6 +93,9 @@ export default function App() {
   const [imageGenModel, setImageGenModel] = useState('')
   const [imageGenSize, setImageGenSize] = useState('1024x1024')
   const [imageGenCount, setImageGenCount] = useState(1)
+  const [isImageGenerating, setIsImageGenerating] = useState(false)
+  const [imageGenProgress, setImageGenProgress] = useState('')
+  const [imageGenPreviewImages, setImageGenPreviewImages] = useState<string[]>([])
   const [generatedImages, setGeneratedImages] = useState<string[]>([])
 
   const [imageEditPrompt, setImageEditPrompt] = useState('Add a red scarf')
@@ -113,6 +116,25 @@ export default function App() {
   const fileInputRef = useRef<HTMLInputElement | null>(null)
   const streamRequestRef = useRef<any>(null)
   const streamRequestIdRef = useRef<string | null>(null)
+  const imageGenerateRequestRef = useRef<any>(null)
+  const imageProgressTimerRef = useRef<number | null>(null)
+  const imageProgressStartAtRef = useRef<number>(0)
+
+  const clearImageProgressTimer = () => {
+    if (imageProgressTimerRef.current) {
+      window.clearInterval(imageProgressTimerRef.current)
+      imageProgressTimerRef.current = null
+    }
+  }
+
+  const startImageProgressTimer = () => {
+    clearImageProgressTimer()
+    imageProgressStartAtRef.current = Date.now()
+    imageProgressTimerRef.current = window.setInterval(() => {
+      const seconds = Math.max(1, Math.floor((Date.now() - imageProgressStartAtRef.current) / 1000))
+      setImageGenProgress(`生成中... ${seconds}s`)
+    }, 1000)
+  }
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search)
@@ -124,6 +146,9 @@ export default function App() {
       setTheme(newTheme)
       document.documentElement.classList.toggle('dark', newTheme === 'dark')
     })
+    return () => {
+      clearImageProgressTimer()
+    }
   }, [])
 
   const loadModels = async () => {
@@ -375,19 +400,66 @@ export default function App() {
       notification?.show?.('请先选择图片模型或上方全局模型', 'warning')
       return
     }
+    setIsImageGenerating(true)
+    setImageGenProgress('开始生成图片...')
+    startImageProgressTimer()
+    setImageGenPreviewImages([])
+    setGeneratedImages([])
     try {
-      const result = await ai?.images?.generate({
+      const input = {
         model,
         prompt: imageGenPrompt,
         size: imageGenSize,
         count: Number(imageGenCount)
-      })
+      }
+      const generateStream = ai?.images?.generateStream
+      const result = typeof generateStream === 'function'
+        ? await (() => {
+          const request = generateStream(input, (chunk: any) => {
+            if (!chunk || typeof chunk !== 'object') return
+            if (chunk.type === 'status') {
+              if (chunk.message) {
+                setImageGenProgress(chunk.message)
+              }
+              return
+            }
+            if (chunk.type === 'preview' && chunk.image) {
+              setImageGenPreviewImages((prev) => {
+                const next = [...prev]
+                const index = typeof chunk.index === 'number' && chunk.index >= 0 ? chunk.index : next.length
+                next[index] = chunk.image
+                return next
+              })
+              const received = Number(chunk.received || 0)
+              const total = Number(chunk.total || 0)
+              if (received > 0 && total > 0) {
+                setImageGenProgress(`生成中... 已收到 ${received}/${total} 个阶段预览`)
+              } else {
+                setImageGenProgress('生成中... 正在返回阶段预览')
+              }
+            }
+          })
+          imageGenerateRequestRef.current = request
+          return request
+        })()
+        : await ai?.images?.generate(input)
       const list = result?.images || []
       setGeneratedImages(list)
       notification?.show?.(`生成完成，返回 ${list.length} 张`, 'success')
     } catch (err: any) {
       notification?.show?.(err?.message || '图片生成失败', 'error')
+    } finally {
+      imageGenerateRequestRef.current = null
+      setIsImageGenerating(false)
+      clearImageProgressTimer()
     }
+  }
+
+  const handleImageGenerateAbort = () => {
+    imageGenerateRequestRef.current?.abort?.()
+    setIsImageGenerating(false)
+    setImageGenProgress('已取消图片生成')
+    clearImageProgressTimer()
   }
 
   const handleImageEdit = async () => {
@@ -826,10 +898,23 @@ export default function App() {
               />
             </div>
           </div>
-          <button className="btn-primary" onClick={handleImageGenerate}>
-            <Wand2 size={16} className="icon" />
-            生成图片
-          </button>
+          <div className="actions">
+            <button className="btn-primary" onClick={handleImageGenerate} disabled={isImageGenerating}>
+              <Wand2 size={16} className="icon" />
+              {isImageGenerating ? '生成中...' : '生成图片'}
+            </button>
+            <button className="btn-secondary" onClick={handleImageGenerateAbort} disabled={!isImageGenerating}>
+              取消
+            </button>
+          </div>
+          {imageGenProgress ? <div className="list-sub">{imageGenProgress}</div> : null}
+          {imageGenPreviewImages.filter(Boolean).length > 0 ? (
+            <div className="image-grid">
+              {imageGenPreviewImages.filter(Boolean).map((img, index) => (
+                <img key={`preview-${index}`} src={toImageSrc(img)} alt={`preview-${index}`} />
+              ))}
+            </div>
+          ) : null}
           <div className="image-grid">
             {generatedImages.map((img, index) => (
               <img key={index} src={toImageSrc(img)} alt={`generated-${index}`} />

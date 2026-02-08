@@ -185,6 +185,16 @@ export interface AiTokenBreakdown {
   outputTokens: number
 }
 
+export interface AiImageGenerateProgressChunk {
+  type: 'status' | 'preview'
+  stage?: 'start' | 'partial' | 'finalizing' | 'completed' | 'fallback'
+  message?: string
+  image?: string
+  index?: number
+  received?: number
+  total?: number
+}
+
 export interface AiPromiseLike<T> extends Promise<T> {
   abort: () => void
 }
@@ -221,6 +231,10 @@ export interface AiApi {
   }
   images: {
     generate: (input: { prompt: string; model: string; size?: string; count?: number }) => Promise<{ images: string[]; tokens: AiTokenBreakdown }>
+    generateStream: (
+      input: { prompt: string; model: string; size?: string; count?: number },
+      onChunk: (chunk: AiImageGenerateProgressChunk) => void
+    ) => AiPromiseLike<{ images: string[]; tokens: AiTokenBreakdown }>
     edit: (input: { imageAttachmentId: string; prompt: string; model: string }) => Promise<{ images: string[]; tokens: AiTokenBreakdown }>
   }
 }

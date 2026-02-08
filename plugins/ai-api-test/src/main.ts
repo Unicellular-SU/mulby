@@ -74,6 +74,18 @@ interface PluginContext {
       }
       images: {
         generate: (input: { model: string; prompt: string; size?: string; count?: number }) => Promise<{ images: string[] }>
+        generateStream: (
+          input: { model: string; prompt: string; size?: string; count?: number },
+          onChunk: (chunk: {
+            type: 'status' | 'preview'
+            stage?: 'start' | 'partial' | 'finalizing' | 'completed' | 'fallback'
+            message?: string
+            image?: string
+            index?: number
+            received?: number
+            total?: number
+          }) => void
+        ) => Promise<{ images: string[] }>
         edit: (input: { model: string; imageAttachmentId: string; prompt: string }) => Promise<{ images: string[] }>
       }
     }

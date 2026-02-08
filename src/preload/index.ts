@@ -208,6 +208,42 @@ const intoolsApi = {
       },
       images: {
         generate: (input: any) => ipcRenderer.invoke('ai:images:generate', input),
+        generateStream: (input: any, onChunk: (chunk: any) => void) => {
+          let abortFn = () => {}
+          const promise = ipcRenderer.invoke('ai:images:generate:stream', input).then(({ requestId }) => {
+            abortFn = () => ipcRenderer.invoke('ai:abort', requestId)
+
+            return new Promise((resolve, reject) => {
+              const onData = (_: any, id: string, chunk: any) => {
+                if (id !== requestId) return
+                onChunk(chunk)
+              }
+              const onEnd = (_: any, id: string, result: any) => {
+                if (id !== requestId) return
+                cleanup()
+                resolve(result)
+              }
+              const onError = (_: any, id: string, error: string) => {
+                if (id !== requestId) return
+                cleanup()
+                reject(new Error(error))
+              }
+
+              const cleanup = () => {
+                ipcRenderer.removeListener('ai:images:chunk', onData)
+                ipcRenderer.removeListener('ai:images:end', onEnd)
+                ipcRenderer.removeListener('ai:images:error', onError)
+              }
+
+              ipcRenderer.on('ai:images:chunk', onData)
+              ipcRenderer.on('ai:images:end', onEnd)
+              ipcRenderer.on('ai:images:error', onError)
+            })
+          })
+
+          ;(promise as any).abort = () => abortFn()
+          return promise as any
+        },
         edit: (input: any) => ipcRenderer.invoke('ai:images:edit', input)
       }
     }

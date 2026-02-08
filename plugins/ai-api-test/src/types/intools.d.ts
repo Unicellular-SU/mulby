@@ -499,6 +499,15 @@ type AiProviderConfig = {
 type AiSettings = { providers: AiProviderConfig[]; models?: AiModel[]; defaultParams?: AiModelParameters }
 type AiAttachmentRef = { attachmentId: string; mimeType: string; size: number; filename?: string; expiresAt?: string; purpose?: string }
 type AiTokenBreakdown = { inputTokens?: number; outputTokens?: number; totalTokens?: number }
+type AiImageGenerateProgressChunk = {
+  type: 'status' | 'preview'
+  stage?: 'start' | 'partial' | 'finalizing' | 'completed' | 'fallback'
+  message?: string
+  image?: string
+  index?: number
+  received?: number
+  total?: number
+}
 type AiModelType = 'text' | 'vision' | 'embedding' | 'reasoning' | 'function_calling' | 'web_search' | 'rerank'
 type AiModelCapability = { type: AiModelType; isUserSelected?: boolean }
 
@@ -521,6 +530,10 @@ interface IntoolsAi {
   }
   images: {
     generate(input: { model: string; prompt: string; size?: string; count?: number }): Promise<{ images: string[]; tokens: AiTokenBreakdown }>
+    generateStream(
+      input: { model: string; prompt: string; size?: string; count?: number },
+      onChunk: (chunk: AiImageGenerateProgressChunk) => void
+    ): Promise<{ images: string[]; tokens: AiTokenBreakdown }>
     edit(input: { model: string; imageAttachmentId: string; prompt: string }): Promise<{ images: string[]; tokens: AiTokenBreakdown }>
   }
   models: {

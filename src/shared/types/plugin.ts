@@ -1,4 +1,11 @@
-import type { AiAttachmentRef, AiMessage, AiModel, AiOption, AiTokenBreakdown } from './ai'
+import type {
+  AiAttachmentRef,
+  AiImageGenerateProgressChunk,
+  AiMessage,
+  AiModel,
+  AiOption,
+  AiTokenBreakdown
+} from './ai'
 
 // 插件类型
 export type PluginType =
@@ -318,6 +325,10 @@ export interface PluginAPI {
     }
     images: {
       generate: (input: { prompt: string; model: string; size?: string; count?: number }) => Promise<{ images: string[]; tokens: AiTokenBreakdown }>
+      generateStream: (
+        input: { prompt: string; model: string; size?: string; count?: number },
+        onChunk: (chunk: AiImageGenerateProgressChunk) => void
+      ) => Promise<{ images: string[]; tokens: AiTokenBreakdown }>
       edit: (input: { imageAttachmentId: string; prompt: string; model: string }) => Promise<{ images: string[]; tokens: AiTokenBreakdown }>
     }
   }

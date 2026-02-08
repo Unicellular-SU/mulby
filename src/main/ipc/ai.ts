@@ -2,7 +2,7 @@ import { ipcMain, IpcMainInvokeEvent } from 'electron'
 import { aiService } from '../ai'
 import { getAiSettings, updateAiSettings } from '../ai/config'
 import { resetProviderRegistry } from '../ai/providers'
-import type { AiOption, AiMessage } from '../../shared/types/ai'
+import type { AiOption, AiMessage, AiImageGenerateProgressChunk } from '../../shared/types/ai'
 
 export function registerAiHandlers() {
   ipcMain.handle('ai:call', async (_event: IpcMainInvokeEvent, option: AiOption) => {
@@ -94,6 +94,35 @@ export function registerAiHandlers() {
 
   ipcMain.handle('ai:images:generate', async (_event, input) => {
     return await aiService.generateImages(input)
+  })
+
+  ipcMain.handle('ai:images:generate:stream', async (event, input) => {
+    const requestId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+    setTimeout(() => {
+      aiService
+        .generateImagesStream(
+          input,
+          (chunk: AiImageGenerateProgressChunk) => {
+            console.info('[AI] image:stream:chunk', {
+              requestId,
+              type: chunk.type,
+              stage: chunk.stage,
+              received: chunk.received,
+              total: chunk.total,
+              hasImage: Boolean(chunk.image)
+            })
+            event.sender.send('ai:images:chunk', requestId, chunk)
+          },
+          requestId
+        )
+        .then((result) => {
+          event.sender.send('ai:images:end', requestId, result)
+        })
+        .catch((err: Error) => {
+          event.sender.send('ai:images:error', requestId, err.message)
+        })
+    }, 0)
+    return { requestId }
   })
 
   ipcMain.handle('ai:images:edit', async (_event, input) => {
