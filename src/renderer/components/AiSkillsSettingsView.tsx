@@ -8,6 +8,69 @@ interface AiSkillsSettingsViewProps {
   onBack: () => void
 }
 
+interface ParsedSkillMarkdown {
+  frontmatter: Record<string, string | string[]>
+  body: string
+}
+
+function parseSkillMarkdown(input: string): ParsedSkillMarkdown {
+  const content = String(input || '')
+  const match = content.match(/^---\s*\r?\n([\s\S]*?)\r?\n---\s*(?:\r?\n)?([\s\S]*)$/)
+  if (!match) {
+    return {
+      frontmatter: {},
+      body: content
+    }
+  }
+
+  const frontmatterRaw = match[1]
+  const body = match[2] || ''
+  const out: Record<string, string | string[]> = {}
+  const lines = frontmatterRaw.split(/\r?\n/)
+  let currentArrayKey: string | null = null
+
+  for (const rawLine of lines) {
+    const line = rawLine.trim()
+    if (!line) continue
+    const arrayItem = line.match(/^-+\s*(.+)$/)
+    if (arrayItem && currentArrayKey) {
+      const prev = out[currentArrayKey]
+      if (Array.isArray(prev)) {
+        prev.push(arrayItem[1].trim())
+      } else {
+        out[currentArrayKey] = [arrayItem[1].trim()]
+      }
+      continue
+    }
+
+    const keyValue = line.match(/^([A-Za-z0-9_-]+)\s*:\s*(.*)$/)
+    if (!keyValue) {
+      currentArrayKey = null
+      continue
+    }
+    const key = keyValue[1]
+    const value = keyValue[2].trim()
+    if (!value) {
+      out[key] = []
+      currentArrayKey = key
+      continue
+    }
+    out[key] = value
+    currentArrayKey = null
+  }
+
+  return {
+    frontmatter: out,
+    body
+  }
+}
+
+function frontmatterValueToText(value: string | string[] | undefined): string {
+  if (!value) return ''
+  if (Array.isArray(value)) return value.join(', ')
+  return value
+}
+
 export default function AiSkillsSettingsView({ onBack }: AiSkillsSettingsViewProps) {
   const [skills, setSkills] = useState<AiSkillRecord[]>([])
   const [selectedSkillId, setSelectedSkillId] = useState<string | null>(null)
@@ -23,7 +86,6 @@ export default function AiSkillsSettingsView({ onBack }: AiSkillsSettingsViewPro
   const [error, setError] = useState<string | null>(null)
   const [info, setInfo] = useState<string | null>(null)
 
-  const cardClass = 'rounded-[24px] border border-slate-200/80 bg-white p-6 dark:border-slate-800/80 dark:bg-slate-900'
   const inputClass = 'w-full rounded-2xl border border-slate-200 bg-white px-4 py-2 text-sm text-slate-700 shadow-sm outline-none transition focus:border-slate-300 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-200'
   const actionButtonClass = 'rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-700 transition hover:border-slate-300 hover:text-slate-900 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-200 disabled:cursor-not-allowed disabled:opacity-50'
   const primaryPillClass = 'rounded-full border border-slate-900 bg-slate-900 px-3 py-1 text-xs text-white shadow-sm transition dark:border-white dark:bg-white dark:text-slate-900 disabled:cursor-not-allowed disabled:opacity-60'
@@ -33,6 +95,7 @@ export default function AiSkillsSettingsView({ onBack }: AiSkillsSettingsViewPro
     () => (selectedSkillId ? skills.find((item) => item.id === selectedSkillId) || null : null),
     [selectedSkillId, skills]
   )
+  const parsedSkillMarkdown = useMemo(() => parseSkillMarkdown(selectedSkillContent), [selectedSkillContent])
 
   const loadSkills = async (forceRefresh = false) => {
     if (!window.intools?.ai?.skills?.list) {
@@ -311,8 +374,14 @@ export default function AiSkillsSettingsView({ onBack }: AiSkillsSettingsViewPro
             <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">已安装 Skills</h3>
             <span className="text-xs text-slate-500 dark:text-slate-400">{skills.length}</span>
           </div>
-          <div className="h-[calc(100%-28px)] overflow-y-auto space-y-2">
-            {loading && <div className="text-xs text-slate-500 dark:text-slate-400">加载中...</div>}
+          <div className="relative h-[calc(100%-28px)] overflow-y-auto space-y-2">
+            {loading && (
+              <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center">
+                <div className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs text-slate-500 shadow-sm dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300">
+                  加载中...
+                </div>
+              </div>
+            )}
             {!loading && skills.length === 0 && (
               <div className="rounded-2xl border border-dashed border-slate-200 p-4 text-xs text-slate-500 dark:border-slate-700 dark:text-slate-400">
                 暂无 Skills。请点击右上角“AI 创建”或“ZIP 安装”。
@@ -324,11 +393,10 @@ export default function AiSkillsSettingsView({ onBack }: AiSkillsSettingsViewPro
                 <button
                   key={skill.id}
                   type="button"
-                  className={`w-full rounded-2xl border px-3 py-2 text-left transition ${
-                    active
+                  className={`w-full rounded-2xl border px-3 py-2 text-left transition ${active
                       ? 'border-slate-400 bg-slate-50 dark:border-slate-500 dark:bg-slate-800/60'
                       : 'border-slate-200 bg-white hover:border-slate-300 dark:border-slate-700 dark:bg-slate-950'
-                  }`}
+                    }`}
                   onClick={() => setSelectedSkillId(skill.id)}
                 >
                   <div className="flex items-center justify-between gap-2">
@@ -349,11 +417,35 @@ export default function AiSkillsSettingsView({ onBack }: AiSkillsSettingsViewPro
           </div>
         </aside>
 
-        <main className="flex-1 min-h-0 overflow-y-auto p-6">
-          <div className="mx-auto max-w-5xl space-y-4">
-            <section className={`${cardClass} space-y-3`}>
+        <main className="flex-1 min-h-0 overflow-hidden p-6">
+          <div className="mx-auto h-full max-w-5xl">
+            <section className="h-full min-h-0 rounded-[24px] bg-white p-2 dark:bg-slate-900 flex flex-col space-y-3">
               <div className="flex items-center justify-between gap-2">
-                <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">Skill 预览</h3>
+                <div className="flex items-center gap-2">
+                  <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">Skill 预览</h3>
+                  {selectedSkill && (
+                    <div className="group relative">
+                      <button
+                        type="button"
+                        className="flex h-5 w-5 items-center justify-center rounded-full border border-slate-200 text-[11px] text-slate-500 transition hover:border-slate-300 hover:text-slate-700 dark:border-slate-700 dark:text-slate-300 dark:hover:text-slate-100 no-drag"
+                        title="查看详情信息"
+                      >
+                        i
+                      </button>
+                      <div className="pointer-events-none invisible absolute left-0 top-full z-20 mt-2 w-[360px] rounded-xl border border-slate-200 bg-white p-3 text-xs text-slate-600 opacity-0 shadow-xl transition-all group-hover:visible group-hover:opacity-100 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300">
+                        <div className="grid grid-cols-1 gap-2">
+                          <div>ID：<span className="text-slate-800 dark:text-slate-100">{selectedSkill.id}</span></div>
+                          <div>来源：<span className="text-slate-800 dark:text-slate-100">{selectedSkill.origin === 'system' ? '系统目录' : '应用目录'}</span></div>
+                          <div>类型：<span className="text-slate-800 dark:text-slate-100">{selectedSkill.source}</span></div>
+                          <div>可编辑：<span className="text-slate-800 dark:text-slate-100">{selectedSkill.readonly || selectedSkill.origin === 'system' ? '否' : '是'}</span></div>
+                          {selectedSkill.skillMdPath && (
+                            <div className="break-all">文件：<span className="text-slate-800 dark:text-slate-100">{selectedSkill.skillMdPath}</span></div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
                 <div className="flex items-center gap-2">
                   <button className={`${actionButtonClass} no-drag`} onClick={handleToggleEnabled} disabled={!selectedSkill || busy}>
                     {selectedSkill?.enabled ? '停用' : '启用'}
@@ -376,7 +468,46 @@ export default function AiSkillsSettingsView({ onBack }: AiSkillsSettingsViewPro
 
               {selectedSkill && (
                 <>
-                  <div className="max-h-[460px] overflow-auto">
+                  <div className="min-h-0 flex-1 overflow-auto">
+                    {Object.keys(parsedSkillMarkdown.frontmatter).length > 0 && (
+                      <div className="mb-4 rounded-2xl border border-slate-200/80 bg-slate-50/70 p-4 dark:border-slate-800 dark:bg-slate-900/40">
+                        <div className="text-[11px] uppercase tracking-[0.2em] text-slate-500 dark:text-slate-400">Skill Metadata</div>
+                        <div className="mt-1 flex items-center justify-between gap-3">
+                          <div className="min-w-0">
+                            <div className="truncate text-base font-semibold text-slate-900 dark:text-slate-100">
+                              {frontmatterValueToText(parsedSkillMarkdown.frontmatter.name) || selectedSkill.descriptor.name || selectedSkill.id}
+                            </div>
+                            {frontmatterValueToText(parsedSkillMarkdown.frontmatter.description) && (
+                              <div className="mt-1 text-sm text-slate-600 dark:text-slate-300">
+                                {frontmatterValueToText(parsedSkillMarkdown.frontmatter.description)}
+                              </div>
+                            )}
+                          </div>
+                          {frontmatterValueToText(parsedSkillMarkdown.frontmatter.mode) && (
+                            <span className="shrink-0 rounded-full bg-slate-100 px-2.5 py-1 text-[11px] text-slate-700 dark:bg-slate-800 dark:text-slate-200">
+                              {frontmatterValueToText(parsedSkillMarkdown.frontmatter.mode)}
+                            </span>
+                          )}
+                        </div>
+                        <div className="mt-3 grid grid-cols-1 gap-2 text-xs text-slate-500 dark:text-slate-400 lg:grid-cols-2">
+                          {frontmatterValueToText(parsedSkillMarkdown.frontmatter.id) && (
+                            <div>ID：<span className="text-slate-700 dark:text-slate-200">{frontmatterValueToText(parsedSkillMarkdown.frontmatter.id)}</span></div>
+                          )}
+                          {frontmatterValueToText(parsedSkillMarkdown.frontmatter.author) && (
+                            <div>作者：<span className="text-slate-700 dark:text-slate-200">{frontmatterValueToText(parsedSkillMarkdown.frontmatter.author)}</span></div>
+                          )}
+                          {frontmatterValueToText(parsedSkillMarkdown.frontmatter.version) && (
+                            <div>版本：<span className="text-slate-700 dark:text-slate-200">{frontmatterValueToText(parsedSkillMarkdown.frontmatter.version)}</span></div>
+                          )}
+                          {frontmatterValueToText(parsedSkillMarkdown.frontmatter.tags) && (
+                            <div className="lg:col-span-2">标签：<span className="text-slate-700 dark:text-slate-200">{frontmatterValueToText(parsedSkillMarkdown.frontmatter.tags)}</span></div>
+                          )}
+                          {frontmatterValueToText(parsedSkillMarkdown.frontmatter.triggerPhrases) && (
+                            <div className="lg:col-span-2">触发词：<span className="text-slate-700 dark:text-slate-200">{frontmatterValueToText(parsedSkillMarkdown.frontmatter.triggerPhrases)}</span></div>
+                          )}
+                        </div>
+                      </div>
+                    )}
                     {selectedSkillContent ? (
                       <article className="prose prose-sm prose-slate max-w-none dark:prose-invert">
                         <ReactMarkdown
@@ -395,19 +526,12 @@ export default function AiSkillsSettingsView({ onBack }: AiSkillsSettingsViewPro
                             )
                           }}
                         >
-                          {selectedSkillContent}
+                          {parsedSkillMarkdown.body}
                         </ReactMarkdown>
                       </article>
                     ) : (
                       <div className="text-xs text-slate-500 dark:text-slate-400">未读取到 SKILL.md 内容</div>
                     )}
-                  </div>
-                  <div className="grid grid-cols-1 gap-2 text-xs text-slate-500 dark:text-slate-400 lg:grid-cols-2">
-                    <div>ID：<span className="text-slate-700 dark:text-slate-200">{selectedSkill.id}</span></div>
-                    <div>来源：<span className="text-slate-700 dark:text-slate-200">{selectedSkill.origin === 'system' ? '系统目录' : '应用目录'}</span></div>
-                    <div>类型：<span className="text-slate-700 dark:text-slate-200">{selectedSkill.source}</span></div>
-                    <div>可编辑：<span className="text-slate-700 dark:text-slate-200">{selectedSkill.readonly || selectedSkill.origin === 'system' ? '否' : '是'}</span></div>
-                    {selectedSkill.skillMdPath && <div className="lg:col-span-2 truncate">文件：<span className="text-slate-700 dark:text-slate-200">{selectedSkill.skillMdPath}</span></div>}
                   </div>
                 </>
               )}
@@ -460,11 +584,10 @@ export default function AiSkillsSettingsView({ onBack }: AiSkillsSettingsViewPro
               <button className={`${actionButtonClass} no-drag`} onClick={() => setShowZipModal(false)} disabled={busy}>关闭</button>
             </div>
             <div
-              className={`rounded-2xl border border-dashed p-8 text-center text-sm transition ${
-                draggingZip
+              className={`rounded-2xl border border-dashed p-8 text-center text-sm transition ${draggingZip
                   ? 'border-slate-400 bg-slate-50 text-slate-800 dark:border-slate-500 dark:bg-slate-800/60 dark:text-slate-100'
                   : 'border-slate-300 text-slate-500 dark:border-slate-700 dark:text-slate-400'
-              }`}
+                }`}
               onDragEnter={(e) => {
                 e.preventDefault()
                 setDraggingZip(true)
