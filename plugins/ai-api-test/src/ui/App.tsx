@@ -11,9 +11,17 @@ type AiAttachmentRef = {
 }
 
 type ModelItem = { id: string; label?: string; description?: string; providerLabel?: string; capabilities?: Array<{ type: string; isUserSelected?: boolean }> }
+type McpServer = {
+  id: string
+  name: string
+  type: 'stdio' | 'sse' | 'streamableHttp'
+  isActive: boolean
+  description?: string
+}
 
 const defaultSystemPrompt = '你是一个专业的 AI API 测试助手。'
 const defaultUserPrompt = '请用简短中文说明今天的测试进度，并给一个下一步建议。'
+const defaultMcpPrompt = '请优先调用可用的 MCP 工具完成任务，并简要说明调用了哪些工具。'
 
 const guessMimeType = (file: File) => {
   if (file.type) return file.type
@@ -112,11 +120,23 @@ export default function App() {
   const [isToolStreaming, setIsToolStreaming] = useState(false)
   const toolStreamBufferRef = useRef('')
   const toolReasoningOpenedRef = useRef(false)
+  const [mcpServers, setMcpServers] = useState<McpServer[]>([])
+  const [selectedMcpServerId, setSelectedMcpServerId] = useState('')
+  const [mcpMode, setMcpMode] = useState<'off' | 'manual' | 'auto'>('manual')
+  const [mcpPrompt, setMcpPrompt] = useState(defaultMcpPrompt)
+  const [mcpCheckResult, setMcpCheckResult] = useState('')
+  const [mcpToolsJson, setMcpToolsJson] = useState('')
+  const [mcpLogsJson, setMcpLogsJson] = useState('')
+  const [mcpCallOutput, setMcpCallOutput] = useState('')
+  const [mcpCallResult, setMcpCallResult] = useState('')
+  const [isMcpCalling, setIsMcpCalling] = useState(false)
+  const mcpCallIdRef = useRef<string | null>(null)
 
   const fileInputRef = useRef<HTMLInputElement | null>(null)
   const streamRequestRef = useRef<any>(null)
   const streamRequestIdRef = useRef<string | null>(null)
   const imageGenerateRequestRef = useRef<any>(null)
+  const mcpRequestRef = useRef<any>(null)
   const imageProgressTimerRef = useRef<number | null>(null)
   const imageProgressStartAtRef = useRef<number>(0)
 
@@ -189,8 +209,31 @@ export default function App() {
     }
   }
 
+  const loadMcpServers = async () => {
+    try {
+      const listServers = ai?.mcp?.listServers
+      if (typeof listServers !== 'function') {
+        setMcpServers([])
+        setSelectedMcpServerId('')
+        return
+      }
+      const list = await listServers()
+      const normalized = Array.isArray(list) ? list : []
+      setMcpServers(normalized)
+      setSelectedMcpServerId((prev) => {
+        if (prev && normalized.some((item: McpServer) => item.id === prev)) {
+          return prev
+        }
+        return normalized[0]?.id || ''
+      })
+    } catch (err: any) {
+      notification?.show?.(err?.message || '读取 MCP 服务器失败', 'error')
+    }
+  }
+
   useEffect(() => {
     loadModels()
+    loadMcpServers()
   }, [])
 
   useEffect(() => {
@@ -554,6 +597,189 @@ export default function App() {
     }
   }
 
+  const requireMcpServerId = () => {
+    const serverId = selectedMcpServerId || mcpServers[0]?.id
+    if (!serverId) {
+      notification?.show?.('请先选择 MCP 服务器', 'warning')
+      return ''
+    }
+    return serverId
+  }
+
+  const handleMcpCheckServer = async () => {
+    try {
+      const serverId = requireMcpServerId()
+      if (!serverId) return
+      const check = await ai?.mcp?.checkServer?.(serverId)
+      setMcpCheckResult(JSON.stringify(check || { ok: false, message: '无返回结果' }, null, 2))
+    } catch (err: any) {
+      setMcpCheckResult(err?.message || '检查失败')
+    }
+  }
+
+  const handleMcpListTools = async () => {
+    try {
+      const serverId = requireMcpServerId()
+      if (!serverId) return
+      const tools = await ai?.mcp?.listTools?.(serverId)
+      setMcpToolsJson(JSON.stringify(tools || [], null, 2))
+    } catch (err: any) {
+      setMcpToolsJson(err?.message || '读取工具失败')
+    }
+  }
+
+  const handleMcpLoadLogs = async () => {
+    try {
+      const serverId = requireMcpServerId()
+      if (!serverId) return
+      const logs = await ai?.mcp?.getLogs?.(serverId)
+      setMcpLogsJson(JSON.stringify(logs || [], null, 2))
+    } catch (err: any) {
+      setMcpLogsJson(err?.message || '读取日志失败')
+    }
+  }
+
+  const handleMcpServerLifecycle = async (action: 'activate' | 'deactivate' | 'restart') => {
+    try {
+      const serverId = requireMcpServerId()
+      if (!serverId) return
+      const api = ai?.mcp
+      if (!api) {
+        notification?.show?.('当前版本未暴露 ai.mcp API', 'warning')
+        return
+      }
+      if (action === 'activate') {
+        await api.activateServer?.(serverId)
+      } else if (action === 'deactivate') {
+        await api.deactivateServer?.(serverId)
+      } else {
+        await api.restartServer?.(serverId)
+      }
+      await loadMcpServers()
+      notification?.show?.(`MCP 服务器已${action === 'activate' ? '激活' : action === 'deactivate' ? '停用' : '重启'}`, 'success')
+    } catch (err: any) {
+      notification?.show?.(err?.message || 'MCP 服务器操作失败', 'error')
+    }
+  }
+
+  const handleMcpCall = async () => {
+    if (!selectedModel) {
+      notification?.show?.('请先选择模型', 'warning')
+      return
+    }
+    const serverId = selectedMcpServerId || mcpServers[0]?.id
+    if (mcpMode === 'manual' && !serverId) {
+      notification?.show?.('manual 模式下请先选择 MCP 服务器', 'warning')
+      return
+    }
+
+    setMcpCallOutput('')
+    setMcpCallResult('')
+    setIsMcpCalling(true)
+    mcpCallIdRef.current = null
+
+    const append = (text: string) => {
+      if (!text) return
+      setMcpCallOutput((prev) => prev + text)
+    }
+
+    try {
+      const mcpSelection = mcpMode === 'off'
+        ? { mode: 'off' as const }
+        : {
+          mode: mcpMode,
+          serverIds: mcpMode === 'manual' && serverId ? [serverId] : undefined
+        }
+
+      const request = ai?.call(
+        {
+          model: selectedModel,
+          messages: [
+            { role: 'system', content: '你是一个 MCP 工具调用测试助手。' },
+            { role: 'user', content: mcpPrompt }
+          ],
+          mcp: mcpSelection,
+          toolContext: { pluginName: 'ai-api-test' },
+          maxToolSteps: 5
+        },
+        (chunk: any) => {
+          if (chunk?.__callId && !mcpCallIdRef.current) {
+            mcpCallIdRef.current = chunk.__callId
+          } else if (chunk?.__requestId && !mcpCallIdRef.current) {
+            mcpCallIdRef.current = chunk.__requestId
+          }
+          if (chunk?.chunkType === 'error') {
+            append(`\n[错误] ${chunk?.error?.message || '流式错误'}\n`)
+            return
+          }
+          if (chunk?.reasoning_content) {
+            append(`\n[思考] ${chunk.reasoning_content}`)
+          }
+          if (chunk?.chunkType === 'tool-call' || chunk?.tool_call?.name) {
+            const argsText = toPreview(chunk?.tool_call?.args)
+            append(`\n[调用工具] ${chunk.tool_call.name}${argsText ? ` args=${argsText}` : ''}\n`)
+          }
+          if (chunk?.chunkType === 'tool-result' || chunk?.tool_result?.name) {
+            const resultText = toPreview(chunk?.tool_result?.result)
+            append(`\n[工具结果] ${chunk.tool_result.name}${resultText ? ` => ${resultText}` : ''}\n`)
+          }
+          const text = extractText(chunk?.content)
+          if (text) {
+            append(text)
+          }
+        }
+      )
+      mcpRequestRef.current = request
+      if ((request as any)?.requestId && !mcpCallIdRef.current) {
+        mcpCallIdRef.current = (request as any).requestId
+      }
+      const result = await request
+      const finalText = extractText(result?.content)
+      if (finalText) {
+        append(`\n${finalText}`)
+      }
+      setMcpCallResult(JSON.stringify(result, null, 2))
+      notification?.show?.('MCP 调用完成', 'success')
+    } catch (err: any) {
+      setMcpCallResult(err?.message || 'MCP 调用失败')
+    } finally {
+      setIsMcpCalling(false)
+      mcpRequestRef.current = null
+      mcpCallIdRef.current = null
+    }
+  }
+
+  const handleMcpAbort = async () => {
+    try {
+      if (mcpRequestRef.current?.abort) {
+        mcpRequestRef.current.abort()
+        mcpRequestRef.current = null
+        mcpCallIdRef.current = null
+        setIsMcpCalling(false)
+        notification?.show?.('已停止 MCP 调用', 'warning')
+        return
+      }
+      const callId = mcpCallIdRef.current
+      if (callId && ai?.mcp?.abort) {
+        await ai.mcp.abort(callId)
+        mcpRequestRef.current = null
+        setIsMcpCalling(false)
+        notification?.show?.('已停止 MCP 调用', 'warning')
+        return
+      }
+      if (callId && ai?.abort) {
+        await ai.abort(callId)
+        mcpRequestRef.current = null
+        setIsMcpCalling(false)
+        notification?.show?.('已停止 MCP 调用', 'warning')
+        return
+      }
+      notification?.show?.('当前没有可停止的 MCP 请求', 'info')
+    } catch (err: any) {
+      notification?.show?.(err?.message || '停止 MCP 调用失败', 'error')
+    }
+  }
+
   const handleToolCall = async () => {
     try {
       const result = await host?.call?.('runToolCall', {
@@ -687,6 +913,10 @@ export default function App() {
     return models.find((item) => item.id === selectedModel)
   }, [models, selectedModel])
 
+  const selectedMcpServer = useMemo(() => {
+    return mcpServers.find((item) => item.id === selectedMcpServerId)
+  }, [mcpServers, selectedMcpServerId])
+
   const selectedCapabilities = useMemo(() => {
     const caps = selectedModelInfo?.capabilities || []
     return caps
@@ -810,6 +1040,98 @@ export default function App() {
           <div className="field">
             <label>最终结果</label>
             <textarea className="output" value={toolResult} readOnly placeholder="工具调用结果" />
+          </div>
+        </section>
+
+        <section className="card">
+          <div className="card-title">MCP 测试 (Renderer)</div>
+          <div className="split">
+            <div className="field">
+              <label>MCP 服务器</label>
+              <select value={selectedMcpServerId} onChange={(e) => setSelectedMcpServerId(e.target.value)}>
+                <option value="">请选择服务器</option>
+                {mcpServers.map((server) => (
+                  <option key={server.id} value={server.id}>
+                    [{server.isActive ? 'on' : 'off'}] {server.name} ({server.type})
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="field">
+              <label>MCP 工具选择模式</label>
+              <select value={mcpMode} onChange={(e) => setMcpMode(e.target.value as 'off' | 'manual' | 'auto')}>
+                <option value="off">off（禁用 MCP）</option>
+                <option value="manual">manual（仅所选服务器）</option>
+                <option value="auto">auto（自动选择）</option>
+              </select>
+            </div>
+          </div>
+          <div className="actions">
+            <button className="btn-secondary" onClick={loadMcpServers}>
+              刷新服务器
+            </button>
+            <button className="btn-ghost" onClick={handleMcpCheckServer}>
+              检查
+            </button>
+            <button className="btn-ghost" onClick={() => handleMcpServerLifecycle('activate')}>
+              激活
+            </button>
+            <button className="btn-ghost" onClick={() => handleMcpServerLifecycle('deactivate')}>
+              停用
+            </button>
+            <button className="btn-ghost" onClick={() => handleMcpServerLifecycle('restart')}>
+              重启
+            </button>
+            <button className="btn-ghost" onClick={handleMcpListTools}>
+              读取工具
+            </button>
+            <button className="btn-ghost" onClick={handleMcpLoadLogs}>
+              读取日志
+            </button>
+          </div>
+          {selectedMcpServer ? (
+            <div className="text-xs text-slate-500">
+              当前服务器：{selectedMcpServer.name} / {selectedMcpServer.type} / {selectedMcpServer.isActive ? '已激活' : '未激活'}
+            </div>
+          ) : (
+            <div className="text-xs text-slate-500">未选择服务器。manual 模式下将无法调用 MCP。</div>
+          )}
+          <div className="field">
+            <label>MCP 调用提示词</label>
+            <textarea value={mcpPrompt} onChange={(e) => setMcpPrompt(e.target.value)} rows={3} />
+          </div>
+          <div className="actions">
+            <button className="btn-primary" onClick={handleMcpCall} disabled={isMcpCalling}>
+              <Play size={16} className="icon" />
+              开始 MCP 调用
+            </button>
+            <button className="btn-secondary" onClick={handleMcpAbort} disabled={!isMcpCalling}>
+              停止
+            </button>
+          </div>
+          <div className="split">
+            <div className="field">
+              <label>检查结果</label>
+              <textarea className="output" value={mcpCheckResult} readOnly placeholder="checkServer 结果" />
+            </div>
+            <div className="field">
+              <label>MCP 调用流式输出</label>
+              <textarea className="output" value={mcpCallOutput} readOnly placeholder="MCP 流式输出..." />
+            </div>
+          </div>
+          <div className="field">
+            <label>MCP 调用最终结果</label>
+            <textarea className="output" value={mcpCallResult} readOnly placeholder="MCP 调用结果" />
+          </div>
+          <div className="split">
+            <div className="field">
+              <label>服务器工具</label>
+              <textarea className="output" value={mcpToolsJson} readOnly placeholder="listTools 结果" />
+            </div>
+            <div className="field">
+              <label>服务器日志</label>
+              <textarea className="output" value={mcpLogsJson} readOnly placeholder="getLogs 结果" />
+            </div>
           </div>
         </section>
 
