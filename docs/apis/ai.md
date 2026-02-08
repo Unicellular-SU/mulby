@@ -29,8 +29,9 @@ const message = await ai.call({
   - `messages` (AiMessage[]) - 对话消息
   - `params` (AiModelParameters) - 覆盖参数（可选）
   - `tools` (AiTool[]) - 工具定义（Function Calling）
+  - `mcp` (AiMcpSelection) - MCP 工具选择策略（可选）
+  - `toolContext` (AiToolContext) - 工具执行上下文（可选）
   - `maxToolSteps` (number) - 工具调用的最大步骤数（默认 10，范围 1-20）
-  - `onChunk` (function) - 流式回调 (可选)
 
 **返回值**:
 - `Promise<AiMessage>` - 最终消息（包含可选 `usage`）
@@ -51,6 +52,25 @@ req.abort?.();
 
 > 说明：`tools` 在插件后端会通过插件 host 方法执行（工具名=插件方法名）。  
 > 渲染进程不直接执行工具函数，如需在 UI 使用工具调用，请通过 `window.intools.host.call` 调用插件后端方法执行。
+
+### MCP 参与调用
+
+当 `option.mcp.mode !== 'off'` 时，AI 调用会自动挂载 MCP 工具（来自已启用的 MCP 服务器），并按 `serverIds/allowedToolIds` 与 `toolContext.mcpScope` 做过滤。
+
+```javascript
+const result = await ai.call({
+  model: 'openai:gpt-4o-mini',
+  messages: [{ role: 'user', content: '帮我调用本地文件工具列目录' }],
+  mcp: {
+    mode: 'manual',
+    serverIds: ['filesystem'],
+    allowedToolIds: ['mcp__filesystem__list_directory']
+  }
+});
+```
+
+> `allowedToolIds` 支持传工具 ID（推荐）或工具名。  
+> MCP 工具 ID 格式：`mcp__<serverId>__<toolName>`。
 
 ---
 
@@ -213,6 +233,122 @@ await ai.settings.update({
 **返回值**: `AiSettings`
 
 > 设置文件位置：`<userData>/ai/settings.json`
+
+---
+
+## MCP 管理
+
+> 可用端：仅渲染进程 `window.intools.ai.mcp`。  
+> 插件后端 `context.api.ai` 当前不提供 `mcp.*` 管理接口（但 `ai.call` 可使用 `option.mcp` 参与工具选择）。
+
+### mcp.listServers()
+[Renderer]
+获取 MCP 服务器列表。
+
+```javascript
+const servers = await ai.mcp.listServers();
+```
+
+### mcp.getServer(serverId)
+[Renderer]
+读取单个 MCP 服务器配置。
+
+```javascript
+const server = await ai.mcp.getServer('filesystem');
+```
+
+### mcp.upsertServer(server)
+[Renderer]
+创建或更新 MCP 服务器。
+
+```javascript
+await ai.mcp.upsertServer({
+  id: 'filesystem',
+  name: 'Filesystem',
+  type: 'stdio',
+  command: 'npx',
+  args: ['-y', '@modelcontextprotocol/server-filesystem', '/Users/you/workspace'],
+  isActive: false
+});
+```
+
+```javascript
+await ai.mcp.upsertServer({
+  id: 'weather-http',
+  name: 'Weather HTTP',
+  type: 'streamableHttp',
+  baseUrl: 'http://127.0.0.1:3000/mcp',
+  headers: { Authorization: 'Bearer xxx' },
+  isActive: false
+});
+```
+
+### mcp.removeServer(serverId)
+[Renderer]
+删除服务器配置并断开连接。
+
+```javascript
+await ai.mcp.removeServer('filesystem');
+```
+
+### mcp.activateServer(serverId)
+[Renderer]
+启动并连接 MCP 服务器。
+
+```javascript
+await ai.mcp.activateServer('filesystem');
+```
+
+### mcp.deactivateServer(serverId)
+[Renderer]
+停止 MCP 服务器连接。
+
+```javascript
+await ai.mcp.deactivateServer('filesystem');
+```
+
+### mcp.restartServer(serverId)
+[Renderer]
+重启 MCP 服务器。
+
+```javascript
+await ai.mcp.restartServer('filesystem');
+```
+
+### mcp.checkServer(serverId)
+[Renderer]
+执行连通性检查（会尝试连通并拉取工具列表）。
+
+```javascript
+const check = await ai.mcp.checkServer('filesystem');
+// { ok: boolean, message?: string }
+```
+
+### mcp.listTools(serverId)
+[Renderer]
+获取服务器工具列表（应用工具策略过滤后）。
+
+```javascript
+const tools = await ai.mcp.listTools('filesystem');
+```
+
+### mcp.abort(callId)
+[Renderer]
+中止进行中的 MCP 工具调用。
+
+```javascript
+await ai.mcp.abort(callId);
+```
+
+### mcp.getLogs(serverId)
+[Renderer]
+读取 MCP 服务器日志。
+
+```javascript
+const logs = await ai.mcp.getLogs('filesystem');
+```
+
+> `installSource = 'protocol'` 且 `isTrusted !== true` 的服务器属于未信任状态，启动/重启/连通性检查/工具调用会被拦截。
 
 ---
 
@@ -380,7 +516,9 @@ type AiOption = {
   model?: string;
   messages: AiMessage[];
   tools?: AiTool[];
+  mcp?: AiMcpSelection;
   params?: AiModelParameters;
+  toolContext?: AiToolContext;
   maxToolSteps?: number;  // 工具调用的最大步骤数，默认为 10
 };
 ```
@@ -435,6 +573,75 @@ type AiSettings = {
   providers: AiProviderConfig[];
   models?: AiModel[];
   defaultParams?: AiModelParameters;
+  mcp?: AiMcpSettings;
+};
+```
+
+### AiMcpSelection / AiToolContext
+```typescript
+type AiMcpSelection = {
+  mode?: 'off' | 'manual' | 'auto';
+  serverIds?: string[];
+  allowedToolIds?: string[];
+};
+
+type AiToolContext = {
+  pluginName?: string;
+  mcpScope?: {
+    allowedServerIds?: string[];
+    allowedToolIds?: string[];
+  };
+};
+```
+
+### AiMcpServer / AiMcpSettings / AiMcpTool
+```typescript
+type AiMcpServer = {
+  id: string;
+  name: string;
+  type: 'stdio' | 'sse' | 'streamableHttp';
+  isActive: boolean;
+  description?: string;
+  baseUrl?: string;
+  command?: string;
+  args?: string[];
+  env?: Record<string, string>;
+  headers?: Record<string, string>;
+  timeoutSec?: number;
+  longRunning?: boolean;
+  disabledTools?: string[];
+  disabledAutoApproveTools?: string[];
+  installSource?: 'manual' | 'protocol' | 'builtin';
+  isTrusted?: boolean;
+  trustedAt?: number;
+  installedAt?: number;
+};
+
+type AiMcpSettings = {
+  servers: AiMcpServer[];
+  defaults?: {
+    timeoutMs?: number;
+    longRunningMaxMs?: number;
+    approvalMode?: 'always' | 'auto-approved-only' | 'never';
+  };
+};
+
+type AiMcpTool = {
+  id: string;
+  name: string;
+  description?: string;
+  serverId: string;
+  serverName: string;
+  inputSchema?: unknown;
+  outputSchema?: unknown;
+};
+
+type AiMcpServerLogEntry = {
+  timestamp: number;
+  level: 'debug' | 'info' | 'warn' | 'error';
+  message: string;
+  source?: string;
+  data?: unknown;
 };
 ```
 

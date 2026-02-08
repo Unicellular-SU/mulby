@@ -70,7 +70,9 @@ export function buildBackendMain(name: string) {
         model?: string
         messages: Array<{ role: 'system' | 'user' | 'assistant'; content?: string | Array<any> }>
         tools?: Array<{ type: 'function'; function: { name: string; description?: string; parameters?: object } }>
+        mcp?: { mode?: 'off' | 'manual' | 'auto'; serverIds?: string[]; allowedToolIds?: string[] }
         params?: any
+        toolContext?: { pluginName?: string; mcpScope?: { allowedServerIds?: string[]; allowedToolIds?: string[] } }
       }, onChunk?: (chunk: any) => void) => Promise<{ role: 'assistant'; content?: string }>
       allModels: () => Promise<any[]>
       tokens: {

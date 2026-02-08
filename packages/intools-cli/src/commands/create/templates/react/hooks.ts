@@ -67,7 +67,9 @@ export function useIntools(pluginId?: string) {
       // - model: 模型 ID
       // - messages: 消息数组
       // - tools: 工具定义数组
+      // - mcp: MCP 选择策略（off/manual/auto + server/tool 限制）
       // - params: 模型参数
+      // - toolContext: 工具上下文（插件名与 MCP 作用域）
       // - maxToolSteps: 工具调用的最大步骤数（默认 10）
       call: (option: any, onChunk?: (chunk: any) => void) => window.intools?.ai?.call(option, onChunk),
       allModels: () => window.intools?.ai?.allModels?.(),
@@ -94,6 +96,19 @@ export function useIntools(pluginId?: string) {
       settings: {
         get: () => window.intools?.ai?.settings?.get(),
         update: (next: any) => window.intools?.ai?.settings?.update(next),
+      },
+      mcp: {
+        listServers: () => window.intools?.ai?.mcp?.listServers?.(),
+        getServer: (serverId: string) => window.intools?.ai?.mcp?.getServer?.(serverId),
+        upsertServer: (server: any) => window.intools?.ai?.mcp?.upsertServer?.(server),
+        removeServer: (serverId: string) => window.intools?.ai?.mcp?.removeServer?.(serverId),
+        activateServer: (serverId: string) => window.intools?.ai?.mcp?.activateServer?.(serverId),
+        deactivateServer: (serverId: string) => window.intools?.ai?.mcp?.deactivateServer?.(serverId),
+        restartServer: (serverId: string) => window.intools?.ai?.mcp?.restartServer?.(serverId),
+        checkServer: (serverId: string) => window.intools?.ai?.mcp?.checkServer?.(serverId),
+        listTools: (serverId: string) => window.intools?.ai?.mcp?.listTools?.(serverId),
+        abort: (callId: string) => window.intools?.ai?.mcp?.abort?.(callId),
+        getLogs: (serverId: string) => window.intools?.ai?.mcp?.getLogs?.(serverId),
       },
     },
 

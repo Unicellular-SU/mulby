@@ -483,7 +483,14 @@ type AiModelParameters = {
   stopSequences?: string[]
   seed?: number
 }
-type AiOption = { model?: string; messages: AiMessage[]; tools?: AiTool[]; params?: AiModelParameters }
+type AiOption = {
+  model?: string
+  messages: AiMessage[]
+  tools?: AiTool[]
+  mcp?: AiMcpSelection
+  params?: AiModelParameters
+  toolContext?: AiToolContext
+}
 type AiModel = {
   id: string
   label: string
@@ -505,7 +512,49 @@ type AiProviderConfig = {
   defaultModel?: string
   defaultParams?: AiModelParameters
 }
-type AiSettings = { providers: AiProviderConfig[]; models?: AiModel[]; defaultParams?: AiModelParameters }
+type AiSettings = { providers: AiProviderConfig[]; models?: AiModel[]; defaultParams?: AiModelParameters; mcp?: AiMcpSettings }
+type AiMcpSelection = { mode?: 'off' | 'manual' | 'auto'; serverIds?: string[]; allowedToolIds?: string[] }
+type AiToolContext = { pluginName?: string; mcpScope?: { allowedServerIds?: string[]; allowedToolIds?: string[] } }
+type AiMcpServer = {
+  id: string
+  name: string
+  type: 'stdio' | 'sse' | 'streamableHttp'
+  isActive: boolean
+  description?: string
+  baseUrl?: string
+  command?: string
+  args?: string[]
+  env?: Record<string, string>
+  headers?: Record<string, string>
+  timeoutSec?: number
+  longRunning?: boolean
+  disabledTools?: string[]
+  disabledAutoApproveTools?: string[]
+  installSource?: 'manual' | 'protocol' | 'builtin'
+  isTrusted?: boolean
+  trustedAt?: number
+  installedAt?: number
+}
+type AiMcpSettings = {
+  servers: AiMcpServer[]
+  defaults?: { timeoutMs?: number; longRunningMaxMs?: number; approvalMode?: 'always' | 'auto-approved-only' | 'never' }
+}
+type AiMcpTool = {
+  id: string
+  name: string
+  description?: string
+  serverId: string
+  serverName: string
+  inputSchema?: unknown
+  outputSchema?: unknown
+}
+type AiMcpServerLogEntry = {
+  timestamp: number
+  level: 'debug' | 'info' | 'warn' | 'error'
+  message: string
+  source?: string
+  data?: unknown
+}
 type AiAttachmentRef = { attachmentId: string; mimeType: string; size: number; filename?: string; expiresAt?: string; purpose?: string }
 type AiTokenBreakdown = { inputTokens: number; outputTokens: number }
 type AiModelType = 'text' | 'vision' | 'embedding' | 'reasoning' | 'function_calling' | 'web_search' | 'rerank'
@@ -544,6 +593,19 @@ interface IntoolsAi {
   settings: {
     get(): Promise<AiSettings>
     update(next: Partial<AiSettings>): Promise<AiSettings>
+  }
+  mcp?: {
+    listServers(): Promise<AiMcpServer[]>
+    getServer(serverId: string): Promise<AiMcpServer | null>
+    upsertServer(server: AiMcpServer): Promise<AiMcpServer>
+    removeServer(serverId: string): Promise<void>
+    activateServer(serverId: string): Promise<AiMcpServer>
+    deactivateServer(serverId: string): Promise<AiMcpServer>
+    restartServer(serverId: string): Promise<AiMcpServer>
+    checkServer(serverId: string): Promise<{ ok: boolean; message?: string }>
+    listTools(serverId: string): Promise<AiMcpTool[]>
+    abort(callId: string): Promise<boolean>
+    getLogs(serverId: string): Promise<AiMcpServerLogEntry[]>
   }
 }
 
