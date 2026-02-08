@@ -8,6 +8,7 @@ import TaskSchedulerView from './components/TaskSchedulerView'
 import AttachmentManager from './components/AttachmentManager'
 import SettingsView, { SettingsSection } from './components/SettingsView'
 import AiSettingsView from './components/AiSettingsView'
+import AiMcpSettingsView from './components/AiMcpSettingsView'
 import LogViewerView from './components/LogViewerView'
 import type { InputAttachment, InputPayload } from '../shared/types/plugin'
 
@@ -26,7 +27,7 @@ function App() {
   const [pluginOpen, setPluginOpen] = useState(false) // 仅用于跟踪插件是否打开
   const [detailsPluginName, setDetailsPluginName] = useState<string | null>(null)
   const [detailsReturnTarget, setDetailsReturnTarget] = useState<'home' | 'settings' | 'plugins'>('home')
-  const [viewMode, setViewMode] = useState<'home' | 'plugin-details' | 'settings' | 'plugins' | 'logs' | 'background-plugins' | 'task-scheduler' | 'ai-settings'>('home')
+  const [viewMode, setViewMode] = useState<'home' | 'plugin-details' | 'settings' | 'plugins' | 'logs' | 'background-plugins' | 'task-scheduler' | 'ai-settings' | 'ai-mcp-settings'>('home')
   const [settingsSection, setSettingsSection] = useState<SettingsSection>('general')
   const [pluginManagerReturnTarget, setPluginManagerReturnTarget] = useState<'home' | 'settings'>('home')
   const [backgroundPluginManagerReturnTarget, setBackgroundPluginManagerReturnTarget] = useState<'home' | 'settings'>('home')
@@ -414,6 +415,17 @@ function App() {
       <div className={`app ${isDragging ? 'dragging' : ''}`}>
         <AiSettingsView
           onBack={() => setViewMode('settings')}
+          onOpenMcpSettings={() => setViewMode('ai-mcp-settings')}
+        />
+      </div>
+    )
+  }
+
+  if (viewMode === 'ai-mcp-settings') {
+    return (
+      <div className={`app ${isDragging ? 'dragging' : ''}`}>
+        <AiMcpSettingsView
+          onBack={() => setViewMode('ai-settings')}
         />
       </div>
     )
