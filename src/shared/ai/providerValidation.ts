@@ -2,6 +2,7 @@ import type { AiProviderConfig } from '../types/ai'
 import { inferProviderType } from './providerType'
 import { getProviderProfile } from './providerProfiles'
 import { resolveProviderBaseURL } from './providerDefaults'
+import { hasApiKey as hasConfiguredApiKey } from './apiKeyPool'
 
 export interface ProviderValidationResult {
   providerType: string
@@ -45,7 +46,7 @@ export function validateProviderConfig(
   const providerId = String(provider.id || '').trim()
   const issueSet = new Set<string>()
   const enabled = provider.enabled !== false
-  const hasApiKey = !!String(provider.apiKey || '').trim()
+  const hasApiKey = hasConfiguredApiKey(provider.apiKey)
   const hasBaseURL = !!String(
     resolveProviderBaseURL({
       providerType,

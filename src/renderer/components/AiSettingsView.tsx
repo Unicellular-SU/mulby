@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import type { AiEndpointType, AiModel, AiModelCapability, AiModelParameters, AiModelType, AiProviderConfig, AiSettings } from '../../shared/types/ai'
 import { BUILTIN_PROVIDER_TYPES, inferProviderType } from '../../shared/ai/providerType'
 import { isEndpointRoutedProviderType, supportsProviderEndpointRouting } from '../../shared/ai/providerEndpointRouting'
@@ -7,6 +7,7 @@ import { getProviderDefaultBaseURL } from '../../shared/ai/providerDefaults'
 import { getProviderPreset } from '../../shared/ai/providerPresets'
 import { getSystemDefaultProviderById, isSystemDefaultProviderId } from '../../shared/ai/systemProviders'
 import { getSystemDefaultModels } from '../../shared/ai/systemModels'
+import { splitApiKeyString } from '../../shared/ai/apiKeyPool'
 import SliderWithTicks from './SliderWithTicks'
 
 const PROVIDER_TYPE_OPTIONS = [...BUILTIN_PROVIDER_TYPES] as string[]
@@ -49,6 +50,29 @@ interface AiSettingsViewProps {
   onBack: () => void
 }
 
+interface ProviderListEntry {
+  provider: AiProviderConfig
+  index: number
+}
+
+interface ProviderModelOption {
+  id: string
+  label: string
+}
+
+interface ApiKeyTestStatus {
+  state: 'success' | 'error' | 'testing'
+  message: string
+}
+
+function serializeApiKeys(keys: string[]): string {
+  return keys
+    .map((key) => key.trim())
+    .filter(Boolean)
+    .map((key) => key.replace(/,/g, '\\,'))
+    .join(',')
+}
+
 export default function AiSettingsView({ onBack }: AiSettingsViewProps) {
   const initialProviderPreset = getProviderPreset('openai')
   const [aiSettings, setAiSettings] = useState<AiSettings | null>(null)
@@ -65,6 +89,11 @@ export default function AiSettingsView({ onBack }: AiSettingsViewProps) {
   const [fetchProviderLabel, setFetchProviderLabel] = useState<string | null>(null)
   const [showAddProviderModal, setShowAddProviderModal] = useState(false)
   const [showAddModelModal, setShowAddModelModal] = useState(false)
+  const [showApiKeyManagerModal, setShowApiKeyManagerModal] = useState(false)
+  const [newApiKeyInput, setNewApiKeyInput] = useState('')
+  const [apiKeyTestModel, setApiKeyTestModel] = useState('')
+  const [testingApiKeyIndex, setTestingApiKeyIndex] = useState<number | null>(null)
+  const [apiKeyTestStatusMap, setApiKeyTestStatusMap] = useState<Record<string, ApiKeyTestStatus>>({})
   const [newModelProviderIndex, setNewModelProviderIndex] = useState<number>(0)
   const [selectedProviderIndex, setSelectedProviderIndex] = useState<number>(0)
   const [newProvider, setNewProvider] = useState<AiProviderConfig>({
@@ -175,6 +204,7 @@ export default function AiSettingsView({ onBack }: AiSettingsViewProps) {
   }
 
   const selectedProvider = (aiDraft?.providers || [])[selectedProviderIndex] || null
+  const selectedProviderApiKeys = useMemo(() => splitApiKeyString(selectedProvider?.apiKey), [selectedProvider?.apiKey])
   const selectedProviderIsSystemDefault = selectedProvider ? isSystemDefaultProviderId(String(selectedProvider.id)) : false
   const selectedProviderType = selectedProvider ? getProviderTypeLabel(selectedProvider) : ''
   const selectedProviderSupportsEndpointRouting = selectedProvider ? supportsProviderEndpointRouting(selectedProvider) : false
@@ -193,6 +223,35 @@ export default function AiSettingsView({ onBack }: AiSettingsViewProps) {
     if (!selectedProvider) return false
     return modelBelongsToProvider(model, selectedProvider)
   })
+  const providerListEntries = useMemo<ProviderListEntry[]>(() => {
+    return (aiDraft?.providers || []).map((provider, index) => ({ provider, index }))
+  }, [aiDraft?.providers])
+  const sortedProviderEntries = useMemo<ProviderListEntry[]>(() => {
+    return [...providerListEntries].sort((a, b) => {
+      const aEnabled = a.provider.enabled !== false ? 1 : 0
+      const bEnabled = b.provider.enabled !== false ? 1 : 0
+      if (aEnabled !== bEnabled) return bEnabled - aEnabled
+      return a.index - b.index
+    })
+  }, [providerListEntries])
+  const selectedProviderModelOptions = useMemo<ProviderModelOption[]>(() => {
+    if (!selectedProvider) return []
+    const modelMap = new Map<string, ProviderModelOption>()
+    filteredModels.forEach((model) => {
+      if (!model.id) return
+      modelMap.set(model.id, {
+        id: model.id,
+        label: model.label || model.id
+      })
+    })
+    if (selectedProvider.defaultModel && !modelMap.has(selectedProvider.defaultModel)) {
+      modelMap.set(selectedProvider.defaultModel, {
+        id: selectedProvider.defaultModel,
+        label: selectedProvider.defaultModel
+      })
+    }
+    return Array.from(modelMap.values())
+  }, [filteredModels, selectedProvider])
   const newModelProvider = aiDraft?.providers?.[newModelProviderIndex]
   const newModelNeedsEndpointType = newModelProvider ? supportsProviderEndpointRouting(newModelProvider) : false
 
@@ -317,6 +376,21 @@ export default function AiSettingsView({ onBack }: AiSettingsViewProps) {
     }
   }, [aiDraft, selectedProviderIndex])
 
+  useEffect(() => {
+    if (!showApiKeyManagerModal) return
+    if (!selectedProviderModelOptions.length) {
+      if (apiKeyTestModel) setApiKeyTestModel('')
+      return
+    }
+    if (!apiKeyTestModel || !selectedProviderModelOptions.some((item) => item.id === apiKeyTestModel)) {
+      const preferredModel =
+        selectedProvider?.defaultModel && selectedProviderModelOptions.some((item) => item.id === selectedProvider.defaultModel)
+          ? selectedProvider.defaultModel
+          : selectedProviderModelOptions[0].id
+      setApiKeyTestModel(preferredModel)
+    }
+  }, [showApiKeyManagerModal, apiKeyTestModel, selectedProviderModelOptions, selectedProvider?.defaultModel])
+
   const buildProviderInstanceId = (preferred: string, type: string) => {
     const providers = aiDraft?.providers || []
     const seed = (preferred || type || 'provider').trim().toLowerCase().replace(/\s+/g, '-')
@@ -440,6 +514,91 @@ export default function AiSettingsView({ onBack }: AiSettingsViewProps) {
         models
       }
     })
+  }
+
+  const openApiKeyManager = () => {
+    if (!selectedProvider) return
+    const preferredModel =
+      selectedProvider.defaultModel && selectedProviderModelOptions.some((item) => item.id === selectedProvider.defaultModel)
+        ? selectedProvider.defaultModel
+        : (selectedProviderModelOptions[0]?.id || '')
+    setApiKeyTestModel(preferredModel)
+    setNewApiKeyInput('')
+    setApiKeyTestStatusMap({})
+    setShowApiKeyManagerModal(true)
+  }
+
+  const updateSelectedProviderApiKeys = (keys: string[]) => {
+    if (!selectedProvider) return
+    handleUpdateProvider(selectedProviderIndex, { apiKey: serializeApiKeys(keys) })
+  }
+
+  const handleAddApiKey = () => {
+    const pendingKeys = splitApiKeyString(newApiKeyInput)
+    if (!pendingKeys.length) {
+      setAiError('请输入有效的 API Key')
+      return
+    }
+    const keySet = new Set(selectedProviderApiKeys)
+    pendingKeys.forEach((key) => keySet.add(key))
+    updateSelectedProviderApiKeys(Array.from(keySet))
+    setNewApiKeyInput('')
+    setApiKeyTestStatusMap({})
+    setAiInfo(`已添加 ${pendingKeys.length} 个 API Key`)
+    setAiError(null)
+  }
+
+  const handleRemoveApiKey = (targetIndex: number) => {
+    if (targetIndex < 0 || targetIndex >= selectedProviderApiKeys.length) return
+    const nextKeys = selectedProviderApiKeys.filter((_, index) => index !== targetIndex)
+    updateSelectedProviderApiKeys(nextKeys)
+    setApiKeyTestStatusMap({})
+  }
+
+  const handleTestSingleApiKey = async (key: string, index: number) => {
+    if (!selectedProvider) return
+    if (!window.intools?.ai?.testConnection) {
+      setAiError('AI 接口未就绪，请重启应用')
+      return
+    }
+    if (!apiKeyTestModel) {
+      setAiError('请先选择一个模型')
+      return
+    }
+
+    const statusKey = `${index}:${key}`
+    setTestingApiKeyIndex(index)
+    setApiKeyTestStatusMap((prev) => ({
+      ...prev,
+      [statusKey]: { state: 'testing', message: '测试中…' }
+    }))
+
+    try {
+      const result = await window.intools.ai.testConnection({
+        model: apiKeyTestModel,
+        providerId: String(selectedProvider.id),
+        apiKey: key,
+        baseURL: selectedProvider.baseURL
+      })
+      setApiKeyTestStatusMap((prev) => ({
+        ...prev,
+        [statusKey]: {
+          state: result.success ? 'success' : 'error',
+          message: result.success ? (result.message || '连接成功') : (result.message || '连接失败')
+        }
+      }))
+    } catch (err) {
+      const message = err instanceof Error ? err.message : '连接失败'
+      setApiKeyTestStatusMap((prev) => ({
+        ...prev,
+        [statusKey]: {
+          state: 'error',
+          message
+        }
+      }))
+    } finally {
+      setTestingApiKeyIndex(null)
+    }
   }
 
   const handleAddModel = () => {
@@ -1004,7 +1163,7 @@ export default function AiSettingsView({ onBack }: AiSettingsViewProps) {
                     暂无 Provider，请先新增
                   </div>
                 ) : (
-                  (aiDraft?.providers || []).map((provider, index) => (
+                  sortedProviderEntries.map(({ provider, index }) => (
                     <button
                       key={`${provider.id}-${index}`}
                       className={`flex w-full items-center justify-between rounded-2xl border px-3 py-2 text-left text-sm transition ${index === selectedProviderIndex ? 'border-slate-900 bg-slate-900 text-white dark:border-white dark:bg-white dark:text-slate-900' : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-200'}`}
@@ -1148,12 +1307,22 @@ export default function AiSettingsView({ onBack }: AiSettingsViewProps) {
                         value={selectedProvider.label || ''}
                         onChange={(e) => handleUpdateProvider(selectedProviderIndex, { label: e.target.value })}
                       />
-                      <input
-                        className={inputClass}
-                        placeholder="API Key"
-                        value={selectedProvider.apiKey || ''}
-                        onChange={(e) => handleUpdateProvider(selectedProviderIndex, { apiKey: e.target.value })}
-                      />
+                      <div className="flex items-center gap-2">
+                        <input
+                          className={`${inputClass} flex-1`}
+                          placeholder="API Key（支持多个，逗号分隔）"
+                          value={selectedProvider.apiKey || ''}
+                          onChange={(e) => handleUpdateProvider(selectedProviderIndex, { apiKey: e.target.value })}
+                        />
+                        <button
+                          className={`${pillClass} shrink-0 no-drag`}
+                          onClick={openApiKeyManager}
+                          title="管理 API Key"
+                          aria-label="管理 API Key"
+                        >
+                          管理
+                        </button>
+                      </div>
                       <input
                         className={inputClass}
                         placeholder="Base URL（可选）"
@@ -1796,6 +1965,124 @@ export default function AiSettingsView({ onBack }: AiSettingsViewProps) {
         </div>
       )}
 
+      {showApiKeyManagerModal && selectedProvider && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
+          onClick={() => setShowApiKeyManagerModal(false)}
+        >
+          <div
+            className="mx-4 w-full max-w-3xl max-h-[80vh] overflow-auto rounded-[32px] border border-slate-200/80 bg-white p-6 shadow-2xl dark:border-slate-800/80 dark:bg-slate-900 no-drag"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="mb-4 flex items-start justify-between">
+              <div>
+                <div className="text-lg font-semibold text-slate-900 dark:text-white">API 密钥管理</div>
+                <div className="text-xs text-slate-500 dark:text-slate-400">
+                  Provider：{getProviderKey(selectedProvider)} · 已配置 {selectedProviderApiKeys.length} 个密钥
+                </div>
+              </div>
+              <button
+                onClick={() => setShowApiKeyManagerModal(false)}
+                className="rounded-full p-2 text-slate-400 hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-slate-800 dark:hover:text-slate-300 no-drag"
+              >
+                <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-[220px_1fr_auto]">
+              <div className="relative">
+                <select
+                  className={selectClass}
+                  value={apiKeyTestModel}
+                  onChange={(e) => setApiKeyTestModel(e.target.value)}
+                  disabled={selectedProviderModelOptions.length === 0}
+                >
+                  {selectedProviderModelOptions.length === 0 ? (
+                    <option value="">无可用模型</option>
+                  ) : (
+                    selectedProviderModelOptions.map((model) => (
+                      <option key={model.id} value={model.id}>
+                        {model.label}
+                      </option>
+                    ))
+                  )}
+                </select>
+                <svg className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="m6 9 6 6 6-6" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+              </div>
+              <input
+                className={inputClass}
+                placeholder="新增 API Key（支持批量粘贴，逗号或换行分隔）"
+                value={newApiKeyInput}
+                onChange={(e) => setNewApiKeyInput(e.target.value)}
+              />
+              <button className={primaryPillClass} onClick={handleAddApiKey}>添加密钥</button>
+            </div>
+            {selectedProviderModelOptions.length === 0 && (
+              <div className="mt-3 rounded-2xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-700 dark:border-amber-900/60 dark:bg-amber-900/20 dark:text-amber-200">
+                当前 Provider 尚未配置模型，无法测试密钥。请先在模型管理中拉取或添加模型。
+              </div>
+            )}
+
+            <div className="mt-4 space-y-2">
+              {selectedProviderApiKeys.length === 0 ? (
+                <div className="rounded-2xl border border-dashed border-slate-200/80 bg-slate-50 px-4 py-6 text-center text-sm text-slate-500 dark:border-slate-800/80 dark:bg-slate-900/40 dark:text-slate-400">
+                  尚未添加 API 密钥
+                </div>
+              ) : (
+                selectedProviderApiKeys.map((key, index) => {
+                  const statusKey = `${index}:${key}`
+                  const status = apiKeyTestStatusMap[statusKey]
+                  const statusClass =
+                    status?.state === 'success'
+                      ? 'text-emerald-600 dark:text-emerald-300'
+                      : status?.state === 'error'
+                        ? 'text-rose-600 dark:text-rose-300'
+                        : 'text-slate-500 dark:text-slate-400'
+                  return (
+                    <div
+                      key={statusKey}
+                      className="rounded-2xl border border-slate-200/80 bg-slate-50 px-4 py-3 dark:border-slate-800/80 dark:bg-slate-900/50"
+                    >
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <div className="min-w-0 flex-1">
+                          <div className="truncate text-sm font-medium text-slate-800 dark:text-slate-100">{key}</div>
+                          {status ? (
+                            <div className={`mt-1 text-xs ${statusClass}`}>{status.message}</div>
+                          ) : (
+                            <div className="mt-1 text-xs text-slate-500 dark:text-slate-400">未测试</div>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <button
+                            className={pillClass}
+                            onClick={() => handleTestSingleApiKey(key, index)}
+                            disabled={testingApiKeyIndex !== null || selectedProviderModelOptions.length === 0 || !apiKeyTestModel}
+                            title={selectedProviderModelOptions.length === 0 ? '请先添加模型' : '测试该密钥可用性'}
+                          >
+                            {testingApiKeyIndex === index ? '测试中…' : '测试'}
+                          </button>
+                          <button
+                            className={actionButtonClass}
+                            onClick={() => handleRemoveApiKey(index)}
+                            disabled={testingApiKeyIndex !== null}
+                          >
+                            删除
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  )
+                })
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
       {showAddProviderModal && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
@@ -1851,7 +2138,7 @@ export default function AiSettingsView({ onBack }: AiSettingsViewProps) {
               />
               <input
                 className={inputClass}
-                placeholder="API Key"
+                placeholder="API Key（支持多个，逗号分隔）"
                 value={newProvider.apiKey || ''}
                 onChange={(e) => setNewProvider((prev) => ({ ...prev, apiKey: e.target.value }))}
               />

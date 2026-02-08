@@ -156,6 +156,9 @@ export interface AiProviderConfig {
   type?: AiProviderId | string
   label?: string
   enabled: boolean
+  /**
+   * 支持单 key 或多 key（逗号分隔，支持转义逗号：`\\,`）。
+   */
   apiKey?: string
   baseURL?: string
   apiVersion?: string

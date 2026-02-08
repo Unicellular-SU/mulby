@@ -19,7 +19,7 @@ export class FileServiceManager {
   }
 
   getService(provider: AiProviderConfig): BaseFileService {
-    const key = `${provider.id}|${provider.label || ''}|${provider.baseURL || ''}`
+    const key = `${provider.id}|${provider.label || ''}|${provider.baseURL || ''}|${provider.apiKey || ''}`
     const existing = this.services.get(key)
     if (existing) return existing
 

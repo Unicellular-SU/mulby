@@ -40,6 +40,7 @@ import { classifyAiStreamError } from '../../shared/ai/streamDiagnostics'
 import { classifyAiImageError } from '../../shared/ai/imageDiagnostics'
 import { resolveProviderBaseURL } from '../../shared/ai/providerDefaults'
 import { buildEndpointRoutedProviderConfig, resolveEndpointRoutedProviderType } from '../../shared/ai/providerEndpointRouting'
+import { getRotatedApiKey, hasApiKey } from '../../shared/ai/apiKeyPool'
 import {
   createEndChunk,
   createErrorChunk,
@@ -88,6 +89,12 @@ interface ImageCompatTaskDescriptor {
   taskStatus?: string
 }
 
+function buildApiKeyScope(input: { providerId?: string; providerType?: string; baseURL?: string }): string {
+  const providerToken = String(input.providerId || input.providerType || 'default').trim() || 'default'
+  const baseURL = String(input.baseURL || '').trim()
+  return `provider:${providerToken}:${baseURL}`
+}
+
 export class AiService {
   private controllers = new Map<string, AbortController>()
   private imageStrategyCapabilities = new Map<string, ImageStrategyCapabilityState>()
@@ -124,6 +131,14 @@ export class AiService {
       const trimmedMessages = this.applyContextWindow(option.messages, params.contextWindow)
       const resolved = resolveModelId(option.model)
       const { providerType, providerConfig } = this.resolveExecutionProviderContext(option.model, resolved.providerId)
+      const requestApiKey = getRotatedApiKey(
+        providerConfig?.apiKey,
+        buildApiKeyScope({
+          providerId: providerConfig?.id ? String(providerConfig.id) : undefined,
+          providerType,
+          baseURL: providerConfig?.baseURL
+        })
+      )
       const methodAdapter = getProviderMethodAdapter(providerType)
       return await methodAdapter.call({
         hasTools: !!tools,
@@ -136,7 +151,7 @@ export class AiService {
             model: resolved.modelId,
             messages: anthropicPayload.messages,
             system: anthropicPayload.system,
-            apiKey: providerConfig?.apiKey,
+            apiKey: requestApiKey,
             baseURL: providerConfig?.baseURL,
             params
           })
@@ -162,7 +177,7 @@ export class AiService {
             model: resolved.modelId,
             providerType,
             messages: chatMessages,
-            apiKey: providerConfig?.apiKey,
+            apiKey: requestApiKey,
             baseURL: providerConfig?.baseURL,
             params,
             tools: option.tools || [],
@@ -250,6 +265,14 @@ export class AiService {
       const trimmedMessages = this.applyContextWindow(option.messages, params.contextWindow)
       const resolved = resolveModelId(option.model)
       const { providerType, providerConfig } = this.resolveExecutionProviderContext(option.model, resolved.providerId)
+      const requestApiKey = getRotatedApiKey(
+        providerConfig?.apiKey,
+        buildApiKeyScope({
+          providerId: providerConfig?.id ? String(providerConfig.id) : undefined,
+          providerType,
+          baseURL: providerConfig?.baseURL
+        })
+      )
       const methodAdapter = getProviderMethodAdapter(providerType)
       const compatToolLoop = shouldUseCompatToolLoop(option.model, providerConfig)
       metrics = createAiStreamMetrics({
@@ -284,7 +307,7 @@ export class AiService {
             model: resolved.modelId,
             messages: anthropicPayload.messages,
             system: anthropicPayload.system,
-            apiKey: providerConfig?.apiKey,
+            apiKey: requestApiKey,
             baseURL: providerConfig?.baseURL,
             params
           }, trackedOnChunk, controller.signal)
@@ -310,7 +333,7 @@ export class AiService {
             model: resolved.modelId,
             providerType,
             messages: await this.toOpenAIChatMessages(option.messages, option.model),
-            apiKey: providerConfig?.apiKey,
+            apiKey: requestApiKey,
             baseURL: providerConfig?.baseURL,
             params,
             tools: option.tools
@@ -342,7 +365,7 @@ export class AiService {
             model: resolved.modelId,
             providerType,
             messages: chatMessages,
-            apiKey: providerConfig?.apiKey,
+            apiKey: requestApiKey,
             baseURL: providerConfig?.baseURL,
             params,
             tools: option.tools || [],
@@ -1014,11 +1037,19 @@ export class AiService {
     }
 
     const params = this.resolveGenerationParams({ model: input?.model, messages: [] }, input?.model)
+    const requestApiKey = getRotatedApiKey(
+      input.apiKey,
+      buildApiKeyScope({
+        providerId: input.providerId,
+        providerType: input.providerType,
+        baseURL: input.baseURL
+      })
+    )
     const res = await fetch(url, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        ...(input.apiKey ? { Authorization: `Bearer ${input.apiKey}` } : {})
+        ...(requestApiKey ? { Authorization: `Bearer ${requestApiKey}` } : {})
       },
       body: JSON.stringify({
         model: modelId,
@@ -1146,12 +1177,19 @@ export class AiService {
     const allowReasoning = supportsReasoning(`openai:${input.model}`)
     const baseURL = this.resolveCompatBaseURL(input.baseURL, input.providerType)
     const url = `${baseURL}/chat/completions`
+    const requestApiKey = getRotatedApiKey(
+      input.apiKey,
+      buildApiKeyScope({
+        providerType: input.providerType,
+        baseURL: input.baseURL
+      })
+    )
     const res = await fetch(url, {
       method: 'POST',
       signal: abortSignal,
       headers: {
         'Content-Type': 'application/json',
-        ...(input.apiKey ? { Authorization: `Bearer ${input.apiKey}` } : {})
+        ...(requestApiKey ? { Authorization: `Bearer ${requestApiKey}` } : {})
       },
       body: JSON.stringify({
         model: input.model,
@@ -1402,12 +1440,19 @@ export class AiService {
   }> {
     const baseURL = this.resolveCompatBaseURL(input.baseURL, input.providerType)
     const url = `${baseURL}/chat/completions`
+    const requestApiKey = getRotatedApiKey(
+      input.apiKey,
+      buildApiKeyScope({
+        providerType: input.providerType,
+        baseURL: input.baseURL
+      })
+    )
     const res = await fetch(url, {
       method: 'POST',
       signal: abortSignal,
       headers: {
         'Content-Type': 'application/json',
-        ...(input.apiKey ? { Authorization: `Bearer ${input.apiKey}` } : {})
+        ...(requestApiKey ? { Authorization: `Bearer ${requestApiKey}` } : {})
       },
       body: JSON.stringify({
         model: input.model,
@@ -1815,7 +1860,14 @@ export class AiService {
       executeModelDiscovery: async ({ endpoint, parseModelIds }) => {
         const url = `${baseURL.replace(/\/$/, '')}${endpoint}`
         try {
-          const apiKey = input.apiKey || configuredProvider?.apiKey
+          const apiKey = getRotatedApiKey(
+            input.apiKey || configuredProvider?.apiKey,
+            buildApiKeyScope({
+              providerId,
+              providerType,
+              baseURL
+            })
+          )
           console.info('[AI] fetchModels:start', { providerId, providerType, url })
           const res = await fetch(url, {
             headers: apiKey ? { Authorization: `Bearer ${apiKey}` } : undefined
@@ -2174,8 +2226,16 @@ export class AiService {
       'Content-Type': 'application/json',
       ...(providerConfig?.headers || {})
     }
-    if (providerConfig?.apiKey) {
-      headers.Authorization = `Bearer ${providerConfig.apiKey}`
+    const requestApiKey = getRotatedApiKey(
+      providerConfig?.apiKey,
+      buildApiKeyScope({
+        providerId: providerConfig?.id ? String(providerConfig.id) : undefined,
+        providerType,
+        baseURL: providerConfig?.baseURL
+      })
+    )
+    if (requestApiKey) {
+      headers.Authorization = `Bearer ${requestApiKey}`
     }
 
     return { baseURL, headers }
@@ -2998,7 +3058,7 @@ export class AiService {
   }): Promise<{ content: string; reasoning: string }> {
     const baseURL = (input.baseURL || 'https://api.anthropic.com/v1').replace(/\/+$/, '')
     const url = `${baseURL}/messages`
-    const apiKey = input.apiKey
+    const apiKey = getRotatedApiKey(input.apiKey, buildApiKeyScope({ providerType: 'anthropic', baseURL }))
     if (!apiKey) {
       throw new Error('Anthropic API key is required')
     }
@@ -3052,7 +3112,7 @@ export class AiService {
   ): Promise<{ content: string; reasoning: string }> {
     const baseURL = (input.baseURL || 'https://api.anthropic.com/v1').replace(/\/+$/, '')
     const url = `${baseURL}/messages`
-    const apiKey = input.apiKey
+    const apiKey = getRotatedApiKey(input.apiKey, buildApiKeyScope({ providerType: 'anthropic', baseURL }))
     if (!apiKey) {
       throw new Error('Anthropic API key is required')
     }
@@ -3184,10 +3244,10 @@ export class AiService {
     providerConfig?: AiProviderConfig
   ): Promise<{ fileId: string; uri?: string } | null> {
     if (!providerConfig) return null
-    if (!providerConfig.apiKey || !providerConfig.baseURL) {
+    if (!hasApiKey(providerConfig.apiKey) || !providerConfig.baseURL) {
       console.warn('[AI] uploadAttachmentToProvider:missing_credentials', {
         providerId: providerConfig.id,
-        hasApiKey: Boolean(providerConfig.apiKey),
+        hasApiKey: hasApiKey(providerConfig.apiKey),
         hasBaseURL: Boolean(providerConfig.baseURL)
       })
       return null
@@ -3201,7 +3261,22 @@ export class AiService {
     }
 
     try {
-      const service = FileServiceManager.getInstance().getService(providerConfig)
+      const requestApiKey = getRotatedApiKey(
+        providerConfig.apiKey,
+        buildApiKeyScope({
+          providerId: String(providerConfig.id),
+          providerType: getProviderType(providerConfig),
+          baseURL: providerConfig.baseURL
+        })
+      )
+      if (!requestApiKey) {
+        return null
+      }
+      const providerWithRequestKey: AiProviderConfig = {
+        ...providerConfig,
+        apiKey: requestApiKey
+      }
+      const service = FileServiceManager.getInstance().getService(providerWithRequestKey)
       const buffer = await attachmentStore.read(input.attachmentId)
       const result = await service.uploadFile({
         buffer,
