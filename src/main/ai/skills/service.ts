@@ -626,8 +626,9 @@ export class AiSkillService {
   }
 
   private async writeGeneratedFiles(installPath: string, files: AiSkillGeneratedFile[] | undefined): Promise<void> {
-    if (!files || files.length === 0) return
+    if (!Array.isArray(files) || files.length === 0) return
     for (const file of files) {
+      if (!file || typeof file !== 'object') continue
       const relativePath = normalizeSkillFilePath(file.path)
       if (!isSafeSkillRelativePath(relativePath)) {
         throw new Error(`Unsafe generated file path: ${file.path}`)
@@ -647,8 +648,18 @@ export class AiSkillService {
       throw new Error('Skill name is required')
     }
     const settings = this.getSkillSettings()
+    const replaceSkillId = String(input.replaceSkillId || '').trim()
+    const replaceTarget = replaceSkillId ? settings.records.find((item) => item.id === replaceSkillId) : undefined
+    if (replaceSkillId && replaceTarget && (replaceTarget.origin === 'system' || replaceTarget.readonly)) {
+      throw new Error('System skill is read-only and cannot be replaced')
+    }
     const existingIds = new Set(settings.records.map((item) => item.id))
-    const id = this.nextUniqueId(input.id || name, existingIds)
+    if (replaceTarget) {
+      existingIds.delete(replaceTarget.id)
+    }
+    const id = replaceTarget
+      ? replaceTarget.id
+      : this.nextUniqueId(input.id || replaceSkillId || name, existingIds)
     const now = this.deps.now()
     const descriptor: AiSkillDescriptor = {
       id,
@@ -687,16 +698,16 @@ export class AiSkillService {
 
     const record: AiSkillRecord = {
       id,
-      source: input.source || 'manual',
+      source: input.source || replaceTarget?.source || 'manual',
       origin: 'app',
       readonly: false,
-      sourceRef: undefined,
+      sourceRef: replaceTarget?.sourceRef,
       installPath,
       skillMdPath,
       contentHash: sha256(finalMarkdown),
-      enabled: input.enabled ?? false,
-      trustLevel: input.trustLevel ? normalizeTrustLevel(input.trustLevel) : 'reviewed',
-      installedAt: now,
+      enabled: input.enabled ?? replaceTarget?.enabled ?? false,
+      trustLevel: input.trustLevel ? normalizeTrustLevel(input.trustLevel) : (replaceTarget?.trustLevel || 'reviewed'),
+      installedAt: replaceTarget?.installedAt || now,
       updatedAt: now,
       descriptor: finalDescriptor
     }

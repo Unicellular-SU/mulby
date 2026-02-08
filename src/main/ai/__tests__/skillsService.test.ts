@@ -349,4 +349,46 @@ Generated prompt`,
       /Unsafe generated file path/
     )
   })
+
+  it('replaces existing generated skill when replaceSkillId is provided', async (t) => {
+    const tempDir = await createTempDir('intools-skill-generated-replace-')
+    t.after(async () => {
+      await rm(tempDir, { recursive: true, force: true })
+    })
+
+    const { service } = createInMemorySkillService({
+      userDataPath: tempDir,
+      settings: {
+        providers: [],
+        models: [],
+        mcp: { servers: [] },
+        skills: {
+          enabled: true,
+          activeSkillIds: [],
+          autoSelect: { enabled: false, maxSkillsPerCall: 3, minScore: 1 },
+          records: []
+        }
+      }
+    })
+
+    const first = await service.createFromGenerated({
+      id: 'iterative-skill',
+      name: 'Iterative Skill',
+      description: 'v1',
+      promptTemplate: 'first version'
+    })
+    const second = await service.createFromGenerated({
+      replaceSkillId: first.id,
+      name: 'Iterative Skill',
+      description: 'v2',
+      promptTemplate: 'second version'
+    })
+
+    assert.equal(second.id, first.id)
+    const all = service.list().filter((item) => item.id === first.id)
+    assert.equal(all.length, 1)
+    const skillMd = await readFile(path.join(second.installPath || '', 'SKILL.md'), 'utf8')
+    assert.equal(skillMd.includes('description: v2'), true)
+    assert.equal(skillMd.includes('second version'), true)
+  })
 })

@@ -1,8 +1,8 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import type { DragEventHandler, MouseEvent } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
-import type { AiSkillCreateModelOption, AiSkillRecord } from '../../shared/types/ai'
+import type { AiSkillCreateModelOption, AiSkillCreateProgressChunk, AiSkillCreateStage, AiSkillRecord } from '../../shared/types/ai'
 
 interface AiSkillsSettingsViewProps {
   onBack: () => void
@@ -71,6 +71,136 @@ function frontmatterValueToText(value: string | string[] | undefined): string {
   return value
 }
 
+type CreateTimelineStatus = 'pending' | 'active' | 'done' | 'error'
+
+interface CreateTimelineItem {
+  stage: AiSkillCreateStage
+  label: string
+  status: CreateTimelineStatus
+  detail?: string
+  updatedAt?: number
+}
+
+const CREATE_TIMELINE_ORDER: Array<{ stage: AiSkillCreateStage; label: string }> = [
+  { stage: 'generating', label: '生成中' },
+  { stage: 'parsing', label: '解析中' },
+  { stage: 'validating', label: '校验中' },
+  { stage: 'writing', label: '写入中' },
+  { stage: 'completed', label: '完成' }
+]
+
+function buildInitialCreateTimeline(): CreateTimelineItem[] {
+  return CREATE_TIMELINE_ORDER.map((item) => ({
+    stage: item.stage,
+    label: item.label,
+    status: 'pending'
+  }))
+}
+
+function inferCreateStage(text: string): AiSkillCreateStage | undefined {
+  const value = String(text || '')
+  if (!value) return undefined
+  if (value.includes('生成')) return 'generating'
+  if (value.includes('解析')) return 'parsing'
+  if (value.includes('校验')) return 'validating'
+  if (value.includes('写入') || value.includes('落盘')) return 'writing'
+  if (value.includes('完成')) return 'completed'
+  return undefined
+}
+
+function inferCreateStageStatus(text: string): 'start' | 'done' | 'error' {
+  const value = String(text || '')
+  if (value.includes('失败') || value.includes('错误')) return 'error'
+  if (value.includes('完成') || value.includes('已')) return 'done'
+  return 'start'
+}
+
+function updateTimelineFromChunk(prev: CreateTimelineItem[], chunk: AiSkillCreateProgressChunk): CreateTimelineItem[] {
+  const stage = chunk.stage || inferCreateStage(chunk.text)
+  const stageStatus = chunk.stageStatus || inferCreateStageStatus(chunk.text)
+  if (!stage) {
+    if (stageStatus !== 'error') return prev
+    const next = prev.map((item) => ({ ...item }))
+    const now = Date.now()
+    const activeIndex = next.findIndex((item) => item.status === 'active')
+    const targetIndex = activeIndex >= 0 ? activeIndex : 0
+    next[targetIndex] = {
+      ...next[targetIndex],
+      status: 'error',
+      detail: chunk.text || next[targetIndex].detail,
+      updatedAt: now
+    }
+    return next
+  }
+  const next = prev.map((item) => ({ ...item }))
+  const targetIndex = next.findIndex((item) => item.stage === stage)
+  if (targetIndex < 0) return prev
+  const now = Date.now()
+
+  if (stageStatus === 'start') {
+    for (let i = 0; i < targetIndex; i += 1) {
+      if (next[i].status === 'pending' || next[i].status === 'active') {
+        next[i].status = 'done'
+      }
+    }
+    next[targetIndex] = {
+      ...next[targetIndex],
+      status: 'active',
+      detail: chunk.text || next[targetIndex].detail,
+      updatedAt: now
+    }
+    return next
+  }
+
+  if (stageStatus === 'done') {
+    for (let i = 0; i < targetIndex; i += 1) {
+      if (next[i].status === 'pending' || next[i].status === 'active') {
+        next[i].status = 'done'
+      }
+    }
+    next[targetIndex] = {
+      ...next[targetIndex],
+      status: 'done',
+      detail: chunk.text || next[targetIndex].detail,
+      updatedAt: now
+    }
+    if (stage === 'completed') {
+      for (let i = 0; i < targetIndex; i += 1) {
+        next[i].status = 'done'
+      }
+    }
+    return next
+  }
+
+  let activeIndex = next.findIndex((item) => item.status === 'active')
+  if (activeIndex < 0) {
+    activeIndex = targetIndex
+  }
+  next[activeIndex] = {
+    ...next[activeIndex],
+    status: 'error',
+    detail: chunk.text || next[activeIndex].detail,
+    updatedAt: now
+  }
+  return next
+}
+
+function formatTimelineTime(value?: number): string {
+  if (!value) return ''
+  const date = new Date(value)
+  const hh = String(date.getHours()).padStart(2, '0')
+  const mm = String(date.getMinutes()).padStart(2, '0')
+  const ss = String(date.getSeconds()).padStart(2, '0')
+  return `${hh}:${mm}:${ss}`
+}
+
+function timelineStatusText(status: CreateTimelineStatus): string {
+  if (status === 'active') return '进行中'
+  if (status === 'done') return '已完成'
+  if (status === 'error') return '失败'
+  return '等待'
+}
+
 export default function AiSkillsSettingsView({ onBack }: AiSkillsSettingsViewProps) {
   const [skills, setSkills] = useState<AiSkillRecord[]>([])
   const [selectedSkillId, setSelectedSkillId] = useState<string | null>(null)
@@ -83,8 +213,14 @@ export default function AiSkillsSettingsView({ onBack }: AiSkillsSettingsViewPro
   const [draggingZip, setDraggingZip] = useState(false)
   const [showCreateModal, setShowCreateModal] = useState(false)
   const [showZipModal, setShowZipModal] = useState(false)
+  const [createTimeline, setCreateTimeline] = useState<CreateTimelineItem[]>(() => buildInitialCreateTimeline())
+  const [createStreamText, setCreateStreamText] = useState('')
+  const [createRawModelOutput, setCreateRawModelOutput] = useState('')
+  const [lastCreatedSkillId, setLastCreatedSkillId] = useState<string | null>(null)
+  const [creatingSkill, setCreatingSkill] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [info, setInfo] = useState<string | null>(null)
+  const createOutputRef = useRef('')
 
   const inputClass = 'w-full rounded-2xl border border-slate-200 bg-white px-4 py-2 text-sm text-slate-700 shadow-sm outline-none transition focus:border-slate-300 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-200'
   const actionButtonClass = 'rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-700 transition hover:border-slate-300 hover:text-slate-900 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-200 disabled:cursor-not-allowed disabled:opacity-50'
@@ -227,28 +363,121 @@ export default function AiSkillsSettingsView({ onBack }: AiSkillsSettingsViewPro
       setError('请选择用于创建 Skill 的模型')
       return
     }
+    const previousRaw = String(createRawModelOutput || '').trim()
+    const isRevision = Boolean(previousRaw)
+    const requestText = isRevision
+      ? [
+          `请在已有 Skill 草稿基础上修改：${requirements}`,
+          '',
+          '请完整返回新的 JSON，不要省略字段。',
+          `上一次模型输出 JSON：\n${previousRaw}`
+        ].join('\n')
+      : requirements
+    createOutputRef.current = ''
+    setCreateTimeline(() => {
+      const next = buildInitialCreateTimeline()
+      next[0] = {
+        ...next[0],
+        status: 'active',
+        detail: `已提交创建请求（模型：${selectedCreateModel}）`,
+        updatedAt: Date.now()
+      }
+      return next
+    })
+    setCreateStreamText('')
+    setCreateRawModelOutput('')
+    setCreatingSkill(true)
     setBusy(true)
     try {
-      const result = await window.intools.ai.skills.createWithAi({
-        requirements,
+      const input = {
+        requirements: requestText,
         model: selectedCreateModel,
+        previousRawText: isRevision ? previousRaw : undefined,
+        replaceSkillId: isRevision ? (lastCreatedSkillId || undefined) : undefined,
         enabled: false,
-        trustLevel: 'reviewed',
-        modePreference: 'both'
-      })
+        trustLevel: 'reviewed' as const,
+        modePreference: 'both' as const
+      }
+      const onChunk = (chunk: AiSkillCreateProgressChunk) => {
+        if (!chunk || !chunk.text) return
+        if (chunk.type === 'status') {
+          setCreateTimeline((prev) => updateTimelineFromChunk(prev, chunk))
+          return
+        }
+        createOutputRef.current += chunk.text
+        setCreateStreamText(createOutputRef.current)
+      }
+
+      const result = window.intools.ai.skills.createWithAiStream
+        ? await window.intools.ai.skills.createWithAiStream(input, onChunk)
+        : await window.intools.ai.skills.createWithAi(input)
+      const finalRawText = String(result?.generation?.rawText || createOutputRef.current || '')
+      if (finalRawText) {
+        createOutputRef.current = finalRawText
+        setCreateStreamText(finalRawText)
+        setCreateRawModelOutput(finalRawText)
+      }
+      setCreateTimeline((prev) =>
+        updateTimelineFromChunk(prev, {
+          type: 'status',
+          stage: 'completed',
+          stageStatus: 'done',
+          text: '完成：Skill 已保存到应用目录'
+        })
+      )
       await loadSkills(true)
       if (result?.record?.id) {
         setSelectedSkillId(result.record.id)
+        setLastCreatedSkillId(result.record.id)
       }
-      setInfo(`AI 已创建 Skill：${result.record.descriptor.name || result.record.id}`)
+      setInfo(`${isRevision ? 'AI 已更新 Skill' : 'AI 已创建 Skill'}：${result.record.descriptor.name || result.record.id}`)
       setError(null)
       setCreateRequirements('')
-      setShowCreateModal(false)
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err)
       setError(`AI 创建失败：${message}`)
+      setCreateTimeline((prev) =>
+        updateTimelineFromChunk(prev, {
+          type: 'status',
+          stageStatus: 'error',
+          text: `创建失败：${message}`
+        })
+      )
     } finally {
       setBusy(false)
+      setCreatingSkill(false)
+    }
+  }
+
+  const handleResetCreateSession = () => {
+    createOutputRef.current = ''
+    setCreateStreamText('')
+    setCreateRawModelOutput('')
+    setLastCreatedSkillId(null)
+    setCreateTimeline(buildInitialCreateTimeline())
+    setInfo('已开始新的创建会话')
+    setError(null)
+  }
+
+  const handleCopyModelOutput = async () => {
+    const text = String(createRawModelOutput || createStreamText || '').trim()
+    if (!text) {
+      setError('暂无可复制的模型输出')
+      return
+    }
+    try {
+      if (window.intools?.clipboard?.writeText) {
+        await window.intools.clipboard.writeText(text)
+      } else if (navigator?.clipboard?.writeText) {
+        await navigator.clipboard.writeText(text)
+      } else {
+        throw new Error('系统剪贴板不可用')
+      }
+      setInfo('已复制完整模型输出')
+      setError(null)
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err)
+      setError(`复制失败：${message}`)
     }
   }
 
@@ -542,12 +771,12 @@ export default function AiSkillsSettingsView({ onBack }: AiSkillsSettingsViewPro
 
       {showCreateModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4 no-drag">
-          <div className="w-full max-w-3xl rounded-[28px] border border-slate-200/80 bg-white p-6 shadow-2xl dark:border-slate-800/80 dark:bg-slate-900">
+          <div className="w-full max-w-2xl rounded-[24px] border border-slate-200/80 bg-white p-5 shadow-2xl dark:border-slate-800/80 dark:bg-slate-900">
             <div className="mb-4 flex items-center justify-between">
               <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">AI 创建 Skill</h3>
               <button className={`${actionButtonClass} no-drag`} onClick={() => setShowCreateModal(false)} disabled={busy}>关闭</button>
             </div>
-            <div className="grid grid-cols-1 gap-3 lg:grid-cols-[260px_minmax(0,1fr)]">
+            <div className="grid grid-cols-1 gap-3 lg:grid-cols-[220px_minmax(0,1fr)]">
               <label className="space-y-1">
                 <div className="text-xs text-slate-500 dark:text-slate-400">创建模型（已启用）</div>
                 <select className={inputClass} value={selectedCreateModel} onChange={(e) => setSelectedCreateModel(e.target.value)}>
@@ -561,16 +790,94 @@ export default function AiSkillsSettingsView({ onBack }: AiSkillsSettingsViewPro
                 <div className="text-xs text-slate-500 dark:text-slate-400">需求描述</div>
                 <textarea
                   className={inputClass}
-                  rows={6}
+                  rows={5}
                   value={createRequirements}
                   onChange={(e) => setCreateRequirements(e.target.value)}
-                  placeholder="描述你要创建的 Skill 能力、触发场景、输出要求..."
+                  placeholder={createRawModelOutput ? '继续补充修改要求，例如：增加触发词、压缩提示词、补充脚本...' : '描述你要创建的 Skill 能力、触发场景、输出要求...'}
                 />
               </label>
             </div>
-            <div className="mt-5 flex items-center justify-end gap-2">
+            {createRawModelOutput && (
+              <div className="mt-3 rounded-xl border border-blue-200/80 bg-blue-50/70 px-3 py-2 text-[11px] text-blue-700 dark:border-blue-900/70 dark:bg-blue-900/20 dark:text-blue-300">
+                已进入连续修改模式：下一次提交会基于上一次模型输出继续优化，并覆盖更新当前 Skill。
+              </div>
+            )}
+            <div className="mt-4 grid grid-cols-1 gap-3 lg:grid-cols-2">
+              <div className="rounded-2xl border border-slate-200 bg-slate-50/80 p-3 dark:border-slate-800 dark:bg-slate-950/60">
+                <div className="mb-2 text-xs font-medium text-slate-600 dark:text-slate-300">创建进度</div>
+                <div className="max-h-44 overflow-auto space-y-2 pr-1">
+                  {createTimeline.map((item) => {
+                    const dotClass = item.status === 'done'
+                      ? 'bg-emerald-500'
+                      : item.status === 'active'
+                        ? 'bg-blue-500 animate-pulse'
+                        : item.status === 'error'
+                          ? 'bg-red-500'
+                          : 'bg-slate-300 dark:bg-slate-700'
+                    return (
+                      <div key={item.stage} className="flex items-start gap-2">
+                        <div className={`mt-1 h-2.5 w-2.5 rounded-full ${dotClass}`} />
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-2 text-[11px]">
+                            <span className="font-medium text-slate-700 dark:text-slate-200">{item.label}</span>
+                            <span className={`rounded-full px-1.5 py-0.5 ${item.status === 'done'
+                                ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300'
+                                : item.status === 'active'
+                                  ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300'
+                                  : item.status === 'error'
+                                    ? 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300'
+                                    : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300'
+                              }`}>
+                              {timelineStatusText(item.status)}
+                            </span>
+                            {item.updatedAt && (
+                              <span className="text-[10px] text-slate-400 dark:text-slate-500">
+                                {formatTimelineTime(item.updatedAt)}
+                              </span>
+                            )}
+                          </div>
+                          {item.detail && (
+                            <div className="mt-0.5 text-[11px] text-slate-500 dark:text-slate-400">
+                              {item.detail}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+              <div className="rounded-2xl border border-slate-200 bg-slate-50/80 p-3 dark:border-slate-800 dark:bg-slate-950/60">
+                <div className="mb-2 flex items-center justify-between gap-2">
+                  <div className="text-xs font-medium text-slate-600 dark:text-slate-300">模型输出（流式）</div>
+                  <button
+                    type="button"
+                    className={`${actionButtonClass} no-drag !px-2 !py-1`}
+                    onClick={() => void handleCopyModelOutput()}
+                    disabled={!String(createRawModelOutput || createStreamText || '').trim()}
+                  >
+                    复制完整模型输出
+                  </button>
+                </div>
+                <pre className="max-h-36 overflow-auto whitespace-pre-wrap text-[11px] leading-5 text-slate-600 dark:text-slate-300">
+                  {createStreamText || '尚无输出'}
+                </pre>
+              </div>
+            </div>
+            <div className="mt-5 flex items-center justify-between gap-2">
+              <button
+                className={`${secondaryPillClass} no-drag`}
+                onClick={handleResetCreateSession}
+                disabled={busy || (!createRawModelOutput && !createStreamText)}
+              >
+                新建会话
+              </button>
+              <div className="flex items-center gap-2">
               <button className={`${secondaryPillClass} no-drag`} onClick={() => setShowCreateModal(false)} disabled={busy}>取消</button>
-              <button className={`${primaryPillClass} no-drag`} onClick={handleCreateWithAi} disabled={busy || !createRequirements.trim() || !selectedCreateModel}>开始创建</button>
+              <button className={`${primaryPillClass} no-drag`} onClick={handleCreateWithAi} disabled={busy || !createRequirements.trim() || !selectedCreateModel}>
+                {creatingSkill ? '处理中…' : (createRawModelOutput ? '继续修改' : '开始创建')}
+              </button>
+              </div>
             </div>
           </div>
         </div>

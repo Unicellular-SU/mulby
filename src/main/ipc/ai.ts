@@ -2,7 +2,7 @@ import { ipcMain, IpcMainInvokeEvent } from 'electron'
 import { aiService } from '../ai'
 import { aiMcpService } from '../ai/mcp'
 import { aiSkillService } from '../ai/skills'
-import { createSkillWithAi, listSkillCreateModels } from '../ai/skills/composer'
+import { createSkillWithAi, createSkillWithAiStream, listSkillCreateModels } from '../ai/skills/composer'
 import { getAiSettings, updateAiSettings } from '../ai/config'
 import { resetProviderRegistry } from '../ai/providers'
 import type { AiOption, AiMessage, AiImageGenerateProgressChunk, AiMcpServer } from '../../shared/types/ai'
@@ -146,6 +146,25 @@ export function registerAiHandlers() {
     const created = await createSkillWithAi(input)
     await aiSkillService.refreshCatalog()
     return created
+  })
+
+  ipcMain.handle('ai:skills:create-with-ai:stream', async (event, input) => {
+    const requestId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+    setTimeout(() => {
+      createSkillWithAiStream(input, {
+        onChunk: (chunk) => {
+          event.sender.send('ai:skills:create-with-ai:chunk', requestId, chunk)
+        }
+      }, requestId)
+        .then(async (result) => {
+          await aiSkillService.refreshCatalog()
+          event.sender.send('ai:skills:create-with-ai:end', requestId, result)
+        })
+        .catch((err: Error) => {
+          event.sender.send('ai:skills:create-with-ai:error', requestId, err.message)
+        })
+    }, 0)
+    return { requestId }
   })
 
   ipcMain.handle('ai:skills:create', async (_event, input) => {

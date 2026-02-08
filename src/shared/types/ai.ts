@@ -207,6 +207,8 @@ export interface AiSkillCreateModelOption {
 export interface AiSkillCreateWithAiInput {
   requirements: string
   model: string
+  previousRawText?: string
+  replaceSkillId?: string
   enabled?: boolean
   trustLevel?: AiSkillTrustLevel
   modePreference?: 'manual' | 'auto' | 'both'
@@ -219,6 +221,15 @@ export interface AiSkillCreateWithAiResult {
     rawText: string
     notes?: string[]
   }
+}
+
+export type AiSkillCreateStage = 'generating' | 'parsing' | 'validating' | 'writing' | 'completed'
+
+export interface AiSkillCreateProgressChunk {
+  type: 'status' | 'content' | 'reasoning'
+  text: string
+  stage?: AiSkillCreateStage
+  stageStatus?: 'start' | 'done' | 'error'
 }
 
 export interface AiOption {
@@ -405,6 +416,10 @@ export interface AiApi {
     get: (skillId: string) => Promise<AiSkillRecord | null>
     listCreateModels: () => Promise<AiSkillCreateModelOption[]>
     createWithAi: (input: AiSkillCreateWithAiInput) => Promise<AiSkillCreateWithAiResult>
+    createWithAiStream: (
+      input: AiSkillCreateWithAiInput,
+      onChunk: (chunk: AiSkillCreateProgressChunk) => void
+    ) => AiPromiseLike<AiSkillCreateWithAiResult>
     create: (input: {
       id?: string
       name: string

@@ -1,6 +1,7 @@
 import type {
   AiOption,
   AiSkillCreateModelOption,
+  AiSkillCreateProgressChunk,
   AiSkillMcpPolicy,
   AiSkillRecord,
   AiSkillResolveResult,
@@ -51,6 +52,7 @@ export interface AiSkillGeneratedFile {
 
 export interface AiSkillCreateFromGeneratedInput {
   id?: string
+  replaceSkillId?: string
   name: string
   description?: string
   promptTemplate?: string
@@ -68,6 +70,8 @@ export interface AiSkillCreateFromGeneratedInput {
 export interface AiSkillCreateWithAiInput {
   requirements: string
   model: string
+  previousRawText?: string
+  replaceSkillId?: string
   enabled?: boolean
   trustLevel?: AiSkillTrustLevel
   modePreference?: 'manual' | 'auto' | 'both'
@@ -83,3 +87,7 @@ export interface AiSkillCreateWithAiResult {
 }
 
 export interface AiSkillCreateModelOptionItem extends AiSkillCreateModelOption {}
+
+export interface AiSkillCreateWithAiStreamCallbacks {
+  onChunk?: (chunk: AiSkillCreateProgressChunk) => void
+}
