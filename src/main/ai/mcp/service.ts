@@ -9,7 +9,15 @@ import {
   ToolListChangedNotificationSchema,
   type Tool as SdkTool
 } from '@modelcontextprotocol/sdk/types.js'
-import type { AiMcpSelection, AiMcpServer, AiMcpServerLogEntry, AiMcpTool, AiTool, AiToolContext } from '../../../shared/types/ai'
+import type {
+  AiMcpSelection,
+  AiMcpServer,
+  AiMcpServerLogEntry,
+  AiMcpTool,
+  AiSettings,
+  AiTool,
+  AiToolContext
+} from '../../../shared/types/ai'
 import { getAiSettings, updateAiSettings } from '../config'
 
 const TOOL_ID_PREFIX = 'mcp__'
@@ -18,6 +26,12 @@ const TOOL_LIST_CACHE_TTL_MS = 5 * 60 * 1000
 interface CachedTools {
   expiresAt: number
   tools: AiMcpTool[]
+}
+
+interface AiMcpServiceDeps {
+  getSettings: () => AiSettings
+  updateSettings: (partial: Partial<AiSettings>) => AiSettings
+  getAppVersion: () => string
 }
 
 function stringifyError(error: unknown): string {
@@ -99,15 +113,14 @@ function normalizeServer(input: AiMcpServer): AiMcpServer {
   }
 }
 
-function getDefaultTimeoutMs(server: AiMcpServer): number {
-  const settings = getAiSettings().mcp
-  const fallback = settings?.defaults?.timeoutMs ?? 60000
+function getDefaultTimeoutMs(server: AiMcpServer, settings: AiSettings): number {
+  const mcpSettings = settings.mcp
+  const fallback = mcpSettings?.defaults?.timeoutMs ?? 60000
   return (server.timeoutSec ?? Math.max(Math.floor(fallback / 1000), 1)) * 1000
 }
 
-function getLongRunningMaxMs(): number {
-  const settings = getAiSettings().mcp
-  return settings?.defaults?.longRunningMaxMs ?? 10 * 60 * 1000
+function getLongRunningMaxMs(settings: AiSettings): number {
+  return settings.mcp?.defaults?.longRunningMaxMs ?? 10 * 60 * 1000
 }
 
 function isProtocolServerUntrusted(server: AiMcpServer): boolean {
@@ -142,14 +155,23 @@ function parseMcpToolId(toolId: string): { serverId: string; toolName: string } 
 }
 
 export class AiMcpService {
+  private deps: AiMcpServiceDeps
   private clients = new Map<string, Client>()
   private pendingClients = new Map<string, Promise<Client>>()
   private toolCache = new Map<string, CachedTools>()
   private activeToolCalls = new Map<string, AbortController>()
   private logStore = new Map<string, AiMcpServerLogEntry[]>()
 
+  constructor(deps?: Partial<AiMcpServiceDeps>) {
+    this.deps = {
+      getSettings: deps?.getSettings || getAiSettings,
+      updateSettings: deps?.updateSettings || updateAiSettings,
+      getAppVersion: deps?.getAppVersion || (() => app.getVersion())
+    }
+  }
+
   listServers(): AiMcpServer[] {
-    return [...(getAiSettings().mcp?.servers || [])]
+    return [...(this.deps.getSettings().mcp?.servers || [])]
   }
 
   getServer(serverId: string): AiMcpServer | null {
@@ -182,7 +204,7 @@ export class AiMcpService {
           trustedAt: normalized.isTrusted === false ? normalized.trustedAt : (normalized.trustedAt || now)
         }
 
-    const settings = getAiSettings().mcp
+    const settings = this.deps.getSettings().mcp
     const servers = [...(settings?.servers || [])]
     const index = servers.findIndex((item) => item.id === nextServer.id)
     if (index >= 0) {
@@ -191,7 +213,7 @@ export class AiMcpService {
       servers.unshift(nextServer)
     }
 
-    const updated = updateAiSettings({
+    const updated = this.deps.updateSettings({
       mcp: {
         ...(settings || { servers: [] }),
         servers
@@ -208,9 +230,9 @@ export class AiMcpService {
     if (!id) return
     await this.closeClient(id)
 
-    const settings = getAiSettings().mcp
+    const settings = this.deps.getSettings().mcp
     const servers = (settings?.servers || []).filter((item) => item.id !== id)
-    updateAiSettings({
+    this.deps.updateSettings({
       mcp: {
         ...(settings || { servers: [] }),
         servers
@@ -294,7 +316,7 @@ export class AiMcpService {
     const mode = input.selection?.mode || 'off'
     if (mode === 'off') return []
 
-    const settings = getAiSettings().mcp
+    const settings = this.deps.getSettings().mcp
     const servers = (settings?.servers || []).filter((server) => server.isActive)
 
     let selectedServers = servers
@@ -377,8 +399,9 @@ export class AiMcpService {
     const controller = new AbortController()
     this.activeToolCalls.set(callId, controller)
 
-    const timeoutMs = getDefaultTimeoutMs(server)
-    const maxTotalTimeout = server.longRunning ? getLongRunningMaxMs() : undefined
+    const settings = this.deps.getSettings()
+    const timeoutMs = getDefaultTimeoutMs(server, settings)
+    const maxTotalTimeout = server.longRunning ? getLongRunningMaxMs(settings) : undefined
 
     this.appendLog(server.id, {
       level: 'info',
@@ -563,7 +586,7 @@ export class AiMcpService {
       const client = new Client(
         {
           name: 'InTools',
-          version: app.getVersion()
+          version: this.deps.getAppVersion()
         },
         {
           capabilities: {}

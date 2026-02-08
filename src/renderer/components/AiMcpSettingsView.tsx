@@ -149,6 +149,22 @@ function parseServerFromJson(jsonText: string, existingServers: AiMcpServer[]): 
   return normalizeImportedServer(aliasFromObject, parsed, existingServers)
 }
 
+function needsProtocolTrustConfirmation(server: AiMcpServer | null): boolean {
+  if (!server) return false
+  return server.installSource === 'protocol' && server.isTrusted !== true
+}
+
+function buildServerCommandPreview(server: AiMcpServer): string {
+  if (server.type === 'stdio') {
+    const parts = [server.command, ...(server.args || [])]
+      .map((part) => String(part || '').trim())
+      .filter(Boolean)
+    return parts.length > 0 ? parts.join(' ') : '(未配置 command)'
+  }
+  const endpoint = String(server.baseUrl || '').trim() || '(未配置 baseUrl)'
+  return `${server.type} ${endpoint}`
+}
+
 function createNewServer(): AiMcpServer {
   const id = `mcp-${Date.now().toString(36)}`
   return {
@@ -230,6 +246,7 @@ export default function AiMcpSettingsView({ onBack }: AiMcpSettingsViewProps) {
   const [jsonImportOpen, setJsonImportOpen] = useState(false)
   const [jsonImportText, setJsonImportText] = useState('')
   const [jsonImportError, setJsonImportError] = useState<string | null>(null)
+  const [trustConfirmServer, setTrustConfirmServer] = useState<AiMcpServer | null>(null)
   const [expandedToolIds, setExpandedToolIds] = useState<Set<string>>(new Set())
   const [overflowToolIds, setOverflowToolIds] = useState<Set<string>>(new Set())
   const toolDescriptionRefs = useRef<Record<string, HTMLSpanElement | null>>({})
@@ -423,6 +440,12 @@ export default function AiMcpSettingsView({ onBack }: AiMcpSettingsViewProps) {
       return
     }
 
+    if (active && needsProtocolTrustConfirmation(draftServer)) {
+      setTrustConfirmServer(draftServer)
+      setError(null)
+      return
+    }
+
     setOperationBusy(true)
     try {
       const next = active
@@ -432,6 +455,29 @@ export default function AiMcpSettingsView({ onBack }: AiMcpSettingsViewProps) {
       setDraftServer({ ...next })
       setSelectedServerId(next.id)
       setInfo(active ? '服务器已启动' : '服务器已停止')
+      setError(null)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '服务器启停失败')
+    } finally {
+      setOperationBusy(false)
+    }
+  }
+
+  const handleTrustConfirmAndActivate = async () => {
+    if (!trustConfirmServer || !window.intools?.ai?.mcp) return
+    setOperationBusy(true)
+    try {
+      const trustedServer = await window.intools.ai.mcp.upsertServer({
+        ...trustConfirmServer,
+        isTrusted: true,
+        trustedAt: Date.now()
+      })
+      const next = await window.intools.ai.mcp.activateServer(trustedServer.id)
+      await loadServers()
+      setDraftServer({ ...next })
+      setSelectedServerId(next.id)
+      setTrustConfirmServer(null)
+      setInfo('已信任并启动协议安装的 MCP 服务器')
       setError(null)
     } catch (err) {
       setError(err instanceof Error ? err.message : '服务器启停失败')
@@ -894,6 +940,42 @@ export default function AiMcpSettingsView({ onBack }: AiMcpSettingsViewProps) {
           </div>
         </main>
       </div>
+
+      {trustConfirmServer && (
+        <div className="no-drag fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4">
+          <div className="w-full max-w-2xl rounded-[24px] border border-slate-200/80 bg-white p-5 shadow-2xl dark:border-slate-800/80 dark:bg-slate-900">
+            <div className="mb-3 text-sm font-semibold text-slate-900 dark:text-white">信任确认</div>
+            <div className="mb-2 text-xs text-slate-600 dark:text-slate-300">
+              该服务器来自协议安装（`protocol`）。首次启用前请确认下面的命令/地址可信。
+            </div>
+            <div className={cardClassTight}>
+              <div className="mb-1 text-[11px] uppercase tracking-[0.15em] text-slate-400 dark:text-slate-500">Command Preview</div>
+              <pre className="whitespace-pre-wrap break-all text-xs text-slate-700 dark:text-slate-200">
+                {buildServerCommandPreview(trustConfirmServer)}
+              </pre>
+            </div>
+            <div className="mt-2 text-[11px] text-slate-500 dark:text-slate-400">
+              服务器：{trustConfirmServer.name}（{trustConfirmServer.id}）
+            </div>
+            <div className="mt-4 flex items-center justify-end gap-2">
+              <button
+                className={`${actionButtonClass} no-drag`}
+                onClick={() => setTrustConfirmServer(null)}
+                disabled={operationBusy}
+              >
+                取消
+              </button>
+              <button
+                className={`${primaryPillClass} no-drag`}
+                onClick={() => void handleTrustConfirmAndActivate()}
+                disabled={operationBusy}
+              >
+                信任并启用
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {jsonImportOpen && (
         <div className="no-drag fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4">
