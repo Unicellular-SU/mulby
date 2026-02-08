@@ -4,6 +4,7 @@ import https from 'https'
 import { join } from 'path'
 import { registerAllHandlers } from './ipc'
 import { setAiToolExecutor } from './ai'
+import { aiMcpService, isMcpToolName } from './ai/mcp'
 import { PluginManager } from './plugin'
 import { PluginWindowManager } from './plugin/window'
 import { ThemeManager } from './services/theme'
@@ -46,6 +47,14 @@ const clipboardWatcher = new ClipboardWatcher()
 const clipboardHistoryManager = new ClipboardHistoryManager()
 
 setAiToolExecutor(async ({ name, args, context }) => {
+  if (isMcpToolName(name)) {
+    return await aiMcpService.callToolById({
+      toolId: name,
+      args,
+      context
+    })
+  }
+
   const pluginName = context?.pluginName
   if (!pluginName) {
     throw new Error('AI tool execution requires plugin context')

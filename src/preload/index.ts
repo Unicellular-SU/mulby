@@ -197,6 +197,19 @@ const intoolsApi = {
         get: () => ipcRenderer.invoke('ai:settings:get'),
         update: (next: any) => ipcRenderer.invoke('ai:settings:update', next)
       },
+      mcp: {
+        listServers: () => ipcRenderer.invoke('ai:mcp:servers:list'),
+        getServer: (serverId: string) => ipcRenderer.invoke('ai:mcp:servers:get', serverId),
+        upsertServer: (server: any) => ipcRenderer.invoke('ai:mcp:servers:upsert', server),
+        removeServer: (serverId: string) => ipcRenderer.invoke('ai:mcp:servers:remove', serverId),
+        activateServer: (serverId: string) => ipcRenderer.invoke('ai:mcp:servers:activate', serverId),
+        deactivateServer: (serverId: string) => ipcRenderer.invoke('ai:mcp:servers:deactivate', serverId),
+        restartServer: (serverId: string) => ipcRenderer.invoke('ai:mcp:servers:restart', serverId),
+        checkServer: (serverId: string) => ipcRenderer.invoke('ai:mcp:servers:check', serverId),
+        listTools: (serverId: string) => ipcRenderer.invoke('ai:mcp:tools:list', serverId),
+        abort: (callId: string) => ipcRenderer.invoke('ai:mcp:abort', callId),
+        getLogs: (serverId: string) => ipcRenderer.invoke('ai:mcp:logs:get', serverId)
+      },
       attachments: {
         upload: (input: any) => ipcRenderer.invoke('ai:attachments:upload', input),
         get: (attachmentId: string) => ipcRenderer.invoke('ai:attachments:get', attachmentId),

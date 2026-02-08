@@ -1,15 +1,25 @@
 import { app } from 'electron'
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'fs'
 import { join } from 'path'
-import type { AiSettings, AiProviderConfig, AiProviderId, AiModel } from '../../shared/types/ai'
+import type { AiSettings, AiProviderConfig, AiProviderId, AiModel, AiMcpServer, AiMcpSettings } from '../../shared/types/ai'
 import { inferProviderType } from './providerCatalog'
 import { resolveProviderBaseURL } from '../../shared/ai/providerDefaults'
 import { getSystemDefaultProviderById, getSystemDefaultProviders, mergeWithSystemDefaultProviders } from '../../shared/ai/systemProviders'
 import { getSystemDefaultModels } from '../../shared/ai/systemModels'
 
+const DEFAULT_MCP_SETTINGS: AiMcpSettings = {
+  servers: [],
+  defaults: {
+    timeoutMs: 60000,
+    longRunningMaxMs: 10 * 60 * 1000,
+    approvalMode: 'always'
+  }
+}
+
 const DEFAULT_SETTINGS: AiSettings = {
   providers: getSystemDefaultProviders(),
   models: getSystemDefaultModels(),
+  mcp: DEFAULT_MCP_SETTINGS,
   defaultParams: {
     contextWindow: 8,
     temperatureEnabled: false,
@@ -93,6 +103,56 @@ function normalizeModel(model: AiModel, providers: AiProviderConfig[]): AiModel 
   return model
 }
 
+function normalizeMcpServer(server: AiMcpServer, index: number): AiMcpServer {
+  const type = server.type === 'sse' || server.type === 'streamableHttp' ? server.type : 'stdio'
+  const baseId = String(server.id || '').trim() || `mcp-server-${index + 1}`
+  const name = String(server.name || '').trim() || baseId
+  const args = Array.isArray(server.args) ? server.args.map((item) => String(item)).filter(Boolean) : []
+  const env = server.env && typeof server.env === 'object' ? server.env : undefined
+  const headers = server.headers && typeof server.headers === 'object' ? server.headers : undefined
+  const timeoutSec = Number(server.timeoutSec)
+  return {
+    ...server,
+    id: baseId,
+    name,
+    type,
+    baseUrl: String(server.baseUrl || '').trim() || undefined,
+    command: String(server.command || '').trim() || undefined,
+    args: args.length > 0 ? args : undefined,
+    env,
+    headers,
+    timeoutSec: Number.isFinite(timeoutSec) && timeoutSec > 0 ? Math.floor(timeoutSec) : undefined,
+    isActive: !!server.isActive
+  }
+}
+
+function normalizeMcpSettings(settings?: AiMcpSettings): AiMcpSettings {
+  const source = settings || DEFAULT_MCP_SETTINGS
+  const used = new Set<string>()
+  const servers = (source.servers || []).map((server, index) => normalizeMcpServer(server, index)).map((server) => {
+    const base = String(server.id || '').trim()
+    let id = base || `mcp-server-${used.size + 1}`
+    let suffix = 2
+    while (used.has(id)) {
+      id = `${base}-${suffix}`
+      suffix += 1
+    }
+    used.add(id)
+    if (id !== server.id) {
+      return { ...server, id }
+    }
+    return server
+  })
+  const defaults = {
+    ...DEFAULT_MCP_SETTINGS.defaults,
+    ...(source.defaults || {})
+  }
+  return {
+    servers,
+    defaults
+  }
+}
+
 function getSettingsPath(): string {
   const dir = join(app.getPath('userData'), 'ai')
   if (!existsSync(dir)) {
@@ -123,7 +183,8 @@ export function loadAiSettings(): AiSettings {
       ...DEFAULT_SETTINGS,
       ...parsed,
       providers: normalizedProviders,
-      models: normalizedModels
+      models: normalizedModels,
+      mcp: normalizeMcpSettings(parsed.mcp)
     }
     if (parsed.defaultModel && next.providers.length > 0) {
       const model = next.models?.find((item) => item.id === parsed.defaultModel)
@@ -177,7 +238,8 @@ export function updateAiSettings(partial: Partial<AiSettings>): AiSettings {
     ...current,
     ...partial,
     providers,
-    models
+    models,
+    mcp: normalizeMcpSettings(partial.mcp ?? current.mcp)
   }
   saveAiSettings(next)
   return next

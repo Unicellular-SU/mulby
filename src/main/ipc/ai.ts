@@ -1,8 +1,9 @@
 import { ipcMain, IpcMainInvokeEvent } from 'electron'
 import { aiService } from '../ai'
+import { aiMcpService } from '../ai/mcp'
 import { getAiSettings, updateAiSettings } from '../ai/config'
 import { resetProviderRegistry } from '../ai/providers'
-import type { AiOption, AiMessage, AiImageGenerateProgressChunk } from '../../shared/types/ai'
+import type { AiOption, AiMessage, AiImageGenerateProgressChunk, AiMcpServer } from '../../shared/types/ai'
 
 export function registerAiHandlers() {
   ipcMain.handle('ai:call', async (_event: IpcMainInvokeEvent, option: AiOption) => {
@@ -70,6 +71,50 @@ export function registerAiHandlers() {
     const next = updateAiSettings(partial)
     resetProviderRegistry()
     return next
+  })
+
+  ipcMain.handle('ai:mcp:servers:list', async () => {
+    return aiMcpService.listServers()
+  })
+
+  ipcMain.handle('ai:mcp:servers:get', async (_event, serverId: string) => {
+    return aiMcpService.getServer(serverId)
+  })
+
+  ipcMain.handle('ai:mcp:servers:upsert', async (_event, server: AiMcpServer) => {
+    return aiMcpService.upsertServer(server)
+  })
+
+  ipcMain.handle('ai:mcp:servers:remove', async (_event, serverId: string) => {
+    await aiMcpService.removeServer(serverId)
+  })
+
+  ipcMain.handle('ai:mcp:servers:activate', async (_event, serverId: string) => {
+    return await aiMcpService.activateServer(serverId)
+  })
+
+  ipcMain.handle('ai:mcp:servers:deactivate', async (_event, serverId: string) => {
+    return await aiMcpService.deactivateServer(serverId)
+  })
+
+  ipcMain.handle('ai:mcp:servers:restart', async (_event, serverId: string) => {
+    return await aiMcpService.restartServer(serverId)
+  })
+
+  ipcMain.handle('ai:mcp:servers:check', async (_event, serverId: string) => {
+    return await aiMcpService.checkServerConnectivity(serverId)
+  })
+
+  ipcMain.handle('ai:mcp:tools:list', async (_event, serverId: string) => {
+    return await aiMcpService.listTools(serverId)
+  })
+
+  ipcMain.handle('ai:mcp:abort', async (_event, callId: string) => {
+    return aiMcpService.abortTool(callId)
+  })
+
+  ipcMain.handle('ai:mcp:logs:get', async (_event, serverId: string) => {
+    return aiMcpService.getLogs(serverId)
   })
 
   ipcMain.handle('ai:attachments:upload', async (_event, input) => {

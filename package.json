@@ -39,6 +39,7 @@
     "@ai-sdk/anthropic": "^3.0.35",
     "@ai-sdk/google": "^3.0.20",
     "@ai-sdk/openai": "^3.0.25",
+    "@modelcontextprotocol/sdk": "^1.26.0",
     "@tailwindcss/typography": "^0.5.19",
     "@types/sharp": "^0.31.1",
     "ai": "^6.0.67",

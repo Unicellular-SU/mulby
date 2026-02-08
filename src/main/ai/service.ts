@@ -62,6 +62,7 @@ import {
   parseThinkTaggedChunk,
   splitThinkTaggedText
 } from './thinkTagParser'
+import { aiMcpService } from './mcp'
 
 interface StreamCallbacks {
   onChunk?: (chunk: AiMessage) => void
@@ -115,7 +116,6 @@ export class AiService {
       toolContext: option.toolContext,
       hasOnChunk: !!onChunk
     })
-    const tools = this.buildTools(option.tools, option.toolContext, option.model)
     const requestId = this.createRequestId()
     const controller = new AbortController()
     this.controllers.set(requestId, controller)
@@ -125,6 +125,9 @@ export class AiService {
         console.log('[AI] call: 使用流式模式')
         return await this.stream(option, { onChunk }, requestId)
       }
+
+      const resolvedTools = await this.resolveMergedTools(option)
+      const tools = this.buildTools(resolvedTools, option.toolContext, option.model)
 
       const { modelKey } = this.resolveLanguageModel(option.model)
       const params = this.resolveGenerationParams(option, option.model)
@@ -180,7 +183,7 @@ export class AiService {
             apiKey: requestApiKey,
             baseURL: providerConfig?.baseURL,
             params,
-            tools: option.tools || [],
+            tools: resolvedTools || [],
             maxToolSteps: option.maxToolSteps,
             toolContext: option.toolContext,
             allowReasoning: supportsReasoning(option.model)
@@ -251,7 +254,8 @@ export class AiService {
     if (!option.messages || option.messages.length === 0) {
       throw new Error('AI messages are required')
     }
-    const tools = this.buildTools(option.tools, option.toolContext, option.model)
+    const resolvedTools = await this.resolveMergedTools(option)
+    const tools = this.buildTools(resolvedTools, option.toolContext, option.model)
 
     const id = requestId || this.createRequestId()
     const controller = new AbortController()
@@ -336,7 +340,7 @@ export class AiService {
             apiKey: requestApiKey,
             baseURL: providerConfig?.baseURL,
             params,
-            tools: option.tools
+            tools: resolvedTools
           }, trackedOnChunk, controller.signal)
 
           const usage = normalizeUsage(
@@ -368,7 +372,7 @@ export class AiService {
             apiKey: requestApiKey,
             baseURL: providerConfig?.baseURL,
             params,
-            tools: option.tools || [],
+            tools: resolvedTools || [],
             maxToolSteps: option.maxToolSteps,
             toolContext: option.toolContext,
             allowReasoning: supportsReasoning(option.model)
@@ -1751,6 +1755,44 @@ export class AiService {
     }
 
     return results
+  }
+
+  private async resolveMergedTools(option: AiOption): Promise<AiTool[] | undefined> {
+    const declaredTools = Array.isArray(option.tools) ? option.tools : []
+    const mcpMode = option.mcp ? (option.mcp.mode || 'auto') : 'off'
+    if (mcpMode === 'off') {
+      return declaredTools.length > 0 ? declaredTools : undefined
+    }
+
+    const mcpTools = await aiMcpService.resolveToolsForAi({
+      selection: {
+        ...option.mcp,
+        mode: mcpMode
+      },
+      context: option.toolContext
+    })
+
+    if (declaredTools.length === 0) {
+      return mcpTools.length > 0 ? mcpTools : undefined
+    }
+    if (mcpTools.length === 0) {
+      return declaredTools
+    }
+
+    const merged = [...declaredTools]
+    const knownNames = new Set(
+      declaredTools
+        .map((item) => item.function?.name)
+        .filter((name): name is string => !!name)
+    )
+    for (const toolItem of mcpTools) {
+      const name = toolItem.function?.name
+      if (!name) continue
+      if (knownNames.has(name)) continue
+      merged.push(toolItem)
+      knownNames.add(name)
+    }
+    return merged
   }
 
   private buildTools(tools?: AiTool[], context?: AiToolContext, modelId?: string) {

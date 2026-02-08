@@ -61,10 +61,71 @@ export interface AiTool {
   function?: AiToolFunction
 }
 
+export type AiMcpServerType = 'stdio' | 'sse' | 'streamableHttp'
+
+export type AiMcpServerInstallSource = 'manual' | 'protocol' | 'builtin'
+
+export interface AiMcpServer {
+  id: string
+  name: string
+  type: AiMcpServerType
+  isActive: boolean
+  description?: string
+  baseUrl?: string
+  command?: string
+  args?: string[]
+  env?: Record<string, string>
+  headers?: Record<string, string>
+  timeoutSec?: number
+  longRunning?: boolean
+  disabledTools?: string[]
+  disabledAutoApproveTools?: string[]
+  installSource?: AiMcpServerInstallSource
+  isTrusted?: boolean
+  trustedAt?: number
+  installedAt?: number
+}
+
+export interface AiMcpDefaults {
+  timeoutMs?: number
+  longRunningMaxMs?: number
+  approvalMode?: 'always' | 'auto-approved-only' | 'never'
+}
+
+export interface AiMcpSettings {
+  servers: AiMcpServer[]
+  defaults?: AiMcpDefaults
+}
+
+export interface AiMcpSelection {
+  mode?: 'off' | 'manual' | 'auto'
+  serverIds?: string[]
+  allowedToolIds?: string[]
+}
+
+export interface AiMcpTool {
+  id: string
+  name: string
+  description?: string
+  serverId: string
+  serverName: string
+  inputSchema?: unknown
+  outputSchema?: unknown
+}
+
+export interface AiMcpServerLogEntry {
+  timestamp: number
+  level: 'debug' | 'info' | 'warn' | 'error'
+  message: string
+  source?: string
+  data?: unknown
+}
+
 export interface AiOption {
   model?: string
   messages: AiMessage[]
   tools?: AiTool[]
+  mcp?: AiMcpSelection
   params?: AiModelParameters
   toolContext?: AiToolContext
   maxToolSteps?: number  // 工具调用的最大步骤数，默认为 10
@@ -72,6 +133,10 @@ export interface AiOption {
 
 export interface AiToolContext {
   pluginName?: string
+  mcpScope?: {
+    allowedServerIds?: string[]
+    allowedToolIds?: string[]
+  }
 }
 
 export interface AiModelParameters {
@@ -172,6 +237,7 @@ export interface AiSettings {
   providers: AiProviderConfig[]
   models?: AiModel[]
   defaultParams?: AiModelParameters
+  mcp?: AiMcpSettings
 }
 
 export interface AiAttachmentRef {
@@ -217,6 +283,19 @@ export interface AiApi {
   settings: {
     get: () => Promise<AiSettings>
     update: (next: Partial<AiSettings>) => Promise<AiSettings>
+  }
+  mcp: {
+    listServers: () => Promise<AiMcpServer[]>
+    getServer: (serverId: string) => Promise<AiMcpServer | null>
+    upsertServer: (server: AiMcpServer) => Promise<AiMcpServer>
+    removeServer: (serverId: string) => Promise<void>
+    activateServer: (serverId: string) => Promise<AiMcpServer>
+    deactivateServer: (serverId: string) => Promise<AiMcpServer>
+    restartServer: (serverId: string) => Promise<AiMcpServer>
+    checkServer: (serverId: string) => Promise<{ ok: boolean; message?: string }>
+    listTools: (serverId: string) => Promise<AiMcpTool[]>
+    abort: (callId: string) => Promise<boolean>
+    getLogs: (serverId: string) => Promise<AiMcpServerLogEntry[]>
   }
   attachments: {
     upload: (input: { filePath?: string; buffer?: ArrayBuffer; mimeType: string; purpose?: string }) => Promise<AiAttachmentRef>
