@@ -9,6 +9,7 @@ import AttachmentManager from './components/AttachmentManager'
 import SettingsView, { SettingsSection } from './components/SettingsView'
 import AiSettingsView from './components/AiSettingsView'
 import AiMcpSettingsView from './components/AiMcpSettingsView'
+import AiSkillsSettingsView from './components/AiSkillsSettingsView'
 import LogViewerView from './components/LogViewerView'
 import type { InputAttachment, InputPayload } from '../shared/types/plugin'
 
@@ -27,7 +28,7 @@ function App() {
   const [pluginOpen, setPluginOpen] = useState(false) // 仅用于跟踪插件是否打开
   const [detailsPluginName, setDetailsPluginName] = useState<string | null>(null)
   const [detailsReturnTarget, setDetailsReturnTarget] = useState<'home' | 'settings' | 'plugins'>('home')
-  const [viewMode, setViewMode] = useState<'home' | 'plugin-details' | 'settings' | 'plugins' | 'logs' | 'background-plugins' | 'task-scheduler' | 'ai-settings' | 'ai-mcp-settings'>('home')
+  const [viewMode, setViewMode] = useState<'home' | 'plugin-details' | 'settings' | 'plugins' | 'logs' | 'background-plugins' | 'task-scheduler' | 'ai-settings' | 'ai-mcp-settings' | 'ai-skills-settings'>('home')
   const [settingsSection, setSettingsSection] = useState<SettingsSection>('general')
   const [pluginManagerReturnTarget, setPluginManagerReturnTarget] = useState<'home' | 'settings'>('home')
   const [backgroundPluginManagerReturnTarget, setBackgroundPluginManagerReturnTarget] = useState<'home' | 'settings'>('home')
@@ -416,6 +417,7 @@ function App() {
         <AiSettingsView
           onBack={() => setViewMode('settings')}
           onOpenMcpSettings={() => setViewMode('ai-mcp-settings')}
+          onOpenSkillsSettings={() => setViewMode('ai-skills-settings')}
         />
       </div>
     )
@@ -425,6 +427,16 @@ function App() {
     return (
       <div className={`app ${isDragging ? 'dragging' : ''}`}>
         <AiMcpSettingsView
+          onBack={() => setViewMode('ai-settings')}
+        />
+      </div>
+    )
+  }
+
+  if (viewMode === 'ai-skills-settings') {
+    return (
+      <div className={`app ${isDragging ? 'dragging' : ''}`}>
+        <AiSkillsSettingsView
           onBack={() => setViewMode('ai-settings')}
         />
       </div>

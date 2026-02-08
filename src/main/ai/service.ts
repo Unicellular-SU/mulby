@@ -63,6 +63,7 @@ import {
   splitThinkTaggedText
 } from './thinkTagParser'
 import { aiMcpService } from './mcp'
+import { aiSkillService } from './skills'
 
 interface StreamCallbacks {
   onChunk?: (chunk: AiMessage) => void
@@ -109,12 +110,16 @@ export class AiService {
     if (!option.messages || option.messages.length === 0) {
       throw new Error('AI messages are required')
     }
+    await aiSkillService.ensureCatalogLoaded()
+    const skillResolution = aiSkillService.resolveForAiCall(option)
+    const effectiveOption = aiSkillService.applyResolutionToOption(option, skillResolution)
     console.log('[AI] call 开始', {
-      model: option.model,
-      messageCount: option.messages.length,
-      hasTools: !!option.tools && option.tools.length > 0,
-      toolContext: option.toolContext,
-      hasOnChunk: !!onChunk
+      model: effectiveOption.model,
+      messageCount: effectiveOption.messages.length,
+      hasTools: !!effectiveOption.tools && effectiveOption.tools.length > 0,
+      toolContext: effectiveOption.toolContext,
+      hasOnChunk: !!onChunk,
+      skills: skillResolution.selectedSkillNames
     })
     const requestId = this.createRequestId()
     const controller = new AbortController()
@@ -126,14 +131,14 @@ export class AiService {
         return await this.stream(option, { onChunk }, requestId)
       }
 
-      const resolvedTools = await this.resolveMergedTools(option)
-      const tools = this.buildTools(resolvedTools, option.toolContext, option.model)
+      const resolvedTools = await this.resolveMergedTools(effectiveOption)
+      const tools = this.buildTools(resolvedTools, effectiveOption.toolContext, effectiveOption.model)
 
-      const { modelKey } = this.resolveLanguageModel(option.model)
-      const params = this.resolveGenerationParams(option, option.model)
-      const trimmedMessages = this.applyContextWindow(option.messages, params.contextWindow)
-      const resolved = resolveModelId(option.model)
-      const { providerType, providerConfig } = this.resolveExecutionProviderContext(option.model, resolved.providerId)
+      const { modelKey } = this.resolveLanguageModel(effectiveOption.model)
+      const params = this.resolveGenerationParams(effectiveOption, effectiveOption.model)
+      const trimmedMessages = this.applyContextWindow(effectiveOption.messages, params.contextWindow)
+      const resolved = resolveModelId(effectiveOption.model)
+      const { providerType, providerConfig } = this.resolveExecutionProviderContext(effectiveOption.model, resolved.providerId)
       const requestApiKey = getRotatedApiKey(
         providerConfig?.apiKey,
         buildApiKeyScope({
@@ -146,10 +151,10 @@ export class AiService {
       return await methodAdapter.call({
         hasTools: !!tools,
         hasMultimodalContent: this.hasMultimodalContent(trimmedMessages),
-        shouldUseCompatToolLoop: shouldUseCompatToolLoop(option.model, providerConfig),
+        shouldUseCompatToolLoop: shouldUseCompatToolLoop(effectiveOption.model, providerConfig),
         executeAnthropicCall: async () => {
           console.log('[AI] call: 使用 Anthropic 原生 API')
-          const anthropicPayload = await this.toAnthropicMessages(trimmedMessages, option.model, providerConfig)
+          const anthropicPayload = await this.toAnthropicMessages(trimmedMessages, effectiveOption.model, providerConfig)
           const { content, reasoning } = await this.callAnthropicMessages({
             model: resolved.modelId,
             messages: anthropicPayload.messages,
@@ -160,8 +165,8 @@ export class AiService {
           })
           const usage = normalizeUsage(
             undefined,
-            countTokensFromMessages(trimmedMessages, option.model),
-            countTokensForText(`${reasoning || ''}${content || ''}`, option.model)
+            countTokensFromMessages(trimmedMessages, effectiveOption.model),
+            countTokensForText(`${reasoning || ''}${content || ''}`, effectiveOption.model)
           )
           return {
             role: 'assistant',
@@ -172,10 +177,10 @@ export class AiService {
         },
         executeCompatToolLoopCall: async () => {
           console.log('[AI] call: 使用 OpenAI 兼容工具调用分支（DeepSeek reasoning 兼容）', {
-            model: option.model,
-            maxToolSteps: option.maxToolSteps ?? 10
+            model: effectiveOption.model,
+            maxToolSteps: effectiveOption.maxToolSteps ?? 10
           })
-          const chatMessages = await this.toOpenAIChatMessages(trimmedMessages, option.model, { includeReasoningContent: true })
+          const chatMessages = await this.toOpenAIChatMessages(trimmedMessages, effectiveOption.model, { includeReasoningContent: true })
           const { content, reasoning, usage } = await this.runOpenAICompatToolLoop({
             model: resolved.modelId,
             providerType,
@@ -184,9 +189,9 @@ export class AiService {
             baseURL: providerConfig?.baseURL,
             params,
             tools: resolvedTools || [],
-            maxToolSteps: option.maxToolSteps,
-            toolContext: option.toolContext,
-            allowReasoning: supportsReasoning(option.model)
+            maxToolSteps: effectiveOption.maxToolSteps,
+            toolContext: effectiveOption.toolContext,
+            allowReasoning: supportsReasoning(effectiveOption.model)
           }, undefined, controller.signal)
 
           return {
@@ -195,15 +200,15 @@ export class AiService {
             reasoning_content: reasoning || undefined,
             usage: normalizeUsage(
               usage,
-              countTokensFromMessages(trimmedMessages, option.model),
-              countTokensForText(`${reasoning || ''}${content || ''}`, option.model)
+              countTokensFromMessages(trimmedMessages, effectiveOption.model),
+              countTokensForText(`${reasoning || ''}${content || ''}`, effectiveOption.model)
             )
           }
         },
         executeSdkCall: async () => {
           console.log('[AI] call: 使用 Vercel AI SDK generateText', { hasTools: !!tools })
-          const messages = await this.toSdkMessages(trimmedMessages, option.model)
-          const maxSteps = option.maxToolSteps ?? 10
+          const messages = await this.toSdkMessages(trimmedMessages, effectiveOption.model)
+          const maxSteps = effectiveOption.maxToolSteps ?? 10
           const result = await generateText({
             model: modelKey,
             messages,
@@ -221,11 +226,11 @@ export class AiService {
             finishReason: result.finishReason
           })
 
-          const allowReasoning = supportsReasoning(option.model)
+          const allowReasoning = supportsReasoning(effectiveOption.model)
           let contentText = result.text || ''
           let reasoningText = allowReasoning ? String((result as any).reasoning || '') : ''
           if (allowReasoning) {
-            const parsed = splitThinkTaggedText(contentText, option.model)
+            const parsed = splitThinkTaggedText(contentText, effectiveOption.model)
             contentText = parsed.content
             if (!reasoningText && parsed.reasoning) {
               reasoningText = parsed.reasoning
@@ -233,8 +238,8 @@ export class AiService {
           }
           const usage = normalizeUsage(
             extractUsage(result),
-            countTokensFromMessages(trimmedMessages, option.model),
-            countTokensForText(`${reasoningText || ''}${contentText || ''}`, option.model)
+            countTokensFromMessages(trimmedMessages, effectiveOption.model),
+            countTokensForText(`${reasoningText || ''}${contentText || ''}`, effectiveOption.model)
           )
 
           return {
@@ -254,8 +259,11 @@ export class AiService {
     if (!option.messages || option.messages.length === 0) {
       throw new Error('AI messages are required')
     }
-    const resolvedTools = await this.resolveMergedTools(option)
-    const tools = this.buildTools(resolvedTools, option.toolContext, option.model)
+    await aiSkillService.ensureCatalogLoaded()
+    const skillResolution = aiSkillService.resolveForAiCall(option)
+    const effectiveOption = aiSkillService.applyResolutionToOption(option, skillResolution)
+    const resolvedTools = await this.resolveMergedTools(effectiveOption)
+    const tools = this.buildTools(resolvedTools, effectiveOption.toolContext, effectiveOption.model)
 
     const id = requestId || this.createRequestId()
     const controller = new AbortController()
@@ -264,11 +272,11 @@ export class AiService {
     let metrics: ReturnType<typeof createAiStreamMetrics> | undefined
 
     try {
-      const { modelKey } = this.resolveLanguageModel(option.model)
-      const params = this.resolveGenerationParams(option, option.model)
-      const trimmedMessages = this.applyContextWindow(option.messages, params.contextWindow)
-      const resolved = resolveModelId(option.model)
-      const { providerType, providerConfig } = this.resolveExecutionProviderContext(option.model, resolved.providerId)
+      const { modelKey } = this.resolveLanguageModel(effectiveOption.model)
+      const params = this.resolveGenerationParams(effectiveOption, effectiveOption.model)
+      const trimmedMessages = this.applyContextWindow(effectiveOption.messages, params.contextWindow)
+      const resolved = resolveModelId(effectiveOption.model)
+      const { providerType, providerConfig } = this.resolveExecutionProviderContext(effectiveOption.model, resolved.providerId)
       const requestApiKey = getRotatedApiKey(
         providerConfig?.apiKey,
         buildApiKeyScope({
@@ -278,14 +286,14 @@ export class AiService {
         })
       )
       const methodAdapter = getProviderMethodAdapter(providerType)
-      const compatToolLoop = shouldUseCompatToolLoop(option.model, providerConfig)
+      const compatToolLoop = shouldUseCompatToolLoop(effectiveOption.model, providerConfig)
       metrics = createAiStreamMetrics({
         requestId: id,
         providerType,
-        model: option.model,
+        model: effectiveOption.model,
         hasTools: !!tools,
         compatToolLoop,
-        maxToolSteps: option.maxToolSteps ?? 10
+        maxToolSteps: effectiveOption.maxToolSteps ?? 10
       })
       trackedOnChunk = (chunk: AiMessage) => {
         recordAiStreamChunk(metrics!, chunk)
@@ -294,10 +302,11 @@ export class AiService {
       console.info('[AI] stream:metrics:start', {
         requestId: id,
         providerType,
-        model: option.model,
+        model: effectiveOption.model,
         hasTools: metrics.hasTools,
         compatToolLoop: metrics.compatToolLoop,
-        maxToolSteps: metrics.maxToolSteps
+        maxToolSteps: metrics.maxToolSteps,
+        skills: skillResolution.selectedSkillNames
       })
 
       const finalMessage = await methodAdapter.stream({
@@ -306,7 +315,7 @@ export class AiService {
         shouldUseCompatToolLoop: compatToolLoop,
         executeAnthropicStream: async () => {
           markAiStreamRoute(metrics!, 'anthropic-native')
-          const anthropicPayload = await this.toAnthropicMessages(trimmedMessages, option.model, providerConfig)
+          const anthropicPayload = await this.toAnthropicMessages(trimmedMessages, effectiveOption.model, providerConfig)
           const { content, reasoning } = await this.streamAnthropicMessages({
             model: resolved.modelId,
             messages: anthropicPayload.messages,
@@ -318,8 +327,8 @@ export class AiService {
 
           const usage = normalizeUsage(
             undefined,
-            countTokensFromMessages(trimmedMessages, option.model),
-            countTokensForText(`${reasoning || ''}${content || ''}`, option.model)
+            countTokensFromMessages(trimmedMessages, effectiveOption.model),
+            countTokensForText(`${reasoning || ''}${content || ''}`, effectiveOption.model)
           )
           const finalMessage: AiMessage = {
             role: 'assistant',
@@ -336,7 +345,7 @@ export class AiService {
           const { content, reasoning } = await this.streamOpenAICompatChat({
             model: resolved.modelId,
             providerType,
-            messages: await this.toOpenAIChatMessages(option.messages, option.model),
+            messages: await this.toOpenAIChatMessages(effectiveOption.messages, effectiveOption.model),
             apiKey: requestApiKey,
             baseURL: providerConfig?.baseURL,
             params,
@@ -345,8 +354,8 @@ export class AiService {
 
           const usage = normalizeUsage(
             undefined,
-            countTokensFromMessages(trimmedMessages, option.model),
-            countTokensForText(`${reasoning || ''}${content || ''}`, option.model)
+            countTokensFromMessages(trimmedMessages, effectiveOption.model),
+            countTokensForText(`${reasoning || ''}${content || ''}`, effectiveOption.model)
           )
           const finalMessage: AiMessage = {
             role: 'assistant',
@@ -361,10 +370,10 @@ export class AiService {
         executeCompatToolLoopStream: async () => {
           markAiStreamRoute(metrics!, 'openai-compat-tool-loop')
           console.log('[AI] stream: 使用 OpenAI 兼容工具调用分支（DeepSeek reasoning 兼容）', {
-            model: option.model,
-            maxToolSteps: option.maxToolSteps ?? 10
+            model: effectiveOption.model,
+            maxToolSteps: effectiveOption.maxToolSteps ?? 10
           })
-          const chatMessages = await this.toOpenAIChatMessages(trimmedMessages, option.model, { includeReasoningContent: true })
+          const chatMessages = await this.toOpenAIChatMessages(trimmedMessages, effectiveOption.model, { includeReasoningContent: true })
           const { content, reasoning, usage } = await this.runOpenAICompatToolLoop({
             model: resolved.modelId,
             providerType,
@@ -373,19 +382,19 @@ export class AiService {
             baseURL: providerConfig?.baseURL,
             params,
             tools: resolvedTools || [],
-            maxToolSteps: option.maxToolSteps,
-            toolContext: option.toolContext,
-            allowReasoning: supportsReasoning(option.model)
+            maxToolSteps: effectiveOption.maxToolSteps,
+            toolContext: effectiveOption.toolContext,
+            allowReasoning: supportsReasoning(effectiveOption.model)
           }, trackedOnChunk, controller.signal)
 
           const finalMessage: AiMessage = {
             role: 'assistant',
             content,
-            reasoning_content: supportsReasoning(option.model) ? reasoning || undefined : undefined,
+            reasoning_content: supportsReasoning(effectiveOption.model) ? reasoning || undefined : undefined,
             usage: normalizeUsage(
               usage,
-              countTokensFromMessages(trimmedMessages, option.model),
-                countTokensForText(`${reasoning || ''}${content || ''}`, option.model)
+              countTokensFromMessages(trimmedMessages, effectiveOption.model),
+              countTokensForText(`${reasoning || ''}${content || ''}`, effectiveOption.model)
             )
           }
           this.emitEndChunk(trackedOnChunk, finalMessage)
@@ -398,24 +407,24 @@ export class AiService {
             // 兼容 chat/completions 流式分支当前仅解析文本，不处理 tool_calls。
             // 启用工具时回退到 AI SDK 的 streamText，以支持工具执行与多步调用。
             console.log('[AI] stream: 检测到工具调用，使用 AI SDK streamText 分支', {
-              model: option.model,
-              maxToolSteps: option.maxToolSteps ?? 10
+              model: effectiveOption.model,
+              maxToolSteps: effectiveOption.maxToolSteps ?? 10
             })
           }
-          const messages = await this.toSdkMessages(trimmedMessages, option.model)
+          const messages = await this.toSdkMessages(trimmedMessages, effectiveOption.model)
           const result = await streamText({
             model: modelKey,
             messages,
             abortSignal: controller.signal,
             tools,
-            stopWhen: tools ? stepCountIs(option.maxToolSteps ?? 10) : undefined,
+            stopWhen: tools ? stepCountIs(effectiveOption.maxToolSteps ?? 10) : undefined,
             ...params
           })
 
           let fullText = ''
           let reasoningText = ''
-          const allowReasoning = supportsReasoning(option.model)
-          const thinkTagState = allowReasoning ? createThinkTagStreamState(option.model) : undefined
+          const allowReasoning = supportsReasoning(effectiveOption.model)
+          const thinkTagState = allowReasoning ? createThinkTagStreamState(effectiveOption.model) : undefined
           let hasStructuredReasoningSignal = false
 
           if ((result as any).fullStream) {
@@ -501,7 +510,7 @@ export class AiService {
           if (!fullText && (result as any).text) {
             const fallbackText = String((await (result as any).text) || '')
             if (allowReasoning) {
-              const parsed = splitThinkTaggedText(fallbackText, option.model)
+              const parsed = splitThinkTaggedText(fallbackText, effectiveOption.model)
               fullText = parsed.content
               if (!reasoningText && parsed.reasoning) {
                 reasoningText = parsed.reasoning
@@ -516,8 +525,8 @@ export class AiService {
 
           const usage = normalizeUsage(
             extractUsage(result),
-            countTokensFromMessages(trimmedMessages, option.model),
-            countTokensForText(`${reasoningText || ''}${fullText || ''}`, option.model)
+            countTokensFromMessages(trimmedMessages, effectiveOption.model),
+            countTokensForText(`${reasoningText || ''}${fullText || ''}`, effectiveOption.model)
           )
 
           const finalMessage: AiMessage = {
@@ -544,7 +553,7 @@ export class AiService {
         console.error('[AI] stream:error', {
           requestId: id,
           providerType: metrics.providerType,
-          model: option.model,
+          model: effectiveOption.model,
           code: classification.code,
           category: classification.category,
           retryable: classification.retryable,
@@ -555,7 +564,7 @@ export class AiService {
       } else {
         console.error('[AI] stream:error', {
           requestId: id,
-          model: option.model,
+          model: effectiveOption.model,
           code: classification.code,
           category: classification.category,
           retryable: classification.retryable,

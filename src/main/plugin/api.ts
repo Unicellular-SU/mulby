@@ -18,6 +18,7 @@ import { pluginInput } from './input'
 import { permissionManager } from './permission-manager'
 import { pluginFeatureStore, redirectHotKeySetting, redirectAiModelsSetting } from './dynamic-features'
 import { aiService } from '../ai'
+import { aiSkillService } from '../ai/skills'
 import type { DynamicFeatureInput, PluginMessage } from '../../shared/types/plugin'
 import type { PluginMessageBus } from './message-bus'
 import type { TaskScheduler } from '../scheduler'
@@ -354,6 +355,16 @@ ${item.files.map(p => `    <string>${p}</string>`).join('\n')}
       },
       allModels: async () => aiService.allModels(),
       abort: (requestId: string) => aiService.abort(requestId),
+      skills: {
+        listEnabled: async () => {
+          await aiSkillService.ensureCatalogLoaded()
+          return aiSkillService.listEnabled()
+        },
+        previewForCall: async (input: { option?: Partial<AiOption>; skillIds?: string[]; prompt?: string }) => {
+          await aiSkillService.ensureCatalogLoaded()
+          return aiSkillService.preview(input)
+        }
+      },
       attachments: {
         upload: async (input: { filePath?: string; buffer?: ArrayBuffer; mimeType: string; purpose?: string }) => await aiService.uploadAttachment(input),
         get: async (attachmentId: string) => await aiService.getAttachment(attachmentId),

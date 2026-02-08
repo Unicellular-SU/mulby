@@ -1,6 +1,8 @@
 import { ipcMain, IpcMainInvokeEvent } from 'electron'
 import { aiService } from '../ai'
 import { aiMcpService } from '../ai/mcp'
+import { aiSkillService } from '../ai/skills'
+import { createSkillWithAi, listSkillCreateModels } from '../ai/skills/composer'
 import { getAiSettings, updateAiSettings } from '../ai/config'
 import { resetProviderRegistry } from '../ai/providers'
 import type { AiOption, AiMessage, AiImageGenerateProgressChunk, AiMcpServer } from '../../shared/types/ai'
@@ -115,6 +117,82 @@ export function registerAiHandlers() {
 
   ipcMain.handle('ai:mcp:logs:get', async (_event, serverId: string) => {
     return aiMcpService.getLogs(serverId)
+  })
+
+  ipcMain.handle('ai:skills:list', async () => {
+    await aiSkillService.ensureCatalogLoaded()
+    return aiSkillService.list()
+  })
+
+  ipcMain.handle('ai:skills:refresh', async () => {
+    return await aiSkillService.refreshCatalog()
+  })
+
+  ipcMain.handle('ai:skills:list-enabled', async () => {
+    await aiSkillService.ensureCatalogLoaded()
+    return aiSkillService.listEnabled()
+  })
+
+  ipcMain.handle('ai:skills:get', async (_event, skillId: string) => {
+    await aiSkillService.ensureCatalogLoaded()
+    return aiSkillService.get(skillId)
+  })
+
+  ipcMain.handle('ai:skills:list-create-models', async () => {
+    return await listSkillCreateModels()
+  })
+
+  ipcMain.handle('ai:skills:create-with-ai', async (_event, input) => {
+    const created = await createSkillWithAi(input)
+    await aiSkillService.refreshCatalog()
+    return created
+  })
+
+  ipcMain.handle('ai:skills:create', async (_event, input) => {
+    return await aiSkillService.create(input)
+  })
+
+  ipcMain.handle('ai:skills:install', async (_event, input) => {
+    const installed = await aiSkillService.install(input)
+    await aiSkillService.refreshCatalog()
+    return installed
+  })
+
+  ipcMain.handle('ai:skills:import', async (_event, input) => {
+    const imported = await aiSkillService.importFromJson(input)
+    await aiSkillService.refreshCatalog()
+    return imported
+  })
+
+  ipcMain.handle('ai:skills:update', async (_event, skillId: string, patch) => {
+    await aiSkillService.ensureCatalogLoaded()
+    return await aiSkillService.update(skillId, patch)
+  })
+
+  ipcMain.handle('ai:skills:remove', async (_event, skillId: string) => {
+    await aiSkillService.ensureCatalogLoaded()
+    await aiSkillService.remove(skillId)
+    await aiSkillService.refreshCatalog()
+  })
+
+  ipcMain.handle('ai:skills:enable', async (_event, skillId: string) => {
+    await aiSkillService.ensureCatalogLoaded()
+    return await aiSkillService.enable(skillId)
+  })
+
+  ipcMain.handle('ai:skills:disable', async (_event, skillId: string) => {
+    await aiSkillService.ensureCatalogLoaded()
+    return await aiSkillService.disable(skillId)
+  })
+
+  ipcMain.handle('ai:skills:preview', async (_event, input) => {
+    await aiSkillService.ensureCatalogLoaded()
+    return aiSkillService.preview(input)
+  })
+
+  ipcMain.handle('ai:skills:resolve', async (_event, option: AiOption) => {
+    await aiSkillService.ensureCatalogLoaded()
+    return aiSkillService.resolveForAiCall(option)
   })
 
   ipcMain.handle('ai:attachments:upload', async (_event, input) => {

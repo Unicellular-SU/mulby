@@ -210,6 +210,23 @@ const intoolsApi = {
         abort: (callId: string) => ipcRenderer.invoke('ai:mcp:abort', callId),
         getLogs: (serverId: string) => ipcRenderer.invoke('ai:mcp:logs:get', serverId)
       },
+      skills: {
+        list: () => ipcRenderer.invoke('ai:skills:list'),
+        refresh: () => ipcRenderer.invoke('ai:skills:refresh'),
+        listEnabled: () => ipcRenderer.invoke('ai:skills:list-enabled'),
+        get: (skillId: string) => ipcRenderer.invoke('ai:skills:get', skillId),
+        listCreateModels: () => ipcRenderer.invoke('ai:skills:list-create-models'),
+        createWithAi: (input: any) => ipcRenderer.invoke('ai:skills:create-with-ai', input),
+        create: (input: any) => ipcRenderer.invoke('ai:skills:create', input),
+        install: (input: any) => ipcRenderer.invoke('ai:skills:install', input),
+        importFromJson: (input: any) => ipcRenderer.invoke('ai:skills:import', input),
+        update: (skillId: string, patch: any) => ipcRenderer.invoke('ai:skills:update', skillId, patch),
+        remove: (skillId: string) => ipcRenderer.invoke('ai:skills:remove', skillId),
+        enable: (skillId: string) => ipcRenderer.invoke('ai:skills:enable', skillId),
+        disable: (skillId: string) => ipcRenderer.invoke('ai:skills:disable', skillId),
+        preview: (input: any) => ipcRenderer.invoke('ai:skills:preview', input),
+        resolve: (option: any) => ipcRenderer.invoke('ai:skills:resolve', option)
+      },
       attachments: {
         upload: (input: any) => ipcRenderer.invoke('ai:attachments:upload', input),
         get: (attachmentId: string) => ipcRenderer.invoke('ai:attachments:get', attachmentId),

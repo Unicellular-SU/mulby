@@ -1,7 +1,17 @@
 import { app } from 'electron'
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'fs'
 import { join } from 'path'
-import type { AiSettings, AiProviderConfig, AiProviderId, AiModel, AiMcpServer, AiMcpSettings } from '../../shared/types/ai'
+import type {
+  AiSettings,
+  AiProviderConfig,
+  AiProviderId,
+  AiModel,
+  AiMcpServer,
+  AiMcpSettings,
+  AiSkillDescriptor,
+  AiSkillRecord,
+  AiSkillSettings
+} from '../../shared/types/ai'
 import { inferProviderType } from './providerCatalog'
 import { resolveProviderBaseURL } from '../../shared/ai/providerDefaults'
 import { getSystemDefaultProviderById, getSystemDefaultProviders, mergeWithSystemDefaultProviders } from '../../shared/ai/systemProviders'
@@ -16,10 +26,22 @@ const DEFAULT_MCP_SETTINGS: AiMcpSettings = {
   }
 }
 
+const DEFAULT_SKILL_SETTINGS: AiSkillSettings = {
+  enabled: true,
+  activeSkillIds: [],
+  autoSelect: {
+    enabled: false,
+    maxSkillsPerCall: 3,
+    minScore: 1
+  },
+  records: []
+}
+
 const DEFAULT_SETTINGS: AiSettings = {
   providers: getSystemDefaultProviders(),
   models: getSystemDefaultModels(),
   mcp: DEFAULT_MCP_SETTINGS,
+  skills: DEFAULT_SKILL_SETTINGS,
   defaultParams: {
     contextWindow: 8,
     temperatureEnabled: false,
@@ -153,6 +175,101 @@ function normalizeMcpSettings(settings?: AiMcpSettings): AiMcpSettings {
   }
 }
 
+function normalizeSkillDescriptor(input: AiSkillDescriptor, fallbackId: string): AiSkillDescriptor {
+  const id = String(input.id || fallbackId).trim() || fallbackId
+  const name = String(input.name || id).trim() || id
+  return {
+    ...input,
+    id,
+    name,
+    description: String(input.description || '').trim() || undefined,
+    version: String(input.version || '').trim() || undefined,
+    author: String(input.author || '').trim() || undefined,
+    tags: Array.isArray(input.tags) ? input.tags.map((item) => String(item || '').trim()).filter(Boolean) : undefined,
+    triggerPhrases: Array.isArray(input.triggerPhrases)
+      ? input.triggerPhrases.map((item) => String(item || '').trim()).filter(Boolean)
+      : undefined,
+    mode: input.mode === 'manual' || input.mode === 'auto' || input.mode === 'both' ? input.mode : undefined,
+    promptTemplate: String(input.promptTemplate || '').trim() || undefined,
+    mcpPolicy: input.mcpPolicy
+      ? {
+          serverIds: Array.isArray(input.mcpPolicy.serverIds)
+            ? input.mcpPolicy.serverIds.map((item) => String(item || '').trim()).filter(Boolean)
+            : undefined,
+          allowedToolIds: Array.isArray(input.mcpPolicy.allowedToolIds)
+            ? input.mcpPolicy.allowedToolIds.map((item) => String(item || '').trim()).filter(Boolean)
+            : undefined,
+          blockedToolIds: Array.isArray(input.mcpPolicy.blockedToolIds)
+            ? input.mcpPolicy.blockedToolIds.map((item) => String(item || '').trim()).filter(Boolean)
+            : undefined
+        }
+      : undefined
+  }
+}
+
+function normalizeSkillRecord(record: AiSkillRecord, index: number): AiSkillRecord {
+  const id = String(record.id || '').trim() || `skill-${index + 1}`
+  const descriptor = normalizeSkillDescriptor(record.descriptor || { id, name: id }, id)
+  return {
+    ...record,
+    id,
+    source: record.source || 'manual',
+    sourceRef: String(record.sourceRef || '').trim() || undefined,
+    installPath: String(record.installPath || '').trim() || undefined,
+    skillMdPath: String(record.skillMdPath || '').trim() || undefined,
+    contentHash: String(record.contentHash || '').trim() || `${id}:${record.updatedAt || Date.now()}`,
+    enabled: !!record.enabled,
+    trustLevel: record.trustLevel === 'trusted' || record.trustLevel === 'reviewed' || record.trustLevel === 'untrusted'
+      ? record.trustLevel
+      : 'reviewed',
+    installedAt: Number.isFinite(record.installedAt) ? Number(record.installedAt) : Date.now(),
+    updatedAt: Number.isFinite(record.updatedAt) ? Number(record.updatedAt) : Date.now(),
+    descriptor: {
+      ...descriptor,
+      id,
+      name: descriptor.name || id
+    }
+  }
+}
+
+function normalizeSkillSettings(settings?: AiSkillSettings): AiSkillSettings {
+  const source = settings || DEFAULT_SKILL_SETTINGS
+  const used = new Set<string>()
+  const records = (source.records || []).map((record, index) => normalizeSkillRecord(record, index)).map((record) => {
+    const base = String(record.id || '').trim() || `skill-${used.size + 1}`
+    let id = base
+    let suffix = 2
+    while (used.has(id)) {
+      id = `${base}-${suffix}`
+      suffix += 1
+    }
+    used.add(id)
+    if (id === record.id) return record
+    return {
+      ...record,
+      id,
+      descriptor: {
+        ...record.descriptor,
+        id
+      }
+    }
+  })
+  const activeSet = new Set(
+    (source.activeSkillIds || [])
+      .map((item) => String(item || '').trim())
+      .filter((item) => records.some((record) => record.id === item))
+  )
+  return {
+    enabled: source.enabled !== false,
+    activeSkillIds: Array.from(activeSet),
+    autoSelect: {
+      ...DEFAULT_SKILL_SETTINGS.autoSelect,
+      ...(source.autoSelect || {})
+    },
+    records
+  }
+}
+
 function getSettingsPath(): string {
   const dir = join(app.getPath('userData'), 'ai')
   if (!existsSync(dir)) {
@@ -184,7 +301,8 @@ export function loadAiSettings(): AiSettings {
       ...parsed,
       providers: normalizedProviders,
       models: normalizedModels,
-      mcp: normalizeMcpSettings(parsed.mcp)
+      mcp: normalizeMcpSettings(parsed.mcp),
+      skills: normalizeSkillSettings(parsed.skills)
     }
     if (parsed.defaultModel && next.providers.length > 0) {
       const model = next.models?.find((item) => item.id === parsed.defaultModel)
@@ -239,7 +357,8 @@ export function updateAiSettings(partial: Partial<AiSettings>): AiSettings {
     ...partial,
     providers,
     models,
-    mcp: normalizeMcpSettings(partial.mcp ?? current.mcp)
+    mcp: normalizeMcpSettings(partial.mcp ?? current.mcp),
+    skills: normalizeSkillSettings(partial.skills ?? current.skills)
   }
   saveAiSettings(next)
   return next

@@ -4,6 +4,8 @@ import type {
   AiMessage,
   AiModel,
   AiOption,
+  AiSkillPreview,
+  AiSkillRecord,
   AiTokenBreakdown
 } from './ai'
 
@@ -315,6 +317,10 @@ export interface PluginAPI {
     call: (option: AiOption) => Promise<AiMessage>
     allModels: () => Promise<AiModel[]>
     abort: (requestId: string) => void
+    skills: {
+      listEnabled: () => Promise<AiSkillRecord[]>
+      previewForCall: (input: { option?: Partial<AiOption>; skillIds?: string[]; prompt?: string }) => Promise<AiSkillPreview>
+    }
     attachments: {
       upload: (input: { filePath?: string; buffer?: ArrayBuffer; mimeType: string; purpose?: string }) => Promise<AiAttachmentRef>
       get: (attachmentId: string) => Promise<AiAttachmentRef | null>

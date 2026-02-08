@@ -121,11 +121,112 @@ export interface AiMcpServerLogEntry {
   data?: unknown
 }
 
+export type AiSkillSource = 'manual' | 'local-dir' | 'zip' | 'json' | 'builtin' | 'system'
+
+export type AiSkillTrustLevel = 'untrusted' | 'reviewed' | 'trusted'
+
+export interface AiSkillMcpPolicy {
+  serverIds?: string[]
+  allowedToolIds?: string[]
+  blockedToolIds?: string[]
+}
+
+export interface AiSkillDescriptor {
+  id: string
+  name: string
+  description?: string
+  version?: string
+  author?: string
+  tags?: string[]
+  triggerPhrases?: string[]
+  mode?: 'manual' | 'auto' | 'both'
+  promptTemplate?: string
+  mcpPolicy?: AiSkillMcpPolicy
+}
+
+export interface AiSkillRecord {
+  id: string
+  source: AiSkillSource
+  origin?: 'system' | 'app'
+  readonly?: boolean
+  sourceRef?: string
+  installPath?: string
+  skillMdPath?: string
+  contentHash: string
+  enabled: boolean
+  trustLevel: AiSkillTrustLevel
+  installedAt: number
+  updatedAt: number
+  descriptor: AiSkillDescriptor
+}
+
+export interface AiSkillSettings {
+  enabled: boolean
+  activeSkillIds: string[]
+  autoSelect?: {
+    enabled?: boolean
+    maxSkillsPerCall?: number
+    minScore?: number
+  }
+  records: AiSkillRecord[]
+}
+
+export interface AiSkillSelection {
+  mode?: 'off' | 'manual' | 'auto'
+  skillIds?: string[]
+  variables?: Record<string, string>
+}
+
+export interface AiSkillResolveResult {
+  selectedSkillIds: string[]
+  selectedSkillNames: string[]
+  systemPrompts: string[]
+  mergedMcp?: AiMcpSelection
+  toolContextPatch?: AiToolContext['mcpScope']
+  reasons?: string[]
+}
+
+export interface AiSkillPreview {
+  selected: AiSkillRecord[]
+  systemPrompt: string
+  mcpImpact: {
+    serverIds?: string[]
+    allowedToolIds?: string[]
+    blockedToolIds?: string[]
+  }
+  reasons: string[]
+}
+
+export interface AiSkillCreateModelOption {
+  id: string
+  label: string
+  providerRef?: string
+  providerLabel?: string
+}
+
+export interface AiSkillCreateWithAiInput {
+  requirements: string
+  model: string
+  enabled?: boolean
+  trustLevel?: AiSkillTrustLevel
+  modePreference?: 'manual' | 'auto' | 'both'
+}
+
+export interface AiSkillCreateWithAiResult {
+  record: AiSkillRecord
+  generation: {
+    model: string
+    rawText: string
+    notes?: string[]
+  }
+}
+
 export interface AiOption {
   model?: string
   messages: AiMessage[]
   tools?: AiTool[]
   mcp?: AiMcpSelection
+  skills?: AiSkillSelection
   params?: AiModelParameters
   toolContext?: AiToolContext
   maxToolSteps?: number  // 工具调用的最大步骤数，默认为 10
@@ -238,6 +339,7 @@ export interface AiSettings {
   models?: AiModel[]
   defaultParams?: AiModelParameters
   mcp?: AiMcpSettings
+  skills?: AiSkillSettings
 }
 
 export interface AiAttachmentRef {
@@ -296,6 +398,47 @@ export interface AiApi {
     listTools: (serverId: string) => Promise<AiMcpTool[]>
     abort: (callId: string) => Promise<boolean>
     getLogs: (serverId: string) => Promise<AiMcpServerLogEntry[]>
+  }
+  skills: {
+    list: () => Promise<AiSkillRecord[]>
+    refresh: () => Promise<AiSkillRecord[]>
+    get: (skillId: string) => Promise<AiSkillRecord | null>
+    listCreateModels: () => Promise<AiSkillCreateModelOption[]>
+    createWithAi: (input: AiSkillCreateWithAiInput) => Promise<AiSkillCreateWithAiResult>
+    create: (input: {
+      id?: string
+      name: string
+      description?: string
+      promptTemplate?: string
+      tags?: string[]
+      triggerPhrases?: string[]
+      mode?: 'manual' | 'auto' | 'both'
+      enabled?: boolean
+      trustLevel?: AiSkillTrustLevel
+      mcpPolicy?: AiSkillMcpPolicy
+    }) => Promise<AiSkillRecord>
+    install: (input: {
+      source: 'local-dir' | 'zip'
+      ref: string
+      trustLevel?: AiSkillTrustLevel
+      enabled?: boolean
+    }) => Promise<AiSkillRecord[]>
+    importFromJson: (input: {
+      json: string
+      trustLevel?: AiSkillTrustLevel
+      enabled?: boolean
+    }) => Promise<AiSkillRecord[]>
+    update: (skillId: string, patch: Partial<AiSkillRecord>) => Promise<AiSkillRecord>
+    remove: (skillId: string) => Promise<void>
+    enable: (skillId: string) => Promise<AiSkillRecord>
+    disable: (skillId: string) => Promise<AiSkillRecord>
+    preview: (input: {
+      option?: Partial<AiOption>
+      skillIds?: string[]
+      prompt?: string
+    }) => Promise<AiSkillPreview>
+    resolve: (option: AiOption) => Promise<AiSkillResolveResult>
+    listEnabled: () => Promise<AiSkillRecord[]>
   }
   attachments: {
     upload: (input: { filePath?: string; buffer?: ArrayBuffer; mimeType: string; purpose?: string }) => Promise<AiAttachmentRef>

@@ -49,6 +49,7 @@ function Switch({ checked, onChange }: { checked: boolean; onChange: () => void 
 interface AiSettingsViewProps {
   onBack: () => void
   onOpenMcpSettings?: () => void
+  onOpenSkillsSettings?: () => void
 }
 
 interface ProviderListEntry {
@@ -74,7 +75,7 @@ function serializeApiKeys(keys: string[]): string {
     .join(',')
 }
 
-export default function AiSettingsView({ onBack, onOpenMcpSettings }: AiSettingsViewProps) {
+export default function AiSettingsView({ onBack, onOpenMcpSettings, onOpenSkillsSettings }: AiSettingsViewProps) {
   const initialProviderPreset = getProviderPreset('openai')
   const [aiSettings, setAiSettings] = useState<AiSettings | null>(null)
   const [aiDraft, setAiDraft] = useState<AiSettings | null>(null)
@@ -911,6 +912,11 @@ export default function AiSettingsView({ onBack, onOpenMcpSettings }: AiSettings
           <div className="text-lg font-semibold text-slate-900 dark:text-slate-100">AI 配置中心</div>
         </div>
         <div className="flex items-center gap-2">
+          {onOpenSkillsSettings && (
+            <button className={`${pillClass} no-drag`} onClick={onOpenSkillsSettings} title="进入 Skills 创建、安装与预览管理">
+              Skills 管理
+            </button>
+          )}
           {onOpenMcpSettings && (
             <button className={`${pillClass} no-drag`} onClick={onOpenMcpSettings} title="进入 MCP 服务器与工具策略管理">
               MCP 管理
