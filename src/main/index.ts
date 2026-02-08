@@ -5,6 +5,11 @@ import { join } from 'path'
 import { registerAllHandlers } from './ipc'
 import { setAiToolExecutor } from './ai'
 import { aiMcpService, isMcpToolName } from './ai/mcp'
+import {
+  AI_SKILL_CREATOR_TOOL_NAME,
+  loadSkillCreatorResourcePack
+} from './ai/skills/creator-resources'
+import { executeSkillCreatorRunCommandTool } from './ai/skills/creator-command-tool'
 import { PluginManager } from './plugin'
 import { PluginWindowManager } from './plugin/window'
 import { ThemeManager } from './services/theme'
@@ -13,6 +18,7 @@ import { appSettingsManager } from './services/app-settings'
 import { AppShortcutManager } from './services/app-shortcuts'
 import { ClipboardWatcher } from './services/clipboard-watcher-v2'
 import { ClipboardHistoryManager } from './services/clipboard-history'
+import { commandRunnerService } from './services/command-runner'
 import { patchConsoleWithTimestamp } from '../shared/utils/console'
 
 patchConsoleWithTimestamp()
@@ -47,6 +53,17 @@ const clipboardWatcher = new ClipboardWatcher()
 const clipboardHistoryManager = new ClipboardHistoryManager()
 
 setAiToolExecutor(async ({ name, args, context }) => {
+  if (name === AI_SKILL_CREATOR_TOOL_NAME) {
+    return await executeSkillCreatorRunCommandTool(args, context, {
+      loadPack: loadSkillCreatorResourcePack,
+      runCommand: (input) => {
+        return commandRunnerService.runCommand(input, {
+          source: 'app'
+        })
+      }
+    })
+  }
+
   if (isMcpToolName(name)) {
     return await aiMcpService.callToolById({
       toolId: name,

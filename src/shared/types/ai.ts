@@ -245,6 +245,7 @@ export interface AiOption {
 
 export interface AiToolContext {
   pluginName?: string
+  internalTag?: string
   mcpScope?: {
     allowedServerIds?: string[]
     allowedToolIds?: string[]

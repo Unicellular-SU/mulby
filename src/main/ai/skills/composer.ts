@@ -1,8 +1,7 @@
-import fs from 'node:fs/promises'
-import path from 'node:path'
 import type {
   AiMessage,
   AiModel,
+  AiTool,
   AiSettings,
   AiSkillCreateProgressChunk,
   AiSkillCreateStage
@@ -10,6 +9,12 @@ import type {
 import { getAiSettings } from '../config'
 import { aiService } from '..'
 import { aiSkillService } from './service'
+import {
+  AI_SKILL_CREATOR_INTERNAL_TAG,
+  AI_SKILL_CREATOR_TOOL_NAME,
+  loadSkillCreatorResourcePack,
+  type SkillCreatorResourcePack
+} from './creator-resources'
 import type {
   AiSkillCreateModelOptionItem,
   AiSkillCreateWithAiInput,
@@ -30,37 +35,6 @@ interface GeneratedSkillPayload {
   skillMd?: unknown
   skillMarkdown?: unknown
   files?: unknown
-}
-
-let cachedSkillCreatorGuide: string | undefined
-
-async function loadBuiltinSkillCreatorGuide(): Promise<string> {
-  if (cachedSkillCreatorGuide !== undefined) {
-    return cachedSkillCreatorGuide
-  }
-
-  const candidates = [
-    path.resolve(process.cwd(), 'resources/skills/skill-creator/SKILL.md'),
-    path.resolve(__dirname, '../../../../resources/skills/skill-creator/SKILL.md'),
-    path.resolve(process.resourcesPath || '', 'resources/skills/skill-creator/SKILL.md'),
-    path.resolve(process.resourcesPath || '', 'skills/skill-creator/SKILL.md')
-  ].filter(Boolean)
-
-  for (const filePath of candidates) {
-    try {
-      const content = await fs.readFile(filePath, 'utf8')
-      const snippet = extractSkillCreatorSnippet(content)
-      if (snippet) {
-        cachedSkillCreatorGuide = snippet
-        return snippet
-      }
-    } catch {
-      // try next candidate
-    }
-  }
-
-  cachedSkillCreatorGuide = ''
-  return ''
 }
 
 function extractSkillCreatorSnippet(content: string): string {
@@ -186,9 +160,111 @@ function deriveSkillName(requirements: string): string {
   return cleaned || 'AI Generated Skill'
 }
 
-async function buildPrompts(input: AiSkillCreateWithAiInput): Promise<{ systemPrompt: string; userPrompt: string }> {
+function sliceForPrompt(input: string, limit: number): string {
+  const text = String(input || '').trim()
+  if (!text) return ''
+  if (text.length <= limit) return text
+  return `${text.slice(0, limit)}\n...[truncated]`
+}
+
+function buildSkillCreatorContext(pack: SkillCreatorResourcePack | null): string {
+  if (!pack) {
+    return ''
+  }
+
+  const scriptPaths = pack.scriptFiles.map((file) => `- ${file}`).join('\n')
+  const referencesText = pack.referenceFiles
+    .map((item) => `## ${item.filename}\n${sliceForPrompt(item.content, 3000)}`)
+    .join('\n\n')
+
+  return [
+    'Built-in skill-creator package (load as constraints):',
+    `root: ${pack.rootPath}`,
+    `skill_md: ${pack.skillMdPath}`,
+    '',
+    '### SKILL.md excerpt',
+    sliceForPrompt(extractSkillCreatorSnippet(pack.skillMdContent) || pack.skillMdContent, 6000),
+    '',
+    scriptPaths ? `### scripts/\n${scriptPaths}` : '',
+    referencesText ? `### references\n${referencesText}` : ''
+  ]
+    .filter(Boolean)
+    .join('\n')
+}
+
+function buildSkillCreatorTools(pack: SkillCreatorResourcePack | null): AiTool[] {
+  if (!pack) return []
+  return [
+    {
+      type: 'function',
+      function: {
+        name: AI_SKILL_CREATOR_TOOL_NAME,
+        description: [
+          'Run local script commands for skill scaffolding/validation.',
+          `Only supports scripts under ${pack.rootPath}/scripts.`,
+          'Use python3/node/bash with explicit script path as first non-flag arg.'
+        ].join(' '),
+        parameters: {
+          type: 'object',
+          properties: {
+            command: {
+              type: 'string',
+              description: 'Executable name or path, e.g. python3/node/bash'
+            },
+            args: {
+              type: 'array',
+              description: 'Command arguments',
+              items: {
+                type: 'string'
+              }
+            },
+            cwd: {
+              type: 'string',
+              description: 'Optional working directory (defaults to skill-creator root)'
+            },
+            timeoutMs: {
+              type: 'number',
+              description: 'Optional timeout in milliseconds'
+            },
+            shell: {
+              type: 'boolean',
+              description: 'Optional shell mode. Default false.'
+            }
+          }
+        },
+        required: ['command']
+      }
+    }
+  ]
+}
+
+function normalizeToolCallArgs(value: unknown): { command?: string; args?: string[] } {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return {}
+  const input = value as Record<string, unknown>
+  return {
+    command: asString(input.command),
+    args: asStringArray(input.args)
+  }
+}
+
+function summarizeToolResult(value: unknown): string {
+  if (!value || typeof value !== 'object') return '命令执行完成'
+  const input = value as Record<string, unknown>
+  const success = input.success === true
+  const code = typeof input.exitCode === 'number' ? `exit=${input.exitCode}` : ''
+  const timedOut = input.timedOut === true ? 'timeout' : ''
+  const message = asString(input.error) || asString(input.message) || ''
+  const hints = [code, timedOut, message].filter(Boolean).join(', ')
+  if (!hints) return success ? '命令执行成功' : '命令执行结束'
+  return success ? `命令执行成功（${hints}）` : `命令执行返回（${hints}）`
+}
+
+async function buildPrompts(
+  input: AiSkillCreateWithAiInput,
+  pack: SkillCreatorResourcePack | null
+): Promise<{ systemPrompt: string; userPrompt: string }> {
   const isRevision = Boolean(String(input.previousRawText || '').trim())
-  const builtinGuide = await loadBuiltinSkillCreatorGuide()
+  const builtinGuide = buildSkillCreatorContext(pack)
   const systemPrompt = [
     'You are an expert skill author.',
     'Create or revise a practical AI skill package following Anthropic Skills conventions.',
@@ -199,8 +275,9 @@ async function buildPrompts(input: AiSkillCreateWithAiInput): Promise<{ systemPr
     'Only include files when needed; paths must stay under scripts/, references/, or assets/.',
     'files is optional and must only contain paths under scripts/, references/, or assets/.',
     'If no files are needed, return "files": [].',
+    'When using command tool, execute only deterministic local scripts and use result to improve output quality.',
     builtinGuide
-      ? `Use this built-in "skill-creator" reference excerpt as hard constraints:\n${builtinGuide}`
+      ? `Use this built-in "skill-creator" package context as hard constraints:\n${builtinGuide}`
       : ''
   ]
     .filter(Boolean)
@@ -314,7 +391,25 @@ async function createSkillWithAiInternal(
   let currentStage: AiSkillCreateStage = 'generating'
   emitStageStatus(callbacks, currentStage, 'start', '生成中：调用模型生成 Skill 内容…')
 
-  const { systemPrompt, userPrompt } = await buildPrompts({ ...input, requirements })
+  const skillCreatorPack = await loadSkillCreatorResourcePack()
+  if (skillCreatorPack) {
+    emitProgress(callbacks, {
+      type: 'status',
+      stage: 'generating',
+      stageStatus: 'start',
+      text: `已加载内置 skill-creator：${skillCreatorPack.rootPath}`
+    })
+  } else {
+    emitProgress(callbacks, {
+      type: 'status',
+      stage: 'generating',
+      stageStatus: 'start',
+      text: '未找到内置 skill-creator，继续使用基础约束生成'
+    })
+  }
+
+  const { systemPrompt, userPrompt } = await buildPrompts({ ...input, requirements }, skillCreatorPack)
+  const tools = buildSkillCreatorTools(skillCreatorPack)
   let generatedText = ''
   try {
     const finalMessage = await aiService.stream(
@@ -324,10 +419,41 @@ async function createSkillWithAiInternal(
           { role: 'system', content: systemPrompt },
           { role: 'user', content: userPrompt }
         ],
-        skills: { mode: 'off' }
+        skills: { mode: 'off' },
+        tools: tools.length > 0 ? tools : undefined,
+        maxToolSteps: 8,
+        toolContext: {
+          internalTag: AI_SKILL_CREATOR_INTERNAL_TAG
+        }
       },
       {
         onChunk: (chunk) => {
+          if (chunk.chunkType === 'tool-call') {
+            const callName = chunk.tool_call?.name
+            if (callName === AI_SKILL_CREATOR_TOOL_NAME) {
+              const commandInput = normalizeToolCallArgs(chunk.tool_call?.args)
+              const preview = [commandInput.command, ...(commandInput.args || [])].filter(Boolean).join(' ').trim()
+              emitProgress(callbacks, {
+                type: 'status',
+                stage: 'generating',
+                stageStatus: 'start',
+                text: preview ? `执行命令：${preview}` : '执行命令：runCommand'
+              })
+            }
+            return
+          }
+          if (chunk.chunkType === 'tool-result') {
+            const resultName = chunk.tool_result?.name
+            if (resultName === AI_SKILL_CREATOR_TOOL_NAME) {
+              emitProgress(callbacks, {
+                type: 'status',
+                stage: 'generating',
+                stageStatus: 'done',
+                text: summarizeToolResult(chunk.tool_result?.result)
+              })
+            }
+            return
+          }
           const chunkType = chunk.chunkType === 'reasoning' ? 'reasoning' : 'content'
           const text = normalizeTextFromMessage(chunk)
           if (!text) return

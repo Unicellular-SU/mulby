@@ -232,6 +232,16 @@ export default function AiSkillsSettingsView({ onBack }: AiSkillsSettingsViewPro
     [selectedSkillId, skills]
   )
   const parsedSkillMarkdown = useMemo(() => parseSkillMarkdown(selectedSkillContent), [selectedSkillContent])
+  const focusedTimelineItem = useMemo(() => {
+    const errored = createTimeline.find((item) => item.status === 'error')
+    if (errored) return errored
+    const active = createTimeline.find((item) => item.status === 'active')
+    if (active) return active
+    const withDetail = [...createTimeline]
+      .filter((item) => !!item.detail)
+      .sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0))
+    return withDetail[0] || null
+  }, [createTimeline])
 
   const loadSkills = async (forceRefresh = false) => {
     if (!window.intools?.ai?.skills?.list) {
@@ -367,11 +377,11 @@ export default function AiSkillsSettingsView({ onBack }: AiSkillsSettingsViewPro
     const isRevision = Boolean(previousRaw)
     const requestText = isRevision
       ? [
-          `请在已有 Skill 草稿基础上修改：${requirements}`,
-          '',
-          '请完整返回新的 JSON，不要省略字段。',
-          `上一次模型输出 JSON：\n${previousRaw}`
-        ].join('\n')
+        `请在已有 Skill 草稿基础上修改：${requirements}`,
+        '',
+        '请完整返回新的 JSON，不要省略字段。',
+        `上一次模型输出 JSON：\n${previousRaw}`
+      ].join('\n')
       : requirements
     createOutputRef.current = ''
     setCreateTimeline(() => {
@@ -623,8 +633,8 @@ export default function AiSkillsSettingsView({ onBack }: AiSkillsSettingsViewPro
                   key={skill.id}
                   type="button"
                   className={`w-full rounded-2xl border px-3 py-2 text-left transition ${active
-                      ? 'border-slate-400 bg-slate-50 dark:border-slate-500 dark:bg-slate-800/60'
-                      : 'border-slate-200 bg-white hover:border-slate-300 dark:border-slate-700 dark:bg-slate-950'
+                    ? 'border-slate-400 bg-slate-50 dark:border-slate-500 dark:bg-slate-800/60'
+                    : 'border-slate-200 bg-white hover:border-slate-300 dark:border-slate-700 dark:bg-slate-950'
                     }`}
                   onClick={() => setSelectedSkillId(skill.id)}
                 >
@@ -805,47 +815,63 @@ export default function AiSkillsSettingsView({ onBack }: AiSkillsSettingsViewPro
             <div className="mt-4 grid grid-cols-1 gap-3 lg:grid-cols-2">
               <div className="rounded-2xl border border-slate-200 bg-slate-50/80 p-3 dark:border-slate-800 dark:bg-slate-950/60">
                 <div className="mb-2 text-xs font-medium text-slate-600 dark:text-slate-300">创建进度</div>
-                <div className="max-h-44 overflow-auto space-y-2 pr-1">
-                  {createTimeline.map((item) => {
-                    const dotClass = item.status === 'done'
-                      ? 'bg-emerald-500'
-                      : item.status === 'active'
-                        ? 'bg-blue-500 animate-pulse'
-                        : item.status === 'error'
-                          ? 'bg-red-500'
-                          : 'bg-slate-300 dark:bg-slate-700'
-                    return (
-                      <div key={item.stage} className="flex items-start gap-2">
-                        <div className={`mt-1 h-2.5 w-2.5 rounded-full ${dotClass}`} />
-                        <div className="min-w-0 flex-1">
-                          <div className="flex items-center gap-2 text-[11px]">
-                            <span className="font-medium text-slate-700 dark:text-slate-200">{item.label}</span>
-                            <span className={`rounded-full px-1.5 py-0.5 ${item.status === 'done'
-                                ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300'
-                                : item.status === 'active'
-                                  ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300'
-                                  : item.status === 'error'
-                                    ? 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300'
-                                    : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300'
+                <div className="overflow-x-auto pb-1">
+                  <div className="flex min-w-[560px] items-start">
+                    {createTimeline.map((item, index) => {
+                      const dotClass = item.status === 'done'
+                        ? 'bg-emerald-500'
+                        : item.status === 'active'
+                          ? 'bg-blue-500 animate-pulse'
+                          : item.status === 'error'
+                            ? 'bg-red-500'
+                            : 'bg-slate-300 dark:bg-slate-700'
+                      const lineClass = item.status === 'done'
+                        ? 'bg-emerald-300 dark:bg-emerald-700/70'
+                        : item.status === 'active'
+                          ? 'bg-blue-300 dark:bg-blue-700/70'
+                          : item.status === 'error'
+                            ? 'bg-red-300 dark:bg-red-700/70'
+                            : 'bg-slate-200 dark:bg-slate-700'
+                      return (
+                        <div key={item.stage} className="flex items-start">
+                          <div className="w-[96px] text-center">
+                            <div className="mx-auto flex w-full items-center justify-center">
+                              <div className={`h-2.5 w-2.5 rounded-full ${dotClass}`} />
+                            </div>
+                            <div className="mt-1 truncate text-[11px] font-medium text-slate-700 dark:text-slate-200">{item.label}</div>
+                            <div className={`mt-1 inline-flex rounded-full px-1.5 py-0.5 text-[10px] ${item.status === 'done'
+                              ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300'
+                              : item.status === 'active'
+                                ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300'
+                                : item.status === 'error'
+                                  ? 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300'
+                                  : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300'
                               }`}>
                               {timelineStatusText(item.status)}
-                            </span>
-                            {item.updatedAt && (
-                              <span className="text-[10px] text-slate-400 dark:text-slate-500">
-                                {formatTimelineTime(item.updatedAt)}
-                              </span>
-                            )}
-                          </div>
-                          {item.detail && (
-                            <div className="mt-0.5 text-[11px] text-slate-500 dark:text-slate-400">
-                              {item.detail}
                             </div>
+                            <div className="mt-1 text-[10px] text-slate-400 dark:text-slate-500">
+                              {item.updatedAt ? formatTimelineTime(item.updatedAt) : '--:--:--'}
+                            </div>
+                          </div>
+                          {index < createTimeline.length - 1 && (
+                            <div className={`mt-[6px] h-[2px] w-8 ${lineClass}`} />
                           )}
                         </div>
-                      </div>
-                    )
-                  })}
+                      )
+                    })}
+                  </div>
                 </div>
+                {focusedTimelineItem?.detail && (
+                  <div className="mt-2 rounded-xl border border-slate-200/80 bg-white/80 px-2.5 py-1.5 text-[11px] text-slate-500 dark:border-slate-700 dark:bg-slate-900/40 dark:text-slate-300">
+                    <span className="font-medium text-slate-600 dark:text-slate-200">{focusedTimelineItem.label}：</span>
+                    {focusedTimelineItem.detail}
+                  </div>
+                )}
+                {!focusedTimelineItem?.detail && (
+                  <div className="mt-2 text-[11px] text-slate-400 dark:text-slate-500">
+                    等待创建任务开始...
+                  </div>
+                )}
               </div>
               <div className="rounded-2xl border border-slate-200 bg-slate-50/80 p-3 dark:border-slate-800 dark:bg-slate-950/60">
                 <div className="mb-2 flex items-center justify-between gap-2">
@@ -873,10 +899,10 @@ export default function AiSkillsSettingsView({ onBack }: AiSkillsSettingsViewPro
                 新建会话
               </button>
               <div className="flex items-center gap-2">
-              <button className={`${secondaryPillClass} no-drag`} onClick={() => setShowCreateModal(false)} disabled={busy}>取消</button>
-              <button className={`${primaryPillClass} no-drag`} onClick={handleCreateWithAi} disabled={busy || !createRequirements.trim() || !selectedCreateModel}>
-                {creatingSkill ? '处理中…' : (createRawModelOutput ? '继续修改' : '开始创建')}
-              </button>
+                <button className={`${secondaryPillClass} no-drag`} onClick={() => setShowCreateModal(false)} disabled={busy}>取消</button>
+                <button className={`${primaryPillClass} no-drag`} onClick={handleCreateWithAi} disabled={busy || !createRequirements.trim() || !selectedCreateModel}>
+                  {creatingSkill ? '处理中…' : (createRawModelOutput ? '继续修改' : '开始创建')}
+                </button>
               </div>
             </div>
           </div>
@@ -892,8 +918,8 @@ export default function AiSkillsSettingsView({ onBack }: AiSkillsSettingsViewPro
             </div>
             <div
               className={`rounded-2xl border border-dashed p-8 text-center text-sm transition ${draggingZip
-                  ? 'border-slate-400 bg-slate-50 text-slate-800 dark:border-slate-500 dark:bg-slate-800/60 dark:text-slate-100'
-                  : 'border-slate-300 text-slate-500 dark:border-slate-700 dark:text-slate-400'
+                ? 'border-slate-400 bg-slate-50 text-slate-800 dark:border-slate-500 dark:bg-slate-800/60 dark:text-slate-100'
+                : 'border-slate-300 text-slate-500 dark:border-slate-700 dark:text-slate-400'
                 }`}
               onDragEnter={(e) => {
                 e.preventDefault()
