@@ -35,3 +35,29 @@
 ### 方案方向
 - 不做单模型特判；改为能力驱动策略链：`stream-sse -> sync-json -> async-job`。
 - 统一状态事件与输出归一化，以 provider 能力映射和探测结果驱动。
+
+## Notes: 图片能力驱动兼容实现（2026-02-08）
+
+### 实现内容
+- `src/main/ai/service.ts` 新增图片策略执行链：
+  - `stream-sse`
+  - `sync-json`
+  - `async-job`
+  - `sdk-direct`（最终兜底）
+- 新增策略能力缓存：按 `providerType + baseURL + modelId` 记录支持性与偏好策略（含 TTL）。
+- 新增兼容请求路径：
+  - 同步：`/images/generations`
+  - 异步：`/async/images/generations`
+  - 查询：`/async-result/{taskId}`
+- 新增通用解析：容错 JSON 解析（含 SSE/data 行）+ 图片字段/任务字段提取与状态归一。
+- `generateImages` 也切换到同一策略链，确保非流式调用同样受益。
+
+### 验证
+- `npm run typecheck` ✅
+- `npm run build` ✅
+- `npm run test:unit` ✅
+
+### 预期收益
+- 避免对单一模型（如 `glm-image`）写死特判。
+- 对“200 但返回结构不一致”的 provider 更稳健。
+- 进度状态在流式/同步/异步路径下保持统一。

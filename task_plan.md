@@ -1,26 +1,27 @@
-# Task Plan: 图片生成协议兼容方案研究（2025-2026）
+# Task Plan: 图片生成能力驱动兼容实现
 
 ## Goal
-基于 2025-2026 年公开最佳实践与 Cherry Studio 现有实现，给出不写死模型名的图片生成兼容方案。
+将图片生成链路改为能力驱动策略（`stream-sse -> sync-json -> async-job -> sdk-direct`），避免按模型名写死，并保持统一进度事件。
 
 ## Phases
 - [x] Phase 1: Plan and setup
-- [x] Phase 2: Research/gather information
-- [x] Phase 3: Synthesize architecture options
-- [x] Phase 4: Deliver recommendation
+- [x] Phase 2: Implement strategy chain
+- [x] Phase 3: Add payload/async parsing and status mapping
+- [x] Phase 4: Validate and deliver
 
 ## Key Questions
-1. 2025-2026 主流 SDK/厂商对图片生成“进度/流式/异步任务”有哪些共识？
-2. Cherry Studio 当前实现采用了哪些策略，边界在哪里？
-3. 如何设计成能力驱动策略链，避免写死 `glm-image`？
+1. 如何避免 `glm-image` 这类模型与 OpenAI Image 固定 schema 不匹配导致失败？
+2. 如何在不影响现有模型的前提下引入异步任务轮询？
+3. 如何统一前端进度事件，避免 UI 感知底层协议差异？
 
 ## Decisions Made
-- 采用“能力驱动而非模型名驱动”的方案。
-- 建议策略链：`stream-sse -> sync-json -> async-job`。
-- 统一进度事件协议与输出归一化，降低 provider 差异对 UI 的影响。
+- 在 `AiService` 增加策略能力缓存（按 providerType/baseURL/modelId）。
+- 优先策略：`stream-sse`，失败后自动降级 `sync-json`，识别任务态后进入 `async-job`，最终 `sdk-direct` 兜底。
+- 统一 JSON 容错解析和图片字段归一化（`b64_json/url/image/result/...`）。
 
 ## Errors Encountered
-- 无阻塞性错误。
+- TypeScript 联合类型收窄报错（`images/taskId` 字段访问）。
+- 解决：新增类型守卫 `isImageCompatImagesResult` / `isImageCompatTaskResult`。
 
 ## Status
-**Completed** - 已完成外部资料与本地实现对照分析，并输出方案文档 `image-compat-strategy-2026.md`
+**Completed** - 已完成实现与验证（typecheck/build/test:unit 全部通过）

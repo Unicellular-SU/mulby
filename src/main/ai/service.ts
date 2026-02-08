@@ -68,8 +68,29 @@ interface StreamCallbacks {
   onError?: (error: Error) => void
 }
 
+type ImageExecutionStrategy = 'stream-sse' | 'sync-json' | 'async-job' | 'sdk-direct'
+
+interface ImageStrategyCapabilityState {
+  streamSupported?: boolean
+  syncSupported?: boolean
+  asyncSupported?: boolean
+  preferredStrategy?: ImageExecutionStrategy
+  updatedAt: number
+}
+
+interface ImageCompatTransportContext {
+  baseURL: string
+  headers: Record<string, string>
+}
+
+interface ImageCompatTaskDescriptor {
+  taskId: string
+  taskStatus?: string
+}
+
 export class AiService {
   private controllers = new Map<string, AbortController>()
+  private imageStrategyCapabilities = new Map<string, ImageStrategyCapabilityState>()
   private toolExecutor?: (input: { name: string; args: unknown; context?: AiToolContext }) => Promise<unknown>
 
   allModels() {
@@ -585,11 +606,13 @@ export class AiService {
         const result = await this.executeImageWithRetry(
           'generateImages',
           async () =>
-            await this.generateImageWithDecodeFallback({
+            await this.generateImageWithProgress({
               modelKey,
               prompt: input.prompt,
               size: input.size,
-              n: input.count
+              n: input.count,
+              providerType,
+              providerConfig
             }),
           {
             modelInput: input.model,
@@ -1893,40 +1916,428 @@ export class AiService {
     abortSignal?: AbortSignal
     onChunk?: (chunk: AiImageGenerateProgressChunk) => void
   }): Promise<{ images: string[] }> {
-    let streamed: { images: string[] } | null = null
-    try {
-      streamed = await this.streamOpenAIImageGeneration({
-        modelId: getImageModelIdFromModelKey(input.modelKey),
-        prompt: typeof input.prompt === 'string' ? input.prompt : input.prompt.text || '',
-        size: input.size,
-        n: input.n,
-        providerType: input.providerType,
-        providerConfig: input.providerConfig,
-        abortSignal: input.abortSignal,
-        onChunk: input.onChunk
-      })
-    } catch (error) {
+    const modelId = getImageModelIdFromModelKey(input.modelKey)
+    const prompt = typeof input.prompt === 'string' ? input.prompt : input.prompt.text || ''
+    const cacheKey = this.getImageStrategyCacheKey({
+      providerType: input.providerType,
+      providerConfig: input.providerConfig,
+      modelId
+    })
+    const transport = this.resolveImageCompatTransport(input.providerType, input.providerConfig)
+    const order = this.getImageStrategyOrder(cacheKey)
+    let lastError: unknown
+    let attemptedCount = 0
+
+    console.info('[AI] image:strategy:order', {
+      modelId,
+      providerType: input.providerType,
+      cacheKey,
+      order
+    })
+
+    for (const strategy of order) {
+      attemptedCount += 1
       if (input.abortSignal?.aborted) {
-        throw error
+        throw new Error('Image generation aborted')
       }
-      console.warn('[AI] image:stream:unavailable', {
-        message: getErrorMessageForLog(error),
+
+      if (attemptedCount > 1) {
+        const fallbackMessage = this.getImageFallbackMessage(strategy)
+        if (fallbackMessage) {
+          input.onChunk?.({
+            type: 'status',
+            stage: 'fallback',
+            message: fallbackMessage
+          })
+        }
+      }
+
+      console.info('[AI] image:strategy:try', {
+        strategy,
+        modelId,
         size: input.size,
         count: input.n
       })
+
+      try {
+        if (strategy === 'stream-sse') {
+          const streamed = await this.streamOpenAIImageGeneration({
+            modelId,
+            prompt,
+            size: input.size,
+            n: input.n,
+            providerType: input.providerType,
+            providerConfig: input.providerConfig,
+            abortSignal: input.abortSignal,
+            onChunk: input.onChunk
+          })
+          if (streamed && streamed.images.length > 0) {
+            this.markImageStrategySupported(cacheKey, 'stream-sse')
+            return { images: streamed.images }
+          }
+          this.markImageStrategyUnsupported(cacheKey, 'stream-sse')
+          continue
+        }
+
+        if (strategy === 'sync-json') {
+          const direct = await this.generateImageViaCompatJson({
+            modelId,
+            prompt,
+            size: input.size,
+            n: input.n,
+            transport,
+            abortSignal: input.abortSignal
+          })
+          if (isImageCompatImagesResult(direct) && direct.images.length > 0) {
+            this.markImageStrategySupported(cacheKey, 'sync-json')
+            return { images: direct.images }
+          }
+          if (isImageCompatTaskResult(direct) && transport) {
+            this.markImageStrategySupported(cacheKey, 'sync-json', 'async-job')
+            const polled = await this.pollAsyncImageTask({
+              taskId: direct.taskId,
+              taskStatus: direct.taskStatus,
+              transport,
+              abortSignal: input.abortSignal,
+              onChunk: input.onChunk,
+              n: input.n
+            })
+            this.markImageStrategySupported(cacheKey, 'async-job')
+            return { images: polled.images }
+          }
+          this.markImageStrategyUnsupported(cacheKey, 'sync-json')
+          continue
+        }
+
+        if (strategy === 'async-job') {
+          const asyncStart = await this.startAsyncImageTask({
+            modelId,
+            prompt,
+            size: input.size,
+            n: input.n,
+            transport,
+            abortSignal: input.abortSignal
+          })
+          if (isImageCompatImagesResult(asyncStart) && asyncStart.images.length > 0) {
+            this.markImageStrategySupported(cacheKey, 'async-job')
+            return { images: asyncStart.images }
+          }
+          if (isImageCompatTaskResult(asyncStart) && transport) {
+            const polled = await this.pollAsyncImageTask({
+              taskId: asyncStart.taskId,
+              taskStatus: asyncStart.taskStatus,
+              transport,
+              abortSignal: input.abortSignal,
+              onChunk: input.onChunk,
+              n: input.n
+            })
+            this.markImageStrategySupported(cacheKey, 'async-job')
+            return { images: polled.images }
+          }
+          this.markImageStrategyUnsupported(cacheKey, 'async-job')
+          continue
+        }
+
+        const fallback = await this.generateImageWithDecodeFallback(input)
+        this.markImageStrategySupported(cacheKey, 'sdk-direct')
+        return fallback
+      } catch (error) {
+        if (input.abortSignal?.aborted) {
+          throw error
+        }
+        lastError = error
+        console.warn('[AI] image:strategy:failed', {
+          strategy,
+          message: getErrorMessageForLog(error),
+          size: input.size,
+          count: input.n
+        })
+        if (strategy === 'stream-sse') {
+          console.warn('[AI] image:stream:unavailable', {
+            message: getErrorMessageForLog(error),
+            size: input.size,
+            count: input.n
+          })
+        }
+        this.markImageStrategyUnsupported(cacheKey, strategy)
+      }
     }
 
-    if (streamed && streamed.images.length > 0) {
-      return { images: streamed.images }
+    if (lastError) {
+      throw lastError
+    }
+    return await this.generateImageWithDecodeFallback(input)
+  }
+
+  private getImageStrategyCacheKey(input: {
+    providerType?: string
+    providerConfig?: AiProviderConfig
+    modelId?: string
+  }): string {
+    const normalizedType = String(input.providerType || '').trim().toLowerCase() || 'unknown'
+    const normalizedModel = String(input.modelId || '').trim().toLowerCase() || 'unknown-model'
+    const normalizedBaseURL = String(input.providerConfig?.baseURL || '').trim().toLowerCase() || 'default'
+    return `${normalizedType}|${normalizedBaseURL}|${normalizedModel}`
+  }
+
+  private getImageStrategyOrder(cacheKey: string): ImageExecutionStrategy[] {
+    const state = this.imageStrategyCapabilities.get(cacheKey)
+    const cacheTtlMs = 10 * 60 * 1000
+    if (state && Date.now() - state.updatedAt > cacheTtlMs) {
+      this.imageStrategyCapabilities.delete(cacheKey)
     }
 
-    input.onChunk?.({
-      type: 'status',
-      stage: 'fallback',
-      message: '流式进度不可用，回退到普通生成...'
+    const current = this.imageStrategyCapabilities.get(cacheKey)
+    const order: ImageExecutionStrategy[] = []
+    const pushStrategy = (strategy: ImageExecutionStrategy) => {
+      if (!order.includes(strategy)) {
+        order.push(strategy)
+      }
+    }
+
+    if (current?.preferredStrategy && current.preferredStrategy !== 'sdk-direct') {
+      pushStrategy(current.preferredStrategy)
+    }
+    if (current?.streamSupported !== false) pushStrategy('stream-sse')
+    if (current?.syncSupported !== false) pushStrategy('sync-json')
+    if (current?.asyncSupported !== false) pushStrategy('async-job')
+    pushStrategy('sdk-direct')
+    return order
+  }
+
+  private setImageStrategyCapability(cacheKey: string, patch: Partial<ImageStrategyCapabilityState>): void {
+    const current = this.imageStrategyCapabilities.get(cacheKey) || { updatedAt: Date.now() }
+    this.imageStrategyCapabilities.set(cacheKey, {
+      ...current,
+      ...patch,
+      updatedAt: Date.now()
+    })
+  }
+
+  private markImageStrategySupported(
+    cacheKey: string,
+    strategy: ImageExecutionStrategy,
+    preferredStrategy?: ImageExecutionStrategy
+  ): void {
+    if (strategy === 'stream-sse') {
+      this.setImageStrategyCapability(cacheKey, { streamSupported: true, preferredStrategy: preferredStrategy || strategy })
+      return
+    }
+    if (strategy === 'sync-json') {
+      this.setImageStrategyCapability(cacheKey, { syncSupported: true, preferredStrategy: preferredStrategy || strategy })
+      return
+    }
+    if (strategy === 'async-job') {
+      this.setImageStrategyCapability(cacheKey, { asyncSupported: true, preferredStrategy: preferredStrategy || strategy })
+      return
+    }
+    this.setImageStrategyCapability(cacheKey, { preferredStrategy: preferredStrategy || strategy })
+  }
+
+  private markImageStrategyUnsupported(cacheKey: string, strategy: ImageExecutionStrategy): void {
+    if (strategy === 'stream-sse') {
+      this.setImageStrategyCapability(cacheKey, { streamSupported: false })
+      return
+    }
+    if (strategy === 'sync-json') {
+      this.setImageStrategyCapability(cacheKey, { syncSupported: false })
+      return
+    }
+    if (strategy === 'async-job') {
+      this.setImageStrategyCapability(cacheKey, { asyncSupported: false })
+    }
+  }
+
+  private getImageFallbackMessage(strategy: ImageExecutionStrategy): string | undefined {
+    if (strategy === 'sync-json') {
+      return '流式进度不可用，尝试同步生成协议...'
+    }
+    if (strategy === 'async-job') {
+      return '检测到异步任务协议，切换轮询进度...'
+    }
+    if (strategy === 'sdk-direct') {
+      return '协议兼容路径不可用，回退 SDK 直连...'
+    }
+    return undefined
+  }
+
+  private resolveImageCompatTransport(
+    providerType?: string,
+    providerConfig?: AiProviderConfig
+  ): ImageCompatTransportContext | null {
+    if (!isCompatImageProviderType(providerType)) {
+      return null
+    }
+
+    const baseURL = this.resolveCompatBaseURL(providerConfig?.baseURL, providerType).replace(/\/$/, '')
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+      ...(providerConfig?.headers || {})
+    }
+    if (providerConfig?.apiKey) {
+      headers.Authorization = `Bearer ${providerConfig.apiKey}`
+    }
+
+    return { baseURL, headers }
+  }
+
+  private async generateImageViaCompatJson(input: {
+    modelId?: string
+    prompt: string
+    size?: string
+    n?: number
+    transport: ImageCompatTransportContext | null
+    abortSignal?: AbortSignal
+  }): Promise<{ images: string[] } | ImageCompatTaskDescriptor | null> {
+    if (!input.modelId || !input.prompt || !input.transport) return null
+
+    const payload = await this.requestImageJson({
+      method: 'POST',
+      url: `${input.transport.baseURL}/images/generations`,
+      headers: input.transport.headers,
+      body: {
+        model: input.modelId,
+        prompt: input.prompt,
+        n: Math.max(1, Number(input.n || 1)),
+        size: input.size
+      },
+      abortSignal: input.abortSignal
     })
 
-    return await this.generateImageWithDecodeFallback(input)
+    const extracted = extractImageResponsePayload(payload)
+    if (extracted.images.length > 0) {
+      const images = await this.normalizeRawGeneratedImages(extracted.images, input.abortSignal)
+      return { images }
+    }
+    if (extracted.taskId) {
+      return { taskId: extracted.taskId, taskStatus: extracted.taskStatus }
+    }
+    return null
+  }
+
+  private async startAsyncImageTask(input: {
+    modelId?: string
+    prompt: string
+    size?: string
+    n?: number
+    transport: ImageCompatTransportContext | null
+    abortSignal?: AbortSignal
+  }): Promise<{ images: string[] } | ImageCompatTaskDescriptor | null> {
+    if (!input.modelId || !input.prompt || !input.transport) return null
+
+    const payload = await this.requestImageJson({
+      method: 'POST',
+      url: `${input.transport.baseURL}/async/images/generations`,
+      headers: input.transport.headers,
+      body: {
+        model: input.modelId,
+        prompt: input.prompt,
+        n: Math.max(1, Number(input.n || 1)),
+        size: input.size
+      },
+      abortSignal: input.abortSignal
+    })
+
+    const extracted = extractImageResponsePayload(payload)
+    if (extracted.images.length > 0) {
+      const images = await this.normalizeRawGeneratedImages(extracted.images, input.abortSignal)
+      return { images }
+    }
+    if (extracted.taskId) {
+      return { taskId: extracted.taskId, taskStatus: extracted.taskStatus }
+    }
+    return null
+  }
+
+  private async pollAsyncImageTask(input: {
+    taskId: string
+    taskStatus?: string
+    transport: ImageCompatTransportContext
+    abortSignal?: AbortSignal
+    onChunk?: (chunk: AiImageGenerateProgressChunk) => void
+    n?: number
+  }): Promise<{ images: string[] }> {
+    const intervalMs = 1800
+    const timeoutMs = 180000
+    const startedAt = Date.now()
+    let latestStatus = input.taskStatus
+
+    while (Date.now() - startedAt < timeoutMs) {
+      if (input.abortSignal?.aborted) {
+        throw new Error('Image generation aborted')
+      }
+
+      const elapsedSeconds = Math.max(1, Math.floor((Date.now() - startedAt) / 1000))
+      input.onChunk?.({
+        type: 'status',
+        stage: 'partial',
+        message: `异步任务处理中（${formatAsyncTaskStatus(latestStatus)}）... ${elapsedSeconds}s`
+      })
+
+      const payload = await this.requestImageJson({
+        method: 'GET',
+        url: `${input.transport.baseURL}/async-result/${encodeURIComponent(input.taskId)}`,
+        headers: input.transport.headers,
+        abortSignal: input.abortSignal
+      })
+      const extracted = extractImageResponsePayload(payload)
+      latestStatus = extracted.taskStatus || latestStatus
+
+      if (extracted.images.length > 0) {
+        input.onChunk?.({
+          type: 'status',
+          stage: 'finalizing',
+          message: '异步任务完成，正在整理图片...'
+        })
+        const normalized = await this.normalizeRawGeneratedImages(extracted.images, input.abortSignal)
+        if (normalized.length > 0) {
+          return { images: normalized }
+        }
+      }
+
+      if (isAsyncTaskFailureStatus(latestStatus)) {
+        throw new Error(`Image async task failed: ${latestStatus}`)
+      }
+
+      if (isAsyncTaskSuccessStatus(latestStatus)) {
+        throw new Error('Image async task completed but no images were returned')
+      }
+
+      await sleep(intervalMs)
+    }
+
+    throw new Error(`Image async task timeout after ${Math.floor(timeoutMs / 1000)}s`)
+  }
+
+  private async requestImageJson(input: {
+    method: 'GET' | 'POST'
+    url: string
+    headers: Record<string, string>
+    body?: Record<string, unknown>
+    abortSignal?: AbortSignal
+  }): Promise<any> {
+    const requestHeaders: Record<string, string> = { ...input.headers }
+    if (input.method === 'GET') {
+      delete requestHeaders['Content-Type']
+      delete requestHeaders['content-type']
+    }
+    const response = await fetch(input.url, {
+      method: input.method,
+      headers: requestHeaders,
+      body: input.method === 'POST' ? JSON.stringify(input.body || {}) : undefined,
+      signal: input.abortSignal
+    })
+    const responseText = await response.text().catch(() => '')
+
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status} ${response.statusText}${responseText ? ` - ${truncateText(responseText, 280)}` : ''}`)
+    }
+
+    const payload = parseJsonPayloadFromText(responseText)
+    if (!payload) {
+      throw new Error('Invalid JSON response')
+    }
+    return payload
   }
 
   private async streamOpenAIImageGeneration(input: {
@@ -1941,23 +2352,10 @@ export class AiService {
   }): Promise<{ images: string[] } | null> {
     if (!input.modelId || !input.prompt) return null
 
-    const type = String(input.providerType || '').trim().toLowerCase()
-    if (
-      !['openai', 'openai-response', 'openai-compatible', 'new-api', 'cherryin', 'deepseek', 'openrouter', 'azure-openai', 'azure', 'ollama'].includes(type)
-    ) {
-      return null
-    }
-
-    const baseURL = this.resolveCompatBaseURL(input.providerConfig?.baseURL, input.providerType)
-    const url = `${baseURL.replace(/\/$/, '')}/images/generations`
-
-    const headers: Record<string, string> = {
-      'Content-Type': 'application/json',
-      ...(input.providerConfig?.headers || {})
-    }
-    if (input.providerConfig?.apiKey) {
-      headers.Authorization = `Bearer ${input.providerConfig.apiKey}`
-    }
+    const transport = this.resolveImageCompatTransport(input.providerType, input.providerConfig)
+    if (!transport) return null
+    const url = `${transport.baseURL}/images/generations`
+    const headers = transport.headers
 
     const streamController = new AbortController()
     const relayAbort = () => streamController.abort(input.abortSignal?.reason)
@@ -2990,10 +3388,210 @@ function isHttpUrl(value: string): boolean {
   return /^https?:\/\//i.test(value)
 }
 
+function isCompatImageProviderType(providerType?: string): boolean {
+  const normalized = String(providerType || '').trim().toLowerCase()
+  return ['openai', 'openai-response', 'openai-compatible', 'new-api', 'cherryin', 'deepseek', 'openrouter', 'azure-openai', 'azure', 'ollama'].includes(normalized)
+}
+
 function getImageModelIdFromModelKey(modelKey: any): string | undefined {
   const modelId = (modelKey as any)?.modelId
   if (typeof modelId === 'string' && modelId.trim()) return modelId.trim()
   return undefined
+}
+
+function truncateText(value: string, maxLength = 240): string {
+  if (value.length <= maxLength) return value
+  return `${value.slice(0, maxLength)}...`
+}
+
+function parseJsonPayloadFromText(text: string): any | null {
+  const trimmed = text.trim()
+  if (!trimmed) return null
+
+  try {
+    return JSON.parse(trimmed)
+  } catch {
+    // Continue with tolerant parsing.
+  }
+
+  const ssePayloads: any[] = []
+  for (const line of trimmed.split(/\r?\n/)) {
+    const matched = line.trim().match(/^data:\s*(.+)$/i)
+    if (!matched) continue
+    const data = matched[1]?.trim()
+    if (!data || data === '[DONE]') continue
+    try {
+      ssePayloads.push(JSON.parse(data))
+    } catch {
+      // Ignore invalid chunk and continue parsing remaining lines.
+    }
+  }
+  if (ssePayloads.length > 0) {
+    return ssePayloads[ssePayloads.length - 1]
+  }
+
+  const firstObject = trimmed.indexOf('{')
+  const lastObject = trimmed.lastIndexOf('}')
+  if (firstObject >= 0 && lastObject > firstObject) {
+    const objectSlice = trimmed.slice(firstObject, lastObject + 1)
+    try {
+      return JSON.parse(objectSlice)
+    } catch {
+      // Continue with array slice parsing.
+    }
+  }
+
+  const firstArray = trimmed.indexOf('[')
+  const lastArray = trimmed.lastIndexOf(']')
+  if (firstArray >= 0 && lastArray > firstArray) {
+    const arraySlice = trimmed.slice(firstArray, lastArray + 1)
+    try {
+      return JSON.parse(arraySlice)
+    } catch {
+      return null
+    }
+  }
+
+  return null
+}
+
+function firstNonEmptyString(values: unknown[]): string | undefined {
+  for (const value of values) {
+    if (typeof value !== 'string') continue
+    const text = value.trim()
+    if (!text) continue
+    return text
+  }
+  return undefined
+}
+
+function isImageCompatImagesResult(value: unknown): value is { images: string[] } {
+  return !!value && typeof value === 'object' && Array.isArray((value as { images?: unknown }).images)
+}
+
+function isImageCompatTaskResult(value: unknown): value is ImageCompatTaskDescriptor {
+  return !!value && typeof value === 'object' && typeof (value as { taskId?: unknown }).taskId === 'string'
+}
+
+function normalizeTaskStatus(status: unknown): string | undefined {
+  if (typeof status !== 'string') return undefined
+  const normalized = status.trim().toLowerCase()
+  return normalized || undefined
+}
+
+function extractImageResponsePayload(payload: any): { images: string[]; taskId?: string; taskStatus?: string } {
+  const images: string[] = []
+  const seenImages = new Set<string>()
+
+  const pushMaybeImage = (value: unknown) => {
+    if (typeof value !== 'string') return
+    const text = value.trim()
+    if (!text || seenImages.has(text)) return
+    seenImages.add(text)
+    images.push(text)
+  }
+
+  const collectFromObject = (value: unknown) => {
+    if (!value || typeof value !== 'object') return
+    const record = value as Record<string, unknown>
+    pushMaybeImage(record.b64_json)
+    pushMaybeImage(record.url)
+    pushMaybeImage(record.image)
+    pushMaybeImage(record.result)
+
+    if (Array.isArray(record.images)) {
+      for (const item of record.images) {
+        if (typeof item === 'string') {
+          pushMaybeImage(item)
+        } else {
+          collectFromObject(item)
+        }
+      }
+    }
+  }
+
+  collectFromObject(payload)
+  if (Array.isArray(payload?.data)) {
+    for (const item of payload.data) {
+      collectFromObject(item)
+    }
+  } else {
+    collectFromObject(payload?.data)
+  }
+  if (Array.isArray(payload?.output)) {
+    for (const item of payload.output) {
+      collectFromObject(item)
+    }
+  } else {
+    collectFromObject(payload?.output)
+  }
+  collectFromObject(payload?.item)
+  collectFromObject(payload?.result)
+
+  const taskStatus = normalizeTaskStatus(
+    firstNonEmptyString([
+      payload?.task_status,
+      payload?.taskStatus,
+      payload?.status,
+      payload?.state,
+      payload?.data?.task_status,
+      payload?.data?.taskStatus,
+      payload?.data?.status,
+      payload?.result?.task_status,
+      payload?.result?.taskStatus,
+      payload?.result?.status
+    ])
+  )
+  const taskId = firstNonEmptyString([
+    payload?.task_id,
+    payload?.taskId,
+    payload?.id,
+    payload?.request_id,
+    payload?.requestId,
+    payload?.data?.task_id,
+    payload?.data?.taskId,
+    payload?.data?.id,
+    payload?.result?.task_id,
+    payload?.result?.taskId,
+    payload?.result?.id
+  ])
+
+  const hasExplicitTaskField =
+    typeof payload?.task_id === 'string' ||
+    typeof payload?.taskId === 'string' ||
+    typeof payload?.task_status === 'string' ||
+    typeof payload?.taskStatus === 'string' ||
+    typeof payload?.data?.task_id === 'string' ||
+    typeof payload?.data?.task_status === 'string'
+
+  const hasTaskSignal = !!taskId && (hasExplicitTaskField || !!taskStatus || images.length === 0)
+
+  if (!hasTaskSignal) {
+    return { images }
+  }
+  return { images, taskId, taskStatus }
+}
+
+function formatAsyncTaskStatus(status?: string): string {
+  const normalized = normalizeTaskStatus(status)
+  if (!normalized) return '处理中'
+  if (['queued', 'pending', 'submitted', 'waiting', 'accepted'].includes(normalized)) return '排队中'
+  if (['running', 'processing', 'in_progress', 'executing', 'doing'].includes(normalized)) return '处理中'
+  if (['success', 'succeeded', 'completed', 'done', 'finish', 'finished'].includes(normalized)) return '已完成'
+  if (['failed', 'error', 'cancelled', 'canceled', 'rejected'].includes(normalized)) return '失败'
+  return normalized
+}
+
+function isAsyncTaskSuccessStatus(status?: string): boolean {
+  const normalized = normalizeTaskStatus(status)
+  if (!normalized) return false
+  return ['success', 'succeeded', 'completed', 'done', 'finish', 'finished'].includes(normalized)
+}
+
+function isAsyncTaskFailureStatus(status?: string): boolean {
+  const normalized = normalizeTaskStatus(status)
+  if (!normalized) return false
+  return ['failed', 'error', 'cancelled', 'canceled', 'rejected'].includes(normalized)
 }
 
 function extractOpenAIImageStreamPayload(payload: any): { partials: string[]; finals: string[] } {
