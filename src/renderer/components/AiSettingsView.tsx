@@ -92,6 +92,7 @@ export default function AiSettingsView({ onBack, onOpenMcpSettings, onOpenSkills
   const [showAddProviderModal, setShowAddProviderModal] = useState(false)
   const [showAddModelModal, setShowAddModelModal] = useState(false)
   const [showApiKeyManagerModal, setShowApiKeyManagerModal] = useState(false)
+  const [showDefaultParamsModal, setShowDefaultParamsModal] = useState(false)
   const [newApiKeyInput, setNewApiKeyInput] = useState('')
   const [apiKeyTestModel, setApiKeyTestModel] = useState('')
   const [testingApiKeyIndex, setTestingApiKeyIndex] = useState<number | null>(null)
@@ -815,12 +816,12 @@ export default function AiSettingsView({ onBack, onOpenMcpSettings, onOpenSkills
         }))
       const mergedModels: AiModel[] = []
       const seen = new Set<string>()
-      ;[...normalizedFetchedModels, ...localDefaultModels].forEach((model) => {
-        const key = modelKey(model)
-        if (seen.has(key)) return
-        seen.add(key)
-        mergedModels.push(model)
-      })
+        ;[...normalizedFetchedModels, ...localDefaultModels].forEach((model) => {
+          const key = modelKey(model)
+          if (seen.has(key)) return
+          seen.add(key)
+          mergedModels.push(model)
+        })
       const existing = new Set((aiDraft?.models || []).map((model) => modelKey(model)))
       const selectedIds = mergedModels
         .filter((model) => existing.has(modelKey(model)))
@@ -917,6 +918,9 @@ export default function AiSettingsView({ onBack, onOpenMcpSettings, onOpenSkills
           <div className="text-lg font-semibold text-slate-900 dark:text-slate-100">AI 配置中心</div>
         </div>
         <div className="flex items-center gap-2">
+          <button className={`${pillClass} no-drag`} onClick={() => setShowDefaultParamsModal(true)} title="配置全局默认参数">
+            默认参数
+          </button>
           {onOpenSkillsSettings && (
             <button className={`${pillClass} no-drag`} onClick={onOpenSkillsSettings} title="进入 Skills 创建、安装与预览管理">
               Skills 管理
@@ -952,206 +956,6 @@ export default function AiSettingsView({ onBack, onOpenMcpSettings, onOpenSkills
               <div className="whitespace-pre-wrap font-mono text-xs leading-relaxed">{aiReasoning}</div>
             </div>
           )}
-
-          <details className={`${cardClass} space-y-4`} open={false}>
-            <summary className="flex cursor-pointer items-center justify-between text-sm font-medium text-slate-900 dark:text-white">
-              <span>默认参数</span>
-              <span className="text-xs text-slate-500 dark:text-slate-400">点击展开</span>
-            </summary>
-            <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
-              <div className="text-xs text-slate-500 dark:text-slate-400">空值表示继承模型或供应商参数</div>
-              <span className={tipWrapClass}>
-                <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <circle cx="12" cy="12" r="9" />
-                  <path d="M12 8h.01M11 12h1v4h-1" strokeLinecap="round" strokeLinejoin="round" />
-                </svg>
-                <span className={tipBubbleClass}>token 为估算值，仅供参考</span>
-              </span>
-            </div>
-
-            <div className="mt-3 space-y-4">
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-[180px_1fr_120px] items-center">
-                <div className="flex items-center gap-2">
-                  <span className="text-xs text-slate-600 dark:text-slate-300">上下文条数</span>
-                  <span className={tipWrapClass}>
-                    <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                      <circle cx="12" cy="12" r="9" />
-                      <path d="M12 8h.01M11 12h1v4h-1" strokeLinecap="round" strokeLinejoin="round" />
-                    </svg>
-                    <span className={tipBubbleClass}>保留最近的消息条数，100 表示不限，普通聊天建议 5–10</span>
-                  </span>
-                </div>
-                <SliderWithTicks
-                  value={aiDraft?.defaultParams?.contextWindow ?? DEFAULT_CONTEXT_WINDOW}
-                  min={0}
-                  max={100}
-                  step={1}
-                  ticks={[
-                    { value: 0 },
-                    { value: 5 },
-                    { value: 10 },
-                    { value: 20 },
-                    { value: 50 },
-                    { value: 100, label: '∞' }
-                  ]}
-                  snapToTicks
-                  onChange={(next) => handleUpdateDefaultParams({ contextWindow: next })}
-                />
-                <input
-                  className={miniInputClass}
-                  type="number"
-                  min="0"
-                  step="1"
-                  value={formatNumber(aiDraft?.defaultParams?.contextWindow)}
-                  onChange={(e) => handleUpdateDefaultParams({ contextWindow: parseOptionalNumber(e.target.value) })}
-                />
-              </div>
-
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                <div className="rounded-2xl border border-slate-200/80 bg-white p-3 dark:border-slate-800/80 dark:bg-slate-950">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs text-slate-600 dark:text-slate-300">温度</span>
-                    <Switch
-                      checked={aiDraft?.defaultParams?.temperatureEnabled ?? false}
-                      onChange={() => handleToggleDefaultParam('temperatureEnabled')}
-                    />
-                  </div>
-                  <div className="mt-2 flex flex-col gap-2">
-                    <SliderWithTicks
-                      value={aiDraft?.defaultParams?.temperature ?? DEFAULT_TEMPERATURE}
-                      min={0}
-                      max={2}
-                      step={0.05}
-                      ticks={[
-                        { value: 0 },
-                        { value: 0.5 },
-                        { value: 1 },
-                        { value: 1.5 },
-                        { value: 2 }
-                      ]}
-                      snapToTicks
-                      disabled={!(aiDraft?.defaultParams?.temperatureEnabled ?? false)}
-                      onChange={(next) => handleUpdateDefaultParams({ temperature: next })}
-                    />
-                    <input
-                      className={miniInputClass}
-                      type="number"
-                      min="0"
-                      max="2"
-                      step="0.05"
-                      value={formatNumber(aiDraft?.defaultParams?.temperature)}
-                      onChange={(e) => handleUpdateDefaultParams({ temperature: parseOptionalNumber(e.target.value) })}
-                      disabled={!(aiDraft?.defaultParams?.temperatureEnabled ?? false)}
-                    />
-                  </div>
-                </div>
-
-                <div className="rounded-2xl border border-slate-200/80 bg-white p-3 dark:border-slate-800/80 dark:bg-slate-950">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs text-slate-600 dark:text-slate-300">Top-P</span>
-                    <Switch
-                      checked={aiDraft?.defaultParams?.topPEnabled ?? false}
-                      onChange={() => handleToggleDefaultParam('topPEnabled')}
-                    />
-                  </div>
-                  <div className="mt-2 flex flex-col gap-2">
-                    <SliderWithTicks
-                      value={aiDraft?.defaultParams?.topP ?? DEFAULT_TOP_P}
-                      min={0}
-                      max={1}
-                      step={0.05}
-                      ticks={[
-                        { value: 0 },
-                        { value: 0.25 },
-                        { value: 0.5 },
-                        { value: 0.75 },
-                        { value: 1 }
-                      ]}
-                      snapToTicks
-                      disabled={!(aiDraft?.defaultParams?.topPEnabled ?? false)}
-                      onChange={(next) => handleUpdateDefaultParams({ topP: next })}
-                    />
-                    <input
-                      className={miniInputClass}
-                      type="number"
-                      min="0"
-                      max="1"
-                      step="0.05"
-                      value={formatNumber(aiDraft?.defaultParams?.topP)}
-                      onChange={(e) => handleUpdateDefaultParams({ topP: parseOptionalNumber(e.target.value) })}
-                      disabled={!(aiDraft?.defaultParams?.topPEnabled ?? false)}
-                    />
-                  </div>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-[180px_1fr_120px] items-center">
-                <div className="flex items-center gap-2">
-                  <span className="text-xs text-slate-600 dark:text-slate-300">最大输出 tokens</span>
-                  <span className={tipWrapClass}>
-                    <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                      <circle cx="12" cy="12" r="9" />
-                      <path d="M12 8h.01M11 12h1v4h-1" strokeLinecap="round" strokeLinejoin="round" />
-                    </svg>
-                    <span className={tipBubbleClass}>单次最大输出 token，过大可能报错。关闭表示不限制。</span>
-                  </span>
-                </div>
-                <div className="flex items-center gap-3">
-                  <Switch
-                    checked={aiDraft?.defaultParams?.maxOutputTokensEnabled ?? false}
-                    onChange={handleToggleDefaultMaxTokens}
-                  />
-                  <input
-                    className={miniInputClass}
-                    type="number"
-                    min="1"
-                    step="1"
-                    value={formatNumber(aiDraft?.defaultParams?.maxOutputTokens)}
-                    onChange={(e) => handleUpdateDefaultParams({ maxOutputTokens: parseOptionalNumber(e.target.value) })}
-                    disabled={!(aiDraft?.defaultParams?.maxOutputTokensEnabled ?? false)}
-                  />
-                </div>
-                <div />
-              </div>
-            </div>
-
-            <details className="rounded-2xl border border-slate-200/80 bg-slate-50 px-4 py-3 text-sm text-slate-700 dark:border-slate-800/80 dark:bg-slate-900/50 dark:text-slate-200">
-              <summary className="cursor-pointer text-sm font-medium text-slate-700 dark:text-slate-200">高级参数</summary>
-              <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-3">
-                <input
-                  className={inputClass}
-                  placeholder="Top-K"
-                  value={formatNumber(aiDraft?.defaultParams?.topK)}
-                  onChange={(e) => handleUpdateDefaultParams({ topK: parseOptionalNumber(e.target.value) })}
-                />
-                <input
-                  className={inputClass}
-                  placeholder="Presence Penalty (-2~2)"
-                  value={formatNumber(aiDraft?.defaultParams?.presencePenalty)}
-                  onChange={(e) => handleUpdateDefaultParams({ presencePenalty: parseOptionalNumber(e.target.value) })}
-                />
-                <input
-                  className={inputClass}
-                  placeholder="Frequency Penalty (-2~2)"
-                  value={formatNumber(aiDraft?.defaultParams?.frequencyPenalty)}
-                  onChange={(e) => handleUpdateDefaultParams({ frequencyPenalty: parseOptionalNumber(e.target.value) })}
-                />
-                <input
-                  className={inputClass}
-                  placeholder="Seed"
-                  value={formatNumber(aiDraft?.defaultParams?.seed)}
-                  onChange={(e) => handleUpdateDefaultParams({ seed: parseOptionalNumber(e.target.value) })}
-                />
-                <textarea
-                  className={`${inputClass} min-h-[84px] sm:col-span-2`}
-                  placeholder="Stop sequences (换行或逗号分隔)"
-                  value={formatStopSequences(aiDraft?.defaultParams?.stopSequences)}
-                  onChange={(e) => handleUpdateDefaultParams({ stopSequences: parseStopSequences(e.target.value) })}
-                />
-              </div>
-            </details>
-
-          </details>
 
           <div className={`${cardClass} space-y-4`}>
             <div className="flex items-center justify-between gap-2">
@@ -2272,6 +2076,230 @@ export default function AiSettingsView({ onBack, onOpenMcpSettings, onOpenSkills
             <div className="mt-5 flex items-center justify-end gap-2">
               <button className={pillClass} onClick={() => setShowAddModelModal(false)}>取消</button>
               <button className={primaryPillClass} onClick={handleAddModel}>添加模型</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showDefaultParamsModal && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
+          onClick={() => setShowDefaultParamsModal(false)}
+        >
+          <div
+            className="mx-4 w-full max-w-2xl max-h-[85vh] overflow-y-auto rounded-[32px] border border-slate-200/80 bg-white p-6 shadow-2xl dark:border-slate-800/80 dark:bg-slate-900 no-drag"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="mb-4 flex items-start justify-between">
+              <div>
+                <div className="text-lg font-semibold text-slate-900 dark:text-white">默认参数</div>
+                <div className="text-xs text-slate-500 dark:text-slate-400">配置全局默认的 AI 模型参数</div>
+              </div>
+              <button
+                onClick={() => setShowDefaultParamsModal(false)}
+                className="rounded-full p-2 text-slate-400 hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-slate-800 dark:hover:text-slate-300 no-drag"
+              >
+                <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
+            <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
+              <div className="text-xs text-slate-500 dark:text-slate-400">空值表示继承模型或供应商参数</div>
+              <span className={tipWrapClass}>
+                <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <circle cx="12" cy="12" r="9" />
+                  <path d="M12 8h.01M11 12h1v4h-1" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+                <span className={tipBubbleClass}>token 为估算值，仅供参考</span>
+              </span>
+            </div>
+
+            <div className="space-y-4">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-[180px_1fr_120px] items-center">
+                <div className="flex items-center gap-2">
+                  <span className="text-xs text-slate-600 dark:text-slate-300">上下文条数</span>
+                  <span className={tipWrapClass}>
+                    <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <circle cx="12" cy="12" r="9" />
+                      <path d="M12 8h.01M11 12h1v4h-1" strokeLinecap="round" strokeLinejoin="round" />
+                    </svg>
+                    <span className={tipBubbleClass}>保留最近的消息条数，100 表示不限，普通聊天建议 5–10</span>
+                  </span>
+                </div>
+                <SliderWithTicks
+                  value={aiDraft?.defaultParams?.contextWindow ?? DEFAULT_CONTEXT_WINDOW}
+                  min={0}
+                  max={100}
+                  step={1}
+                  ticks={[
+                    { value: 0 },
+                    { value: 5 },
+                    { value: 10 },
+                    { value: 20 },
+                    { value: 50 },
+                    { value: 100, label: '∞' }
+                  ]}
+                  snapToTicks
+                  onChange={(next) => handleUpdateDefaultParams({ contextWindow: next })}
+                />
+                <input
+                  className={miniInputClass}
+                  type="number"
+                  min="0"
+                  step="1"
+                  value={formatNumber(aiDraft?.defaultParams?.contextWindow)}
+                  onChange={(e) => handleUpdateDefaultParams({ contextWindow: parseOptionalNumber(e.target.value) })}
+                />
+              </div>
+
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <div className="rounded-2xl border border-slate-200/80 bg-white p-3 dark:border-slate-800/80 dark:bg-slate-950">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs text-slate-600 dark:text-slate-300">温度</span>
+                    <Switch
+                      checked={aiDraft?.defaultParams?.temperatureEnabled ?? false}
+                      onChange={() => handleToggleDefaultParam('temperatureEnabled')}
+                    />
+                  </div>
+                  <div className="mt-2 flex flex-col gap-2">
+                    <SliderWithTicks
+                      value={aiDraft?.defaultParams?.temperature ?? DEFAULT_TEMPERATURE}
+                      min={0}
+                      max={2}
+                      step={0.05}
+                      ticks={[
+                        { value: 0 },
+                        { value: 0.5 },
+                        { value: 1 },
+                        { value: 1.5 },
+                        { value: 2 }
+                      ]}
+                      snapToTicks
+                      disabled={!(aiDraft?.defaultParams?.temperatureEnabled ?? false)}
+                      onChange={(next) => handleUpdateDefaultParams({ temperature: next })}
+                    />
+                    <input
+                      className={miniInputClass}
+                      type="number"
+                      min="0"
+                      max="2"
+                      step="0.05"
+                      value={formatNumber(aiDraft?.defaultParams?.temperature)}
+                      onChange={(e) => handleUpdateDefaultParams({ temperature: parseOptionalNumber(e.target.value) })}
+                      disabled={!(aiDraft?.defaultParams?.temperatureEnabled ?? false)}
+                    />
+                  </div>
+                </div>
+
+                <div className="rounded-2xl border border-slate-200/80 bg-white p-3 dark:border-slate-800/80 dark:bg-slate-950">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs text-slate-600 dark:text-slate-300">Top-P</span>
+                    <Switch
+                      checked={aiDraft?.defaultParams?.topPEnabled ?? false}
+                      onChange={() => handleToggleDefaultParam('topPEnabled')}
+                    />
+                  </div>
+                  <div className="mt-2 flex flex-col gap-2">
+                    <SliderWithTicks
+                      value={aiDraft?.defaultParams?.topP ?? DEFAULT_TOP_P}
+                      min={0}
+                      max={1}
+                      step={0.05}
+                      ticks={[
+                        { value: 0 },
+                        { value: 0.25 },
+                        { value: 0.5 },
+                        { value: 0.75 },
+                        { value: 1 }
+                      ]}
+                      snapToTicks
+                      disabled={!(aiDraft?.defaultParams?.topPEnabled ?? false)}
+                      onChange={(next) => handleUpdateDefaultParams({ topP: next })}
+                    />
+                    <input
+                      className={miniInputClass}
+                      type="number"
+                      min="0"
+                      max="1"
+                      step="0.05"
+                      value={formatNumber(aiDraft?.defaultParams?.topP)}
+                      onChange={(e) => handleUpdateDefaultParams({ topP: parseOptionalNumber(e.target.value) })}
+                      disabled={!(aiDraft?.defaultParams?.topPEnabled ?? false)}
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-[180px_1fr_120px] items-center">
+                <div className="flex items-center gap-2">
+                  <span className="text-xs text-slate-600 dark:text-slate-300">最大输出 tokens</span>
+                  <span className={tipWrapClass}>
+                    <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <circle cx="12" cy="12" r="9" />
+                      <path d="M12 8h.01M11 12h1v4h-1" strokeLinecap="round" strokeLinejoin="round" />
+                    </svg>
+                    <span className={tipBubbleClass}>单次最大输出 token，过大可能报错。关闭表示不限制。</span>
+                  </span>
+                </div>
+                <div className="flex items-center gap-3">
+                  <Switch
+                    checked={aiDraft?.defaultParams?.maxOutputTokensEnabled ?? false}
+                    onChange={handleToggleDefaultMaxTokens}
+                  />
+                  <input
+                    className={miniInputClass}
+                    type="number"
+                    min="1"
+                    step="1"
+                    value={formatNumber(aiDraft?.defaultParams?.maxOutputTokens)}
+                    onChange={(e) => handleUpdateDefaultParams({ maxOutputTokens: parseOptionalNumber(e.target.value) })}
+                    disabled={!(aiDraft?.defaultParams?.maxOutputTokensEnabled ?? false)}
+                  />
+                </div>
+                <div />
+              </div>
+            </div>
+
+            <details className="mt-4 rounded-2xl border border-slate-200/80 bg-slate-50 px-4 py-3 text-sm text-slate-700 dark:border-slate-800/80 dark:bg-slate-900/50 dark:text-slate-200">
+              <summary className="cursor-pointer text-sm font-medium text-slate-700 dark:text-slate-200">高级参数</summary>
+              <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-3">
+                <input
+                  className={inputClass}
+                  placeholder="Top-K"
+                  value={formatNumber(aiDraft?.defaultParams?.topK)}
+                  onChange={(e) => handleUpdateDefaultParams({ topK: parseOptionalNumber(e.target.value) })}
+                />
+                <input
+                  className={inputClass}
+                  placeholder="Presence Penalty (-2~2)"
+                  value={formatNumber(aiDraft?.defaultParams?.presencePenalty)}
+                  onChange={(e) => handleUpdateDefaultParams({ presencePenalty: parseOptionalNumber(e.target.value) })}
+                />
+                <input
+                  className={inputClass}
+                  placeholder="Frequency Penalty (-2~2)"
+                  value={formatNumber(aiDraft?.defaultParams?.frequencyPenalty)}
+                  onChange={(e) => handleUpdateDefaultParams({ frequencyPenalty: parseOptionalNumber(e.target.value) })}
+                />
+                <input
+                  className={inputClass}
+                  placeholder="Seed"
+                  value={formatNumber(aiDraft?.defaultParams?.seed)}
+                  onChange={(e) => handleUpdateDefaultParams({ seed: parseOptionalNumber(e.target.value) })}
+                />
+                <textarea
+                  className={`${inputClass} min-h-[84px] sm:col-span-2`}
+                  placeholder="Stop sequences (换行或逗号分隔)"
+                  value={formatStopSequences(aiDraft?.defaultParams?.stopSequences)}
+                  onChange={(e) => handleUpdateDefaultParams({ stopSequences: parseStopSequences(e.target.value) })}
+                />
+              </div>
+            </details>
+
+            <div className="mt-5 flex items-center justify-end gap-2">
+              <button className={pillClass} onClick={() => setShowDefaultParamsModal(false)}>关闭</button>
             </div>
           </div>
         </div>
