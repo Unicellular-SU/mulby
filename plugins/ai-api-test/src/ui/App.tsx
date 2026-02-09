@@ -147,6 +147,7 @@ export default function App() {
   const [isMcpCalling, setIsMcpCalling] = useState(false)
   const mcpCallIdRef = useRef<string | null>(null)
   const mcpCallSessionRef = useRef<string>('')
+  const mcpReasoningOpenedRef = useRef(false)
 
   const [skillsList, setSkillsList] = useState<SkillRecord[]>([])
   const [skillsMode, setSkillsMode] = useState<SkillMode>('manual')
@@ -158,6 +159,7 @@ export default function App() {
   const [skillsCallResult, setSkillsCallResult] = useState('')
   const [skillsCapabilityDebugJson, setSkillsCapabilityDebugJson] = useState('')
   const [isSkillsCalling, setIsSkillsCalling] = useState(false)
+  const skillsReasoningOpenedRef = useRef(false)
   const [policyDebugEntries, setPolicyDebugEntries] = useState<Array<{
     at: string
     scene: string
@@ -761,6 +763,7 @@ export default function App() {
     setMcpCallResult('')
     setIsMcpCalling(true)
     mcpCallIdRef.current = null
+    mcpReasoningOpenedRef.current = false
     const currentSession = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
     mcpCallSessionRef.current = currentSession
     console.info('[ai-api-test][mcp] call start', {
@@ -821,8 +824,17 @@ export default function App() {
             append(`\n[错误] ${chunk?.error?.message || '流式错误'}\n`)
             return
           }
-          if (chunk?.reasoning_content) {
-            append(`\n[思考] ${chunk.reasoning_content}`)
+          // 处理思考内容：只在开始时显示前缀
+          const isReasoningChunk = chunk?.chunkType === 'reasoning' || !!chunk?.reasoning_content
+          if (isReasoningChunk) {
+            if (!mcpReasoningOpenedRef.current) {
+              append('\n[思考] ')
+              mcpReasoningOpenedRef.current = true
+            }
+            append(chunk.reasoning_content)
+          } else if (mcpReasoningOpenedRef.current && chunk?.chunkType !== 'reasoning') {
+            append('\n')
+            mcpReasoningOpenedRef.current = false
           }
           if (chunk?.chunkType === 'tool-call' || chunk?.tool_call?.name) {
             const toolName = String(chunk?.tool_call?.name || '[unknown-tool]')
@@ -980,6 +992,7 @@ export default function App() {
     setSkillsCapabilityDebugJson('')
     setIsSkillsCalling(true)
     skillsRequestIdRef.current = null
+    skillsReasoningOpenedRef.current = false
     const append = (text: string) => {
       if (!text) return
       setSkillsCallOutput((prev) => prev + text)
@@ -1025,8 +1038,17 @@ export default function App() {
             append(`\n[错误] ${chunk?.error?.message || '流式错误'}\n`)
             return
           }
-          if (chunk?.reasoning_content) {
-            append(`\n[思考] ${chunk.reasoning_content}`)
+          // 处理思考内容：只在开始时显示前缀
+          const isReasoningChunk = chunk?.chunkType === 'reasoning' || !!chunk?.reasoning_content
+          if (isReasoningChunk) {
+            if (!skillsReasoningOpenedRef.current) {
+              append('\n[思考] ')
+              skillsReasoningOpenedRef.current = true
+            }
+            append(chunk.reasoning_content)
+          } else if (skillsReasoningOpenedRef.current && chunk?.chunkType !== 'reasoning') {
+            append('\n')
+            skillsReasoningOpenedRef.current = false
           }
           const text = extractText(chunk?.content)
           if (text) append(text)

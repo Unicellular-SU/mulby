@@ -203,6 +203,7 @@ function timelineStatusText(status: CreateTimelineStatus): string {
 
 export default function AiSkillsSettingsView({ onBack }: AiSkillsSettingsViewProps) {
   const [skills, setSkills] = useState<AiSkillRecord[]>([])
+  const [skillSearchQuery, setSkillSearchQuery] = useState('')
   const [selectedSkillId, setSelectedSkillId] = useState<string | null>(null)
   const [selectedSkillContent, setSelectedSkillContent] = useState('')
   const [createModels, setCreateModels] = useState<AiSkillCreateModelOption[]>([])
@@ -231,6 +232,16 @@ export default function AiSkillsSettingsView({ onBack }: AiSkillsSettingsViewPro
     () => (selectedSkillId ? skills.find((item) => item.id === selectedSkillId) || null : null),
     [selectedSkillId, skills]
   )
+  const filteredSkills = useMemo(() => {
+    const keyword = skillSearchQuery.trim().toLowerCase()
+    if (!keyword) return skills
+    return skills.filter((skill) => {
+      const name = String(skill.descriptor.name || '').toLowerCase()
+      const id = String(skill.id || '').toLowerCase()
+      const description = String(skill.descriptor.description || '').toLowerCase()
+      return name.includes(keyword) || id.includes(keyword) || description.includes(keyword)
+    })
+  }, [skillSearchQuery, skills])
   const parsedSkillMarkdown = useMemo(() => parseSkillMarkdown(selectedSkillContent), [selectedSkillContent])
   const focusedTimelineItem = useMemo(() => {
     const errored = createTimeline.find((item) => item.status === 'error')
@@ -304,6 +315,13 @@ export default function AiSkillsSettingsView({ onBack }: AiSkillsSettingsViewPro
 
     void loadSkillContent()
   }, [selectedSkill])
+
+  useEffect(() => {
+    if (filteredSkills.length === 0) return
+    if (!selectedSkillId || !filteredSkills.some((item) => item.id === selectedSkillId)) {
+      setSelectedSkillId(filteredSkills[0].id)
+    }
+  }, [filteredSkills, selectedSkillId])
 
   useEffect(() => {
     if (!error) return
@@ -569,6 +587,34 @@ export default function AiSkillsSettingsView({ onBack }: AiSkillsSettingsViewPro
     }
   }
 
+  const handleOpenSkillFolder = async () => {
+    if (!selectedSkill) return
+    try {
+      const shell = window.intools?.shell
+      if (!shell) {
+        setError('系统 shell API 未就绪')
+        return
+      }
+      if (selectedSkill.installPath && shell.openFolder) {
+        await shell.openFolder(selectedSkill.installPath)
+        return
+      }
+      if (selectedSkill.skillMdPath && shell.showItemInFolder) {
+        await shell.showItemInFolder(selectedSkill.skillMdPath)
+        return
+      }
+      const fallbackPath = selectedSkill.installPath || selectedSkill.skillMdPath
+      if (fallbackPath && shell.openPath) {
+        await shell.openPath(fallbackPath)
+        return
+      }
+      setError('未找到可打开的 Skill 目录路径')
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err)
+      setError(`打开目录失败：${message}`)
+    }
+  }
+
   return (
     <div className="flex h-full flex-col bg-white/50 dark:bg-slate-900/30">
       <div className="flex items-center gap-3 border-b border-slate-200/70 bg-white px-6 py-4 dark:border-slate-800/80 dark:bg-slate-900">
@@ -608,12 +654,36 @@ export default function AiSkillsSettingsView({ onBack }: AiSkillsSettingsViewPro
       )}
 
       <div className="flex min-h-0 flex-1 no-drag">
-        <aside className="w-[340px] shrink-0 border-r border-slate-200/70 bg-white p-4 dark:border-slate-800/80 dark:bg-slate-900">
+        <aside className="flex min-h-0 w-[340px] shrink-0 flex-col border-r border-slate-200/70 bg-white p-4 dark:border-slate-800/80 dark:bg-slate-900">
           <div className="mb-3 flex items-center justify-between">
             <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">已安装 Skills</h3>
-            <span className="text-xs text-slate-500 dark:text-slate-400">{skills.length}</span>
+            <span className="text-xs text-slate-500 dark:text-slate-400">
+              {skillSearchQuery.trim() ? `${filteredSkills.length}/${skills.length}` : skills.length}
+            </span>
           </div>
-          <div className="relative h-[calc(100%-28px)] overflow-y-auto space-y-2">
+          <div className="relative mb-3">
+            <input
+              type="text"
+              value={skillSearchQuery}
+              onChange={(event) => setSkillSearchQuery(event.target.value)}
+              placeholder="搜索名称 / ID / 描述"
+              className={`${inputClass} py-1.5 pr-9 text-xs`}
+            />
+            {skillSearchQuery && (
+              <button
+                type="button"
+                aria-label="清空搜索"
+                title="清空搜索"
+                className="no-drag absolute right-2 top-1/2 inline-flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded-full text-slate-400 transition hover:bg-slate-100 hover:text-slate-600 dark:text-slate-500 dark:hover:bg-slate-800 dark:hover:text-slate-300"
+                onClick={() => setSkillSearchQuery('')}
+              >
+                <svg className="h-3.5 w-3.5" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.8">
+                  <path d="M6 6l8 8M14 6l-8 8" strokeLinecap="round" />
+                </svg>
+              </button>
+            )}
+          </div>
+          <div className="relative min-h-0 flex-1 overflow-y-auto space-y-2">
             {loading && (
               <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center">
                 <div className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs text-slate-500 shadow-sm dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300">
@@ -626,7 +696,12 @@ export default function AiSkillsSettingsView({ onBack }: AiSkillsSettingsViewPro
                 暂无 Skills。请点击右上角“AI 创建”或“ZIP 安装”。
               </div>
             )}
-            {skills.map((skill) => {
+            {!loading && skills.length > 0 && filteredSkills.length === 0 && (
+              <div className="rounded-2xl border border-dashed border-slate-200 p-4 text-xs text-slate-500 dark:border-slate-700 dark:text-slate-400">
+                没有匹配的 Skill，请调整搜索关键词。
+              </div>
+            )}
+            {filteredSkills.map((skill) => {
               const active = selectedSkillId === skill.id
               return (
                 <button
@@ -686,6 +761,13 @@ export default function AiSkillsSettingsView({ onBack }: AiSkillsSettingsViewPro
                   )}
                 </div>
                 <div className="flex items-center gap-2">
+                  <button
+                    className={`${actionButtonClass} no-drag`}
+                    onClick={handleOpenSkillFolder}
+                    disabled={!selectedSkill || (!selectedSkill.installPath && !selectedSkill.skillMdPath) || busy}
+                  >
+                    打开目录
+                  </button>
                   <button className={`${actionButtonClass} no-drag`} onClick={handleToggleEnabled} disabled={!selectedSkill || busy}>
                     {selectedSkill?.enabled ? '停用' : '启用'}
                   </button>
