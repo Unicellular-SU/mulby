@@ -538,6 +538,111 @@ export function AddModelModal({
   )
 }
 
+export interface GlobalDefaultModelOption {
+  id: string
+  label: string
+  providerLabel: string
+}
+
+interface GlobalDefaultModelModalProps {
+  show: boolean
+  options: GlobalDefaultModelOption[]
+  selectedModelId: string
+  currentModelId?: string
+  onClose: () => void
+  onSelectedModelIdChange: (modelId: string) => void
+  onConfirm: () => void
+  onClear: () => void
+}
+
+export function GlobalDefaultModelModal({
+  show,
+  options,
+  selectedModelId,
+  currentModelId,
+  onClose,
+  onSelectedModelIdChange,
+  onConfirm,
+  onClear
+}: GlobalDefaultModelModalProps) {
+  if (!show) return null
+  const hasCurrent = !!currentModelId
+  const currentAvailable = hasCurrent && options.some((item) => item.id === currentModelId)
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={onClose}>
+      <div
+        className="mx-4 w-full max-w-2xl rounded-[32px] border border-slate-200/80 bg-white p-6 shadow-2xl dark:border-slate-800/80 dark:bg-slate-900 no-drag"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="mb-4 flex items-start justify-between">
+          <div>
+            <div className="text-lg font-semibold text-slate-900 dark:text-white">全局默认模型</div>
+            <div className="text-xs text-slate-500 dark:text-slate-400">
+              当插件或主程序调用 AI 且未指定 model 时，将自动使用该模型。
+            </div>
+          </div>
+          <button
+            onClick={onClose}
+            className="rounded-full p-2 text-slate-400 hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-slate-800 dark:hover:text-slate-300 no-drag"
+          >
+            <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+
+        {hasCurrent && (
+          <div className={`mb-3 rounded-2xl px-3 py-2 text-xs ${
+            currentAvailable
+              ? 'border border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900/60 dark:bg-emerald-900/20 dark:text-emerald-200'
+              : 'border border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-900/60 dark:bg-amber-900/20 dark:text-amber-200'
+          }`}
+          >
+            当前全局默认模型：{currentModelId}
+            {!currentAvailable ? '（当前不可用，请重新选择）' : ''}
+          </div>
+        )}
+
+        {options.length === 0 ? (
+          <div className="rounded-2xl border border-dashed border-slate-200/80 bg-slate-50 px-4 py-6 text-center text-sm text-slate-500 dark:border-slate-800/80 dark:bg-slate-900/40 dark:text-slate-400">
+            当前没有可选模型。请先启用 Provider 并添加模型。
+          </div>
+        ) : (
+          <div className="space-y-2">
+            <div className="text-xs text-slate-500 dark:text-slate-400">
+              仅展示已启用 Provider 下的模型（共 {options.length} 个）。
+            </div>
+            <UnifiedSelect
+              value={selectedModelId}
+              onChange={(e) => onSelectedModelIdChange(e.target.value)}
+            >
+              <option value="">请选择模型</option>
+              {options.map((item) => (
+                <option key={`${item.providerLabel}:${item.id}`} value={item.id}>
+                  {item.label} ({item.providerLabel})
+                </option>
+              ))}
+            </UnifiedSelect>
+          </div>
+        )}
+
+        <div className="mt-5 flex items-center justify-end gap-2">
+          <button className={classNames.pillClass} onClick={onClose}>取消</button>
+          <button className={classNames.pillClass} onClick={onClear}>清空默认</button>
+          <button
+            className={`${classNames.primaryPillClass} disabled:cursor-not-allowed disabled:opacity-60`}
+            onClick={onConfirm}
+            disabled={!selectedModelId || options.length === 0}
+          >
+            确认
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 interface DefaultParamsModalProps {
   show: boolean
   aiDraft: AiSettings | null

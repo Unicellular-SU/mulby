@@ -14,7 +14,9 @@ import {
   AddProviderModal,
   ApiKeyManagerModal,
   DefaultParamsModal,
-  FetchedModelsModal
+  FetchedModelsModal,
+  GlobalDefaultModelModal,
+  type GlobalDefaultModelOption
 } from './ai-settings/AiSettingsModals'
 import { ProviderSettingsSection } from './ai-settings/ProviderSettingsSection'
 import {
@@ -52,6 +54,8 @@ export default function AiSettingsView({ onBack, onOpenMcpSettings, onOpenSkills
   const [showAddModelModal, setShowAddModelModal] = useState(false)
   const [showApiKeyManagerModal, setShowApiKeyManagerModal] = useState(false)
   const [showDefaultParamsModal, setShowDefaultParamsModal] = useState(false)
+  const [showGlobalDefaultModelModal, setShowGlobalDefaultModelModal] = useState(false)
+  const [globalDefaultModelSelection, setGlobalDefaultModelSelection] = useState('')
   const [newApiKeyInput, setNewApiKeyInput] = useState('')
   const [apiKeyTestModel, setApiKeyTestModel] = useState('')
   const [testingApiKeyIndex, setTestingApiKeyIndex] = useState<number | null>(null)
@@ -174,6 +178,49 @@ export default function AiSettingsView({ onBack, onOpenMcpSettings, onOpenSkills
     }
     return Array.from(modelMap.values())
   }, [filteredModels, selectedProvider])
+  const globalDefaultModelOptions = useMemo<GlobalDefaultModelOption[]>(() => {
+    if (!aiDraft) return []
+    const enabledProviders = (aiDraft.providers || []).filter((provider) => provider.enabled !== false)
+    if (enabledProviders.length === 0) return []
+    const enabledProviderMap = new Map(
+      enabledProviders.map((provider) => [String(provider.id), provider] as const)
+    )
+    const options: GlobalDefaultModelOption[] = []
+    const seenModelIds = new Set<string>()
+
+    ;(aiDraft.models || []).forEach((model) => {
+      if (!model.id) return
+      const providerId = resolveProviderIdFromModel(model)
+      if (!providerId) return
+      const provider = enabledProviderMap.get(String(providerId))
+      if (!provider) return
+      if (seenModelIds.has(model.id)) return
+      seenModelIds.add(model.id)
+      options.push({
+        id: model.id,
+        label: model.label || model.id,
+        providerLabel: getProviderKey(provider)
+      })
+    })
+
+    enabledProviders.forEach((provider) => {
+      const modelId = String(provider.defaultModel || '').trim()
+      if (!modelId) return
+      if (seenModelIds.has(modelId)) return
+      seenModelIds.add(modelId)
+      options.push({
+        id: modelId,
+        label: modelId,
+        providerLabel: getProviderKey(provider)
+      })
+    })
+
+    return options.sort((a, b) => {
+      const providerCompare = a.providerLabel.localeCompare(b.providerLabel)
+      if (providerCompare !== 0) return providerCompare
+      return a.label.localeCompare(b.label)
+    })
+  }, [aiDraft])
   const newModelProvider = aiDraft?.providers?.[newModelProviderIndex]
   const newModelNeedsEndpointType = newModelProvider ? supportsProviderEndpointRouting(newModelProvider) : false
 
@@ -272,9 +319,45 @@ export default function AiSettingsView({ onBack, onOpenMcpSettings, onOpenSkills
 
   const handleResetAiSettings = () => {
     setAiDraft(aiSettings)
+    setGlobalDefaultModelSelection('')
     setAiError(null)
     setAiInfo(null)
     setAiReasoning(null)
+  }
+
+  const openGlobalDefaultModelModal = () => {
+    const current = String(aiDraft?.defaultModel || '').trim()
+    const selected =
+      current && globalDefaultModelOptions.some((item) => item.id === current)
+        ? current
+        : (globalDefaultModelOptions[0]?.id || '')
+    setGlobalDefaultModelSelection(selected)
+    setShowGlobalDefaultModelModal(true)
+  }
+
+  const handleConfirmGlobalDefaultModel = () => {
+    if (!aiDraft) return
+    if (!globalDefaultModelSelection) {
+      setAiError('请先选择一个模型')
+      return
+    }
+    if (!globalDefaultModelOptions.some((item) => item.id === globalDefaultModelSelection)) {
+      setAiError('所选模型不可用，请重新选择')
+      return
+    }
+    updateAiDraft({ defaultModel: globalDefaultModelSelection })
+    setShowGlobalDefaultModelModal(false)
+    setAiError(null)
+    setAiInfo(`已设置全局默认模型：${globalDefaultModelSelection}`)
+  }
+
+  const handleClearGlobalDefaultModel = () => {
+    if (!aiDraft) return
+    updateAiDraft({ defaultModel: undefined })
+    setGlobalDefaultModelSelection('')
+    setShowGlobalDefaultModelModal(false)
+    setAiError(null)
+    setAiInfo('已清空全局默认模型')
   }
 
   useEffect(() => {
@@ -914,6 +997,13 @@ export default function AiSettingsView({ onBack, onOpenMcpSettings, onOpenSkills
           <div className="text-lg font-semibold text-slate-900 dark:text-slate-100">AI 配置中心</div>
         </div>
         <div className="flex items-center gap-2">
+          <button
+            className={`${pillClass} no-drag`}
+            onClick={openGlobalDefaultModelModal}
+            title="设置未指定模型时使用的全局默认模型"
+          >
+            默认模型
+          </button>
           <button className={`${pillClass} no-drag`} onClick={() => setShowDefaultParamsModal(true)} title="配置全局默认参数">
             默认参数
           </button>
@@ -1059,6 +1149,17 @@ export default function AiSettingsView({ onBack, onOpenMcpSettings, onOpenSkills
         onUpdateDefaultParams={handleUpdateDefaultParams}
         onToggleDefaultParam={handleToggleDefaultParam}
         onToggleDefaultMaxTokens={handleToggleDefaultMaxTokens}
+      />
+
+      <GlobalDefaultModelModal
+        show={showGlobalDefaultModelModal}
+        options={globalDefaultModelOptions}
+        selectedModelId={globalDefaultModelSelection}
+        currentModelId={aiDraft?.defaultModel}
+        onClose={() => setShowGlobalDefaultModelModal(false)}
+        onSelectedModelIdChange={setGlobalDefaultModelSelection}
+        onConfirm={handleConfirmGlobalDefaultModel}
+        onClear={handleClearGlobalDefaultModel}
       />
     </div>
   )

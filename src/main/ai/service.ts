@@ -3896,10 +3896,20 @@ export class AiService {
     return normalizeModelParams(merged)
   }
 
+  private resolveEffectiveModelId(modelId?: string): string | undefined {
+    if (modelId) return modelId
+    try {
+      return resolveModelId().model.id
+    } catch {
+      return undefined
+    }
+  }
+
   private resolveModelConfig(modelId?: string): AiModel | undefined {
-    if (!modelId) return undefined
+    const resolvedModelId = this.resolveEffectiveModelId(modelId)
+    if (!resolvedModelId) return undefined
     const settings = getAiSettings()
-    return settings.models?.find((model) => model.id === modelId)
+    return settings.models?.find((model) => model.id === resolvedModelId)
   }
 
   private resolveExecutionProviderContext(

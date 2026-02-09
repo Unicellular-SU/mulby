@@ -416,6 +416,10 @@ export interface AiProviderConfig {
 export interface AiSettings {
   providers: AiProviderConfig[]
   models?: AiModel[]
+  /**
+   * 全局默认模型：当调用方未显式传 model 时优先使用。
+   */
+  defaultModel?: string
   defaultParams?: AiModelParameters
   mcp?: AiMcpSettings
   skills?: AiSkillSettings

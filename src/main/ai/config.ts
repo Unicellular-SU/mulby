@@ -293,7 +293,7 @@ export function loadAiSettings(): AiSettings {
   }
   try {
     const raw = readFileSync(path, 'utf-8')
-    const parsed = JSON.parse(raw) as AiSettings & { defaultModel?: string }
+    const parsed = JSON.parse(raw) as AiSettings
     const normalizedProviders = normalizeProviders(
       (parsed.providers || []).map((provider, index) => normalizeProvider(provider, index))
     )
@@ -309,23 +309,6 @@ export function loadAiSettings(): AiSettings {
       models: normalizedModels,
       mcp: normalizeMcpSettings(parsed.mcp),
       skills: normalizeSkillSettings(parsed.skills)
-    }
-    if (parsed.defaultModel && next.providers.length > 0) {
-      const model = next.models?.find((item) => item.id === parsed.defaultModel)
-      if (model?.providerLabel) {
-        const provider = next.providers.find((item) => (item.label || item.id) === model.providerLabel)
-        if (provider && !provider.defaultModel) {
-          provider.defaultModel = parsed.defaultModel
-        }
-      } else {
-        const providerId = parsed.defaultModel.split(':')[0]
-        const provider = next.providers.find((item) =>
-          String(item.id) === String(providerId) || inferProviderType(item) === String(providerId)
-        )
-        if (provider && !provider.defaultModel) {
-          provider.defaultModel = parsed.defaultModel
-        }
-      }
     }
     settingsCache.value = next
     return settingsCache.value

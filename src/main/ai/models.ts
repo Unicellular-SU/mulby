@@ -62,6 +62,30 @@ function parseModelKey(raw: string): { providerToken: string; modelToken: string
   return { providerToken: raw, modelToken: raw }
 }
 
+function isEnabledProviderToken(
+  providerToken: string,
+  providers: ReturnType<typeof getAiSettings>['providers']
+): boolean {
+  if (!providerToken) return false
+  return providers.some((provider) => {
+    if (provider.enabled === false) return false
+    return String(provider.id) === providerToken || inferProviderType(provider) === providerToken
+  })
+}
+
+function isUsableConfiguredModel(
+  modelId: string | undefined,
+  models: ModelInfo[],
+  providers: ReturnType<typeof getAiSettings>['providers']
+): modelId is string {
+  const raw = String(modelId || '').trim()
+  if (!raw) return false
+  if (models.some((model) => model.id === raw)) return true
+  const { providerToken, modelToken } = parseModelKey(raw)
+  if (!modelToken) return false
+  return isEnabledProviderToken(providerToken, providers)
+}
+
 function toFallbackModelInfo(inputRaw: string): ModelInfo {
   const { providerToken, modelToken } = parseModelKey(inputRaw)
   return {
@@ -117,8 +141,14 @@ export function resolveModelId(input?: string): { providerId: string; modelId: s
   const models = getAllModels()
   const defaultModel = models[0]
   const settings = getAiSettings()
-  const providerDefault = settings.providers.find((provider) => provider.defaultModel)?.defaultModel
-  const raw = input || providerDefault || defaultModel?.id
+  const globalDefault = isUsableConfiguredModel(settings.defaultModel, models, settings.providers)
+    ? settings.defaultModel
+    : undefined
+  const providerDefault = settings.providers
+    .filter((provider) => provider.enabled !== false)
+    .map((provider) => provider.defaultModel)
+    .find((candidate) => isUsableConfiguredModel(candidate, models, settings.providers))
+  const raw = input || globalDefault || providerDefault || defaultModel?.id
   if (!raw) {
     throw new Error('AI model is not configured')
   }

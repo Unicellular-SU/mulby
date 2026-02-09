@@ -6,16 +6,27 @@ import { getProviderAdapter } from './providerAdapterCatalog'
 import { getProviderCapabilityConstraint } from '../../shared/ai/providerProfiles'
 import { inferProviderType } from '../../shared/ai/providerType'
 
+function resolveCapabilityModelId(modelId?: string): string | undefined {
+  if (modelId) return modelId
+  try {
+    return resolveModelId().model.id
+  } catch {
+    return undefined
+  }
+}
+
 function modelName(modelId?: string): string {
-  if (!modelId) return ''
-  const resolved = resolveModelId(modelId)
+  const resolvedModelId = resolveCapabilityModelId(modelId)
+  if (!resolvedModelId) return ''
+  const resolved = resolveModelId(resolvedModelId)
   return resolved.modelId.toLowerCase()
 }
 
 function getModelCapabilities(modelId?: string): AiModelCapability[] | undefined {
-  if (!modelId) return undefined
+  const resolvedModelId = resolveCapabilityModelId(modelId)
+  if (!resolvedModelId) return undefined
   const settings = getAiSettings()
-  return settings.models?.find((model) => model.id === modelId)?.capabilities
+  return settings.models?.find((model) => model.id === resolvedModelId)?.capabilities
 }
 
 function resolveCapabilityOverride(modelId: string | undefined, capability: AiModelType): boolean | undefined {
@@ -29,16 +40,18 @@ function resolveCapabilityOverride(modelId: string | undefined, capability: AiMo
 }
 
 function getModelConfig(modelId?: string): AiModel | undefined {
-  if (!modelId) return undefined
+  const resolvedModelId = resolveCapabilityModelId(modelId)
+  if (!resolvedModelId) return undefined
   const settings = getAiSettings()
-  return settings.models?.find((model) => model.id === modelId)
+  return settings.models?.find((model) => model.id === resolvedModelId)
 }
 
 function resolveProviderConfig(modelId?: string, explicitProvider?: AiProviderConfig): AiProviderConfig | undefined {
   if (explicitProvider) return explicitProvider
-  if (!modelId) return undefined
+  const resolvedModelId = resolveCapabilityModelId(modelId)
+  if (!resolvedModelId) return undefined
   const settings = getAiSettings()
-  const modelConfig = settings.models?.find((model) => model.id === modelId)
+  const modelConfig = settings.models?.find((model) => model.id === resolvedModelId)
   if (modelConfig?.providerRef) {
     const byRef = settings.providers.find((provider) => String(provider.id) === String(modelConfig.providerRef))
     if (byRef) return byRef
@@ -47,7 +60,7 @@ function resolveProviderConfig(modelId?: string, explicitProvider?: AiProviderCo
     const byLabel = settings.providers.find((provider) => (provider.label || provider.id) === modelConfig.providerLabel)
     if (byLabel) return byLabel
   }
-  const providerToken = modelId.includes(':') ? modelId.split(':', 2)[0] : modelId
+  const providerToken = resolvedModelId.includes(':') ? resolvedModelId.split(':', 2)[0] : resolvedModelId
   const byId = settings.providers.find((provider) => String(provider.id) === providerToken)
   if (byId) return byId
   const byType = settings.providers.find((provider) => inferProviderType(provider) === providerToken)
@@ -66,18 +79,21 @@ function getDefaultCapability(type: AiModelType): boolean {
 }
 
 function hasCapability(modelId: string | undefined, type: AiModelType, provider?: AiProviderConfig): boolean {
-  const resolvedProvider = resolveProviderConfig(modelId, provider)
+  const resolvedModelId = resolveCapabilityModelId(modelId)
+  const resolvedProvider = resolveProviderConfig(resolvedModelId, provider)
   const providerConstraint = getProviderCapabilityConstraint(resolvedProvider, type)
   if (providerConstraint === false) return false
 
-  const modelConfig = getModelConfig(modelId) || (modelId ? { id: modelId, label: modelId, description: '' } : undefined)
+  const modelConfig = getModelConfig(resolvedModelId) || (
+    resolvedModelId ? { id: resolvedModelId, label: resolvedModelId, description: '' } : undefined
+  )
   let modelCapability: boolean | undefined
   if (modelConfig) {
     const inferred = inferCapability(type, modelConfig, resolvedProvider)
     if (inferred !== undefined) modelCapability = inferred
   }
   const mergedBase = modelCapability ?? getDefaultCapability(type)
-  const override = resolveCapabilityOverride(modelId, type)
+  const override = resolveCapabilityOverride(resolvedModelId, type)
   if (override !== undefined) return override
   return mergedBase
 }
