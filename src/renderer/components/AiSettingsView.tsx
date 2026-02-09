@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import type { AiEndpointType, AiModel, AiModelCapability, AiModelParameters, AiModelType, AiProviderConfig, AiSettings } from '../../shared/types/ai'
-import { BUILTIN_PROVIDER_TYPES, inferProviderType } from '../../shared/ai/providerType'
+import type { AiModel, AiModelCapability, AiModelParameters, AiModelType, AiProviderConfig, AiSettings } from '../../shared/types/ai'
+import { inferProviderType } from '../../shared/ai/providerType'
 import { isEndpointRoutedProviderType, supportsProviderEndpointRouting } from '../../shared/ai/providerEndpointRouting'
 import { buildProviderIdCounts, validateProviderConfig } from '../../shared/ai/providerValidation'
 import { getProviderDefaultBaseURL } from '../../shared/ai/providerDefaults'
@@ -9,72 +9,31 @@ import { getSystemDefaultProviderById, isSystemDefaultProviderId } from '../../s
 import { getSystemDefaultModels } from '../../shared/ai/systemModels'
 import { splitApiKeyString } from '../../shared/ai/apiKeyPool'
 import { useInAppNotice } from './InAppNotice'
-import SliderWithTicks from './SliderWithTicks'
-import UnifiedSelect from './UnifiedSelect'
-
-const PROVIDER_TYPE_OPTIONS = [...BUILTIN_PROVIDER_TYPES] as string[]
-const PROVIDER_TYPE_LABELS: Record<string, string> = {
-  openai: 'OpenAI',
-  'openai-response': 'OpenAI-Response',
-  gemini: 'Gemini',
-  anthropic: 'Anthropic',
-  'azure-openai': 'Azure OpenAI',
-  'new-api': 'New API',
-  cherryin: 'CherryIN',
-  ollama: 'Ollama',
-  deepseek: 'DeepSeek',
-  openrouter: 'OpenRouter',
-  'openai-compatible': 'OpenAI Compatible'
-}
-const ENDPOINT_TYPE_OPTIONS: AiEndpointType[] = ['openai', 'openai-response', 'anthropic', 'gemini', 'image-generation', 'jina-rerank']
-
-function getProviderTypeOptions(currentType?: string): string[] {
-  const normalized = String(currentType || '').trim().toLowerCase()
-  const base = [...PROVIDER_TYPE_OPTIONS]
-  if (!normalized || base.includes(normalized)) return base
-  return [normalized, ...base]
-}
-
-function Switch({ checked, onChange }: { checked: boolean; onChange: () => void }) {
-  return (
-    <button
-      type="button"
-      className={`relative w-11 h-6 rounded-full transition-colors ${checked ? 'bg-blue-500' : 'bg-gray-300 dark:bg-gray-600'}`}
-      onClick={onChange}
-    >
-      <span className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${checked ? 'translate-x-5' : ''}`} />
-    </button>
-  )
-}
+import {
+  AddModelModal,
+  AddProviderModal,
+  ApiKeyManagerModal,
+  DefaultParamsModal,
+  FetchedModelsModal
+} from './ai-settings/AiSettingsModals'
+import { ProviderSettingsSection } from './ai-settings/ProviderSettingsSection'
+import {
+  DEFAULT_TEMPERATURE,
+  DEFAULT_TOP_P,
+  classNames,
+  getModelCapabilityState as getSharedModelCapabilityState,
+  isCapabilityAuto as getSharedIsCapabilityAuto,
+  serializeApiKeys,
+  type ApiKeyTestStatus,
+  type ProviderListEntry,
+  type ProviderModelOption
+} from './ai-settings/shared'
 
 
 interface AiSettingsViewProps {
   onBack: () => void
   onOpenMcpSettings?: () => void
   onOpenSkillsSettings?: () => void
-}
-
-interface ProviderListEntry {
-  provider: AiProviderConfig
-  index: number
-}
-
-interface ProviderModelOption {
-  id: string
-  label: string
-}
-
-interface ApiKeyTestStatus {
-  state: 'success' | 'error' | 'testing'
-  message: string
-}
-
-function serializeApiKeys(keys: string[]): string {
-  return keys
-    .map((key) => key.trim())
-    .filter(Boolean)
-    .map((key) => key.replace(/,/g, '\\,'))
-    .join(',')
 }
 
 export default function AiSettingsView({ onBack, onOpenMcpSettings, onOpenSkillsSettings }: AiSettingsViewProps) {
@@ -121,52 +80,7 @@ export default function AiSettingsView({ onBack, onOpenMcpSettings, onOpenSkills
     label: '',
     description: ''
   })
-
-  const cardClass = 'rounded-[24px] border border-slate-200/80 bg-white p-6 dark:border-slate-800/80 dark:bg-slate-900'
-  const cardClassTight = 'rounded-[24px] border border-slate-200/80 bg-white p-5 dark:border-slate-800/80 dark:bg-slate-900'
-  const pillClass = 'rounded-full border border-slate-200 bg-white px-3 py-1 text-xs text-slate-600 shadow-sm transition hover:border-slate-300 hover:text-slate-900 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-300 dark:hover:text-white'
-  const primaryPillClass = 'rounded-full border border-slate-900 bg-slate-900 px-3 py-1 text-xs text-white shadow-sm transition dark:border-white dark:bg-white dark:text-slate-900'
-  const actionButtonClass = 'rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-700 transition hover:border-slate-300 hover:text-slate-900 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-200'
-  const inputClass = 'w-full rounded-2xl border border-slate-200 bg-white px-4 py-2 text-sm text-slate-700 shadow-sm outline-none transition focus:border-slate-300 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-200'
-
-  const miniInputClass = 'w-24 rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 shadow-sm outline-none transition focus:border-slate-300 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-200'
-  const tipWrapClass = 'relative inline-flex items-center gap-1 text-xs text-slate-500 dark:text-slate-400 group'
-  const tipBubbleClass = 'pointer-events-none absolute left-1/2 top-full z-10 mt-2 w-56 -translate-x-1/2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-[11px] text-slate-600 opacity-0 shadow-lg transition group-hover:opacity-100 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-300'
-  const DEFAULT_TEMPERATURE = 0.7
-  const DEFAULT_TOP_P = 1
-  const DEFAULT_CONTEXT_WINDOW = 8
-  const MODEL_CAPABILITIES: Array<{ type: AiModelType; label: string }> = [
-    { type: 'vision', label: '视觉' },
-    { type: 'reasoning', label: '推理' },
-    { type: 'function_calling', label: '工具' },
-    { type: 'web_search', label: '联网' },
-    { type: 'embedding', label: '嵌入' },
-    { type: 'rerank', label: '重排' }
-  ]
-  const formatNumber = (value?: number) => (value === undefined || Number.isNaN(value) ? '' : String(value))
-  const parseOptionalNumber = (value: string) => {
-    const trimmed = value.trim()
-    if (!trimmed) return undefined
-    const num = Number(trimmed)
-    return Number.isFinite(num) ? num : undefined
-  }
-  const formatStopSequences = (value?: string[]) => (value && value.length > 0 ? value.join('\n') : '')
-  const parseStopSequences = (value: string) => {
-    const items = value
-      .split(/[\n,]+/)
-      .map((item) => item.trim())
-      .filter(Boolean)
-    return items.length > 0 ? items : undefined
-  }
-  const formatEndpointTypes = (value?: AiEndpointType[]) => (value && value.length > 0 ? value.join(', ') : '')
-  const parseEndpointTypes = (value: string): AiEndpointType[] | undefined => {
-    const allowed = new Set<AiEndpointType>(ENDPOINT_TYPE_OPTIONS)
-    const items = value
-      .split(/[\n,]+/)
-      .map((item) => item.trim())
-      .filter((item): item is AiEndpointType => allowed.has(item as AiEndpointType))
-    return items.length > 0 ? Array.from(new Set(items)) : undefined
-  }
+  const { pillClass, primaryPillClass } = classNames
 
   const getProviderKey = (provider: AiProviderConfig) => {
     const label = (provider.label || '').trim()
@@ -300,22 +214,11 @@ export default function AiSettingsView({ onBack, onOpenMcpSettings, onOpenSkills
   }
 
   const getModelCapabilityState = (model: AiModel, type: AiModelType) => {
-    const caps = model.capabilities || []
-    const item = caps.find((cap) => cap.type === type)
-    if (item) {
-      return item.isUserSelected !== false
-    }
-    const inferred = inferredCapabilities[model.id]
-    if (inferred) {
-      return inferred.has(type)
-    }
-    return false
+    return getSharedModelCapabilityState(model, type, inferredCapabilities)
   }
 
   const isCapabilityAuto = (model: AiModel, type: AiModelType) => {
-    const caps = model.capabilities || []
-    const item = caps.find((cap) => cap.type === type)
-    return !item
+    return getSharedIsCapabilityAuto(model, type)
   }
 
   const updateModelCapabilities = (modelId: string, type: AiModelType, enabled: boolean) => {
@@ -653,6 +556,17 @@ export default function AiSettingsView({ onBack, onOpenMcpSettings, onOpenSkills
     setShowAddModelModal(true)
   }
 
+  const handleNewModelProviderIndexChange = (nextIndex: number) => {
+    setNewModelProviderIndex(nextIndex)
+    const nextProvider = (aiDraft?.providers || [])[nextIndex]
+    const nextProviderSupportsEndpointRouting = nextProvider ? supportsProviderEndpointRouting(nextProvider) : false
+    setNewModel((prev) => ({
+      ...prev,
+      endpointType: nextProviderSupportsEndpointRouting ? (prev.endpointType || 'openai') : undefined,
+      supportedEndpointTypes: nextProviderSupportsEndpointRouting ? prev.supportedEndpointTypes : undefined
+    }))
+  }
+
   const handleRemoveModel = (index: number) => {
     if (!aiDraft?.models) return
     const models = aiDraft.models.filter((_, i) => i !== index)
@@ -901,6 +815,88 @@ export default function AiSettingsView({ onBack, onOpenMcpSettings, onOpenSkills
     setShowModelModal(false)
   }
 
+  const handleTestSelectedProviderConnection = async () => {
+    if (!selectedProvider) return
+    setAiInfo(null)
+    setAiError(null)
+    if (!window.intools?.ai?.testConnection) {
+      setAiError('AI 接口未就绪，请重启应用')
+      return
+    }
+    try {
+      setIsTestingConnection(true)
+      const providerModel = selectedProvider.defaultModel || aiDraft?.models?.find((item) => modelBelongsToProvider(item, selectedProvider))?.id
+      if (!providerModel) {
+        setAiError('该 Provider 未配置模型，请先拉取或手动添加')
+        return
+      }
+      const fallbackModel = providerModel
+      let reasoningStreamed = ''
+      setAiInfo('')
+      setAiReasoning('')
+      const result = await (window.intools.ai.testConnectionStream
+        ? window.intools.ai.testConnectionStream({
+          model: fallbackModel,
+          providerId: String(selectedProvider.id),
+          apiKey: selectedProvider.apiKey,
+          baseURL: selectedProvider.baseURL
+        }, (chunk) => {
+          if (chunk.type === 'reasoning') {
+            reasoningStreamed += chunk.text
+            setAiReasoning(reasoningStreamed)
+          }
+        })
+        : window.intools.ai.testConnection({
+          model: fallbackModel,
+          providerId: String(selectedProvider.id),
+          apiKey: selectedProvider.apiKey,
+          baseURL: selectedProvider.baseURL
+        }))
+      if (result.success) {
+        setAiInfo(`连接成功：${result.message || 'ok'}`)
+        if ((result as any).reasoning) {
+          setAiReasoning((result as any).reasoning)
+        }
+      } else {
+        setAiError(result.message || '连接失败')
+      }
+    } finally {
+      setIsTestingConnection(false)
+    }
+  }
+
+  const handleUpdateSelectedProvider = (patch: Partial<AiProviderConfig>) => {
+    if (!selectedProvider) return
+    handleUpdateProvider(selectedProviderIndex, patch)
+  }
+
+  const handleRemoveSelectedProvider = () => {
+    handleRemoveProvider(selectedProviderIndex)
+  }
+
+  const handleSelectedProviderTypeChange = (nextType: string) => {
+    if (!selectedProvider) return
+    const nextProvider = applyProviderTypePreset(selectedProvider, nextType)
+    handleUpdateProvider(selectedProviderIndex, nextProvider)
+  }
+
+  const handleUpdateSelectedProviderParams = (patch: Partial<AiModelParameters>) => {
+    handleUpdateProviderParams(selectedProviderIndex, patch)
+  }
+
+  const handleToggleSelectedProviderParam = (key: 'temperatureEnabled' | 'topPEnabled') => {
+    handleToggleProviderParam(selectedProviderIndex, key)
+  }
+
+  const handleToggleSelectedProviderMaxTokens = () => {
+    handleToggleProviderMaxTokens(selectedProviderIndex)
+  }
+
+  const handleFetchModelsForSelectedProvider = () => {
+    if (!selectedProvider) return
+    handleFetchModels(selectedProvider)
+  }
+
   return (
     <div className="flex h-full flex-col bg-white/50 dark:bg-slate-900/30">
       <div className="flex items-center gap-3 border-b border-slate-200/70 bg-white px-6 py-4 dark:border-slate-800/80 dark:bg-slate-900">
@@ -957,1353 +953,113 @@ export default function AiSettingsView({ onBack, onOpenMcpSettings, onOpenSkills
             </div>
           )}
 
-          <div className={`${cardClass} space-y-4`}>
-            <div className="flex items-center justify-between gap-2">
-              <div className="text-sm font-medium text-slate-900 dark:text-white">供应商配置</div>
-              <div className="flex items-center gap-2">
-                <button className={`${primaryPillClass} no-drag`} onClick={() => setShowAddProviderModal(true)}>
-                  + 新增供应商
-                </button>
-              </div>
-            </div>
-
-            <div className="grid grid-cols-1 gap-4 md:grid-cols-[180px_1fr]">
-              <div className="space-y-2">
-                {(aiDraft?.providers || []).length === 0 ? (
-                  <div className="rounded-2xl border border-dashed border-slate-200/80 bg-slate-50 px-4 py-6 text-center text-sm text-slate-500 dark:border-slate-800/80 dark:bg-slate-900/40 dark:text-slate-400">
-                    暂无 Provider，请先新增
-                  </div>
-                ) : (
-                  sortedProviderEntries.map(({ provider, index }) => (
-                    <button
-                      key={`${provider.id}-${index}`}
-                      className={`flex w-full items-center justify-between rounded-2xl border px-3 py-2 text-left text-sm transition ${index === selectedProviderIndex ? 'border-slate-900 bg-slate-900 text-white dark:border-white dark:bg-white dark:text-slate-900' : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-200'}`}
-                      onClick={() => setSelectedProviderIndex(index)}
-                    >
-                      <div className="min-w-0">
-                        <div className="truncate text-sm font-medium">{getProviderKey(provider)}</div>
-                        <div className={`truncate text-xs ${index === selectedProviderIndex ? 'text-white/70 dark:text-slate-600' : 'text-slate-400 dark:text-slate-500'}`}>
-                          {getProviderTypeLabel(provider)} · {provider.id}
-                        </div>
-                      </div>
-                      <span
-                        className={`inline-block h-2.5 w-2.5 shrink-0 rounded-full ${provider.enabled ? 'bg-emerald-500' : 'bg-rose-500'}`}
-                        title={provider.enabled ? '已启用' : '已停用'}
-                        aria-label={provider.enabled ? '已启用' : '已停用'}
-                      />
-                    </button>
-                  ))
-                )}
-              </div>
-
-              <div className={`${cardClassTight} space-y-3`}>
-                {!selectedProvider ? (
-                  <div className="rounded-2xl border border-dashed border-slate-200/80 bg-slate-50 px-4 py-6 text-center text-sm text-slate-500 dark:border-slate-800/80 dark:bg-slate-900/40 dark:text-slate-400">
-                    请选择一个 Provider 查看详情
-                  </div>
-                ) : (
-                  <>
-                    <div className="flex flex-wrap items-center justify-between gap-3">
-                      <div className="min-w-[160px]">
-                        <div className="text-sm font-medium text-slate-900 dark:text-white">{getProviderKey(selectedProvider)}</div>
-                        <div className="text-xs text-slate-500 dark:text-slate-400">
-                          {getProviderTypeLabel(selectedProvider)} · {selectedProvider.id}
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <button
-                          className={`${pillClass} no-drag`}
-                          onClick={async () => {
-                            setAiInfo(null)
-                            setAiError(null)
-                            if (!window.intools?.ai?.testConnection) {
-                              setAiError('AI 接口未就绪，请重启应用')
-                              return
-                            }
-                            try {
-                              setIsTestingConnection(true)
-                              const providerModel = selectedProvider.defaultModel || aiDraft?.models?.find((item) => modelBelongsToProvider(item, selectedProvider))?.id
-                              if (!providerModel) {
-                                setAiError('该 Provider 未配置模型，请先拉取或手动添加')
-                                return
-                              }
-                              const fallbackModel = providerModel
-                              let reasoningStreamed = ''
-                              setAiInfo('')
-                              setAiReasoning('')
-                              const result = await (window.intools.ai.testConnectionStream
-                                ? window.intools.ai.testConnectionStream({
-                                  model: fallbackModel,
-                                  providerId: String(selectedProvider.id),
-                                  apiKey: selectedProvider.apiKey,
-                                  baseURL: selectedProvider.baseURL
-                                }, (chunk) => {
-                                  if (chunk.type === 'reasoning') {
-                                    reasoningStreamed += chunk.text
-                                    setAiReasoning(reasoningStreamed)
-                                    return
-                                  }
-                                })
-                                : window.intools.ai.testConnection({
-                                  model: fallbackModel,
-                                  providerId: String(selectedProvider.id),
-                                  apiKey: selectedProvider.apiKey,
-                                  baseURL: selectedProvider.baseURL
-                                }))
-                              if (result.success) {
-                                setAiInfo(`连接成功：${result.message || 'ok'}`)
-                                if ((result as any).reasoning) {
-                                  setAiReasoning((result as any).reasoning)
-                                }
-                              } else {
-                                setAiError(result.message || '连接失败')
-                              }
-                            } finally {
-                              setIsTestingConnection(false)
-                            }
-                          }}
-                          disabled={isTestingConnection || !selectedProviderValidation.canTestConnection}
-                          title={selectedProviderValidation.testConnectionHint || '测试连接'}
-                        >
-                          {isTestingConnection ? '测试中…' : '测试连接'}
-                        </button>
-                        <button
-                          className={selectedProvider.enabled ? primaryPillClass : pillClass}
-                          onClick={() => handleUpdateProvider(selectedProviderIndex, { enabled: !selectedProvider.enabled })}
-                        >
-                          {selectedProvider.enabled ? '已启用' : '已停用'}
-                        </button>
-                        <button
-                          className={actionButtonClass}
-                          onClick={() => handleRemoveProvider(selectedProviderIndex)}
-                          disabled={selectedProviderIsSystemDefault}
-                          title={selectedProviderIsSystemDefault ? '系统默认供应商不可删除，可改为停用' : '删除'}
-                        >
-                          删除
-                        </button>
-                      </div>
-                    </div>
-                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                      <UnifiedSelect
-                        value={getProviderTypeLabel(selectedProvider)}
-                        onChange={(e) => {
-                          const nextProvider = applyProviderTypePreset(selectedProvider, e.target.value)
-                          handleUpdateProvider(selectedProviderIndex, nextProvider)
-                        }}
-                      >
-                        {getProviderTypeOptions(getProviderTypeLabel(selectedProvider)).map((type) => (
-                          <option key={type} value={type}>
-                            {PROVIDER_TYPE_LABELS[type] || type}
-                          </option>
-                        ))}
-                      </UnifiedSelect>
-                      <input
-                        className={inputClass}
-                        placeholder="Provider 实例 ID（如 v3-openai）"
-                        value={selectedProvider.id}
-                        onChange={(e) => handleUpdateProvider(selectedProviderIndex, { id: e.target.value })}
-                      />
-                      <input
-                        className={inputClass}
-                        placeholder="显示名称（可选）"
-                        value={selectedProvider.label || ''}
-                        onChange={(e) => handleUpdateProvider(selectedProviderIndex, { label: e.target.value })}
-                      />
-                      <div className="flex items-center gap-2">
-                        <input
-                          className={`${inputClass} flex-1`}
-                          placeholder="API Key（支持多个，逗号分隔）"
-                          value={selectedProvider.apiKey || ''}
-                          onChange={(e) => handleUpdateProvider(selectedProviderIndex, { apiKey: e.target.value })}
-                        />
-                        <button
-                          className={`${pillClass} shrink-0 no-drag`}
-                          onClick={openApiKeyManager}
-                          title="管理 API Key"
-                          aria-label="管理 API Key"
-                        >
-                          管理
-                        </button>
-                      </div>
-                      <input
-                        className={inputClass}
-                        placeholder="Base URL（可选）"
-                        value={selectedProvider.baseURL || ''}
-                        onChange={(e) => handleUpdateProvider(selectedProviderIndex, { baseURL: e.target.value })}
-                      />
-                      <div className="text-[11px] text-slate-500 dark:text-slate-400">
-                        默认 Base URL：{selectedProviderDefaultBaseURL || '无（需手动填写）'}
-                      </div>
-                      {selectedProviderSupportsEndpointRouting && (
-                        <>
-                          <input
-                            className={inputClass}
-                            placeholder="Anthropic Base URL（可选）"
-                            value={selectedProvider.anthropicBaseURL || selectedProviderDefaultAnthropicBaseURL || ''}
-                            onChange={(e) => handleUpdateProvider(selectedProviderIndex, { anthropicBaseURL: e.target.value })}
-                          />
-                          <div className="text-[11px] text-slate-500 dark:text-slate-400">
-                            默认 Anthropic Base URL：{selectedProviderDefaultAnthropicBaseURL || '无（将使用 Base URL）'}
-                          </div>
-                        </>
-                      )}
-                      {(selectedProviderType === 'azure-openai' || selectedProviderType === 'azure') && (
-                        <input
-                          className={inputClass}
-                          placeholder="API Version（Azure OpenAI）"
-                          value={selectedProvider.apiVersion || ''}
-                          onChange={(e) => handleUpdateProvider(selectedProviderIndex, { apiVersion: e.target.value })}
-                        />
-                      )}
-                    </div>
-                    {selectedProviderValidation.issues.length > 0 && (
-                      <div className="rounded-2xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-700 dark:border-amber-900/60 dark:bg-amber-900/20 dark:text-amber-200">
-                        {selectedProviderValidation.issues.join('；')}
-                      </div>
-                    )}
-                    <details className="rounded-2xl border border-slate-200/80 bg-slate-50 px-4 py-3 text-sm text-slate-700 dark:border-slate-800/80 dark:bg-slate-900/50 dark:text-slate-200">
-                      <summary className="cursor-pointer text-sm font-medium text-slate-700 dark:text-slate-200">供应商默认参数</summary>
-                      <div className="mt-3 space-y-4">
-                        <div className="rounded-2xl border border-slate-200/80 bg-white p-4 dark:border-slate-800/80 dark:bg-slate-950">
-                          <div className="mb-2 text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">上下文条数</div>
-                          <SliderWithTicks
-                            value={selectedProvider.defaultParams?.contextWindow ?? aiDraft?.defaultParams?.contextWindow ?? DEFAULT_CONTEXT_WINDOW}
-                            min={0}
-                            max={100}
-                            step={1}
-                            ticks={[
-                              { value: 0 },
-                              { value: 5 },
-                              { value: 10 },
-                              { value: 20 },
-                              { value: 50 },
-                              { value: 100, label: '∞' }
-                            ]}
-                            snapToTicks
-                            onChange={(next) => handleUpdateProviderParams(selectedProviderIndex, { contextWindow: next })}
-                          />
-                          <div className="mt-2 flex items-center justify-between">
-                            <span className="text-xs text-slate-500 dark:text-slate-400">100 表示不限</span>
-                            <input
-                              className={miniInputClass}
-                              type="number"
-                              min="0"
-                              step="1"
-                              value={formatNumber(selectedProvider.defaultParams?.contextWindow)}
-                              onChange={(e) => handleUpdateProviderParams(selectedProviderIndex, { contextWindow: parseOptionalNumber(e.target.value) })}
-                            />
-                          </div>
-                        </div>
-
-                        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                          <div className="rounded-2xl border border-slate-200/80 bg-white p-3 dark:border-slate-800/80 dark:bg-slate-950">
-                            <div className="flex items-center justify-between">
-                              <span className="text-xs text-slate-600 dark:text-slate-300">温度</span>
-                              <Switch
-                                checked={selectedProvider.defaultParams?.temperatureEnabled ?? false}
-                                onChange={() => handleToggleProviderParam(selectedProviderIndex, 'temperatureEnabled')}
-                              />
-                            </div>
-                            <div className="mt-2 flex flex-col gap-2">
-                              <SliderWithTicks
-                                value={selectedProvider.defaultParams?.temperature ?? DEFAULT_TEMPERATURE}
-                                min={0}
-                                max={2}
-                                step={0.05}
-                                ticks={[
-                                  { value: 0 },
-                                  { value: 0.5 },
-                                  { value: 1 },
-                                  { value: 1.5 },
-                                  { value: 2 }
-                                ]}
-                                snapToTicks
-                                disabled={!(selectedProvider.defaultParams?.temperatureEnabled ?? false)}
-                                onChange={(next) => handleUpdateProviderParams(selectedProviderIndex, { temperature: next })}
-                              />
-                              <input
-                                className={miniInputClass}
-                                type="number"
-                                min="0"
-                                max="2"
-                                step="0.05"
-                                value={formatNumber(selectedProvider.defaultParams?.temperature)}
-                                onChange={(e) => handleUpdateProviderParams(selectedProviderIndex, { temperature: parseOptionalNumber(e.target.value) })}
-                                disabled={!(selectedProvider.defaultParams?.temperatureEnabled ?? false)}
-                              />
-                            </div>
-                          </div>
-                          <div className="rounded-2xl border border-slate-200/80 bg-white p-3 dark:border-slate-800/80 dark:bg-slate-950">
-                            <div className="flex items-center justify-between">
-                              <span className="text-xs text-slate-600 dark:text-slate-300">Top-P</span>
-                              <Switch
-                                checked={selectedProvider.defaultParams?.topPEnabled ?? false}
-                                onChange={() => handleToggleProviderParam(selectedProviderIndex, 'topPEnabled')}
-                              />
-                            </div>
-                            <div className="mt-2 flex flex-col gap-2">
-                              <SliderWithTicks
-                                value={selectedProvider.defaultParams?.topP ?? DEFAULT_TOP_P}
-                                min={0}
-                                max={1}
-                                step={0.05}
-                                ticks={[
-                                  { value: 0 },
-                                  { value: 0.25 },
-                                  { value: 0.5 },
-                                  { value: 0.75 },
-                                  { value: 1 }
-                                ]}
-                                snapToTicks
-                                disabled={!(selectedProvider.defaultParams?.topPEnabled ?? false)}
-                                onChange={(next) => handleUpdateProviderParams(selectedProviderIndex, { topP: next })}
-                              />
-                              <input
-                                className={miniInputClass}
-                                type="number"
-                                min="0"
-                                max="1"
-                                step="0.05"
-                                value={formatNumber(selectedProvider.defaultParams?.topP)}
-                                onChange={(e) => handleUpdateProviderParams(selectedProviderIndex, { topP: parseOptionalNumber(e.target.value) })}
-                                disabled={!(selectedProvider.defaultParams?.topPEnabled ?? false)}
-                              />
-                            </div>
-                          </div>
-                        </div>
-
-                        <div className="rounded-2xl border border-slate-200/80 bg-white p-4 dark:border-slate-800/80 dark:bg-slate-950">
-                          <div className="flex items-center justify-between">
-                            <div className="flex items-center gap-2">
-                              <span className="text-xs text-slate-600 dark:text-slate-300">最大输出 tokens</span>
-                              <span className={tipWrapClass}>
-                                <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                                  <circle cx="12" cy="12" r="9" />
-                                  <path d="M12 8h.01M11 12h1v4h-1" strokeLinecap="round" strokeLinejoin="round" />
-                                </svg>
-                                <span className={tipBubbleClass}>单次最大输出 token，过大可能报错。关闭表示不限制。</span>
-                              </span>
-                            </div>
-                            <Switch
-                              checked={selectedProvider.defaultParams?.maxOutputTokensEnabled ?? false}
-                              onChange={() => handleToggleProviderMaxTokens(selectedProviderIndex)}
-                            />
-                          </div>
-                          <div className="mt-3 flex items-center justify-between">
-                            <span className="text-xs text-slate-500 dark:text-slate-400">关闭表示不限制</span>
-                            <input
-                              className={miniInputClass}
-                              type="number"
-                              min="1"
-                              step="1"
-                              value={formatNumber(selectedProvider.defaultParams?.maxOutputTokens)}
-                              onChange={(e) => handleUpdateProviderParams(selectedProviderIndex, { maxOutputTokens: parseOptionalNumber(e.target.value) })}
-                              disabled={!(selectedProvider.defaultParams?.maxOutputTokensEnabled ?? false)}
-                            />
-                          </div>
-                        </div>
-
-                        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-                          <input
-                            className={inputClass}
-                            placeholder="Presence Penalty (-2~2)"
-                            value={formatNumber(selectedProvider.defaultParams?.presencePenalty)}
-                            onChange={(e) => handleUpdateProviderParams(selectedProviderIndex, { presencePenalty: parseOptionalNumber(e.target.value) })}
-                          />
-                          <input
-                            className={inputClass}
-                            placeholder="Frequency Penalty (-2~2)"
-                            value={formatNumber(selectedProvider.defaultParams?.frequencyPenalty)}
-                            onChange={(e) => handleUpdateProviderParams(selectedProviderIndex, { frequencyPenalty: parseOptionalNumber(e.target.value) })}
-                          />
-                          <input
-                            className={inputClass}
-                            placeholder="Seed"
-                            value={formatNumber(selectedProvider.defaultParams?.seed)}
-                            onChange={(e) => handleUpdateProviderParams(selectedProviderIndex, { seed: parseOptionalNumber(e.target.value) })}
-                          />
-                          <textarea
-                            className={`${inputClass} min-h-[72px] sm:col-span-3`}
-                            placeholder="Stop sequences (换行或逗号分隔)"
-                            value={formatStopSequences(selectedProvider.defaultParams?.stopSequences)}
-                            onChange={(e) => handleUpdateProviderParams(selectedProviderIndex, { stopSequences: parseStopSequences(e.target.value) })}
-                          />
-                        </div>
-                      </div>
-                    </details>
-
-                    <div className="rounded-2xl bg-slate-50 p-4 dark:bg-slate-900/50">
-                      <div className="flex flex-wrap items-center justify-between gap-2">
-                        <div>
-                          <div className="text-sm font-medium text-slate-900 dark:text-white">模型管理</div>
-                          <div className="text-xs text-slate-500 dark:text-slate-400">
-                            默认模型：{selectedProvider.defaultModel || '未设置'} · 已关联 {filteredModels.length} 个模型
-                          </div>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <button
-                            className={`${primaryPillClass} no-drag`}
-                            onClick={() => handleFetchModels(selectedProvider)}
-                            disabled={isFetchingModels || !selectedProviderValidation.canFetchModels}
-                            title={selectedProviderValidation.fetchModelsHint || '拉取模型'}
-                          >
-                            {isFetchingModels ? '拉取中…' : '拉取模型'}
-                          </button>
-                          <button className={`${pillClass} no-drag`} onClick={openAddModelModal}>
-                            + 新增模型
-                          </button>
-                        </div>
-                      </div>
-
-                      <div className="mt-3 space-y-2">
-                        {filteredModels.length === 0 ? (
-                          <div className="rounded-2xl border border-dashed border-slate-200/80 bg-white/70 px-4 py-5 text-center text-sm text-slate-500 dark:border-slate-800/80 dark:bg-slate-900/40 dark:text-slate-400">
-                            当前 Provider 暂无模型
-                          </div>
-                        ) : (
-                          filteredModels.map((model, index) => (
-                            <details key={`${model.id}-${index}`} className="rounded-2xl border border-slate-200/80 bg-white/80 p-3 shadow-sm dark:border-slate-800/80 dark:bg-slate-900/70">
-                              <summary className="flex cursor-pointer list-none items-center justify-between gap-3 text-sm">
-                                <div className="min-w-0">
-                                  <div className="truncate font-semibold text-slate-900 dark:text-white">{model.label}</div>
-                                  <div className="truncate text-xs text-slate-500 dark:text-slate-400">{model.id}</div>
-                                </div>
-                                <div className="flex items-center gap-2">
-                                  <button
-                                    className={selectedProvider.defaultModel === model.id ? primaryPillClass : pillClass}
-                                    onClick={(e) => {
-                                      e.preventDefault()
-                                      handleUpdateProvider(selectedProviderIndex, { defaultModel: model.id })
-                                    }}
-                                  >
-                                    {selectedProvider.defaultModel === model.id ? '默认模型' : '设为默认'}
-                                  </button>
-                                  <button className={actionButtonClass} onClick={(e) => {
-                                    e.preventDefault()
-                                    const actualIndex = (aiDraft?.models || []).findIndex((item) => item.id === model.id)
-                                    handleRemoveModel(actualIndex)
-                                  }}>删除</button>
-                                </div>
-                              </summary>
-                              <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-3">
-                                <input
-                                  className={inputClass}
-                                  placeholder="模型 ID"
-                                  value={model.id}
-                                  onChange={(e) => {
-                                    const actualIndex = (aiDraft?.models || []).findIndex((item) => item.id === model.id)
-                                    handleUpdateModel(actualIndex, { id: e.target.value })
-                                  }}
-                                />
-                                <input
-                                  className={inputClass}
-                                  placeholder="模型名称"
-                                  value={model.label}
-                                  onChange={(e) => {
-                                    const actualIndex = (aiDraft?.models || []).findIndex((item) => item.id === model.id)
-                                    handleUpdateModel(actualIndex, { label: e.target.value })
-                                  }}
-                                />
-                                <UnifiedSelect
-                                  value={resolveProviderIdFromModel(model)}
-                                  onChange={(e) => {
-                                    const actualIndex = (aiDraft?.models || []).findIndex((item) => item.id === model.id)
-                                    const providerRef = e.target.value || undefined
-                                    const provider = (aiDraft?.providers || []).find((item) => String(item.id) === providerRef)
-                                    handleUpdateModel(actualIndex, {
-                                      providerRef,
-                                      providerLabel: provider ? getProviderKey(provider) : undefined
-                                    })
-                                  }}
-                                >
-                                  <option value="">未绑定 Provider</option>
-                                  {(aiDraft?.providers || []).map((provider, providerIndex) => (
-                                    <option key={`${provider.id}-${providerIndex}`} value={String(provider.id)}>
-                                      {getProviderKey(provider)}
-                                    </option>
-                                  ))}
-                                </UnifiedSelect>
-                              </div>
-                              <div className="mt-3">
-                                <input
-                                  className={inputClass}
-                                  placeholder="描述"
-                                  value={model.description}
-                                  onChange={(e) => {
-                                    const actualIndex = (aiDraft?.models || []).findIndex((item) => item.id === model.id)
-                                    handleUpdateModel(actualIndex, { description: e.target.value })
-                                  }}
-                                />
-                              </div>
-                              {selectedProviderSupportsEndpointRouting && (
-                                <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
-                                  <UnifiedSelect
-                                    value={model.endpointType || 'openai'}
-                                    onChange={(e) => {
-                                      const actualIndex = (aiDraft?.models || []).findIndex((item) => item.id === model.id)
-                                      handleUpdateModel(actualIndex, { endpointType: e.target.value as AiEndpointType })
-                                    }}
-                                  >
-                                    {ENDPOINT_TYPE_OPTIONS.map((endpointType) => (
-                                      <option key={endpointType} value={endpointType}>
-                                        {endpointType}
-                                      </option>
-                                    ))}
-                                  </UnifiedSelect>
-                                  <input
-                                    className={inputClass}
-                                    placeholder="supported endpoint types（逗号分隔，可选）"
-                                    value={formatEndpointTypes(model.supportedEndpointTypes)}
-                                    onChange={(e) => {
-                                      const actualIndex = (aiDraft?.models || []).findIndex((item) => item.id === model.id)
-                                      handleUpdateModel(actualIndex, { supportedEndpointTypes: parseEndpointTypes(e.target.value) })
-                                    }}
-                                  />
-                                </div>
-                              )}
-
-                              <div className="mt-3">
-                                <div className="text-xs uppercase tracking-[0.2em] text-slate-400">模型能力</div>
-                                <div className="mt-2 text-xs text-slate-500 dark:text-slate-400">
-                                  默认自动推断，建议不要手动修改，配置错误可能导致模型不可用。
-                                </div>
-                                <div className="mt-2 flex flex-wrap gap-2">
-                                  {MODEL_CAPABILITIES.map((cap) => {
-                                    const enabled = getModelCapabilityState(model, cap.type)
-                                    const isAuto = isCapabilityAuto(model, cap.type)
-                                    return (
-                                      <button
-                                        key={`${model.id}-${cap.type}`}
-                                        className={enabled ? primaryPillClass : pillClass}
-                                        onClick={(e) => {
-                                          e.preventDefault()
-                                          updateModelCapabilities(model.id, cap.type, !enabled)
-                                        }}
-                                      >
-                                        <span>{cap.label}</span>
-                                        {isAuto ? <span className="ml-2 rounded-full bg-slate-200 px-2 py-0.5 text-[10px] text-slate-600 dark:bg-slate-700 dark:text-slate-200">自动</span> : null}
-                                      </button>
-                                    )
-                                  })}
-                                </div>
-                              </div>
-
-                              <div className="mt-3">
-                                <div className="text-xs uppercase tracking-[0.2em] text-slate-400">参数覆盖</div>
-                                <div className="mt-2 space-y-4">
-                                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-[180px_1fr_120px] items-center">
-                                    <div className="flex items-center gap-2">
-                                      <span className="text-xs text-slate-600 dark:text-slate-300">上下文条数</span>
-                                      <span className={tipWrapClass}>
-                                        <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                                          <circle cx="12" cy="12" r="9" />
-                                          <path d="M12 8h.01M11 12h1v4h-1" strokeLinecap="round" strokeLinejoin="round" />
-                                        </svg>
-                                        <span className={tipBubbleClass}>100 表示不限，普通聊天建议 5–10</span>
-                                      </span>
-                                    </div>
-                                    <SliderWithTicks
-                                      value={model.params?.contextWindow ?? selectedProvider?.defaultParams?.contextWindow ?? aiDraft?.defaultParams?.contextWindow ?? DEFAULT_CONTEXT_WINDOW}
-                                      min={0}
-                                      max={100}
-                                      step={1}
-                                      ticks={[
-                                        { value: 0 },
-                                        { value: 5 },
-                                        { value: 10 },
-                                        { value: 20 },
-                                        { value: 50 },
-                                        { value: 100, label: '∞' }
-                                      ]}
-                                      snapToTicks
-                                      onChange={(next) => handleUpdateModelParams(model.id, { contextWindow: next })}
-                                    />
-                                    <input
-                                      className={miniInputClass}
-                                      type="number"
-                                      min="0"
-                                      step="1"
-                                      value={formatNumber(model.params?.contextWindow)}
-                                      onChange={(e) => handleUpdateModelParams(model.id, { contextWindow: parseOptionalNumber(e.target.value) })}
-                                    />
-                                  </div>
-
-                                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                                    <div className="rounded-2xl border border-slate-200/80 bg-white p-3 dark:border-slate-800/80 dark:bg-slate-950">
-                                      <div className="flex items-center justify-between">
-                                        <span className="text-xs text-slate-600 dark:text-slate-300">温度</span>
-                                        <Switch
-                                          checked={model.params?.temperatureEnabled ?? false}
-                                          onChange={() => handleToggleModelParam(model.id, 'temperatureEnabled')}
-                                        />
-                                      </div>
-                                      <div className="mt-2 flex flex-col gap-2">
-                                        <SliderWithTicks
-                                          value={model.params?.temperature ?? DEFAULT_TEMPERATURE}
-                                          min={0}
-                                          max={2}
-                                          step={0.05}
-                                          ticks={[
-                                            { value: 0 },
-                                            { value: 0.5 },
-                                            { value: 1 },
-                                            { value: 1.5 },
-                                            { value: 2 }
-                                          ]}
-                                          snapToTicks
-                                          disabled={!(model.params?.temperatureEnabled ?? false)}
-                                          onChange={(next) => handleUpdateModelParams(model.id, { temperature: next })}
-                                        />
-                                        <input
-                                          className={miniInputClass}
-                                          type="number"
-                                          min="0"
-                                          max="2"
-                                          step="0.05"
-                                          value={formatNumber(model.params?.temperature)}
-                                          onChange={(e) => handleUpdateModelParams(model.id, { temperature: parseOptionalNumber(e.target.value) })}
-                                          disabled={!(model.params?.temperatureEnabled ?? false)}
-                                        />
-                                      </div>
-                                    </div>
-                                    <div className="rounded-2xl border border-slate-200/80 bg-white p-3 dark:border-slate-800/80 dark:bg-slate-950">
-                                      <div className="flex items-center justify-between">
-                                        <span className="text-xs text-slate-600 dark:text-slate-300">Top-P</span>
-                                        <Switch
-                                          checked={model.params?.topPEnabled ?? false}
-                                          onChange={() => handleToggleModelParam(model.id, 'topPEnabled')}
-                                        />
-                                      </div>
-                                      <div className="mt-2 flex flex-col gap-2">
-                                        <SliderWithTicks
-                                          value={model.params?.topP ?? DEFAULT_TOP_P}
-                                          min={0}
-                                          max={1}
-                                          step={0.05}
-                                          ticks={[
-                                            { value: 0 },
-                                            { value: 0.25 },
-                                            { value: 0.5 },
-                                            { value: 0.75 },
-                                            { value: 1 }
-                                          ]}
-                                          snapToTicks
-                                          disabled={!(model.params?.topPEnabled ?? false)}
-                                          onChange={(next) => handleUpdateModelParams(model.id, { topP: next })}
-                                        />
-                                        <input
-                                          className={miniInputClass}
-                                          type="number"
-                                          min="0"
-                                          max="1"
-                                          step="0.05"
-                                          value={formatNumber(model.params?.topP)}
-                                          onChange={(e) => handleUpdateModelParams(model.id, { topP: parseOptionalNumber(e.target.value) })}
-                                          disabled={!(model.params?.topPEnabled ?? false)}
-                                        />
-                                      </div>
-                                    </div>
-                                  </div>
-
-                                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-[180px_1fr_120px] items-center">
-                                    <div className="flex items-center gap-2">
-                                      <span className="text-xs text-slate-600 dark:text-slate-300">最大输出 tokens</span>
-                                      <span className={tipWrapClass}>
-                                        <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                                          <circle cx="12" cy="12" r="9" />
-                                          <path d="M12 8h.01M11 12h1v4h-1" strokeLinecap="round" strokeLinejoin="round" />
-                                        </svg>
-                                        <span className={tipBubbleClass}>单次最大输出 token，过大可能报错。关闭表示不限制。</span>
-                                      </span>
-                                    </div>
-                                    <div className="flex items-center gap-3">
-                                      <Switch
-                                        checked={model.params?.maxOutputTokensEnabled ?? false}
-                                        onChange={() => handleToggleModelMaxTokens(model.id)}
-                                      />
-                                      <input
-                                        className={miniInputClass}
-                                        type="number"
-                                        min="1"
-                                        step="1"
-                                        value={formatNumber(model.params?.maxOutputTokens)}
-                                        onChange={(e) => handleUpdateModelParams(model.id, { maxOutputTokens: parseOptionalNumber(e.target.value) })}
-                                        disabled={!(model.params?.maxOutputTokensEnabled ?? false)}
-                                      />
-                                    </div>
-                                    <div />
-                                  </div>
-                                </div>
-                                <details className="mt-3 rounded-2xl border border-slate-200/80 bg-slate-50 px-4 py-3 text-sm text-slate-700 dark:border-slate-800/80 dark:bg-slate-900/50 dark:text-slate-200">
-                                  <summary className="cursor-pointer text-sm font-medium text-slate-700 dark:text-slate-200">高级参数</summary>
-                                  <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-3">
-                                    <input
-                                      className={inputClass}
-                                      placeholder="Top-K"
-                                      value={formatNumber(model.params?.topK)}
-                                      onChange={(e) => handleUpdateModelParams(model.id, { topK: parseOptionalNumber(e.target.value) })}
-                                    />
-                                    <input
-                                      className={inputClass}
-                                      placeholder="Presence Penalty (-2~2)"
-                                      value={formatNumber(model.params?.presencePenalty)}
-                                      onChange={(e) => handleUpdateModelParams(model.id, { presencePenalty: parseOptionalNumber(e.target.value) })}
-                                    />
-                                    <input
-                                      className={inputClass}
-                                      placeholder="Frequency Penalty (-2~2)"
-                                      value={formatNumber(model.params?.frequencyPenalty)}
-                                      onChange={(e) => handleUpdateModelParams(model.id, { frequencyPenalty: parseOptionalNumber(e.target.value) })}
-                                    />
-                                    <input
-                                      className={inputClass}
-                                      placeholder="Seed"
-                                      value={formatNumber(model.params?.seed)}
-                                      onChange={(e) => handleUpdateModelParams(model.id, { seed: parseOptionalNumber(e.target.value) })}
-                                    />
-                                    <textarea
-                                      className={`${inputClass} min-h-[72px] sm:col-span-3`}
-                                      placeholder="Stop sequences (换行或逗号分隔)"
-                                      value={formatStopSequences(model.params?.stopSequences)}
-                                      onChange={(e) => handleUpdateModelParams(model.id, { stopSequences: parseStopSequences(e.target.value) })}
-                                    />
-                                  </div>
-                                </details>
-                              </div>
-                            </details>
-                          ))
-                        )}
-                      </div>
-                    </div>
-                  </>
-                )}
-              </div>
-            </div>
-          </div>
+          <ProviderSettingsSection
+            aiDraft={aiDraft}
+            sortedProviderEntries={sortedProviderEntries}
+            selectedProvider={selectedProvider}
+            selectedProviderIndex={selectedProviderIndex}
+            selectedProviderValidation={selectedProviderValidation}
+            selectedProviderIsSystemDefault={selectedProviderIsSystemDefault}
+            selectedProviderType={selectedProviderType}
+            selectedProviderSupportsEndpointRouting={selectedProviderSupportsEndpointRouting}
+            selectedProviderDefaultBaseURL={selectedProviderDefaultBaseURL}
+            selectedProviderDefaultAnthropicBaseURL={selectedProviderDefaultAnthropicBaseURL}
+            filteredModels={filteredModels}
+            isTestingConnection={isTestingConnection}
+            isFetchingModels={isFetchingModels}
+            setSelectedProviderIndex={setSelectedProviderIndex}
+            onOpenAddProviderModal={() => setShowAddProviderModal(true)}
+            onTestConnection={handleTestSelectedProviderConnection}
+            onUpdateSelectedProvider={handleUpdateSelectedProvider}
+            onRemoveSelectedProvider={handleRemoveSelectedProvider}
+            onSelectedProviderTypeChange={handleSelectedProviderTypeChange}
+            openApiKeyManager={openApiKeyManager}
+            onUpdateSelectedProviderParams={handleUpdateSelectedProviderParams}
+            onToggleSelectedProviderParam={handleToggleSelectedProviderParam}
+            onToggleSelectedProviderMaxTokens={handleToggleSelectedProviderMaxTokens}
+            onFetchModelsForSelectedProvider={handleFetchModelsForSelectedProvider}
+            openAddModelModal={openAddModelModal}
+            handleRemoveModel={handleRemoveModel}
+            handleUpdateModel={handleUpdateModel}
+            resolveProviderIdFromModel={resolveProviderIdFromModel}
+            getProviderKey={getProviderKey}
+            getProviderTypeLabel={getProviderTypeLabel}
+            getModelCapabilityState={getModelCapabilityState}
+            isCapabilityAuto={isCapabilityAuto}
+            updateModelCapabilities={updateModelCapabilities}
+            handleUpdateModelParams={handleUpdateModelParams}
+            onToggleModelParam={handleToggleModelParam}
+            onToggleModelMaxTokens={handleToggleModelMaxTokens}
+          />
         </div>
       </div>
 
-      {showModelModal && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
-          onClick={() => setShowModelModal(false)}
-        >
-          <div
-            className="mx-4 w-full max-w-3xl max-h-[80vh] overflow-auto rounded-[32px] border border-slate-200/80 bg-white p-6 shadow-2xl dark:border-slate-800/80 dark:bg-slate-900 no-drag"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="mb-4 flex items-start justify-between">
-              <div>
-                <div className="text-lg font-semibold text-slate-900 dark:text-white">可添加的模型</div>
-                <div className="text-xs text-slate-500 dark:text-slate-400">
-                  {fetchProviderLabel ? `来源：${fetchProviderLabel}` : '选择后点击添加'}
-                </div>
-              </div>
-              <button
-                onClick={() => setShowModelModal(false)}
-                className="rounded-full p-2 text-slate-400 hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-slate-800 dark:hover:text-slate-300 no-drag"
-              >
-                <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </button>
-            </div>
+      <FetchedModelsModal
+        show={showModelModal}
+        fetchProviderLabel={fetchProviderLabel}
+        fetchSearch={fetchSearch}
+        filteredFetchedModels={filteredFetchedModels}
+        selectedFetchedModelIds={selectedFetchedModelIds}
+        onClose={() => setShowModelModal(false)}
+        onFetchSearchChange={setFetchSearch}
+        onSelectAll={selectAllFetched}
+        onInvertSelection={invertFetchedSelection}
+        onToggleFetchedModel={toggleFetchedModel}
+        onAddSelected={handleAddFetchedModels}
+      />
 
-            <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
-              <div className="relative flex-1 min-w-[240px]">
-                <input
-                  className={inputClass}
-                  placeholder="搜索模型 ID / 名称"
-                  value={fetchSearch}
-                  onChange={(e) => setFetchSearch(e.target.value)}
-                />
-              </div>
-              <div className="flex items-center gap-2">
-                <button className={pillClass} onClick={selectAllFetched}>全选</button>
-                <button className={pillClass} onClick={invertFetchedSelection}>反全选</button>
-              </div>
-            </div>
+      <ApiKeyManagerModal
+        show={showApiKeyManagerModal}
+        selectedProvider={selectedProvider}
+        selectedProviderApiKeys={selectedProviderApiKeys}
+        selectedProviderModelOptions={selectedProviderModelOptions}
+        newApiKeyInput={newApiKeyInput}
+        apiKeyTestModel={apiKeyTestModel}
+        testingApiKeyIndex={testingApiKeyIndex}
+        apiKeyTestStatusMap={apiKeyTestStatusMap}
+        onClose={() => setShowApiKeyManagerModal(false)}
+        onNewApiKeyInputChange={setNewApiKeyInput}
+        onApiKeyTestModelChange={setApiKeyTestModel}
+        onAddApiKey={handleAddApiKey}
+        onTestSingleApiKey={handleTestSingleApiKey}
+        onRemoveApiKey={handleRemoveApiKey}
+        getProviderKey={getProviderKey}
+      />
 
-            <div className="space-y-2">
-              {filteredFetchedModels.length === 0 ? (
-                <div className="rounded-2xl border border-dashed border-slate-200/80 bg-slate-50 px-4 py-6 text-center text-sm text-slate-500 dark:border-slate-800/80 dark:bg-slate-900/40 dark:text-slate-400">
-                  未找到匹配模型
-                </div>
-              ) : (
-                filteredFetchedModels.map((model) => (
-                  <label key={model.id} className="flex items-center justify-between rounded-2xl border border-slate-200/80 bg-slate-50 px-4 py-3 text-sm text-slate-700 dark:border-slate-800/80 dark:bg-slate-800/40 dark:text-slate-200">
-                    <div className="min-w-0">
-                      <div className="text-sm font-medium text-slate-900 dark:text-white">{model.label}</div>
-                      <div className="text-xs text-slate-500 dark:text-slate-400 truncate">{model.id}</div>
-                    </div>
-                    <input
-                      type="checkbox"
-                      className="h-4 w-4 accent-slate-900 dark:accent-white"
-                      checked={selectedFetchedModelIds.has(model.id)}
-                      onChange={() => toggleFetchedModel(model.id)}
-                    />
-                  </label>
-                ))
-              )}
-            </div>
+      <AddProviderModal
+        show={showAddProviderModal}
+        newProvider={newProvider}
+        newProviderDefaultBaseURL={newProviderDefaultBaseURL}
+        newProviderDefaultAnthropicBaseURL={newProviderDefaultAnthropicBaseURL}
+        onClose={() => setShowAddProviderModal(false)}
+        onAddProvider={handleAddProvider}
+        onNewProviderTypeChange={handleNewProviderTypeChange}
+        setNewProvider={setNewProvider}
+      />
 
-            <div className="mt-5 flex items-center justify-end gap-2">
-              <button className={pillClass} onClick={() => setShowModelModal(false)}>取消</button>
-              <button className={primaryPillClass} onClick={handleAddFetchedModels}>添加所选</button>
-            </div>
-          </div>
-        </div>
-      )}
+      <AddModelModal
+        show={showAddModelModal}
+        aiDraft={aiDraft}
+        newModel={newModel}
+        newModelProviderIndex={newModelProviderIndex}
+        newModelNeedsEndpointType={newModelNeedsEndpointType}
+        inferredCapabilities={inferredCapabilities}
+        onClose={() => setShowAddModelModal(false)}
+        onAddModel={handleAddModel}
+        onNewModelProviderIndexChange={handleNewModelProviderIndexChange}
+        setNewModel={setNewModel}
+        updateNewModelCapability={updateNewModelCapability}
+        getProviderKey={getProviderKey}
+      />
 
-      {showApiKeyManagerModal && selectedProvider && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
-          onClick={() => setShowApiKeyManagerModal(false)}
-        >
-          <div
-            className="mx-4 w-full max-w-3xl max-h-[80vh] overflow-auto rounded-[32px] border border-slate-200/80 bg-white p-6 shadow-2xl dark:border-slate-800/80 dark:bg-slate-900 no-drag"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="mb-4 flex items-start justify-between">
-              <div>
-                <div className="text-lg font-semibold text-slate-900 dark:text-white">API 密钥管理</div>
-                <div className="text-xs text-slate-500 dark:text-slate-400">
-                  Provider：{getProviderKey(selectedProvider)} · 已配置 {selectedProviderApiKeys.length} 个密钥
-                </div>
-              </div>
-              <button
-                onClick={() => setShowApiKeyManagerModal(false)}
-                className="rounded-full p-2 text-slate-400 hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-slate-800 dark:hover:text-slate-300 no-drag"
-              >
-                <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </button>
-            </div>
-
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-[220px_1fr_auto]">
-              <UnifiedSelect
-                value={apiKeyTestModel}
-                onChange={(e) => setApiKeyTestModel(e.target.value)}
-                disabled={selectedProviderModelOptions.length === 0}
-              >
-                {selectedProviderModelOptions.length === 0 ? (
-                  <option value="">无可用模型</option>
-                ) : (
-                  selectedProviderModelOptions.map((model) => (
-                    <option key={model.id} value={model.id}>
-                      {model.label}
-                    </option>
-                  ))
-                )}
-              </UnifiedSelect>
-              <input
-                className={inputClass}
-                placeholder="新增 API Key（支持批量粘贴，逗号或换行分隔）"
-                value={newApiKeyInput}
-                onChange={(e) => setNewApiKeyInput(e.target.value)}
-              />
-              <button className={primaryPillClass} onClick={handleAddApiKey}>添加密钥</button>
-            </div>
-            {selectedProviderModelOptions.length === 0 && (
-              <div className="mt-3 rounded-2xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-700 dark:border-amber-900/60 dark:bg-amber-900/20 dark:text-amber-200">
-                当前 Provider 尚未配置模型，无法测试密钥。请先在模型管理中拉取或添加模型。
-              </div>
-            )}
-
-            <div className="mt-4 space-y-2">
-              {selectedProviderApiKeys.length === 0 ? (
-                <div className="rounded-2xl border border-dashed border-slate-200/80 bg-slate-50 px-4 py-6 text-center text-sm text-slate-500 dark:border-slate-800/80 dark:bg-slate-900/40 dark:text-slate-400">
-                  尚未添加 API 密钥
-                </div>
-              ) : (
-                selectedProviderApiKeys.map((key, index) => {
-                  const statusKey = `${index}:${key}`
-                  const status = apiKeyTestStatusMap[statusKey]
-                  const statusClass =
-                    status?.state === 'success'
-                      ? 'text-emerald-600 dark:text-emerald-300'
-                      : status?.state === 'error'
-                        ? 'text-rose-600 dark:text-rose-300'
-                        : 'text-slate-500 dark:text-slate-400'
-                  return (
-                    <div
-                      key={statusKey}
-                      className="rounded-2xl border border-slate-200/80 bg-slate-50 px-4 py-3 dark:border-slate-800/80 dark:bg-slate-900/50"
-                    >
-                      <div className="flex flex-wrap items-center justify-between gap-2">
-                        <div className="min-w-0 flex-1">
-                          <div className="truncate text-sm font-medium text-slate-800 dark:text-slate-100">{key}</div>
-                          {status ? (
-                            <div className={`mt-1 text-xs ${statusClass}`}>{status.message}</div>
-                          ) : (
-                            <div className="mt-1 text-xs text-slate-500 dark:text-slate-400">未测试</div>
-                          )}
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <button
-                            className={pillClass}
-                            onClick={() => handleTestSingleApiKey(key, index)}
-                            disabled={testingApiKeyIndex !== null || selectedProviderModelOptions.length === 0 || !apiKeyTestModel}
-                            title={selectedProviderModelOptions.length === 0 ? '请先添加模型' : '测试该密钥可用性'}
-                          >
-                            {testingApiKeyIndex === index ? '测试中…' : '测试'}
-                          </button>
-                          <button
-                            className={actionButtonClass}
-                            onClick={() => handleRemoveApiKey(index)}
-                            disabled={testingApiKeyIndex !== null}
-                          >
-                            删除
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-                  )
-                })
-              )}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {showAddProviderModal && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
-          onClick={() => setShowAddProviderModal(false)}
-        >
-          <div
-            className="mx-4 w-full max-w-xl rounded-[32px] border border-slate-200/80 bg-white p-6 shadow-2xl dark:border-slate-800/80 dark:bg-slate-900 no-drag"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="mb-4 flex items-start justify-between">
-              <div>
-                <div className="text-lg font-semibold text-slate-900 dark:text-white">新增 Provider</div>
-                <div className="text-xs text-slate-500 dark:text-slate-400">填写 Provider 基本信息</div>
-              </div>
-              <button
-                onClick={() => setShowAddProviderModal(false)}
-                className="rounded-full p-2 text-slate-400 hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-slate-800 dark:hover:text-slate-300 no-drag"
-              >
-                <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </button>
-            </div>
-
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-              <UnifiedSelect
-                value={inferProviderType(newProvider)}
-                onChange={(e) => handleNewProviderTypeChange(e.target.value)}
-              >
-                {PROVIDER_TYPE_OPTIONS.map((type) => (
-                  <option key={type} value={type}>
-                    {PROVIDER_TYPE_LABELS[type] || type}
-                  </option>
-                ))}
-              </UnifiedSelect>
-              <input
-                className={inputClass}
-                placeholder="Provider 实例 ID（可选，留空自动生成）"
-                value={newProvider.id || ''}
-                onChange={(e) => setNewProvider((prev) => ({ ...prev, id: e.target.value }))}
-              />
-              <input
-                className={inputClass}
-                placeholder="显示名称（可选）"
-                value={newProvider.label || ''}
-                onChange={(e) => setNewProvider((prev) => ({ ...prev, label: e.target.value }))}
-              />
-              <input
-                className={inputClass}
-                placeholder="API Key（支持多个，逗号分隔）"
-                value={newProvider.apiKey || ''}
-                onChange={(e) => setNewProvider((prev) => ({ ...prev, apiKey: e.target.value }))}
-              />
-              <input
-                className={inputClass}
-                placeholder="Base URL（可选）"
-                value={newProvider.baseURL || ''}
-                onChange={(e) => setNewProvider((prev) => ({ ...prev, baseURL: e.target.value }))}
-              />
-              <div className="text-[11px] text-slate-500 dark:text-slate-400">
-                默认 Base URL：{newProviderDefaultBaseURL || '无（需手动填写）'}
-              </div>
-              {supportsProviderEndpointRouting(newProvider) && (
-                <>
-                  <input
-                    className={inputClass}
-                    placeholder="Anthropic Base URL（可选）"
-                    value={newProvider.anthropicBaseURL || newProviderDefaultAnthropicBaseURL || ''}
-                    onChange={(e) => setNewProvider((prev) => ({ ...prev, anthropicBaseURL: e.target.value }))}
-                  />
-                  <div className="text-[11px] text-slate-500 dark:text-slate-400">
-                    默认 Anthropic Base URL：{newProviderDefaultAnthropicBaseURL || '无（将使用 Base URL）'}
-                  </div>
-                </>
-              )}
-              {(inferProviderType(newProvider) === 'azure-openai' || inferProviderType(newProvider) === 'azure') && (
-                <input
-                  className={inputClass}
-                  placeholder="API Version（Azure OpenAI）"
-                  value={newProvider.apiVersion || ''}
-                  onChange={(e) => setNewProvider((prev) => ({ ...prev, apiVersion: e.target.value }))}
-                />
-              )}
-            </div>
-
-            <div className="mt-5 flex items-center justify-end gap-2">
-              <button className={pillClass} onClick={() => setShowAddProviderModal(false)}>取消</button>
-              <button className={primaryPillClass} onClick={handleAddProvider}>添加 Provider</button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {showAddModelModal && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
-          onClick={() => setShowAddModelModal(false)}
-        >
-          <div
-            className="mx-4 w-full max-w-xl rounded-[32px] border border-slate-200/80 bg-white p-6 shadow-2xl dark:border-slate-800/80 dark:bg-slate-900 no-drag"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="mb-4 flex items-start justify-between">
-              <div>
-                <div className="text-lg font-semibold text-slate-900 dark:text-white">新增模型</div>
-                <div className="text-xs text-slate-500 dark:text-slate-400">手动录入模型信息</div>
-              </div>
-              <button
-                onClick={() => setShowAddModelModal(false)}
-                className="rounded-full p-2 text-slate-400 hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-slate-800 dark:hover:text-slate-300 no-drag"
-              >
-                <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </button>
-            </div>
-
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-              <input
-                className={inputClass}
-                placeholder="模型 ID"
-                value={newModel.id}
-                onChange={(e) => setNewModel((prev) => ({ ...prev, id: e.target.value }))}
-              />
-              <input
-                className={inputClass}
-                placeholder="模型名称"
-                value={newModel.label}
-                onChange={(e) => setNewModel((prev) => ({ ...prev, label: e.target.value }))}
-              />
-              <UnifiedSelect
-                value={String(newModelProviderIndex)}
-                onChange={(e) => {
-                  const nextIndex = Number(e.target.value)
-                  setNewModelProviderIndex(nextIndex)
-                  const nextProvider = (aiDraft?.providers || [])[nextIndex]
-                  const nextProviderSupportsEndpointRouting = nextProvider ? supportsProviderEndpointRouting(nextProvider) : false
-                  setNewModel((prev) => ({
-                    ...prev,
-                    endpointType: nextProviderSupportsEndpointRouting ? (prev.endpointType || 'openai') : undefined,
-                    supportedEndpointTypes: nextProviderSupportsEndpointRouting ? prev.supportedEndpointTypes : undefined
-                  }))
-                }}
-                disabled={!aiDraft || aiDraft.providers.length === 0}
-              >
-                {(aiDraft?.providers || []).length === 0 ? (
-                  <option value="0">暂无 Provider</option>
-                ) : (
-                  (aiDraft?.providers || []).map((provider, index) => (
-                    <option key={`${provider.id}-${index}`} value={String(index)}>
-                      {getProviderKey(provider)}
-                    </option>
-                  ))
-                )}
-              </UnifiedSelect>
-              <input
-                className={inputClass}
-                placeholder="描述"
-                value={newModel.description}
-                onChange={(e) => setNewModel((prev) => ({ ...prev, description: e.target.value }))}
-              />
-              {newModelNeedsEndpointType && (
-                <>
-                  <UnifiedSelect
-                    value={newModel.endpointType || 'openai'}
-                    onChange={(e) => setNewModel((prev) => ({ ...prev, endpointType: e.target.value as AiEndpointType }))}
-                  >
-                    {ENDPOINT_TYPE_OPTIONS.map((endpointType) => (
-                      <option key={endpointType} value={endpointType}>
-                        {endpointType}
-                      </option>
-                    ))}
-                  </UnifiedSelect>
-                  <input
-                    className={inputClass}
-                    placeholder="supported endpoint types（逗号分隔，可选）"
-                    value={formatEndpointTypes(newModel.supportedEndpointTypes)}
-                    onChange={(e) => setNewModel((prev) => ({ ...prev, supportedEndpointTypes: parseEndpointTypes(e.target.value) }))}
-                  />
-                </>
-              )}
-            </div>
-
-            <div className="mt-4">
-              <div className="text-xs uppercase tracking-[0.2em] text-slate-400">模型能力</div>
-              <div className="mt-2 text-xs text-slate-500 dark:text-slate-400">
-                默认自动推断，建议不要手动修改，配置错误可能导致模型不可用。
-              </div>
-              <div className="mt-2 flex flex-wrap gap-2">
-                {MODEL_CAPABILITIES.map((cap) => {
-                  const enabled = getModelCapabilityState(newModel, cap.type)
-                  const isAuto = isCapabilityAuto(newModel, cap.type)
-                  return (
-                    <button
-                      key={`new-${cap.type}`}
-                      className={enabled ? primaryPillClass : pillClass}
-                      onClick={() => updateNewModelCapability(cap.type, !enabled)}
-                    >
-                      <span>{cap.label}</span>
-                      {isAuto ? <span className="ml-2 rounded-full bg-slate-200 px-2 py-0.5 text-[10px] text-slate-600 dark:bg-slate-700 dark:text-slate-200">自动</span> : null}
-                    </button>
-                  )
-                })}
-              </div>
-            </div>
-
-            <div className="mt-5 flex items-center justify-end gap-2">
-              <button className={pillClass} onClick={() => setShowAddModelModal(false)}>取消</button>
-              <button className={primaryPillClass} onClick={handleAddModel}>添加模型</button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {showDefaultParamsModal && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
-          onClick={() => setShowDefaultParamsModal(false)}
-        >
-          <div
-            className="mx-4 w-full max-w-2xl max-h-[85vh] overflow-y-auto rounded-[32px] border border-slate-200/80 bg-white p-6 shadow-2xl dark:border-slate-800/80 dark:bg-slate-900 no-drag"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="mb-4 flex items-start justify-between">
-              <div>
-                <div className="text-lg font-semibold text-slate-900 dark:text-white">默认参数</div>
-                <div className="text-xs text-slate-500 dark:text-slate-400">配置全局默认的 AI 模型参数</div>
-              </div>
-              <button
-                onClick={() => setShowDefaultParamsModal(false)}
-                className="rounded-full p-2 text-slate-400 hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-slate-800 dark:hover:text-slate-300 no-drag"
-              >
-                <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </button>
-            </div>
-
-            <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
-              <div className="text-xs text-slate-500 dark:text-slate-400">空值表示继承模型或供应商参数</div>
-              <span className={tipWrapClass}>
-                <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <circle cx="12" cy="12" r="9" />
-                  <path d="M12 8h.01M11 12h1v4h-1" strokeLinecap="round" strokeLinejoin="round" />
-                </svg>
-                <span className={tipBubbleClass}>token 为估算值，仅供参考</span>
-              </span>
-            </div>
-
-            <div className="space-y-4">
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-[180px_1fr_120px] items-center">
-                <div className="flex items-center gap-2">
-                  <span className="text-xs text-slate-600 dark:text-slate-300">上下文条数</span>
-                  <span className={tipWrapClass}>
-                    <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                      <circle cx="12" cy="12" r="9" />
-                      <path d="M12 8h.01M11 12h1v4h-1" strokeLinecap="round" strokeLinejoin="round" />
-                    </svg>
-                    <span className={tipBubbleClass}>保留最近的消息条数，100 表示不限，普通聊天建议 5–10</span>
-                  </span>
-                </div>
-                <SliderWithTicks
-                  value={aiDraft?.defaultParams?.contextWindow ?? DEFAULT_CONTEXT_WINDOW}
-                  min={0}
-                  max={100}
-                  step={1}
-                  ticks={[
-                    { value: 0 },
-                    { value: 5 },
-                    { value: 10 },
-                    { value: 20 },
-                    { value: 50 },
-                    { value: 100, label: '∞' }
-                  ]}
-                  snapToTicks
-                  onChange={(next) => handleUpdateDefaultParams({ contextWindow: next })}
-                />
-                <input
-                  className={miniInputClass}
-                  type="number"
-                  min="0"
-                  step="1"
-                  value={formatNumber(aiDraft?.defaultParams?.contextWindow)}
-                  onChange={(e) => handleUpdateDefaultParams({ contextWindow: parseOptionalNumber(e.target.value) })}
-                />
-              </div>
-
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                <div className="rounded-2xl border border-slate-200/80 bg-white p-3 dark:border-slate-800/80 dark:bg-slate-950">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs text-slate-600 dark:text-slate-300">温度</span>
-                    <Switch
-                      checked={aiDraft?.defaultParams?.temperatureEnabled ?? false}
-                      onChange={() => handleToggleDefaultParam('temperatureEnabled')}
-                    />
-                  </div>
-                  <div className="mt-2 flex flex-col gap-2">
-                    <SliderWithTicks
-                      value={aiDraft?.defaultParams?.temperature ?? DEFAULT_TEMPERATURE}
-                      min={0}
-                      max={2}
-                      step={0.05}
-                      ticks={[
-                        { value: 0 },
-                        { value: 0.5 },
-                        { value: 1 },
-                        { value: 1.5 },
-                        { value: 2 }
-                      ]}
-                      snapToTicks
-                      disabled={!(aiDraft?.defaultParams?.temperatureEnabled ?? false)}
-                      onChange={(next) => handleUpdateDefaultParams({ temperature: next })}
-                    />
-                    <input
-                      className={miniInputClass}
-                      type="number"
-                      min="0"
-                      max="2"
-                      step="0.05"
-                      value={formatNumber(aiDraft?.defaultParams?.temperature)}
-                      onChange={(e) => handleUpdateDefaultParams({ temperature: parseOptionalNumber(e.target.value) })}
-                      disabled={!(aiDraft?.defaultParams?.temperatureEnabled ?? false)}
-                    />
-                  </div>
-                </div>
-
-                <div className="rounded-2xl border border-slate-200/80 bg-white p-3 dark:border-slate-800/80 dark:bg-slate-950">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs text-slate-600 dark:text-slate-300">Top-P</span>
-                    <Switch
-                      checked={aiDraft?.defaultParams?.topPEnabled ?? false}
-                      onChange={() => handleToggleDefaultParam('topPEnabled')}
-                    />
-                  </div>
-                  <div className="mt-2 flex flex-col gap-2">
-                    <SliderWithTicks
-                      value={aiDraft?.defaultParams?.topP ?? DEFAULT_TOP_P}
-                      min={0}
-                      max={1}
-                      step={0.05}
-                      ticks={[
-                        { value: 0 },
-                        { value: 0.25 },
-                        { value: 0.5 },
-                        { value: 0.75 },
-                        { value: 1 }
-                      ]}
-                      snapToTicks
-                      disabled={!(aiDraft?.defaultParams?.topPEnabled ?? false)}
-                      onChange={(next) => handleUpdateDefaultParams({ topP: next })}
-                    />
-                    <input
-                      className={miniInputClass}
-                      type="number"
-                      min="0"
-                      max="1"
-                      step="0.05"
-                      value={formatNumber(aiDraft?.defaultParams?.topP)}
-                      onChange={(e) => handleUpdateDefaultParams({ topP: parseOptionalNumber(e.target.value) })}
-                      disabled={!(aiDraft?.defaultParams?.topPEnabled ?? false)}
-                    />
-                  </div>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-[180px_1fr_120px] items-center">
-                <div className="flex items-center gap-2">
-                  <span className="text-xs text-slate-600 dark:text-slate-300">最大输出 tokens</span>
-                  <span className={tipWrapClass}>
-                    <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                      <circle cx="12" cy="12" r="9" />
-                      <path d="M12 8h.01M11 12h1v4h-1" strokeLinecap="round" strokeLinejoin="round" />
-                    </svg>
-                    <span className={tipBubbleClass}>单次最大输出 token，过大可能报错。关闭表示不限制。</span>
-                  </span>
-                </div>
-                <div className="flex items-center gap-3">
-                  <Switch
-                    checked={aiDraft?.defaultParams?.maxOutputTokensEnabled ?? false}
-                    onChange={handleToggleDefaultMaxTokens}
-                  />
-                  <input
-                    className={miniInputClass}
-                    type="number"
-                    min="1"
-                    step="1"
-                    value={formatNumber(aiDraft?.defaultParams?.maxOutputTokens)}
-                    onChange={(e) => handleUpdateDefaultParams({ maxOutputTokens: parseOptionalNumber(e.target.value) })}
-                    disabled={!(aiDraft?.defaultParams?.maxOutputTokensEnabled ?? false)}
-                  />
-                </div>
-                <div />
-              </div>
-            </div>
-
-            <details className="mt-4 rounded-2xl border border-slate-200/80 bg-slate-50 px-4 py-3 text-sm text-slate-700 dark:border-slate-800/80 dark:bg-slate-900/50 dark:text-slate-200">
-              <summary className="cursor-pointer text-sm font-medium text-slate-700 dark:text-slate-200">高级参数</summary>
-              <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-3">
-                <input
-                  className={inputClass}
-                  placeholder="Top-K"
-                  value={formatNumber(aiDraft?.defaultParams?.topK)}
-                  onChange={(e) => handleUpdateDefaultParams({ topK: parseOptionalNumber(e.target.value) })}
-                />
-                <input
-                  className={inputClass}
-                  placeholder="Presence Penalty (-2~2)"
-                  value={formatNumber(aiDraft?.defaultParams?.presencePenalty)}
-                  onChange={(e) => handleUpdateDefaultParams({ presencePenalty: parseOptionalNumber(e.target.value) })}
-                />
-                <input
-                  className={inputClass}
-                  placeholder="Frequency Penalty (-2~2)"
-                  value={formatNumber(aiDraft?.defaultParams?.frequencyPenalty)}
-                  onChange={(e) => handleUpdateDefaultParams({ frequencyPenalty: parseOptionalNumber(e.target.value) })}
-                />
-                <input
-                  className={inputClass}
-                  placeholder="Seed"
-                  value={formatNumber(aiDraft?.defaultParams?.seed)}
-                  onChange={(e) => handleUpdateDefaultParams({ seed: parseOptionalNumber(e.target.value) })}
-                />
-                <textarea
-                  className={`${inputClass} min-h-[84px] sm:col-span-2`}
-                  placeholder="Stop sequences (换行或逗号分隔)"
-                  value={formatStopSequences(aiDraft?.defaultParams?.stopSequences)}
-                  onChange={(e) => handleUpdateDefaultParams({ stopSequences: parseStopSequences(e.target.value) })}
-                />
-              </div>
-            </details>
-
-            <div className="mt-5 flex items-center justify-end gap-2">
-              <button className={pillClass} onClick={() => setShowDefaultParamsModal(false)}>关闭</button>
-            </div>
-          </div>
-        </div>
-      )}
+      <DefaultParamsModal
+        show={showDefaultParamsModal}
+        aiDraft={aiDraft}
+        onClose={() => setShowDefaultParamsModal(false)}
+        onUpdateDefaultParams={handleUpdateDefaultParams}
+        onToggleDefaultParam={handleToggleDefaultParam}
+        onToggleDefaultMaxTokens={handleToggleDefaultMaxTokens}
+      />
     </div>
   )
 }
