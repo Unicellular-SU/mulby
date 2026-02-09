@@ -9,6 +9,7 @@ import { getSystemDefaultProviderById, isSystemDefaultProviderId } from '../../s
 import { getSystemDefaultModels } from '../../shared/ai/systemModels'
 import { splitApiKeyString } from '../../shared/ai/apiKeyPool'
 import SliderWithTicks from './SliderWithTicks'
+import UnifiedSelect from './UnifiedSelect'
 
 const PROVIDER_TYPE_OPTIONS = [...BUILTIN_PROVIDER_TYPES] as string[]
 const PROVIDER_TYPE_LABELS: Record<string, string> = {
@@ -120,8 +121,6 @@ export default function AiSettingsView({ onBack, onOpenMcpSettings, onOpenSkills
   const primaryPillClass = 'rounded-full border border-slate-900 bg-slate-900 px-3 py-1 text-xs text-white shadow-sm transition dark:border-white dark:bg-white dark:text-slate-900'
   const actionButtonClass = 'rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-700 transition hover:border-slate-300 hover:text-slate-900 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-200'
   const inputClass = 'w-full rounded-2xl border border-slate-200 bg-white px-4 py-2 text-sm text-slate-700 shadow-sm outline-none transition focus:border-slate-300 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-200'
-  const selectClass = 'w-full appearance-none rounded-2xl border border-slate-200 bg-white px-4 py-2 pr-10 text-sm text-slate-700 shadow-sm outline-none transition focus:border-slate-300 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-200'
-
 
   const miniInputClass = 'w-24 rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 shadow-sm outline-none transition focus:border-slate-300 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-200'
   const tipWrapClass = 'relative inline-flex items-center gap-1 text-xs text-slate-500 dark:text-slate-400 group'
@@ -1288,25 +1287,19 @@ export default function AiSettingsView({ onBack, onOpenMcpSettings, onOpenSkills
                       </div>
                     </div>
                     <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                      <div className="relative">
-                        <select
-                          className={selectClass}
-                          value={getProviderTypeLabel(selectedProvider)}
-                          onChange={(e) => {
-                            const nextProvider = applyProviderTypePreset(selectedProvider, e.target.value)
-                            handleUpdateProvider(selectedProviderIndex, nextProvider)
-                          }}
-                        >
-                          {getProviderTypeOptions(getProviderTypeLabel(selectedProvider)).map((type) => (
-                            <option key={type} value={type}>
-                              {PROVIDER_TYPE_LABELS[type] || type}
-                            </option>
-                          ))}
-                        </select>
-                        <svg className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                          <path d="m6 9 6 6 6-6" strokeLinecap="round" strokeLinejoin="round" />
-                        </svg>
-                      </div>
+                      <UnifiedSelect
+                        value={getProviderTypeLabel(selectedProvider)}
+                        onChange={(e) => {
+                          const nextProvider = applyProviderTypePreset(selectedProvider, e.target.value)
+                          handleUpdateProvider(selectedProviderIndex, nextProvider)
+                        }}
+                      >
+                        {getProviderTypeOptions(getProviderTypeLabel(selectedProvider)).map((type) => (
+                          <option key={type} value={type}>
+                            {PROVIDER_TYPE_LABELS[type] || type}
+                          </option>
+                        ))}
+                      </UnifiedSelect>
                       <input
                         className={inputClass}
                         placeholder="Provider 实例 ID（如 v3-openai）"
@@ -1614,31 +1607,25 @@ export default function AiSettingsView({ onBack, onOpenMcpSettings, onOpenSkills
                                     handleUpdateModel(actualIndex, { label: e.target.value })
                                   }}
                                 />
-                                <div className="relative">
-                                  <select
-                                    className={selectClass}
-                                    value={resolveProviderIdFromModel(model)}
-                                    onChange={(e) => {
-                                      const actualIndex = (aiDraft?.models || []).findIndex((item) => item.id === model.id)
-                                      const providerRef = e.target.value || undefined
-                                      const provider = (aiDraft?.providers || []).find((item) => String(item.id) === providerRef)
-                                      handleUpdateModel(actualIndex, {
-                                        providerRef,
-                                        providerLabel: provider ? getProviderKey(provider) : undefined
-                                      })
-                                    }}
-                                  >
-                                    <option value="">未绑定 Provider</option>
-                                    {(aiDraft?.providers || []).map((provider, providerIndex) => (
-                                      <option key={`${provider.id}-${providerIndex}`} value={String(provider.id)}>
-                                        {getProviderKey(provider)}
-                                      </option>
-                                    ))}
-                                  </select>
-                                  <svg className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                                    <path d="m6 9 6 6 6-6" strokeLinecap="round" strokeLinejoin="round" />
-                                  </svg>
-                                </div>
+                                <UnifiedSelect
+                                  value={resolveProviderIdFromModel(model)}
+                                  onChange={(e) => {
+                                    const actualIndex = (aiDraft?.models || []).findIndex((item) => item.id === model.id)
+                                    const providerRef = e.target.value || undefined
+                                    const provider = (aiDraft?.providers || []).find((item) => String(item.id) === providerRef)
+                                    handleUpdateModel(actualIndex, {
+                                      providerRef,
+                                      providerLabel: provider ? getProviderKey(provider) : undefined
+                                    })
+                                  }}
+                                >
+                                  <option value="">未绑定 Provider</option>
+                                  {(aiDraft?.providers || []).map((provider, providerIndex) => (
+                                    <option key={`${provider.id}-${providerIndex}`} value={String(provider.id)}>
+                                      {getProviderKey(provider)}
+                                    </option>
+                                  ))}
+                                </UnifiedSelect>
                               </div>
                               <div className="mt-3">
                                 <input
@@ -1653,25 +1640,19 @@ export default function AiSettingsView({ onBack, onOpenMcpSettings, onOpenSkills
                               </div>
                               {selectedProviderSupportsEndpointRouting && (
                                 <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
-                                  <div className="relative">
-                                    <select
-                                      className={selectClass}
-                                      value={model.endpointType || 'openai'}
-                                      onChange={(e) => {
-                                        const actualIndex = (aiDraft?.models || []).findIndex((item) => item.id === model.id)
-                                        handleUpdateModel(actualIndex, { endpointType: e.target.value as AiEndpointType })
-                                      }}
-                                    >
-                                      {ENDPOINT_TYPE_OPTIONS.map((endpointType) => (
-                                        <option key={endpointType} value={endpointType}>
-                                          {endpointType}
-                                        </option>
-                                      ))}
-                                    </select>
-                                    <svg className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                                      <path d="m6 9 6 6 6-6" strokeLinecap="round" strokeLinejoin="round" />
-                                    </svg>
-                                  </div>
+                                  <UnifiedSelect
+                                    value={model.endpointType || 'openai'}
+                                    onChange={(e) => {
+                                      const actualIndex = (aiDraft?.models || []).findIndex((item) => item.id === model.id)
+                                      handleUpdateModel(actualIndex, { endpointType: e.target.value as AiEndpointType })
+                                    }}
+                                  >
+                                    {ENDPOINT_TYPE_OPTIONS.map((endpointType) => (
+                                      <option key={endpointType} value={endpointType}>
+                                        {endpointType}
+                                      </option>
+                                    ))}
+                                  </UnifiedSelect>
                                   <input
                                     className={inputClass}
                                     placeholder="supported endpoint types（逗号分隔，可选）"
@@ -2004,27 +1985,21 @@ export default function AiSettingsView({ onBack, onOpenMcpSettings, onOpenSkills
             </div>
 
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-[220px_1fr_auto]">
-              <div className="relative">
-                <select
-                  className={selectClass}
-                  value={apiKeyTestModel}
-                  onChange={(e) => setApiKeyTestModel(e.target.value)}
-                  disabled={selectedProviderModelOptions.length === 0}
-                >
-                  {selectedProviderModelOptions.length === 0 ? (
-                    <option value="">无可用模型</option>
-                  ) : (
-                    selectedProviderModelOptions.map((model) => (
-                      <option key={model.id} value={model.id}>
-                        {model.label}
-                      </option>
-                    ))
-                  )}
-                </select>
-                <svg className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <path d="m6 9 6 6 6-6" strokeLinecap="round" strokeLinejoin="round" />
-                </svg>
-              </div>
+              <UnifiedSelect
+                value={apiKeyTestModel}
+                onChange={(e) => setApiKeyTestModel(e.target.value)}
+                disabled={selectedProviderModelOptions.length === 0}
+              >
+                {selectedProviderModelOptions.length === 0 ? (
+                  <option value="">无可用模型</option>
+                ) : (
+                  selectedProviderModelOptions.map((model) => (
+                    <option key={model.id} value={model.id}>
+                      {model.label}
+                    </option>
+                  ))
+                )}
+              </UnifiedSelect>
               <input
                 className={inputClass}
                 placeholder="新增 API Key（支持批量粘贴，逗号或换行分隔）"
@@ -2120,22 +2095,16 @@ export default function AiSettingsView({ onBack, onOpenMcpSettings, onOpenSkills
             </div>
 
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-              <div className="relative">
-                <select
-                  className={selectClass}
-                  value={inferProviderType(newProvider)}
-                  onChange={(e) => handleNewProviderTypeChange(e.target.value)}
-                >
-                  {PROVIDER_TYPE_OPTIONS.map((type) => (
-                    <option key={type} value={type}>
-                      {PROVIDER_TYPE_LABELS[type] || type}
-                    </option>
-                  ))}
-                </select>
-                <svg className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <path d="m6 9 6 6 6-6" strokeLinecap="round" strokeLinejoin="round" />
-                </svg>
-              </div>
+              <UnifiedSelect
+                value={inferProviderType(newProvider)}
+                onChange={(e) => handleNewProviderTypeChange(e.target.value)}
+              >
+                {PROVIDER_TYPE_OPTIONS.map((type) => (
+                  <option key={type} value={type}>
+                    {PROVIDER_TYPE_LABELS[type] || type}
+                  </option>
+                ))}
+              </UnifiedSelect>
               <input
                 className={inputClass}
                 placeholder="Provider 实例 ID（可选，留空自动生成）"
@@ -2231,37 +2200,31 @@ export default function AiSettingsView({ onBack, onOpenMcpSettings, onOpenSkills
                 value={newModel.label}
                 onChange={(e) => setNewModel((prev) => ({ ...prev, label: e.target.value }))}
               />
-              <div className="relative">
-                <select
-                  className={selectClass}
-                  value={String(newModelProviderIndex)}
-                  onChange={(e) => {
-                    const nextIndex = Number(e.target.value)
-                    setNewModelProviderIndex(nextIndex)
-                    const nextProvider = (aiDraft?.providers || [])[nextIndex]
-                    const nextProviderSupportsEndpointRouting = nextProvider ? supportsProviderEndpointRouting(nextProvider) : false
-                    setNewModel((prev) => ({
-                      ...prev,
-                      endpointType: nextProviderSupportsEndpointRouting ? (prev.endpointType || 'openai') : undefined,
-                      supportedEndpointTypes: nextProviderSupportsEndpointRouting ? prev.supportedEndpointTypes : undefined
-                    }))
-                  }}
-                  disabled={!aiDraft || aiDraft.providers.length === 0}
-                >
-                  {(aiDraft?.providers || []).length === 0 ? (
-                    <option value="0">暂无 Provider</option>
-                  ) : (
-                    (aiDraft?.providers || []).map((provider, index) => (
-                      <option key={`${provider.id}-${index}`} value={String(index)}>
-                        {getProviderKey(provider)}
-                      </option>
-                    ))
-                  )}
-                </select>
-                <svg className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <path d="m6 9 6 6 6-6" strokeLinecap="round" strokeLinejoin="round" />
-                </svg>
-              </div>
+              <UnifiedSelect
+                value={String(newModelProviderIndex)}
+                onChange={(e) => {
+                  const nextIndex = Number(e.target.value)
+                  setNewModelProviderIndex(nextIndex)
+                  const nextProvider = (aiDraft?.providers || [])[nextIndex]
+                  const nextProviderSupportsEndpointRouting = nextProvider ? supportsProviderEndpointRouting(nextProvider) : false
+                  setNewModel((prev) => ({
+                    ...prev,
+                    endpointType: nextProviderSupportsEndpointRouting ? (prev.endpointType || 'openai') : undefined,
+                    supportedEndpointTypes: nextProviderSupportsEndpointRouting ? prev.supportedEndpointTypes : undefined
+                  }))
+                }}
+                disabled={!aiDraft || aiDraft.providers.length === 0}
+              >
+                {(aiDraft?.providers || []).length === 0 ? (
+                  <option value="0">暂无 Provider</option>
+                ) : (
+                  (aiDraft?.providers || []).map((provider, index) => (
+                    <option key={`${provider.id}-${index}`} value={String(index)}>
+                      {getProviderKey(provider)}
+                    </option>
+                  ))
+                )}
+              </UnifiedSelect>
               <input
                 className={inputClass}
                 placeholder="描述"
@@ -2270,22 +2233,16 @@ export default function AiSettingsView({ onBack, onOpenMcpSettings, onOpenSkills
               />
               {newModelNeedsEndpointType && (
                 <>
-                  <div className="relative">
-                    <select
-                      className={selectClass}
-                      value={newModel.endpointType || 'openai'}
-                      onChange={(e) => setNewModel((prev) => ({ ...prev, endpointType: e.target.value as AiEndpointType }))}
-                    >
-                      {ENDPOINT_TYPE_OPTIONS.map((endpointType) => (
-                        <option key={endpointType} value={endpointType}>
-                          {endpointType}
-                        </option>
-                      ))}
-                    </select>
-                    <svg className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                      <path d="m6 9 6 6 6-6" strokeLinecap="round" strokeLinejoin="round" />
-                    </svg>
-                  </div>
+                  <UnifiedSelect
+                    value={newModel.endpointType || 'openai'}
+                    onChange={(e) => setNewModel((prev) => ({ ...prev, endpointType: e.target.value as AiEndpointType }))}
+                  >
+                    {ENDPOINT_TYPE_OPTIONS.map((endpointType) => (
+                      <option key={endpointType} value={endpointType}>
+                        {endpointType}
+                      </option>
+                    ))}
+                  </UnifiedSelect>
                   <input
                     className={inputClass}
                     placeholder="supported endpoint types（逗号分隔，可选）"

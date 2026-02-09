@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { AiMcpServer, AiMcpTool, AiMcpServerLogEntry } from '../../shared/types/ai'
+import UnifiedSelect from './UnifiedSelect'
 
 interface AiMcpSettingsViewProps {
   onBack: () => void
@@ -707,15 +708,14 @@ export default function AiMcpSettingsView({ onBack }: AiMcpSettingsViewProps) {
                     </label>
                     <label className="space-y-1">
                       <div className="text-xs text-slate-500 dark:text-slate-400">类型</div>
-                      <select
-                        className={inputClass}
+                      <UnifiedSelect
                         value={draftServer.type}
                         onChange={(e) => setDraftServer({ ...draftServer, type: e.target.value as AiMcpServer['type'] })}
                       >
                         {SERVER_TYPE_OPTIONS.map((option) => (
                           <option key={option.value} value={option.value}>{option.label}</option>
                         ))}
-                      </select>
+                      </UnifiedSelect>
                     </label>
                     <label className="space-y-1">
                       <div className="flex items-center justify-between text-xs text-slate-500 dark:text-slate-400">

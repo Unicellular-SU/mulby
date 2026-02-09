@@ -8,6 +8,7 @@ import type {
   ShortcutStatusMap,
   StoreSource
 } from '../../shared/types/settings'
+import UnifiedSelect from './UnifiedSelect'
 type SettingsSection =
   | 'general'
   | 'appearance'
@@ -1270,14 +1271,14 @@ export default function SettingsView({ section, onSectionChange, onClose, onOpen
                             <div className="truncate text-slate-700 dark:text-slate-200">
                               {formatCapabilityLabel(grant.capability)}
                             </div>
-                            <select
-                              className="rounded-xl border border-slate-200 bg-white px-2 py-1 text-xs dark:border-slate-800 dark:bg-slate-950"
+                            <UnifiedSelect
+                              className="rounded-xl px-2 py-1 pr-8 text-xs"
                               value={grant.decision}
                               onChange={(e) => void patchCapabilityGrant(grant.id, { decision: e.target.value as 'allow' | 'deny' })}
                             >
                               <option value="allow">allow（允许）</option>
                               <option value="deny">deny（拒绝）</option>
-                            </select>
+                            </UnifiedSelect>
                             <input
                               type="datetime-local"
                               className="rounded-xl border border-slate-200 bg-white px-2 py-1 text-xs dark:border-slate-800 dark:bg-slate-950"
@@ -1299,23 +1300,23 @@ export default function SettingsView({ section, onSectionChange, onClose, onOpen
                       <div className="space-y-2 rounded-xl border border-dashed border-slate-300 p-3 dark:border-slate-700">
                         <div className="text-xs font-medium text-slate-700 dark:text-slate-200">新增 global grant</div>
                         <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                          <select
-                            className="rounded-xl border border-slate-200 bg-white px-2 py-1 text-xs dark:border-slate-800 dark:bg-slate-950"
+                          <UnifiedSelect
+                            className="rounded-xl px-2 py-1 pr-8 text-xs"
                             value={grantDraft.capability}
                             onChange={(e) => setGrantDraft((prev) => ({ ...prev, capability: e.target.value }))}
                           >
                             {TOOL_CAPABILITY_OPTIONS.map((item) => (
                               <option key={`cap-option-${item.value}`} value={item.value}>{item.label}</option>
                             ))}
-                          </select>
-                          <select
-                            className="rounded-xl border border-slate-200 bg-white px-2 py-1 text-xs dark:border-slate-800 dark:bg-slate-950"
+                          </UnifiedSelect>
+                          <UnifiedSelect
+                            className="rounded-xl px-2 py-1 pr-8 text-xs"
                             value={grantDraft.decision}
                             onChange={(e) => setGrantDraft((prev) => ({ ...prev, decision: e.target.value as 'allow' | 'deny' }))}
                           >
                             <option value="allow">allow（允许）</option>
                             <option value="deny">deny（拒绝）</option>
-                          </select>
+                          </UnifiedSelect>
                           <input
                             type="datetime-local"
                             className="rounded-xl border border-slate-200 bg-white px-2 py-1 text-xs dark:border-slate-800 dark:bg-slate-950 sm:col-span-2"
@@ -1624,14 +1625,14 @@ export default function SettingsView({ section, onSectionChange, onClose, onOpen
                     <div className="space-y-2">
                       {settings.commandRunner.allowList.map((rule) => (
                         <div key={rule.id} className="grid grid-cols-1 gap-2 rounded-2xl border border-slate-200/80 bg-white/70 p-3 dark:border-slate-800 dark:bg-slate-950/70 sm:grid-cols-[110px_minmax(0,1fr)_80px_70px]">
-                          <select
-                            className="rounded-xl border border-slate-200 bg-white px-2 py-1 text-xs dark:border-slate-800 dark:bg-slate-950"
+                          <UnifiedSelect
+                            className="rounded-xl px-2 py-1 pr-8 text-xs"
                             value={rule.mode}
                             onChange={(e) => void patchCommandRule('allowList', rule.id, { mode: e.target.value as 'exact' | 'prefix' })}
                           >
                             <option value="exact">exact（精确匹配）</option>
                             <option value="prefix">prefix（前缀匹配）</option>
-                          </select>
+                          </UnifiedSelect>
                           <input
                             className="rounded-xl border border-slate-200 bg-white px-2 py-1 text-xs dark:border-slate-800 dark:bg-slate-950"
                             value={rule.value}
@@ -1651,14 +1652,14 @@ export default function SettingsView({ section, onSectionChange, onClose, onOpen
                       )}
                     </div>
                     <div className="grid grid-cols-1 gap-2 sm:grid-cols-[110px_minmax(0,1fr)_100px]">
-                      <select
-                        className="rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm dark:border-slate-800 dark:bg-slate-950"
+                      <UnifiedSelect
+                        className="rounded-2xl px-3 py-2 pr-9 text-sm"
                         value={allowRuleDraft.mode}
                         onChange={(e) => setAllowRuleDraft((prev) => ({ ...prev, mode: e.target.value as 'exact' | 'prefix' }))}
                       >
                         <option value="exact">exact（精确匹配）</option>
                         <option value="prefix">prefix（前缀匹配）</option>
-                      </select>
+                      </UnifiedSelect>
                       <input
                         className="rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm dark:border-slate-800 dark:bg-slate-950"
                         placeholder="命令或命令前缀（可包含参数）"
@@ -1677,14 +1678,14 @@ export default function SettingsView({ section, onSectionChange, onClose, onOpen
                     <div className="space-y-2">
                       {settings.commandRunner.denyList.map((rule) => (
                         <div key={rule.id} className="grid grid-cols-1 gap-2 rounded-2xl border border-slate-200/80 bg-white/70 p-3 dark:border-slate-800 dark:bg-slate-950/70 sm:grid-cols-[110px_minmax(0,1fr)_80px_70px]">
-                          <select
-                            className="rounded-xl border border-slate-200 bg-white px-2 py-1 text-xs dark:border-slate-800 dark:bg-slate-950"
+                          <UnifiedSelect
+                            className="rounded-xl px-2 py-1 pr-8 text-xs"
                             value={rule.mode}
                             onChange={(e) => void patchCommandRule('denyList', rule.id, { mode: e.target.value as 'exact' | 'prefix' })}
                           >
                             <option value="exact">exact（精确匹配）</option>
                             <option value="prefix">prefix（前缀匹配）</option>
-                          </select>
+                          </UnifiedSelect>
                           <input
                             className="rounded-xl border border-slate-200 bg-white px-2 py-1 text-xs dark:border-slate-800 dark:bg-slate-950"
                             value={rule.value}
@@ -1701,14 +1702,14 @@ export default function SettingsView({ section, onSectionChange, onClose, onOpen
                       ))}
                     </div>
                     <div className="grid grid-cols-1 gap-2 sm:grid-cols-[110px_minmax(0,1fr)_100px]">
-                      <select
-                        className="rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm dark:border-slate-800 dark:bg-slate-950"
+                      <UnifiedSelect
+                        className="rounded-2xl px-3 py-2 pr-9 text-sm"
                         value={denyRuleDraft.mode}
                         onChange={(e) => setDenyRuleDraft((prev) => ({ ...prev, mode: e.target.value as 'exact' | 'prefix' }))}
                       >
                         <option value="exact">exact（精确匹配）</option>
                         <option value="prefix">prefix（前缀匹配）</option>
-                      </select>
+                      </UnifiedSelect>
                       <input
                         className="rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm dark:border-slate-800 dark:bg-slate-950"
                         placeholder="命令或命令前缀（可包含参数）"

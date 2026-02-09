@@ -3,6 +3,7 @@ import type { DragEventHandler, MouseEvent } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import type { AiSkillCreateModelOption, AiSkillCreateProgressChunk, AiSkillCreateStage, AiSkillRecord } from '../../shared/types/ai'
+import UnifiedSelect from './UnifiedSelect'
 
 interface AiSkillsSettingsViewProps {
   onBack: () => void
@@ -871,12 +872,12 @@ export default function AiSkillsSettingsView({ onBack }: AiSkillsSettingsViewPro
             <div className="grid grid-cols-1 gap-3 lg:grid-cols-[220px_minmax(0,1fr)]">
               <label className="space-y-1">
                 <div className="text-xs text-slate-500 dark:text-slate-400">创建模型（已启用）</div>
-                <select className={inputClass} value={selectedCreateModel} onChange={(e) => setSelectedCreateModel(e.target.value)}>
+                <UnifiedSelect value={selectedCreateModel} onChange={(e) => setSelectedCreateModel(e.target.value)}>
                   {createModels.length === 0 && <option value="">无可用模型</option>}
                   {createModels.map((model) => (
                     <option key={model.id} value={model.id}>{model.label} ({model.id})</option>
                   ))}
-                </select>
+                </UnifiedSelect>
               </label>
               <label className="space-y-1">
                 <div className="text-xs text-slate-500 dark:text-slate-400">需求描述</div>

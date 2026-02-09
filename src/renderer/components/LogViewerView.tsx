@@ -3,6 +3,7 @@
  * 参考 SettingsView 样式设计
  */
 import { useState, useEffect, useRef, useCallback } from 'react'
+import UnifiedSelect from './UnifiedSelect'
 
 // 日志条目接口
 interface LogEntry {
@@ -178,8 +179,8 @@ export default function LogViewerView({ onClose }: LogViewerViewProps) {
                     {/* 插件过滤 */}
                     <div className="flex items-center gap-2">
                         <span className="text-xs text-slate-500 dark:text-slate-400">插件:</span>
-                        <select
-                            className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs text-slate-600 shadow-sm outline-none dark:border-slate-800 dark:bg-slate-950 dark:text-slate-300"
+                        <UnifiedSelect
+                            wrapperClassName="w-44"
                             value={filterPlugin}
                             onChange={e => setFilterPlugin(e.target.value)}
                         >
@@ -187,7 +188,7 @@ export default function LogViewerView({ onClose }: LogViewerViewProps) {
                             {pluginIds.map(id => (
                                 <option key={id} value={id}>{id}</option>
                             ))}
-                        </select>
+                        </UnifiedSelect>
                     </div>
 
                     {/* 搜索 */}
