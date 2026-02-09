@@ -40,11 +40,160 @@ export function buildBasicMain(name: string) {
     clipboard: {
       readText: () => string
       writeText: (text: string) => Promise<void>
-      readImage: () => ArrayBuffer | null
-      getFormat: () => string
+      readImage: () => Uint8Array | null
+      writeImage: (buffer: Uint8Array) => void
+      readFiles: () => Array<{ path: string; name: string; size: number; isDirectory: boolean }>
+      getFormat: () => 'text' | 'image' | 'files' | 'empty'
+    }
+    clipboardHistory: {
+      query: (options?: {
+        type?: 'text' | 'image' | 'files'
+        search?: string
+        favorite?: boolean
+        limit?: number
+        offset?: number
+      }) => Promise<any[]>
+      get: (id: string) => Promise<any>
+      copy: (id: string) => Promise<{ success: boolean; error?: string }>
+      toggleFavorite: (id: string) => Promise<{ success: boolean }>
+      delete: (id: string) => Promise<{ success: boolean }>
+      clear: () => Promise<{ success: boolean }>
+      stats: () => Promise<{ total: number; text: number; image: number; files: number; favorite: number }>
     }
     notification: {
       show: (message: string, type?: string) => void
+    }
+    storage: {
+      get: (key: string) => unknown
+      set: (key: string, value: unknown) => unknown
+      remove: (key: string) => unknown
+      clear: () => unknown
+      keys: () => string[]
+    }
+    filesystem: {
+      readFile: (path: string, encoding?: 'utf-8' | 'base64') => Promise<string | Uint8Array>
+      writeFile: (path: string, data: string | Uint8Array, encoding?: 'utf-8' | 'base64') => Promise<void>
+      exists: (path: string) => Promise<boolean>
+      unlink: (path: string) => Promise<void>
+      readdir: (path: string) => Promise<string[]>
+      mkdir: (path: string) => Promise<void>
+      stat: (path: string) => Promise<any>
+      copy: (src: string, dest: string) => Promise<void>
+      move: (src: string, dest: string) => Promise<void>
+      extname: (path: string) => string
+      join: (...paths: string[]) => string
+      dirname: (path: string) => string
+      basename: (path: string, ext?: string) => string
+    }
+    http: {
+      request: (options: { url: string; method?: string; headers?: Record<string, string>; body?: string | object; timeout?: number }) => Promise<any>
+      get: (url: string, headers?: Record<string, string>) => Promise<any>
+      post: (url: string, body?: string | object, headers?: Record<string, string>) => Promise<any>
+      put: (url: string, body?: string | object, headers?: Record<string, string>) => Promise<any>
+      delete: (url: string, headers?: Record<string, string>) => Promise<any>
+    }
+    screen: {
+      getAllDisplays: () => Promise<any[]>
+      getPrimaryDisplay: () => Promise<any>
+      getDisplayNearestPoint: (point: { x: number; y: number }) => Promise<any>
+      getCursorScreenPoint: () => Promise<{ x: number; y: number }>
+      getSources: (options?: any) => Promise<any[]>
+      capture: (options?: any) => Promise<Uint8Array>
+      captureRegion: (region: { x: number; y: number; width: number; height: number }, options?: any) => Promise<Uint8Array>
+      getMediaStreamConstraints: (options: any) => Promise<any>
+    }
+    shell: {
+      openPath: (path: string) => Promise<string>
+      openExternal: (url: string) => Promise<void>
+      showItemInFolder: (path: string) => void
+      openFolder: (path: string) => Promise<string>
+      trashItem: (path: string) => Promise<void>
+      beep: () => void
+      runCommand: (input: {
+        command: string
+        args?: string[]
+        cwd?: string
+        env?: Record<string, string>
+        timeoutMs?: number
+        shell?: boolean
+      }) => Promise<any>
+      getRunCommandPolicy: () => Promise<{
+        enabled: boolean
+        requireConsent: boolean
+        allowShell: boolean
+        allowList?: string[]
+        denyList?: string[]
+      }>
+      listRunCommandAudit: (limit?: number) => Promise<any[]>
+    }
+    dialog: {
+      showOpenDialog: (options?: any) => Promise<string[]>
+      showSaveDialog: (options?: any) => Promise<string | null>
+      showMessageBox: (options: any) => Promise<{ response: number }>
+      showErrorBox: (title: string, content: string) => void
+    }
+    system: {
+      getSystemInfo: () => Promise<any>
+      getAppInfo: () => Promise<any>
+      getPath: (name: 'home' | 'appData' | 'userData' | 'temp' | 'desktop' | 'documents' | 'downloads' | 'music' | 'pictures' | 'videos') => Promise<string>
+      getEnv: (name: string) => Promise<string>
+      getIdleTime: () => Promise<number>
+    }
+    shortcut: Record<string, (...args: any[]) => any>
+    security: Record<string, (...args: any[]) => any>
+    media: {
+      getAccessStatus: (mediaType: 'microphone' | 'camera') => 'granted' | 'denied' | 'not-determined' | 'restricted' | 'unknown'
+      askForAccess: (mediaType: 'microphone' | 'camera') => Promise<boolean>
+      hasCameraAccess: () => Promise<boolean>
+      hasMicrophoneAccess: () => Promise<boolean>
+    }
+    power: {
+      getSystemIdleTime: () => number
+      getSystemIdleState: (idleThreshold: number) => 'active' | 'idle' | 'locked' | 'unknown'
+      isOnBatteryPower: () => boolean
+      getCurrentThermalState: () => 'unknown' | 'nominal' | 'fair' | 'serious' | 'critical'
+    }
+    tray: Record<string, (...args: any[]) => any>
+    network: {
+      isOnline: () => boolean
+    }
+    input: Record<string, (...args: any[]) => any>
+    permission: {
+      getStatus: (type: 'geolocation' | 'camera' | 'microphone' | 'notifications' | 'screen' | 'accessibility' | 'contacts' | 'calendar') => any
+      request: (type: 'geolocation' | 'camera' | 'microphone' | 'notifications' | 'screen' | 'accessibility' | 'contacts' | 'calendar') => Promise<any>
+      canRequest: (type: 'geolocation' | 'camera' | 'microphone' | 'notifications' | 'screen' | 'accessibility' | 'contacts' | 'calendar') => any
+      openSystemSettings: (type: 'geolocation' | 'camera' | 'microphone' | 'notifications' | 'screen' | 'accessibility' | 'contacts' | 'calendar') => Promise<any>
+      isAccessibilityTrusted: () => boolean
+    }
+    features: {
+      getFeatures: (codes?: string[]) => Array<{ code: string }>
+      setFeature: (feature: {
+        code: string
+        explain?: string
+        icon?: string
+        platform?: string | string[]
+        mode?: 'ui' | 'silent' | 'detached'
+        route?: string
+        mainHide?: boolean
+        mainPush?: boolean
+        cmds: Array<
+          | string
+          | { type: 'keyword'; value: string; explain?: string }
+          | { type: 'regex'; match: string; explain?: string; label?: string; minLength?: number; maxLength?: number }
+          | { type: 'files'; exts?: string[]; fileType?: 'file' | 'directory' | 'any'; match?: string; minLength?: number; maxLength?: number }
+          | { type: 'img'; exts?: string[] }
+          | { type: 'over'; label?: string; exclude?: string; minLength?: number; maxLength?: number }
+        >
+      }) => void
+      removeFeature: (code: string) => boolean
+      redirectHotKeySetting: (cmdLabel: string, autocopy?: boolean) => void
+      redirectAiModelsSetting: () => void
+    }
+    messaging: {
+      send: (targetPluginId: string, type: string, payload: unknown) => Promise<void>
+      broadcast: (type: string, payload: unknown) => Promise<void>
+      on: (handler: (message: { id: string; from: string; to?: string; type: string; payload: unknown; timestamp: number }) => void | Promise<void>) => void
+      off: (handler?: (message: any) => void) => void
     }
     scheduler: {
       schedule: (task: {
@@ -59,14 +208,11 @@ export function buildBasicMain(name: string) {
         retryDelay?: number
         timeout?: number
       }) => Promise<any>
-      cancelTask: (taskId: string) => Promise<void>
-      pauseTask: (taskId: string) => Promise<void>
-      resumeTask: (taskId: string) => Promise<void>
-      listTasks: (filter?: { status?: string; type?: string; limit?: number; offset?: number }) => Promise<any[]>
-      getTaskCount: (filter?: { status?: string; type?: string }) => Promise<number>
-      getTask: (taskId: string) => Promise<any>
-      deleteTasks: (taskIds: string[]) => Promise<{ success: boolean; deletedCount: number }>
-      cleanupTasks: (olderThan?: number) => Promise<{ success: boolean; deletedCount: number }>
+      cancel: (taskId: string) => Promise<void>
+      pause: (taskId: string) => Promise<void>
+      resume: (taskId: string) => Promise<void>
+      get: (taskId: string) => Promise<any>
+      list: (filter?: { status?: string; type?: string; limit?: number }) => Promise<any[]>
       getExecutions: (taskId: string, limit?: number) => Promise<any[]>
       validateCron: (expression: string) => boolean
       getNextCronTime: (expression: string, after?: Date) => Date
@@ -131,6 +277,7 @@ export function buildBasicMain(name: string) {
   }
   input?: string
   featureCode?: string
+  attachments?: Array<any>
 }
 
 export function onLoad() {

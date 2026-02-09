@@ -970,6 +970,216 @@ interface IntoolsAPI {
   ffmpeg: IntoolsFFmpeg
 }
 
+type BackendPermissionType = 'geolocation' | 'camera' | 'microphone' | 'notifications' | 'screen' | 'accessibility' | 'contacts' | 'calendar'
+
+interface BackendScheduler {
+  schedule(task: {
+    name: string
+    type: 'once' | 'repeat' | 'delay'
+    callback: string
+    time?: number
+    cron?: string
+    delay?: number
+    payload?: any
+    maxRetries?: number
+    retryDelay?: number
+    timeout?: number
+    description?: string
+    endTime?: number
+    maxExecutions?: number
+  }): Promise<any>
+  cancel(taskId: string): Promise<void>
+  pause(taskId: string): Promise<void>
+  resume(taskId: string): Promise<void>
+  get(taskId: string): Promise<any>
+  list(filter?: { status?: string; type?: string; limit?: number }): Promise<any[]>
+  getExecutions(taskId: string, limit?: number): Promise<any[]>
+  validateCron(expression: string): boolean
+  getNextCronTime(expression: string, after?: Date): Date
+  describeCron(expression: string): string
+}
+
+interface BackendIntoolsAi {
+  call(option: AiOption, onChunk?: (chunk: AiMessage) => void): AiPromiseLike<AiMessage>
+  allModels(): Promise<AiModel[]>
+  abort(requestId: string): void
+  skills: {
+    listEnabled(): Promise<AiSkillRecord[]>
+    previewForCall(input: { option?: Partial<AiOption>; skillIds?: string[]; prompt?: string }): Promise<AiSkillPreview>
+  }
+  attachments: {
+    upload(input: { filePath?: string; buffer?: ArrayBuffer; mimeType: string; purpose?: string }): Promise<AiAttachmentRef>
+    get(attachmentId: string): Promise<AiAttachmentRef | null>
+    delete(attachmentId: string): Promise<void>
+    uploadToProvider(input: { attachmentId: string; model?: string; providerId?: string; purpose?: string }): Promise<{ providerId: string; fileId: string; uri?: string }>
+  }
+  tokens: {
+    estimate(input: { model?: string; messages: AiMessage[]; outputText?: string }): Promise<AiTokenBreakdown>
+  }
+  images: {
+    generate(input: { prompt: string; model: string; size?: string; count?: number }): Promise<{ images: string[]; tokens: AiTokenBreakdown }>
+    generateStream(
+      input: { prompt: string; model: string; size?: string; count?: number },
+      onChunk: (chunk: AiImageGenerateProgressChunk) => void
+    ): AiPromiseLike<{ images: string[]; tokens: AiTokenBreakdown }>
+    edit(input: { imageAttachmentId: string; prompt: string; model: string }): Promise<{ images: string[]; tokens: AiTokenBreakdown }>
+  }
+}
+
+interface BackendPluginAPI {
+  clipboard: {
+    readText(): string
+    writeText(text: string): Promise<void>
+    readImage(): Uint8Array | null
+    writeImage(buffer: Uint8Array): void
+    readFiles(): Array<{ path: string; name: string; size: number; isDirectory: boolean }>
+    getFormat(): 'text' | 'image' | 'files' | 'empty'
+  }
+  clipboardHistory: IntoolsClipboardHistory
+  notification: IntoolsNotification
+  storage: {
+    get(key: string): unknown
+    set(key: string, value: unknown): unknown
+    remove(key: string): unknown
+    clear(): unknown
+    keys(): string[]
+  }
+  filesystem: {
+    readFile(path: string, encoding?: 'utf-8' | 'base64'): Promise<string | Uint8Array>
+    writeFile(path: string, data: string | Uint8Array, encoding?: 'utf-8' | 'base64'): Promise<void>
+    exists(path: string): Promise<boolean>
+    unlink(path: string): Promise<void>
+    readdir(path: string): Promise<string[]>
+    mkdir(path: string): Promise<void>
+    stat(path: string): Promise<any>
+    copy(src: string, dest: string): Promise<void>
+    move(src: string, dest: string): Promise<void>
+    extname(path: string): string
+    join(...paths: string[]): string
+    dirname(path: string): string
+    basename(path: string, ext?: string): string
+  }
+  http: IntoolsHttp
+  screen: {
+    getAllDisplays(): Promise<any[]>
+    getPrimaryDisplay(): Promise<any>
+    getDisplayNearestPoint(point: { x: number; y: number }): Promise<any>
+    getCursorScreenPoint(): Promise<{ x: number; y: number }>
+    getSources(options?: any): Promise<any[]>
+    capture(options?: any): Promise<Uint8Array>
+    captureRegion(region: { x: number; y: number; width: number; height: number }, options?: any): Promise<Uint8Array>
+    getMediaStreamConstraints(options: any): Promise<any>
+  }
+  shell: {
+    openPath(path: string): Promise<string>
+    openExternal(url: string): Promise<void>
+    showItemInFolder(path: string): void
+    openFolder(path: string): Promise<string>
+    trashItem(path: string): Promise<void>
+    beep(): void
+    runCommand(input: {
+      command: string
+      args?: string[]
+      cwd?: string
+      env?: Record<string, string>
+      timeoutMs?: number
+      shell?: boolean
+    }): Promise<any>
+    getRunCommandPolicy(): Promise<{
+      enabled: boolean
+      requireConsent: boolean
+      allowShell: boolean
+      allowList?: string[]
+      denyList?: string[]
+    }>
+    listRunCommandAudit(limit?: number): Promise<any[]>
+  }
+  dialog: IntoolsDialog
+  system: {
+    getSystemInfo(): Promise<any>
+    getAppInfo(): Promise<any>
+    getPath(name: 'home' | 'appData' | 'userData' | 'temp' | 'desktop' | 'documents' | 'downloads' | 'music' | 'pictures' | 'videos'): Promise<string>
+    getEnv(name: string): Promise<string>
+    getIdleTime(): Promise<number>
+  }
+  shortcut: {
+    register(accelerator: string, callback: () => void): boolean
+    unregister(accelerator: string): void
+    unregisterAll(): void
+    isRegistered(accelerator: string): boolean
+  }
+  security: {
+    isEncryptionAvailable(): boolean
+    encryptString(plainText: string): Uint8Array
+    decryptString(encrypted: Uint8Array | ArrayBuffer): string
+  }
+  media: {
+    getAccessStatus(mediaType: 'microphone' | 'camera'): 'not-determined' | 'granted' | 'denied' | 'restricted' | 'unknown'
+    askForAccess(mediaType: 'microphone' | 'camera'): Promise<boolean>
+    hasCameraAccess(): Promise<boolean>
+    hasMicrophoneAccess(): Promise<boolean>
+  }
+  power: {
+    getSystemIdleTime(): number
+    getSystemIdleState(idleThreshold: number): 'active' | 'idle' | 'locked' | 'unknown'
+    isOnBatteryPower(): boolean
+    getCurrentThermalState(): 'unknown' | 'nominal' | 'fair' | 'serious' | 'critical'
+  }
+  tray: {
+    create(options: { icon: string; tooltip?: string; title?: string }): boolean
+    destroy(): void
+    setIcon(icon: string): void
+    setTooltip(tooltip: string): void
+    setTitle(title: string): void
+    exists(): boolean
+  }
+  network: {
+    isOnline(): boolean
+  }
+  input: Record<string, (...args: any[]) => any>
+  permission: {
+    getStatus(type: BackendPermissionType): any
+    request(type: BackendPermissionType): Promise<any>
+    canRequest(type: BackendPermissionType): any
+    openSystemSettings(type: BackendPermissionType): Promise<any>
+    isAccessibilityTrusted(): boolean
+  }
+  features: {
+    getFeatures(codes?: string[]): Array<{ code: string }>
+    setFeature(feature: {
+      code: string
+      explain?: string
+      icon?: string
+      platform?: string | string[]
+      mode?: 'ui' | 'silent' | 'detached'
+      route?: string
+      mainHide?: boolean
+      mainPush?: boolean
+      cmds: Array<
+        | string
+        | { type: 'keyword'; value: string; explain?: string }
+        | { type: 'regex'; match: string; explain?: string; label?: string; minLength?: number; maxLength?: number }
+        | { type: 'files'; exts?: string[]; fileType?: 'file' | 'directory' | 'any'; match?: string; minLength?: number; maxLength?: number }
+        | { type: 'img'; exts?: string[] }
+        | { type: 'over'; label?: string; exclude?: string; minLength?: number; maxLength?: number }
+      >
+    }): void
+    removeFeature(code: string): boolean
+    redirectHotKeySetting(cmdLabel: string, autocopy?: boolean): void
+    redirectAiModelsSetting(): void
+  }
+  messaging: IntoolsMessaging
+  ai: BackendIntoolsAi
+  scheduler: BackendScheduler
+}
+
+interface BackendPluginContext {
+  api: BackendPluginAPI
+  featureCode?: string
+  input?: string
+  attachments?: Attachment[]
+}
+
 interface IntoolsSharpProxy {
   resize(width?: number, height?: number, options?: object): IntoolsSharpProxy
   extend(options: object): IntoolsSharpProxy
