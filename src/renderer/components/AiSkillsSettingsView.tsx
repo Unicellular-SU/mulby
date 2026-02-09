@@ -1,8 +1,9 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { DragEventHandler, MouseEvent } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import type { AiSkillCreateModelOption, AiSkillCreateProgressChunk, AiSkillCreateStage, AiSkillRecord } from '../../shared/types/ai'
+import { useInAppNotice } from './InAppNotice'
 import UnifiedSelect from './UnifiedSelect'
 
 interface AiSkillsSettingsViewProps {
@@ -220,9 +221,16 @@ export default function AiSkillsSettingsView({ onBack }: AiSkillsSettingsViewPro
   const [createRawModelOutput, setCreateRawModelOutput] = useState('')
   const [lastCreatedSkillId, setLastCreatedSkillId] = useState<string | null>(null)
   const [creatingSkill, setCreatingSkill] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-  const [info, setInfo] = useState<string | null>(null)
   const createOutputRef = useRef('')
+  const notice = useInAppNotice()
+
+  const setError = useCallback((message: string | null) => {
+    if (message) notice.error(message)
+  }, [notice])
+
+  const setInfo = useCallback((message: string | null) => {
+    if (message) notice.success(message)
+  }, [notice])
 
   const inputClass = 'w-full rounded-2xl border border-slate-200 bg-white px-4 py-2 text-sm text-slate-700 shadow-sm outline-none transition focus:border-slate-300 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-200'
   const actionButtonClass = 'rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-700 transition hover:border-slate-300 hover:text-slate-900 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-200 disabled:cursor-not-allowed disabled:opacity-50'
@@ -323,22 +331,6 @@ export default function AiSkillsSettingsView({ onBack }: AiSkillsSettingsViewPro
       setSelectedSkillId(filteredSkills[0].id)
     }
   }, [filteredSkills, selectedSkillId])
-
-  useEffect(() => {
-    if (!error) return
-    const timer = window.setTimeout(() => {
-      setError(null)
-    }, 5000)
-    return () => window.clearTimeout(timer)
-  }, [error])
-
-  useEffect(() => {
-    if (!info) return
-    const timer = window.setTimeout(() => {
-      setInfo(null)
-    }, 5000)
-    return () => window.clearTimeout(timer)
-  }, [info])
 
   const handleToggleEnabled = async () => {
     if (!selectedSkill || !window.intools?.ai?.skills) return
@@ -638,21 +630,6 @@ export default function AiSkillsSettingsView({ onBack }: AiSkillsSettingsViewPro
           <button className={`${secondaryPillClass} no-drag`} onClick={() => void loadSkills(true)} disabled={loading || busy}>刷新</button>
         </div>
       </div>
-
-      {(error || info) && (
-        <div className="border-b border-slate-200/70 bg-white px-6 py-3 dark:border-slate-800/80 dark:bg-slate-900">
-          {error && (
-            <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-xs text-red-600 dark:border-red-900/60 dark:bg-red-900/20 dark:text-red-300">
-              {error}
-            </div>
-          )}
-          {info && (
-            <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-xs text-emerald-700 dark:border-emerald-900/60 dark:bg-emerald-900/20 dark:text-emerald-300">
-              {info}
-            </div>
-          )}
-        </div>
-      )}
 
       <div className="flex min-h-0 flex-1 no-drag">
         <aside className="flex min-h-0 w-[340px] shrink-0 flex-col border-r border-slate-200/70 bg-white p-4 dark:border-slate-800/80 dark:bg-slate-900">

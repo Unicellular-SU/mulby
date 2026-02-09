@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { AiEndpointType, AiModel, AiModelCapability, AiModelParameters, AiModelType, AiProviderConfig, AiSettings } from '../../shared/types/ai'
 import { BUILTIN_PROVIDER_TYPES, inferProviderType } from '../../shared/ai/providerType'
 import { isEndpointRoutedProviderType, supportsProviderEndpointRouting } from '../../shared/ai/providerEndpointRouting'
@@ -8,6 +8,7 @@ import { getProviderPreset } from '../../shared/ai/providerPresets'
 import { getSystemDefaultProviderById, isSystemDefaultProviderId } from '../../shared/ai/systemProviders'
 import { getSystemDefaultModels } from '../../shared/ai/systemModels'
 import { splitApiKeyString } from '../../shared/ai/apiKeyPool'
+import { useInAppNotice } from './InAppNotice'
 import SliderWithTicks from './SliderWithTicks'
 import UnifiedSelect from './UnifiedSelect'
 
@@ -80,8 +81,6 @@ export default function AiSettingsView({ onBack, onOpenMcpSettings, onOpenSkills
   const initialProviderPreset = getProviderPreset('openai')
   const [aiSettings, setAiSettings] = useState<AiSettings | null>(null)
   const [aiDraft, setAiDraft] = useState<AiSettings | null>(null)
-  const [aiError, setAiError] = useState<string | null>(null)
-  const [aiInfo, setAiInfo] = useState<string | null>(null)
   const [aiReasoning, setAiReasoning] = useState<string | null>(null)
   const [isTestingConnection, setIsTestingConnection] = useState(false)
   const [isFetchingModels, setIsFetchingModels] = useState(false)
@@ -99,6 +98,13 @@ export default function AiSettingsView({ onBack, onOpenMcpSettings, onOpenSkills
   const [apiKeyTestStatusMap, setApiKeyTestStatusMap] = useState<Record<string, ApiKeyTestStatus>>({})
   const [newModelProviderIndex, setNewModelProviderIndex] = useState<number>(0)
   const [selectedProviderIndex, setSelectedProviderIndex] = useState<number>(0)
+  const notice = useInAppNotice()
+  const setAiError = useCallback((message: string | null) => {
+    if (message) notice.error(message)
+  }, [notice])
+  const setAiInfo = useCallback((message: string | null) => {
+    if (message) notice.success(message)
+  }, [notice])
   const [newProvider, setNewProvider] = useState<AiProviderConfig>({
     id: initialProviderPreset.defaultId,
     type: initialProviderPreset.type,
@@ -935,16 +941,6 @@ export default function AiSettingsView({ onBack, onOpenMcpSettings, onOpenSkills
 
       <div className="flex-1 overflow-y-auto no-drag">
         <div className="mx-auto max-w-5xl px-6 pb-16 pt-8 space-y-4">
-          {aiError && (
-            <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-xs text-red-600 dark:border-red-900/60 dark:bg-red-900/20 dark:text-red-300">
-              {aiError}
-            </div>
-          )}
-          {aiInfo && (
-            <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-xs text-emerald-700 dark:border-emerald-900/60 dark:bg-emerald-900/20 dark:text-emerald-300">
-              {aiInfo}
-            </div>
-          )}
           {hasProviderBlockingIssues && (
             <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-700 dark:border-amber-900/60 dark:bg-amber-900/20 dark:text-amber-200">
               检测到 Provider 配置问题（重复实例 ID 或缺少 API Key / Base URL），请先修复后再保存。
@@ -1228,7 +1224,6 @@ export default function AiSettingsView({ onBack, onOpenMcpSettings, onOpenSkills
                                 return
                               }
                               const fallbackModel = providerModel
-                              let streamed = ''
                               let reasoningStreamed = ''
                               setAiInfo('')
                               setAiReasoning('')
@@ -1244,8 +1239,6 @@ export default function AiSettingsView({ onBack, onOpenMcpSettings, onOpenSkills
                                     setAiReasoning(reasoningStreamed)
                                     return
                                   }
-                                  streamed += chunk.text
-                                  setAiInfo(streamed)
                                 })
                                 : window.intools.ai.testConnection({
                                   model: fallbackModel,

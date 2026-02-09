@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { AiMcpServer, AiMcpTool, AiMcpServerLogEntry } from '../../shared/types/ai'
+import { useInAppNotice } from './InAppNotice'
 import UnifiedSelect from './UnifiedSelect'
 
 interface AiMcpSettingsViewProps {
@@ -242,15 +243,25 @@ export default function AiMcpSettingsView({ onBack }: AiMcpSettingsViewProps) {
   const [loadingServers, setLoadingServers] = useState(false)
   const [loadingTools, setLoadingTools] = useState(false)
   const [operationBusy, setOperationBusy] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-  const [info, setInfo] = useState<string | null>(null)
   const [jsonImportOpen, setJsonImportOpen] = useState(false)
   const [jsonImportText, setJsonImportText] = useState('')
-  const [jsonImportError, setJsonImportError] = useState<string | null>(null)
   const [trustConfirmServer, setTrustConfirmServer] = useState<AiMcpServer | null>(null)
   const [expandedToolIds, setExpandedToolIds] = useState<Set<string>>(new Set())
   const [overflowToolIds, setOverflowToolIds] = useState<Set<string>>(new Set())
   const toolDescriptionRefs = useRef<Record<string, HTMLSpanElement | null>>({})
+  const notice = useInAppNotice()
+
+  const setError = useCallback((message: string | null) => {
+    if (message) notice.error(message)
+  }, [notice])
+
+  const setInfo = useCallback((message: string | null) => {
+    if (message) notice.success(message)
+  }, [notice])
+
+  const setJsonImportError = useCallback((message: string | null) => {
+    if (message) notice.warning(message)
+  }, [notice])
 
   const cardClass = 'rounded-[24px] border border-slate-200/80 bg-white p-6 dark:border-slate-800/80 dark:bg-slate-900'
   const cardClassTight = 'rounded-[20px] border border-slate-200/80 bg-white p-4 dark:border-slate-800/80 dark:bg-slate-900'
@@ -669,17 +680,6 @@ export default function AiMcpSettingsView({ onBack }: AiMcpSettingsViewProps) {
 
         <main className="min-h-0 flex-1 overflow-y-auto px-6 pb-16 pt-6">
           <div className="mx-auto max-w-5xl space-y-4">
-            {error && (
-              <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-xs text-red-600 dark:border-red-900/60 dark:bg-red-900/20 dark:text-red-300">
-                {error}
-              </div>
-            )}
-            {info && (
-              <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-xs text-emerald-700 dark:border-emerald-900/60 dark:bg-emerald-900/20 dark:text-emerald-300">
-                {info}
-              </div>
-            )}
-
             {!draftServer ? (
               <div className={cardClass}>请选择服务器，或新建服务器。</div>
             ) : (
@@ -995,12 +995,6 @@ export default function AiMcpSettingsView({ onBack }: AiMcpSettingsViewProps) {
                 关闭
               </button>
             </div>
-
-            {jsonImportError && (
-              <div className="mb-3 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-xs text-red-600 dark:border-red-900/60 dark:bg-red-900/20 dark:text-red-300">
-                {jsonImportError}
-              </div>
-            )}
 
             <label className="mb-3 block space-y-2">
               <div className="text-xs text-slate-500 dark:text-slate-400">JSON 配置</div>

@@ -8,6 +8,7 @@ import type {
   ShortcutStatusMap,
   StoreSource
 } from '../../shared/types/settings'
+import { useInAppNotice } from './InAppNotice'
 import UnifiedSelect from './UnifiedSelect'
 type SettingsSection =
   | 'general'
@@ -278,6 +279,7 @@ function ShortcutInput({
 }
 
 export default function SettingsView({ section, onSectionChange, onClose, onOpenPluginManager, onOpenBackgroundPluginManager, onOpenTaskScheduler, onOpenLogViewer, onOpenAiSettings }: SettingsViewProps) {
+  const notice = useInAppNotice()
   const [settings, setSettings] = useState<AppSettings | null>(null)
   const [themeMode, setThemeMode] = useState<'light' | 'dark' | 'system'>('system')
   const [shortcutStatus, setShortcutStatus] = useState<ShortcutStatusMap | null>(null)
@@ -1879,7 +1881,7 @@ export default function SettingsView({ section, onSectionChange, onClose, onOpen
                                 const settingsResult = await window.intools.settings.get()
                                 setSettings(settingsResult.settings)
                               } else {
-                                window.intools.notification.show(result.error || '添加失败', 'error')
+                                notice.error(result.error || '添加失败')
                               }
                             }
                           }}
@@ -1890,7 +1892,7 @@ export default function SettingsView({ section, onSectionChange, onClose, onOpen
                           className={actionButtonClass}
                           onClick={async () => {
                             await window.intools.developer.reloadPlugins()
-                            window.intools.notification.show('插件已刷新')
+                            notice.success('插件已刷新')
                           }}
                         >
                           刷新插件
