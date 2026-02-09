@@ -21,6 +21,7 @@ import { isAiInternalToolName } from './ai/tools/internal-tools'
 import { PluginManager } from './plugin'
 import { PluginWindowManager } from './plugin/window'
 import { ThemeManager } from './services/theme'
+import { setUiDialogThemeResolver } from './services/ui-dialog-service'
 import { isIgnoringBlur, startIgnoringBlur, stopIgnoringBlur, setWindowsProvider } from './services/blur-manager'
 import { appSettingsManager } from './services/app-settings'
 import { AppShortcutManager } from './services/app-shortcuts'
@@ -57,6 +58,7 @@ let mainWindow: BrowserWindow | null = null
 const pluginManager = new PluginManager()
 const pluginWindowManager = new PluginWindowManager()
 const themeManager = new ThemeManager()
+setUiDialogThemeResolver(() => themeManager.getActualTheme())
 const clipboardWatcher = new ClipboardWatcher()
 const clipboardHistoryManager = new ClipboardHistoryManager()
 const aiInternalToolRuntime = createAiInternalToolRuntime({

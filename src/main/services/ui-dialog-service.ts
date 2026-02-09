@@ -1,4 +1,4 @@
-import { BrowserWindow, ipcMain, screen } from 'electron'
+import { BrowserWindow, ipcMain, nativeTheme, screen } from 'electron'
 import { withIgnoringBlur } from './blur-manager'
 
 export interface UiMessageBoxOptions {
@@ -14,6 +14,27 @@ export interface UiMessageBoxOptions {
 export interface UiMessageBoxResult {
   response: number
   checkboxChecked: boolean
+}
+
+type UiDialogTheme = 'light' | 'dark'
+
+let themeResolver: () => UiDialogTheme = () => (nativeTheme.shouldUseDarkColors ? 'dark' : 'light')
+
+export function setUiDialogThemeResolver(resolver?: (() => UiDialogTheme) | null): void {
+  if (typeof resolver === 'function') {
+    themeResolver = resolver
+    return
+  }
+  themeResolver = () => (nativeTheme.shouldUseDarkColors ? 'dark' : 'light')
+}
+
+function getUiDialogTheme(): UiDialogTheme {
+  try {
+    const value = themeResolver()
+    return value === 'dark' ? 'dark' : 'light'
+  } catch {
+    return nativeTheme.shouldUseDarkColors ? 'dark' : 'light'
+  }
 }
 
 function escapeHtml(input: string): string {
@@ -126,18 +147,32 @@ async function measureContentLayout(
   }
 }
 
-function colorByType(type: UiMessageBoxOptions['type']): { chipBg: string; chipText: string; chipLabel: string } {
+function colorByType(
+  type: UiMessageBoxOptions['type'],
+  theme: UiDialogTheme
+): { chipBg: string; chipText: string; chipLabel: string } {
+  const isDark = theme === 'dark'
   switch (type) {
     case 'error':
-      return { chipBg: '#fee2e2', chipText: '#991b1b', chipLabel: 'Error' }
+      return isDark
+        ? { chipBg: '#3b0a14', chipText: '#fecdd3', chipLabel: 'Error' }
+        : { chipBg: '#fee2e2', chipText: '#991b1b', chipLabel: 'Error' }
     case 'warning':
-      return { chipBg: '#fef3c7', chipText: '#92400e', chipLabel: 'Warning' }
+      return isDark
+        ? { chipBg: '#3a2605', chipText: '#fde68a', chipLabel: 'Warning' }
+        : { chipBg: '#fef3c7', chipText: '#92400e', chipLabel: 'Warning' }
     case 'question':
-      return { chipBg: '#dbeafe', chipText: '#1e3a8a', chipLabel: 'Question' }
+      return isDark
+        ? { chipBg: '#102347', chipText: '#bfdbfe', chipLabel: 'Question' }
+        : { chipBg: '#dbeafe', chipText: '#1e3a8a', chipLabel: 'Question' }
     case 'info':
-      return { chipBg: '#e0f2fe', chipText: '#0c4a6e', chipLabel: 'Info' }
+      return isDark
+        ? { chipBg: '#082f49', chipText: '#bae6fd', chipLabel: 'Info' }
+        : { chipBg: '#e0f2fe', chipText: '#0c4a6e', chipLabel: 'Info' }
     default:
-      return { chipBg: '#e2e8f0', chipText: '#334155', chipLabel: 'Message' }
+      return isDark
+        ? { chipBg: '#1e293b', chipText: '#cbd5e1', chipLabel: 'Message' }
+        : { chipBg: '#e2e8f0', chipText: '#334155', chipLabel: 'Message' }
   }
 }
 
@@ -147,8 +182,49 @@ function buildMessageBoxHtml(input: {
   buttons: string[]
   defaultId: number
   cancelId: number
+  theme: UiDialogTheme
 }): string {
-  const typeStyle = colorByType(input.options.type)
+  const typeStyle = colorByType(input.options.type, input.theme)
+  const isDark = input.theme === 'dark'
+  const palette = isDark
+    ? {
+      pageBg: 'radial-gradient(120% 120% at 15% 0%, #0b2447 0%, #111827 42%, #020617 100%)',
+      text: '#e2e8f0',
+      cardBorder: '#334155',
+      cardBg: 'rgba(15, 23, 42, 0.96)',
+      cardShadow: '0 20px 56px rgba(2, 6, 23, 0.6)',
+      divider: '#334155',
+      messageText: '#e2e8f0',
+      detailText: '#cbd5e1',
+      detailBorder: '#334155',
+      detailBg: '#0f172a',
+      buttonBg: '#0f172a',
+      buttonText: '#e2e8f0',
+      buttonBorder: '#475569',
+      buttonHoverBorder: '#64748b',
+      primaryBg: '#e2e8f0',
+      primaryText: '#0f172a',
+      primaryHoverBg: '#cbd5e1'
+    }
+    : {
+      pageBg: 'radial-gradient(110% 120% at 15% 0%, #dbeafe 0%, #eef2ff 40%, #f8fafc 100%)',
+      text: '#0f172a',
+      cardBorder: '#cbd5e1',
+      cardBg: 'rgba(255, 255, 255, 0.96)',
+      cardShadow: '0 20px 56px rgba(15, 23, 42, 0.22)',
+      divider: '#e2e8f0',
+      messageText: '#0f172a',
+      detailText: '#334155',
+      detailBorder: '#e2e8f0',
+      detailBg: '#f8fafc',
+      buttonBg: '#ffffff',
+      buttonText: '#1e293b',
+      buttonBorder: '#cbd5e1',
+      buttonHoverBorder: '#94a3b8',
+      primaryBg: '#0f172a',
+      primaryText: '#ffffff',
+      primaryHoverBg: '#111827'
+    }
   const title = escapeHtml(input.options.title || '提示')
   const message = escapeHtml(input.options.message || '')
   const detail = escapeHtml(input.options.detail || '')
@@ -167,21 +243,21 @@ function buildMessageBoxHtml(input: {
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>${title}</title>
   <style>
-    :root { color-scheme: light dark; }
+    :root { color-scheme: ${input.theme}; }
     * { box-sizing: border-box; }
     body {
       margin: 0;
       width: 100%;
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-      background: radial-gradient(110% 120% at 15% 0%, #dbeafe 0%, #eef2ff 40%, #f8fafc 100%);
-      color: #0f172a;
+      background: ${palette.pageBg};
+      color: ${palette.text};
     }
     .card {
       width: 100%;
       border-radius: 0;
-      border: 1px solid #cbd5e1;
-      background: rgba(255, 255, 255, 0.96);
-      box-shadow: 0 20px 56px rgba(15, 23, 42, 0.22);
+      border: 1px solid ${palette.cardBorder};
+      background: ${palette.cardBg};
+      box-shadow: ${palette.cardShadow};
       overflow: hidden;
     }
     .head {
@@ -190,7 +266,7 @@ function buildMessageBoxHtml(input: {
       justify-content: space-between;
       gap: 10px;
       padding: 14px 18px;
-      border-bottom: 1px solid #e2e8f0;
+      border-bottom: 1px solid ${palette.divider};
     }
     .title {
       margin: 0;
@@ -215,19 +291,19 @@ function buildMessageBoxHtml(input: {
     .message {
       font-size: 14px;
       line-height: 1.5;
-      color: #0f172a;
+      color: ${palette.messageText};
       white-space: pre-wrap;
       word-break: break-word;
     }
     .detail {
       font-size: 12px;
       line-height: 1.5;
-      color: #334155;
+      color: ${palette.detailText};
       white-space: pre-wrap;
       word-break: break-word;
       border-radius: 12px;
-      border: 1px solid #e2e8f0;
-      background: #f8fafc;
+      border: 1px solid ${palette.detailBorder};
+      background: ${palette.detailBg};
       padding: 10px 12px;
     }
     .actions {
@@ -235,26 +311,26 @@ function buildMessageBoxHtml(input: {
       justify-content: flex-end;
       gap: 8px;
       padding: 12px 18px 16px;
-      border-top: 1px solid #e2e8f0;
+      border-top: 1px solid ${palette.divider};
     }
     .btn {
       appearance: none;
       border-radius: 999px;
       font-size: 12px;
       padding: 8px 12px;
-      border: 1px solid #cbd5e1;
+      border: 1px solid ${palette.buttonBorder};
       cursor: pointer;
-      background: #fff;
-      color: #1e293b;
+      background: ${palette.buttonBg};
+      color: ${palette.buttonText};
     }
-    .btn-default:hover { border-color: #94a3b8; }
+    .btn-default:hover { border-color: ${palette.buttonHoverBorder}; }
     .btn-primary {
-      background: #0f172a;
-      color: #fff;
-      border-color: #0f172a;
+      background: ${palette.primaryBg};
+      color: ${palette.primaryText};
+      border-color: ${palette.primaryBg};
       font-weight: 600;
     }
-    .btn-primary:hover { background: #111827; }
+    .btn-primary:hover { background: ${palette.primaryHoverBg}; }
   </style>
 </head>
 <body>
@@ -300,6 +376,7 @@ export async function showInternalMessageBox(
   options: UiMessageBoxOptions,
   input?: { parentWindow?: BrowserWindow | null }
 ): Promise<UiMessageBoxResult> {
+  const theme = getUiDialogTheme()
   const buttons = normalizeButtons(options.buttons)
   const defaultId = clampIndex(options.defaultId, buttons.length, 0)
   const cancelId = clampIndex(options.cancelId, buttons.length, 0)
@@ -322,7 +399,7 @@ export async function showInternalMessageBox(
       fullscreenable: false,
       alwaysOnTop: true,
       title: options.title || '提示',
-      backgroundColor: '#f8fafc',
+      backgroundColor: theme === 'dark' ? '#0b1220' : '#f8fafc',
       webPreferences: {
         nodeIntegration: true,
         contextIsolation: false
@@ -331,7 +408,7 @@ export async function showInternalMessageBox(
 
     win.setBounds(buildCenteredBounds({ parent, display, width, height: initialHeight }))
 
-    const html = buildMessageBoxHtml({ options, channel, buttons, defaultId, cancelId })
+    const html = buildMessageBoxHtml({ options, channel, buttons, defaultId, cancelId, theme })
     const dataUrl = `data:text/html;charset=utf-8,${encodeURIComponent(html)}`
 
     return await new Promise<UiMessageBoxResult>((resolve) => {
