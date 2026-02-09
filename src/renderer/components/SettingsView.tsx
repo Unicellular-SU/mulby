@@ -12,7 +12,6 @@ import { useInAppNotice } from './InAppNotice'
 import UnifiedSelect from './UnifiedSelect'
 type SettingsSection =
   | 'general'
-  | 'appearance'
   | 'shortcuts'
   | 'store'
   | 'permissions'
@@ -33,7 +32,6 @@ interface SettingsViewProps {
 
 const SECTION_ITEMS: { id: SettingsSection; label: string }[] = [
   { id: 'general', label: '通用' },
-  { id: 'appearance', label: '外观' },
   { id: 'shortcuts', label: '快捷键' },
   { id: 'store', label: '插件商店' },
   { id: 'permissions', label: '权限' },
@@ -863,8 +861,25 @@ export default function SettingsView({ section, onSectionChange, onClose, onOpen
             <div className="mx-auto max-w-5xl px-6 pb-16 pt-8">
               {section === 'general' && (
                 <div className="space-y-4">
-                  <div className={`${cardClass} text-sm text-slate-600 dark:text-slate-300`}>
-                    通用设置将在后续版本提供。
+                  <div className={`${cardClass} space-y-4`}>
+                    <div className="text-sm font-medium text-slate-900 dark:text-white">主题模式</div>
+                    <div className="flex flex-wrap gap-3">
+                      {(['light', 'dark', 'system'] as const).map((mode) => (
+                        <button
+                          key={mode}
+                          className={`rounded-full border px-4 py-2 text-sm transition-colors ${themeMode === mode
+                            ? 'border-slate-900 bg-slate-900 text-white dark:border-white dark:bg-white dark:text-slate-900'
+                            : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:text-slate-900 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-300'
+                            }`}
+                          onClick={async () => {
+                            const info = await window.intools.theme.set(mode)
+                            setThemeMode(info.mode)
+                          }}
+                        >
+                          {mode === 'light' ? '浅色' : mode === 'dark' ? '深色' : '跟随系统'}
+                        </button>
+                      ))}
+                    </div>
                   </div>
                   {onOpenAiSettings && (
                     <div className={`${cardClass} flex items-center justify-between gap-4`}>
@@ -911,28 +926,6 @@ export default function SettingsView({ section, onSectionChange, onClose, onOpen
                 </div>
               )}
 
-              {section === 'appearance' && (
-                <div className={`${cardClass} space-y-4`}>
-                  <div className="text-sm font-medium text-slate-900 dark:text-white">主题模式</div>
-                  <div className="flex flex-wrap gap-3">
-                    {(['light', 'dark', 'system'] as const).map((mode) => (
-                      <button
-                        key={mode}
-                        className={`rounded-full border px-4 py-2 text-sm transition-colors ${themeMode === mode
-                          ? 'border-slate-900 bg-slate-900 text-white dark:border-white dark:bg-white dark:text-slate-900'
-                          : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:text-slate-900 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-300'
-                          }`}
-                        onClick={async () => {
-                          const info = await window.intools.theme.set(mode)
-                          setThemeMode(info.mode)
-                        }}
-                      >
-                        {mode === 'light' ? '浅色' : mode === 'dark' ? '深色' : '跟随系统'}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
 
               {section === 'shortcuts' && settings && (
                 <div className="space-y-3">
