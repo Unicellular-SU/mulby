@@ -32,7 +32,7 @@ describe('ai tool capabilities', () => {
 })
 
 describe('ai capability policy', () => {
-  it('applies network skill least-privilege defaults', () => {
+  it('uses global default capabilities even when skills are selected', () => {
     const result = resolveAiCapabilityPolicy({
       option: {
         messages: [{ role: 'user', content: 'run command' }]
@@ -44,11 +44,11 @@ describe('ai capability policy', () => {
         trustLevel: 'reviewed'
       }]
     })
-    assert.deepEqual(result.allowedCapabilities, ['fs.read'])
-    assert.deepEqual(result.deniedCapabilities, ['shell.exec'])
+    assert.deepEqual(result.allowedCapabilities, ['shell.exec', 'fs.read'])
+    assert.deepEqual(result.deniedCapabilities, [])
   })
 
-  it('allows session override for blocked capabilities', () => {
+  it('global deny takes precedence over session allow', () => {
     const result = resolveAiCapabilityPolicy({
       option: {
         messages: [{ role: 'user', content: 'run command' }],
@@ -57,42 +57,62 @@ describe('ai capability policy', () => {
         }
       },
       requestedCapabilities: ['shell.exec'],
-      selectedSkills: [{
-        id: 'find-skills',
-        source: 'zip',
-        trustLevel: 'reviewed'
-      }]
+      policy: {
+        defaultAppCapabilities: [],
+        globalGrants: [{
+          id: 'deny-shell',
+          decision: 'deny',
+          capability: 'shell.exec'
+        }]
+      }
     })
-    assert.deepEqual(result.allowedCapabilities, ['shell.exec'])
-    assert.deepEqual(result.deniedCapabilities, [])
+    assert.deepEqual(result.allowedCapabilities, [])
+    assert.deepEqual(result.deniedCapabilities, ['shell.exec'])
   })
 
-  it('allows policy grants for network skills', () => {
+  it('allows global grants', () => {
     const result = resolveAiCapabilityPolicy({
       option: {
         messages: [{ role: 'user', content: 'run command' }]
       },
       requestedCapabilities: ['shell.exec'],
-      selectedSkills: [{
-        id: 'find-skills',
-        source: 'zip',
-        trustLevel: 'reviewed'
-      }],
       policy: {
         defaultAppCapabilities: [],
-        defaultSkillCapabilities: [],
-        defaultNetworkSkillCapabilities: [],
-        grants: [
+        globalGrants: [
           {
-            id: 'allow-find-skills-shell',
+            id: 'allow-shell-global',
             decision: 'allow',
-            capability: 'shell.exec',
-            skillId: 'find-skills'
+            capability: 'shell.exec'
           }
         ]
       }
     })
     assert.deepEqual(result.allowedCapabilities, ['shell.exec'])
+    assert.deepEqual(result.deniedCapabilities, [])
+  })
+
+  it('ignores unknown legacy fields in final cleanup stage', () => {
+    const result = resolveAiCapabilityPolicy({
+      option: {
+        messages: [{ role: 'user', content: 'run command' }]
+      },
+      requestedCapabilities: ['shell.exec'],
+      policy: {
+        defaultAppCapabilities: [],
+        globalGrants: [],
+        ...({
+          grants: [
+            {
+              id: 'legacy-allow-shell',
+              decision: 'allow',
+              capability: 'shell.exec'
+            }
+          ]
+        } as Record<string, unknown>)
+      }
+    })
+    assert.deepEqual(result.allowedCapabilities, [])
+    assert.deepEqual(result.deniedCapabilities, ['shell.exec'])
   })
 
   it('allows default app capabilities in normal ai calls by default', () => {
@@ -106,7 +126,7 @@ describe('ai capability policy', () => {
     assert.equal(result.allowedCapabilities.includes('git.status'), true)
   })
 
-  it('uses default skill capabilities for reviewed system skills', () => {
+  it('uses global app capabilities for reviewed system skills', () => {
     const result = resolveAiCapabilityPolicy({
       option: {
         messages: [{ role: 'user', content: '请帮我运行命令检查技能' }]

@@ -54,9 +54,7 @@ function createTooling(root: string): AiToolingSettings {
     },
     capabilityPolicy: {
       defaultAppCapabilities: [],
-      defaultSkillCapabilities: [],
-      defaultNetworkSkillCapabilities: [],
-      grants: []
+      globalGrants: []
     }
   }
 }

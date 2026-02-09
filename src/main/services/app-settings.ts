@@ -122,23 +122,7 @@ const DEFAULT_SETTINGS: AppSettings = {
         'git.status',
         'git.diff'
       ],
-      defaultSkillCapabilities: [
-        'shell.exec',
-        'shell.script',
-        'fs.read',
-        'fs.list',
-        'fs.search',
-        'patch.apply',
-        'http.fetch',
-        'git.status',
-        'git.diff'
-      ],
-      defaultNetworkSkillCapabilities: [
-        'fs.read',
-        'fs.list',
-        'fs.search'
-      ],
-      grants: []
+      globalGrants: []
     }
   },
   window: {
@@ -224,15 +208,6 @@ function normalizeCapabilityGrant(input: unknown, index: number): AiToolCapabili
   const decision = obj.decision === 'deny' ? 'deny' : obj.decision === 'allow' ? 'allow' : null
   if (!decision) return null
   const id = String(obj.id || `grant-${index + 1}`).trim() || `grant-${index + 1}`
-  const sourceRaw = String(obj.source || '').trim()
-  const source = sourceRaw === 'manual' ||
-    sourceRaw === 'local-dir' ||
-    sourceRaw === 'zip' ||
-    sourceRaw === 'json' ||
-    sourceRaw === 'builtin' ||
-    sourceRaw === 'system'
-    ? sourceRaw
-    : undefined
   const createdAt = Number(obj.createdAt)
   const updatedAt = Number(obj.updatedAt)
   const expiresAt = Number(obj.expiresAt)
@@ -240,8 +215,6 @@ function normalizeCapabilityGrant(input: unknown, index: number): AiToolCapabili
     id,
     capability,
     decision,
-    skillId: String(obj.skillId || '').trim() || undefined,
-    source,
     createdAt: Number.isFinite(createdAt) && createdAt > 0 ? createdAt : undefined,
     updatedAt: Number.isFinite(updatedAt) && updatedAt > 0 ? updatedAt : undefined,
     expiresAt: Number.isFinite(expiresAt) && expiresAt > 0 ? expiresAt : undefined
@@ -253,8 +226,8 @@ function normalizeCapabilityPolicySettings(input: Partial<AiToolCapabilityPolicy
     ...DEFAULT_SETTINGS.aiTooling.capabilityPolicy,
     ...(input || {})
   }
-  const grants = Array.isArray(current.grants)
-    ? current.grants
+  const normalizedGlobalGrants = Array.isArray(current.globalGrants)
+    ? current.globalGrants
       .map((item, index) => normalizeCapabilityGrant(item, index))
       .filter((item): item is AiToolCapabilityGrant => !!item)
     : []
@@ -263,15 +236,7 @@ function normalizeCapabilityPolicySettings(input: Partial<AiToolCapabilityPolicy
       current.defaultAppCapabilities,
       DEFAULT_SETTINGS.aiTooling.capabilityPolicy.defaultAppCapabilities.length
     ),
-    defaultSkillCapabilities: normalizeStringList(
-      current.defaultSkillCapabilities,
-      DEFAULT_SETTINGS.aiTooling.capabilityPolicy.defaultSkillCapabilities.length
-    ),
-    defaultNetworkSkillCapabilities: normalizeStringList(
-      current.defaultNetworkSkillCapabilities,
-      DEFAULT_SETTINGS.aiTooling.capabilityPolicy.defaultNetworkSkillCapabilities.length
-    ),
-    grants
+    globalGrants: normalizedGlobalGrants
   }
 }
 
@@ -436,7 +401,11 @@ function mergeSettings(current: AppSettings, next: Partial<AppSettings>): AppSet
     }),
     aiTooling: normalizeAiToolingSettings({
       ...current.aiTooling,
-      ...(next.aiTooling || {})
+      ...(next.aiTooling || {}),
+      capabilityPolicy: {
+        ...current.aiTooling.capabilityPolicy,
+        ...((next.aiTooling && next.aiTooling.capabilityPolicy) || {})
+      }
     }),
     window: {
       ...(current.window || { width: 800 }),

@@ -1,5 +1,29 @@
 # Notes: AI Skills 2025-2026 + Project Integration
 
+## Current Task Notes (2026-02-09)
+
+### Capability Policy 解耦迁移
+- 目标：能力授权从 Skill/source 维度解耦到 AI 全局策略。
+- 迁移策略：
+  - 新增 `globalGrants` 作为主路径。
+  - 保留 `grants` 兼容历史 scoped 规则。
+  - 通过 `legacy` 记录是否存在 scoped grants（用于 UI 提示与后续清理）。
+- 风险控制：
+  - 不自动提升 scoped allow 到 global allow，避免权限扩大。
+  - 兼容期保留 scoped grants 生效（可通过开关关闭）。
+
+### 本次落地结果
+- `src/shared/types/settings.ts`
+  - 新增 `globalGrants`、`compatEnableScopedGrants`、`legacy` 字段。
+- `src/main/services/app-settings.ts`
+  - 增加旧配置到 `globalGrants` 的平滑归一化与 `legacy` 统计。
+- `src/main/ai/tools/capability-policy.ts`
+  - 裁决逻辑改为全局能力优先，scoped grants 仅兼容期生效。
+- `src/renderer/components/SettingsView.tsx`
+  - 移除按 Skill/source 能力矩阵，改为全局 grant 管理 UI。
+- `src/main/ai/__tests__/capabilities.test.ts`
+  - 增加/调整全局策略与兼容窗口测试。
+
 ## Sources
 
 ### Source 1: Anthropic Claude Code docs (Skills)

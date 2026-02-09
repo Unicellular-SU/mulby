@@ -129,8 +129,6 @@ export interface AiToolCapabilityGrant {
   id: string
   capability: string
   decision: AiToolCapabilityGrantDecision
-  skillId?: string
-  source?: 'manual' | 'local-dir' | 'zip' | 'json' | 'builtin' | 'system'
   createdAt?: number
   updatedAt?: number
   expiresAt?: number
@@ -138,9 +136,10 @@ export interface AiToolCapabilityGrant {
 
 export interface AiToolCapabilityPolicySettings {
   defaultAppCapabilities: string[]
-  defaultSkillCapabilities: string[]
-  defaultNetworkSkillCapabilities: string[]
-  grants: AiToolCapabilityGrant[]
+  /**
+   * Canonical grant list: global capability allow/deny rules.
+   */
+  globalGrants: AiToolCapabilityGrant[]
 }
 
 export interface AiToolingSettings {
