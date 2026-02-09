@@ -1,13 +1,4 @@
-/**
- * React 插件模板 - 类型定义生成器
- * 包含：intools.d.ts
- */
-
-/**
- * 生成 intools.d.ts 类型定义内容
- */
-export function buildIntoolsTypes() {
-  return `// InTools API 类型定义
+// InTools API 类型定义
 
 interface ClipboardFileInfo {
   path: string
@@ -1221,6 +1212,4 @@ type IntoolsSharpFunction = (
 
 interface Window {
   intools: IntoolsAPI
-}
-`
 }

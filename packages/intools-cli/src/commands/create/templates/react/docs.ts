@@ -62,8 +62,8 @@ ${name}/
 │   │   ├── styles.css         # 全局样式
 │   │   ├── hooks/
 │   │   │   └── useIntools.ts  # InTools API Hook
-│   │   └── types/
-│   │       └── intools.d.ts   # 类型定义
+│   └── types/
+│       └── intools.d.ts       # 类型定义（含 BackendPluginContext）
 ├── dist/                      # 后端构建输出
 ├── ui/                        # UI 构建输出
 └── icon.png                   # 插件图标
