@@ -307,7 +307,7 @@ export interface AiOption {
   skills?: AiSkillSelection
   params?: AiModelParameters
   toolContext?: AiToolContext
-  maxToolSteps?: number  // 工具调用的最大步骤数，默认为 10
+  maxToolSteps?: number  // 工具调用的最大步骤数，默认为 20，最大 100
 }
 
 export interface AiToolContext {

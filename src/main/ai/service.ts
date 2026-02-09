@@ -110,6 +110,13 @@ interface InjectedInternalToolResult {
   capabilityDebug: AiCapabilityDebugInfo
 }
 
+const DEFAULT_MAX_TOOL_STEPS = 20
+const MAX_TOOL_STEPS_LIMIT = 100
+
+function resolveMaxToolSteps(maxToolSteps?: number): number {
+  return Math.min(Math.max(Math.floor(maxToolSteps ?? DEFAULT_MAX_TOOL_STEPS), 1), MAX_TOOL_STEPS_LIMIT)
+}
+
 function buildApiKeyScope(input: { providerId?: string; providerType?: string; baseURL?: string }): string {
   const providerToken = String(input.providerId || input.providerType || 'default').trim() || 'default'
   const baseURL = String(input.baseURL || '').trim()
@@ -453,7 +460,7 @@ export class AiService {
         executeCompatToolLoopCall: async () => {
           console.log('[AI] call: 使用 OpenAI 兼容工具调用分支（DeepSeek reasoning 兼容）', {
             model: effectiveOption.model,
-            maxToolSteps: effectiveOption.maxToolSteps ?? 10
+            maxToolSteps: resolveMaxToolSteps(effectiveOption.maxToolSteps)
           })
           const chatMessages = await this.toOpenAIChatMessages(trimmedMessages, effectiveOption.model, { includeReasoningContent: true })
           const { content, reasoning, usage } = await this.runOpenAICompatToolLoop({
@@ -484,7 +491,7 @@ export class AiService {
         executeSdkCall: async () => {
           console.log('[AI] call: 使用 Vercel AI SDK generateText', { hasTools: !!tools })
           const messages = await this.toSdkMessages(trimmedMessages, effectiveOption.model)
-          const maxSteps = effectiveOption.maxToolSteps ?? 10
+          const maxSteps = resolveMaxToolSteps(effectiveOption.maxToolSteps)
           const result = await generateText({
             model: modelKey,
             messages,
@@ -596,7 +603,7 @@ export class AiService {
         model: effectiveOption.model,
         hasTools: !!tools,
         compatToolLoop,
-        maxToolSteps: effectiveOption.maxToolSteps ?? 10
+        maxToolSteps: resolveMaxToolSteps(effectiveOption.maxToolSteps)
       })
       trackedOnChunk = (chunk: AiMessage) => {
         recordAiStreamChunk(metrics!, chunk)
@@ -689,7 +696,7 @@ export class AiService {
           markAiStreamRoute(metrics!, 'openai-compat-tool-loop')
           console.log('[AI] stream: 使用 OpenAI 兼容工具调用分支（DeepSeek reasoning 兼容）', {
             model: effectiveOption.model,
-            maxToolSteps: effectiveOption.maxToolSteps ?? 10
+            maxToolSteps: resolveMaxToolSteps(effectiveOption.maxToolSteps)
           })
           const chatMessages = await this.toOpenAIChatMessages(trimmedMessages, effectiveOption.model, { includeReasoningContent: true })
           const { content, reasoning, usage } = await this.runOpenAICompatToolLoop({
@@ -729,16 +736,17 @@ export class AiService {
             // 启用工具时回退到 AI SDK 的 streamText，以支持工具执行与多步调用。
             console.log('[AI] stream: 检测到工具调用，使用 AI SDK streamText 分支', {
               model: effectiveOption.model,
-              maxToolSteps: effectiveOption.maxToolSteps ?? 10
+              maxToolSteps: resolveMaxToolSteps(effectiveOption.maxToolSteps)
             })
           }
+          const maxSteps = resolveMaxToolSteps(effectiveOption.maxToolSteps)
           const messages = await this.toSdkMessages(trimmedMessages, effectiveOption.model)
           const result = await streamText({
             model: modelKey,
             messages,
             abortSignal: controller.signal,
             tools,
-            stopWhen: tools ? stepCountIs(effectiveOption.maxToolSteps ?? 10) : undefined,
+            stopWhen: tools ? stepCountIs(maxSteps) : undefined,
             ...params
           })
 
@@ -1676,7 +1684,7 @@ export class AiService {
     onChunk?: (chunk: AiMessage) => void,
     abortSignal?: AbortSignal
   ): Promise<{ content: string; reasoning: string; usage?: { inputTokens?: number; outputTokens?: number } }> {
-    const maxSteps = Math.min(Math.max(Math.floor(input.maxToolSteps ?? 10), 1), 20)
+    const maxSteps = resolveMaxToolSteps(input.maxToolSteps)
     const conversationMessages = [...input.messages]
     let fullContent = ''
     let fullReasoning = ''
