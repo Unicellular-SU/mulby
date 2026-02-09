@@ -1021,7 +1021,8 @@ export default function App() {
             { role: 'system', content: '你是一个 Skills 调用测试助手。' },
             { role: 'user', content: skillsPrompt }
           ],
-          skills: buildSkillSelection()
+          skills: buildSkillSelection(),
+          maxToolSteps: 100
         },
         (chunk: any) => {
           if (chunk?.__requestId && !skillsRequestIdRef.current) {

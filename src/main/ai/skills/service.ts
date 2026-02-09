@@ -256,6 +256,39 @@ function collectPromptText(messages: AiMessage[] | undefined): string {
     .toLowerCase()
 }
 
+function extractScriptRefsFromPrompt(promptTemplate: string | undefined): string[] {
+  const text = String(promptTemplate || '')
+  if (!text) return []
+  const matches = text.match(/\bscripts\/[A-Za-z0-9._/-]+\b/g) || []
+  const seen = new Set<string>()
+  const out: string[] = []
+  for (const raw of matches) {
+    const normalized = normalizeSkillFilePath(raw)
+    if (!normalized || seen.has(normalized)) continue
+    seen.add(normalized)
+    out.push(normalized)
+  }
+  return out
+}
+
+function buildSkillRuntimeHint(record: AiSkillRecord): string | undefined {
+  const installPath = String(record.installPath || '').trim()
+  if (!installPath) return undefined
+  const quotedInstallPath = JSON.stringify(installPath)
+  const scriptRefs = extractScriptRefsFromPrompt(record.descriptor.promptTemplate)
+  const absoluteScriptRefs = scriptRefs.map((ref) => JSON.stringify(path.join(installPath, ref)))
+  const lines = [
+    `Skill runtime hint (${record.id}):`,
+    `- Skill root path: ${quotedInstallPath}`,
+    '- Reuse existing scripts from this skill before writing ad-hoc inline scripts.',
+    '- intools_run_command arguments must be a JSON object, never a quoted JSON string.'
+  ]
+  if (absoluteScriptRefs.length > 0) {
+    lines.push(`- Preferred existing scripts: ${absoluteScriptRefs.join(', ')}`)
+  }
+  return lines.join('\n')
+}
+
 function pathInside(root: string, target: string): boolean {
   const normalizedRoot = path.resolve(root)
   const normalizedTarget = path.resolve(target)
@@ -1128,9 +1161,13 @@ export class AiSkillService {
       reasons.push(`auto:${selected.length}`)
     }
 
-    const prompts = selected
-      .map((record) => record.descriptor.promptTemplate?.trim())
-      .filter((item): item is string => !!item)
+    const prompts: string[] = []
+    for (const record of selected) {
+      const promptTemplate = record.descriptor.promptTemplate?.trim()
+      if (promptTemplate) prompts.push(promptTemplate)
+      const runtimeHint = buildSkillRuntimeHint(record)
+      if (runtimeHint) prompts.push(runtimeHint)
+    }
 
     let mcpSelection: AiMcpSelection | undefined
     let scope: AiToolContext['mcpScope'] | undefined

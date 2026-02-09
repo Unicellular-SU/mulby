@@ -116,6 +116,25 @@ function buildApiKeyScope(input: { providerId?: string; providerType?: string; b
   return `provider:${providerToken}:${baseURL}`
 }
 
+function parseCompatToolCallArgs(rawArgs: unknown): unknown {
+  if (typeof rawArgs !== 'string') return rawArgs ?? {}
+  const source = rawArgs.trim()
+  if (!source) return {}
+  try {
+    const parsed = JSON.parse(source)
+    if (typeof parsed !== 'string') return parsed
+    const nested = parsed.trim()
+    if (!nested) return {}
+    try {
+      return JSON.parse(nested)
+    } catch {
+      return parsed
+    }
+  } catch {
+    return rawArgs
+  }
+}
+
 export class AiService {
   private controllers = new Map<string, AbortController>()
   private requestMcpCallIds = new Map<string, Set<string>>()
@@ -1726,13 +1745,7 @@ export class AiService {
         const rawToolName = call.function?.name
         const toolName = resolveCompatToolCallName(rawToolName, input.tools)
 
-        const rawArgs = call.function?.arguments || '{}'
-        let parsedArgs: unknown = {}
-        try {
-          parsedArgs = rawArgs ? JSON.parse(rawArgs) : {}
-        } catch {
-          parsedArgs = rawArgs
-        }
+        const parsedArgs = parseCompatToolCallArgs(call.function?.arguments || '{}')
 
         this.emitToolCallChunk(onChunk, {
           id: call.id,

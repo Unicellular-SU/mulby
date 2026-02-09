@@ -3,6 +3,59 @@ import type { RunCommandInput, RunCommandResult } from '../../services/command-r
 
 export const AI_RUN_COMMAND_TOOL_NAME = 'intools_run_command'
 
+function tryParsePossiblyMalformedJson(input: string): unknown {
+  const source = String(input || '')
+  try {
+    return JSON.parse(source)
+  } catch {
+    // Some providers return non-standard escapes like "\|", which breaks JSON.parse.
+    // Recover by escaping only backslashes that are not valid JSON escapes.
+    const sanitized = source.replace(/\\(?!["\\/bfnrtu])/g, '\\\\')
+    if (sanitized !== source) {
+      return JSON.parse(sanitized)
+    }
+    throw new Error('runCommand args must be an object')
+  }
+}
+
+function parseRunCommandArgsObject(args: unknown): Record<string, unknown> {
+  if (args && typeof args === 'object' && !Array.isArray(args)) {
+    return args as Record<string, unknown>
+  }
+  if (typeof args !== 'string') {
+    throw new Error('runCommand args must be an object')
+  }
+  const firstRaw = args.trim()
+  if (!firstRaw) {
+    throw new Error('runCommand args must be an object')
+  }
+
+  let firstParsed: unknown
+  try {
+    firstParsed = tryParsePossiblyMalformedJson(firstRaw)
+  } catch {
+    throw new Error('runCommand args must be an object')
+  }
+
+  if (firstParsed && typeof firstParsed === 'object' && !Array.isArray(firstParsed)) {
+    return firstParsed as Record<string, unknown>
+  }
+  if (typeof firstParsed === 'string') {
+    const secondRaw = firstParsed.trim()
+    if (!secondRaw) throw new Error('runCommand args must be an object')
+    try {
+      const secondParsed = tryParsePossiblyMalformedJson(secondRaw)
+      if (secondParsed && typeof secondParsed === 'object' && !Array.isArray(secondParsed)) {
+        return secondParsed as Record<string, unknown>
+      }
+    } catch {
+      // ignore and throw unified error below
+    }
+  }
+
+  throw new Error('runCommand args must be an object')
+}
+
 export function buildAiRunCommandTool(): AiTool {
   return {
     type: 'function',
@@ -50,10 +103,7 @@ export function buildAiRunCommandTool(): AiTool {
 }
 
 export function parseAiRunCommandArgs(args: unknown): RunCommandInput {
-  if (!args || typeof args !== 'object' || Array.isArray(args)) {
-    throw new Error('runCommand args must be an object')
-  }
-  const input = args as Record<string, unknown>
+  const input = parseRunCommandArgsObject(args)
   const command = String(input.command || '').trim()
   if (!command) {
     throw new Error('runCommand command is required')

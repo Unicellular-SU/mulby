@@ -33,6 +33,28 @@ describe('ai runCommand tool', () => {
     assert.deepEqual(parsed.env, { NODE_ENV: 'test', RETRIES: '3' })
   })
 
+  it('parses stringified runCommand args payload', () => {
+    const parsed = parseAiRunCommandArgs('{"command":"node","args":["-v"],"shell":false}')
+    assert.equal(parsed.command, 'node')
+    assert.deepEqual(parsed.args, ['-v'])
+    assert.equal(parsed.shell, false)
+  })
+
+  it('parses double-stringified runCommand args payload', () => {
+    const payload = JSON.stringify(JSON.stringify({ command: 'node', args: ['-v'], shell: false }))
+    const parsed = parseAiRunCommandArgs(payload)
+    assert.equal(parsed.command, 'node')
+    assert.deepEqual(parsed.args, ['-v'])
+    assert.equal(parsed.shell, false)
+  })
+
+  it('parses runCommand args with non-standard escaped characters from provider', () => {
+    const payload = '{"command":"grep","args":["-i","预算\\\\|价格\\\\|金额\\\\|报价","/tmp/a.txt"]}'
+    const parsed = parseAiRunCommandArgs(payload)
+    assert.equal(parsed.command, 'grep')
+    assert.deepEqual(parsed.args, ['-i', '预算\\|价格\\|金额\\|报价', '/tmp/a.txt'])
+  })
+
   it('rejects invalid args payload', () => {
     assert.throws(() => parseAiRunCommandArgs(null), /object/)
     assert.throws(() => parseAiRunCommandArgs({}), /required/)
