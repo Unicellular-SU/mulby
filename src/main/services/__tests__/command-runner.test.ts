@@ -12,6 +12,8 @@ function createBaseSettings(): CommandRunnerSettings {
     maxTimeoutMs: 300_000,
     maxOutputBytes: 1024 * 1024,
     maxConcurrent: 2,
+    denyEnvKeys: [],
+    maskEnvKeysInAudit: [],
     allowList: [],
     denyList: [],
     trustedFingerprints: [],
@@ -175,5 +177,29 @@ describe('command runner service', () => {
     assert.equal(getSettings().audit.records.length, 1)
     assert.equal(getSettings().audit.records[0].status, 'timeout')
   })
-})
 
+  it('blocks denied env keys and masks in audit', async () => {
+    const { service, getSettings } = createInMemoryRunner({
+      settings: {
+        denyEnvKeys: ['SECRET_TOKEN'],
+        maskEnvKeysInAudit: ['SECRET_TOKEN']
+      }
+    })
+
+    await assert.rejects(
+      service.runCommand(
+        {
+          command: process.execPath,
+          args: ['-e', 'process.stdout.write(process.env.SECRET_TOKEN || \"\")'],
+          env: { SECRET_TOKEN: 'abc' }
+        },
+        { source: 'app' }
+      ),
+      /环境变量命中黑名单/
+    )
+
+    assert.equal(getSettings().audit.records.length, 1)
+    assert.deepEqual(getSettings().audit.records[0].envKeys, ['SECRET_TOKEN=***'])
+    assert.equal(getSettings().audit.records[0].status, 'blocked')
+  })
+})

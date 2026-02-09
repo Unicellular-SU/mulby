@@ -1,13 +1,64 @@
 #!/usr/bin/env python3
-"""
-Quick validation script for skills - minimal version
-"""
+"""Quick validation script for skills - minimal version."""
 
-import sys
-import os
 import re
-import yaml
+import sys
 from pathlib import Path
+
+try:
+    import yaml  # type: ignore
+except Exception:
+    yaml = None
+
+
+def _parse_scalar(value):
+    text = value.strip()
+    if not text:
+        return ""
+    if (text.startswith('"') and text.endswith('"')) or (
+        text.startswith("'") and text.endswith("'")
+    ):
+        return text[1:-1]
+    if text == "true":
+        return True
+    if text == "false":
+        return False
+    if text == "null":
+        return None
+    if re.fullmatch(r"-?\d+", text):
+        try:
+            return int(text)
+        except Exception:
+            return text
+    if re.fullmatch(r"-?\d+\.\d+", text):
+        try:
+            return float(text)
+        except Exception:
+            return text
+    return text
+
+
+def _parse_frontmatter_without_yaml(frontmatter_text):
+    """
+    Minimal top-level parser used when PyYAML is unavailable.
+
+    It intentionally supports only top-level `key: value` lines and ignores
+    nested structures to avoid hard dependency on external packages.
+    """
+    data = {}
+    for raw_line in frontmatter_text.splitlines():
+        if not raw_line.strip() or raw_line.lstrip().startswith("#"):
+            continue
+        if raw_line.startswith((" ", "\t")):
+            # Ignore nested blocks in fallback mode.
+            continue
+        match = re.match(r"^([A-Za-z0-9_-]+)\s*:\s*(.*)$", raw_line)
+        if not match:
+            continue
+        key = match.group(1)
+        value = match.group(2)
+        data[key] = _parse_scalar(value)
+    return data
 
 def validate_skill(skill_path):
     """Basic validation of a skill"""
@@ -30,13 +81,18 @@ def validate_skill(skill_path):
 
     frontmatter_text = match.group(1)
 
-    # Parse YAML frontmatter
-    try:
-        frontmatter = yaml.safe_load(frontmatter_text)
+    # Parse YAML frontmatter (with graceful fallback when PyYAML is missing)
+    if yaml is not None:
+        try:
+            frontmatter = yaml.safe_load(frontmatter_text)
+            if not isinstance(frontmatter, dict):
+                return False, "Frontmatter must be a YAML dictionary"
+        except yaml.YAMLError as e:
+            return False, f"Invalid YAML in frontmatter: {e}"
+    else:
+        frontmatter = _parse_frontmatter_without_yaml(frontmatter_text)
         if not isinstance(frontmatter, dict):
-            return False, "Frontmatter must be a YAML dictionary"
-    except yaml.YAMLError as e:
-        return False, f"Invalid YAML in frontmatter: {e}"
+            return False, "Frontmatter must be a key-value dictionary"
 
     # Define allowed properties
     ALLOWED_PROPERTIES = {'name', 'description', 'license', 'allowed-tools', 'metadata', 'compatibility'}
@@ -94,6 +150,10 @@ def validate_skill(skill_path):
     return True, "Skill is valid!"
 
 if __name__ == "__main__":
+    if len(sys.argv) == 2 and sys.argv[1] in ("-h", "--help"):
+        print("Usage: python quick_validate.py <skill_directory>")
+        sys.exit(0)
+
     if len(sys.argv) != 2:
         print("Usage: python quick_validate.py <skill_directory>")
         sys.exit(1)

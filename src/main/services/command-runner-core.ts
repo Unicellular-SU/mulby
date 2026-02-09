@@ -42,6 +42,8 @@ export interface CommandConsentRequest {
   pluginId?: string
   command: string
   args: string[]
+  cwd?: string
+  envKeys: string[]
   shell: boolean
   timeoutMs: number
   preview: string
@@ -131,18 +133,47 @@ function normalizeArgs(input: unknown): string[] {
   return input.map((item) => String(item ?? ''))
 }
 
+function normalizeEnv(input: unknown): Record<string, string> | undefined {
+  if (!input || typeof input !== 'object' || Array.isArray(input)) return undefined
+  const entries = Object.entries(input as Record<string, unknown>)
+    .map(([key, value]) => [String(key || '').trim(), String(value ?? '')] as const)
+    .filter(([key]) => !!key)
+  if (entries.length === 0) return undefined
+  return Object.fromEntries(entries)
+}
+
+function normalizeEnvKey(value: string): string {
+  return String(value || '').trim().toUpperCase()
+}
+
+function listEnvKeys(input: Record<string, string> | undefined): string[] {
+  if (!input) return []
+  return Object.keys(input).map((item) => normalizeEnvKey(item)).filter(Boolean).sort((a, b) => a.localeCompare(b))
+}
+
+function sanitizeEnvKeysForAudit(keys: string[], settings: CommandRunnerSettings): string[] {
+  if (keys.length === 0) return []
+  const maskSet = new Set((settings.maskEnvKeysInAudit || []).map((item) => normalizeEnvKey(item)))
+  return keys.map((key) => (maskSet.has(key) ? `${key}=***` : key))
+}
+
 function buildFingerprint(input: {
   source: 'app' | 'plugin'
   pluginId?: string
   command: string
   args: string[]
+  env?: Record<string, string>
   shell: boolean
 }): string {
+  const envEntries = Object.entries(input.env || {})
+    .map(([key, value]) => [normalizeEnvKey(key), String(value ?? '')] as const)
+    .sort(([a], [b]) => a.localeCompare(b))
   const payload = JSON.stringify({
     source: input.source,
     pluginId: input.pluginId || '',
     command: normalizeCommandToken(input.command),
     args: input.args.map((arg) => String(arg || '').trim()),
+    env: envEntries,
     shell: input.shell
   })
   return createHash('sha256').update(payload).digest('hex')
@@ -216,6 +247,7 @@ export class CommandRunnerService {
       throw new Error('Command is required')
     }
     const args = normalizeArgs(input.args)
+    const env = normalizeEnv(input.env)
     const shell = input.shell === true
     const settings = this.getPolicy()
     const timeoutMs = clamp(
@@ -224,12 +256,18 @@ export class CommandRunnerService {
       settings.maxTimeoutMs || 300_000
     )
     const startAt = this.now()
+    const envKeys = listEnvKeys(env)
+    const sanitizedEnvKeys = sanitizeEnvKeysForAudit(envKeys, settings)
 
     await this.acquire(settings.maxConcurrent || 4)
     try {
       await this.ensureAllowed({
         command,
         args,
+        env,
+        envKeys,
+        sanitizedEnvKeys,
+        cwd: input.cwd,
         shell,
         timeoutMs,
         context,
@@ -240,7 +278,7 @@ export class CommandRunnerService {
         command,
         args,
         cwd: input.cwd,
-        env: input.env,
+        env,
         shell,
         timeoutMs,
         maxOutputBytes: settings.maxOutputBytes || 1_048_576
@@ -254,6 +292,7 @@ export class CommandRunnerService {
         pluginId: context.pluginId,
         command,
         args,
+        envKeys: sanitizedEnvKeys,
         cwd: input.cwd,
         shell,
         timeoutMs,
@@ -284,6 +323,7 @@ export class CommandRunnerService {
         pluginId: context.pluginId,
         command,
         args,
+        envKeys: sanitizedEnvKeys,
         cwd: input.cwd,
         shell,
         timeoutMs,
@@ -305,12 +345,16 @@ export class CommandRunnerService {
   private async ensureAllowed(input: {
     command: string
     args: string[]
+    env?: Record<string, string>
+    envKeys: string[]
+    sanitizedEnvKeys: string[]
+    cwd?: string
     shell: boolean
     timeoutMs: number
     context: RunCommandContext
     settings: CommandRunnerSettings
   }): Promise<void> {
-    const { command, args, shell, context, settings } = input
+    const { command, args, env, envKeys, sanitizedEnvKeys, cwd, shell, context, settings } = input
     if (!settings.enabled) {
       throw new CommandPolicyError('命令执行能力已在设置中禁用')
     }
@@ -336,12 +380,19 @@ export class CommandRunnerService {
       }
     }
 
+    const denyEnvSet = new Set((settings.denyEnvKeys || []).map((item) => normalizeEnvKey(item)))
+    const blockedEnvKeys = envKeys.filter((key) => denyEnvSet.has(key))
+    if (blockedEnvKeys.length > 0) {
+      throw new CommandPolicyError(`命令环境变量命中黑名单：${blockedEnvKeys.join(', ')}`)
+    }
+
     if (!settings.requireConsent) return
     const fingerprint = buildFingerprint({
       source: context.source,
       pluginId: context.pluginId,
       command,
       args,
+      env,
       shell
     })
     const trusted = (settings.trustedFingerprints || []).find((item) => item.fingerprint === fingerprint)
@@ -356,6 +407,8 @@ export class CommandRunnerService {
       pluginId: context.pluginId,
       command,
       args,
+      cwd,
+      envKeys: sanitizedEnvKeys,
       shell,
       timeoutMs: input.timeoutMs,
       preview: preview || command,
@@ -365,6 +418,8 @@ export class CommandRunnerService {
         : '应用请求执行系统命令',
       detail: [
         `命令: ${preview || command}`,
+        `cwd: ${cwd || process.cwd()}`,
+        sanitizedEnvKeys.length > 0 ? `env keys: ${sanitizedEnvKeys.join(', ')}` : 'env keys: (none)',
         `shell: ${shell ? 'true' : 'false'}`,
         `timeout: ${input.timeoutMs}ms`
       ].join('\n')
@@ -554,4 +609,3 @@ export class CommandRunnerService {
     if (next) next()
   }
 }
-

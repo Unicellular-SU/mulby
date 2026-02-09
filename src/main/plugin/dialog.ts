@@ -1,5 +1,6 @@
 import { dialog } from 'electron'
 import { withDialogMode } from '../services/blur-manager'
+import { showInternalMessageBox, type UiMessageBoxOptions } from '../services/ui-dialog-service'
 
 export interface OpenDialogOptions {
   title?: string
@@ -16,15 +17,7 @@ export interface SaveDialogOptions {
   filters?: { name: string; extensions: string[] }[]
 }
 
-export interface MessageBoxOptions {
-  type?: 'none' | 'info' | 'error' | 'question' | 'warning'
-  title?: string
-  message: string
-  detail?: string
-  buttons?: string[]
-  defaultId?: number
-  cancelId?: number
-}
+export type MessageBoxOptions = UiMessageBoxOptions
 
 export class PluginDialog {
   /**
@@ -64,16 +57,7 @@ export class PluginDialog {
    * 显示消息框
    */
   async showMessageBox(options: MessageBoxOptions): Promise<{ response: number; checkboxChecked: boolean }> {
-    const result = await dialog.showMessageBox({
-      type: options.type || 'info',
-      title: options.title,
-      message: options.message,
-      detail: options.detail,
-      buttons: options.buttons || ['OK'],
-      defaultId: options.defaultId,
-      cancelId: options.cancelId
-    })
-    return result
+    return showInternalMessageBox(options)
   }
 
   /**

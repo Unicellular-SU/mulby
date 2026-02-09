@@ -70,6 +70,13 @@ function formatPermissionStatus(status: string) {
   }
 }
 
+function parseListDraft(value: string): string[] {
+  return value
+    .split(/[\n,]/)
+    .map((item) => item.trim())
+    .filter(Boolean)
+}
+
 function normalizeShortcutKey(event: KeyboardEvent) {
   const code = event.code
   const key = event.key
@@ -242,6 +249,20 @@ export default function SettingsView({ section, onSectionChange, onClose, onOpen
     mode: 'exact',
     value: ''
   })
+  const [filesystemRootDraft, setFilesystemRootDraft] = useState('')
+  const [patchRootDraft, setPatchRootDraft] = useState('')
+  const [gitRootDraft, setGitRootDraft] = useState('')
+  const [denyHostDraft, setDenyHostDraft] = useState('')
+  const [denyCidrDraft, setDenyCidrDraft] = useState('')
+  const [denyPrefixDraft, setDenyPrefixDraft] = useState('')
+  const [runScriptDraft, setRunScriptDraft] = useState({
+    id: '',
+    command: '',
+    args: '',
+    cwd: '',
+    timeoutMs: '',
+    allowEnvKeys: ''
+  })
   const [appInfo, setAppInfo] = useState<{ name: string; version: string; userDataPath: string } | null>(null)
   const [newSource, setNewSource] = useState<{ name: string; url: string }>({ name: '', url: '' })
   const [sourceError, setSourceError] = useState<string | null>(null)
@@ -308,6 +329,218 @@ export default function SettingsView({ section, onSectionChange, onClose, onOpen
         ...settings.commandRunner,
         ...patch
       }
+    })
+  }
+
+  const updateAiTooling = async (patch: Partial<AppSettings['aiTooling']>) => {
+    if (!settings) return
+    await updateSettings({
+      aiTooling: {
+        ...settings.aiTooling,
+        ...patch
+      }
+    })
+  }
+
+  const updateAiFilesystem = async (patch: Partial<AppSettings['aiTooling']['filesystem']>) => {
+    if (!settings) return
+    await updateAiTooling({
+      filesystem: {
+        ...settings.aiTooling.filesystem,
+        ...patch
+      }
+    })
+  }
+
+  const updateAiPatch = async (patch: Partial<AppSettings['aiTooling']['patch']>) => {
+    if (!settings) return
+    await updateAiTooling({
+      patch: {
+        ...settings.aiTooling.patch,
+        ...patch
+      }
+    })
+  }
+
+  const updateAiGit = async (patch: Partial<AppSettings['aiTooling']['git']>) => {
+    if (!settings) return
+    await updateAiTooling({
+      git: {
+        ...settings.aiTooling.git,
+        ...patch
+      }
+    })
+  }
+
+  const updateAiHttp = async (patch: Partial<AppSettings['aiTooling']['http']>) => {
+    if (!settings) return
+    await updateAiTooling({
+      http: {
+        ...settings.aiTooling.http,
+        ...patch
+      }
+    })
+  }
+
+  const updateAiRunScript = async (patch: Partial<AppSettings['aiTooling']['runScript']>) => {
+    if (!settings) return
+    await updateAiTooling({
+      runScript: {
+        ...settings.aiTooling.runScript,
+        ...patch
+      }
+    })
+  }
+
+  const addUniqueListItem = (list: string[], draft: string): string[] => {
+    const parsed = parseListDraft(draft)
+    if (parsed.length === 0) return list
+    const next = [...list]
+    const seen = new Set(list.map((item) => item.toLowerCase()))
+    for (const item of parsed) {
+      const token = item.toLowerCase()
+      if (seen.has(token)) continue
+      seen.add(token)
+      next.push(item)
+    }
+    return next
+  }
+
+  const addFilesystemRoot = async () => {
+    if (!settings) return
+    const next = addUniqueListItem(settings.aiTooling.filesystem.allowedRoots || [], filesystemRootDraft)
+    if (next.length === settings.aiTooling.filesystem.allowedRoots.length) return
+    await updateAiFilesystem({ allowedRoots: next })
+    setFilesystemRootDraft('')
+  }
+
+  const removeFilesystemRoot = async (value: string) => {
+    if (!settings) return
+    const next = (settings.aiTooling.filesystem.allowedRoots || []).filter((item) => item !== value)
+    await updateAiFilesystem({ allowedRoots: next })
+  }
+
+  const addPatchRoot = async () => {
+    if (!settings) return
+    const next = addUniqueListItem(settings.aiTooling.patch.allowedRoots || [], patchRootDraft)
+    if (next.length === settings.aiTooling.patch.allowedRoots.length) return
+    await updateAiPatch({ allowedRoots: next })
+    setPatchRootDraft('')
+  }
+
+  const removePatchRoot = async (value: string) => {
+    if (!settings) return
+    const next = (settings.aiTooling.patch.allowedRoots || []).filter((item) => item !== value)
+    await updateAiPatch({ allowedRoots: next })
+  }
+
+  const addGitRoot = async () => {
+    if (!settings) return
+    const next = addUniqueListItem(settings.aiTooling.git.allowedRepoRoots || [], gitRootDraft)
+    if (next.length === settings.aiTooling.git.allowedRepoRoots.length) return
+    await updateAiGit({ allowedRepoRoots: next })
+    setGitRootDraft('')
+  }
+
+  const removeGitRoot = async (value: string) => {
+    if (!settings) return
+    const next = (settings.aiTooling.git.allowedRepoRoots || []).filter((item) => item !== value)
+    await updateAiGit({ allowedRepoRoots: next })
+  }
+
+  const addHttpDenyHost = async () => {
+    if (!settings) return
+    const next = addUniqueListItem(settings.aiTooling.http.denyHosts || [], denyHostDraft)
+    if (next.length === settings.aiTooling.http.denyHosts.length) return
+    await updateAiHttp({ denyHosts: next })
+    setDenyHostDraft('')
+  }
+
+  const removeHttpDenyHost = async (value: string) => {
+    if (!settings) return
+    const next = (settings.aiTooling.http.denyHosts || []).filter((item) => item !== value)
+    await updateAiHttp({ denyHosts: next })
+  }
+
+  const addHttpDenyCidr = async () => {
+    if (!settings) return
+    const next = addUniqueListItem(settings.aiTooling.http.denyCidrs || [], denyCidrDraft)
+    if (next.length === settings.aiTooling.http.denyCidrs.length) return
+    await updateAiHttp({ denyCidrs: next })
+    setDenyCidrDraft('')
+  }
+
+  const removeHttpDenyCidr = async (value: string) => {
+    if (!settings) return
+    const next = (settings.aiTooling.http.denyCidrs || []).filter((item) => item !== value)
+    await updateAiHttp({ denyCidrs: next })
+  }
+
+  const addHttpDenyPrefix = async () => {
+    if (!settings) return
+    const next = addUniqueListItem(settings.aiTooling.http.denyUrlPrefixes || [], denyPrefixDraft)
+    if (next.length === settings.aiTooling.http.denyUrlPrefixes.length) return
+    await updateAiHttp({ denyUrlPrefixes: next })
+    setDenyPrefixDraft('')
+  }
+
+  const removeHttpDenyPrefix = async (value: string) => {
+    if (!settings) return
+    const next = (settings.aiTooling.http.denyUrlPrefixes || []).filter((item) => item !== value)
+    await updateAiHttp({ denyUrlPrefixes: next })
+  }
+
+  const updateRunScriptEntry = async (
+    index: number,
+    patch: Partial<AppSettings['aiTooling']['runScript']['entries'][number]>
+  ) => {
+    if (!settings) return
+    const entries = [...(settings.aiTooling.runScript.entries || [])]
+    if (!entries[index]) return
+    entries[index] = {
+      ...entries[index],
+      ...patch
+    }
+    await updateAiRunScript({ entries })
+  }
+
+  const removeRunScriptEntry = async (index: number) => {
+    if (!settings) return
+    const entries = (settings.aiTooling.runScript.entries || []).filter((_, i) => i !== index)
+    await updateAiRunScript({ entries })
+  }
+
+  const addRunScriptEntry = async () => {
+    if (!settings) return
+    const id = runScriptDraft.id.trim()
+    const command = runScriptDraft.command.trim()
+    if (!id || !command) return
+    const exists = (settings.aiTooling.runScript.entries || []).some((item) => item.id === id)
+    if (exists) return
+    const args = parseListDraft(runScriptDraft.args)
+    const allowEnvKeys = parseListDraft(runScriptDraft.allowEnvKeys)
+    const timeoutRaw = Number(runScriptDraft.timeoutMs)
+    const timeoutMs = Number.isFinite(timeoutRaw) && timeoutRaw > 0 ? timeoutRaw : undefined
+
+    const nextEntry: AppSettings['aiTooling']['runScript']['entries'][number] = {
+      id,
+      command,
+      args: args.length > 0 ? args : undefined,
+      cwd: runScriptDraft.cwd.trim() || undefined,
+      timeoutMs,
+      allowEnvKeys: allowEnvKeys.length > 0 ? allowEnvKeys : undefined
+    }
+
+    await updateAiRunScript({
+      entries: [...(settings.aiTooling.runScript.entries || []), nextEntry]
+    })
+    setRunScriptDraft({
+      id: '',
+      command: '',
+      args: '',
+      cwd: '',
+      timeoutMs: '',
+      allowEnvKeys: ''
     })
   }
 
@@ -769,6 +1002,329 @@ export default function SettingsView({ section, onSectionChange, onClose, onOpen
                           })}
                         />
                       </label>
+                    </div>
+                  </div>
+
+                  <div className={`${cardClass} space-y-4`}>
+                    <div className="text-sm font-medium text-slate-900 dark:text-white">AI 内置工具总开关</div>
+                    <div className="flex items-center justify-between border-b border-slate-200/80 pb-3 dark:border-slate-800/80">
+                      <div>
+                        <div className="text-sm text-slate-900 dark:text-white">启用 aiTooling</div>
+                        <div className="text-xs text-slate-500 dark:text-slate-400">关闭后将拒绝所有内置工具（read/list/search/patch/http/script/git）</div>
+                      </div>
+                      <button
+                        className={`relative w-11 h-6 rounded-full transition-colors ${settings.aiTooling.enabled
+                          ? 'bg-blue-500'
+                          : 'bg-gray-300 dark:bg-gray-600'
+                          }`}
+                        onClick={() => void updateAiTooling({ enabled: !settings.aiTooling.enabled })}
+                      >
+                        <span
+                          className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${settings.aiTooling.enabled ? 'translate-x-5' : ''}`}
+                        />
+                      </button>
+                    </div>
+                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                      <label className="space-y-1">
+                        <div className="text-xs text-slate-500 dark:text-slate-400">filesystem 最大读取（bytes）</div>
+                        <input
+                          type="number"
+                          min={1024}
+                          className="w-full rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-200"
+                          value={settings.aiTooling.filesystem.maxReadBytes}
+                          onChange={(e) => void updateAiFilesystem({ maxReadBytes: Number(e.target.value || 0) })}
+                        />
+                      </label>
+                      <label className="space-y-1">
+                        <div className="text-xs text-slate-500 dark:text-slate-400">filesystem 搜索命中上限</div>
+                        <input
+                          type="number"
+                          min={10}
+                          className="w-full rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-200"
+                          value={settings.aiTooling.filesystem.maxSearchHits}
+                          onChange={(e) => void updateAiFilesystem({ maxSearchHits: Number(e.target.value || 0) })}
+                        />
+                      </label>
+                    </div>
+                  </div>
+
+                  <div className={`${cardClass} space-y-4`}>
+                    <div className="text-sm font-medium text-slate-900 dark:text-white">allowedRoots / allowedRepoRoots</div>
+                    <div className="space-y-4">
+                      <div className="space-y-2">
+                        <div className="text-xs text-slate-500 dark:text-slate-400">filesystem.allowedRoots</div>
+                        <div className="space-y-2">
+                          {(settings.aiTooling.filesystem.allowedRoots || []).map((item) => (
+                            <div key={`fs-${item}`} className="flex items-center justify-between gap-2 rounded-xl border border-slate-200/80 bg-white/70 px-3 py-2 text-xs dark:border-slate-800 dark:bg-slate-950/70">
+                              <div className="truncate">{item}</div>
+                              <button className={actionButtonClass} onClick={() => void removeFilesystemRoot(item)}>删除</button>
+                            </div>
+                          ))}
+                        </div>
+                        <div className="grid grid-cols-1 gap-2 sm:grid-cols-[minmax(0,1fr)_100px]">
+                          <input
+                            className="rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm dark:border-slate-800 dark:bg-slate-950"
+                            placeholder="新增路径，支持逗号或换行批量"
+                            value={filesystemRootDraft}
+                            onChange={(e) => setFilesystemRootDraft(e.target.value)}
+                          />
+                          <button className={actionButtonClass} onClick={() => void addFilesystemRoot()}>新增</button>
+                        </div>
+                      </div>
+
+                      <div className="space-y-2">
+                        <div className="text-xs text-slate-500 dark:text-slate-400">patch.allowedRoots</div>
+                        <div className="space-y-2">
+                          {(settings.aiTooling.patch.allowedRoots || []).map((item) => (
+                            <div key={`patch-${item}`} className="flex items-center justify-between gap-2 rounded-xl border border-slate-200/80 bg-white/70 px-3 py-2 text-xs dark:border-slate-800 dark:bg-slate-950/70">
+                              <div className="truncate">{item}</div>
+                              <button className={actionButtonClass} onClick={() => void removePatchRoot(item)}>删除</button>
+                            </div>
+                          ))}
+                        </div>
+                        <div className="grid grid-cols-1 gap-2 sm:grid-cols-[minmax(0,1fr)_100px]">
+                          <input
+                            className="rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm dark:border-slate-800 dark:bg-slate-950"
+                            placeholder="新增路径，支持逗号或换行批量"
+                            value={patchRootDraft}
+                            onChange={(e) => setPatchRootDraft(e.target.value)}
+                          />
+                          <button className={actionButtonClass} onClick={() => void addPatchRoot()}>新增</button>
+                        </div>
+                      </div>
+
+                      <div className="space-y-2">
+                        <div className="text-xs text-slate-500 dark:text-slate-400">git.allowedRepoRoots</div>
+                        <div className="space-y-2">
+                          {(settings.aiTooling.git.allowedRepoRoots || []).map((item) => (
+                            <div key={`git-${item}`} className="flex items-center justify-between gap-2 rounded-xl border border-slate-200/80 bg-white/70 px-3 py-2 text-xs dark:border-slate-800 dark:bg-slate-950/70">
+                              <div className="truncate">{item}</div>
+                              <button className={actionButtonClass} onClick={() => void removeGitRoot(item)}>删除</button>
+                            </div>
+                          ))}
+                        </div>
+                        <div className="grid grid-cols-1 gap-2 sm:grid-cols-[minmax(0,1fr)_100px]">
+                          <input
+                            className="rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm dark:border-slate-800 dark:bg-slate-950"
+                            placeholder="新增路径，支持逗号或换行批量"
+                            value={gitRootDraft}
+                            onChange={(e) => setGitRootDraft(e.target.value)}
+                          />
+                          <button className={actionButtonClass} onClick={() => void addGitRoot()}>新增</button>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className={`${cardClass} space-y-4`}>
+                    <div className="text-sm font-medium text-slate-900 dark:text-white">HTTP 黑名单与限制</div>
+                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                      <label className="space-y-1">
+                        <div className="text-xs text-slate-500 dark:text-slate-400">超时（ms）</div>
+                        <input
+                          type="number"
+                          min={1000}
+                          className="w-full rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-200"
+                          value={settings.aiTooling.http.timeoutMs}
+                          onChange={(e) => void updateAiHttp({ timeoutMs: Number(e.target.value || 0) })}
+                        />
+                      </label>
+                      <label className="space-y-1">
+                        <div className="text-xs text-slate-500 dark:text-slate-400">响应体上限（bytes）</div>
+                        <input
+                          type="number"
+                          min={1024}
+                          className="w-full rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-200"
+                          value={settings.aiTooling.http.maxResponseBytes}
+                          onChange={(e) => void updateAiHttp({ maxResponseBytes: Number(e.target.value || 0) })}
+                        />
+                      </label>
+                    </div>
+
+                    <div className="space-y-2">
+                      <div className="text-xs text-slate-500 dark:text-slate-400">denyHosts</div>
+                      {(settings.aiTooling.http.denyHosts || []).map((item) => (
+                        <div key={`deny-host-${item}`} className="flex items-center justify-between gap-2 rounded-xl border border-slate-200/80 bg-white/70 px-3 py-2 text-xs dark:border-slate-800 dark:bg-slate-950/70">
+                          <div className="truncate">{item}</div>
+                          <button className={actionButtonClass} onClick={() => void removeHttpDenyHost(item)}>删除</button>
+                        </div>
+                      ))}
+                      <div className="grid grid-cols-1 gap-2 sm:grid-cols-[minmax(0,1fr)_100px]">
+                        <input
+                          className="rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm dark:border-slate-800 dark:bg-slate-950"
+                          placeholder="例如 localhost, example.com"
+                          value={denyHostDraft}
+                          onChange={(e) => setDenyHostDraft(e.target.value)}
+                        />
+                        <button className={actionButtonClass} onClick={() => void addHttpDenyHost()}>新增</button>
+                      </div>
+                    </div>
+
+                    <div className="space-y-2">
+                      <div className="text-xs text-slate-500 dark:text-slate-400">denyCidrs</div>
+                      {(settings.aiTooling.http.denyCidrs || []).map((item) => (
+                        <div key={`deny-cidr-${item}`} className="flex items-center justify-between gap-2 rounded-xl border border-slate-200/80 bg-white/70 px-3 py-2 text-xs dark:border-slate-800 dark:bg-slate-950/70">
+                          <div className="truncate">{item}</div>
+                          <button className={actionButtonClass} onClick={() => void removeHttpDenyCidr(item)}>删除</button>
+                        </div>
+                      ))}
+                      <div className="grid grid-cols-1 gap-2 sm:grid-cols-[minmax(0,1fr)_100px]">
+                        <input
+                          className="rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm dark:border-slate-800 dark:bg-slate-950"
+                          placeholder="例如 127.0.0.0/8"
+                          value={denyCidrDraft}
+                          onChange={(e) => setDenyCidrDraft(e.target.value)}
+                        />
+                        <button className={actionButtonClass} onClick={() => void addHttpDenyCidr()}>新增</button>
+                      </div>
+                    </div>
+
+                    <div className="space-y-2">
+                      <div className="text-xs text-slate-500 dark:text-slate-400">denyUrlPrefixes</div>
+                      {(settings.aiTooling.http.denyUrlPrefixes || []).map((item) => (
+                        <div key={`deny-prefix-${item}`} className="flex items-center justify-between gap-2 rounded-xl border border-slate-200/80 bg-white/70 px-3 py-2 text-xs dark:border-slate-800 dark:bg-slate-950/70">
+                          <div className="truncate">{item}</div>
+                          <button className={actionButtonClass} onClick={() => void removeHttpDenyPrefix(item)}>删除</button>
+                        </div>
+                      ))}
+                      <div className="grid grid-cols-1 gap-2 sm:grid-cols-[minmax(0,1fr)_100px]">
+                        <input
+                          className="rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm dark:border-slate-800 dark:bg-slate-950"
+                          placeholder="例如 https://internal.example.com/"
+                          value={denyPrefixDraft}
+                          onChange={(e) => setDenyPrefixDraft(e.target.value)}
+                        />
+                        <button className={actionButtonClass} onClick={() => void addHttpDenyPrefix()}>新增</button>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className={`${cardClass} space-y-4`}>
+                    <div className="text-sm font-medium text-slate-900 dark:text-white">runScript 注册表</div>
+                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                      <label className="space-y-1">
+                        <div className="text-xs text-slate-500 dark:text-slate-400">默认超时（ms）</div>
+                        <input
+                          type="number"
+                          min={1000}
+                          className="w-full rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-200"
+                          value={settings.aiTooling.runScript.defaultTimeoutMs}
+                          onChange={(e) => void updateAiRunScript({ defaultTimeoutMs: Number(e.target.value || 0) })}
+                        />
+                      </label>
+                      <label className="space-y-1">
+                        <div className="text-xs text-slate-500 dark:text-slate-400">最大超时（ms）</div>
+                        <input
+                          type="number"
+                          min={5000}
+                          className="w-full rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-200"
+                          value={settings.aiTooling.runScript.maxTimeoutMs}
+                          onChange={(e) => void updateAiRunScript({ maxTimeoutMs: Number(e.target.value || 0) })}
+                        />
+                      </label>
+                    </div>
+
+                    <div className="space-y-3">
+                      {(settings.aiTooling.runScript.entries || []).map((entry, index) => (
+                        <div key={`script-${entry.id}-${index}`} className="space-y-2 rounded-2xl border border-slate-200/80 bg-white/70 p-3 dark:border-slate-800 dark:bg-slate-950/70">
+                          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                            <input
+                              className="rounded-xl border border-slate-200 bg-white px-2 py-1 text-xs dark:border-slate-800 dark:bg-slate-950"
+                              placeholder="scriptId"
+                              value={entry.id}
+                              onChange={(e) => void updateRunScriptEntry(index, { id: e.target.value })}
+                            />
+                            <input
+                              className="rounded-xl border border-slate-200 bg-white px-2 py-1 text-xs dark:border-slate-800 dark:bg-slate-950"
+                              placeholder="command"
+                              value={entry.command}
+                              onChange={(e) => void updateRunScriptEntry(index, { command: e.target.value })}
+                            />
+                            <input
+                              className="rounded-xl border border-slate-200 bg-white px-2 py-1 text-xs dark:border-slate-800 dark:bg-slate-950"
+                              placeholder="args（逗号分隔）"
+                              value={(entry.args || []).join(', ')}
+                              onChange={(e) => void updateRunScriptEntry(index, { args: parseListDraft(e.target.value) })}
+                            />
+                            <input
+                              className="rounded-xl border border-slate-200 bg-white px-2 py-1 text-xs dark:border-slate-800 dark:bg-slate-950"
+                              placeholder="cwd（可选）"
+                              value={entry.cwd || ''}
+                              onChange={(e) => void updateRunScriptEntry(index, { cwd: e.target.value || undefined })}
+                            />
+                            <input
+                              type="number"
+                              min={1000}
+                              className="rounded-xl border border-slate-200 bg-white px-2 py-1 text-xs dark:border-slate-800 dark:bg-slate-950"
+                              placeholder="timeoutMs（可选）"
+                              value={entry.timeoutMs || ''}
+                              onChange={(e) => {
+                                const num = Number(e.target.value || 0)
+                                void updateRunScriptEntry(index, { timeoutMs: Number.isFinite(num) && num > 0 ? num : undefined })
+                              }}
+                            />
+                            <input
+                              className="rounded-xl border border-slate-200 bg-white px-2 py-1 text-xs dark:border-slate-800 dark:bg-slate-950"
+                              placeholder="allowEnvKeys（逗号分隔）"
+                              value={(entry.allowEnvKeys || []).join(', ')}
+                              onChange={(e) => void updateRunScriptEntry(index, { allowEnvKeys: parseListDraft(e.target.value) })}
+                            />
+                          </div>
+                          <div className="flex justify-end">
+                            <button className={actionButtonClass} onClick={() => void removeRunScriptEntry(index)}>删除</button>
+                          </div>
+                        </div>
+                      ))}
+                      {(settings.aiTooling.runScript.entries || []).length === 0 && (
+                        <div className="text-xs text-slate-500 dark:text-slate-400">暂无脚本条目。</div>
+                      )}
+                    </div>
+
+                    <div className="space-y-2 rounded-2xl border border-dashed border-slate-300 p-3 dark:border-slate-700">
+                      <div className="text-xs text-slate-500 dark:text-slate-400">新增条目</div>
+                      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                        <input
+                          className="rounded-xl border border-slate-200 bg-white px-2 py-1 text-xs dark:border-slate-800 dark:bg-slate-950"
+                          placeholder="scriptId"
+                          value={runScriptDraft.id}
+                          onChange={(e) => setRunScriptDraft((prev) => ({ ...prev, id: e.target.value }))}
+                        />
+                        <input
+                          className="rounded-xl border border-slate-200 bg-white px-2 py-1 text-xs dark:border-slate-800 dark:bg-slate-950"
+                          placeholder="command"
+                          value={runScriptDraft.command}
+                          onChange={(e) => setRunScriptDraft((prev) => ({ ...prev, command: e.target.value }))}
+                        />
+                        <input
+                          className="rounded-xl border border-slate-200 bg-white px-2 py-1 text-xs dark:border-slate-800 dark:bg-slate-950"
+                          placeholder="args（逗号分隔）"
+                          value={runScriptDraft.args}
+                          onChange={(e) => setRunScriptDraft((prev) => ({ ...prev, args: e.target.value }))}
+                        />
+                        <input
+                          className="rounded-xl border border-slate-200 bg-white px-2 py-1 text-xs dark:border-slate-800 dark:bg-slate-950"
+                          placeholder="cwd（可选）"
+                          value={runScriptDraft.cwd}
+                          onChange={(e) => setRunScriptDraft((prev) => ({ ...prev, cwd: e.target.value }))}
+                        />
+                        <input
+                          type="number"
+                          min={1000}
+                          className="rounded-xl border border-slate-200 bg-white px-2 py-1 text-xs dark:border-slate-800 dark:bg-slate-950"
+                          placeholder="timeoutMs（可选）"
+                          value={runScriptDraft.timeoutMs}
+                          onChange={(e) => setRunScriptDraft((prev) => ({ ...prev, timeoutMs: e.target.value }))}
+                        />
+                        <input
+                          className="rounded-xl border border-slate-200 bg-white px-2 py-1 text-xs dark:border-slate-800 dark:bg-slate-950"
+                          placeholder="allowEnvKeys（逗号分隔）"
+                          value={runScriptDraft.allowEnvKeys}
+                          onChange={(e) => setRunScriptDraft((prev) => ({ ...prev, allowEnvKeys: e.target.value }))}
+                        />
+                      </div>
+                      <div className="flex justify-end">
+                        <button className={actionButtonClass} onClick={() => void addRunScriptEntry()}>新增 runScript 条目</button>
+                      </div>
                     </div>
                   </div>
 

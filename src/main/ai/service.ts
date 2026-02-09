@@ -62,9 +62,11 @@ import {
   parseThinkTaggedChunk,
   splitThinkTaggedText
 } from './thinkTagParser'
+import { resolveCompatToolCallName } from './tool-name-matching'
 import { aiMcpService } from './mcp'
 import { aiSkillService } from './skills'
-import { AI_RUN_COMMAND_TOOL_NAME, buildAiRunCommandTool } from './tools/run-command-tool'
+import { AI_RUN_COMMAND_TOOL_NAME } from './tools/run-command-tool'
+import { buildAiInternalTools, normalizeAiInternalToolNames } from './tools/internal-tools'
 
 interface StreamCallbacks {
   onChunk?: (chunk: AiMessage) => void
@@ -103,35 +105,44 @@ export class AiService {
   private imageStrategyCapabilities = new Map<string, ImageStrategyCapabilityState>()
   private toolExecutor?: (input: { name: string; args: unknown; context?: AiToolContext }) => Promise<unknown>
 
-  private injectSkillRuntimeTools(option: AiOption, selectedSkillCount: number): AiOption {
-    if (selectedSkillCount <= 0) return option
+  private injectInternalRuntimeTools(option: AiOption, skillInternalTools?: string[]): AiOption {
+    const requestedTools = normalizeAiInternalToolNames([
+      ...(option.internalTools || []),
+      ...(skillInternalTools || [])
+    ])
+    if (requestedTools.length === 0) return option
     const existingTools = Array.isArray(option.tools) ? option.tools : []
-    const hasRunCommandTool = existingTools.some((item) => item.function?.name === AI_RUN_COMMAND_TOOL_NAME)
-    const executionGuidance = [
-      'Skill runtime instruction:',
-      `- If a selected skill requires command/script execution, call tool "${AI_RUN_COMMAND_TOOL_NAME}" directly.`,
-      '- Do not ask user to run commands manually.',
-      '- After each command, analyze stdout/stderr and continue multi-step execution when needed.',
-      '- If command execution is blocked/failed, explain reason and provide fallback.'
-    ].join('\n')
+    const knownNames = new Set(
+      existingTools
+        .map((item) => item.function?.name)
+        .filter((name): name is string => !!name)
+    )
+    const missing = requestedTools.filter((name) => !knownNames.has(name))
+    const injectedTools = missing.length > 0 ? buildAiInternalTools(missing) : []
+    const needsRunCommandGuidance = requestedTools.includes(AI_RUN_COMMAND_TOOL_NAME)
     const hasGuidance = option.messages.some((message) => {
       if (message.role !== 'system') return false
       if (typeof message.content !== 'string') return false
       return message.content.includes(`"${AI_RUN_COMMAND_TOOL_NAME}"`)
     })
-    const messages = hasGuidance
-      ? option.messages
-      : [{ role: 'system' as const, content: executionGuidance }, ...option.messages]
-    if (hasRunCommandTool) {
-      return {
-        ...option,
-        messages
-      }
-    }
+    const messages = needsRunCommandGuidance && !hasGuidance
+      ? [{
+          role: 'system' as const,
+          content: [
+            'Tool runtime instruction:',
+            `- If a task requires command execution, call "${AI_RUN_COMMAND_TOOL_NAME}" directly.`,
+            '- Do not ask user to run commands manually.',
+            '- After command execution, analyze stdout/stderr and continue when needed.',
+            '- If blocked/failed, explain reason and provide fallback.'
+          ].join('\n')
+        }, ...option.messages]
+      : option.messages
+
     return {
       ...option,
       messages,
-      tools: [...existingTools, buildAiRunCommandTool()]
+      tools: [...existingTools, ...injectedTools],
+      internalTools: requestedTools
     }
   }
 
@@ -145,9 +156,9 @@ export class AiService {
     }
     await aiSkillService.ensureCatalogLoaded()
     const skillResolution = aiSkillService.resolveForAiCall(option)
-    const effectiveOption = this.injectSkillRuntimeTools(
+    const effectiveOption = this.injectInternalRuntimeTools(
       aiSkillService.applyResolutionToOption(option, skillResolution),
-      skillResolution.selectedSkillIds.length
+      skillResolution.internalTools
     )
     console.log('[AI] call 开始', {
       model: effectiveOption.model,
@@ -297,9 +308,9 @@ export class AiService {
     }
     await aiSkillService.ensureCatalogLoaded()
     const skillResolution = aiSkillService.resolveForAiCall(option)
-    const effectiveOption = this.injectSkillRuntimeTools(
+    const effectiveOption = this.injectInternalRuntimeTools(
       aiSkillService.applyResolutionToOption(option, skillResolution),
-      skillResolution.selectedSkillIds.length
+      skillResolution.internalTools
     )
     const resolvedTools = await this.resolveMergedTools(effectiveOption)
     const tools = this.buildTools(resolvedTools, effectiveOption.toolContext, effectiveOption.model)
@@ -1426,8 +1437,8 @@ export class AiService {
       }
 
       for (const call of stepResult.toolCalls) {
-        const toolName = call.function?.name
-        if (!toolName) continue
+        const rawToolName = call.function?.name
+        const toolName = resolveCompatToolCallName(rawToolName, input.tools)
 
         const rawArgs = call.function?.arguments || '{}'
         let parsedArgs: unknown = {}
@@ -1439,9 +1450,41 @@ export class AiService {
 
         this.emitToolCallChunk(onChunk, {
           id: call.id,
-          name: toolName,
+          name: String(rawToolName || ''),
           args: parsedArgs
         })
+
+        if (!toolName) {
+          const fallbackResult = {
+            success: false,
+            error: `Unknown tool "${String(rawToolName || '')}"`,
+            availableTools: input.tools
+              .map((item) => item.function?.name)
+              .filter((name): name is string => !!name)
+          }
+          console.warn('[AI] 工具执行跳过：工具名未匹配', {
+            rawToolName,
+            availableTools: fallbackResult.availableTools
+          })
+          this.emitToolResultChunk(onChunk, {
+            id: call.id,
+            name: String(rawToolName || ''),
+            result: fallbackResult
+          })
+          conversationMessages.push({
+            role: 'tool',
+            tool_call_id: call.id,
+            content: stringifyToolResult(fallbackResult)
+          })
+          continue
+        }
+
+        if (rawToolName && rawToolName !== toolName) {
+          console.warn('[AI] 工具名自动纠正', {
+            rawToolName,
+            resolvedToolName: toolName
+          })
+        }
 
         console.log('[AI] 工具执行开始', { toolName, input: parsedArgs, context: input.toolContext })
         let result: unknown
@@ -1884,7 +1927,11 @@ export class AiService {
       .map((item) => (item?.type === 'function' ? item.function : undefined))
       .filter((item): item is NonNullable<AiTool['function']> => !!item && !!item.name)
       .map((fn) => {
-        const schema = fn.parameters || { type: 'object', properties: {} }
+        const schemaBase = fn.parameters || { type: 'object', properties: {} }
+        const schema = {
+          ...schemaBase,
+          required: (schemaBase as any).required || fn.required
+        }
         return [
           fn.name,
           tool({

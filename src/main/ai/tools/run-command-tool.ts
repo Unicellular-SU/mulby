@@ -15,6 +15,8 @@ export function buildAiRunCommandTool(): AiTool {
       ].join(' '),
       parameters: {
         type: 'object',
+        required: ['command'],
+        additionalProperties: false,
         properties: {
           command: {
             type: 'string',
@@ -42,8 +44,7 @@ export function buildAiRunCommandTool(): AiTool {
             description: 'Whether to execute through shell'
           }
         }
-      },
-      required: ['command']
+      }
     }
   }
 }

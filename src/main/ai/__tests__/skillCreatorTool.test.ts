@@ -83,26 +83,25 @@ describe('skill creator runCommand tool guard', () => {
     })
 
     let invoked = false
-    await assert.rejects(
-      executeSkillCreatorRunCommandTool(
-        {
-          command: 'python3',
-          args: ['scripts/init_skill.py'],
-          cwd: path.join(pack.rootPath, '..')
-        },
-        {
-          internalTag: AI_SKILL_CREATOR_INTERNAL_TAG
-        },
-        {
-          loadPack: async () => pack,
-          runCommand: async () => {
-            invoked = true
-            throw new Error('should not execute')
-          }
+    const result = await executeSkillCreatorRunCommandTool(
+      {
+        command: 'python3',
+        args: ['scripts/init_skill.py'],
+        cwd: path.join(pack.rootPath, '..')
+      },
+      {
+        internalTag: AI_SKILL_CREATOR_INTERNAL_TAG
+      },
+      {
+        loadPack: async () => pack,
+        runCommand: async () => {
+          invoked = true
+          throw new Error('should not execute')
         }
-      ),
-      /cwd 必须位于/
+      }
     )
+    assert.equal(result.success, false)
+    assert.match(result.error || '', /cwd 必须位于/)
     assert.equal(invoked, false)
   })
 
@@ -113,25 +112,53 @@ describe('skill creator runCommand tool guard', () => {
     })
 
     let invoked = false
-    await assert.rejects(
-      executeSkillCreatorRunCommandTool(
-        {
-          command: 'python3',
-          args: ['../outside.py']
-        },
-        {
-          internalTag: AI_SKILL_CREATOR_INTERNAL_TAG
-        },
-        {
-          loadPack: async () => pack,
-          runCommand: async () => {
-            invoked = true
-            throw new Error('should not execute')
-          }
+    const result = await executeSkillCreatorRunCommandTool(
+      {
+        command: 'python3',
+        args: ['../outside.py']
+      },
+      {
+        internalTag: AI_SKILL_CREATOR_INTERNAL_TAG
+      },
+      {
+        loadPack: async () => pack,
+        runCommand: async () => {
+          invoked = true
+          throw new Error('should not execute')
         }
-      ),
-      /scripts 目录内脚本/
+      }
     )
+    assert.equal(result.success, false)
+    assert.match(result.error || '', /scripts 目录内脚本/)
+    assert.equal(invoked, false)
+  })
+
+  it('returns structured failure for non-script command calls', async (t) => {
+    const pack = await createSkillCreatorFixture()
+    t.after(async () => {
+      await rm(pack.rootPath, { recursive: true, force: true })
+    })
+
+    let invoked = false
+    const result = await executeSkillCreatorRunCommandTool(
+      {
+        command: 'ls',
+        args: ['-la', path.join(pack.rootPath, 'scripts')]
+      },
+      {
+        internalTag: AI_SKILL_CREATOR_INTERNAL_TAG
+      },
+      {
+        loadPack: async () => pack,
+        runCommand: async () => {
+          invoked = true
+          throw new Error('should not execute')
+        }
+      }
+    )
+
+    assert.equal(result.success, false)
+    assert.match(result.error || '', /仅允许执行 scripts 目录中的脚本文件/)
     assert.equal(invoked, false)
   })
 
@@ -191,5 +218,62 @@ describe('skill creator runCommand tool guard', () => {
     assert.equal(result.success, false)
     assert.equal(result.error, 'policy blocked')
     assert.equal(result.stderr, 'policy blocked')
+  })
+
+  it('blocks help probe flags to avoid tool-loop stalls', async (t) => {
+    const pack = await createSkillCreatorFixture()
+    t.after(async () => {
+      await rm(pack.rootPath, { recursive: true, force: true })
+    })
+
+    let invoked = false
+    const result = await executeSkillCreatorRunCommandTool(
+      {
+        command: 'python3',
+        args: ['scripts/init_skill.py', '--help']
+      },
+      {
+        internalTag: AI_SKILL_CREATOR_INTERNAL_TAG
+      },
+      {
+        loadPack: async () => pack,
+        runCommand: async () => {
+          invoked = true
+          throw new Error('should not execute')
+        }
+      }
+    )
+
+    assert.equal(result.success, false)
+    assert.match(result.error || '', /禁止使用 --help\/-h/)
+    assert.equal(invoked, false)
+  })
+
+  it('adds clarify note for quick_validate success', async (t) => {
+    const pack = await createSkillCreatorFixture()
+    t.after(async () => {
+      await rm(pack.rootPath, { recursive: true, force: true })
+    })
+
+    const result = await executeSkillCreatorRunCommandTool(
+      {
+        command: 'python3',
+        args: ['scripts/quick_validate.py', 'demo-skill'],
+        cwd: pack.rootPath
+      },
+      {
+        internalTag: AI_SKILL_CREATOR_INTERNAL_TAG
+      },
+      {
+        loadPack: async () => pack,
+        runCommand: async (input) => ({
+          ...createSuccessResult(input),
+          stdout: 'Skill is valid!\n'
+        })
+      }
+    )
+
+    assert.equal(result.success, true)
+    assert.match(result.stdout, /quick_validate only checks structure\/frontmatter/)
   })
 })

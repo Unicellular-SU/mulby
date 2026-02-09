@@ -15,6 +15,8 @@ import {
   normalizeFailedRunCommandResult,
   parseAiRunCommandArgs
 } from './ai/tools/run-command-tool'
+import { createAiInternalToolRuntime } from './ai/tools/internal-tool-runtime'
+import { isAiInternalToolName } from './ai/tools/internal-tools'
 import { PluginManager } from './plugin'
 import { PluginWindowManager } from './plugin/window'
 import { ThemeManager } from './services/theme'
@@ -56,6 +58,19 @@ const pluginWindowManager = new PluginWindowManager()
 const themeManager = new ThemeManager()
 const clipboardWatcher = new ClipboardWatcher()
 const clipboardHistoryManager = new ClipboardHistoryManager()
+const aiInternalToolRuntime = createAiInternalToolRuntime({
+  getToolingSettings: () => appSettingsManager.getSettings().aiTooling,
+  runCommand: (input, context) => commandRunnerService.runCommand(input, context),
+  resolveRunCommandContext: (toolContext) => {
+    const pluginName = toolContext?.pluginName
+    const plugin = pluginName ? pluginManager.get(pluginName) : undefined
+    return {
+      source: pluginName ? 'plugin' : 'app',
+      pluginId: pluginName || undefined,
+      runCommandAllowed: plugin ? plugin.manifest.permissions?.runCommand === true : undefined
+    }
+  }
+})
 
 setAiToolExecutor(async ({ name, args, context }) => {
   if (name === AI_SKILL_CREATOR_TOOL_NAME) {
@@ -88,6 +103,14 @@ setAiToolExecutor(async ({ name, args, context }) => {
         shell: input.shell
       })
     }
+  }
+
+  if (isAiInternalToolName(name)) {
+    return await aiInternalToolRuntime.execute({
+      name,
+      args,
+      context
+    })
   }
 
   if (isMcpToolName(name)) {

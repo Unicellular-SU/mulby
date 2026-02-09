@@ -161,6 +161,7 @@ function parseDescriptorFromMarkdown(input: {
   const author = String(frontmatter.author || '').trim() || undefined
   const tags = asStringArray(frontmatter.tags)
   const triggerPhrases = asStringArray(frontmatter.triggerPhrases ?? frontmatter.trigger_phrases)
+  const internalTools = asStringArray(frontmatter.internalTools ?? frontmatter.internal_tools)
   const mode = normalizeMode(frontmatter.mode)
   const promptTemplate =
     String((frontmatter.promptTemplate ?? frontmatter.prompt_template) || '').trim() || (body || undefined)
@@ -183,6 +184,7 @@ function parseDescriptorFromMarkdown(input: {
     author,
     tags,
     triggerPhrases,
+    internalTools,
     mode,
     promptTemplate,
     mcpPolicy
@@ -204,6 +206,10 @@ function buildSkillMarkdown(descriptor: AiSkillDescriptor): string {
   if (descriptor.triggerPhrases && descriptor.triggerPhrases.length > 0) {
     lines.push('triggerPhrases:')
     for (const phrase of descriptor.triggerPhrases) lines.push(`  - ${phrase}`)
+  }
+  if (descriptor.internalTools && descriptor.internalTools.length > 0) {
+    lines.push('internalTools:')
+    for (const toolName of descriptor.internalTools) lines.push(`  - ${toolName}`)
   }
   if (descriptor.mcpPolicy) {
     const mcpPolicy = {
@@ -586,6 +592,7 @@ export class AiSkillService {
       promptTemplate: input.promptTemplate?.trim() || undefined,
       tags: input.tags?.map((item) => item.trim()).filter(Boolean),
       triggerPhrases: input.triggerPhrases?.map((item) => item.trim()).filter(Boolean),
+      internalTools: input.internalTools?.map((item) => item.trim()).filter(Boolean),
       mode: input.mode,
       mcpPolicy: input.mcpPolicy
     }
@@ -668,6 +675,7 @@ export class AiSkillService {
       promptTemplate: input.promptTemplate?.trim() || undefined,
       tags: input.tags?.map((item) => item.trim()).filter(Boolean),
       triggerPhrases: input.triggerPhrases?.map((item) => item.trim()).filter(Boolean),
+      internalTools: input.internalTools?.map((item) => item.trim()).filter(Boolean),
       mode: input.mode,
       mcpPolicy: input.mcpPolicy
     }
@@ -739,6 +747,7 @@ export class AiSkillService {
       author: String(obj.author || '').trim() || undefined,
       tags: asStringArray(obj.tags),
       triggerPhrases: asStringArray(obj.triggerPhrases ?? obj.trigger_phrases),
+      internalTools: asStringArray(obj.internalTools ?? obj.internal_tools),
       mode: normalizeMode(obj.mode),
       promptTemplate: String((obj.promptTemplate ?? obj.prompt_template) || '').trim() || undefined,
       mcpPolicy:
@@ -1111,9 +1120,13 @@ export class AiSkillService {
     let mcpSelection: AiMcpSelection | undefined
     let scope: AiToolContext['mcpScope'] | undefined
     let blockedToolIds: string[] = []
+    const internalToolNames = new Set<string>()
 
     for (const record of selected) {
       const policy = record.descriptor.mcpPolicy
+      for (const toolName of record.descriptor.internalTools || []) {
+        if (toolName) internalToolNames.add(toolName)
+      }
       if (!policy) continue
       mcpSelection = mergeMcpSelections(mcpSelection, {
         mode: 'auto',
@@ -1144,6 +1157,7 @@ export class AiSkillService {
       selectedSkillIds: selected.map((record) => record.id),
       selectedSkillNames: selected.map((record) => record.descriptor.name),
       systemPrompts: prompts,
+      internalTools: Array.from(internalToolNames),
       mergedMcp: mcpSelection,
       toolContextPatch: scope,
       reasons
@@ -1158,11 +1172,18 @@ export class AiSkillService {
       : option.messages
     const mergedMcp = mergeMcpSelections(option.mcp, resolution.mergedMcp)
     const toolContext = mergeToolContext(option.toolContext, resolution.toolContextPatch)
+    const internalTools = Array.from(
+      new Set([
+        ...(option.internalTools || []),
+        ...(resolution.internalTools || [])
+      ])
+    )
     return {
       ...option,
       messages,
       mcp: mergedMcp,
-      toolContext
+      toolContext,
+      internalTools: internalTools.length > 0 ? internalTools : option.internalTools
     }
   }
 
@@ -1183,6 +1204,7 @@ export class AiSkillService {
       },
       toolContext: input.option?.toolContext,
       tools: input.option?.tools,
+      internalTools: input.option?.internalTools,
       params: input.option?.params,
       maxToolSteps: input.option?.maxToolSteps
     }

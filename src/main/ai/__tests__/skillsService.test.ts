@@ -58,6 +58,7 @@ describe('skill service', () => {
     const created = await service.create({
       name: 'Code Review',
       promptTemplate: 'You are a strict reviewer.',
+      internalTools: ['intools_read_file'],
       enabled: true,
       trustLevel: 'trusted',
       mcpPolicy: {
@@ -81,6 +82,7 @@ describe('skill service', () => {
     })
 
     assert.equal(resolved.selectedSkillIds.length, 1)
+    assert.deepEqual(resolved.internalTools, ['intools_read_file'])
     assert.deepEqual(resolved.mergedMcp?.serverIds, ['filesystem'])
     assert.deepEqual(resolved.mergedMcp?.allowedToolIds, ['mcp__filesystem__read_file'])
 

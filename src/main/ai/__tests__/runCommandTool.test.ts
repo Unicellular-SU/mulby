@@ -12,8 +12,9 @@ describe('ai runCommand tool', () => {
     const tool = buildAiRunCommandTool()
     assert.equal(tool.type, 'function')
     assert.equal(tool.function?.name, AI_RUN_COMMAND_TOOL_NAME)
-    assert.equal(Array.isArray(tool.function?.required), true)
-    assert.equal(tool.function?.required?.includes('command'), true)
+    const schema = tool.function?.parameters as { required?: string[] } | undefined
+    assert.equal(Array.isArray(schema?.required), true)
+    assert.equal(schema?.required?.includes('command'), true)
   })
 
   it('parses runCommand args object', () => {

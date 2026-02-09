@@ -48,6 +48,7 @@ export interface CommandAuditItem {
   pluginId?: string
   command: string
   args?: string[]
+  envKeys?: string[]
   cwd?: string
   shell?: boolean
   timeoutMs?: number
@@ -69,6 +70,8 @@ export interface CommandRunnerSettings {
   maxTimeoutMs: number
   maxOutputBytes: number
   maxConcurrent: number
+  denyEnvKeys: string[]
+  maskEnvKeysInAudit: string[]
   allowList: CommandRule[]
   denyList: CommandRule[]
   trustedFingerprints: CommandTrustRecord[]
@@ -76,6 +79,57 @@ export interface CommandRunnerSettings {
     maxItems: number
     records: CommandAuditItem[]
   }
+}
+
+export interface AiToolFilesystemSettings {
+  allowedRoots: string[]
+  maxReadBytes: number
+  maxEntries: number
+  maxSearchHits: number
+  maxSearchFileBytes: number
+}
+
+export interface AiToolPatchSettings {
+  allowedRoots: string[]
+  maxPatchBytes: number
+  requireDryRunFirst: boolean
+}
+
+export interface AiToolHttpSettings {
+  timeoutMs: number
+  maxResponseBytes: number
+  denyHosts: string[]
+  denyCidrs: string[]
+  denyUrlPrefixes: string[]
+}
+
+export interface AiToolScriptEntry {
+  id: string
+  command: string
+  args?: string[]
+  cwd?: string
+  timeoutMs?: number
+  allowEnvKeys?: string[]
+}
+
+export interface AiToolRunScriptSettings {
+  entries: AiToolScriptEntry[]
+  defaultTimeoutMs: number
+  maxTimeoutMs: number
+}
+
+export interface AiToolGitSettings {
+  allowedRepoRoots: string[]
+  maxDiffBytes: number
+}
+
+export interface AiToolingSettings {
+  enabled: boolean
+  filesystem: AiToolFilesystemSettings
+  patch: AiToolPatchSettings
+  http: AiToolHttpSettings
+  runScript: AiToolRunScriptSettings
+  git: AiToolGitSettings
 }
 
 // 日志级别类型
@@ -109,6 +163,7 @@ export interface AppSettings {
   storeSources: StoreSource[]
   developer: DeveloperSettings
   commandRunner: CommandRunnerSettings
+  aiTooling: AiToolingSettings
   window?: WindowSettings
   input: InputSettings
 }

@@ -30,6 +30,7 @@ interface GeneratedSkillPayload {
   mode?: unknown
   tags?: unknown
   triggerPhrases?: unknown
+  internalTools?: unknown
   promptTemplate?: unknown
   mcpPolicy?: unknown
   skillMd?: unknown
@@ -200,20 +201,22 @@ function buildSkillCreatorTools(pack: SkillCreatorResourcePack | null): AiTool[]
       function: {
         name: AI_SKILL_CREATOR_TOOL_NAME,
         description: [
-          'Run local script commands for skill scaffolding/validation.',
-          `Only supports scripts under ${pack.rootPath}/scripts.`,
-          'Use python3/node/bash with explicit script path as first non-flag arg.'
+          'Run local skill-creator scripts for scaffolding/validation.',
+          `Only scripts under ${pack.rootPath}/scripts are allowed.`,
+          'Only use python3/python with a scripts/*.py path as first non-flag arg.',
+          'Do not use bash/sh/zsh, do not use -c, and do not run ls/cat/find.'
         ].join(' '),
         parameters: {
           type: 'object',
           properties: {
             command: {
               type: 'string',
-              description: 'Executable name or path, e.g. python3/node/bash'
+              enum: ['python3', 'python'],
+              description: 'Interpreter name.'
             },
             args: {
               type: 'array',
-              description: 'Command arguments',
+              description: 'Command arguments. First non-flag arg must be scripts/*.py.',
               items: {
                 type: 'string'
               }
@@ -225,14 +228,10 @@ function buildSkillCreatorTools(pack: SkillCreatorResourcePack | null): AiTool[]
             timeoutMs: {
               type: 'number',
               description: 'Optional timeout in milliseconds'
-            },
-            shell: {
-              type: 'boolean',
-              description: 'Optional shell mode. Default false.'
             }
           }
         },
-        required: ['command']
+        required: ['command', 'args']
       }
     }
   ]
@@ -269,13 +268,19 @@ async function buildPrompts(
     'You are an expert skill author.',
     'Create or revise a practical AI skill package following Anthropic Skills conventions.',
     'Respond with JSON only (no markdown prose).',
-    'Return fields: id, name, description, mode, tags, triggerPhrases, promptTemplate, skillMd, files.',
+    'Return fields: id, name, description, mode, tags, triggerPhrases, internalTools, promptTemplate, skillMd, files.',
     'skillMd must start with YAML frontmatter enclosed by --- and include at least "name" and "description".',
     'Prefer kebab-case for name/id. Keep description specific about when to use the skill.',
     'Only include files when needed; paths must stay under scripts/, references/, or assets/.',
     'files is optional and must only contain paths under scripts/, references/, or assets/.',
     'If no files are needed, return "files": [].',
-    'When using command tool, execute only deterministic local scripts and use result to improve output quality.',
+    'Tool-call policy (strict):',
+    '- Call tools only when needed for final JSON quality.',
+    '- Allowed command values: python3 or python.',
+    '- First non-flag arg must be one of scripts/init_skill.py, scripts/quick_validate.py, scripts/package_skill.py.',
+    '- Never call bash/sh/zsh, never use -c, never call ls/cat/find/pwd, never use python -c.',
+    '- Do not run --help probes. Use scripts directly with concrete arguments.',
+    '- If a tool fails, adapt once and continue. Do not repeat the same probe loop.',
     builtinGuide
       ? `Use this built-in "skill-creator" package context as hard constraints:\n${builtinGuide}`
       : ''
@@ -421,7 +426,7 @@ async function createSkillWithAiInternal(
         ],
         skills: { mode: 'off' },
         tools: tools.length > 0 ? tools : undefined,
-        maxToolSteps: 8,
+        maxToolSteps: 20,
         toolContext: {
           internalTag: AI_SKILL_CREATOR_INTERNAL_TAG
         }
@@ -494,6 +499,7 @@ async function createSkillWithAiInternal(
       mode: normalizeMode(payload.mode),
       tags: asStringArray(payload.tags),
       triggerPhrases: asStringArray(payload.triggerPhrases),
+      internalTools: asStringArray(payload.internalTools),
       promptTemplate: asString(payload.promptTemplate),
       mcpPolicy: normalizeMcpPolicy(payload.mcpPolicy),
       skillMarkdown: asString(payload.skillMd) || asString(payload.skillMarkdown),

@@ -16,6 +16,7 @@ export interface AiSkillCreateInput {
   tags?: string[]
   triggerPhrases?: string[]
   mode?: 'manual' | 'auto' | 'both'
+  internalTools?: string[]
   enabled?: boolean
   trustLevel?: AiSkillTrustLevel
   mcpPolicy?: AiSkillMcpPolicy
@@ -59,6 +60,7 @@ export interface AiSkillCreateFromGeneratedInput {
   tags?: string[]
   triggerPhrases?: string[]
   mode?: 'manual' | 'auto' | 'both'
+  internalTools?: string[]
   mcpPolicy?: AiSkillMcpPolicy
   skillMarkdown?: string
   files?: AiSkillGeneratedFile[]

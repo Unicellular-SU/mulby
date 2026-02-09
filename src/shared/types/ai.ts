@@ -52,7 +52,12 @@ export interface AiToolFunction {
   parameters: {
     type: 'object'
     properties: Record<string, unknown>
+    required?: string[]
+    additionalProperties?: boolean
   }
+  /**
+   * Legacy required fields location. Prefer parameters.required.
+   */
   required?: string[]
 }
 
@@ -142,6 +147,7 @@ export interface AiSkillDescriptor {
   mode?: 'manual' | 'auto' | 'both'
   promptTemplate?: string
   mcpPolicy?: AiSkillMcpPolicy
+  internalTools?: string[]
 }
 
 export interface AiSkillRecord {
@@ -183,6 +189,7 @@ export interface AiSkillResolveResult {
   systemPrompts: string[]
   mergedMcp?: AiMcpSelection
   toolContextPatch?: AiToolContext['mcpScope']
+  internalTools?: string[]
   reasons?: string[]
 }
 
@@ -236,6 +243,7 @@ export interface AiOption {
   model?: string
   messages: AiMessage[]
   tools?: AiTool[]
+  internalTools?: string[]
   mcp?: AiMcpSelection
   skills?: AiSkillSelection
   params?: AiModelParameters
@@ -429,6 +437,7 @@ export interface AiApi {
       tags?: string[]
       triggerPhrases?: string[]
       mode?: 'manual' | 'auto' | 'both'
+      internalTools?: string[]
       enabled?: boolean
       trustLevel?: AiSkillTrustLevel
       mcpPolicy?: AiSkillMcpPolicy

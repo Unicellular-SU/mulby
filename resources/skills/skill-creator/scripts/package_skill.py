@@ -83,6 +83,13 @@ def package_skill(skill_path, output_dir=None):
 
 
 def main():
+    if len(sys.argv) == 2 and sys.argv[1] in ("-h", "--help"):
+        print("Usage: python utils/package_skill.py <path/to/skill-folder> [output-directory]")
+        print("\nExample:")
+        print("  python utils/package_skill.py skills/public/my-skill")
+        print("  python utils/package_skill.py skills/public/my-skill ./dist")
+        sys.exit(0)
+
     if len(sys.argv) < 2:
         print("Usage: python utils/package_skill.py <path/to/skill-folder> [output-directory]")
         print("\nExample:")

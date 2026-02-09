@@ -12,6 +12,8 @@ function createSettings(): CommandRunnerSettings {
     maxTimeoutMs: 300_000,
     maxOutputBytes: 1024 * 1024,
     maxConcurrent: 2,
+    denyEnvKeys: [],
+    maskEnvKeysInAudit: [],
     allowList: [],
     denyList: [],
     trustedFingerprints: [],
@@ -115,4 +117,3 @@ describe('command runner plugin integration', () => {
     assert.equal(after.some((item) => item.source === 'app'), true)
   })
 })
-
