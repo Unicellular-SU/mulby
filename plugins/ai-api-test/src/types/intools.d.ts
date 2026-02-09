@@ -479,6 +479,7 @@ type AiOption = {
   messages: AiMessage[]
   tools?: AiTool[]
   mcp?: AiMcpSelection
+  skills?: AiSkillSelection
   params?: AiModelParameters
   toolContext?: AiToolContext
 }
@@ -505,6 +506,7 @@ type AiProviderConfig = {
 }
 type AiSettings = { providers: AiProviderConfig[]; models?: AiModel[]; defaultParams?: AiModelParameters; mcp?: AiMcpSettings }
 type AiMcpSelection = { mode?: 'off' | 'manual' | 'auto'; serverIds?: string[]; allowedToolIds?: string[] }
+type AiSkillSelection = { mode?: 'off' | 'manual' | 'auto'; skillIds?: string[]; variables?: Record<string, string> }
 type AiToolContext = { pluginName?: string; mcpScope?: { allowedServerIds?: string[]; allowedToolIds?: string[] } }
 type AiMcpServer = {
   id: string
@@ -545,6 +547,38 @@ type AiMcpServerLogEntry = {
   message: string
   source?: string
   data?: unknown
+}
+type AiSkillDescriptor = {
+  id: string
+  name: string
+  description?: string
+  tags?: string[]
+  mode?: 'manual' | 'auto' | 'both'
+}
+type AiSkillRecord = {
+  id: string
+  source: string
+  origin?: 'system' | 'app'
+  readonly?: boolean
+  enabled: boolean
+  trustLevel: 'untrusted' | 'reviewed' | 'trusted'
+  descriptor: AiSkillDescriptor
+}
+type AiSkillPreview = {
+  selected: AiSkillRecord[]
+  systemPrompt: string
+  mcpImpact: {
+    serverIds?: string[]
+    allowedToolIds?: string[]
+    blockedToolIds?: string[]
+  }
+  reasons: string[]
+}
+type AiSkillResolveResult = {
+  selectedSkillIds: string[]
+  selectedSkillNames: string[]
+  systemPrompts: string[]
+  reasons?: string[]
 }
 type AiAttachmentRef = { attachmentId: string; mimeType: string; size: number; filename?: string; expiresAt?: string; purpose?: string }
 type AiTokenBreakdown = { inputTokens?: number; outputTokens?: number; totalTokens?: number }
@@ -610,6 +644,12 @@ interface IntoolsAi {
     listTools(serverId: string): Promise<AiMcpTool[]>
     abort(callId: string): Promise<boolean>
     getLogs(serverId: string): Promise<AiMcpServerLogEntry[]>
+  }
+  skills?: {
+    list(): Promise<AiSkillRecord[]>
+    listEnabled(): Promise<AiSkillRecord[]>
+    preview(input: { option?: Partial<AiOption>; skillIds?: string[]; prompt?: string }): Promise<AiSkillPreview>
+    resolve(option: AiOption): Promise<AiSkillResolveResult>
   }
 }
 

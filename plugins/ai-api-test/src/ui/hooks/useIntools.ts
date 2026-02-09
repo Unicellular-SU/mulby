@@ -103,6 +103,12 @@ export function useIntools(pluginId?: string) {
         abort: (callId: string) => window.intools?.ai?.mcp?.abort?.(callId),
         getLogs: (serverId: string) => window.intools?.ai?.mcp?.getLogs?.(serverId),
       },
+      skills: {
+        list: () => window.intools?.ai?.skills?.list?.(),
+        listEnabled: () => window.intools?.ai?.skills?.listEnabled?.(),
+        preview: (input: any) => window.intools?.ai?.skills?.preview?.(input),
+        resolve: (option: any) => window.intools?.ai?.skills?.resolve?.(option),
+      },
     },
 
     // Messaging API

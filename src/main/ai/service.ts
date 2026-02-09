@@ -64,6 +64,7 @@ import {
 } from './thinkTagParser'
 import { aiMcpService } from './mcp'
 import { aiSkillService } from './skills'
+import { AI_RUN_COMMAND_TOOL_NAME, buildAiRunCommandTool } from './tools/run-command-tool'
 
 interface StreamCallbacks {
   onChunk?: (chunk: AiMessage) => void
@@ -102,6 +103,38 @@ export class AiService {
   private imageStrategyCapabilities = new Map<string, ImageStrategyCapabilityState>()
   private toolExecutor?: (input: { name: string; args: unknown; context?: AiToolContext }) => Promise<unknown>
 
+  private injectSkillRuntimeTools(option: AiOption, selectedSkillCount: number): AiOption {
+    if (selectedSkillCount <= 0) return option
+    const existingTools = Array.isArray(option.tools) ? option.tools : []
+    const hasRunCommandTool = existingTools.some((item) => item.function?.name === AI_RUN_COMMAND_TOOL_NAME)
+    const executionGuidance = [
+      'Skill runtime instruction:',
+      `- If a selected skill requires command/script execution, call tool "${AI_RUN_COMMAND_TOOL_NAME}" directly.`,
+      '- Do not ask user to run commands manually.',
+      '- After each command, analyze stdout/stderr and continue multi-step execution when needed.',
+      '- If command execution is blocked/failed, explain reason and provide fallback.'
+    ].join('\n')
+    const hasGuidance = option.messages.some((message) => {
+      if (message.role !== 'system') return false
+      if (typeof message.content !== 'string') return false
+      return message.content.includes(`"${AI_RUN_COMMAND_TOOL_NAME}"`)
+    })
+    const messages = hasGuidance
+      ? option.messages
+      : [{ role: 'system' as const, content: executionGuidance }, ...option.messages]
+    if (hasRunCommandTool) {
+      return {
+        ...option,
+        messages
+      }
+    }
+    return {
+      ...option,
+      messages,
+      tools: [...existingTools, buildAiRunCommandTool()]
+    }
+  }
+
   allModels() {
     return getAllModels()
   }
@@ -112,7 +145,10 @@ export class AiService {
     }
     await aiSkillService.ensureCatalogLoaded()
     const skillResolution = aiSkillService.resolveForAiCall(option)
-    const effectiveOption = aiSkillService.applyResolutionToOption(option, skillResolution)
+    const effectiveOption = this.injectSkillRuntimeTools(
+      aiSkillService.applyResolutionToOption(option, skillResolution),
+      skillResolution.selectedSkillIds.length
+    )
     console.log('[AI] call 开始', {
       model: effectiveOption.model,
       messageCount: effectiveOption.messages.length,
@@ -261,7 +297,10 @@ export class AiService {
     }
     await aiSkillService.ensureCatalogLoaded()
     const skillResolution = aiSkillService.resolveForAiCall(option)
-    const effectiveOption = aiSkillService.applyResolutionToOption(option, skillResolution)
+    const effectiveOption = this.injectSkillRuntimeTools(
+      aiSkillService.applyResolutionToOption(option, skillResolution),
+      skillResolution.selectedSkillIds.length
+    )
     const resolvedTools = await this.resolveMergedTools(effectiveOption)
     const tools = this.buildTools(resolvedTools, effectiveOption.toolContext, effectiveOption.model)
 

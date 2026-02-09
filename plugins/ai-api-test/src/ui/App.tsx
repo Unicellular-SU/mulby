@@ -18,10 +18,25 @@ type McpServer = {
   isActive: boolean
   description?: string
 }
+type SkillRecord = {
+  id: string
+  enabled: boolean
+  origin?: 'system' | 'app'
+  readonly?: boolean
+  descriptor?: {
+    id?: string
+    name?: string
+    description?: string
+    tags?: string[]
+    mode?: 'manual' | 'auto' | 'both'
+  }
+}
+type SkillMode = 'off' | 'manual' | 'auto'
 
 const defaultSystemPrompt = '你是一个专业的 AI API 测试助手。'
 const defaultUserPrompt = '请用简短中文说明今天的测试进度，并给一个下一步建议。'
 const defaultMcpPrompt = '请优先调用可用的 MCP 工具完成任务，并简要说明调用了哪些工具。'
+const defaultSkillsPrompt = '请根据我的输入给出结构化方案，并明确说明你应用了哪些 Skills。'
 
 const guessMimeType = (file: File) => {
   if (file.type) return file.type
@@ -75,7 +90,7 @@ const toImageSrc = (value: string) => {
 export default function App() {
   const { ai, notification, host, dialog } = useIntools('ai-api-test') as any
 
-  const [theme, setTheme] = useState<'light' | 'dark'>('light')
+  const [, setTheme] = useState<'light' | 'dark'>('light')
   const [models, setModels] = useState<ModelItem[]>([])
   const [modelsJson, setModelsJson] = useState('')
   const [selectedModel, setSelectedModel] = useState('')
@@ -132,11 +147,23 @@ export default function App() {
   const [isMcpCalling, setIsMcpCalling] = useState(false)
   const mcpCallIdRef = useRef<string | null>(null)
 
+  const [skillsList, setSkillsList] = useState<SkillRecord[]>([])
+  const [skillsMode, setSkillsMode] = useState<SkillMode>('manual')
+  const [selectedSkillIds, setSelectedSkillIds] = useState<string[]>([])
+  const [skillsPrompt, setSkillsPrompt] = useState(defaultSkillsPrompt)
+  const [skillsPreviewJson, setSkillsPreviewJson] = useState('')
+  const [skillsResolveJson, setSkillsResolveJson] = useState('')
+  const [skillsCallOutput, setSkillsCallOutput] = useState('')
+  const [skillsCallResult, setSkillsCallResult] = useState('')
+  const [isSkillsCalling, setIsSkillsCalling] = useState(false)
+
   const fileInputRef = useRef<HTMLInputElement | null>(null)
   const streamRequestRef = useRef<any>(null)
   const streamRequestIdRef = useRef<string | null>(null)
   const imageGenerateRequestRef = useRef<any>(null)
   const mcpRequestRef = useRef<any>(null)
+  const skillsRequestRef = useRef<any>(null)
+  const skillsRequestIdRef = useRef<string | null>(null)
   const imageProgressTimerRef = useRef<number | null>(null)
   const imageProgressStartAtRef = useRef<number>(0)
 
@@ -231,9 +258,39 @@ export default function App() {
     }
   }
 
+  const loadSkills = async () => {
+    try {
+      const listSkills = ai?.skills?.list
+      const listEnabledSkills = ai?.skills?.listEnabled
+      if (typeof listSkills !== 'function' && typeof listEnabledSkills !== 'function') {
+        setSkillsList([])
+        setSelectedSkillIds([])
+        setSkillsPreviewJson('当前版本未暴露 ai.skills API')
+        return
+      }
+      const list = typeof listSkills === 'function'
+        ? await listSkills()
+        : await listEnabledSkills?.()
+      const normalized = Array.isArray(list) ? list : []
+      setSkillsList(normalized)
+      setSelectedSkillIds((prev) => {
+        const valid = prev.filter((id) => normalized.some((item: SkillRecord) => item.id === id))
+        if (valid.length > 0) return valid
+        const defaults = normalized
+          .filter((item: SkillRecord) => item.enabled)
+          .slice(0, 3)
+          .map((item: SkillRecord) => item.id)
+        return defaults
+      })
+    } catch (err: any) {
+      notification?.show?.(err?.message || '读取 Skills 失败', 'error')
+    }
+  }
+
   useEffect(() => {
     loadModels()
     loadMcpServers()
+    loadSkills()
   }, [])
 
   useEffect(() => {
@@ -780,6 +837,148 @@ export default function App() {
     }
   }
 
+  const buildSkillSelection = (): { mode: SkillMode; skillIds?: string[] } => {
+    if (skillsMode === 'off') return { mode: 'off' }
+    if (skillsMode === 'manual') return { mode: 'manual', skillIds: selectedSkillIds }
+    return { mode: 'auto' }
+  }
+
+  const toggleSkillSelected = (skillId: string) => {
+    setSelectedSkillIds((prev) => {
+      if (prev.includes(skillId)) {
+        return prev.filter((id) => id !== skillId)
+      }
+      return [...prev, skillId]
+    })
+  }
+
+  const handleSkillsPreview = async () => {
+    try {
+      const preview = ai?.skills?.preview
+      if (typeof preview !== 'function') {
+        notification?.show?.('当前版本未暴露 ai.skills.preview API', 'warning')
+        return
+      }
+      const selection = buildSkillSelection()
+      const result = await preview({
+        option: {
+          model: selectedModel || undefined,
+          messages: [{ role: 'user', content: skillsPrompt }],
+          skills: selection
+        },
+        skillIds: selection.mode === 'manual' ? selection.skillIds : undefined,
+        prompt: skillsPrompt
+      })
+      setSkillsPreviewJson(JSON.stringify(result, null, 2))
+    } catch (err: any) {
+      setSkillsPreviewJson(err?.message || 'Skills 预览失败')
+    }
+  }
+
+  const handleSkillsResolve = async () => {
+    try {
+      const resolveSkills = ai?.skills?.resolve
+      if (typeof resolveSkills !== 'function') {
+        notification?.show?.('当前版本未暴露 ai.skills.resolve API', 'warning')
+        return
+      }
+      const result = await resolveSkills({
+        model: selectedModel || undefined,
+        messages: [{ role: 'user', content: skillsPrompt }],
+        skills: buildSkillSelection()
+      })
+      setSkillsResolveJson(JSON.stringify(result, null, 2))
+    } catch (err: any) {
+      setSkillsResolveJson(err?.message || 'Skills resolve 失败')
+    }
+  }
+
+  const handleSkillsCall = async () => {
+    if (!selectedModel) {
+      notification?.show?.('请先选择模型', 'warning')
+      return
+    }
+    if (skillsMode === 'manual' && selectedSkillIds.length === 0) {
+      notification?.show?.('manual 模式下请至少勾选一个 Skill', 'warning')
+      return
+    }
+    setSkillsCallOutput('')
+    setSkillsCallResult('')
+    setIsSkillsCalling(true)
+    skillsRequestIdRef.current = null
+    const append = (text: string) => {
+      if (!text) return
+      setSkillsCallOutput((prev) => prev + text)
+    }
+
+    try {
+      const request = ai?.call(
+        {
+          model: selectedModel,
+          messages: [
+            { role: 'system', content: '你是一个 Skills 调用测试助手。' },
+            { role: 'user', content: skillsPrompt }
+          ],
+          skills: buildSkillSelection()
+        },
+        (chunk: any) => {
+          if (chunk?.__requestId && !skillsRequestIdRef.current) {
+            skillsRequestIdRef.current = chunk.__requestId
+          }
+          if (chunk?.chunkType === 'error') {
+            append(`\n[错误] ${chunk?.error?.message || '流式错误'}\n`)
+            return
+          }
+          if (chunk?.reasoning_content) {
+            append(`\n[思考] ${chunk.reasoning_content}`)
+          }
+          const text = extractText(chunk?.content)
+          if (text) append(text)
+        }
+      )
+      skillsRequestRef.current = request
+      if ((request as any)?.requestId && !skillsRequestIdRef.current) {
+        skillsRequestIdRef.current = (request as any).requestId
+      }
+      const result = await request
+      const finalText = extractText(result?.content)
+      if (finalText) append(`\n${finalText}`)
+      setSkillsCallResult(JSON.stringify(result, null, 2))
+      notification?.show?.('Skills 调用完成', 'success')
+    } catch (err: any) {
+      setSkillsCallResult(err?.message || 'Skills 调用失败')
+    } finally {
+      skillsRequestRef.current = null
+      skillsRequestIdRef.current = null
+      setIsSkillsCalling(false)
+    }
+  }
+
+  const handleSkillsAbort = async () => {
+    try {
+      if (skillsRequestRef.current?.abort) {
+        skillsRequestRef.current.abort()
+        skillsRequestRef.current = null
+        skillsRequestIdRef.current = null
+        setIsSkillsCalling(false)
+        notification?.show?.('已停止 Skills 调用', 'warning')
+        return
+      }
+      const requestId = skillsRequestIdRef.current
+      if (requestId && ai?.abort) {
+        await ai.abort(requestId)
+        skillsRequestRef.current = null
+        skillsRequestIdRef.current = null
+        setIsSkillsCalling(false)
+        notification?.show?.('已停止 Skills 调用', 'warning')
+        return
+      }
+      notification?.show?.('当前没有可停止的 Skills 请求', 'info')
+    } catch (err: any) {
+      notification?.show?.(err?.message || '停止 Skills 调用失败', 'error')
+    }
+  }
+
   const handleToolCall = async () => {
     try {
       const result = await host?.call?.('runToolCall', {
@@ -1131,6 +1330,90 @@ export default function App() {
             <div className="field">
               <label>服务器日志</label>
               <textarea className="output" value={mcpLogsJson} readOnly placeholder="getLogs 结果" />
+            </div>
+          </div>
+        </section>
+
+        <section className="card">
+          <div className="card-title">Skills 测试 (Renderer)</div>
+          <div className="split">
+            <div className="field">
+              <label>Skills 选择模式</label>
+              <select value={skillsMode} onChange={(e) => setSkillsMode(e.target.value as SkillMode)}>
+                <option value="off">off（禁用 Skills）</option>
+                <option value="manual">manual（手动选择）</option>
+                <option value="auto">auto（自动选择）</option>
+              </select>
+            </div>
+            <div className="field">
+              <label>已选 Skill 数量</label>
+              <input value={String(selectedSkillIds.length)} readOnly />
+            </div>
+          </div>
+          <div className="actions">
+            <button className="btn-secondary" onClick={loadSkills}>
+              刷新 Skills
+            </button>
+            <button className="btn-ghost" onClick={handleSkillsPreview}>
+              预览合成
+            </button>
+            <button className="btn-ghost" onClick={handleSkillsResolve}>
+              解析选择
+            </button>
+          </div>
+          <div className="list">
+            {skillsList.length === 0 && <div className="empty">暂无可用 Skills 或当前 API 未暴露</div>}
+            {skillsList.map((skill) => {
+              const skillName = skill.descriptor?.name || skill.id
+              const checked = selectedSkillIds.includes(skill.id)
+              const skillTag = skill.origin === 'system' ? 'System' : 'App'
+              return (
+                <label className="list-item" key={skill.id}>
+                  <div>
+                    <div className="list-title">{skillName}</div>
+                    <div className="list-sub">{skill.id} · {skillTag} · {skill.enabled ? '启用' : '停用'}</div>
+                  </div>
+                  <input
+                    type="checkbox"
+                    checked={checked}
+                    disabled={skillsMode !== 'manual'}
+                    onChange={() => toggleSkillSelected(skill.id)}
+                  />
+                </label>
+              )
+            })}
+          </div>
+          <div className="field">
+            <label>Skills 调用提示词</label>
+            <textarea value={skillsPrompt} onChange={(e) => setSkillsPrompt(e.target.value)} rows={3} />
+          </div>
+          <div className="actions">
+            <button className="btn-primary" onClick={handleSkillsCall} disabled={isSkillsCalling}>
+              <Play size={16} className="icon" />
+              开始 Skills 调用
+            </button>
+            <button className="btn-secondary" onClick={handleSkillsAbort} disabled={!isSkillsCalling}>
+              停止
+            </button>
+          </div>
+          <div className="split">
+            <div className="field">
+              <label>Skills 调用流式输出</label>
+              <textarea className="output" value={skillsCallOutput} readOnly placeholder="Skills 流式输出..." />
+            </div>
+            <div className="field">
+              <label>Skills 调用最终结果</label>
+              <textarea className="output" value={skillsCallResult} readOnly placeholder="Skills 调用结果" />
+            </div>
+          </div>
+          <div className="split">
+            <div className="field">
+              <label>Skills Preview</label>
+              <textarea className="output" value={skillsPreviewJson} readOnly placeholder="skills.preview 结果" />
+            </div>
+            <div className="field">
+              <label>Skills Resolve</label>
+              <textarea className="output" value={skillsResolveJson} readOnly placeholder="skills.resolve 结果" />
             </div>
           </div>
         </section>

@@ -89,6 +89,9 @@ interface PluginContext {
         edit: (input: { model: string; imageAttachmentId: string; prompt: string }) => Promise<{ images: string[] }>
       }
     }
+    system: {
+      getSystemInfo: () => Promise<any>
+    }
     features?: {
       getFeatures: (codes?: string[]) => Array<{ code: string }>
       setFeature: (feature: {
@@ -147,7 +150,7 @@ export async function run(context: PluginContext) {
 }
 
 export const host = {
-  async sumNumbers(context: PluginContext, input: ToolInput) {
+  async sumNumbers(_context: PluginContext, input: ToolInput) {
     console.log('[ai-api-test] sumNumbers 被调用', { input })
     const a = Number(input?.a ?? 0)
     const b = Number(input?.b ?? 0)

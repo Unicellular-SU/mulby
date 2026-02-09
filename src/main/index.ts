@@ -10,6 +10,11 @@ import {
   loadSkillCreatorResourcePack
 } from './ai/skills/creator-resources'
 import { executeSkillCreatorRunCommandTool } from './ai/skills/creator-command-tool'
+import {
+  AI_RUN_COMMAND_TOOL_NAME,
+  normalizeFailedRunCommandResult,
+  parseAiRunCommandArgs
+} from './ai/tools/run-command-tool'
 import { PluginManager } from './plugin'
 import { PluginWindowManager } from './plugin/window'
 import { ThemeManager } from './services/theme'
@@ -62,6 +67,27 @@ setAiToolExecutor(async ({ name, args, context }) => {
         })
       }
     })
+  }
+
+  if (name === AI_RUN_COMMAND_TOOL_NAME) {
+    const input = parseAiRunCommandArgs(args)
+    const pluginName = context?.pluginName
+    const plugin = pluginName ? pluginManager.get(pluginName) : undefined
+    try {
+      return await commandRunnerService.runCommand(input, {
+        source: pluginName ? 'plugin' : 'app',
+        pluginId: pluginName || undefined,
+        runCommandAllowed: plugin ? plugin.manifest.permissions?.runCommand === true : undefined
+      })
+    } catch (error) {
+      return normalizeFailedRunCommandResult({
+        error,
+        command: input.command,
+        args: input.args,
+        cwd: input.cwd,
+        shell: input.shell
+      })
+    }
   }
 
   if (isMcpToolName(name)) {

@@ -220,3 +220,19 @@ await shell.clearRunCommandTrusted();
 ```
 
 未声明时调用会被拒绝，并记录为 `blocked` 审计事件。
+
+## 与 AI Skills 联动
+
+当 AI 调用启用了 Skills（`option.skills.mode = manual/auto` 且实际选中了 skill）时，系统会自动注入内置工具：
+
+- `intools_run_command`
+
+AI 可通过该工具执行多步命令流程（例如先检索，再基于输出继续分析），而不是只返回“请手动执行命令”。
+
+该工具的执行仍然完全受 `runCommand` 全局策略约束：
+
+- 总开关、黑白名单、`allowShell`
+- 用户同意确认流（`requireConsent`）
+- 插件场景下的 `manifest.permissions.runCommand` 校验
+
+如果命令被策略拦截或用户拒绝，工具会返回结构化失败结果（`success: false` + `stderr/error`），AI 可继续给出降级方案。
