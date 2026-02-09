@@ -19,6 +19,7 @@ describe('streamMetrics', () => {
       maxToolSteps: 5
     })
     markAiStreamRoute(metrics, 'openai-compat-tool-loop')
+    recordAiStreamChunk(metrics, { role: 'assistant', chunkType: 'meta', capability_debug: { requested: [], allowed: [], denied: [], reasons: [] } })
     recordAiStreamChunk(metrics, { role: 'assistant', chunkType: 'reasoning', reasoning_content: 'think' })
     recordAiStreamChunk(metrics, { role: 'assistant', chunkType: 'text', content: 'answer' })
     recordAiStreamChunk(metrics, { role: 'assistant', chunkType: 'tool-call', tool_call: { id: '1', name: 'sum' } })
@@ -26,6 +27,7 @@ describe('streamMetrics', () => {
     recordAiStreamChunk(metrics, { role: 'assistant', chunkType: 'end' })
 
     assert.equal(metrics.route, 'openai-compat-tool-loop')
+    assert.equal(metrics.chunks.meta, 1)
     assert.equal(metrics.chunks.reasoning, 1)
     assert.equal(metrics.chunks.text, 1)
     assert.equal(metrics.chunks.toolCall, 1)
@@ -59,4 +61,3 @@ describe('streamMetrics', () => {
     assert.equal(aborted.error?.code, 'AI_STREAM_ABORTED')
   })
 })
-

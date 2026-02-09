@@ -5,6 +5,7 @@ import path from 'node:path'
 import { describe, it } from 'node:test'
 import type { AiToolingSettings } from '../../../shared/types/settings'
 import {
+  AI_GIT_STATUS_TOOL_NAME,
   AI_LIST_DIR_TOOL_NAME,
   AI_READ_FILE_TOOL_NAME,
   AI_RUN_SCRIPT_TOOL_NAME,
@@ -50,6 +51,12 @@ function createTooling(root: string): AiToolingSettings {
     git: {
       allowedRepoRoots: [root],
       maxDiffBytes: 1024 * 1024
+    },
+    capabilityPolicy: {
+      defaultAppCapabilities: [],
+      defaultSkillCapabilities: [],
+      defaultNetworkSkillCapabilities: [],
+      grants: []
     }
   }
 }
@@ -58,6 +65,9 @@ describe('internal ai tools', () => {
   it('normalizes requested internal tool names', () => {
     const names = normalizeAiInternalToolNames(['intools_read_file', 'intools_read_file', 'unknown', ''])
     assert.deepEqual(names, ['intools_read_file'])
+
+    const legacyNames = normalizeAiInternalToolNames(['runCommand', 'shell:runCommand', 'intools_run_command'])
+    assert.deepEqual(legacyNames, ['intools_run_command'])
   })
 
   it('builds schema with parameters.required', () => {
@@ -145,5 +155,39 @@ describe('internal ai tools', () => {
     assert.equal(capturedCommand, process.execPath)
     assert.equal(capturedArgs.includes('A'), true)
     assert.equal(capturedContext, 'app')
+  })
+
+  it('routes git tools through run command bridge', async () => {
+    const captured: Array<{ command: string; args: string[] }> = []
+    const runtime = createAiInternalToolRuntime({
+      getToolingSettings: () => createTooling(process.cwd()),
+      runCommand: async (input) => {
+        captured.push({ command: input.command, args: input.args || [] })
+        return {
+          success: false,
+          command: input.command,
+          args: input.args || [],
+          cwd: input.cwd,
+          shell: false,
+          stdout: '',
+          stderr: 'not a git repository',
+          exitCode: 128,
+          signal: null,
+          durationMs: 1,
+          timedOut: false,
+          truncated: false
+        }
+      },
+      resolveRunCommandContext: () => ({ source: 'app' })
+    })
+
+    const result = await runtime.execute({
+      name: AI_GIT_STATUS_TOOL_NAME,
+      args: { repoPath: process.cwd() }
+    }) as Record<string, unknown>
+
+    assert.equal(result.success, false)
+    assert.equal(captured.length > 0, true)
+    assert.equal(captured[0]?.command, 'git')
   })
 })

@@ -98,6 +98,10 @@ export function applyStreamChunkToSummary(
     return next
   }
 
+  if (chunkType === 'meta') {
+    return next
+  }
+
   next.warnings.push(`unknown chunkType: ${chunkType}`)
   return next
 }
@@ -105,4 +109,3 @@ export function applyStreamChunkToSummary(
 export function summarizeStreamChunks(chunks: AiMessage[]): StreamRegressionSummary {
   return chunks.reduce((summary, chunk) => applyStreamChunkToSummary(summary, chunk), createEmptyStreamSummary())
 }
-

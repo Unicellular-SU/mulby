@@ -1,4 +1,3 @@
-import { spawn } from 'node:child_process'
 import { createHash, randomUUID } from 'node:crypto'
 import { lookup } from 'node:dns/promises'
 import { promises as fs } from 'node:fs'
@@ -32,17 +31,6 @@ interface PatchDryRunRecord {
 }
 
 const patchDryRunCache = new Map<string, PatchDryRunRecord>()
-
-interface ProcessRunResult {
-  success: boolean
-  stdout: string
-  stderr: string
-  exitCode: number | null
-  signal: string | null
-  timedOut: boolean
-  truncated: boolean
-  durationMs: number
-}
 
 interface InternalToolRuntimeDeps {
   getToolingSettings: () => AiToolingSettings
@@ -210,101 +198,6 @@ async function assertHttpUrlAllowed(urlText: string, settings: AiToolingSettings
   }
 }
 
-async function runProcess(input: {
-  command: string
-  args: string[]
-  cwd?: string
-  env?: Record<string, string>
-  timeoutMs: number
-  maxOutputBytes: number
-}): Promise<ProcessRunResult> {
-  return await new Promise((resolve, reject) => {
-    const startedAt = Date.now()
-    const child = spawn(input.command, input.args, {
-      cwd: input.cwd,
-      env: input.env ? { ...process.env, ...input.env } : process.env,
-      shell: false,
-      windowsHide: true
-    })
-
-    const stdoutChunks: Buffer[] = []
-    const stderrChunks: Buffer[] = []
-    let stdoutBytes = 0
-    let stderrBytes = 0
-    let truncated = false
-    let timedOut = false
-
-    const appendChunk = (chunks: Buffer[], currentBytes: number, chunk: Buffer): { bytes: number; truncated: boolean } => {
-      if (currentBytes >= input.maxOutputBytes) {
-        return { bytes: currentBytes, truncated: true }
-      }
-      const remaining = input.maxOutputBytes - currentBytes
-      if (chunk.length <= remaining) {
-        chunks.push(chunk)
-        return { bytes: currentBytes + chunk.length, truncated: false }
-      }
-      chunks.push(chunk.subarray(0, remaining))
-      return { bytes: input.maxOutputBytes, truncated: true }
-    }
-
-    if (child.stdout) {
-      child.stdout.on('data', (chunk: Buffer) => {
-        const next = appendChunk(stdoutChunks, stdoutBytes, Buffer.from(chunk))
-        stdoutBytes = next.bytes
-        truncated = truncated || next.truncated
-      })
-    }
-
-    if (child.stderr) {
-      child.stderr.on('data', (chunk: Buffer) => {
-        const next = appendChunk(stderrChunks, stderrBytes, Buffer.from(chunk))
-        stderrBytes = next.bytes
-        truncated = truncated || next.truncated
-      })
-    }
-
-    const timer = setTimeout(() => {
-      timedOut = true
-      try {
-        child.kill('SIGTERM')
-      } catch {
-        // ignore
-      }
-      setTimeout(() => {
-        if (!child.killed) {
-          try {
-            child.kill('SIGKILL')
-          } catch {
-            // ignore
-          }
-        }
-      }, 2000)
-    }, input.timeoutMs)
-
-    child.on('error', (error) => {
-      clearTimeout(timer)
-      reject(error)
-    })
-
-    child.on('close', (code, signal) => {
-      clearTimeout(timer)
-      const durationMs = Date.now() - startedAt
-      const stdout = Buffer.concat(stdoutChunks).toString('utf8')
-      const stderr = Buffer.concat(stderrChunks).toString('utf8')
-      resolve({
-        success: !timedOut && code === 0,
-        stdout,
-        stderr,
-        exitCode: code,
-        signal: signal ? String(signal) : null,
-        timedOut,
-        truncated,
-        durationMs
-      })
-    })
-  })
-}
-
 async function performHttpRequest(input: {
   url: string
   method: string
@@ -420,6 +313,16 @@ function normalizeToolError(error: unknown): { success: false; error: string } {
 export class AiInternalToolRuntime {
   constructor(private readonly deps: InternalToolRuntimeDeps) {}
 
+  private async runManagedCommand(input: RunCommandInput, context?: AiToolContext): Promise<RunCommandResult> {
+    return await this.deps.runCommand(
+      {
+        ...input,
+        shell: false
+      },
+      this.deps.resolveRunCommandContext(context)
+    )
+  }
+
   async execute(input: { name: AiInternalToolName; args: unknown; context?: AiToolContext }): Promise<unknown> {
     try {
       switch (input.name) {
@@ -430,15 +333,15 @@ export class AiInternalToolRuntime {
         case AI_SEARCH_TEXT_TOOL_NAME:
           return await this.searchTextTool(input.args)
         case AI_APPLY_PATCH_TOOL_NAME:
-          return await this.applyPatchTool(input.args)
+          return await this.applyPatchTool(input.args, input.context)
         case AI_HTTP_FETCH_TOOL_NAME:
           return await this.httpFetchTool(input.args)
         case AI_RUN_SCRIPT_TOOL_NAME:
           return await this.runScriptTool(input.args, input.context)
         case AI_GIT_STATUS_TOOL_NAME:
-          return await this.gitStatusTool(input.args)
+          return await this.gitStatusTool(input.args, input.context)
         case AI_GIT_DIFF_TOOL_NAME:
-          return await this.gitDiffTool(input.args)
+          return await this.gitDiffTool(input.args, input.context)
         default:
           return normalizeToolError(`Unsupported internal tool: ${input.name}`)
       }
@@ -627,7 +530,7 @@ export class AiInternalToolRuntime {
     }
   }
 
-  private async applyPatchTool(args: unknown): Promise<unknown> {
+  private async applyPatchTool(args: unknown, context?: AiToolContext): Promise<unknown> {
     const policy = this.deps.getToolingSettings().patch
     const input = parseObject(args)
     const patchText = String(input.patch || '')
@@ -649,13 +552,12 @@ export class AiInternalToolRuntime {
 
     try {
       const changedFiles = summarizePatchFiles(patchText)
-      const checkRepo = await runProcess({
+      const checkRepo = await this.runManagedCommand({
         command: 'git',
         args: ['-C', baseDir, 'rev-parse', '--is-inside-work-tree'],
         cwd: baseDir,
-        timeoutMs: 10_000,
-        maxOutputBytes: 256 * 1024
-      })
+        timeoutMs: 10_000
+      }, context)
       if (!checkRepo.success) {
         return {
           success: false,
@@ -670,13 +572,12 @@ export class AiInternalToolRuntime {
       }
 
       if (mode === 'dry-run') {
-        const result = await runProcess({
+        const result = await this.runManagedCommand({
           command: 'git',
           args: ['-C', baseDir, 'apply', '--check', patchPath],
           cwd: baseDir,
-          timeoutMs: 20_000,
-          maxOutputBytes: 512 * 1024
-        })
+          timeoutMs: 20_000
+        }, context)
         const dryRunToken = result.success
           ? (() => {
               const token = randomUUID()
@@ -717,13 +618,12 @@ export class AiInternalToolRuntime {
         }
       }
 
-      const result = await runProcess({
+      const result = await this.runManagedCommand({
         command: 'git',
         args: ['-C', baseDir, 'apply', patchPath],
         cwd: baseDir,
-        timeoutMs: 30_000,
-        maxOutputBytes: 512 * 1024
-      })
+        timeoutMs: 30_000
+      }, context)
 
       if (policy.requireDryRunFirst) {
         const token = String(input.dryRunToken || '').trim()
@@ -858,7 +758,7 @@ export class AiInternalToolRuntime {
     }
   }
 
-  private async gitStatusTool(args: unknown): Promise<unknown> {
+  private async gitStatusTool(args: unknown, context?: AiToolContext): Promise<unknown> {
     const policy = this.deps.getToolingSettings().git
     const input = parseObject(args)
     const repoPathRaw = String(input.repoPath || '').trim()
@@ -866,13 +766,12 @@ export class AiInternalToolRuntime {
     const short = input.short !== false
     const repoPath = ensurePathAllowed(repoPathRaw, policy.allowedRepoRoots, 'git')
 
-    const check = await runProcess({
+    const check = await this.runManagedCommand({
       command: 'git',
       args: ['-C', repoPath, 'rev-parse', '--is-inside-work-tree'],
       cwd: repoPath,
-      timeoutMs: 10_000,
-      maxOutputBytes: 256 * 1024
-    })
+      timeoutMs: 10_000
+    }, context)
     if (!check.success) {
       return {
         success: false,
@@ -885,15 +784,14 @@ export class AiInternalToolRuntime {
       }
     }
 
-    const statusResult = await runProcess({
+    const statusResult = await this.runManagedCommand({
       command: 'git',
       args: short
         ? ['-C', repoPath, 'status', '--short', '--branch']
         : ['-C', repoPath, 'status', '--porcelain=v1', '--branch'],
       cwd: repoPath,
-      timeoutMs: 20_000,
-      maxOutputBytes: 512 * 1024
-    })
+      timeoutMs: 20_000
+    }, context)
 
     return {
       success: statusResult.success,
@@ -907,7 +805,7 @@ export class AiInternalToolRuntime {
     }
   }
 
-  private async gitDiffTool(args: unknown): Promise<unknown> {
+  private async gitDiffTool(args: unknown, context?: AiToolContext): Promise<unknown> {
     const policy = this.deps.getToolingSettings().git
     const input = parseObject(args)
     const repoPathRaw = String(input.repoPath || '').trim()
@@ -922,13 +820,12 @@ export class AiInternalToolRuntime {
       policy.maxDiffBytes
     )
 
-    const check = await runProcess({
+    const check = await this.runManagedCommand({
       command: 'git',
       args: ['-C', repoPath, 'rev-parse', '--is-inside-work-tree'],
       cwd: repoPath,
-      timeoutMs: 10_000,
-      maxOutputBytes: 256 * 1024
-    })
+      timeoutMs: 10_000
+    }, context)
     if (!check.success) {
       return {
         success: false,
@@ -948,24 +845,23 @@ export class AiInternalToolRuntime {
         ? ['-C', repoPath, 'show', '--format=', '--no-color', ref]
         : ['-C', repoPath, 'diff']
 
-    const result = await runProcess({
+    const result = await this.runManagedCommand({
       command: 'git',
       args: argsList,
       cwd: repoPath,
-      timeoutMs: 30_000,
-      maxOutputBytes: maxBytes
-    })
+      timeoutMs: 30_000
+    }, context)
 
     return {
       success: result.success,
       repoPath,
       target,
       ref: target === 'commit' ? ref : undefined,
-      stdout: result.stdout,
+      stdout: result.stdout.length > maxBytes ? result.stdout.slice(0, maxBytes) : result.stdout,
       stderr: result.stderr,
       exitCode: result.exitCode,
       timedOut: result.timedOut,
-      truncated: result.truncated
+      truncated: result.truncated || result.stdout.length > maxBytes
     }
   }
 }

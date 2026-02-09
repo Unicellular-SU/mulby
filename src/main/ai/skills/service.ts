@@ -17,6 +17,10 @@ import type {
   AiSkillTrustLevel,
   AiToolContext
 } from '../../../shared/types/ai'
+import {
+  mapInternalToolsToCapabilities,
+  normalizeAiToolCapabilityNames
+} from '../tools/capabilities'
 import { getAiSettings, updateAiSettings } from '../config'
 import type {
   AiSkillCreateFromGeneratedInput,
@@ -161,6 +165,9 @@ function parseDescriptorFromMarkdown(input: {
   const author = String(frontmatter.author || '').trim() || undefined
   const tags = asStringArray(frontmatter.tags)
   const triggerPhrases = asStringArray(frontmatter.triggerPhrases ?? frontmatter.trigger_phrases)
+  const capabilities = normalizeAiToolCapabilityNames(
+    asStringArray(frontmatter.capabilities ?? frontmatter.capabilityDeps ?? frontmatter.capability_deps) || []
+  )
   const internalTools = asStringArray(frontmatter.internalTools ?? frontmatter.internal_tools)
   const mode = normalizeMode(frontmatter.mode)
   const promptTemplate =
@@ -184,6 +191,7 @@ function parseDescriptorFromMarkdown(input: {
     author,
     tags,
     triggerPhrases,
+    capabilities: capabilities.length > 0 ? capabilities : undefined,
     internalTools,
     mode,
     promptTemplate,
@@ -206,6 +214,10 @@ function buildSkillMarkdown(descriptor: AiSkillDescriptor): string {
   if (descriptor.triggerPhrases && descriptor.triggerPhrases.length > 0) {
     lines.push('triggerPhrases:')
     for (const phrase of descriptor.triggerPhrases) lines.push(`  - ${phrase}`)
+  }
+  if (descriptor.capabilities && descriptor.capabilities.length > 0) {
+    lines.push('capabilities:')
+    for (const capability of descriptor.capabilities) lines.push(`  - ${capability}`)
   }
   if (descriptor.internalTools && descriptor.internalTools.length > 0) {
     lines.push('internalTools:')
@@ -592,6 +604,7 @@ export class AiSkillService {
       promptTemplate: input.promptTemplate?.trim() || undefined,
       tags: input.tags?.map((item) => item.trim()).filter(Boolean),
       triggerPhrases: input.triggerPhrases?.map((item) => item.trim()).filter(Boolean),
+      capabilities: normalizeAiToolCapabilityNames(input.capabilities || []),
       internalTools: input.internalTools?.map((item) => item.trim()).filter(Boolean),
       mode: input.mode,
       mcpPolicy: input.mcpPolicy
@@ -675,6 +688,7 @@ export class AiSkillService {
       promptTemplate: input.promptTemplate?.trim() || undefined,
       tags: input.tags?.map((item) => item.trim()).filter(Boolean),
       triggerPhrases: input.triggerPhrases?.map((item) => item.trim()).filter(Boolean),
+      capabilities: normalizeAiToolCapabilityNames(input.capabilities || []),
       internalTools: input.internalTools?.map((item) => item.trim()).filter(Boolean),
       mode: input.mode,
       mcpPolicy: input.mcpPolicy
@@ -747,6 +761,7 @@ export class AiSkillService {
       author: String(obj.author || '').trim() || undefined,
       tags: asStringArray(obj.tags),
       triggerPhrases: asStringArray(obj.triggerPhrases ?? obj.trigger_phrases),
+      capabilities: normalizeAiToolCapabilityNames(asStringArray(obj.capabilities ?? obj.capabilityDeps ?? obj.capability_deps) || []),
       internalTools: asStringArray(obj.internalTools ?? obj.internal_tools),
       mode: normalizeMode(obj.mode),
       promptTemplate: String((obj.promptTemplate ?? obj.prompt_template) || '').trim() || undefined,
@@ -1120,12 +1135,20 @@ export class AiSkillService {
     let mcpSelection: AiMcpSelection | undefined
     let scope: AiToolContext['mcpScope'] | undefined
     let blockedToolIds: string[] = []
+    const capabilities = new Set<string>()
     const internalToolNames = new Set<string>()
 
     for (const record of selected) {
       const policy = record.descriptor.mcpPolicy
+      for (const capability of normalizeAiToolCapabilityNames(record.descriptor.capabilities || [])) {
+        capabilities.add(capability)
+      }
       for (const toolName of record.descriptor.internalTools || []) {
-        if (toolName) internalToolNames.add(toolName)
+        if (!toolName) continue
+        internalToolNames.add(toolName)
+        for (const capability of mapInternalToolsToCapabilities([toolName])) {
+          capabilities.add(capability)
+        }
       }
       if (!policy) continue
       mcpSelection = mergeMcpSelections(mcpSelection, {
@@ -1156,7 +1179,13 @@ export class AiSkillService {
     return {
       selectedSkillIds: selected.map((record) => record.id),
       selectedSkillNames: selected.map((record) => record.descriptor.name),
+      selectedSkills: selected.map((record) => ({
+        id: record.id,
+        source: record.source,
+        trustLevel: record.trustLevel
+      })),
       systemPrompts: prompts,
+      capabilities: Array.from(capabilities),
       internalTools: Array.from(internalToolNames),
       mergedMcp: mcpSelection,
       toolContextPatch: scope,
@@ -1172,6 +1201,12 @@ export class AiSkillService {
       : option.messages
     const mergedMcp = mergeMcpSelections(option.mcp, resolution.mergedMcp)
     const toolContext = mergeToolContext(option.toolContext, resolution.toolContextPatch)
+    const capabilities = Array.from(
+      new Set([
+        ...(option.capabilities || []),
+        ...(resolution.capabilities || [])
+      ])
+    )
     const internalTools = Array.from(
       new Set([
         ...(option.internalTools || []),
@@ -1183,6 +1218,7 @@ export class AiSkillService {
       messages,
       mcp: mergedMcp,
       toolContext,
+      capabilities: capabilities.length > 0 ? capabilities : option.capabilities,
       internalTools: internalTools.length > 0 ? internalTools : option.internalTools
     }
   }
@@ -1204,6 +1240,7 @@ export class AiSkillService {
       },
       toolContext: input.option?.toolContext,
       tools: input.option?.tools,
+      capabilities: input.option?.capabilities,
       internalTools: input.option?.internalTools,
       params: input.option?.params,
       maxToolSteps: input.option?.maxToolSteps

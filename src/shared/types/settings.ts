@@ -123,6 +123,26 @@ export interface AiToolGitSettings {
   maxDiffBytes: number
 }
 
+export type AiToolCapabilityGrantDecision = 'allow' | 'deny'
+
+export interface AiToolCapabilityGrant {
+  id: string
+  capability: string
+  decision: AiToolCapabilityGrantDecision
+  skillId?: string
+  source?: 'manual' | 'local-dir' | 'zip' | 'json' | 'builtin' | 'system'
+  createdAt?: number
+  updatedAt?: number
+  expiresAt?: number
+}
+
+export interface AiToolCapabilityPolicySettings {
+  defaultAppCapabilities: string[]
+  defaultSkillCapabilities: string[]
+  defaultNetworkSkillCapabilities: string[]
+  grants: AiToolCapabilityGrant[]
+}
+
 export interface AiToolingSettings {
   enabled: boolean
   filesystem: AiToolFilesystemSettings
@@ -130,6 +150,7 @@ export interface AiToolingSettings {
   http: AiToolHttpSettings
   runScript: AiToolRunScriptSettings
   git: AiToolGitSettings
+  capabilityPolicy: AiToolCapabilityPolicySettings
 }
 
 // 日志级别类型

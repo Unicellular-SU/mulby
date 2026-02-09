@@ -189,6 +189,12 @@ function normalizeSkillDescriptor(input: AiSkillDescriptor, fallbackId: string):
     triggerPhrases: Array.isArray(input.triggerPhrases)
       ? input.triggerPhrases.map((item) => String(item || '').trim()).filter(Boolean)
       : undefined,
+    capabilities: Array.isArray(input.capabilities)
+      ? input.capabilities.map((item) => String(item || '').trim()).filter(Boolean)
+      : undefined,
+    internalTools: Array.isArray(input.internalTools)
+      ? input.internalTools.map((item) => String(item || '').trim()).filter(Boolean)
+      : undefined,
     mode: input.mode === 'manual' || input.mode === 'auto' || input.mode === 'both' ? input.mode : undefined,
     promptTemplate: String(input.promptTemplate || '').trim() || undefined,
     mcpPolicy: input.mcpPolicy

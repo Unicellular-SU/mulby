@@ -3,6 +3,7 @@ import { describe, it } from 'node:test'
 import {
   createEndChunk,
   createErrorChunk,
+  createMetaChunk,
   createReasoningChunk,
   createTextChunk,
   createToolCallChunk,
@@ -20,6 +21,19 @@ describe('streamChunkProtocol', () => {
     const chunk = createReasoningChunk('think')
     assert.equal(chunk.chunkType, 'reasoning')
     assert.equal(chunk.reasoning_content, 'think')
+  })
+
+  it('creates meta chunk for capability debug payload', () => {
+    const chunk = createMetaChunk({
+      capability_debug: {
+        requested: ['shell.exec'],
+        allowed: ['shell.exec'],
+        denied: [],
+        reasons: ['allowed by policy']
+      }
+    })
+    assert.equal(chunk.chunkType, 'meta')
+    assert.deepEqual(chunk.capability_debug?.requested, ['shell.exec'])
   })
 
   it('creates tool call/result chunks', () => {

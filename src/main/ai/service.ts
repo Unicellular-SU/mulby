@@ -1,6 +1,7 @@
 import { generateText, streamText, generateImage, stepCountIs } from 'ai'
 import { jsonSchema, tool } from '@ai-sdk/provider-utils'
 import type {
+  AiCapabilityDebugInfo,
   AiAttachmentRef,
   AiImageGenerateProgressChunk,
   AiMessage,
@@ -8,6 +9,7 @@ import type {
   AiModelParameters,
   AiOption,
   AiProviderConfig,
+  AiSkillSelectionMeta,
   AiTokenBreakdown,
   AiToolContext,
   AiTool
@@ -44,6 +46,7 @@ import { getRotatedApiKey, hasApiKey } from '../../shared/ai/apiKeyPool'
 import {
   createEndChunk,
   createErrorChunk,
+  createMetaChunk,
   createReasoningChunk,
   createTextChunk,
   createToolCallChunk,
@@ -66,7 +69,14 @@ import { resolveCompatToolCallName } from './tool-name-matching'
 import { aiMcpService } from './mcp'
 import { aiSkillService } from './skills'
 import { AI_RUN_COMMAND_TOOL_NAME } from './tools/run-command-tool'
-import { buildAiInternalTools, normalizeAiInternalToolNames } from './tools/internal-tools'
+import { buildAiInternalTools, type AiInternalToolName } from './tools/internal-tools'
+import {
+  mapCapabilitiesToInternalToolNames,
+  mapInternalToolsToCapabilities,
+  normalizeAiToolCapabilityNames,
+  type AiToolCapabilityName
+} from './tools/capabilities'
+import { resolveAiCapabilityPolicy } from './tools/capability-policy'
 
 interface StreamCallbacks {
   onChunk?: (chunk: AiMessage) => void
@@ -94,6 +104,11 @@ interface ImageCompatTaskDescriptor {
   taskStatus?: string
 }
 
+interface InjectedInternalToolResult {
+  option: AiOption
+  capabilityDebug: AiCapabilityDebugInfo
+}
+
 function buildApiKeyScope(input: { providerId?: string; providerType?: string; baseURL?: string }): string {
   const providerToken = String(input.providerId || input.providerType || 'default').trim() || 'default'
   const baseURL = String(input.baseURL || '').trim()
@@ -104,13 +119,120 @@ export class AiService {
   private controllers = new Map<string, AbortController>()
   private imageStrategyCapabilities = new Map<string, ImageStrategyCapabilityState>()
   private toolExecutor?: (input: { name: string; args: unknown; context?: AiToolContext }) => Promise<unknown>
+  private capabilityPolicyResolver?: (input: {
+    option: AiOption
+    requestedCapabilities: AiToolCapabilityName[]
+    selectedSkills?: AiSkillSelectionMeta[]
+  }) => { allowedCapabilities: string[]; deniedCapabilities?: string[]; reasons?: string[] }
 
-  private injectInternalRuntimeTools(option: AiOption, skillInternalTools?: string[]): AiOption {
-    const requestedTools = normalizeAiInternalToolNames([
-      ...(option.internalTools || []),
-      ...(skillInternalTools || [])
+  private shouldAutoInjectRunCommandByIntent(messages: AiMessage[]): boolean {
+    const hints = [
+      'run command',
+      'execute command',
+      'run the command',
+      'shell command',
+      '```bash',
+      '```sh',
+      'npx ',
+      '执行命令',
+      '运行命令'
+    ]
+    for (const message of messages) {
+      const chunks: string[] = []
+      if (typeof message.content === 'string') {
+        chunks.push(message.content.toLowerCase())
+      } else if (Array.isArray(message.content)) {
+        for (const part of message.content) {
+          if (!part || typeof part !== 'object') continue
+          if ((part as any).type !== 'text') continue
+          const text = String((part as any).text || '').toLowerCase()
+          if (text) chunks.push(text)
+        }
+      }
+      if (chunks.some((text) => hints.some((hint) => text.includes(hint)))) {
+        return true
+      }
+    }
+    return false
+  }
+
+  private resolveCapabilityDecision(input: {
+    option: AiOption
+    requestedCapabilities: AiToolCapabilityName[]
+    selectedSkills?: AiSkillSelectionMeta[]
+  }): {
+    allowedCapabilities: AiToolCapabilityName[]
+    deniedCapabilities: AiToolCapabilityName[]
+    reasons: string[]
+  } {
+    const resolved = this.capabilityPolicyResolver
+      ? this.capabilityPolicyResolver(input)
+      : resolveAiCapabilityPolicy({
+          option: input.option,
+          requestedCapabilities: input.requestedCapabilities,
+          selectedSkills: input.selectedSkills
+        })
+    return {
+      allowedCapabilities: normalizeAiToolCapabilityNames(resolved.allowedCapabilities || []),
+      deniedCapabilities: normalizeAiToolCapabilityNames(resolved.deniedCapabilities || []),
+      reasons: Array.isArray(resolved.reasons)
+        ? resolved.reasons.map((item) => String(item || '').trim()).filter(Boolean)
+        : []
+    }
+  }
+
+  private injectInternalRuntimeTools(input: {
+    option: AiOption
+    skillCapabilities?: string[]
+    skillInternalTools?: string[]
+    selectedSkills?: AiSkillSelectionMeta[]
+  }): InjectedInternalToolResult {
+    const { option } = input
+    const optionRequestedCapabilities = normalizeAiToolCapabilityNames(option.capabilities || [])
+    const skillRequestedCapabilities = normalizeAiToolCapabilityNames(input.skillCapabilities || [])
+    const legacyOptionCapabilities = mapInternalToolsToCapabilities(option.internalTools || [])
+    const legacySkillCapabilities = mapInternalToolsToCapabilities(input.skillInternalTools || [])
+    const requestedCapabilities: AiToolCapabilityName[] = normalizeAiToolCapabilityNames([
+      ...optionRequestedCapabilities,
+      ...skillRequestedCapabilities,
+      ...legacyOptionCapabilities,
+      ...legacySkillCapabilities
     ])
-    if (requestedTools.length === 0) return option
+    const hasDeclaredTools = Array.isArray(option.tools) && option.tools.length > 0
+    const fallbackRequested = requestedCapabilities.length === 0 &&
+      !hasDeclaredTools &&
+      option.toolingPolicy?.enableInternalTools !== false &&
+      this.shouldAutoInjectRunCommandByIntent(option.messages)
+    const withFallback = fallbackRequested ? normalizeAiToolCapabilityNames(['shell.exec']) : requestedCapabilities
+    const capabilityDecision = this.resolveCapabilityDecision({
+      option,
+      requestedCapabilities: withFallback,
+      selectedSkills: input.selectedSkills
+    })
+    const capabilityDebug: AiCapabilityDebugInfo = {
+      requested: withFallback,
+      allowed: capabilityDecision.allowedCapabilities,
+      denied: capabilityDecision.deniedCapabilities,
+      reasons: [
+        ...capabilityDecision.reasons,
+        ...(fallbackRequested ? ['shell.exec requested by intent fallback'] : [])
+      ],
+      selectedSkills: input.selectedSkills && input.selectedSkills.length > 0
+        ? input.selectedSkills
+        : undefined
+    }
+
+    const requestedTools: AiInternalToolName[] = mapCapabilitiesToInternalToolNames(capabilityDecision.allowedCapabilities)
+    if (requestedTools.length === 0) {
+      return {
+        option: {
+          ...option,
+          capabilities: capabilityDecision.allowedCapabilities,
+          internalTools: requestedTools
+        },
+        capabilityDebug
+      }
+    }
     const existingTools = Array.isArray(option.tools) ? option.tools : []
     const knownNames = new Set(
       existingTools
@@ -139,10 +261,14 @@ export class AiService {
       : option.messages
 
     return {
-      ...option,
-      messages,
-      tools: [...existingTools, ...injectedTools],
-      internalTools: requestedTools
+      option: {
+        ...option,
+        messages,
+        tools: [...existingTools, ...injectedTools],
+        capabilities: capabilityDecision.allowedCapabilities,
+        internalTools: requestedTools
+      },
+      capabilityDebug
     }
   }
 
@@ -156,10 +282,14 @@ export class AiService {
     }
     await aiSkillService.ensureCatalogLoaded()
     const skillResolution = aiSkillService.resolveForAiCall(option)
-    const effectiveOption = this.injectInternalRuntimeTools(
-      aiSkillService.applyResolutionToOption(option, skillResolution),
-      skillResolution.internalTools
-    )
+    const resolvedOption = aiSkillService.applyResolutionToOption(option, skillResolution)
+    const effective = this.injectInternalRuntimeTools({
+      option: resolvedOption,
+      skillCapabilities: skillResolution.capabilities,
+      skillInternalTools: skillResolution.internalTools,
+      selectedSkills: skillResolution.selectedSkills
+    })
+    const effectiveOption = effective.option
     console.log('[AI] call 开始', {
       model: effectiveOption.model,
       messageCount: effectiveOption.messages.length,
@@ -195,7 +325,7 @@ export class AiService {
         })
       )
       const methodAdapter = getProviderMethodAdapter(providerType)
-      return await methodAdapter.call({
+      const finalMessage = await methodAdapter.call({
         hasTools: !!tools,
         hasMultimodalContent: this.hasMultimodalContent(trimmedMessages),
         shouldUseCompatToolLoop: shouldUseCompatToolLoop(effectiveOption.model, providerConfig),
@@ -297,6 +427,10 @@ export class AiService {
           }
         }
       })
+      return {
+        ...finalMessage,
+        capability_debug: effective.capabilityDebug
+      }
     } finally {
       this.controllers.delete(requestId)
     }
@@ -308,10 +442,14 @@ export class AiService {
     }
     await aiSkillService.ensureCatalogLoaded()
     const skillResolution = aiSkillService.resolveForAiCall(option)
-    const effectiveOption = this.injectInternalRuntimeTools(
-      aiSkillService.applyResolutionToOption(option, skillResolution),
-      skillResolution.internalTools
-    )
+    const resolvedOption = aiSkillService.applyResolutionToOption(option, skillResolution)
+    const effective = this.injectInternalRuntimeTools({
+      option: resolvedOption,
+      skillCapabilities: skillResolution.capabilities,
+      skillInternalTools: skillResolution.internalTools,
+      selectedSkills: skillResolution.selectedSkills
+    })
+    const effectiveOption = effective.option
     const resolvedTools = await this.resolveMergedTools(effectiveOption)
     const tools = this.buildTools(resolvedTools, effectiveOption.toolContext, effectiveOption.model)
 
@@ -358,6 +496,7 @@ export class AiService {
         maxToolSteps: metrics.maxToolSteps,
         skills: skillResolution.selectedSkillNames
       })
+      this.emitCapabilityDebugChunk(trackedOnChunk, effective.capabilityDebug)
 
       const finalMessage = await methodAdapter.stream({
         hasTools: !!tools,
@@ -384,7 +523,8 @@ export class AiService {
             role: 'assistant',
             content,
             reasoning_content: reasoning || undefined,
-            usage
+            usage,
+            capability_debug: effective.capabilityDebug
           }
           this.emitEndChunk(trackedOnChunk, finalMessage)
           callbacks.onEnd?.(finalMessage)
@@ -411,7 +551,8 @@ export class AiService {
             role: 'assistant',
             content,
             reasoning_content: reasoning || undefined,
-            usage
+            usage,
+            capability_debug: effective.capabilityDebug
           }
           this.emitEndChunk(trackedOnChunk, finalMessage)
           callbacks.onEnd?.(finalMessage)
@@ -445,7 +586,8 @@ export class AiService {
               usage,
               countTokensFromMessages(trimmedMessages, effectiveOption.model),
               countTokensForText(`${reasoning || ''}${content || ''}`, effectiveOption.model)
-            )
+            ),
+            capability_debug: effective.capabilityDebug
           }
           this.emitEndChunk(trackedOnChunk, finalMessage)
           callbacks.onEnd?.(finalMessage)
@@ -583,7 +725,8 @@ export class AiService {
             role: 'assistant',
             content: fullText || '',
             reasoning_content: allowReasoning ? reasoningText || undefined : undefined,
-            usage
+            usage,
+            capability_debug: effective.capabilityDebug
           }
           this.emitEndChunk(trackedOnChunk, finalMessage)
           callbacks.onEnd?.(finalMessage)
@@ -644,6 +787,16 @@ export class AiService {
 
   setToolExecutor(executor?: (input: { name: string; args: unknown; context?: AiToolContext }) => Promise<unknown>): void {
     this.toolExecutor = executor
+  }
+
+  setCapabilityPolicyResolver(
+    resolver?: (input: {
+      option: AiOption
+      requestedCapabilities: AiToolCapabilityName[]
+      selectedSkills?: AiSkillSelectionMeta[]
+    }) => { allowedCapabilities: string[]; deniedCapabilities?: string[]; reasons?: string[] }
+  ): void {
+    this.capabilityPolicyResolver = resolver
   }
 
   async uploadAttachment(input: { filePath?: string; buffer?: ArrayBuffer; mimeType: string; purpose?: string }): Promise<AiAttachmentRef> {
@@ -3019,6 +3172,16 @@ export class AiService {
   private emitChunk(onChunk: ((chunk: AiMessage) => void) | undefined, chunk: AiMessage): void {
     if (!onChunk) return
     onChunk(chunk)
+  }
+
+  private emitCapabilityDebugChunk(
+    onChunk: ((chunk: AiMessage) => void) | undefined,
+    capabilityDebug?: AiCapabilityDebugInfo
+  ): void {
+    if (!capabilityDebug) return
+    this.emitChunk(onChunk, createMetaChunk({
+      capability_debug: capabilityDebug
+    }))
   }
 
   private emitTextChunk(onChunk: ((chunk: AiMessage) => void) | undefined, text: string): void {

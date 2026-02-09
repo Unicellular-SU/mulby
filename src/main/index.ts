@@ -3,7 +3,7 @@ import http from 'http'
 import https from 'https'
 import { join } from 'path'
 import { registerAllHandlers } from './ipc'
-import { setAiToolExecutor } from './ai'
+import { setAiCapabilityPolicyResolver, setAiToolExecutor } from './ai'
 import { aiMcpService, isMcpToolName } from './ai/mcp'
 import {
   AI_SKILL_CREATOR_TOOL_NAME,
@@ -16,6 +16,7 @@ import {
   parseAiRunCommandArgs
 } from './ai/tools/run-command-tool'
 import { createAiInternalToolRuntime } from './ai/tools/internal-tool-runtime'
+import { resolveAiCapabilityPolicy } from './ai/tools/capability-policy'
 import { isAiInternalToolName } from './ai/tools/internal-tools'
 import { PluginManager } from './plugin'
 import { PluginWindowManager } from './plugin/window'
@@ -134,6 +135,23 @@ setAiToolExecutor(async ({ name, args, context }) => {
   }
 
   return result
+})
+
+setAiCapabilityPolicyResolver(({ option, requestedCapabilities, selectedSkills }) => {
+  const settings = appSettingsManager.getSettings().aiTooling
+  if (!settings.enabled) {
+    return {
+      allowedCapabilities: [],
+      deniedCapabilities: requestedCapabilities,
+      reasons: ['aiTooling disabled']
+    }
+  }
+  return resolveAiCapabilityPolicy({
+    option,
+    requestedCapabilities,
+    selectedSkills,
+    policy: settings.capabilityPolicy
+  })
 })
 
 // 单实例锁：确保只有一个应用实例运行

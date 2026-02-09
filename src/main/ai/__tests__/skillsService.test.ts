@@ -58,6 +58,7 @@ describe('skill service', () => {
     const created = await service.create({
       name: 'Code Review',
       promptTemplate: 'You are a strict reviewer.',
+      capabilities: ['fs.read'],
       internalTools: ['intools_read_file'],
       enabled: true,
       trustLevel: 'trusted',
@@ -82,6 +83,8 @@ describe('skill service', () => {
     })
 
     assert.equal(resolved.selectedSkillIds.length, 1)
+    assert.deepEqual(resolved.selectedSkills?.map((item) => item.id), [created.id])
+    assert.deepEqual(resolved.capabilities, ['fs.read'])
     assert.deepEqual(resolved.internalTools, ['intools_read_file'])
     assert.deepEqual(resolved.mergedMcp?.serverIds, ['filesystem'])
     assert.deepEqual(resolved.mergedMcp?.allowedToolIds, ['mcp__filesystem__read_file'])

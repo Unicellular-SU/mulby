@@ -16,6 +16,10 @@ export interface AiSkillCreateInput {
   tags?: string[]
   triggerPhrases?: string[]
   mode?: 'manual' | 'auto' | 'both'
+  capabilities?: string[]
+  /**
+   * @deprecated Prefer capabilities.
+   */
   internalTools?: string[]
   enabled?: boolean
   trustLevel?: AiSkillTrustLevel
@@ -60,6 +64,10 @@ export interface AiSkillCreateFromGeneratedInput {
   tags?: string[]
   triggerPhrases?: string[]
   mode?: 'manual' | 'auto' | 'both'
+  capabilities?: string[]
+  /**
+   * @deprecated Prefer capabilities.
+   */
   internalTools?: string[]
   mcpPolicy?: AiSkillMcpPolicy
   skillMarkdown?: string

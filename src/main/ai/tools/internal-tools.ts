@@ -26,6 +26,19 @@ export type AiInternalToolName = typeof AI_INTERNAL_TOOL_NAMES[number]
 
 const INTERNAL_TOOL_NAME_SET = new Set<string>(AI_INTERNAL_TOOL_NAMES)
 
+function canonicalToolName(input: string): string {
+  return String(input || '')
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '')
+}
+
+const INTERNAL_TOOL_ALIAS_CANONICAL_MAP: Record<string, AiInternalToolName> = {
+  runcommand: AI_RUN_COMMAND_TOOL_NAME,
+  shellruncommand: AI_RUN_COMMAND_TOOL_NAME,
+  intoolsruncommand: AI_RUN_COMMAND_TOOL_NAME
+}
+
 function normalizeToolList(input: unknown): string[] {
   if (!Array.isArray(input)) return []
   const out: string[] = []
@@ -46,7 +59,17 @@ export function isAiInternalToolName(input: string): input is AiInternalToolName
 
 export function normalizeAiInternalToolNames(input: unknown): AiInternalToolName[] {
   const names = normalizeToolList(input)
-  return names.filter((item): item is AiInternalToolName => isAiInternalToolName(item))
+  const out: AiInternalToolName[] = []
+  const seen = new Set<AiInternalToolName>()
+  for (const item of names) {
+    const normalized = isAiInternalToolName(item)
+      ? item
+      : INTERNAL_TOOL_ALIAS_CANONICAL_MAP[canonicalToolName(item)]
+    if (!normalized || seen.has(normalized)) continue
+    seen.add(normalized)
+    out.push(normalized)
+  }
+  return out
 }
 
 function createInternalTool(input: {

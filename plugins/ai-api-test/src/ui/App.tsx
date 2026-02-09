@@ -155,6 +155,7 @@ export default function App() {
   const [skillsResolveJson, setSkillsResolveJson] = useState('')
   const [skillsCallOutput, setSkillsCallOutput] = useState('')
   const [skillsCallResult, setSkillsCallResult] = useState('')
+  const [skillsCapabilityDebugJson, setSkillsCapabilityDebugJson] = useState('')
   const [isSkillsCalling, setIsSkillsCalling] = useState(false)
 
   const fileInputRef = useRef<HTMLInputElement | null>(null)
@@ -904,11 +905,27 @@ export default function App() {
     }
     setSkillsCallOutput('')
     setSkillsCallResult('')
+    setSkillsCapabilityDebugJson('')
     setIsSkillsCalling(true)
     skillsRequestIdRef.current = null
     const append = (text: string) => {
       if (!text) return
       setSkillsCallOutput((prev) => prev + text)
+    }
+    const applyCapabilityDebug = (payload: any, stage: 'chunk' | 'final') => {
+      if (!payload || typeof payload !== 'object') return
+      const normalizeList = (value: unknown) => Array.isArray(value)
+        ? value.map((item) => String(item || '').trim()).filter(Boolean)
+        : []
+      const normalized = {
+        stage,
+        requested: normalizeList(payload.requested),
+        allowed: normalizeList(payload.allowed),
+        denied: normalizeList(payload.denied),
+        reasons: normalizeList(payload.reasons),
+        selectedSkills: Array.isArray(payload.selectedSkills) ? payload.selectedSkills : []
+      }
+      setSkillsCapabilityDebugJson(JSON.stringify(normalized, null, 2))
     }
 
     try {
@@ -924,6 +941,12 @@ export default function App() {
         (chunk: any) => {
           if (chunk?.__requestId && !skillsRequestIdRef.current) {
             skillsRequestIdRef.current = chunk.__requestId
+          }
+          if (chunk?.capability_debug) {
+            applyCapabilityDebug(chunk.capability_debug, 'chunk')
+          }
+          if (chunk?.chunkType === 'meta') {
+            return
           }
           if (chunk?.chunkType === 'error') {
             append(`\n[错误] ${chunk?.error?.message || '流式错误'}\n`)
@@ -943,6 +966,9 @@ export default function App() {
       const result = await request
       const finalText = extractText(result?.content)
       if (finalText) append(`\n${finalText}`)
+      if (result?.capability_debug) {
+        applyCapabilityDebug(result.capability_debug, 'final')
+      }
       setSkillsCallResult(JSON.stringify(result, null, 2))
       notification?.show?.('Skills 调用完成', 'success')
     } catch (err: any) {
@@ -1405,6 +1431,15 @@ export default function App() {
               <label>Skills 调用最终结果</label>
               <textarea className="output" value={skillsCallResult} readOnly placeholder="Skills 调用结果" />
             </div>
+          </div>
+          <div className="field">
+            <label>Capability 调试面板（实时）</label>
+            <textarea
+              className="output"
+              value={skillsCapabilityDebugJson}
+              readOnly
+              placeholder="requested / allowed / denied / reasons 将显示在这里"
+            />
           </div>
           <div className="split">
             <div className="field">

@@ -1,6 +1,16 @@
 import type { AiMessage } from '../../shared/types/ai'
 import type { AiStreamErrorClassification } from '../../shared/ai/streamDiagnostics'
 
+export function createMetaChunk(meta: {
+  capability_debug?: AiMessage['capability_debug']
+}): AiMessage {
+  return {
+    role: 'assistant',
+    chunkType: 'meta',
+    capability_debug: meta.capability_debug
+  }
+}
+
 export function createTextChunk(text: string): AiMessage {
   return {
     role: 'assistant',

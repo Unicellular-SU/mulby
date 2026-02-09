@@ -18,14 +18,23 @@ export interface AiMessageContentFile {
 
 export type AiMessageContent = AiMessageContentText | AiMessageContentImage | AiMessageContentFile
 
+export interface AiCapabilityDebugInfo {
+  requested: string[]
+  allowed: string[]
+  denied: string[]
+  reasons: string[]
+  selectedSkills?: AiSkillSelectionMeta[]
+}
+
 export interface AiMessage {
   role: 'system' | 'user' | 'assistant'
   content?: string | AiMessageContent[]
   reasoning_content?: string
   /**
-   * 流式事件类型（仅 onChunk 过程中出现），用于统一 text/reasoning/tool/error/end 协议。
+   * 流式事件类型（仅 onChunk 过程中出现），用于统一 meta/text/reasoning/tool/error/end 协议。
    */
-  chunkType?: 'text' | 'reasoning' | 'tool-call' | 'tool-result' | 'error' | 'end'
+  chunkType?: 'meta' | 'text' | 'reasoning' | 'tool-call' | 'tool-result' | 'error' | 'end'
+  capability_debug?: AiCapabilityDebugInfo
   tool_call?: {
     id: string
     name: string
@@ -130,6 +139,12 @@ export type AiSkillSource = 'manual' | 'local-dir' | 'zip' | 'json' | 'builtin' 
 
 export type AiSkillTrustLevel = 'untrusted' | 'reviewed' | 'trusted'
 
+export interface AiSkillSelectionMeta {
+  id: string
+  source: AiSkillSource
+  trustLevel: AiSkillTrustLevel
+}
+
 export interface AiSkillMcpPolicy {
   serverIds?: string[]
   allowedToolIds?: string[]
@@ -147,6 +162,10 @@ export interface AiSkillDescriptor {
   mode?: 'manual' | 'auto' | 'both'
   promptTemplate?: string
   mcpPolicy?: AiSkillMcpPolicy
+  capabilities?: string[]
+  /**
+   * @deprecated Prefer capabilities.
+   */
   internalTools?: string[]
 }
 
@@ -186,9 +205,14 @@ export interface AiSkillSelection {
 export interface AiSkillResolveResult {
   selectedSkillIds: string[]
   selectedSkillNames: string[]
+  selectedSkills?: AiSkillSelectionMeta[]
   systemPrompts: string[]
   mergedMcp?: AiMcpSelection
   toolContextPatch?: AiToolContext['mcpScope']
+  capabilities?: string[]
+  /**
+   * @deprecated Prefer capabilities.
+   */
   internalTools?: string[]
   reasons?: string[]
 }
@@ -243,7 +267,16 @@ export interface AiOption {
   model?: string
   messages: AiMessage[]
   tools?: AiTool[]
+  capabilities?: string[]
+  /**
+   * @deprecated Prefer capabilities.
+   */
   internalTools?: string[]
+  toolingPolicy?: {
+    enableInternalTools?: boolean
+    capabilityAllowList?: string[]
+    capabilityDenyList?: string[]
+  }
   mcp?: AiMcpSelection
   skills?: AiSkillSelection
   params?: AiModelParameters
@@ -437,6 +470,7 @@ export interface AiApi {
       tags?: string[]
       triggerPhrases?: string[]
       mode?: 'manual' | 'auto' | 'both'
+      capabilities?: string[]
       internalTools?: string[]
       enabled?: boolean
       trustLevel?: AiSkillTrustLevel

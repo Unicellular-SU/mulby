@@ -4,6 +4,7 @@ import type { AiStreamErrorClassification } from '../../shared/ai/streamDiagnost
 type AiStreamStatus = 'running' | 'completed' | 'aborted' | 'error'
 
 interface AiStreamChunkCounters {
+  meta: number
   text: number
   reasoning: number
   toolCall: number
@@ -48,6 +49,7 @@ export function createAiStreamMetrics(input: {
     startedAtMs: Date.now(),
     status: 'running',
     chunks: {
+      meta: 0,
       text: 0,
       reasoning: 0,
       toolCall: 0,
@@ -65,6 +67,10 @@ export function markAiStreamRoute(metrics: AiStreamMetrics, route: AiStreamMetri
 }
 
 export function recordAiStreamChunk(metrics: AiStreamMetrics, chunk: AiMessage): void {
+  if (chunk.chunkType === 'meta') {
+    metrics.chunks.meta += 1
+    return
+  }
   if (chunk.chunkType === 'text') {
     metrics.chunks.text += 1
     if (typeof chunk.content === 'string') metrics.textChars += chunk.content.length
@@ -108,4 +114,3 @@ export function finishAiStreamMetricsError(
   metrics.status = error.code === 'AI_STREAM_ABORTED' ? 'aborted' : 'error'
   return metrics
 }
-

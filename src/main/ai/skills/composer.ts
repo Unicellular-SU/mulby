@@ -30,6 +30,7 @@ interface GeneratedSkillPayload {
   mode?: unknown
   tags?: unknown
   triggerPhrases?: unknown
+  capabilities?: unknown
   internalTools?: unknown
   promptTemplate?: unknown
   mcpPolicy?: unknown
@@ -268,7 +269,7 @@ async function buildPrompts(
     'You are an expert skill author.',
     'Create or revise a practical AI skill package following Anthropic Skills conventions.',
     'Respond with JSON only (no markdown prose).',
-    'Return fields: id, name, description, mode, tags, triggerPhrases, internalTools, promptTemplate, skillMd, files.',
+    'Return fields: id, name, description, mode, tags, triggerPhrases, capabilities, promptTemplate, skillMd, files.',
     'skillMd must start with YAML frontmatter enclosed by --- and include at least "name" and "description".',
     'Prefer kebab-case for name/id. Keep description specific about when to use the skill.',
     'Only include files when needed; paths must stay under scripts/, references/, or assets/.',
@@ -499,6 +500,7 @@ async function createSkillWithAiInternal(
       mode: normalizeMode(payload.mode),
       tags: asStringArray(payload.tags),
       triggerPhrases: asStringArray(payload.triggerPhrases),
+      capabilities: asStringArray(payload.capabilities),
       internalTools: asStringArray(payload.internalTools),
       promptTemplate: asString(payload.promptTemplate),
       mcpPolicy: normalizeMcpPolicy(payload.mcpPolicy),

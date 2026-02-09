@@ -1,6 +1,8 @@
 import db from '../db'
 import path from 'node:path'
 import type {
+  AiToolCapabilityGrant,
+  AiToolCapabilityPolicySettings,
   AiToolingSettings,
   AiToolScriptEntry,
   AppSettings,
@@ -107,6 +109,36 @@ const DEFAULT_SETTINGS: AppSettings = {
     git: {
       allowedRepoRoots: [process.cwd()],
       maxDiffBytes: 1024 * 1024
+    },
+    capabilityPolicy: {
+      defaultAppCapabilities: [
+        'shell.exec',
+        'shell.script',
+        'fs.read',
+        'fs.list',
+        'fs.search',
+        'patch.apply',
+        'http.fetch',
+        'git.status',
+        'git.diff'
+      ],
+      defaultSkillCapabilities: [
+        'shell.exec',
+        'shell.script',
+        'fs.read',
+        'fs.list',
+        'fs.search',
+        'patch.apply',
+        'http.fetch',
+        'git.status',
+        'git.diff'
+      ],
+      defaultNetworkSkillCapabilities: [
+        'fs.read',
+        'fs.list',
+        'fs.search'
+      ],
+      grants: []
     }
   },
   window: {
@@ -184,6 +216,65 @@ function normalizeScriptEntry(input: unknown, index: number): AiToolScriptEntry 
   }
 }
 
+function normalizeCapabilityGrant(input: unknown, index: number): AiToolCapabilityGrant | null {
+  if (!input || typeof input !== 'object' || Array.isArray(input)) return null
+  const obj = input as Record<string, unknown>
+  const capability = String(obj.capability || '').trim()
+  if (!capability) return null
+  const decision = obj.decision === 'deny' ? 'deny' : obj.decision === 'allow' ? 'allow' : null
+  if (!decision) return null
+  const id = String(obj.id || `grant-${index + 1}`).trim() || `grant-${index + 1}`
+  const sourceRaw = String(obj.source || '').trim()
+  const source = sourceRaw === 'manual' ||
+    sourceRaw === 'local-dir' ||
+    sourceRaw === 'zip' ||
+    sourceRaw === 'json' ||
+    sourceRaw === 'builtin' ||
+    sourceRaw === 'system'
+    ? sourceRaw
+    : undefined
+  const createdAt = Number(obj.createdAt)
+  const updatedAt = Number(obj.updatedAt)
+  const expiresAt = Number(obj.expiresAt)
+  return {
+    id,
+    capability,
+    decision,
+    skillId: String(obj.skillId || '').trim() || undefined,
+    source,
+    createdAt: Number.isFinite(createdAt) && createdAt > 0 ? createdAt : undefined,
+    updatedAt: Number.isFinite(updatedAt) && updatedAt > 0 ? updatedAt : undefined,
+    expiresAt: Number.isFinite(expiresAt) && expiresAt > 0 ? expiresAt : undefined
+  }
+}
+
+function normalizeCapabilityPolicySettings(input: Partial<AiToolCapabilityPolicySettings> | undefined): AiToolCapabilityPolicySettings {
+  const current = {
+    ...DEFAULT_SETTINGS.aiTooling.capabilityPolicy,
+    ...(input || {})
+  }
+  const grants = Array.isArray(current.grants)
+    ? current.grants
+      .map((item, index) => normalizeCapabilityGrant(item, index))
+      .filter((item): item is AiToolCapabilityGrant => !!item)
+    : []
+  return {
+    defaultAppCapabilities: normalizeStringList(
+      current.defaultAppCapabilities,
+      DEFAULT_SETTINGS.aiTooling.capabilityPolicy.defaultAppCapabilities.length
+    ),
+    defaultSkillCapabilities: normalizeStringList(
+      current.defaultSkillCapabilities,
+      DEFAULT_SETTINGS.aiTooling.capabilityPolicy.defaultSkillCapabilities.length
+    ),
+    defaultNetworkSkillCapabilities: normalizeStringList(
+      current.defaultNetworkSkillCapabilities,
+      DEFAULT_SETTINGS.aiTooling.capabilityPolicy.defaultNetworkSkillCapabilities.length
+    ),
+    grants
+  }
+}
+
 function normalizeAiToolingSettings(input: Partial<AiToolingSettings> | undefined): AiToolingSettings {
   const current = {
     ...DEFAULT_SETTINGS.aiTooling,
@@ -194,6 +285,7 @@ function normalizeAiToolingSettings(input: Partial<AiToolingSettings> | undefine
   const http = current.http || DEFAULT_SETTINGS.aiTooling.http
   const runScript = current.runScript || DEFAULT_SETTINGS.aiTooling.runScript
   const git = current.git || DEFAULT_SETTINGS.aiTooling.git
+  const capabilityPolicy = normalizeCapabilityPolicySettings(current.capabilityPolicy)
   const scriptEntries = Array.isArray(runScript.entries)
     ? runScript.entries
       .map((entry, index) => normalizeScriptEntry(entry, index))
@@ -229,7 +321,8 @@ function normalizeAiToolingSettings(input: Partial<AiToolingSettings> | undefine
     git: {
       allowedRepoRoots: normalizePathList(git.allowedRepoRoots, DEFAULT_SETTINGS.aiTooling.git.allowedRepoRoots),
       maxDiffBytes: Math.max(8 * 1024, Math.min(Number(git.maxDiffBytes || DEFAULT_SETTINGS.aiTooling.git.maxDiffBytes), 20 * 1024 * 1024))
-    }
+    },
+    capabilityPolicy
   }
 }
 

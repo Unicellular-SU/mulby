@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from 'react'
+import type { AiSkillRecord } from '../../shared/types/ai'
 import type {
   AppSettings,
+  AiToolCapabilityGrant,
   AppShortcutAction,
   CommandAuditItem,
   CommandRule,
@@ -34,7 +36,7 @@ const SECTION_ITEMS: { id: SettingsSection; label: string }[] = [
   { id: 'shortcuts', label: '快捷键' },
   { id: 'store', label: '插件商店' },
   { id: 'permissions', label: '权限' },
-  { id: 'security', label: '命令执行' },
+  { id: 'security', label: '工具与命令' },
   { id: 'developer', label: '开发者' },
   { id: 'about', label: '关于' }
 ]
@@ -51,6 +53,27 @@ const PERMISSIONS = [
   { id: 'microphone', label: '麦克风' },
   { id: 'camera', label: '摄像头' },
   { id: 'geolocation', label: '定位' }
+] as const
+
+const TOOL_CAPABILITY_OPTIONS = [
+  { value: 'shell.exec', label: 'shell.exec（执行系统命令）' },
+  { value: 'shell.script', label: 'shell.script（执行预置脚本）' },
+  { value: 'fs.read', label: 'fs.read（读取文件）' },
+  { value: 'fs.list', label: 'fs.list（列出目录）' },
+  { value: 'fs.search', label: 'fs.search（文本检索）' },
+  { value: 'patch.apply', label: 'patch.apply（补丁校验/应用）' },
+  { value: 'http.fetch', label: 'http.fetch（HTTP 请求）' },
+  { value: 'git.status', label: 'git.status（仓库状态）' },
+  { value: 'git.diff', label: 'git.diff（差异查看）' }
+] as const
+
+const SKILL_SOURCE_OPTIONS = [
+  { value: 'manual', label: 'manual（手动创建）' },
+  { value: 'local-dir', label: 'local-dir（本地目录导入）' },
+  { value: 'zip', label: 'zip（压缩包导入）' },
+  { value: 'json', label: 'json（JSON 导入）' },
+  { value: 'builtin', label: 'builtin（内置）' },
+  { value: 'system', label: 'system（系统）' }
 ] as const
 
 function formatPermissionStatus(status: string) {
@@ -75,6 +98,38 @@ function parseListDraft(value: string): string[] {
     .split(/[\n,]/)
     .map((item) => item.trim())
     .filter(Boolean)
+}
+
+function formatCommandAuditStatus(status: string): string {
+  switch (status) {
+    case 'allowed':
+      return '允许'
+    case 'blocked':
+      return '拦截'
+    case 'timeout':
+      return '超时'
+    case 'error':
+      return '错误'
+    default:
+      return status
+  }
+}
+
+function formatSkillSource(source: string): string {
+  const row = SKILL_SOURCE_OPTIONS.find((item) => item.value === source)
+  return row?.label || source || 'unknown'
+}
+
+function formatCapabilityLabel(capability: string): string {
+  const row = TOOL_CAPABILITY_OPTIONS.find((item) => item.value === capability)
+  return row?.label || capability
+}
+
+function toDateTimeLocalValue(input?: number): string {
+  if (!input || !Number.isFinite(input)) return ''
+  const date = new Date(input)
+  const pad = (n: number) => String(n).padStart(2, '0')
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`
 }
 
 function normalizeShortcutKey(event: KeyboardEvent) {
@@ -255,6 +310,28 @@ export default function SettingsView({ section, onSectionChange, onClose, onOpen
   const [denyHostDraft, setDenyHostDraft] = useState('')
   const [denyCidrDraft, setDenyCidrDraft] = useState('')
   const [denyPrefixDraft, setDenyPrefixDraft] = useState('')
+  const [appCapabilityDraft, setAppCapabilityDraft] = useState('')
+  const [skillCapabilityDraft, setSkillCapabilityDraft] = useState('')
+  const [networkSkillCapabilityDraft, setNetworkSkillCapabilityDraft] = useState('')
+  const [skillRecords, setSkillRecords] = useState<AiSkillRecord[]>([])
+  const [grantTargetSkillId, setGrantTargetSkillId] = useState('')
+  const [grantTargetSource, setGrantTargetSource] = useState<'manual' | 'local-dir' | 'zip' | 'json' | 'builtin' | 'system'>('zip')
+  const [grantFilterSkillId, setGrantFilterSkillId] = useState<'all' | string>('all')
+  const [grantDraft, setGrantDraft] = useState<{
+    targetType: 'skill' | 'source'
+    skillId: string
+    source: 'manual' | 'local-dir' | 'zip' | 'json' | 'builtin' | 'system'
+    capability: string
+    decision: 'allow' | 'deny'
+    expiresAt: string
+  }>({
+    targetType: 'skill',
+    skillId: '',
+    source: 'zip',
+    capability: 'shell.exec',
+    decision: 'deny',
+    expiresAt: ''
+  })
   const [runScriptDraft, setRunScriptDraft] = useState({
     id: '',
     command: '',
@@ -308,7 +385,65 @@ export default function SettingsView({ section, onSectionChange, onClose, onOpen
     void loadAudit()
   }, [section, settings?.commandRunner.audit.records.length])
 
+  useEffect(() => {
+    if (section !== 'security') return
+    const loadSkills = async () => {
+      try {
+        const list = await window.intools.ai.skills.list()
+        setSkillRecords(list)
+      } catch {
+        setSkillRecords([])
+      }
+    }
+    void loadSkills()
+  }, [section])
+
+  useEffect(() => {
+    if (skillRecords.length === 0) {
+      setGrantTargetSkillId('')
+      return
+    }
+    setGrantTargetSkillId((prev) => {
+      if (prev && skillRecords.some((item) => item.id === prev)) return prev
+      return skillRecords[0]?.id || ''
+    })
+  }, [skillRecords])
+
   const sources = settings?.storeSources ?? []
+  const skillMap = useMemo(() => {
+    return new Map(skillRecords.map((item) => [item.id, item]))
+  }, [skillRecords])
+  const visibleCapabilityGrants = useMemo(() => {
+    if (!settings) return []
+    const grants = settings.aiTooling.capabilityPolicy.grants || []
+    if (grantFilterSkillId === 'all') return grants
+    return grants.filter((item) => item.skillId === grantFilterSkillId)
+  }, [settings, grantFilterSkillId])
+  const skillCapabilityDecisionMap = useMemo(() => {
+    const result = new Map<string, 'allow' | 'deny'>()
+    if (!settings || !grantTargetSkillId) return result
+    const now = Date.now()
+    for (const grant of settings.aiTooling.capabilityPolicy.grants || []) {
+      if (grant.skillId !== grantTargetSkillId) continue
+      if (!grant.capability) continue
+      if (grant.expiresAt && grant.expiresAt <= now) continue
+      result.set(grant.capability, grant.decision)
+    }
+    return result
+  }, [settings, grantTargetSkillId])
+  const sourceCapabilityDecisionMap = useMemo(() => {
+    const result = new Map<string, 'allow' | 'deny'>()
+    if (!settings || !grantTargetSource) return result
+    const now = Date.now()
+    for (const grant of settings.aiTooling.capabilityPolicy.grants || []) {
+      if (grant.skillId) continue
+      if (grant.source !== grantTargetSource) continue
+      if (!grant.capability) continue
+      if (grant.expiresAt && grant.expiresAt <= now) continue
+      result.set(grant.capability, grant.decision)
+    }
+    return result
+  }, [settings, grantTargetSource])
 
   const updateSettings = async (partial: Partial<AppSettings>) => {
     const result = await window.intools.settings.update(partial)
@@ -387,6 +522,16 @@ export default function SettingsView({ section, onSectionChange, onClose, onOpen
     await updateAiTooling({
       runScript: {
         ...settings.aiTooling.runScript,
+        ...patch
+      }
+    })
+  }
+
+  const updateAiCapabilityPolicy = async (patch: Partial<AppSettings['aiTooling']['capabilityPolicy']>) => {
+    if (!settings) return
+    await updateAiTooling({
+      capabilityPolicy: {
+        ...settings.aiTooling.capabilityPolicy,
         ...patch
       }
     })
@@ -488,6 +633,155 @@ export default function SettingsView({ section, onSectionChange, onClose, onOpen
     if (!settings) return
     const next = (settings.aiTooling.http.denyUrlPrefixes || []).filter((item) => item !== value)
     await updateAiHttp({ denyUrlPrefixes: next })
+  }
+
+  const addCapabilityToPolicyList = async (
+    key: 'defaultAppCapabilities' | 'defaultSkillCapabilities' | 'defaultNetworkSkillCapabilities',
+    draft: string,
+    reset: () => void
+  ) => {
+    if (!settings) return
+    const next = addUniqueListItem(settings.aiTooling.capabilityPolicy[key] || [], draft)
+    if (next.length === settings.aiTooling.capabilityPolicy[key].length) return
+    await updateAiCapabilityPolicy({ [key]: next })
+    reset()
+  }
+
+  const removeCapabilityFromPolicyList = async (
+    key: 'defaultAppCapabilities' | 'defaultSkillCapabilities' | 'defaultNetworkSkillCapabilities',
+    capability: string
+  ) => {
+    if (!settings) return
+    const next = (settings.aiTooling.capabilityPolicy[key] || []).filter((item) => item !== capability)
+    await updateAiCapabilityPolicy({ [key]: next })
+  }
+
+  const addCapabilityGrant = async () => {
+    if (!settings) return
+    const capability = grantDraft.capability.trim()
+    if (!capability) return
+
+    const skillId = grantDraft.targetType === 'skill'
+      ? grantDraft.skillId.trim() || undefined
+      : undefined
+    const source = grantDraft.targetType === 'source'
+      ? grantDraft.source
+      : undefined
+
+    if (!skillId && !source) return
+
+    const exists = (settings.aiTooling.capabilityPolicy.grants || []).some((item) =>
+      item.capability === capability &&
+      item.decision === grantDraft.decision &&
+      (item.skillId || undefined) === skillId &&
+      (item.source || undefined) === source
+    )
+    if (exists) return
+
+    const now = Date.now()
+    const expiresAtMs = grantDraft.expiresAt ? Date.parse(grantDraft.expiresAt) : undefined
+    const expiresAt = Number.isFinite(expiresAtMs || NaN) ? expiresAtMs : undefined
+
+    const nextGrant: AiToolCapabilityGrant = {
+      id: `grant-${now}-${Math.random().toString(36).slice(2, 8)}`,
+      capability,
+      decision: grantDraft.decision,
+      skillId,
+      source,
+      createdAt: now,
+      updatedAt: now,
+      expiresAt
+    }
+
+    await updateAiCapabilityPolicy({
+      grants: [...(settings.aiTooling.capabilityPolicy.grants || []), nextGrant]
+    })
+
+    setGrantDraft((prev) => ({
+      ...prev,
+      expiresAt: ''
+    }))
+  }
+
+  const removeCapabilityGrant = async (grantId: string) => {
+    if (!settings) return
+    const next = (settings.aiTooling.capabilityPolicy.grants || []).filter((item) => item.id !== grantId)
+    await updateAiCapabilityPolicy({ grants: next })
+  }
+
+  const patchCapabilityGrant = async (grantId: string, patch: Partial<AiToolCapabilityGrant>) => {
+    if (!settings) return
+    const now = Date.now()
+    const next = (settings.aiTooling.capabilityPolicy.grants || []).map((item) => (
+      item.id === grantId
+        ? {
+            ...item,
+            ...patch,
+            updatedAt: now
+          }
+        : item
+    ))
+    await updateAiCapabilityPolicy({ grants: next })
+  }
+
+  const setSkillCapabilityGrantDecision = async (
+    skillId: string,
+    capability: string,
+    decision: 'allow' | 'deny' | 'inherit'
+  ) => {
+    if (!settings) return
+    const normalizedSkillId = skillId.trim()
+    const normalizedCapability = capability.trim()
+    if (!normalizedSkillId || !normalizedCapability) return
+    const current = settings.aiTooling.capabilityPolicy.grants || []
+    const filtered = current.filter((item) => !(item.skillId === normalizedSkillId && item.capability === normalizedCapability))
+    if (decision === 'inherit') {
+      if (filtered.length === current.length) return
+      await updateAiCapabilityPolicy({ grants: filtered })
+      return
+    }
+
+    const now = Date.now()
+    const nextGrant: AiToolCapabilityGrant = {
+      id: `grant-${now}-${Math.random().toString(36).slice(2, 8)}`,
+      capability: normalizedCapability,
+      decision,
+      skillId: normalizedSkillId,
+      createdAt: now,
+      updatedAt: now
+    }
+    await updateAiCapabilityPolicy({
+      grants: [...filtered, nextGrant]
+    })
+  }
+
+  const setSourceCapabilityGrantDecision = async (
+    source: 'manual' | 'local-dir' | 'zip' | 'json' | 'builtin' | 'system',
+    capability: string,
+    decision: 'allow' | 'deny' | 'inherit'
+  ) => {
+    if (!settings) return
+    const normalizedCapability = capability.trim()
+    if (!source || !normalizedCapability) return
+    const current = settings.aiTooling.capabilityPolicy.grants || []
+    const filtered = current.filter((item) => !(!item.skillId && item.source === source && item.capability === normalizedCapability))
+    if (decision === 'inherit') {
+      if (filtered.length === current.length) return
+      await updateAiCapabilityPolicy({ grants: filtered })
+      return
+    }
+    const now = Date.now()
+    const nextGrant: AiToolCapabilityGrant = {
+      id: `grant-${now}-${Math.random().toString(36).slice(2, 8)}`,
+      capability: normalizedCapability,
+      decision,
+      source,
+      createdAt: now,
+      updatedAt: now
+    }
+    await updateAiCapabilityPolicy({
+      grants: [...filtered, nextGrant]
+    })
   }
 
   const updateRunScriptEntry = async (
@@ -678,7 +972,7 @@ export default function SettingsView({ section, onSectionChange, onClose, onOpen
             </svg>
           </button>
           <div>
-            <div className="text-xs uppercase tracking-[0.35em] text-slate-500 dark:text-slate-400">Settings</div>
+            <div className="text-xs uppercase tracking-[0.35em] text-slate-500 dark:text-slate-400">Settings / 设置</div>
             <div className="text-lg font-semibold text-slate-900 dark:text-slate-100">{currentSectionLabel}</div>
           </div>
         </div>
@@ -891,6 +1185,9 @@ export default function SettingsView({ section, onSectionChange, onClose, onOpen
                 <div className="space-y-5">
                   <div className={`${cardClass} space-y-4`}>
                     <div className="text-sm font-medium text-slate-900 dark:text-white">命令执行总开关</div>
+                    <div className="text-xs text-slate-500 dark:text-slate-400">
+                      这部分控制 `shell:runCommand` 的统一安全策略（独立于 Skill capability 授权层）。
+                    </div>
                     <div className="flex items-center justify-between border-b border-slate-200/80 pb-3 dark:border-slate-800/80">
                       <div>
                         <div className="text-sm text-slate-900 dark:text-white">启用 runCommand</div>
@@ -1049,10 +1346,351 @@ export default function SettingsView({ section, onSectionChange, onClose, onOpen
                   </div>
 
                   <div className={`${cardClass} space-y-4`}>
-                    <div className="text-sm font-medium text-slate-900 dark:text-white">allowedRoots / allowedRepoRoots</div>
+                    <div className="space-y-1">
+                      <div className="text-sm font-medium text-slate-900 dark:text-white">能力授权策略（Capability Policy）</div>
+                      <div className="text-xs text-slate-500 dark:text-slate-400">
+                        用于控制 AI 在不同来源 Skill 下可调用的能力。默认值决定基线，grants 用于按 Skill/来源逐条放行或拒绝。
+                        优先级：显式 grant &gt; 默认能力列表。
+                      </div>
+                    </div>
+
+                    <div className="space-y-3 rounded-2xl border border-slate-200/80 bg-white/70 p-3 dark:border-slate-800 dark:bg-slate-950/70">
+                      <div className="text-xs font-medium text-slate-700 dark:text-slate-200">
+                        按 Skill 管理能力（快速设置：允许 / 拒绝 / 继承默认）
+                      </div>
+                      <div className="text-xs text-slate-500 dark:text-slate-400">
+                        这里的操作会直接写入 grants。点击“继承默认”会删除该 Skill 对应能力的显式 grant。
+                      </div>
+                      <select
+                        className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs dark:border-slate-800 dark:bg-slate-950"
+                        value={grantTargetSkillId}
+                        onChange={(e) => setGrantTargetSkillId(e.target.value)}
+                      >
+                        <option value="">选择 Skill</option>
+                        {skillRecords.map((item) => (
+                          <option key={`grant-target-${item.id}`} value={item.id}>
+                            {item.descriptor.name || item.id}（{item.id}）
+                          </option>
+                        ))}
+                      </select>
+
+                      {grantTargetSkillId ? (
+                        <div className="space-y-2">
+                          {TOOL_CAPABILITY_OPTIONS.map((capability) => {
+                            const current = skillCapabilityDecisionMap.get(capability.value) || 'inherit'
+                            return (
+                              <div
+                                key={`skill-cap-row-${grantTargetSkillId}-${capability.value}`}
+                                className="grid grid-cols-1 gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs dark:border-slate-800 dark:bg-slate-950 sm:grid-cols-[minmax(0,1fr)_74px_74px_90px]"
+                              >
+                                <div className="truncate text-slate-700 dark:text-slate-200">{capability.label}</div>
+                                <button
+                                  className={current === 'allow' ? primaryPillClass : pillClass}
+                                  onClick={() => void setSkillCapabilityGrantDecision(grantTargetSkillId, capability.value, 'allow')}
+                                >
+                                  allow 允许
+                                </button>
+                                <button
+                                  className={current === 'deny' ? primaryPillClass : pillClass}
+                                  onClick={() => void setSkillCapabilityGrantDecision(grantTargetSkillId, capability.value, 'deny')}
+                                >
+                                  deny 拒绝
+                                </button>
+                                <button
+                                  className={current === 'inherit' ? primaryPillClass : pillClass}
+                                  onClick={() => void setSkillCapabilityGrantDecision(grantTargetSkillId, capability.value, 'inherit')}
+                                >
+                                  继承默认
+                                </button>
+                              </div>
+                            )
+                          })}
+                        </div>
+                      ) : (
+                        <div className="text-xs text-slate-500 dark:text-slate-400">请选择一个 Skill 后再配置能力。</div>
+                      )}
+                    </div>
+
+                    <div className="space-y-3 rounded-2xl border border-slate-200/80 bg-white/70 p-3 dark:border-slate-800 dark:bg-slate-950/70">
+                      <div className="text-xs font-medium text-slate-700 dark:text-slate-200">
+                        按来源（source）批量管理能力矩阵
+                      </div>
+                      <div className="text-xs text-slate-500 dark:text-slate-400">
+                        适合统一管理网络来源 Skill（如 zip/json）权限；点击“继承默认”会删除该来源的显式 grant。
+                      </div>
+                      <select
+                        className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs dark:border-slate-800 dark:bg-slate-950"
+                        value={grantTargetSource}
+                        onChange={(e) => setGrantTargetSource(e.target.value as typeof grantTargetSource)}
+                      >
+                        {SKILL_SOURCE_OPTIONS.map((item) => (
+                          <option key={`grant-target-source-${item.value}`} value={item.value}>
+                            {item.label}
+                          </option>
+                        ))}
+                      </select>
+                      <div className="space-y-2">
+                        {TOOL_CAPABILITY_OPTIONS.map((capability) => {
+                          const current = sourceCapabilityDecisionMap.get(capability.value) || 'inherit'
+                          return (
+                            <div
+                              key={`source-cap-row-${grantTargetSource}-${capability.value}`}
+                              className="grid grid-cols-1 gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs dark:border-slate-800 dark:bg-slate-950 sm:grid-cols-[minmax(0,1fr)_74px_74px_90px]"
+                            >
+                              <div className="truncate text-slate-700 dark:text-slate-200">{capability.label}</div>
+                              <button
+                                className={current === 'allow' ? primaryPillClass : pillClass}
+                                onClick={() => void setSourceCapabilityGrantDecision(grantTargetSource, capability.value, 'allow')}
+                              >
+                                allow 允许
+                              </button>
+                              <button
+                                className={current === 'deny' ? primaryPillClass : pillClass}
+                                onClick={() => void setSourceCapabilityGrantDecision(grantTargetSource, capability.value, 'deny')}
+                              >
+                                deny 拒绝
+                              </button>
+                              <button
+                                className={current === 'inherit' ? primaryPillClass : pillClass}
+                                onClick={() => void setSourceCapabilityGrantDecision(grantTargetSource, capability.value, 'inherit')}
+                              >
+                                继承默认
+                              </button>
+                            </div>
+                          )
+                        })}
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 gap-3">
+                      <div className="rounded-2xl border border-slate-200/80 bg-white/70 p-3 dark:border-slate-800 dark:bg-slate-950/70">
+                        <div className="mb-2 text-xs font-medium text-slate-700 dark:text-slate-200">defaultAppCapabilities（普通 AI 调用默认能力）</div>
+                        <div className="mb-2 flex flex-wrap gap-2">
+                          {(settings.aiTooling.capabilityPolicy.defaultAppCapabilities || []).map((item) => (
+                            <button
+                              key={`default-app-cap-${item}`}
+                              className={pillClass}
+                              onClick={() => void removeCapabilityFromPolicyList('defaultAppCapabilities', item)}
+                              title="点击删除"
+                            >
+                              {formatCapabilityLabel(item)}
+                            </button>
+                          ))}
+                        </div>
+                        <div className="grid grid-cols-1 gap-2 sm:grid-cols-[minmax(0,1fr)_100px]">
+                          <input
+                            className="rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm dark:border-slate-800 dark:bg-slate-950"
+                            placeholder="输入 capability，支持逗号或换行批量"
+                            value={appCapabilityDraft}
+                            onChange={(e) => setAppCapabilityDraft(e.target.value)}
+                          />
+                          <button
+                            className={actionButtonClass}
+                            onClick={() => void addCapabilityToPolicyList('defaultAppCapabilities', appCapabilityDraft, () => setAppCapabilityDraft(''))}
+                          >
+                            新增
+                          </button>
+                        </div>
+                      </div>
+
+                      <div className="rounded-2xl border border-slate-200/80 bg-white/70 p-3 dark:border-slate-800 dark:bg-slate-950/70">
+                        <div className="mb-2 text-xs font-medium text-slate-700 dark:text-slate-200">defaultSkillCapabilities（本地/可信 Skill 默认能力）</div>
+                        <div className="mb-2 flex flex-wrap gap-2">
+                          {(settings.aiTooling.capabilityPolicy.defaultSkillCapabilities || []).map((item) => (
+                            <button
+                              key={`default-skill-cap-${item}`}
+                              className={pillClass}
+                              onClick={() => void removeCapabilityFromPolicyList('defaultSkillCapabilities', item)}
+                              title="点击删除"
+                            >
+                              {formatCapabilityLabel(item)}
+                            </button>
+                          ))}
+                        </div>
+                        <div className="grid grid-cols-1 gap-2 sm:grid-cols-[minmax(0,1fr)_100px]">
+                          <input
+                            className="rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm dark:border-slate-800 dark:bg-slate-950"
+                            placeholder="输入 capability，支持逗号或换行批量"
+                            value={skillCapabilityDraft}
+                            onChange={(e) => setSkillCapabilityDraft(e.target.value)}
+                          />
+                          <button
+                            className={actionButtonClass}
+                            onClick={() => void addCapabilityToPolicyList('defaultSkillCapabilities', skillCapabilityDraft, () => setSkillCapabilityDraft(''))}
+                          >
+                            新增
+                          </button>
+                        </div>
+                      </div>
+
+                      <div className="rounded-2xl border border-slate-200/80 bg-white/70 p-3 dark:border-slate-800 dark:bg-slate-950/70">
+                        <div className="mb-2 text-xs font-medium text-slate-700 dark:text-slate-200">defaultNetworkSkillCapabilities（网络 Skill 默认最小权限）</div>
+                        <div className="mb-2 flex flex-wrap gap-2">
+                          {(settings.aiTooling.capabilityPolicy.defaultNetworkSkillCapabilities || []).map((item) => (
+                            <button
+                              key={`default-network-cap-${item}`}
+                              className={pillClass}
+                              onClick={() => void removeCapabilityFromPolicyList('defaultNetworkSkillCapabilities', item)}
+                              title="点击删除"
+                            >
+                              {formatCapabilityLabel(item)}
+                            </button>
+                          ))}
+                        </div>
+                        <div className="grid grid-cols-1 gap-2 sm:grid-cols-[minmax(0,1fr)_100px]">
+                          <input
+                            className="rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm dark:border-slate-800 dark:bg-slate-950"
+                            placeholder="输入 capability，支持逗号或换行批量"
+                            value={networkSkillCapabilityDraft}
+                            onChange={(e) => setNetworkSkillCapabilityDraft(e.target.value)}
+                          />
+                          <button
+                            className={actionButtonClass}
+                            onClick={() => void addCapabilityToPolicyList('defaultNetworkSkillCapabilities', networkSkillCapabilityDraft, () => setNetworkSkillCapabilityDraft(''))}
+                          >
+                            新增
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="space-y-3 rounded-2xl border border-slate-200/80 bg-white/70 p-3 dark:border-slate-800 dark:bg-slate-950/70">
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="text-xs font-medium text-slate-700 dark:text-slate-200">
+                          grants（按 Skill / 来源定向放权）
+                        </div>
+                        <select
+                          className="rounded-xl border border-slate-200 bg-white px-2 py-1 text-xs dark:border-slate-800 dark:bg-slate-950"
+                          value={grantFilterSkillId}
+                          onChange={(e) => setGrantFilterSkillId(e.target.value)}
+                        >
+                          <option value="all">全部 Skill</option>
+                          {skillRecords.map((item) => (
+                            <option key={`grant-filter-${item.id}`} value={item.id}>
+                              {item.descriptor.name || item.id}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+
+                      <div className="space-y-2">
+                        {(visibleCapabilityGrants || []).map((grant) => {
+                          const skill = grant.skillId ? skillMap.get(grant.skillId) : undefined
+                          return (
+                            <div
+                              key={grant.id}
+                              className="grid grid-cols-1 gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs dark:border-slate-800 dark:bg-slate-950 sm:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)_120px_140px_70px]"
+                            >
+                              <div className="truncate text-slate-700 dark:text-slate-200">
+                                {formatCapabilityLabel(grant.capability)}
+                              </div>
+                              <div className="truncate text-slate-500 dark:text-slate-400">
+                                {grant.skillId
+                                  ? `Skill: ${skill?.descriptor.name || grant.skillId}`
+                                  : `来源: ${formatSkillSource(String(grant.source || ''))}`}
+                              </div>
+                              <select
+                                className="rounded-xl border border-slate-200 bg-white px-2 py-1 text-xs dark:border-slate-800 dark:bg-slate-950"
+                                value={grant.decision}
+                                onChange={(e) => void patchCapabilityGrant(grant.id, { decision: e.target.value as 'allow' | 'deny' })}
+                              >
+                                <option value="allow">allow（允许）</option>
+                                <option value="deny">deny（拒绝）</option>
+                              </select>
+                              <input
+                                type="datetime-local"
+                                className="rounded-xl border border-slate-200 bg-white px-2 py-1 text-xs dark:border-slate-800 dark:bg-slate-950"
+                                value={toDateTimeLocalValue(grant.expiresAt)}
+                                onChange={(e) => {
+                                  const text = e.target.value
+                                  const parsed = text ? Date.parse(text) : undefined
+                                  void patchCapabilityGrant(grant.id, { expiresAt: Number.isFinite(parsed || NaN) ? parsed : undefined })
+                                }}
+                              />
+                              <button className={actionButtonClass} onClick={() => void removeCapabilityGrant(grant.id)}>删除</button>
+                            </div>
+                          )
+                        })}
+                        {(visibleCapabilityGrants || []).length === 0 && (
+                          <div className="text-xs text-slate-500 dark:text-slate-400">暂无 grant 规则。</div>
+                        )}
+                      </div>
+
+                      <div className="space-y-2 rounded-xl border border-dashed border-slate-300 p-3 dark:border-slate-700">
+                        <div className="text-xs font-medium text-slate-700 dark:text-slate-200">新增 grant</div>
+                        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                          <select
+                            className="rounded-xl border border-slate-200 bg-white px-2 py-1 text-xs dark:border-slate-800 dark:bg-slate-950"
+                            value={grantDraft.targetType}
+                            onChange={(e) => setGrantDraft((prev) => ({ ...prev, targetType: e.target.value as 'skill' | 'source' }))}
+                          >
+                            <option value="skill">按 Skill 生效</option>
+                            <option value="source">按来源生效</option>
+                          </select>
+                          <select
+                            className="rounded-xl border border-slate-200 bg-white px-2 py-1 text-xs dark:border-slate-800 dark:bg-slate-950"
+                            value={grantDraft.capability}
+                            onChange={(e) => setGrantDraft((prev) => ({ ...prev, capability: e.target.value }))}
+                          >
+                            {TOOL_CAPABILITY_OPTIONS.map((item) => (
+                              <option key={`cap-option-${item.value}`} value={item.value}>{item.label}</option>
+                            ))}
+                          </select>
+
+                          {grantDraft.targetType === 'skill' ? (
+                            <select
+                              className="rounded-xl border border-slate-200 bg-white px-2 py-1 text-xs dark:border-slate-800 dark:bg-slate-950"
+                              value={grantDraft.skillId}
+                              onChange={(e) => setGrantDraft((prev) => ({ ...prev, skillId: e.target.value }))}
+                            >
+                              <option value="">选择 Skill</option>
+                              {skillRecords.map((item) => (
+                                <option key={`grant-skill-${item.id}`} value={item.id}>
+                                  {item.descriptor.name || item.id}（{item.id}）
+                                </option>
+                              ))}
+                            </select>
+                          ) : (
+                            <select
+                              className="rounded-xl border border-slate-200 bg-white px-2 py-1 text-xs dark:border-slate-800 dark:bg-slate-950"
+                              value={grantDraft.source}
+                              onChange={(e) => setGrantDraft((prev) => ({ ...prev, source: e.target.value as typeof prev.source }))}
+                            >
+                              {SKILL_SOURCE_OPTIONS.map((item) => (
+                                <option key={`grant-source-${item.value}`} value={item.value}>{item.label}</option>
+                              ))}
+                            </select>
+                          )}
+
+                          <select
+                            className="rounded-xl border border-slate-200 bg-white px-2 py-1 text-xs dark:border-slate-800 dark:bg-slate-950"
+                            value={grantDraft.decision}
+                            onChange={(e) => setGrantDraft((prev) => ({ ...prev, decision: e.target.value as 'allow' | 'deny' }))}
+                          >
+                            <option value="allow">allow（允许）</option>
+                            <option value="deny">deny（拒绝）</option>
+                          </select>
+
+                          <input
+                            type="datetime-local"
+                            className="rounded-xl border border-slate-200 bg-white px-2 py-1 text-xs dark:border-slate-800 dark:bg-slate-950 sm:col-span-2"
+                            placeholder="过期时间（可选）"
+                            value={grantDraft.expiresAt}
+                            onChange={(e) => setGrantDraft((prev) => ({ ...prev, expiresAt: e.target.value }))}
+                          />
+                        </div>
+                        <div className="flex justify-end">
+                          <button className={actionButtonClass} onClick={() => void addCapabilityGrant()}>新增 grant</button>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className={`${cardClass} space-y-4`}>
+                    <div className="text-sm font-medium text-slate-900 dark:text-white">路径白名单（allowedRoots / allowedRepoRoots）</div>
                     <div className="space-y-4">
                       <div className="space-y-2">
-                        <div className="text-xs text-slate-500 dark:text-slate-400">filesystem.allowedRoots</div>
+                        <div className="text-xs text-slate-500 dark:text-slate-400">filesystem.allowedRoots（文件读取/检索范围）</div>
                         <div className="space-y-2">
                           {(settings.aiTooling.filesystem.allowedRoots || []).map((item) => (
                             <div key={`fs-${item}`} className="flex items-center justify-between gap-2 rounded-xl border border-slate-200/80 bg-white/70 px-3 py-2 text-xs dark:border-slate-800 dark:bg-slate-950/70">
@@ -1073,7 +1711,7 @@ export default function SettingsView({ section, onSectionChange, onClose, onOpen
                       </div>
 
                       <div className="space-y-2">
-                        <div className="text-xs text-slate-500 dark:text-slate-400">patch.allowedRoots</div>
+                        <div className="text-xs text-slate-500 dark:text-slate-400">patch.allowedRoots（补丁应用范围）</div>
                         <div className="space-y-2">
                           {(settings.aiTooling.patch.allowedRoots || []).map((item) => (
                             <div key={`patch-${item}`} className="flex items-center justify-between gap-2 rounded-xl border border-slate-200/80 bg-white/70 px-3 py-2 text-xs dark:border-slate-800 dark:bg-slate-950/70">
@@ -1094,7 +1732,7 @@ export default function SettingsView({ section, onSectionChange, onClose, onOpen
                       </div>
 
                       <div className="space-y-2">
-                        <div className="text-xs text-slate-500 dark:text-slate-400">git.allowedRepoRoots</div>
+                        <div className="text-xs text-slate-500 dark:text-slate-400">git.allowedRepoRoots（Git 仓库范围）</div>
                         <div className="space-y-2">
                           {(settings.aiTooling.git.allowedRepoRoots || []).map((item) => (
                             <div key={`git-${item}`} className="flex items-center justify-between gap-2 rounded-xl border border-slate-200/80 bg-white/70 px-3 py-2 text-xs dark:border-slate-800 dark:bg-slate-950/70">
@@ -1142,7 +1780,7 @@ export default function SettingsView({ section, onSectionChange, onClose, onOpen
                     </div>
 
                     <div className="space-y-2">
-                      <div className="text-xs text-slate-500 dark:text-slate-400">denyHosts</div>
+                      <div className="text-xs text-slate-500 dark:text-slate-400">denyHosts（拒绝访问的域名）</div>
                       {(settings.aiTooling.http.denyHosts || []).map((item) => (
                         <div key={`deny-host-${item}`} className="flex items-center justify-between gap-2 rounded-xl border border-slate-200/80 bg-white/70 px-3 py-2 text-xs dark:border-slate-800 dark:bg-slate-950/70">
                           <div className="truncate">{item}</div>
@@ -1161,7 +1799,7 @@ export default function SettingsView({ section, onSectionChange, onClose, onOpen
                     </div>
 
                     <div className="space-y-2">
-                      <div className="text-xs text-slate-500 dark:text-slate-400">denyCidrs</div>
+                      <div className="text-xs text-slate-500 dark:text-slate-400">denyCidrs（拒绝访问的网段）</div>
                       {(settings.aiTooling.http.denyCidrs || []).map((item) => (
                         <div key={`deny-cidr-${item}`} className="flex items-center justify-between gap-2 rounded-xl border border-slate-200/80 bg-white/70 px-3 py-2 text-xs dark:border-slate-800 dark:bg-slate-950/70">
                           <div className="truncate">{item}</div>
@@ -1180,7 +1818,7 @@ export default function SettingsView({ section, onSectionChange, onClose, onOpen
                     </div>
 
                     <div className="space-y-2">
-                      <div className="text-xs text-slate-500 dark:text-slate-400">denyUrlPrefixes</div>
+                      <div className="text-xs text-slate-500 dark:text-slate-400">denyUrlPrefixes（拒绝访问的 URL 前缀）</div>
                       {(settings.aiTooling.http.denyUrlPrefixes || []).map((item) => (
                         <div key={`deny-prefix-${item}`} className="flex items-center justify-between gap-2 rounded-xl border border-slate-200/80 bg-white/70 px-3 py-2 text-xs dark:border-slate-800 dark:bg-slate-950/70">
                           <div className="truncate">{item}</div>
@@ -1200,7 +1838,12 @@ export default function SettingsView({ section, onSectionChange, onClose, onOpen
                   </div>
 
                   <div className={`${cardClass} space-y-4`}>
-                    <div className="text-sm font-medium text-slate-900 dark:text-white">runScript 注册表</div>
+                    <div className="space-y-1">
+                      <div className="text-sm font-medium text-slate-900 dark:text-white">runScript 注册表（预置脚本白名单）</div>
+                      <div className="text-xs text-slate-500 dark:text-slate-400">
+                        仅对 `shell.script` 能力生效；不影响 `shell.exec` 的直接命令执行。
+                      </div>
+                    </div>
                     <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                       <label className="space-y-1">
                         <div className="text-xs text-slate-500 dark:text-slate-400">默认超时（ms）</div>
@@ -1230,25 +1873,25 @@ export default function SettingsView({ section, onSectionChange, onClose, onOpen
                           <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                             <input
                               className="rounded-xl border border-slate-200 bg-white px-2 py-1 text-xs dark:border-slate-800 dark:bg-slate-950"
-                              placeholder="scriptId"
+                              placeholder="脚本 ID（scriptId）"
                               value={entry.id}
                               onChange={(e) => void updateRunScriptEntry(index, { id: e.target.value })}
                             />
                             <input
                               className="rounded-xl border border-slate-200 bg-white px-2 py-1 text-xs dark:border-slate-800 dark:bg-slate-950"
-                              placeholder="command"
+                              placeholder="命令（command）"
                               value={entry.command}
                               onChange={(e) => void updateRunScriptEntry(index, { command: e.target.value })}
                             />
                             <input
                               className="rounded-xl border border-slate-200 bg-white px-2 py-1 text-xs dark:border-slate-800 dark:bg-slate-950"
-                              placeholder="args（逗号分隔）"
+                              placeholder="参数 args（逗号分隔）"
                               value={(entry.args || []).join(', ')}
                               onChange={(e) => void updateRunScriptEntry(index, { args: parseListDraft(e.target.value) })}
                             />
                             <input
                               className="rounded-xl border border-slate-200 bg-white px-2 py-1 text-xs dark:border-slate-800 dark:bg-slate-950"
-                              placeholder="cwd（可选）"
+                              placeholder="工作目录 cwd（可选）"
                               value={entry.cwd || ''}
                               onChange={(e) => void updateRunScriptEntry(index, { cwd: e.target.value || undefined })}
                             />
@@ -1256,7 +1899,7 @@ export default function SettingsView({ section, onSectionChange, onClose, onOpen
                               type="number"
                               min={1000}
                               className="rounded-xl border border-slate-200 bg-white px-2 py-1 text-xs dark:border-slate-800 dark:bg-slate-950"
-                              placeholder="timeoutMs（可选）"
+                              placeholder="超时 timeoutMs（可选）"
                               value={entry.timeoutMs || ''}
                               onChange={(e) => {
                                 const num = Number(e.target.value || 0)
@@ -1265,7 +1908,7 @@ export default function SettingsView({ section, onSectionChange, onClose, onOpen
                             />
                             <input
                               className="rounded-xl border border-slate-200 bg-white px-2 py-1 text-xs dark:border-slate-800 dark:bg-slate-950"
-                              placeholder="allowEnvKeys（逗号分隔）"
+                              placeholder="允许环境变量 allowEnvKeys（逗号分隔）"
                               value={(entry.allowEnvKeys || []).join(', ')}
                               onChange={(e) => void updateRunScriptEntry(index, { allowEnvKeys: parseListDraft(e.target.value) })}
                             />
@@ -1285,25 +1928,25 @@ export default function SettingsView({ section, onSectionChange, onClose, onOpen
                       <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                         <input
                           className="rounded-xl border border-slate-200 bg-white px-2 py-1 text-xs dark:border-slate-800 dark:bg-slate-950"
-                          placeholder="scriptId"
+                          placeholder="脚本 ID（scriptId）"
                           value={runScriptDraft.id}
                           onChange={(e) => setRunScriptDraft((prev) => ({ ...prev, id: e.target.value }))}
                         />
                         <input
                           className="rounded-xl border border-slate-200 bg-white px-2 py-1 text-xs dark:border-slate-800 dark:bg-slate-950"
-                          placeholder="command"
+                          placeholder="命令（command）"
                           value={runScriptDraft.command}
                           onChange={(e) => setRunScriptDraft((prev) => ({ ...prev, command: e.target.value }))}
                         />
                         <input
                           className="rounded-xl border border-slate-200 bg-white px-2 py-1 text-xs dark:border-slate-800 dark:bg-slate-950"
-                          placeholder="args（逗号分隔）"
+                          placeholder="参数 args（逗号分隔）"
                           value={runScriptDraft.args}
                           onChange={(e) => setRunScriptDraft((prev) => ({ ...prev, args: e.target.value }))}
                         />
                         <input
                           className="rounded-xl border border-slate-200 bg-white px-2 py-1 text-xs dark:border-slate-800 dark:bg-slate-950"
-                          placeholder="cwd（可选）"
+                          placeholder="工作目录 cwd（可选）"
                           value={runScriptDraft.cwd}
                           onChange={(e) => setRunScriptDraft((prev) => ({ ...prev, cwd: e.target.value }))}
                         />
@@ -1311,13 +1954,13 @@ export default function SettingsView({ section, onSectionChange, onClose, onOpen
                           type="number"
                           min={1000}
                           className="rounded-xl border border-slate-200 bg-white px-2 py-1 text-xs dark:border-slate-800 dark:bg-slate-950"
-                          placeholder="timeoutMs（可选）"
+                          placeholder="超时 timeoutMs（可选）"
                           value={runScriptDraft.timeoutMs}
                           onChange={(e) => setRunScriptDraft((prev) => ({ ...prev, timeoutMs: e.target.value }))}
                         />
                         <input
                           className="rounded-xl border border-slate-200 bg-white px-2 py-1 text-xs dark:border-slate-800 dark:bg-slate-950"
-                          placeholder="allowEnvKeys（逗号分隔）"
+                          placeholder="允许环境变量 allowEnvKeys（逗号分隔）"
                           value={runScriptDraft.allowEnvKeys}
                           onChange={(e) => setRunScriptDraft((prev) => ({ ...prev, allowEnvKeys: e.target.value }))}
                         />
@@ -1330,7 +1973,7 @@ export default function SettingsView({ section, onSectionChange, onClose, onOpen
 
                   <div className={`${cardClass} space-y-4`}>
                     <div className="flex items-center justify-between">
-                      <div className="text-sm font-medium text-slate-900 dark:text-white">白名单规则</div>
+                      <div className="text-sm font-medium text-slate-900 dark:text-white">白名单规则（allowList）</div>
                       <span className="text-xs text-slate-500 dark:text-slate-400">{settings.commandRunner.allowList.length}</span>
                     </div>
                     <div className="space-y-2">
@@ -1341,8 +1984,8 @@ export default function SettingsView({ section, onSectionChange, onClose, onOpen
                             value={rule.mode}
                             onChange={(e) => void patchCommandRule('allowList', rule.id, { mode: e.target.value as 'exact' | 'prefix' })}
                           >
-                            <option value="exact">exact</option>
-                            <option value="prefix">prefix</option>
+                            <option value="exact">exact（精确匹配）</option>
+                            <option value="prefix">prefix（前缀匹配）</option>
                           </select>
                           <input
                             className="rounded-xl border border-slate-200 bg-white px-2 py-1 text-xs dark:border-slate-800 dark:bg-slate-950"
@@ -1368,12 +2011,12 @@ export default function SettingsView({ section, onSectionChange, onClose, onOpen
                         value={allowRuleDraft.mode}
                         onChange={(e) => setAllowRuleDraft((prev) => ({ ...prev, mode: e.target.value as 'exact' | 'prefix' }))}
                       >
-                        <option value="exact">exact</option>
-                        <option value="prefix">prefix</option>
+                        <option value="exact">exact（精确匹配）</option>
+                        <option value="prefix">prefix（前缀匹配）</option>
                       </select>
                       <input
                         className="rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm dark:border-slate-800 dark:bg-slate-950"
-                        placeholder="command 或 command + args 前缀"
+                        placeholder="命令或命令前缀（可包含参数）"
                         value={allowRuleDraft.value}
                         onChange={(e) => setAllowRuleDraft((prev) => ({ ...prev, value: e.target.value }))}
                       />
@@ -1383,7 +2026,7 @@ export default function SettingsView({ section, onSectionChange, onClose, onOpen
 
                   <div className={`${cardClass} space-y-4`}>
                     <div className="flex items-center justify-between">
-                      <div className="text-sm font-medium text-slate-900 dark:text-white">黑名单规则</div>
+                      <div className="text-sm font-medium text-slate-900 dark:text-white">黑名单规则（denyList）</div>
                       <span className="text-xs text-slate-500 dark:text-slate-400">{settings.commandRunner.denyList.length}</span>
                     </div>
                     <div className="space-y-2">
@@ -1394,8 +2037,8 @@ export default function SettingsView({ section, onSectionChange, onClose, onOpen
                             value={rule.mode}
                             onChange={(e) => void patchCommandRule('denyList', rule.id, { mode: e.target.value as 'exact' | 'prefix' })}
                           >
-                            <option value="exact">exact</option>
-                            <option value="prefix">prefix</option>
+                            <option value="exact">exact（精确匹配）</option>
+                            <option value="prefix">prefix（前缀匹配）</option>
                           </select>
                           <input
                             className="rounded-xl border border-slate-200 bg-white px-2 py-1 text-xs dark:border-slate-800 dark:bg-slate-950"
@@ -1418,12 +2061,12 @@ export default function SettingsView({ section, onSectionChange, onClose, onOpen
                         value={denyRuleDraft.mode}
                         onChange={(e) => setDenyRuleDraft((prev) => ({ ...prev, mode: e.target.value as 'exact' | 'prefix' }))}
                       >
-                        <option value="exact">exact</option>
-                        <option value="prefix">prefix</option>
+                        <option value="exact">exact（精确匹配）</option>
+                        <option value="prefix">prefix（前缀匹配）</option>
                       </select>
                       <input
                         className="rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm dark:border-slate-800 dark:bg-slate-950"
-                        placeholder="command 或 command + args 前缀"
+                        placeholder="命令或命令前缀（可包含参数）"
                         value={denyRuleDraft.value}
                         onChange={(e) => setDenyRuleDraft((prev) => ({ ...prev, value: e.target.value }))}
                       />
@@ -1484,11 +2127,11 @@ export default function SettingsView({ section, onSectionChange, onClose, onOpen
                                   ? 'bg-orange-100 text-orange-700 dark:bg-orange-900/40 dark:text-orange-300'
                                   : 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300'
                               }`}>
-                              {item.status}
+                              {formatCommandAuditStatus(item.status)}
                             </span>
                           </div>
                           <div className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">
-                            {item.source === 'plugin' ? `插件: ${item.pluginId || 'unknown'}` : '来源: app'}
+                            {item.source === 'plugin' ? `插件: ${item.pluginId || 'unknown'}` : '来源: 应用'}
                             {' | 退出码: '}
                             {item.exitCode ?? 'null'}
                             {' | 耗时: '}
