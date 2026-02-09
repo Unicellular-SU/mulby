@@ -458,17 +458,56 @@ interface IntoolsHttp {
   delete(url: string, headers?: Record<string, string>): Promise<HttpResponse>
 }
 
+type AiSkillSource = 'manual' | 'local-dir' | 'zip' | 'json' | 'builtin' | 'system'
+type AiSkillTrustLevel = 'untrusted' | 'reviewed' | 'trusted'
+
 type AiMessage = {
   role: 'system' | 'user' | 'assistant'
   content?: string | AiMessageContent[]
   reasoning_content?: string
-  usage?: { inputTokens: number; outputTokens: number }
+  chunkType?: 'meta' | 'text' | 'reasoning' | 'tool-call' | 'tool-result' | 'error' | 'end'
+  capability_debug?: {
+    requested: string[]
+    allowed: string[]
+    denied: string[]
+    reasons: string[]
+    selectedSkills?: Array<{ id: string; source: AiSkillSource; trustLevel: AiSkillTrustLevel }>
+  }
+  policy_debug?: {
+    skills: {
+      requested?: AiSkillSelection
+      selectedSkillIds: string[]
+      selectedSkillNames: string[]
+      reasons: string[]
+    }
+    mcp: { requested?: AiMcpSelection; resolved?: AiMcpSelection }
+    toolContext: { requested?: AiToolContext; resolved?: AiToolContext }
+    capabilities: { requested: string[]; resolved: string[] }
+    internalTools: { requested: string[]; resolved: string[] }
+  }
+  tool_call?: { id: string; name: string; args?: unknown }
+  tool_result?: { id: string; name: string; result?: unknown }
+  error?: { message: string; code?: string; category?: string; retryable?: boolean; statusCode?: number }
+  usage?: AiTokenBreakdown
 }
 type AiMessageContent =
   | { type: 'text'; text: string }
   | { type: 'image'; attachmentId: string; mimeType?: string }
   | { type: 'file'; attachmentId: string; mimeType?: string; filename?: string }
-type AiTool = { type: 'function'; function: { name: string; description?: string; parameters?: object } }
+type AiTool = {
+  type: 'function'
+  function?: {
+    name: string
+    description: string
+    parameters: {
+      type: 'object'
+      properties: Record<string, unknown>
+      required?: string[]
+      additionalProperties?: boolean
+    }
+    required?: string[]
+  }
+}
 type AiModelParameters = {
   contextWindow?: number
   temperatureEnabled?: boolean
@@ -483,14 +522,32 @@ type AiModelParameters = {
   stopSequences?: string[]
   seed?: number
 }
+type AiMcpSelection = { mode?: 'off' | 'manual' | 'auto'; serverIds?: string[]; allowedToolIds?: string[] }
+type AiSkillSelection = {
+  mode?: 'off' | 'manual' | 'auto'
+  skillIds?: string[]
+  variables?: Record<string, string>
+}
 type AiOption = {
   model?: string
   messages: AiMessage[]
   tools?: AiTool[]
+  capabilities?: string[]
+  internalTools?: string[]
+  toolingPolicy?: {
+    enableInternalTools?: boolean
+    capabilityAllowList?: string[]
+    capabilityDenyList?: string[]
+  }
   mcp?: AiMcpSelection
+  skills?: AiSkillSelection
   params?: AiModelParameters
   toolContext?: AiToolContext
+  maxToolSteps?: number
 }
+type AiEndpointType = 'openai' | 'openai-response' | 'anthropic' | 'gemini' | 'image-generation' | 'jina-rerank'
+type AiModelType = 'text' | 'vision' | 'embedding' | 'reasoning' | 'function_calling' | 'web_search' | 'rerank'
+type AiModelCapability = { type: AiModelType; isUserSelected?: boolean }
 type AiModel = {
   id: string
   label: string
@@ -498,6 +555,8 @@ type AiModel = {
   icon?: string
   providerRef?: string
   providerLabel?: string
+  endpointType?: AiEndpointType
+  supportedEndpointTypes?: AiEndpointType[]
   params?: AiModelParameters
   capabilities?: AiModelCapability[]
 }
@@ -508,13 +567,12 @@ type AiProviderConfig = {
   enabled: boolean
   apiKey?: string
   baseURL?: string
+  apiVersion?: string
+  anthropicBaseURL?: string
   headers?: Record<string, string>
   defaultModel?: string
   defaultParams?: AiModelParameters
 }
-type AiSettings = { providers: AiProviderConfig[]; models?: AiModel[]; defaultParams?: AiModelParameters; mcp?: AiMcpSettings }
-type AiMcpSelection = { mode?: 'off' | 'manual' | 'auto'; serverIds?: string[]; allowedToolIds?: string[] }
-type AiToolContext = { pluginName?: string; mcpScope?: { allowedServerIds?: string[]; allowedToolIds?: string[] } }
 type AiMcpServer = {
   id: string
   name: string
@@ -555,17 +613,153 @@ type AiMcpServerLogEntry = {
   source?: string
   data?: unknown
 }
+type AiSkillMcpPolicy = {
+  serverIds?: string[]
+  allowedToolIds?: string[]
+  blockedToolIds?: string[]
+}
+type AiSkillRecord = {
+  id: string
+  source: AiSkillSource
+  origin?: 'system' | 'app'
+  readonly?: boolean
+  sourceRef?: string
+  installPath?: string
+  skillMdPath?: string
+  contentHash: string
+  enabled: boolean
+  trustLevel: AiSkillTrustLevel
+  installedAt: number
+  updatedAt: number
+  descriptor: {
+    id: string
+    name: string
+    description?: string
+    version?: string
+    author?: string
+    tags?: string[]
+    triggerPhrases?: string[]
+    mode?: 'manual' | 'auto' | 'both'
+    promptTemplate?: string
+    mcpPolicy?: AiSkillMcpPolicy
+    capabilities?: string[]
+    internalTools?: string[]
+  }
+}
+type AiSkillSettings = {
+  enabled: boolean
+  activeSkillIds: string[]
+  autoSelect?: { enabled?: boolean; maxSkillsPerCall?: number; minScore?: number }
+  records: AiSkillRecord[]
+}
+type AiSkillPreview = {
+  selected: AiSkillRecord[]
+  systemPrompt: string
+  mcpImpact: { serverIds?: string[]; allowedToolIds?: string[]; blockedToolIds?: string[] }
+  reasons: string[]
+}
+type AiSkillResolveResult = {
+  selectedSkillIds: string[]
+  selectedSkillNames: string[]
+  selectedSkills?: Array<{ id: string; source: AiSkillSource; trustLevel: AiSkillTrustLevel }>
+  systemPrompts: string[]
+  mergedMcp?: AiMcpSelection
+  toolContextPatch?: AiToolContext['mcpScope']
+  capabilities?: string[]
+  internalTools?: string[]
+  reasons?: string[]
+}
+type AiSkillCreateModelOption = {
+  id: string
+  label: string
+  providerRef?: string
+  providerLabel?: string
+}
+type AiSkillCreateWithAiInput = {
+  requirements: string
+  model: string
+  previousRawText?: string
+  replaceSkillId?: string
+  enabled?: boolean
+  trustLevel?: AiSkillTrustLevel
+  modePreference?: 'manual' | 'auto' | 'both'
+}
+type AiSkillCreateWithAiResult = {
+  record: AiSkillRecord
+  generation: { model: string; rawText: string; notes?: string[] }
+}
+type AiSkillCreateProgressChunk = {
+  type: 'status' | 'content' | 'reasoning'
+  text: string
+  stage?: 'generating' | 'parsing' | 'validating' | 'writing' | 'completed'
+  stageStatus?: 'start' | 'done' | 'error'
+}
+type AiToolContext = {
+  pluginName?: string
+  internalTag?: string
+  mcpScope?: { allowedServerIds?: string[]; allowedToolIds?: string[] }
+}
+type AiSettings = {
+  providers: AiProviderConfig[]
+  models?: AiModel[]
+  defaultModel?: string
+  defaultParams?: AiModelParameters
+  mcp?: AiMcpSettings
+  skills?: AiSkillSettings
+}
 type AiAttachmentRef = { attachmentId: string; mimeType: string; size: number; filename?: string; expiresAt?: string; purpose?: string }
 type AiTokenBreakdown = { inputTokens: number; outputTokens: number }
-type AiModelType = 'text' | 'vision' | 'embedding' | 'reasoning' | 'function_calling' | 'web_search' | 'rerank'
-type AiModelCapability = { type: AiModelType; isUserSelected?: boolean }
+type AiImageGenerateProgressChunk = {
+  type: 'status' | 'preview'
+  stage?: 'start' | 'partial' | 'finalizing' | 'completed' | 'fallback'
+  message?: string
+  image?: string
+  index?: number
+  received?: number
+  total?: number
+}
+type AiPromiseLike<T> = Promise<T> & { abort: () => void }
 
 interface IntoolsAi {
-  call(option: AiOption, onChunk?: (chunk: AiMessage) => void): Promise<AiMessage>
+  call(option: AiOption, onChunk?: (chunk: AiMessage) => void): AiPromiseLike<AiMessage>
   allModels(): Promise<AiModel[]>
   abort(requestId: string): Promise<void>
+  skills: {
+    list(): Promise<AiSkillRecord[]>
+    refresh(): Promise<AiSkillRecord[]>
+    listEnabled(): Promise<AiSkillRecord[]>
+    get(skillId: string): Promise<AiSkillRecord | null>
+    listCreateModels(): Promise<AiSkillCreateModelOption[]>
+    createWithAi(input: AiSkillCreateWithAiInput): Promise<AiSkillCreateWithAiResult>
+    createWithAiStream(
+      input: AiSkillCreateWithAiInput,
+      onChunk: (chunk: AiSkillCreateProgressChunk) => void
+    ): AiPromiseLike<AiSkillCreateWithAiResult>
+    create(input: {
+      id?: string
+      name: string
+      description?: string
+      promptTemplate?: string
+      tags?: string[]
+      triggerPhrases?: string[]
+      mode?: 'manual' | 'auto' | 'both'
+      capabilities?: string[]
+      internalTools?: string[]
+      enabled?: boolean
+      trustLevel?: AiSkillTrustLevel
+      mcpPolicy?: AiSkillMcpPolicy
+    }): Promise<AiSkillRecord>
+    install(input: { source: 'local-dir' | 'zip'; ref: string; trustLevel?: AiSkillTrustLevel; enabled?: boolean }): Promise<AiSkillRecord[]>
+    importFromJson(input: { json: string; trustLevel?: AiSkillTrustLevel; enabled?: boolean }): Promise<AiSkillRecord[]>
+    update(skillId: string, patch: Partial<AiSkillRecord>): Promise<AiSkillRecord>
+    remove(skillId: string): Promise<void>
+    enable(skillId: string): Promise<AiSkillRecord>
+    disable(skillId: string): Promise<AiSkillRecord>
+    preview(input: { option?: Partial<AiOption>; skillIds?: string[]; prompt?: string }): Promise<AiSkillPreview>
+    resolve(option: AiOption): Promise<AiSkillResolveResult>
+  }
   tokens: {
-    estimate(input: { model?: string; messages: AiMessage[]; outputText?: string }): Promise<{ inputTokens: number; outputTokens: number }>
+    estimate(input: { model?: string; messages: AiMessage[]; outputText?: string }): Promise<AiTokenBreakdown>
   }
   attachments: {
     upload(input: { filePath?: string; buffer?: ArrayBuffer; mimeType: string; purpose?: string }): Promise<AiAttachmentRef>
@@ -580,6 +774,10 @@ interface IntoolsAi {
   }
   images: {
     generate(input: { model: string; prompt: string; size?: string; count?: number }): Promise<{ images: string[]; tokens: AiTokenBreakdown }>
+    generateStream(
+      input: { model: string; prompt: string; size?: string; count?: number },
+      onChunk: (chunk: AiImageGenerateProgressChunk) => void
+    ): AiPromiseLike<{ images: string[]; tokens: AiTokenBreakdown }>
     edit(input: { model: string; imageAttachmentId: string; prompt: string }): Promise<{ images: string[]; tokens: AiTokenBreakdown }>
   }
   models: {
@@ -589,7 +787,7 @@ interface IntoolsAi {
   testConnectionStream(
     input: { providerId?: string; model?: string; baseURL?: string; apiKey?: string },
     onChunk: (chunk: { type: 'reasoning' | 'content'; text: string }) => void
-  ): Promise<{ success: boolean; message?: string; reasoning?: string }>
+  ): AiPromiseLike<{ success: boolean; message?: string; reasoning?: string }>
   settings: {
     get(): Promise<AiSettings>
     update(next: Partial<AiSettings>): Promise<AiSettings>

@@ -70,22 +70,55 @@ export function buildBackendMain(name: string) {
         model?: string
         messages: Array<{ role: 'system' | 'user' | 'assistant'; content?: string | Array<any> }>
         tools?: Array<{ type: 'function'; function: { name: string; description?: string; parameters?: object } }>
+        capabilities?: string[]
+        internalTools?: string[]
+        toolingPolicy?: {
+          enableInternalTools?: boolean
+          capabilityAllowList?: string[]
+          capabilityDenyList?: string[]
+        }
         mcp?: { mode?: 'off' | 'manual' | 'auto'; serverIds?: string[]; allowedToolIds?: string[] }
+        skills?: { mode?: 'off' | 'manual' | 'auto'; skillIds?: string[]; variables?: Record<string, string> }
         params?: any
-        toolContext?: { pluginName?: string; mcpScope?: { allowedServerIds?: string[]; allowedToolIds?: string[] } }
+        toolContext?: {
+          pluginName?: string
+          internalTag?: string
+          mcpScope?: { allowedServerIds?: string[]; allowedToolIds?: string[] }
+        }
+        maxToolSteps?: number
       }, onChunk?: (chunk: any) => void) => Promise<{ role: 'assistant'; content?: string }>
       allModels: () => Promise<any[]>
+      abort: (requestId: string) => void
+      skills: {
+        listEnabled: () => Promise<any[]>
+        previewForCall: (input: { option?: Record<string, any>; skillIds?: string[]; prompt?: string }) => Promise<any>
+      }
       tokens: {
-        estimate: (input: { model?: string; messages: Array<any> }) => Promise<{ inputTokens: number; outputTokens: number }>
+        estimate: (input: { model?: string; messages: Array<any>; outputText?: string }) => Promise<{ inputTokens: number; outputTokens: number }>
       }
       attachments: {
         upload: (input: { filePath?: string; buffer?: ArrayBuffer; mimeType: string; purpose?: string }) => Promise<any>
         get: (attachmentId: string) => Promise<any>
         delete: (attachmentId: string) => Promise<void>
+        uploadToProvider: (input: { attachmentId: string; model?: string; providerId?: string; purpose?: string }) => Promise<{
+          providerId: string
+          fileId: string
+          uri?: string
+        }>
       }
       images: {
-        generate: (input: { model: string; prompt: string; size?: string; count?: number }) => Promise<{ images: string[] }>
-        edit: (input: { model: string; imageAttachmentId: string; prompt: string }) => Promise<{ images: string[] }>
+        generate: (input: { model: string; prompt: string; size?: string; count?: number }) => Promise<{
+          images: string[]
+          tokens: { inputTokens: number; outputTokens: number }
+        }>
+        generateStream: (
+          input: { model: string; prompt: string; size?: string; count?: number },
+          onChunk: (chunk: any) => void
+        ) => Promise<{ images: string[]; tokens: { inputTokens: number; outputTokens: number } }>
+        edit: (input: { model: string; imageAttachmentId: string; prompt: string }) => Promise<{
+          images: string[]
+          tokens: { inputTokens: number; outputTokens: number }
+        }>
       }
     }
     features?: {

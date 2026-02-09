@@ -67,13 +67,34 @@ export function useIntools(pluginId?: string) {
       // - model: 模型 ID
       // - messages: 消息数组
       // - tools: 工具定义数组
+      // - capabilities/internalTools/toolingPolicy: 内置工具能力控制
       // - mcp: MCP 选择策略（off/manual/auto + server/tool 限制）
+      // - skills: 技能选择策略
       // - params: 模型参数
       // - toolContext: 工具上下文（插件名与 MCP 作用域）
-      // - maxToolSteps: 工具调用的最大步骤数（默认 10）
+      // - maxToolSteps: 工具调用的最大步骤数（默认 20，最大 100）
       call: (option: any, onChunk?: (chunk: any) => void) => window.intools?.ai?.call(option, onChunk),
       allModels: () => window.intools?.ai?.allModels?.(),
       abort: (requestId: string) => window.intools?.ai?.abort?.(requestId),
+      skills: {
+        list: () => window.intools?.ai?.skills?.list?.(),
+        refresh: () => window.intools?.ai?.skills?.refresh?.(),
+        listEnabled: () => window.intools?.ai?.skills?.listEnabled?.(),
+        get: (skillId: string) => window.intools?.ai?.skills?.get?.(skillId),
+        listCreateModels: () => window.intools?.ai?.skills?.listCreateModels?.(),
+        createWithAi: (input: any) => window.intools?.ai?.skills?.createWithAi?.(input),
+        createWithAiStream: (input: any, onChunk: (chunk: any) => void) =>
+          window.intools?.ai?.skills?.createWithAiStream?.(input, onChunk),
+        create: (input: any) => window.intools?.ai?.skills?.create?.(input),
+        install: (input: any) => window.intools?.ai?.skills?.install?.(input),
+        importFromJson: (input: any) => window.intools?.ai?.skills?.importFromJson?.(input),
+        update: (skillId: string, patch: any) => window.intools?.ai?.skills?.update?.(skillId, patch),
+        remove: (skillId: string) => window.intools?.ai?.skills?.remove?.(skillId),
+        enable: (skillId: string) => window.intools?.ai?.skills?.enable?.(skillId),
+        disable: (skillId: string) => window.intools?.ai?.skills?.disable?.(skillId),
+        preview: (input: any) => window.intools?.ai?.skills?.preview?.(input),
+        resolve: (option: any) => window.intools?.ai?.skills?.resolve?.(option),
+      },
       tokens: {
         estimate: (input: any) => window.intools?.ai?.tokens?.estimate(input),
       },
@@ -81,10 +102,12 @@ export function useIntools(pluginId?: string) {
         upload: (input: any) => window.intools?.ai?.attachments?.upload(input),
         get: (attachmentId: string) => window.intools?.ai?.attachments?.get(attachmentId),
         delete: (attachmentId: string) => window.intools?.ai?.attachments?.delete(attachmentId),
-        uploadToProvider: (input: any) => window.intools?.ai?.attachments?.uploadToProvider?.(input),
+        uploadToProvider: (input: any) => window.intools?.ai?.attachments?.uploadToProvider(input),
       },
       images: {
         generate: (input: any) => window.intools?.ai?.images?.generate(input),
+        generateStream: (input: any, onChunk: (chunk: any) => void) =>
+          window.intools?.ai?.images?.generateStream(input, onChunk),
         edit: (input: any) => window.intools?.ai?.images?.edit(input),
       },
       models: {

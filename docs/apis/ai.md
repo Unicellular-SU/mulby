@@ -29,13 +29,17 @@ const message = await ai.call({
   - `messages` (AiMessage[]) - 对话消息
   - `params` (AiModelParameters) - 覆盖参数（可选）
   - `tools` (AiTool[]) - 工具定义（Function Calling）
+  - `capabilities` (string[]) - 内置工具能力声明（可选）
+  - `internalTools` (string[]) - 旧版内置工具声明（可选，已废弃，建议改用 `capabilities`）
+  - `toolingPolicy` (object) - 内置工具能力策略（可选）
   - `mcp` (AiMcpSelection) - MCP 工具选择策略（可选）
+  - `skills` (AiSkillSelection) - 技能选择策略（可选）
   - `toolContext` (AiToolContext) - 工具执行上下文（可选）
-  - `maxToolSteps` (number) - 工具调用的最大步骤数（默认 10，范围 1-20）
+  - `maxToolSteps` (number) - 工具调用最大步数（默认 20，范围 1-100）
 
 **返回值**:
-- `Promise<AiMessage>` - 最终消息（包含可选 `usage`）
-- 渲染进程返回的 Promise 附带 `abort()` 方法（仅 `onChunk` 模式有效）
+- `AiPromiseLike<AiMessage>` - 最终消息（包含可选 `usage`）
+- 返回 Promise 附带 `abort()` 方法；传入 `onChunk` 时可中止当前流式请求
 
 ```javascript
 const req = ai.call(
@@ -46,9 +50,19 @@ const req = ai.call(
   (chunk) => console.log(chunk.content)
 );
 
-// 中止（仅渲染进程）
+// 中止请求
 req.abort?.();
 ```
+
+### abort(requestId)
+[Renderer] [Backend]
+中止指定请求 ID 的进行中调用。
+
+```javascript
+await ai.abort(requestId);
+```
+
+> 通常优先使用 `ai.call(...).abort()`；当你拿到了 `requestId`（例如并发管理）时可直接用 `ai.abort(requestId)`。
 
 > 说明：`tools` 在插件后端会通过插件 host 方法执行（工具名=插件方法名）。  
 > 渲染进程不直接执行工具函数，如需在 UI 使用工具调用，请通过 `window.intools.host.call` 调用插件后端方法执行。
@@ -138,7 +152,7 @@ const models = await ai.allModels();
 
 ### models.fetch(input)
 [Renderer]
-从 OpenAI 兼容接口拉取模型列表。
+按 Provider 协议能力拉取模型列表；不支持自动发现时会返回空列表或回退到内置模型，并附带 `message`。
 
 ```javascript
 const result = await ai.models.fetch({
@@ -149,14 +163,14 @@ const result = await ai.models.fetch({
 ```
 
 **参数**:
-- `providerId` (string) - 当前仅支持 `openai`
+- `providerId` (string) - Provider 实例 ID（或 provider 类型）
 - `baseURL` (string, optional)
 - `apiKey` (string, optional)
 
 **返回值**:
 - `{ models: AiModel[]; message?: string }`
 
-> 说明：当 `providerId !== 'openai'` 时返回空列表并给出提示。
+> 说明：是否支持 `models.fetch` 取决于 Provider 协议能力。
 
 ---
 
@@ -200,9 +214,9 @@ req.abort?.();
 ```
 
 **返回值**:
-- `Promise<{ success: boolean; message?: string; reasoning?: string }>`
+- `AiPromiseLike<{ success: boolean; message?: string; reasoning?: string }>`
 
-> 说明：当 `providerId = 'openai'` 且 `baseURL` 不是 `api.openai.com` 时，会使用兼容的 `/chat/completions` 流式接口。
+> 说明：当 Provider 走 OpenAI 兼容协议并命中兼容路由时，会使用 `/chat/completions` 流式接口。
 
 ---
 
@@ -352,6 +366,84 @@ const logs = await ai.mcp.getLogs('filesystem');
 
 ---
 
+## 技能管理 (skills)
+
+> 渲染进程：`window.intools.ai.skills`（完整管理接口）  
+> 插件后端：`context.api.ai.skills`（仅 `listEnabled` 与 `previewForCall`）
+
+### skills.list()
+### skills.refresh()
+### skills.listEnabled()
+### skills.get(skillId)
+### skills.listCreateModels()
+[Renderer]
+
+```javascript
+const all = await ai.skills.list();
+const enabled = await ai.skills.listEnabled();
+const one = await ai.skills.get('my-skill-id');
+const models = await ai.skills.listCreateModels();
+```
+
+### skills.createWithAi(input)
+### skills.createWithAiStream(input, onChunk)
+[Renderer]
+
+```javascript
+const req = ai.skills.createWithAiStream(
+  {
+    requirements: '创建一个用于代码审查的技能',
+    model: 'openai:gpt-4o-mini'
+  },
+  (chunk) => console.log(chunk.type, chunk.text)
+);
+
+req.abort?.();
+```
+
+### skills.create(input)
+### skills.install(input)
+### skills.importFromJson(input)
+### skills.update(skillId, patch)
+### skills.remove(skillId)
+### skills.enable(skillId)
+### skills.disable(skillId)
+[Renderer]
+
+```javascript
+await ai.skills.create({
+  name: 'My Skill',
+  description: '示例技能',
+  mode: 'manual',
+  promptTemplate: 'You are a strict reviewer.'
+});
+```
+
+### skills.preview(input)
+### skills.resolve(option)
+[Renderer]
+预览/解析本次调用会启用的技能与策略合并结果。
+
+```javascript
+const preview = await ai.skills.preview({ prompt: '帮我写一个 React 组件' });
+const resolved = await ai.skills.resolve({
+  messages: [{ role: 'user', content: '请帮我审查代码' }]
+});
+```
+
+### skills.listEnabled()
+### skills.previewForCall(input)
+[Backend]
+
+```javascript
+const enabled = await context.api.ai.skills.listEnabled();
+const preview = await context.api.ai.skills.previewForCall({
+  prompt: '帮我写一个脚本'
+});
+```
+
+---
+
 ## 附件 (多模态 / 文件)
 
 ### attachments.upload(input)
@@ -474,6 +566,29 @@ const result = await ai.images.generate({
 
 **返回值**: `{ images: string[]; tokens: AiTokenBreakdown }`
 
+### images.generateStream(input, onChunk)
+[Renderer] [Backend]
+流式生成图片，过程中会推送进度与预览片段。
+
+```javascript
+const req = ai.images.generateStream(
+  {
+    model: 'openai:gpt-image-1',
+    prompt: 'A cute cat in watercolor style',
+    size: '1024x1024',
+    count: 1
+  },
+  (chunk) => {
+    if (chunk.type === 'status') console.log(chunk.stage, chunk.message);
+    if (chunk.type === 'preview') console.log('preview base64 length:', chunk.image?.length || 0);
+  }
+);
+
+req.abort?.();
+```
+
+**返回值**: `AiPromiseLike<{ images: string[]; tokens: AiTokenBreakdown }>`
+
 ### images.edit(input)
 [Renderer] [Backend]
 基于图片附件编辑生成。
@@ -498,7 +613,36 @@ type AiMessage = {
   role: 'system' | 'user' | 'assistant';
   content?: string | AiMessageContent[];
   reasoning_content?: string;
-  usage?: { inputTokens: number; outputTokens: number };
+  chunkType?: 'meta' | 'text' | 'reasoning' | 'tool-call' | 'tool-result' | 'error' | 'end';
+  capability_debug?: {
+    requested: string[];
+    allowed: string[];
+    denied: string[];
+    reasons: string[];
+    selectedSkills?: { id: string; source: string; trustLevel: string }[];
+  };
+  policy_debug?: {
+    skills: {
+      requested?: AiSkillSelection;
+      selectedSkillIds: string[];
+      selectedSkillNames: string[];
+      reasons: string[];
+    };
+    mcp: { requested?: AiMcpSelection; resolved?: AiMcpSelection };
+    toolContext: { requested?: AiToolContext; resolved?: AiToolContext };
+    capabilities: { requested: string[]; resolved: string[] };
+    internalTools: { requested: string[]; resolved: string[] };
+  };
+  tool_call?: { id: string; name: string; args?: unknown };
+  tool_result?: { id: string; name: string; result?: unknown };
+  error?: {
+    message: string;
+    code?: string;
+    category?: string;
+    retryable?: boolean;
+    statusCode?: number;
+  };
+  usage?: AiTokenBreakdown;
 };
 ```
 
@@ -510,16 +654,42 @@ type AiMessageContent =
   | { type: 'file'; attachmentId: string; mimeType?: string; filename?: string };
 ```
 
+### AiTool
+```typescript
+type AiTool = {
+  type: 'function';
+  function?: {
+    name: string;
+    description: string;
+    parameters: {
+      type: 'object';
+      properties: Record<string, unknown>;
+      required?: string[];
+      additionalProperties?: boolean;
+    };
+    required?: string[]; // 旧字段，建议改用 parameters.required
+  };
+};
+```
+
 ### AiOption
 ```typescript
 type AiOption = {
   model?: string;
   messages: AiMessage[];
   tools?: AiTool[];
+  capabilities?: string[];
+  internalTools?: string[]; // 已废弃，建议改用 capabilities
+  toolingPolicy?: {
+    enableInternalTools?: boolean;
+    capabilityAllowList?: string[];
+    capabilityDenyList?: string[];
+  };
   mcp?: AiMcpSelection;
+  skills?: AiSkillSelection;
   params?: AiModelParameters;
   toolContext?: AiToolContext;
-  maxToolSteps?: number;  // 工具调用的最大步骤数，默认为 10
+  maxToolSteps?: number; // 工具调用最大步数，默认 20，最大 100
 };
 ```
 
@@ -544,11 +714,14 @@ type AiModelParameters = {
 ### AiProviderConfig
 ```typescript
 type AiProviderConfig = {
-  id: string;
+  id: string; // Provider 实例 ID
+  type?: string; // Provider 协议类型，不填时向后兼容为 id
   label?: string;
   enabled: boolean;
-  apiKey?: string;
+  apiKey?: string; // 支持单 key 或逗号分隔多 key（支持转义逗号）
   baseURL?: string;
+  apiVersion?: string;
+  anthropicBaseURL?: string;
   headers?: Record<string, string>;
   defaultModel?: string;
   defaultParams?: AiModelParameters;
@@ -557,13 +730,28 @@ type AiProviderConfig = {
 
 ### AiModel
 ```typescript
+type AiEndpointType =
+  | 'openai'
+  | 'openai-response'
+  | 'anthropic'
+  | 'gemini'
+  | 'image-generation'
+  | 'jina-rerank';
+
 type AiModel = {
   id: string; // 形如 "openai:gpt-4o-mini"
   label: string;
   description: string;
   icon?: string;
+  providerRef?: string;
   providerLabel?: string;
+  endpointType?: AiEndpointType;
+  supportedEndpointTypes?: AiEndpointType[];
   params?: AiModelParameters;
+  capabilities?: Array<{
+    type: 'text' | 'vision' | 'embedding' | 'reasoning' | 'function_calling' | 'web_search' | 'rerank';
+    isUserSelected?: boolean;
+  }>;
 };
 ```
 
@@ -572,8 +760,19 @@ type AiModel = {
 type AiSettings = {
   providers: AiProviderConfig[];
   models?: AiModel[];
+  defaultModel?: string;
   defaultParams?: AiModelParameters;
   mcp?: AiMcpSettings;
+  skills?: {
+    enabled: boolean;
+    activeSkillIds: string[];
+    autoSelect?: {
+      enabled?: boolean;
+      maxSkillsPerCall?: number;
+      minScore?: number;
+    };
+    records: AiSkillRecord[];
+  };
 };
 ```
 
@@ -587,6 +786,7 @@ type AiMcpSelection = {
 
 type AiToolContext = {
   pluginName?: string;
+  internalTag?: string;
   mcpScope?: {
     allowedServerIds?: string[];
     allowedToolIds?: string[];
@@ -642,6 +842,132 @@ type AiMcpServerLogEntry = {
   message: string;
   source?: string;
   data?: unknown;
+};
+```
+
+### AiSkillSelection / AiSkillRecord / AiSkillPreview
+```typescript
+type AiSkillSelection = {
+  mode?: 'off' | 'manual' | 'auto';
+  skillIds?: string[];
+  variables?: Record<string, string>;
+};
+
+type AiSkillRecord = {
+  id: string;
+  source: 'manual' | 'local-dir' | 'zip' | 'json' | 'builtin' | 'system';
+  origin?: 'system' | 'app';
+  readonly?: boolean;
+  sourceRef?: string;
+  installPath?: string;
+  skillMdPath?: string;
+  contentHash: string;
+  enabled: boolean;
+  trustLevel: 'untrusted' | 'reviewed' | 'trusted';
+  installedAt: number;
+  updatedAt: number;
+  descriptor: {
+    id: string;
+    name: string;
+    description?: string;
+    version?: string;
+    author?: string;
+    tags?: string[];
+    triggerPhrases?: string[];
+    mode?: 'manual' | 'auto' | 'both';
+    promptTemplate?: string;
+    mcpPolicy?: {
+      serverIds?: string[];
+      allowedToolIds?: string[];
+      blockedToolIds?: string[];
+    };
+    capabilities?: string[];
+    internalTools?: string[]; // 已废弃
+  };
+};
+
+type AiSkillPreview = {
+  selected: AiSkillRecord[];
+  systemPrompt: string;
+  mcpImpact: {
+    serverIds?: string[];
+    allowedToolIds?: string[];
+    blockedToolIds?: string[];
+  };
+  reasons: string[];
+};
+
+type AiSkillResolveResult = {
+  selectedSkillIds: string[];
+  selectedSkillNames: string[];
+  selectedSkills?: Array<{ id: string; source: string; trustLevel: string }>;
+  systemPrompts: string[];
+  mergedMcp?: AiMcpSelection;
+  toolContextPatch?: AiToolContext['mcpScope'];
+  capabilities?: string[];
+  internalTools?: string[]; // 已废弃
+  reasons?: string[];
+};
+```
+
+### AiSkillCreateWithAiInput / AiSkillCreateProgressChunk
+```typescript
+type AiSkillCreateModelOption = {
+  id: string;
+  label: string;
+  providerRef?: string;
+  providerLabel?: string;
+};
+
+type AiSkillCreateWithAiInput = {
+  requirements: string;
+  model: string;
+  previousRawText?: string;
+  replaceSkillId?: string;
+  enabled?: boolean;
+  trustLevel?: 'untrusted' | 'reviewed' | 'trusted';
+  modePreference?: 'manual' | 'auto' | 'both';
+};
+
+type AiSkillCreateWithAiResult = {
+  record: AiSkillRecord;
+  generation: {
+    model: string;
+    rawText: string;
+    notes?: string[];
+  };
+};
+
+type AiSkillCreateProgressChunk = {
+  type: 'status' | 'content' | 'reasoning';
+  text: string;
+  stage?: 'generating' | 'parsing' | 'validating' | 'writing' | 'completed';
+  stageStatus?: 'start' | 'done' | 'error';
+};
+```
+
+### AiTokenBreakdown
+```typescript
+type AiTokenBreakdown = {
+  inputTokens: number;
+  outputTokens: number;
+};
+
+type AiPromiseLike<T> = Promise<T> & {
+  abort: () => void;
+};
+```
+
+### AiImageGenerateProgressChunk
+```typescript
+type AiImageGenerateProgressChunk = {
+  type: 'status' | 'preview';
+  stage?: 'start' | 'partial' | 'finalizing' | 'completed' | 'fallback';
+  message?: string;
+  image?: string;
+  index?: number;
+  received?: number;
+  total?: number;
 };
 ```
 
