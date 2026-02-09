@@ -26,6 +26,31 @@ export interface AiCapabilityDebugInfo {
   selectedSkills?: AiSkillSelectionMeta[]
 }
 
+export interface AiPolicyDebugInfo {
+  skills: {
+    requested?: AiSkillSelection
+    selectedSkillIds: string[]
+    selectedSkillNames: string[]
+    reasons: string[]
+  }
+  mcp: {
+    requested?: AiMcpSelection
+    resolved?: AiMcpSelection
+  }
+  toolContext: {
+    requested?: AiToolContext
+    resolved?: AiToolContext
+  }
+  capabilities: {
+    requested: string[]
+    resolved: string[]
+  }
+  internalTools: {
+    requested: string[]
+    resolved: string[]
+  }
+}
+
 export interface AiMessage {
   role: 'system' | 'user' | 'assistant'
   content?: string | AiMessageContent[]
@@ -35,6 +60,7 @@ export interface AiMessage {
    */
   chunkType?: 'meta' | 'text' | 'reasoning' | 'tool-call' | 'tool-result' | 'error' | 'end'
   capability_debug?: AiCapabilityDebugInfo
+  policy_debug?: AiPolicyDebugInfo
   tool_call?: {
     id: string
     name: string

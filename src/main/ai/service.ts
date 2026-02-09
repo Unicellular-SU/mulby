@@ -8,6 +8,7 @@ import type {
   AiModel,
   AiModelParameters,
   AiOption,
+  AiPolicyDebugInfo,
   AiProviderConfig,
   AiSkillSelectionMeta,
   AiTokenBreakdown,
@@ -66,7 +67,7 @@ import {
   splitThinkTaggedText
 } from './thinkTagParser'
 import { resolveCompatToolCallName } from './tool-name-matching'
-import { aiMcpService } from './mcp'
+import { aiMcpService, isMcpToolName } from './mcp'
 import { aiSkillService } from './skills'
 import { AI_RUN_COMMAND_TOOL_NAME } from './tools/run-command-tool'
 import { buildAiInternalTools, type AiInternalToolName } from './tools/internal-tools'
@@ -117,8 +118,14 @@ function buildApiKeyScope(input: { providerId?: string; providerType?: string; b
 
 export class AiService {
   private controllers = new Map<string, AbortController>()
+  private requestMcpCallIds = new Map<string, Set<string>>()
   private imageStrategyCapabilities = new Map<string, ImageStrategyCapabilityState>()
-  private toolExecutor?: (input: { name: string; args: unknown; context?: AiToolContext }) => Promise<unknown>
+  private toolExecutor?: (input: {
+    name: string
+    args: unknown
+    context?: AiToolContext
+    callId?: string
+  }) => Promise<unknown>
   private capabilityPolicyResolver?: (input: {
     option: AiOption
     requestedCapabilities: AiToolCapabilityName[]
@@ -272,6 +279,73 @@ export class AiService {
     }
   }
 
+  private buildPolicyDebugInfo(input: {
+    requestedOption: AiOption
+    effectiveOption: AiOption
+    skillResolution: ReturnType<typeof aiSkillService.resolveForAiCall>
+  }): AiPolicyDebugInfo {
+    const normalizeStringArray = (value: unknown): string[] =>
+      Array.isArray(value)
+        ? value.map((item) => String(item || '').trim()).filter(Boolean)
+        : []
+    const normalizeMcpSelection = (value: AiOption['mcp']): AiOption['mcp'] | undefined => {
+      if (!value) return undefined
+      return {
+        mode: value.mode,
+        serverIds: normalizeStringArray(value.serverIds),
+        allowedToolIds: normalizeStringArray(value.allowedToolIds)
+      }
+    }
+    const normalizeToolContext = (value: AiToolContext | undefined): AiToolContext | undefined => {
+      if (!value) return undefined
+      const next: AiToolContext = {
+        ...(value.pluginName ? { pluginName: value.pluginName } : {}),
+        ...(value.internalTag ? { internalTag: value.internalTag } : {})
+      }
+      if (value.mcpScope) {
+        next.mcpScope = {
+          allowedServerIds: normalizeStringArray(value.mcpScope.allowedServerIds),
+          allowedToolIds: normalizeStringArray(value.mcpScope.allowedToolIds)
+        }
+      }
+      return next
+    }
+    const requestedSkills = input.requestedOption.skills
+      ? {
+          mode: input.requestedOption.skills.mode,
+          skillIds: normalizeStringArray(input.requestedOption.skills.skillIds),
+          variables: input.requestedOption.skills.variables
+            ? { ...input.requestedOption.skills.variables }
+            : undefined
+        }
+      : undefined
+
+    return {
+      skills: {
+        requested: requestedSkills,
+        selectedSkillIds: normalizeStringArray(input.skillResolution.selectedSkillIds),
+        selectedSkillNames: normalizeStringArray(input.skillResolution.selectedSkillNames),
+        reasons: normalizeStringArray(input.skillResolution.reasons)
+      },
+      mcp: {
+        requested: normalizeMcpSelection(input.requestedOption.mcp),
+        resolved: normalizeMcpSelection(input.effectiveOption.mcp)
+      },
+      toolContext: {
+        requested: normalizeToolContext(input.requestedOption.toolContext),
+        resolved: normalizeToolContext(input.effectiveOption.toolContext)
+      },
+      capabilities: {
+        requested: normalizeStringArray(input.requestedOption.capabilities),
+        resolved: normalizeStringArray(input.effectiveOption.capabilities)
+      },
+      internalTools: {
+        requested: normalizeStringArray(input.requestedOption.internalTools),
+        resolved: normalizeStringArray(input.effectiveOption.internalTools)
+      }
+    }
+  }
+
   allModels() {
     return getAllModels()
   }
@@ -290,6 +364,11 @@ export class AiService {
       selectedSkills: skillResolution.selectedSkills
     })
     const effectiveOption = effective.option
+    const policyDebug = this.buildPolicyDebugInfo({
+      requestedOption: option,
+      effectiveOption,
+      skillResolution
+    })
     console.log('[AI] call 开始', {
       model: effectiveOption.model,
       messageCount: effectiveOption.messages.length,
@@ -368,7 +447,8 @@ export class AiService {
             tools: resolvedTools || [],
             maxToolSteps: effectiveOption.maxToolSteps,
             toolContext: effectiveOption.toolContext,
-            allowReasoning: supportsReasoning(effectiveOption.model)
+            allowReasoning: supportsReasoning(effectiveOption.model),
+            requestId
           }, undefined, controller.signal)
 
           return {
@@ -429,10 +509,12 @@ export class AiService {
       })
       return {
         ...finalMessage,
-        capability_debug: effective.capabilityDebug
+        capability_debug: effective.capabilityDebug,
+        policy_debug: policyDebug
       }
     } finally {
       this.controllers.delete(requestId)
+      this.requestMcpCallIds.delete(requestId)
     }
   }
 
@@ -450,9 +532,11 @@ export class AiService {
       selectedSkills: skillResolution.selectedSkills
     })
     const effectiveOption = effective.option
-    const resolvedTools = await this.resolveMergedTools(effectiveOption)
-    const tools = this.buildTools(resolvedTools, effectiveOption.toolContext, effectiveOption.model)
-
+    const policyDebug = this.buildPolicyDebugInfo({
+      requestedOption: option,
+      effectiveOption,
+      skillResolution
+    })
     const id = requestId || this.createRequestId()
     const controller = new AbortController()
     this.controllers.set(id, controller)
@@ -460,6 +544,18 @@ export class AiService {
     let metrics: ReturnType<typeof createAiStreamMetrics> | undefined
 
     try {
+      console.info('[AI] stream:prepare:start', {
+        requestId: id,
+        model: effectiveOption.model
+      })
+      const resolvedTools = await this.resolveMergedTools(effectiveOption)
+      const tools = this.buildTools(resolvedTools, effectiveOption.toolContext, effectiveOption.model)
+      console.info('[AI] stream:prepare:tools-ready', {
+        requestId: id,
+        model: effectiveOption.model,
+        resolvedToolCount: resolvedTools?.length || 0,
+        hasRuntimeTools: !!tools
+      })
       const { modelKey } = this.resolveLanguageModel(effectiveOption.model)
       const params = this.resolveGenerationParams(effectiveOption, effectiveOption.model)
       const trimmedMessages = this.applyContextWindow(effectiveOption.messages, params.contextWindow)
@@ -487,6 +583,13 @@ export class AiService {
         recordAiStreamChunk(metrics!, chunk)
         callbacks.onChunk?.(chunk)
       }
+      console.info('[AI] stream:boot', {
+        requestId: id,
+        model: effectiveOption.model,
+        providerType,
+        resolvedMcpMode: effectiveOption.mcp?.mode || 'off',
+        resolvedSkillNames: skillResolution.selectedSkillNames
+      })
       console.info('[AI] stream:metrics:start', {
         requestId: id,
         providerType,
@@ -496,7 +599,10 @@ export class AiService {
         maxToolSteps: metrics.maxToolSteps,
         skills: skillResolution.selectedSkillNames
       })
-      this.emitCapabilityDebugChunk(trackedOnChunk, effective.capabilityDebug)
+      this.emitDebugMetaChunk(trackedOnChunk, {
+        capabilityDebug: effective.capabilityDebug,
+        policyDebug
+      })
 
       const finalMessage = await methodAdapter.stream({
         hasTools: !!tools,
@@ -524,7 +630,8 @@ export class AiService {
             content,
             reasoning_content: reasoning || undefined,
             usage,
-            capability_debug: effective.capabilityDebug
+            capability_debug: effective.capabilityDebug,
+            policy_debug: policyDebug
           }
           this.emitEndChunk(trackedOnChunk, finalMessage)
           callbacks.onEnd?.(finalMessage)
@@ -552,7 +659,8 @@ export class AiService {
             content,
             reasoning_content: reasoning || undefined,
             usage,
-            capability_debug: effective.capabilityDebug
+            capability_debug: effective.capabilityDebug,
+            policy_debug: policyDebug
           }
           this.emitEndChunk(trackedOnChunk, finalMessage)
           callbacks.onEnd?.(finalMessage)
@@ -575,7 +683,8 @@ export class AiService {
             tools: resolvedTools || [],
             maxToolSteps: effectiveOption.maxToolSteps,
             toolContext: effectiveOption.toolContext,
-            allowReasoning: supportsReasoning(effectiveOption.model)
+            allowReasoning: supportsReasoning(effectiveOption.model),
+            requestId: id
           }, trackedOnChunk, controller.signal)
 
           const finalMessage: AiMessage = {
@@ -587,7 +696,8 @@ export class AiService {
               countTokensFromMessages(trimmedMessages, effectiveOption.model),
               countTokensForText(`${reasoning || ''}${content || ''}`, effectiveOption.model)
             ),
-            capability_debug: effective.capabilityDebug
+            capability_debug: effective.capabilityDebug,
+            policy_debug: policyDebug
           }
           this.emitEndChunk(trackedOnChunk, finalMessage)
           callbacks.onEnd?.(finalMessage)
@@ -621,6 +731,7 @@ export class AiService {
 
           if ((result as any).fullStream) {
             for await (const part of (result as any).fullStream) {
+              this.assertNotAborted(controller.signal)
               console.log('[AI] stream part:', part?.type, part)
               if (part?.type === 'text-delta') {
                 const textDelta = typeof (part as any).delta === 'string'
@@ -669,6 +780,7 @@ export class AiService {
             }
           } else {
             for await (const chunk of result.textStream) {
+              this.assertNotAborted(controller.signal)
               if (!chunk) continue
               if (allowReasoning && thinkTagState) {
                 const parsed = parseThinkTaggedChunk(chunk, thinkTagState)
@@ -686,6 +798,8 @@ export class AiService {
               }
             }
           }
+
+          this.assertNotAborted(controller.signal)
 
           if (allowReasoning && thinkTagState) {
             const tail = finalizeThinkTagStream(thinkTagState)
@@ -726,7 +840,8 @@ export class AiService {
             content: fullText || '',
             reasoning_content: allowReasoning ? reasoningText || undefined : undefined,
             usage,
-            capability_debug: effective.capabilityDebug
+            capability_debug: effective.capabilityDebug,
+            policy_debug: policyDebug
           }
           this.emitEndChunk(trackedOnChunk, finalMessage)
           callbacks.onEnd?.(finalMessage)
@@ -768,15 +883,22 @@ export class AiService {
       throw error
     } finally {
       this.controllers.delete(id)
+      this.requestMcpCallIds.delete(id)
     }
   }
 
   abort(requestId: string): void {
     const controller = this.controllers.get(requestId)
     if (controller) {
+      console.info('[AI] abort:request', { requestId })
       controller.abort()
       this.controllers.delete(requestId)
     }
+    const trackedCount = this.requestMcpCallIds.get(requestId)?.size || 0
+    if (trackedCount > 0) {
+      console.info('[AI] abort:mcp-calls', { requestId, trackedCount })
+    }
+    this.abortTrackedMcpCalls(requestId)
   }
 
   async estimateTokens(input: { model?: string; messages: AiMessage[]; outputText?: string }): Promise<AiTokenBreakdown> {
@@ -785,7 +907,12 @@ export class AiService {
     return await estimateTokens({ ...input, maxOutputTokens })
   }
 
-  setToolExecutor(executor?: (input: { name: string; args: unknown; context?: AiToolContext }) => Promise<unknown>): void {
+  setToolExecutor(executor?: (input: {
+    name: string
+    args: unknown
+    context?: AiToolContext
+    callId?: string
+  }) => Promise<unknown>): void {
     this.toolExecutor = executor
   }
 
@@ -1390,6 +1517,7 @@ export class AiService {
     onChunk?: (chunk: AiMessage) => void,
     abortSignal?: AbortSignal
   ): Promise<{ content: string; reasoning: string }> {
+    this.assertNotAborted(abortSignal)
     const allowReasoning = supportsReasoning(`openai:${input.model}`)
     const baseURL = this.resolveCompatBaseURL(input.baseURL, input.providerType)
     const url = `${baseURL}/chat/completions`
@@ -1435,6 +1563,7 @@ export class AiService {
     const thinkTagState = allowReasoning ? createThinkTagStreamState(input.model) : undefined
 
     while (true) {
+      this.assertNotAborted(abortSignal)
       const { value, done } = await reader.read()
       if (done) break
       buffer += decoder.decode(value, { stream: true })
@@ -1444,6 +1573,7 @@ export class AiService {
         const line = buffer.slice(0, newlineIndex).trim()
         buffer = buffer.slice(newlineIndex + 1)
         newlineIndex = buffer.indexOf('\n')
+        this.assertNotAborted(abortSignal)
 
         if (!line || !line.startsWith('data:')) continue
         const data = line.slice(5).trim()
@@ -1522,6 +1652,7 @@ export class AiService {
       maxToolSteps?: number
       toolContext?: AiToolContext
       allowReasoning: boolean
+      requestId?: string
     },
     onChunk?: (chunk: AiMessage) => void,
     abortSignal?: AbortSignal
@@ -1536,6 +1667,7 @@ export class AiService {
     let hasOutputUsage = false
 
     for (let step = 0; step < maxSteps; step += 1) {
+      this.assertNotAborted(abortSignal)
       const stepResult = await this.streamOpenAICompatToolStep({
         model: input.model,
         providerType: input.providerType,
@@ -1590,6 +1722,7 @@ export class AiService {
       }
 
       for (const call of stepResult.toolCalls) {
+        this.assertNotAborted(abortSignal)
         const rawToolName = call.function?.name
         const toolName = resolveCompatToolCallName(rawToolName, input.tools)
 
@@ -1640,12 +1773,26 @@ export class AiService {
         }
 
         console.log('[AI] 工具执行开始', { toolName, input: parsedArgs, context: input.toolContext })
+        const mcpExecutionCallId = isMcpToolName(toolName)
+          ? `${String(input.requestId || 'request')}:${String(call.id || 'tool')}`
+          : undefined
+        this.trackMcpCall(input.requestId, mcpExecutionCallId)
         let result: unknown
         try {
-          result = await this.toolExecutor({ name: toolName, args: parsedArgs, context: input.toolContext })
+          result = await this.toolExecutor({
+            name: toolName,
+            args: parsedArgs,
+            context: input.toolContext,
+            callId: mcpExecutionCallId
+          })
         } catch (error) {
+          if (abortSignal?.aborted) {
+            throw new Error('AI stream aborted by user')
+          }
           const message = error instanceof Error ? error.message : String(error)
           throw new Error(`[AI_TOOL_EXECUTION_ERROR] ${toolName}: ${message}`)
+        } finally {
+          this.untrackMcpCall(input.requestId, mcpExecutionCallId)
         }
         console.log('[AI] 工具执行完成', { toolName, result })
 
@@ -1686,6 +1833,8 @@ export class AiService {
     finishReason?: string
     usage?: { inputTokens?: number; outputTokens?: number }
   }> {
+    this.assertNotAborted(abortSignal)
+    const toolLoopStepTimeoutMs = 120_000
     const baseURL = this.resolveCompatBaseURL(input.baseURL, input.providerType)
     const url = `${baseURL}/chat/completions`
     const requestApiKey = getRotatedApiKey(
@@ -1695,29 +1844,58 @@ export class AiService {
         baseURL: input.baseURL
       })
     )
-    const res = await fetch(url, {
-      method: 'POST',
-      signal: abortSignal,
-      headers: {
-        'Content-Type': 'application/json',
-        ...(requestApiKey ? { Authorization: `Bearer ${requestApiKey}` } : {})
-      },
-      body: JSON.stringify({
-        model: input.model,
-        stream: true,
-        stream_options: { include_usage: true },
-        messages: input.messages,
-        tools: input.tools,
-        tool_choice: 'auto',
-        temperature: input.params.temperature,
-        top_p: input.params.topP,
-        max_tokens: input.params.maxOutputTokens,
-        presence_penalty: input.params.presencePenalty,
-        frequency_penalty: input.params.frequencyPenalty,
-        stop: input.params.stopSequences,
-        seed: input.params.seed
+    const timeoutController = new AbortController()
+    let parentAbortListener: (() => void) | undefined
+    const timeoutHandle = setTimeout(() => {
+      timeoutController.abort(new Error(`OpenAI compat tool step timeout after ${Math.floor(toolLoopStepTimeoutMs / 1000)}s`))
+    }, toolLoopStepTimeoutMs)
+    if (abortSignal) {
+      if (abortSignal.aborted) {
+        timeoutController.abort(abortSignal.reason)
+      } else {
+        parentAbortListener = () => timeoutController.abort(abortSignal.reason)
+        abortSignal.addEventListener('abort', parentAbortListener, { once: true })
+      }
+    }
+
+    let res: Response
+    try {
+      res = await fetch(url, {
+        method: 'POST',
+        signal: timeoutController.signal,
+        headers: {
+          'Content-Type': 'application/json',
+          ...(requestApiKey ? { Authorization: `Bearer ${requestApiKey}` } : {})
+        },
+        body: JSON.stringify({
+          model: input.model,
+          stream: true,
+          stream_options: { include_usage: true },
+          messages: input.messages,
+          tools: input.tools,
+          tool_choice: 'auto',
+          temperature: input.params.temperature,
+          top_p: input.params.topP,
+          max_tokens: input.params.maxOutputTokens,
+          presence_penalty: input.params.presencePenalty,
+          frequency_penalty: input.params.frequencyPenalty,
+          stop: input.params.stopSequences,
+          seed: input.params.seed
+        })
       })
-    })
+    } catch (error) {
+      const abortedByCaller = !!abortSignal?.aborted
+      const abortedByTimeout = timeoutController.signal.aborted && !abortedByCaller
+      if (abortedByTimeout) {
+        throw new Error(`OpenAI compatible tool loop request timeout after ${Math.floor(toolLoopStepTimeoutMs / 1000)}s`)
+      }
+      throw error
+    } finally {
+      clearTimeout(timeoutHandle)
+      if (abortSignal && parentAbortListener) {
+        abortSignal.removeEventListener('abort', parentAbortListener)
+      }
+    }
 
     if (!res.ok || !res.body) {
       const body = await res.text().catch(() => '')
@@ -1735,6 +1913,7 @@ export class AiService {
     const toolCallsMap = new Map<number, { id: string; type: 'function'; function: { name: string; arguments: string } }>()
 
     while (true) {
+      this.assertNotAborted(abortSignal)
       const { value, done } = await reader.read()
       if (done) break
       buffer += decoder.decode(value, { stream: true })
@@ -1744,6 +1923,7 @@ export class AiService {
         const line = buffer.slice(0, newlineIndex).trim()
         buffer = buffer.slice(newlineIndex + 1)
         newlineIndex = buffer.indexOf('\n')
+        this.assertNotAborted(abortSignal)
 
         if (!line || !line.startsWith('data:')) continue
         const data = line.slice(5).trim()
@@ -2015,6 +2195,24 @@ export class AiService {
       },
       context: option.toolContext
     })
+    console.info('[AI] resolveMergedTools:mcp', {
+      mode: mcpMode,
+      requestedServerIds: option.mcp?.serverIds || [],
+      requestedAllowedToolIds: option.mcp?.allowedToolIds?.length || 0,
+      scopeAllowedServerIds: option.toolContext?.mcpScope?.allowedServerIds || [],
+      scopeAllowedToolIds: option.toolContext?.mcpScope?.allowedToolIds?.length || 0,
+      resolvedMcpToolCount: mcpTools.length,
+      declaredToolCount: declaredTools.length
+    })
+    if (mcpTools.length === 0) {
+      console.warn('[AI] resolveMergedTools:mcp returned 0 tools', {
+        mode: mcpMode,
+        requestedServerIds: option.mcp?.serverIds || [],
+        requestedAllowedToolIds: option.mcp?.allowedToolIds || [],
+        scopeAllowedServerIds: option.toolContext?.mcpScope?.allowedServerIds || [],
+        scopeAllowedToolIds: option.toolContext?.mcpScope?.allowedToolIds || []
+      })
+    }
 
     if (declaredTools.length === 0) {
       return mcpTools.length > 0 ? mcpTools : undefined
@@ -2050,20 +2248,20 @@ export class AiService {
         .map((item) => item?.type === 'function' ? item.function?.name : undefined)
         .filter((name): name is string => !!name)
         .map((name) => name.toLowerCase())
-      if (toolNames.some((name) => name.includes('web_search') || name.includes('web-search'))) {
-        if (!supportsWebSearch(modelId)) {
-          throw new Error('Model does not support web_search capability')
-        }
-      }
-      if (toolNames.some((name) => name.includes('embedding') || name.includes('embed'))) {
-        if (!supportsEmbedding(modelId)) {
-          throw new Error('Model does not support embedding capability')
-        }
-      }
-      if (toolNames.some((name) => name.includes('rerank') || name.includes('re-rank'))) {
-        if (!supportsRerank(modelId)) {
-          throw new Error('Model does not support rerank capability')
-        }
+      const requiresWebSearch = toolNames.some((name) => name.includes('web_search') || name.includes('web-search'))
+      const requiresEmbedding = toolNames.some((name) => name.includes('embedding') || name.includes('embed'))
+      const requiresRerank = toolNames.some((name) => name.includes('rerank') || name.includes('re-rank'))
+      const warnings: string[] = []
+      if (requiresWebSearch && !supportsWebSearch(modelId)) warnings.push('web_search')
+      if (requiresEmbedding && !supportsEmbedding(modelId)) warnings.push('embedding')
+      if (requiresRerank && !supportsRerank(modelId)) warnings.push('rerank')
+      if (warnings.length > 0) {
+        // Tool name keyword may come from MCP/custom tools; keep function-calling available and avoid hard block.
+        console.warn('[AI] buildTools: capability keyword mismatch (allowing custom tool execution)', {
+          modelId,
+          warnings,
+          toolNames
+        })
       }
     }
     if (!this.toolExecutor) {
@@ -3174,13 +3372,17 @@ export class AiService {
     onChunk(chunk)
   }
 
-  private emitCapabilityDebugChunk(
+  private emitDebugMetaChunk(
     onChunk: ((chunk: AiMessage) => void) | undefined,
-    capabilityDebug?: AiCapabilityDebugInfo
+    meta: {
+      capabilityDebug?: AiCapabilityDebugInfo
+      policyDebug?: AiPolicyDebugInfo
+    }
   ): void {
-    if (!capabilityDebug) return
+    if (!meta.capabilityDebug && !meta.policyDebug) return
     this.emitChunk(onChunk, createMetaChunk({
-      capability_debug: capabilityDebug
+      capability_debug: meta.capabilityDebug,
+      policy_debug: meta.policyDebug
     }))
   }
 
@@ -3216,6 +3418,37 @@ export class AiService {
 
   private emitEndChunk(onChunk: ((chunk: AiMessage) => void) | undefined, message: AiMessage): void {
     this.emitChunk(onChunk, createEndChunk(message))
+  }
+
+  private assertNotAborted(abortSignal?: AbortSignal): void {
+    if (!abortSignal?.aborted) return
+    throw new Error('AI stream aborted by user')
+  }
+
+  private trackMcpCall(requestId: string | undefined, callId: string | undefined): void {
+    if (!requestId || !callId) return
+    const current = this.requestMcpCallIds.get(requestId) || new Set<string>()
+    current.add(callId)
+    this.requestMcpCallIds.set(requestId, current)
+  }
+
+  private untrackMcpCall(requestId: string | undefined, callId: string | undefined): void {
+    if (!requestId || !callId) return
+    const current = this.requestMcpCallIds.get(requestId)
+    if (!current) return
+    current.delete(callId)
+    if (current.size === 0) {
+      this.requestMcpCallIds.delete(requestId)
+    }
+  }
+
+  private abortTrackedMcpCalls(requestId: string): void {
+    const ids = this.requestMcpCallIds.get(requestId)
+    if (!ids || ids.size === 0) return
+    for (const callId of ids) {
+      aiMcpService.abortTool(callId)
+    }
+    this.requestMcpCallIds.delete(requestId)
   }
 
   private resolveCompatBaseURL(explicitBaseURL?: string, providerType?: string): string {

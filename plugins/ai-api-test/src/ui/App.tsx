@@ -146,6 +146,7 @@ export default function App() {
   const [mcpCallResult, setMcpCallResult] = useState('')
   const [isMcpCalling, setIsMcpCalling] = useState(false)
   const mcpCallIdRef = useRef<string | null>(null)
+  const mcpCallSessionRef = useRef<string>('')
 
   const [skillsList, setSkillsList] = useState<SkillRecord[]>([])
   const [skillsMode, setSkillsMode] = useState<SkillMode>('manual')
@@ -157,6 +158,12 @@ export default function App() {
   const [skillsCallResult, setSkillsCallResult] = useState('')
   const [skillsCapabilityDebugJson, setSkillsCapabilityDebugJson] = useState('')
   const [isSkillsCalling, setIsSkillsCalling] = useState(false)
+  const [policyDebugEntries, setPolicyDebugEntries] = useState<Array<{
+    at: string
+    scene: string
+    stage: 'chunk' | 'final'
+    policy: any
+  }>>([])
 
   const fileInputRef = useRef<HTMLInputElement | null>(null)
   const streamRequestRef = useRef<any>(null)
@@ -300,6 +307,23 @@ export default function App() {
     if (!imageEditModel) setImageEditModel(selectedModel)
   }, [selectedModel, imageGenModel, imageEditModel])
 
+  const recordPolicyDebug = (scene: string, stage: 'chunk' | 'final', payload: any) => {
+    if (!payload || typeof payload !== 'object') return
+    const entry = {
+      at: new Date().toISOString(),
+      scene,
+      stage,
+      policy: payload
+    }
+    setPolicyDebugEntries((prev) => [entry, ...prev].slice(0, 20))
+  }
+
+  const capturePolicyDebug = (scene: string, stage: 'chunk' | 'final', envelope: any) => {
+    if (!envelope || typeof envelope !== 'object') return
+    if (!envelope.policy_debug || typeof envelope.policy_debug !== 'object') return
+    recordPolicyDebug(scene, stage, envelope.policy_debug)
+  }
+
   const startStream = async () => {
     if (!selectedModel) {
       notification?.show?.('请先选择模型', 'warning')
@@ -326,6 +350,7 @@ export default function App() {
             streamRequestIdRef.current = chunk.__requestId
             console.info('[ai-api-test] stream requestId set', chunk.__requestId)
           }
+          capturePolicyDebug('chat-stream', 'chunk', chunk)
           if (chunk?.chunkType === 'end') {
             if (chunk?.usage) {
               setTokenActual(JSON.stringify(chunk.usage, null, 2))
@@ -350,6 +375,7 @@ export default function App() {
       streamRequestIdRef.current = (req as any)?.requestId ?? null
       const finalMessage = await req
       console.info('[ai-api-test] stream end', finalMessage)
+      capturePolicyDebug('chat-stream', 'final', finalMessage)
       if (finalMessage?.reasoning_content) {
         setReasoningOutput(finalMessage.reasoning_content)
       }
@@ -735,6 +761,13 @@ export default function App() {
     setMcpCallResult('')
     setIsMcpCalling(true)
     mcpCallIdRef.current = null
+    const currentSession = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+    mcpCallSessionRef.current = currentSession
+    console.info('[ai-api-test][mcp] call start', {
+      model: selectedModel,
+      mode: mcpMode,
+      selectedMcpServerId: serverId || null
+    })
 
     const append = (text: string) => {
       if (!text) return
@@ -742,14 +775,19 @@ export default function App() {
     }
 
     try {
+      const call = ai?.call
+      if (typeof call !== 'function') {
+        throw new Error('当前版本未暴露 ai.call API')
+      }
       const mcpSelection = mcpMode === 'off'
         ? { mode: 'off' as const }
         : {
           mode: mcpMode,
           serverIds: mcpMode === 'manual' && serverId ? [serverId] : undefined
         }
+      let capabilityDebugLogged = false
 
-      const request = ai?.call(
+      const request = call(
         {
           model: selectedModel,
           messages: [
@@ -758,13 +796,26 @@ export default function App() {
           ],
           mcp: mcpSelection,
           toolContext: { pluginName: 'ai-api-test' },
-          maxToolSteps: 5
+          maxToolSteps: 20
         },
         (chunk: any) => {
+          if (mcpCallSessionRef.current !== currentSession) return
+          console.info('[ai-api-test][mcp] stream chunk', chunk)
           if (chunk?.__callId && !mcpCallIdRef.current) {
             mcpCallIdRef.current = chunk.__callId
           } else if (chunk?.__requestId && !mcpCallIdRef.current) {
             mcpCallIdRef.current = chunk.__requestId
+          }
+          capturePolicyDebug('mcp-call', 'chunk', chunk)
+          if (!capabilityDebugLogged && chunk?.capability_debug) {
+            capabilityDebugLogged = true
+            const selectedSkills = Array.isArray(chunk.capability_debug?.selectedSkills)
+              ? chunk.capability_debug.selectedSkills
+              : []
+            append(`\n[调试] capability_debug.selectedSkills=${JSON.stringify(selectedSkills)}\n`)
+          }
+          if (chunk?.chunkType === 'meta') {
+            return
           }
           if (chunk?.chunkType === 'error') {
             append(`\n[错误] ${chunk?.error?.message || '流式错误'}\n`)
@@ -774,12 +825,14 @@ export default function App() {
             append(`\n[思考] ${chunk.reasoning_content}`)
           }
           if (chunk?.chunkType === 'tool-call' || chunk?.tool_call?.name) {
+            const toolName = String(chunk?.tool_call?.name || '[unknown-tool]')
             const argsText = toPreview(chunk?.tool_call?.args)
-            append(`\n[调用工具] ${chunk.tool_call.name}${argsText ? ` args=${argsText}` : ''}\n`)
+            append(`\n[调用工具] ${toolName}${argsText ? ` args=${argsText}` : ''}\n`)
           }
           if (chunk?.chunkType === 'tool-result' || chunk?.tool_result?.name) {
+            const toolName = String(chunk?.tool_result?.name || '[unknown-tool]')
             const resultText = toPreview(chunk?.tool_result?.result)
-            append(`\n[工具结果] ${chunk.tool_result.name}${resultText ? ` => ${resultText}` : ''}\n`)
+            append(`\n[工具结果] ${toolName}${resultText ? ` => ${resultText}` : ''}\n`)
           }
           const text = extractText(chunk?.content)
           if (text) {
@@ -787,28 +840,45 @@ export default function App() {
           }
         }
       )
+      if (!request || typeof (request as any).then !== 'function') {
+        throw new Error('ai.call 未返回 Promise，请检查调用桥接是否正常')
+      }
       mcpRequestRef.current = request
       if ((request as any)?.requestId && !mcpCallIdRef.current) {
         mcpCallIdRef.current = (request as any).requestId
       }
       const result = await request
+      if (mcpCallSessionRef.current !== currentSession) {
+        return
+      }
       const finalText = extractText(result?.content)
       if (finalText) {
         append(`\n${finalText}`)
       }
+      capturePolicyDebug('mcp-call', 'final', result)
       setMcpCallResult(JSON.stringify(result, null, 2))
+      console.info('[ai-api-test][mcp] call done', result)
       notification?.show?.('MCP 调用完成', 'success')
     } catch (err: any) {
+      if (mcpCallSessionRef.current !== currentSession) {
+        return
+      }
+      console.error('[ai-api-test][mcp] call failed', err)
       setMcpCallResult(err?.message || 'MCP 调用失败')
     } finally {
+      if (mcpCallSessionRef.current !== currentSession) {
+        return
+      }
       setIsMcpCalling(false)
       mcpRequestRef.current = null
       mcpCallIdRef.current = null
+      mcpCallSessionRef.current = ''
     }
   }
 
   const handleMcpAbort = async () => {
     try {
+      mcpCallSessionRef.current = ''
       if (mcpRequestRef.current?.abort) {
         mcpRequestRef.current.abort()
         mcpRequestRef.current = null
@@ -821,6 +891,7 @@ export default function App() {
       if (callId && ai?.mcp?.abort) {
         await ai.mcp.abort(callId)
         mcpRequestRef.current = null
+        mcpCallIdRef.current = null
         setIsMcpCalling(false)
         notification?.show?.('已停止 MCP 调用', 'warning')
         return
@@ -828,6 +899,7 @@ export default function App() {
       if (callId && ai?.abort) {
         await ai.abort(callId)
         mcpRequestRef.current = null
+        mcpCallIdRef.current = null
         setIsMcpCalling(false)
         notification?.show?.('已停止 MCP 调用', 'warning')
         return
@@ -942,6 +1014,7 @@ export default function App() {
           if (chunk?.__requestId && !skillsRequestIdRef.current) {
             skillsRequestIdRef.current = chunk.__requestId
           }
+          capturePolicyDebug('skills-call', 'chunk', chunk)
           if (chunk?.capability_debug) {
             applyCapabilityDebug(chunk.capability_debug, 'chunk')
           }
@@ -966,6 +1039,7 @@ export default function App() {
       const result = await request
       const finalText = extractText(result?.content)
       if (finalText) append(`\n${finalText}`)
+      capturePolicyDebug('skills-call', 'final', result)
       if (result?.capability_debug) {
         applyCapabilityDebug(result.capability_debug, 'final')
       }
@@ -1011,7 +1085,9 @@ export default function App() {
         model: selectedModel || undefined,
         prompt: toolPrompt
       })
-      setToolResult(JSON.stringify(result?.data || result, null, 2))
+      const payload = result?.data || result
+      capturePolicyDebug('host-tool-call', 'final', payload)
+      setToolResult(JSON.stringify(payload, null, 2))
     } catch (err: any) {
       setToolResult(err?.message || '工具调用失败')
     }
@@ -1075,10 +1151,11 @@ export default function App() {
           ],
           tools,
           toolContext: { pluginName: 'ai-api-test' },
-          maxToolSteps: 5
+          maxToolSteps: 20
         },
         (chunk: any) => {
           console.log('[ai-api-test] stream chunk', chunk)
+          capturePolicyDebug('tool-stream', 'chunk', chunk)
           if (chunk?.chunkType === 'end') {
             return
           }
@@ -1121,6 +1198,7 @@ export default function App() {
           appendToolStream(`\n${finalText}`)
         }
       }
+      capturePolicyDebug('tool-stream', 'final', result)
       setToolResult(JSON.stringify(result, null, 2))
       setIsToolStreaming(false)
       notification?.show?.('流式工具调用完成', 'success')
@@ -1148,6 +1226,10 @@ export default function App() {
       .filter((cap) => cap?.type && cap.isUserSelected !== false)
       .map((cap) => cap.type)
   }, [selectedModelInfo])
+  const policyDebugJson = useMemo(() => {
+    if (policyDebugEntries.length === 0) return ''
+    return JSON.stringify(policyDebugEntries, null, 2)
+  }, [policyDebugEntries])
 
   return (
     <div className="app">
@@ -1450,6 +1532,27 @@ export default function App() {
               <label>Skills Resolve</label>
               <textarea className="output" value={skillsResolveJson} readOnly placeholder="skills.resolve 结果" />
             </div>
+          </div>
+        </section>
+
+        <section className="card">
+          <div className="card-title">策略可视化 (ai.call)</div>
+          <div className="actions">
+            <button className="btn-ghost" onClick={() => setPolicyDebugEntries([])}>
+              清空记录
+            </button>
+          </div>
+          <div className="text-xs text-slate-500 mt-2">
+            展示最近 20 次 ai.call 的最终生效策略（skills / mcp / toolContext 合并结果）。
+          </div>
+          <div className="field">
+            <label>Policy Debug</label>
+            <textarea
+              className="output"
+              value={policyDebugJson}
+              readOnly
+              placeholder="等待 ai.call 返回 policy_debug..."
+            />
           </div>
         </section>
 

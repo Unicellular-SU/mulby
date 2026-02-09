@@ -30,10 +30,35 @@ describe('streamChunkProtocol', () => {
         allowed: ['shell.exec'],
         denied: [],
         reasons: ['allowed by policy']
+      },
+      policy_debug: {
+        skills: {
+          requested: { mode: 'manual', skillIds: ['debug-skill'] },
+          selectedSkillIds: ['debug-skill'],
+          selectedSkillNames: ['Debug Skill'],
+          reasons: ['manual:1']
+        },
+        mcp: {
+          requested: { mode: 'manual', serverIds: ['filesystem'] },
+          resolved: { mode: 'manual', serverIds: ['filesystem'] }
+        },
+        toolContext: {
+          requested: { pluginName: 'ai-api-test' },
+          resolved: { pluginName: 'ai-api-test' }
+        },
+        capabilities: {
+          requested: [],
+          resolved: []
+        },
+        internalTools: {
+          requested: [],
+          resolved: []
+        }
       }
     })
     assert.equal(chunk.chunkType, 'meta')
     assert.deepEqual(chunk.capability_debug?.requested, ['shell.exec'])
+    assert.deepEqual(chunk.policy_debug?.skills.selectedSkillIds, ['debug-skill'])
   })
 
   it('creates tool call/result chunks', () => {

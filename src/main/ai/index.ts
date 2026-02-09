@@ -5,7 +5,12 @@ import type { AiToolCapabilityName } from './tools/capabilities'
 export const aiService = new AiService()
 
 export function setAiToolExecutor(
-  executor?: (input: { name: string; args: unknown; context?: import('../../shared/types/ai').AiToolContext }) => Promise<unknown>
+  executor?: (input: {
+    name: string
+    args: unknown
+    context?: import('../../shared/types/ai').AiToolContext
+    callId?: string
+  }) => Promise<unknown>
 ) {
   aiService.setToolExecutor(executor)
 }

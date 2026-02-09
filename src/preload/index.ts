@@ -101,51 +101,100 @@ const intoolsApi = {
       }
 
       let requestIdValue: string | null = null
-      const requestIdPromise = ipcRenderer.invoke('ai:stream', option)
-      const promise = requestIdPromise.then(({ requestId }) => {
-        requestIdValue = requestId
-        ;(promise as any).requestId = requestId
+      let settled = false
+      const pendingEvents: Array<{ type: 'chunk' | 'end' | 'error'; id: string; payload: any }> = []
+
+      let resolvePromise: ((value: any) => void) | null = null
+      let rejectPromise: ((reason?: any) => void) | null = null
+
+      const emitChunk = (chunk: any) => {
         try {
-          streamCallback({ __requestId: requestId })
+          streamCallback(chunk)
         } catch {
-          // ignore
+          // ignore user callback errors
         }
+      }
 
-        return new Promise((resolve, reject) => {
-          const onChunk = (_: any, id: string, chunk: any) => {
-            if (id !== requestId) return
-            streamCallback(chunk)
-          }
-          const onEnd = (_: any, id: string, message: any) => {
-            if (id !== requestId) return
-            cleanup()
-            resolve(message)
-          }
-          const onError = (_: any, id: string, error: string) => {
-            if (id !== requestId) return
-            cleanup()
-            reject(new Error(error))
-          }
+      const maybeHandleEvent = (event: { type: 'chunk' | 'end' | 'error'; id: string; payload: any }) => {
+        if (settled) return
+        if (!requestIdValue) {
+          pendingEvents.push(event)
+          return
+        }
+        if (event.id !== requestIdValue) return
+        if (event.type === 'chunk') {
+          emitChunk(event.payload)
+          return
+        }
+        settled = true
+        cleanup()
+        if (event.type === 'end') {
+          resolvePromise?.(event.payload)
+          return
+        }
+        rejectPromise?.(new Error(String(event.payload || 'AI stream failed')))
+      }
 
-          const cleanup = () => {
-            ipcRenderer.removeListener('ai:stream:chunk', onChunk)
-            ipcRenderer.removeListener('ai:stream:end', onEnd)
-            ipcRenderer.removeListener('ai:stream:error', onError)
-          }
+      const onChunk = (_: any, id: string, chunk: any) => {
+        maybeHandleEvent({ type: 'chunk', id, payload: chunk })
+      }
+      const onEnd = (_: any, id: string, message: any) => {
+        maybeHandleEvent({ type: 'end', id, payload: message })
+      }
+      const onError = (_: any, id: string, error: string) => {
+        maybeHandleEvent({ type: 'error', id, payload: error })
+      }
 
-          ipcRenderer.on('ai:stream:chunk', onChunk)
-          ipcRenderer.on('ai:stream:end', onEnd)
-          ipcRenderer.on('ai:stream:error', onError)
-        })
+      const cleanup = () => {
+        ipcRenderer.removeListener('ai:stream:chunk', onChunk)
+        ipcRenderer.removeListener('ai:stream:end', onEnd)
+        ipcRenderer.removeListener('ai:stream:error', onError)
+      }
+
+      ipcRenderer.on('ai:stream:chunk', onChunk)
+      ipcRenderer.on('ai:stream:end', onEnd)
+      ipcRenderer.on('ai:stream:error', onError)
+
+      const promise = new Promise((resolve, reject) => {
+        resolvePromise = resolve
+        rejectPromise = reject
       })
+
+      const requestIdPromise = ipcRenderer.invoke('ai:stream', option)
+        .then(({ requestId }) => {
+          if (settled) return
+          requestIdValue = requestId
+          ;(promise as any).requestId = requestId
+          emitChunk({ __requestId: requestId })
+          if (pendingEvents.length > 0) {
+            const queue = pendingEvents.splice(0, pendingEvents.length)
+            for (const event of queue) {
+              maybeHandleEvent(event)
+              if (settled) break
+            }
+          }
+        })
+        .catch((error) => {
+          if (settled) return
+          settled = true
+          cleanup()
+          rejectPromise?.(error instanceof Error ? error : new Error(String(error)))
+        })
 
       ;(promise as any).abort = () => {
         if (requestIdValue) {
-          ipcRenderer.invoke('ai:abort', requestIdValue)
+          ipcRenderer.invoke('ai:abort', requestIdValue).catch(() => {})
           return
         }
-        requestIdPromise.then(({ requestId }) => ipcRenderer.invoke('ai:abort', requestId)).catch(() => {})
+        requestIdPromise
+          .then(() => {
+            if (requestIdValue) {
+              return ipcRenderer.invoke('ai:abort', requestIdValue).catch(() => {})
+            }
+          })
+          .catch(() => {})
       }
+
       return promise as any
     }
 

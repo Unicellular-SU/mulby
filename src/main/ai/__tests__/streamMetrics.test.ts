@@ -16,7 +16,7 @@ describe('streamMetrics', () => {
       model: 'deepseek:deepseek-reasoner',
       hasTools: true,
       compatToolLoop: true,
-      maxToolSteps: 5
+      maxToolSteps: 20
     })
     markAiStreamRoute(metrics, 'openai-compat-tool-loop')
     recordAiStreamChunk(metrics, { role: 'assistant', chunkType: 'meta', capability_debug: { requested: [], allowed: [], denied: [], reasons: [] } })

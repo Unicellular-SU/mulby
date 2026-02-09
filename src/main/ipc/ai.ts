@@ -15,21 +15,30 @@ export function registerAiHandlers() {
   ipcMain.handle('ai:stream', async (event: IpcMainInvokeEvent, option: AiOption) => {
     const requestId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
 
-    aiService
-      .stream(option, {
-        onChunk: (chunk: AiMessage) => {
-          event.sender.send('ai:stream:chunk', requestId, chunk)
-        },
-        onEnd: (message: AiMessage) => {
-          event.sender.send('ai:stream:end', requestId, message)
-        },
-        onError: (error: Error) => {
-          event.sender.send('ai:stream:error', requestId, error.message)
-        }
-      }, requestId)
-      .catch(() => {
-        // errors handled in onError
-      })
+    // 避免在 renderer 监听器挂载前发送首个 chunk/end，导致 Promise 永久等待。
+    setTimeout(() => {
+      let settled = false
+      aiService
+        .stream(option, {
+          onChunk: (chunk: AiMessage) => {
+            event.sender.send('ai:stream:chunk', requestId, chunk)
+          },
+          onEnd: (message: AiMessage) => {
+            settled = true
+            event.sender.send('ai:stream:end', requestId, message)
+          },
+          onError: (error: Error) => {
+            settled = true
+            event.sender.send('ai:stream:error', requestId, error.message)
+          }
+        }, requestId)
+        .catch((error) => {
+          // 双重兜底：若异常发生在 aiService.stream 的 onError 触发之前，也要回传给 renderer。
+          if (settled) return
+          const message = error instanceof Error ? error.message : String(error || 'AI stream failed')
+          event.sender.send('ai:stream:error', requestId, message)
+        })
+    }, 0)
 
     return { requestId }
   })
@@ -52,16 +61,18 @@ export function registerAiHandlers() {
 
   ipcMain.handle('ai:test:stream', async (event, input) => {
     const requestId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
-    aiService
-      .testConnectionStream(input, (chunk) => {
-        event.sender.send('ai:test:chunk', requestId, chunk)
-      })
-      .then((result) => {
-        event.sender.send('ai:test:end', requestId, result)
-      })
-      .catch((err: Error) => {
-        event.sender.send('ai:test:error', requestId, err.message)
-      })
+    setTimeout(() => {
+      aiService
+        .testConnectionStream(input, (chunk) => {
+          event.sender.send('ai:test:chunk', requestId, chunk)
+        })
+        .then((result) => {
+          event.sender.send('ai:test:end', requestId, result)
+        })
+        .catch((err: Error) => {
+          event.sender.send('ai:test:error', requestId, err.message)
+        })
+    }, 0)
     return { requestId }
   })
 

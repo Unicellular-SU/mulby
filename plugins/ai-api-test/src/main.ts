@@ -213,7 +213,7 @@ export const host = {
         { role: 'user', content: payload.prompt }
       ],
       tools,
-      maxToolSteps: 5  // 设置最大工具调用步骤数为 5
+      maxToolSteps: 20  // 设置最大工具调用步骤数为 20
     } as any)
 
     console.log('[ai-api-test] AI 调用结果', result)
@@ -261,7 +261,7 @@ export const host = {
         { role: 'user', content: payload.prompt }
       ],
       tools,
-      maxToolSteps: 5  // 设置最大工具调用步骤数为 5
+      maxToolSteps: 20  // 设置最大工具调用步骤数为 20
     } as any, onChunk)
 
     console.log('[ai-api-test] AI 调用结果', result)

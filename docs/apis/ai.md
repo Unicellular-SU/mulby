@@ -107,7 +107,7 @@ export const host = {
       model: 'openai:gpt-4o-mini',
       messages: input.messages,
       tools,
-      maxToolSteps: 5  // 设置最大工具调用步骤数为 5
+      maxToolSteps: 20  // 设置最大工具调用步骤数为 20
     });
   }
 };

@@ -100,6 +100,92 @@ describe('skill service', () => {
     assert.equal(typeof applied.messages[0].content, 'string')
   })
 
+  it('keeps explicit MCP selection when skills are only implicitly active, and merges when skills are explicit', async (t) => {
+    const tempDir = await createTempDir('intools-skill-mcp-precedence-')
+    t.after(async () => {
+      await rm(tempDir, { recursive: true, force: true })
+    })
+
+    const { service } = createInMemorySkillService({
+      userDataPath: tempDir,
+      settings: {
+        providers: [],
+        models: [],
+        mcp: { servers: [] },
+        skills: {
+          enabled: true,
+          activeSkillIds: [],
+          autoSelect: { enabled: false, maxSkillsPerCall: 3, minScore: 1 },
+          records: []
+        }
+      }
+    })
+
+    const created = await service.create({
+      id: 'skill-mcp-policy',
+      name: 'Skill MCP Policy',
+      promptTemplate: 'Use MCP skill policy when explicitly selected.',
+      enabled: true,
+      trustLevel: 'trusted',
+      mcpPolicy: {
+        serverIds: ['skill-server'],
+        allowedToolIds: ['mcp__skill-server__skill_tool']
+      }
+    })
+
+    const implicitResolved = service.resolveForAiCall({
+      messages: [{ role: 'user', content: 'run task' }],
+      mcp: {
+        mode: 'manual',
+        serverIds: ['manual-server'],
+        allowedToolIds: ['mcp__manual-server__manual_tool']
+      }
+    })
+
+    const implicitApplied = service.applyResolutionToOption({
+      messages: [{ role: 'user', content: 'run task' }],
+      mcp: {
+        mode: 'manual',
+        serverIds: ['manual-server'],
+        allowedToolIds: ['mcp__manual-server__manual_tool']
+      }
+    }, implicitResolved)
+
+    assert.deepEqual(implicitApplied.mcp?.serverIds, ['manual-server'])
+    assert.deepEqual(implicitApplied.mcp?.allowedToolIds, ['mcp__manual-server__manual_tool'])
+    assert.equal(implicitApplied.mcp?.mode, 'manual')
+
+    const explicitResolved = service.resolveForAiCall({
+      messages: [{ role: 'user', content: 'run task' }],
+      mcp: {
+        mode: 'manual',
+        serverIds: ['manual-server', 'skill-server'],
+        allowedToolIds: ['mcp__manual-server__manual_tool', 'mcp__skill-server__skill_tool']
+      },
+      skills: {
+        mode: 'manual',
+        skillIds: [created.id]
+      }
+    })
+
+    const explicitApplied = service.applyResolutionToOption({
+      messages: [{ role: 'user', content: 'run task' }],
+      mcp: {
+        mode: 'manual',
+        serverIds: ['manual-server', 'skill-server'],
+        allowedToolIds: ['mcp__manual-server__manual_tool', 'mcp__skill-server__skill_tool']
+      },
+      skills: {
+        mode: 'manual',
+        skillIds: [created.id]
+      }
+    }, explicitResolved)
+
+    assert.deepEqual(explicitApplied.mcp?.serverIds, ['skill-server'])
+    assert.deepEqual(explicitApplied.mcp?.allowedToolIds, ['mcp__skill-server__skill_tool'])
+    assert.equal(explicitApplied.mcp?.mode, 'manual')
+  })
+
   it('imports from JSON and provides preview output', async (t) => {
     const tempDir = await createTempDir('intools-skill-json-')
     t.after(async () => {

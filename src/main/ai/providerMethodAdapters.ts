@@ -49,7 +49,11 @@ function createProviderMethodAdapter(type: string): ProviderMethodAdapter {
       if (adapter.type === 'anthropic' && args.hasMultimodalContent) {
         return args.executeAnthropicCall()
       }
-      if (adapter.openAICompatible && args.hasTools && args.shouldUseCompatToolLoop) {
+      if (
+        adapter.openAICompatible &&
+        args.hasTools &&
+        (args.shouldUseCompatToolLoop || (adapter.type !== 'openai' && adapter.type !== 'openai-response'))
+      ) {
         return args.executeCompatToolLoopCall()
       }
       return args.executeSdkCall()
@@ -61,7 +65,11 @@ function createProviderMethodAdapter(type: string): ProviderMethodAdapter {
       if (adapter.openAICompatible && adapter.preferCompatTextStream && !args.hasTools) {
         return args.executeCompatChatStream()
       }
-      if (adapter.openAICompatible && args.hasTools && args.shouldUseCompatToolLoop) {
+      if (
+        adapter.openAICompatible &&
+        args.hasTools &&
+        (args.shouldUseCompatToolLoop || (adapter.type !== 'openai' && adapter.type !== 'openai-response'))
+      ) {
         return args.executeCompatToolLoopStream()
       }
       return args.executeSdkStream()

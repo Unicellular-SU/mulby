@@ -73,7 +73,7 @@ const aiInternalToolRuntime = createAiInternalToolRuntime({
   }
 })
 
-setAiToolExecutor(async ({ name, args, context }) => {
+setAiToolExecutor(async ({ name, args, context, callId }) => {
   if (name === AI_SKILL_CREATOR_TOOL_NAME) {
     return await executeSkillCreatorRunCommandTool(args, context, {
       loadPack: loadSkillCreatorResourcePack,
@@ -118,7 +118,8 @@ setAiToolExecutor(async ({ name, args, context }) => {
     return await aiMcpService.callToolById({
       toolId: name,
       args,
-      context
+      context,
+      callId
     })
   }
 

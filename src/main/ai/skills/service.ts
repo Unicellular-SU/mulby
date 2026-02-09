@@ -1199,8 +1199,19 @@ export class AiSkillService {
     const messages = injectedSystemPrompt
       ? [{ role: 'system' as const, content: injectedSystemPrompt }, ...option.messages]
       : option.messages
-    const mergedMcp = mergeMcpSelections(option.mcp, resolution.mergedMcp)
-    const toolContext = mergeToolContext(option.toolContext, resolution.toolContextPatch)
+    const hasExplicitMcpSelection = !!option.mcp
+    const hasExplicitSkillSelection = !!option.skills
+    // 显式 mcp 代表调用方已确定本次工具边界；隐式全局技能不应覆盖该边界。
+    const shouldMergeSkillMcpPolicies = hasExplicitSkillSelection || !hasExplicitMcpSelection
+    const mergedMcp = shouldMergeSkillMcpPolicies
+      ? mergeMcpSelections(option.mcp, resolution.mergedMcp)
+      : option.mcp
+    const toolContext = shouldMergeSkillMcpPolicies
+      ? mergeToolContext(option.toolContext, resolution.toolContextPatch)
+      : option.toolContext
+    if (option.mcp?.mode && mergedMcp) {
+      mergedMcp.mode = option.mcp.mode
+    }
     const capabilities = Array.from(
       new Set([
         ...(option.capabilities || []),

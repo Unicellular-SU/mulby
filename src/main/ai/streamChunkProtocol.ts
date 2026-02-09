@@ -3,11 +3,13 @@ import type { AiStreamErrorClassification } from '../../shared/ai/streamDiagnost
 
 export function createMetaChunk(meta: {
   capability_debug?: AiMessage['capability_debug']
+  policy_debug?: AiMessage['policy_debug']
 }): AiMessage {
   return {
     role: 'assistant',
     chunkType: 'meta',
-    capability_debug: meta.capability_debug
+    capability_debug: meta.capability_debug,
+    policy_debug: meta.policy_debug
   }
 }
 
