@@ -2,13 +2,92 @@ import { ipcMain, app } from 'electron'
 import { resolve } from 'path'
 import { PluginManager } from '../plugin'
 import { resolveIcon } from '../plugin/icon-resolver'
-import type { InputPayload } from '../../shared/types/plugin'
+import type { InputPayload, Plugin, PluginFeature } from '../../shared/types/plugin'
 import { PluginInstaller } from '../plugin/installer'
+
+function nowMs(): number {
+  return Number(process.hrtime.bigint()) / 1_000_000
+}
+
+function roundMs(value: number): number {
+  return Math.round(value * 10) / 10
+}
+
+function logSearchPerfMain(stage: string, payload: Record<string, unknown>) {
+  const message = JSON.stringify({
+    stage,
+    ...payload,
+    ts: Date.now()
+  })
+  console.log(`[search-perf-main] ${message}`)
+}
 
 export function registerPluginHandlers(manager: PluginManager) {
   const installer = new PluginInstaller()
   const userPluginsDir = resolve(app.getPath('userData'), 'plugins')
   const isBuiltin = (pluginPath: string) => !resolve(pluginPath).startsWith(userPluginsDir)
+  const featureIconCache = new Map<string, Awaited<ReturnType<typeof resolveIcon>> | null>()
+
+  const resolveResultIcon = async (
+    cacheKey: string,
+    pluginPath: string,
+    featureIcon: PluginFeature['icon'] | undefined,
+    fallback: Plugin['resolvedIcon']
+  ) => {
+    const startedAt = nowMs()
+    if (!featureIcon) {
+      return {
+        icon: fallback,
+        featureIconRequested: false,
+        cacheHit: false,
+        resolveMs: 0
+      }
+    }
+    const cached = featureIconCache.get(cacheKey)
+    if (cached !== undefined) {
+      return {
+        icon: cached || fallback,
+        featureIconRequested: true,
+        cacheHit: true,
+        resolveMs: roundMs(nowMs() - startedAt)
+      }
+    }
+    const resolved = await resolveIcon(featureIcon, pluginPath)
+    featureIconCache.set(cacheKey, resolved || null)
+    return {
+      icon: resolved || fallback,
+      featureIconRequested: true,
+      cacheHit: false,
+      resolveMs: roundMs(nowMs() - startedAt)
+    }
+  }
+
+  const formatResultItem = async (
+    cacheKey: string,
+    plugin: Plugin,
+    feature: PluginFeature,
+    matchType: string
+  ) => {
+    const iconMeta = await resolveResultIcon(cacheKey, plugin.path, feature.icon, plugin.resolvedIcon)
+
+    return {
+      item: {
+        pluginId: plugin.id,
+        pluginName: plugin.manifest.name,
+        displayName: plugin.manifest.displayName,
+        featureCode: feature.code,
+        featureExplain: feature.explain,
+        matchType,
+        icon: iconMeta.icon
+      },
+      meta: {
+        featureIconRequested: iconMeta.featureIconRequested,
+        cacheHit: iconMeta.cacheHit,
+        resolveMs: iconMeta.resolveMs
+      }
+    }
+  }
+
   // 获取所有插件
   ipcMain.handle('plugin:getAll', () => {
     return manager.getAll().map(p => ({
@@ -33,28 +112,64 @@ export function registerPluginHandlers(manager: PluginManager) {
 
   // 搜索插件（返回匹配的功能入口）
   ipcMain.handle('plugin:search', async (_, query: string | InputPayload) => {
+    const startedAt = nowMs()
+    const querySummary = typeof query === 'string'
+      ? { kind: 'string', textLength: query.length, attachmentCount: 0 }
+      : { kind: 'payload', textLength: query.text.length, attachmentCount: query.attachments.length }
     const searchResults = await manager.search(query)
+    const managerDoneAt = nowMs()
+    const formattedResults = await Promise.all(searchResults.map((result) =>
+      formatResultItem(
+        `${result.plugin.id}:${result.feature.code}`,
+        result.plugin,
+        result.feature,
+        result.matchType
+      )
+    ))
+    const formatDoneAt = nowMs()
 
-    return Promise.all(searchResults.map(async result => {
-      // 优先使用功能独立图标，否则使用插件图标
-      let icon = result.plugin.resolvedIcon
-      if (result.feature.icon) {
-        const featureIcon = await resolveIcon(result.feature.icon, result.plugin.path)
-        if (featureIcon) {
-          icon = featureIcon
-        }
-      }
+    let iconResolveTotalMs = 0
+    let iconResolveCount = 0
+    let iconCacheHits = 0
+    let featureIconRequestedCount = 0
 
-      return {
-        pluginId: result.plugin.id,
-        pluginName: result.plugin.manifest.name,
-        displayName: result.plugin.manifest.displayName,
-        featureCode: result.feature.code,
-        featureExplain: result.feature.explain,
-        matchType: result.matchType,
-        icon
-      }
-    }))
+    for (const result of formattedResults) {
+      iconResolveTotalMs += result.meta.resolveMs
+      iconResolveCount += 1
+      if (result.meta.cacheHit) iconCacheHits += 1
+      if (result.meta.featureIconRequested) featureIconRequestedCount += 1
+    }
+
+    logSearchPerfMain('plugin-search', {
+      ...querySummary,
+      matchedCount: searchResults.length,
+      resultCount: formattedResults.length,
+      managerSearchMs: roundMs(managerDoneAt - startedAt),
+      renderFormatMs: roundMs(formatDoneAt - managerDoneAt),
+      totalMs: roundMs(formatDoneAt - startedAt),
+      iconResolveTotalMs: roundMs(iconResolveTotalMs),
+      iconResolveAvgMs: iconResolveCount > 0 ? roundMs(iconResolveTotalMs / iconResolveCount) : 0,
+      iconResolveCount,
+      featureIconRequestedCount,
+      iconCacheHits
+    })
+
+    return formattedResults.map((result) => result.item)
+  })
+
+  // 最近使用插件
+  ipcMain.handle('plugin:getRecentUsed', async (_, limit?: number) => {
+    const normalizedLimit = typeof limit === 'number' && limit > 0 ? Math.floor(limit) : 20
+    const recentResults = manager.getRecentUsed(normalizedLimit)
+    const formattedResults = await Promise.all(recentResults.map((result) =>
+      formatResultItem(
+        `${result.plugin.id}:${result.feature.code}`,
+        result.plugin,
+        result.feature,
+        'keyword'
+      )
+    ))
+    return formattedResults.map((result) => result.item)
   })
 
   // 执行插件

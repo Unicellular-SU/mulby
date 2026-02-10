@@ -716,18 +716,50 @@ body {
 
 /* Plugin Grid */
 .plugin-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 10px 12px 12px;
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  -webkit-app-region: no-drag;
+  backdrop-filter: blur(var(--glass-blur));
+  -webkit-backdrop-filter: blur(var(--glass-blur));
+}
+
+.result-empty {
+  margin: 6px 0;
+  border-radius: 10px;
+  border: 1px dashed var(--glass-border);
+  background: var(--glass-bg);
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.4;
+  text-align: center;
+  padding: 18px 14px;
+}
+
+.result-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.result-section-title {
+  padding: 0 2px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+}
+
+.result-section-grid {
   display: grid;
   grid-template-columns: repeat(6, minmax(0, 1fr));
   align-content: start;
   gap: 8px;
-  padding: 12px;
-  flex: 1;
-  min-height: 0;
-  overflow-y: auto;
-  padding-right: 10px;
-  /* 添加 backdrop-filter 到容器而不是每个卡片 */
-  backdrop-filter: blur(var(--glass-blur));
-  -webkit-backdrop-filter: blur(var(--glass-blur));
 }
 
 .plugin-card {
@@ -766,6 +798,10 @@ body {
 }
 
 .plugin-card.settings {
+  background: var(--glass-bg);
+}
+
+.plugin-card.system {
   background: var(--glass-bg);
 }
 
@@ -848,25 +884,25 @@ body {
 
 
 @media (max-width: 980px) {
-  .plugin-grid {
+  .result-section-grid {
     grid-template-columns: repeat(5, minmax(0, 1fr));
   }
 }
 
 @media (max-width: 760px) {
-  .plugin-grid {
+  .result-section-grid {
     grid-template-columns: repeat(4, minmax(0, 1fr));
   }
 }
 
 @media (max-width: 580px) {
-  .plugin-grid {
+  .result-section-grid {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 }
 
 @media (max-width: 420px) {
-  .plugin-grid {
+  .result-section-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }

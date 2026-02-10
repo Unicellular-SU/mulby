@@ -56,11 +56,24 @@ export interface SearchResultItem {
   featureCode: string
   featureExplain: string
   featureRoute?: string
-  matchType: 'keyword' | 'regex' | 'files' | 'img'
+  matchType: 'keyword' | 'regex' | 'files' | 'img' | 'over'
   icon?: {
     type: 'url' | 'svg' | 'data-url' | 'emoji'
     value: string
   }
+}
+
+export interface DesktopFileSearchResult {
+  name: string
+  path: string
+  isDirectory: boolean
+  size?: number
+}
+
+export interface DesktopAppSearchResult {
+  name: string
+  path: string
+  kind: 'application' | 'shortcut' | 'executable'
 }
 
 export interface PluginInfo {
@@ -336,6 +349,7 @@ export interface ElectronAPI {
     getAll: () => Promise<PluginInfo[]>
     search: (query: string | InputPayload) => Promise<SearchResultItem[]>
     run: (name: string, featureCode: string, input?: string | InputPayload) => Promise<{ success: boolean; hasUI?: boolean; error?: string }>
+    getRecentUsed: (limit?: number) => Promise<SearchResultItem[]>
     install: (filePath: string) => Promise<{ success: boolean; pluginName?: string; isUpdate?: boolean; oldVersion?: string; newVersion?: string; error?: string }>
     enable: (name: string) => Promise<{ success: boolean; error?: string }>
     disable: (name: string) => Promise<{ success: boolean; error?: string }>
@@ -396,6 +410,10 @@ export interface ElectronAPI {
     listRunCommandAudit: (limit?: number) => Promise<CommandAuditItem[]>
     clearRunCommandAudit: () => Promise<CommandRunnerSettings>
     clearRunCommandTrusted: () => Promise<CommandRunnerSettings>
+  }
+  desktop: {
+    searchFiles: (query: string, limit?: number) => Promise<DesktopFileSearchResult[]>
+    searchApps: (query: string, limit?: number) => Promise<DesktopAppSearchResult[]>
   }
   dialog: {
     showOpenDialog: (options?: OpenDialogOptions) => Promise<string[]>

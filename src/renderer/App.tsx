@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useCallback, useDeferredValue, useRef } from 'react'
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import SearchInput, { SearchInputRef } from './components/SearchInput'
 import PluginList from './components/PluginList'
 import PluginDetails from './components/PluginDetails'
@@ -22,9 +22,31 @@ interface PluginInfo {
   mode: 'panel'
 }
 
+type SearchPerfTraceSource = 'text' | 'attachments'
+
+interface SearchPerfTrace {
+  id: number
+  startedAt: number
+  source: SearchPerfTraceSource
+  textLength: number
+  attachmentCount: number
+}
+
+function roundPerfMs(value: number): number {
+  return Math.round(value * 10) / 10
+}
+
+function logSearchPerf(stage: string, payload: Record<string, unknown>) {
+  const message = JSON.stringify({
+    stage,
+    ...payload
+  })
+  console.log(`[search-perf] ${message}`)
+}
+
 function App() {
   const [query, setQuery] = useState('')
-  const [resultCount, setResultCount] = useState(0)
+  const [, setResultCount] = useState(0)
   const [pluginOpen, setPluginOpen] = useState(false) // 仅用于跟踪插件是否打开
   const [detailsPluginName, setDetailsPluginName] = useState<string | null>(null)
   const [detailsReturnTarget, setDetailsReturnTarget] = useState<'home' | 'settings' | 'plugins'>('home')
@@ -38,10 +60,39 @@ function App() {
   const [attachments, setAttachments] = useState<UiAttachment[]>([])
   const [attachmentsManagerOpen, setAttachmentsManagerOpen] = useState(false)
   const payload = useMemo(() => buildPayload(query, attachments), [query, attachments])
-  const deferredPayload = useDeferredValue(payload)
+  const [perfTrace, setPerfTrace] = useState<SearchPerfTrace>({
+    id: 0,
+    startedAt: 0,
+    source: 'text',
+    textLength: 0,
+    attachmentCount: 0
+  })
 
   // 搜索框 ref
   const searchInputRef = useRef<SearchInputRef>(null)
+  const perfTraceSeqRef = useRef(0)
+  const lastHeightRef = useRef<number | null>(null)
+
+  const beginPerfTrace = useCallback((source: SearchPerfTraceSource, textLength: number, attachmentCount: number) => {
+    const nextId = perfTraceSeqRef.current + 1
+    perfTraceSeqRef.current = nextId
+    const startedAt = performance.now()
+    setPerfTrace({
+      id: nextId,
+      startedAt,
+      source,
+      textLength,
+      attachmentCount
+    })
+    logSearchPerf('input', {
+      traceId: nextId,
+      source,
+      textLength,
+      attachmentCount,
+      nowMs: roundPerfMs(startedAt),
+      ts: Date.now()
+    })
+  }, [])
 
   const managerMetrics = useMemo(() => {
     const MANAGER_HEADER_HEIGHT = 34
@@ -96,11 +147,29 @@ function App() {
       height = SEARCH_BOX_HEIGHT
     } else if (attachmentsManagerOpen && attachments.length > 0) {
       height = SEARCH_BOX_HEIGHT + BORDER_HEIGHT + MANAGER_HEIGHT
-    } else if ((query.length > 0 || attachments.length > 0) && resultCount > 0) {
+    } else if (query.length > 0 || attachments.length > 0) {
       height = EXPANDED_HEIGHT
     }
     window.intools.window.setExpendHeight(height, allowResize)
-  }, [query, resultCount, pluginOpen, detailsPluginName, attachments.length, attachmentsManagerOpen, managerMetrics.managerHeight, viewMode])
+
+    const hasInput = query.length > 0 || attachments.length > 0
+    if (hasInput && lastHeightRef.current !== height) {
+      lastHeightRef.current = height
+      const now = performance.now()
+      logSearchPerf('window-height', {
+        traceId: perfTrace.id,
+        height,
+        allowResize,
+        queryLength: query.length,
+        attachmentCount: attachments.length,
+        sinceInputMs: perfTrace.startedAt > 0 ? roundPerfMs(now - perfTrace.startedAt) : undefined,
+        nowMs: roundPerfMs(now),
+        ts: Date.now()
+      })
+    } else if (!hasInput) {
+      lastHeightRef.current = null
+    }
+  }, [query, pluginOpen, detailsPluginName, attachments.length, attachmentsManagerOpen, managerMetrics.managerHeight, viewMode, perfTrace.id, perfTrace.startedAt])
 
   // 监听插件附着事件
   useEffect(() => {
@@ -272,6 +341,7 @@ function App() {
             }
             // 设置文本（如果搜索框为空，或者覆盖旧文本）
             setQuery(text)
+            beginPerfTrace('text', text.length, 0)
           }
         } else if (format === 'image') {
           // 粘贴图片 - 总是替换附件
@@ -299,6 +369,7 @@ function App() {
             setAttachments([attachment])
             // 清空搜索框，让用户专注于附件
             setQuery('')
+            beginPerfTrace('attachments', 0, 1)
           }
         } else if (format === 'files') {
           // 粘贴文件 - 总是替换附件
@@ -318,6 +389,7 @@ function App() {
             setAttachments(newAttachments)
             // 清空搜索框，让用户专注于附件
             setQuery('')
+            beginPerfTrace('attachments', 0, newAttachments.length)
           }
         }
       } catch (err) {
@@ -326,7 +398,7 @@ function App() {
     })
 
     return cleanup
-  }, [query, pluginOpen, clearAttachments])
+  }, [query, pluginOpen, clearAttachments, attachments.length, beginPerfTrace])
 
   const handleQueryChange = (value: string) => {
     // 如果有附着的插件，先关闭它
@@ -337,6 +409,7 @@ function App() {
     if (attachmentsManagerOpen) {
       setAttachmentsManagerOpen(false)
     }
+    beginPerfTrace('text', value.length, attachments.length)
     setQuery(value)
     if (value.length === 0 && attachments.length === 0) {
       setResultCount(0)
@@ -350,6 +423,7 @@ function App() {
       window.intools.window.close()
       setPluginOpen(false)
     }
+    beginPerfTrace('attachments', query.length, next.length)
     setAttachments(next)
     if (next.length === 0 && query.length === 0) {
       setResultCount(0)
@@ -553,7 +627,12 @@ function App() {
       )}
       {(query.length > 0 || attachments.length > 0) && !pluginOpen && !attachmentsManagerOpen && (
         <PluginList
-          payload={deferredPayload}
+          payload={payload}
+          traceId={perfTrace.id}
+          traceStartedAt={perfTrace.startedAt}
+          traceSource={perfTrace.source}
+          traceInputLength={perfTrace.textLength}
+          traceAttachmentCount={perfTrace.attachmentCount}
           onResultsChange={setResultCount}
           onShowDetails={(pluginName) => {
             setDetailsPluginName(pluginName)

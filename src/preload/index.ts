@@ -1,6 +1,7 @@
 import { contextBridge, ipcRenderer } from 'electron'
 import { inbrowser } from './inbrowser'
 import { patchConsoleWithTimestamp } from '../shared/utils/console'
+import type { InputPayload } from '../shared/types/plugin'
 
 // 检测是否启用了 contextIsolation
 // 当 contextIsolation 为 false 时，contextBridge 不可用，需要直接设置 window
@@ -431,9 +432,10 @@ const intoolsApi = {
   // 插件
   plugin: {
     getAll: () => ipcRenderer.invoke('plugin:getAll'),
-    search: (query: string) => ipcRenderer.invoke('plugin:search', query),
-    run: (name: string, featureCode: string, input?: string) =>
+    search: (query: string | InputPayload) => ipcRenderer.invoke('plugin:search', query),
+    run: (name: string, featureCode: string, input?: string | InputPayload) =>
       ipcRenderer.invoke('plugin:run', name, featureCode, input),
+    getRecentUsed: (limit?: number) => ipcRenderer.invoke('plugin:getRecentUsed', limit),
     install: (filePath: string) => ipcRenderer.invoke('plugin:install', filePath),
     enable: (name: string) => ipcRenderer.invoke('plugin:enable', name),
     disable: (name: string) => ipcRenderer.invoke('plugin:disable', name),
@@ -534,7 +536,8 @@ const intoolsApi = {
 
   // Desktop API
   desktop: {
-    searchFiles: (query: string, limit?: number) => ipcRenderer.invoke('desktop:searchFiles', query, limit)
+    searchFiles: (query: string, limit?: number) => ipcRenderer.invoke('desktop:searchFiles', query, limit),
+    searchApps: (query: string, limit?: number) => ipcRenderer.invoke('desktop:searchApps', query, limit)
   },
 
   // Filesystem API

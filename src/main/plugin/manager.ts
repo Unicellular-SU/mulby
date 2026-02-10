@@ -21,6 +21,13 @@ interface SearchResult {
   matchType: MatchType
 }
 
+interface RecentUsedResult {
+  plugin: Plugin
+  feature: PluginFeature
+  lastUsedAt: number
+  useCount: number
+}
+
 
 export class PluginManager {
   private plugins: Map<string, Plugin> = new Map()
@@ -164,6 +171,33 @@ export class PluginManager {
     return this.getCombinedFeatures(plugin)
   }
 
+  // 获取最近使用的插件功能（按时间倒序）
+  getRecentUsed(limit: number = 20): RecentUsedResult[] {
+    const recent = this.stateManager.getRecentUsage(limit * 3)
+    const results: RecentUsedResult[] = []
+
+    for (const item of recent) {
+      const plugin = this.plugins.get(item.pluginId)
+      if (!plugin || !plugin.enabled) continue
+
+      const feature = this.getCombinedFeatures(plugin).find((candidate) => candidate.code === item.featureCode)
+      if (!feature) continue
+
+      results.push({
+        plugin,
+        feature,
+        lastUsedAt: item.lastUsedAt,
+        useCount: item.useCount
+      })
+
+      if (results.length >= limit) {
+        break
+      }
+    }
+
+    return results
+  }
+
   // 搜索插件（返回匹配的功能入口，只搜索启用的插件）
   async search(input: string | InputPayload): Promise<SearchResult[]> {
     const enabledPlugins = this.getEnabled()
@@ -275,9 +309,16 @@ export class PluginManager {
 
       if (useDetached) {
         const win = this.windowManager.createDetachedWindow(plugin, featureCode, resolvedInput, route)
-        return { success: Boolean(win), hasUI: true }
+        const success = Boolean(win)
+        if (success) {
+          this.stateManager.recordRecentUsage(plugin.id, featureCode)
+        }
+        return { success, hasUI: true }
       }
       const success = this.windowManager.attachPlugin(plugin, featureCode, resolvedInput, route)
+      if (success) {
+        this.stateManager.recordRecentUsage(plugin.id, featureCode)
+      }
       return { success, hasUI: true }
     }
 
@@ -306,6 +347,7 @@ export class PluginManager {
         }
       }
 
+      this.stateManager.recordRecentUsage(plugin.id, featureCode)
       return { success: true }
     } catch (err) {
       const error = err instanceof Error ? err.message : 'Unknown error'

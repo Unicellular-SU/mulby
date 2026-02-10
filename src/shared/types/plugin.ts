@@ -393,6 +393,14 @@ export interface PluginStateConfig {
   }
 }
 
+// 最近使用的插件功能
+export interface RecentPluginUsageEntry {
+  pluginId: string
+  featureCode: string
+  lastUsedAt: number
+  useCount: number
+}
+
 // 文件信息
 export interface FileStat {
   name: string

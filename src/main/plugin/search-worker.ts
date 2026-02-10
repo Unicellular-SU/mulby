@@ -58,3 +58,9 @@ if (parentPort) {
   parentPort.on('message', onMessage)
 }
 process.on('message', onMessage)
+
+send({
+  id: '__ready__',
+  type: 'ready',
+  payload: {}
+})
