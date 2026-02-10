@@ -9,12 +9,10 @@
   "ui": "ui/index.html",
   "icon": "icon.png",
   "window": {
-    "width": 960,
-    "height": 680,
+    "width": 800,
+    "height": 800,
     "minWidth": 560,
-    "minHeight": 420,
-    "maxWidth": 1200,
-    "maxHeight": 960
+    "minHeight": 420
   },
   "features": [
     {
@@ -32,6 +30,20 @@
         {
           "type": "keyword",
           "value": "translate"
+        },
+        {
+          "type": "regex",
+          "match": "^\\s*\\S[\\s\\S]*$",
+          "explain": "翻译输入文本",
+          "label": "翻译文本",
+          "minLength": 2,
+          "maxLength": 20000
+        },
+        {
+          "type": "over",
+          "label": "翻译选中文本",
+          "minLength": 1,
+          "maxLength": 20000
         }
       ]
     },

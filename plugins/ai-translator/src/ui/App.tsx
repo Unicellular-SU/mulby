@@ -1,6 +1,8 @@
-import { useEffect, useState } from 'react'
-import { Check, Copy, Loader2, RefreshCcw, Settings2 } from 'lucide-react'
+import { useEffect, useMemo, useState } from 'react'
+import { ArrowLeftRight, Copy, Loader2, RefreshCw, Save, Settings2 } from 'lucide-react'
 import { useIntools } from './hooks/useIntools'
+
+type ViewMode = 'translate' | 'settings'
 
 interface PluginInitData {
   pluginName: string
@@ -16,20 +18,19 @@ interface AiModelOption {
   providerLabel?: string
 }
 
-interface TranslatorSettings {
-  modelId: string
-  defaultTargetLanguage: string
-}
-
-type Tab = 'translate' | 'settings'
-
 interface LanguageOption {
   code: string
   label: string
 }
 
+interface TranslatorSettings {
+  modelId: string
+  defaultTargetLanguage: string
+}
+
 const SETTINGS_STORAGE_KEY = 'translator.settings.v1'
 const DEFAULT_TARGET_LANGUAGE = 'zh-CN'
+
 const TARGET_LANGUAGES: LanguageOption[] = [
   { code: 'zh-CN', label: '中文（简体）' },
   { code: 'en', label: '英语' },
@@ -42,33 +43,17 @@ const TARGET_LANGUAGES: LanguageOption[] = [
   { code: 'pt', label: '葡萄牙语' },
   { code: 'ar', label: '阿拉伯语' }
 ]
-const SOURCE_LANGUAGES: LanguageOption[] = [
-  { code: 'auto', label: '自动检测' },
-  ...TARGET_LANGUAGES
-]
 
+const SOURCE_LANGUAGES: LanguageOption[] = [{ code: 'auto', label: '自动检测' }, ...TARGET_LANGUAGES]
 const TARGET_LANGUAGE_CODES = new Set(TARGET_LANGUAGES.map((item) => item.code))
 
 function getLanguageLabel(code: string, options: LanguageOption[]) {
   return options.find((item) => item.code === code)?.label || code
 }
 
-function extractResponseText(content?: string | Array<{ type?: string; text?: string }>) {
-  if (!content) return ''
-  if (typeof content === 'string') return content
-  if (!Array.isArray(content)) return ''
-  return content
-    .filter((part) => part?.type === 'text' && typeof part.text === 'string')
-    .map((part) => part.text)
-    .join('')
-}
-
 function normalizeSettings(raw: unknown): TranslatorSettings {
   if (!raw || typeof raw !== 'object') {
-    return {
-      modelId: '',
-      defaultTargetLanguage: DEFAULT_TARGET_LANGUAGE
-    }
+    return { modelId: '', defaultTargetLanguage: DEFAULT_TARGET_LANGUAGE }
   }
 
   const value = raw as { modelId?: unknown; defaultTargetLanguage?: unknown }
@@ -81,6 +66,17 @@ function normalizeSettings(raw: unknown): TranslatorSettings {
   return { modelId, defaultTargetLanguage }
 }
 
+function extractResponseText(content?: string | Array<{ type?: string; text?: string }>) {
+  if (!content) return ''
+  if (typeof content === 'string') return content
+  if (!Array.isArray(content)) return ''
+
+  return content
+    .filter((part) => part?.type === 'text' && typeof part.text === 'string')
+    .map((part) => part.text)
+    .join('')
+}
+
 function buildTranslationSystemPrompt(sourceLanguage: string, targetLanguage: string) {
   return [
     '你是一个专业、可靠的翻译引擎。',
@@ -89,10 +85,10 @@ function buildTranslationSystemPrompt(sourceLanguage: string, targetLanguage: st
     '翻译规则：',
     '1. 准确保留原文语义、语气和上下文。',
     '2. 保留原文结构（段落、换行、列表、代码块、标点风格）。',
-    '3. 专有名词、产品名、变量名、代码标识符优先保持原样，必要时仅翻译其解释性文本。',
+    '3. 专有名词、产品名、变量名、代码标识符优先保持原样，必要时仅翻译解释性文本。',
     '4. 如果源语言已是目标语言，请输出润色后的自然表达。',
     '输出要求：',
-    '1. 只输出最终译文，不要解释，不要附加前后缀。',
+    '1. 只输出最终译文，不要解释，不要附加任何前后缀。',
     '2. 不要包含“翻译结果：”等提示语。',
     '3. 输入为空时输出空字符串。'
   ].join('\n')
@@ -100,10 +96,10 @@ function buildTranslationSystemPrompt(sourceLanguage: string, targetLanguage: st
 
 export default function App() {
   const { ai, clipboard, notification, storage } = useIntools('ai-translator')
-  const [, setTheme] = useState<'light' | 'dark'>('light')
-  const [activeTab, setActiveTab] = useState<Tab>('translate')
-  const [input, setInput] = useState('')
-  const [output, setOutput] = useState('')
+
+  const [viewMode, setViewMode] = useState<ViewMode>('translate')
+  const [inputText, setInputText] = useState('')
+  const [outputText, setOutputText] = useState('')
   const [sourceLanguage, setSourceLanguage] = useState('auto')
   const [targetLanguage, setTargetLanguage] = useState(DEFAULT_TARGET_LANGUAGE)
   const [settingsTargetLanguage, setSettingsTargetLanguage] = useState(DEFAULT_TARGET_LANGUAGE)
@@ -112,6 +108,35 @@ export default function App() {
   const [loadingModels, setLoadingModels] = useState(false)
   const [isTranslating, setIsTranslating] = useState(false)
   const [isSavingSettings, setIsSavingSettings] = useState(false)
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    const initialTheme = (params.get('theme') as 'light' | 'dark') || 'light'
+    document.documentElement.classList.toggle('dark', initialTheme === 'dark')
+
+    window.intools?.onThemeChange?.((nextTheme: 'light' | 'dark') => {
+      document.documentElement.classList.toggle('dark', nextTheme === 'dark')
+    })
+
+    window.intools?.onPluginInit?.((data: PluginInitData) => {
+      if (data.input) setInputText(data.input)
+      if (data.featureCode === 'settings' || data.route?.includes('settings')) {
+        setViewMode('settings')
+      }
+    })
+
+    if (params.get('tab') === 'settings') {
+      setViewMode('settings')
+    }
+
+    void (async () => {
+      const saved = normalizeSettings(await storage.get(SETTINGS_STORAGE_KEY))
+      setSettingsTargetLanguage(saved.defaultTargetLanguage)
+      setTargetLanguage(saved.defaultTargetLanguage)
+      setSelectedModelId(saved.modelId)
+      await loadModels(saved.modelId)
+    })()
+  }, [])
 
   const loadModels = async (preferredModelId?: string) => {
     try {
@@ -141,45 +166,8 @@ export default function App() {
     }
   }
 
-  useEffect(() => {
-    // 获取初始主题（从 URL 参数）
-    const params = new URLSearchParams(window.location.search)
-    const initialTheme = (params.get('theme') as 'light' | 'dark') || 'light'
-    setTheme(initialTheme)
-    document.documentElement.classList.toggle('dark', initialTheme === 'dark')
-
-    // 监听主题变化
-    window.intools?.onThemeChange?.((newTheme: 'light' | 'dark') => {
-      setTheme(newTheme)
-      document.documentElement.classList.toggle('dark', newTheme === 'dark')
-    })
-
-    // 接收插件初始化数据
-    window.intools?.onPluginInit?.((data: PluginInitData) => {
-      if (data.input) {
-        setInput(data.input)
-      }
-      if (data.featureCode === 'settings' || data.route?.includes('settings')) {
-        setActiveTab('settings')
-      }
-    })
-
-    const tabParams = new URLSearchParams(window.location.search)
-    if (tabParams.get('tab') === 'settings') {
-      setActiveTab('settings')
-    }
-
-    void (async () => {
-      const saved = normalizeSettings(await storage.get(SETTINGS_STORAGE_KEY))
-      setSettingsTargetLanguage(saved.defaultTargetLanguage)
-      setTargetLanguage(saved.defaultTargetLanguage)
-      setSelectedModelId(saved.modelId)
-      await loadModels(saved.modelId)
-    })()
-  }, [])
-
   const handleTranslate = async () => {
-    const text = input.trim()
+    const text = inputText.trim()
     if (!text) {
       notification.show('请先输入需要翻译的文本', 'warning')
       return
@@ -187,32 +175,59 @@ export default function App() {
 
     try {
       setIsTranslating(true)
+      setOutputText('')
+
       const sourceLabel = getLanguageLabel(sourceLanguage, SOURCE_LANGUAGES)
       const targetLabel = getLanguageLabel(targetLanguage, TARGET_LANGUAGES)
-      const response = await ai.call({
-        model: selectedModelId || undefined,
-        messages: [
-          {
-            role: 'system',
-            content: buildTranslationSystemPrompt(sourceLabel, targetLabel)
-          },
-          {
-            role: 'user',
-            content: text
-          }
-        ],
-        params: {
-          temperature: 0.1
-        }
-      })
+      let streamBuffer = ''
 
-      const translated = extractResponseText(response?.content).trim()
-      if (!translated) {
+      const request = ai.call(
+        {
+          model: selectedModelId || undefined,
+          tools: [],
+          capabilities: [],
+          internalTools: [],
+          toolingPolicy: {
+            enableInternalTools: false
+          },
+          skills: {
+            mode: 'off'
+          },
+          mcp: {
+            mode: 'off'
+          },
+          maxToolSteps: 1,
+          messages: [
+            { role: 'system', content: buildTranslationSystemPrompt(sourceLabel, targetLabel) },
+            { role: 'user', content: text }
+          ],
+          params: {
+            temperature: 0.1
+          }
+        },
+        (chunk: any) => {
+          if (chunk?.chunkType === 'error') return
+          const nextText = extractResponseText(chunk?.content)
+          if (!nextText) return
+
+          if (nextText.startsWith(streamBuffer)) {
+            streamBuffer = nextText
+          } else {
+            streamBuffer += nextText
+          }
+          setOutputText(streamBuffer)
+        }
+      )
+
+      const finalResponse = await request
+      const finalText = extractResponseText(finalResponse?.content).trim() || streamBuffer.trim()
+
+      if (!finalText) {
         notification.show('AI 未返回可用译文', 'warning')
         return
       }
 
-      setOutput(translated)
+      setOutputText(finalText)
       notification.show('翻译完成', 'success')
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : '翻译失败'
@@ -223,12 +238,22 @@ export default function App() {
   }
 
   const handleCopyOutput = async () => {
-    if (!output.trim()) {
+    const value = outputText.trim()
+    if (!value) {
       notification.show('没有可复制的译文', 'warning')
       return
     }
-    await clipboard.writeText(output)
+
+    await clipboard.writeText(value)
     notification.show('译文已复制到剪贴板', 'success')
+  }
+
+  const handleSwapLanguages = () => {
+    if (sourceLanguage === 'auto') return
+    const nextSource = targetLanguage
+    const nextTarget = sourceLanguage
+    setSourceLanguage(nextSource)
+    setTargetLanguage(nextTarget)
   }
 
   const handleSaveSettings = async () => {
@@ -237,64 +262,195 @@ export default function App() {
       return
     }
 
-    const settings: TranslatorSettings = {
+    const payload: TranslatorSettings = {
       modelId: selectedModelId,
       defaultTargetLanguage: settingsTargetLanguage
     }
 
     try {
       setIsSavingSettings(true)
-      await storage.set(SETTINGS_STORAGE_KEY, settings)
+      await storage.set(SETTINGS_STORAGE_KEY, payload)
       setTargetLanguage(settingsTargetLanguage)
       notification.show('设置已保存', 'success')
     } catch (error: unknown) {
-      const message = error instanceof Error ? error.message : '设置保存失败'
+      const message = error instanceof Error ? error.message : '保存失败'
       notification.show(message, 'error')
     } finally {
       setIsSavingSettings(false)
     }
   }
 
+  const currentModelDisplay = useMemo(() => {
+    if (!selectedModelId) return '系统默认'
+    const match = models.find((item) => item.id === selectedModelId)
+    if (!match) return selectedModelId
+    return match.providerLabel ? `${match.providerLabel} / ${match.label}` : match.label
+  }, [selectedModelId, models])
+
   return (
-    <div className="app">
-      <header className="header">
-        <div className="title-wrap">
-          <h1>AI 翻译</h1>
-          <p>使用系统内置 AI 进行高质量翻译</p>
-        </div>
-        <div className="tab-group">
-          <button
-            className={`tab-btn ${activeTab === 'translate' ? 'active' : ''}`}
-            onClick={() => setActiveTab('translate')}
-          >
-            翻译
-          </button>
-          <button
-            className={`tab-btn ${activeTab === 'settings' ? 'active' : ''}`}
-            onClick={() => setActiveTab('settings')}
-          >
-            <Settings2 size={14} />
-            设置
-          </button>
-        </div>
-      </header>
-      <div className="container">
-        {activeTab === 'translate' ? (
-          <>
-            <section className="selectors">
-              <div className="field">
-                <label>源语言</label>
-                <select value={sourceLanguage} onChange={(event) => setSourceLanguage(event.target.value)}>
+    <div className="translator-root">
+      <div className="translator-shell">
+        <div className="ambient-layer" aria-hidden="true" />
+
+        <header className="shell-header">
+          <div className="brand-block">
+            <p className="brand-eyebrow">AI Translator</p>
+            <h1>翻译工作台</h1>
+          </div>
+
+          <div className="header-actions">
+            <div className="mode-switch" role="tablist" aria-label="视图切换">
+              <button
+                className={`mode-btn ${viewMode === 'translate' ? 'active' : ''}`}
+                onClick={() => setViewMode('translate')}
+                aria-pressed={viewMode === 'translate'}
+              >
+                翻译
+              </button>
+              <button
+                className={`mode-btn ${viewMode === 'settings' ? 'active' : ''}`}
+                onClick={() => setViewMode('settings')}
+                aria-pressed={viewMode === 'settings'}
+              >
+                <Settings2 size={15} />
+                设置
+              </button>
+            </div>
+          </div>
+        </header>
+
+        {viewMode === 'translate' ? (
+          <main className="translate-main">
+            <section className="panel-card language-panel">
+              <label className="field">
+                <span>源语言</span>
+                <select
+                  id="source-language"
+                  value={sourceLanguage}
+                  onChange={(event) => setSourceLanguage(event.target.value)}
+                >
                   {SOURCE_LANGUAGES.map((item) => (
                     <option key={item.code} value={item.code}>
                       {item.label}
                     </option>
                   ))}
                 </select>
+              </label>
+
+              <button
+                className="swap-btn"
+                onClick={handleSwapLanguages}
+                disabled={sourceLanguage === 'auto'}
+                title={sourceLanguage === 'auto' ? '自动检测模式下不可交换' : '交换源语言与目标语言'}
+                aria-label="交换源语言与目标语言"
+              >
+                <ArrowLeftRight size={18} />
+              </button>
+
+              <label className="field">
+                <span>目标语言</span>
+                <select
+                  id="target-language"
+                  value={targetLanguage}
+                  onChange={(event) => setTargetLanguage(event.target.value)}
+                >
+                  {TARGET_LANGUAGES.map((item) => (
+                    <option key={item.code} value={item.code}>
+                      {item.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </section>
+
+            <section className="editor-grid">
+              <article className="panel-card editor-card">
+                <div className="editor-head">
+                  <h2>原文</h2>
+                  <button className="ghost-btn" onClick={() => setInputText('')}>
+                    清空
+                  </button>
+                </div>
+                <textarea
+                  id="source-text"
+                  className="editor-textarea"
+                  value={inputText}
+                  onChange={(event) => setInputText(event.target.value)}
+                  placeholder="请输入需要翻译的文本"
+                />
+              </article>
+
+              <article className="panel-card editor-card">
+                <div className="editor-head">
+                  <h2>译文</h2>
+                  <span className="stream-badge">流式输出</span>
+                </div>
+                <textarea
+                  id="translated-text"
+                  className="editor-output"
+                  value={outputText}
+                  onChange={(event) => setOutputText(event.target.value)}
+                  placeholder="翻译结果将显示在这里"
+                />
+              </article>
+            </section>
+
+            <section className="panel-card action-bar">
+              <button className="primary-btn" onClick={handleTranslate} disabled={isTranslating}>
+                {isTranslating ? (
+                  <>
+                    <Loader2 size={15} className="spin" />
+                    翻译中...
+                  </>
+                ) : (
+                  '开始翻译'
+                )}
+              </button>
+              <button className="secondary-btn" onClick={() => setTargetLanguage(settingsTargetLanguage)}>
+                使用默认目标语言
+              </button>
+              <button className="secondary-btn" onClick={handleCopyOutput}>
+                <Copy size={15} />
+                复制译文
+              </button>
+            </section>
+          </main>
+        ) : (
+          <main className="settings-main">
+            <section className="panel-card settings-card">
+              <div className="settings-block">
+                <label htmlFor="model-select">翻译模型</label>
+                <div className="settings-inline">
+                  <select
+                    id="model-select"
+                    value={selectedModelId}
+                    onChange={(event) => setSelectedModelId(event.target.value)}
+                  >
+                    <option value="">跟随系统默认模型</option>
+                    {models.map((model) => (
+                      <option key={model.id} value={model.id}>
+                        {model.providerLabel ? `${model.providerLabel} / ${model.label}` : model.label}
+                      </option>
+                    ))}
+                  </select>
+                  <button
+                    className="secondary-btn"
+                    onClick={() => void loadModels(selectedModelId)}
+                    disabled={loadingModels}
+                  >
+                    {loadingModels ? <Loader2 size={15} className="spin" /> : <RefreshCw size={15} />}
+                    刷新模型
+                  </button>
+                </div>
               </div>
-              <div className="field">
-                <label>目标语言</label>
-                <select value={targetLanguage} onChange={(event) => setTargetLanguage(event.target.value)}>
+
+              <div className="settings-block">
+                <label htmlFor="default-target-language">默认目标语言</label>
+                <select
+                  id="default-target-language"
+                  value={settingsTargetLanguage}
+                  onChange={(event) => setSettingsTargetLanguage(event.target.value)}
+                >
                   {TARGET_LANGUAGES.map((item) => (
                     <option key={item.code} value={item.code}>
                       {item.label}
@@ -302,90 +458,31 @@ export default function App() {
                   ))}
                 </select>
               </div>
-              <div className="field compact">
-                <label>当前模型</label>
-                <div className="model-chip">{selectedModelId || '系统默认'}</div>
-              </div>
-            </section>
-            <div className="field">
-              <label>原文</label>
-              <textarea
-                value={input}
-                onChange={(event) => setInput(event.target.value)}
-                placeholder="请输入需要翻译的文本"
-              />
-            </div>
-            <div className="actions">
-              <button className="btn-primary" onClick={handleTranslate} disabled={isTranslating}>
-                {isTranslating ? (
-                  <>
-                    <Loader2 size={14} className="spin" />
-                    翻译中...
-                  </>
-                ) : (
-                  '开始翻译'
-                )}
-              </button>
-              <button className="btn-secondary" onClick={() => setTargetLanguage(settingsTargetLanguage)}>
-                使用默认目标语言
-              </button>
-              <button className="btn-secondary" onClick={handleCopyOutput}>
-                <Copy size={14} />
-                复制译文
-              </button>
-            </div>
-            <div className="field">
-              <label>译文</label>
-              <textarea value={output} readOnly placeholder="翻译结果将显示在这里" />
-            </div>
-          </>
-        ) : (
-          <section className="settings-panel">
-            <div className="field">
-              <label>翻译模型</label>
-              <div className="inline-row">
-                <select value={selectedModelId} onChange={(event) => setSelectedModelId(event.target.value)}>
-                  <option value="">跟随系统默认模型</option>
-                  {models.map((model) => (
-                    <option key={model.id} value={model.id}>
-                      {model.providerLabel ? `${model.providerLabel} / ${model.label}` : model.label}
-                    </option>
-                  ))}
-                </select>
-                <button className="btn-secondary" onClick={() => void loadModels(selectedModelId)} disabled={loadingModels}>
-                  {loadingModels ? <Loader2 size={14} className="spin" /> : <RefreshCcw size={14} />}
-                  刷新模型
+
+              <div className="settings-block">
+                <p className="settings-note">保存后，翻译页会使用该默认目标语言，并持久化当前模型配置。</p>
+                <button className="primary-btn save-btn" onClick={handleSaveSettings} disabled={isSavingSettings}>
+                  {isSavingSettings ? (
+                    <>
+                      <Loader2 size={15} className="spin" />
+                      保存中...
+                    </>
+                  ) : (
+                    <>
+                      <Save size={15} />
+                      保存设置
+                    </>
+                  )}
                 </button>
               </div>
-            </div>
-            <div className="field">
-              <label>默认目标语言</label>
-              <select value={settingsTargetLanguage} onChange={(event) => setSettingsTargetLanguage(event.target.value)}>
-                {TARGET_LANGUAGES.map((item) => (
-                  <option key={item.code} value={item.code}>
-                    {item.label}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div className="settings-tips">
-              <Check size={14} />
-              <span>保存后会作为翻译页的默认目标语言。</span>
-            </div>
-            <div className="actions">
-              <button className="btn-primary" onClick={handleSaveSettings} disabled={isSavingSettings}>
-                {isSavingSettings ? (
-                  <>
-                    <Loader2 size={14} className="spin" />
-                    保存中...
-                  </>
-                ) : (
-                  '保存设置'
-                )}
-              </button>
-            </div>
-          </section>
+            </section>
+          </main>
         )}
+
+        <footer className="shell-footer">
+          <span className="footer-key">当前模型</span>
+          <span className="footer-value">{currentModelDisplay}</span>
+        </footer>
       </div>
     </div>
   )
