@@ -57,6 +57,12 @@ body,
 #root {
   width: 100%;
   height: 100%;
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+html {
+  background: transparent;
 }
 
 body {
@@ -80,7 +86,7 @@ body {
 
 .app-home {
   background: var(--glass-bg);
-  border: 1px solid var(--glass-border);
+  border: none;
   box-shadow: var(--glass-shadow);
   backdrop-filter: blur(var(--glass-blur-strong));
   -webkit-backdrop-filter: blur(var(--glass-blur-strong));
@@ -259,7 +265,8 @@ body {
   height: 62px;
   -webkit-app-region: drag;
   background: var(--glass-bg-strong);
-  border: 1px solid var(--glass-border);
+  border: none;
+  border-radius: 12px;
   box-shadow: 0 10px 24px rgba(15, 23, 42, 0.08);
   backdrop-filter: blur(var(--glass-blur));
   -webkit-backdrop-filter: blur(var(--glass-blur));

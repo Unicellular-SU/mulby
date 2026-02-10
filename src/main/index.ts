@@ -221,11 +221,7 @@ function createWindow() {
     minWidth: 400,   // 设置最小宽度
     skipTaskbar: true,
     transparent: true,
-    // macOS: 阻止窗口自动管理 dock 图标
-    ...(process.platform === 'darwin' ? {
-      vibrancy: 'under-window',
-      visualEffectState: 'active'
-    } : {}),
+    hasShadow: false, // 透明窗口禁用原生阴影，由 CSS box-shadow 控制
     type: 'panel', // macOS 上 panel 类型有助于浮动在全屏应用之上
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
