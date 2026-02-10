@@ -76,6 +76,22 @@ export interface DesktopAppSearchResult {
   kind: 'application' | 'shortcut' | 'executable'
 }
 
+export type SystemIconKind = 'app' | 'file'
+
+export interface SystemIconRequest {
+  key: string
+  path: string
+  kind?: SystemIconKind
+  size?: number
+}
+
+export interface SystemIconResult {
+  key: string
+  path: string
+  kind: SystemIconKind
+  icon: string
+}
+
 export interface PluginInfo {
   id: string
   name: string
@@ -427,8 +443,11 @@ export interface ElectronAPI {
     getPath: (name: 'home' | 'appData' | 'userData' | 'temp' | 'exe' | 'desktop' | 'documents' | 'downloads' | 'music' | 'pictures' | 'videos' | 'logs') => Promise<string>
     getEnv: (name: string) => Promise<string | undefined>
     getIdleTime: () => Promise<number>
-    // 新增 API
-    getFileIcon: (filePath: string) => Promise<string>
+    getFileIcon: (filePath: string, options?: { size?: number; kind?: SystemIconKind }) => Promise<string>
+    getFileIcons: (
+      requests: SystemIconRequest[],
+      options?: { size?: number; concurrency?: number }
+    ) => Promise<SystemIconResult[]>
     getNativeId: () => Promise<string>
     isDev: () => Promise<boolean>
     isMacOS: () => Promise<boolean>

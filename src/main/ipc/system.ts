@@ -1,5 +1,10 @@
 import { ipcMain } from 'electron'
-import { pluginSystem } from '../plugin/system'
+import {
+  pluginSystem,
+  type SystemIconBatchOptions,
+  type SystemIconRequest,
+  type SystemIconSingleOptions
+} from '../plugin/system'
 
 export function registerSystemHandlers() {
   // 获取系统信息
@@ -28,8 +33,20 @@ export function registerSystemHandlers() {
   })
 
   // 获取文件图标 (新增)
-  ipcMain.handle('system:getFileIcon', async (_, filePath: string) => {
-    return pluginSystem.getFileIcon(filePath)
+  ipcMain.handle('system:getFileIcon', async (_, filePath: string, options?: SystemIconSingleOptions) => {
+    return pluginSystem.getFileIcon(filePath, options)
+  })
+
+  ipcMain.handle(
+    'system:getFileIcons',
+    async (_, requests: SystemIconRequest[], options?: SystemIconBatchOptions) => {
+      return pluginSystem.getFileIcons(requests, options)
+    }
+  )
+
+  ipcMain.handle('system:clearFileIconCache', () => {
+    pluginSystem.clearFileIconCache()
+    return true
   })
 
   // 获取设备唯一标识 (新增)

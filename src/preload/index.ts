@@ -590,8 +590,14 @@ const intoolsApi = {
     getPath: (name: string) => ipcRenderer.invoke('system:getPath', name),
     getEnv: (name: string) => ipcRenderer.invoke('system:getEnv', name),
     getIdleTime: () => ipcRenderer.invoke('system:getIdleTime'),
-    // 新增 API
-    getFileIcon: (filePath: string) => ipcRenderer.invoke('system:getFileIcon', filePath),
+    getFileIcon: (
+      filePath: string,
+      options?: { size?: number; kind?: 'app' | 'file' }
+    ) => ipcRenderer.invoke('system:getFileIcon', filePath, options),
+    getFileIcons: (
+      requests: Array<{ key: string; path: string; kind?: 'app' | 'file'; size?: number }>,
+      options?: { size?: number; concurrency?: number }
+    ) => ipcRenderer.invoke('system:getFileIcons', requests, options),
     getNativeId: () => ipcRenderer.invoke('system:getNativeId'),
     isDev: () => ipcRenderer.invoke('system:isDev'),
     isMacOS: () => ipcRenderer.invoke('system:isMacOS'),

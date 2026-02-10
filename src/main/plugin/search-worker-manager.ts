@@ -53,6 +53,11 @@ export class PluginSearchWorker {
     })
   }
 
+  async warmup(): Promise<void> {
+    this.ensureWorker()
+    await this.waitUntilReady()
+  }
+
   private waitUntilReady(): Promise<void> {
     this.ensureWorker()
     if (this.ready) {

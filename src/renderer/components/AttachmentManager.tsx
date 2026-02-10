@@ -10,6 +10,10 @@ interface AttachmentManagerProps {
 
 type UiAttachment = InputAttachment & { previewUrl?: string }
 
+function isValidIconDataUrl(value: string): boolean {
+  return /^data:image\/[a-z0-9.+-]+;base64,/i.test(value) && value.length > 64
+}
+
 function AttachmentManager({ attachments, onAttachmentsChange, onClose, listMaxHeight }: AttachmentManagerProps) {
   const [query, setQuery] = useState('')
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
@@ -33,8 +37,13 @@ function AttachmentManager({ attachments, onAttachmentsChange, onClose, listMaxH
         if (attachment.kind !== 'file' || !attachment.path) return
         if (iconMap[attachment.id]) return
         try {
-          const icon = await window.intools.system.getFileIcon(attachment.path)
-          nextIcons[attachment.id] = icon
+          const icon = await window.intools.system.getFileIcon(attachment.path, {
+            size: 96,
+            kind: 'file'
+          })
+          if (icon && isValidIconDataUrl(icon)) {
+            nextIcons[attachment.id] = icon
+          }
         } catch {
           // Ignore icon failures to avoid blocking list rendering.
         }

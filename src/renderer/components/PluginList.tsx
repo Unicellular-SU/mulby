@@ -2,7 +2,9 @@ import { useState, useEffect, useCallback, useRef, memo, useMemo } from 'react'
 import type {
   DesktopAppSearchResult,
   DesktopFileSearchResult,
-  SearchResultItem
+  SearchResultItem,
+  SystemIconKind,
+  SystemIconRequest
 } from '../../shared/types/electron'
 import type { InputPayload } from '../../shared/types/plugin'
 
@@ -47,9 +49,11 @@ interface ResultCardProps {
   onShowDetails?: (pluginName: string) => void
 }
 
-const SYSTEM_SEARCH_MIN_LENGTH = 2
-const SYSTEM_SEARCH_LIMIT = 12
-const SYSTEM_SEARCH_DEBOUNCE_MS = 120
+const SYSTEM_APP_SEARCH_LIMIT = 12
+const SYSTEM_FILE_SEARCH_LIMIT = 12
+const SYSTEM_FILE_STABLE_DELAY_MS = 260
+const SYSTEM_ICON_TARGET_SIZE = 128
+const SYSTEM_ICON_BATCH_CONCURRENCY = 6
 const RECENT_LIMIT = 40
 const MAX_CACHE_SIZE = 80
 
@@ -93,6 +97,14 @@ function logSearchPerf(stage: string, payload: Record<string, unknown>) {
 // 简单哈希用于缓存键
 function hashPayload(payload: InputPayload): string {
   return `${payload.text}|${payload.attachments.map((a) => `${a.id}:${a.name}`).join(',')}`
+}
+
+function getSystemIconCacheKey(kind: SystemIconKind, path: string): string {
+  return `${kind}:${path}`
+}
+
+function isValidIconDataUrl(value: string): boolean {
+  return /^data:image\/[a-z0-9.+-]+;base64,/i.test(value) && value.length > 64
 }
 
 function getColumns(width: number): number {
@@ -304,18 +316,28 @@ function PluginList({
   const [pluginResults, setPluginResults] = useState<SearchResultItem[]>([])
   const [systemApps, setSystemApps] = useState<DesktopAppSearchResult[]>([])
   const [systemFiles, setSystemFiles] = useState<DesktopFileSearchResult[]>([])
+  const [systemAppsResultHash, setSystemAppsResultHash] = useState('')
+  const [systemFilesResultHash, setSystemFilesResultHash] = useState('')
   const [recentPlugins, setRecentPlugins] = useState<SearchResultItem[]>([])
   const [isPluginLoading, setIsPluginLoading] = useState(false)
-  const [isSystemLoading, setIsSystemLoading] = useState(false)
+  const [isSystemAppsLoading, setIsSystemAppsLoading] = useState(false)
+  const [isSystemFilesLoading, setIsSystemFilesLoading] = useState(false)
   const [selectedKey, setSelectedKey] = useState('')
   const [columns, setColumns] = useState(() => getColumns(window.innerWidth))
+  const [systemIconVersion, setSystemIconVersion] = useState(0)
 
   const payloadRef = useRef(payload)
   const requestIdRef = useRef(0)
   const searchStartedAtRef = useRef(0)
+  const searchStartedPayloadHashRef = useRef('')
+  const searchStartedTraceIdRef = useRef(0)
+  const launchedSearchTokenRef = useRef('')
   const renderLoggedKeyRef = useRef('')
   const pluginCacheRef = useRef<Map<string, SearchResultItem[]>>(new Map())
-  const systemCacheRef = useRef<Map<string, { apps: DesktopAppSearchResult[]; files: DesktopFileSearchResult[] }>>(new Map())
+  const systemAppCacheRef = useRef<Map<string, DesktopAppSearchResult[]>>(new Map())
+  const systemFileCacheRef = useRef<Map<string, DesktopFileSearchResult[]>>(new Map())
+  const systemIconCacheRef = useRef<Map<string, string>>(new Map())
+  const systemIconPendingRef = useRef<Set<string>>(new Set())
 
   useEffect(() => {
     payloadRef.current = payload
@@ -350,156 +372,219 @@ function PluginList({
   const maxItemsPerSection = Math.max(columns * 2, 2)
 
   useEffect(() => {
-    const currentPayload = payload
-    const currentRequestId = requestIdRef.current + 1
-    requestIdRef.current = currentRequestId
-    searchStartedAtRef.current = performance.now()
     let cancelled = false
+    let kickoffTimer: ReturnType<typeof setTimeout> | null = null
     let systemTimer: ReturnType<typeof setTimeout> | null = null
 
-    logSearchPerf('search-start', {
-      traceId,
-      requestId: currentRequestId,
-      source: traceSource,
-      payloadHash,
-      queryLength: currentPayload.text.length,
-      attachmentCount: currentPayload.attachments.length,
-      traceInputLength,
-      traceAttachmentCount,
-      sinceInputMs: traceStartedAt > 0 ? roundPerfMs(searchStartedAtRef.current - traceStartedAt) : undefined
-    })
+    const runSearch = () => {
+      const currentPayload = payload
+      const searchToken = `${traceId}:${payloadHash}`
+      if (launchedSearchTokenRef.current === searchToken) {
+        return
+      }
+      launchedSearchTokenRef.current = searchToken
 
-    const hasInput = currentPayload.text.trim().length > 0 || currentPayload.attachments.length > 0
-    if (!hasInput) {
-      setPluginResults([])
-      setSystemApps([])
-      setSystemFiles([])
-      setIsPluginLoading(false)
-      setIsSystemLoading(false)
-      return () => {
-        cancelled = true
+      const currentRequestId = requestIdRef.current + 1
+      requestIdRef.current = currentRequestId
+      searchStartedAtRef.current = performance.now()
+      searchStartedPayloadHashRef.current = payloadHash
+      searchStartedTraceIdRef.current = traceId
+
+      logSearchPerf('search-start', {
+        traceId,
+        requestId: currentRequestId,
+        source: traceSource,
+        payloadHash,
+        queryLength: currentPayload.text.length,
+        attachmentCount: currentPayload.attachments.length,
+        traceInputLength,
+        traceAttachmentCount,
+        sinceInputMs: traceStartedAt > 0 ? roundPerfMs(searchStartedAtRef.current - traceStartedAt) : undefined
+      })
+
+      const hasInput = currentPayload.text.trim().length > 0 || currentPayload.attachments.length > 0
+      if (!hasInput) {
+        setPluginResults([])
+        setSystemApps([])
+        setSystemFiles([])
+        setSystemAppsResultHash('')
+        setSystemFilesResultHash('')
+        setIsPluginLoading(false)
+        setIsSystemAppsLoading(false)
+        setIsSystemFilesLoading(false)
+        return
+      }
+
+      const cachedPlugins = pluginCacheRef.current.get(payloadHash)
+      if (cachedPlugins) {
+        setPluginResults(cachedPlugins)
+        setIsPluginLoading(false)
+        logSearchPerf('plugin-ready', {
+          traceId,
+          requestId: currentRequestId,
+          payloadHash,
+          source: 'cache',
+          pluginCount: cachedPlugins.length,
+          elapsedMs: roundPerfMs(performance.now() - searchStartedAtRef.current)
+        })
+      } else {
+        setIsPluginLoading(true)
+        void window.intools.plugin.search(currentPayload)
+          .then((result) => {
+            if (cancelled || currentRequestId !== requestIdRef.current) return
+            const merged = dedupePluginResults(injectSettingsResult(result, currentPayload.text))
+            setLruCache(pluginCacheRef.current, payloadHash, merged, MAX_CACHE_SIZE)
+            setPluginResults(merged)
+            logSearchPerf('plugin-ready', {
+              traceId,
+              requestId: currentRequestId,
+              payloadHash,
+              source: 'ipc',
+              pluginCount: merged.length,
+              elapsedMs: roundPerfMs(performance.now() - searchStartedAtRef.current)
+            })
+          })
+          .catch((error) => {
+            if (cancelled || currentRequestId !== requestIdRef.current) return
+            console.warn('[PluginList] Plugin search failed', error)
+            logSearchPerf('plugin-error', {
+              traceId,
+              requestId: currentRequestId,
+              payloadHash,
+              error: error instanceof Error ? error.message : String(error),
+              elapsedMs: roundPerfMs(performance.now() - searchStartedAtRef.current)
+            })
+          })
+          .finally(() => {
+            if (cancelled || currentRequestId !== requestIdRef.current) return
+            setIsPluginLoading(false)
+          })
+      }
+
+      const query = currentPayload.text.trim()
+      const shouldSearchSystem = query.length > 0 && currentPayload.attachments.length === 0
+      if (!shouldSearchSystem) {
+        setSystemApps([])
+        setSystemFiles([])
+        setSystemAppsResultHash('')
+        setSystemFilesResultHash('')
+        setIsSystemAppsLoading(false)
+        setIsSystemFilesLoading(false)
+        return
+      }
+
+      const systemCacheKey = query.toLowerCase()
+      const cachedApps = systemAppCacheRef.current.get(systemCacheKey)
+      if (cachedApps) {
+        setSystemApps(cachedApps)
+        setSystemAppsResultHash(payloadHash)
+        setIsSystemAppsLoading(false)
+        logSearchPerf('system-app-ready', {
+          traceId,
+          requestId: currentRequestId,
+          payloadHash,
+          source: 'cache',
+          appCount: cachedApps.length,
+          elapsedMs: roundPerfMs(performance.now() - searchStartedAtRef.current)
+        })
+      } else {
+        setSystemApps([])
+        setSystemAppsResultHash('')
+        setIsSystemAppsLoading(true)
+
+        void window.intools.desktop.searchApps(query, SYSTEM_APP_SEARCH_LIMIT)
+          .then((apps) => {
+            if (cancelled || currentRequestId !== requestIdRef.current) return
+            setLruCache(systemAppCacheRef.current, systemCacheKey, apps, MAX_CACHE_SIZE)
+            setSystemApps(apps)
+            setSystemAppsResultHash(payloadHash)
+            logSearchPerf('system-app-ready', {
+              traceId,
+              requestId: currentRequestId,
+              payloadHash,
+              source: 'ipc',
+              appCount: apps.length,
+              elapsedMs: roundPerfMs(performance.now() - searchStartedAtRef.current)
+            })
+          })
+          .catch((error) => {
+            if (cancelled || currentRequestId !== requestIdRef.current) return
+            logSearchPerf('system-app-error', {
+              traceId,
+              requestId: currentRequestId,
+              payloadHash,
+              error: error instanceof Error ? error.message : String(error),
+              elapsedMs: roundPerfMs(performance.now() - searchStartedAtRef.current)
+            })
+          })
+          .finally(() => {
+            if (cancelled || currentRequestId !== requestIdRef.current) return
+            setIsSystemAppsLoading(false)
+          })
+      }
+
+      const cachedFiles = systemFileCacheRef.current.get(systemCacheKey)
+      if (cachedFiles) {
+        setSystemFiles(cachedFiles)
+        setSystemFilesResultHash(payloadHash)
+        setIsSystemFilesLoading(false)
+        logSearchPerf('system-file-ready', {
+          traceId,
+          requestId: currentRequestId,
+          payloadHash,
+          source: 'cache',
+          fileCount: cachedFiles.length,
+          elapsedMs: roundPerfMs(performance.now() - searchStartedAtRef.current)
+        })
+      } else {
+        setSystemFiles([])
+        setSystemFilesResultHash('')
+        setIsSystemFilesLoading(false)
+
+        systemTimer = setTimeout(() => {
+          if (cancelled || currentRequestId !== requestIdRef.current) return
+          setIsSystemFilesLoading(true)
+          void window.intools.desktop.searchFiles(query, SYSTEM_FILE_SEARCH_LIMIT).then((files) => {
+            if (cancelled || currentRequestId !== requestIdRef.current) return
+            setLruCache(systemFileCacheRef.current, systemCacheKey, files, MAX_CACHE_SIZE)
+            setSystemFiles(files)
+            setSystemFilesResultHash(payloadHash)
+            logSearchPerf('system-file-ready', {
+              traceId,
+              requestId: currentRequestId,
+              payloadHash,
+              source: 'ipc',
+              fileCount: files.length,
+              elapsedMs: roundPerfMs(performance.now() - searchStartedAtRef.current)
+            })
+          }).catch((error) => {
+            if (cancelled || currentRequestId !== requestIdRef.current) return
+            logSearchPerf('system-file-error', {
+              traceId,
+              requestId: currentRequestId,
+              payloadHash,
+              error: error instanceof Error ? error.message : String(error),
+              elapsedMs: roundPerfMs(performance.now() - searchStartedAtRef.current)
+            })
+          }).finally(() => {
+            if (cancelled || currentRequestId !== requestIdRef.current) return
+            setIsSystemFilesLoading(false)
+          })
+        }, SYSTEM_FILE_STABLE_DELAY_MS)
       }
     }
 
-    const cachedPlugins = pluginCacheRef.current.get(payloadHash)
-    if (cachedPlugins) {
-      setPluginResults(cachedPlugins)
-      setIsPluginLoading(false)
-      logSearchPerf('plugin-ready', {
-        traceId,
-        requestId: currentRequestId,
-        payloadHash,
-        source: 'cache',
-        pluginCount: cachedPlugins.length,
-        elapsedMs: roundPerfMs(performance.now() - searchStartedAtRef.current)
-      })
+    if (import.meta.env.DEV) {
+      kickoffTimer = setTimeout(runSearch, 0)
     } else {
-      setIsPluginLoading(true)
-      void window.intools.plugin.search(currentPayload)
-        .then((result) => {
-          if (cancelled || currentRequestId !== requestIdRef.current) return
-          const merged = dedupePluginResults(injectSettingsResult(result, currentPayload.text))
-          setLruCache(pluginCacheRef.current, payloadHash, merged, MAX_CACHE_SIZE)
-          setPluginResults(merged)
-          logSearchPerf('plugin-ready', {
-            traceId,
-            requestId: currentRequestId,
-            payloadHash,
-            source: 'ipc',
-            pluginCount: merged.length,
-            elapsedMs: roundPerfMs(performance.now() - searchStartedAtRef.current)
-          })
-        })
-        .catch((error) => {
-          if (cancelled || currentRequestId !== requestIdRef.current) return
-          console.warn('[PluginList] Plugin search failed', error)
-          logSearchPerf('plugin-error', {
-            traceId,
-            requestId: currentRequestId,
-            payloadHash,
-            error: error instanceof Error ? error.message : String(error),
-            elapsedMs: roundPerfMs(performance.now() - searchStartedAtRef.current)
-          })
-        })
-        .finally(() => {
-          if (cancelled || currentRequestId !== requestIdRef.current) return
-          setIsPluginLoading(false)
-        })
+      runSearch()
     }
-
-    const query = currentPayload.text.trim()
-    const shouldSearchSystem = query.length >= SYSTEM_SEARCH_MIN_LENGTH && currentPayload.attachments.length === 0
-    if (!shouldSearchSystem) {
-      setSystemApps([])
-      setSystemFiles([])
-      setIsSystemLoading(false)
-      return () => {
-        cancelled = true
-      }
-    }
-
-    const systemCacheKey = query.toLowerCase()
-    const cachedSystem = systemCacheRef.current.get(systemCacheKey)
-    if (cachedSystem) {
-      setSystemApps(cachedSystem.apps)
-      setSystemFiles(cachedSystem.files)
-      setIsSystemLoading(false)
-      logSearchPerf('system-ready', {
-        traceId,
-        requestId: currentRequestId,
-        payloadHash,
-        source: 'cache',
-        appCount: cachedSystem.apps.length,
-        fileCount: cachedSystem.files.length,
-        elapsedMs: roundPerfMs(performance.now() - searchStartedAtRef.current)
-      })
-      return () => {
-        cancelled = true
-      }
-    }
-
-    setSystemApps([])
-    setSystemFiles([])
-    setIsSystemLoading(true)
-
-    systemTimer = setTimeout(() => {
-      if (cancelled || currentRequestId !== requestIdRef.current) return
-      void Promise.allSettled([
-        window.intools.desktop.searchApps(query, SYSTEM_SEARCH_LIMIT),
-        window.intools.desktop.searchFiles(query, SYSTEM_SEARCH_LIMIT)
-      ]).then((results) => {
-        if (cancelled || currentRequestId !== requestIdRef.current) return
-        const apps = results[0].status === 'fulfilled' ? results[0].value : []
-        const files = results[1].status === 'fulfilled' ? results[1].value : []
-        setLruCache(systemCacheRef.current, systemCacheKey, { apps, files }, MAX_CACHE_SIZE)
-        setSystemApps(apps)
-        setSystemFiles(files)
-        logSearchPerf('system-ready', {
-          traceId,
-          requestId: currentRequestId,
-          payloadHash,
-          source: 'ipc',
-          appCount: apps.length,
-          fileCount: files.length,
-          elapsedMs: roundPerfMs(performance.now() - searchStartedAtRef.current)
-        })
-      }).catch((error) => {
-        if (cancelled || currentRequestId !== requestIdRef.current) return
-        logSearchPerf('system-error', {
-          traceId,
-          requestId: currentRequestId,
-          payloadHash,
-          error: error instanceof Error ? error.message : String(error),
-          elapsedMs: roundPerfMs(performance.now() - searchStartedAtRef.current)
-        })
-      }).finally(() => {
-        if (cancelled || currentRequestId !== requestIdRef.current) return
-        setIsSystemLoading(false)
-      })
-    }, SYSTEM_SEARCH_DEBOUNCE_MS)
 
     return () => {
       cancelled = true
+      if (kickoffTimer) {
+        clearTimeout(kickoffTimer)
+      }
       if (systemTimer) {
         clearTimeout(systemTimer)
       }
@@ -547,25 +632,121 @@ function PluginList({
 
   const appDisplayItems = useMemo(() => {
     const seen = new Set<string>()
-    return systemApps
+    const sourceApps = systemAppsResultHash === payloadHash ? systemApps : []
+    return sourceApps
       .filter((item) => {
         if (seen.has(item.path)) return false
         seen.add(item.path)
         return true
       })
       .slice(0, maxItemsPerSection)
-  }, [systemApps, maxItemsPerSection])
+  }, [maxItemsPerSection, payloadHash, systemApps, systemAppsResultHash])
 
   const fileDisplayItems = useMemo(() => {
     const seen = new Set<string>()
-    return systemFiles
+    const sourceFiles = systemFilesResultHash === payloadHash ? systemFiles : []
+    return sourceFiles
       .filter((item) => {
+        // .app 应归类到“系统应用”，避免在“系统文件”里重复展示和重复请求图标。
+        if (item.path.toLowerCase().endsWith('.app')) return false
         if (seen.has(item.path)) return false
         seen.add(item.path)
         return true
       })
       .slice(0, maxItemsPerSection)
-  }, [systemFiles, maxItemsPerSection])
+  }, [maxItemsPerSection, payloadHash, systemFiles, systemFilesResultHash])
+
+  useEffect(() => {
+    const requests: SystemIconRequest[] = [
+      ...appDisplayItems.map((item) => ({
+        key: getSystemIconCacheKey('app', item.path),
+        path: item.path,
+        kind: 'app' as const
+      })),
+      ...fileDisplayItems.map((item) => ({
+        key: getSystemIconCacheKey('file', item.path),
+        path: item.path,
+        kind: 'file' as const
+      }))
+    ]
+    if (requests.length === 0) return
+
+    const pendingRequests = requests.filter((request) => {
+      if (systemIconCacheRef.current.has(request.key)) return false
+      if (systemIconPendingRef.current.has(request.key)) return false
+      return true
+    })
+    if (pendingRequests.length === 0) return
+
+    const pendingKeys = pendingRequests.map((request) => request.key)
+    pendingKeys.forEach((key) => systemIconPendingRef.current.add(key))
+
+    const iconBatchStartedAt = performance.now()
+    logSearchPerf('icon-batch-start', {
+      traceId,
+      payloadHash,
+      requestCount: pendingRequests.length
+    })
+
+    void window.intools.system.getFileIcons(pendingRequests, {
+      size: SYSTEM_ICON_TARGET_SIZE,
+      concurrency: SYSTEM_ICON_BATCH_CONCURRENCY
+    })
+      .then((results) => {
+        if (!Array.isArray(results)) return
+
+        let changed = false
+        let validCount = 0
+
+        for (const result of results) {
+          if (!result.icon || !isValidIconDataUrl(result.icon)) {
+            if (result.icon) {
+              logSearchPerf('icon-invalid', {
+                traceId,
+                payloadHash,
+                targetPath: result.path,
+                cacheKey: result.key,
+                dataUrlLength: result.icon.length,
+                dataUrlPrefix: result.icon.slice(0, 48)
+              })
+            }
+            continue
+          }
+
+          validCount += 1
+          if (systemIconCacheRef.current.get(result.key) === result.icon) {
+            continue
+          }
+          systemIconCacheRef.current.set(result.key, result.icon)
+          changed = true
+        }
+
+        logSearchPerf('icon-batch-ready', {
+          traceId,
+          payloadHash,
+          requestCount: pendingRequests.length,
+          resultCount: results.length,
+          validCount,
+          elapsedMs: roundPerfMs(performance.now() - iconBatchStartedAt)
+        })
+
+        if (changed) {
+          setSystemIconVersion((prev) => prev + 1)
+        }
+      })
+      .catch((error) => {
+        logSearchPerf('icon-batch-error', {
+          traceId,
+          payloadHash,
+          requestCount: pendingRequests.length,
+          error: error instanceof Error ? error.message : String(error),
+          elapsedMs: roundPerfMs(performance.now() - iconBatchStartedAt)
+        })
+      })
+      .finally(() => {
+        pendingKeys.forEach((key) => systemIconPendingRef.current.delete(key))
+      })
+  }, [appDisplayItems, fileDisplayItems, payloadHash, traceId])
 
   const sections = useMemo((): ResultSection[] => {
     const next: ResultSection[] = []
@@ -587,7 +768,9 @@ function PluginList({
       type: 'system-app',
       title: item.name,
       subtitle: item.kind === 'shortcut' ? '系统应用快捷方式' : '系统应用',
-      icon: { type: 'svg', value: SYSTEM_APP_ICON_SVG },
+      icon: systemIconCacheRef.current.has(getSystemIconCacheKey('app', item.path))
+        ? { type: 'data-url', value: systemIconCacheRef.current.get(getSystemIconCacheKey('app', item.path))! }
+        : { type: 'svg', value: SYSTEM_APP_ICON_SVG },
       appItem: item
     }))
     if (apps.length > 0) {
@@ -599,7 +782,9 @@ function PluginList({
       type: 'system-file',
       title: item.name,
       subtitle: trimPath(item.path),
-      icon: { type: 'svg', value: SYSTEM_FILE_ICON_SVG },
+      icon: systemIconCacheRef.current.has(getSystemIconCacheKey('file', item.path))
+        ? { type: 'data-url', value: systemIconCacheRef.current.get(getSystemIconCacheKey('file', item.path))! }
+        : { type: 'svg', value: SYSTEM_FILE_ICON_SVG },
       fileItem: item
     }))
     if (files.length > 0) {
@@ -619,9 +804,10 @@ function PluginList({
     }
 
     return next
-  }, [bestPlugins, appDisplayItems, fileDisplayItems, recentDisplayItems])
+  }, [bestPlugins, appDisplayItems, fileDisplayItems, recentDisplayItems, systemIconVersion])
 
   const flatItems = useMemo(() => sections.flatMap((section) => section.items), [sections])
+  const isSystemLoading = isSystemAppsLoading || isSystemFilesLoading
   const isSearching = isPluginLoading || isSystemLoading
   const flatIndexMap = useMemo(() => {
     const map = new Map<string, number>()
@@ -649,6 +835,9 @@ function PluginList({
 
     requestAnimationFrame(() => {
       const now = performance.now()
+      const hasSearchStart = searchStartedPayloadHashRef.current === payloadHash &&
+        searchStartedAtRef.current > 0 &&
+        searchStartedTraceIdRef.current === traceId
       logSearchPerf('render-commit', {
         traceId,
         payloadHash,
@@ -656,12 +845,25 @@ function PluginList({
         isSearching,
         isPluginLoading,
         isSystemLoading,
+        isSystemAppsLoading,
+        isSystemFilesLoading,
         sections: sectionSizes,
-        sinceSearchStartMs: roundPerfMs(now - searchStartedAtRef.current),
+        sinceSearchStartMs: hasSearchStart ? roundPerfMs(now - searchStartedAtRef.current) : undefined,
         sinceInputMs: traceStartedAt > 0 ? roundPerfMs(now - traceStartedAt) : undefined
       })
     })
-  }, [flatItems.length, isPluginLoading, isSearching, isSystemLoading, payloadHash, sections, traceId, traceStartedAt])
+  }, [
+    flatItems.length,
+    isPluginLoading,
+    isSearching,
+    isSystemAppsLoading,
+    isSystemFilesLoading,
+    isSystemLoading,
+    payloadHash,
+    sections,
+    traceId,
+    traceStartedAt
+  ])
 
   useEffect(() => {
     if (flatItems.length === 0) {
@@ -778,7 +980,7 @@ function PluginList({
   if (flatItems.length === 0) {
     return (
       <div className="plugin-grid" role="listbox" aria-label="搜索结果">
-        <div className="result-empty">{isPluginLoading ? '正在搜索...' : '没有匹配结果'}</div>
+        <div className="result-empty">{isSearching ? '正在搜索...' : '没有匹配结果'}</div>
       </div>
     )
   }

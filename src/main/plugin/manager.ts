@@ -147,6 +147,11 @@ export class PluginManager {
 
     // 恢复持久化的后台插件
     await this.backgroundManager.restorePersistent(this.getAll())
+
+    // 预热搜索 worker，降低首次搜索延迟（不阻塞启动流程）
+    void this.searchWorker.warmup().catch((error) => {
+      console.warn('[PluginManager] Search worker warmup failed', error)
+    })
   }
 
   // 获取所有插件
