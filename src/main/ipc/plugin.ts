@@ -5,22 +5,7 @@ import { resolveIcon } from '../plugin/icon-resolver'
 import type { InputPayload, Plugin, PluginFeature } from '../../shared/types/plugin'
 import { PluginInstaller } from '../plugin/installer'
 
-function nowMs(): number {
-  return Number(process.hrtime.bigint()) / 1_000_000
-}
 
-function roundMs(value: number): number {
-  return Math.round(value * 10) / 10
-}
-
-function logSearchPerfMain(stage: string, payload: Record<string, unknown>) {
-  const message = JSON.stringify({
-    stage,
-    ...payload,
-    ts: Date.now()
-  })
-  console.log(`[search-perf-main] ${message}`)
-}
 
 export function registerPluginHandlers(manager: PluginManager) {
   const installer = new PluginInstaller()
@@ -34,13 +19,11 @@ export function registerPluginHandlers(manager: PluginManager) {
     featureIcon: PluginFeature['icon'] | undefined,
     fallback: Plugin['resolvedIcon']
   ) => {
-    const startedAt = nowMs()
     if (!featureIcon) {
       return {
         icon: fallback,
         featureIconRequested: false,
-        cacheHit: false,
-        resolveMs: 0
+        cacheHit: false
       }
     }
     const cached = featureIconCache.get(cacheKey)
@@ -48,8 +31,7 @@ export function registerPluginHandlers(manager: PluginManager) {
       return {
         icon: cached || fallback,
         featureIconRequested: true,
-        cacheHit: true,
-        resolveMs: roundMs(nowMs() - startedAt)
+        cacheHit: true
       }
     }
     const resolved = await resolveIcon(featureIcon, pluginPath)
@@ -57,8 +39,7 @@ export function registerPluginHandlers(manager: PluginManager) {
     return {
       icon: resolved || fallback,
       featureIconRequested: true,
-      cacheHit: false,
-      resolveMs: roundMs(nowMs() - startedAt)
+      cacheHit: false
     }
   }
 
@@ -71,20 +52,13 @@ export function registerPluginHandlers(manager: PluginManager) {
     const iconMeta = await resolveResultIcon(cacheKey, plugin.path, feature.icon, plugin.resolvedIcon)
 
     return {
-      item: {
-        pluginId: plugin.id,
-        pluginName: plugin.manifest.name,
-        displayName: plugin.manifest.displayName,
-        featureCode: feature.code,
-        featureExplain: feature.explain,
-        matchType,
-        icon: iconMeta.icon
-      },
-      meta: {
-        featureIconRequested: iconMeta.featureIconRequested,
-        cacheHit: iconMeta.cacheHit,
-        resolveMs: iconMeta.resolveMs
-      }
+      pluginId: plugin.id,
+      pluginName: plugin.manifest.name,
+      displayName: plugin.manifest.displayName,
+      featureCode: feature.code,
+      featureExplain: feature.explain,
+      matchType,
+      icon: iconMeta.icon
     }
   }
 
@@ -112,12 +86,7 @@ export function registerPluginHandlers(manager: PluginManager) {
 
   // 搜索插件（返回匹配的功能入口）
   ipcMain.handle('plugin:search', async (_, query: string | InputPayload) => {
-    const startedAt = nowMs()
-    const querySummary = typeof query === 'string'
-      ? { kind: 'string', textLength: query.length, attachmentCount: 0 }
-      : { kind: 'payload', textLength: query.text.length, attachmentCount: query.attachments.length }
     const searchResults = await manager.search(query)
-    const managerDoneAt = nowMs()
     const formattedResults = await Promise.all(searchResults.map((result) =>
       formatResultItem(
         `${result.plugin.id}:${result.feature.code}`,
@@ -126,35 +95,8 @@ export function registerPluginHandlers(manager: PluginManager) {
         result.matchType
       )
     ))
-    const formatDoneAt = nowMs()
 
-    let iconResolveTotalMs = 0
-    let iconResolveCount = 0
-    let iconCacheHits = 0
-    let featureIconRequestedCount = 0
-
-    for (const result of formattedResults) {
-      iconResolveTotalMs += result.meta.resolveMs
-      iconResolveCount += 1
-      if (result.meta.cacheHit) iconCacheHits += 1
-      if (result.meta.featureIconRequested) featureIconRequestedCount += 1
-    }
-
-    logSearchPerfMain('plugin-search', {
-      ...querySummary,
-      matchedCount: searchResults.length,
-      resultCount: formattedResults.length,
-      managerSearchMs: roundMs(managerDoneAt - startedAt),
-      renderFormatMs: roundMs(formatDoneAt - managerDoneAt),
-      totalMs: roundMs(formatDoneAt - startedAt),
-      iconResolveTotalMs: roundMs(iconResolveTotalMs),
-      iconResolveAvgMs: iconResolveCount > 0 ? roundMs(iconResolveTotalMs / iconResolveCount) : 0,
-      iconResolveCount,
-      featureIconRequestedCount,
-      iconCacheHits
-    })
-
-    return formattedResults.map((result) => result.item)
+    return formattedResults
   })
 
   // 最近使用插件
@@ -169,7 +111,7 @@ export function registerPluginHandlers(manager: PluginManager) {
         'keyword'
       )
     ))
-    return formattedResults.map((result) => result.item)
+    return formattedResults
   })
 
   // 执行插件

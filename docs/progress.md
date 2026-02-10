@@ -499,3 +499,39 @@ interface FileSearchResult {
 
 
 
+
+---
+
+# 移除系统图标调试日志
+
+> **更新时间**: 2026-02-10
+> **状态**: ✅ 已完成
+
+## 完成内容
+
+### 代码清理
+- [x] `src/main/plugin/system.ts`
+  - 移除了所有 `[icon-debug]` 相关的日志输出
+  - 移除了 `logIconDebug` 方法及相关死代码 (`ICON_DEBUG_ENABLED` 等)
+  - 清理了因移除日志而产生的未使用的变量 (`statSync`, `ext`, `iconSize`, `size`)
+
+---
+
+# 移除搜索性能日志
+
+> **更新时间**: 2026-02-10
+> **状态**: ✅ 已完成
+
+## 完成内容
+
+### 代码清理
+- [x] `src/renderer/components/PluginList.tsx`
+  - 移除了所有 `[search-perf]` 相关的日志输出
+  - 移除了 `logSearchPerf` 方法及 `roundPerfMs` 工具函数
+  - 移除了 `render-commit` 性能监控 Effect
+- [x] `src/renderer/App.tsx`
+  - 移除了 `[search-perf]` 相关的日志输出 (input trace, window height trace)
+  - 移除了 `logSearchPerf` 方法
+- [x] `src/main/ipc/plugin.ts`
+  - 移除了 `[search-perf-main]` 相关的日志输出
+  - 移除了 `logSearchPerfMain` 方法及性能打点逻辑 (`nowMs`, `resolveResultIcon` timing, etc.)

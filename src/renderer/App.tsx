@@ -32,17 +32,7 @@ interface SearchPerfTrace {
   attachmentCount: number
 }
 
-function roundPerfMs(value: number): number {
-  return Math.round(value * 10) / 10
-}
 
-function logSearchPerf(stage: string, payload: Record<string, unknown>) {
-  const message = JSON.stringify({
-    stage,
-    ...payload
-  })
-  console.log(`[search-perf] ${message}`)
-}
 
 function App() {
   const [query, setQuery] = useState('')
@@ -84,14 +74,7 @@ function App() {
       textLength,
       attachmentCount
     })
-    logSearchPerf('input', {
-      traceId: nextId,
-      source,
-      textLength,
-      attachmentCount,
-      nowMs: roundPerfMs(startedAt),
-      ts: Date.now()
-    })
+
   }, [])
 
   const managerMetrics = useMemo(() => {
@@ -155,17 +138,7 @@ function App() {
     const hasInput = query.length > 0 || attachments.length > 0
     if (hasInput && lastHeightRef.current !== height) {
       lastHeightRef.current = height
-      const now = performance.now()
-      logSearchPerf('window-height', {
-        traceId: perfTrace.id,
-        height,
-        allowResize,
-        queryLength: query.length,
-        attachmentCount: attachments.length,
-        sinceInputMs: perfTrace.startedAt > 0 ? roundPerfMs(now - perfTrace.startedAt) : undefined,
-        nowMs: roundPerfMs(now),
-        ts: Date.now()
-      })
+
     } else if (!hasInput) {
       lastHeightRef.current = null
     }

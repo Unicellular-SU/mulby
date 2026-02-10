@@ -1,7 +1,7 @@
 import { app, nativeImage, NativeImage } from 'electron'
 import * as os from 'os'
 import * as crypto from 'crypto'
-import { existsSync, readFileSync, statSync } from 'fs'
+import { existsSync, readFileSync } from 'fs'
 import { extname, join } from 'path'
 import { spawnSync } from 'child_process'
 
@@ -64,7 +64,7 @@ export class PluginSystem {
   private _nativeId: string | null = null
   private fileIconCache: Map<string, string> = new Map()
   private static readonly MAX_FILE_ICON_CACHE = 1500
-  private static readonly ICON_DEBUG_ENABLED = !app.isPackaged || process.env.INTOOLS_ICON_DEBUG === '1'
+
   private static readonly DEFAULT_ICON_SIZE = 128
   private static readonly MIN_ICON_SIZE = 24
   private static readonly MAX_ICON_SIZE = 256
@@ -195,88 +195,34 @@ export class PluginSystem {
     const cacheKey = this.buildIconCacheKey(normalizedPath, options.kind, options.size)
     const cached = this.fileIconCache.get(cacheKey)
     if (cached) {
-      this.logIconDebug('cache-hit', {
-        path: normalizedPath,
-        kind: options.kind,
-        size: options.size,
-        dataUrlLength: cached.length
-      })
+
       return cached
     }
 
-    const ext = extname(normalizedPath).toLowerCase()
-    let exists: boolean | undefined
-    let isDirectory: boolean | undefined
-    if (PluginSystem.ICON_DEBUG_ENABLED) {
-      exists = existsSync(normalizedPath)
-      isDirectory = exists ? (() => {
-        try {
-          return statSync(normalizedPath).isDirectory()
-        } catch {
-          return false
-        }
-      })() : false
-      this.logIconDebug('request', {
-        path: normalizedPath,
-        kind: options.kind,
-        size: options.size,
-        ext,
-        exists,
-        isDirectory
-      })
-    }
+
+
 
     const resolved = await this.resolveNativeIcon(normalizedPath, options)
     if (!this.isUsableNativeIcon(resolved.icon)) {
-      this.logIconDebug('icon-empty', {
-        path: normalizedPath,
-        kind: options.kind,
-        size: options.size,
-        ext,
-        exists,
-        source: resolved.source,
-        error: resolved.error
-      })
+
       return ''
     }
 
     const normalizedIcon = this.normalizeIcon(resolved.icon, options.size)
     if (!this.isUsableNativeIcon(normalizedIcon)) {
-      this.logIconDebug('icon-empty-after-normalize', {
-        path: normalizedPath,
-        kind: options.kind,
-        size: options.size,
-        source: resolved.source
-      })
+
       return ''
     }
 
     const dataUrl = normalizedIcon.toDataURL()
-    const iconSize = normalizedIcon.getSize()
+
     if (!this.isValidIconDataUrl(dataUrl)) {
-      this.logIconDebug('icon-invalid-data-url', {
-        path: normalizedPath,
-        kind: options.kind,
-        size: options.size,
-        source: resolved.source,
-        width: iconSize.width,
-        height: iconSize.height,
-        dataUrlLength: dataUrl.length,
-        dataUrlPrefix: dataUrl.slice(0, 48)
-      })
+
       return ''
     }
 
     this.setFileIconCache(cacheKey, dataUrl)
-    this.logIconDebug('icon-ready', {
-      path: normalizedPath,
-      kind: options.kind,
-      size: options.size,
-      source: resolved.source,
-      width: iconSize.width,
-      height: iconSize.height,
-      dataUrlLength: dataUrl.length
-    })
+
     return dataUrl
   }
 
@@ -292,7 +238,7 @@ export class PluginSystem {
       if (this.isUsableNativeIcon(bundleIcon)) {
         return { icon: bundleIcon, source: 'bundle' }
       }
-      this.logIconDebug('bundle-icon-miss', { path: normalizedPath })
+
     }
 
     if (options.kind === 'file' && this.isDirectImagePath(normalizedPath)) {
@@ -317,14 +263,8 @@ export class PluginSystem {
         if (this.isUsableNativeIcon(icon)) {
           return { icon, source: `app.getFileIcon:${candidate}` }
         }
-        const iconSize = icon.getSize()
-        this.logIconDebug('icon-candidate-invalid', {
-          path: normalizedPath,
-          source: `app.getFileIcon:${candidate}`,
-          width: iconSize.width,
-          height: iconSize.height,
-          isEmpty: icon.isEmpty()
-        })
+
+
       } catch (error) {
         lastError = error instanceof Error ? error.message : String(error)
       }
@@ -342,19 +282,11 @@ export class PluginSystem {
       if (this.isUsableNativeIcon(thumbnail)) {
         return thumbnail
       }
-      const size = thumbnail.getSize()
-      this.logIconDebug('thumbnail-invalid', {
-        path: filePath,
-        width: size.width,
-        height: size.height,
-        isEmpty: thumbnail.isEmpty()
-      })
+
+
       return nativeImage.createEmpty()
     } catch (error) {
-      this.logIconDebug('thumbnail-error', {
-        path: filePath,
-        error: error instanceof Error ? error.message : String(error)
-      })
+
       return nativeImage.createEmpty()
     }
   }
@@ -381,14 +313,9 @@ export class PluginSystem {
         const iconPath = join(appBundlePath, 'Contents', 'Resources', withExt)
         if (!existsSync(iconPath)) continue
         const icon = nativeImage.createFromPath(iconPath)
-        const size = icon.getSize()
+
         if (this.isUsableNativeIcon(icon)) {
-          this.logIconDebug('bundle-icon-path', {
-            appBundlePath,
-            iconPath,
-            width: size.width,
-            height: size.height
-          })
+
           return icon
         }
       }
@@ -538,17 +465,7 @@ export class PluginSystem {
     )
   }
 
-  private logIconDebug(stage: string, payload: Record<string, unknown>): void {
-    if (!PluginSystem.ICON_DEBUG_ENABLED) {
-      return
-    }
-    const message = JSON.stringify({
-      stage,
-      ...payload,
-      ts: Date.now()
-    })
-    console.log(`[icon-debug] ${message}`)
-  }
+
 
   /**
    * 获取设备唯一标识

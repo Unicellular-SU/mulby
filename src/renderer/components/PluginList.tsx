@@ -43,9 +43,7 @@ interface ResultSection {
 interface ResultCardProps {
   item: RenderItem
   isSelected: boolean
-  index: number
   onRun: (item: RenderItem) => void
-  onHover: (index: number) => void
   onShowDetails?: (pluginName: string) => void
 }
 
@@ -80,19 +78,7 @@ const SYSTEM_FILE_ICON_SVG = `
 </svg>
 `.trim()
 
-function roundPerfMs(value: number): number {
-  return Math.round(value * 10) / 10
-}
 
-function logSearchPerf(stage: string, payload: Record<string, unknown>) {
-  const message = JSON.stringify({
-    stage,
-    ...payload,
-    nowMs: roundPerfMs(performance.now()),
-    ts: Date.now()
-  })
-  console.log(`[search-perf] ${message}`)
-}
 
 // 简单哈希用于缓存键
 function hashPayload(payload: InputPayload): string {
@@ -271,9 +257,7 @@ const PluginIcon = memo(function PluginIcon({ icon }: { icon?: SearchResultItem[
 const ResultCard = memo(function ResultCard({
   item,
   isSelected,
-  index,
   onRun,
-  onHover,
   onShowDetails
 }: ResultCardProps) {
   const isSettings = item.pluginItem ? isSettingsItem(item.pluginItem) : false
@@ -283,8 +267,9 @@ const ResultCard = memo(function ResultCard({
       className={`plugin-card ${systemClass} ${isSettings ? 'settings' : ''} ${isSelected ? 'selected' : ''}`}
       role="option"
       aria-selected={isSelected}
-      onClick={() => onRun(item)}
-      onMouseEnter={() => onHover(index)}
+      onClick={() => {
+        void onRun(item)
+      }}
       onContextMenu={(e) => {
         e.preventDefault()
         if (!item.pluginItem || isSettings) return
@@ -332,7 +317,7 @@ function PluginList({
   const searchStartedPayloadHashRef = useRef('')
   const searchStartedTraceIdRef = useRef(0)
   const launchedSearchTokenRef = useRef('')
-  const renderLoggedKeyRef = useRef('')
+
   const pluginCacheRef = useRef<Map<string, SearchResultItem[]>>(new Map())
   const systemAppCacheRef = useRef<Map<string, DesktopAppSearchResult[]>>(new Map())
   const systemFileCacheRef = useRef<Map<string, DesktopFileSearchResult[]>>(new Map())
@@ -390,17 +375,7 @@ function PluginList({
       searchStartedPayloadHashRef.current = payloadHash
       searchStartedTraceIdRef.current = traceId
 
-      logSearchPerf('search-start', {
-        traceId,
-        requestId: currentRequestId,
-        source: traceSource,
-        payloadHash,
-        queryLength: currentPayload.text.length,
-        attachmentCount: currentPayload.attachments.length,
-        traceInputLength,
-        traceAttachmentCount,
-        sinceInputMs: traceStartedAt > 0 ? roundPerfMs(searchStartedAtRef.current - traceStartedAt) : undefined
-      })
+
 
       const hasInput = currentPayload.text.trim().length > 0 || currentPayload.attachments.length > 0
       if (!hasInput) {
@@ -419,14 +394,7 @@ function PluginList({
       if (cachedPlugins) {
         setPluginResults(cachedPlugins)
         setIsPluginLoading(false)
-        logSearchPerf('plugin-ready', {
-          traceId,
-          requestId: currentRequestId,
-          payloadHash,
-          source: 'cache',
-          pluginCount: cachedPlugins.length,
-          elapsedMs: roundPerfMs(performance.now() - searchStartedAtRef.current)
-        })
+
       } else {
         setIsPluginLoading(true)
         void window.intools.plugin.search(currentPayload)
@@ -435,26 +403,14 @@ function PluginList({
             const merged = dedupePluginResults(injectSettingsResult(result, currentPayload.text))
             setLruCache(pluginCacheRef.current, payloadHash, merged, MAX_CACHE_SIZE)
             setPluginResults(merged)
-            logSearchPerf('plugin-ready', {
-              traceId,
-              requestId: currentRequestId,
-              payloadHash,
-              source: 'ipc',
-              pluginCount: merged.length,
-              elapsedMs: roundPerfMs(performance.now() - searchStartedAtRef.current)
-            })
+
           })
           .catch((error) => {
             if (cancelled || currentRequestId !== requestIdRef.current) return
             console.warn('[PluginList] Plugin search failed', error)
-            logSearchPerf('plugin-error', {
-              traceId,
-              requestId: currentRequestId,
-              payloadHash,
-              error: error instanceof Error ? error.message : String(error),
-              elapsedMs: roundPerfMs(performance.now() - searchStartedAtRef.current)
-            })
           })
+
+
           .finally(() => {
             if (cancelled || currentRequestId !== requestIdRef.current) return
             setIsPluginLoading(false)
@@ -479,14 +435,7 @@ function PluginList({
         setSystemApps(cachedApps)
         setSystemAppsResultHash(payloadHash)
         setIsSystemAppsLoading(false)
-        logSearchPerf('system-app-ready', {
-          traceId,
-          requestId: currentRequestId,
-          payloadHash,
-          source: 'cache',
-          appCount: cachedApps.length,
-          elapsedMs: roundPerfMs(performance.now() - searchStartedAtRef.current)
-        })
+
       } else {
         setSystemApps([])
         setSystemAppsResultHash('')
@@ -498,24 +447,11 @@ function PluginList({
             setLruCache(systemAppCacheRef.current, systemCacheKey, apps, MAX_CACHE_SIZE)
             setSystemApps(apps)
             setSystemAppsResultHash(payloadHash)
-            logSearchPerf('system-app-ready', {
-              traceId,
-              requestId: currentRequestId,
-              payloadHash,
-              source: 'ipc',
-              appCount: apps.length,
-              elapsedMs: roundPerfMs(performance.now() - searchStartedAtRef.current)
-            })
+
           })
-          .catch((error) => {
+          .catch((_) => {
             if (cancelled || currentRequestId !== requestIdRef.current) return
-            logSearchPerf('system-app-error', {
-              traceId,
-              requestId: currentRequestId,
-              payloadHash,
-              error: error instanceof Error ? error.message : String(error),
-              elapsedMs: roundPerfMs(performance.now() - searchStartedAtRef.current)
-            })
+
           })
           .finally(() => {
             if (cancelled || currentRequestId !== requestIdRef.current) return
@@ -528,14 +464,7 @@ function PluginList({
         setSystemFiles(cachedFiles)
         setSystemFilesResultHash(payloadHash)
         setIsSystemFilesLoading(false)
-        logSearchPerf('system-file-ready', {
-          traceId,
-          requestId: currentRequestId,
-          payloadHash,
-          source: 'cache',
-          fileCount: cachedFiles.length,
-          elapsedMs: roundPerfMs(performance.now() - searchStartedAtRef.current)
-        })
+
       } else {
         setSystemFiles([])
         setSystemFilesResultHash('')
@@ -549,23 +478,10 @@ function PluginList({
             setLruCache(systemFileCacheRef.current, systemCacheKey, files, MAX_CACHE_SIZE)
             setSystemFiles(files)
             setSystemFilesResultHash(payloadHash)
-            logSearchPerf('system-file-ready', {
-              traceId,
-              requestId: currentRequestId,
-              payloadHash,
-              source: 'ipc',
-              fileCount: files.length,
-              elapsedMs: roundPerfMs(performance.now() - searchStartedAtRef.current)
-            })
-          }).catch((error) => {
+
+          }).catch(() => {
             if (cancelled || currentRequestId !== requestIdRef.current) return
-            logSearchPerf('system-file-error', {
-              traceId,
-              requestId: currentRequestId,
-              payloadHash,
-              error: error instanceof Error ? error.message : String(error),
-              elapsedMs: roundPerfMs(performance.now() - searchStartedAtRef.current)
-            })
+
           }).finally(() => {
             if (cancelled || currentRequestId !== requestIdRef.current) return
             setIsSystemFilesLoading(false)
@@ -681,12 +597,8 @@ function PluginList({
     const pendingKeys = pendingRequests.map((request) => request.key)
     pendingKeys.forEach((key) => systemIconPendingRef.current.add(key))
 
-    const iconBatchStartedAt = performance.now()
-    logSearchPerf('icon-batch-start', {
-      traceId,
-      payloadHash,
-      requestCount: pendingRequests.length
-    })
+
+
 
     void window.intools.system.getFileIcons(pendingRequests, {
       size: SYSTEM_ICON_TARGET_SIZE,
@@ -701,14 +613,7 @@ function PluginList({
         for (const result of results) {
           if (!result.icon || !isValidIconDataUrl(result.icon)) {
             if (result.icon) {
-              logSearchPerf('icon-invalid', {
-                traceId,
-                payloadHash,
-                targetPath: result.path,
-                cacheKey: result.key,
-                dataUrlLength: result.icon.length,
-                dataUrlPrefix: result.icon.slice(0, 48)
-              })
+
             }
             continue
           }
@@ -721,27 +626,14 @@ function PluginList({
           changed = true
         }
 
-        logSearchPerf('icon-batch-ready', {
-          traceId,
-          payloadHash,
-          requestCount: pendingRequests.length,
-          resultCount: results.length,
-          validCount,
-          elapsedMs: roundPerfMs(performance.now() - iconBatchStartedAt)
-        })
+
 
         if (changed) {
           setSystemIconVersion((prev) => prev + 1)
         }
       })
-      .catch((error) => {
-        logSearchPerf('icon-batch-error', {
-          traceId,
-          payloadHash,
-          requestCount: pendingRequests.length,
-          error: error instanceof Error ? error.message : String(error),
-          elapsedMs: roundPerfMs(performance.now() - iconBatchStartedAt)
-        })
+      .catch((_) => {
+
       })
       .finally(() => {
         pendingKeys.forEach((key) => systemIconPendingRef.current.delete(key))
@@ -809,61 +701,12 @@ function PluginList({
   const flatItems = useMemo(() => sections.flatMap((section) => section.items), [sections])
   const isSystemLoading = isSystemAppsLoading || isSystemFilesLoading
   const isSearching = isPluginLoading || isSystemLoading
-  const flatIndexMap = useMemo(() => {
-    const map = new Map<string, number>()
-    flatItems.forEach((item, index) => map.set(item.key, index))
-    return map
-  }, [flatItems])
 
   useEffect(() => {
     onResultsChange?.(flatItems.length)
   }, [flatItems.length, onResultsChange])
 
-  useEffect(() => {
-    const renderKey = `${traceId}:${payloadHash}:${flatItems.length}:${isSearching ? 1 : 0}`
-    if (renderLoggedKeyRef.current === renderKey) {
-      return
-    }
-    renderLoggedKeyRef.current = renderKey
 
-    const sectionSizes = {
-      best: sections.find((section) => section.key === 'best')?.items.length ?? 0,
-      apps: sections.find((section) => section.key === 'apps')?.items.length ?? 0,
-      files: sections.find((section) => section.key === 'files')?.items.length ?? 0,
-      recent: sections.find((section) => section.key === 'recent')?.items.length ?? 0
-    }
-
-    requestAnimationFrame(() => {
-      const now = performance.now()
-      const hasSearchStart = searchStartedPayloadHashRef.current === payloadHash &&
-        searchStartedAtRef.current > 0 &&
-        searchStartedTraceIdRef.current === traceId
-      logSearchPerf('render-commit', {
-        traceId,
-        payloadHash,
-        totalCount: flatItems.length,
-        isSearching,
-        isPluginLoading,
-        isSystemLoading,
-        isSystemAppsLoading,
-        isSystemFilesLoading,
-        sections: sectionSizes,
-        sinceSearchStartMs: hasSearchStart ? roundPerfMs(now - searchStartedAtRef.current) : undefined,
-        sinceInputMs: traceStartedAt > 0 ? roundPerfMs(now - traceStartedAt) : undefined
-      })
-    })
-  }, [
-    flatItems.length,
-    isPluginLoading,
-    isSearching,
-    isSystemAppsLoading,
-    isSystemFilesLoading,
-    isSystemLoading,
-    payloadHash,
-    sections,
-    traceId,
-    traceStartedAt
-  ])
 
   useEffect(() => {
     if (flatItems.length === 0) {
@@ -912,12 +755,6 @@ function PluginList({
       console.error('[PluginList] Failed to open system item:', error)
     }
   }, [onOpenSettings, promoteRecent])
-
-  const handleHover = useCallback((index: number) => {
-    const item = flatItems[index]
-    if (!item) return
-    setSelectedKey(item.key)
-  }, [flatItems])
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -992,17 +829,12 @@ function PluginList({
           <div className="result-section-title">{section.title}</div>
           <div className="result-section-grid" role="group" aria-label={section.title}>
             {section.items.map((item) => {
-              const index = flatIndexMap.get(item.key) ?? 0
               return (
                 <ResultCard
                   key={item.key}
                   item={item}
-                  index={index}
                   isSelected={item.key === selectedKey}
-                  onRun={(value) => {
-                    void handleRun(value)
-                  }}
-                  onHover={handleHover}
+                  onRun={handleRun}
                   onShowDetails={onShowDetails}
                 />
               )
