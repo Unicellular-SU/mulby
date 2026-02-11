@@ -27,6 +27,7 @@ import { isIgnoringBlur, startIgnoringBlur, stopIgnoringBlur, setWindowsProvider
 import { appSettingsManager } from './services/app-settings'
 import { AppShortcutManager } from './services/app-shortcuts'
 import { AppTrayManager } from './services/app-tray'
+import { TrayMenuWindowManager } from './services/tray-menu-window'
 import { ClipboardWatcher } from './services/clipboard-watcher-v2'
 import { ClipboardHistoryManager } from './services/clipboard-history'
 import { commandRunnerService } from './services/command-runner'
@@ -58,6 +59,7 @@ console.log('[CrashReporter] 崩溃报告器已启动，dump 目录:', app.getPa
 
 let mainWindow: BrowserWindow | null = null
 let appTrayManager: AppTrayManager | null = null
+let trayMenuWindowManager: TrayMenuWindowManager | null = null
 let isQuitting = false
 const pluginManager = new PluginManager()
 const pluginWindowManager = new PluginWindowManager()
@@ -186,6 +188,7 @@ function getMainWindow() {
 function hideMainWindow() {
   if (!mainWindow || mainWindow.isDestroyed()) return
 
+  trayMenuWindowManager?.hide()
   pluginWindowManager.hidePanelWindow()
   mainWindow.hide()
 
@@ -359,6 +362,7 @@ function showMainWindow() {
   if (!mainWindow || mainWindow.isDestroyed()) {
     return
   }
+  trayMenuWindowManager?.hide()
 
   // 每次显示前都强制重置关键属性，确保窗口行为正确
   if (process.platform === 'darwin') {
@@ -446,6 +450,47 @@ function toggleWindow() {
   }
 }
 
+function openSettingsView() {
+  showMainWindow()
+  mainWindow?.webContents.send('app:openSettings')
+}
+
+function openPluginStoreView() {
+  showMainWindow()
+  mainWindow?.webContents.send('app:openPluginStore')
+}
+
+function openPluginManagerView() {
+  showMainWindow()
+  mainWindow?.webContents.send('app:openPluginManager')
+}
+
+function openAiSettingsView() {
+  showMainWindow()
+  mainWindow?.webContents.send('app:openAiSettings')
+}
+
+function openBackgroundPluginsView() {
+  showMainWindow()
+  mainWindow?.webContents.send('app:openBackgroundPlugins')
+}
+
+function openTaskSchedulerView() {
+  showMainWindow()
+  mainWindow?.webContents.send('app:openTaskScheduler')
+}
+
+function resetMainWindowPosition() {
+  const settings = appSettingsManager.getSettings()
+  appSettingsManager.updateSettings({
+    window: {
+      ...(settings.window || { width: 800 }),
+      x: undefined,
+      y: undefined
+    }
+  })
+}
+
 function restartMainProcess() {
   if (isQuitting) return
   isQuitting = true
@@ -478,18 +523,9 @@ app.whenReady().then(async () => {
 
   const appShortcutManager = new AppShortcutManager({
     toggleWindow: () => toggleWindow(),
-    openSettings: () => {
-      showMainWindow()
-      mainWindow?.webContents.send('app:openSettings')
-    },
-    openPluginStore: () => {
-      showMainWindow()
-      mainWindow?.webContents.send('app:openPluginStore')
-    },
-    openPluginManager: () => {
-      showMainWindow()
-      mainWindow?.webContents.send('app:openPluginManager')
-    }
+    openSettings: () => openSettingsView(),
+    openPluginStore: () => openPluginStoreView(),
+    openPluginManager: () => openPluginManagerView()
   })
 
   // macOS: 监听 dock 图标点击事件
@@ -532,11 +568,33 @@ app.whenReady().then(async () => {
 
   createWindow()
 
+  trayMenuWindowManager = new TrayMenuWindowManager({
+    pluginManager,
+    settingsManager: appSettingsManager,
+    themeManager,
+    showMainWindow,
+    openSettings: openSettingsView,
+    openAiSettings: openAiSettingsView,
+    openPluginManager: openPluginManagerView,
+    openBackgroundPlugins: openBackgroundPluginsView,
+    openTaskScheduler: openTaskSchedulerView,
+    openPluginStore: openPluginStoreView,
+    resetMainWindowPosition,
+    reloadPlugins: async () => {
+      await pluginManager.init()
+    },
+    restartMainProcess,
+    quitMainProcess
+  })
+
   appTrayManager = new AppTrayManager(
     () => appSettingsManager.getSettings(),
     {
       toggleMainWindow: toggleWindow,
       openMainWindow: showMainWindow,
+      openTrayMenu: (anchorBounds) => {
+        void trayMenuWindowManager?.toggle(anchorBounds)
+      },
       restartApp: restartMainProcess,
       quitApp: quitMainProcess
     }
@@ -591,5 +649,6 @@ app.on('before-quit', () => {
 
 app.on('will-quit', () => {
   appTrayManager?.destroy()
+  trayMenuWindowManager?.destroy()
   globalShortcut.unregisterAll()
 })

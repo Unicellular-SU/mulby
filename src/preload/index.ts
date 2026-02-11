@@ -372,6 +372,11 @@ const intoolsApi = {
       ipcRenderer.on('app:openSettings', listener)
       return () => ipcRenderer.removeListener('app:openSettings', listener)
     },
+    onOpenAiSettings: (callback: () => void) => {
+      const listener = () => callback()
+      ipcRenderer.on('app:openAiSettings', listener)
+      return () => ipcRenderer.removeListener('app:openAiSettings', listener)
+    },
     onOpenPluginStore: (callback: () => void) => {
       const listener = () => callback()
       ipcRenderer.on('app:openPluginStore', listener)
@@ -381,6 +386,16 @@ const intoolsApi = {
       const listener = () => callback()
       ipcRenderer.on('app:openPluginManager', listener)
       return () => ipcRenderer.removeListener('app:openPluginManager', listener)
+    },
+    onOpenBackgroundPlugins: (callback: () => void) => {
+      const listener = () => callback()
+      ipcRenderer.on('app:openBackgroundPlugins', listener)
+      return () => ipcRenderer.removeListener('app:openBackgroundPlugins', listener)
+    },
+    onOpenTaskScheduler: (callback: () => void) => {
+      const listener = () => callback()
+      ipcRenderer.on('app:openTaskScheduler', listener)
+      return () => ipcRenderer.removeListener('app:openTaskScheduler', listener)
     }
   },
 
@@ -716,6 +731,18 @@ const intoolsApi = {
     setTooltip: (tooltip: string) => ipcRenderer.invoke('tray:setTooltip', tooltip),
     setTitle: (title: string) => ipcRenderer.invoke('tray:setTitle', title),
     exists: () => ipcRenderer.invoke('tray:exists')
+  },
+
+  // App Tray Menu API（主程序托盘自定义菜单）
+  trayMenu: {
+    getState: () => ipcRenderer.invoke('tray-menu:getState'),
+    action: (action: string, payload?: Record<string, unknown>) => ipcRenderer.invoke('tray-menu:action', action, payload),
+    close: () => ipcRenderer.invoke('tray-menu:close'),
+    onState: (callback: (state: unknown) => void) => {
+      const listener = (_: any, state: unknown) => callback(state)
+      ipcRenderer.on('tray-menu:state', listener)
+      return () => ipcRenderer.removeListener('tray-menu:state', listener)
+    }
   },
 
   // HTTP API

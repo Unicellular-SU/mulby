@@ -10,6 +10,7 @@ const FALLBACK_ICON_DATA_URL =
 export interface AppTrayCallbacks {
   toggleMainWindow: () => void
   openMainWindow: () => void
+  openTrayMenu: (anchorBounds?: Electron.Rectangle) => void
   restartApp: () => void
   quitApp: () => void
 }
@@ -67,21 +68,29 @@ export class AppTrayManager {
     return !!this.tray
   }
 
-  private handleTrayActivation = () => {
+  private handleTrayActivation = (_event?: Electron.KeyboardEvent, bounds?: Electron.Rectangle) => {
     if (!this.tray) return
 
     const clickAction = this.getSettings().tray.clickAction
     if (clickAction === 'openMenu') {
-      this.tray.popUpContextMenu(this.buildContextMenu())
+      if (process.platform === 'linux') {
+        this.tray.popUpContextMenu(this.buildContextMenu())
+      } else {
+        this.callbacks.openTrayMenu(bounds)
+      }
       return
     }
 
     this.callbacks.toggleMainWindow()
   }
 
-  private handleTrayContextMenu = () => {
+  private handleTrayContextMenu = (_event?: Electron.KeyboardEvent, bounds?: Electron.Rectangle) => {
     if (!this.tray) return
-    this.tray.popUpContextMenu(this.buildContextMenu())
+    if (process.platform === 'linux') {
+      this.tray.popUpContextMenu(this.buildContextMenu())
+      return
+    }
+    this.callbacks.openTrayMenu(bounds)
   }
 
   private buildContextMenu() {

@@ -225,6 +225,15 @@ function App() {
     setViewMode('task-scheduler')
   }, [pluginOpen])
 
+  const openAiSettingsCenter = useCallback(() => {
+    if (pluginOpen) {
+      window.intools.window.close()
+      setPluginOpen(false)
+    }
+    setAttachmentsManagerOpen(false)
+    setViewMode('ai-settings')
+  }, [pluginOpen])
+
   // ESC 键分级退出处理
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -289,6 +298,27 @@ function App() {
     })
     return cleanup
   }, [openPluginManager])
+
+  useEffect(() => {
+    const cleanup = window.intools.app.onOpenAiSettings(() => {
+      openAiSettingsCenter()
+    })
+    return cleanup
+  }, [openAiSettingsCenter])
+
+  useEffect(() => {
+    const cleanup = window.intools.app.onOpenBackgroundPlugins(() => {
+      openBackgroundPluginManager('home')
+    })
+    return cleanup
+  }, [openBackgroundPluginManager])
+
+  useEffect(() => {
+    const cleanup = window.intools.app.onOpenTaskScheduler(() => {
+      openTaskScheduler('home')
+    })
+    return cleanup
+  }, [openTaskScheduler])
 
   const clearAttachments = useCallback(() => {
     attachments.forEach((attachment) => {
@@ -461,7 +491,7 @@ function App() {
             openTaskScheduler('settings')
           }}
           onOpenLogViewer={() => setViewMode('logs')}
-          onOpenAiSettings={() => setViewMode('ai-settings')}
+          onOpenAiSettings={openAiSettingsCenter}
         />
       </div>
     )

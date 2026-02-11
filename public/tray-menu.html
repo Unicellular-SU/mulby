@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="zh-CN">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>InTools Tray Menu</title>
+  <link rel="stylesheet" href="./tray-menu.css" />
+</head>
+
+<body>
+  <div class="tray-shell">
+    <header class="tray-header">
+      <div class="tray-brand">
+        <span class="tray-dot"></span>
+        <span class="tray-title">InTools Control</span>
+      </div>
+      <button id="close-btn" class="ghost-btn" type="button" aria-label="关闭菜单">✕</button>
+    </header>
+
+    <section class="tray-section">
+      <div class="section-title">启动</div>
+      <button id="open-at-login-btn" class="toggle-row" type="button">
+        <span>
+          <strong>开机启动</strong>
+          <small id="open-at-login-desc">加载中...</small>
+        </span>
+        <span id="open-at-login-switch" class="switch" aria-hidden="true"></span>
+      </button>
+    </section>
+
+    <section class="tray-section">
+      <div class="section-title">快捷入口</div>
+      <div class="quick-grid">
+        <button data-action="openSettings" class="quick-btn" type="button">设置</button>
+        <button data-action="openAiSettings" class="quick-btn" type="button">AI 设置中心</button>
+        <button data-action="openPluginManager" class="quick-btn" type="button">插件管理</button>
+        <button data-action="openBackgroundPlugins" class="quick-btn" type="button">任务管理</button>
+        <button data-action="openTaskScheduler" class="quick-btn" type="button">任务调度</button>
+        <button data-action="openPluginStore" class="quick-btn" type="button">插件商店</button>
+      </div>
+    </section>
+
+    <section class="tray-section">
+      <div class="section-title">运行状态</div>
+      <div id="status-grid" class="status-grid"></div>
+    </section>
+
+    <section class="tray-section">
+      <div class="section-title">运维</div>
+      <div class="ops-list">
+        <button data-action="openLogsDir" class="op-btn" type="button">查看日志目录</button>
+        <button data-action="reloadPlugins" class="op-btn" type="button">重载插件</button>
+        <button data-action="resetWindowPosition" class="op-btn" type="button">重置窗口位置</button>
+        <button data-action="restartMainProcess" class="op-btn danger" type="button">重启主进程</button>
+        <button data-action="quitMainProcess" class="op-btn danger" type="button">退出 InTools</button>
+      </div>
+    </section>
+
+    <section class="tray-section">
+      <div class="section-title">最近动作</div>
+      <div id="recent-list" class="recent-list"></div>
+    </section>
+  </div>
+
+  <script src="./tray-menu.js"></script>
+</body>
+
+</html>

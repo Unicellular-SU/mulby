@@ -238,6 +238,32 @@ export interface MessageBoxOptions {
   cancelId?: number
 }
 
+export interface TrayMenuRecentItem {
+  id: string
+  type: 'plugin' | 'command'
+  title: string
+  subtitle: string
+  timestamp: number
+  pluginId?: string
+  featureCode?: string
+}
+
+export interface TrayMenuState {
+  platform: string
+  openAtLogin: {
+    supported: boolean
+    enabled: boolean
+  }
+  status: {
+    backgroundPluginCount: number
+    activeHostCount: number
+    runningTaskCount: number
+    pendingTaskCount: number
+    pausedTaskCount: number
+  }
+  recentActions: TrayMenuRecentItem[]
+}
+
 export interface RunCommandInput {
   command: string
   args?: string[]
@@ -306,8 +332,11 @@ export interface ElectronAPI {
   ai: AiApi
   app: {
     onOpenSettings: (callback: () => void) => () => void
+    onOpenAiSettings: (callback: () => void) => () => void
     onOpenPluginStore: (callback: () => void) => () => void
     onOpenPluginManager: (callback: () => void) => () => void
+    onOpenBackgroundPlugins: (callback: () => void) => () => void
+    onOpenTaskScheduler: (callback: () => void) => () => void
   }
   clipboard: {
     readText: () => Promise<string>
@@ -499,6 +528,12 @@ export interface ElectronAPI {
     setTooltip: (tooltip: string) => Promise<void>
     setTitle: (title: string) => Promise<void>
     exists: () => Promise<boolean>
+  }
+  trayMenu: {
+    getState: () => Promise<TrayMenuState>
+    action: (action: string, payload?: Record<string, unknown>) => Promise<{ success: boolean; state?: TrayMenuState; error?: string }>
+    close: () => Promise<{ success: boolean }>
+    onState: (callback: (state: TrayMenuState) => void) => () => void
   }
   network: {
     isOnline: () => Promise<boolean>
