@@ -72,6 +72,11 @@ import { aiSkillService } from './skills'
 import { AI_RUN_COMMAND_TOOL_NAME } from './tools/run-command-tool'
 import { buildAiInternalTools, type AiInternalToolName } from './tools/internal-tools'
 import {
+  createRuntimeCapabilityIntrospectionSnapshot,
+  ensureRuntimeCapabilityIntrospectionTool,
+  isRuntimeCapabilityIntrospectionToolName
+} from './tools/runtime-capability-introspection-tool'
+import {
   mapCapabilitiesToInternalToolNames,
   mapInternalToolsToCapabilities,
   normalizeAiToolCapabilityNames,
@@ -414,7 +419,14 @@ export class AiService {
       }
 
       const resolvedTools = await this.resolveMergedTools(effectiveOption)
-      const tools = this.buildTools(resolvedTools, effectiveOption.toolContext, effectiveOption.model)
+      const introspectionReadyTools = ensureRuntimeCapabilityIntrospectionTool(resolvedTools)
+      const tools = this.buildTools(
+        introspectionReadyTools,
+        effectiveOption.toolContext,
+        effectiveOption.model,
+        effective.capabilityDebug,
+        policyDebug
+      )
 
       const { modelKey } = this.resolveLanguageModel(effectiveOption.model)
       const params = this.resolveGenerationParams(effectiveOption, effectiveOption.model)
@@ -470,11 +482,13 @@ export class AiService {
             apiKey: requestApiKey,
             baseURL: providerConfig?.baseURL,
             params,
-            tools: resolvedTools || [],
+            tools: introspectionReadyTools || [],
             maxToolSteps: effectiveOption.maxToolSteps,
             toolContext: effectiveOption.toolContext,
             allowReasoning: supportsReasoning(effectiveOption.model),
-            requestId
+            requestId,
+            capabilityDebug: effective.capabilityDebug,
+            policyDebug
           }, undefined, controller.signal)
 
           return {
@@ -575,11 +589,18 @@ export class AiService {
         model: effectiveOption.model
       })
       const resolvedTools = await this.resolveMergedTools(effectiveOption)
-      const tools = this.buildTools(resolvedTools, effectiveOption.toolContext, effectiveOption.model)
+      const introspectionReadyTools = ensureRuntimeCapabilityIntrospectionTool(resolvedTools)
+      const tools = this.buildTools(
+        introspectionReadyTools,
+        effectiveOption.toolContext,
+        effectiveOption.model,
+        effective.capabilityDebug,
+        policyDebug
+      )
       console.info('[AI] stream:prepare:tools-ready', {
         requestId: id,
         model: effectiveOption.model,
-        resolvedToolCount: resolvedTools?.length || 0,
+        resolvedToolCount: introspectionReadyTools?.length || 0,
         hasRuntimeTools: !!tools
       })
       const { modelKey } = this.resolveLanguageModel(effectiveOption.model)
@@ -672,7 +693,7 @@ export class AiService {
             apiKey: requestApiKey,
             baseURL: providerConfig?.baseURL,
             params,
-            tools: resolvedTools
+            tools: introspectionReadyTools
           }, trackedOnChunk, controller.signal)
 
           const usage = normalizeUsage(
@@ -706,11 +727,13 @@ export class AiService {
             apiKey: requestApiKey,
             baseURL: providerConfig?.baseURL,
             params,
-            tools: resolvedTools || [],
+            tools: introspectionReadyTools || [],
             maxToolSteps: effectiveOption.maxToolSteps,
             toolContext: effectiveOption.toolContext,
             allowReasoning: supportsReasoning(effectiveOption.model),
-            requestId: id
+            requestId: id,
+            capabilityDebug: effective.capabilityDebug,
+            policyDebug
           }, trackedOnChunk, controller.signal)
 
           const finalMessage: AiMessage = {
@@ -1680,6 +1703,8 @@ export class AiService {
       toolContext?: AiToolContext
       allowReasoning: boolean
       requestId?: string
+      capabilityDebug?: AiCapabilityDebugInfo
+      policyDebug?: AiPolicyDebugInfo
     },
     onChunk?: (chunk: AiMessage) => void,
     abortSignal?: AbortSignal
@@ -1744,10 +1769,6 @@ export class AiService {
         }
       }
 
-      if (!this.toolExecutor) {
-        throw new Error('AI tool executor is not configured')
-      }
-
       for (const call of stepResult.toolCalls) {
         this.assertNotAborted(abortSignal)
         const rawToolName = call.function?.name
@@ -1794,26 +1815,38 @@ export class AiService {
         }
 
         console.log('[AI] 工具执行开始', { toolName, input: parsedArgs, context: input.toolContext })
-        const mcpExecutionCallId = isMcpToolName(toolName)
-          ? `${String(input.requestId || 'request')}:${String(call.id || 'tool')}`
-          : undefined
-        this.trackMcpCall(input.requestId, mcpExecutionCallId)
         let result: unknown
-        try {
-          result = await this.toolExecutor({
-            name: toolName,
+        if (isRuntimeCapabilityIntrospectionToolName(toolName)) {
+          result = createRuntimeCapabilityIntrospectionSnapshot({
+            tools: input.tools,
             args: parsedArgs,
-            context: input.toolContext,
-            callId: mcpExecutionCallId
+            capabilityDebug: input.capabilityDebug,
+            policyDebug: input.policyDebug
           })
-        } catch (error) {
-          if (abortSignal?.aborted) {
-            throw new Error('AI stream aborted by user')
+        } else {
+          if (!this.toolExecutor) {
+            throw new Error('AI tool executor is not configured')
           }
-          const message = error instanceof Error ? error.message : String(error)
-          throw new Error(`[AI_TOOL_EXECUTION_ERROR] ${toolName}: ${message}`)
-        } finally {
-          this.untrackMcpCall(input.requestId, mcpExecutionCallId)
+          const mcpExecutionCallId = isMcpToolName(toolName)
+            ? `${String(input.requestId || 'request')}:${String(call.id || 'tool')}`
+            : undefined
+          this.trackMcpCall(input.requestId, mcpExecutionCallId)
+          try {
+            result = await this.toolExecutor({
+              name: toolName,
+              args: parsedArgs,
+              context: input.toolContext,
+              callId: mcpExecutionCallId
+            })
+          } catch (error) {
+            if (abortSignal?.aborted) {
+              throw new Error('AI stream aborted by user')
+            }
+            const message = error instanceof Error ? error.message : String(error)
+            throw new Error(`[AI_TOOL_EXECUTION_ERROR] ${toolName}: ${message}`)
+          } finally {
+            this.untrackMcpCall(input.requestId, mcpExecutionCallId)
+          }
         }
         console.log('[AI] 工具执行完成', { toolName, result })
 
@@ -2258,7 +2291,13 @@ export class AiService {
     return merged
   }
 
-  private buildTools(tools?: AiTool[], context?: AiToolContext, modelId?: string) {
+  private buildTools(
+    tools?: AiTool[],
+    context?: AiToolContext,
+    modelId?: string,
+    capabilityDebug?: AiCapabilityDebugInfo,
+    policyDebug?: AiPolicyDebugInfo
+  ) {
     if (!tools || tools.length === 0) return undefined
     if (modelId && !supportsFunctionCalling(modelId)) {
       console.log('[AI] buildTools: 模型不支持 function calling', { modelId })
@@ -2285,7 +2324,10 @@ export class AiService {
         })
       }
     }
-    if (!this.toolExecutor) {
+    const requiresExternalExecutor = tools.some(
+      (item) => !isRuntimeCapabilityIntrospectionToolName(String(item.function?.name || ''))
+    )
+    if (!this.toolExecutor && requiresExternalExecutor) {
       console.error('[AI] buildTools: toolExecutor 未配置')
       throw new Error('AI tool executor is not configured')
     }
@@ -2308,21 +2350,33 @@ export class AiService {
           fn.name,
           tool({
             description: fn.description,
-          inputSchema: jsonSchema(schema as any),
-          execute: async (input: unknown) => {
-            console.log('[AI] 工具执行开始', { toolName: fn.name, input, context })
-            let result: unknown
-            try {
-              result = await this.toolExecutor?.({ name: fn.name, args: input, context })
-            } catch (error) {
-              const message = error instanceof Error ? error.message : String(error)
-              throw new Error(`[AI_TOOL_EXECUTION_ERROR] ${fn.name}: ${message}`)
+            inputSchema: jsonSchema(schema as any),
+            execute: async (input: unknown) => {
+              console.log('[AI] 工具执行开始', { toolName: fn.name, input, context })
+              let result: unknown
+              if (isRuntimeCapabilityIntrospectionToolName(fn.name)) {
+                result = createRuntimeCapabilityIntrospectionSnapshot({
+                  tools,
+                  args: input,
+                  capabilityDebug,
+                  policyDebug
+                })
+              } else {
+                if (!this.toolExecutor) {
+                  throw new Error('AI tool executor is not configured')
+                }
+                try {
+                  result = await this.toolExecutor({ name: fn.name, args: input, context })
+                } catch (error) {
+                  const message = error instanceof Error ? error.message : String(error)
+                  throw new Error(`[AI_TOOL_EXECUTION_ERROR] ${fn.name}: ${message}`)
+                }
+              }
+              console.log('[AI] 工具执行完成', { toolName: fn.name, result })
+              return result
             }
-            console.log('[AI] 工具执行完成', { toolName: fn.name, result })
-            return result
-          }
-        })
-      ] as const
+          })
+        ] as const
       })
 
     if (toolEntries.length === 0) return undefined
