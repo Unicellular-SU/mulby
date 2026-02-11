@@ -111,8 +111,36 @@ describe('providerMethodAdapters', () => {
     assert.deepEqual(calls, ['sdk-stream'])
   })
 
-  it('stream: openai-compatible + tools without compat loop falls back to sdk stream', async () => {
+  it('stream: openai-compatible + tools without compat loop keeps compat tool-loop route for openrouter', async () => {
     const adapter = getProviderMethodAdapter('openrouter')
+    const calls: string[] = []
+    const result = await adapter.stream({
+      hasTools: true,
+      hasMultimodalContent: false,
+      shouldUseCompatToolLoop: false,
+      executeAnthropicStream: async () => {
+        calls.push('anthropic-stream')
+        return assistantMessage('anthropic-stream')
+      },
+      executeCompatChatStream: async () => {
+        calls.push('compat-chat-stream')
+        return assistantMessage('compat-chat-stream')
+      },
+      executeCompatToolLoopStream: async () => {
+        calls.push('compat-tool-loop-stream')
+        return assistantMessage('compat-tool-loop-stream')
+      },
+      executeSdkStream: async () => {
+        calls.push('sdk-stream')
+        return assistantMessage('sdk-stream')
+      }
+    })
+    assert.equal(result.content, 'compat-tool-loop-stream')
+    assert.deepEqual(calls, ['compat-tool-loop-stream'])
+  })
+
+  it('stream: openai + tools without compat loop keeps sdk stream route', async () => {
+    const adapter = getProviderMethodAdapter('openai')
     const calls: string[] = []
     const result = await adapter.stream({
       hasTools: true,

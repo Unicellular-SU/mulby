@@ -421,8 +421,11 @@ function PluginList({
       }
 
       const query = currentPayload.text.trim()
-      const shouldSearchSystem = query.length > 0 && currentPayload.attachments.length === 0
-      if (!shouldSearchSystem) {
+      const hasTextOnlyInput = query.length > 0 && currentPayload.attachments.length === 0
+      const shouldSearchApps = hasTextOnlyInput
+      const shouldSearchFiles = hasTextOnlyInput && query.length >= 2
+
+      if (!hasTextOnlyInput) {
         setSystemApps([])
         setSystemFiles([])
         setSystemAppsResultHash('')
@@ -433,63 +436,69 @@ function PluginList({
       }
 
       const systemCacheKey = query.toLowerCase()
-      const cachedApps = systemAppCacheRef.current.get(systemCacheKey)
-      if (cachedApps) {
-        setSystemApps(cachedApps)
-        setSystemAppsResultHash(payloadHash)
-        setIsSystemAppsLoading(false)
-
-      } else {
+      if (!shouldSearchApps) {
         setSystemApps([])
         setSystemAppsResultHash('')
-        setIsSystemAppsLoading(true)
+        setIsSystemAppsLoading(false)
+      } else {
+        const cachedApps = systemAppCacheRef.current.get(systemCacheKey)
+        if (cachedApps) {
+          setSystemApps(cachedApps)
+          setSystemAppsResultHash(payloadHash)
+          setIsSystemAppsLoading(false)
+        } else {
+          setSystemApps([])
+          setSystemAppsResultHash('')
+          setIsSystemAppsLoading(true)
 
-        void window.intools.desktop.searchApps(query, SYSTEM_APP_SEARCH_LIMIT)
-          .then((apps) => {
-            if (cancelled || currentRequestId !== requestIdRef.current) return
-            setLruCache(systemAppCacheRef.current, systemCacheKey, apps, MAX_CACHE_SIZE)
-            setSystemApps(apps)
-            setSystemAppsResultHash(payloadHash)
-
-          })
-          .catch((_) => {
-            if (cancelled || currentRequestId !== requestIdRef.current) return
-
-          })
-          .finally(() => {
-            if (cancelled || currentRequestId !== requestIdRef.current) return
-            setIsSystemAppsLoading(false)
-          })
+          void window.intools.desktop.searchApps(query, SYSTEM_APP_SEARCH_LIMIT)
+            .then((apps) => {
+              if (cancelled || currentRequestId !== requestIdRef.current) return
+              setLruCache(systemAppCacheRef.current, systemCacheKey, apps, MAX_CACHE_SIZE)
+              setSystemApps(apps)
+              setSystemAppsResultHash(payloadHash)
+            })
+            .catch((_) => {
+              if (cancelled || currentRequestId !== requestIdRef.current) return
+            })
+            .finally(() => {
+              if (cancelled || currentRequestId !== requestIdRef.current) return
+              setIsSystemAppsLoading(false)
+            })
+        }
       }
 
-      const cachedFiles = systemFileCacheRef.current.get(systemCacheKey)
-      if (cachedFiles) {
-        setSystemFiles(cachedFiles)
-        setSystemFilesResultHash(payloadHash)
-        setIsSystemFilesLoading(false)
-
-      } else {
+      if (!shouldSearchFiles) {
         setSystemFiles([])
         setSystemFilesResultHash('')
         setIsSystemFilesLoading(false)
+      } else {
+        const cachedFiles = systemFileCacheRef.current.get(systemCacheKey)
+        if (cachedFiles) {
+          setSystemFiles(cachedFiles)
+          setSystemFilesResultHash(payloadHash)
+          setIsSystemFilesLoading(false)
+        } else {
+          setSystemFiles([])
+          setSystemFilesResultHash('')
+          setIsSystemFilesLoading(false)
 
-        systemTimer = setTimeout(() => {
-          if (cancelled || currentRequestId !== requestIdRef.current) return
-          setIsSystemFilesLoading(true)
-          void window.intools.desktop.searchFiles(query, SYSTEM_FILE_SEARCH_LIMIT).then((files) => {
+          systemTimer = setTimeout(() => {
             if (cancelled || currentRequestId !== requestIdRef.current) return
-            setLruCache(systemFileCacheRef.current, systemCacheKey, files, MAX_CACHE_SIZE)
-            setSystemFiles(files)
-            setSystemFilesResultHash(payloadHash)
-
-          }).catch(() => {
-            if (cancelled || currentRequestId !== requestIdRef.current) return
-
-          }).finally(() => {
-            if (cancelled || currentRequestId !== requestIdRef.current) return
-            setIsSystemFilesLoading(false)
-          })
-        }, SYSTEM_FILE_STABLE_DELAY_MS)
+            setIsSystemFilesLoading(true)
+            void window.intools.desktop.searchFiles(query, SYSTEM_FILE_SEARCH_LIMIT).then((files) => {
+              if (cancelled || currentRequestId !== requestIdRef.current) return
+              setLruCache(systemFileCacheRef.current, systemCacheKey, files, MAX_CACHE_SIZE)
+              setSystemFiles(files)
+              setSystemFilesResultHash(payloadHash)
+            }).catch(() => {
+              if (cancelled || currentRequestId !== requestIdRef.current) return
+            }).finally(() => {
+              if (cancelled || currentRequestId !== requestIdRef.current) return
+              setIsSystemFilesLoading(false)
+            })
+          }, SYSTEM_FILE_STABLE_DELAY_MS)
+        }
       }
     }
 
@@ -579,8 +588,8 @@ function PluginList({
     const requests: SystemIconRequest[] = [
       ...appDisplayItems.map((item) => ({
         key: getSystemIconCacheKey('app', item.path),
-        path: item.path,
-        kind: 'app' as const
+        path: item.iconPath || item.path,
+        kind: item.iconPath ? ('file' as const) : ('app' as const)
       })),
       ...fileDisplayItems.map((item) => ({
         key: getSystemIconCacheKey('file', item.path),
@@ -611,17 +620,12 @@ function PluginList({
         if (!Array.isArray(results)) return
 
         let changed = false
-        let validCount = 0
 
         for (const result of results) {
           if (!result.icon || !isValidIconDataUrl(result.icon)) {
-            if (result.icon) {
-
-            }
             continue
           }
 
-          validCount += 1
           if (systemIconCacheRef.current.get(result.key) === result.icon) {
             continue
           }
@@ -636,7 +640,7 @@ function PluginList({
         }
       })
       .catch((_) => {
-
+        // ignore icon load errors
       })
       .finally(() => {
         pendingKeys.forEach((key) => systemIconPendingRef.current.delete(key))

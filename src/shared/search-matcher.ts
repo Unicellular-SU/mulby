@@ -1,4 +1,5 @@
 import { extname } from 'path'
+import { pinyin } from 'pinyin-pro'
 import type { InputAttachment, InputPayload, PluginCmd, PluginFeature } from './types/plugin'
 
 export type MatchType = 'keyword' | 'regex' | 'files' | 'img' | 'over'
@@ -74,6 +75,20 @@ export interface CmdFilesMatch {
 // Regex Cache
 const regexCache = new Map<string, RegExp>()
 const MAX_CACHE_SIZE = 1000
+const keywordCache = new Map<string, KeywordSearchIndex>()
+const MAX_KEYWORD_CACHE_SIZE = 3000
+
+const SEARCH_SEPARATOR_REGEX = /[\s\-_./\\|,:;，。！？、：；'"`‘’“”()（）[\]【】{}<>《》+*&^%$#@!~]+/g
+const CAMEL_CASE_BOUNDARY_REGEX = /([a-z0-9])([A-Z])/g
+const NON_ALNUM_REGEX = /[^a-z0-9]+/g
+
+interface KeywordSearchIndex {
+  normalized: string
+  compact: string
+  latinInitials: string
+  pinyinFull: string
+  pinyinInitials: string
+}
 
 function getCachedRegex(pattern: string): RegExp | null {
   if (regexCache.has(pattern)) {
@@ -92,6 +107,97 @@ function getCachedRegex(pattern: string): RegExp | null {
   } catch {
     return null
   }
+}
+
+function normalizeSearchText(value: string): string {
+  return value.trim().toLowerCase().normalize('NFKC')
+}
+
+function compactSearchText(value: string): string {
+  return normalizeSearchText(value).replace(SEARCH_SEPARATOR_REGEX, '')
+}
+
+function buildLatinInitials(value: string): string {
+  const tokens = value
+    .replace(CAMEL_CASE_BOUNDARY_REGEX, '$1 $2')
+    .toLowerCase()
+    .split(NON_ALNUM_REGEX)
+    .filter(Boolean)
+  return tokens.map((token) => token[0]).join('')
+}
+
+function buildPinyinValue(value: string, pattern: 'pinyin' | 'first'): string {
+  try {
+    const converted = pinyin(value, {
+      type: 'array',
+      pattern,
+      toneType: 'none',
+      nonZh: 'consecutive',
+      v: true
+    })
+    return compactSearchText(converted.join(''))
+  } catch {
+    return ''
+  }
+}
+
+function getCachedKeywordIndex(value: string): KeywordSearchIndex {
+  const cached = keywordCache.get(value)
+  if (cached) return cached
+
+  const index: KeywordSearchIndex = {
+    normalized: normalizeSearchText(value),
+    compact: compactSearchText(value),
+    latinInitials: compactSearchText(buildLatinInitials(value)),
+    pinyinFull: buildPinyinValue(value, 'pinyin'),
+    pinyinInitials: buildPinyinValue(value, 'first')
+  }
+
+  if (keywordCache.size >= MAX_KEYWORD_CACHE_SIZE) {
+    const firstKey = keywordCache.keys().next().value as string | undefined
+    if (firstKey) keywordCache.delete(firstKey)
+  }
+  keywordCache.set(value, index)
+  return index
+}
+
+function isSubsequenceMatch(target: string, query: string): boolean {
+  if (!target || !query || query.length > target.length) return false
+  let targetIndex = 0
+  for (const queryChar of query) {
+    targetIndex = target.indexOf(queryChar, targetIndex)
+    if (targetIndex === -1) return false
+    targetIndex += 1
+  }
+  return true
+}
+
+function matchesKeywordQuery(keywordValue: string, queryText: string): boolean {
+  const normalizedQuery = normalizeSearchText(queryText)
+  if (!normalizedQuery) return false
+
+  const queryCompact = compactSearchText(normalizedQuery)
+  const index = getCachedKeywordIndex(keywordValue)
+
+  // 直接包含：保留原有行为（中英文连续匹配）
+  if (index.normalized.includes(normalizedQuery)) return true
+  if (queryCompact && index.compact.includes(queryCompact)) return true
+
+  // 单字符不启用拼音/跨字，避免噪音匹配
+  if (queryCompact.length < 2) return false
+
+  // 拼音缩写 / 跨词英文首字母
+  if (index.latinInitials && index.latinInitials.includes(queryCompact)) return true
+  if (index.pinyinInitials && index.pinyinInitials.includes(queryCompact)) return true
+
+  // 拼音全拼连续匹配
+  if (index.pinyinFull && index.pinyinFull.includes(queryCompact)) return true
+
+  // 跨字匹配（子序列）：例如“百网”匹配“百度网盘”
+  if (isSubsequenceMatch(index.compact, queryCompact)) return true
+  if (index.pinyinInitials && isSubsequenceMatch(index.pinyinInitials, queryCompact)) return true
+
+  return false
 }
 
 export function matchesFiles(cmd: CmdFilesMatch, attachments: InputAttachment[]): boolean {
@@ -178,7 +284,7 @@ export function findBestMatch(feature: PluginFeature, input: InputPayload): Feat
 
     if (cmd.type === 'keyword') {
       if (!hasText) continue
-      if (cmd.value.toLowerCase().includes(q)) {
+      if (matchesKeywordQuery(cmd.value, q)) {
         matchType = 'keyword'
       }
     }

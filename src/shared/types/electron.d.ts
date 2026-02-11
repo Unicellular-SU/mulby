@@ -74,6 +74,7 @@ export interface DesktopAppSearchResult {
   name: string
   path: string
   kind: 'application' | 'shortcut' | 'executable'
+  iconPath?: string
 }
 
 export type SystemIconKind = 'app' | 'file'
