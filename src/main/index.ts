@@ -26,6 +26,7 @@ import { setUiDialogThemeResolver } from './services/ui-dialog-service'
 import { isIgnoringBlur, startIgnoringBlur, stopIgnoringBlur, setWindowsProvider } from './services/blur-manager'
 import { appSettingsManager } from './services/app-settings'
 import { AppShortcutManager } from './services/app-shortcuts'
+import { AppTrayManager } from './services/app-tray'
 import { ClipboardWatcher } from './services/clipboard-watcher-v2'
 import { ClipboardHistoryManager } from './services/clipboard-history'
 import { commandRunnerService } from './services/command-runner'
@@ -56,6 +57,8 @@ crashReporter.start({
 console.log('[CrashReporter] 崩溃报告器已启动，dump 目录:', app.getPath('crashDumps'))
 
 let mainWindow: BrowserWindow | null = null
+let appTrayManager: AppTrayManager | null = null
+let isQuitting = false
 const pluginManager = new PluginManager()
 const pluginWindowManager = new PluginWindowManager()
 const themeManager = new ThemeManager()
@@ -161,6 +164,7 @@ setAiCapabilityPolicyResolver(({ option, requestedCapabilities, selectedSkills }
 // 单实例锁：确保只有一个应用实例运行
 const gotTheLock = app.requestSingleInstanceLock()
 if (!gotTheLock) {
+  isQuitting = true
   app.quit()
 } else {
   // 当第二个实例启动时，聚焦到已有窗口
@@ -177,6 +181,21 @@ if (!gotTheLock) {
 
 function getMainWindow() {
   return mainWindow
+}
+
+function hideMainWindow() {
+  if (!mainWindow || mainWindow.isDestroyed()) return
+
+  pluginWindowManager.hidePanelWindow()
+  mainWindow.hide()
+
+  // macOS: 如果有独立窗口，确保 dock 图标保持显示
+  if (process.platform === 'darwin' && app.dock) {
+    const hasDetachedWindows = pluginWindowManager.getAllDetachedWindows().length > 0
+    if (hasDetachedWindows) {
+      void app.dock.show()
+    }
+  }
 }
 
 function canReachUrl(url: string, timeoutMs = 800): Promise<boolean> {
@@ -244,6 +263,16 @@ function createWindow() {
 
   mainWindow.once('ready-to-show', () => {
     // console.log('[Main] Window ready-to-show event fired')
+  })
+
+  // 默认关闭行为：隐藏到托盘（显式退出时除外）
+  mainWindow.on('close', (event) => {
+    const closeToTray = appSettingsManager.getSettings().tray.closeToTray
+    if (isQuitting || !closeToTray) {
+      return
+    }
+    event.preventDefault()
+    hideMainWindow()
   })
 
   // 失焦隐藏（类似 uTools 的交互）
@@ -411,19 +440,23 @@ function toggleWindow() {
     return
   }
   if (mainWindow.isVisible()) {
-    pluginWindowManager.hidePanelWindow()
-    mainWindow.hide()
-
-    // macOS: 如果有独立窗口，确保 dock 图标保持显示
-    if (process.platform === 'darwin' && app.dock) {
-      const hasDetachedWindows = pluginWindowManager.getAllDetachedWindows().length > 0
-      if (hasDetachedWindows) {
-        void app.dock.show()
-      }
-    }
+    hideMainWindow()
   } else {
     showMainWindow()
   }
+}
+
+function restartMainProcess() {
+  if (isQuitting) return
+  isQuitting = true
+  app.relaunch()
+  app.exit(0)
+}
+
+function quitMainProcess() {
+  if (isQuitting) return
+  isQuitting = true
+  app.quit()
 }
 
 app.whenReady().then(async () => {
@@ -499,6 +532,20 @@ app.whenReady().then(async () => {
 
   createWindow()
 
+  appTrayManager = new AppTrayManager(
+    () => appSettingsManager.getSettings(),
+    {
+      toggleMainWindow: toggleWindow,
+      openMainWindow: showMainWindow,
+      restartApp: restartMainProcess,
+      quitApp: quitMainProcess
+    }
+  )
+  const trayCreated = appTrayManager.create()
+  if (!trayCreated) {
+    console.warn('[AppTray] Tray unavailable, fallback to global shortcuts.')
+  }
+
   // 设置全局窗口提供者，用于系统对话框打开时临时隐藏窗口
   setWindowsProvider(() => {
     const windows: BrowserWindow[] = []
@@ -530,11 +577,19 @@ app.whenReady().then(async () => {
 })
 
 app.on('window-all-closed', () => {
+  if (isQuitting) {
+    return
+  }
   if (process.platform !== 'darwin') {
     app.quit()
   }
 })
 
+app.on('before-quit', () => {
+  isQuitting = true
+})
+
 app.on('will-quit', () => {
+  appTrayManager?.destroy()
   globalShortcut.unregisterAll()
 })

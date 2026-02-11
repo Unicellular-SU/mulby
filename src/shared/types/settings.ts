@@ -178,6 +178,14 @@ export interface WindowSettings {
   y?: number
 }
 
+export type TrayClickAction = 'toggleWindow' | 'openMenu'
+
+export interface TraySettings {
+  enabled: boolean
+  closeToTray: boolean
+  clickAction: TrayClickAction
+}
+
 export interface AppSettings {
   shortcuts: AppShortcutSettings
   storeSources: StoreSource[]
@@ -186,6 +194,7 @@ export interface AppSettings {
   aiTooling: AiToolingSettings
   window?: WindowSettings
   input: InputSettings
+  tray: TraySettings
 }
 
 export interface ShortcutStatus {

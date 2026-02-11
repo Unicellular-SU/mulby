@@ -11,6 +11,7 @@ import type {
   CommandCallerSource,
   CommandRunnerSettings,
   CommandRule,
+  TraySettings,
   CommandTrustRecord
 } from '../../shared/types/settings'
 
@@ -131,6 +132,24 @@ const DEFAULT_SETTINGS: AppSettings = {
   input: {
     autoPasteOnShow: true,
     autoPasteMaxAge: 5000
+  },
+  tray: {
+    enabled: true,
+    closeToTray: true,
+    clickAction: 'toggleWindow'
+  }
+}
+
+function normalizeTraySettings(input: Partial<TraySettings> | undefined): TraySettings {
+  const current = {
+    ...DEFAULT_SETTINGS.tray,
+    ...(input || {})
+  }
+
+  return {
+    enabled: current.enabled !== false,
+    closeToTray: current.closeToTray !== false,
+    clickAction: current.clickAction === 'openMenu' ? 'openMenu' : 'toggleWindow'
   }
 }
 
@@ -414,7 +433,11 @@ function mergeSettings(current: AppSettings, next: Partial<AppSettings>): AppSet
     input: {
       ...current.input,
       ...(next.input || {})
-    }
+    },
+    tray: normalizeTraySettings({
+      ...current.tray,
+      ...(next.tray || {})
+    })
   }
 }
 
@@ -423,7 +446,8 @@ function sanitizeShortcuts(settings: AppSettings): AppSettings {
     ...settings,
     shortcuts: { ...settings.shortcuts },
     commandRunner: normalizeCommandRunnerSettings(settings.commandRunner),
-    aiTooling: normalizeAiToolingSettings(settings.aiTooling)
+    aiTooling: normalizeAiToolingSettings(settings.aiTooling),
+    tray: normalizeTraySettings(settings.tray)
   }
 
   if (next.shortcuts.openSettings === 'CommandOrControl+Comma') {
