@@ -2,7 +2,7 @@
 本文档描述 AI API (ai) 的使用方法与接口。
 
 > 入口：
-> - UI/渲染进程：`window.intools.ai`
+> - UI/渲染进程：`window.mulby.ai`
 > - 插件后端：`context.api.ai`
 
 ---
@@ -65,7 +65,7 @@ await ai.abort(requestId);
 > 通常优先使用 `ai.call(...).abort()`；当你拿到了 `requestId`（例如并发管理）时可直接用 `ai.abort(requestId)`。
 
 > 说明：`tools` 在插件后端会通过插件 host 方法执行（工具名=插件方法名）。  
-> 渲染进程不直接执行工具函数，如需在 UI 使用工具调用，请通过 `window.intools.host.call` 调用插件后端方法执行。
+> 渲染进程不直接执行工具函数，如需在 UI 使用工具调用，请通过 `window.mulby.host.call` 调用插件后端方法执行。
 
 ### MCP 参与调用
 
@@ -131,7 +131,7 @@ export const host = {
 
 ```ts
 // UI/渲染进程
-const result = await window.intools.host.call('my-plugin', 'runWithTools', {
+const result = await window.mulby.host.call('my-plugin', 'runWithTools', {
   messages: [{ role: 'user', content: '我的系统信息是什么？' }]
 });
 ```
@@ -252,7 +252,7 @@ await ai.settings.update({
 
 ## MCP 管理
 
-> 可用端：仅渲染进程 `window.intools.ai.mcp`。  
+> 可用端：仅渲染进程 `window.mulby.ai.mcp`。  
 > 插件后端 `context.api.ai` 当前不提供 `mcp.*` 管理接口（但 `ai.call` 可使用 `option.mcp` 参与工具选择）。
 
 ### mcp.listServers()
@@ -368,7 +368,7 @@ const logs = await ai.mcp.getLogs('filesystem');
 
 ## 技能管理 (skills)
 
-> 渲染进程：`window.intools.ai.skills`（完整管理接口）  
+> 渲染进程：`window.mulby.ai.skills`（完整管理接口）  
 > 插件后端：`context.api.ai.skills`（仅 `listEnabled` 与 `previewForCall`）
 
 ### skills.list()

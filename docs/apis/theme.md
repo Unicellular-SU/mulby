@@ -1,7 +1,7 @@
 # 主题 API (theme)
 本文档描述 主题 API (theme) 的使用方法与接口。
 
-> 入口：`window.intools.theme`
+> 入口：`window.mulby.theme`
 
 主题 API 允许插件获取和跟随主程序的主题设置，实现视觉一致性。
 
@@ -10,7 +10,7 @@
 获取当前主题信息。
 
 ```javascript
-const themeInfo = await window.intools.theme.get();
+const themeInfo = await window.mulby.theme.get();
 // 返回: { mode: 'system', actual: 'dark' }
 ```
 
@@ -28,9 +28,9 @@ interface ThemeInfo {
 设置主题模式。
 
 ```javascript
-await window.intools.theme.set('dark');   // 设置为暗色主题
-await window.intools.theme.set('light');  // 设置为亮色主题
-await window.intools.theme.set('system'); // 跟随系统主题
+await window.mulby.theme.set('dark');   // 设置为暗色主题
+await window.mulby.theme.set('light');  // 设置为亮色主题
+await window.mulby.theme.set('system'); // 跟随系统主题
 ```
 
 **参数**:
@@ -43,7 +43,7 @@ await window.intools.theme.set('system'); // 跟随系统主题
 获取实际应用的主题（解析 system 后的结果）。
 
 ```javascript
-const theme = await window.intools.theme.getActual();
+const theme = await window.mulby.theme.getActual();
 // 返回: 'light' 或 'dark'
 ```
 
@@ -54,7 +54,7 @@ const theme = await window.intools.theme.getActual();
 监听主题变化事件。
 
 ```javascript
-window.intools.onThemeChange((theme) => {
+window.mulby.onThemeChange((theme) => {
   console.log('主题已变更为:', theme);
   document.documentElement.classList.toggle('dark', theme === 'dark');
 });
@@ -78,10 +78,10 @@ function getInitialTheme() {
 
 #### 监听主题变化（推荐）
 
-使用 `window.intools.onThemeChange` 监听主题变化，适用于附着模式和独立窗口模式：
+使用 `window.mulby.onThemeChange` 监听主题变化，适用于附着模式和独立窗口模式：
 
 ```javascript
-window.intools?.onThemeChange?.((theme) => {
+window.mulby?.onThemeChange?.((theme) => {
   document.documentElement.classList.toggle('dark', theme === 'dark');
 });
 ```
@@ -140,7 +140,7 @@ export default function App() {
 
   // 监听主题变化
   useEffect(() => {
-    window.intools?.onThemeChange?.((newTheme: 'light' | 'dark') => {
+    window.mulby?.onThemeChange?.((newTheme: 'light' | 'dark') => {
       setTheme(newTheme);
     });
   }, []);

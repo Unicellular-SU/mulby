@@ -138,7 +138,7 @@ async function downloadFile(
             const protocol = currentUrl.startsWith('https') ? https : http
 
             protocol
-                .get(currentUrl, { headers: { 'User-Agent': 'InTools' } }, (response) => {
+                .get(currentUrl, { headers: { 'User-Agent': 'Mulby' } }, (response) => {
                     // 处理重定向 (301, 302, 303, 307, 308)
                     if (response.statusCode && response.statusCode >= 300 && response.statusCode < 400) {
                         const location = response.headers.location

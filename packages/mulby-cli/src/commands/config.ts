@@ -8,7 +8,7 @@ export function configCommand(action: string, key?: string, value?: string) {
         switch (action) {
             case 'get':
                 if (!key) {
-                    console.log(chalk.red('错误: 请指定要查询的配置键，例如: intools config get ai.provider'));
+                    console.log(chalk.red('错误: 请指定要查询的配置键，例如: mulby config get ai.provider'));
                     return;
                 }
                 const val = configManager.get(key);
@@ -21,7 +21,7 @@ export function configCommand(action: string, key?: string, value?: string) {
 
             case 'set':
                 if (!key || !value) {
-                    console.log(chalk.red('错误: 请指定键和值，例如: intools config set ai.apiKey sk-xxx'));
+                    console.log(chalk.red('错误: 请指定键和值，例如: mulby config set ai.apiKey sk-xxx'));
                     return;
                 }
                 configManager.set(key, value);

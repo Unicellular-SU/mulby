@@ -1,10 +1,10 @@
 import { useState, useEffect, useCallback } from 'react'
 import type { DragEvent } from 'react'
 import { PageHeader, Card, Button, StatusBadge, CodeBlock } from '../../components'
-import { useIntools, useNotification } from '../../hooks'
+import { useMulby, useNotification } from '../../hooks'
 
 export function WindowAPIModule() {
-    const { window: win, subInput, plugin, filesystem, system, dialog } = useIntools()
+    const { window: win, subInput, plugin, filesystem, system, dialog } = useMulby()
     const notify = useNotification()
 
     // 窗口状态
@@ -247,14 +247,14 @@ export function WindowAPIModule() {
             }
             const timestamp = Date.now()
             if (type === 'text') {
-                const filePath = `${tempDir}/intools-drag-${timestamp}.txt`
-                const content = `InTools Drag Demo\n${new Date(timestamp).toISOString()}`
+                const filePath = `${tempDir}/mulby-drag-${timestamp}.txt`
+                const content = `Mulby Drag Demo\n${new Date(timestamp).toISOString()}`
                 await filesystem.writeFile(filePath, content, 'utf-8')
                 setGeneratedTextPath(filePath)
                 notify.success('已生成临时文本文件')
                 return filePath
             }
-            const filePath = `${tempDir}/intools-drag-${timestamp}.png`
+            const filePath = `${tempDir}/mulby-drag-${timestamp}.png`
             const base64Png =
                 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAOqz9uoAAAAASUVORK5CYII='
             await filesystem.writeFile(filePath, base64Png, 'base64')

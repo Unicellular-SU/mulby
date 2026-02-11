@@ -1,7 +1,7 @@
-# InTools Plugin Development Guide
+# Mulby Plugin Development Guide
 
-> **Architecture**: InTools is built on the **Electron** framework. Plugins run in a multi-process environment.
-> **Contexts**: `UI` = **Renderer Process** (`window.intools.{module}`), `Main` = **Main Process** (`context.api.{module}`). Most APIs are available in both contexts (marked as **R/B**).
+> **Architecture**: Mulby is built on the **Electron** framework. Plugins run in a multi-process environment.
+> **Contexts**: `UI` = **Renderer Process** (`window.mulby.{module}`), `Main` = **Main Process** (`context.api.{module}`). Most APIs are available in both contexts (marked as **R/B**).
 
 ## 1. Project Structure
 
@@ -19,7 +19,7 @@ my-plugin/
 │       ├── App.tsx     # Main Component
 │       ├── styles.css  # Styles
 │       ├── hooks/      # Custom Hooks
-│       │   └── useIntools.ts
+│       │   └── useMulby.ts
 │       └── vite-env.d.ts
 └── assets/             # Icons, etc.
 ```
@@ -46,10 +46,10 @@ export default { onLoad, onUnload, run };
 
 **Frontend (`src/ui/App.tsx`)**:
 ```typescript
-import { useIntools } from './hooks/useIntools';
+import { useMulby } from './hooks/useMulby';
 
 export default function App() {
-  const { clipboard, notification } = useIntools(); // Use provided hook
+  const { clipboard, notification } = useMulby(); // Use provided hook
   // ...
 }
 ```
@@ -156,7 +156,7 @@ window.myPluginApi = {
 
 ## 4. API Reference (TypeScript Definition)
 
-> **R/B** = Available in both Renderer (`window.intools`) and Backend (`context.api`).
+> **R/B** = Available in both Renderer (`window.mulby`) and Backend (`context.api`).
 > **R** = Renderer only. **B** = Backend only.
 
 ### Core Modules
@@ -286,7 +286,7 @@ interface Ai {
     get(): Promise<AiSettings>;
     update(next: Partial<AiSettings>): Promise<AiSettings>;
   };
-  // Renderer-only MCP manager (window.intools.ai.mcp)
+  // Renderer-only MCP manager (window.mulby.ai.mcp)
   // Backend context.api.ai currently does not expose mcp.*
   mcp?: {
     listServers(): Promise<AiMcpServer[]>;
@@ -1138,10 +1138,10 @@ export const api = {
 ### 7.2 UI 中调用
 
 ```typescript
-import { useIntools } from './hooks/useIntools'
+import { useMulby } from './hooks/useMulby'
 
 export default function App() {
-  const { host, notification } = useIntools('my-plugin')
+  const { host, notification } = useMulby('my-plugin')
 
   const handleClick = async () => {
     try {

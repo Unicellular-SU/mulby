@@ -2,7 +2,7 @@
 本文档描述 剪贴板历史 API (clipboardHistory) 的使用方法与接口。
 
 > 入口：
-> - UI/渲染进程：`window.intools.clipboardHistory`
+> - UI/渲染进程：`window.mulby.clipboardHistory`
 > - 插件后端：`context.api.clipboardHistory`
 
 ## 功能概述
@@ -252,6 +252,6 @@ module.exports = {
 ## 数据库位置
 
 剪贴板历史存储在应用数据目录的 SQLite 数据库中：
-- macOS: `~/Library/Application Support/InTools/data.db`
-- Windows: `%APPDATA%/InTools/data.db`
-- Linux: `~/.config/InTools/data.db`
+- macOS: `~/Library/Application Support/Mulby/data.db`
+- Windows: `%APPDATA%/Mulby/data.db`
+- Linux: `~/.config/Mulby/data.db`

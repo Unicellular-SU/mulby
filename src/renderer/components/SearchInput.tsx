@@ -18,10 +18,10 @@ export interface SearchInputRef {
   select: () => void
 }
 
-// intoolsMain 类型声明
+// mulbyMain 类型声明
 declare global {
   interface Window {
-    intoolsMain?: {
+    mulbyMain?: {
       subInput: {
         onEnabled: (callback: (data: { placeholder: string; isFocus: boolean }) => void) => () => void
         onDisabled: (callback: () => void) => () => void
@@ -75,7 +75,7 @@ const SearchInput = forwardRef<SearchInputRef, SearchInputProps>(function Search
 
   // 监听 SubInput 事件
   useEffect(() => {
-    const api = window.intoolsMain?.subInput
+    const api = window.mulbyMain?.subInput
     if (!api) return
 
     const cleanupEnabled = api.onEnabled((data) => {
@@ -123,7 +123,7 @@ const SearchInput = forwardRef<SearchInputRef, SearchInputProps>(function Search
     if (subInput.enabled) {
       // SubInput 模式：更新本地值并通知主进程转发给插件
       setSubInputValue(text)
-      window.intoolsMain?.subInput.sendChange(text)
+      window.mulbyMain?.subInput.sendChange(text)
     } else {
       // 正常模式：调用父组件回调
       onChange(text)

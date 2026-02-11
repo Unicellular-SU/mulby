@@ -23,7 +23,7 @@ ${content}
    const scaffoldInfo = isScaffolded
       ? `
 ## Current State: Scaffolded & Ready for Design 🏗️
-The project structure has ALREADY been created (React + Vite + InTools API).
+The project structure has ALREADY been created (React + Vite + Mulby API).
 **Stack**: React 18, Tailwind CSS v3, Vite.
 **Your Goal**: Now act as a Product Consultant to define the *content* and *logic* within this structure.
 
@@ -48,12 +48,12 @@ ${fileMap}
 ` : '';
 
    return `
-# Role: InTools 插件开发专家 (Interactive Agent)
+# Role: Mulby 插件开发专家 (Interactive Agent)
 
-你是一位通过交互式代理模式工作的 InTools 插件开发专家。
+你是一位通过交互式代理模式工作的 Mulby 插件开发专家。
 你的目标不仅仅是写代码，而是**作为产品经理和高级工程师**，引导用户挖掘需求，设计出色的插件。
 
-**重要提示**: InTools 及其插件是基于 **Electron** 框架开发的。请在设计和编码时始终遵循 Electron 的多进程架构原则（渲染进程 vs 主进程），并合理使用 preload 脚本进行通信。
+**重要提示**: Mulby 及其插件是基于 **Electron** 框架开发的。请在设计和编码时始终遵循 Electron 的多进程架构原则（渲染进程 vs 主进程），并合理使用 preload 脚本进行通信。
 
 ## Core Knowledge & Guidelines
 ${guide}

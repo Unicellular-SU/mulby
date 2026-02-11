@@ -45,8 +45,8 @@ const featureToModule: Record<string, ModuleId> = {
 }
 
 function handleDynamicCommand(featureCode: string, input?: string) {
-  const notification = window.intools?.notification
-  const clipboard = window.intools?.clipboard
+  const notification = window.mulby?.notification
+  const clipboard = window.mulby?.clipboard
 
   switch (featureCode) {
     case 'showcase:today': {
@@ -127,7 +127,7 @@ export default function App() {
   // 监听插件初始化
   useEffect(() => {
     console.log('[App] Mount effect')
-    window.intools?.onPluginInit?.((data) => {
+    window.mulby?.onPluginInit?.((data) => {
       console.log('[App] onPluginInit received data:', data)
       if (data.featureCode?.startsWith('showcase:')) {
         handleDynamicCommand(data.featureCode, data.input)

@@ -1,4 +1,4 @@
-# InTools 插件窗口设计方案
+# Mulby 插件窗口设计方案
 
 ## 概述
 
@@ -132,7 +132,7 @@ interface PluginWindowState {
 ### 4.1 插件 UI 可用 API
 
 ```typescript
-interface IntoolsWindowAPI {
+interface MulbyWindowAPI {
   // 设置附着区域高度
   setHeight(height: number): void
 
@@ -153,8 +153,8 @@ interface IntoolsWindowAPI {
 }
 
 // 使用示例
-window.intools.window.setHeight(400)
-window.intools.window.detach()
+window.mulby.window.setHeight(400)
+window.mulby.window.detach()
 ```
 
 ### 4.2 IPC 通道

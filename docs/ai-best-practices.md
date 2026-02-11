@@ -1,20 +1,20 @@
-# InTools 全局 AI 接口最佳实践方案
+# Mulby 全局 AI 接口最佳实践方案
 
 > 目标：让插件“无感接入”用户在主程序中配置好的 AI 模型与计费/限额策略，减少重复造轮子，同时保持安全、性能和良好体验。
 
 ## 1. 方案定位与价值
 
 - **统一配置**：用户只在主程序配置模型与费用，插件直接复用。
-- **统一能力**：Function Calling、流式输出、模型列表获取等能力由 InTools 提供。
+- **统一能力**：Function Calling、流式输出、模型列表获取等能力由 Mulby 提供。
 - **统一体验**：插件只关注业务逻辑与 UI，不再实现完整 AI SDK 接入。
 
 ## 2. 接入能力速览（关键约束）
 
-- `intools.ai(option[, streamCallback])` 支持流式与非流式。
+- `mulby.ai(option[, streamCallback])` 支持流式与非流式。
 - `AiOption`：`model?`、`messages`、`tools?`。
 - Function Calling 的 **函数必须挂在 `window` 对象** 上。
 - 返回类型 `PromiseLike` 支持 `abort()` 中止。
-- `intools.allAiModels()` 可获取模型列表（含 cost）。
+- `mulby.allAiModels()` 可获取模型列表（含 cost）。
 
 ## 3. 可复用的开源 npm 库（建议主程序集成）
 
@@ -52,7 +52,7 @@
 └────────────┬─────────────┘
              │
 ┌────────────▼─────────────┐
-│   intools.ai (global AI)  │
+│   mulby.ai (global AI)  │
 │  stream/abort/function    │
 └──────────────────────────┘
 ```
@@ -61,7 +61,7 @@
 
 - **UI 层**：输入校验、流式渲染、错误提示、取消调用。
 - **编排层**：组装 messages/tools、模型选择策略、调用封装。
-- **调用层**：仅负责调用 `intools.ai` 并处理 `abort()`。
+- **调用层**：仅负责调用 `mulby.ai` 并处理 `abort()`。
 
 ## 5. 消息与 Prompt 设计规范
 
@@ -96,16 +96,16 @@
 ### 6.3 典型流程
 
 1. UI 生成 messages + tools
-2. `intools.ai` 返回 `tool_calls`
+2. `mulby.ai` 返回 `tool_calls`
 3. 运行 `window` 上的函数
 4. 将函数结果回填 `messages`
-5. 再次调用 `intools.ai` 产出最终回答
+5. 再次调用 `mulby.ai` 产出最终回答
 
 ## 7. 模型选择与成本控制
 
 ### 7.1 动态模型策略
 
-- 使用 `intools.allAiModels()` 读取模型及 cost。
+- 使用 `mulby.allAiModels()` 读取模型及 cost。
 - 对 **高成本模型** 增加用户确认或阈值。
 - 默认选择“速度快/价格低”的模型，必要时切换。
 - 针对多模态任务优先选择支持图像输入的模型；各 provider 能力差异较大，需要能力标签化。
@@ -162,7 +162,7 @@
 1. 插件调用“附件上传”接口（主程序负责存储与安全校验）。
 2. 主程序返回 `attachmentId`（或 `fileRef`）给插件。
 3. 插件构造 `messages`，在 `content` 中引用该 `attachmentId`。
-4. 调用 `intools.ai`，主程序完成模型适配与推理。
+4. 调用 `mulby.ai`，主程序完成模型适配与推理。
 5. 输出结果回到插件 UI。
 
 ### 11.4 风险控制要点
@@ -180,24 +180,24 @@
 
 ## 12. 主进程 AI API 设计草案（面向实现）
 
-> 说明：以下为建议性的主程序 API 设计，保持与 `intools.ai` 兼容并扩展多模态、附件与成本能力。
+> 说明：以下为建议性的主程序 API 设计，保持与 `mulby.ai` 兼容并扩展多模态、附件与成本能力。
 
 ### 12.1 基础能力
 
-- `intools.ai(option[, streamCallback])`：基础聊天/工具调用。
-- `intools.allAiModels()`：模型列表（含 cost 与能力标签）。
-- `intools.ai.abort(requestId)`：中止正在进行的请求（面向多请求并发）。
+- `mulby.ai(option[, streamCallback])`：基础聊天/工具调用。
+- `mulby.allAiModels()`：模型列表（含 cost 与能力标签）。
+- `mulby.ai.abort(requestId)`：中止正在进行的请求（面向多请求并发）。
 
 ### 12.2 附件与多模态
 
-- `intools.ai.attachments.upload({ filePath | blob | buffer, mimeType, purpose })` -> `{ attachmentId, size, mimeType, expiresAt }`
-- `intools.ai.attachments.delete(attachmentId)`
-- `intools.ai.attachments.get(attachmentId)`
+- `mulby.ai.attachments.upload({ filePath | blob | buffer, mimeType, purpose })` -> `{ attachmentId, size, mimeType, expiresAt }`
+- `mulby.ai.attachments.delete(attachmentId)`
+- `mulby.ai.attachments.get(attachmentId)`
 
 ### 12.3 费用与配额
 
-- `intools.ai.cost.estimate({ model, messages, attachments })` -> `{ inputTokens, outputTokens, attachmentCost, totalCost }`
-- `intools.ai.quota.get()` / `intools.ai.quota.check(cost)`：统一配额与拦截策略
+- `mulby.ai.cost.estimate({ model, messages, attachments })` -> `{ inputTokens, outputTokens, attachmentCost, totalCost }`
+- `mulby.ai.quota.get()` / `mulby.ai.quota.check(cost)`：统一配额与拦截策略
 
 ### 12.4 建议的消息结构扩展（草案）
 
@@ -218,12 +218,12 @@ interface Message {
 
 ### 12.5 图像生成
 
-- `intools.ai.images.generate({ prompt, model, size, count })` -> `{ images, cost }`
-- `intools.ai.images.edit({ imageAttachmentId, prompt, model })` -> `{ images, cost }`
+- `mulby.ai.images.generate({ prompt, model, size, count })` -> `{ images, cost }`
+- `mulby.ai.images.edit({ imageAttachmentId, prompt, model })` -> `{ images, cost }`
 
 ### 12.6 视频生成（可选）
 
-- `intools.ai.videos.generate({ prompt, model, duration, size })` -> `{ videos, cost }`
+- `mulby.ai.videos.generate({ prompt, model, duration, size })` -> `{ videos, cost }`
 
 ### 12.7 主进程模块结构与伪代码骨架（Vercel AI SDK 适配层）
 
@@ -233,7 +233,7 @@ interface Message {
 
 ```
 src/main/ai/
-  api/                # 对外 API 聚合（intools.ai.*）
+  api/                # 对外 API 聚合（mulby.ai.*）
   providers/          # Vercel AI SDK provider 构造与能力配置
   router/             # 模型与能力路由（多模态、工具、成本）
   cost/               # token 估算、价格表、成本计算
@@ -431,9 +431,9 @@ export interface AiProvider {
 async function callAi(messages: Message[], tools?: Tool[], onStream?: (m: Message) => void) {
   const option: AiOption = { messages, tools };
   if (onStream) {
-    return await intools.ai(option, onStream);
+    return await mulby.ai(option, onStream);
   }
-  return await intools.ai(option);
+  return await mulby.ai(option);
 }
 ```
 
@@ -442,7 +442,7 @@ async function callAi(messages: Message[], tools?: Tool[], onStream?: (m: Messag
 1. 明确业务场景与输入输出格式。
 2. 设计系统提示词与消息结构。
 3. 如需 Function Calling，先设计工具定义与安全校验。
-4. 接入 `intools.ai` 并实现流式 UI。
+4. 接入 `mulby.ai` 并实现流式 UI。
 5. 加入取消、错误提示与降级策略。
 6. 用样例用例集验证效果后发布。
 

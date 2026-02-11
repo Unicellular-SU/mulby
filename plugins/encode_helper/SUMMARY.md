@@ -74,7 +74,7 @@ encode_helper/
 │       ├── App.tsx                # 主组件
 │       ├── styles.css             # 样式文件
 │       ├── main.tsx               # UI入口
-│       └── hooks/useIntools.ts    # Intools API封装
+│       └── hooks/useMulby.ts    # Mulby API封装
 ├── manifest.json                  # 插件清单
 ├── plugin.json                    # 插件配置
 ├── package.json                   # 项目配置
@@ -86,7 +86,7 @@ encode_helper/
 ## 使用方法
 
 ### 关键词触发
-在Intools主界面输入功能关键词即可触发对应功能：
+在Mulby主界面输入功能关键词即可触发对应功能：
 - `时间转换` / `timestamp`
 - `base64` / `base64编码` / `base64解码`
 - `url编码` / `url解码`
@@ -108,7 +108,7 @@ encode_helper/
 - **前端**: React 18 + TypeScript
 - **构建工具**: Vite + esbuild
 - **样式**: CSS变量 + 响应式设计
-- **API**: Intools插件API
+- **API**: Mulby插件API
 
 ### 构建命令
 ```bash
@@ -133,7 +133,7 @@ npm run pack
 4. 更新配置文件
 
 ## 兼容性
-- **Intools版本**: 最新版本
+- **Mulby版本**: 最新版本
 - **操作系统**: Windows 10+, macOS 10.15+, Linux
 - **浏览器**: 现代浏览器（Chrome 90+, Firefox 88+, Safari 14+）
 

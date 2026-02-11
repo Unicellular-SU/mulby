@@ -50,7 +50,7 @@ export default function BackgroundPluginManagerView({ onBack }: BackgroundPlugin
 
   const refreshPlugins = async () => {
     try {
-      const list = await window.intools.plugin.listBackground()
+      const list = await window.mulby.plugin.listBackground()
       setPlugins(list)
     } catch (err) {
       console.error('Failed to list background plugins:', err)
@@ -78,14 +78,14 @@ export default function BackgroundPluginManagerView({ onBack }: BackgroundPlugin
 
     try {
       if (runMode === 'background') {
-        await window.intools.plugin.stopBackground(pluginId)
+        await window.mulby.plugin.stopBackground(pluginId)
       } else {
-        await window.intools.plugin.stopPlugin(pluginId)
+        await window.mulby.plugin.stopPlugin(pluginId)
       }
-      window.intools.notification.show(`${modeText}已停止`, 'success')
+      window.mulby.notification.show(`${modeText}已停止`, 'success')
       await refreshPlugins()
     } catch (err) {
-      window.intools.notification.show('停止失败', 'error')
+      window.mulby.notification.show('停止失败', 'error')
     }
   }
 
@@ -98,15 +98,15 @@ export default function BackgroundPluginManagerView({ onBack }: BackgroundPlugin
     try {
       await Promise.all(plugins.map(p => {
         if (p.runMode === 'background') {
-          return window.intools.plugin.stopBackground(p.pluginId)
+          return window.mulby.plugin.stopBackground(p.pluginId)
         } else {
-          return window.intools.plugin.stopPlugin(p.pluginId)
+          return window.mulby.plugin.stopPlugin(p.pluginId)
         }
       }))
-      window.intools.notification.show('所有插件已停止', 'success')
+      window.mulby.notification.show('所有插件已停止', 'success')
       await refreshPlugins()
     } catch (err) {
-      window.intools.notification.show('停止失败', 'error')
+      window.mulby.notification.show('停止失败', 'error')
     }
   }
 

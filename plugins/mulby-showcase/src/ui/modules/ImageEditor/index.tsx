@@ -1,15 +1,15 @@
 import React, { useEffect, useRef, useState } from 'react'
-import { useIntools } from '../../hooks/useIntools'
+import { useMulby } from '../../hooks/useMulby'
 
 export const ImageEditor: React.FC = () => {
-    const { window: win } = useIntools()
+    const { window: win } = useMulby()
     const canvasRef = useRef<HTMLCanvasElement>(null)
     const [isDrawing, setIsDrawing] = useState(false)
     const [lastPos, setLastPos] = useState({ x: 0, y: 0 })
     const [imageLoaded, setImageLoaded] = useState(false)
 
     useEffect(() => {
-        const channel = new BroadcastChannel('intools-image-editor')
+        const channel = new BroadcastChannel('mulby-image-editor')
 
         channel.onmessage = (event) => {
             const { type, data } = event.data
@@ -83,7 +83,7 @@ export const ImageEditor: React.FC = () => {
 
         // 获取 base64 发回主窗口
         const dataUrl = canvasRef.current.toDataURL('image/png')
-        const channel = new BroadcastChannel('intools-image-editor')
+        const channel = new BroadcastChannel('mulby-image-editor')
         channel.postMessage({ type: 'SAVE_IMAGE', data: dataUrl })
         channel.close()
 

@@ -18,7 +18,7 @@ export class PlanManager {
     private plansDir: string;
     private sessionsDir: string;
 
-    constructor(baseDir: string = '.intools') {
+    constructor(baseDir: string = '.mulby') {
         this.plansDir = path.join(baseDir, 'plans');
         this.sessionsDir = path.join(baseDir, 'sessions');
         this.ensureDirectories();

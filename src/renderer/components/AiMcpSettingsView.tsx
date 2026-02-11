@@ -277,13 +277,13 @@ export default function AiMcpSettingsView({ onBack }: AiMcpSettingsViewProps) {
   const isNewDraft = !!draftServer && !servers.some((server) => server.id === draftServer.id)
 
   const loadServers = async () => {
-    if (!window.intools?.ai?.mcp?.listServers) {
+    if (!window.mulby?.ai?.mcp?.listServers) {
       setError('MCP API 未就绪，请重启应用')
       return
     }
     setLoadingServers(true)
     try {
-      const list = await window.intools.ai.mcp.listServers()
+      const list = await window.mulby.ai.mcp.listServers()
       setServers(list)
       setError(null)
       if (list.length === 0) {
@@ -300,12 +300,12 @@ export default function AiMcpSettingsView({ onBack }: AiMcpSettingsViewProps) {
   }
 
   const loadToolsAndLogs = async (server: AiMcpServer) => {
-    if (!window.intools?.ai?.mcp) return
+    if (!window.mulby?.ai?.mcp) return
 
     setLoadingTools(true)
     try {
       if (server.isActive) {
-        const list = await window.intools.ai.mcp.listTools(server.id)
+        const list = await window.mulby.ai.mcp.listTools(server.id)
         setTools(list)
       } else {
         setTools([])
@@ -318,7 +318,7 @@ export default function AiMcpSettingsView({ onBack }: AiMcpSettingsViewProps) {
     }
 
     try {
-      const rows = await window.intools.ai.mcp.getLogs(server.id)
+      const rows = await window.mulby.ai.mcp.getLogs(server.id)
       setLogs(rows)
     } catch {
       setLogs([])
@@ -358,7 +358,7 @@ export default function AiMcpSettingsView({ onBack }: AiMcpSettingsViewProps) {
   }
 
   const handleImportJsonServer = async () => {
-    if (!window.intools?.ai?.mcp?.upsertServer) return
+    if (!window.mulby?.ai?.mcp?.upsertServer) return
     if (!jsonImportText.trim()) {
       setJsonImportError('请先粘贴 MCP JSON 配置')
       return
@@ -374,7 +374,7 @@ export default function AiMcpSettingsView({ onBack }: AiMcpSettingsViewProps) {
 
     setOperationBusy(true)
     try {
-      const saved = await window.intools.ai.mcp.upsertServer(parsedServer)
+      const saved = await window.mulby.ai.mcp.upsertServer(parsedServer)
       await loadServers()
       setSelectedServerId(saved.id)
       setJsonImportOpen(false)
@@ -401,7 +401,7 @@ export default function AiMcpSettingsView({ onBack }: AiMcpSettingsViewProps) {
   }
 
   const handleSaveServer = async () => {
-    if (!draftServer || !window.intools?.ai?.mcp?.upsertServer) return
+    if (!draftServer || !window.mulby?.ai?.mcp?.upsertServer) return
 
     const prepared: AiMcpServer = {
       ...draftServer,
@@ -418,7 +418,7 @@ export default function AiMcpSettingsView({ onBack }: AiMcpSettingsViewProps) {
 
     setOperationBusy(true)
     try {
-      const saved = await window.intools.ai.mcp.upsertServer(prepared)
+      const saved = await window.mulby.ai.mcp.upsertServer(prepared)
       await loadServers()
       setSelectedServerId(saved.id)
       setInfo('服务器配置已保存')
@@ -431,10 +431,10 @@ export default function AiMcpSettingsView({ onBack }: AiMcpSettingsViewProps) {
   }
 
   const handleDeleteServer = async () => {
-    if (!draftServer || !window.intools?.ai?.mcp?.removeServer) return
+    if (!draftServer || !window.mulby?.ai?.mcp?.removeServer) return
     setOperationBusy(true)
     try {
-      await window.intools.ai.mcp.removeServer(draftServer.id)
+      await window.mulby.ai.mcp.removeServer(draftServer.id)
       await loadServers()
       setInfo('服务器已删除')
       setError(null)
@@ -446,7 +446,7 @@ export default function AiMcpSettingsView({ onBack }: AiMcpSettingsViewProps) {
   }
 
   const handleSetActive = async (active: boolean) => {
-    if (!draftServer || !window.intools?.ai?.mcp) return
+    if (!draftServer || !window.mulby?.ai?.mcp) return
     if (isNewDraft) {
       setError('请先保存服务器，再执行启停操作')
       return
@@ -461,8 +461,8 @@ export default function AiMcpSettingsView({ onBack }: AiMcpSettingsViewProps) {
     setOperationBusy(true)
     try {
       const next = active
-        ? await window.intools.ai.mcp.activateServer(draftServer.id)
-        : await window.intools.ai.mcp.deactivateServer(draftServer.id)
+        ? await window.mulby.ai.mcp.activateServer(draftServer.id)
+        : await window.mulby.ai.mcp.deactivateServer(draftServer.id)
       await loadServers()
       setDraftServer({ ...next })
       setSelectedServerId(next.id)
@@ -476,15 +476,15 @@ export default function AiMcpSettingsView({ onBack }: AiMcpSettingsViewProps) {
   }
 
   const handleTrustConfirmAndActivate = async () => {
-    if (!trustConfirmServer || !window.intools?.ai?.mcp) return
+    if (!trustConfirmServer || !window.mulby?.ai?.mcp) return
     setOperationBusy(true)
     try {
-      const trustedServer = await window.intools.ai.mcp.upsertServer({
+      const trustedServer = await window.mulby.ai.mcp.upsertServer({
         ...trustConfirmServer,
         isTrusted: true,
         trustedAt: Date.now()
       })
-      const next = await window.intools.ai.mcp.activateServer(trustedServer.id)
+      const next = await window.mulby.ai.mcp.activateServer(trustedServer.id)
       await loadServers()
       setDraftServer({ ...next })
       setSelectedServerId(next.id)
@@ -499,14 +499,14 @@ export default function AiMcpSettingsView({ onBack }: AiMcpSettingsViewProps) {
   }
 
   const handleRestart = async () => {
-    if (!draftServer || !window.intools?.ai?.mcp?.restartServer) return
+    if (!draftServer || !window.mulby?.ai?.mcp?.restartServer) return
     if (isNewDraft) {
       setError('请先保存服务器，再执行重启操作')
       return
     }
     setOperationBusy(true)
     try {
-      const next = await window.intools.ai.mcp.restartServer(draftServer.id)
+      const next = await window.mulby.ai.mcp.restartServer(draftServer.id)
       await loadServers()
       setSelectedServerId(next.id)
       setInfo('服务器已重启')
@@ -519,10 +519,10 @@ export default function AiMcpSettingsView({ onBack }: AiMcpSettingsViewProps) {
   }
 
   const handleConnectivityCheck = async () => {
-    if (!draftServer || !window.intools?.ai?.mcp?.checkServer) return
+    if (!draftServer || !window.mulby?.ai?.mcp?.checkServer) return
     setOperationBusy(true)
     try {
-      const result = await window.intools.ai.mcp.checkServer(draftServer.id)
+      const result = await window.mulby.ai.mcp.checkServer(draftServer.id)
       if (result.ok) {
         setInfo('连通性检查通过')
         setError(null)
@@ -538,7 +538,7 @@ export default function AiMcpSettingsView({ onBack }: AiMcpSettingsViewProps) {
   }
 
   const updateToolPolicy = async (toolName: string, updates: { enabled?: boolean; autoApprove?: boolean }) => {
-    if (!draftServer || !window.intools?.ai?.mcp?.upsertServer) return
+    if (!draftServer || !window.mulby?.ai?.mcp?.upsertServer) return
 
     const disabled = new Set(draftServer.disabledTools || [])
     const disabledAutoApprove = new Set(draftServer.disabledAutoApproveTools || [])
@@ -568,7 +568,7 @@ export default function AiMcpSettingsView({ onBack }: AiMcpSettingsViewProps) {
     setDraftServer(nextDraft)
     setOperationBusy(true)
     try {
-      const saved = await window.intools.ai.mcp.upsertServer(nextDraft)
+      const saved = await window.mulby.ai.mcp.upsertServer(nextDraft)
       setDraftServer(saved)
       await loadServers()
       await loadToolsAndLogs(saved)

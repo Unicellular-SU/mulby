@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react'
 import jsQR from 'jsqr'
-import { useIntools } from '../hooks/useIntools'
+import { useMulby } from '../hooks/useMulby'
 
 interface InputAttachment {
     id: string
@@ -20,7 +20,7 @@ interface QRCodeScannerProps {
 export const QRCodeScanner: React.FC<QRCodeScannerProps> = ({ initialAttachment }) => {
     const [result, setResult] = useState('')
     const [error, setError] = useState('')
-    const { clipboard, notification, filesystem } = useIntools()
+    const { clipboard, notification, filesystem } = useMulby()
     const lastAttachmentId = useRef<string | null>(null)
 
     const scanImage = useCallback((imageData: ImageData) => {

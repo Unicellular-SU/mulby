@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react'
 import { PageHeader, Card, Button, StatusBadge, CodeBlock } from '../../components'
-import { useTheme, useIntools, useNotification } from '../../hooks'
+import { useTheme, useMulby, useNotification } from '../../hooks'
 
 interface ThemeInfo {
     mode: 'light' | 'dark' | 'system'
@@ -9,7 +9,7 @@ interface ThemeInfo {
 
 export function SettingsModule() {
     const { theme } = useTheme()
-    const { window: win, shortcut, tray, menu } = useIntools()
+    const { window: win, shortcut, tray, menu } = useMulby()
     const notify = useNotification()
 
     const [themeInfo, setThemeInfo] = useState<ThemeInfo | null>(null)
@@ -22,7 +22,7 @@ export function SettingsModule() {
 
     const loadThemeInfo = useCallback(async () => {
         try {
-            const info = await window.intools?.theme?.get()
+            const info = await window.mulby?.theme?.get()
             setThemeInfo(info ?? null)
         } catch (error) {
             console.error('Failed to get theme info:', error)
@@ -58,8 +58,8 @@ export function SettingsModule() {
             notify.success(`🎯 快捷键触发: ${accelerator}`)
         }
 
-        // 使用 intools API 订阅快捷键触发事件
-        window.intools?.shortcut?.onTriggered?.(handleShortcutTriggered)
+        // 使用 mulby API 订阅快捷键触发事件
+        window.mulby?.shortcut?.onTriggered?.(handleShortcutTriggered)
 
         // 注意：当前 onTriggered 没有返回取消订阅的函数，
         // 如果需要清理，可以在 preload 中添加 offTriggered 方法
@@ -67,7 +67,7 @@ export function SettingsModule() {
 
     const handleThemeChange = useCallback(async (mode: 'light' | 'dark' | 'system') => {
         try {
-            await window.intools?.theme?.set(mode)
+            await window.mulby?.theme?.set(mode)
             loadThemeInfo()
             notify.success(`已切换到 ${mode === 'system' ? '跟随系统' : mode === 'dark' ? '暗色' : '亮色'} 主题`)
         } catch (error) {
@@ -137,7 +137,7 @@ export function SettingsModule() {
             // 使用 base64 图标或本地图标
             const success = await tray.create({
                 icon: 'https://via.placeholder.com/16',
-                tooltip: 'InTools Showcase',
+                tooltip: 'Mulby Showcase',
                 title: '🧰',
             })
             if (success) {

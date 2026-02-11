@@ -1,5 +1,30 @@
 # Notes: AI Skills 2025-2026 + Project Integration
 
+## Current Task Notes (2026-02-11)
+
+### Mulby -> Mulby 全量改名
+- 已确认执行模式：一次性切断（不保留旧命名兼容别名）。
+- 本次替换目标：
+  - `Mulby` -> `Mulby`
+  - `mulby` -> `mulby`
+  - `mulby` / `mulby` -> `mulby`
+  - `mulby-cli` -> `mulby-cli`
+  - `window.mulby` -> `window.mulby`
+  - `window.mulbyMain` -> `window.mulbyMain`
+  - `.mulby` -> `.mulby`
+  - `com.mulby.app` -> `com.mulby.app`
+  - `@mulby/` -> `@mulby/`
+  - `Mulby` 类型前缀 -> `Mulby`
+- 需同步处理目录/文件重命名：
+  - `packages/mulby-cli` -> `packages/mulby-cli`
+  - `docs/mulby-cli` -> `docs/mulby-cli`
+  - `plugins/mulby-showcase` -> `plugins/mulby-showcase`
+  - `plugins/**/src/types/mulby.d.ts` -> `plugins/**/src/types/mulby.d.ts`
+- 排除直接替换范围：
+  - `node_modules/**`
+  - 二进制包（如 `.png`, `.inplugin`, `.icns`, `.zip`, `.dmg`）
+  - 需要重建的构建产物目录（按需重建）
+
 ## Current Task Notes (2026-02-09)
 
 ### Capability Policy 解耦迁移

@@ -1,4 +1,4 @@
-# InTools CLI - AI 多供应商快速开始
+# Mulby CLI - AI 多供应商快速开始
 
 ## 🚀 快速配置
 
@@ -6,31 +6,31 @@
 
 ```bash
 # 智谱AI (GLM) - 最新模型 glm-4.7
-intools ai add glm-main \
+mulby ai add glm-main \
   --provider glm \
   --api-key your-glm-api-key \
   --model glm-4.7
 
 # OpenAI
-intools ai add openai-main \
+mulby ai add openai-main \
   --provider openai \
   --api-key sk-xxx \
   --model gpt-4o
 
 # Claude
-intools ai add claude-main \
+mulby ai add claude-main \
   --provider claude \
   --api-key sk-ant-xxx \
   --model claude-3-5-sonnet-20241022
 
 # DeepSeek - 推理模型
-intools ai add deepseek-main \
+mulby ai add deepseek-main \
   --provider deepseek \
   --api-key your-deepseek-key \
   --model deepseek-reasoner
 
 # Gemini
-intools ai add gemini-main \
+mulby ai add gemini-main \
   --provider gemini \
   --api-key AIza-xxx \
   --model gemini-2.0-flash-exp
@@ -39,7 +39,7 @@ intools ai add gemini-main \
 ### 2. 查看所有配置
 
 ```bash
-intools ai list
+mulby ai list
 ```
 
 输出示例：
@@ -60,14 +60,14 @@ AI 供应商配置:
 ### 3. 设置默认供应商
 
 ```bash
-intools ai use glm-main
+mulby ai use glm-main
 ```
 
 ### 4. 创建插件
 
 ```bash
 # 使用默认供应商创建插件
-intools create my-plugin --ai
+mulby create my-plugin --ai
 ```
 
 ## 📝 常用命令
@@ -76,12 +76,12 @@ intools create my-plugin --ai
 
 | 命令 | 说明 |
 |------|------|
-| `intools ai add <name>` | 添加新配置（交互式） |
-| `intools ai list` | 列出所有配置 |
-| `intools ai show <name>` | 查看配置详情 |
-| `intools ai use <name>` | 设置默认配置 |
-| `intools ai update <name>` | 更新配置 |
-| `intools ai remove <name>` | 删除配置 |
+| `mulby ai add <name>` | 添加新配置（交互式） |
+| `mulby ai list` | 列出所有配置 |
+| `mulby ai show <name>` | 查看配置详情 |
+| `mulby ai use <name>` | 设置默认配置 |
+| `mulby ai update <name>` | 更新配置 |
+| `mulby ai remove <name>` | 删除配置 |
 
 ### 会话中命令
 
@@ -103,16 +103,16 @@ intools create my-plugin --ai
 
 ```bash
 # 1. 添加智谱AI配置
-intools ai add my-glm \
+mulby ai add my-glm \
   --provider glm \
   --api-key your-api-key \
   --model glm-4.7
 
 # 2. 设为默认
-intools ai use my-glm
+mulby ai use my-glm
 
 # 3. 创建插件
-intools create weather-plugin --ai
+mulby create weather-plugin --ai
 
 # 4. 在会话中...
 > 我想创建一个天气查询插件
@@ -122,7 +122,7 @@ intools create weather-plugin --ai
 
 ```bash
 # 启动 AI 会话
-intools create my-plugin --ai
+mulby create my-plugin --ai
 
 # 使用 Claude 进行产品设计
 > /use claude-main
@@ -185,19 +185,19 @@ intools create my-plugin --ai
 **正确格式**:
 ```bash
 # ✅ 正确
-intools ai add my-config --provider glm
+mulby ai add my-config --provider glm
 
 # ❌ 错误
-intools config ai add my-config --provider glm
+mulby config ai add my-config --provider glm
 ```
 
 ### 2. 未配置 AI 服务
 
-**错误**: `未配置 AI 服务。请使用 intools ai add <name> 添加供应商配置。`
+**错误**: `未配置 AI 服务。请使用 mulby ai add <name> 添加供应商配置。`
 
 **解决**: 先添加至少一个供应商配置
 ```bash
-intools ai add my-glm --provider glm --api-key your-key
+mulby ai add my-glm --provider glm --api-key your-key
 ```
 
 ### 3. 配置不存在
@@ -206,7 +206,7 @@ intools ai add my-glm --provider glm --api-key your-key
 
 **解决**: 查看可用配置
 ```bash
-intools ai list
+mulby ai list
 ```
 
 ### 4. API 调用失败
@@ -227,9 +227,9 @@ intools ai list
 
 1. **为不同场景配置多个供应商**
    ```bash
-   intools ai add design-ai --provider claude    # 产品设计
-   intools ai add code-ai --provider deepseek    # 代码生成
-   intools ai add fast-ai --provider gemini      # 快速原型
+   mulby ai add design-ai --provider claude    # 产品设计
+   mulby ai add code-ai --provider deepseek    # 代码生成
+   mulby ai add fast-ai --provider gemini      # 快速原型
    ```
 
 2. **使用描述性名称**
@@ -243,17 +243,17 @@ intools ai list
 
 4. **定期更新**
    ```bash
-   intools ai update my-config --api-key new-key
+   mulby ai update my-config --api-key new-key
    ```
 
 ## 🚀 开始使用
 
 ```bash
 # 1. 添加配置
-intools ai add my-glm --provider glm --api-key your-key --model glm-4.7
+mulby ai add my-glm --provider glm --api-key your-key --model glm-4.7
 
 # 2. 创建插件
-intools create my-plugin --ai
+mulby create my-plugin --ai
 
 # 3. 开始对话
 > 我想创建一个...

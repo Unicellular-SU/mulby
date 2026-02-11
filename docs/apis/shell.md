@@ -2,7 +2,7 @@
 本文档描述 `shell` API 的使用方法与接口。
 
 > 入口：
-> - UI/渲染进程：`window.intools.shell`
+> - UI/渲染进程：`window.mulby.shell`
 > - 插件后端：`context.api.shell`
 
 Shell API 提供系统级操作，包括打开文件、URL、文件管理器，以及受策略保护的命令执行能力（`runCommand`）。
@@ -225,7 +225,7 @@ await shell.clearRunCommandTrusted();
 
 内置命令工具属于 **AI 会话能力**，并不只属于 Skills：
 
-- 工具名：`intools_run_command`
+- 工具名：`mulby_run_command`
 - Skills 作用：提供提示词/能力需求信号，影响本次会话的 capability 选择与策略裁决
 - 是否最终可执行：由主进程策略层统一决定（capability policy + runCommand policy）
 

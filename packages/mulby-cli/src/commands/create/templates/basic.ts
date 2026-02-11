@@ -4,7 +4,7 @@ export function buildBasicManifest(name: string) {
     name,
     version: '1.0.0',
     displayName: name,
-    author: 'intools',
+    author: 'mulby',
     description: '插件描述',
     main: 'dist/main.js',
     icon: 'icon.png',
@@ -24,8 +24,8 @@ export function buildBasicPackageJson(name: string) {
     version: '1.0.0',
     scripts: {
       build: 'esbuild src/main.ts --bundle --platform=node --outfile=dist/main.js',
-      dev: 'intools dev',
-      pack: 'intools pack'
+      dev: 'mulby dev',
+      pack: 'mulby pack'
     },
     devDependencies: {
       esbuild: '^0.20.0',

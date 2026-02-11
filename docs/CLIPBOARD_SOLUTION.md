@@ -102,7 +102,7 @@ Electron 没有暴露原生的剪贴板变化事件 API
 **已实现的 API：**
 
 ```typescript
-window.intools.clipboardHistory = {
+window.mulby.clipboardHistory = {
   // 查询历史记录
   query: (options?: {
     type?: 'text' | 'image' | 'files'
@@ -146,7 +146,7 @@ export async function run(context) {
   const { api } = context
 
   // 查询最近 50 条记录
-  const items = await window.intools.clipboardHistory.query({
+  const items = await window.mulby.clipboardHistory.query({
     limit: 50
   })
 
@@ -160,10 +160,10 @@ export async function run(context) {
   })
 
   // 用户点击某条记录
-  await window.intools.clipboardHistory.copy(item.id)
+  await window.mulby.clipboardHistory.copy(item.id)
 
   // 隐藏主窗口
-  window.intools.window.hide()
+  window.mulby.window.hide()
 }
 ```
 
@@ -214,7 +214,7 @@ app.whenReady().then(() => {
 
 ```typescript
 // src/preload/index.ts
-const intoolsApi = {
+const mulbyApi = {
   // ... 其他 API
   clipboardHistory: {
     query: (options) => ipcRenderer.invoke('clipboardHistory:query', options),

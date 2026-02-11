@@ -321,10 +321,10 @@
         // 如果有 preload 暴露的 API，使用它
         window.addEventListener('DOMContentLoaded', () => {
             // 通过 contextBridge 暴露的 API 获取 IPC
-            if (window.intools) {
+            if (window.mulby) {
                 // 替换 IPC 发送方法
                 window.sendIPC = (channel, ...args) => {
-                    // 使用 intools 暴露的方法或回退到 postMessage
+                    // 使用 mulby 暴露的方法或回退到 postMessage
                     console.log('Send IPC:', channel, args);
                 };
             }

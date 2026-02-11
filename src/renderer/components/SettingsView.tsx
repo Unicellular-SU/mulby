@@ -321,12 +321,12 @@ export default function SettingsView({ section, onSectionChange, onClose, onOpen
   const [_activeRecordings, setActiveRecordings] = useState(0)
 
   useEffect(() => {
-    window.intools.settings.get().then(({ settings, shortcutStatus }) => {
+    window.mulby.settings.get().then(({ settings, shortcutStatus }) => {
       setSettings(settings)
       setShortcutStatus(shortcutStatus)
     })
-    window.intools.theme.get().then((info) => setThemeMode(info.mode))
-    window.intools.system.getAppInfo().then((info) => {
+    window.mulby.theme.get().then((info) => setThemeMode(info.mode))
+    window.mulby.system.getAppInfo().then((info) => {
       setAppInfo({ name: info.name, version: info.version, userDataPath: info.userDataPath })
     })
   }, [])
@@ -336,7 +336,7 @@ export default function SettingsView({ section, onSectionChange, onClose, onOpen
     const load = async () => {
       const next: Record<string, string> = {}
       for (const item of PERMISSIONS) {
-        next[item.id] = await window.intools.permission.getStatus(item.id)
+        next[item.id] = await window.mulby.permission.getStatus(item.id)
       }
       setPermissionStatus(next)
     }
@@ -346,12 +346,12 @@ export default function SettingsView({ section, onSectionChange, onClose, onOpen
   useEffect(() => {
     if (section !== 'security') return
     const loadAudit = async () => {
-      if (!window.intools?.shell?.listRunCommandAudit) {
+      if (!window.mulby?.shell?.listRunCommandAudit) {
         setCommandAudit([])
         return
       }
       try {
-        const records = await window.intools.shell.listRunCommandAudit(100)
+        const records = await window.mulby.shell.listRunCommandAudit(100)
         setCommandAudit(records)
       } catch {
         setCommandAudit([])
@@ -373,13 +373,13 @@ export default function SettingsView({ section, onSectionChange, onClose, onOpen
   }, [settings])
 
   const updateSettings = async (partial: Partial<AppSettings>) => {
-    const result = await window.intools.settings.update(partial)
+    const result = await window.mulby.settings.update(partial)
     setSettings(result.settings)
     setShortcutStatus(result.shortcutStatus)
   }
 
   const reloadSettings = async () => {
-    const result = await window.intools.settings.get()
+    const result = await window.mulby.settings.get()
     setSettings(result.settings)
     setShortcutStatus(result.shortcutStatus)
   }
@@ -738,7 +738,7 @@ export default function SettingsView({ section, onSectionChange, onClose, onOpen
     setActiveRecordings((count) => {
       const next = count + 1
       if (next === 1) {
-        window.intools.settings.pauseShortcuts()
+        window.mulby.settings.pauseShortcuts()
       }
       return next
     })
@@ -748,7 +748,7 @@ export default function SettingsView({ section, onSectionChange, onClose, onOpen
     setActiveRecordings((count) => {
       const next = Math.max(0, count - 1)
       if (next === 0) {
-        window.intools.settings.resumeShortcuts().then(setShortcutStatus)
+        window.mulby.settings.resumeShortcuts().then(setShortcutStatus)
       }
       return next
     })
@@ -872,7 +872,7 @@ export default function SettingsView({ section, onSectionChange, onClose, onOpen
                             : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:text-slate-900 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-300'
                             }`}
                           onClick={async () => {
-                            const info = await window.intools.theme.set(mode)
+                            const info = await window.mulby.theme.set(mode)
                             setThemeMode(info.mode)
                           }}
                         >
@@ -1028,7 +1028,7 @@ export default function SettingsView({ section, onSectionChange, onClose, onOpen
                       <div className="flex items-center gap-2">
                         <button
                           className={actionButtonClass}
-                          onClick={() => window.intools.permission.openSystemSettings(item.id)}
+                          onClick={() => window.mulby.permission.openSystemSettings(item.id)}
                         >
                           打开系统设置
                         </button>
@@ -1722,8 +1722,8 @@ export default function SettingsView({ section, onSectionChange, onClose, onOpen
                         <button
                           className={actionButtonClass}
                           onClick={async () => {
-                            if (!window.intools?.shell?.clearRunCommandTrusted) return
-                            await window.intools.shell.clearRunCommandTrusted()
+                            if (!window.mulby?.shell?.clearRunCommandTrusted) return
+                            await window.mulby.shell.clearRunCommandTrusted()
                             await reloadSettings()
                           }}
                         >
@@ -1732,8 +1732,8 @@ export default function SettingsView({ section, onSectionChange, onClose, onOpen
                         <button
                           className={actionButtonClass}
                           onClick={async () => {
-                            if (!window.intools?.shell?.clearRunCommandAudit) return
-                            await window.intools.shell.clearRunCommandAudit()
+                            if (!window.mulby?.shell?.clearRunCommandAudit) return
+                            await window.mulby.shell.clearRunCommandAudit()
                             await reloadSettings()
                             setCommandAudit([])
                           }}
@@ -1743,8 +1743,8 @@ export default function SettingsView({ section, onSectionChange, onClose, onOpen
                         <button
                           className={actionButtonClass}
                           onClick={async () => {
-                            if (!window.intools?.shell?.listRunCommandAudit) return
-                            const records = await window.intools.shell.listRunCommandAudit(100)
+                            if (!window.mulby?.shell?.listRunCommandAudit) return
+                            const records = await window.mulby.shell.listRunCommandAudit(100)
                             setCommandAudit(records)
                           }}
                         >
@@ -1851,8 +1851,8 @@ export default function SettingsView({ section, onSectionChange, onClose, onOpen
                               <button
                                 className="text-xs text-red-500 hover:text-red-600 dark:text-red-400 dark:hover:text-red-300"
                                 onClick={async () => {
-                                  await window.intools.developer.removePluginPath(path)
-                                  const result = await window.intools.settings.get()
+                                  await window.mulby.developer.removePluginPath(path)
+                                  const result = await window.mulby.settings.get()
                                   setSettings(result.settings)
                                 }}
                               >
@@ -1867,11 +1867,11 @@ export default function SettingsView({ section, onSectionChange, onClose, onOpen
                         <button
                           className={actionButtonClass}
                           onClick={async () => {
-                            const path = await window.intools.developer.selectDirectory()
+                            const path = await window.mulby.developer.selectDirectory()
                             if (path) {
-                              const result = await window.intools.developer.addPluginPath(path)
+                              const result = await window.mulby.developer.addPluginPath(path)
                               if (result.success) {
-                                const settingsResult = await window.intools.settings.get()
+                                const settingsResult = await window.mulby.settings.get()
                                 setSettings(settingsResult.settings)
                               } else {
                                 notice.error(result.error || '添加失败')
@@ -1884,7 +1884,7 @@ export default function SettingsView({ section, onSectionChange, onClose, onOpen
                         <button
                           className={actionButtonClass}
                           onClick={async () => {
-                            await window.intools.developer.reloadPlugins()
+                            await window.mulby.developer.reloadPlugins()
                             notice.success('插件已刷新')
                           }}
                         >
@@ -2038,7 +2038,7 @@ export default function SettingsView({ section, onSectionChange, onClose, onOpen
                   </div>
                   <button
                     className={actionButtonClass}
-                    onClick={() => appInfo?.userDataPath && window.intools.shell.openFolder(appInfo.userDataPath)}
+                    onClick={() => appInfo?.userDataPath && window.mulby.shell.openFolder(appInfo.userDataPath)}
                   >
                     打开数据目录
                   </button>

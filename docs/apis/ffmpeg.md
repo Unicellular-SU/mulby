@@ -1,22 +1,22 @@
 # FFmpeg 音视频处理 API
 本文档描述 FFmpeg 音视频处理 API 的使用方法与接口。
 
-> 入口：`window.intools.ffmpeg`
+> 入口：`window.mulby.ffmpeg`
 
 FFmpeg API 提供音视频处理能力。需先下载 FFmpeg，再执行命令。
 
 ### 基础流程
 
 ```javascript
-const available = await intools.ffmpeg.isAvailable();
+const available = await mulby.ffmpeg.isAvailable();
 if (!available) {
-  const result = await intools.ffmpeg.download((progress) => {
+  const result = await mulby.ffmpeg.download((progress) => {
     console.log(`${progress.phase}: ${progress.percent}%`);
   });
   if (!result.success) throw new Error(result.error || '下载失败');
 }
 
-const version = await intools.ffmpeg.getVersion();
+const version = await mulby.ffmpeg.getVersion();
 console.log('FFmpeg 版本:', version);
 ```
 
@@ -57,7 +57,7 @@ interface RunTask {
 #### 视频压缩
 
 ```javascript
-const task = intools.ffmpeg.run(
+const task = mulby.ffmpeg.run(
   [
     '-i', '/path/to/input.mp4',
     '-c:v', 'libx264',
@@ -92,7 +92,7 @@ function getConvertToGifArgs(inputVideo, outputGif, fps = 15, width = 200) {
 }
 
 const args = getConvertToGifArgs('/path/to/input.mp4', '/path/to/output.gif');
-const task = intools.ffmpeg.run(args, (progress) => {
+const task = mulby.ffmpeg.run(args, (progress) => {
   console.log('转换中', progress.percent, '%');
 });
 
@@ -102,7 +102,7 @@ await task.promise;
 #### 音频提取
 
 ```javascript
-const task = intools.ffmpeg.run([
+const task = mulby.ffmpeg.run([
   '-i', '/path/to/input.mp4',
   '-q:a', '0',
   '-map', 'a',
@@ -120,7 +120,7 @@ await task.promise;
 检查 FFmpeg 是否已安装。
 
 ```javascript
-const available = await intools.ffmpeg.isAvailable();
+const available = await mulby.ffmpeg.isAvailable();
 ```
 
 ### ffmpeg.getVersion()
@@ -129,7 +129,7 @@ const available = await intools.ffmpeg.isAvailable();
 获取 FFmpeg 版本信息。
 
 ```javascript
-const version = await intools.ffmpeg.getVersion();
+const version = await mulby.ffmpeg.getVersion();
 ```
 
 ### ffmpeg.getPath()
@@ -138,7 +138,7 @@ const version = await intools.ffmpeg.getVersion();
 获取 FFmpeg 可执行文件路径。
 
 ```javascript
-const path = await intools.ffmpeg.getPath();
+const path = await mulby.ffmpeg.getPath();
 // 未安装时返回 null
 ```
 
@@ -148,7 +148,7 @@ const path = await intools.ffmpeg.getPath();
 手动下载 FFmpeg。
 
 ```javascript
-const result = await intools.ffmpeg.download((progress) => {
+const result = await mulby.ffmpeg.download((progress) => {
   // progress.phase: 'downloading' | 'extracting' | 'done'
   // progress.percent: 0-100
   console.log(`${progress.phase}: ${progress.percent}%`);

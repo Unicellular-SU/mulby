@@ -1,6 +1,6 @@
-# InTools 插件 API 状态
+# Mulby 插件 API 状态
 
-本文档记录 InTools 插件系统已实现和待实现的底层 API。
+本文档记录 Mulby 插件系统已实现和待实现的底层 API。
 
 ## 已实现的 API（共 23 个）
 

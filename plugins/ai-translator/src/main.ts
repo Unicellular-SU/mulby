@@ -1,5 +1,5 @@
-/// <reference path="./types/intools.d.ts" />
-// PluginContext 类型由 src/types/intools.d.ts 提供
+/// <reference path="./types/mulby.d.ts" />
+// PluginContext 类型由 src/types/mulby.d.ts 提供
 type PluginContext = BackendPluginContext
 
 export function onLoad() {

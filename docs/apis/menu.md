@@ -1,7 +1,7 @@
 # Menu API (menu)
 本文档描述 Menu API (menu) 的使用方法与接口。
 
-> 入口：`window.intools.menu`
+> 入口：`window.mulby.menu`
 
 Menu API 提供原生右键菜单功能，支持 macOS、Windows 和 Linux。
 
@@ -38,7 +38,7 @@ if (selectedId === 'copy') {
 ### 完整示例
 
 ```javascript
-const id = await window.intools.menu.showContextMenu([
+const id = await window.mulby.menu.showContextMenu([
   { label: '复制', id: 'copy' },
   { type: 'separator' },
   { label: '设置', id: 'settings' }

@@ -101,11 +101,11 @@ function PluginDetailsPanel({ pluginName, onClose, onUninstall }: { pluginName: 
   const loadData = async () => {
     setLoading(true)
     try {
-      const plugins = await window.intools.plugin.getAll()
+      const plugins = await window.mulby.plugin.getAll()
       const current = plugins.find(p => p.name === pluginName)
       setPlugin(current || null)
 
-      const content = await window.intools.plugin.getReadme(pluginName)
+      const content = await window.mulby.plugin.getReadme(pluginName)
       setReadme(content)
     } catch (err) {
       console.error('Failed to load plugin details:', err)
@@ -333,7 +333,7 @@ export default function PluginManagerView({ onBack }: PluginManagerViewProps) {
   const refreshPlugins = async () => {
     setPluginLoading(true)
     try {
-      const list = await window.intools.plugin.getAll()
+      const list = await window.mulby.plugin.getAll()
       setPlugins(list)
     } finally {
       setPluginLoading(false)
@@ -343,7 +343,7 @@ export default function PluginManagerView({ onBack }: PluginManagerViewProps) {
   const refreshRunningPlugins = async () => {
     try {
       // listBackground 返回所有运行中的插件，包括后台插件和独立窗口插件
-      const list = await window.intools.plugin.listBackground()
+      const list = await window.mulby.plugin.listBackground()
       setRunningPlugins(list)
     } catch (err) {
       console.error('Failed to get running plugins:', err)
@@ -352,19 +352,19 @@ export default function PluginManagerView({ onBack }: PluginManagerViewProps) {
 
   const handleUninstallPlugin = async (plugin: PluginInfo) => {
     if (plugin.builtin) {
-      window.intools.notification.show('内置插件不可卸载', 'error')
+      window.mulby.notification.show('内置插件不可卸载', 'error')
       return
     }
     const confirmed = confirm(`确定要卸载插件 ${plugin.displayName} 吗？`)
     if (!confirmed) return
-    const result = await window.intools.plugin.uninstall(plugin.name)
+    const result = await window.mulby.plugin.uninstall(plugin.name)
     if (result.success) {
       setPlugins((prev) => prev.filter((item) => item.name !== plugin.name))
       if (selectedPlugin === plugin.name) {
         setSelectedPlugin(null)
       }
     } else {
-      window.intools.notification.show(result.error || '卸载失败', 'error')
+      window.mulby.notification.show(result.error || '卸载失败', 'error')
     }
   }
 
@@ -408,14 +408,14 @@ export default function PluginManagerView({ onBack }: PluginManagerViewProps) {
 
     try {
       if (runMode === 'background') {
-        await window.intools.plugin.stopBackground(pluginId)
+        await window.mulby.plugin.stopBackground(pluginId)
       } else {
-        await window.intools.plugin.stopPlugin(pluginId)
+        await window.mulby.plugin.stopPlugin(pluginId)
       }
-      window.intools.notification.show(`${modeText}已停止`, 'success')
+      window.mulby.notification.show(`${modeText}已停止`, 'success')
       await refreshRunningPlugins()
     } catch (err) {
-      window.intools.notification.show('停止失败', 'error')
+      window.mulby.notification.show('停止失败', 'error')
     }
   }
 

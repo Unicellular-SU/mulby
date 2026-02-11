@@ -1,12 +1,12 @@
-# InTools Showcase
+# Mulby Showcase
 
-**综合展示 InTools 所有 API 能力的示例插件**
+**综合展示 Mulby 所有 API 能力的示例插件**
 
-![InTools Showcase](./icon.png)
+![Mulby Showcase](./icon.png)
 
 ## 功能特性
 
-这个插件是 InTools 平台的完整功能展示，涵盖了所有 20+ 个 API 模块：
+这个插件是 Mulby 平台的完整功能展示，涵盖了所有 20+ 个 API 模块：
 
 | 模块 | 涵盖的 API | 功能描述 |
 |------|-----------|---------|
@@ -63,7 +63,7 @@ npm run pack
 ## 项目结构
 
 ```
-intools-showcase/
+mulby-showcase/
 ├── manifest.json              # 插件配置
 ├── package.json
 ├── src/
@@ -81,7 +81,7 @@ intools-showcase/
 │       ├── hooks/             # 自定义 Hooks
 │       │   ├── useTheme.ts
 │       │   ├── useNotification.ts
-│       │   └── useIntools.ts
+│       │   └── useMulby.ts
 │       └── modules/           # 功能模块
 │           ├── SystemInfo/
 │           ├── Clipboard/
@@ -98,7 +98,7 @@ intools-showcase/
 
 ## API 覆盖
 
-此插件完整展示了 InTools 的以下 API：
+此插件完整展示了 Mulby 的以下 API：
 
 ### 基础 API
 - ✅ `clipboard` - 剪贴板操作
@@ -168,7 +168,7 @@ sequenceDiagram
 
 ### 关键技术点
 
-1.  **多窗口管理**：使用 `window.intools.window.create` 创建独立的编辑器窗口，互不干扰。
+1.  **多窗口管理**：使用 `window.mulby.window.create` 创建独立的编辑器窗口，互不干扰。
 2.  **窗口通信**：使用 Web 标准 `BroadcastChannel` 实现主窗口与编辑器窗口的直接通信，无需经过主进程中转，高效且低延迟。
 3.  **可见性控制**：利用 `window.show()` 确保截图流程结束后主窗口能正确恢复显示。
 

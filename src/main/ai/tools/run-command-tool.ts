@@ -1,7 +1,7 @@
 import type { AiTool } from '../../../shared/types/ai'
 import type { RunCommandInput, RunCommandResult } from '../../services/command-runner'
 
-export const AI_RUN_COMMAND_TOOL_NAME = 'intools_run_command'
+export const AI_RUN_COMMAND_TOOL_NAME = 'mulby_run_command'
 
 function tryParsePossiblyMalformedJson(input: string): unknown {
   const source = String(input || '')

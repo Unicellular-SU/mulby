@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react'
 import { PageHeader, Card, Button, CodeBlock } from '../../components'
-import { useIntools, useNotification } from '../../hooks'
+import { useMulby, useNotification } from '../../hooks'
 
 interface Voice {
     name: string
@@ -10,10 +10,10 @@ interface Voice {
 }
 
 export function MediaModule() {
-    const { tts, shell } = useIntools()
+    const { tts, shell } = useMulby()
     const notify = useNotification()
 
-    const [text, setText] = useState('你好，欢迎使用 InTools 功能展示插件！这是一个语音合成测试。')
+    const [text, setText] = useState('你好，欢迎使用 Mulby 功能展示插件！这是一个语音合成测试。')
     const [voices, setVoices] = useState<Voice[]>([])
     const [selectedVoice, setSelectedVoice] = useState('')
     const [rate, setRate] = useState(1)
@@ -97,10 +97,10 @@ export function MediaModule() {
     }, [shell, notify])
 
     const sampleTexts = [
-        { label: '中文', text: '你好，欢迎使用 InTools 功能展示插件！' },
-        { label: '英文', text: 'Hello, welcome to InTools Showcase Plugin!' },
+        { label: '中文', text: '你好，欢迎使用 Mulby 功能展示插件！' },
+        { label: '英文', text: 'Hello, welcome to Mulby Showcase Plugin!' },
         { label: '数字', text: '今天是2024年1月1日，温度是25度。' },
-        { label: '长文', text: 'InTools 是一个强大的效率工具平台，支持插件扩展。用户可以通过简单的关键词或快捷键触发各种功能，大大提高工作效率。' },
+        { label: '长文', text: 'Mulby 是一个强大的效率工具平台，支持插件扩展。用户可以通过简单的关键词或快捷键触发各种功能，大大提高工作效率。' },
     ]
 
     return (

@@ -2,7 +2,7 @@
 本文档描述 网络 API (http) 的使用方法与接口。
 
 > 入口：
-> - UI/渲染进程：`window.intools.http`
+> - UI/渲染进程：`window.mulby.http`
 > - 插件后端：`context.api.http`
 
 ### request(options)

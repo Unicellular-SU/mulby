@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Scissors, Plus, Trash2, ArrowRight, LayoutGrid, List } from 'lucide-react';
 import { PDFHeader, PDFUploadArea, PDFPageThumbnail } from '../components/SharedPDFComponents';
-import { useIntools } from '../hooks/useIntools';
+import { useMulby } from '../hooks/useMulby';
 import { pdfService } from '../services/PDFService';
 import '../types';
 import { PDFInfo, SplitRange } from '../types';
@@ -9,7 +9,7 @@ import { PDFInfo, SplitRange } from '../types';
 // PDFPageThumbnail moved to SharedPDFComponents
 
 const SplitPDF: React.FC = () => {
-    const { dialog, notification, system } = useIntools('pdf-tools');
+    const { dialog, notification, system } = useMulby('pdf-tools');
     const [file, setFile] = useState<string | null>(null);
     const [info, setInfo] = useState<PDFInfo | null>(null);
     const [pdfDoc, setPdfDoc] = useState<any>(null);

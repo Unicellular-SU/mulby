@@ -58,7 +58,7 @@
 - **前端框架**：React 18 + TypeScript
 - **构建工具**：Vite + esbuild
 - **样式系统**：CSS变量 + 响应式设计
-- **插件API**：Intools插件系统集成
+- **插件API**：Mulby插件系统集成
 
 ### 📦 项目结构
 - 完整的TypeScript项目配置

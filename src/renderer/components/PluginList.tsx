@@ -335,7 +335,7 @@ function PluginList({
     let active = true
     const loadRecent = async () => {
       try {
-        const recent = await window.intools.plugin.getRecentUsed(RECENT_LIMIT)
+        const recent = await window.mulby.plugin.getRecentUsed(RECENT_LIMIT)
         if (!active) return
         setRecentPlugins(dedupePluginResults(recent))
       } catch (error) {
@@ -400,7 +400,7 @@ function PluginList({
 
       } else {
         setIsPluginLoading(true)
-        void window.intools.plugin.search(currentPayload)
+        void window.mulby.plugin.search(currentPayload)
           .then((result) => {
             if (cancelled || currentRequestId !== requestIdRef.current) return
             const merged = dedupePluginResults(injectSettingsResult(result, currentPayload.text))
@@ -451,7 +451,7 @@ function PluginList({
           setSystemAppsResultHash('')
           setIsSystemAppsLoading(true)
 
-          void window.intools.desktop.searchApps(query, SYSTEM_APP_SEARCH_LIMIT)
+          void window.mulby.desktop.searchApps(query, SYSTEM_APP_SEARCH_LIMIT)
             .then((apps) => {
               if (cancelled || currentRequestId !== requestIdRef.current) return
               setLruCache(systemAppCacheRef.current, systemCacheKey, apps, MAX_CACHE_SIZE)
@@ -486,7 +486,7 @@ function PluginList({
           systemTimer = setTimeout(() => {
             if (cancelled || currentRequestId !== requestIdRef.current) return
             setIsSystemFilesLoading(true)
-            void window.intools.desktop.searchFiles(query, SYSTEM_FILE_SEARCH_LIMIT).then((files) => {
+            void window.mulby.desktop.searchFiles(query, SYSTEM_FILE_SEARCH_LIMIT).then((files) => {
               if (cancelled || currentRequestId !== requestIdRef.current) return
               setLruCache(systemFileCacheRef.current, systemCacheKey, files, MAX_CACHE_SIZE)
               setSystemFiles(files)
@@ -612,7 +612,7 @@ function PluginList({
 
 
 
-    void window.intools.system.getFileIcons(pendingRequests, {
+    void window.mulby.system.getFileIcons(pendingRequests, {
       size: SYSTEM_ICON_TARGET_SIZE,
       concurrency: SYSTEM_ICON_BATCH_CONCURRENCY
     })
@@ -766,11 +766,11 @@ function PluginList({
       }
 
       const currentPayload = payloadRef.current
-      const result = await window.intools.plugin.run(item.pluginItem.pluginId, item.pluginItem.featureCode, currentPayload)
+      const result = await window.mulby.plugin.run(item.pluginItem.pluginId, item.pluginItem.featureCode, currentPayload)
       if (result.success) {
         promoteRecent(item.pluginItem)
         if (!result.hasUI) {
-          window.intools.window.hide()
+          window.mulby.window.hide()
         }
       } else {
         console.error('Plugin error:', result.error)
@@ -782,12 +782,12 @@ function PluginList({
     if (!targetPath) return
 
     try {
-      const openError = await window.intools.shell.openPath(targetPath)
+      const openError = await window.mulby.shell.openPath(targetPath)
       if (openError) {
         console.error('[PluginList] Failed to open path:', openError)
         return
       }
-      window.intools.window.hide()
+      window.mulby.window.hide()
     } catch (error) {
       console.error('[PluginList] Failed to open system item:', error)
     }

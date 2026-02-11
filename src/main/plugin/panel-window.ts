@@ -423,7 +423,7 @@ export class PluginPanelWindow {
         // 页面重载时重新注入标题栏
         independentWindow.webContents.on('did-finish-load', async () => {
             const hasTitleBar = await independentWindow.webContents.executeJavaScript(
-                'document.getElementById("intools-titlebar") !== null'
+                'document.getElementById("mulby-titlebar") !== null'
             )
             if (!hasTitleBar) {
                 const theme = this.themeManager?.getActualTheme() || 'dark'

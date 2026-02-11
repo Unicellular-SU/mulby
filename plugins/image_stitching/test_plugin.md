@@ -92,7 +92,7 @@ image_stitching/
 │       ├── App.css          # 样式文件
 │       ├── main.tsx         # UI入口
 │       └── hooks/
-│           └── useIntools.ts # InTools API Hook
+│           └── useMulby.ts # Mulby API Hook
 ├── dist/                     # 后端构建输出
 ├── ui/                      # UI构建输出
 └── icon.png                 # 插件图标
@@ -148,4 +148,4 @@ image_stitching/
    - 添加快捷键支持
    - 添加批量处理功能
 
-插件已准备就绪，可以安装到InTools中进行测试和使用！
+插件已准备就绪，可以安装到Mulby中进行测试和使用！

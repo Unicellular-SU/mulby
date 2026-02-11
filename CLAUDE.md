@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-InTools is a cross-platform plugin-based productivity toolbox (similar to uTools/Alfred/Raycast). It provides a global hotkey-activated search interface with an extensible plugin ecosystem.
+Mulby is a cross-platform plugin-based productivity toolbox (similar to uTools/Alfred/Raycast). It provides a global hotkey-activated search interface with an extensible plugin ecosystem.
 
 ## Development Commands
 
@@ -31,7 +31,7 @@ npm run typecheck
 
 - **Main Process** (`src/main/`) - Window management, IPC handlers, plugin runtime
 - **Renderer Process** (`src/renderer/`) - React UI for search window
-- **Preload** (`src/preload/`) - Context bridge exposing `window.intools` API
+- **Preload** (`src/preload/`) - Context bridge exposing `window.mulby` API
 
 ### Key Modules
 
@@ -74,9 +74,9 @@ Plugin UI can run in two modes:
 
 ## CLI Tool
 
-The `packages/intools-cli/` contains a CLI for plugin development:
+The `packages/mulby-cli/` contains a CLI for plugin development:
 ```bash
-intools create <plugin-name>  # Create new plugin from template
+mulby create <plugin-name>  # Create new plugin from template
 ```
 
 ## Global Shortcut

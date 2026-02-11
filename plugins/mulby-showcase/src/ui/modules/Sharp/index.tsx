@@ -20,7 +20,7 @@ interface SharpVersion {
 
 /**
  * Sharp 图像处理模块演示
- * 展示 intools.sharp() API 的各种功能
+ * 展示 mulby.sharp() API 的各种功能
  */
 export function SharpModule() {
     const notify = useNotification()
@@ -44,7 +44,7 @@ export function SharpModule() {
     // 选择图片文件
     const handleSelectImage = useCallback(async () => {
         try {
-            const paths = await window.intools?.dialog?.showOpenDialog({
+            const paths = await window.mulby?.dialog?.showOpenDialog({
                 title: '选择图片',
                 filters: [{ name: '图片', extensions: ['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 'tiff'] }],
                 properties: ['openFile']
@@ -53,7 +53,7 @@ export function SharpModule() {
             if (paths && paths.length > 0) {
                 setSourcePath(paths[0])
                 // 读取图片预览
-                const data = await window.intools?.filesystem?.readFile(paths[0], 'base64')
+                const data = await window.mulby?.filesystem?.readFile(paths[0], 'base64')
                 if (data) {
                     const ext = paths[0].split('.').pop()?.toLowerCase() || 'png'
                     setSourceImage(`data:image/${ext};base64,${data}`)
@@ -71,16 +71,16 @@ export function SharpModule() {
     const handleCaptureScreen = useCallback(async () => {
         setLoading(true)
         try {
-            const buffer = await window.intools?.screen?.capture({ format: 'png' })
+            const buffer = await window.mulby?.screen?.capture({ format: 'png' })
             if (buffer) {
                 // 保存到临时文件
-                const tempPath = await window.intools?.system?.getPath('temp')
+                const tempPath = await window.mulby?.system?.getPath('temp')
                 if (tempPath) {
                     const filePath = `${tempPath}/sharp-demo-${Date.now()}.png`
                     const base64 = btoa(
                         new Uint8Array(buffer).reduce((data, byte) => data + String.fromCharCode(byte), '')
                     )
-                    await window.intools?.filesystem?.writeFile(filePath, base64, 'base64')
+                    await window.mulby?.filesystem?.writeFile(filePath, base64, 'base64')
                     setSourcePath(filePath)
                     setSourceImage(bufferToDataUrl(buffer, 'png'))
                     setResultImage(null)
@@ -98,7 +98,7 @@ export function SharpModule() {
     // 获取 Sharp 版本
     const handleGetVersion = useCallback(async () => {
         try {
-            const version = await window.intools?.getSharpVersion?.()
+            const version = await window.mulby?.getSharpVersion?.()
             if (version) {
                 setSharpVersion(version)
                 notify.success('获取版本信息成功')
@@ -117,9 +117,9 @@ export function SharpModule() {
         setLoading(true)
         try {
             console.log('[Sharp Test] sourcePath:', sourcePath)
-            console.log('[Sharp Test] window.intools.sharp:', typeof window.intools?.sharp)
+            console.log('[Sharp Test] window.mulby.sharp:', typeof window.mulby?.sharp)
 
-            const sharpFn = window.intools?.sharp
+            const sharpFn = window.mulby?.sharp
             console.log('[Sharp Test] sharpFn:', sharpFn)
 
             if (!sharpFn) {
@@ -164,7 +164,7 @@ export function SharpModule() {
         }
         setLoading(true)
         try {
-            const buffer = await window.intools?.sharp?.(sourcePath)
+            const buffer = await window.mulby?.sharp?.(sourcePath)
                 .resize(200, 200, { fit: 'cover' })
                 .toBuffer()
             if (buffer) {
@@ -186,7 +186,7 @@ export function SharpModule() {
         }
         setLoading(true)
         try {
-            const buffer = await window.intools?.sharp?.(sourcePath)
+            const buffer = await window.mulby?.sharp?.(sourcePath)
                 .rotate(90)
                 .toBuffer()
             if (buffer) {
@@ -208,7 +208,7 @@ export function SharpModule() {
         }
         setLoading(true)
         try {
-            const buffer = await window.intools?.sharp?.(sourcePath)
+            const buffer = await window.mulby?.sharp?.(sourcePath)
                 .grayscale()
                 .toBuffer()
             if (buffer) {
@@ -230,7 +230,7 @@ export function SharpModule() {
         }
         setLoading(true)
         try {
-            const buffer = await window.intools?.sharp?.(sourcePath)
+            const buffer = await window.mulby?.sharp?.(sourcePath)
                 .blur(5)
                 .toBuffer()
             if (buffer) {
@@ -252,7 +252,7 @@ export function SharpModule() {
         }
         setLoading(true)
         try {
-            const buffer = await window.intools?.sharp?.(sourcePath)
+            const buffer = await window.mulby?.sharp?.(sourcePath)
                 .sharpen()
                 .toBuffer()
             if (buffer) {
@@ -274,7 +274,7 @@ export function SharpModule() {
         }
         setLoading(true)
         try {
-            const buffer = await window.intools?.sharp?.(sourcePath)
+            const buffer = await window.mulby?.sharp?.(sourcePath)
                 .negate()
                 .toBuffer()
             if (buffer) {
@@ -296,7 +296,7 @@ export function SharpModule() {
         }
         setLoading(true)
         try {
-            const buffer = await window.intools?.sharp?.(sourcePath)
+            const buffer = await window.mulby?.sharp?.(sourcePath)
                 .flop()
                 .toBuffer()
             if (buffer) {
@@ -318,7 +318,7 @@ export function SharpModule() {
         }
         setLoading(true)
         try {
-            const buffer = await window.intools?.sharp?.(sourcePath)
+            const buffer = await window.mulby?.sharp?.(sourcePath)
                 .webp({ quality: 80 })
                 .toBuffer()
             if (buffer) {
@@ -340,7 +340,7 @@ export function SharpModule() {
         }
         setLoading(true)
         try {
-            const buffer = await window.intools?.sharp?.(sourcePath)
+            const buffer = await window.mulby?.sharp?.(sourcePath)
                 .resize(300, 300, { fit: 'cover' })
                 .grayscale()
                 .blur(2)
@@ -360,7 +360,7 @@ export function SharpModule() {
     const handleCreateImage = useCallback(async () => {
         setLoading(true)
         try {
-            const buffer = await window.intools?.sharp?.({
+            const buffer = await window.mulby?.sharp?.({
                 create: {
                     width: 200,
                     height: 200,
@@ -386,14 +386,14 @@ export function SharpModule() {
             return
         }
         try {
-            const savePath = await window.intools?.dialog?.showSaveDialog({
+            const savePath = await window.mulby?.dialog?.showSaveDialog({
                 title: '保存图片',
                 defaultPath: `sharp-result-${Date.now()}.png`,
                 filters: [{ name: 'PNG 图片', extensions: ['png'] }],
             })
             if (savePath) {
                 const base64Data = resultImage.split(',')[1]
-                await window.intools?.filesystem?.writeFile(savePath, base64Data, 'base64')
+                await window.mulby?.filesystem?.writeFile(savePath, base64Data, 'base64')
                 notify.success('保存成功')
             }
         } catch (error) {
@@ -592,28 +592,28 @@ export function SharpModule() {
                 <Card title="使用的 API" icon="📖">
                     <CodeBlock>
                         {`// 调整尺寸
-const buffer = await intools.sharp('/path/to/image.jpg')
+const buffer = await mulby.sharp('/path/to/image.jpg')
   .resize(200, 200, { fit: 'cover' })
   .toBuffer()
 
 // 链式操作
-const buffer = await intools.sharp('/path/to/image.jpg')
+const buffer = await mulby.sharp('/path/to/image.jpg')
   .resize(300, 300)
   .grayscale()
   .blur(2)
   .toBuffer()
 
 // 格式转换
-await intools.sharp('/path/to/input.png')
+await mulby.sharp('/path/to/input.png')
   .jpeg({ quality: 80 })
   .toFile('/path/to/output.jpg')
 
 // 获取元数据
-const metadata = await intools.sharp('/path/to/image.png').metadata()
+const metadata = await mulby.sharp('/path/to/image.png').metadata()
 // { width, height, format, channels, space, hasAlpha, ... }
 
 // 创建空白图像
-const buffer = await intools.sharp({
+const buffer = await mulby.sharp({
   create: {
     width: 200, height: 200, channels: 4,
     background: { r: 255, g: 0, b: 0, alpha: 1 }

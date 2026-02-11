@@ -46,7 +46,7 @@ export default function LogViewerView({ onClose }: LogViewerViewProps) {
     // 加载日志
     const loadLogs = useCallback(async () => {
         try {
-            const result = await window.intools.log.getLogs({ limit: 500 })
+            const result = await window.mulby.log.getLogs({ limit: 500 })
             setLogs(result)
         } catch (e) {
             console.error('Failed to load logs:', e)
@@ -57,7 +57,7 @@ export default function LogViewerView({ onClose }: LogViewerViewProps) {
 
     // 获取日志目录
     useEffect(() => {
-        window.intools.log.getLogsDir().then(setLogsDir)
+        window.mulby.log.getLogsDir().then(setLogsDir)
     }, [])
 
     // 初始加载
@@ -67,8 +67,8 @@ export default function LogViewerView({ onClose }: LogViewerViewProps) {
 
     // 订阅实时日志
     useEffect(() => {
-        window.intools.log.subscribe()
-        const cleanup = window.intools.log.onLog((entry: LogEntry) => {
+        window.mulby.log.subscribe()
+        const cleanup = window.mulby.log.onLog((entry: LogEntry) => {
             setLogs(prev => [...prev.slice(-499), entry])
         })
         return cleanup
@@ -94,14 +94,14 @@ export default function LogViewerView({ onClose }: LogViewerViewProps) {
 
     // 清除日志
     const handleClear = async () => {
-        await window.intools.log.clear()
+        await window.mulby.log.clear()
         setLogs([])
     }
 
     // 打开日志目录
     const handleOpenLogsDir = () => {
         if (logsDir) {
-            window.intools.shell.openFolder(logsDir)
+            window.mulby.shell.openFolder(logsDir)
         }
     }
 
@@ -229,7 +229,7 @@ export default function LogViewerView({ onClose }: LogViewerViewProps) {
                                 <path d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" strokeLinecap="round" strokeLinejoin="round" />
                             </svg>
                             <span>暂无日志</span>
-                            <span className="text-xs">开发者模式下，插件调用 window.intools.log.* 记录日志</span>
+                            <span className="text-xs">开发者模式下，插件调用 window.mulby.log.* 记录日志</span>
                         </div>
                     ) : (
                         <table className="w-full text-xs">

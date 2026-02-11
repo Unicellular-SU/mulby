@@ -1,9 +1,9 @@
 {
-  "id": "@intools/color-converter",
+  "id": "@mulby/color-converter",
   "name": "color-converter",
   "version": "1.0.0",
-  "author": "InTools Team",
-  "homepage": "https://github.com/intools",
+  "author": "Mulby Team",
+  "homepage": "https://github.com/mulby",
   "displayName": "颜色转换器",
   "description": "HEX、RGB、HSL 颜色格式互转，支持颜色预览和取色",
   "main": "dist/main.js",

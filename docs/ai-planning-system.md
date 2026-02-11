@@ -2,7 +2,7 @@
 
 ## 概述
 
-本文档描述了为 InTools CLI 设计的 AI Planning 系统，该系统实现了"Plan First, Code Later"的开发模式，通过任务分解、进度跟踪和持续可见的 todo list，提升 AI 辅助开发的效率和可控性。
+本文档描述了为 Mulby CLI 设计的 AI Planning 系统，该系统实现了"Plan First, Code Later"的开发模式，通过任务分解、进度跟踪和持续可见的 todo list，提升 AI 辅助开发的效率和可控性。
 
 ## 研究背景
 
@@ -379,7 +379,7 @@ AI: 好的，我将添加任务：
 
 ### 目录结构
 ```
-.intools/
+.mulby/
 ├── sessions/
 │   └── {session-id}/
 │       ├── conversation.json    # 对话历史

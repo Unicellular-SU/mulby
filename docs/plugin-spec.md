@@ -1,15 +1,15 @@
-# InTools 插件开发规范
+# Mulby 插件开发规范
 
-本文档描述当前版本 InTools 的插件开发规范，内容以实际代码、CLI 和官方文档为准。
+本文档描述当前版本 Mulby 的插件开发规范，内容以实际代码、CLI 和官方文档为准。
 
 ## 快速开始
 
 使用 CLI 创建、开发与打包插件：
 
 ```bash
-npm install -g intools-cli
+npm install -g mulby-cli
 
-intools create my-plugin
+mulby create my-plugin
 cd my-plugin
 npm install
 npm run dev
@@ -20,10 +20,10 @@ npm run pack
 创建无 UI 插件（basic 模板）：
 
 ```bash
-intools create my-plugin --template basic
+mulby create my-plugin --template basic
 ```
 
-CLI 行为与完整命令说明见 `packages/intools-cli/README.md`。
+CLI 行为与完整命令说明见 `packages/mulby-cli/README.md`。
 
 ## 项目结构
 
@@ -39,13 +39,13 @@ my-plugin/
 ├── src/
 │   ├── main.ts
 │   ├── types/
-│   │   └── intools.d.ts
+│   │   └── mulby.d.ts
 │   └── ui/
 │       ├── index.html
 │       ├── main.tsx
 │       ├── App.tsx
 │       ├── hooks/
-│       │   └── useIntools.ts
+│       │   └── useMulby.ts
 │       └── styles.css
 ├── dist/
 │   └── main.js
@@ -65,7 +65,7 @@ my-plugin/
     └── main.ts
 ```
 
-模板输出由 CLI 生成（见 `packages/intools-cli/src/commands/create/templates/*`）。
+模板输出由 CLI 生成（见 `packages/mulby-cli/src/commands/create/templates/*`）。
 
 ## manifest.json
 
@@ -102,7 +102,7 @@ manifest 规范请以 `docs/manifest-v2.md` 为准。本节仅补充与实际加
 UI 插件在窗口加载后，会收到初始化事件：
 
 ```ts
-window.intools.onPluginInit((data) => {
+window.mulby.onPluginInit((data) => {
   // data: { pluginName, featureCode, input, attachments?, mode?, route? }
 })
 ```
@@ -124,4 +124,4 @@ window.intools.onPluginInit((data) => {
   - UI：`ui/`（由 Vite 产出）
 - `npm run pack` 生成 `.inplugin` 安装包
 
-构建/打包流程以 CLI 为准（`packages/intools-cli/README.md`）。
+构建/打包流程以 CLI 为准（`packages/mulby-cli/README.md`）。

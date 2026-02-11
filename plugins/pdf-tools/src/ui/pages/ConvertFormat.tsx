@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { FileText, Presentation, Sheet, FileQuestion } from 'lucide-react';
-import { useIntools } from '../hooks/useIntools';
+import { useMulby } from '../hooks/useMulby';
 import { pdfService } from '../services/PDFService';
 import { PDFHeader, PDFUploadArea, PDFPageThumbnail } from '../components/SharedPDFComponents';
 import '../types';
@@ -11,7 +11,7 @@ interface ConvertFormatProps {
 }
 
 const ConvertFormat: React.FC<ConvertFormatProps> = ({ type }) => {
-    const { dialog, shell, notification, system } = useIntools('pdf-tools');
+    const { dialog, shell, notification, system } = useMulby('pdf-tools');
     const [file, setFile] = useState<string | null>(null);
     const [info, setInfo] = useState<PDFInfo | null>(null);
     const [pdfDoc, setPdfDoc] = useState<any>(null); // pdfjs-dist document proxy

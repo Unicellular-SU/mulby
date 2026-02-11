@@ -1,7 +1,7 @@
 {
-  "name": "intools-cli",
+  "name": "mulby-cli",
   "version": "1.1.5",
-  "description": "InTools 插件开发 CLI 工具",
+  "description": "Mulby 插件开发 CLI 工具",
   "main": "dist/index.js",
   "files": [
     "dist",
@@ -9,7 +9,7 @@
     "PLUGIN_DEVELOP_PROMPT.md"
   ],
   "bin": {
-    "intools": "dist/index.js"
+    "mulby": "dist/index.js"
   },
   "scripts": {
     "build": "tsc && cp src/services/ai/*.md dist/services/ai/",

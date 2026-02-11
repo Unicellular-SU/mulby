@@ -1,14 +1,14 @@
 # 插件管理 API (plugin)
 本文档描述 插件管理 API (plugin) 的使用方法与接口。
 
-> 入口：`window.intools.plugin`
+> 入口：`window.mulby.plugin`
 
 ### plugin.getAll()
 [Renderer]
 获取所有插件信息。
 
 ```javascript
-const plugins = await window.intools.plugin.getAll();
+const plugins = await window.mulby.plugin.getAll();
 ```
 
 **返回值**:
@@ -29,7 +29,7 @@ interface PluginInfo {
 搜索插件功能入口。
 
 ```javascript
-const results = await window.intools.plugin.search('translate');
+const results = await window.mulby.plugin.search('translate');
 ```
 
 **返回值**:
@@ -51,7 +51,7 @@ interface PluginSearchResult {
 执行插件功能入口。
 
 ```javascript
-const result = await window.intools.plugin.run('translator', 'translate', 'hello');
+const result = await window.mulby.plugin.run('translator', 'translate', 'hello');
 ```
 
 **返回值**:
@@ -65,7 +65,7 @@ const result = await window.intools.plugin.run('translator', 'translate', 'hello
 安装插件。
 
 ```javascript
-const result = await window.intools.plugin.install('/path/to/plugin.zip');
+const result = await window.mulby.plugin.install('/path/to/plugin.zip');
 ```
 
 **返回值**:
@@ -79,9 +79,9 @@ const result = await window.intools.plugin.install('/path/to/plugin.zip');
 启用、禁用或卸载插件。
 
 ```javascript
-await window.intools.plugin.enable('translator');
-await window.intools.plugin.disable('translator');
-await window.intools.plugin.uninstall('translator');
+await window.mulby.plugin.enable('translator');
+await window.mulby.plugin.disable('translator');
+await window.mulby.plugin.uninstall('translator');
 ```
 
 **返回值**:
@@ -95,7 +95,7 @@ await window.intools.plugin.uninstall('translator');
 获取插件 README 文档内容。
 
 ```javascript
-const markdown = await window.intools.plugin.getReadme('translator');
+const markdown = await window.mulby.plugin.getReadme('translator');
 ```
 
 **返回值**: `string | null`
@@ -106,10 +106,10 @@ const markdown = await window.intools.plugin.getReadme('translator');
 
 ```javascript
 // 按 featureCode 跳转
-await window.intools.plugin.redirect('translate', { text: 'hello' });
+await window.mulby.plugin.redirect('translate', { text: 'hello' });
 
 // 指定插件 + featureCode
-await window.intools.plugin.redirect(['translator', 'translate'], { text: 'hello' });
+await window.mulby.plugin.redirect(['translator', 'translate'], { text: 'hello' });
 ```
 
 **返回值**:
@@ -121,8 +121,8 @@ await window.intools.plugin.redirect(['translator', 'translate'], { text: 'hello
 退出当前插件（附着模式关闭插件，独立模式隐藏或销毁）。
 
 ```javascript
-await window.intools.plugin.outPlugin();
-await window.intools.plugin.outPlugin(true); // 强制销毁独立窗口
+await window.mulby.plugin.outPlugin();
+await window.mulby.plugin.outPlugin(true); // 强制销毁独立窗口
 ```
 
 **返回值**: `boolean`
@@ -144,7 +144,7 @@ await window.intools.plugin.outPlugin(true); // 强制销毁独立窗口
 获取所有后台运行的插件及活跃的插件宿主进程信息。
 
 ```javascript
-const processes = await window.intools.plugin.listBackground();
+const processes = await window.mulby.plugin.listBackground();
 ```
 
 **返回值**: `Array<BackgroundPluginInfo>` (包含插件的基础信息、运行模式、资源占用、健康状态等)
@@ -154,7 +154,7 @@ const processes = await window.intools.plugin.listBackground();
 手动启动后台插件。
 
 ```javascript
-await window.intools.plugin.startBackground('my-plugin');
+await window.mulby.plugin.startBackground('my-plugin');
 ```
 
 **返回值**: `{ success: boolean; error?: string }`
@@ -164,7 +164,7 @@ await window.intools.plugin.startBackground('my-plugin');
 停止后台插件。
 
 ```javascript
-await window.intools.plugin.stopBackground('my-plugin');
+await window.mulby.plugin.stopBackground('my-plugin');
 ```
 
 **返回值**: `{ success: boolean }`
@@ -174,7 +174,7 @@ await window.intools.plugin.stopBackground('my-plugin');
 获取后台插件详细信息。
 
 ```javascript
-const info = await window.intools.plugin.getBackgroundInfo('my-plugin');
+const info = await window.mulby.plugin.getBackgroundInfo('my-plugin');
 ```
 
 **返回值**: `any`
@@ -184,7 +184,7 @@ const info = await window.intools.plugin.getBackgroundInfo('my-plugin');
 停止运行中的插件（关闭窗口并销毁 Host 进程）。
 
 ```javascript
-await window.intools.plugin.stopPlugin('my-plugin');
+await window.mulby.plugin.stopPlugin('my-plugin');
 ```
 
 **返回值**: `Promise<void>`
@@ -192,15 +192,15 @@ await window.intools.plugin.stopPlugin('my-plugin');
 ### 完整示例
 
 ```javascript
-window.intools.onPluginInit((data) => {
+window.mulby.onPluginInit((data) => {
   console.log(data.pluginName, data.featureCode, data.input, data.mode);
 });
 
-window.intools.onPluginAttach((data) => {
+window.mulby.onPluginAttach((data) => {
   console.log(data.displayName, data.featureCode);
 });
 
-window.intools.onPluginDetached(() => {
+window.mulby.onPluginDetached(() => {
   console.log('detached');
 });
 ```

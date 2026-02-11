@@ -32,7 +32,7 @@ export class AIAgent {
 
     constructor(private session: GenerationSession, private systemPrompt?: string) {
         this.fileWriter = new FileWriter(session.targetDir);
-        this.planManager = new PlanManager(path.join(session.targetDir, '.intools'));
+        this.planManager = new PlanManager(path.join(session.targetDir, '.mulby'));
         this.planCommandHandler = new PlanCommandHandler(
             this.planManager,
             () => this.currentPlan,

@@ -61,11 +61,11 @@ function createTooling(root: string): AiToolingSettings {
 
 describe('internal ai tools', () => {
   it('normalizes requested internal tool names', () => {
-    const names = normalizeAiInternalToolNames(['intools_read_file', 'intools_read_file', 'unknown', ''])
-    assert.deepEqual(names, ['intools_read_file'])
+    const names = normalizeAiInternalToolNames(['mulby_read_file', 'mulby_read_file', 'unknown', ''])
+    assert.deepEqual(names, ['mulby_read_file'])
 
-    const legacyNames = normalizeAiInternalToolNames(['runCommand', 'shell:runCommand', 'intools_run_command'])
-    assert.deepEqual(legacyNames, ['intools_run_command'])
+    const legacyNames = normalizeAiInternalToolNames(['runCommand', 'shell:runCommand', 'mulby_run_command'])
+    assert.deepEqual(legacyNames, ['mulby_run_command'])
   })
 
   it('builds schema with parameters.required', () => {
@@ -76,7 +76,7 @@ describe('internal ai tools', () => {
   })
 
   it('executes filesystem tools', async (t) => {
-    const root = await mkdtemp(path.join(os.tmpdir(), 'intools-ai-tools-'))
+    const root = await mkdtemp(path.join(os.tmpdir(), 'mulby-ai-tools-'))
     t.after(async () => {
       await rm(root, { recursive: true, force: true })
     })

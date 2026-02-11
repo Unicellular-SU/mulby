@@ -1,14 +1,14 @@
 import type { AiTool } from '../../../shared/types/ai'
 import { AI_RUN_COMMAND_TOOL_NAME, buildAiRunCommandTool } from './run-command-tool'
 
-export const AI_READ_FILE_TOOL_NAME = 'intools_read_file'
-export const AI_LIST_DIR_TOOL_NAME = 'intools_list_dir'
-export const AI_SEARCH_TEXT_TOOL_NAME = 'intools_search_text'
-export const AI_APPLY_PATCH_TOOL_NAME = 'intools_apply_patch'
-export const AI_HTTP_FETCH_TOOL_NAME = 'intools_http_fetch'
-export const AI_RUN_SCRIPT_TOOL_NAME = 'intools_run_script'
-export const AI_GIT_STATUS_TOOL_NAME = 'intools_git_status'
-export const AI_GIT_DIFF_TOOL_NAME = 'intools_git_diff'
+export const AI_READ_FILE_TOOL_NAME = 'mulby_read_file'
+export const AI_LIST_DIR_TOOL_NAME = 'mulby_list_dir'
+export const AI_SEARCH_TEXT_TOOL_NAME = 'mulby_search_text'
+export const AI_APPLY_PATCH_TOOL_NAME = 'mulby_apply_patch'
+export const AI_HTTP_FETCH_TOOL_NAME = 'mulby_http_fetch'
+export const AI_RUN_SCRIPT_TOOL_NAME = 'mulby_run_script'
+export const AI_GIT_STATUS_TOOL_NAME = 'mulby_git_status'
+export const AI_GIT_DIFF_TOOL_NAME = 'mulby_git_diff'
 
 export const AI_INTERNAL_TOOL_NAMES = [
   AI_RUN_COMMAND_TOOL_NAME,
@@ -36,7 +36,7 @@ function canonicalToolName(input: string): string {
 const INTERNAL_TOOL_ALIAS_CANONICAL_MAP: Record<string, AiInternalToolName> = {
   runcommand: AI_RUN_COMMAND_TOOL_NAME,
   shellruncommand: AI_RUN_COMMAND_TOOL_NAME,
-  intoolsruncommand: AI_RUN_COMMAND_TOOL_NAME
+  mulbyruncommand: AI_RUN_COMMAND_TOOL_NAME
 }
 
 function normalizeToolList(input: unknown): string[] {

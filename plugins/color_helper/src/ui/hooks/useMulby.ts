@@ -1,90 +1,90 @@
 import { useMemo } from 'react'
 
-export function useIntools(pluginId?: string) {
+export function useMulby(pluginId?: string) {
   return useMemo(() => ({
     // Clipboard API
     clipboard: {
-      readText: () => window.intools?.clipboard?.readText(),
-      writeText: (text: string) => window.intools?.clipboard?.writeText(text),
-      readImage: () => window.intools?.clipboard?.readImage(),
-      writeImage: (image: string | ArrayBuffer) => window.intools?.clipboard?.writeImage(image),
-      readFiles: () => window.intools?.clipboard?.readFiles(),
-      writeFiles: (files: string | string[]) => window.intools?.clipboard?.writeFiles(files),
-      getFormat: () => window.intools?.clipboard?.getFormat(),
+      readText: () => window.mulby?.clipboard?.readText(),
+      writeText: (text: string) => window.mulby?.clipboard?.writeText(text),
+      readImage: () => window.mulby?.clipboard?.readImage(),
+      writeImage: (image: string | ArrayBuffer) => window.mulby?.clipboard?.writeImage(image),
+      readFiles: () => window.mulby?.clipboard?.readFiles(),
+      writeFiles: (files: string | string[]) => window.mulby?.clipboard?.writeFiles(files),
+      getFormat: () => window.mulby?.clipboard?.getFormat(),
     },
 
     // Input API
     input: {
-      hideMainWindowPasteText: (text: string) => window.intools?.input?.hideMainWindowPasteText(text),
-      hideMainWindowPasteImage: (image: string | ArrayBuffer) => window.intools?.input?.hideMainWindowPasteImage(image),
-      hideMainWindowPasteFile: (filePaths: string | string[]) => window.intools?.input?.hideMainWindowPasteFile(filePaths),
-      hideMainWindowTypeString: (text: string) => window.intools?.input?.hideMainWindowTypeString(text),
+      hideMainWindowPasteText: (text: string) => window.mulby?.input?.hideMainWindowPasteText(text),
+      hideMainWindowPasteImage: (image: string | ArrayBuffer) => window.mulby?.input?.hideMainWindowPasteImage(image),
+      hideMainWindowPasteFile: (filePaths: string | string[]) => window.mulby?.input?.hideMainWindowPasteFile(filePaths),
+      hideMainWindowTypeString: (text: string) => window.mulby?.input?.hideMainWindowTypeString(text),
       simulateKeyboardTap: (key: string, ...modifiers: string[]) =>
-        window.intools?.input?.simulateKeyboardTap(key, ...modifiers),
-      simulateMouseMove: (x: number, y: number) => window.intools?.input?.simulateMouseMove(x, y),
-      simulateMouseClick: (x: number, y: number) => window.intools?.input?.simulateMouseClick(x, y),
-      simulateMouseDoubleClick: (x: number, y: number) => window.intools?.input?.simulateMouseDoubleClick(x, y),
-      simulateMouseRightClick: (x: number, y: number) => window.intools?.input?.simulateMouseRightClick(x, y),
+        window.mulby?.input?.simulateKeyboardTap(key, ...modifiers),
+      simulateMouseMove: (x: number, y: number) => window.mulby?.input?.simulateMouseMove(x, y),
+      simulateMouseClick: (x: number, y: number) => window.mulby?.input?.simulateMouseClick(x, y),
+      simulateMouseDoubleClick: (x: number, y: number) => window.mulby?.input?.simulateMouseDoubleClick(x, y),
+      simulateMouseRightClick: (x: number, y: number) => window.mulby?.input?.simulateMouseRightClick(x, y),
     },
 
     // Storage API
     storage: {
-      get: (key: string) => window.intools?.storage?.get(key, pluginId),
-      set: (key: string, value: unknown) => window.intools?.storage?.set(key, value, pluginId),
-      remove: (key: string) => window.intools?.storage?.remove(key, pluginId),
+      get: (key: string) => window.mulby?.storage?.get(key, pluginId),
+      set: (key: string, value: unknown) => window.mulby?.storage?.set(key, value, pluginId),
+      remove: (key: string) => window.mulby?.storage?.remove(key, pluginId),
     },
 
     // Notification API
     notification: {
       show: (message: string, type?: 'info' | 'success' | 'warning' | 'error') =>
-        window.intools?.notification?.show(message, type),
+        window.mulby?.notification?.show(message, type),
     },
 
     // Window API
     window: {
-      setSize: (width: number, height: number) => window.intools?.window?.setSize(width, height),
-      setExpendHeight: (height: number) => window.intools?.window?.setExpendHeight?.(height),
-      center: () => window.intools?.window?.center?.(),
-      hide: (isRestorePreWindow?: boolean) => window.intools?.window?.hide?.(isRestorePreWindow),
-      show: () => window.intools?.window?.show(),
-      close: () => window.intools?.window?.close(),
+      setSize: (width: number, height: number) => window.mulby?.window?.setSize(width, height),
+      setExpendHeight: (height: number) => window.mulby?.window?.setExpendHeight?.(height),
+      center: () => window.mulby?.window?.center?.(),
+      hide: (isRestorePreWindow?: boolean) => window.mulby?.window?.hide?.(isRestorePreWindow),
+      show: () => window.mulby?.window?.show(),
+      close: () => window.mulby?.window?.close(),
       create: (url: string, options?: { width?: number; height?: number; title?: string }) =>
-        window.intools?.window?.create(url, options),
-      detach: () => window.intools?.window?.detach?.(),
-      setAlwaysOnTop: (flag: boolean) => window.intools?.window?.setAlwaysOnTop?.(flag),
-      getMode: () => window.intools?.window?.getMode?.(),
-      getWindowType: () => window.intools?.window?.getWindowType?.(),
-      minimize: () => window.intools?.window?.minimize?.(),
-      maximize: () => window.intools?.window?.maximize?.(),
-      getState: () => window.intools?.window?.getState?.(),
-      reload: () => window.intools?.window?.reload?.(),
+        window.mulby?.window?.create(url, options),
+      detach: () => window.mulby?.window?.detach?.(),
+      setAlwaysOnTop: (flag: boolean) => window.mulby?.window?.setAlwaysOnTop?.(flag),
+      getMode: () => window.mulby?.window?.getMode?.(),
+      getWindowType: () => window.mulby?.window?.getWindowType?.(),
+      minimize: () => window.mulby?.window?.minimize?.(),
+      maximize: () => window.mulby?.window?.maximize?.(),
+      getState: () => window.mulby?.window?.getState?.(),
+      reload: () => window.mulby?.window?.reload?.(),
       sendToParent: (channel: string, ...args: unknown[]) =>
-        window.intools?.window?.sendToParent?.(channel, ...args),
+        window.mulby?.window?.sendToParent?.(channel, ...args),
       onChildMessage: (callback: (channel: string, ...args: unknown[]) => void) =>
-        window.intools?.window?.onChildMessage?.(callback),
+        window.mulby?.window?.onChildMessage?.(callback),
       findInPage: (text: string, options?: { forward?: boolean; findNext?: boolean; matchCase?: boolean }) =>
-        window.intools?.window?.findInPage?.(text, options),
+        window.mulby?.window?.findInPage?.(text, options),
       stopFindInPage: (action?: 'clearSelection' | 'keepSelection' | 'activateSelection') =>
-        window.intools?.window?.stopFindInPage?.(action),
-      startDrag: (filePath: string | string[]) => window.intools?.window?.startDrag?.(filePath),
+        window.mulby?.window?.stopFindInPage?.(action),
+      startDrag: (filePath: string | string[]) => window.mulby?.window?.startDrag?.(filePath),
     },
 
     // SubInput API
     subInput: {
-      set: (placeholder?: string, isFocus?: boolean) => window.intools?.subInput?.set?.(placeholder, isFocus),
-      remove: () => window.intools?.subInput?.remove?.(),
-      setValue: (text: string) => window.intools?.subInput?.setValue?.(text),
-      focus: () => window.intools?.subInput?.focus?.(),
-      blur: () => window.intools?.subInput?.blur?.(),
-      select: () => window.intools?.subInput?.select?.(),
-      onChange: (callback: (data: { text: string }) => void) => window.intools?.subInput?.onChange?.(callback),
+      set: (placeholder?: string, isFocus?: boolean) => window.mulby?.subInput?.set?.(placeholder, isFocus),
+      remove: () => window.mulby?.subInput?.remove?.(),
+      setValue: (text: string) => window.mulby?.subInput?.setValue?.(text),
+      focus: () => window.mulby?.subInput?.focus?.(),
+      blur: () => window.mulby?.subInput?.blur?.(),
+      select: () => window.mulby?.subInput?.select?.(),
+      onChange: (callback: (data: { text: string }) => void) => window.mulby?.subInput?.onChange?.(callback),
     },
 
     // Plugin API
     plugin: {
       redirect: (label: string | [string, string], payload?: unknown) =>
-        window.intools?.plugin?.redirect?.(label, payload),
-      outPlugin: (isKill?: boolean) => window.intools?.plugin?.outPlugin?.(isKill),
+        window.mulby?.plugin?.redirect?.(label, payload),
+      outPlugin: (isKill?: boolean) => window.mulby?.plugin?.outPlugin?.(isKill),
     },
 
     // HTTP API
@@ -95,56 +95,56 @@ export function useIntools(pluginId?: string) {
         headers?: Record<string, string>
         body?: unknown
         timeout?: number
-      }) => window.intools?.http?.request(options),
-      get: (url: string, headers?: Record<string, string>) => window.intools?.http?.get(url, headers),
+      }) => window.mulby?.http?.request(options),
+      get: (url: string, headers?: Record<string, string>) => window.mulby?.http?.get(url, headers),
       post: (url: string, body?: unknown, headers?: Record<string, string>) =>
-        window.intools?.http?.post(url, body, headers),
+        window.mulby?.http?.post(url, body, headers),
       put: (url: string, body?: unknown, headers?: Record<string, string>) =>
-        window.intools?.http?.put(url, body, headers),
-      delete: (url: string, headers?: Record<string, string>) => window.intools?.http?.delete(url, headers),
+        window.mulby?.http?.put(url, body, headers),
+      delete: (url: string, headers?: Record<string, string>) => window.mulby?.http?.delete(url, headers),
     },
 
     // Filesystem API
     filesystem: {
-      readFile: (path: string, encoding?: 'utf-8' | 'base64') => window.intools?.filesystem?.readFile(path, encoding),
+      readFile: (path: string, encoding?: 'utf-8' | 'base64') => window.mulby?.filesystem?.readFile(path, encoding),
       writeFile: (path: string, data: string | ArrayBuffer, encoding?: 'utf-8' | 'base64') =>
-        window.intools?.filesystem?.writeFile(path, data, encoding),
-      exists: (path: string) => window.intools?.filesystem?.exists(path),
-      readdir: (path: string) => window.intools?.filesystem?.readdir(path),
-      mkdir: (path: string) => window.intools?.filesystem?.mkdir(path),
-      stat: (path: string) => window.intools?.filesystem?.stat(path),
-      copy: (src: string, dest: string) => window.intools?.filesystem?.copy(src, dest),
-      move: (src: string, dest: string) => window.intools?.filesystem?.move(src, dest),
-      unlink: (path: string) => window.intools?.filesystem?.unlink(path),
+        window.mulby?.filesystem?.writeFile(path, data, encoding),
+      exists: (path: string) => window.mulby?.filesystem?.exists(path),
+      readdir: (path: string) => window.mulby?.filesystem?.readdir(path),
+      mkdir: (path: string) => window.mulby?.filesystem?.mkdir(path),
+      stat: (path: string) => window.mulby?.filesystem?.stat(path),
+      copy: (src: string, dest: string) => window.mulby?.filesystem?.copy(src, dest),
+      move: (src: string, dest: string) => window.mulby?.filesystem?.move(src, dest),
+      unlink: (path: string) => window.mulby?.filesystem?.unlink(path),
     },
 
     // Screen API
     screen: {
-      getAllDisplays: () => window.intools?.screen?.getAllDisplays(),
-      getPrimaryDisplay: () => window.intools?.screen?.getPrimaryDisplay(),
-      getCursorScreenPoint: () => window.intools?.screen?.getCursorScreenPoint(),
+      getAllDisplays: () => window.mulby?.screen?.getAllDisplays(),
+      getPrimaryDisplay: () => window.mulby?.screen?.getPrimaryDisplay(),
+      getCursorScreenPoint: () => window.mulby?.screen?.getCursorScreenPoint(),
       getDisplayNearestPoint: (point: { x: number; y: number }) =>
-        window.intools?.screen?.getDisplayNearestPoint?.(point),
+        window.mulby?.screen?.getDisplayNearestPoint?.(point),
       getDisplayMatching: (rect: { x: number; y: number; width: number; height: number }) =>
-        window.intools?.screen?.getDisplayMatching?.(rect),
+        window.mulby?.screen?.getDisplayMatching?.(rect),
       getSources: (options?: { types?: ('screen' | 'window')[]; thumbnailSize?: { width: number; height: number } }) =>
-        window.intools?.screen?.getSources(options),
+        window.mulby?.screen?.getSources(options),
       capture: (options?: { sourceId?: string; format?: 'png' | 'jpeg'; quality?: number }) =>
-        window.intools?.screen?.capture(options),
+        window.mulby?.screen?.capture(options),
       captureRegion: (region: { x: number; y: number; width: number; height: number }, options?: { format?: 'png' | 'jpeg'; quality?: number }) =>
-        window.intools?.screen?.captureRegion(region, options),
-      screenCapture: () => window.intools?.screen?.screenCapture(),
-      colorPick: () => window.intools?.screen?.colorPick?.(),
+        window.mulby?.screen?.captureRegion(region, options),
+      screenCapture: () => window.mulby?.screen?.screenCapture(),
+      colorPick: () => window.mulby?.screen?.colorPick?.(),
     },
 
     // Shell API
     shell: {
-      openPath: (path: string) => window.intools?.shell?.openPath(path),
-      openExternal: (url: string) => window.intools?.shell?.openExternal(url),
-      showItemInFolder: (path: string) => window.intools?.shell?.showItemInFolder(path),
-      openFolder: (path: string) => window.intools?.shell?.openFolder(path),
-      trashItem: (path: string) => window.intools?.shell?.trashItem(path),
-      beep: () => window.intools?.shell?.beep(),
+      openPath: (path: string) => window.mulby?.shell?.openPath(path),
+      openExternal: (url: string) => window.mulby?.shell?.openExternal(url),
+      showItemInFolder: (path: string) => window.mulby?.shell?.showItemInFolder(path),
+      openFolder: (path: string) => window.mulby?.shell?.openFolder(path),
+      trashItem: (path: string) => window.mulby?.shell?.trashItem(path),
+      beep: () => window.mulby?.shell?.beep(),
     },
 
     // Dialog API
@@ -154,114 +154,114 @@ export function useIntools(pluginId?: string) {
         defaultPath?: string
         filters?: { name: string; extensions: string[] }[]
         properties?: ('openFile' | 'openDirectory' | 'multiSelections' | 'showHiddenFiles')[]
-      }) => window.intools?.dialog?.showOpenDialog(options),
+      }) => window.mulby?.dialog?.showOpenDialog(options),
       showSaveDialog: (options?: {
         title?: string
         defaultPath?: string
         filters?: { name: string; extensions: string[] }[]
-      }) => window.intools?.dialog?.showSaveDialog(options),
+      }) => window.mulby?.dialog?.showSaveDialog(options),
       showMessageBox: (options: {
         type?: 'none' | 'info' | 'error' | 'question' | 'warning'
         title?: string
         message: string
         detail?: string
         buttons?: string[]
-      }) => window.intools?.dialog?.showMessageBox(options),
+      }) => window.mulby?.dialog?.showMessageBox(options),
     },
 
     // System API
     system: {
-      getSystemInfo: () => window.intools?.system?.getSystemInfo(),
-      getAppInfo: () => window.intools?.system?.getAppInfo(),
-      getPath: (name: string) => window.intools?.system?.getPath(name as any),
-      getEnv: (name: string) => window.intools?.system?.getEnv(name),
-      getIdleTime: () => window.intools?.system?.getIdleTime(),
-      getFileIcon: (filePath: string) => window.intools?.system?.getFileIcon?.(filePath),
-      getNativeId: () => window.intools?.system?.getNativeId?.(),
-      isDev: () => window.intools?.system?.isDev?.(),
-      isMacOS: () => window.intools?.system?.isMacOS?.(),
-      isWindows: () => window.intools?.system?.isWindows?.(),
-      isLinux: () => window.intools?.system?.isLinux?.(),
+      getSystemInfo: () => window.mulby?.system?.getSystemInfo(),
+      getAppInfo: () => window.mulby?.system?.getAppInfo(),
+      getPath: (name: string) => window.mulby?.system?.getPath(name as any),
+      getEnv: (name: string) => window.mulby?.system?.getEnv(name),
+      getIdleTime: () => window.mulby?.system?.getIdleTime(),
+      getFileIcon: (filePath: string) => window.mulby?.system?.getFileIcon?.(filePath),
+      getNativeId: () => window.mulby?.system?.getNativeId?.(),
+      isDev: () => window.mulby?.system?.isDev?.(),
+      isMacOS: () => window.mulby?.system?.isMacOS?.(),
+      isWindows: () => window.mulby?.system?.isWindows?.(),
+      isLinux: () => window.mulby?.system?.isLinux?.(),
     },
 
     // Permission API
     permission: {
       getStatus: (type: 'geolocation' | 'camera' | 'microphone' | 'notifications' | 'screen' | 'accessibility' | 'contacts' | 'calendar') =>
-        window.intools?.permission?.getStatus(type),
+        window.mulby?.permission?.getStatus(type),
       request: (type: 'geolocation' | 'camera' | 'microphone' | 'notifications' | 'screen' | 'accessibility' | 'contacts' | 'calendar') =>
-        window.intools?.permission?.request(type),
+        window.mulby?.permission?.request(type),
       canRequest: (type: 'geolocation' | 'camera' | 'microphone' | 'notifications' | 'screen' | 'accessibility' | 'contacts' | 'calendar') =>
-        window.intools?.permission?.canRequest(type),
+        window.mulby?.permission?.canRequest(type),
       openSystemSettings: (type: 'geolocation' | 'camera' | 'microphone' | 'notifications' | 'screen' | 'accessibility' | 'contacts' | 'calendar') =>
-        window.intools?.permission?.openSystemSettings(type),
-      isAccessibilityTrusted: () => window.intools?.permission?.isAccessibilityTrusted()
+        window.mulby?.permission?.openSystemSettings(type),
+      isAccessibilityTrusted: () => window.mulby?.permission?.isAccessibilityTrusted()
     },
 
     // Power API
     power: {
-      getSystemIdleTime: () => window.intools?.power?.getSystemIdleTime(),
-      getSystemIdleState: (threshold: number) => window.intools?.power?.getSystemIdleState(threshold),
-      isOnBatteryPower: () => window.intools?.power?.isOnBatteryPower(),
-      getCurrentThermalState: () => window.intools?.power?.getCurrentThermalState(),
+      getSystemIdleTime: () => window.mulby?.power?.getSystemIdleTime(),
+      getSystemIdleState: (threshold: number) => window.mulby?.power?.getSystemIdleState(threshold),
+      isOnBatteryPower: () => window.mulby?.power?.isOnBatteryPower(),
+      getCurrentThermalState: () => window.mulby?.power?.getCurrentThermalState(),
     },
 
     // Network API
     network: {
-      isOnline: () => window.intools?.network?.isOnline(),
+      isOnline: () => window.mulby?.network?.isOnline(),
     },
 
     // Geolocation API
     geolocation: {
-      getAccessStatus: () => window.intools?.geolocation?.getAccessStatus(),
-      requestAccess: () => window.intools?.geolocation?.requestAccess(),
-      canGetPosition: () => window.intools?.geolocation?.canGetPosition(),
-      openSettings: () => window.intools?.geolocation?.openSettings(),
-      getCurrentPosition: () => window.intools?.geolocation?.getCurrentPosition(),
+      getAccessStatus: () => window.mulby?.geolocation?.getAccessStatus(),
+      requestAccess: () => window.mulby?.geolocation?.requestAccess(),
+      canGetPosition: () => window.mulby?.geolocation?.canGetPosition(),
+      openSettings: () => window.mulby?.geolocation?.openSettings(),
+      getCurrentPosition: () => window.mulby?.geolocation?.getCurrentPosition(),
     },
 
     // TTS API
     tts: {
       speak: (text: string, options?: { lang?: string; rate?: number; pitch?: number; volume?: number }) =>
-        window.intools?.tts?.speak(text, options),
-      stop: () => window.intools?.tts?.stop(),
-      pause: () => window.intools?.tts?.pause(),
-      resume: () => window.intools?.tts?.resume(),
-      getVoices: () => window.intools?.tts?.getVoices(),
-      isSpeaking: () => window.intools?.tts?.isSpeaking(),
+        window.mulby?.tts?.speak(text, options),
+      stop: () => window.mulby?.tts?.stop(),
+      pause: () => window.mulby?.tts?.pause(),
+      resume: () => window.mulby?.tts?.resume(),
+      getVoices: () => window.mulby?.tts?.getVoices(),
+      isSpeaking: () => window.mulby?.tts?.isSpeaking(),
     },
 
     // Media API
     media: {
-      getAccessStatus: (type: 'camera' | 'microphone') => window.intools?.media?.getAccessStatus(type),
-      askForAccess: (type: 'camera' | 'microphone') => window.intools?.media?.askForAccess(type),
-      hasCameraAccess: () => window.intools?.media?.hasCameraAccess(),
-      hasMicrophoneAccess: () => window.intools?.media?.hasMicrophoneAccess(),
+      getAccessStatus: (type: 'camera' | 'microphone') => window.mulby?.media?.getAccessStatus(type),
+      askForAccess: (type: 'camera' | 'microphone') => window.mulby?.media?.askForAccess(type),
+      hasCameraAccess: () => window.mulby?.media?.hasCameraAccess(),
+      hasMicrophoneAccess: () => window.mulby?.media?.hasMicrophoneAccess(),
     },
 
     // Shortcut API
     shortcut: {
-      register: (accelerator: string) => window.intools?.shortcut?.register(accelerator),
-      unregister: (accelerator: string) => window.intools?.shortcut?.unregister(accelerator),
-      unregisterAll: () => window.intools?.shortcut?.unregisterAll(),
-      isRegistered: (accelerator: string) => window.intools?.shortcut?.isRegistered(accelerator),
+      register: (accelerator: string) => window.mulby?.shortcut?.register(accelerator),
+      unregister: (accelerator: string) => window.mulby?.shortcut?.unregister(accelerator),
+      unregisterAll: () => window.mulby?.shortcut?.unregisterAll(),
+      isRegistered: (accelerator: string) => window.mulby?.shortcut?.isRegistered(accelerator),
     },
 
     // Security API
     security: {
-      isEncryptionAvailable: () => window.intools?.security?.isEncryptionAvailable(),
-      encryptString: (text: string) => window.intools?.security?.encryptString(text),
-      decryptString: (data: ArrayBuffer) => window.intools?.security?.decryptString(data),
+      isEncryptionAvailable: () => window.mulby?.security?.isEncryptionAvailable(),
+      encryptString: (text: string) => window.mulby?.security?.encryptString(text),
+      decryptString: (data: ArrayBuffer) => window.mulby?.security?.decryptString(data),
     },
 
     // Tray API
     tray: {
       create: (options: { icon: string; tooltip?: string; title?: string }) =>
-        window.intools?.tray?.create(options),
-      destroy: () => window.intools?.tray?.destroy(),
-      setIcon: (icon: string) => window.intools?.tray?.setIcon(icon),
-      setTooltip: (tooltip: string) => window.intools?.tray?.setTooltip(tooltip),
-      setTitle: (title: string) => window.intools?.tray?.setTitle(title),
-      exists: () => window.intools?.tray?.exists(),
+        window.mulby?.tray?.create(options),
+      destroy: () => window.mulby?.tray?.destroy(),
+      setIcon: (icon: string) => window.mulby?.tray?.setIcon(icon),
+      setTooltip: (tooltip: string) => window.mulby?.tray?.setTooltip(tooltip),
+      setTitle: (title: string) => window.mulby?.tray?.setTitle(title),
+      exists: () => window.mulby?.tray?.exists(),
     },
 
     // Menu API
@@ -273,31 +273,31 @@ export function useIntools(pluginId?: string) {
         enabled?: boolean
         id?: string
         submenu?: unknown[]
-      }[]) => window.intools?.menu?.showContextMenu(items as Parameters<typeof window.intools.menu.showContextMenu>[0]),
+      }[]) => window.mulby?.menu?.showContextMenu(items as Parameters<typeof window.mulby.menu.showContextMenu>[0]),
     },
 
     // Theme API
     theme: {
-      get: () => window.intools?.theme?.get(),
-      set: (mode: 'light' | 'dark' | 'system') => window.intools?.theme?.set(mode),
-      getActual: () => window.intools?.theme?.getActual(),
+      get: () => window.mulby?.theme?.get(),
+      set: (mode: 'light' | 'dark' | 'system') => window.mulby?.theme?.set(mode),
+      getActual: () => window.mulby?.theme?.getActual(),
     },
 
     // Host API
     host: {
-      invoke: (pluginName: string, method: string, ...args: unknown[]) => window.intools?.host?.invoke(pluginName, method, ...args),
-      status: (pluginName: string) => window.intools?.host?.status(pluginName),
-      restart: (pluginName: string) => window.intools?.host?.restart(pluginName),
+      invoke: (pluginName: string, method: string, ...args: unknown[]) => window.mulby?.host?.invoke(pluginName, method, ...args),
+      status: (pluginName: string) => window.mulby?.host?.status(pluginName),
+      restart: (pluginName: string) => window.mulby?.host?.restart(pluginName),
     },
 
     // InBrowser API
-    inbrowser: window.intools?.inbrowser,
+    inbrowser: window.mulby?.inbrowser,
 
     // Sharp API
-    sharp: window.intools?.sharp,
-    getSharpVersion: () => window.intools?.getSharpVersion?.(),
+    sharp: window.mulby?.sharp,
+    getSharpVersion: () => window.mulby?.getSharpVersion?.(),
 
     // FFmpeg API
-    ffmpeg: window.intools?.ffmpeg,
+    ffmpeg: window.mulby?.ffmpeg,
   }), [pluginId])
 }

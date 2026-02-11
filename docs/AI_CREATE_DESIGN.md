@@ -1,12 +1,12 @@
-# InTools CLI AI 插件生成功能设计方案
+# Mulby CLI AI 插件生成功能设计方案
 
-> `intools create --ai` 详细技术设计文档
+> `mulby create --ai` 详细技术设计文档
 
 ---
 
 ## 目标
 
-在 `intools-cli` 中集成 AI 能力，让用户通过自然语言描述需求，自动生成完整的插件代码。
+在 `mulby-cli` 中集成 AI 能力，让用户通过自然语言描述需求，自动生成完整的插件代码。
 
 ## 核心特性
 
@@ -26,7 +26,7 @@
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│                     intools create --ai                          │
+│                     mulby create --ai                          │
 ├─────────────────────────────────────────────────────────────────┤
 │                                                                  │
 │  ┌────────────┐  ┌────────────┐  ┌────────────┐  ┌────────────┐ │
@@ -36,7 +36,7 @@
 │        │               │               │               │        │
 │        ▼               ▼               ▼               ▼        │
 │  ┌────────────┐  ┌────────────┐  ┌────────────┐  ┌────────────┐ │
-│  │ ~/.intools │  │ ~/.intools │  │  OpenAI/   │  │  plugins/  │ │
+│  │ ~/.mulby │  │ ~/.mulby │  │  OpenAI/   │  │  plugins/  │ │
 │  │ /config    │  │ /sessions  │  │  Claude/   │  │  {name}/   │ │
 │  │ .json      │  │ /*.json    │  │  DeepSeek  │  │  *.ts/css  │ │
 │  └────────────┘  └────────────┘  └────────────┘  └────────────┘ │
@@ -52,7 +52,7 @@
 
 #### 配置文件位置
 ```
-~/.intools/config.json
+~/.mulby/config.json
 ```
 
 #### 配置结构
@@ -117,7 +117,7 @@ const PROVIDERS = {
 
 ```mermaid
 graph TD
-    A[User Input: intools create my-plugin --ai] --> B{Project Exists?}
+    A[User Input: mulby create my-plugin --ai] --> B{Project Exists?}
     B -- No --> C[Scaffold: Deterministic Templates]
     B -- Yes --> D[Read Existing Context]
     C --> D
@@ -166,19 +166,19 @@ graph TD
 #### 3. `SessionManager` (会话持久化)
 确保用户可以随时中断、恢复、回溯。
 
-*   **存储路径**: `~/.intools/sessions/<session_id>.json`
+*   **存储路径**: `~/.mulby/sessions/<session_id>.json`
 *   **存储内容**:
     *   `history`: 完整的对话历史 (User, Assistant, Tool Outputs)。
     *   `variables`: 提取出的关键信息 (如插件名、主要功能描述)。
     *   `status`: 当前状态 (`generating`, `completed`, `failed`)。
 *   **新增命令**:
-    *   `intools ai-session list`: 列出历史会话。
-    *   `intools ai-session resume <id>`: 恢复某个会话。
-    *   `intools create --continue`: 尝试恢复当前目录下的最近会话。
+    *   `mulby ai-session list`: 列出历史会话。
+    *   `mulby ai-session resume <id>`: 恢复某个会话。
+    *   `mulby create --continue`: 尝试恢复当前目录下的最近会话。
 
 ### 3. 系统提示词 (System Prompt) 优化
 
-**Role**: InTools 插件开发专家 (Interactive Agent)
+**Role**: Mulby 插件开发专家 (Interactive Agent)
 
 **核心指令**:
 1.  **脚手架优先**: 你是在一个**已初始化**的 React 项目中工作。我们已经为你生成了核心文件（`package.json`, `manifest.json`, `vite.config.ts`, `src/ui/App.tsx` 等）。
@@ -195,7 +195,7 @@ graph TD
 用户体验将更像是一个聊天界面，而不仅仅是进度条。
 
 ```bash
-$ intools create encode_helper --ai
+$ mulby create encode_helper --ai
 
 🚀 [System] 初始化 React 脚手架... 完成。
 🤖 [AI]    你好！我已经准备好开发环境了。你希望这个 "encode_helper" 具体包含哪些功能？
@@ -235,14 +235,14 @@ You: (Ctrl+C 退出)
 
 ## 4. 验证与测试步骤
 
-1.  **基础脚手架验证**: 运行 `intools create test --ai`，确认是否先生成了标准 React 模板。
+1.  **基础脚手架验证**: 运行 `mulby create test --ai`，确认是否先生成了标准 React 模板。
 2.  **ReAct 循环验证**:
     *   输入需求。
     *   观察 AI 是否分步调用 `write_file`。
     *   观察 AI 是否在修改前正确读取了 `package.json` 等文件。
 3.  **中断恢复验证**:
     *   在生成过程中 Ctrl+C。
-    *   运行 `intools create --continue` 或 `intools ai-session resume`。
+    *   运行 `mulby create --continue` 或 `mulby ai-session resume`。
     *   确认上下文是否接续。
 4.  **错误纠正验证**:
     *   人为造成生成错误（或指出错误）。
@@ -628,10 +628,10 @@ async function handleInterrupt() {
     console.log(chalk.gray(`已完成: ${currentSession.completedFiles.length}/${currentSession.plan.files.length} 文件`));
     console.log();
     console.log('恢复命令:');
-    console.log(chalk.cyan(`  intools create --ai --resume ${currentSession.id}`));
+    console.log(chalk.cyan(`  mulby create --ai --resume ${currentSession.id}`));
     console.log();
     console.log('或恢复最近会话:');
-    console.log(chalk.cyan(`  intools create --ai --resume`));
+    console.log(chalk.cyan(`  mulby create --ai --resume`));
   }
   
   process.exit(0);
@@ -645,7 +645,7 @@ async function handleInterrupt() {
 ### 主命令
 
 ```bash
-intools create <name> --ai [options]
+mulby create <name> --ai [options]
 ```
 
 #### 选项
@@ -660,7 +660,7 @@ intools create <name> --ai [options]
 | `--dry-run` | 只显示计划，不生成 | - |
 
 ```
-packages/intools-cli/src/
+packages/mulby-cli/src/
 ├── commands/
 │   ├── create/
 │   │   ├── index.ts          # 修改：添加 --ai 选项
@@ -694,7 +694,7 @@ packages/intools-cli/src/
 
 1. 配置管理系统
    - `ConfigManager` 类实现
-   - `intools config` 命令
+   - `mulby config` 命令
    - API Key 安全存储
 
 2. AI 服务抽象
@@ -748,10 +748,10 @@ packages/intools-cli/src/
 #### 测试 1：首次配置
 ```bash
 # 1. 确保没有配置文件
-rm -rf ~/.intools/config.json
+rm -rf ~/.mulby/config.json
 
 # 2. 运行命令，应提示配置
-intools create test-plugin --ai
+mulby create test-plugin --ai
 
 # 3. 验证：
 #    - 交互式选择服务商
@@ -762,7 +762,7 @@ intools create test-plugin --ai
 #### 测试 2：正常生成
 ```bash
 # 1. 创建简单插件
-intools create hello-world --ai
+mulby create hello-world --ai
 
 # 2. 输入描述："一个显示 Hello World 的简单插件"
 
@@ -776,15 +776,15 @@ intools create hello-world --ai
 #### 测试 3：断点续传
 ```bash
 # 1. 开始生成
-intools create complex-plugin --ai
+mulby create complex-plugin --ai
 
 # 2. 等待生成 2-3 个文件后按 Ctrl+C
 
 # 3. 验证进度保存
-cat ~/.intools/ai-sessions/*.json
+cat ~/.mulby/ai-sessions/*.json
 
 # 4. 恢复会话
-intools create --ai --resume
+mulby create --ai --resume
 
 # 5. 验证：
 #    - 从中断处继续
@@ -794,10 +794,10 @@ intools create --ai --resume
 #### 测试 4：错误处理
 ```bash
 # 1. 配置错误的 API Key
-intools config set ai.apiKey invalid-key
+mulby config set ai.apiKey invalid-key
 
 # 2. 尝试创建
-intools create test --ai
+mulby create test --ai
 
 # 3. 验证：
 #    - 显示清晰的错误消息

@@ -101,8 +101,8 @@ function App() {
 
   // 初始化主题
   useEffect(() => {
-    window.intools.theme.getActual().then(setTheme)
-    const cleanup = window.intools.onThemeChange(setTheme)
+    window.mulby.theme.getActual().then(setTheme)
+    const cleanup = window.mulby.onThemeChange(setTheme)
     return cleanup
   }, [])
 
@@ -137,7 +137,7 @@ function App() {
       const nextPanelHeight = Math.min(SEARCH_PANEL_MAX_HEIGHT, Math.max(0, pluginListHeight))
       height = SEARCH_BOX_HEIGHT + BORDER_HEIGHT + nextPanelHeight
     }
-    window.intools.window.setExpendHeight(height, allowResize)
+    window.mulby.window.setExpendHeight(height, allowResize)
 
     const hasInput = query.length > 0 || attachments.length > 0
     if (hasInput && lastHeightRef.current !== height) {
@@ -155,11 +155,11 @@ function App() {
 
   // 监听插件附着事件
   useEffect(() => {
-    const cleanupAttach = window.intools.onPluginAttach((_data: PluginInfo) => {
+    const cleanupAttach = window.mulby.onPluginAttach((_data: PluginInfo) => {
       setPluginOpen(true)
     })
 
-    const cleanupDetached = window.intools.onPluginDetached(() => {
+    const cleanupDetached = window.mulby.onPluginDetached(() => {
       setPluginOpen(false)
       // 插件关闭后，让搜索框重新获取焦点
       setTimeout(() => {
@@ -187,7 +187,7 @@ function App() {
 
   const openSettings = useCallback((section: SettingsSection = 'general') => {
     if (pluginOpen) {
-      window.intools.window.close()
+      window.mulby.window.close()
       setPluginOpen(false)
     }
     setAttachmentsManagerOpen(false)
@@ -197,7 +197,7 @@ function App() {
 
   const openPluginManager = useCallback((from: 'home' | 'settings' = 'home') => {
     if (pluginOpen) {
-      window.intools.window.close()
+      window.mulby.window.close()
       setPluginOpen(false)
     }
     setAttachmentsManagerOpen(false)
@@ -207,7 +207,7 @@ function App() {
 
   const openBackgroundPluginManager = useCallback((from: 'home' | 'settings' = 'home') => {
     if (pluginOpen) {
-      window.intools.window.close()
+      window.mulby.window.close()
       setPluginOpen(false)
     }
     setAttachmentsManagerOpen(false)
@@ -217,7 +217,7 @@ function App() {
 
   const openTaskScheduler = useCallback((from: 'home' | 'settings' = 'home') => {
     if (pluginOpen) {
-      window.intools.window.close()
+      window.mulby.window.close()
       setPluginOpen(false)
     }
     setAttachmentsManagerOpen(false)
@@ -227,7 +227,7 @@ function App() {
 
   const openAiSettingsCenter = useCallback(() => {
     if (pluginOpen) {
-      window.intools.window.close()
+      window.mulby.window.close()
       setPluginOpen(false)
     }
     setAttachmentsManagerOpen(false)
@@ -246,7 +246,7 @@ function App() {
           setAttachmentsManagerOpen(false)
         } else if (pluginOpen) {
           // 1. 优先关闭插件
-          window.intools.window.close()
+          window.mulby.window.close()
         } else if (query.length > 0) {
           // 2. 清空搜索框与附件
           setQuery('')
@@ -259,7 +259,7 @@ function App() {
           setResultCount(0)
         } else {
           // 4. 隐藏窗口
-          window.intools.window.hide()
+          window.mulby.window.hide()
         }
       }
     }
@@ -279,42 +279,42 @@ function App() {
   }, [openSettings])
 
   useEffect(() => {
-    const cleanup = window.intools.app.onOpenSettings(() => {
+    const cleanup = window.mulby.app.onOpenSettings(() => {
       openSettings()
     })
     return cleanup
   }, [openSettings])
 
   useEffect(() => {
-    const cleanup = window.intools.app.onOpenPluginStore(() => {
+    const cleanup = window.mulby.app.onOpenPluginStore(() => {
       openSettings('store')
     })
     return cleanup
   }, [openSettings])
 
   useEffect(() => {
-    const cleanup = window.intools.app.onOpenPluginManager(() => {
+    const cleanup = window.mulby.app.onOpenPluginManager(() => {
       openPluginManager('home')
     })
     return cleanup
   }, [openPluginManager])
 
   useEffect(() => {
-    const cleanup = window.intools.app.onOpenAiSettings(() => {
+    const cleanup = window.mulby.app.onOpenAiSettings(() => {
       openAiSettingsCenter()
     })
     return cleanup
   }, [openAiSettingsCenter])
 
   useEffect(() => {
-    const cleanup = window.intools.app.onOpenBackgroundPlugins(() => {
+    const cleanup = window.mulby.app.onOpenBackgroundPlugins(() => {
       openBackgroundPluginManager('home')
     })
     return cleanup
   }, [openBackgroundPluginManager])
 
   useEffect(() => {
-    const cleanup = window.intools.app.onOpenTaskScheduler(() => {
+    const cleanup = window.mulby.app.onOpenTaskScheduler(() => {
       openTaskScheduler('home')
     })
     return cleanup
@@ -331,9 +331,9 @@ function App() {
 
   // 监听自动粘贴事件
   useEffect(() => {
-    if (!window.intoolsMain?.clipboard) return
+    if (!window.mulbyMain?.clipboard) return
 
-    const cleanup = window.intoolsMain.clipboard.onAutoPaste(async () => {
+    const cleanup = window.mulbyMain.clipboard.onAutoPaste(async () => {
       // 条件1：没有打开插件
       if (pluginOpen) {
         return
@@ -341,11 +341,11 @@ function App() {
 
       // 执行自动粘贴
       try {
-        const format = await window.intools.clipboard.getFormat()
+        const format = await window.mulby.clipboard.getFormat()
 
         if (format === 'text') {
           // 粘贴文本 - 清空附件
-          const text = await window.intools.clipboard.readText()
+          const text = await window.mulby.clipboard.readText()
           if (text && text.trim()) {
             // 清空旧的附件
             if (attachments.length > 0) {
@@ -357,7 +357,7 @@ function App() {
           }
         } else if (format === 'image') {
           // 粘贴图片 - 总是替换附件
-          const imageBuffer = await window.intools.clipboard.readImage()
+          const imageBuffer = await window.mulby.clipboard.readImage()
           if (imageBuffer) {
             // 清理旧的附件
             clearAttachments()
@@ -385,7 +385,7 @@ function App() {
           }
         } else if (format === 'files') {
           // 粘贴文件 - 总是替换附件
-          const files = await window.intools.clipboard.readFiles()
+          const files = await window.mulby.clipboard.readFiles()
           if (files && files.length > 0) {
             // 清理旧的附件
             clearAttachments()
@@ -415,7 +415,7 @@ function App() {
   const handleQueryChange = (value: string) => {
     // 如果有附着的插件，先关闭它
     if (pluginOpen) {
-      window.intools.window.close()
+      window.mulby.window.close()
       setPluginOpen(false)
     }
     if (attachmentsManagerOpen) {
@@ -432,7 +432,7 @@ function App() {
 
   const handleAttachmentsChange = (next: UiAttachment[]) => {
     if (pluginOpen) {
-      window.intools.window.close()
+      window.mulby.window.close()
       setPluginOpen(false)
     }
     beginPerfTrace('attachments', query.length, next.length)
@@ -451,11 +451,11 @@ function App() {
 
     const file = e.dataTransfer.files[0]
     if (file?.path?.endsWith('.inplugin')) {
-      const result = await window.intools.plugin.install(file.path)
+      const result = await window.mulby.plugin.install(file.path)
       if (result.success) {
-        window.intools.notification.show(`插件 ${result.pluginName} 安装成功`)
+        window.mulby.notification.show(`插件 ${result.pluginName} 安装成功`)
       } else {
-        window.intools.notification.show(result.error || '安装失败', 'error')
+        window.mulby.notification.show(result.error || '安装失败', 'error')
       }
     }
   }
@@ -593,7 +593,7 @@ function App() {
           attachmentsManagerOpen={attachmentsManagerOpen}
           onAttachmentsManagerOpen={() => {
             if (pluginOpen) {
-              window.intools.window.close()
+              window.mulby.window.close()
               setPluginOpen(false)
             }
             setAttachmentsManagerOpen(true)
@@ -605,7 +605,7 @@ function App() {
             <button
               className="plugin-control-btn plugin-reload-btn"
               onClick={() => {
-                window.intools.window.reload()
+                window.mulby.window.reload()
               }}
               title="重载插件"
             >
@@ -617,7 +617,7 @@ function App() {
             <button
               className="plugin-control-btn plugin-detach-btn"
               onClick={() => {
-                window.intools.window.detach()
+                window.mulby.window.detach()
               }}
               title="转为独立窗口"
             >
@@ -628,7 +628,7 @@ function App() {
             <button
               className="plugin-control-btn plugin-close-btn"
               onClick={() => {
-                window.intools.window.close()
+                window.mulby.window.close()
                 setPluginOpen(false)
                 // 关闭插件后，让搜索框重新获取焦点
                 setTimeout(() => {

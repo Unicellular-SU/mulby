@@ -1,5 +1,5 @@
 /**
- * InTools Showcase - Backend Entry
+ * Mulby Showcase - Backend Entry
  * 
  * 这个文件展示了插件后端的生命周期钩子和基本结构。
  * 对于纯 UI 插件，后端主要用于初始化和资源管理。
@@ -47,7 +47,7 @@ interface PluginContext {
  * 用于初始化资源、注册服务等
  */
 export function onLoad(context?: PluginContext) {
-  console.log('[InTools Showcase] 插件已加载')
+  console.log('[Mulby Showcase] 插件已加载')
 
   const features = context?.api.features
   if (!features) return
@@ -60,7 +60,7 @@ export function onLoad(context?: PluginContext) {
  * 用于清理资源、保存状态等
  */
 export function onUnload() {
-  console.log('[InTools Showcase] 插件即将卸载')
+  console.log('[Mulby Showcase] 插件即将卸载')
 }
 
 /**
@@ -68,7 +68,7 @@ export function onUnload() {
  * 用于恢复服务、重新注册等
  */
 export function onEnable() {
-  console.log('[InTools Showcase] 插件已启用')
+  console.log('[Mulby Showcase] 插件已启用')
 }
 
 /**
@@ -76,7 +76,7 @@ export function onEnable() {
  * 用于暂停服务、释放资源等
  */
 export function onDisable() {
-  console.log('[InTools Showcase] 插件已禁用')
+  console.log('[Mulby Showcase] 插件已禁用')
 }
 
 /**
@@ -84,7 +84,7 @@ export function onDisable() {
  * 当用户触发插件时调用
  * 
  * @param context - 执行上下文
- * @param context.api - InTools API 接口
+ * @param context.api - Mulby API 接口
  * @param context.input - 用户输入
  * @param context.feature - 触发的功能代码
  */
@@ -92,7 +92,7 @@ export async function run(context: PluginContext) {
   const { notification, clipboard } = context.api
 
   // 记录功能触发
-  console.log(`[InTools Showcase] 功能触发: ${context.featureCode || 'main'}`)
+  console.log(`[Mulby Showcase] 功能触发: ${context.featureCode || 'main'}`)
 
   // 对于 UI 插件，主要逻辑在前端处理
   // 这里可以做一些后端初始化工作

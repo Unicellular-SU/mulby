@@ -30,7 +30,7 @@
 - 处理来自渲染进程的 host 方法调用请求
 
 ### 1.5 Preload API (preload/index.ts)
-- 在 `window.intools.host` 中添加了 `call` 方法
+- 在 `window.mulby.host` 中添加了 `call` 方法
 - 用于调用插件自定义的 host 方法
 
 ## 2. 文档更新
@@ -41,16 +41,16 @@
 - 提供了完整的使用示例
 - 说明了与 `host.invoke()` 的区别
 
-### 2.2 开发指南 (packages/intools-cli/PLUGIN_DEVELOP_PROMPT.md)
+### 2.2 开发指南 (packages/mulby-cli/PLUGIN_DEVELOP_PROMPT.md)
 - 添加了第 7 章：Host API - UI 调用后端方法
 - 包含三种导出方式的详细说明
 - 提供了完整的前后端示例代码
 - 说明了方法签名规范和最佳实践
 
-### 2.3 模板更新 (packages/intools-cli/src/commands/create/templates/react.ts)
+### 2.3 模板更新 (packages/mulby-cli/src/commands/create/templates/react.ts)
 - **buildBackendMain**: 添加了 host 对象示例，包含两个示例方法
-- **buildUseIntools**: 更新了 host API，添加了 `call` 方法，自动注入 pluginId
-- **buildIntoolsTypes**: 添加了 `call` 方法的类型定义
+- **buildUseMulby**: 更新了 host API，添加了 `call` 方法，自动注入 pluginId
+- **buildMulbyTypes**: 添加了 `call` 方法的类型定义
 - **buildAppTsx**: 添加了调用 host 方法的示例函数和按钮
 
 ## 3. 测试验证
@@ -92,10 +92,10 @@ export const host = {
 
 ```typescript
 // src/ui/App.tsx
-import { useIntools } from './hooks/useIntools'
+import { useMulby } from './hooks/useMulby'
 
 export default function App() {
-  const { host, notification } = useIntools('my-plugin')
+  const { host, notification } = useMulby('my-plugin')
 
   const handleClick = async () => {
     try {
@@ -135,24 +135,24 @@ export default function App() {
 ## 8. 文件清单
 
 ### 核心实现
-- `/Users/su/workspace/in_tools/src/main/plugin/host-worker.ts`
-- `/Users/su/workspace/in_tools/src/main/plugin/host-manager.ts`
-- `/Users/su/workspace/in_tools/src/main/plugin/host-protocol.ts`
-- `/Users/su/workspace/in_tools/src/main/ipc/host.ts`
-- `/Users/su/workspace/in_tools/src/preload/index.ts`
+- `/Users/su/workspace/mulby/src/main/plugin/host-worker.ts`
+- `/Users/su/workspace/mulby/src/main/plugin/host-manager.ts`
+- `/Users/su/workspace/mulby/src/main/plugin/host-protocol.ts`
+- `/Users/su/workspace/mulby/src/main/ipc/host.ts`
+- `/Users/su/workspace/mulby/src/preload/index.ts`
 
 ### 文档
-- `/Users/su/workspace/in_tools/docs/apis/host.md`
-- `/Users/su/workspace/in_tools/packages/intools-cli/PLUGIN_DEVELOP_PROMPT.md`
+- `/Users/su/workspace/mulby/docs/apis/host.md`
+- `/Users/su/workspace/mulby/packages/mulby-cli/PLUGIN_DEVELOP_PROMPT.md`
 
 ### 模板
-- `/Users/su/workspace/in_tools/packages/intools-cli/src/commands/create/templates/react.ts`
-- `/Users/su/workspace/in_tools/packages/intools-cli/src/commands/create/templates/basic.ts`
+- `/Users/su/workspace/mulby/packages/mulby-cli/src/commands/create/templates/react.ts`
+- `/Users/su/workspace/mulby/packages/mulby-cli/src/commands/create/templates/basic.ts`
 
 ### 测试
-- `/Users/su/workspace/in_tools/plugins/scheduler-demo/src/main.ts`
-- `/Users/su/workspace/in_tools/plugins/scheduler-demo/src/ui/App.tsx`
-- `/Users/su/workspace/in_tools/plugins/scheduler-demo/HOST_METHODS.md`
+- `/Users/su/workspace/mulby/plugins/scheduler-demo/src/main.ts`
+- `/Users/su/workspace/mulby/plugins/scheduler-demo/src/ui/App.tsx`
+- `/Users/su/workspace/mulby/plugins/scheduler-demo/HOST_METHODS.md`
 
 ## 9. 构建状态
 

@@ -95,12 +95,12 @@ export default function TaskSchedulerView({ onBack }: TaskSchedulerViewProps) {
     try {
       const statusFilter = getFilterStatus()
       const [list, count] = await Promise.all([
-        window.intools.scheduler.listTasks({
+        window.mulby.scheduler.listTasks({
           status: statusFilter,
           limit: pageSize,
           offset: (currentPage - 1) * pageSize
         }),
-        window.intools.scheduler.getTaskCount({
+        window.mulby.scheduler.getTaskCount({
           status: statusFilter
         })
       ])
@@ -130,38 +130,38 @@ export default function TaskSchedulerView({ onBack }: TaskSchedulerViewProps) {
     if (!confirmed) return
 
     try {
-      await window.intools.scheduler.cancelTask(taskId)
-      window.intools.notification.show('任务已取消', 'success')
+      await window.mulby.scheduler.cancelTask(taskId)
+      window.mulby.notification.show('任务已取消', 'success')
       await refreshTasks()
     } catch (err) {
-      window.intools.notification.show('取消失败', 'error')
+      window.mulby.notification.show('取消失败', 'error')
     }
   }
 
   const handlePause = async (taskId: string) => {
     try {
-      await window.intools.scheduler.pauseTask(taskId)
-      window.intools.notification.show('任务已暂停', 'success')
+      await window.mulby.scheduler.pauseTask(taskId)
+      window.mulby.notification.show('任务已暂停', 'success')
       await refreshTasks()
     } catch (err) {
-      window.intools.notification.show('暂停失败', 'error')
+      window.mulby.notification.show('暂停失败', 'error')
     }
   }
 
   const handleResume = async (taskId: string) => {
     try {
-      await window.intools.scheduler.resumeTask(taskId)
-      window.intools.notification.show('任务已恢复', 'success')
+      await window.mulby.scheduler.resumeTask(taskId)
+      window.mulby.notification.show('任务已恢复', 'success')
       await refreshTasks()
     } catch (err) {
-      window.intools.notification.show('恢复失败', 'error')
+      window.mulby.notification.show('恢复失败', 'error')
     }
   }
 
   const handleViewDetails = async (task: Task) => {
     setSelectedTask(task)
     try {
-      const execs = await window.intools.scheduler.getExecutions(task.id, 20)
+      const execs = await window.mulby.scheduler.getExecutions(task.id, 20)
       setExecutions(execs)
     } catch (err) {
       console.error('Failed to get executions:', err)
@@ -170,7 +170,7 @@ export default function TaskSchedulerView({ onBack }: TaskSchedulerViewProps) {
 
   const handleBatchDelete = async () => {
     if (selectedTaskIds.size === 0) {
-      window.intools.notification.show('请先选择要删除的任务', 'warning')
+      window.mulby.notification.show('请先选择要删除的任务', 'warning')
       return
     }
 
@@ -178,12 +178,12 @@ export default function TaskSchedulerView({ onBack }: TaskSchedulerViewProps) {
     if (!confirmed) return
 
     try {
-      const result = await window.intools.scheduler.deleteTasks(Array.from(selectedTaskIds))
-      window.intools.notification.show(`已删除 ${result.deletedCount} 个任务`, 'success')
+      const result = await window.mulby.scheduler.deleteTasks(Array.from(selectedTaskIds))
+      window.mulby.notification.show(`已删除 ${result.deletedCount} 个任务`, 'success')
       setSelectedTaskIds(new Set())
       await refreshTasks()
     } catch (err) {
-      window.intools.notification.show('批量删除失败', 'error')
+      window.mulby.notification.show('批量删除失败', 'error')
     }
   }
 
@@ -192,11 +192,11 @@ export default function TaskSchedulerView({ onBack }: TaskSchedulerViewProps) {
     if (!confirmed) return
 
     try {
-      const result = await window.intools.scheduler.cleanupTasks()
-      window.intools.notification.show(`已清除 ${result.deletedCount} 个任务`, 'success')
+      const result = await window.mulby.scheduler.cleanupTasks()
+      window.mulby.notification.show(`已清除 ${result.deletedCount} 个任务`, 'success')
       await refreshTasks()
     } catch (err) {
-      window.intools.notification.show('清除失败', 'error')
+      window.mulby.notification.show('清除失败', 'error')
     }
   }
 

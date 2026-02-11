@@ -1,5 +1,5 @@
 import { useEffect, useState, useRef } from 'react'
-import { useIntools } from './hooks/useIntools'
+import { useMulby } from './hooks/useMulby'
 import './App.css'
 
 // 图片类型定义
@@ -43,7 +43,7 @@ export default function App() {
   const [outputWidth, setOutputWidth] = useState<number>(800)
   const [spacing, setSpacing] = useState<number>(0)
   const [backgroundColor, setBackgroundColor] = useState<string>('#ffffff')
-  const { clipboard, notification } = useIntools('image_stitching')
+  const { clipboard, notification } = useMulby('image_stitching')
   const canvasRef = useRef<HTMLCanvasElement>(null)
 
   useEffect(() => {
@@ -54,13 +54,13 @@ export default function App() {
     document.documentElement.classList.toggle('dark', initialTheme === 'dark')
 
     // 监听主题变化
-    window.intools?.onThemeChange?.((newTheme: 'light' | 'dark') => {
+    window.mulby?.onThemeChange?.((newTheme: 'light' | 'dark') => {
       setTheme(newTheme)
       document.documentElement.classList.toggle('dark', newTheme === 'dark')
     })
 
     // 接收插件初始化数据
-    window.intools?.onPluginInit?.((data: PluginInitData) => {
+    window.mulby?.onPluginInit?.((data: PluginInitData) => {
       if (data.attachments) {
         const imageAttachments = data.attachments.filter(
           item => item.kind === 'image' && item.dataUrl

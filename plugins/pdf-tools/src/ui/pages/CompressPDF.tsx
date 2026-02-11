@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Minimize2, Trash2, FileText, CheckCircle, AlertCircle, RefreshCcw } from 'lucide-react';
 import { PDFHeader, PDFUploadArea } from '../components/SharedPDFComponents';
-import { useIntools } from '../hooks/useIntools';
+import { useMulby } from '../hooks/useMulby';
 import { pdfService } from '../services/PDFService';
 
 interface FileStatus {
@@ -144,7 +144,7 @@ const FileItem: React.FC<{
 };
 
 const CompressPDF: React.FC = () => {
-    const { dialog, notification, system } = useIntools('pdf-tools');
+    const { dialog, notification, system } = useMulby('pdf-tools');
     const [files, setFiles] = useState<string[]>([]);
     const [statusMap, setStatusMap] = useState<Record<string, FileStatus>>({});
     const [processing, setProcessing] = useState(false);

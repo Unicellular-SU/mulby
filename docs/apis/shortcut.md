@@ -2,7 +2,7 @@
 本文档描述 GlobalShortcut API (shortcut) 的使用方法与接口。
 
 > 入口：
-> - UI/渲染进程：`window.intools.shortcut`
+> - UI/渲染进程：`window.mulby.shortcut`
 > - 插件后端：`context.api.shortcut`
 
 GlobalShortcut API 允许插件注册全局快捷键，支持 macOS、Windows 和 Linux。
@@ -62,7 +62,7 @@ const registered = await shortcut.isRegistered('CommandOrControl+X');
 监听快捷键触发事件（仅插件 UI 中使用）。
 
 ```javascript
-window.intools.shortcut.onTriggered((accelerator) => {
+window.mulby.shortcut.onTriggered((accelerator) => {
   console.log(`快捷键 ${accelerator} 被触发`);
 });
 ```
@@ -70,6 +70,6 @@ window.intools.shortcut.onTriggered((accelerator) => {
 ### 完整示例
 
 ```javascript
-await window.intools.shortcut.register('CommandOrControl+Shift+X');
-window.intools.shortcut.onTriggered((key) => console.log('triggered', key));
+await window.mulby.shortcut.register('CommandOrControl+Shift+X');
+window.mulby.shortcut.onTriggered((key) => console.log('triggered', key));
 ```

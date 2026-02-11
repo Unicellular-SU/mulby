@@ -1,6 +1,6 @@
 # Window API 增强计划
 
-> 基于 uTools 官方窗口 API 文档对比分析，规划 InTools 窗口 API 的增强实现。
+> 基于 uTools 官方窗口 API 文档对比分析，规划 Mulby 窗口 API 的增强实现。
 
 ## 概述
 
@@ -10,7 +10,7 @@
 
 ### ✅ 已实现的 API
 
-| uTools API | InTools API | 状态 |
+| uTools API | Mulby API | 状态 |
 |------------|-------------|------|
 | `hideMainWindow()` | `window.hide()` | ✅ 已实现 |
 | `showMainWindow()` | `window.show()` | ✅ 已实现 |
@@ -58,7 +58,7 @@
 
 ```
 ┌─────────────────────────────────────────────┐
-│ InTools                              [─][□][×] │
+│ Mulby                              [─][□][×] │
 ├─────────────────────────────────────────────┤
 │  🔍 [          子输入框 (SubInput)         ] │  ← 主窗口搜索栏
 ├─────────────────────────────────────────────┤
@@ -71,7 +71,7 @@
 #### 新增 API
 
 ```typescript
-interface IntoolsWindow {
+interface MulbyWindow {
   // ... 现有 API
 
   /**
@@ -120,7 +120,7 @@ interface IntoolsWindow {
 | `src/main/ipc/window.ts` | 添加 SubInput 相关 IPC handlers |
 | `src/preload/index.ts` | 暴露 SubInput API |
 | `src/renderer/` | 主窗口搜索栏组件支持 SubInput 模式 |
-| `plugins/*/intools.d.ts` | 更新类型定义 |
+| `plugins/*/mulby.d.ts` | 更新类型定义 |
 
 ---
 
@@ -131,7 +131,7 @@ interface IntoolsWindow {
 #### 新增 API
 
 ```typescript
-interface IntoolsWindow {
+interface MulbyWindow {
   /**
    * 跳转到另一个插件
    * @param label 插件标识或 [插件名, 功能名]
@@ -164,7 +164,7 @@ interface IntoolsWindow {
 #### 新增 API
 
 ```typescript
-interface IntoolsWindow {
+interface MulbyWindow {
   /**
    * 向父窗口发送消息 (仅 createBrowserWindow 创建的窗口可用)
    */
@@ -180,7 +180,7 @@ interface IntoolsWindow {
 #### 增强 createBrowserWindow
 
 ```typescript
-interface IntoolsWindow {
+interface MulbyWindow {
   /**
    * 创建独立浏览器窗口 (增强版)
    * @param url 相对路径 HTML 文件
@@ -297,7 +297,7 @@ stopFindInPage(action?: 'clearSelection' | 'keepSelection' | 'activateSelection'
 
 ### 手动验证
 
-在 `intools-showcase` 插件中添加 Window API 展示模块：
+在 `mulby-showcase` 插件中添加 Window API 展示模块：
 
 1. **SubInput 测试**
    - 点击 "启用子输入框" → 验证搜索栏变为子输入
@@ -316,5 +316,5 @@ stopFindInPage(action?: 'clearSelection' | 'keepSelection' | 'activateSelection'
 
 1. [ ] 确认实现优先级顺序
 2. [ ] 开始 Phase 1: SubInput 子输入框实现
-3. [ ] 更新 `intools-showcase` 添加验证 UI
+3. [ ] 更新 `mulby-showcase` 添加验证 UI
 4. [ ] 更新 `api-reference.md` 文档

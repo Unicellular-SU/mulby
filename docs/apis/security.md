@@ -2,7 +2,7 @@
 本文档描述 Security API (security) 的使用方法与接口。
 
 > 入口：
-> - UI/渲染进程：`window.intools.security`
+> - UI/渲染进程：`window.mulby.security`
 > - 插件后端：`context.api.security`
 
 Security API 提供安全的加密存储功能，使用系统级加密（macOS Keychain、Windows DPAPI、Linux Secret Service）。

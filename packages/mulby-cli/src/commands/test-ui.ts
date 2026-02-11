@@ -6,7 +6,7 @@ async function main() {
     console.log('Starting UI Test...');
     tui.start();
 
-    tui.log('Welcome to InTools CLI UI Test');
+    tui.log('Welcome to Mulby CLI UI Test');
     tui.log('This line should appear in the scrollable log area.');
 
     let counter = 0;

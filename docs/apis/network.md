@@ -2,7 +2,7 @@
 本文档描述 Network API (network) 的使用方法与接口。
 
 > 入口：
-> - UI/渲染进程：`window.intools.network`
+> - UI/渲染进程：`window.mulby.network`
 > - 插件后端：`context.api.network`
 
 Network API 提供网络状态监控，支持 macOS、Windows 和 Linux。
@@ -24,7 +24,7 @@ if (await network.isOnline()) {
 监听网络恢复事件。
 
 ```javascript
-window.intools.network.onOnline(() => {
+window.mulby.network.onOnline(() => {
   console.log('网络已恢复');
 });
 ```
@@ -34,7 +34,7 @@ window.intools.network.onOnline(() => {
 监听网络断开事件。
 
 ```javascript
-window.intools.network.onOffline(() => {
+window.mulby.network.onOffline(() => {
   console.log('网络已断开');
 });
 ```
@@ -42,7 +42,7 @@ window.intools.network.onOffline(() => {
 ### 完整示例
 
 ```javascript
-const online = await window.intools.network.isOnline();
+const online = await window.mulby.network.isOnline();
 console.log('online:', online);
-window.intools.network.onOnline(() => console.log('网络恢复'));
+window.mulby.network.onOnline(() => console.log('网络恢复'));
 ```

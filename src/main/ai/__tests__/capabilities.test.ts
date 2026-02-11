@@ -21,13 +21,13 @@ describe('ai tool capabilities', () => {
   })
 
   it('maps legacy internal tool names to capabilities', () => {
-    const capabilities = mapInternalToolsToCapabilities(['intools_run_command', 'runCommand', 'intools_read_file'])
+    const capabilities = mapInternalToolsToCapabilities(['mulby_run_command', 'runCommand', 'mulby_read_file'])
     assert.deepEqual(capabilities, ['shell.exec', 'fs.read'])
   })
 
   it('maps capabilities to internal tool names', () => {
     const tools = mapCapabilitiesToInternalToolNames(['shell.exec', 'fs.read'])
-    assert.deepEqual(tools, ['intools_run_command', 'intools_read_file'])
+    assert.deepEqual(tools, ['mulby_run_command', 'mulby_read_file'])
   })
 })
 

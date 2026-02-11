@@ -31,8 +31,8 @@ const pkg = JSON.parse(readFileSync(join(__dirname, '..', 'package.json'), 'utf-
 const program = new Command()
 
 program
-  .name('intools')
-  .description('InTools 插件开发 CLI 工具')
+  .name('mulby')
+  .description('Mulby 插件开发 CLI 工具')
   .version(pkg.version)
 
 program

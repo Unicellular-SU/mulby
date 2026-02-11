@@ -116,13 +116,13 @@ export const PROVIDER_ENDPOINTS: Record<AIProviderType, string | undefined> = {
 
 ```bash
 # 使用最新的 glm-4.7 模型
-intools ai add my-glm \
+mulby ai add my-glm \
   --provider glm \
   --api-key your-api-key \
   --model glm-4.7
 
 # 或使用长文本模型
-intools ai add my-glm-long \
+mulby ai add my-glm-long \
   --provider glm \
   --api-key your-api-key \
   --model glm-4-long
@@ -132,13 +132,13 @@ intools ai add my-glm-long \
 
 ```bash
 # 使用对话模型
-intools ai add my-deepseek \
+mulby ai add my-deepseek \
   --provider deepseek \
   --api-key your-api-key \
   --model deepseek-chat
 
 # 使用推理模型
-intools ai add my-deepseek-reasoner \
+mulby ai add my-deepseek-reasoner \
   --provider deepseek \
   --api-key your-api-key \
   --model deepseek-reasoner
@@ -148,7 +148,7 @@ intools ai add my-deepseek-reasoner \
 
 ```bash
 # 启动 AI 会话
-intools create my-plugin --ai
+mulby create my-plugin --ai
 
 # 切换到智谱AI
 > /use my-glm

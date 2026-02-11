@@ -2,7 +2,7 @@
 本文档描述 文件系统 API (filesystem) 的使用方法与接口。
 
 > 入口：
-> - UI/渲染进程：`window.intools.filesystem`
+> - UI/渲染进程：`window.mulby.filesystem`
 > - 插件后端：`context.api.filesystem`
 
 ### readFile(path, encoding?)
@@ -127,7 +127,7 @@ filesystem.move('/path/to/old.txt', '/path/to/new.txt');
 
 ### 路径工具方法（仅插件后端）
 
-> 仅 `context.api.filesystem` 可用，`window.intools.filesystem` 不提供。
+> 仅 `context.api.filesystem` 可用，`window.mulby.filesystem` 不提供。
 
 ```javascript
 // 获取扩展名
@@ -148,9 +148,9 @@ filesystem.basename('/path/to/file.txt', '.txt');  // 'file'
 
 ```javascript
 // 写入并读取文件
-const temp = await window.intools.system.getPath('temp');
-const filePath = `${temp}/intools-demo.txt`;
-window.intools.filesystem.writeFile(filePath, 'Hello InTools', 'utf-8');
-const text = window.intools.filesystem.readFile(filePath, 'utf-8');
+const temp = await window.mulby.system.getPath('temp');
+const filePath = `${temp}/mulby-demo.txt`;
+window.mulby.filesystem.writeFile(filePath, 'Hello Mulby', 'utf-8');
+const text = window.mulby.filesystem.readFile(filePath, 'utf-8');
 console.log(text);
 ```

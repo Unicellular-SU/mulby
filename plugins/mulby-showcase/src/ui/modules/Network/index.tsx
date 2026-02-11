@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react'
 import { PageHeader, Card, Button, StatusBadge, CodeBlock } from '../../components'
-import { useIntools, useNotification } from '../../hooks'
+import { useMulby, useNotification } from '../../hooks'
 
 interface HttpResponse {
     status: number
@@ -10,7 +10,7 @@ interface HttpResponse {
 }
 
 export function NetworkModule() {
-    const { http, network } = useIntools()
+    const { http, network } = useMulby()
     const notify = useNotification()
 
     const [isOnline, setIsOnline] = useState<boolean | null>(null)
@@ -31,12 +31,12 @@ export function NetworkModule() {
         checkOnline()
 
         // 监听网络状态变化
-        window.intools?.network?.onOnline?.(() => {
+        window.mulby?.network?.onOnline?.(() => {
             setIsOnline(true)
             notify.success('网络已恢复')
         })
 
-        window.intools?.network?.onOffline?.(() => {
+        window.mulby?.network?.onOffline?.(() => {
             setIsOnline(false)
             notify.warning('网络已断开')
         })

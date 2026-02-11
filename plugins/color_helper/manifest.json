@@ -2,7 +2,7 @@
   "id": "color_helper",
   "name": "color_helper",
   "version": "1.0.0",
-  "author": "intools",
+  "author": "mulby",
   "displayName": "color_helper",
   "description": "插件描述",
   "main": "dist/main.js",

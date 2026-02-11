@@ -52,9 +52,9 @@ pdf-tools/
 │   │   ├── index.html         # HTML 模板
 │   │   ├── styles.css         # 全局样式
 │   │   ├── hooks/
-│   │   │   └── useIntools.ts  # InTools API Hook
+│   │   │   └── useMulby.ts  # Mulby API Hook
 │   │   └── types/
-│   │       └── intools.d.ts   # 类型定义
+│   │       └── mulby.d.ts   # 类型定义
 ├── dist/                      # 后端构建输出
 ├── ui/                        # UI 构建输出
 └── icon.png                   # 插件图标

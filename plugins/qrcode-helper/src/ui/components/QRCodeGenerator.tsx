@@ -1,10 +1,10 @@
 import React, { useState, useRef, useEffect } from 'react'
 import { QRCodeCanvas } from 'qrcode.react'
-import { useIntools } from '../hooks/useIntools'
+import { useMulby } from '../hooks/useMulby'
 
 export const QRCodeGenerator: React.FC<{ initialValue?: string }> = ({ initialValue = '' }) => {
     const [text, setText] = useState(initialValue)
-    const { clipboard, notification } = useIntools()
+    const { clipboard, notification } = useMulby()
     const canvasRef = useRef<HTMLCanvasElement>(null)
 
     useEffect(() => {
@@ -27,7 +27,7 @@ export const QRCodeGenerator: React.FC<{ initialValue?: string }> = ({ initialVa
 
         try {
             const dataUrl = canvas.toDataURL('image/png')
-            // intools API 通常接受 DataURL
+            // mulby API 通常接受 DataURL
             await clipboard.writeImage(dataUrl)
             notification.show('二维码已复制到剪贴板', 'success')
         } catch (e) {

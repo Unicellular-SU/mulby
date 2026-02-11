@@ -2,7 +2,7 @@
 本文档描述 System API (system) 的使用方法与接口。
 
 > 入口：
-> - UI/渲染进程：`window.intools.system`
+> - UI/渲染进程：`window.mulby.system`
 > - 插件后端：`context.api.system`
 
 System API 提供系统和应用信息，支持 macOS、Windows 和 Linux。
@@ -165,6 +165,6 @@ if (await system.isMacOS()) {
 ### 完整示例
 
 ```javascript
-const info = await window.intools.system.getSystemInfo();
+const info = await window.mulby.system.getSystemInfo();
 console.log(info.platform, info.arch);
 ```

@@ -2,7 +2,7 @@
   "name": "encode_helper",
   "version": "1.0.0",
   "description": "编码小助手 - 集合时间转换、base64编解码、URL编解码、哈希加密、Unicode、UUID、进制转换、HTML转义",
-  "author": "Intools Plugin Developer",
+  "author": "Mulby Plugin Developer",
   "homepage": "",
   "license": "MIT",
   "main": "dist/main.js",

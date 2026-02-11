@@ -3,7 +3,7 @@ import * as path from 'path';
 import * as os from 'os';
 import { GlobalConfig } from '../types/ai';
 
-const CONFIG_DIR = path.join(os.homedir(), '.intools');
+const CONFIG_DIR = path.join(os.homedir(), '.mulby');
 const CONFIG_FILE = path.join(CONFIG_DIR, 'config.json');
 
 export class ConfigManager {

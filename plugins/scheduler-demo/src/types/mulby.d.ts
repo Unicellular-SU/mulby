@@ -1,4 +1,4 @@
-// InTools API 类型定义
+// Mulby API 类型定义
 
 interface ClipboardFileInfo {
   path: string
@@ -7,7 +7,7 @@ interface ClipboardFileInfo {
   isDirectory: boolean
 }
 
-interface IntoolsClipboard {
+interface MulbyClipboard {
   readText(): Promise<string>
   writeText(text: string): Promise<void>
   readImage(): Promise<ArrayBuffer | null>
@@ -17,7 +17,7 @@ interface IntoolsClipboard {
   getFormat(): Promise<'text' | 'image' | 'files' | 'empty'>
 }
 
-interface IntoolsInput {
+interface MulbyInput {
   hideMainWindowPasteText(text: string): Promise<boolean>
   hideMainWindowPasteImage(image: string | ArrayBuffer): Promise<boolean>
   hideMainWindowPasteFile(filePaths: string | string[]): Promise<boolean>
@@ -30,7 +30,7 @@ interface IntoolsInput {
   simulateMouseRightClick(x: number, y: number): Promise<boolean>
 }
 
-interface IntoolsNotification {
+interface MulbyNotification {
   show(message: string, type?: 'info' | 'success' | 'warning' | 'error'): void
 }
 
@@ -46,7 +46,7 @@ interface BrowserWindowProxy {
   postMessage(channel: string, ...args: unknown[]): Promise<void>
 }
 
-interface IntoolsWindow {
+interface MulbyWindow {
   hide(isRestorePreWindow?: boolean): void
   show(): void
   setSize(width: number, height: number): void
@@ -69,7 +69,7 @@ interface IntoolsWindow {
   startDrag(filePath: string | string[]): void
 }
 
-interface IntoolsSubInput {
+interface MulbySubInput {
   set(placeholder?: string, isFocus?: boolean): Promise<boolean>
   remove(): Promise<boolean>
   setValue(text: string): void
@@ -79,7 +79,7 @@ interface IntoolsSubInput {
   onChange(callback: (data: { text: string }) => void): void
 }
 
-interface IntoolsTheme {
+interface MulbyTheme {
   get(): Promise<{ mode: 'light' | 'dark' | 'system'; actual: 'light' | 'dark' }>
   set(mode: 'light' | 'dark' | 'system'): Promise<{ mode: 'light' | 'dark' | 'system'; actual: 'light' | 'dark' }>
   getActual(): Promise<'light' | 'dark'>
@@ -120,7 +120,7 @@ interface BackgroundPluginInfo {
   missedHeartbeats?: number
 }
 
-interface IntoolsPlugin {
+interface MulbyPlugin {
   getAll(): Promise<PluginInfo[]>
   search(query: string): Promise<PluginSearchResult[]>
   run(name: string, featureCode: string, input?: string): Promise<{ success: boolean; hasUI?: boolean; error?: string }>
@@ -164,7 +164,7 @@ interface ColorPickResult {
   b: number
 }
 
-interface IntoolsScreen {
+interface MulbyScreen {
   getAllDisplays(): Promise<DisplayInfo[]>
   getPrimaryDisplay(): Promise<DisplayInfo>
   getDisplayNearestPoint(point: { x: number; y: number }): Promise<DisplayInfo>
@@ -178,7 +178,7 @@ interface IntoolsScreen {
   colorPick(): Promise<ColorPickResult | null>
 }
 
-interface IntoolsShell {
+interface MulbyShell {
   openPath(path: string): Promise<string>
   openExternal(url: string): Promise<void>
   showItemInFolder(path: string): Promise<void>
@@ -187,7 +187,7 @@ interface IntoolsShell {
   beep(): Promise<void>
 }
 
-interface IntoolsDialog {
+interface MulbyDialog {
   showOpenDialog(options?: {
     title?: string
     defaultPath?: string
@@ -236,7 +236,7 @@ interface AppInfo {
   userDataPath: string
 }
 
-interface IntoolsSystem {
+interface MulbySystem {
   getSystemInfo(): Promise<SystemInfo>
   getAppInfo(): Promise<AppInfo>
   getPath(name: 'home' | 'appData' | 'userData' | 'temp' | 'exe' | 'desktop' | 'documents' | 'downloads' | 'music' | 'pictures' | 'videos' | 'logs'): Promise<string>
@@ -250,7 +250,7 @@ interface IntoolsSystem {
   isLinux(): Promise<boolean>
 }
 
-interface IntoolsPermission {
+interface MulbyPermission {
   getStatus(type: 'geolocation' | 'camera' | 'microphone' | 'notifications' | 'screen' | 'accessibility' | 'contacts' | 'calendar'): Promise<'authorized' | 'granted' | 'denied' | 'not-determined' | 'restricted' | 'limited' | 'unknown'>
   request(type: 'geolocation' | 'camera' | 'microphone' | 'notifications' | 'screen' | 'accessibility' | 'contacts' | 'calendar'): Promise<'authorized' | 'granted' | 'denied' | 'not-determined' | 'restricted' | 'limited' | 'unknown'>
   canRequest(type: 'geolocation' | 'camera' | 'microphone' | 'notifications' | 'screen' | 'accessibility' | 'contacts' | 'calendar'): Promise<boolean>
@@ -258,7 +258,7 @@ interface IntoolsPermission {
   isAccessibilityTrusted(): Promise<boolean>
 }
 
-interface IntoolsShortcut {
+interface MulbyShortcut {
   register(accelerator: string): Promise<boolean>
   unregister(accelerator: string): Promise<void>
   unregisterAll(): Promise<void>
@@ -266,20 +266,20 @@ interface IntoolsShortcut {
   onTriggered(callback: (accelerator: string) => void): void
 }
 
-interface IntoolsSecurity {
+interface MulbySecurity {
   isEncryptionAvailable(): Promise<boolean>
   encryptString(plainText: string): Promise<ArrayBuffer>
   decryptString(encrypted: ArrayBuffer): Promise<string>
 }
 
-interface IntoolsMedia {
+interface MulbyMedia {
   getAccessStatus(mediaType: 'microphone' | 'camera'): Promise<'not-determined' | 'granted' | 'denied' | 'restricted' | 'unknown'>
   askForAccess(mediaType: 'microphone' | 'camera'): Promise<boolean>
   hasCameraAccess(): Promise<boolean>
   hasMicrophoneAccess(): Promise<boolean>
 }
 
-interface IntoolsPower {
+interface MulbyPower {
   getSystemIdleTime(): Promise<number>
   getSystemIdleState(idleThreshold: number): Promise<'active' | 'idle' | 'locked' | 'unknown'>
   isOnBatteryPower(): Promise<boolean>
@@ -292,7 +292,7 @@ interface IntoolsPower {
   onUnlockScreen(callback: () => void): void
 }
 
-interface IntoolsTray {
+interface MulbyTray {
   create(options: { icon: string; tooltip?: string; title?: string }): Promise<boolean>
   destroy(): Promise<void>
   setIcon(icon: string): Promise<void>
@@ -301,11 +301,11 @@ interface IntoolsTray {
   exists(): Promise<boolean>
 }
 
-interface IntoolsNetwork {
+interface MulbyNetwork {
   isOnline(): Promise<boolean>
 }
 
-interface IntoolsMenu {
+interface MulbyMenu {
   showContextMenu(items: {
     label: string
     type?: 'normal' | 'separator' | 'checkbox' | 'radio'
@@ -316,7 +316,7 @@ interface IntoolsMenu {
   }[]): Promise<string | null>
 }
 
-interface IntoolsGeolocation {
+interface MulbyGeolocation {
   getAccessStatus(): Promise<'not-determined' | 'granted' | 'denied' | 'restricted' | 'unknown'>
   requestAccess(): Promise<'not-determined' | 'granted' | 'denied' | 'restricted' | 'unknown'>
   canGetPosition(): Promise<boolean>
@@ -333,7 +333,7 @@ interface IntoolsGeolocation {
   }>
 }
 
-interface IntoolsTTS {
+interface MulbyTTS {
   speak(text: string, options?: { lang?: string; rate?: number; pitch?: number; volume?: number }): Promise<void>
   stop(): void
   pause(): void
@@ -342,13 +342,13 @@ interface IntoolsTTS {
   isSpeaking(): boolean
 }
 
-interface IntoolsStorage {
+interface MulbyStorage {
   get(key: string, namespace?: string): Promise<unknown>
   set(key: string, value: unknown, namespace?: string): Promise<void>
   remove(key: string, namespace?: string): Promise<void>
 }
 
-interface IntoolsMessaging {
+interface MulbyMessaging {
   send(targetPluginId: string, type: string, payload: unknown): Promise<void>
   broadcast(type: string, payload: unknown): Promise<void>
   on(handler: (message: {
@@ -362,7 +362,7 @@ interface IntoolsMessaging {
   off(handler?: (message: any) => void): void
 }
 
-interface IntoolsScheduler {
+interface MulbyScheduler {
   schedule(task: {
     name: string
     type: 'once' | 'repeat' | 'delay'
@@ -396,7 +396,7 @@ interface HttpResponse {
   data: string
 }
 
-interface IntoolsHttp {
+interface MulbyHttp {
   request(options: {
     url: string
     method?: 'GET' | 'POST' | 'PUT' | 'DELETE' | 'PATCH' | 'HEAD'
@@ -420,7 +420,7 @@ interface FileStat {
   modifiedAt: number
 }
 
-interface IntoolsFilesystem {
+interface MulbyFilesystem {
   readFile(path: string, encoding?: 'utf-8' | 'base64'): Promise<string | ArrayBuffer>
   writeFile(path: string, data: string | ArrayBuffer, encoding?: 'utf-8' | 'base64'): Promise<void>
   exists(path: string): Promise<boolean>
@@ -432,7 +432,7 @@ interface IntoolsFilesystem {
   move(src: string, dest: string): Promise<void>
 }
 
-interface IntoolsHost {
+interface MulbyHost {
   invoke(pluginName: string, method: string, ...args: unknown[]): Promise<unknown>
   status(pluginName: string): Promise<{ ready: boolean; active: boolean }>
   restart(pluginName: string): Promise<boolean>
@@ -462,7 +462,7 @@ interface FFmpegTask {
   quit(): void
 }
 
-interface IntoolsFFmpeg {
+interface MulbyFFmpeg {
   isAvailable(): Promise<boolean>
   getVersion(): Promise<string | null>
   getPath(): Promise<string | null>
@@ -491,34 +491,34 @@ interface PluginInitData {
   attachments?: Attachment[]
 }
 
-interface IntoolsAPI {
-  clipboard: IntoolsClipboard
-  input: IntoolsInput
-  notification: IntoolsNotification
-  window: IntoolsWindow
-  subInput: IntoolsSubInput
-  plugin: IntoolsPlugin
-  theme?: IntoolsTheme
-  screen: IntoolsScreen
-  shell: IntoolsShell
-  dialog: IntoolsDialog
-  system: IntoolsSystem
-  permission: IntoolsPermission
-  shortcut: IntoolsShortcut
-  security: IntoolsSecurity
-  media: IntoolsMedia
-  power: IntoolsPower
-  tray: IntoolsTray
-  network: IntoolsNetwork
-  menu: IntoolsMenu
-  geolocation: IntoolsGeolocation
-  tts: IntoolsTTS
-  storage: IntoolsStorage
-  http: IntoolsHttp
-  filesystem: IntoolsFilesystem
-  messaging: IntoolsMessaging
-  scheduler: IntoolsScheduler
-  host?: IntoolsHost
+interface MulbyAPI {
+  clipboard: MulbyClipboard
+  input: MulbyInput
+  notification: MulbyNotification
+  window: MulbyWindow
+  subInput: MulbySubInput
+  plugin: MulbyPlugin
+  theme?: MulbyTheme
+  screen: MulbyScreen
+  shell: MulbyShell
+  dialog: MulbyDialog
+  system: MulbySystem
+  permission: MulbyPermission
+  shortcut: MulbyShortcut
+  security: MulbySecurity
+  media: MulbyMedia
+  power: MulbyPower
+  tray: MulbyTray
+  network: MulbyNetwork
+  menu: MulbyMenu
+  geolocation: MulbyGeolocation
+  tts: MulbyTTS
+  storage: MulbyStorage
+  http: MulbyHttp
+  filesystem: MulbyFilesystem
+  messaging: MulbyMessaging
+  scheduler: MulbyScheduler
+  host?: MulbyHost
   onPluginInit(callback: (data: PluginInitData) => void): void
   onPluginAttach?(callback: (data: { pluginName: string; displayName: string; featureCode: string; input: string; uiPath: string; preloadPath: string }) => void): void
   onPluginDetached?(callback: () => void): void
@@ -565,53 +565,53 @@ interface IntoolsAPI {
     clearInBrowserCache: () => Promise<boolean>
     run: (idOrOptions?: number | any, options?: any) => Promise<any[]>
   }
-  sharp: IntoolsSharpFunction
+  sharp: MulbySharpFunction
   getSharpVersion: () => Promise<{ sharp: Record<string, string>; format: Record<string, any> }>
-  ffmpeg: IntoolsFFmpeg
+  ffmpeg: MulbyFFmpeg
 }
 
-interface IntoolsSharpProxy {
-  resize(width?: number, height?: number, options?: object): IntoolsSharpProxy
-  extend(options: object): IntoolsSharpProxy
-  extract(options: { left: number; top: number; width: number; height: number }): IntoolsSharpProxy
-  trim(options?: object): IntoolsSharpProxy
-  rotate(angle?: number, options?: object): IntoolsSharpProxy
-  flip(): IntoolsSharpProxy
-  flop(): IntoolsSharpProxy
-  blur(sigma?: number): IntoolsSharpProxy
-  sharpen(options?: object): IntoolsSharpProxy
-  flatten(options?: object): IntoolsSharpProxy
-  gamma(gamma?: number): IntoolsSharpProxy
-  negate(options?: object): IntoolsSharpProxy
-  normalize(options?: object): IntoolsSharpProxy
-  threshold(threshold?: number, options?: object): IntoolsSharpProxy
-  modulate(options?: object): IntoolsSharpProxy
-  tint(color: string | object): IntoolsSharpProxy
-  greyscale(greyscale?: boolean): IntoolsSharpProxy
-  grayscale(grayscale?: boolean): IntoolsSharpProxy
-  composite(images: object[]): IntoolsSharpProxy
-  png(options?: object): IntoolsSharpProxy
-  jpeg(options?: object): IntoolsSharpProxy
-  webp(options?: object): IntoolsSharpProxy
-  gif(options?: object): IntoolsSharpProxy
-  tiff(options?: object): IntoolsSharpProxy
-  avif(options?: object): IntoolsSharpProxy
-  withMetadata(options?: object): IntoolsSharpProxy
-  clone(): IntoolsSharpProxy
+interface MulbySharpProxy {
+  resize(width?: number, height?: number, options?: object): MulbySharpProxy
+  extend(options: object): MulbySharpProxy
+  extract(options: { left: number; top: number; width: number; height: number }): MulbySharpProxy
+  trim(options?: object): MulbySharpProxy
+  rotate(angle?: number, options?: object): MulbySharpProxy
+  flip(): MulbySharpProxy
+  flop(): MulbySharpProxy
+  blur(sigma?: number): MulbySharpProxy
+  sharpen(options?: object): MulbySharpProxy
+  flatten(options?: object): MulbySharpProxy
+  gamma(gamma?: number): MulbySharpProxy
+  negate(options?: object): MulbySharpProxy
+  normalize(options?: object): MulbySharpProxy
+  threshold(threshold?: number, options?: object): MulbySharpProxy
+  modulate(options?: object): MulbySharpProxy
+  tint(color: string | object): MulbySharpProxy
+  greyscale(greyscale?: boolean): MulbySharpProxy
+  grayscale(grayscale?: boolean): MulbySharpProxy
+  composite(images: object[]): MulbySharpProxy
+  png(options?: object): MulbySharpProxy
+  jpeg(options?: object): MulbySharpProxy
+  webp(options?: object): MulbySharpProxy
+  gif(options?: object): MulbySharpProxy
+  tiff(options?: object): MulbySharpProxy
+  avif(options?: object): MulbySharpProxy
+  withMetadata(options?: object): MulbySharpProxy
+  clone(): MulbySharpProxy
   toBuffer(options?: object): Promise<ArrayBuffer>
   toFile(fileOut: string): Promise<{ format: string; width: number; height: number; channels: number; size: number }>
   metadata(): Promise<{ format?: string; width?: number; height?: number; channels?: number; space?: string; depth?: string; density?: number; hasAlpha?: boolean; orientation?: number }>
   stats(): Promise<object>
 }
 
-type IntoolsSharpFunction = (
+type MulbySharpFunction = (
   input?: string | ArrayBuffer | Uint8Array | object | any[],
   options?: object
-) => IntoolsSharpProxy
+) => MulbySharpProxy
 
 declare global {
   interface Window {
-    intools: IntoolsAPI
+    mulby: MulbyAPI
   }
 }
 

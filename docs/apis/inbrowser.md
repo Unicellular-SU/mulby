@@ -1,14 +1,14 @@
 # InBrowser API (inbrowser)
 本文档描述 InBrowser API (inbrowser) 的使用方法与接口。
 
-> 入口：`window.intools.inbrowser`
+> 入口：`window.mulby.inbrowser`
 
 InBrowser 是可编程自动化浏览器 API，支持链式调用。所有链式方法返回同一个 Builder，最终通过 `run()` 执行。
 
 ### 基础用法
 
 ```javascript
-const result = await window.intools.inbrowser
+const result = await window.mulby.inbrowser
   .goto('https://example.com')
   .click('#login')
   .input('#username', 'user')
@@ -230,12 +230,12 @@ interface InBrowserOptions {
 
 ```javascript
 // 直接下载
-await window.intools.inbrowser
+await window.mulby.inbrowser
   .download('https://example.com/file.zip', '/tmp/file.zip')
   .run();
 
 // 通过函数动态获取下载 URL
-await window.intools.inbrowser
+await window.mulby.inbrowser
   .download(() => document.querySelector('#download')?.href)
   .run();
 ```
@@ -244,7 +244,7 @@ await window.intools.inbrowser
 [Renderer]
 
 ```javascript
-const [title] = await window.intools.inbrowser
+const [title] = await window.mulby.inbrowser
   .goto('https://example.com')
   .evaluate(() => document.title)
   .run();
@@ -255,13 +255,13 @@ const [title] = await window.intools.inbrowser
 
 ```javascript
 // 等待 1s
-await window.intools.inbrowser.wait(1000).run();
+await window.mulby.inbrowser.wait(1000).run();
 
 // 等待元素出现（内部默认超时 15s）
-await window.intools.inbrowser.wait('#login').run();
+await window.mulby.inbrowser.wait('#login').run();
 
 // 等待自定义条件
-await window.intools.inbrowser
+await window.mulby.inbrowser
   .wait(() => document.querySelectorAll('li').length > 10)
   .run();
 ```
@@ -271,12 +271,12 @@ await window.intools.inbrowser
 
 ```javascript
 // 按选择器拖放文件
-await window.intools.inbrowser
+await window.mulby.inbrowser
   .drop('#dropzone', ['/path/a.txt', '/path/b.txt'])
   .run();
 
 // 按坐标拖放 data URL
-await window.intools.inbrowser
+await window.mulby.inbrowser
   .drop(200, 300, 'data:image/png;base64,...')
   .run();
 ```

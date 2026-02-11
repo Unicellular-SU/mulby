@@ -2,7 +2,7 @@
 本文档描述 Power API (power) 的使用方法与接口。
 
 > 入口：
-> - UI/渲染进程：`window.intools.power`
+> - UI/渲染进程：`window.mulby.power`
 > - 插件后端：`context.api.power`
 
 Power API 提供电源和系统状态监控，支持 macOS、Windows 和 Linux。
@@ -84,32 +84,32 @@ const thermal = await power.getCurrentThermalState();
 
 ```javascript
 // 系统休眠
-window.intools.power.onSuspend(() => {
+window.mulby.power.onSuspend(() => {
   console.log('系统即将休眠');
 });
 
 // 系统唤醒
-window.intools.power.onResume(() => {
+window.mulby.power.onResume(() => {
   console.log('系统已唤醒');
 });
 
 // 切换到交流电
-window.intools.power.onAC(() => {
+window.mulby.power.onAC(() => {
   console.log('已连接电源');
 });
 
 // 切换到电池
-window.intools.power.onBattery(() => {
+window.mulby.power.onBattery(() => {
   console.log('已切换到电池供电');
 });
 
 // 屏幕锁定
-window.intools.power.onLockScreen(() => {
+window.mulby.power.onLockScreen(() => {
   console.log('屏幕已锁定');
 });
 
 // 屏幕解锁
-window.intools.power.onUnlockScreen(() => {
+window.mulby.power.onUnlockScreen(() => {
   console.log('屏幕已解锁');
 });
 ```

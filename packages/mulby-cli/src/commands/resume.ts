@@ -15,7 +15,7 @@ export async function resume(options: any) {
 
     if (!session) {
         console.log(chalk.yellow('No active AI session found for this directory.'));
-        console.log('You can start a new one with: intools create <name> --ai');
+        console.log('You can start a new one with: mulby create <name> --ai');
         return;
     }
 

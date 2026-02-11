@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react'
 import { PageHeader, Card, Button, StatusBadge, CodeBlock } from '../../components'
-import { useIntools, useNotification } from '../../hooks'
+import { useMulby, useNotification } from '../../hooks'
 
 type ClipboardFormat = 'text' | 'image' | 'files' | 'empty'
 
@@ -12,7 +12,7 @@ interface ClipboardFile {
 }
 
 export function ClipboardModule() {
-    const { clipboard } = useIntools()
+    const { clipboard } = useMulby()
     const notify = useNotification()
 
     const [format, setFormat] = useState<ClipboardFormat>('empty')
@@ -85,7 +85,7 @@ export function ClipboardModule() {
     }
 
     const handleWriteSampleText = async () => {
-        const sampleText = `InTools Showcase - 测试文本
+        const sampleText = `Mulby Showcase - 测试文本
 时间: ${new Date().toLocaleString()}
 这是一段测试文本，用于演示剪贴板写入功能。`
         try {
@@ -125,7 +125,7 @@ export function ClipboardModule() {
 
     const handleWriteFiles = async () => {
         try {
-            const result = await window.intools.dialog.showOpenDialog({
+            const result = await window.mulby.dialog.showOpenDialog({
                 title: '选择要复制的文件',
                 properties: ['openFile', 'multiSelections']
             })
@@ -141,7 +141,7 @@ export function ClipboardModule() {
 
     const handleWriteImageFromPath = async () => {
         try {
-            const result = await window.intools.dialog.showOpenDialog({
+            const result = await window.mulby.dialog.showOpenDialog({
                 title: '选择图片',
                 filters: [{ name: 'Images', extensions: ['jpg', 'png', 'gif'] }],
                 properties: ['openFile']

@@ -26,7 +26,7 @@ export async function aiCreate(name: string, options: any) {
         }]);
 
         if (!configure) {
-            console.log('已取消。请先配置: intools ai add <name>');
+            console.log('已取消。请先配置: mulby ai add <name>');
             return;
         }
 
@@ -139,8 +139,8 @@ export async function aiCreate(name: string, options: any) {
     session.pluginName = name;
 
     // 初始消息：告知 AI 脚手架已就绪，触发 Consultant Mode (Context Aware)
-    let initialPrompt = `我想创建一个名为 "${name}" 的 InTools 插件。`;
-    initialPrompt += `\n\n✅ 项目脚手架已创建完成 (React 18 + Tailwind CSS v3 + Vite + InTools API)。`;
+    let initialPrompt = `我想创建一个名为 "${name}" 的 Mulby 插件。`;
+    initialPrompt += `\n\n✅ 项目脚手架已创建完成 (React 18 + Tailwind CSS v3 + Vite + Mulby API)。`;
     initialPrompt += `\n当前文件结构已包含：manifest.json, src/ui/App.tsx, src/main.ts 等基础文件。`;
     initialPrompt += `\n请读取现有文件了解结构，并作为产品顾问并通过提问帮我明确功能需求和 UI 设计。`;
 

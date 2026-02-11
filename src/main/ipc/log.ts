@@ -24,7 +24,7 @@ function getPluginIdFromSender(sender: Electron.WebContents): string {
     if (win) {
         // 窗口标题可能包含插件名称
         const title = win.getTitle()
-        if (title && title !== 'InTools') {
+        if (title && title !== 'Mulby') {
             return title
         }
     }

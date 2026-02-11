@@ -134,7 +134,7 @@ export class CaptureWindow {
     // 为了使用 getUserMedia，我们必须在安全上下文(https 或 file)中运行
     // 这里将 HTML 写入用户数据目录的临时文件，然后通过 file:// 协议加载
     try {
-      const tempPath = join(app.getPath('userData'), 'intools-capture-temp.html')
+      const tempPath = join(app.getPath('userData'), 'mulby-capture-temp.html')
       await writeFile(tempPath, html, 'utf-8')
       await this.window.loadFile(tempPath)
     } catch (err) {

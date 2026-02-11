@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Loader2, Wand2, Image as ImageIcon, Play, PlusCircle } from 'lucide-react'
-import { useIntools } from './hooks/useIntools'
+import { useMulby } from './hooks/useMulby'
 
 type AiAttachmentRef = {
   attachmentId: string
@@ -88,7 +88,7 @@ const toImageSrc = (value: string) => {
 }
 
 export default function App() {
-  const { ai, notification, host, dialog } = useIntools('ai-api-test') as any
+  const { ai, notification, host, dialog } = useMulby('ai-api-test') as any
 
   const [, setTheme] = useState<'light' | 'dark'>('light')
   const [models, setModels] = useState<ModelItem[]>([])
@@ -199,7 +199,7 @@ export default function App() {
     setTheme(initialTheme)
     document.documentElement.classList.toggle('dark', initialTheme === 'dark')
 
-    window.intools?.onThemeChange?.((newTheme: 'light' | 'dark') => {
+    window.mulby?.onThemeChange?.((newTheme: 'light' | 'dark') => {
       setTheme(newTheme)
       document.documentElement.classList.toggle('dark', newTheme === 'dark')
     })

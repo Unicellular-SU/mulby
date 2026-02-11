@@ -5,7 +5,7 @@ import { z } from 'zod'
 
 function createMcpServer() {
   const server = new McpServer({
-    name: 'intools-test-streamable-http-server',
+    name: 'mulby-test-streamable-http-server',
     version: '1.0.0'
   })
 

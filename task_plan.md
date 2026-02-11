@@ -1,28 +1,28 @@
-# Task Plan: AI Capability Policy 解耦迁移实施
+# Task Plan: Mulby 全量改名为 Mulby
 
 ## Goal
-按 `docs/ai-capability-policy-decoupling-migration-plan.md` 落地第一阶段编码：能力授权从 Skill/source 维度解耦到 AI 全局策略，同时保持兼容行为。
+将仓库内所有 Mulby/mulby/mulby 相关命名统一迁移为 Mulby/mulby（一次性切断，不保留兼容层），并完成构建与检索验收。
 
 ## Phases
-- [x] Phase 1: Plan and setup
-- [x] Phase 2: Types + settings 迁移能力（globalGrants/legacy）
-- [x] Phase 3: capability-policy 运行时裁决改造（全局优先，兼容 scoped grants）
-- [x] Phase 4: SettingsView UI 解耦（移除 Skill/source 矩阵）
-- [x] Phase 5: 测试更新 + typecheck + AI tests
+- [x] Phase 1: 方案确认（兼容策略、标识范围、仓库目录策略）
+- [x] Phase 2: 批量内容替换（代码/文档/配置）
+- [x] Phase 3: 目录与文件重命名（packages/docs/plugins/types）
+- [x] Phase 4: 依赖与构建产物一致性修复（lock/bin/import/path）
+- [x] Phase 5: 构建与验收（typecheck/build/关键词清零）
 
 ## Key Questions
-1. 兼容期是否保留 scoped grants 的运行时生效能力？（是，默认保留）
-2. 是否在设置页继续暴露 defaultSkill/defaultNetwork 默认项？（否，本次隐藏并只保留 global 语义）
-3. 迁移时是否自动提升 scoped allow 到全局 allow？（否，避免权限意外扩大）
+1. 兼容策略：是否保留 `window.mulby` / `mulby` 命令别名？（否，一次性切断）
+2. 标识范围：是否只改展示名还是全量技术标识？（全量替换）
+3. 仓库目录 `/Users/su/workspace/mulby` 是否改名？（否，本次不改）
 
 ## Decisions Made
-- 按“全局策略主路径 + scoped grants 兼容窗口”实施。
-- `globalGrants` 作为 UI 与策略主入口；`grants` 保留兼容与历史数据。
-- 设置页移除按 Skill/source 矩阵，只保留全局能力策略与中文说明。
+- 全量替换：品牌、CLI、API、配置目录、appId、scope、插件示例名。
+- 不保留兼容层：`window.mulby` 和 `mulby` 命令直接迁移到 `window.mulby` 与 `mulby`。
+- 不直接改二进制或第三方目录：通过源码替换与重建保证一致性。
 
 ## Errors Encountered
-- `capabilities.test.ts` 里优先级断言与实现不一致（写成了 session allow 覆盖 global deny）。
-  - 处理：将测试修正为 global deny 优先。
+- `git mv` 在沙箱内无法创建 `.git/index.lock`。
+  - 处理：使用提权命令完成批量路径重命名。
 
 ## Status
-**Completed** - 迁移方案已按第一阶段实现并通过 typecheck 与能力策略测试。
+**Completed** - 全量改名完成，构建通过，旧关键词在仓库（排除 `node_modules/.git`）中检索为 0。

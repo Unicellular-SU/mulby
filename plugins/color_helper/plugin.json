@@ -3,17 +3,17 @@
   "displayName": "颜色助手",
   "version": "1.0.0",
   "description": "一个功能丰富的颜色工具插件，支持颜色解析、图片色卡提取、UI色卡、传统色、渐变色和收藏功能",
-  "author": "Intools Plugin Developer",
+  "author": "Mulby Plugin Developer",
   "icon": "plugin-icon.svg",
-  "homepage": "https://github.com/intools-plugins/color_helper",
+  "homepage": "https://github.com/mulby-plugins/color_helper",
   "repository": {
     "type": "git",
-    "url": "https://github.com/intools-plugins/color_helper.git"
+    "url": "https://github.com/mulby-plugins/color_helper.git"
   },
   "keywords": ["color", "palette", "gradient", "design", "ui", "traditional"],
   "category": "design",
   "engines": {
-    "intools": ">=1.0.0"
+    "mulby": ">=1.0.0"
   },
   "main": "dist/main.js",
   "ui": "ui/index.html",

@@ -1,7 +1,7 @@
 # 窗口 API (window)
 本文档描述 窗口 API (window) 的使用方法与接口。
 
-> 入口：`window.intools.window`
+> 入口：`window.mulby.window`
 
 ### hide(isRestorePreWindow?)
 [Renderer]
@@ -129,31 +129,31 @@ interface ChildWindowHandle {
 [Renderer]
 监听子输入框文本变化。
 
-### intoolsMain.subInput.onEnabled(callback)
+### mulbyMain.subInput.onEnabled(callback)
 [Renderer]
 主窗口监听子输入框启用事件。
 
-### intoolsMain.subInput.onDisabled(callback)
+### mulbyMain.subInput.onDisabled(callback)
 [Renderer]
 主窗口监听子输入框移除事件。
 
-### intoolsMain.subInput.onSetValue(callback)
+### mulbyMain.subInput.onSetValue(callback)
 [Renderer]
 主窗口监听子输入框设置值事件。
 
-### intoolsMain.subInput.onFocus(callback)
+### mulbyMain.subInput.onFocus(callback)
 [Renderer]
 主窗口监听子输入框聚焦事件。
 
-### intoolsMain.subInput.onBlur(callback)
+### mulbyMain.subInput.onBlur(callback)
 [Renderer]
 主窗口监听子输入框失焦事件。
 
-### intoolsMain.subInput.onSelect(callback)
+### mulbyMain.subInput.onSelect(callback)
 [Renderer]
 主窗口监听子输入框选中事件。
 
-### intoolsMain.subInput.sendChange(text)
+### mulbyMain.subInput.sendChange(text)
 [Renderer]
 主窗口向主进程发送输入变化（转发给插件）。
 
@@ -161,14 +161,14 @@ interface ChildWindowHandle {
 
 ```javascript
 // 调整窗口大小并居中
-window.intools.window.setSize(680, 420);
-window.intools.window.center();
+window.mulby.window.setSize(680, 420);
+window.mulby.window.center();
 
 // 创建子窗口
-const child = await window.intools.window.create('https://example.com', { width: 800, height: 600 });
+const child = await window.mulby.window.create('https://example.com', { width: 800, height: 600 });
 child?.postMessage('ready');
 
 // 子输入框
-await window.intools.subInput.set('请输入...', true);
-window.intools.subInput.onChange(({ text }) => console.log(text));
+await window.mulby.subInput.set('请输入...', true);
+window.mulby.subInput.onChange(({ text }) => console.log(text));
 ```

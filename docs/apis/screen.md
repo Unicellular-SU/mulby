@@ -2,7 +2,7 @@
 本文档描述 屏幕 API (screen) 的使用方法与接口。
 
 > 入口：
-> - UI/渲染进程：`window.intools.screen`
+> - UI/渲染进程：`window.mulby.screen`
 > - 插件后端：`context.api.screen`
 
 屏幕 API 提供截图、录屏和屏幕信息获取功能，支持 macOS、Windows 和 Linux。

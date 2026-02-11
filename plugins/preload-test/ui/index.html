@@ -83,8 +83,8 @@
   </div>
   
   <div class="section">
-    <h3>核心 API 检查 (window.intools)</h3>
-    <div id="intools-status"></div>
+    <h3>核心 API 检查 (window.mulby)</h3>
+    <div id="mulby-status"></div>
   </div>
 
   <div class="section">
@@ -124,25 +124,25 @@
       }
     }
     
-    // 检查核心 intools API
-    function checkIntools() {
-      const el = document.getElementById('intools-status')
-      const hasIntools = typeof window.intools !== 'undefined'
+    // 检查核心 mulby API
+    function checkMulby() {
+      const el = document.getElementById('mulby-status')
+      const hasMulby = typeof window.mulby !== 'undefined'
       
-      if (hasIntools) {
+      if (hasMulby) {
         const apis = []
-        if (window.intools.clipboard) apis.push('clipboard')
-        if (window.intools.storage) apis.push('storage')
-        if (window.intools.notification) apis.push('notification')
-        if (window.intools.window) apis.push('window')
-        if (window.intools.system) apis.push('system')
+        if (window.mulby.clipboard) apis.push('clipboard')
+        if (window.mulby.storage) apis.push('storage')
+        if (window.mulby.notification) apis.push('notification')
+        if (window.mulby.window) apis.push('window')
+        if (window.mulby.system) apis.push('system')
         
         el.innerHTML = `
-          <div class="status success">✅ window.intools 可用</div>
+          <div class="status success">✅ window.mulby 可用</div>
           <div class="info-item"><span class="info-label">可用模块:</span><span class="info-value">${apis.join(', ')}</span></div>
         `
       } else {
-        el.innerHTML = '<div class="status error">❌ window.intools 未找到</div>'
+        el.innerHTML = '<div class="status error">❌ window.mulby 未找到</div>'
       }
     }
     
@@ -163,7 +163,7 @@
     // 初始化
     checkApis()
     showSystemInfo()
-    checkIntools()
+    checkMulby()
   </script>
 </body>
 </html>

@@ -4,7 +4,7 @@ import { useNotification } from '../../hooks'
 
 /**
  * FFmpeg 音视频处理模块演示
- * 展示 intools.ffmpeg API 的各种功能
+ * 展示 mulby.ffmpeg API 的各种功能
  */
 export function FFmpegModule() {
     const notify = useNotification()
@@ -26,13 +26,13 @@ export function FFmpegModule() {
     // 检查 FFmpeg 是否可用
     const handleCheckAvailability = useCallback(async () => {
         try {
-            const available = await window.intools?.ffmpeg?.isAvailable()
+            const available = await window.mulby?.ffmpeg?.isAvailable()
             setIsAvailable(available)
 
             if (available) {
-                const ver = await window.intools?.ffmpeg?.getVersion()
+                const ver = await window.mulby?.ffmpeg?.getVersion()
                 setVersion(ver)
-                const path = await window.intools?.ffmpeg?.getPath()
+                const path = await window.mulby?.ffmpeg?.getPath()
                 setFFmpegPath(path)
                 notify.success('FFmpeg 已安装')
             } else {
@@ -48,7 +48,7 @@ export function FFmpegModule() {
         setDownloading(true)
         setDownloadProgress(null)
         try {
-            const result = await window.intools?.ffmpeg?.download((progress) => {
+            const result = await window.mulby?.ffmpeg?.download((progress) => {
                 setDownloadProgress({ phase: progress.phase, percent: progress.percent })
             })
 
@@ -70,7 +70,7 @@ export function FFmpegModule() {
     // 选择输入文件
     const handleSelectInput = useCallback(async () => {
         try {
-            const paths = await window.intools?.dialog?.showOpenDialog({
+            const paths = await window.mulby?.dialog?.showOpenDialog({
                 title: '选择视频/音频文件',
                 filters: [
                     { name: '媒体文件', extensions: ['mp4', 'mkv', 'avi', 'mov', 'mp3', 'wav', 'flac', 'webm'] }
@@ -104,7 +104,7 @@ export function FFmpegModule() {
         setRunProgress(null)
 
         try {
-            const task = window.intools?.ffmpeg?.run(
+            const task = window.mulby?.ffmpeg?.run(
                 [
                     '-i', inputFile,
                     '-c:v', 'libx264',
@@ -149,7 +149,7 @@ export function FFmpegModule() {
         setRunning(true)
 
         try {
-            const task = window.intools?.ffmpeg?.run(
+            const task = window.mulby?.ffmpeg?.run(
                 [
                     '-i', inputFile,
                     '-q:a', '0',
@@ -217,7 +217,7 @@ export function FFmpegModule() {
 
         try {
             // FFmpeg 不指定输出文件时会报错，但 stderr 包含媒体信息
-            await window.intools?.ffmpeg?.run(['-i', inputFile])
+            await window.mulby?.ffmpeg?.run(['-i', inputFile])
         } catch (error: any) {
             // 从错误信息中提取媒体元数据
             const message = error.message || ''
@@ -257,8 +257,8 @@ export function FFmpegModule() {
         area: { x: number; y: number; width: number; height: number; screenId?: string } | string | null,
         outputFile: string
     ) => {
-        const isWindows = await window.intools.system.isWindows()
-        const isMacOS = await window.intools.system.isMacOS()
+        const isWindows = await window.mulby.system.isWindows()
+        const isMacOS = await window.mulby.system.isMacOS()
 
         if (isWindows) {
             if (speaker && typeof speaker !== 'string') {
@@ -317,7 +317,7 @@ export function FFmpegModule() {
     const handleStartRecording = useCallback(async () => {
         try {
             // 选择保存路径
-            const savePath = await window.intools.dialog.showSaveDialog({
+            const savePath = await window.mulby.dialog.showSaveDialog({
                 title: '保存录屏文件',
                 defaultPath: 'capture.mp4',
                 filters: [{ name: '视频文件', extensions: ['mp4'] }]
@@ -334,7 +334,7 @@ export function FFmpegModule() {
             // 这里为了演示，传 null 表示全屏
             const args = await getRecordingArgs(false, false, recordMouse, null, savePath)
 
-            const task = window.intools.ffmpeg.run(
+            const task = window.mulby.ffmpeg.run(
                 args,
                 (progress) => {
                     setRunProgress({
@@ -636,7 +636,7 @@ export function FFmpegModule() {
                     <CodeBlock>
                         {`// 生成录屏参数
 async function getRecordingArgs (speaker, microphone, captureMouse, area, outputFile) {
-  const isWindows = await intools.system.isWindows()
+  const isWindows = await mulby.system.isWindows()
 
                         if (isWindows) {
     // Windows 参数构造 (gdigrab + dshow)
@@ -656,7 +656,7 @@ async function getRecordingArgs (speaker, microphone, captureMouse, area, output
                         const args = await getRecordingArgs(false, false, true, null, '/path/to.mp4')
 
 // 2. 启动任务 (注意：不要 await run，先拿到 task 对象以便控制)
-const task = intools.ffmpeg.run(args, (progress) => {
+const task = mulby.ffmpeg.run(args, (progress) => {
                             console.log('录制时间:', progress.time)
                         })
 

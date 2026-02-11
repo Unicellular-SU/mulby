@@ -24,9 +24,9 @@
 - [x] `resources/Info.plist` - macOS 权限描述
 
 ### 插件集成
-- [x] `plugins/intools-showcase/src/types/intools.d.ts`
-- [x] `plugins/intools-showcase/src/ui/hooks/useIntools.ts`
-- [x] `plugins/intools-showcase/src/ui/modules/SystemInfo/index.tsx`
+- [x] `plugins/mulby-showcase/src/types/mulby.d.ts`
+- [x] `plugins/mulby-showcase/src/ui/hooks/useMulby.ts`
+- [x] `plugins/mulby-showcase/src/ui/modules/SystemInfo/index.tsx`
 
 ### 文档
 - [x] `docs/api-reference.md` - 更新 Geolocation API 文档
@@ -44,7 +44,7 @@ geolocation.getCurrentPosition() // 获取当前位置
 ## 测试方法
 
 1. 运行 `npm run electron:dev`
-2. 打开 intools-showcase 插件
+2. 打开 mulby-showcase 插件
 3. 进入"系统信息"模块
 4. 点击"获取位置"按钮
 5. 观察终端日志和系统权限弹窗
@@ -74,7 +74,7 @@ geolocation.getCurrentPosition() // 获取当前位置
 - [x] `src/main/ipc/index.ts` - 整合 Desktop 模块
 
 ### 预加载脚本
-- [x] `src/preload/index.ts` - 暴露 `intools.desktop.searchFiles`
+- [x] `src/preload/index.ts` - 暴露 `mulby.desktop.searchFiles`
 
 ## API 说明
 
@@ -82,7 +82,7 @@ geolocation.getCurrentPosition() // 获取当前位置
 // 搜索系统文件
 // query: 关键词
 // limit: 限制返回数量 (默认 100)
-intools.desktop.searchFiles(query: string, limit?: number): Promise<FileSearchResult[]>
+mulby.desktop.searchFiles(query: string, limit?: number): Promise<FileSearchResult[]>
 
 interface FileSearchResult {
   name: string
@@ -269,7 +269,7 @@ interface FileSearchResult {
   - AI 任务完成后不强制退出，用户可选择 "Exit" 或 "Continue"
   - 支持在当前上下文中继续追加修改需求
 - [x] **智能会话恢复 (Smart Resume)** (`src/commands/create/ai-create.ts`)
-  - `intools create --ai --resume` 自动识别并激活 `completed` 状态的会话
+  - `mulby create --ai --resume` 自动识别并激活 `completed` 状态的会话
   - 自动重置状态并引导用户输入新指令，实现无缝断点续传
 
 ### 可视化与监控
@@ -326,7 +326,7 @@ interface FileSearchResult {
 
 ## 完成内容
 
-- [x] **文档合并与优化** (`packages/intools-cli/src/services/ai/`)
+- [x] **文档合并与优化** (`packages/mulby-cli/src/services/ai/`)
   - 将 `PLUGIN_API.md` 的完整 API 规范合并入 `PLUGIN_DEVELOP_PROMPT.md`
   - 移除了冗余的 `PLUGIN_API.md` 文件（AI 服务专用副本）
   - 优化了提示词结构：Role -> Workflow -> Detailed API Reference
@@ -369,16 +369,16 @@ interface FileSearchResult {
 ## 完成内容
 
 ### 模板增强
-- [x] **React 模板升级** (`packages/intools-cli/src/commands/create/templates/react.ts`)
+- [x] **React 模板升级** (`packages/mulby-cli/src/commands/create/templates/react.ts`)
   - 集成 `tailwindcss`, `postcss`, `autoprefixer` 依赖
   - 新增 Tailwind 配置文件生成器 (`buildTailwindConfig`)
   - 新增 PostCSS 配置文件生成器 (`buildPostcssConfig`)
   - 更新 `styles.css` 引入 `@tailwind` 指令
 
 ### 创建流程
-- [x] **脚手架逻辑更新** (`packages/intools-cli/src/commands/create/react.ts`)
+- [x] **脚手架逻辑更新** (`packages/mulby-cli/src/commands/create/react.ts`)
   - 在创建项目时自动生成 `tailwind.config.js` 和 `postcss.config.js`
-  - 确保 AI 创建的项目 (`intools create --ai`) 和手动创建的项目均默认支持 Tailwind CSS
+  - 确保 AI 创建的项目 (`mulby create --ai`) 和手动创建的项目均默认支持 Tailwind CSS
 
 ---
 
@@ -390,18 +390,18 @@ interface FileSearchResult {
 ## 完成内容
 
 ### 模板升级
-- [x] **React 模板升级** (`packages/intools-cli/src/commands/create/templates/react.ts`)
+- [x] **React 模板升级** (`packages/mulby-cli/src/commands/create/templates/react.ts`)
   - 升级 React 依赖至 `v19`
   - 升级 Tailwind CSS 至 `v4`，集成 `@tailwindcss/vite`
   - 移除显式的 PostCSS 配置（改为 Vite 插件处理）
   - 更新 `styles.css` 为 `@import "tailwindcss";`
 
 ### 流程优化
-- [x] **创建逻辑精简** (`packages/intools-cli/src/commands/create/react.ts`)
+- [x] **创建逻辑精简** (`packages/mulby-cli/src/commands/create/react.ts`)
   - 移除了不再需要的 `tailwind.config.js` 和 `postcss.config.js` 生成步骤
 
 ### AI 上下文
-- [x] **Prompt 更新** (`packages/intools-cli/src/services/ai/prompts.ts`)
+- [x] **Prompt 更新** (`packages/mulby-cli/src/services/ai/prompts.ts`)
   - 显式告知 AI 当前环境为 React 19 + Tailwind 4 + Vite，确保生成的代码通过新的 CSS 方式引入 Tailwind。
 
 ---
@@ -414,7 +414,7 @@ interface FileSearchResult {
 ## 完成内容
 
 ### UI 渲染优化
-- [x] **引入 Static 组件** (`packages/intools-cli/src/ui/Terminal.tsx`)
+- [x] **引入 Static 组件** (`packages/mulby-cli/src/ui/Terminal.tsx`)
   - 将日志区域 (`LogArea`) 替换为 `ink` 的 `<Static>` 组件
   - 弃用全量重渲染模式：日志现在永久输出到标准输出 (stdout)，不再参与每帧的 Diff 和重绘
   - 彻底解决了在输入文字、执行命令和 AI 思考高频刷新状态时的终端闪烁问题
@@ -423,7 +423,7 @@ interface FileSearchResult {
   - 支持原生终端滚动历史，不再受限于虚拟的 20 行视口 (Viewport)
 
 ### 交互体验优化
-- [x] **用户输入回显** (`packages/intools-cli/src/services/tui/store.ts`)
+- [x] **用户输入回显** (`packages/mulby-cli/src/services/tui/store.ts`)
   - 修复了用户输入内容在提交后从屏幕消失的问题
   - 在 `submitInput` 和 `submitSelect` 时自动将用户的输入/选择追加到日志流中
   - 使用 ANSI 颜色高亮回显内容 (绿色 `✔` + 原始内容)，模拟真实终端交互体验
@@ -464,13 +464,13 @@ interface FileSearchResult {
 ## 完成内容
 
 ### 交互逻辑调整
-- [x] **强制等待用户输入** (`packages/intools-cli/src/commands/resume.ts`, `services/ai-generator.ts`)
-  - 修改了 `intools resume` 的行为：无论会话历史如何， resumed session 启动时都会先暂停，等待用户输入。
+- [x] **强制等待用户输入** (`packages/mulby-cli/src/commands/resume.ts`, `services/ai-generator.ts`)
+  - 修改了 `mulby resume` 的行为：无论会话历史如何， resumed session 启动时都会先暂停，等待用户输入。
   - 允许用户在恢复会话时先补充新的上下文或指令，而不是让 AI 基于旧历史直接继续执行。
   - 若用户直接回车，则按原逻辑继续。
-- [x] **去除冗余 Prompt** (`packages/intools-cli/src/commands/resume.ts`)
+- [x] **去除冗余 Prompt** (`packages/mulby-cli/src/commands/resume.ts`)
   - 移除了 `resume` 命令中通过 `inquirer` 询问新指令的逻辑，统一收敛至 AI Agent 内的 TUI 交互界面，体验更连贯。
-  - 对齐了 `intools create --resume` 的行为。
+  - 对齐了 `mulby create --resume` 的行为。
 
 ---
 
@@ -487,15 +487,15 @@ interface FileSearchResult {
   - 明确了相关 API 的参数、返回值类型及使用示例。
 
 ### 插件开发提示词更新
-- [x] `packages/intools-cli/PLUGIN_DEVELOP_PROMPT.md`
+- [x] `packages/mulby-cli/PLUGIN_DEVELOP_PROMPT.md`
   - 更新 `Plugin` 接口定义，补全了 `enable`, `disable` 及上述后台管理相关方法的类型声明。
   - 确保 AI 生成插件代码时能正确识别和使用这些 API。
 
 ### 模板代码更新
-- [x] `packages/intools-cli/src/commands/create/templates/react.ts`
-  - 更新 `useIntools` hook 生成逻辑，暴露 `listBackground` 等新 API。
-  - 更新 `intools.d.ts` 类型定义生成逻辑，补充 `IntoolsPlugin` 接口定义，增加 `listBackground`, `startBackground`, `stopBackground`, `getBackgroundInfo`, `stopPlugin` 方法声明。
-  - 完善 `IntoolsPlugin` 相关接口类型，新增 `PluginInfo`, `PluginSearchResult`, `BackgroundPluginInfo` 等类型定义，消除 `any` 类型。
+- [x] `packages/mulby-cli/src/commands/create/templates/react.ts`
+  - 更新 `useMulby` hook 生成逻辑，暴露 `listBackground` 等新 API。
+  - 更新 `mulby.d.ts` 类型定义生成逻辑，补充 `MulbyPlugin` 接口定义，增加 `listBackground`, `startBackground`, `stopBackground`, `getBackgroundInfo`, `stopPlugin` 方法声明。
+  - 完善 `MulbyPlugin` 相关接口类型，新增 `PluginInfo`, `PluginSearchResult`, `BackgroundPluginInfo` 等类型定义，消除 `any` 类型。
 
 
 

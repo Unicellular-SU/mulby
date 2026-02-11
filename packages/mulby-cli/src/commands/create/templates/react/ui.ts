@@ -46,7 +46,7 @@ createRoot(document.getElementById('root')!).render(
 export function buildAppTsx(name: string) {
   return `import { useEffect, useState } from 'react'
 import { FileText, Image, Copy, Inbox, Paperclip } from 'lucide-react'
-import { useIntools } from './hooks/useIntools'
+import { useMulby } from './hooks/useMulby'
 
 // 附件类型定义
 interface Attachment {
@@ -72,7 +72,7 @@ interface PluginInitData {
 export default function App() {
   const [input, setInput] = useState('')
   const [attachments, setAttachments] = useState<Attachment[]>([])
-  const { clipboard, notification, host } = useIntools('${name}')
+  const { clipboard, notification, host } = useMulby('${name}')
 
   // 按类型分组附件
   const images = attachments.filter((a) => a.kind === 'image')
@@ -86,12 +86,12 @@ export default function App() {
     document.documentElement.classList.toggle('dark', initialTheme === 'dark')
 
     // 监听主题变化
-    window.intools?.onThemeChange?.((newTheme: 'light' | 'dark') => {
+    window.mulby?.onThemeChange?.((newTheme: 'light' | 'dark') => {
       document.documentElement.classList.toggle('dark', newTheme === 'dark')
     })
 
     // 接收插件初始化数据
-    window.intools?.onPluginInit?.((data: PluginInitData) => {
+    window.mulby?.onPluginInit?.((data: PluginInitData) => {
       if (data.input) setInput(data.input)
       if (data.attachments) setAttachments(data.attachments)
     })

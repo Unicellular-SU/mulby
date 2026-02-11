@@ -49,8 +49,8 @@ app.commandLine.appendSwitch('disable-software-rasterizer')
 // 启动崩溃报告器（生成本地 crash dump，用于分析 Native 层崩溃）
 // 必须在 app 模块加载后尽早调用
 crashReporter.start({
-  productName: 'InTools',
-  companyName: 'InTools',
+  productName: 'Mulby',
+  companyName: 'Mulby',
   submitURL: '', // 不上传，只保存本地
   uploadToServer: false,
   ignoreSystemCrashHandler: false

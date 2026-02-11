@@ -186,14 +186,14 @@ export const pluginFeatureStore = new PluginFeatureStore()
 
 export function redirectHotKeySetting(cmdLabel: string): void {
   new Notification({
-    title: 'InTools',
+    title: 'Mulby',
     body: `Shortcut settings are not available yet. Use api.shortcut.register for "${cmdLabel}".`
   }).show()
 }
 
 export function redirectAiModelsSetting(): void {
   new Notification({
-    title: 'InTools',
+    title: 'Mulby',
     body: 'AI model settings are not available yet.'
   }).show()
 }

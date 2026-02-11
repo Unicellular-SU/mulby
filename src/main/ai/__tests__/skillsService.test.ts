@@ -35,7 +35,7 @@ function createInMemorySkillService(input: { settings: AiSettings; userDataPath:
 
 describe('skill service', () => {
   it('creates skill and resolves manual selection with MCP scope merge', async (t) => {
-    const tempDir = await createTempDir('intools-skill-test-')
+    const tempDir = await createTempDir('mulby-skill-test-')
     t.after(async () => {
       await rm(tempDir, { recursive: true, force: true })
     })
@@ -59,7 +59,7 @@ describe('skill service', () => {
       name: 'Code Review',
       promptTemplate: 'You are a strict reviewer.',
       capabilities: ['fs.read'],
-      internalTools: ['intools_read_file'],
+      internalTools: ['mulby_read_file'],
       enabled: true,
       trustLevel: 'trusted',
       mcpPolicy: {
@@ -85,7 +85,7 @@ describe('skill service', () => {
     assert.equal(resolved.selectedSkillIds.length, 1)
     assert.deepEqual(resolved.selectedSkills?.map((item) => item.id), [created.id])
     assert.deepEqual(resolved.capabilities, ['fs.read'])
-    assert.deepEqual(resolved.internalTools, ['intools_read_file'])
+    assert.deepEqual(resolved.internalTools, ['mulby_read_file'])
     assert.deepEqual(resolved.mergedMcp?.serverIds, ['filesystem'])
     assert.deepEqual(resolved.mergedMcp?.allowedToolIds, ['mcp__filesystem__read_file'])
 
@@ -101,7 +101,7 @@ describe('skill service', () => {
   })
 
   it('keeps explicit MCP selection when skills are only implicitly active, and merges when skills are explicit', async (t) => {
-    const tempDir = await createTempDir('intools-skill-mcp-precedence-')
+    const tempDir = await createTempDir('mulby-skill-mcp-precedence-')
     t.after(async () => {
       await rm(tempDir, { recursive: true, force: true })
     })
@@ -187,7 +187,7 @@ describe('skill service', () => {
   })
 
   it('imports from JSON and provides preview output', async (t) => {
-    const tempDir = await createTempDir('intools-skill-json-')
+    const tempDir = await createTempDir('mulby-skill-json-')
     t.after(async () => {
       await rm(tempDir, { recursive: true, force: true })
     })
@@ -233,7 +233,7 @@ describe('skill service', () => {
   })
 
   it('installs skill from local directory', async (t) => {
-    const tempDir = await createTempDir('intools-skill-install-')
+    const tempDir = await createTempDir('mulby-skill-install-')
     const sourceDir = path.join(tempDir, 'source-skill')
     await mkdir(sourceDir, { recursive: true })
     await writeFile(
@@ -288,8 +288,8 @@ Provide concrete bug-fix steps.`,
   })
 
   it('refreshes catalog from system and app roots, app skills override system skills on conflict', async (t) => {
-    const tempDir = await createTempDir('intools-skill-catalog-')
-    const homeDir = await createTempDir('intools-skill-home-')
+    const tempDir = await createTempDir('mulby-skill-catalog-')
+    const homeDir = await createTempDir('mulby-skill-home-')
     t.after(async () => {
       await rm(tempDir, { recursive: true, force: true })
       await rm(homeDir, { recursive: true, force: true })
@@ -339,8 +339,8 @@ App prompt`, 'utf8')
   })
 
   it('treats system skills as read-only for descriptor mutation/removal', async (t) => {
-    const tempDir = await createTempDir('intools-skill-system-readonly-')
-    const homeDir = await createTempDir('intools-skill-home-readonly-')
+    const tempDir = await createTempDir('mulby-skill-system-readonly-')
+    const homeDir = await createTempDir('mulby-skill-home-readonly-')
     t.after(async () => {
       await rm(tempDir, { recursive: true, force: true })
       await rm(homeDir, { recursive: true, force: true })
@@ -392,7 +392,7 @@ System prompt`, 'utf8')
   })
 
   it('creates generated skill files and blocks unsafe generated file paths', async (t) => {
-    const tempDir = await createTempDir('intools-skill-generated-')
+    const tempDir = await createTempDir('mulby-skill-generated-')
     t.after(async () => {
       await rm(tempDir, { recursive: true, force: true })
     })
@@ -442,7 +442,7 @@ Generated prompt`,
   })
 
   it('replaces existing generated skill when replaceSkillId is provided', async (t) => {
-    const tempDir = await createTempDir('intools-skill-generated-replace-')
+    const tempDir = await createTempDir('mulby-skill-generated-replace-')
     t.after(async () => {
       await rm(tempDir, { recursive: true, force: true })
     })

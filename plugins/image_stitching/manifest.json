@@ -2,7 +2,7 @@
   "id": "image_stitching",
   "name": "image_stitching",
   "version": "1.0.0",
-  "author": "intools",
+  "author": "mulby",
   "displayName": "长图拼接",
   "description": "将多张图片任意纵向裁切后拼接成一张长图",
   "main": "dist/main.js",

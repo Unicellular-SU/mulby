@@ -4,7 +4,7 @@
 
 ### 1.1 目标
 
-为 InTools 提供一个强大、可靠的任务调度系统，支持插件创建定时任务、周期任务和延迟任务，解决插件需要长期后台运行才能实现定时功能的问题。
+为 Mulby 提供一个强大、可靠的任务调度系统，支持插件创建定时任务、周期任务和延迟任务，解决插件需要长期后台运行才能实现定时功能的问题。
 
 ### 1.2 核心特性
 
@@ -781,19 +781,19 @@ class MacOSScheduler {
   private plistDir = path.join(os.homedir(), 'Library/LaunchAgents')
 
   async createLaunchAgent(task: Task): Promise<void> {
-    const plistPath = path.join(this.plistDir, `com.intools.task.${task.id}.plist`)
+    const plistPath = path.join(this.plistDir, `com.mulby.task.${task.id}.plist`)
 
     const plist = {
-      Label: `com.intools.task.${task.id}`,
+      Label: `com.mulby.task.${task.id}`,
       ProgramArguments: [
-        process.execPath,  // InTools 可执行文件路径
+        process.execPath,  // Mulby 可执行文件路径
         '--execute-task',
         task.id
       ],
       StartCalendarInterval: this.convertCronToCalendar(task.cron),
       RunAtLoad: false,
-      StandardOutPath: `/tmp/intools-task-${task.id}.log`,
-      StandardErrorPath: `/tmp/intools-task-${task.id}.error.log`
+      StandardOutPath: `/tmp/mulby-task-${task.id}.log`,
+      StandardErrorPath: `/tmp/mulby-task-${task.id}.error.log`
     }
 
     await fs.writeFile(plistPath, plist.toString('xml'))
@@ -801,7 +801,7 @@ class MacOSScheduler {
   }
 
   async removeLaunchAgent(taskId: string): Promise<void> {
-    const plistPath = path.join(this.plistDir, `com.intools.task.${taskId}.plist`)
+    const plistPath = path.join(this.plistDir, `com.mulby.task.${taskId}.plist`)
     await exec(`launchctl unload ${plistPath}`)
     await fs.unlink(plistPath)
   }
@@ -833,7 +833,7 @@ class MacOSScheduler {
 ```typescript
 class WindowsScheduler {
   async createScheduledTask(task: Task): Promise<void> {
-    const taskName = `InTools_${task.id}`
+    const taskName = `Mulby_${task.id}`
 
     // 使用 schtasks 命令创建任务
     const cronParts = task.cron!.split(' ')
@@ -854,7 +854,7 @@ class WindowsScheduler {
   }
 
   async removeScheduledTask(taskId: string): Promise<void> {
-    const taskName = `InTools_${taskId}`
+    const taskName = `Mulby_${taskId}`
     await exec(`schtasks /Delete /TN ${taskName} /F`)
   }
 
@@ -892,12 +892,12 @@ class LinuxScheduler {
   private timerDir = path.join(os.homedir(), '.config/systemd/user')
 
   async createSystemdTimer(task: Task): Promise<void> {
-    const serviceName = `intools-task-${task.id}`
+    const serviceName = `mulby-task-${task.id}`
 
     // 创建 service 文件
     const serviceContent = `
 [Unit]
-Description=InTools Task: ${task.name}
+Description=Mulby Task: ${task.name}
 
 [Service]
 Type=oneshot
@@ -911,7 +911,7 @@ ExecStart=${process.execPath} --execute-task ${task.id}
     // 创建 timer 文件
     const timerContent = `
 [Unit]
-Description=InTools Task Timer: ${task.name}
+Description=Mulby Task Timer: ${task.name}
 
 [Timer]
 ${this.convertCronToOnCalendar(task.cron!)}
@@ -932,7 +932,7 @@ WantedBy=timers.target
   }
 
   async removeSystemdTimer(taskId: string): Promise<void> {
-    const serviceName = `intools-task-${taskId}`
+    const serviceName = `mulby-task-${taskId}`
     await exec(`systemctl --user stop ${serviceName}.timer`)
     await exec(`systemctl --user disable ${serviceName}.timer`)
     await fs.unlink(path.join(this.timerDir, `${serviceName}.service`))
@@ -1433,7 +1433,7 @@ api.scheduler.schedule({
 
 ### 12.3 分布式调度
 
-支持多实例协调（如果 InTools 支持多开）：
+支持多实例协调（如果 Mulby 支持多开）：
 
 ```typescript
 // 使用分布式锁确保任务只执行一次
@@ -1459,7 +1459,7 @@ api.scheduler.chain([
 
 ## 13. 总结
 
-任务调度器是 InTools 的重要基础设施，将极大地扩展插件的能力边界。通过本设计方案：
+任务调度器是 Mulby 的重要基础设施，将极大地扩展插件的能力边界。通过本设计方案：
 
 **核心价值**：
 - ✅ 解决了插件长期后台运行的问题
@@ -1479,5 +1479,5 @@ api.scheduler.chain([
 - 监控告警、定期检查
 - 自动化工作流
 
-这将使 InTools 成为一个更加强大和完整的生产力工具平台。
+这将使 Mulby 成为一个更加强大和完整的生产力工具平台。
 

@@ -24,9 +24,9 @@ const CopyButton = ({ text }: { text: string }) => {
   const handleCopy = async () => {
     if (!text) return;
     try {
-      await window.intools?.clipboard?.writeText(text);
+      await window.mulby?.clipboard?.writeText(text);
       setCopied(true);
-      window.intools?.notification?.show('已复制到剪贴板', 'success');
+      window.mulby?.notification?.show('已复制到剪贴板', 'success');
       setTimeout(() => setCopied(false), 2000);
     } catch (e) {
       console.error('Copy failed', e);
@@ -112,12 +112,12 @@ export default function App() {
     const t = (search.get('theme') as 'light' | 'dark') || 'light';
     setTheme(t);
 
-    window.intools?.onThemeChange?.((newTheme) => {
+    window.mulby?.onThemeChange?.((newTheme) => {
       setTheme(newTheme);
     });
 
-    // Handle initial input from InTools if any
-    window.intools?.onPluginInit?.((data) => {
+    // Handle initial input from Mulby if any
+    window.mulby?.onPluginInit?.((data) => {
       if (data.input) {
         // Default to charset tab and populate input
         setCharInput(data.input);

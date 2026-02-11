@@ -1,9 +1,9 @@
 import { useState, useEffect } from 'react'
 import { PageHeader, Card, Button, CodeBlock } from '../../components'
-import { useIntools, useNotification } from '../../hooks'
+import { useMulby, useNotification } from '../../hooks'
 
 export function ChildWindowModule() {
-    const { window: win } = useIntools()
+    const { window: win } = useMulby()
     const notify = useNotification()
     const [messages, setMessages] = useState<string[]>([])
     const [childWin, setChildWin] = useState<any | null>(null)
@@ -158,7 +158,7 @@ export function ChildWindowModule() {
                     <CodeBlock>
                         {`// 子窗口间通信需要通过父窗口中转:
 // 1. 子窗口A 发送给父窗口
-window.intools.window.sendToParent('relay-request', data)
+window.mulby.window.sendToParent('relay-request', data)
 
 // 2. 父窗口收到后，转发给子窗口B
 win.onChildMessage((channel, data) => {

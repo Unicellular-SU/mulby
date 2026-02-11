@@ -2,14 +2,14 @@
 本文档描述 输入 API (input) 的使用方法与接口。
 
 > 入口：
-> - UI/渲染进程：`window.intools.input`
+> - UI/渲染进程：`window.mulby.input`
 > - 插件后端：`context.api.input`
 
 输入 API 用于对外部应用执行粘贴、键入操作以及模拟键盘和鼠标操作，适配 macOS、Windows、Linux。
-调用时部分方法会先隐藏 InTools 窗口，以便目标应用接收输入焦点。
+调用时部分方法会先隐藏 Mulby 窗口，以便目标应用接收输入焦点。
 
 注意：
-- macOS 需要在系统设置中授予 InTools 辅助功能权限
+- macOS 需要在系统设置中授予 Mulby 辅助功能权限
 - Linux 依赖 `xdotool` 执行按键与输入（Wayland 环境可能受限）
 
 ### hideMainWindowPasteText(text)
@@ -17,7 +17,7 @@
 将文本写入剪贴板并模拟粘贴到当前焦点应用。
 
 ```javascript
-await input.hideMainWindowPasteText('Hello InTools');
+await input.hideMainWindowPasteText('Hello Mulby');
 ```
 
 **参数**:
@@ -207,7 +207,7 @@ module.exports = {
     const { input } = context.api;
 
     // 粘贴文本
-    await input.hideMainWindowPasteText('InTools rocks!');
+    await input.hideMainWindowPasteText('Mulby rocks!');
 
     // 模拟键盘快捷键
     await input.simulateKeyboardTap('s', 'ctrl'); // Ctrl+S 保存

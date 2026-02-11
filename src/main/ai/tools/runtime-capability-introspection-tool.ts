@@ -1,7 +1,7 @@
 import type { AiCapabilityDebugInfo, AiPolicyDebugInfo, AiTool } from '../../../shared/types/ai'
 import { isAiInternalToolName } from './internal-tools'
 
-export const AI_RUNTIME_CAPABILITY_INTROSPECTION_TOOL_NAME = 'intools_describe_runtime_capabilities'
+export const AI_RUNTIME_CAPABILITY_INTROSPECTION_TOOL_NAME = 'mulby_describe_runtime_capabilities'
 
 const MAX_TOOLS_HARD_LIMIT = 500
 const MAX_DESCRIPTION_LENGTH = 160

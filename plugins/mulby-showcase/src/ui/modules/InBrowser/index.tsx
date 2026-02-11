@@ -8,8 +8,8 @@ export default function InBrowserDemo() {
     const addLog = (msg: string) => setLogs(prev => [...prev, `[${new Date().toLocaleTimeString()}] ${msg}`]);
 
     const runDemo = async () => {
-        if (!window.intools?.inbrowser) {
-            addLog('Error: window.intools.inbrowser not found');
+        if (!window.mulby?.inbrowser) {
+            addLog('Error: window.mulby.inbrowser not found');
             return;
         }
 
@@ -20,7 +20,7 @@ export default function InBrowserDemo() {
         try {
             addLog('Building chain: goto(google.com) -> when(input) -> type(uTools) -> press(Enter) -> wait(2s) -> css(bg=red)');
 
-            const result = await window.intools.inbrowser
+            const result = await window.mulby.inbrowser
                 .goto('https://www.google.com', {
                     'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
                 })
@@ -54,8 +54,8 @@ export default function InBrowserDemo() {
     }
 
     const runP1Demo = async () => {
-        if (!window.intools?.inbrowser) {
-            addLog('Error: window.intools.inbrowser not found');
+        if (!window.mulby?.inbrowser) {
+            addLog('Error: window.mulby.inbrowser not found');
             return;
         }
 
@@ -66,7 +66,7 @@ export default function InBrowserDemo() {
         try {
             addLog('Chain: goto(google) -> devTools -> value(search) -> scroll(y) -> evaluate(add check) -> check -> wait');
 
-            const result = await window.intools.inbrowser
+            const result = await window.mulby.inbrowser
                 .goto('https://www.google.com')
                 .show()
                 .devTools('right') // Test devTools
@@ -100,8 +100,8 @@ export default function InBrowserDemo() {
     }
 
     const runP2Demo = async () => {
-        if (!window.intools?.inbrowser) {
-            addLog('Error: window.intools.inbrowser not found');
+        if (!window.mulby?.inbrowser) {
+            addLog('Error: window.mulby.inbrowser not found');
             return;
         }
 
@@ -114,7 +114,7 @@ export default function InBrowserDemo() {
 
             const customUA = 'Mozilla/5.0 (Priority2Test/1.0) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
 
-            const result = await window.intools.inbrowser
+            const result = await window.mulby.inbrowser
                 .useragent(customUA) // Test useragent
                 .goto('https://www.google.com')
                 .show()
@@ -144,8 +144,8 @@ export default function InBrowserDemo() {
     }
 
     const runP3Demo = async () => {
-        if (!window.intools?.inbrowser) {
-            addLog('Error: window.intools.inbrowser not found');
+        if (!window.mulby?.inbrowser) {
+            addLog('Error: window.mulby.inbrowser not found');
             return;
         }
 
@@ -156,7 +156,7 @@ export default function InBrowserDemo() {
         try {
             addLog('Chain: device(iPhone X) -> goto(google) -> mousedown(logo) -> mouseup(logo) -> evaluate(check dimensions/UA) -> wait -> end');
 
-            const result = await window.intools.inbrowser
+            const result = await window.mulby.inbrowser
                 .device('iPhone X') // Test device
                 .goto('https://www.google.com')
                 .show()
@@ -187,8 +187,8 @@ export default function InBrowserDemo() {
     }
 
     const runBaiduMapDemo = async () => {
-        if (!window.intools?.inbrowser) {
-            addLog('Error: window.intools.inbrowser not found');
+        if (!window.mulby?.inbrowser) {
+            addLog('Error: window.mulby.inbrowser not found');
             return;
         }
 
@@ -201,7 +201,7 @@ export default function InBrowserDemo() {
         try {
             addLog(`Searching for: ${address} on Baidu Map`);
 
-            const result = await window.intools.inbrowser
+            const result = await window.mulby.inbrowser
                 .goto("https://map.baidu.com")
                 .show() // Ensure window is visible
                 .wait(1000) // Wait for page load
@@ -220,8 +220,8 @@ export default function InBrowserDemo() {
     }
 
     const runIframeDemo = async () => {
-        if (!window.intools?.inbrowser) {
-            addLog('Error: window.intools.inbrowser not found');
+        if (!window.mulby?.inbrowser) {
+            addLog('Error: window.mulby.inbrowser not found');
             return;
         }
 
@@ -232,7 +232,7 @@ export default function InBrowserDemo() {
         addLog('Target: iframe#outer >> iframe#inner >> button.login');
 
         try {
-            const result = await window.intools.inbrowser
+            const result = await window.mulby.inbrowser
                 .goto('https://container.iframe.test.web')
                 // Wait for button inside nested iframes
                 .wait("iframe#outer >> iframe#inner >> button.login")
@@ -251,8 +251,8 @@ export default function InBrowserDemo() {
     }
 
     const runCloudDriveDemo = async () => {
-        if (!window.intools?.inbrowser) {
-            addLog('Error: window.intools.inbrowser not found');
+        if (!window.mulby?.inbrowser) {
+            addLog('Error: window.mulby.inbrowser not found');
             return;
         }
 
@@ -276,7 +276,7 @@ export default function InBrowserDemo() {
         addLog(`Extraction Code: ${code}`);
 
         try {
-            const result = await window.intools.inbrowser
+            const result = await window.mulby.inbrowser
                 .clearCookies(url)
                 .goto(url)
                 .show() // Ensure visible
@@ -297,8 +297,8 @@ export default function InBrowserDemo() {
     }
 
     const runNewFeaturesDemo = async () => {
-        if (!window.intools?.inbrowser) {
-            addLog('Error: window.intools.inbrowser not found');
+        if (!window.mulby?.inbrowser) {
+            addLog('Error: window.mulby.inbrowser not found');
             return;
         }
 
@@ -307,7 +307,7 @@ export default function InBrowserDemo() {
         addLog('Starting New Features Demo (dblclick, hover, markdown, screenshot)...');
 
         try {
-            const result = await window.intools.inbrowser
+            const result = await window.mulby.inbrowser
                 .goto('https://www.google.com')
                 .show()
                 .wait(1000)
@@ -337,8 +337,8 @@ export default function InBrowserDemo() {
     }
 
     const runFinalGapDemo = async () => {
-        if (!window.intools?.inbrowser) {
-            addLog('Error: window.intools.inbrowser not found');
+        if (!window.mulby?.inbrowser) {
+            addLog('Error: window.mulby.inbrowser not found');
             return;
         }
 
@@ -349,18 +349,18 @@ export default function InBrowserDemo() {
         try {
             // Test Manager Methods
             addLog('Testing Manager Methods...');
-            const idles = await window.intools.inbrowser.getIdleInBrowsers();
+            const idles = await window.mulby.inbrowser.getIdleInBrowsers();
             addLog(`Idle Windows: ${idles.length}`);
 
-            await window.intools.inbrowser.clearInBrowserCache();
+            await window.mulby.inbrowser.clearInBrowserCache();
             addLog('Cache cleared');
 
             // Test Ops
-            const downloadsPath = await window.intools.system.getPath('downloads');
-            const savePath = `${downloadsPath}/intools-test-${Date.now()}.pdf`;
+            const downloadsPath = await window.mulby.system.getPath('downloads');
+            const savePath = `${downloadsPath}/mulby-test-${Date.now()}.pdf`;
 
             addLog(`Chain: goto(google) -> css(bg=blue) -> press(A) -> pdf(${savePath}) -> end`);
-            const result = await window.intools.inbrowser
+            const result = await window.mulby.inbrowser
                 .goto('https://www.google.com')
                 .show()
                 .wait(1000)

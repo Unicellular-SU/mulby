@@ -281,7 +281,7 @@ function buildSkillRuntimeHint(record: AiSkillRecord): string | undefined {
     `Skill runtime hint (${record.id}):`,
     `- Skill root path: ${quotedInstallPath}`,
     '- Reuse existing scripts from this skill before writing ad-hoc inline scripts.',
-    '- intools_run_command arguments must be a JSON object, never a quoted JSON string.'
+    '- mulby_run_command arguments must be a JSON object, never a quoted JSON string.'
   ]
   if (absoluteScriptRefs.length > 0) {
     lines.push(`- Preferred existing scripts: ${absoluteScriptRefs.join(', ')}`)
@@ -980,7 +980,7 @@ export class AiSkillService {
       if (!zipStat || !zipStat.isFile()) {
         throw new Error('ZIP file not found')
       }
-      const tempBase = await fs.mkdtemp(path.join(os.tmpdir(), 'intools-skill-install-'))
+      const tempBase = await fs.mkdtemp(path.join(os.tmpdir(), 'mulby-skill-install-'))
       try {
         await extractZip(sourceRef, { dir: tempBase })
         const skillDirs = await findSkillDirectories(tempBase, 10)

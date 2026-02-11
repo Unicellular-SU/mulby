@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Clock, Play, Pause, Trash2, RefreshCw, Plus } from 'lucide-react'
-import { useIntools } from './hooks/useIntools'
+import { useMulby } from './hooks/useMulby'
 
 interface Task {
   id: string
@@ -44,7 +44,7 @@ export default function App() {
   const [taskDateTime, setTaskDateTime] = useState('')
   const [taskCron, setTaskCron] = useState('0 */1 * * * *')
   const [cronDescription, setCronDescription] = useState('')
-  const { notification, scheduler, host } = useIntools('scheduler-demo')
+  const { notification, scheduler, host } = useMulby('scheduler-demo')
 
   // 加载任务列表
   const loadTasks = async () => {

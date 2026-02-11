@@ -1,6 +1,6 @@
 import React, { useState, useCallback } from 'react'
 import { PageHeader, Card, Button, StatusBadge, CodeBlock } from '../../components'
-import { useIntools, useNotification } from '../../hooks'
+import { useMulby, useNotification } from '../../hooks'
 
 interface FileStat {
     name: string
@@ -13,7 +13,7 @@ interface FileStat {
 }
 
 export function FileManagerModule() {
-    const { filesystem, dialog, shell } = useIntools()
+    const { filesystem, dialog, shell } = useMulby()
     const notify = useNotification()
 
     const [selectedFile, setSelectedFile] = useState<string | null>(null)
@@ -93,7 +93,7 @@ export function FileManagerModule() {
         try {
             const savePath = await dialog.showSaveDialog({
                 title: '保存文件',
-                defaultPath: 'intools-test.txt',
+                defaultPath: 'mulby-test.txt',
                 filters: [
                     { name: '文本文件', extensions: ['txt'] },
                     { name: '所有文件', extensions: ['*'] },
@@ -101,9 +101,9 @@ export function FileManagerModule() {
             })
 
             if (savePath) {
-                const content = `InTools Showcase - 文件保存测试
+                const content = `Mulby Showcase - 文件保存测试
 时间: ${new Date().toLocaleString()}
-这是一个测试文件，由 InTools 插件创建。`
+这是一个测试文件，由 Mulby 插件创建。`
 
                 await filesystem.writeFile(savePath, content, 'utf-8')
                 notify.success(`文件已保存: ${savePath}`)

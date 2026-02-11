@@ -51,7 +51,7 @@ Phase 3 的管理界面已成功实现，提供了用户友好的任务调度器
 
 **暴露的 API**：
 ```typescript
-window.intools.scheduler = {
+window.mulby.scheduler = {
   listTasks: (filter?) => Promise<Task[]>
   getTask: (taskId) => Promise<Task | null>
   cancelTask: (taskId) => Promise<{ success: boolean }>
@@ -253,7 +253,7 @@ src/
 
 ### 从设置界面打开
 
-1. 打开 InTools 主窗口
+1. 打开 Mulby 主窗口
 2. 点击设置图标
 3. 在"通用"设置中找到"任务调度器"卡片
 4. 点击"打开任务调度器"按钮

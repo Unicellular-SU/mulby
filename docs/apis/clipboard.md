@@ -2,7 +2,7 @@
 本文档描述 剪贴板 API (clipboard) 的使用方法与接口。
 
 > 入口：
-> - UI/渲染进程：`window.intools.clipboard`
+> - UI/渲染进程：`window.mulby.clipboard`
 > - 插件后端：`context.api.clipboard`
 
 ### readText()

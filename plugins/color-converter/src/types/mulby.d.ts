@@ -1,4 +1,4 @@
-// InTools API 类型定义
+// Mulby API 类型定义
 
 interface ClipboardFileInfo {
   path: string
@@ -7,7 +7,7 @@ interface ClipboardFileInfo {
   isDirectory: boolean
 }
 
-interface IntoolsClipboard {
+interface MulbyClipboard {
   readText(): Promise<string>
   writeText(text: string): Promise<void>
   readImage(): Promise<ArrayBuffer | null>
@@ -16,17 +16,17 @@ interface IntoolsClipboard {
   getFormat(): Promise<'text' | 'image' | 'files' | 'empty'>
 }
 
-interface IntoolsNotification {
+interface MulbyNotification {
   show(message: string, type?: 'info' | 'success' | 'warning' | 'error'): void
 }
 
-interface IntoolsWindow {
+interface MulbyWindow {
   hide(): void
   setSize(width: number, height: number): void
   center(): void
 }
 
-interface IntoolsTheme {
+interface MulbyTheme {
   get(): Promise<{ mode: 'light' | 'dark' | 'system'; actual: 'light' | 'dark' }>
   getActual(): Promise<'light' | 'dark'>
 }
@@ -37,18 +37,18 @@ interface PluginInitData {
   input: string
 }
 
-interface IntoolsAPI {
-  clipboard: IntoolsClipboard
-  notification: IntoolsNotification
-  window: IntoolsWindow
-  theme?: IntoolsTheme
+interface MulbyAPI {
+  clipboard: MulbyClipboard
+  notification: MulbyNotification
+  window: MulbyWindow
+  theme?: MulbyTheme
   onPluginInit(callback: (data: PluginInitData) => void): void
   onThemeChange?(callback: (theme: 'light' | 'dark') => void): void
 }
 
 declare global {
   interface Window {
-    intools: IntoolsAPI
+    mulby: MulbyAPI
   }
 }
 

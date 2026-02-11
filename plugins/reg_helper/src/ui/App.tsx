@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from 'react'
-import { useIntools } from './hooks/useIntools'
+import { useMulby } from './hooks/useMulby'
 import './App.css'
 
 // 正则匹配结果类型
@@ -92,7 +92,7 @@ export default function App() {
   const [isValid, setIsValid] = useState(true)
   const [theme, setTheme] = useState<'light' | 'dark'>('light')
   const [showPatterns, setShowPatterns] = useState(true)
-  const { clipboard, notification } = useIntools('reg_helper')
+  const { clipboard, notification } = useMulby('reg_helper')
 
   // 初始化
   useEffect(() => {
@@ -103,13 +103,13 @@ export default function App() {
     document.documentElement.classList.toggle('dark', initialTheme === 'dark')
 
     // 监听主题变化
-    window.intools?.onThemeChange?.((newTheme: 'light' | 'dark') => {
+    window.mulby?.onThemeChange?.((newTheme: 'light' | 'dark') => {
       setTheme(newTheme)
       document.documentElement.classList.toggle('dark', newTheme === 'dark')
     })
 
     // 接收插件初始化数据
-    window.intools?.onPluginInit?.((data: any) => {
+    window.mulby?.onPluginInit?.((data: any) => {
       if (data.input) {
         setTestText(data.input)
       }

@@ -1,12 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { Droplet, FileText, Image as ImageIcon, Type, Trash2, LayoutGrid, Maximize } from 'lucide-react';
-import { useIntools } from '../hooks/useIntools';
+import { useMulby } from '../hooks/useMulby';
 import { pdfService } from '../services/PDFService';
 import { WatermarkConfig } from '../types';
 import { PDFHeader, PDFUploadArea } from '../components/SharedPDFComponents';
 
 const Watermark: React.FC = () => {
-    const { dialog, notification, system } = useIntools('pdf-tools');
+    const { dialog, notification, system } = useMulby('pdf-tools');
     const [files, setFiles] = useState<string[]>([]);
     const [processing, setProcessing] = useState(false);
     const [preview, setPreview] = useState<string | null>(null);

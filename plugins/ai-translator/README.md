@@ -1,12 +1,12 @@
 # AI Translator
 
-基于 InTools 系统内置 AI 的翻译插件。
+基于 Mulby 系统内置 AI 的翻译插件。
 
 ## 已实现能力
 
 - 源语言可选，默认 `自动检测`
 - 目标语言可选
-- 翻译使用系统内置 `window.intools.ai.call`
+- 翻译使用系统内置 `window.mulby.ai.call`
 - 内置翻译系统提示词（仅输出译文、保留格式、语义一致）
 - 设置页支持：
   - 选择系统可用模型（来自 `ai.allModels()`）
@@ -17,7 +17,7 @@
 此插件由以下命令创建：
 
 ```bash
-node ../packages/intools-cli/dist/index.js create ai-translator
+node ../packages/mulby-cli/dist/index.js create ai-translator
 ```
 
 ## 触发方式

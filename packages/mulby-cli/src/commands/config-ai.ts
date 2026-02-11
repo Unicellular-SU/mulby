@@ -137,7 +137,7 @@ export function createAIConfigCommand() {
 
                 if (!aiConfig || !aiConfig.providers || Object.keys(aiConfig.providers).length === 0) {
                     console.log(chalk.yellow('未配置任何 AI 供应商'));
-                    console.log(chalk.gray('使用 `intools ai add <name>` 添加配置'));
+                    console.log(chalk.gray('使用 `mulby ai add <name>` 添加配置'));
                     return;
                 }
 
@@ -219,7 +219,7 @@ export function createAIConfigCommand() {
 
                 if (!aiConfig || !aiConfig.providers || !aiConfig.providers[name]) {
                     console.log(chalk.yellow(`配置 "${name}" 不存在`));
-                    console.log(chalk.gray('使用 `intools ai list` 查看所有配置'));
+                    console.log(chalk.gray('使用 `mulby ai list` 查看所有配置'));
                     return;
                 }
 

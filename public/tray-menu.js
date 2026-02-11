@@ -100,12 +100,12 @@ function render(state) {
 }
 
 async function refreshState() {
-  const state = await window.intools.trayMenu.getState();
+  const state = await window.mulby.trayMenu.getState();
   render(state);
 }
 
 async function runAction(action, payload) {
-  const result = await window.intools.trayMenu.action(action, payload);
+  const result = await window.mulby.trayMenu.action(action, payload);
   if (!result || result.success !== true) {
     return;
   }
@@ -124,17 +124,17 @@ function applyTheme(theme) {
 
 async function initTheme() {
   try {
-    const current = await window.intools.theme.getActual();
+    const current = await window.mulby.theme.getActual();
     applyTheme(current);
   } catch {}
 
-  unsubscribeTheme = window.intools.onThemeChange((theme) => {
+  unsubscribeTheme = window.mulby.onThemeChange((theme) => {
     applyTheme(theme);
   });
 }
 
 closeBtn.addEventListener('click', () => {
-  void window.intools.trayMenu.close();
+  void window.mulby.trayMenu.close();
 });
 
 openAtLoginBtn.addEventListener('click', () => {
@@ -163,11 +163,11 @@ recentList.addEventListener('click', (event) => {
 window.addEventListener('keydown', (event) => {
   if (event.key === 'Escape') {
     event.preventDefault();
-    void window.intools.trayMenu.close();
+    void window.mulby.trayMenu.close();
   }
 });
 
-unsubscribeState = window.intools.trayMenu.onState((state) => {
+unsubscribeState = window.mulby.trayMenu.onState((state) => {
   render(state);
 });
 

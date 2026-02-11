@@ -692,8 +692,8 @@ export type SharpFunction = (
 
 declare global {
   interface Window {
-    intools: ElectronAPI
-    intoolsMain?: {
+    mulby: ElectronAPI
+    mulbyMain?: {
       subInput: {
         onEnabled: (callback: (data: { placeholder: string; isFocus: boolean }) => void) => () => void
         onDisabled: (callback: () => void) => () => void

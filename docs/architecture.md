@@ -1,4 +1,4 @@
-# InTools 技术架构设计
+# Mulby 技术架构设计
 
 ## 1. 架构概览
 
@@ -67,7 +67,7 @@
 ## 3. 目录结构
 
 ```
-intools/
+mulby/
 ├── src/
 │   ├── main/                 # Electron 主进程
 │   │   ├── index.ts          # 主进程入口

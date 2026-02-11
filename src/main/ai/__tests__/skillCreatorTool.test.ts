@@ -13,7 +13,7 @@ import {
 import type { RunCommandInput, RunCommandResult } from '../../services/command-runner'
 
 async function createSkillCreatorFixture(): Promise<SkillCreatorResourcePack> {
-  const rootPath = await mkdtemp(path.join(os.tmpdir(), 'intools-skill-creator-tool-'))
+  const rootPath = await mkdtemp(path.join(os.tmpdir(), 'mulby-skill-creator-tool-'))
   const scriptsPath = path.join(rootPath, 'scripts')
   await mkdir(scriptsPath, { recursive: true })
   await writeFile(path.join(rootPath, 'SKILL.md'), '# skill creator', 'utf8')

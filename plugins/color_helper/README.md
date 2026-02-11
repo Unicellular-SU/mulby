@@ -43,8 +43,8 @@
 ## 🚀 使用方法
 
 ### 安装插件
-1. 将插件文件夹放置在 Intools 的插件目录中
-2. 重启 Intools 或刷新插件列表
+1. 将插件文件夹放置在 Mulby 的插件目录中
+2. 重启 Mulby 或刷新插件列表
 3. 启用 "color_helper" 插件
 
 ### 使用方式
@@ -75,7 +75,7 @@
 - **前端框架**：React 18 + TypeScript
 - **构建工具**：Vite + esbuild
 - **样式方案**：CSS 变量支持亮色/暗色主题
-- **插件架构**：遵循 Intools 插件规范
+- **插件架构**：遵循 Mulby 插件规范
 
 ## 📁 项目结构
 
@@ -88,7 +88,7 @@ color_helper/
 │   │   ├── main.tsx         # UI 入口
 │   │   ├── styles.css       # 样式文件
 │   │   └── hooks/
-│   │       └── useIntools.ts # Intools API Hook
+│   │       └── useMulby.ts # Mulby API Hook
 ├── dist/                    # 构建输出目录
 ├── ui/                      # UI 构建输出目录
 ├── package.json

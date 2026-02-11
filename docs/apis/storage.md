@@ -2,7 +2,7 @@
 本文档描述 存储 API (storage) 的使用方法与接口。
 
 > 入口：
-> - UI/渲染进程：`window.intools.storage`
+> - UI/渲染进程：`window.mulby.storage`
 > - 插件后端：`context.api.storage`
 
 ### get(key[, namespace])
@@ -93,7 +93,7 @@ const keys = context.api.storage.keys();
 
 ```javascript
 // 渲染进程
-await window.intools.storage.set('demo', { ok: true });
-const value = await window.intools.storage.get('demo');
+await window.mulby.storage.set('demo', { ok: true });
+const value = await window.mulby.storage.get('demo');
 console.log(value);
 ```

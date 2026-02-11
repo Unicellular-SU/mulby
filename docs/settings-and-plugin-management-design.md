@@ -68,7 +68,7 @@ References:
 ### 2) Appearance
 
 - Theme mode: `light` / `dark` / `system`.
-  - Use `window.intools.theme.get()` and `window.intools.theme.set()` in renderer.
+  - Use `window.mulby.theme.get()` and `window.mulby.theme.set()` in renderer.
 - Reduced motion (respect `prefers-reduced-motion`).
 - Glass intensity (optional; mapped to CSS vars).
 
@@ -119,12 +119,12 @@ so app-level shortcuts should be backed by a new main-process registry (see Data
 
 - Show status for: accessibility, screen, mic, camera, location.
 - Actions: request permission / open system settings.
-- Uses `window.intools.permission.*`.
+- Uses `window.mulby.permission.*`.
 
 ### 7) About / Advanced
 
-- App info: version, build, data path (use `window.intools.system.getAppInfo()` and `getPath()`).
-- Logs folder open (use `window.intools.shell.openFolder()`).
+- App info: version, build, data path (use `window.mulby.system.getAppInfo()` and `getPath()`).
+- Logs folder open (use `window.mulby.shell.openFolder()`).
 - Export/Import settings (future).
 
 ## Plugin Store Source Model
@@ -147,7 +147,7 @@ so app-level shortcuts should be backed by a new main-process registry (see Data
 
 ```
 {
-  "name": "InTools Community",
+  "name": "Mulby Community",
   "updatedAt": 1730000000000,
   "plugins": [
     {
@@ -170,7 +170,7 @@ so app-level shortcuts should be backed by a new main-process registry (see Data
 ### 1) Settings Load
 
 - Renderer:
-  - `window.intools.storage.get('appSettings', 'global')`
+  - `window.mulby.storage.get('appSettings', 'global')`
   - Merge defaults and update UI state.
 - Main:
   - `storage` IPC already exists (`src/main/ipc/storage.ts`).
@@ -178,15 +178,15 @@ so app-level shortcuts should be backed by a new main-process registry (see Data
 ### 2) Theme Changes
 
 - Renderer:
-  - On user selection: `window.intools.theme.set(mode)`
-  - Listen: `window.intools.onThemeChange`.
+  - On user selection: `window.mulby.theme.set(mode)`
+  - Listen: `window.mulby.onThemeChange`.
 - Main:
   - `ThemeManager` persists `theme.json` and broadcasts updates.
 
 ### 3) Plugin List
 
 - Renderer:
-  - `window.intools.plugin.getAll()`
+  - `window.mulby.plugin.getAll()`
   - Use `PluginDetails` for README via `plugin:getReadme`.
 - Main:
   - `registerPluginHandlers()` exposes `getAll`, `enable`, `disable`, `uninstall`.
@@ -203,7 +203,7 @@ so app-level shortcuts should be backed by a new main-process registry (see Data
 ### 5) Store Index Fetch
 
 - Renderer:
-  - For each enabled source: `window.intools.http.get(url)`
+  - For each enabled source: `window.mulby.http.get(url)`
   - Validate schema, aggregate by id/version.
   - Cache in `storage` under `pluginStoreCache`.
 - Main:
@@ -213,7 +213,7 @@ so app-level shortcuts should be backed by a new main-process registry (see Data
 
 - Renderer:
   - Download `.inplugin` with `http` (or use `filesystem` + `dialog`).
-  - Call `window.intools.plugin.install(filePath)` after saving.
+  - Call `window.mulby.plugin.install(filePath)` after saving.
 - Main:
   - `PluginInstaller` handles install/update; `PluginManager.init()` reloads.
 
@@ -278,7 +278,7 @@ state:
 ### New IPC/API
 
 - `settings:get`, `settings:update`, `settings:reset`
-- Renderer API: `window.intools.settings`
+- Renderer API: `window.mulby.settings`
 - App event: `app:openSettings` (main -> renderer)
  - `plugin:getAll` now returns version/author/path/builtin for management UI.
 

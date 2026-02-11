@@ -264,18 +264,18 @@ export default function AiSkillsSettingsView({ onBack }: AiSkillsSettingsViewPro
   }, [createTimeline])
 
   const loadSkills = async (forceRefresh = false) => {
-    if (!window.intools?.ai?.skills?.list) {
+    if (!window.mulby?.ai?.skills?.list) {
       setError('Skills API 未就绪，请重启应用')
       return
     }
     setLoading(true)
     try {
-      const list = forceRefresh && window.intools.ai.skills.refresh
-        ? await window.intools.ai.skills.refresh()
-        : await window.intools.ai.skills.list()
+      const list = forceRefresh && window.mulby.ai.skills.refresh
+        ? await window.mulby.ai.skills.refresh()
+        : await window.mulby.ai.skills.list()
       setSkills(list)
-      const models = window.intools.ai.skills.listCreateModels
-        ? await window.intools.ai.skills.listCreateModels()
+      const models = window.mulby.ai.skills.listCreateModels
+        ? await window.mulby.ai.skills.listCreateModels()
         : []
       setCreateModels(models)
       if (!selectedCreateModel && models.length > 0) {
@@ -310,9 +310,9 @@ export default function AiSkillsSettingsView({ onBack }: AiSkillsSettingsViewPro
       }
 
       const filePath = selectedSkill.skillMdPath
-      if (filePath && (window.intools as any)?.filesystem?.readFile) {
+      if (filePath && (window.mulby as any)?.filesystem?.readFile) {
         try {
-          const content = await (window.intools as any).filesystem.readFile(filePath, 'utf-8')
+          const content = await (window.mulby as any).filesystem.readFile(filePath, 'utf-8')
           setSelectedSkillContent(typeof content === 'string' ? content : String(content || ''))
           return
         } catch {
@@ -333,13 +333,13 @@ export default function AiSkillsSettingsView({ onBack }: AiSkillsSettingsViewPro
   }, [filteredSkills, selectedSkillId])
 
   const handleToggleEnabled = async () => {
-    if (!selectedSkill || !window.intools?.ai?.skills) return
+    if (!selectedSkill || !window.mulby?.ai?.skills) return
     setBusy(true)
     try {
       if (selectedSkill.enabled) {
-        await window.intools.ai.skills.disable(selectedSkill.id)
+        await window.mulby.ai.skills.disable(selectedSkill.id)
       } else {
-        await window.intools.ai.skills.enable(selectedSkill.id)
+        await window.mulby.ai.skills.enable(selectedSkill.id)
       }
       await loadSkills(true)
       setInfo(selectedSkill.enabled ? 'Skill 已停用' : 'Skill 已启用')
@@ -353,12 +353,12 @@ export default function AiSkillsSettingsView({ onBack }: AiSkillsSettingsViewPro
   }
 
   const handleDeleteSkill = async () => {
-    if (!selectedSkill || selectedSkill.readonly || selectedSkill.origin === 'system' || !window.intools?.ai?.skills?.remove) return
+    if (!selectedSkill || selectedSkill.readonly || selectedSkill.origin === 'system' || !window.mulby?.ai?.skills?.remove) return
     const ok = window.confirm(`确认删除 Skill「${selectedSkill.descriptor.name || selectedSkill.id}」吗？`)
     if (!ok) return
     setBusy(true)
     try {
-      await window.intools.ai.skills.remove(selectedSkill.id)
+      await window.mulby.ai.skills.remove(selectedSkill.id)
       await loadSkills(true)
       setInfo('Skill 已删除')
       setError(null)
@@ -371,7 +371,7 @@ export default function AiSkillsSettingsView({ onBack }: AiSkillsSettingsViewPro
   }
 
   const handleCreateWithAi = async () => {
-    if (!window.intools?.ai?.skills?.createWithAi) {
+    if (!window.mulby?.ai?.skills?.createWithAi) {
       setError('当前版本不支持 AI 创建 Skill')
       return
     }
@@ -429,9 +429,9 @@ export default function AiSkillsSettingsView({ onBack }: AiSkillsSettingsViewPro
         setCreateStreamText(createOutputRef.current)
       }
 
-      const result = window.intools.ai.skills.createWithAiStream
-        ? await window.intools.ai.skills.createWithAiStream(input, onChunk)
-        : await window.intools.ai.skills.createWithAi(input)
+      const result = window.mulby.ai.skills.createWithAiStream
+        ? await window.mulby.ai.skills.createWithAiStream(input, onChunk)
+        : await window.mulby.ai.skills.createWithAi(input)
       const finalRawText = String(result?.generation?.rawText || createOutputRef.current || '')
       if (finalRawText) {
         createOutputRef.current = finalRawText
@@ -487,8 +487,8 @@ export default function AiSkillsSettingsView({ onBack }: AiSkillsSettingsViewPro
       return
     }
     try {
-      if (window.intools?.clipboard?.writeText) {
-        await window.intools.clipboard.writeText(text)
+      if (window.mulby?.clipboard?.writeText) {
+        await window.mulby.clipboard.writeText(text)
       } else if (navigator?.clipboard?.writeText) {
         await navigator.clipboard.writeText(text)
       } else {
@@ -503,13 +503,13 @@ export default function AiSkillsSettingsView({ onBack }: AiSkillsSettingsViewPro
   }
 
   const installZipPath = async (zipPath: string) => {
-    if (!window.intools?.ai?.skills?.install) {
+    if (!window.mulby?.ai?.skills?.install) {
       setError('Skills 安装 API 未就绪')
       return
     }
     setBusy(true)
     try {
-      const installed = await window.intools.ai.skills.install({
+      const installed = await window.mulby.ai.skills.install({
         source: 'zip',
         ref: zipPath
       })
@@ -547,7 +547,7 @@ export default function AiSkillsSettingsView({ onBack }: AiSkillsSettingsViewPro
   }
 
   const handlePickZip = async () => {
-    const dialog = window.intools?.dialog
+    const dialog = window.mulby?.dialog
     if (!dialog?.showOpenDialog) {
       setError('文件选择 API 未就绪')
       return
@@ -570,8 +570,8 @@ export default function AiSkillsSettingsView({ onBack }: AiSkillsSettingsViewPro
     const url = String(href || '').trim()
     if (!url) return
     try {
-      if (window.intools?.shell?.openExternal) {
-        await window.intools.shell.openExternal(url)
+      if (window.mulby?.shell?.openExternal) {
+        await window.mulby.shell.openExternal(url)
         return
       }
       window.open(url, '_blank', 'noopener,noreferrer')
@@ -583,7 +583,7 @@ export default function AiSkillsSettingsView({ onBack }: AiSkillsSettingsViewPro
   const handleOpenSkillFolder = async () => {
     if (!selectedSkill) return
     try {
-      const shell = window.intools?.shell
+      const shell = window.mulby?.shell
       if (!shell) {
         setError('系统 shell API 未就绪')
         return

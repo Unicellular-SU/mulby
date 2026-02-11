@@ -2,13 +2,13 @@
 
 ## 概述
 
-本文档描述了 `packages/intools-cli` 中 AI 开发插件上下文压缩算法的优化方案。目标是提升上下文管理的效率、降低 token 成本、提高压缩质量。
+本文档描述了 `packages/mulby-cli` 中 AI 开发插件上下文压缩算法的优化方案。目标是提升上下文管理的效率、降低 token 成本、提高压缩质量。
 
 ## 当前实现分析
 
 ### 核心文件
-- **压缩实现**：`packages/intools-cli/src/services/ai/context-manager.ts`
-- **压缩集成**：`packages/intools-cli/src/services/ai-generator.ts`
+- **压缩实现**：`packages/mulby-cli/src/services/ai/context-manager.ts`
+- **压缩集成**：`packages/mulby-cli/src/services/ai-generator.ts`
 
 ### 当前策略
 1. **Token 估算**：4 字符 ≈ 1 token（启发式规则）
@@ -240,7 +240,7 @@ private static ensureCompleteToolChains(messages: AIMessage[]): AIMessage[] {
 
 1. 更新 AIMessage 类型定义：
 ```typescript
-// packages/intools-cli/src/types/ai.ts
+// packages/mulby-cli/src/types/ai.ts
 export interface AIMessageContent {
     type: 'text' | 'image';
     text?: string;
@@ -287,7 +287,7 @@ public static async compressHistory(
 
 3. 更新 Claude Provider 支持缓存：
 ```typescript
-// packages/intools-cli/src/services/ai/providers/claude.ts
+// packages/mulby-cli/src/services/ai/providers/claude.ts
 public async chat(
     messages: AIMessage[],
     options?: ChatOptions
@@ -417,7 +417,7 @@ if (count > 10000) {  // 接近限制才压缩
 
 **实现**：
 ```typescript
-// packages/intools-cli/src/services/ai-generator.ts
+// packages/mulby-cli/src/services/ai-generator.ts
 
 private async checkAndCompressContext() {
     const tokens = ContextManager.estimateTokenCount(this.session.conversationHistory);

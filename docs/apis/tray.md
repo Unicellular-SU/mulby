@@ -2,7 +2,7 @@
 本文档描述 Tray API (tray) 的使用方法与接口。
 
 > 入口：
-> - UI/渲染进程：`window.intools.tray`
+> - UI/渲染进程：`window.mulby.tray`
 > - 插件后端：`context.api.tray`
 
 Tray API 提供系统托盘功能，支持 macOS、Windows 和 Linux。
@@ -76,8 +76,8 @@ if (await tray.exists()) {
 ### 完整示例
 
 ```javascript
-await window.intools.tray.create({
+await window.mulby.tray.create({
   icon: '/path/to/icon.png',
-  tooltip: 'InTools'
+  tooltip: 'Mulby'
 });
 ```

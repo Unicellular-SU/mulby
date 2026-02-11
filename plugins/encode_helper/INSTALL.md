@@ -3,12 +3,12 @@
 ## 方法一：直接安装（推荐）
 
 1. 下载插件压缩包或克隆仓库
-2. 将整个 `encode_helper` 文件夹复制到 Intools 的插件目录：
-   - **Windows**: `%APPDATA%\Intools\plugins\`
-   - **macOS**: `~/Library/Application Support/Intools/plugins/`
-   - **Linux**: `~/.config/Intools/plugins/`
+2. 将整个 `encode_helper` 文件夹复制到 Mulby 的插件目录：
+   - **Windows**: `%APPDATA%\Mulby\plugins\`
+   - **macOS**: `~/Library/Application Support/Mulby/plugins/`
+   - **Linux**: `~/.config/Mulby/plugins/`
 
-3. 重启 Intools 或进入插件管理界面重新加载插件
+3. 重启 Mulby 或进入插件管理界面重新加载插件
 4. 在插件管理中找到 "编码小助手" 并启用
 
 ## 方法二：开发模式安装
@@ -20,12 +20,12 @@
    npm run build
    ```
 
-3. 将构建好的插件文件夹复制到 Intools 插件目录
+3. 将构建好的插件文件夹复制到 Mulby 插件目录
 4. 启用插件
 
 ## 验证安装
 
-1. 打开 Intools 主界面
+1. 打开 Mulby 主界面
 2. 输入以下任意关键词测试：
    - `时间转换`
    - `base64`
@@ -50,7 +50,7 @@
 ### 插件未显示
 - 检查插件文件夹是否在正确的目录
 - 检查插件文件夹名称是否为 `encode_helper`
-- 重启 Intools 并重新加载插件
+- 重启 Mulby 并重新加载插件
 
 ### 功能无法使用
 - 检查是否已启用插件
@@ -71,7 +71,7 @@
 
 ## 系统要求
 
-- **Intools**: 最新版本
+- **Mulby**: 最新版本
 - **操作系统**: Windows 10+, macOS 10.15+, Linux
 - **Node.js**: 16+（仅开发需要）
 - **内存**: 建议 2GB+

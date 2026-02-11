@@ -5,7 +5,7 @@ import * as os from 'os';
 import { v4 as uuidv4 } from 'uuid';
 import { AIMessage } from '../types/ai';
 
-const SESSION_DIR = path.join(os.homedir(), '.intools', 'ai-sessions');
+const SESSION_DIR = path.join(os.homedir(), '.mulby', 'ai-sessions');
 
 export interface FileToGenerate {
     path: string;

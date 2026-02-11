@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Combine, Trash2, FileText, ArrowUp, ArrowDown } from 'lucide-react';
 import { PDFHeader, PDFUploadArea } from '../components/SharedPDFComponents';
-import { useIntools } from '../hooks/useIntools';
+import { useMulby } from '../hooks/useMulby';
 import { pdfService } from '../services/PDFService';
 import '../types';
 
@@ -92,7 +92,7 @@ const FileItem: React.FC<{
 };
 
 const MergePDF: React.FC = () => {
-    const { dialog, notification, system } = useIntools('pdf-tools');
+    const { dialog, notification, system } = useMulby('pdf-tools');
     const [files, setFiles] = useState<string[]>([]);
     const [merging, setMerging] = useState(false);
 

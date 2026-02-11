@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { FileText, Image, Folder, Star, Trash2, Copy, Search, X, File, ChevronRight, RefreshCw } from 'lucide-react'
-import { useIntools } from './hooks/useIntools'
+import { useMulby } from './hooks/useMulby'
 
 interface ClipboardHistoryItem {
   id: string
@@ -32,7 +32,7 @@ export default function App() {
   const [searchText, setSearchText] = useState('')
   const [filterType, setFilterType] = useState<'all' | 'text' | 'image' | 'files' | 'favorite'>('all')
   const [stats, setStats] = useState<Stats | null>(null)
-  const { host, notification, window: win } = useIntools('clipboard-history')
+  const { host, notification, window: win } = useMulby('clipboard-history')
 
   // 加载历史记录
   const loadHistory = async () => {
@@ -71,7 +71,7 @@ export default function App() {
     setTheme(initialTheme)
     document.documentElement.classList.toggle('dark', initialTheme === 'dark')
 
-    window.intools?.onThemeChange?.((newTheme: 'light' | 'dark') => {
+    window.mulby?.onThemeChange?.((newTheme: 'light' | 'dark') => {
       setTheme(newTheme)
       document.documentElement.classList.toggle('dark', newTheme === 'dark')
     })

@@ -1,8 +1,8 @@
-# InTools CLI - AI 多供应商支持实现总结
+# Mulby CLI - AI 多供应商支持实现总结
 
 ## 实现概述
 
-成功为 InTools CLI 添加了多 AI 供应商支持，并实现了灵活的配置管理和会话中切换功能。
+成功为 Mulby CLI 添加了多 AI 供应商支持，并实现了灵活的配置管理和会话中切换功能。
 
 ## 主要变更
 
@@ -84,7 +84,7 @@
 
 ### 4. 配置管理命令 (`src/commands/config-ai.ts`)
 
-新增 `intools config ai` 子命令系统:
+新增 `mulby config ai` 子命令系统:
 
 | 命令 | 功能 |
 |------|------|
@@ -131,7 +131,7 @@
 - `src/services/ai/providers/gemini.ts` - Gemini 供应商实现
 - `src/services/ai/providers/glm.ts` - GLM 供应商实现
 - `src/commands/config-ai.ts` - AI 配置管理命令
-- `packages/intools-cli/AI_PROVIDERS.md` - 用户文档
+- `packages/mulby-cli/AI_PROVIDERS.md` - 用户文档
 
 ### 修改文件
 - `src/types/ai.ts` - 类型系统重构
@@ -150,32 +150,32 @@
 
 ```bash
 # 添加 OpenAI
-intools config ai add openai-main \
+mulby config ai add openai-main \
   --provider openai \
   --api-key sk-xxx \
   --model gpt-4o
 
 # 添加 Claude
-intools config ai add claude-main \
+mulby config ai add claude-main \
   --provider claude \
   --api-key sk-ant-xxx \
   --model claude-3-5-sonnet-20241022
 
 # 添加 Gemini
-intools config ai add gemini-main \
+mulby config ai add gemini-main \
   --provider gemini \
   --api-key AIza-xxx \
   --model gemini-2.0-flash-exp
 
 # 查看所有配置
-intools config ai list
+mulby config ai list
 ```
 
 ### 会话中切换
 
 ```bash
 # 启动 AI 会话
-intools create my-plugin --ai
+mulby create my-plugin --ai
 
 # 在会话中切换供应商
 > /use claude-main
@@ -239,4 +239,4 @@ intools create my-plugin --ai
 
 ## 文档
 
-详细使用文档请参考: `packages/intools-cli/AI_PROVIDERS.md`
+详细使用文档请参考: `packages/mulby-cli/AI_PROVIDERS.md`

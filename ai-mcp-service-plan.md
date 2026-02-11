@@ -2,7 +2,7 @@
 
 ## 1. Goals and scope
 - Provide a unified MCP configuration, management, and invocation layer for:
-  - Main app AI calls (`window.intools.ai.call`)
+  - Main app AI calls (`window.mulby.ai.call`)
   - Plugin AI calls (`context.api.ai.call`)
   - Future agent-mode calls (if introduced later)
 - Keep compatibility with existing `AiOption.tools` and plugin-host tool invocation.
@@ -49,7 +49,7 @@ Out of scope for phase-1:
 
 ### 3.3 IPC and preload APIs
 - Add `src/main/ipc/ai-mcp.ts` and register in `src/main/ipc/index.ts`.
-- Expose in `src/preload/index.ts` under `window.intools.ai.mcp`:
+- Expose in `src/preload/index.ts` under `window.mulby.ai.mcp`:
   - `servers.list/get/upsert/remove`
   - `servers.activate/deactivate/restart/checkConnectivity`
   - `tools.list(serverId)`
@@ -153,7 +153,7 @@ interface AiOption {
 ### Phase C (ecosystem support)
 - OAuth support for streamableHttp/sse servers.
 - prompts/resources management APIs.
-- optional protocol import entry (`intools://mcp/install?...`).
+- optional protocol import entry (`mulby://mcp/install?...`).
 
 ## 7. File-level implementation plan
 - New files:

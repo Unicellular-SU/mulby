@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react'
 import { PageHeader, Card, Button, StatusBadge, CodeBlock } from '../../components'
-import { useIntools, useNotification } from '../../hooks'
+import { useMulby, useNotification } from '../../hooks'
 
 interface DisplayInfo {
     id: number
@@ -34,7 +34,7 @@ interface ScreenModuleProps {
 }
 
 export function ScreenModule({ autoAction, onAutoActionDone }: ScreenModuleProps) {
-    const { screen, media, clipboard, filesystem, dialog } = useIntools()
+    const { screen, media, clipboard, filesystem, dialog } = useMulby()
     const notify = useNotification()
 
     const [displays, setDisplays] = useState<DisplayInfo[]>([])
@@ -138,9 +138,9 @@ export function ScreenModule({ autoAction, onAutoActionDone }: ScreenModuleProps
             if (result) {
                 // 不再设置主界面预览，等待编辑结果
                 // setScreenshot(result)
-                // localStorage.setItem('intools-temp-screenshot', result)
+                // localStorage.setItem('mulby-temp-screenshot', result)
 
-                const channel = new BroadcastChannel('intools-image-editor')
+                const channel = new BroadcastChannel('mulby-image-editor')
 
                 // 监听编辑器消息
                 channel.onmessage = (event) => {
@@ -154,15 +154,15 @@ export function ScreenModule({ autoAction, onAutoActionDone }: ScreenModuleProps
                         notify.success('收到编辑后的图片')
                         channel.close()
                         // 恢复显示主窗口
-                        if (window.intools?.window?.show) {
-                            window.intools.window.show()
+                        if (window.mulby?.window?.show) {
+                            window.mulby.window.show()
                         }
                     }
                 }
 
                 // 打开独立编辑器窗口
-                if (window.intools?.window?.create) {
-                    await window.intools.window.create('/image-editor', {
+                if (window.mulby?.window?.create) {
+                    await window.mulby.window.create('/image-editor', {
                         title: '图片编辑器',
                         width: 900,
                         height: 700
@@ -173,16 +173,16 @@ export function ScreenModule({ autoAction, onAutoActionDone }: ScreenModuleProps
             } else {
                 notify.info('已取消截图')
                 // 恢复显示主窗口
-                if (window.intools?.window?.show) {
-                    window.intools.window.show()
+                if (window.mulby?.window?.show) {
+                    window.mulby.window.show()
                 }
             }
         } catch (error) {
             console.error(error)
             notify.error('截图失败')
             // 恢复显示主窗口
-            if (window.intools?.window?.show) {
-                window.intools.window.show()
+            if (window.mulby?.window?.show) {
+                window.mulby.window.show()
             }
         } finally {
             setLoading(false)
@@ -526,8 +526,8 @@ export function ScreenModule({ autoAction, onAutoActionDone }: ScreenModuleProps
                                 variant="primary"
                                 onClick={async () => {
                                     try {
-                                        const result = await window.intools?.plugin?.redirect?.(
-                                            ['@intools/color-converter', 'main'],
+                                        const result = await window.mulby?.plugin?.redirect?.(
+                                            ['@mulby/color-converter', 'main'],
                                             pickedColor.hex
                                         )
                                         if (!result) {

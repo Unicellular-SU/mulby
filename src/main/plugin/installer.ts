@@ -32,7 +32,7 @@ export class PluginInstaller {
       return { success: false, error: '文件不存在' }
     }
 
-    const tempDir = join(tmpdir(), `intools-${Date.now()}`)
+    const tempDir = join(tmpdir(), `mulby-${Date.now()}`)
 
     try {
       // 解压到临时目录验证

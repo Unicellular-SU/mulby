@@ -6,13 +6,13 @@ import {
   buildAppTsx,
   buildBackendMain,
   buildIndexHtml,
-  buildIntoolsTypes,
+  buildMulbyTypes,
   buildMainTsx,
   buildReactManifest,
   buildReactPackageJson,
   buildStylesCss,
   buildTsConfig,
-  buildUseIntools,
+  buildUseMulby,
   buildViteConfig,
   buildGitignore,
   buildReactReadme,
@@ -34,7 +34,7 @@ export async function createReactProject(targetDir: string, name: string) {
   createTailwindConfig(targetDir)
   createBackendMain(targetDir, name)
   createReactUI(targetDir, name)
-  createIntoolsTypes(targetDir)
+  createMulbyTypes(targetDir)
   createGitignore(targetDir)
   createReadme(targetDir, name)
 
@@ -107,17 +107,17 @@ function createReactUI(targetDir: string, name: string) {
   fs.writeFileSync(path.join(targetDir, 'src/ui/styles.css'), stylesCss)
   console.log(chalk.green('  ✓ src/ui/styles.css'))
 
-  const useIntools = buildUseIntools()
-  fs.writeFileSync(path.join(targetDir, 'src/ui/hooks/useIntools.ts'), useIntools)
-  console.log(chalk.green('  ✓ src/ui/hooks/useIntools.ts'))
+  const useMulby = buildUseMulby()
+  fs.writeFileSync(path.join(targetDir, 'src/ui/hooks/useMulby.ts'), useMulby)
+  console.log(chalk.green('  ✓ src/ui/hooks/useMulby.ts'))
 }
 
-function createIntoolsTypes(targetDir: string) {
+function createMulbyTypes(targetDir: string) {
   fs.mkdirSync(path.join(targetDir, 'src/types'), { recursive: true })
 
-  const typesDts = buildIntoolsTypes()
-  fs.writeFileSync(path.join(targetDir, 'src/types/intools.d.ts'), typesDts)
-  console.log(chalk.green('  ✓ src/types/intools.d.ts'))
+  const typesDts = buildMulbyTypes()
+  fs.writeFileSync(path.join(targetDir, 'src/types/mulby.d.ts'), typesDts)
+  console.log(chalk.green('  ✓ src/types/mulby.d.ts'))
 }
 
 function createGitignore(targetDir: string) {

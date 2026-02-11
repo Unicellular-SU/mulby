@@ -1,4 +1,4 @@
-const PATCHED_FLAG = '__intools_console_ts_patched__'
+const PATCHED_FLAG = '__mulby_console_ts_patched__'
 
 function formatTimestamp() {
   const d = new Date()

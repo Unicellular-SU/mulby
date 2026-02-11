@@ -2,7 +2,7 @@
   "id": "ai-api-test",
   "name": "ai-api-test",
   "version": "1.0.0",
-  "author": "intools",
+  "author": "mulby",
   "displayName": "ai-api-test",
   "description": "插件描述",
   "main": "dist/main.js",

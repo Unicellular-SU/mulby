@@ -2,7 +2,7 @@
 本文档描述 权限 API (permission) 的使用方法与接口。
 
 > 入口：
-> - UI/渲染进程：`window.intools.permission`
+> - UI/渲染进程：`window.mulby.permission`
 > - 插件后端：`context.api.permission`
 
 权限 API 封装系统权限检测与跳转设置页，优先在 macOS 上提供真实状态。
@@ -74,8 +74,8 @@ const trusted = await permission.isAccessibilityTrusted();
 ### 完整示例
 
 ```javascript
-const status = await window.intools.permission.getStatus('camera');
+const status = await window.mulby.permission.getStatus('camera');
 if (status === 'not-determined') {
-  await window.intools.permission.request('camera');
+  await window.mulby.permission.request('camera');
 }
 ```

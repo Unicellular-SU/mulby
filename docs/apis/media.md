@@ -2,7 +2,7 @@
 本文档描述 Media API (media) 的使用方法与接口。
 
 > 入口：
-> - UI/渲染进程：`window.intools.media`
+> - UI/渲染进程：`window.mulby.media`
 > - 插件后端：`context.api.media`
 
 Media API 提供摄像头和麦克风的权限管理，支持 macOS、Windows 和 Linux。
@@ -72,9 +72,9 @@ if (await media.hasMicrophoneAccess()) {
 
 ```javascript
 // 检查权限
-const hasCamera = await window.intools.media.hasCameraAccess();
+const hasCamera = await window.mulby.media.hasCameraAccess();
 if (!hasCamera) {
-  await window.intools.media.askForAccess('camera');
+  await window.mulby.media.askForAccess('camera');
 }
 
 // 使用 Web API 获取媒体流
@@ -91,6 +91,6 @@ video.srcObject = stream;
 ### 完整示例
 
 ```javascript
-const granted = await window.intools.media.askForAccess('microphone');
+const granted = await window.mulby.media.askForAccess('microphone');
 console.log('microphone:', granted);
 ```

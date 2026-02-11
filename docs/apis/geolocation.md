@@ -1,7 +1,7 @@
 # Geolocation API (geolocation)
 本文档描述 Geolocation API (geolocation) 的使用方法与接口。
 
-> 入口：`window.intools.geolocation`
+> 入口：`window.mulby.geolocation`
 
 Geolocation API 提供地理位置功能，支持 macOS、Windows 和 Linux。
 

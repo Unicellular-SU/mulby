@@ -1,9 +1,9 @@
 ---
 trigger: model_decision
-description: InTools UI/UX 设计规范，UI Design
+description: Mulby UI/UX 设计规范，UI Design
 ---
 
-# InTools UI/UX 设计规范
+# Mulby UI/UX 设计规范
 
 ## 1. 设计原则
 

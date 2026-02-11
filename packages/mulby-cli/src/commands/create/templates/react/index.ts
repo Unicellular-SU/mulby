@@ -5,8 +5,8 @@
  * - config.ts   - 配置文件生成器（manifest, package.json, tsconfig 等）
  * - backend.ts  - 后端代码生成器（main.ts）
  * - ui.ts       - UI 代码生成器（index.html, main.tsx, App.tsx, styles.css）
- * - hooks.ts    - Hooks 代码生成器（useIntools.ts）
- * - types.ts    - 类型定义生成器（intools.d.ts）
+ * - hooks.ts    - Hooks 代码生成器（useMulby.ts）
+ * - types.ts    - 类型定义生成器（mulby.d.ts）
  * - docs.ts     - 文档生成器（README.md）
  */
 
@@ -33,10 +33,10 @@ export {
 } from './ui.js'
 
 // Hooks 代码
-export { buildUseIntools } from './hooks.js'
+export { buildUseMulby } from './hooks.js'
 
 // 类型定义
-export { buildIntoolsTypes } from './types.js'
+export { buildMulbyTypes } from './types.js'
 
 // 文档
 export { buildReactReadme } from './docs.js'

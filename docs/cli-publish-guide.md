@@ -1,6 +1,6 @@
-# intools-cli 发布指南
+# mulby-cli 发布指南
 
-本文档介绍如何将 `intools-cli` 发布到 NPM 仓库。
+本文档介绍如何将 `mulby-cli` 发布到 NPM 仓库。
 
 ## 1. 准备工作
 
@@ -17,7 +17,7 @@ npm login
 在发布前必须构建 TypeScript 代码：
 
 ```bash
-cd packages/intools-cli
+cd packages/mulby-cli
 npm run build
 ```
 
@@ -35,18 +35,18 @@ npm publish --access public
 npm publish --tag beta --access public
 ```
 
-> 注意：`--access public` 是为了确保包是公开的（对于 scoped package 如 `@my/pkg` 尤为重要，`intools-cli` 虽为非 scoped 包，加上参数是个好习惯）。
+> 注意：`--access public` 是为了确保包是公开的（对于 scoped package 如 `@my/pkg` 尤为重要，`mulby-cli` 虽为非 scoped 包，加上参数是个好习惯）。
 
 ## 4. 验证
 
 发布成功后，可以通过以下命令验证：
 
 ```bash
-npm info intools-cli version
+npm info mulby-cli version
 ```
 
 或者尝试安装：
 
 ```bash
-npm install -g intools-cli
+npm install -g mulby-cli
 ```

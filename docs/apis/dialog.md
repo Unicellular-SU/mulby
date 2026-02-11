@@ -2,7 +2,7 @@
 本文档描述 Dialog API (dialog) 的使用方法与接口。
 
 > 入口：
-> - UI/渲染进程：`window.intools.dialog`
+> - UI/渲染进程：`window.mulby.dialog`
 > - 插件后端：`context.api.dialog`
 
 Dialog API 提供系统原生对话框，支持 macOS、Windows 和 Linux。
@@ -129,11 +129,11 @@ dialog.showErrorBox('错误', '发生了一个严重错误');
 
 ```javascript
 // 选择文件
-const files = await window.intools.dialog.showOpenDialog({
+const files = await window.mulby.dialog.showOpenDialog({
   title: '选择文件',
   properties: ['openFile', 'multiSelections']
 });
 if (files.length) {
-  window.intools.notification.show(`已选择 ${files.length} 个文件`);
+  window.mulby.notification.show(`已选择 ${files.length} 个文件`);
 }
 ```

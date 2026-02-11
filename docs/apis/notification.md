@@ -2,7 +2,7 @@
 本文档描述 通知 API (notification) 的使用方法与接口。
 
 > 入口：
-> - UI/渲染进程：`window.intools.notification`
+> - UI/渲染进程：`window.mulby.notification`
 > - 插件后端：`context.api.notification`
 
 ### show(message, type?)
@@ -21,5 +21,5 @@ notification.show('发生错误', 'error');
 ### 完整示例
 
 ```javascript
-window.intools.notification.show('操作完成');
+window.mulby.notification.show('操作完成');
 ```

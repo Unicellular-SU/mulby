@@ -207,7 +207,7 @@ ${item.files.map(p => `    <string>${p}</string>`).join('\n')}
         // 使用 setImmediate 确保不阻塞事件循环
         setImmediate(() => {
           new Notification({
-            title: 'InTools',
+            title: 'Mulby',
             body: message
           }).show()
         })

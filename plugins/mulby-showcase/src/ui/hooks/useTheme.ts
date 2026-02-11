@@ -23,7 +23,7 @@ export function useTheme() {
 
     // 监听主题变化
     useEffect(() => {
-        window.intools?.onThemeChange?.((newTheme: Theme) => {
+        window.mulby?.onThemeChange?.((newTheme: Theme) => {
             setThemeState(newTheme)
         })
     }, [])
@@ -31,7 +31,7 @@ export function useTheme() {
     // 手动设置主题
     const setTheme = useCallback(async (mode: 'light' | 'dark' | 'system') => {
         try {
-            const result = await window.intools?.theme?.set(mode)
+            const result = await window.mulby?.theme?.set(mode)
             if (result?.actual) {
                 setThemeState(result.actual)
             }
@@ -43,7 +43,7 @@ export function useTheme() {
     // 获取当前主题信息
     const getThemeInfo = useCallback(async () => {
         try {
-            return await window.intools?.theme?.get()
+            return await window.mulby?.theme?.get()
         } catch (error) {
             console.error('Failed to get theme:', error)
             return null

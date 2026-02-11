@@ -1,9 +1,9 @@
-# InTools 产品需求文档 (PRD)
+# Mulby 产品需求文档 (PRD)
 
 ## 1. 产品概述
 
 ### 1.1 产品名称
-InTools - 跨平台插件式效率工具箱
+Mulby - 跨平台插件式效率工具箱
 
 ### 1.2 产品定位
 面向开发者和效率用户的跨平台桌面应用，通过全局快捷键快速唤起，提供可扩展的插件生态系统。
@@ -98,7 +98,7 @@ InTools - 跨平台插件式效率工具箱
 
 ## 5. 竞品分析
 
-| 特性 | uTools | Raycast | Alfred | InTools |
+| 特性 | uTools | Raycast | Alfred | Mulby |
 |-----|--------|---------|--------|---------|
 | 平台支持 | Win/Mac/Linux | Mac | Mac | Win/Mac/Linux |
 | 插件开发语言 | JavaScript | JS/Swift | AppleScript | JS + Python |

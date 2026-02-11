@@ -5,7 +5,7 @@
 当前开发流程中，插件位于项目根目录的 `plugins/` 下，开发时直接由 `PluginManager` 从 `process.cwd()/plugins` 加载。这在开发阶段非常便捷，但当应用打包发布后：
 
 1. **开发目录不可用**：打包后 `process.cwd()` 不再是项目根目录，开发中的插件无法被加载
-2. **用户数据目录隔离**：已安装插件位于 `~/Library/Application Support/intools/plugins/`（macOS），开发者需要将插件复制到这里才能测试
+2. **用户数据目录隔离**：已安装插件位于 `~/Library/Application Support/mulby/plugins/`（macOS），开发者需要将插件复制到这里才能测试
 3. **调试体验下降**：每次修改都需要重新打包 `.inplugin` 文件并安装，效率极低
 
 ---
@@ -83,7 +83,7 @@ const DEFAULT_SETTINGS: AppSettings = {
 │ 插件开发目录                                                     │
 │ ┌─────────────────────────────────────────────────────────────┐ │
 │ │ /Users/su/workspace/my-plugins                       [移除] │ │
-│ │ /Users/su/workspace/in_tools/plugins                 [移除] │ │
+│ │ /Users/su/workspace/mulby/plugins                 [移除] │ │
 │ └─────────────────────────────────────────────────────────────┘ │
 │                                                                 │
 │ [+ 添加目录]                            [刷新插件]               │
@@ -325,16 +325,16 @@ export function registerDeveloperHandlers(pluginManager: PluginManager) {
 ```bash
 # 1. 创建插件
 cd ~/my-plugins
-intools create my-awesome-plugin
+mulby create my-awesome-plugin
 cd my-awesome-plugin
 
-# 2. 在 InTools 应用中启用开发者模式
+# 2. 在 Mulby 应用中启用开发者模式
 # 设置 -> 开发者 -> 开启开发者模式 -> 添加目录 -> 选择 ~/my-plugins
 
 # 3. 开发插件
 npm run dev  # 启动 Vite 开发服务器
 
-# 4. 在 InTools 中测试
+# 4. 在 Mulby 中测试
 # 输入关键词触发插件，修改代码后自动热重载
 ```
 
@@ -385,7 +385,7 @@ npm run electron:build
 ### P2：可选优化
 
 - [ ] 插件来源标识：在插件列表中显示「开发中」标记
-- [ ] CLI 命令：`intools link` 自动注册当前目录到开发目录
+- [ ] CLI 命令：`mulby link` 自动注册当前目录到开发目录
 - [ ] 热重载优化：仅重载变化的插件，而非全部重新加载
 
 ---

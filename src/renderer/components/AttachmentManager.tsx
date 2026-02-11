@@ -37,7 +37,7 @@ function AttachmentManager({ attachments, onAttachmentsChange, onClose, listMaxH
         if (attachment.kind !== 'file' || !attachment.path) return
         if (iconMap[attachment.id]) return
         try {
-          const icon = await window.intools.system.getFileIcon(attachment.path, {
+          const icon = await window.mulby.system.getFileIcon(attachment.path, {
             size: 96,
             kind: 'file'
           })

@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Image as ImageIcon, Trash2, FileText, Layers } from 'lucide-react';
 import { PDFHeader, PDFUploadArea } from '../components/SharedPDFComponents';
-import { useIntools } from '../hooks/useIntools';
+import { useMulby } from '../hooks/useMulby';
 import { pdfService } from '../services/PDFService';
 import '../types';
 
@@ -79,7 +79,7 @@ const FileItem: React.FC<{
 };
 
 const ExtractImages: React.FC = () => {
-    const { dialog, notification, system } = useIntools('pdf-tools');
+    const { dialog, notification, system } = useMulby('pdf-tools');
     const [files, setFiles] = useState<string[]>([]);
     const [processing, setProcessing] = useState(false);
 

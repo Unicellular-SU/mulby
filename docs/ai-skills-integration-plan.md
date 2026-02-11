@@ -149,7 +149,7 @@ interface AiSkillSelection {
 
 ## 6. API 设计
 
-### 6.1 Renderer API（`window.intools.ai.skills`）
+### 6.1 Renderer API（`window.mulby.ai.skills`）
 
 - `list(): Promise<AiSkillRecord[]>`
 - `get(skillId): Promise<AiSkillRecord | null>`

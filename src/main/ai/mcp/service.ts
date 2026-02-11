@@ -585,7 +585,7 @@ export class AiMcpService {
     const initPromise = (async () => {
       const client = new Client(
         {
-          name: 'InTools',
+          name: 'Mulby',
           version: this.deps.getAppVersion()
         },
         {

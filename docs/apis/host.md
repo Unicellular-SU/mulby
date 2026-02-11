@@ -1,7 +1,7 @@
 # 插件 Host API (host)
 本文档描述 插件 Host API (host) 的使用方法与接口。
 
-> 入口：`window.intools.host`
+> 入口：`window.mulby.host`
 
 Host API 允许插件 UI 调用插件后端（UtilityProcess/Host）中的方法。
 
@@ -12,7 +12,7 @@ Host API 允许插件 UI 调用插件后端（UtilityProcess/Host）中的方法
 调用主进程 API 方法（如 clipboard、scheduler 等）。
 
 ```javascript
-const result = await window.intools.host.invoke('translator', 'clipboard.readText');
+const result = await window.mulby.host.invoke('translator', 'clipboard.readText');
 ```
 
 **参数**:
@@ -27,7 +27,7 @@ const result = await window.intools.host.invoke('translator', 'clipboard.readTex
 调用插件后端自定义方法（main.ts 中导出的方法）。
 
 ```javascript
-const result = await window.intools.host.call('my-plugin', 'processData', { value: 123 });
+const result = await window.mulby.host.call('my-plugin', 'processData', { value: 123 });
 ```
 
 **参数**:
@@ -42,7 +42,7 @@ const result = await window.intools.host.call('my-plugin', 'processData', { valu
 获取 Host 状态。
 
 ```javascript
-const status = await window.intools.host.status('translator');
+const status = await window.mulby.host.status('translator');
 // { ready: boolean, active: boolean }
 ```
 
@@ -51,7 +51,7 @@ const status = await window.intools.host.status('translator');
 重启插件 Host 进程。
 
 ```javascript
-const ok = await window.intools.host.restart('translator');
+const ok = await window.mulby.host.restart('translator');
 ```
 
 **返回值**: `boolean` - 是否重启成功
@@ -73,7 +73,7 @@ export async function quickAction(context: PluginContext, text: string) {
 
 **UI 调用：**
 ```typescript
-const result = await window.intools.host.call('my-plugin', 'quickAction', 'Hello')
+const result = await window.mulby.host.call('my-plugin', 'quickAction', 'Hello')
 console.log(result.data.message) // "完成: Hello"
 ```
 
@@ -97,8 +97,8 @@ export const host = {
 
 **UI 调用：**
 ```typescript
-const result = await window.intools.host.call('my-plugin', 'processData', { value: 123 })
-const tasks = await window.intools.host.call('my-plugin', 'getTasks')
+const result = await window.mulby.host.call('my-plugin', 'processData', { value: 123 })
+const tasks = await window.mulby.host.call('my-plugin', 'getTasks')
 ```
 
 ### 方式3：导出 api/methods 等对象
@@ -116,7 +116,7 @@ export const api = {
 
 **UI 调用：**
 ```typescript
-const result = await window.intools.host.call('my-plugin', 'customMethod', { test: 'data' })
+const result = await window.mulby.host.call('my-plugin', 'customMethod', { test: 'data' })
 ```
 
 ## 方法签名规范
@@ -145,13 +145,13 @@ async function myMethod(
 
 ## 在 React Hook 中使用
 
-使用 `useIntools` hook 可以自动注入 pluginId：
+使用 `useMulby` hook 可以自动注入 pluginId：
 
 ```typescript
-import { useIntools } from './hooks/useIntools'
+import { useMulby } from './hooks/useMulby'
 
 function MyComponent() {
-  const { host, notification } = useIntools('my-plugin')
+  const { host, notification } = useMulby('my-plugin')
 
   const handleClick = async () => {
     try {
@@ -216,10 +216,10 @@ export default { run, onLoad, host, quickAction }
 
 ```typescript
 // UI: App.tsx
-import { useIntools } from './hooks/useIntools'
+import { useMulby } from './hooks/useMulby'
 
 export default function App() {
-  const { host, notification } = useIntools('my-plugin')
+  const { host, notification } = useMulby('my-plugin')
 
   const handleProcess = async () => {
     try {

@@ -28,7 +28,7 @@ color_helper/
 │       │   └── 响应式设计
 │       │
 │       └── hooks/
-│           └── useIntools.ts   # Intools API Hook
+│           └── useMulby.ts   # Mulby API Hook
 │
 ├── dist/                       # 构建后的后端代码
 │   └── main.js                # 打包后的插件主文件
@@ -52,7 +52,7 @@ color_helper/
 ### 1. `src/main.ts` - 插件主入口
 - **功能注册**：注册6个主要功能模块
 - **生命周期管理**：处理插件的加载、卸载、启用、禁用
-- **API集成**：与Intools主程序通信
+- **API集成**：与Mulby主程序通信
 
 ### 2. `src/ui/App.tsx` - 主界面组件
 - **标签页导航**：6个功能标签页切换
@@ -203,4 +203,4 @@ features.getFeatures()
 ### 用户反馈
 - 通过GitHub Issues报告问题
 - 提供复现步骤和截图
-- 注明Intools版本和操作系统
+- 注明Mulby版本和操作系统

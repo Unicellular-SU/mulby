@@ -12,7 +12,7 @@ export function buildReactManifest(name: string) {
         id: name,
         name,
         version: '1.0.0',
-        author: 'intools',
+        author: 'mulby',
         displayName: name,
         description: '插件描述',
         main: 'dist/main.js',
@@ -45,11 +45,11 @@ export function buildReactPackageJson(name: string) {
         version: '1.0.0',
         type: 'module',
         scripts: {
-            dev: 'intools dev',
+            dev: 'mulby dev',
             build: 'npm run build:backend && npm run build:ui',
             'build:backend': 'esbuild src/main.ts --bundle --platform=node --outfile=dist/main.js',
             'build:ui': 'vite build',
-            pack: 'intools pack'
+            pack: 'mulby pack'
         },
         dependencies: {
             react: '^18.3.1',

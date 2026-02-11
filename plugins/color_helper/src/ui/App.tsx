@@ -1,5 +1,5 @@
 import { useEffect, useState, useRef } from 'react'
-import { useIntools } from './hooks/useIntools'
+import { useMulby } from './hooks/useMulby'
 import './styles.css'
 
 // 颜色类型定义
@@ -72,7 +72,7 @@ export default function App() {
   const [imagePreview, setImagePreview] = useState<string | null>(null)
   const [isProcessingImage, setIsProcessingImage] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
-  const { clipboard, notification } = useIntools('color_helper')
+  const { clipboard, notification } = useMulby('color_helper')
 
   // 传统色数据
   const traditionalColors: TraditionalColor[] = [
@@ -409,13 +409,13 @@ export default function App() {
     document.documentElement.classList.toggle('dark', initialTheme === 'dark')
 
     // 监听主题变化
-    window.intools?.onThemeChange?.((newTheme: 'light' | 'dark') => {
+    window.mulby?.onThemeChange?.((newTheme: 'light' | 'dark') => {
       setTheme(newTheme)
       document.documentElement.classList.toggle('dark', newTheme === 'dark')
     })
 
     // 接收插件初始化数据
-    window.intools?.onPluginInit?.((data: PluginInitData) => {
+    window.mulby?.onPluginInit?.((data: PluginInitData) => {
       if (data.input) {
         setColorInput(data.input)
         const color = parseColor(data.input)

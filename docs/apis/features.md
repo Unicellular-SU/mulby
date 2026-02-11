@@ -3,7 +3,7 @@
 
 > 入口：`context.api.features`
 
-参考 uTools 的「动态指令」概念，InTools 提供可运行时增删功能入口的能力。适用于用户可配置入口、在线内容映射、批量快捷命令等场景。
+参考 uTools 的「动态指令」概念，Mulby 提供可运行时增删功能入口的能力。适用于用户可配置入口、在线内容映射、批量快捷命令等场景。
 
 ### 适用场景
 
@@ -103,14 +103,14 @@ features.setFeature(feature: DynamicFeatureInput): void
 - `platform`: 指定平台（可选，`string | string[]`）
 - `mode`: 指令模式（可选，`'ui' | 'silent' | 'detached'`，默认 `ui`）
 - `route`: UI 路由（可选，传给窗口的 hash）
-- `mainHide`: InTools 暂未支持（保留字段）
-- `mainPush`: InTools 暂未支持（保留字段）
+- `mainHide`: Mulby 暂未支持（保留字段）
+- `mainPush`: Mulby 暂未支持（保留字段）
 - `cmds`: 指令列表（必填）
 
 `cmds` 支持两种写法：
 
 - 字符串：会被视为 `keyword` 指令
-- 对象：使用 InTools 的 `cmd` 结构（`keyword`/`regex`/`files`/`img`/`over`）
+- 对象：使用 Mulby 的 `cmd` 结构（`keyword`/`regex`/`files`/`img`/`over`）
 
 ### removeFeature
 [Backend]

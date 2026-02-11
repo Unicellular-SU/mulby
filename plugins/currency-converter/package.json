@@ -3,8 +3,8 @@
   "version": "1.0.0",
   "scripts": {
     "build": "esbuild src/main.ts --bundle --platform=node --outfile=dist/main.js",
-    "dev": "intools dev",
-    "pack": "intools pack"
+    "dev": "mulby dev",
+    "pack": "mulby pack"
   },
   "devDependencies": {
     "esbuild": "^0.20.0",

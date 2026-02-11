@@ -2,7 +2,7 @@
 本文档描述 任务调度器 API (scheduler) 的使用方法与接口。
 
 > 入口：
-> - UI/渲染进程：`window.intools.scheduler`
+> - UI/渲染进程：`window.mulby.scheduler`
 > - 插件后端：`context.api.scheduler`
 
 ## 概述
@@ -686,7 +686,7 @@ await api.scheduler.schedule({
 
 用户可以通过设置界面打开任务调度器管理界面：
 
-1. 打开 InTools 主窗口
+1. 打开 Mulby 主窗口
 2. 点击设置图标
 3. 在"通用"设置中找到"任务调度器"
 4. 点击"打开任务调度器"按钮

@@ -28,7 +28,7 @@ export function Sidebar({ activeModule, onModuleChange }: SidebarProps) {
             <div className="sidebar-header">
                 <h1 className="sidebar-title">
                     <span>🧰</span>
-                    <span>InTools</span>
+                    <span>Mulby</span>
                 </h1>
             </div>
             <nav className="sidebar-nav">

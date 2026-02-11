@@ -1,4 +1,4 @@
-# InTools 插件打包与第三方库支持设计
+# Mulby 插件打包与第三方库支持设计
 
 ## 问题分析
 
@@ -100,11 +100,11 @@ my-plugin/
   "version": "1.0.0",
   "scripts": {
     "build": "esbuild src/main.ts --bundle --platform=node --outfile=dist/main.js",
-    "pack": "intools-cli pack"
+    "pack": "mulby-cli pack"
   },
   "devDependencies": {
     "esbuild": "^0.20.0",
-    "@anthropic/intools-cli": "^1.0.0"
+    "@anthropic/mulby-cli": "^1.0.0"
   },
   "dependencies": {
     "lodash": "^4.17.21",
@@ -117,7 +117,7 @@ my-plugin/
 
 ```bash
 # 1. 创建插件项目
-intools-cli create my-plugin
+mulby-cli create my-plugin
 
 # 2. 安装依赖
 cd my-plugin && npm install
@@ -140,8 +140,8 @@ npm run pack
 ### 安装方式
 
 1. **双击安装**：用户双击 `.inplugin` 文件
-2. **拖拽安装**：拖入 InTools 窗口
-3. **命令安装**：`intools install ./my-plugin.inplugin`
+2. **拖拽安装**：拖入 Mulby 窗口
+3. **命令安装**：`mulby install ./my-plugin.inplugin`
 
 ### 安装过程
 
@@ -199,10 +199,10 @@ module.exports = {
 
 ### 阶段 1：CLI 工具
 
-创建 `@anthropic/intools-cli` 包：
+创建 `@anthropic/mulby-cli` 包：
 
 ```
-intools-cli/
+mulby-cli/
 ├── src/
 │   ├── commands/
 │   │   ├── create.ts    # 创建插件模板
@@ -217,7 +217,7 @@ intools-cli/
 
 ### 阶段 2：容器支持
 
-更新 InTools 主程序：
+更新 Mulby 主程序：
 
 1. **PluginInstaller** - 安装 .inplugin 文件
 2. **文件关联** - 注册 .inplugin 扩展名

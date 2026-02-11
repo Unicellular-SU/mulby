@@ -38,7 +38,7 @@ export class AppTrayManager {
         ? new Tray(icon, MAIN_TRAY_GUID)
         : new Tray(icon)
 
-      this.tray.setToolTip('InTools')
+      this.tray.setToolTip('Mulby')
       if (process.platform === 'darwin' || process.platform === 'win32') {
         this.tray.setIgnoreDoubleClickEvents(true)
         this.tray.on('click', this.handleTrayActivation)
@@ -96,7 +96,7 @@ export class AppTrayManager {
   private buildContextMenu() {
     return Menu.buildFromTemplate([
       {
-        label: '打开 InTools',
+        label: '打开 Mulby',
         click: () => this.callbacks.openMainWindow()
       },
       { type: 'separator' },
@@ -105,7 +105,7 @@ export class AppTrayManager {
         click: () => this.callbacks.restartApp()
       },
       {
-        label: '退出 InTools',
+        label: '退出 Mulby',
         click: () => this.callbacks.quitApp()
       }
     ])

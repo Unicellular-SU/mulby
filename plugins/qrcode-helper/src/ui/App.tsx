@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { QRCodeGenerator } from './components/QRCodeGenerator'
 import { QRCodeScanner } from './components/QRCodeScanner'
-import { useIntools } from './hooks/useIntools'
+import { useMulby } from './hooks/useMulby'
 import './styles.css'
 
 interface PluginInitData {
@@ -28,7 +28,7 @@ export default function App() {
   const [activeTab, setActiveTab] = useState<Tab>('generate')
   const [initialInput, setInitialInput] = useState('')
   const [initialAttachment, setInitialAttachment] = useState<InputAttachment | null>(null)
-  const { window: windowApi } = useIntools()
+  const { window: windowApi } = useMulby()
 
   useEffect(() => {
     // 确保窗口显示
@@ -51,8 +51,8 @@ export default function App() {
     }
 
     // 监听插件初始化
-    if (window.intools && window.intools.onPluginInit) {
-      window.intools.onPluginInit(handleInit)
+    if (window.mulby && window.mulby.onPluginInit) {
+      window.mulby.onPluginInit(handleInit)
     }
   }, [windowApi])
 

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { ArrowLeftRight, Copy, Loader2, RefreshCw, Save, Settings2 } from 'lucide-react'
-import { useIntools } from './hooks/useIntools'
+import { useMulby } from './hooks/useMulby'
 
 type ViewMode = 'translate' | 'settings'
 
@@ -95,7 +95,7 @@ function buildTranslationSystemPrompt(sourceLanguage: string, targetLanguage: st
 }
 
 export default function App() {
-  const { ai, clipboard, notification, storage } = useIntools('ai-translator')
+  const { ai, clipboard, notification, storage } = useMulby('ai-translator')
 
   const [viewMode, setViewMode] = useState<ViewMode>('translate')
   const [inputText, setInputText] = useState('')
@@ -114,11 +114,11 @@ export default function App() {
     const initialTheme = (params.get('theme') as 'light' | 'dark') || 'light'
     document.documentElement.classList.toggle('dark', initialTheme === 'dark')
 
-    window.intools?.onThemeChange?.((nextTheme: 'light' | 'dark') => {
+    window.mulby?.onThemeChange?.((nextTheme: 'light' | 'dark') => {
       document.documentElement.classList.toggle('dark', nextTheme === 'dark')
     })
 
-    window.intools?.onPluginInit?.((data: PluginInitData) => {
+    window.mulby?.onPluginInit?.((data: PluginInitData) => {
       if (data.input) setInputText(data.input)
       if (data.featureCode === 'settings' || data.route?.includes('settings')) {
         setViewMode('settings')

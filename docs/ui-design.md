@@ -1,4 +1,4 @@
-# InTools UI/UX 设计规范
+# Mulby UI/UX 设计规范
 
 ## 1. 设计原则
 

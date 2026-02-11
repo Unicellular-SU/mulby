@@ -1,12 +1,12 @@
 import { useCallback, useEffect, useState } from 'react'
 import { PageHeader, Card, Button, CodeBlock } from '../../components'
-import { useIntools, useNotification } from '../../hooks'
+import { useMulby, useNotification } from '../../hooks'
 
 // 延迟函数
 const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms))
 
 export function InputModule() {
-    const { input, dialog, system, permission, screen } = useIntools()
+    const { input, dialog, system, permission, screen } = useMulby()
     const notify = useNotification()
 
     const [pasteText, setPasteText] = useState('')
@@ -121,7 +121,7 @@ export function InputModule() {
         ctx.fillRect(0, 0, canvas.width, canvas.height)
         ctx.fillStyle = '#0f172a'
         ctx.font = '18px Arial'
-        ctx.fillText('InTools Input', 12, 58)
+        ctx.fillText('Mulby Input', 12, 58)
         const dataUrl = canvas.toDataURL('image/png')
         await runAction('pasteImageSample', () => input.hideMainWindowPasteImage(dataUrl))
     }
@@ -189,7 +189,7 @@ export function InputModule() {
 
             // 步骤1: 输入标题（使用粘贴方式支持中文）
             log('📝 步骤1: 输入标题')
-            await input.hideMainWindowPasteText('InTools 自动化演示文档')
+            await input.hideMainWindowPasteText('Mulby 自动化演示文档')
             await delay(300)
 
             // 步骤2: 全选刚输入的标题
@@ -231,7 +231,7 @@ export function InputModule() {
 
             // 步骤9: 输入正文内容（使用粘贴方式支持中文）
             log('✍️ 步骤9: 输入正文内容')
-            await input.hideMainWindowPasteText('这是由 InTools 自动生成的文档内容。')
+            await input.hideMainWindowPasteText('这是由 Mulby 自动生成的文档内容。')
             await delay(300)
 
             // 步骤10: 换行并继续输入
@@ -404,7 +404,7 @@ export function InputModule() {
     }
 
     const tutorialText = `// 文本粘贴
-await input.hideMainWindowPasteText('Hello InTools')
+await input.hideMainWindowPasteText('Hello Mulby')
 
 // 图片粘贴 (路径 / DataURL / Buffer)
 await input.hideMainWindowPasteImage('/path/to/image.png')
@@ -465,7 +465,7 @@ console.log(\`鼠标位置: (\${pos.x}, \${pos.y})\`)`
                             </div>
                             {!accessibilityTrusted && (
                                 <div style={{ color: 'var(--warning)' }}>
-                                    需要在“辅助功能”中允许 InTools/Electron 发送按键，才能模拟输入。
+                                    需要在“辅助功能”中允许 Mulby/Electron 发送按键，才能模拟输入。
                                 </div>
                             )}
                         </div>
@@ -480,10 +480,10 @@ console.log(\`鼠标位置: (\${pos.x}, \${pos.y})\`)`
                     <div style={{ display: 'grid', gap: '8px', color: 'var(--text-secondary)' }}>
                         <div>1. <strong>打开目标应用</strong>（例如文本编辑器、浏览器、聊天窗口）。</div>
                         <div>2. <strong>在目标应用中放置光标</strong>，确保它是你希望接收输入的位置。</div>
-                        <div>3. <strong>唤起 InTools</strong>（通过快捷键 Alt+Space）。</div>
-                        <div>4. <strong>点击下方操作按钮</strong>，InTools 会自动隐藏并向目标应用发送操作。</div>
+                        <div>3. <strong>唤起 Mulby</strong>（通过快捷键 Alt+Space）。</div>
+                        <div>4. <strong>点击下方操作按钮</strong>，Mulby 会自动隐藏并向目标应用发送操作。</div>
                         <div style={{ marginTop: '8px', padding: '8px', background: 'var(--bg-tertiary)', borderRadius: '6px' }}>
-                            💡 <strong>原理</strong>：所有模拟操作都会先隐藏 InTools 窗口，让目标应用获得焦点，然后再执行模拟操作。
+                            💡 <strong>原理</strong>：所有模拟操作都会先隐藏 Mulby 窗口，让目标应用获得焦点，然后再执行模拟操作。
                         </div>
                     </div>
                 </Card>
@@ -556,7 +556,7 @@ console.log(\`鼠标位置: (\${pos.x}, \${pos.y})\`)`
 
                 <Card title="模拟操作说明" icon="💡">
                     <div style={{ display: 'grid', gap: '8px', color: 'var(--text-secondary)' }}>
-                        <div>模拟按键和鼠标操作会<strong>先隐藏 InTools 窗口</strong>，让之前活跃的应用获得焦点，然后发送模拟操作。</div>
+                        <div>模拟按键和鼠标操作会<strong>先隐藏 Mulby 窗口</strong>，让之前活跃的应用获得焦点，然后发送模拟操作。</div>
                         <div>这适用于以下场景：</div>
                         <ul style={{ margin: '4px 0', paddingLeft: '20px' }}>
                             <li>向编辑器发送快捷键（如 Ctrl+S 保存）</li>
@@ -736,9 +736,9 @@ console.log(\`鼠标位置: (\${pos.x}, \${pos.y})\`)`
                         <div style={{ fontWeight: 500, color: 'var(--text-primary)' }}>操作步骤：</div>
                         <div>1. 打开 WPS 文字，新建或打开一个文档</div>
                         <div>2. 将光标放置在文档中你希望开始操作的位置</div>
-                        <div>3. 按 <kbd style={{ padding: '2px 6px', background: 'var(--bg-tertiary)', borderRadius: '4px', fontSize: '12px' }}>Alt+Space</kbd> 唤起 InTools</div>
+                        <div>3. 按 <kbd style={{ padding: '2px 6px', background: 'var(--bg-tertiary)', borderRadius: '4px', fontSize: '12px' }}>Alt+Space</kbd> 唤起 Mulby</div>
                         <div>4. 进入"输入控制"模块，点击下方任一脚本按钮</div>
-                        <div>5. InTools 会自动隐藏，脚本将在 WPS 中执行</div>
+                        <div>5. Mulby 会自动隐藏，脚本将在 WPS 中执行</div>
                         <div style={{ marginTop: '8px', padding: '8px', background: 'var(--warning)', color: '#000', borderRadius: '6px', opacity: 0.8 }}>
                             ⚠️ 脚本执行期间请勿操作键盘鼠标，否则可能干扰自动化流程
                         </div>

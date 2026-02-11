@@ -1,9 +1,9 @@
 {
-  "id": "@intools/timestamp-converter",
+  "id": "@mulby/timestamp-converter",
   "name": "timestamp-converter",
   "version": "1.0.0",
-  "author": "InTools Team",
-  "homepage": "https://github.com/intools",
+  "author": "Mulby Team",
+  "homepage": "https://github.com/mulby",
   "displayName": "时间戳转换",
   "description": "时间戳与日期互转",
   "main": "main.js",

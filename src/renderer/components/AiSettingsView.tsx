@@ -225,8 +225,8 @@ export default function AiSettingsView({ onBack, onOpenMcpSettings, onOpenSkills
   const newModelNeedsEndpointType = newModelProvider ? supportsProviderEndpointRouting(newModelProvider) : false
 
   useEffect(() => {
-    if (window.intools?.ai?.settings?.get) {
-      window.intools.ai.settings.get()
+    if (window.mulby?.ai?.settings?.get) {
+      window.mulby.ai.settings.get()
         .then((next) => {
           setAiSettings(next)
           setAiDraft(next)
@@ -244,9 +244,9 @@ export default function AiSettingsView({ onBack, onOpenMcpSettings, onOpenSkills
   const [inferredCapabilities, setInferredCapabilities] = useState<Record<string, Set<AiModelType>>>({})
 
   const loadInferredCapabilities = async () => {
-    if (!window.intools?.ai?.allModels) return
+    if (!window.mulby?.ai?.allModels) return
     try {
-      const list = await window.intools.ai.allModels()
+      const list = await window.mulby.ai.allModels()
       const next: Record<string, Set<AiModelType>> = {}
       if (Array.isArray(list)) {
         list.forEach((item) => {
@@ -300,12 +300,12 @@ export default function AiSettingsView({ onBack, onOpenMcpSettings, onOpenSkills
 
   const handleSaveAiSettings = async () => {
     if (!aiDraft) return
-    if (!window.intools?.ai?.settings?.update) {
+    if (!window.mulby?.ai?.settings?.update) {
       setAiError('AI 接口未就绪，请重启应用')
       return
     }
     try {
-      const next = await window.intools.ai.settings.update(aiDraft)
+      const next = await window.mulby.ai.settings.update(aiDraft)
       setAiSettings(next)
       setAiDraft(next)
       loadInferredCapabilities()
@@ -551,7 +551,7 @@ export default function AiSettingsView({ onBack, onOpenMcpSettings, onOpenSkills
 
   const handleTestSingleApiKey = async (key: string, index: number) => {
     if (!selectedProvider) return
-    if (!window.intools?.ai?.testConnection) {
+    if (!window.mulby?.ai?.testConnection) {
       setAiError('AI 接口未就绪，请重启应用')
       return
     }
@@ -568,7 +568,7 @@ export default function AiSettingsView({ onBack, onOpenMcpSettings, onOpenSkills
     }))
 
     try {
-      const result = await window.intools.ai.testConnection({
+      const result = await window.mulby.ai.testConnection({
         model: apiKeyTestModel,
         providerId: String(selectedProvider.id),
         apiKey: key,
@@ -771,7 +771,7 @@ export default function AiSettingsView({ onBack, onOpenMcpSettings, onOpenSkills
   const handleFetchModels = async (provider: AiProviderConfig) => {
     setAiInfo(null)
     setAiError(null)
-    if (!window.intools?.ai?.models?.fetch) {
+    if (!window.mulby?.ai?.models?.fetch) {
       setAiError('AI 接口未就绪，请重启应用')
       return
     }
@@ -784,7 +784,7 @@ export default function AiSettingsView({ onBack, onOpenMcpSettings, onOpenSkills
     try {
       setIsFetchingModels(true)
       setFetchProviderLabel(getProviderKey(provider))
-      const result = await window.intools.ai.models.fetch({
+      const result = await window.mulby.ai.models.fetch({
         providerId: String(provider.id),
         baseURL: provider.baseURL,
         apiKey: provider.apiKey
@@ -902,7 +902,7 @@ export default function AiSettingsView({ onBack, onOpenMcpSettings, onOpenSkills
     if (!selectedProvider) return
     setAiInfo(null)
     setAiError(null)
-    if (!window.intools?.ai?.testConnection) {
+    if (!window.mulby?.ai?.testConnection) {
       setAiError('AI 接口未就绪，请重启应用')
       return
     }
@@ -917,8 +917,8 @@ export default function AiSettingsView({ onBack, onOpenMcpSettings, onOpenSkills
       let reasoningStreamed = ''
       setAiInfo('')
       setAiReasoning('')
-      const result = await (window.intools.ai.testConnectionStream
-        ? window.intools.ai.testConnectionStream({
+      const result = await (window.mulby.ai.testConnectionStream
+        ? window.mulby.ai.testConnectionStream({
           model: fallbackModel,
           providerId: String(selectedProvider.id),
           apiKey: selectedProvider.apiKey,
@@ -929,7 +929,7 @@ export default function AiSettingsView({ onBack, onOpenMcpSettings, onOpenSkills
             setAiReasoning(reasoningStreamed)
           }
         })
-        : window.intools.ai.testConnection({
+        : window.mulby.ai.testConnection({
           model: fallbackModel,
           providerId: String(selectedProvider.id),
           apiKey: selectedProvider.apiKey,

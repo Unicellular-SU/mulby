@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react'
 import { PageHeader, Card, Button, StatusBadge, CodeBlock } from '../../components'
-import { useIntools, useNotification } from '../../hooks'
+import { useMulby, useNotification } from '../../hooks'
 
 interface SystemInfo {
     platform: string
@@ -34,7 +34,7 @@ interface Position {
 
 export function SystemInfoModule() {
     console.log('[SystemInfo] Render')
-    const { system, power, network, geolocation } = useIntools()
+    const { system, power, network, geolocation } = useMulby()
     const notify = useNotification()
 
     const [systemInfo, setSystemInfo] = useState<SystemInfo | null>(null)

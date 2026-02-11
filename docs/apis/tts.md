@@ -1,7 +1,7 @@
 # TTS API (tts)
 本文档描述 TTS API (tts) 的使用方法与接口。
 
-> 入口：`window.intools.tts`
+> 入口：`window.mulby.tts`
 
 TTS API 提供语音合成功能，使用 Web Speech API，支持 macOS、Windows 和 Linux。
 
@@ -68,5 +68,5 @@ if (tts.isSpeaking()) {
 ### 完整示例
 
 ```javascript
-await window.intools.tts.speak('你好');
+await window.mulby.tts.speak('你好');
 ```

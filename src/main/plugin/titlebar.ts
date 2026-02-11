@@ -177,7 +177,7 @@ body {
 function getTitleBarHTML(title: string): string {
   const escapedTitle = title.replace(/'/g, "\\'").replace(/"/g, '&quot;')
   return `
-<div id="intools-titlebar" class="it-pb-container">
+<div id="mulby-titlebar" class="it-pb-container">
   <div class="it-pb-drag-region"></div>
   <div class="it-pb-title">${escapedTitle}</div>
   <div class="it-pb-controls">
@@ -236,8 +236,8 @@ function initTitleBar() {
   }
 
   // 初始化状态
-  if (window.intools && window.intools.window.getState) {
-    window.intools.window.getState().then(function(state) {
+  if (window.mulby && window.mulby.window.getState) {
+    window.mulby.window.getState().then(function(state) {
       isAlwaysOnTop = state.isAlwaysOnTop;
       updatePinState();
       updateMaximizeIcon(state.isMaximized);
@@ -247,7 +247,7 @@ function initTitleBar() {
   // 置顶按钮
   pinBtn.addEventListener('click', function() {
     isAlwaysOnTop = !isAlwaysOnTop;
-    window.intools.window.setAlwaysOnTop(isAlwaysOnTop);
+    window.mulby.window.setAlwaysOnTop(isAlwaysOnTop);
     updatePinState();
   });
 
@@ -269,17 +269,17 @@ function initTitleBar() {
 
   // 重新加载按钮
   reloadBtn.addEventListener('click', function() {
-    window.intools.window.reload();
+    window.mulby.window.reload();
   });
 
   // 最小化按钮
   minimizeBtn.addEventListener('click', function() {
-    window.intools.window.minimize();
+    window.mulby.window.minimize();
   });
 
   // 最大化/还原按钮
   maximizeBtn.addEventListener('click', function() {
-    window.intools.window.maximize();
+    window.mulby.window.maximize();
   });
 
   function updateMaximizeIcon(isMaximized) {
@@ -291,15 +291,15 @@ function initTitleBar() {
   }
 
   // 监听窗口状态变化
-  if (window.intools && window.intools.onWindowStateChange) {
-    window.intools.onWindowStateChange(function(state) {
+  if (window.mulby && window.mulby.onWindowStateChange) {
+    window.mulby.onWindowStateChange(function(state) {
       updateMaximizeIcon(state.isMaximized);
     });
   }
 
   // 关闭按钮
   closeBtn.addEventListener('click', function() {
-    window.intools.window.close();
+    window.mulby.window.close();
   });
 
   // 初始化主题
@@ -307,13 +307,13 @@ function initTitleBar() {
 }
 
 function initTheme() {
-  if (window.intools && window.intools.theme && window.intools.theme.getActual) {
-    window.intools.theme.getActual().then(function(theme) {
+  if (window.mulby && window.mulby.theme && window.mulby.theme.getActual) {
+    window.mulby.theme.getActual().then(function(theme) {
       applyTheme(theme);
     });
   }
-  if (window.intools && window.intools.onThemeChange) {
-    window.intools.onThemeChange(function(theme) {
+  if (window.mulby && window.mulby.onThemeChange) {
+    window.mulby.onThemeChange(function(theme) {
       applyTheme(theme);
     });
   }
@@ -326,7 +326,7 @@ function applyTheme(theme) {
 
 // 监听 body 变化，确保标题栏不被移除
 var titleBarObserver = new MutationObserver(function(mutations) {
-  if (!document.getElementById('intools-titlebar')) {
+  if (!document.getElementById('mulby-titlebar')) {
     // 标题栏被移除了，重新注入
     var titleBarHTML = document.documentElement.dataset.titleBarHtml;
     if (titleBarHTML) {
@@ -371,7 +371,7 @@ export async function injectCustomTitleBar(
       var titleBarHTML = \`${escapedHtml}\`;
       
       // 检查是否已存在
-      if (!document.getElementById('intools-titlebar')) {
+      if (!document.getElementById('mulby-titlebar')) {
         document.body.insertAdjacentHTML('afterbegin', titleBarHTML);
         initTitleBar();
       }

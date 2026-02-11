@@ -7,8 +7,8 @@
  * 生成后端 main.ts 内容
  */
 export function buildBackendMain(name: string) {
-    return `/// <reference path="./types/intools.d.ts" />
-// PluginContext 类型由 src/types/intools.d.ts 提供
+    return `/// <reference path="./types/mulby.d.ts" />
+// PluginContext 类型由 src/types/mulby.d.ts 提供
 type PluginContext = BackendPluginContext
 
 export function onLoad() {

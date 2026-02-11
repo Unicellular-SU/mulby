@@ -30,13 +30,13 @@ export default function App() {
 
   // 监听主题变化消息
   useEffect(() => {
-    window.intools?.onThemeChange?.((newTheme: 'light' | 'dark') => {
+    window.mulby?.onThemeChange?.((newTheme: 'light' | 'dark') => {
       setTheme(newTheme)
     })
   }, [])
 
   useEffect(() => {
-    window.intools?.onPluginInit?.((data) => {
+    window.mulby?.onPluginInit?.((data) => {
       if (data.input) {
         const parsed = parseColor(data.input)
         if (parsed) updateFromRgb(parsed)
@@ -74,10 +74,10 @@ export default function App() {
   }
 
   const copyToClipboard = async (text: string, label: string) => {
-    await window.intools?.clipboard?.writeText(text)
+    await window.mulby?.clipboard?.writeText(text)
     setCopied(label)
     setTimeout(() => setCopied(null), 1500)
-    window.intools?.notification?.show(`${label} 已复制`)
+    window.mulby?.notification?.show(`${label} 已复制`)
   }
 
   const formatRgb = () => `rgb(${color.rgb.r}, ${color.rgb.g}, ${color.rgb.b})`

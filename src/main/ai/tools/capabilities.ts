@@ -75,15 +75,15 @@ const CAPABILITY_ALIAS_MAP: Record<string, AiToolCapabilityName> = {
   fetchhttp: 'http.fetch',
   gitstatus: 'git.status',
   gitdiff: 'git.diff',
-  intoolsruncommand: 'shell.exec',
-  intoolsrunscript: 'shell.script',
-  intoolsreadfile: 'fs.read',
-  intoolslistdir: 'fs.list',
-  intoolssearchtext: 'fs.search',
-  intoolsapplypatch: 'patch.apply',
-  intoolshttpfetch: 'http.fetch',
-  intoolsgitstatus: 'git.status',
-  intoolsgitdiff: 'git.diff'
+  mulbyruncommand: 'shell.exec',
+  mulbyrunscript: 'shell.script',
+  mulbyreadfile: 'fs.read',
+  mulbylistdir: 'fs.list',
+  mulbysearchtext: 'fs.search',
+  mulbyapplypatch: 'patch.apply',
+  mulbyhttpfetch: 'http.fetch',
+  mulbygitstatus: 'git.status',
+  mulbygitdiff: 'git.diff'
 }
 
 function normalizeStringList(input: unknown): string[] {

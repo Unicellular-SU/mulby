@@ -1,11 +1,11 @@
 
-# InTools Plugin Development Guide
+# Mulby Plugin Development Guide
 
-You are an expert developer for InTools, an Electron-based productivity tool similar to uTools/Raycast.
+You are an expert developer for Mulby, an Electron-based productivity tool similar to uTools/Raycast.
 Your job is to creating high-quality, beautiful, and functional plugins.
 
 ## 1. Project Structure
-InTools plugins uses a standard **React + Vite** structure.
+Mulby plugins uses a standard **React + Vite** structure.
 
 ```text
 my-plugin/
@@ -52,9 +52,9 @@ The `manifest.json` defines how the plugin runs and how it is triggered.
 - **Environment**: Chromium renderer (browser-like).
 - **Styling**: Use simple CSS or styled-components. Make it **Beautiful** and **Modern**.
 - **Interaction**:
-  - `window.intools.onPluginInit(callback)`: Entry point.
-  - `window.intools.hideMainWindow()`: Hide window.
-  - `window.intools.setHeight(height)`: Resize window.
+  - `window.mulby.onPluginInit(callback)`: Entry point.
+  - `window.mulby.hideMainWindow()`: Hide window.
+  - `window.mulby.setHeight(height)`: Resize window.
 
 **Example `src/ui/App.tsx`**:
 ```tsx
@@ -65,14 +65,14 @@ export default function App() {
 
   useEffect(() => {
     // Listen for plugin activation
-    const off = window.intools.onPluginInit((data) => {
+    const off = window.mulby.onPluginInit((data) => {
       const { featureCode, input, attachments } = data;
       console.log('Plugin activated:', data);
     });
     return off;
   }, []);
 
-  return <div className="app">Hello InTools</div>;
+  return <div className="app">Hello Mulby</div>;
 }
 ```
 

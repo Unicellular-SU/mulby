@@ -1,4 +1,4 @@
-# InTools Glassmorphism UI/UX Standard
+# Mulby Glassmorphism UI/UX Standard
 
 This standard applies to **app-owned surfaces** only (search window, settings, plugin management, toolbars). Plugin UIs are allowed to define their own design language and are not required to follow these styles.
 

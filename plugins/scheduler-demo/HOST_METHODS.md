@@ -2,7 +2,7 @@
 
 ## 概述
 
-插件的 UI 可以通过 `window.intools.host.call()` 调用后端（main.ts）中导出的方法。系统支持三种导出方式，按优先级查找。
+插件的 UI 可以通过 `window.mulby.host.call()` 调用后端（main.ts）中导出的方法。系统支持三种导出方式，按优先级查找。
 
 ## 支持的导出方式
 
@@ -103,10 +103,10 @@ async function myMethod(
 ## UI 中使用
 
 ```typescript
-import { useIntools } from './hooks/useIntools'
+import { useMulby } from './hooks/useMulby'
 
 function MyComponent() {
-  const { host, notification } = useIntools('my-plugin')
+  const { host, notification } = useMulby('my-plugin')
 
   const handleClick = async () => {
     try {
@@ -178,10 +178,10 @@ export default { run, onLoad, host, quickAction }
 
 ```typescript
 // UI: App.tsx
-import { useIntools } from './hooks/useIntools'
+import { useMulby } from './hooks/useMulby'
 
 export default function App() {
-  const { host, notification } = useIntools('my-plugin')
+  const { host, notification } = useMulby('my-plugin')
 
   const handleProcess = async () => {
     const result = await host.call('processData', { value: 123 })

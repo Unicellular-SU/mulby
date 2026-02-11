@@ -546,7 +546,7 @@ export class AiInternalToolRuntime {
     const now = Date.now()
     prunePatchDryRunCache(now)
 
-    const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'intools-patch-'))
+    const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'mulby-patch-'))
     const patchPath = path.join(tempDir, 'change.patch')
     await fs.writeFile(patchPath, patchText, 'utf8')
 

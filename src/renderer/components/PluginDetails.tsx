@@ -93,12 +93,12 @@ export default function PluginDetails({ pluginName, onBack }: PluginDetailsProps
         setLoading(true)
         try {
             // 获取插件基本信息
-            const plugins = await window.intools.plugin.getAll()
+            const plugins = await window.mulby.plugin.getAll()
             const current = plugins.find(p => p.name === pluginName)
             setPlugin(current || null)
 
             // 获取 README
-            const content = await window.intools.plugin.getReadme(pluginName)
+            const content = await window.mulby.plugin.getReadme(pluginName)
             setReadme(content)
         } catch (err) {
             console.error('Failed to load plugin details:', err)
@@ -109,12 +109,12 @@ export default function PluginDetails({ pluginName, onBack }: PluginDetailsProps
 
     const handleUninstall = async () => {
         if (confirm(`确定要卸载插件 ${plugin?.displayName || pluginName} 吗？`)) {
-            const result = await window.intools.plugin.uninstall(pluginName)
+            const result = await window.mulby.plugin.uninstall(pluginName)
             if (result.success) {
-                window.intools.notification.show('插件已卸载')
+                window.mulby.notification.show('插件已卸载')
                 onBack()
             } else {
-                window.intools.notification.show(result.error || '卸载失败', 'error')
+                window.mulby.notification.show(result.error || '卸载失败', 'error')
             }
         }
     }

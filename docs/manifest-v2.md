@@ -1,4 +1,4 @@
-# InTools 插件 Manifest 规范 v2
+# Mulby 插件 Manifest 规范 v2
 
 ## 核心概念
 
@@ -227,4 +227,4 @@ const content = window.myApi?.readFile('/path/to/file.txt')
 - preload.js 必须是清晰可读的源码，不能压缩/混淆
 - 可以使用 Node.js 原生模块和第三方模块
 - 通过 `window.xxx` 暴露 API 给前端
-- `window.intools` 核心 API 仍然可用
+- `window.mulby` 核心 API 仍然可用

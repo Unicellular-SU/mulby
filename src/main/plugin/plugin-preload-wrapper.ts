@@ -4,7 +4,7 @@
  * 用于生成动态 preload 脚本，支持插件自定义 preload
  * 
  * 工作原理：
- * 1. 先执行 intools 核心 preload，暴露 window.intools
+ * 1. 先执行 mulby 核心 preload，暴露 window.mulby
  * 2. 再执行插件的自定义 preload，允许访问 Node.js
  */
 
@@ -50,20 +50,20 @@ export function generateWrappedPreload(
     // 注意：由于 Electron 的 preload 只支持单个脚本，
     // 我们需要生成一个包装脚本来按顺序加载两个 preload
     const wrapperCode = `
-// === InTools 自动生成的 Preload 包装脚本 ===
+// === Mulby 自动生成的 Preload 包装脚本 ===
 // 请勿手动修改此文件
 
 (function() {
     'use strict';
     
-    // 1. 加载核心 preload (暴露 window.intools)
+    // 1. 加载核心 preload (暴露 window.mulby)
     require(${JSON.stringify(basePreloadPath)});
     
     // 2. 加载插件自定义 preload
     try {
         require(${JSON.stringify(pluginPreloadPath)});
     } catch (error) {
-        console.error('[InTools] 插件 preload 加载失败:', error);
+        console.error('[Mulby] 插件 preload 加载失败:', error);
     }
 })();
 `
@@ -76,7 +76,7 @@ export function generateWrappedPreload(
     writeFileSync(wrapperPath, wrapperCode, 'utf-8')
     preloadCache.set(cacheKey, wrapperPath)
 
-    console.log(`[InTools] 生成插件 preload 包装: ${wrapperPath}`)
+    console.log(`[Mulby] 生成插件 preload 包装: ${wrapperPath}`)
     return wrapperPath
 }
 
@@ -108,7 +108,7 @@ export function getPluginPreloadPath(
 
     // 检查文件是否存在
     if (!existsSync(pluginPreloadPath)) {
-        console.warn(`[InTools] 插件 preload 文件不存在: ${pluginPreloadPath}`)
+        console.warn(`[Mulby] 插件 preload 文件不存在: ${pluginPreloadPath}`)
         return basePreloadPath
     }
 

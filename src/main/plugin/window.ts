@@ -366,7 +366,7 @@ export class PluginWindowManager {
     win.webContents.on('did-finish-load', async () => {
       // 检查标题栏是否已存在，避免首次加载时重复注入
       const hasTitleBar = await win.webContents.executeJavaScript(
-        'document.getElementById("intools-titlebar") !== null'
+        'document.getElementById("mulby-titlebar") !== null'
       )
       if (!hasTitleBar) {
         const theme = this.themeManager?.getActualTheme() || 'dark'
@@ -497,7 +497,7 @@ export class PluginWindowManager {
 
     // 页面加载完成
     win.webContents.on('did-finish-load', async () => {
-      const hasTitleBar = await win.webContents.executeJavaScript('document.getElementById("intools-titlebar") !== null')
+      const hasTitleBar = await win.webContents.executeJavaScript('document.getElementById("mulby-titlebar") !== null')
       if (!hasTitleBar) {
         const theme = this.themeManager?.getActualTheme() || 'dark'
         await injectCustomTitleBar(win, options?.title || plugin.manifest.displayName, theme)

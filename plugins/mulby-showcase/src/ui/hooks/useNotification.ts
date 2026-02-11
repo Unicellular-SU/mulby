@@ -7,7 +7,7 @@ type NotificationType = 'info' | 'success' | 'warning' | 'error'
  */
 export function useNotification() {
     const show = useCallback((message: string, type: NotificationType = 'info') => {
-        window.intools?.notification?.show(message, type)
+        window.mulby?.notification?.show(message, type)
     }, [])
 
     const success = useCallback((message: string) => {
