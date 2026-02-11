@@ -49,6 +49,7 @@ function App() {
   const [theme, setTheme] = useState<'light' | 'dark'>('light')
   const [attachments, setAttachments] = useState<UiAttachment[]>([])
   const [attachmentsManagerOpen, setAttachmentsManagerOpen] = useState(false)
+  const [pluginListHeight, setPluginListHeight] = useState(240)
   const payload = useMemo(() => buildPayload(query, attachments), [query, attachments])
   const [perfTrace, setPerfTrace] = useState<SearchPerfTrace>({
     id: 0,
@@ -115,11 +116,13 @@ function App() {
     const SEARCH_BOX_HEIGHT = 62
     const BORDER_HEIGHT = 1
     const EXPANDED_HEIGHT = 800
+    const SEARCH_PANEL_MAX_HEIGHT = EXPANDED_HEIGHT - SEARCH_BOX_HEIGHT - BORDER_HEIGHT
     const SYSTEM_PAGE_HEIGHT = 800
     const MANAGER_HEIGHT = managerMetrics.managerHeight
 
     let height = SEARCH_BOX_HEIGHT
     let allowResize = false
+    const showSearchPanel = (query.length > 0 || attachments.length > 0) && !pluginOpen && !attachmentsManagerOpen
 
     if (viewMode !== 'home') {
       // 设置/详情页高度，允许自由调整大小
@@ -130,8 +133,9 @@ function App() {
       height = SEARCH_BOX_HEIGHT
     } else if (attachmentsManagerOpen && attachments.length > 0) {
       height = SEARCH_BOX_HEIGHT + BORDER_HEIGHT + MANAGER_HEIGHT
-    } else if (query.length > 0 || attachments.length > 0) {
-      height = EXPANDED_HEIGHT
+    } else if (showSearchPanel) {
+      const nextPanelHeight = Math.min(SEARCH_PANEL_MAX_HEIGHT, Math.max(0, pluginListHeight))
+      height = SEARCH_BOX_HEIGHT + BORDER_HEIGHT + nextPanelHeight
     }
     window.intools.window.setExpendHeight(height, allowResize)
 
@@ -142,7 +146,12 @@ function App() {
     } else if (!hasInput) {
       lastHeightRef.current = null
     }
-  }, [query, pluginOpen, detailsPluginName, attachments.length, attachmentsManagerOpen, managerMetrics.managerHeight, viewMode, perfTrace.id, perfTrace.startedAt])
+  }, [query, pluginOpen, detailsPluginName, attachments.length, attachmentsManagerOpen, managerMetrics.managerHeight, pluginListHeight, viewMode, perfTrace.id, perfTrace.startedAt])
+
+  const handlePluginListHeightChange = useCallback((height: number) => {
+    const normalized = Math.max(0, Math.round(height))
+    setPluginListHeight((prev) => (prev === normalized ? prev : normalized))
+  }, [])
 
   // 监听插件附着事件
   useEffect(() => {
@@ -533,6 +542,9 @@ function App() {
     )
   }
 
+  const showAttachmentManager = attachmentsManagerOpen && attachments.length > 0
+  const showPluginList = (query.length > 0 || attachments.length > 0) && !pluginOpen && !showAttachmentManager
+  const hasBottomPanel = showAttachmentManager || showPluginList
 
   return (
     <div
@@ -541,7 +553,7 @@ function App() {
       onDragLeave={() => setIsDragging(false)}
       onDrop={handleDrop}
     >
-      <div className="search-box-container">
+      <div className={`search-box-container ${hasBottomPanel ? 'with-bottom-panel' : ''}`}>
         <SearchInput
           ref={searchInputRef}
           value={query}
@@ -590,7 +602,7 @@ function App() {
           </div>
         )}
       </div>
-      {attachmentsManagerOpen && attachments.length > 0 && (
+      {showAttachmentManager && (
         <AttachmentManager
           attachments={attachments}
           onAttachmentsChange={handleAttachmentsChange}
@@ -598,7 +610,7 @@ function App() {
           listMaxHeight={managerMetrics.listHeight}
         />
       )}
-      {(query.length > 0 || attachments.length > 0) && !pluginOpen && !attachmentsManagerOpen && (
+      {showPluginList && (
         <PluginList
           payload={payload}
           traceId={perfTrace.id}
@@ -607,6 +619,7 @@ function App() {
           traceInputLength={perfTrace.textLength}
           traceAttachmentCount={perfTrace.attachmentCount}
           onResultsChange={setResultCount}
+          onPanelHeightChange={handlePluginListHeightChange}
           onShowDetails={(pluginName) => {
             setDetailsPluginName(pluginName)
             setDetailsReturnTarget('home')

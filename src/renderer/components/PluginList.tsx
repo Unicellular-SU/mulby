@@ -16,6 +16,7 @@ interface PluginListProps {
   traceInputLength: number
   traceAttachmentCount: number
   onResultsChange?: (count: number) => void
+  onPanelHeightChange?: (height: number) => void
   onShowDetails?: (pluginName: string) => void
   onOpenSettings?: () => void
 }
@@ -295,6 +296,7 @@ function PluginList({
   traceInputLength,
   traceAttachmentCount,
   onResultsChange,
+  onPanelHeightChange,
   onShowDetails,
   onOpenSettings
 }: PluginListProps) {
@@ -312,6 +314,7 @@ function PluginList({
   const [systemIconVersion, setSystemIconVersion] = useState(0)
 
   const payloadRef = useRef(payload)
+  const panelContentRef = useRef<HTMLDivElement | null>(null)
   const requestIdRef = useRef(0)
   const searchStartedAtRef = useRef(0)
   const searchStartedPayloadHashRef = useRef('')
@@ -706,6 +709,36 @@ function PluginList({
     onResultsChange?.(flatItems.length)
   }, [flatItems.length, onResultsChange])
 
+  useEffect(() => {
+    if (!onPanelHeightChange) return
+    const element = panelContentRef.current
+    if (!element) return
+
+    let frameId = 0
+    const reportHeight = () => {
+      frameId = 0
+      onPanelHeightChange(Math.ceil(element.offsetHeight))
+    }
+    const scheduleReport = () => {
+      if (frameId !== 0) return
+      frameId = window.requestAnimationFrame(reportHeight)
+    }
+
+    scheduleReport()
+
+    const observer = new ResizeObserver(() => {
+      scheduleReport()
+    })
+    observer.observe(element)
+
+    return () => {
+      if (frameId !== 0) {
+        window.cancelAnimationFrame(frameId)
+      }
+      observer.disconnect()
+    }
+  }, [onPanelHeightChange])
+
 
 
   useEffect(() => {
@@ -814,34 +847,32 @@ function PluginList({
     return () => window.removeEventListener('keydown', handleKeyDown)
   }, [flatItems, selectedKey, columns, handleRun, onShowDetails])
 
-  if (flatItems.length === 0) {
-    return (
-      <div className="plugin-grid" role="listbox" aria-label="搜索结果">
-        <div className="result-empty">{isSearching ? '正在搜索...' : '没有匹配结果'}</div>
-      </div>
-    )
-  }
-
   return (
     <div className="plugin-grid" role="listbox" aria-label="搜索结果">
-      {sections.map((section) => (
-        <section key={section.key} className="result-section" aria-label={section.title}>
-          <div className="result-section-title">{section.title}</div>
-          <div className="result-section-grid" role="group" aria-label={section.title}>
-            {section.items.map((item) => {
-              return (
-                <ResultCard
-                  key={item.key}
-                  item={item}
-                  isSelected={item.key === selectedKey}
-                  onRun={handleRun}
-                  onShowDetails={onShowDetails}
-                />
-              )
-            })}
-          </div>
-        </section>
-      ))}
+      <div className="plugin-grid-content" ref={panelContentRef}>
+        {flatItems.length === 0 ? (
+          <div className="result-empty">{isSearching ? '正在搜索...' : '没有匹配结果'}</div>
+        ) : (
+          sections.map((section) => (
+            <section key={section.key} className="result-section" aria-label={section.title}>
+              <div className="result-section-title">{section.title}</div>
+              <div className="result-section-grid" role="group" aria-label={section.title}>
+                {section.items.map((item) => {
+                  return (
+                    <ResultCard
+                      key={item.key}
+                      item={item}
+                      isSelected={item.key === selectedKey}
+                      onRun={handleRun}
+                      onShowDetails={onShowDetails}
+                    />
+                  )
+                })}
+              </div>
+            </section>
+          ))
+        )}
+      </div>
     </div>
   )
 }

@@ -21,6 +21,7 @@ const SEARCH_KEY_APPS = 'apps'
 
 export class PluginDesktop {
   private searchProcesses: Map<string, ChildProcess> = new Map()
+  private appDisplayNameCache: Map<string, string> = new Map()
 
   /**
    * 搜索系统文件
@@ -165,8 +166,8 @@ export class PluginDesktop {
     return formatted
   }
 
-  private formatAppResults(results: string[], limit: number, os: NodeJS.Platform): AppSearchResult[] {
-    const appResults: AppSearchResult[] = []
+  private async formatAppResults(results: string[], limit: number, os: NodeJS.Platform): Promise<AppSearchResult[]> {
+    const appCandidates: Array<{ path: string; kind: AppSearchResult['kind'] }> = []
     const seen = new Set<string>()
 
     for (const rawPath of results) {
@@ -197,16 +198,79 @@ export class PluginDesktop {
 
       if (!valid) continue
 
-      const name = this.normalizeAppDisplayName(basename(appPath), os)
-      appResults.push({ name, path: appPath, kind })
+      appCandidates.push({ path: appPath, kind })
       seen.add(appPath)
 
-      if (appResults.length >= limit) {
+      if (appCandidates.length >= limit) {
         break
       }
     }
 
+    if (appCandidates.length === 0) return []
+
+    const appResults = await Promise.all(
+      appCandidates.map(async ({ path: appPath, kind }) => {
+        const name = await this.resolveAppDisplayName(appPath, os)
+        return { name, path: appPath, kind }
+      })
+    )
+
     return appResults
+  }
+
+  private async resolveAppDisplayName(appPath: string, os: NodeJS.Platform): Promise<string> {
+    const fallbackName = this.normalizeAppDisplayName(basename(appPath), os)
+    if (os !== 'darwin') {
+      return fallbackName
+    }
+
+    const cachedName = this.appDisplayNameCache.get(appPath)
+    if (cachedName) {
+      return cachedName
+    }
+
+    const resolved = await this.resolveDarwinAppDisplayName(appPath)
+    const finalName = resolved || fallbackName
+    this.setCachedAppDisplayName(appPath, finalName)
+    return finalName
+  }
+
+  private async resolveDarwinAppDisplayName(appPath: string): Promise<string | undefined> {
+    try {
+      const rawDisplayName = await this.runQuickCommand('mdls', ['-name', 'kMDItemDisplayName', '-raw', appPath], 1500)
+      const normalized = this.normalizeMdlsValue(rawDisplayName)
+      return normalized || undefined
+    } catch {
+      return undefined
+    }
+  }
+
+  private normalizeMdlsValue(value: string): string {
+    const trimmed = value.trim()
+    if (!trimmed || trimmed === '(null)' || trimmed === 'null') {
+      return ''
+    }
+    if (trimmed.startsWith('"') && trimmed.endsWith('"')) {
+      try {
+        const parsed = JSON.parse(trimmed)
+        return typeof parsed === 'string' ? parsed.trim() : ''
+      } catch {
+        // ignore JSON parse errors and fall back to raw string
+      }
+    }
+    return trimmed
+  }
+
+  private setCachedAppDisplayName(appPath: string, name: string): void {
+    if (this.appDisplayNameCache.has(appPath)) {
+      this.appDisplayNameCache.delete(appPath)
+    }
+    this.appDisplayNameCache.set(appPath, name)
+    while (this.appDisplayNameCache.size > 400) {
+      const oldestKey = this.appDisplayNameCache.keys().next().value as string | undefined
+      if (!oldestKey) break
+      this.appDisplayNameCache.delete(oldestKey)
+    }
   }
 
   private normalizeAppDisplayName(filename: string, os: NodeJS.Platform): string {
@@ -315,6 +379,52 @@ export class PluginDesktop {
         }
 
         resolve(parsedLines.slice(0, limit))
+      })
+    })
+  }
+
+  private runQuickCommand(cmd: string, args: string[], timeoutMs: number = 1500): Promise<string> {
+    return new Promise((resolve, reject) => {
+      const child = spawn(cmd, args)
+      let stdout = ''
+      let stderr = ''
+      let settled = false
+
+      const timer = setTimeout(() => {
+        if (settled) return
+        settled = true
+        try {
+          child.kill()
+        } catch {
+          // ignore
+        }
+        reject(new Error(`Command timed out: ${cmd}`))
+      }, timeoutMs)
+
+      child.stdout.on('data', (data) => {
+        stdout += data.toString()
+      })
+
+      child.stderr.on('data', (data) => {
+        stderr += data.toString()
+      })
+
+      child.on('error', (error) => {
+        if (settled) return
+        settled = true
+        clearTimeout(timer)
+        reject(error)
+      })
+
+      child.on('close', (code) => {
+        if (settled) return
+        settled = true
+        clearTimeout(timer)
+        if (code !== 0 && code !== null) {
+          reject(new Error(`Command failed: ${cmd} ${stderr}`))
+          return
+        }
+        resolve(stdout)
       })
     })
   }

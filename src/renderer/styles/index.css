@@ -273,6 +273,11 @@ body {
   transition: background-color 0.2s ease-out;
 }
 
+.search-box-container.with-bottom-panel {
+  border-radius: 12px 12px 0 0;
+  box-shadow: none;
+}
+
 .search-box {
   display: flex;
   align-items: center;
@@ -716,10 +721,6 @@ body {
 
 /* Plugin Grid */
 .plugin-grid {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  padding: 10px 12px 12px;
   flex: 1;
   min-height: 0;
   overflow-y: auto;
@@ -728,8 +729,16 @@ body {
   -webkit-backdrop-filter: blur(var(--glass-blur));
 }
 
+.plugin-grid-content {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 10px 12px 12px;
+  min-width: 0;
+}
+
 .result-empty {
-  margin: 6px 0;
+  margin: 0;
   border-radius: 10px;
   border: 1px dashed var(--glass-border);
   background: var(--glass-bg);
