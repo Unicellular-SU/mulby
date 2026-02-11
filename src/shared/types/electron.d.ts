@@ -320,6 +320,7 @@ export interface ElectronAPI {
     center: () => void
     detach: () => void
     close: () => void
+    reload: () => void
     setAlwaysOnTop: (flag: boolean) => void
     getMode: () => Promise<'attached' | 'detached'>
   }

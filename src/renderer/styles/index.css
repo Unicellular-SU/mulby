@@ -1095,6 +1095,15 @@ body {
   transform: scale(0.95);
 }
 
+.plugin-reload-btn:hover {
+  background: rgba(59, 130, 246, 0.15);
+  color: #3b82f6;
+}
+
+.plugin-reload-btn:active {
+  background: rgba(59, 130, 246, 0.25);
+}
+
 .plugin-detach-btn:hover {
   background: rgba(59, 130, 246, 0.15);
   color: #3b82f6;

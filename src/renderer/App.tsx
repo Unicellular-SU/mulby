@@ -603,6 +603,18 @@ function App() {
         {pluginOpen && (
           <div className="plugin-controls">
             <button
+              className="plugin-control-btn plugin-reload-btn"
+              onClick={() => {
+                window.intools.window.reload()
+              }}
+              title="重载插件"
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M21 12a9 9 0 1 1-2.64-6.36" />
+                <path d="M21 3v6h-6" />
+              </svg>
+            </button>
+            <button
               className="plugin-control-btn plugin-detach-btn"
               onClick={() => {
                 window.intools.window.detach()

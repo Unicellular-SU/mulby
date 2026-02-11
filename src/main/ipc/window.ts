@@ -532,8 +532,13 @@ export function registerWindowHandlers(
 
   // 重新加载插件
   ipcMain.on('plugin:reload', (event) => {
-    const win = BrowserWindow.fromWebContents(event.sender)
-    if (win) {
+    const senderWin = BrowserWindow.fromWebContents(event.sender)
+    if (senderWin) {
+      const mainWin = getMainWindow()
+      // 主窗口触发时，重载当前附着的 Panel 插件窗口；其他情况重载发送者窗口。
+      const panelWin = pluginWindowManager.getPanelWindow()?.getWindow()
+      const win = senderWin === mainWin && panelWin ? panelWin : senderWin
+
       // 重载前设置背景色并隐藏窗口内容，避免闪白
       const isDark = themeManager.getActualTheme() === 'dark'
       const bgColor = isDark ? '#1e293b' : '#ffffff'
