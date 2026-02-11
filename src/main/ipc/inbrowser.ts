@@ -3,9 +3,24 @@ import { InBrowserManager } from '../browser/InBrowserManager';
 import { InBrowserRunPayload } from '../../shared/types/inbrowser';
 
 export function registerInBrowserHandlers() {
-    ipcMain.handle('inbrowser:run', async (_event, payload: InBrowserRunPayload) => {
+    const cleanupBoundSenders = new Set<number>();
+
+    ipcMain.handle('inbrowser:run', async (event, payload: InBrowserRunPayload) => {
         try {
-            const result = await InBrowserManager.getInstance().run(payload);
+            const manager = InBrowserManager.getInstance();
+            const senderId = event.sender.id;
+
+            if (!cleanupBoundSenders.has(senderId)) {
+                cleanupBoundSenders.add(senderId);
+                event.sender.once('destroyed', () => {
+                    void manager.destroyByOwner(senderId).catch((error) => {
+                        console.warn(`[InBrowser] Failed to cleanup windows for sender ${senderId}:`, error);
+                    });
+                    cleanupBoundSenders.delete(senderId);
+                });
+            }
+
+            const result = await manager.run(payload, senderId);
             return result;
         } catch (error: any) {
             console.error('InBrowser IPC Error:', error);

@@ -1,14 +1,17 @@
-import { BrowserWindow } from 'electron';
+import { BrowserWindow, Session } from 'electron';
 import { InBrowserOp, InBrowserOptions } from '../../shared/types/inbrowser';
 
 export class InBrowserWindow {
     public window: BrowserWindow;
     public id: number;
+    private readonly cleanupSessionOnClose: boolean;
+    private readonly ownedSession: Session;
+    private sessionCleanupPromise: Promise<void> | null = null;
 
-    constructor(options: InBrowserOptions) {
+    constructor(options: InBrowserOptions, cleanupSessionOnClose: boolean = false) {
         this.window = new BrowserWindow({
             ...options,
-            show: options.show || false, // Default to hidden
+            show: options.show ?? false, // Default to hidden
             webPreferences: {
                 nodeIntegration: false,
                 contextIsolation: true,
@@ -17,6 +20,14 @@ export class InBrowserWindow {
             },
         });
         this.id = this.window.id;
+        this.cleanupSessionOnClose = cleanupSessionOnClose;
+        this.ownedSession = this.window.webContents.session;
+
+        if (this.cleanupSessionOnClose) {
+            this.window.once('closed', () => {
+                void this.cleanupSessionData();
+            });
+        }
     }
 
     public async run(queue: InBrowserOp[]): Promise<any[]> {
@@ -488,7 +499,7 @@ export class InBrowserWindow {
             }
 
             case 'end':
-                this.destroy();
+                await this.destroy();
                 // Optionally stop processing further ops?
                 // The loop in run() continues?
                 // If destroyed, accessing contents/window will throw.
@@ -772,7 +783,39 @@ export class InBrowserWindow {
         }
     }
 
-    public destroy() {
+    private async cleanupSessionData(): Promise<void> {
+        if (!this.cleanupSessionOnClose) {
+            return;
+        }
+
+        if (this.sessionCleanupPromise) {
+            return this.sessionCleanupPromise;
+        }
+
+        this.sessionCleanupPromise = (async () => {
+            try {
+                await this.ownedSession.clearCache();
+                await this.ownedSession.clearStorageData({
+                    storages: [
+                        'serviceworkers',
+                        'cachestorage',
+                        'indexdb',
+                        'localstorage',
+                        'filesystem',
+                        'websql',
+                        'cookies'
+                    ]
+                });
+            } catch (error) {
+                console.warn('[InBrowserWindow] Failed to cleanup session data:', error);
+            }
+        })();
+
+        return this.sessionCleanupPromise;
+    }
+
+    public async destroy(): Promise<void> {
+        await this.cleanupSessionData();
         if (!this.window.isDestroyed()) {
             this.window.destroy();
         }

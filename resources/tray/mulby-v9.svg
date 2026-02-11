@@ -1,0 +1,56 @@
+<svg width="200" height="200" viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg" shape-rendering="crispEdges">
+      <defs>
+        <!-- 定义单个像素葡萄的形状 (40x40 grid近似) -->
+        <!-- 使用简单的多边形模拟圆形的像素化边缘 -->
+        <g id="pixelGrape">
+            <path d="M12 0 H28 V4 H36 V12 H40 V28 H36 V36 H28 V40 H12 V36 H4 V28 H0 V12 H4 V4 H12 Z"></path>
+            <!-- 高光点 (像素块) -->
+            <rect x="8" y="8" width="8" height="8" fill="white" fill-opacity="0.3"></rect>
+        </g>
+      </defs>
+    
+      <g>
+        <!-- 阴影 (扁平像素椭圆) -->
+        <g fill="#000" fill-opacity="0.15" transform="translate(50, 165)">
+             <path d="M20 0 H80 V4 H90 V12 H10 V12 H0 V4 H10 Z"></path>
+        </g>
+    
+        <!-- 深色层 (Dark Grapes) - 对应原图 gradDark (#4A148C) -->
+        <g fill="#4A148C">
+          <!-- 坐标基于原图 translate 减去中心偏移 (20,20) -->
+          <use href="#pixelGrape" x="55" y="65"></use>   <!-- 原(75, 85) -->
+          <use href="#pixelGrape" x="105" y="65"></use>  <!-- 原(125, 85) -->
+          <use href="#pixelGrape" x="38" y="95"></use>   <!-- 原(58, 115) -->
+          <use href="#pixelGrape" x="122" y="95"></use>  <!-- 原(142, 115) -->
+          <use href="#pixelGrape" x="55" y="125"></use>  <!-- 原(75, 145) -->
+          <use href="#pixelGrape" x="105" y="125"></use> <!-- 原(125, 145) -->
+          <use href="#pixelGrape" x="80" y="140"></use>  <!-- 原(100, 160) -->
+        </g>
+    
+        <!-- 中色层 (Mid Grapes) - 对应原图 gradMid (#5E35B1) -->
+        <g fill="#673AB7">
+          <use href="#pixelGrape" x="62" y="88"></use>   <!-- 原(82, 108) -->
+          <use href="#pixelGrape" x="98" y="88"></use>   <!-- 原(118, 108) -->
+          <use href="#pixelGrape" x="80" y="118"></use>  <!-- 原(100, 138) -->
+        </g>
+    
+        <!-- 亮色层 (Light Grapes) - 对应原图 gradLight (#7E57C2) -->
+        <g fill="#9575CD">
+          <use href="#pixelGrape" x="80" y="80"></use>   <!-- 原(100, 100) -->
+        </g>
+    
+        <!-- 叶子 (Leaf) - 像素化路径 -->
+        <!-- 对应原图 translate(2, 2) 附近的曲线，改为阶梯状直线 -->
+        <g transform="translate(0, 0)">
+            <!-- 叶柄阴影 -->
+            <path d="M96 68 H104 V60 H96 Z" fill="#000" fill-opacity="0.2"></path>
+            
+            <!-- 叶子主体 (Green) -->
+            <path d="M96 64 H104 V56 H108 V48 H116 V40 H124 V32 H132 V24 H140 V40 H132 V48 H124 V56 H116 V64 H108 V72 H96 Z" fill="#388E3C"></path>
+            
+            <!-- 叶子高光细节 -->
+            <rect x="108" y="48" width="4" height="4" fill="white" fill-opacity="0.2"></rect>
+            <rect x="116" y="40" width="4" height="4" fill="white" fill-opacity="0.2"></rect>
+        </g>
+      </g>
+    </svg>

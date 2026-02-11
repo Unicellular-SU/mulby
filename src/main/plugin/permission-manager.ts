@@ -132,6 +132,11 @@ export class PermissionManager {
         // 权限检查处理器
         session.defaultSession.setPermissionCheckHandler(
             (_webContents, permission, requestingOrigin, details) => {
+                // `background-sync` 会被页面周期性轮询，保留日志会造成主日志噪声
+                if ((permission as string) === 'background-sync') {
+                    return false
+                }
+
                 log.debug(`[PermissionManager] Permission check: ${permission}`, { requestingOrigin, details })
 
                 const permType = this.mapElectronPermission(permission)

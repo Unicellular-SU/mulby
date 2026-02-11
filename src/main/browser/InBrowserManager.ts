@@ -1,10 +1,12 @@
-import { session } from 'electron';
+import { session, Session } from 'electron';
 import { InBrowserWindow } from './InBrowserWindow';
 import { InBrowserRunPayload, InBrowserOptions, InBrowserInstance } from '../../shared/types/inbrowser';
 
 export class InBrowserManager {
     private static instance: InBrowserManager;
     private windows: Map<number, InBrowserWindow> = new Map();
+    private windowOwners: Map<number, number> = new Map();
+    private ownerToWindows: Map<number, Set<number>> = new Map();
     private proxyConfig: Electron.ProxyConfig | null = null;
 
     private constructor() { }
@@ -16,26 +18,90 @@ export class InBrowserManager {
         return InBrowserManager.instance;
     }
 
-    public async run(payload: InBrowserRunPayload): Promise<any[]> {
+    private createManagedPartition(): string {
+        return `inbrowser-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+    }
+
+    private buildWindowOptions(options?: InBrowserOptions): { options: InBrowserOptions; cleanupSessionOnClose: boolean } {
+        const defaultOptions: InBrowserOptions = {
+            show: false,
+            width: 800,
+            height: 600
+        };
+
+        const merged: InBrowserOptions = {
+            ...defaultOptions,
+            ...(options || {})
+        };
+
+        const mergedWebPreferences: Electron.WebPreferences = {
+            ...(options?.webPreferences || {})
+        };
+
+        let cleanupSessionOnClose = false;
+        if (!mergedWebPreferences.partition) {
+            mergedWebPreferences.partition = this.createManagedPartition();
+            cleanupSessionOnClose = true;
+        }
+
+        merged.webPreferences = mergedWebPreferences;
+
+        return { options: merged, cleanupSessionOnClose };
+    }
+
+    private trackOwnership(ownerId: number | undefined, windowId: number): void {
+        if (ownerId === undefined) {
+            return;
+        }
+
+        this.windowOwners.set(windowId, ownerId);
+        let ids = this.ownerToWindows.get(ownerId);
+        if (!ids) {
+            ids = new Set<number>();
+            this.ownerToWindows.set(ownerId, ids);
+        }
+        ids.add(windowId);
+    }
+
+    private releaseWindow(windowId: number): void {
+        this.windows.delete(windowId);
+
+        const ownerId = this.windowOwners.get(windowId);
+        if (ownerId === undefined) {
+            return;
+        }
+
+        this.windowOwners.delete(windowId);
+        const ids = this.ownerToWindows.get(ownerId);
+        if (!ids) {
+            return;
+        }
+
+        ids.delete(windowId);
+        if (ids.size === 0) {
+            this.ownerToWindows.delete(ownerId);
+        }
+    }
+
+    public async run(payload: InBrowserRunPayload, ownerId?: number): Promise<any[]> {
         let browserWindow: InBrowserWindow;
 
         // Check if ID is provided to reuse existing window
 
         if (payload.id && this.windows.has(payload.id)) {
             browserWindow = this.windows.get(payload.id)!;
+            if (!this.windowOwners.has(payload.id)) {
+                this.trackOwnership(ownerId, payload.id);
+            }
         } else {
-            // Default options if none provided
-            const options: InBrowserOptions = payload.options || {
-                show: false,
-                width: 800,
-                height: 600
-            };
-            browserWindow = new InBrowserWindow(options);
+            const { options, cleanupSessionOnClose } = this.buildWindowOptions(payload.options);
+            browserWindow = new InBrowserWindow(options, cleanupSessionOnClose);
             this.windows.set(browserWindow.id, browserWindow);
+            this.trackOwnership(ownerId, browserWindow.id);
 
             // Handle window close to cleanup map
             browserWindow.window.on('closed', () => {
-                this.windows.delete(browserWindow.id);
+                this.releaseWindow(browserWindow.id);
             });
 
             // Apply proxy if set
@@ -107,7 +173,47 @@ export class InBrowserManager {
     }
 
     public async clearInBrowserCache(): Promise<boolean> {
-        await session.defaultSession.clearCache();
+        const sessions = new Set<Session>([session.defaultSession]);
+        for (const win of this.windows.values()) {
+            if (!win.window.isDestroyed()) {
+                sessions.add(win.window.webContents.session);
+            }
+        }
+
+        for (const activeSession of sessions) {
+            await activeSession.clearCache();
+        }
+
         return true;
+    }
+
+    public async destroyByOwner(ownerId: number): Promise<number> {
+        const windowIds = Array.from(this.ownerToWindows.get(ownerId) || []);
+        if (windowIds.length === 0) {
+            return 0;
+        }
+
+        for (const windowId of windowIds) {
+            const win = this.windows.get(windowId);
+            if (!win) {
+                this.releaseWindow(windowId);
+                continue;
+            }
+            await win.destroy();
+        }
+
+        this.ownerToWindows.delete(ownerId);
+        return windowIds.length;
+    }
+
+    public async destroyAll(): Promise<void> {
+        const allWindows = Array.from(this.windows.values());
+        for (const win of allWindows) {
+            await win.destroy();
+        }
+
+        this.windows.clear();
+        this.windowOwners.clear();
+        this.ownerToWindows.clear();
     }
 }

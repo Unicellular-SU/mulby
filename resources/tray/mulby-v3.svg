@@ -1,0 +1,30 @@
+<svg width="200" height="200" viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="cyberGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#7c4dff" />
+      <stop offset="100%" stop-color="#ff4081" />
+    </linearGradient>
+    <linearGradient id="neonLeaf" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#00e676" />
+      <stop offset="100%" stop-color="#00b0ff" />
+    </linearGradient>
+    <rect id="pixel" x="-18" y="-18" width="36" height="36" rx="4" ry="4" transform="rotate(45)" />
+  </defs>
+  <g transform="translate(10, 0)">
+    <g fill="url(#cyberGradient)">
+      <use href="#pixel" x="70" y="70" />
+      <use href="#pixel" x="110" y="70" />
+      <use href="#pixel" x="50" y="100" />
+      <use href="#pixel" x="90" y="100" />
+      <use href="#pixel" x="130" y="100" />
+      <use href="#pixel" x="70" y="130" />
+      <use href="#pixel" x="110" y="130" />
+      <use href="#pixel" x="90" y="160" />
+    </g>
+    <circle cx="90" cy="100" r="3" fill="white" fill-opacity="0.8" />
+    <circle cx="50" cy="100" r="2" fill="white" fill-opacity="0.5" />
+    <circle cx="130" cy="100" r="2" fill="white" fill-opacity="0.5" />
+    <polygon points="90,60 110,20 135,35 115,65" fill="url(#neonLeaf)" transform="translate(-5, -5)"/>
+    <path d="M110 20 L112.5 45" stroke="white" stroke-width="1" stroke-opacity="0.5" stroke-linecap="round" transform="translate(-5, -5)"/>
+  </g>
+</svg>

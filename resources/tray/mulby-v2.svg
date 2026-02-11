@@ -1,0 +1,43 @@
+<svg width="200" height="200" viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="leafGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#66BB6A" />
+      <stop offset="100%" stop-color="#388E3C" />
+    </linearGradient>
+    <radialGradient id="gradDark" cx="30%" cy="30%" r="70%">
+      <stop offset="0%" stop-color="#7B1FA2" />
+      <stop offset="100%" stop-color="#4A148C" />
+    </radialGradient>
+    <radialGradient id="gradMid" cx="30%" cy="30%" r="70%">
+      <stop offset="0%" stop-color="#9575CD" />
+      <stop offset="100%" stop-color="#5E35B1" />
+    </radialGradient>
+    <radialGradient id="gradLight" cx="30%" cy="30%" r="70%">
+      <stop offset="0%" stop-color="#D1C4E9" />
+      <stop offset="100%" stop-color="#7E57C2" />
+    </radialGradient>
+    <ellipse id="highlight" cx="-8" cy="-8" rx="6" ry="4" transform="rotate(-45)" fill="white" fill-opacity="0.2" />
+  </defs>
+  <g>
+    <ellipse cx="100" cy="175" rx="50" ry="8" fill="#000" fill-opacity="0.1" />
+    <g fill="url(#gradDark)">
+      <g transform="translate(75, 85)"><circle r="24" /><use href="#highlight" /></g>
+      <g transform="translate(125, 85)"><circle r="24" /><use href="#highlight" /></g>
+      <g transform="translate(58, 115)"><circle r="24" /><use href="#highlight" /></g>
+      <g transform="translate(142, 115)"><circle r="24" /><use href="#highlight" /></g>
+      <g transform="translate(75, 145)"><circle r="24" /><use href="#highlight" /></g>
+      <g transform="translate(125, 145)"><circle r="24" /><use href="#highlight" /></g>
+      <g transform="translate(100, 160)"><circle r="24" /><use href="#highlight" /></g>
+    </g>
+    <g fill="url(#gradMid)">
+      <g transform="translate(82, 108)"><circle r="22" /><use href="#highlight" /></g>
+      <g transform="translate(118, 108)"><circle r="22" /><use href="#highlight" /></g>
+      <g transform="translate(100, 138)"><circle r="22" /><use href="#highlight" /></g>
+    </g>
+    <g fill="url(#gradLight)">
+      <g transform="translate(100, 100)"><circle r="22" /><use href="#highlight" /></g>
+    </g>
+    <path d="M100 68 Q105 28 135 23 Q125 63 100 68 Z" fill="#000" fill-opacity="0.2" transform="translate(2, 2) rotate(-5 100 65)" />
+    <path d="M100 65 Q105 25 135 20 Q125 60 100 65 Z" fill="url(#leafGrad)" transform="rotate(-5 100 65)" />
+  </g>
+</svg>
