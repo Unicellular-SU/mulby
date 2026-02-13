@@ -6,11 +6,6 @@ import { registerAllHandlers } from './ipc'
 import { setAiCapabilityPolicyResolver, setAiToolExecutor } from './ai'
 import { aiMcpService, isMcpToolName } from './ai/mcp'
 import {
-  AI_SKILL_CREATOR_TOOL_NAME,
-  loadSkillCreatorResourcePack
-} from './ai/skills/creator-resources'
-import { executeSkillCreatorRunCommandTool } from './ai/skills/creator-command-tool'
-import {
   AI_RUN_COMMAND_TOOL_NAME,
   normalizeFailedRunCommandResult,
   parseAiRunCommandArgs
@@ -82,17 +77,6 @@ const aiInternalToolRuntime = createAiInternalToolRuntime({
 })
 
 setAiToolExecutor(async ({ name, args, context, callId }) => {
-  if (name === AI_SKILL_CREATOR_TOOL_NAME) {
-    return await executeSkillCreatorRunCommandTool(args, context, {
-      loadPack: loadSkillCreatorResourcePack,
-      runCommand: (input) => {
-        return commandRunnerService.runCommand(input, {
-          source: 'app'
-        })
-      }
-    })
-  }
-
   if (name === AI_RUN_COMMAND_TOOL_NAME) {
     const input = parseAiRunCommandArgs(args)
     const pluginName = context?.pluginName

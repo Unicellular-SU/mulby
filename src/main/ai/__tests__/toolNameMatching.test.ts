@@ -18,16 +18,15 @@ function buildTool(name: string): AiTool {
 }
 
 describe('tool name matching', () => {
-  it('maps creator alias to declared skill creator tool', () => {
-    const tools = [buildTool('mulby_skill_creator_run_command')]
+  it('maps creator alias to run command when only run command exists', () => {
+    const tools = [buildTool('mulby_run_command')]
     const resolved = resolveCompatToolCallName('mulby_creator_run_command', tools)
-    assert.equal(resolved, 'mulby_skill_creator_run_command')
+    assert.equal(resolved, 'mulby_run_command')
   })
 
   it('returns undefined for ambiguous unknown names', () => {
-    const tools = [buildTool('mulby_run_command'), buildTool('mulby_skill_creator_run_command')]
+    const tools = [buildTool('mulby_run_command'), buildTool('mulby_admin_run_command')]
     const resolved = resolveCompatToolCallName('mulby_unknown_run_command', tools)
     assert.equal(resolved, undefined)
   })
 })
-

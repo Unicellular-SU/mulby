@@ -1,7 +1,9 @@
+import { promises as fs } from 'node:fs'
+import os from 'node:os'
+import path from 'node:path'
 import type {
   AiMessage,
   AiModel,
-  AiTool,
   AiSettings,
   AiSkillMulbyExtensions,
   AiSkillCreateProgressChunk,
@@ -10,9 +12,10 @@ import type {
 import { getAiSettings } from '../config'
 import { aiService } from '..'
 import { aiSkillService } from './service'
+import { AI_TOOL_CAPABILITY_NAMES, normalizeAiToolCapabilityNames } from '../tools/capabilities'
+import { normalizeAiInternalToolNames } from '../tools/internal-tools'
+import { AI_RUN_COMMAND_TOOL_NAME } from '../tools/run-command-tool'
 import {
-  AI_SKILL_CREATOR_INTERNAL_TAG,
-  AI_SKILL_CREATOR_TOOL_NAME,
   loadSkillCreatorResourcePack,
   type SkillCreatorResourcePack
 } from './creator-resources'
@@ -23,6 +26,16 @@ import type {
   AiSkillCreateWithAiStreamCallbacks,
   AiSkillGeneratedFile
 } from './types'
+
+const SUPPORTED_METADATA_MULBY_KEYS = new Set([
+  'mode',
+  'triggerPhrases',
+  'capabilities',
+  'internalTools',
+  'mcpPolicy'
+])
+const GENERATED_FILE_PATH_PATTERN = /^((scripts|references|assets)\/)[^?*:|"<>]+$/
+const DEFAULT_SKILL_CREATOR_WORKSPACE_DIR = path.resolve(os.tmpdir(), 'mulby-skill-creator-workspace')
 
 interface GeneratedSkillPayload {
   id?: unknown
@@ -43,6 +56,18 @@ interface GeneratedSkillPayload {
   skillMd?: unknown
   skillMarkdown?: unknown
   files?: unknown
+}
+
+interface NormalizeMetadataMulbyResult {
+  value?: AiSkillMulbyExtensions
+  droppedKeys: string[]
+  droppedCapabilities: string[]
+}
+
+interface NormalizeFilesResult {
+  files?: AiSkillGeneratedFile[]
+  pathOnlyPaths: string[]
+  invalidPaths: string[]
 }
 
 function extractSkillCreatorSnippet(content: string): string {
@@ -168,38 +193,231 @@ function normalizeAllowedTools(value: unknown): string[] | undefined {
   return out.length > 0 ? Array.from(new Set(out)) : undefined
 }
 
-function normalizeMetadataMulby(payload: GeneratedSkillPayload): AiSkillMulbyExtensions | undefined {
+function normalizeMetadataMulby(payload: GeneratedSkillPayload): NormalizeMetadataMulbyResult {
   const direct = payload.metadataMulby
   const fromDirect = direct && typeof direct === 'object' && !Array.isArray(direct)
     ? (direct as Record<string, unknown>)
     : null
+  const droppedKeys = fromDirect
+    ? Object.keys(fromDirect).filter((key) => !SUPPORTED_METADATA_MULBY_KEYS.has(key))
+    : []
   const mode = normalizeMode(fromDirect?.mode ?? payload.mode)
   const triggerPhrases = asStringArray(fromDirect?.triggerPhrases ?? payload.triggerPhrases)
-  const capabilities = asStringArray(fromDirect?.capabilities ?? payload.capabilities)
-  const internalTools = asStringArray(fromDirect?.internalTools ?? payload.internalTools)
+  const rawCapabilities = asStringArray(fromDirect?.capabilities ?? payload.capabilities) || []
+  const capabilities = normalizeAiToolCapabilityNames(rawCapabilities)
+  const droppedCapabilities = rawCapabilities.filter((value) => normalizeAiToolCapabilityNames([value]).length === 0)
+  const internalTools = normalizeAiInternalToolNames(asStringArray(fromDirect?.internalTools ?? payload.internalTools) || [])
   const mcpPolicy = normalizeMcpPolicy(fromDirect?.mcpPolicy ?? payload.mcpPolicy)
   const out: AiSkillMulbyExtensions = {
     ...(mode ? { mode } : {}),
     ...(triggerPhrases ? { triggerPhrases } : {}),
-    ...(capabilities ? { capabilities } : {}),
-    ...(internalTools ? { internalTools } : {}),
+    ...(capabilities.length > 0 ? { capabilities } : {}),
+    ...(internalTools.length > 0 ? { internalTools } : {}),
     ...(mcpPolicy ? { mcpPolicy } : {})
   }
-  return Object.keys(out).length > 0 ? out : undefined
+  return {
+    value: Object.keys(out).length > 0 ? out : undefined,
+    droppedKeys,
+    droppedCapabilities
+  }
 }
 
-function normalizeFiles(value: unknown): AiSkillGeneratedFile[] | undefined {
-  if (!Array.isArray(value)) return undefined
+function normalizeGeneratedFilePath(value: unknown): string | undefined {
+  const normalized = String(value ?? '').replace(/\\/g, '/').trim()
+  if (!normalized) return undefined
+  if (normalized.startsWith('/') || /^[A-Za-z]:\//.test(normalized)) return undefined
+  if (normalized.includes('..')) return undefined
+  if (!GENERATED_FILE_PATH_PATTERN.test(normalized)) return undefined
+  return normalized
+}
+
+function dedupeGeneratedFiles(files: AiSkillGeneratedFile[] | undefined): AiSkillGeneratedFile[] | undefined {
+  if (!files || files.length === 0) return undefined
+  const map = new Map<string, AiSkillGeneratedFile>()
+  for (const item of files) {
+    map.set(item.path, item)
+  }
+  return Array.from(map.values())
+}
+
+function normalizeFiles(value: unknown): NormalizeFilesResult {
+  if (!Array.isArray(value)) {
+    return {
+      files: undefined,
+      pathOnlyPaths: [],
+      invalidPaths: []
+    }
+  }
   const out: AiSkillGeneratedFile[] = []
+  const pathOnlyPaths: string[] = []
+  const invalidPaths: string[] = []
+  const seenPathOnly = new Set<string>()
   for (const item of value) {
+    if (typeof item === 'string') {
+      const filePath = normalizeGeneratedFilePath(item)
+      if (!filePath) {
+        invalidPaths.push(String(item))
+        continue
+      }
+      if (!seenPathOnly.has(filePath)) {
+        seenPathOnly.add(filePath)
+        pathOnlyPaths.push(filePath)
+      }
+      continue
+    }
     if (!item || typeof item !== 'object' || Array.isArray(item)) continue
     const row = item as Record<string, unknown>
-    const path = asString(row.path)
+    const filePath = normalizeGeneratedFilePath(row.path)
     const content = asString(row.content)
-    if (!path || content === undefined) continue
-    out.push({ path, content })
+    if (!filePath) {
+      invalidPaths.push(String(row.path ?? ''))
+      continue
+    }
+    if (content === undefined) {
+      if (!seenPathOnly.has(filePath)) {
+        seenPathOnly.add(filePath)
+        pathOnlyPaths.push(filePath)
+      }
+      continue
+    }
+    out.push({ path: filePath, content })
   }
-  return out.length > 0 ? out : undefined
+  return {
+    files: dedupeGeneratedFiles(out),
+    pathOnlyPaths,
+    invalidPaths
+  }
+}
+
+function resolveSkillCreatorWorkspaceRoot(): string {
+  const envPath = String(process.env.MULBY_SKILL_CREATOR_WORKSPACE || '').trim()
+  return envPath ? path.resolve(envPath) : DEFAULT_SKILL_CREATOR_WORKSPACE_DIR
+}
+
+function pathInside(root: string, target: string): boolean {
+  const normalizedRoot = path.resolve(root)
+  const normalizedTarget = path.resolve(target)
+  return normalizedTarget === normalizedRoot || normalizedTarget.startsWith(`${normalizedRoot}${path.sep}`)
+}
+
+async function readFileIfExists(filePath: string): Promise<string | undefined> {
+  try {
+    const stat = await fs.stat(filePath)
+    if (!stat.isFile()) return undefined
+    return await fs.readFile(filePath, 'utf8')
+  } catch {
+    return undefined
+  }
+}
+
+async function hydrateFilesFromWorkspace(input: {
+  paths: string[]
+  skillNameCandidates: string[]
+}): Promise<{ files: AiSkillGeneratedFile[]; missingPaths: string[] }> {
+  const workspaceRoot = resolveSkillCreatorWorkspaceRoot()
+  const skillNames = Array.from(
+    new Set(
+      input.skillNameCandidates
+        .map((item) => String(item || '').trim())
+        .filter(Boolean)
+    )
+  )
+  const files: AiSkillGeneratedFile[] = []
+  const missingPaths: string[] = []
+  for (const relativePath of input.paths) {
+    let foundContent: string | undefined
+    for (const skillName of skillNames) {
+      const candidateSkillDir = path.join(workspaceRoot, skillName)
+      const candidate = path.join(candidateSkillDir, relativePath)
+      if (!pathInside(candidateSkillDir, candidate)) continue
+      const content = await readFileIfExists(candidate)
+      if (content !== undefined) {
+        foundContent = content
+        break
+      }
+    }
+    if (foundContent === undefined) {
+      missingPaths.push(relativePath)
+      continue
+    }
+    files.push({
+      path: relativePath,
+      content: foundContent
+    })
+  }
+  return {
+    files,
+    missingPaths
+  }
+}
+
+async function repairFilesWithAi(input: {
+  model: string
+  requirements: string
+  rawModelOutput: string
+  skillMarkdown?: string
+  filePaths: string[]
+}): Promise<AiSkillGeneratedFile[] | undefined> {
+  if (!input.filePaths || input.filePaths.length === 0) return undefined
+  const systemPrompt = [
+    'You are fixing a malformed skill generation payload.',
+    'Return JSON only.',
+    'Output exactly: {"files":[{"path":"...","content":"..."}]}',
+    'Do not include any fields other than files.',
+    'Each files item must include both path and full content.',
+    'Never return string-only file paths.',
+    'Each path must stay under scripts/, references/, or assets/.'
+  ].join('\n')
+  const userPrompt = [
+    `User requirement:\n${input.requirements}`,
+    `Expected file paths:\n${input.filePaths.map((item) => `- ${item}`).join('\n')}`,
+    input.skillMarkdown
+      ? `Current SKILL.md draft:\n${input.skillMarkdown}`
+      : '',
+    `Previous malformed JSON output:\n${input.rawModelOutput}`
+  ]
+    .filter(Boolean)
+    .join('\n\n')
+  const repaired = await aiService.call({
+    model: input.model,
+    messages: [
+      { role: 'system', content: systemPrompt },
+      { role: 'user', content: userPrompt }
+    ],
+    skills: { mode: 'off' }
+  })
+  const repairedText = normalizeTextFromMessage(repaired)
+  const repairedPayload = extractJsonPayload(repairedText)
+  const normalized = normalizeFiles(repairedPayload.files)
+  if (normalized.pathOnlyPaths.length > 0 || normalized.invalidPaths.length > 0) return undefined
+  if (!normalized.files || normalized.files.length === 0) return undefined
+  const requested = new Set(input.filePaths)
+  const filtered = normalized.files.filter((item) => requested.has(item.path))
+  if (filtered.length !== input.filePaths.length) return undefined
+  return dedupeGeneratedFiles(filtered)
+}
+
+function formatCapabilityList(): string {
+  return AI_TOOL_CAPABILITY_NAMES.join(', ')
+}
+
+function buildMetadataMulbyNotes(input: NormalizeMetadataMulbyResult): string[] {
+  const notes: string[] = []
+  if (input.droppedKeys.length > 0) {
+    notes.push(`metadataMulby unsupported keys ignored: ${input.droppedKeys.join(', ')}`)
+  }
+  if (input.droppedCapabilities.length > 0) {
+    notes.push(`metadataMulby.capabilities unsupported values ignored: ${input.droppedCapabilities.join(', ')}`)
+  }
+  return notes
+}
+
+function buildFilesNormalizationNotes(input: NormalizeFilesResult): string[] {
+  const notes: string[] = []
+  if (input.invalidPaths.length > 0) {
+    notes.push(`files invalid paths ignored: ${input.invalidPaths.join(', ')}`)
+  }
+  return notes
 }
 
 function deriveSkillName(requirements: string): string {
@@ -257,50 +475,6 @@ function buildSkillCreatorContext(pack: SkillCreatorResourcePack | null): string
     .join('\n')
 }
 
-function buildSkillCreatorTools(pack: SkillCreatorResourcePack | null): AiTool[] {
-  if (!pack) return []
-  return [
-    {
-      type: 'function',
-      function: {
-        name: AI_SKILL_CREATOR_TOOL_NAME,
-        description: [
-          'Run local skill-creator scripts for scaffolding/validation.',
-          `Only scripts under ${pack.rootPath}/scripts are allowed.`,
-          'Only use python3/python with a scripts/*.py path as first non-flag arg.',
-          'Do not use bash/sh/zsh, do not use -c, and do not run ls/cat/find.'
-        ].join(' '),
-        parameters: {
-          type: 'object',
-          properties: {
-            command: {
-              type: 'string',
-              enum: ['python3', 'python'],
-              description: 'Interpreter name.'
-            },
-            args: {
-              type: 'array',
-              description: 'Command arguments. First non-flag arg must be scripts/*.py.',
-              items: {
-                type: 'string'
-              }
-            },
-            cwd: {
-              type: 'string',
-              description: 'Optional working directory (defaults to skill-creator root)'
-            },
-            timeoutMs: {
-              type: 'number',
-              description: 'Optional timeout in milliseconds'
-            }
-          }
-        },
-        required: ['command', 'args']
-      }
-    }
-  ]
-}
-
 function normalizeToolCallArgs(value: unknown): { command?: string; args?: string[] } {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return {}
   const input = value as Record<string, unknown>
@@ -322,9 +496,20 @@ function summarizeToolResult(value: unknown): string {
   return success ? `命令执行成功（${hints}）` : `命令执行返回（${hints}）`
 }
 
+function isSkillCreatorCommandEnabled(): boolean {
+  const disabledRaw = String(process.env.MULBY_DISABLE_SKILL_CREATOR_TOOLS || '').trim().toLowerCase()
+  if (disabledRaw === '1' || disabledRaw === 'true' || disabledRaw === 'yes') {
+    return false
+  }
+  const enabledRaw = String(process.env.MULBY_ENABLE_SKILL_CREATOR_TOOLS || '').trim().toLowerCase()
+  if (!enabledRaw) return true
+  return enabledRaw === '1' || enabledRaw === 'true' || enabledRaw === 'yes'
+}
+
 async function buildPrompts(
   input: AiSkillCreateWithAiInput,
-  pack: SkillCreatorResourcePack | null
+  pack: SkillCreatorResourcePack | null,
+  allowToolCalls: boolean
 ): Promise<{ systemPrompt: string; userPrompt: string }> {
   const isRevision = Boolean(String(input.previousRawText || '').trim())
   const builtinGuide = buildSkillCreatorContext(pack)
@@ -336,19 +521,26 @@ async function buildPrompts(
     'SKILL.md frontmatter may only contain: name, description, license, compatibility, metadata, allowed-tools.',
     'metadata must be a string key-value map.',
     'Do not output unsupported top-level frontmatter fields (mode, capabilities, triggerPhrases, mcpPolicy, etc).',
-    'Put platform-specific extensions under metadataMulby; they will be encoded into metadata.mulby.* keys.',
+    'Put project-specific extensions under metadataMulby only.',
+    'metadataMulby supports keys only: mode, triggerPhrases, capabilities, internalTools, mcpPolicy.',
+    `metadataMulby.capabilities supports only: ${formatCapabilityList()}.`,
+    'Do not output metadataMulby.platform or any unknown metadataMulby key.',
     'skillMd must start with YAML frontmatter enclosed by --- and include required name/description.',
     'Prefer kebab-case for name/id. Keep description specific about when to use the skill.',
     'Only include files when needed; paths must stay under scripts/, references/, or assets/.',
-    'files is optional and must only contain paths under scripts/, references/, or assets/.',
+    'files is optional and must be an array of objects: {"path":"...","content":"..."} only.',
+    'Never return files as string path list.',
+    'If user asks for scripts/libraries, you MUST include full script content in files[].content.',
     'If no files are needed, return "files": [].',
-    'Tool-call policy (strict):',
-    '- Call tools only when needed for final JSON quality.',
-    '- Allowed command values: python3 or python.',
-    '- First non-flag arg must be one of scripts/init_skill.py, scripts/quick_validate.py, scripts/package_skill.py.',
-    '- Never call bash/sh/zsh, never use -c, never call ls/cat/find/pwd, never use python -c.',
-    '- Do not run --help probes. Use scripts directly with concrete arguments.',
-    '- If a tool fails, adapt once and continue. Do not repeat the same probe loop.',
+    allowToolCalls ? 'Tool-call policy (strict):' : 'Tool-call policy: disabled for safety. Do not call tools.',
+    allowToolCalls ? `- Use ${AI_RUN_COMMAND_TOOL_NAME} for command execution.` : '',
+    allowToolCalls ? '- run_command args must be a JSON object: {"command":"...","args":[...],"cwd":"...","timeoutMs":30000,"shell":false}.' : '',
+    allowToolCalls ? '- Prefer using python3 with absolute script path under <skill-creator-root>/scripts/*.py.' : '',
+    allowToolCalls ? '- Auxiliary dependency command allowed: python3 -m pip install/show/list/freeze <package> (or pip direct form).' : '',
+    allowToolCalls ? '- When quick_validate reports missing module yaml, install pyyaml then retry validation.' : '',
+    allowToolCalls ? '- Never use shell=true, never use -c probes, and never use command discovery loops.' : '',
+    allowToolCalls ? '- Do not run --help probes. Use scripts directly with concrete arguments.' : '',
+    allowToolCalls ? '- If a tool fails, adapt once and continue. Do not repeat the same probe loop.' : '',
     builtinGuide
       ? `Use this built-in "skill-creator" package context as hard constraints:\n${builtinGuide}`
       : ''
@@ -481,8 +673,16 @@ async function createSkillWithAiInternal(
     })
   }
 
-  const { systemPrompt, userPrompt } = await buildPrompts({ ...input, requirements }, skillCreatorPack)
-  const tools = buildSkillCreatorTools(skillCreatorPack)
+  const allowToolCalls = isSkillCreatorCommandEnabled()
+  if (!allowToolCalls) {
+    emitProgress(callbacks, {
+      type: 'status',
+      stage: 'generating',
+      stageStatus: 'start',
+      text: '已禁用命令工具（MULBY_DISABLE_SKILL_CREATOR_TOOLS=1），仅使用结构化生成'
+    })
+  }
+  const { systemPrompt, userPrompt } = await buildPrompts({ ...input, requirements }, skillCreatorPack, allowToolCalls)
   let generatedText = ''
   try {
     const finalMessage = await aiService.stream(
@@ -493,17 +693,14 @@ async function createSkillWithAiInternal(
           { role: 'user', content: userPrompt }
         ],
         skills: { mode: 'off' },
-        tools: tools.length > 0 ? tools : undefined,
-        maxToolSteps: 20,
-        toolContext: {
-          internalTag: AI_SKILL_CREATOR_INTERNAL_TAG
-        }
+        capabilities: allowToolCalls ? ['shell.exec'] : undefined,
+        maxToolSteps: 20
       },
       {
         onChunk: (chunk) => {
           if (chunk.chunkType === 'tool-call') {
             const callName = chunk.tool_call?.name
-            if (callName === AI_SKILL_CREATOR_TOOL_NAME) {
+            if (callName === AI_RUN_COMMAND_TOOL_NAME) {
               const commandInput = normalizeToolCallArgs(chunk.tool_call?.args)
               const preview = [commandInput.command, ...(commandInput.args || [])].filter(Boolean).join(' ').trim()
               emitProgress(callbacks, {
@@ -517,7 +714,7 @@ async function createSkillWithAiInternal(
           }
           if (chunk.chunkType === 'tool-result') {
             const resultName = chunk.tool_result?.name
-            if (resultName === AI_SKILL_CREATOR_TOOL_NAME) {
+            if (resultName === AI_RUN_COMMAND_TOOL_NAME) {
               emitProgress(callbacks, {
                 type: 'status',
                 stage: 'generating',
@@ -560,7 +757,60 @@ async function createSkillWithAiInternal(
     const normalizedMetadata = normalizeMetadata(payload.metadata)
     const normalizedAllowedTools = normalizeAllowedTools(payload.allowedTools ?? payload['allowed-tools'])
     const normalizedMetadataMulby = normalizeMetadataMulby(payload)
-    const normalizedFiles = normalizeFiles(payload.files)
+    const normalizedFilesResult = normalizeFiles(payload.files)
+    const generationNotes: string[] = [
+      ...buildMetadataMulbyNotes(normalizedMetadataMulby),
+      ...buildFilesNormalizationNotes(normalizedFilesResult)
+    ]
+    let normalizedFiles = normalizedFilesResult.files
+
+    if (normalizedFilesResult.pathOnlyPaths.length > 0) {
+      emitProgress(callbacks, {
+        type: 'status',
+        stage: 'validating',
+        stageStatus: 'start',
+        text: '检测到 files 仅返回路径，尝试补全文件内容…'
+      })
+      const fromWorkspace = await hydrateFilesFromWorkspace({
+        paths: normalizedFilesResult.pathOnlyPaths,
+        skillNameCandidates: Array.from(
+          new Set([
+            normalizedName,
+            normalizeSkillName(payload.id, normalizedName)
+          ])
+        )
+      })
+      normalizedFiles = dedupeGeneratedFiles([...(normalizedFiles || []), ...fromWorkspace.files])
+      const existingPathSet = new Set((normalizedFiles || []).map((item) => item.path))
+      const stillMissing = normalizedFilesResult.pathOnlyPaths.filter((item) => !existingPathSet.has(item))
+      if (stillMissing.length > 0) {
+        const repaired = await repairFilesWithAi({
+          model,
+          requirements,
+          rawModelOutput: generatedText,
+          skillMarkdown: asString(payload.skillMd) || asString(payload.skillMarkdown),
+          filePaths: stillMissing
+        })
+        if (repaired && repaired.length > 0) {
+          normalizedFiles = dedupeGeneratedFiles([...(normalizedFiles || []), ...repaired])
+        }
+      }
+
+      const finalPathSet = new Set((normalizedFiles || []).map((item) => item.path))
+      const unresolved = normalizedFilesResult.pathOnlyPaths.filter((item) => !finalPathSet.has(item))
+      if (unresolved.length > 0) {
+        throw new Error(
+          `AI 生成的 files 缺少 content，无法写入：${unresolved.slice(0, 8).join(', ')}。` +
+          '请让模型返回 files=[{path, content}]。'
+        )
+      }
+      emitProgress(callbacks, {
+        type: 'status',
+        stage: 'validating',
+        stageStatus: 'done',
+        text: 'files 内容补全完成'
+      })
+    }
     emitStageStatus(callbacks, currentStage, 'done', '校验完成：准备写入本地目录')
 
     currentStage = 'writing'
@@ -574,7 +824,7 @@ async function createSkillWithAiInternal(
       compatibility: normalizedCompatibility,
       metadata: normalizedMetadata,
       allowedTools: normalizedAllowedTools,
-      metadataMulby: normalizedMetadataMulby,
+      metadataMulby: normalizedMetadataMulby.value,
       promptTemplate: asString(payload.promptTemplate),
       skillMarkdown: asString(payload.skillMd) || asString(payload.skillMarkdown),
       files: normalizedFiles,
@@ -591,7 +841,8 @@ async function createSkillWithAiInternal(
       record,
       generation: {
         model,
-        rawText: generatedText
+        rawText: generatedText,
+        notes: generationNotes.length > 0 ? generationNotes : undefined
       }
     }
   } catch (error) {

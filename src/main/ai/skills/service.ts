@@ -99,6 +99,14 @@ function splitSkillMarkdown(content: string): { body: string } {
   }
 }
 
+function extractSkillMarkdownBody(content: string): string | undefined {
+  const text = String(content || '').trim()
+  if (!text) return undefined
+  const parsedBody = splitSkillMarkdown(text).body
+  const body = String(parsedBody || text).trim()
+  return body || undefined
+}
+
 function mergeMulbyExtensions(input: {
   fromMetadata?: AiSkillMulbyExtensions
   fromLegacy?: Partial<AiSkillMulbyExtensions>
@@ -748,13 +756,13 @@ export class AiSkillService {
     const markdown = buildSkillMarkdown(descriptor)
     const root = await this.ensureSkillsRootPath()
     const installPath = path.join(root, id)
-    await fs.mkdir(installPath, { recursive: true })
     const skillMdPath = path.join(installPath, 'SKILL.md')
     assertValidSkillMarkdown({
       markdown,
       skillDirPath: installPath,
       filePath: skillMdPath
     })
+    await fs.mkdir(installPath, { recursive: true })
     await fs.writeFile(skillMdPath, markdown, 'utf8')
     const hash = sha256(markdown)
 
@@ -845,42 +853,25 @@ export class AiSkillService {
       internalTools: input.internalTools,
       mcpPolicy: input.mcpPolicy
     })
+    const generatedPromptTemplate = extractSkillMarkdownBody(String(input.skillMarkdown || ''))
+    const finalDescriptor: AiSkillDescriptor = {
+      ...descriptor,
+      promptTemplate: generatedPromptTemplate || descriptor.promptTemplate
+    }
+    const finalMarkdown = buildSkillMarkdown(finalDescriptor)
 
     const root = await this.ensureSkillsRootPath()
     const installPath = path.join(root, id)
-    await fs.rm(installPath, { recursive: true, force: true })
-    await fs.mkdir(installPath, { recursive: true })
     const skillMdPath = path.join(installPath, 'SKILL.md')
-    const markdown = String(input.skillMarkdown || '').trim() || buildSkillMarkdown(descriptor)
-    assertValidSkillMarkdown({
-      markdown,
-      skillDirPath: installPath,
-      filePath: skillMdPath
-    })
-    await fs.writeFile(skillMdPath, markdown, 'utf8')
-    await this.writeGeneratedFiles(installPath, input.files)
-
-    const finalContent = await fs.readFile(skillMdPath, 'utf8')
-    const parsedDescriptor = parseDescriptorFromMarkdown({
-      content: finalContent,
-      skillDirPath: installPath,
-      filePath: skillMdPath,
-      fallbackId: descriptor.id,
-      includeBody: true
-    })
-    const finalDescriptor: AiSkillDescriptor = {
-      ...descriptor,
-      ...parsedDescriptor,
-      id,
-      name: parsedDescriptor.name || descriptor.name
-    }
-    const finalMarkdown = buildSkillMarkdown(finalDescriptor)
     assertValidSkillMarkdown({
       markdown: finalMarkdown,
       skillDirPath: installPath,
       filePath: skillMdPath
     })
+    await fs.rm(installPath, { recursive: true, force: true })
+    await fs.mkdir(installPath, { recursive: true })
     await fs.writeFile(skillMdPath, finalMarkdown, 'utf8')
+    await this.writeGeneratedFiles(installPath, input.files)
 
     const record: AiSkillRecord = {
       id,
@@ -998,13 +989,13 @@ export class AiSkillService {
       const nextDescriptor = { ...descriptor, id }
       const markdown = buildSkillMarkdown(nextDescriptor)
       const installPath = path.join(root, id)
-      await fs.mkdir(installPath, { recursive: true })
       const skillMdPath = path.join(installPath, 'SKILL.md')
       assertValidSkillMarkdown({
         markdown,
         skillDirPath: installPath,
         filePath: skillMdPath
       })
+      await fs.mkdir(installPath, { recursive: true })
       await fs.writeFile(skillMdPath, markdown, 'utf8')
 
       imported.push({

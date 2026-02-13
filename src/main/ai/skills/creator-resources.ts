@@ -1,9 +1,6 @@
 import fs from 'node:fs/promises'
 import path from 'node:path'
 
-export const AI_SKILL_CREATOR_TOOL_NAME = 'mulby_skill_creator_run_command'
-export const AI_SKILL_CREATOR_INTERNAL_TAG = 'mulby-skill-creator'
-
 export interface SkillCreatorResourcePack {
   rootPath: string
   skillMdPath: string

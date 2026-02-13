@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { mkdtemp, rm, writeFile, mkdir, readFile } from 'node:fs/promises'
+import { mkdtemp, rm, writeFile, mkdir, readFile, stat } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 import { describe, it } from 'node:test'
@@ -416,10 +416,14 @@ System prompt`, 'utf8')
       name: 'generated-skill',
       description: 'generated skill description',
       skillMarkdown: `---
-name: generated-skill
+name: Generated Skill
 description: generated skill description
+allowed-tools:
+  - Read
+  - Bash(git:*)
 ---
 Generated prompt`,
+      allowedTools: ['Read', 'Bash(git:*)'],
       files: [
         {
           path: 'references/workflows.md',
@@ -428,6 +432,13 @@ Generated prompt`,
       ]
     })
     assert.equal(created.id.startsWith('generated-skill'), true)
+    const skillMdPath = path.join(created.installPath || '', 'SKILL.md')
+    const skillMd = await readFile(skillMdPath, 'utf8')
+    assert.equal(skillMd.includes('name: generated-skill'), true)
+    assert.equal(skillMd.includes('allowed-tools:'), true)
+    assert.equal(skillMd.includes('Read'), true)
+    assert.equal(skillMd.includes('Bash(git:*)'), true)
+    assert.equal(skillMd.includes('Generated prompt'), true)
     const refPath = path.join(created.installPath || '', 'references', 'workflows.md')
     const refContent = await readFile(refPath, 'utf8')
     assert.equal(refContent, '# workflow')
@@ -440,6 +451,40 @@ Generated prompt`,
       }),
       /Unsafe generated file path/
     )
+  })
+
+  it('does not leave empty directory when generated skill validation fails', async (t) => {
+    const tempDir = await createTempDir('mulby-skill-generated-invalid-')
+    t.after(async () => {
+      await rm(tempDir, { recursive: true, force: true })
+    })
+
+    const { service } = createInMemorySkillService({
+      userDataPath: tempDir,
+      settings: {
+        providers: [],
+        models: [],
+        mcp: { servers: [] },
+        skills: {
+          enabled: true,
+          activeSkillIds: [],
+          autoSelect: { enabled: false, maxSkillsPerCall: 3, minScore: 1 },
+          records: []
+        }
+      }
+    })
+
+    await assert.rejects(
+      service.createFromGenerated({
+        name: 'Bad Skill Name',
+        description: 'invalid name should fail validation'
+      }),
+      /Invalid SKILL\.md/
+    )
+
+    const installPath = path.join(tempDir, 'ai', 'skills', 'app', 'bad-skill-name')
+    const exists = await stat(installPath).then(() => true).catch(() => false)
+    assert.equal(exists, false)
   })
 
   it('replaces existing generated skill when replaceSkillId is provided', async (t) => {
@@ -482,5 +527,18 @@ Generated prompt`,
     const skillMd = await readFile(path.join(second.installPath || '', 'SKILL.md'), 'utf8')
     assert.equal(skillMd.includes('description: v2'), true)
     assert.equal(skillMd.includes('second version'), true)
+
+    await assert.rejects(
+      service.createFromGenerated({
+        replaceSkillId: first.id,
+        name: 'Iterative Skill',
+        description: 'invalid replacement should fail'
+      }),
+      /Invalid SKILL\.md/
+    )
+
+    const preservedSkillMd = await readFile(path.join(second.installPath || '', 'SKILL.md'), 'utf8')
+    assert.equal(preservedSkillMd.includes('description: v2'), true)
+    assert.equal(preservedSkillMd.includes('second version'), true)
   })
 })
