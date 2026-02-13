@@ -1,28 +1,29 @@
-# Task Plan: Mulby 全量改名为 Mulby
+# Task Plan: Agent Skills 官方规范一次性达标改造
 
 ## Goal
-将仓库内所有 Mulby/mulby/mulby 相关命名统一迁移为 Mulby/mulby（一次性切断，不保留兼容层），并完成构建与检索验收。
+使项目 `src/main/ai` 的 Skills 设计与运行链路符合 `agentskills.io` 官方定义与规范，并完成单测与 UI 验收。
 
 ## Phases
-- [x] Phase 1: 方案确认（兼容策略、标识范围、仓库目录策略）
-- [x] Phase 2: 批量内容替换（代码/文档/配置）
-- [x] Phase 3: 目录与文件重命名（packages/docs/plugins/types）
-- [x] Phase 4: 依赖与构建产物一致性修复（lock/bin/import/path）
-- [x] Phase 5: 构建与验收（typecheck/build/关键词清零）
+- [x] Phase 1: 规范模型与校验器（严格 frontmatter + 字段约束）
+- [x] Phase 2: Skills 服务链路改造（创建/安装/导入/刷新/解析全入口硬校验）
+- [x] Phase 3: 渐进披露与注入策略（启动仅元数据，激活再加载正文）
+- [x] Phase 4: metadata 命名空间落地（`metadata.mulby.*` 承载扩展能力）
+- [x] Phase 5: IPC/预加载/UI 适配（错误语义、状态展示、创建约束）
+- [x] Phase 6: 测试与文档收口（新增规范测试 + 全量回归）
 
 ## Key Questions
-1. 兼容策略：是否保留 `window.mulby` / `mulby` 命令别名？（否，一次性切断）
-2. 标识范围：是否只改展示名还是全量技术标识？（全量替换）
-3. 仓库目录 `/Users/su/workspace/mulby` 是否改名？（否，本次不改）
+1. 不合规 Skill 处理策略？（已定：立即硬校验，直接拒绝）
+2. 交付范围？（已定：全量一次到位，不做迁移工具）
+3. 扩展字段放置策略？（已定：`metadata` 命名空间）
 
 ## Decisions Made
-- 全量替换：品牌、CLI、API、配置目录、appId、scope、插件示例名。
-- 不保留兼容层：`window.mulby` 和 `mulby` 命令直接迁移到 `window.mulby` 与 `mulby`。
-- 不直接改二进制或第三方目录：通过源码替换与重建保证一致性。
+- 官方字段严格对齐：`name`、`description`、`license`、`compatibility`、`metadata`、`allowed-tools`。
+- 平台扩展字段迁移到 `metadata.mulby.*`，不再写入顶层。
+- 启动扫描只解析 frontmatter；正文在技能激活时按需读取。
+- 全链路阻断不合规技能，提供可读错误信息。
 
 ## Errors Encountered
-- `git mv` 在沙箱内无法创建 `.git/index.lock`。
-  - 处理：使用提权命令完成批量路径重命名。
+- 暂无
 
 ## Status
-**Completed** - 全量改名完成，构建通过，旧关键词在仓库（排除 `node_modules/.git`）中检索为 0。
+**Completed** - 官方规范改造已完成，`test:unit` 与 `typecheck` 均通过。

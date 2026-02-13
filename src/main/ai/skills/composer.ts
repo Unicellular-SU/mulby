@@ -3,6 +3,7 @@ import type {
   AiModel,
   AiTool,
   AiSettings,
+  AiSkillMulbyExtensions,
   AiSkillCreateProgressChunk,
   AiSkillCreateStage
 } from '../../../shared/types/ai'
@@ -27,12 +28,17 @@ interface GeneratedSkillPayload {
   id?: unknown
   name?: unknown
   description?: unknown
+  license?: unknown
+  compatibility?: unknown
+  metadata?: unknown
+  metadataMulby?: unknown
+  allowedTools?: unknown
+  ['allowed-tools']?: unknown
+  promptTemplate?: unknown
   mode?: unknown
-  tags?: unknown
   triggerPhrases?: unknown
   capabilities?: unknown
   internalTools?: unknown
-  promptTemplate?: unknown
   mcpPolicy?: unknown
   skillMd?: unknown
   skillMarkdown?: unknown
@@ -140,6 +146,48 @@ function normalizeMcpPolicy(value: unknown): {
   }
 }
 
+function normalizeMetadata(value: unknown): Record<string, string> | undefined {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined
+  const out: Record<string, string> = {}
+  for (const [rawKey, rawValue] of Object.entries(value as Record<string, unknown>)) {
+    const key = asString(rawKey)
+    if (!key) continue
+    if (typeof rawValue !== 'string') continue
+    out[key] = rawValue
+  }
+  return Object.keys(out).length > 0 ? out : undefined
+}
+
+function normalizeAllowedTools(value: unknown): string[] | undefined {
+  if (typeof value === 'string') {
+    const out = value.split(/\s+/).map((item) => item.trim()).filter(Boolean)
+    return out.length > 0 ? Array.from(new Set(out)) : undefined
+  }
+  if (!Array.isArray(value)) return undefined
+  const out = value.map((item) => String(item ?? '').trim()).filter(Boolean)
+  return out.length > 0 ? Array.from(new Set(out)) : undefined
+}
+
+function normalizeMetadataMulby(payload: GeneratedSkillPayload): AiSkillMulbyExtensions | undefined {
+  const direct = payload.metadataMulby
+  const fromDirect = direct && typeof direct === 'object' && !Array.isArray(direct)
+    ? (direct as Record<string, unknown>)
+    : null
+  const mode = normalizeMode(fromDirect?.mode ?? payload.mode)
+  const triggerPhrases = asStringArray(fromDirect?.triggerPhrases ?? payload.triggerPhrases)
+  const capabilities = asStringArray(fromDirect?.capabilities ?? payload.capabilities)
+  const internalTools = asStringArray(fromDirect?.internalTools ?? payload.internalTools)
+  const mcpPolicy = normalizeMcpPolicy(fromDirect?.mcpPolicy ?? payload.mcpPolicy)
+  const out: AiSkillMulbyExtensions = {
+    ...(mode ? { mode } : {}),
+    ...(triggerPhrases ? { triggerPhrases } : {}),
+    ...(capabilities ? { capabilities } : {}),
+    ...(internalTools ? { internalTools } : {}),
+    ...(mcpPolicy ? { mcpPolicy } : {})
+  }
+  return Object.keys(out).length > 0 ? out : undefined
+}
+
 function normalizeFiles(value: unknown): AiSkillGeneratedFile[] | undefined {
   if (!Array.isArray(value)) return undefined
   const out: AiSkillGeneratedFile[] = []
@@ -159,7 +207,22 @@ function deriveSkillName(requirements: string): string {
     .replace(/\s+/g, ' ')
     .trim()
     .slice(0, 64)
-  return cleaned || 'AI Generated Skill'
+    .toLowerCase()
+    .replace(/[^a-z0-9-]+/g, '-')
+    .replace(/--+/g, '-')
+    .replace(/^-+/, '')
+    .replace(/-+$/, '')
+  return cleaned || 'ai-generated-skill'
+}
+
+function normalizeSkillName(value: unknown, fallback: string): string {
+  const raw = String(value ?? fallback).trim().toLowerCase()
+  const normalized = raw
+    .replace(/[^a-z0-9-]+/g, '-')
+    .replace(/--+/g, '-')
+    .replace(/^-+/, '')
+    .replace(/-+$/, '')
+  return normalized || fallback
 }
 
 function sliceForPrompt(input: string, limit: number): string {
@@ -267,10 +330,14 @@ async function buildPrompts(
   const builtinGuide = buildSkillCreatorContext(pack)
   const systemPrompt = [
     'You are an expert skill author.',
-    'Create or revise a practical AI skill package following Anthropic Skills conventions.',
+    'Create or revise a practical AI skill package following Agent Skills conventions.',
     'Respond with JSON only (no markdown prose).',
-    'Return fields: id, name, description, mode, tags, triggerPhrases, capabilities, promptTemplate, skillMd, files.',
-    'skillMd must start with YAML frontmatter enclosed by --- and include at least "name" and "description".',
+    'Return fields: id, name, description, license, compatibility, metadata, allowedTools, metadataMulby, promptTemplate, skillMd, files.',
+    'SKILL.md frontmatter may only contain: name, description, license, compatibility, metadata, allowed-tools.',
+    'metadata must be a string key-value map.',
+    'Do not output unsupported top-level frontmatter fields (mode, capabilities, triggerPhrases, mcpPolicy, etc).',
+    'Put platform-specific extensions under metadataMulby; they will be encoded into metadata.mulby.* keys.',
+    'skillMd must start with YAML frontmatter enclosed by --- and include required name/description.',
     'Prefer kebab-case for name/id. Keep description specific about when to use the skill.',
     'Only include files when needed; paths must stay under scripts/, references/, or assets/.',
     'files is optional and must only contain paths under scripts/, references/, or assets/.',
@@ -485,8 +552,14 @@ async function createSkillWithAiInternal(
 
     currentStage = 'validating'
     emitStageStatus(callbacks, currentStage, 'start', '校验中：标准化字段与文件定义…')
-    const normalizedName = asString(payload.name) || deriveSkillName(requirements)
+    const defaultName = deriveSkillName(requirements)
+    const normalizedName = normalizeSkillName(payload.name, defaultName)
     const normalizedDescription = asString(payload.description) || `AI generated skill for: ${normalizedName}`
+    const normalizedLicense = asString(payload.license)
+    const normalizedCompatibility = asString(payload.compatibility)
+    const normalizedMetadata = normalizeMetadata(payload.metadata)
+    const normalizedAllowedTools = normalizeAllowedTools(payload.allowedTools ?? payload['allowed-tools'])
+    const normalizedMetadataMulby = normalizeMetadataMulby(payload)
     const normalizedFiles = normalizeFiles(payload.files)
     emitStageStatus(callbacks, currentStage, 'done', '校验完成：准备写入本地目录')
 
@@ -497,13 +570,12 @@ async function createSkillWithAiInternal(
       replaceSkillId: asString(input.replaceSkillId),
       name: normalizedName,
       description: normalizedDescription,
-      mode: normalizeMode(payload.mode),
-      tags: asStringArray(payload.tags),
-      triggerPhrases: asStringArray(payload.triggerPhrases),
-      capabilities: asStringArray(payload.capabilities),
-      internalTools: asStringArray(payload.internalTools),
+      license: normalizedLicense,
+      compatibility: normalizedCompatibility,
+      metadata: normalizedMetadata,
+      allowedTools: normalizedAllowedTools,
+      metadataMulby: normalizedMetadataMulby,
       promptTemplate: asString(payload.promptTemplate),
-      mcpPolicy: normalizeMcpPolicy(payload.mcpPolicy),
       skillMarkdown: asString(payload.skillMd) || asString(payload.skillMarkdown),
       files: normalizedFiles,
       enabled: input.enabled ?? false,

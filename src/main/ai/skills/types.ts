@@ -2,6 +2,7 @@ import type {
   AiOption,
   AiSkillCreateModelOption,
   AiSkillCreateProgressChunk,
+  AiSkillMulbyExtensions,
   AiSkillMcpPolicy,
   AiSkillRecord,
   AiSkillResolveResult,
@@ -11,18 +12,34 @@ import type {
 export interface AiSkillCreateInput {
   id?: string
   name: string
-  description?: string
+  description: string
+  license?: string
+  compatibility?: string
+  metadata?: Record<string, string>
+  allowedTools?: string[]
+  metadataMulby?: AiSkillMulbyExtensions
   promptTemplate?: string
-  tags?: string[]
-  triggerPhrases?: string[]
-  mode?: 'manual' | 'auto' | 'both'
-  capabilities?: string[]
-  /**
-   * @deprecated Prefer capabilities.
-   */
-  internalTools?: string[]
   enabled?: boolean
   trustLevel?: AiSkillTrustLevel
+  /**
+   * @deprecated Use metadataMulby.
+   */
+  triggerPhrases?: string[]
+  /**
+   * @deprecated Use metadataMulby.
+   */
+  mode?: 'manual' | 'auto' | 'both'
+  /**
+   * @deprecated Use metadataMulby.
+   */
+  capabilities?: string[]
+  /**
+   * @deprecated Use metadataMulby.capabilities.
+   */
+  internalTools?: string[]
+  /**
+   * @deprecated Use metadataMulby.
+   */
   mcpPolicy?: AiSkillMcpPolicy
 }
 
@@ -59,22 +76,38 @@ export interface AiSkillCreateFromGeneratedInput {
   id?: string
   replaceSkillId?: string
   name: string
-  description?: string
+  description: string
+  license?: string
+  compatibility?: string
+  metadata?: Record<string, string>
+  allowedTools?: string[]
+  metadataMulby?: AiSkillMulbyExtensions
   promptTemplate?: string
-  tags?: string[]
-  triggerPhrases?: string[]
-  mode?: 'manual' | 'auto' | 'both'
-  capabilities?: string[]
-  /**
-   * @deprecated Prefer capabilities.
-   */
-  internalTools?: string[]
-  mcpPolicy?: AiSkillMcpPolicy
   skillMarkdown?: string
   files?: AiSkillGeneratedFile[]
   enabled?: boolean
   trustLevel?: AiSkillTrustLevel
   source?: Exclude<import('../../../shared/types/ai').AiSkillSource, 'system'>
+  /**
+   * @deprecated Use metadataMulby.
+   */
+  triggerPhrases?: string[]
+  /**
+   * @deprecated Use metadataMulby.
+   */
+  mode?: 'manual' | 'auto' | 'both'
+  /**
+   * @deprecated Use metadataMulby.
+   */
+  capabilities?: string[]
+  /**
+   * @deprecated Use metadataMulby.capabilities.
+   */
+  internalTools?: string[]
+  /**
+   * @deprecated Use metadataMulby.
+   */
+  mcpPolicy?: AiSkillMcpPolicy
 }
 
 export interface AiSkillCreateWithAiInput {

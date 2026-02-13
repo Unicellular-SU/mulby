@@ -271,19 +271,6 @@ def init_skill(skill_name, path):
 
 
 def main():
-    if len(sys.argv) == 2 and sys.argv[1] in ('-h', '--help'):
-        print("Usage: init_skill.py <skill-name> --path <path>")
-        print("\nSkill name requirements:")
-        print("  - Kebab-case identifier (e.g., 'my-data-analyzer')")
-        print("  - Lowercase letters, digits, and hyphens only")
-        print("  - Max 64 characters")
-        print("  - Must match directory name exactly")
-        print("\nExamples:")
-        print("  init_skill.py my-new-skill --path skills/public")
-        print("  init_skill.py my-api-helper --path skills/private")
-        print("  init_skill.py custom-skill --path /custom/location")
-        sys.exit(0)
-
     if len(sys.argv) < 4 or sys.argv[2] != '--path':
         print("Usage: init_skill.py <skill-name> --path <path>")
         print("\nSkill name requirements:")

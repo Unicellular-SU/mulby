@@ -1,5 +1,23 @@
 # Notes: AI Skills 2025-2026 + Project Integration
 
+## Current Task Notes (2026-02-12)
+
+### Agent Skills 官方规范一次性达标（执行阶段）
+- 用户确认策略：
+  - 不合规 Skill 处理：立即硬校验（拒绝安装/导入/创建/刷新入库）。
+  - 交付范围：全量一次到位（不需要迁移工具）。
+  - 扩展字段策略：迁移到 `metadata` 命名空间（`metadata.mulby.*`）。
+- 本轮强制目标：
+  - `SKILL.md` 仅允许官方字段：`name`、`description`、`license`、`compatibility`、`metadata`、`allowed-tools`。
+  - 启动阶段只读取 frontmatter，激活时再加载正文。
+  - 全入口硬校验：create/install/import/refresh/update。
+  - UI 暴露规范状态与失败原因。
+- 实施结果：
+  - 新增 `spec-validator`，统一执行 frontmatter 严格校验与 `metadata.mulby.*` 编解码。
+  - Skills 服务入口已全部接入硬校验与规范化写入。
+  - 创建链路改为官方字段输出，非官方扩展统一收敛到 `metadataMulby`。
+  - 新增规范单测并更新服务单测；`npm run test:unit` 与 `npm run typecheck` 通过。
+
 ## Current Task Notes (2026-02-11)
 
 ### Mulby -> Mulby 全量改名

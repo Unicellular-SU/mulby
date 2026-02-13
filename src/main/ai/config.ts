@@ -178,14 +178,26 @@ function normalizeMcpSettings(settings?: AiMcpSettings): AiMcpSettings {
 function normalizeSkillDescriptor(input: AiSkillDescriptor, fallbackId: string): AiSkillDescriptor {
   const id = String(input.id || fallbackId).trim() || fallbackId
   const name = String(input.name || id).trim() || id
+  const description = String(input.description || '').trim() || `Skill ${name}`
+  const metadata = input.metadata && typeof input.metadata === 'object' && !Array.isArray(input.metadata)
+    ? Object.fromEntries(
+      Object.entries(input.metadata as Record<string, unknown>)
+        .map(([rawKey, rawValue]) => [String(rawKey || '').trim(), String(rawValue ?? '')] as const)
+        .filter(([key]) => !!key)
+    )
+    : undefined
+  const allowedTools = Array.isArray(input.allowedTools)
+    ? input.allowedTools.map((item) => String(item || '').trim()).filter(Boolean)
+    : undefined
   return {
     ...input,
     id,
     name,
-    description: String(input.description || '').trim() || undefined,
-    version: String(input.version || '').trim() || undefined,
-    author: String(input.author || '').trim() || undefined,
-    tags: Array.isArray(input.tags) ? input.tags.map((item) => String(item || '').trim()).filter(Boolean) : undefined,
+    description,
+    license: String(input.license || '').trim() || undefined,
+    compatibility: String(input.compatibility || '').trim() || undefined,
+    metadata: metadata && Object.keys(metadata).length > 0 ? metadata : undefined,
+    allowedTools: allowedTools && allowedTools.length > 0 ? allowedTools : undefined,
     triggerPhrases: Array.isArray(input.triggerPhrases)
       ? input.triggerPhrases.map((item) => String(item || '').trim()).filter(Boolean)
       : undefined,
@@ -215,7 +227,7 @@ function normalizeSkillDescriptor(input: AiSkillDescriptor, fallbackId: string):
 
 function normalizeSkillRecord(record: AiSkillRecord, index: number): AiSkillRecord {
   const id = String(record.id || '').trim() || `skill-${index + 1}`
-  const descriptor = normalizeSkillDescriptor(record.descriptor || { id, name: id }, id)
+  const descriptor = normalizeSkillDescriptor(record.descriptor || { id, name: id, description: `Skill ${id}` }, id)
   return {
     ...record,
     id,
@@ -233,7 +245,8 @@ function normalizeSkillRecord(record: AiSkillRecord, index: number): AiSkillReco
     descriptor: {
       ...descriptor,
       id,
-      name: descriptor.name || id
+      name: descriptor.name || id,
+      description: descriptor.description || `Skill ${id}`
     }
   }
 }

@@ -177,22 +177,56 @@ export interface AiSkillMcpPolicy {
   blockedToolIds?: string[]
 }
 
-export interface AiSkillDescriptor {
-  id: string
-  name: string
-  description?: string
-  version?: string
-  author?: string
-  tags?: string[]
-  triggerPhrases?: string[]
+export interface AiSkillMulbyExtensions {
   mode?: 'manual' | 'auto' | 'both'
-  promptTemplate?: string
-  mcpPolicy?: AiSkillMcpPolicy
+  triggerPhrases?: string[]
   capabilities?: string[]
   /**
    * @deprecated Prefer capabilities.
    */
   internalTools?: string[]
+  mcpPolicy?: AiSkillMcpPolicy
+}
+
+export interface AiSkillDescriptor {
+  id: string
+  name: string
+  description: string
+  license?: string
+  compatibility?: string
+  metadata?: Record<string, string>
+  /**
+   * Frontmatter key `allowed-tools` (space-delimited string) as normalized tool id list.
+   */
+  allowedTools?: string[]
+  /**
+   * SKILL.md body content (loaded lazily at activation time).
+   */
+  promptTemplate?: string
+  /**
+   * Parsed from `metadata.mulby.*` keys.
+   */
+  mulbyExtensions?: AiSkillMulbyExtensions
+  /**
+   * @deprecated Use mulbyExtensions.mode.
+   */
+  mode?: 'manual' | 'auto' | 'both'
+  /**
+   * @deprecated Use mulbyExtensions.triggerPhrases.
+   */
+  triggerPhrases?: string[]
+  /**
+   * @deprecated Use mulbyExtensions.capabilities.
+   */
+  capabilities?: string[]
+  /**
+   * @deprecated Use mulbyExtensions.internalTools.
+   */
+  internalTools?: string[]
+  /**
+   * @deprecated Use mulbyExtensions.mcpPolicy.
+   */
+  mcpPolicy?: AiSkillMcpPolicy
 }
 
 export interface AiSkillRecord {
@@ -232,6 +266,7 @@ export interface AiSkillResolveResult {
   selectedSkillIds: string[]
   selectedSkillNames: string[]
   selectedSkills?: AiSkillSelectionMeta[]
+  availableSkillsPrompt?: string
   systemPrompts: string[]
   mergedMcp?: AiMcpSelection
   toolContextPatch?: AiToolContext['mcpScope']
@@ -495,15 +530,34 @@ export interface AiApi {
     create: (input: {
       id?: string
       name: string
-      description?: string
+      description: string
+      license?: string
+      compatibility?: string
+      metadata?: Record<string, string>
+      allowedTools?: string[]
+      metadataMulby?: AiSkillMulbyExtensions
       promptTemplate?: string
-      tags?: string[]
-      triggerPhrases?: string[]
-      mode?: 'manual' | 'auto' | 'both'
-      capabilities?: string[]
-      internalTools?: string[]
       enabled?: boolean
       trustLevel?: AiSkillTrustLevel
+      /**
+       * @deprecated Use metadataMulby.
+       */
+      mode?: 'manual' | 'auto' | 'both'
+      /**
+       * @deprecated Use metadataMulby.
+       */
+      triggerPhrases?: string[]
+      /**
+       * @deprecated Use metadataMulby.
+       */
+      capabilities?: string[]
+      /**
+       * @deprecated Use metadataMulby.capabilities.
+       */
+      internalTools?: string[]
+      /**
+       * @deprecated Use metadataMulby.
+       */
       mcpPolicy?: AiSkillMcpPolicy
     }) => Promise<AiSkillRecord>
     install: (input: {

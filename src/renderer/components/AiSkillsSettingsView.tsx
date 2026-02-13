@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { DragEventHandler, MouseEvent } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
+import YAML from 'yaml'
 import type { AiSkillCreateModelOption, AiSkillCreateProgressChunk, AiSkillCreateStage, AiSkillRecord } from '../../shared/types/ai'
 import { useInAppNotice } from './InAppNotice'
 import UnifiedSelect from './UnifiedSelect'
@@ -28,37 +29,25 @@ function parseSkillMarkdown(input: string): ParsedSkillMarkdown {
   const frontmatterRaw = match[1]
   const body = match[2] || ''
   const out: Record<string, string | string[]> = {}
-  const lines = frontmatterRaw.split(/\r?\n/)
-  let currentArrayKey: string | null = null
-
-  for (const rawLine of lines) {
-    const line = rawLine.trim()
-    if (!line) continue
-    const arrayItem = line.match(/^-+\s*(.+)$/)
-    if (arrayItem && currentArrayKey) {
-      const prev = out[currentArrayKey]
-      if (Array.isArray(prev)) {
-        prev.push(arrayItem[1].trim())
-      } else {
-        out[currentArrayKey] = [arrayItem[1].trim()]
+  try {
+    const parsed = YAML.parse(frontmatterRaw)
+    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+      for (const [rawKey, rawValue] of Object.entries(parsed as Record<string, unknown>)) {
+        const key = String(rawKey || '').trim()
+        if (!key) continue
+        if (Array.isArray(rawValue)) {
+          out[key] = rawValue.map((item) => String(item ?? '')).filter(Boolean)
+          continue
+        }
+        if (rawValue && typeof rawValue === 'object') {
+          out[key] = JSON.stringify(rawValue, null, 2)
+          continue
+        }
+        out[key] = String(rawValue ?? '')
       }
-      continue
     }
-
-    const keyValue = line.match(/^([A-Za-z0-9_-]+)\s*:\s*(.*)$/)
-    if (!keyValue) {
-      currentArrayKey = null
-      continue
-    }
-    const key = keyValue[1]
-    const value = keyValue[2].trim()
-    if (!value) {
-      out[key] = []
-      currentArrayKey = key
-      continue
-    }
-    out[key] = value
-    currentArrayKey = null
+  } catch {
+    // Ignore YAML parse failure and fallback to empty frontmatter preview.
   }
 
   return {
@@ -782,27 +771,19 @@ export default function AiSkillsSettingsView({ onBack }: AiSkillsSettingsViewPro
                               </div>
                             )}
                           </div>
-                          {frontmatterValueToText(parsedSkillMarkdown.frontmatter.mode) && (
-                            <span className="shrink-0 rounded-full bg-slate-100 px-2.5 py-1 text-[11px] text-slate-700 dark:bg-slate-800 dark:text-slate-200">
-                              {frontmatterValueToText(parsedSkillMarkdown.frontmatter.mode)}
-                            </span>
-                          )}
                         </div>
                         <div className="mt-3 grid grid-cols-1 gap-2 text-xs text-slate-500 dark:text-slate-400 lg:grid-cols-2">
-                          {frontmatterValueToText(parsedSkillMarkdown.frontmatter.id) && (
-                            <div>ID：<span className="text-slate-700 dark:text-slate-200">{frontmatterValueToText(parsedSkillMarkdown.frontmatter.id)}</span></div>
+                          {frontmatterValueToText(parsedSkillMarkdown.frontmatter.license) && (
+                            <div>许可证：<span className="text-slate-700 dark:text-slate-200">{frontmatterValueToText(parsedSkillMarkdown.frontmatter.license)}</span></div>
                           )}
-                          {frontmatterValueToText(parsedSkillMarkdown.frontmatter.author) && (
-                            <div>作者：<span className="text-slate-700 dark:text-slate-200">{frontmatterValueToText(parsedSkillMarkdown.frontmatter.author)}</span></div>
+                          {frontmatterValueToText(parsedSkillMarkdown.frontmatter.compatibility) && (
+                            <div>兼容性：<span className="text-slate-700 dark:text-slate-200">{frontmatterValueToText(parsedSkillMarkdown.frontmatter.compatibility)}</span></div>
                           )}
-                          {frontmatterValueToText(parsedSkillMarkdown.frontmatter.version) && (
-                            <div>版本：<span className="text-slate-700 dark:text-slate-200">{frontmatterValueToText(parsedSkillMarkdown.frontmatter.version)}</span></div>
+                          {frontmatterValueToText(parsedSkillMarkdown.frontmatter['allowed-tools']) && (
+                            <div className="lg:col-span-2">允许工具：<span className="text-slate-700 dark:text-slate-200">{frontmatterValueToText(parsedSkillMarkdown.frontmatter['allowed-tools'])}</span></div>
                           )}
-                          {frontmatterValueToText(parsedSkillMarkdown.frontmatter.tags) && (
-                            <div className="lg:col-span-2">标签：<span className="text-slate-700 dark:text-slate-200">{frontmatterValueToText(parsedSkillMarkdown.frontmatter.tags)}</span></div>
-                          )}
-                          {frontmatterValueToText(parsedSkillMarkdown.frontmatter.triggerPhrases) && (
-                            <div className="lg:col-span-2">触发词：<span className="text-slate-700 dark:text-slate-200">{frontmatterValueToText(parsedSkillMarkdown.frontmatter.triggerPhrases)}</span></div>
+                          {frontmatterValueToText(parsedSkillMarkdown.frontmatter.metadata) && (
+                            <div className="lg:col-span-2 break-all">metadata：<span className="text-slate-700 dark:text-slate-200">{frontmatterValueToText(parsedSkillMarkdown.frontmatter.metadata)}</span></div>
                           )}
                         </div>
                       </div>

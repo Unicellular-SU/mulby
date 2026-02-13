@@ -1,6 +1,7 @@
 import { app } from 'electron'
 import { createHash } from 'node:crypto'
 import { promises as fs } from 'node:fs'
+import { readFileSync } from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import extractZip from 'extract-zip'
@@ -10,6 +11,7 @@ import type {
   AiOption,
   AiSettings,
   AiSkillDescriptor,
+  AiSkillMulbyExtensions,
   AiSkillPreview,
   AiSkillRecord,
   AiSkillResolveResult,
@@ -30,8 +32,14 @@ import type {
   AiSkillInstallInput,
   AiSkillPreviewInput
 } from './types'
+import {
+  buildSkillMarkdown as buildSpecSkillMarkdown,
+  decodeMulbyExtensions,
+  encodeMulbyExtensions,
+  validateSkillMarkdown
+} from './spec-validator'
 
-const SKILL_MD_VARIANTS = ['SKILL.md', 'skill.md']
+const SKILL_MD_VARIANTS = ['SKILL.md']
 const SKILL_APP_ROOT_NAME = 'app'
 
 interface AiSkillServiceDeps {
@@ -63,7 +71,8 @@ function slugify(input: string): string {
   const normalized = String(input || '')
     .trim()
     .toLowerCase()
-    .replace(/[^a-z0-9_-]+/g, '-')
+    .replace(/[^a-z0-9-]+/g, '-')
+    .replace(/--+/g, '-')
     .replace(/^-+/, '')
     .replace(/-+$/, '')
   return normalized || 'skill'
@@ -71,73 +80,6 @@ function slugify(input: string): string {
 
 function sha256(content: string): string {
   return createHash('sha256').update(content).digest('hex')
-}
-
-function parsePrimitive(input: string): unknown {
-  const trimmed = input.trim()
-  if (!trimmed) return ''
-  if ((trimmed.startsWith('"') && trimmed.endsWith('"')) || (trimmed.startsWith('\'') && trimmed.endsWith('\''))) {
-    return trimmed.slice(1, -1)
-  }
-  if (trimmed === 'true') return true
-  if (trimmed === 'false') return false
-  if (trimmed === 'null') return null
-  if (/^-?\d+(\.\d+)?$/.test(trimmed)) {
-    const num = Number(trimmed)
-    if (Number.isFinite(num)) return num
-  }
-  if ((trimmed.startsWith('{') && trimmed.endsWith('}')) || (trimmed.startsWith('[') && trimmed.endsWith(']'))) {
-    try {
-      return JSON.parse(trimmed)
-    } catch {
-      return trimmed
-    }
-  }
-  return trimmed
-}
-
-function parseFrontmatter(content: string): Record<string, unknown> {
-  const match = content.match(/^---\s*\r?\n([\s\S]*?)\r?\n---\s*(?:\r?\n|$)/)
-  if (!match) return {}
-  const raw = match[1]
-  const lines = raw.split(/\r?\n/)
-  const data: Record<string, unknown> = {}
-  let currentArrayKey: string | null = null
-
-  for (const line of lines) {
-    const arrayMatch = line.match(/^\s*-\s+(.*)$/)
-    if (arrayMatch && currentArrayKey) {
-      const currentValue = data[currentArrayKey]
-      if (!Array.isArray(currentValue)) {
-        data[currentArrayKey] = []
-      }
-      ;(data[currentArrayKey] as unknown[]).push(parsePrimitive(arrayMatch[1]))
-      continue
-    }
-
-    const keyMatch = line.match(/^([A-Za-z0-9_-]+)\s*:\s*(.*)$/)
-    if (!keyMatch) {
-      currentArrayKey = null
-      continue
-    }
-
-    const key = keyMatch[1]
-    const value = keyMatch[2]
-    if (!value.trim()) {
-      data[key] = []
-      currentArrayKey = key
-      continue
-    }
-
-    data[key] = parsePrimitive(value)
-    currentArrayKey = null
-  }
-
-  return data
-}
-
-function stripFrontmatter(content: string): string {
-  return content.replace(/^---\s*\r?\n[\s\S]*?\r?\n---\s*(\r?\n)?/, '').trim()
 }
 
 function normalizeMode(input: unknown): 'manual' | 'auto' | 'both' | undefined {
@@ -150,93 +92,110 @@ function normalizeTrustLevel(input: unknown): AiSkillTrustLevel {
   return 'reviewed'
 }
 
+function splitSkillMarkdown(content: string): { body: string } {
+  const match = String(content || '').match(/^---\s*\r?\n[\s\S]*?\r?\n---\s*(?:\r?\n|$)([\s\S]*)$/)
+  return {
+    body: String(match?.[1] || '').trim()
+  }
+}
+
+function mergeMulbyExtensions(input: {
+  fromMetadata?: AiSkillMulbyExtensions
+  fromLegacy?: Partial<AiSkillMulbyExtensions>
+}): AiSkillMulbyExtensions | undefined {
+  const metadata = input.fromMetadata || {}
+  const legacy = input.fromLegacy || {}
+  const mode = normalizeMode(metadata.mode || legacy.mode)
+  const triggerPhrases = asStringArray(metadata.triggerPhrases || legacy.triggerPhrases)
+  const capabilities = normalizeAiToolCapabilityNames(asStringArray(metadata.capabilities || legacy.capabilities) || [])
+  const internalTools = asStringArray(metadata.internalTools || legacy.internalTools)
+  const rawPolicy = metadata.mcpPolicy || legacy.mcpPolicy
+  const mcpPolicy = rawPolicy
+    ? {
+        serverIds: asStringArray(rawPolicy.serverIds),
+        allowedToolIds: asStringArray(rawPolicy.allowedToolIds),
+        blockedToolIds: asStringArray(rawPolicy.blockedToolIds)
+      }
+    : undefined
+
+  const next: AiSkillMulbyExtensions = {
+    ...(mode ? { mode } : {}),
+    ...(triggerPhrases && triggerPhrases.length > 0 ? { triggerPhrases } : {}),
+    ...(capabilities.length > 0 ? { capabilities } : {}),
+    ...(internalTools && internalTools.length > 0 ? { internalTools } : {}),
+    ...(mcpPolicy ? { mcpPolicy } : {})
+  }
+
+  return Object.keys(next).length > 0 ? next : undefined
+}
+
 function parseDescriptorFromMarkdown(input: {
   content: string
-  fallbackId: string
-  fallbackName: string
+  skillDirPath?: string
+  filePath?: string
+  fallbackId?: string
+  includeBody?: boolean
 }): AiSkillDescriptor {
-  const frontmatter = parseFrontmatter(input.content)
-  const body = stripFrontmatter(input.content)
+  const validation = validateSkillMarkdown(input.content, {
+    skillDirPath: input.skillDirPath,
+    filePath: input.filePath,
+    requireCanonicalSkillFileName: true
+  })
+  if (!validation.ok || !validation.document) {
+    throw new Error(`Invalid SKILL.md: ${validation.errors.join('; ')}`)
+  }
 
-  const id = slugify(String(frontmatter.id || input.fallbackId || input.fallbackName || 'skill'))
-  const name = String(frontmatter.name || input.fallbackName || id).trim() || id
-  const description = String(frontmatter.description || '').trim() || undefined
-  const version = String(frontmatter.version || '').trim() || undefined
-  const author = String(frontmatter.author || '').trim() || undefined
-  const tags = asStringArray(frontmatter.tags)
-  const triggerPhrases = asStringArray(frontmatter.triggerPhrases ?? frontmatter.trigger_phrases)
-  const capabilities = normalizeAiToolCapabilityNames(
-    asStringArray(frontmatter.capabilities ?? frontmatter.capabilityDeps ?? frontmatter.capability_deps) || []
-  )
-  const internalTools = asStringArray(frontmatter.internalTools ?? frontmatter.internal_tools)
-  const mode = normalizeMode(frontmatter.mode)
-  const promptTemplate =
-    String((frontmatter.promptTemplate ?? frontmatter.prompt_template) || '').trim() || (body || undefined)
-
-  const mcpPolicyRaw = frontmatter.mcpPolicy ?? frontmatter.mcp_policy
-  const mcpPolicy =
-    mcpPolicyRaw && typeof mcpPolicyRaw === 'object' && !Array.isArray(mcpPolicyRaw)
-      ? {
-          serverIds: asStringArray((mcpPolicyRaw as Record<string, unknown>).serverIds),
-          allowedToolIds: asStringArray((mcpPolicyRaw as Record<string, unknown>).allowedToolIds),
-          blockedToolIds: asStringArray((mcpPolicyRaw as Record<string, unknown>).blockedToolIds)
-        }
-      : undefined
+  const frontmatter = validation.document.frontmatter
+  const id = slugify(frontmatter.name || input.fallbackId || 'skill')
+  const metadata = frontmatter.metadata
+  const body = input.includeBody ? splitSkillMarkdown(input.content).body : ''
+  const mulbyFromMetadata = decodeMulbyExtensions(metadata)
+  const extensions = mergeMulbyExtensions({ fromMetadata: mulbyFromMetadata })
 
   return {
     id,
-    name,
-    description,
-    version,
-    author,
-    tags,
-    triggerPhrases,
-    capabilities: capabilities.length > 0 ? capabilities : undefined,
-    internalTools,
-    mode,
-    promptTemplate,
-    mcpPolicy
+    name: frontmatter.name,
+    description: frontmatter.description,
+    license: frontmatter.license,
+    compatibility: frontmatter.compatibility,
+    metadata,
+    allowedTools: frontmatter.allowedTools,
+    promptTemplate: body || undefined,
+    mulbyExtensions: extensions,
+    mode: extensions?.mode,
+    triggerPhrases: extensions?.triggerPhrases,
+    capabilities: extensions?.capabilities,
+    internalTools: extensions?.internalTools,
+    mcpPolicy: extensions?.mcpPolicy
   }
 }
 
 function buildSkillMarkdown(descriptor: AiSkillDescriptor): string {
-  const lines: string[] = ['---']
-  lines.push(`id: ${descriptor.id}`)
-  lines.push(`name: ${descriptor.name}`)
-  if (descriptor.description) lines.push(`description: ${descriptor.description}`)
-  if (descriptor.version) lines.push(`version: ${descriptor.version}`)
-  if (descriptor.author) lines.push(`author: ${descriptor.author}`)
-  if (descriptor.mode) lines.push(`mode: ${descriptor.mode}`)
-  if (descriptor.tags && descriptor.tags.length > 0) {
-    lines.push('tags:')
-    for (const tag of descriptor.tags) lines.push(`  - ${tag}`)
-  }
-  if (descriptor.triggerPhrases && descriptor.triggerPhrases.length > 0) {
-    lines.push('triggerPhrases:')
-    for (const phrase of descriptor.triggerPhrases) lines.push(`  - ${phrase}`)
-  }
-  if (descriptor.capabilities && descriptor.capabilities.length > 0) {
-    lines.push('capabilities:')
-    for (const capability of descriptor.capabilities) lines.push(`  - ${capability}`)
-  }
-  if (descriptor.internalTools && descriptor.internalTools.length > 0) {
-    lines.push('internalTools:')
-    for (const toolName of descriptor.internalTools) lines.push(`  - ${toolName}`)
-  }
-  if (descriptor.mcpPolicy) {
-    const mcpPolicy = {
-      serverIds: descriptor.mcpPolicy.serverIds,
-      allowedToolIds: descriptor.mcpPolicy.allowedToolIds,
-      blockedToolIds: descriptor.mcpPolicy.blockedToolIds
+  const extensions = mergeMulbyExtensions({
+    fromMetadata: descriptor.mulbyExtensions,
+    fromLegacy: {
+      mode: descriptor.mode,
+      triggerPhrases: descriptor.triggerPhrases,
+      capabilities: descriptor.capabilities,
+      internalTools: descriptor.internalTools,
+      mcpPolicy: descriptor.mcpPolicy
     }
-    lines.push(`mcpPolicy: ${JSON.stringify(mcpPolicy)}`)
-  }
-  lines.push('---')
-  lines.push('')
-  if (descriptor.promptTemplate) {
-    lines.push(descriptor.promptTemplate.trim())
-  }
-  return lines.join('\n')
+  })
+  const metadata = encodeMulbyExtensions({
+    metadata: descriptor.metadata,
+    extensions
+  })
+  return buildSpecSkillMarkdown({
+    frontmatter: {
+      name: descriptor.name,
+      description: descriptor.description,
+      license: descriptor.license,
+      compatibility: descriptor.compatibility,
+      metadata,
+      allowedTools: descriptor.allowedTools
+    },
+    body: descriptor.promptTemplate || ''
+  })
 }
 
 function collectPromptText(messages: AiMessage[] | undefined): string {
@@ -254,6 +213,25 @@ function collectPromptText(messages: AiMessage[] | undefined): string {
     })
     .join('\n')
     .toLowerCase()
+}
+
+function buildAvailableSkillsPrompt(records: AiSkillRecord[]): string | undefined {
+  if (!records || records.length === 0) return undefined
+  const lines: string[] = ['<available_skills>']
+  for (const record of records) {
+    const name = String(record.descriptor.name || '').trim()
+    const description = String(record.descriptor.description || '').trim()
+    if (!name || !description) continue
+    lines.push('  <skill>')
+    lines.push(`    <name>${name}</name>`)
+    lines.push(`    <description>${description}</description>`)
+    if (record.skillMdPath) {
+      lines.push(`    <location>${record.skillMdPath}</location>`)
+    }
+    lines.push('  </skill>')
+  }
+  lines.push('</available_skills>')
+  return lines.length > 2 ? lines.join('\n') : undefined
 }
 
 function extractScriptRefsFromPrompt(promptTemplate: string | undefined): string[] {
@@ -275,7 +253,7 @@ function buildSkillRuntimeHint(record: AiSkillRecord): string | undefined {
   const installPath = String(record.installPath || '').trim()
   if (!installPath) return undefined
   const quotedInstallPath = JSON.stringify(installPath)
-  const scriptRefs = extractScriptRefsFromPrompt(record.descriptor.promptTemplate)
+  const scriptRefs = extractScriptRefsFromPrompt(loadSkillPromptTemplate(record))
   const absoluteScriptRefs = scriptRefs.map((ref) => JSON.stringify(path.join(installPath, ref)))
   const lines = [
     `Skill runtime hint (${record.id}):`,
@@ -305,6 +283,124 @@ function isSafeSkillRelativePath(input: string): boolean {
   if (normalized.startsWith('/') || /^[A-Za-z]:\//.test(normalized)) return false
   if (normalized.includes('..')) return false
   return /^((scripts|references|assets)\/)[^?*:|"<>]+$/.test(normalized)
+}
+
+function normalizeMetadataMap(input: unknown): Record<string, string> | undefined {
+  if (!input || typeof input !== 'object' || Array.isArray(input)) return undefined
+  const out: Record<string, string> = {}
+  for (const [rawKey, rawValue] of Object.entries(input as Record<string, unknown>)) {
+    const key = String(rawKey || '').trim()
+    if (!key) continue
+    const value = String(rawValue ?? '')
+    out[key] = value
+  }
+  return Object.keys(out).length > 0 ? out : undefined
+}
+
+function normalizeAllowedTools(input: unknown): string[] | undefined {
+  if (!Array.isArray(input)) return undefined
+  const out = input.map((item) => String(item || '').trim()).filter(Boolean)
+  return out.length > 0 ? Array.from(new Set(out)) : undefined
+}
+
+function buildDescriptorFromInput(input: {
+  id: string
+  name: string
+  description?: string
+  license?: string
+  compatibility?: string
+  metadata?: Record<string, string>
+  allowedTools?: string[]
+  metadataMulby?: AiSkillMulbyExtensions
+  promptTemplate?: string
+  mode?: 'manual' | 'auto' | 'both'
+  triggerPhrases?: string[]
+  capabilities?: string[]
+  internalTools?: string[]
+  mcpPolicy?: AiSkillDescriptor['mcpPolicy']
+}): AiSkillDescriptor {
+  const name = String(input.name || '').trim()
+  if (!name) {
+    throw new Error('Skill name is required')
+  }
+  const canonicalId = slugify(name)
+  const requestedId = slugify(input.id || name)
+  if (requestedId !== canonicalId) {
+    throw new Error(`Skill id must match name in kebab-case (${requestedId} !== ${canonicalId})`)
+  }
+  const description = String(input.description || '').trim()
+  if (!description) {
+    throw new Error('Skill description is required')
+  }
+
+  const normalizedMetadata = normalizeMetadataMap(input.metadata)
+  const extensions = mergeMulbyExtensions({
+    fromMetadata: input.metadataMulby,
+    fromLegacy: {
+      mode: input.mode,
+      triggerPhrases: input.triggerPhrases,
+      capabilities: input.capabilities,
+      internalTools: input.internalTools,
+      mcpPolicy: input.mcpPolicy
+    }
+  })
+  const metadata = encodeMulbyExtensions({
+    metadata: normalizedMetadata,
+    extensions
+  })
+  const capabilities = normalizeAiToolCapabilityNames(extensions?.capabilities || [])
+
+  return {
+    id: canonicalId,
+    name,
+    description,
+    license: String(input.license || '').trim() || undefined,
+    compatibility: String(input.compatibility || '').trim() || undefined,
+    metadata,
+    allowedTools: normalizeAllowedTools(input.allowedTools),
+    promptTemplate: String(input.promptTemplate || '').trim() || undefined,
+    mulbyExtensions: extensions,
+    mode: extensions?.mode,
+    triggerPhrases: extensions?.triggerPhrases,
+    capabilities: capabilities.length > 0 ? capabilities : undefined,
+    internalTools: extensions?.internalTools,
+    mcpPolicy: extensions?.mcpPolicy
+  }
+}
+
+function loadSkillPromptTemplate(record: AiSkillRecord): string | undefined {
+  const existing = String(record.descriptor.promptTemplate || '').trim()
+  if (existing) return existing
+  const skillMdPath = String(record.skillMdPath || '').trim()
+  if (!skillMdPath) return undefined
+  try {
+    const content = readFileSync(skillMdPath, 'utf8')
+    const validation = validateSkillMarkdown(content, {
+      skillDirPath: record.installPath,
+      filePath: skillMdPath,
+      requireCanonicalSkillFileName: true
+    })
+    if (!validation.ok) return undefined
+    const body = splitSkillMarkdown(content).body
+    return body || undefined
+  } catch {
+    return undefined
+  }
+}
+
+function assertValidSkillMarkdown(input: {
+  markdown: string
+  skillDirPath?: string
+  filePath?: string
+}): void {
+  const validation = validateSkillMarkdown(input.markdown, {
+    skillDirPath: input.skillDirPath,
+    filePath: input.filePath,
+    requireCanonicalSkillFileName: true
+  })
+  if (!validation.ok) {
+    throw new Error(`Invalid SKILL.md: ${validation.errors.join('; ')}`)
+  }
 }
 
 async function findSkillMarkdownPath(dirPath: string): Promise<string | null> {
@@ -453,17 +549,6 @@ export class AiSkillService {
     return root
   }
 
-  private nextUniqueId(baseId: string, existingIds: Set<string>): string {
-    const initial = slugify(baseId)
-    let nextId = initial
-    let suffix = 2
-    while (existingIds.has(nextId)) {
-      nextId = `${initial}-${suffix}`
-      suffix += 1
-    }
-    return nextId
-  }
-
   private cloneRecordWithState(record: AiSkillRecord, previous?: AiSkillRecord): AiSkillRecord {
     const enabled = previous?.enabled ?? record.enabled ?? false
     const trustLevel = previous?.trustLevel ?? record.trustLevel ?? 'reviewed'
@@ -485,11 +570,22 @@ export class AiSkillService {
     const skillMdPath = await findSkillMarkdownPath(input.dirPath)
     if (!skillMdPath) return null
     const content = await fs.readFile(skillMdPath, 'utf8')
-    const descriptor = parseDescriptorFromMarkdown({
-      content,
-      fallbackId: path.basename(input.dirPath),
-      fallbackName: path.basename(input.dirPath)
-    })
+    let descriptor: AiSkillDescriptor
+    try {
+      descriptor = parseDescriptorFromMarkdown({
+        content,
+        skillDirPath: input.dirPath,
+        filePath: skillMdPath,
+        fallbackId: path.basename(input.dirPath),
+        includeBody: false
+      })
+    } catch (error) {
+      console.warn('[AI][Skills] skip invalid skill during catalog refresh', {
+        dirPath: input.dirPath,
+        error: error instanceof Error ? error.message : String(error)
+      })
+      return null
+    }
     const stats = await fs.stat(skillMdPath)
     const installedAt = input.previous?.installedAt ?? (stats.birthtimeMs || stats.mtimeMs || this.deps.now())
     const updatedAt = Math.max(stats.mtimeMs || 0, input.previous?.updatedAt || 0, this.deps.now())
@@ -627,28 +723,40 @@ export class AiSkillService {
 
     const settings = this.getSkillSettings()
     const existingIds = new Set(settings.records.map((item) => item.id))
-    const id = this.nextUniqueId(input.id || name, existingIds)
+    const id = slugify(input.id || name)
+    if (existingIds.has(id)) {
+      throw new Error(`Skill already exists: ${id}`)
+    }
     const now = this.deps.now()
 
-    const descriptor: AiSkillDescriptor = {
+    const descriptor = buildDescriptorFromInput({
       id,
       name,
-      description: input.description?.trim() || undefined,
-      promptTemplate: input.promptTemplate?.trim() || undefined,
-      tags: input.tags?.map((item) => item.trim()).filter(Boolean),
-      triggerPhrases: input.triggerPhrases?.map((item) => item.trim()).filter(Boolean),
-      capabilities: normalizeAiToolCapabilityNames(input.capabilities || []),
-      internalTools: input.internalTools?.map((item) => item.trim()).filter(Boolean),
+      description: input.description,
+      license: input.license,
+      compatibility: input.compatibility,
+      metadata: input.metadata,
+      allowedTools: input.allowedTools,
+      metadataMulby: input.metadataMulby,
+      promptTemplate: input.promptTemplate,
       mode: input.mode,
+      triggerPhrases: input.triggerPhrases,
+      capabilities: input.capabilities,
+      internalTools: input.internalTools,
       mcpPolicy: input.mcpPolicy
-    }
+    })
     const markdown = buildSkillMarkdown(descriptor)
-    const hash = sha256(markdown)
     const root = await this.ensureSkillsRootPath()
     const installPath = path.join(root, id)
     await fs.mkdir(installPath, { recursive: true })
     const skillMdPath = path.join(installPath, 'SKILL.md')
+    assertValidSkillMarkdown({
+      markdown,
+      skillDirPath: installPath,
+      filePath: skillMdPath
+    })
     await fs.writeFile(skillMdPath, markdown, 'utf8')
+    const hash = sha256(markdown)
 
     const record: AiSkillRecord = {
       id,
@@ -710,22 +818,33 @@ export class AiSkillService {
     if (replaceTarget) {
       existingIds.delete(replaceTarget.id)
     }
+    const expectedId = slugify(input.id || name)
     const id = replaceTarget
       ? replaceTarget.id
-      : this.nextUniqueId(input.id || replaceSkillId || name, existingIds)
+      : expectedId
+    if (replaceTarget && replaceTarget.id !== expectedId) {
+      throw new Error(`Replacing skill requires same name/id (${replaceTarget.id} !== ${expectedId})`)
+    }
+    if (!replaceTarget && existingIds.has(id)) {
+      throw new Error(`Skill already exists: ${id}`)
+    }
     const now = this.deps.now()
-    const descriptor: AiSkillDescriptor = {
+    const descriptor = buildDescriptorFromInput({
       id,
       name,
-      description: input.description?.trim() || undefined,
-      promptTemplate: input.promptTemplate?.trim() || undefined,
-      tags: input.tags?.map((item) => item.trim()).filter(Boolean),
-      triggerPhrases: input.triggerPhrases?.map((item) => item.trim()).filter(Boolean),
-      capabilities: normalizeAiToolCapabilityNames(input.capabilities || []),
-      internalTools: input.internalTools?.map((item) => item.trim()).filter(Boolean),
+      description: input.description,
+      license: input.license,
+      compatibility: input.compatibility,
+      metadata: input.metadata,
+      allowedTools: input.allowedTools,
+      metadataMulby: input.metadataMulby,
+      promptTemplate: input.promptTemplate,
       mode: input.mode,
+      triggerPhrases: input.triggerPhrases,
+      capabilities: input.capabilities,
+      internalTools: input.internalTools,
       mcpPolicy: input.mcpPolicy
-    }
+    })
 
     const root = await this.ensureSkillsRootPath()
     const installPath = path.join(root, id)
@@ -733,14 +852,21 @@ export class AiSkillService {
     await fs.mkdir(installPath, { recursive: true })
     const skillMdPath = path.join(installPath, 'SKILL.md')
     const markdown = String(input.skillMarkdown || '').trim() || buildSkillMarkdown(descriptor)
+    assertValidSkillMarkdown({
+      markdown,
+      skillDirPath: installPath,
+      filePath: skillMdPath
+    })
     await fs.writeFile(skillMdPath, markdown, 'utf8')
     await this.writeGeneratedFiles(installPath, input.files)
 
     const finalContent = await fs.readFile(skillMdPath, 'utf8')
     const parsedDescriptor = parseDescriptorFromMarkdown({
       content: finalContent,
+      skillDirPath: installPath,
+      filePath: skillMdPath,
       fallbackId: descriptor.id,
-      fallbackName: descriptor.name
+      includeBody: true
     })
     const finalDescriptor: AiSkillDescriptor = {
       ...descriptor,
@@ -749,6 +875,11 @@ export class AiSkillService {
       name: parsedDescriptor.name || descriptor.name
     }
     const finalMarkdown = buildSkillMarkdown(finalDescriptor)
+    assertValidSkillMarkdown({
+      markdown: finalMarkdown,
+      skillDirPath: installPath,
+      filePath: skillMdPath
+    })
     await fs.writeFile(skillMdPath, finalMarkdown, 'utf8')
 
     const record: AiSkillRecord = {
@@ -786,18 +917,30 @@ export class AiSkillService {
     const obj = raw as Record<string, unknown>
     const id = slugify(String(obj.id || obj.name || fallbackName))
     const name = String(obj.name || id).trim() || id
-    return {
+    const description = String(obj.description || '').trim()
+    if (!description) {
+      throw new Error('Invalid skill descriptor: description is required')
+    }
+
+    const metadata = normalizeMetadataMap(obj.metadata)
+    const metadataMulby = obj.metadataMulby && typeof obj.metadataMulby === 'object' && !Array.isArray(obj.metadataMulby)
+      ? (obj.metadataMulby as AiSkillMulbyExtensions)
+      : undefined
+
+    return buildDescriptorFromInput({
       id,
       name,
-      description: String(obj.description || '').trim() || undefined,
-      version: String(obj.version || '').trim() || undefined,
-      author: String(obj.author || '').trim() || undefined,
-      tags: asStringArray(obj.tags),
-      triggerPhrases: asStringArray(obj.triggerPhrases ?? obj.trigger_phrases),
-      capabilities: normalizeAiToolCapabilityNames(asStringArray(obj.capabilities ?? obj.capabilityDeps ?? obj.capability_deps) || []),
-      internalTools: asStringArray(obj.internalTools ?? obj.internal_tools),
-      mode: normalizeMode(obj.mode),
+      description,
+      license: String(obj.license || '').trim() || undefined,
+      compatibility: String(obj.compatibility || '').trim() || undefined,
+      metadata,
+      allowedTools: asStringArray(obj.allowedTools ?? obj['allowed-tools']),
+      metadataMulby,
       promptTemplate: String((obj.promptTemplate ?? obj.prompt_template) || '').trim() || undefined,
+      mode: normalizeMode(obj.mode),
+      triggerPhrases: asStringArray(obj.triggerPhrases ?? obj.trigger_phrases),
+      capabilities: asStringArray(obj.capabilities ?? obj.capabilityDeps ?? obj.capability_deps),
+      internalTools: asStringArray(obj.internalTools ?? obj.internal_tools),
       mcpPolicy:
         obj.mcpPolicy && typeof obj.mcpPolicy === 'object' && !Array.isArray(obj.mcpPolicy)
           ? {
@@ -806,7 +949,7 @@ export class AiSkillService {
               blockedToolIds: asStringArray((obj.mcpPolicy as Record<string, unknown>).blockedToolIds)
             }
           : undefined
-    }
+    })
   }
 
   async importFromJson(input: AiSkillImportJsonInput): Promise<AiSkillRecord[]> {
@@ -847,13 +990,21 @@ export class AiSkillService {
 
     for (let index = 0; index < candidates.length; index += 1) {
       const descriptor = this.normalizeDescriptorFromUnknown(candidates[index], `skill-${index + 1}`)
-      const id = this.nextUniqueId(descriptor.id || descriptor.name, existingIds)
+      const id = slugify(descriptor.id || descriptor.name)
+      if (existingIds.has(id)) {
+        throw new Error(`Duplicate skill id/name in import payload: ${id}`)
+      }
       existingIds.add(id)
       const nextDescriptor = { ...descriptor, id }
       const markdown = buildSkillMarkdown(nextDescriptor)
       const installPath = path.join(root, id)
       await fs.mkdir(installPath, { recursive: true })
       const skillMdPath = path.join(installPath, 'SKILL.md')
+      assertValidSkillMarkdown({
+        markdown,
+        skillDirPath: installPath,
+        filePath: skillMdPath
+      })
       await fs.writeFile(skillMdPath, markdown, 'utf8')
 
       imported.push({
@@ -902,10 +1053,15 @@ export class AiSkillService {
     const content = await fs.readFile(skillMdPath, 'utf8')
     const parsed = parseDescriptorFromMarkdown({
       content,
+      skillDirPath: sourceDir,
+      filePath: skillMdPath,
       fallbackId: path.basename(sourceDir),
-      fallbackName: path.basename(sourceDir)
+      includeBody: false
     })
-    const id = this.nextUniqueId(parsed.id || parsed.name, existingIds)
+    const id = slugify(parsed.id || parsed.name)
+    if (existingIds.has(id)) {
+      throw new Error(`Skill already exists: ${id}`)
+    }
     existingIds.add(id)
     const descriptor: AiSkillDescriptor = {
       ...parsed,
@@ -1042,8 +1198,22 @@ export class AiSkillService {
 
     if (!isReadonly && nextRecord.installPath) {
       await fs.mkdir(nextRecord.installPath, { recursive: true })
+      if (!String(nextRecord.descriptor.promptTemplate || '').trim()) {
+        const existingPrompt = loadSkillPromptTemplate(nextRecord)
+        if (existingPrompt) {
+          nextRecord.descriptor = {
+            ...nextRecord.descriptor,
+            promptTemplate: existingPrompt
+          }
+        }
+      }
       const markdown = buildSkillMarkdown(nextRecord.descriptor)
       const filePath = nextRecord.skillMdPath || path.join(nextRecord.installPath, 'SKILL.md')
+      assertValidSkillMarkdown({
+        markdown,
+        skillDirPath: nextRecord.installPath,
+        filePath
+      })
       await fs.writeFile(filePath, markdown, 'utf8')
       nextRecord.skillMdPath = filePath
       nextRecord.contentHash = sha256(markdown)
@@ -1102,7 +1272,8 @@ export class AiSkillService {
     return await this.update(skillId, { enabled: false })
   }
 
-  private modeAllowed(descriptorMode: AiSkillDescriptor['mode'], requestedMode: 'manual' | 'auto'): boolean {
+  private modeAllowed(record: AiSkillRecord, requestedMode: 'manual' | 'auto'): boolean {
+    const descriptorMode = record.descriptor.mulbyExtensions?.mode || record.descriptor.mode
     if (!descriptorMode || descriptorMode === 'both') return true
     return descriptorMode === requestedMode
   }
@@ -1112,13 +1283,23 @@ export class AiSkillService {
     let score = 0
     const name = record.descriptor.name.toLowerCase()
     if (name && text.includes(name)) score += 2
-    const triggers = record.descriptor.triggerPhrases || []
+    const triggers = record.descriptor.mulbyExtensions?.triggerPhrases || record.descriptor.triggerPhrases || []
     for (const trigger of triggers) {
       if (text.includes(trigger.toLowerCase())) score += 3
     }
-    const tags = record.descriptor.tags || []
-    for (const tag of tags) {
-      if (text.includes(tag.toLowerCase())) score += 1
+    const description = String(record.descriptor.description || '').toLowerCase()
+    if (description) {
+      const keywords = Array.from(
+        new Set(
+          description
+            .split(/[^a-z0-9\u4e00-\u9fa5]+/i)
+            .map((item) => item.trim())
+            .filter((item) => item.length >= 3)
+        )
+      ).slice(0, 10)
+      for (const keyword of keywords) {
+        if (text.includes(keyword)) score += 1
+      }
     }
     return score
   }
@@ -1128,16 +1309,23 @@ export class AiSkillService {
     if (!settings.enabled) {
       return { selectedSkillIds: [], selectedSkillNames: [], systemPrompts: [], reasons: ['skills disabled'] }
     }
+    const availableCandidates = settings.records.filter((record) => record.enabled && record.trustLevel !== 'untrusted')
+    const availableSkillsPrompt = buildAvailableSkillsPrompt(availableCandidates)
 
     const requestedMode = option.skills?.mode
     const mode: 'off' | 'manual' | 'auto' =
       requestedMode ||
       (settings.autoSelect?.enabled ? 'auto' : settings.activeSkillIds.length > 0 ? 'manual' : 'off')
     if (mode === 'off') {
-      return { selectedSkillIds: [], selectedSkillNames: [], systemPrompts: [], reasons: ['mode off'] }
+      return {
+        selectedSkillIds: [],
+        selectedSkillNames: [],
+        systemPrompts: [],
+        reasons: ['mode off']
+      }
     }
 
-    const candidates = settings.records.filter((record) => record.enabled && record.trustLevel !== 'untrusted')
+    const candidates = availableCandidates
     const reasons: string[] = []
     let selected: AiSkillRecord[] = []
 
@@ -1146,14 +1334,14 @@ export class AiSkillService {
         ? option.skills.skillIds
         : settings.activeSkillIds
       const include = new Set(requestedIds)
-      selected = candidates.filter((record) => include.has(record.id) && this.modeAllowed(record.descriptor.mode, 'manual'))
+      selected = candidates.filter((record) => include.has(record.id) && this.modeAllowed(record, 'manual'))
       reasons.push(`manual:${selected.length}`)
     } else {
       const promptText = collectPromptText(option.messages)
       const minScore = Math.max(Math.floor(settings.autoSelect?.minScore || 1), 1)
       const maxSkills = Math.max(Math.floor(settings.autoSelect?.maxSkillsPerCall || 3), 1)
       const scored = candidates
-        .filter((record) => this.modeAllowed(record.descriptor.mode, 'auto'))
+        .filter((record) => this.modeAllowed(record, 'auto'))
         .map((record) => ({ record, score: this.scoreAutoSkill(record, promptText) }))
         .filter((item) => item.score >= minScore)
         .sort((a, b) => b.score - a.score)
@@ -1163,7 +1351,7 @@ export class AiSkillService {
 
     const prompts: string[] = []
     for (const record of selected) {
-      const promptTemplate = record.descriptor.promptTemplate?.trim()
+      const promptTemplate = loadSkillPromptTemplate(record)?.trim()
       if (promptTemplate) prompts.push(promptTemplate)
       const runtimeHint = buildSkillRuntimeHint(record)
       if (runtimeHint) prompts.push(runtimeHint)
@@ -1176,11 +1364,16 @@ export class AiSkillService {
     const internalToolNames = new Set<string>()
 
     for (const record of selected) {
-      const policy = record.descriptor.mcpPolicy
-      for (const capability of normalizeAiToolCapabilityNames(record.descriptor.capabilities || [])) {
+      const extensions = record.descriptor.mulbyExtensions
+      const policy = extensions?.mcpPolicy || record.descriptor.mcpPolicy
+      const declaredCapabilities = normalizeAiToolCapabilityNames(
+        extensions?.capabilities || record.descriptor.capabilities || []
+      )
+      for (const capability of declaredCapabilities) {
         capabilities.add(capability)
       }
-      for (const toolName of record.descriptor.internalTools || []) {
+      const declaredInternalTools = extensions?.internalTools || record.descriptor.internalTools || []
+      for (const toolName of declaredInternalTools) {
         if (!toolName) continue
         internalToolNames.add(toolName)
         for (const capability of mapInternalToolsToCapabilities([toolName])) {
@@ -1221,6 +1414,7 @@ export class AiSkillService {
         source: record.source,
         trustLevel: record.trustLevel
       })),
+      availableSkillsPrompt,
       systemPrompts: prompts,
       capabilities: Array.from(capabilities),
       internalTools: Array.from(internalToolNames),
@@ -1231,15 +1425,23 @@ export class AiSkillService {
   }
 
   applyResolutionToOption(option: AiOption, resolution: AiSkillResolveResult): AiOption {
-    if (resolution.selectedSkillIds.length === 0) return option
-    const injectedSystemPrompt = resolution.systemPrompts.join('\n\n')
+    const injectedSystemPrompt = [
+      String(resolution.availableSkillsPrompt || '').trim(),
+      resolution.systemPrompts.join('\n\n').trim()
+    ]
+      .filter(Boolean)
+      .join('\n\n')
+    const hasSelectedSkills = resolution.selectedSkillIds.length > 0
+    if (!hasSelectedSkills && !injectedSystemPrompt) {
+      return option
+    }
     const messages = injectedSystemPrompt
       ? [{ role: 'system' as const, content: injectedSystemPrompt }, ...option.messages]
       : option.messages
     const hasExplicitMcpSelection = !!option.mcp
     const hasExplicitSkillSelection = !!option.skills
     // 显式 mcp 代表调用方已确定本次工具边界；隐式全局技能不应覆盖该边界。
-    const shouldMergeSkillMcpPolicies = hasExplicitSkillSelection || !hasExplicitMcpSelection
+    const shouldMergeSkillMcpPolicies = hasSelectedSkills && (hasExplicitSkillSelection || !hasExplicitMcpSelection)
     const mergedMcp = shouldMergeSkillMcpPolicies
       ? mergeMcpSelections(option.mcp, resolution.mergedMcp)
       : option.mcp
@@ -1249,18 +1451,22 @@ export class AiSkillService {
     if (option.mcp?.mode && mergedMcp) {
       mergedMcp.mode = option.mcp.mode
     }
-    const capabilities = Array.from(
+    const capabilities = hasSelectedSkills
+      ? Array.from(
       new Set([
         ...(option.capabilities || []),
         ...(resolution.capabilities || [])
       ])
     )
-    const internalTools = Array.from(
+      : option.capabilities || []
+    const internalTools = hasSelectedSkills
+      ? Array.from(
       new Set([
         ...(option.internalTools || []),
         ...(resolution.internalTools || [])
       ])
     )
+      : option.internalTools || []
     return {
       ...option,
       messages,
@@ -1300,13 +1506,21 @@ export class AiSkillService {
     const blockedToolIds = Array.from(
       new Set(
         selected
-          .flatMap((record) => record.descriptor.mcpPolicy?.blockedToolIds || [])
+          .flatMap((record) => {
+            const policy = record.descriptor.mulbyExtensions?.mcpPolicy || record.descriptor.mcpPolicy
+            return policy?.blockedToolIds || []
+          })
           .filter(Boolean)
       )
     )
     return {
       selected,
-      systemPrompt: resolution.systemPrompts.join('\n\n'),
+      systemPrompt: [
+        String(resolution.availableSkillsPrompt || '').trim(),
+        resolution.systemPrompts.join('\n\n').trim()
+      ]
+        .filter(Boolean)
+        .join('\n\n'),
       mcpImpact: {
         serverIds: resolution.mergedMcp?.serverIds,
         allowedToolIds: resolution.mergedMcp?.allowedToolIds,

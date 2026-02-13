@@ -56,7 +56,8 @@ describe('skill service', () => {
     })
 
     const created = await service.create({
-      name: 'Code Review',
+      name: 'code-review',
+      description: 'Review source code patches with strict quality checks.',
       promptTemplate: 'You are a strict reviewer.',
       capabilities: ['fs.read'],
       internalTools: ['mulby_read_file'],
@@ -123,7 +124,8 @@ describe('skill service', () => {
 
     const created = await service.create({
       id: 'skill-mcp-policy',
-      name: 'Skill MCP Policy',
+      name: 'skill-mcp-policy',
+      description: 'Apply MCP boundaries when the skill is selected.',
       promptTemplate: 'Use MCP skill policy when explicitly selected.',
       enabled: true,
       trustLevel: 'trusted',
@@ -211,8 +213,9 @@ describe('skill service', () => {
       json: JSON.stringify({
         skills: [
           {
-            id: 'planner',
-            name: 'Task Planner',
+            id: 'task-planner',
+            name: 'task-planner',
+            description: 'Create task roadmaps when users ask for plans or roadmaps.',
             mode: 'manual',
             promptTemplate: 'Break down the task into steps.',
             triggerPhrases: ['plan', 'roadmap']
@@ -234,17 +237,16 @@ describe('skill service', () => {
 
   it('installs skill from local directory', async (t) => {
     const tempDir = await createTempDir('mulby-skill-install-')
-    const sourceDir = path.join(tempDir, 'source-skill')
+    const sourceDir = path.join(tempDir, 'bug-fixer')
     await mkdir(sourceDir, { recursive: true })
     await writeFile(
       path.join(sourceDir, 'SKILL.md'),
       `---
-id: fixer
-name: Bug Fixer
-mode: auto
-triggerPhrases:
-  - bug
-  - fix
+name: bug-fixer
+description: Fix common software bugs when users ask to fix issues.
+metadata:
+  mulby.mode: auto
+  mulby.trigger_phrases: "[\\"bug\\",\\"fix\\"]"
 ---
 Provide concrete bug-fix steps.`,
       'utf8'
@@ -277,7 +279,7 @@ Provide concrete bug-fix steps.`,
     })
 
     assert.equal(installed.length, 1)
-    assert.equal(installed[0].descriptor.name, 'Bug Fixer')
+    assert.equal(installed[0].descriptor.name, 'bug-fixer')
     assert.equal(getSettings().skills?.records.length, 1)
 
     const autoResolved = service.resolveForAiCall({
@@ -295,21 +297,19 @@ Provide concrete bug-fix steps.`,
       await rm(homeDir, { recursive: true, force: true })
     })
 
-    const systemSkillDir = path.join(homeDir, '.agents', 'skills', 'shared')
+    const systemSkillDir = path.join(homeDir, '.agents', 'skills', 'shared-skill')
     await mkdir(systemSkillDir, { recursive: true })
     await writeFile(path.join(systemSkillDir, 'SKILL.md'), `---
-id: shared-skill
-name: Shared Skill (System)
-mode: both
+name: shared-skill
+description: system shared skill description
 ---
 System prompt`, 'utf8')
 
-    const appSkillDir = path.join(tempDir, 'ai', 'skills', 'app', 'shared')
+    const appSkillDir = path.join(tempDir, 'ai', 'skills', 'app', 'shared-skill')
     await mkdir(appSkillDir, { recursive: true })
     await writeFile(path.join(appSkillDir, 'SKILL.md'), `---
-id: shared-skill
-name: Shared Skill (App)
-mode: both
+name: shared-skill
+description: app shared skill description
 ---
 App prompt`, 'utf8')
 
@@ -333,7 +333,8 @@ App prompt`, 'utf8')
     assert.equal(records.length >= 1, true)
     const merged = records.find((item) => item.id === 'shared-skill')
     assert.equal(!!merged, true)
-    assert.equal(merged?.descriptor.name, 'Shared Skill (App)')
+    assert.equal(merged?.descriptor.name, 'shared-skill')
+    assert.equal(merged?.descriptor.description, 'app shared skill description')
     assert.equal(merged?.origin, 'app')
     assert.equal(merged?.readonly, false)
   })
@@ -346,12 +347,11 @@ App prompt`, 'utf8')
       await rm(homeDir, { recursive: true, force: true })
     })
 
-    const systemSkillDir = path.join(homeDir, '.agents', 'skills', 'readonly-skill')
+    const systemSkillDir = path.join(homeDir, '.agents', 'skills', 'system-readonly')
     await mkdir(systemSkillDir, { recursive: true })
     await writeFile(path.join(systemSkillDir, 'SKILL.md'), `---
-id: system-readonly
-name: System Readonly
-mode: both
+name: system-readonly
+description: system readonly skill
 ---
 System prompt`, 'utf8')
 
@@ -413,11 +413,11 @@ System prompt`, 'utf8')
     })
 
     const created = await service.createFromGenerated({
-      name: 'Generated Skill',
+      name: 'generated-skill',
+      description: 'generated skill description',
       skillMarkdown: `---
-id: generated-skill
-name: Generated Skill
-mode: both
+name: generated-skill
+description: generated skill description
 ---
 Generated prompt`,
       files: [
@@ -434,7 +434,8 @@ Generated prompt`,
 
     await assert.rejects(
       service.createFromGenerated({
-        name: 'Unsafe Skill',
+        name: 'unsafe-skill',
+        description: 'unsafe skill description',
         files: [{ path: '../hack.sh', content: 'echo hack' }]
       }),
       /Unsafe generated file path/
@@ -464,13 +465,13 @@ Generated prompt`,
 
     const first = await service.createFromGenerated({
       id: 'iterative-skill',
-      name: 'Iterative Skill',
+      name: 'iterative-skill',
       description: 'v1',
       promptTemplate: 'first version'
     })
     const second = await service.createFromGenerated({
       replaceSkillId: first.id,
-      name: 'Iterative Skill',
+      name: 'iterative-skill',
       description: 'v2',
       promptTemplate: 'second version'
     })
