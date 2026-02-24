@@ -2,7 +2,6 @@ import { ipcMain, IpcMainInvokeEvent } from 'electron'
 import { aiService } from '../ai'
 import { aiMcpService } from '../ai/mcp'
 import { aiSkillService } from '../ai/skills'
-import { createSkillWithAi, createSkillWithAiStream, listSkillCreateModels } from '../ai/skills/composer'
 import { getAiSettings, updateAiSettings } from '../ai/config'
 import { resetProviderRegistry } from '../ai/providers'
 import type { AiOption, AiMessage, AiImageGenerateProgressChunk, AiMcpServer } from '../../shared/types/ai'
@@ -149,54 +148,10 @@ export function registerAiHandlers() {
     return aiSkillService.get(skillId)
   })
 
-  ipcMain.handle('ai:skills:list-create-models', async () => {
-    return await listSkillCreateModels()
-  })
-
-  ipcMain.handle('ai:skills:create-with-ai', async (_event, input) => {
-    const created = await createSkillWithAi(input)
-    await aiSkillService.refreshCatalog()
-    return created
-  })
-
-  ipcMain.handle('ai:skills:create-with-ai:stream', async (event, input) => {
-    const requestId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
-    setTimeout(() => {
-      createSkillWithAiStream(input, {
-        onChunk: (chunk) => {
-          event.sender.send('ai:skills:create-with-ai:chunk', requestId, chunk)
-        }
-      }, requestId)
-        .then(async (result) => {
-          await aiSkillService.refreshCatalog()
-          event.sender.send('ai:skills:create-with-ai:end', requestId, result)
-        })
-        .catch((err: Error) => {
-          event.sender.send('ai:skills:create-with-ai:error', requestId, err.message)
-        })
-    }, 0)
-    return { requestId }
-  })
-
-  ipcMain.handle('ai:skills:create', async (_event, input) => {
-    return await aiSkillService.create(input)
-  })
-
   ipcMain.handle('ai:skills:install', async (_event, input) => {
     const installed = await aiSkillService.install(input)
     await aiSkillService.refreshCatalog()
     return installed
-  })
-
-  ipcMain.handle('ai:skills:import', async (_event, input) => {
-    const imported = await aiSkillService.importFromJson(input)
-    await aiSkillService.refreshCatalog()
-    return imported
-  })
-
-  ipcMain.handle('ai:skills:update', async (_event, skillId: string, patch) => {
-    await aiSkillService.ensureCatalogLoaded()
-    return await aiSkillService.update(skillId, patch)
   })
 
   ipcMain.handle('ai:skills:remove', async (_event, skillId: string) => {

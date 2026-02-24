@@ -35,6 +35,8 @@ export interface RunCommandContext {
   source: 'app' | 'plugin'
   pluginId?: string
   runCommandAllowed?: boolean
+  allowShellOverride?: boolean
+  abortSignal?: AbortSignal
 }
 
 export interface CommandConsentRequest {
@@ -126,6 +128,12 @@ function appendWithLimit(chunks: Buffer[], currentBytes: number, incoming: Buffe
   }
   chunks.push(incoming.subarray(0, remaining))
   return { chunks, bytes: maxBytes, truncated: true }
+}
+
+function createAbortError(): Error {
+  const error = new Error('命令执行已中止')
+  error.name = 'AbortError'
+  return error
 }
 
 function normalizeArgs(input: unknown): string[] {
@@ -281,7 +289,8 @@ export class CommandRunnerService {
         env,
         shell,
         timeoutMs,
-        maxOutputBytes: settings.maxOutputBytes || 1_048_576
+        maxOutputBytes: settings.maxOutputBytes || 1_048_576,
+        abortSignal: context.abortSignal
       })
       const durationMs = this.now() - startAt
       const auditStatus: CommandAuditItem['status'] = result.timedOut ? 'timeout' : 'allowed'
@@ -361,7 +370,7 @@ export class CommandRunnerService {
     if (context.source === 'plugin' && context.runCommandAllowed !== true) {
       throw new CommandPolicyError(`插件 ${context.pluginId || ''} 未声明 runCommand 权限`)
     }
-    if (shell && !settings.allowShell) {
+    if (shell && !settings.allowShell && context.allowShellOverride !== true) {
       throw new CommandPolicyError('当前策略禁止 shell=true 执行')
     }
 
@@ -452,6 +461,7 @@ export class CommandRunnerService {
     shell: boolean
     timeoutMs: number
     maxOutputBytes: number
+    abortSignal?: AbortSignal
   }): Promise<Omit<RunCommandResult, 'command' | 'args' | 'cwd' | 'shell' | 'durationMs'>> {
     return new Promise((resolve, reject) => {
       const child = spawn(input.command, input.args, {
@@ -463,6 +473,7 @@ export class CommandRunnerService {
         shell: input.shell,
         windowsHide: true
       })
+      child.stdin?.end()
 
       let stdoutBytes = 0
       let stderrBytes = 0
@@ -470,7 +481,62 @@ export class CommandRunnerService {
       const stderrChunks: Buffer[] = []
       let truncated = false
       let timedOut = false
+      let aborted = false
       let killTimer: NodeJS.Timeout | null = null
+      let forceKillTimer: NodeJS.Timeout | null = null
+      let settled = false
+      let abortListener: (() => void) | null = null
+
+      const cleanup = () => {
+        if (killTimer) {
+          clearTimeout(killTimer)
+          killTimer = null
+        }
+        if (forceKillTimer) {
+          clearTimeout(forceKillTimer)
+          forceKillTimer = null
+        }
+        if (abortListener && input.abortSignal) {
+          input.abortSignal.removeEventListener('abort', abortListener)
+          abortListener = null
+        }
+      }
+
+      const finalizeResolve = (value: Omit<RunCommandResult, 'command' | 'args' | 'cwd' | 'shell' | 'durationMs'>) => {
+        if (settled) return
+        settled = true
+        cleanup()
+        resolve(value)
+      }
+
+      const finalizeReject = (error: Error) => {
+        if (settled) return
+        settled = true
+        cleanup()
+        reject(error)
+      }
+
+      const scheduleForceKill = () => {
+        if (forceKillTimer) return
+        forceKillTimer = setTimeout(() => {
+          if (!child.killed) {
+            try {
+              child.kill('SIGKILL')
+            } catch {
+              // ignore
+            }
+          }
+        }, 2000)
+      }
+
+      const terminateProcess = () => {
+        try {
+          child.kill('SIGTERM')
+        } catch {
+          // ignore
+        }
+        scheduleForceKill()
+      }
 
       if (child.stdout) {
         child.stdout.on('data', (data: Buffer) => {
@@ -489,33 +555,38 @@ export class CommandRunnerService {
 
       killTimer = setTimeout(() => {
         timedOut = true
-        try {
-          child.kill('SIGTERM')
-        } catch {
-          // ignore
-        }
-        setTimeout(() => {
-          if (!child.killed) {
-            try {
-              child.kill('SIGKILL')
-            } catch {
-              // ignore
-            }
-          }
-        }, 2000)
+        terminateProcess()
       }, input.timeoutMs)
 
+      abortListener = () => {
+        aborted = true
+        terminateProcess()
+      }
+      if (input.abortSignal) {
+        if (input.abortSignal.aborted) {
+          abortListener()
+        } else {
+          input.abortSignal.addEventListener('abort', abortListener, { once: true })
+        }
+      }
+
       child.on('error', (error) => {
-        if (killTimer) clearTimeout(killTimer)
-        reject(error)
+        if (aborted) {
+          finalizeReject(createAbortError())
+          return
+        }
+        finalizeReject(error instanceof Error ? error : new Error(String(error)))
       })
 
       child.on('close', (code, signal) => {
-        if (killTimer) clearTimeout(killTimer)
+        if (aborted) {
+          finalizeReject(createAbortError())
+          return
+        }
         const stdout = Buffer.concat(stdoutChunks).toString('utf8')
         const stderr = Buffer.concat(stderrChunks).toString('utf8')
         const success = !timedOut && code === 0
-        resolve({
+        finalizeResolve({
           success,
           stdout,
           stderr,

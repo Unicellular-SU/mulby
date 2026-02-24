@@ -551,6 +551,10 @@ export class AiSkillService {
     return this.getSkillsRootPath()
   }
 
+  getWritableSkillsRootPathForRuntime(): string {
+    return this.getWritableSkillsRootPath()
+  }
+
   private async ensureSkillsRootPath(): Promise<string> {
     const root = this.getWritableSkillsRootPath()
     await fs.mkdir(root, { recursive: true })

@@ -56,7 +56,7 @@ const DEFAULT_SETTINGS: AppSettings = {
   commandRunner: {
     enabled: true,
     requireConsent: true,
-    allowShell: false,
+    allowShell: true,
     defaultTimeoutMs: 30_000,
     maxTimeoutMs: 300_000,
     maxOutputBytes: 1_048_576,
@@ -378,7 +378,7 @@ function normalizeCommandRunnerSettings(input: Partial<CommandRunnerSettings> | 
   return {
     enabled: current.enabled !== false,
     requireConsent: current.requireConsent !== false,
-    allowShell: current.allowShell === true,
+    allowShell: current.allowShell !== false,
     defaultTimeoutMs: Math.max(1000, Math.min(Number(current.defaultTimeoutMs || DEFAULT_SETTINGS.commandRunner.defaultTimeoutMs), 300_000)),
     maxTimeoutMs: Math.max(5000, Math.min(Number(current.maxTimeoutMs || DEFAULT_SETTINGS.commandRunner.maxTimeoutMs), 3_600_000)),
     maxOutputBytes: Math.max(8 * 1024, Math.min(Number(current.maxOutputBytes || DEFAULT_SETTINGS.commandRunner.maxOutputBytes), 10 * 1024 * 1024)),

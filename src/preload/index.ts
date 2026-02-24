@@ -265,48 +265,7 @@ const mulbyApi = {
         refresh: () => ipcRenderer.invoke('ai:skills:refresh'),
         listEnabled: () => ipcRenderer.invoke('ai:skills:list-enabled'),
         get: (skillId: string) => ipcRenderer.invoke('ai:skills:get', skillId),
-        listCreateModels: () => ipcRenderer.invoke('ai:skills:list-create-models'),
-        createWithAi: (input: any) => ipcRenderer.invoke('ai:skills:create-with-ai', input),
-        createWithAiStream: (input: any, onChunk: (chunk: any) => void) => {
-          let abortFn = () => {}
-          const promise = ipcRenderer.invoke('ai:skills:create-with-ai:stream', input).then(({ requestId }) => {
-            abortFn = () => ipcRenderer.invoke('ai:abort', requestId)
-
-            return new Promise((resolve, reject) => {
-              const onData = (_: any, id: string, chunk: any) => {
-                if (id !== requestId) return
-                onChunk(chunk)
-              }
-              const onEnd = (_: any, id: string, result: any) => {
-                if (id !== requestId) return
-                cleanup()
-                resolve(result)
-              }
-              const onError = (_: any, id: string, error: string) => {
-                if (id !== requestId) return
-                cleanup()
-                reject(new Error(error))
-              }
-
-              const cleanup = () => {
-                ipcRenderer.removeListener('ai:skills:create-with-ai:chunk', onData)
-                ipcRenderer.removeListener('ai:skills:create-with-ai:end', onEnd)
-                ipcRenderer.removeListener('ai:skills:create-with-ai:error', onError)
-              }
-
-              ipcRenderer.on('ai:skills:create-with-ai:chunk', onData)
-              ipcRenderer.on('ai:skills:create-with-ai:end', onEnd)
-              ipcRenderer.on('ai:skills:create-with-ai:error', onError)
-            })
-          })
-
-          ;(promise as any).abort = () => abortFn()
-          return promise as any
-        },
-        create: (input: any) => ipcRenderer.invoke('ai:skills:create', input),
         install: (input: any) => ipcRenderer.invoke('ai:skills:install', input),
-        importFromJson: (input: any) => ipcRenderer.invoke('ai:skills:import', input),
-        update: (skillId: string, patch: any) => ipcRenderer.invoke('ai:skills:update', skillId, patch),
         remove: (skillId: string) => ipcRenderer.invoke('ai:skills:remove', skillId),
         enable: (skillId: string) => ipcRenderer.invoke('ai:skills:enable', skillId),
         disable: (skillId: string) => ipcRenderer.invoke('ai:skills:disable', skillId),

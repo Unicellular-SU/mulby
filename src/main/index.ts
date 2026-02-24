@@ -68,26 +68,44 @@ const aiInternalToolRuntime = createAiInternalToolRuntime({
   resolveRunCommandContext: (toolContext) => {
     const pluginName = toolContext?.pluginName
     const plugin = pluginName ? pluginManager.get(pluginName) : undefined
+    const source = pluginName ? 'plugin' : 'app'
     return {
-      source: pluginName ? 'plugin' : 'app',
+      source,
       pluginId: pluginName || undefined,
-      runCommandAllowed: plugin ? plugin.manifest.permissions?.runCommand === true : undefined
+      runCommandAllowed: plugin ? plugin.manifest.permissions?.runCommand === true : undefined,
+      allowShellOverride: source === 'app'
     }
   }
 })
 
-setAiToolExecutor(async ({ name, args, context, callId }) => {
+function isAbortLikeError(error: unknown): boolean {
+  if (error instanceof Error) {
+    if (error.name === 'AbortError') return true
+    const message = String(error.message || '').toLowerCase()
+    return message.includes('abort') || message.includes('cancelled') || message.includes('canceled')
+  }
+  const message = String(error || '').toLowerCase()
+  return message.includes('abort') || message.includes('cancelled') || message.includes('canceled')
+}
+
+setAiToolExecutor(async ({ name, args, context, callId, abortSignal }) => {
   if (name === AI_RUN_COMMAND_TOOL_NAME) {
     const input = parseAiRunCommandArgs(args)
     const pluginName = context?.pluginName
     const plugin = pluginName ? pluginManager.get(pluginName) : undefined
     try {
+      const source = pluginName ? 'plugin' : 'app'
       return await commandRunnerService.runCommand(input, {
-        source: pluginName ? 'plugin' : 'app',
+        source,
         pluginId: pluginName || undefined,
-        runCommandAllowed: plugin ? plugin.manifest.permissions?.runCommand === true : undefined
+        runCommandAllowed: plugin ? plugin.manifest.permissions?.runCommand === true : undefined,
+        allowShellOverride: source === 'app',
+        abortSignal
       })
     } catch (error) {
+      if (abortSignal?.aborted || isAbortLikeError(error)) {
+        throw error instanceof Error ? error : new Error(String(error))
+      }
       return normalizeFailedRunCommandResult({
         error,
         command: input.command,

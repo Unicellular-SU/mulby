@@ -156,6 +156,7 @@ export class AiService {
     args: unknown
     context?: AiToolContext
     callId?: string
+    abortSignal?: AbortSignal
   }) => Promise<unknown>
   private capabilityPolicyResolver?: (input: {
     option: AiOption
@@ -425,7 +426,8 @@ export class AiService {
         effectiveOption.toolContext,
         effectiveOption.model,
         effective.capabilityDebug,
-        policyDebug
+        policyDebug,
+        controller.signal
       )
 
       const { modelKey } = this.resolveLanguageModel(effectiveOption.model)
@@ -595,7 +597,8 @@ export class AiService {
         effectiveOption.toolContext,
         effectiveOption.model,
         effective.capabilityDebug,
-        policyDebug
+        policyDebug,
+        controller.signal
       )
       console.info('[AI] stream:prepare:tools-ready', {
         requestId: id,
@@ -962,6 +965,7 @@ export class AiService {
     args: unknown
     context?: AiToolContext
     callId?: string
+    abortSignal?: AbortSignal
   }) => Promise<unknown>): void {
     this.toolExecutor = executor
   }
@@ -1836,7 +1840,8 @@ export class AiService {
               name: toolName,
               args: parsedArgs,
               context: input.toolContext,
-              callId: mcpExecutionCallId
+              callId: mcpExecutionCallId,
+              abortSignal
             })
           } catch (error) {
             if (abortSignal?.aborted) {
@@ -2296,7 +2301,8 @@ export class AiService {
     context?: AiToolContext,
     modelId?: string,
     capabilityDebug?: AiCapabilityDebugInfo,
-    policyDebug?: AiPolicyDebugInfo
+    policyDebug?: AiPolicyDebugInfo,
+    abortSignal?: AbortSignal
   ) {
     if (!tools || tools.length === 0) return undefined
     if (modelId && !supportsFunctionCalling(modelId)) {
@@ -2366,8 +2372,16 @@ export class AiService {
                   throw new Error('AI tool executor is not configured')
                 }
                 try {
-                  result = await this.toolExecutor({ name: fn.name, args: input, context })
+                  result = await this.toolExecutor({
+                    name: fn.name,
+                    args: input,
+                    context,
+                    abortSignal
+                  })
                 } catch (error) {
+                  if (abortSignal?.aborted) {
+                    throw new Error('AI stream aborted by user')
+                  }
                   const message = error instanceof Error ? error.message : String(error)
                   throw new Error(`[AI_TOOL_EXECUTION_ERROR] ${fn.name}: ${message}`)
                 }

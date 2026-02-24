@@ -178,6 +178,32 @@ describe('command runner service', () => {
     assert.equal(getSettings().audit.records[0].status, 'timeout')
   })
 
+  it('aborts running command when abortSignal is triggered', async () => {
+    const { service, getSettings } = createInMemoryRunner({
+      settings: {
+        defaultTimeoutMs: 60_000,
+        maxTimeoutMs: 60_000
+      }
+    })
+    const controller = new AbortController()
+    const runPromise = service.runCommand(
+      {
+        command: process.execPath,
+        args: ['-e', 'setInterval(() => {}, 1000)']
+      },
+      {
+        source: 'app',
+        abortSignal: controller.signal
+      }
+    )
+
+    setTimeout(() => controller.abort(), 120)
+
+    await assert.rejects(runPromise, /中止|abort/i)
+    assert.equal(getSettings().audit.records.length, 1)
+    assert.equal(getSettings().audit.records[0].status, 'error')
+  })
+
   it('blocks denied env keys and masks in audit', async () => {
     const { service, getSettings } = createInMemoryRunner({
       settings: {

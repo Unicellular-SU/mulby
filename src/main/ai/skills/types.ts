@@ -1,7 +1,5 @@
 import type {
   AiOption,
-  AiSkillCreateModelOption,
-  AiSkillCreateProgressChunk,
   AiSkillMulbyExtensions,
   AiSkillMcpPolicy,
   AiSkillRecord,
@@ -108,29 +106,4 @@ export interface AiSkillCreateFromGeneratedInput {
    * @deprecated Use metadataMulby.
    */
   mcpPolicy?: AiSkillMcpPolicy
-}
-
-export interface AiSkillCreateWithAiInput {
-  requirements: string
-  model: string
-  previousRawText?: string
-  replaceSkillId?: string
-  enabled?: boolean
-  trustLevel?: AiSkillTrustLevel
-  modePreference?: 'manual' | 'auto' | 'both'
-}
-
-export interface AiSkillCreateWithAiResult {
-  record: AiSkillRecord
-  generation: {
-    model: string
-    rawText: string
-    notes?: string[]
-  }
-}
-
-export interface AiSkillCreateModelOptionItem extends AiSkillCreateModelOption {}
-
-export interface AiSkillCreateWithAiStreamCallbacks {
-  onChunk?: (chunk: AiSkillCreateProgressChunk) => void
 }

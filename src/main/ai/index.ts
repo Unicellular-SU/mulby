@@ -10,6 +10,7 @@ export function setAiToolExecutor(
     args: unknown
     context?: import('../../shared/types/ai').AiToolContext
     callId?: string
+    abortSignal?: AbortSignal
   }) => Promise<unknown>
 ) {
   aiService.setToolExecutor(executor)

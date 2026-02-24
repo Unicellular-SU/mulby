@@ -289,41 +289,6 @@ export interface AiSkillPreview {
   reasons: string[]
 }
 
-export interface AiSkillCreateModelOption {
-  id: string
-  label: string
-  providerRef?: string
-  providerLabel?: string
-}
-
-export interface AiSkillCreateWithAiInput {
-  requirements: string
-  model: string
-  previousRawText?: string
-  replaceSkillId?: string
-  enabled?: boolean
-  trustLevel?: AiSkillTrustLevel
-  modePreference?: 'manual' | 'auto' | 'both'
-}
-
-export interface AiSkillCreateWithAiResult {
-  record: AiSkillRecord
-  generation: {
-    model: string
-    rawText: string
-    notes?: string[]
-  }
-}
-
-export type AiSkillCreateStage = 'generating' | 'parsing' | 'validating' | 'writing' | 'completed'
-
-export interface AiSkillCreateProgressChunk {
-  type: 'status' | 'content' | 'reasoning'
-  text: string
-  stage?: AiSkillCreateStage
-  stageStatus?: 'start' | 'done' | 'error'
-}
-
 export interface AiOption {
   model?: string
   messages: AiMessage[]
@@ -520,58 +485,14 @@ export interface AiApi {
   skills: {
     list: () => Promise<AiSkillRecord[]>
     refresh: () => Promise<AiSkillRecord[]>
+    listEnabled: () => Promise<AiSkillRecord[]>
     get: (skillId: string) => Promise<AiSkillRecord | null>
-    listCreateModels: () => Promise<AiSkillCreateModelOption[]>
-    createWithAi: (input: AiSkillCreateWithAiInput) => Promise<AiSkillCreateWithAiResult>
-    createWithAiStream: (
-      input: AiSkillCreateWithAiInput,
-      onChunk: (chunk: AiSkillCreateProgressChunk) => void
-    ) => AiPromiseLike<AiSkillCreateWithAiResult>
-    create: (input: {
-      id?: string
-      name: string
-      description: string
-      license?: string
-      compatibility?: string
-      metadata?: Record<string, string>
-      allowedTools?: string[]
-      metadataMulby?: AiSkillMulbyExtensions
-      promptTemplate?: string
-      enabled?: boolean
-      trustLevel?: AiSkillTrustLevel
-      /**
-       * @deprecated Use metadataMulby.
-       */
-      mode?: 'manual' | 'auto' | 'both'
-      /**
-       * @deprecated Use metadataMulby.
-       */
-      triggerPhrases?: string[]
-      /**
-       * @deprecated Use metadataMulby.
-       */
-      capabilities?: string[]
-      /**
-       * @deprecated Use metadataMulby.capabilities.
-       */
-      internalTools?: string[]
-      /**
-       * @deprecated Use metadataMulby.
-       */
-      mcpPolicy?: AiSkillMcpPolicy
-    }) => Promise<AiSkillRecord>
     install: (input: {
       source: 'local-dir' | 'zip'
       ref: string
       trustLevel?: AiSkillTrustLevel
       enabled?: boolean
     }) => Promise<AiSkillRecord[]>
-    importFromJson: (input: {
-      json: string
-      trustLevel?: AiSkillTrustLevel
-      enabled?: boolean
-    }) => Promise<AiSkillRecord[]>
-    update: (skillId: string, patch: Partial<AiSkillRecord>) => Promise<AiSkillRecord>
     remove: (skillId: string) => Promise<void>
     enable: (skillId: string) => Promise<AiSkillRecord>
     disable: (skillId: string) => Promise<AiSkillRecord>
@@ -581,7 +502,6 @@ export interface AiApi {
       prompt?: string
     }) => Promise<AiSkillPreview>
     resolve: (option: AiOption) => Promise<AiSkillResolveResult>
-    listEnabled: () => Promise<AiSkillRecord[]>
   }
   attachments: {
     upload: (input: { filePath?: string; buffer?: ArrayBuffer; mimeType: string; purpose?: string }) => Promise<AiAttachmentRef>
