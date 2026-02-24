@@ -1,11 +1,16 @@
 import { systemPreferences, session, app } from 'electron'
 import log from 'electron-log'
 
+type MacPermissionsModule = {
+    getAuthStatus: (type: string) => string
+    [key: string]: unknown
+}
+
 // 仅在 macOS 上加载原生模块
-let permissions: typeof import('node-mac-permissions') | null = null
+let permissions: MacPermissionsModule | null = null
 if (process.platform === 'darwin') {
     try {
-        permissions = require('node-mac-permissions')
+        permissions = require('node-mac-permissions') as MacPermissionsModule
         log.info('[PermissionManager] Loaded node-mac-permissions')
     } catch (error) {
         log.warn('[PermissionManager] Failed to load node-mac-permissions:', error)
@@ -176,7 +181,7 @@ export class PermissionManager {
             const macType = mapToMacPermissionType(type)
             if (macType) {
                 try {
-                    const status = permissions.getAuthStatus(macType as any)
+                    const status = permissions.getAuthStatus(macType)
                     log.info(`[PermissionManager] macOS ${type} status: ${status}`)
                     return normalizeStatus(status)
                 } catch (error) {
@@ -241,9 +246,10 @@ export class PermissionManager {
             if (macType) {
                 try {
                     // askForXXXAccess 方法
-                    const askMethod = `askFor${macType.charAt(0).toUpperCase() + macType.slice(1)}Access` as keyof typeof permissions
-                    if (typeof permissions[askMethod] === 'function') {
-                        const result = await (permissions[askMethod] as Function)()
+                    const askMethod = `askFor${macType.charAt(0).toUpperCase() + macType.slice(1)}Access`
+                    const askFn = permissions[askMethod]
+                    if (typeof askFn === 'function') {
+                        const result = await askFn()
                         log.info(`[PermissionManager] ${askMethod} result:`, result)
                         return normalizeStatus(result)
                     } else {
