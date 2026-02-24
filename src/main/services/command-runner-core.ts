@@ -36,6 +36,7 @@ export interface RunCommandContext {
   pluginId?: string
   runCommandAllowed?: boolean
   allowShellOverride?: boolean
+  assumeUserApproved?: boolean
   abortSignal?: AbortSignal
 }
 
@@ -396,6 +397,7 @@ export class CommandRunnerService {
     }
 
     if (!settings.requireConsent) return
+    if (context.source === 'app' && context.assumeUserApproved === true) return
     const fingerprint = buildFingerprint({
       source: context.source,
       pluginId: context.pluginId,

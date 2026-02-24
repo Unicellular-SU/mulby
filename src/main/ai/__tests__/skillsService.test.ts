@@ -10,7 +10,32 @@ async function createTempDir(prefix: string): Promise<string> {
   return await mkdtemp(path.join(os.tmpdir(), prefix))
 }
 
-function createInMemorySkillService(input: { settings: AiSettings; userDataPath: string; homeDir?: string }) {
+function createInMemorySkillService(input: {
+  settings: AiSettings
+  userDataPath: string
+  homeDir?: string
+  runCommand?: (payload: {
+    command: string
+    args?: string[]
+    cwd?: string
+    env?: Record<string, string>
+    timeoutMs?: number
+    shell?: boolean
+  }) => Promise<{
+    success: boolean
+    command: string
+    args: string[]
+    cwd?: string
+    shell: boolean
+    stdout: string
+    stderr: string
+    exitCode: number | null
+    signal: string | null
+    durationMs: number
+    timedOut: boolean
+    truncated: boolean
+  }>
+}) {
   let settings = input.settings
   const service = new AiSkillService({
     getSettings: () => settings,
@@ -25,7 +50,8 @@ function createInMemorySkillService(input: { settings: AiSettings; userDataPath:
     },
     now: () => 1_700_000_000_000,
     getUserDataPath: () => input.userDataPath,
-    getHomeDir: () => input.homeDir || os.homedir()
+    getHomeDir: () => input.homeDir || os.homedir(),
+    ...(input.runCommand ? { runCommand: input.runCommand } : {})
   })
   return {
     service,
@@ -287,6 +313,74 @@ Provide concrete bug-fix steps.`,
       skills: { mode: 'auto' }
     })
     assert.equal(autoResolved.selectedSkillIds.length, 1)
+  })
+
+  it('installs skill via npx command parsing into app skills directory', async (t) => {
+    const tempDir = await createTempDir('mulby-skill-install-npx-')
+    t.after(async () => {
+      await rm(tempDir, { recursive: true, force: true })
+    })
+
+    const { service } = createInMemorySkillService({
+      userDataPath: tempDir,
+      settings: {
+        providers: [],
+        models: [],
+        mcp: { servers: [] },
+        skills: {
+          enabled: true,
+          activeSkillIds: [],
+          autoSelect: { enabled: false, maxSkillsPerCall: 2, minScore: 1 },
+          records: []
+        }
+      },
+      runCommand: async (payload) => {
+        assert.equal(payload.command, 'npx')
+        const cwd = String(payload.cwd || '')
+        assert.equal(cwd.length > 0, true)
+        assert.equal((payload.args || []).includes('--global'), false)
+        const generatedSkillDir = path.join(cwd, '.agents', 'skills', 'vercel-react-best-practices')
+        await mkdir(generatedSkillDir, { recursive: true })
+        await writeFile(
+          path.join(generatedSkillDir, 'SKILL.md'),
+          `---
+name: vercel-react-best-practices
+description: React best practices
+---
+Apply Vercel React best practices.`,
+          'utf8'
+        )
+
+        return {
+          success: true,
+          command: payload.command,
+          args: payload.args || [],
+          cwd: payload.cwd,
+          shell: payload.shell === true,
+          stdout: 'ok',
+          stderr: '',
+          exitCode: 0,
+          signal: null,
+          durationMs: 12,
+          timedOut: false,
+          truncated: false
+        }
+      }
+    })
+
+    const installed = await service.install({
+      source: 'npx',
+      ref: '',
+      command: 'npx skills add https://github.com/vercel-labs/agent-skills --skill vercel-react-best-practices',
+      enabled: true,
+      trustLevel: 'reviewed'
+    })
+
+    assert.equal(installed.length, 1)
+    assert.equal(installed[0].source, 'npx')
+    assert.equal(installed[0].origin, 'app')
+    assert.equal(installed[0].id, 'vercel-react-best-practices')
+    assert.equal(installed[0].installPath?.includes(path.join('ai', 'skills', 'app')), true)
   })
 
   it('refreshes catalog from system and app roots, app skills override system skills on conflict', async (t) => {

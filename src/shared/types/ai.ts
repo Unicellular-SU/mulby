@@ -161,7 +161,7 @@ export interface AiMcpServerLogEntry {
   data?: unknown
 }
 
-export type AiSkillSource = 'manual' | 'local-dir' | 'zip' | 'json' | 'builtin' | 'system'
+export type AiSkillSource = 'manual' | 'local-dir' | 'zip' | 'npx' | 'json' | 'builtin' | 'system'
 
 export type AiSkillTrustLevel = 'untrusted' | 'reviewed' | 'trusted'
 
@@ -488,8 +488,10 @@ export interface AiApi {
     listEnabled: () => Promise<AiSkillRecord[]>
     get: (skillId: string) => Promise<AiSkillRecord | null>
     install: (input: {
-      source: 'local-dir' | 'zip'
+      source: 'local-dir' | 'zip' | 'npx'
       ref: string
+      skills?: string[]
+      command?: string
       trustLevel?: AiSkillTrustLevel
       enabled?: boolean
     }) => Promise<AiSkillRecord[]>

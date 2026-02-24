@@ -42,8 +42,10 @@ export interface AiSkillCreateInput {
 }
 
 export interface AiSkillInstallInput {
-  source: 'local-dir' | 'zip'
+  source: 'local-dir' | 'zip' | 'npx'
   ref: string
+  skills?: string[]
+  command?: string
   trustLevel?: AiSkillTrustLevel
   enabled?: boolean
 }

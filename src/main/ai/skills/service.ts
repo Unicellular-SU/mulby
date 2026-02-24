@@ -38,6 +38,8 @@ import {
   encodeMulbyExtensions,
   validateSkillMarkdown
 } from './spec-validator'
+import { commandRunnerService } from '../../services/command-runner'
+import type { RunCommandInput, RunCommandResult } from '../../services/command-runner'
 
 const SKILL_MD_VARIANTS = ['SKILL.md']
 const SKILL_APP_ROOT_NAME = 'app'
@@ -48,6 +50,7 @@ interface AiSkillServiceDeps {
   now: () => number
   getUserDataPath: () => string
   getHomeDir: () => string
+  runCommand: (input: RunCommandInput) => Promise<RunCommandResult>
 }
 
 const DEFAULT_SKILL_SETTINGS: AiSkillSettings = {
@@ -90,6 +93,146 @@ function normalizeMode(input: unknown): 'manual' | 'auto' | 'both' | undefined {
 function normalizeTrustLevel(input: unknown): AiSkillTrustLevel {
   if (input === 'trusted' || input === 'reviewed' || input === 'untrusted') return input
   return 'reviewed'
+}
+
+interface ParsedNpxSkillInstallCommand {
+  sourceRef: string
+  skills: string[]
+}
+
+function tokenizeCommandLine(input: string): string[] {
+  const text = String(input || '')
+  const tokens: string[] = []
+  let current = ''
+  let quote: '"' | "'" | null = null
+  let escaped = false
+
+  for (let index = 0; index < text.length; index += 1) {
+    const char = text[index]
+    if (escaped) {
+      current += char
+      escaped = false
+      continue
+    }
+
+    if (char === '\\' && quote !== "'") {
+      escaped = true
+      continue
+    }
+
+    if (quote) {
+      if (char === quote) {
+        quote = null
+      } else {
+        current += char
+      }
+      continue
+    }
+
+    if (char === '"' || char === "'") {
+      quote = char
+      continue
+    }
+
+    if (/\s/.test(char)) {
+      if (current) {
+        tokens.push(current)
+        current = ''
+      }
+      continue
+    }
+
+    current += char
+  }
+
+  if (quote) {
+    throw new Error('命令格式错误：存在未闭合引号')
+  }
+  if (escaped) {
+    current += '\\'
+  }
+  if (current) {
+    tokens.push(current)
+  }
+  return tokens
+}
+
+function normalizeExecutableName(token: string): string {
+  const base = path.basename(String(token || '')).toLowerCase()
+  return base.replace(/\.(cmd|exe|bat)$/, '')
+}
+
+function parseNpxSkillsAddCommand(command: string): ParsedNpxSkillInstallCommand {
+  const tokens = tokenizeCommandLine(command)
+  if (tokens.length === 0) {
+    throw new Error('命令不能为空')
+  }
+  if (normalizeExecutableName(tokens[0]) !== 'npx') {
+    throw new Error('仅支持以 npx 开头的命令')
+  }
+
+  let addStartIndex = -1
+  for (let index = 1; index < tokens.length - 1; index += 1) {
+    if (tokens[index] === 'skills' && tokens[index + 1] === 'add') {
+      addStartIndex = index
+      break
+    }
+  }
+  if (addStartIndex < 0) {
+    throw new Error('命令必须包含 "skills add"')
+  }
+
+  const sourceRef = String(tokens[addStartIndex + 2] || '').trim()
+  if (!sourceRef || sourceRef.startsWith('-')) {
+    throw new Error('命令缺少 skills 源引用（例如 owner/repo 或 URL）')
+  }
+
+  const skillNames: string[] = []
+  for (let index = addStartIndex + 3; index < tokens.length; index += 1) {
+    const token = tokens[index]
+    if (!token) continue
+
+    if (token === '--skill' || token === '-s') {
+      const nextValue = String(tokens[index + 1] || '').trim()
+      if (!nextValue || nextValue.startsWith('-')) {
+        throw new Error('参数 --skill 缺少值')
+      }
+      skillNames.push(nextValue)
+      index += 1
+      continue
+    }
+
+    if (token.startsWith('--skill=')) {
+      const value = token.slice('--skill='.length).trim()
+      if (!value) {
+        throw new Error('参数 --skill 缺少值')
+      }
+      skillNames.push(value)
+      continue
+    }
+    if (token.startsWith('-s=')) {
+      const value = token.slice('-s='.length).trim()
+      if (!value) {
+        throw new Error('参数 -s 缺少值')
+      }
+      skillNames.push(value)
+      continue
+    }
+
+    if (token === '--agent' || token === '-a') {
+      index += 1
+      continue
+    }
+    if (token.startsWith('--agent=')) {
+      continue
+    }
+  }
+
+  const skills = Array.from(new Set(skillNames.map((item) => item.trim()).filter(Boolean)))
+  return {
+    sourceRef,
+    skills
+  }
 }
 
 function splitSkillMarkdown(content: string): { body: string } {
@@ -500,7 +643,8 @@ export class AiSkillService {
       updateSettings: deps?.updateSettings || updateAiSettings,
       now: deps?.now || (() => Date.now()),
       getUserDataPath: deps?.getUserDataPath || (() => app.getPath('userData')),
-      getHomeDir: deps?.getHomeDir || (() => os.homedir())
+      getHomeDir: deps?.getHomeDir || (() => os.homedir()),
+      runCommand: deps?.runCommand || ((input) => commandRunnerService.runCommand(input, { source: 'app', assumeUserApproved: true }))
     }
   }
 
@@ -1036,7 +1180,7 @@ export class AiSkillService {
 
   private async installFromSkillDirectory(
     sourceDir: string,
-    sourceType: 'local-dir' | 'zip',
+    sourceType: 'local-dir' | 'zip' | 'npx',
     trustLevel: AiSkillTrustLevel,
     enabled: boolean,
     existingIds: Set<string>
@@ -1096,9 +1240,93 @@ export class AiSkillService {
     }
   }
 
+  private formatCommandFailureMessage(result: Pick<RunCommandResult, 'exitCode' | 'signal' | 'stdout' | 'stderr'>): string {
+    const lines = [
+      `exit=${result.exitCode ?? 'null'}`,
+      `signal=${result.signal ?? 'null'}`
+    ]
+    const stdout = String(result.stdout || '').trim()
+    const stderr = String(result.stderr || '').trim()
+    if (stdout) {
+      lines.push(`stdout:\n${stdout}`)
+    }
+    if (stderr) {
+      lines.push(`stderr:\n${stderr}`)
+    }
+    return lines.join('\n')
+  }
+
+  private async installViaNpxSkills(input: {
+    sourceRef: string
+    requestedSkills?: string[]
+  }): Promise<{
+    tempBase: string
+    skillDirs: string[]
+  }> {
+    const tempBase = await fs.mkdtemp(path.join(os.tmpdir(), 'mulby-skill-install-npx-'))
+    const normalizedSkills = Array.from(
+      new Set(
+        (asStringArray(input.requestedSkills) || [])
+          .map((item) => item.trim())
+          .filter(Boolean)
+      )
+    )
+    const args = ['skills', 'add', input.sourceRef, '--agent', 'codex', '--copy', '--yes']
+    for (const skillName of normalizedSkills) {
+      args.push('--skill', skillName)
+    }
+
+    let result: RunCommandResult
+    try {
+      result = await this.deps.runCommand({
+        command: 'npx',
+        args,
+        cwd: tempBase,
+        timeoutMs: 180_000,
+        shell: false
+      })
+    } catch (error) {
+      await fs.rm(tempBase, { recursive: true, force: true })
+      const message = error instanceof Error ? error.message : String(error)
+      throw new Error(`执行 npx skills 失败：${message}`)
+    }
+
+    if (!result.success) {
+      await fs.rm(tempBase, { recursive: true, force: true })
+      throw new Error(`npx skills add 执行失败\n${this.formatCommandFailureMessage(result)}`)
+    }
+
+    const codexSkillsRoot = path.join(tempBase, '.agents', 'skills')
+    let skillDirs = await findSkillDirectories(codexSkillsRoot, 8)
+    if (skillDirs.length === 0) {
+      skillDirs = await findSkillDirectories(tempBase, 10)
+    }
+    if (skillDirs.length === 0) {
+      await fs.rm(tempBase, { recursive: true, force: true })
+      throw new Error(
+        `npx skills add 未产生可安装的 SKILL.md\n${this.formatCommandFailureMessage(result)}`
+      )
+    }
+    return {
+      tempBase,
+      skillDirs
+    }
+  }
+
   async install(input: AiSkillInstallInput): Promise<AiSkillRecord[]> {
     const sourceType = input.source
-    const sourceRef = String(input.ref || '').trim()
+    const commandText = String(input.command || '').trim()
+    let sourceRef = String(input.ref || '').trim()
+    let requestedSkills = Array.from(new Set((asStringArray(input.skills) || []).map((item) => item.trim()).filter(Boolean)))
+
+    if (sourceType === 'npx' && commandText) {
+      const parsed = parseNpxSkillsAddCommand(commandText)
+      sourceRef = parsed.sourceRef
+      if (parsed.skills.length > 0) {
+        requestedSkills = parsed.skills
+      }
+    }
+
     if (!sourceRef) {
       throw new Error('Install ref is required')
     }
@@ -1109,7 +1337,7 @@ export class AiSkillService {
     const enabled = input.enabled ?? false
     const installed: AiSkillRecord[] = []
 
-    const installFromDirs = async (dirs: string[], kind: 'local-dir' | 'zip') => {
+    const installFromDirs = async (dirs: string[], kind: 'local-dir' | 'zip' | 'npx') => {
       for (const dir of dirs) {
         const record = await this.installFromSkillDirectory(dir, kind, trustLevel, enabled, existingIds)
         installed.push(record)
@@ -1126,7 +1354,7 @@ export class AiSkillService {
         throw new Error('No SKILL.md found in directory')
       }
       await installFromDirs(skillDirs, 'local-dir')
-    } else {
+    } else if (sourceType === 'zip') {
       const zipStat = await fs.stat(sourceRef).catch(() => null)
       if (!zipStat || !zipStat.isFile()) {
         throw new Error('ZIP file not found')
@@ -1142,6 +1370,18 @@ export class AiSkillService {
       } finally {
         await fs.rm(tempBase, { recursive: true, force: true })
       }
+    } else if (sourceType === 'npx') {
+      const prepared = await this.installViaNpxSkills({
+        sourceRef,
+        requestedSkills
+      })
+      try {
+        await installFromDirs(prepared.skillDirs, 'npx')
+      } finally {
+        await fs.rm(prepared.tempBase, { recursive: true, force: true })
+      }
+    } else {
+      throw new Error(`Unsupported install source: ${String(sourceType)}`)
     }
 
     const nextActive = new Set(settings.activeSkillIds)

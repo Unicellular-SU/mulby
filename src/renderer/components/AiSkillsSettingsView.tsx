@@ -15,6 +15,8 @@ interface ParsedSkillMarkdown {
   body: string
 }
 
+type SkillListCategory = 'all' | 'app' | 'global'
+
 function parseSkillMarkdown(input: string): ParsedSkillMarkdown {
   const content = String(input || '')
   const match = content.match(/^---\s*\r?\n([\s\S]*?)\r?\n---\s*(?:\r?\n)?([\s\S]*)$/)
@@ -61,6 +63,14 @@ function frontmatterValueToText(value: string | string[] | undefined): string {
   return value
 }
 
+function compareSkillByNameAsc(a: AiSkillRecord, b: AiSkillRecord): number {
+  const aName = String(a.descriptor.name || a.id || '').trim()
+  const bName = String(b.descriptor.name || b.id || '').trim()
+  const byName = aName.localeCompare(bName, 'en', { sensitivity: 'base', numeric: true })
+  if (byName !== 0) return byName
+  return String(a.id || '').localeCompare(String(b.id || ''), 'en', { sensitivity: 'base', numeric: true })
+}
+
 export default function AiSkillsSettingsView({ onBack }: AiSkillsSettingsViewProps) {
   const [skills, setSkills] = useState<AiSkillRecord[]>([])
   const [skillSearchQuery, setSkillSearchQuery] = useState('')
@@ -70,6 +80,12 @@ export default function AiSkillsSettingsView({ onBack }: AiSkillsSettingsViewPro
   const [busy, setBusy] = useState(false)
   const [draggingZip, setDraggingZip] = useState(false)
   const [showZipModal, setShowZipModal] = useState(false)
+  const [showNpxModal, setShowNpxModal] = useState(false)
+  const [showNpxAdvanced, setShowNpxAdvanced] = useState(false)
+  const [npxCommandText, setNpxCommandText] = useState('')
+  const [npxRepoRef, setNpxRepoRef] = useState('https://github.com/vercel-labs/agent-skills')
+  const [npxSkillNames, setNpxSkillNames] = useState('')
+  const [skillListCategory, setSkillListCategory] = useState<SkillListCategory>('all')
   const skillItemRefs = useRef<Record<string, HTMLButtonElement | null>>({})
   const notice = useInAppNotice()
 
@@ -90,16 +106,29 @@ export default function AiSkillsSettingsView({ onBack }: AiSkillsSettingsViewPro
     () => (selectedSkillId ? skills.find((item) => item.id === selectedSkillId) || null : null),
     [selectedSkillId, skills]
   )
+  const sortedSkills = useMemo(() => {
+    return [...skills].sort(compareSkillByNameAsc)
+  }, [skills])
+  const scopedSkills = useMemo(() => {
+    if (skillListCategory === 'all') return sortedSkills
+    if (skillListCategory === 'app') return sortedSkills.filter((skill) => skill.origin !== 'system')
+    return sortedSkills.filter((skill) => skill.origin === 'system')
+  }, [skillListCategory, sortedSkills])
   const filteredSkills = useMemo(() => {
     const keyword = skillSearchQuery.trim().toLowerCase()
-    if (!keyword) return skills
-    return skills.filter((skill) => {
+    if (!keyword) return scopedSkills
+    return scopedSkills.filter((skill) => {
       const name = String(skill.descriptor.name || '').toLowerCase()
       const id = String(skill.id || '').toLowerCase()
       const description = String(skill.descriptor.description || '').toLowerCase()
       return name.includes(keyword) || id.includes(keyword) || description.includes(keyword)
     })
-  }, [skillSearchQuery, skills])
+  }, [skillSearchQuery, scopedSkills])
+  const categoryCounts = useMemo(() => ({
+    all: sortedSkills.length,
+    app: sortedSkills.filter((skill) => skill.origin !== 'system').length,
+    global: sortedSkills.filter((skill) => skill.origin === 'system').length
+  }), [sortedSkills])
   const parsedSkillMarkdown = useMemo(() => parseSkillMarkdown(selectedSkillContent), [selectedSkillContent])
 
   const loadSkills = async (forceRefresh = false) => {
@@ -161,7 +190,10 @@ export default function AiSkillsSettingsView({ onBack }: AiSkillsSettingsViewPro
   }, [selectedSkill])
 
   useEffect(() => {
-    if (filteredSkills.length === 0) return
+    if (filteredSkills.length === 0) {
+      setSelectedSkillId(null)
+      return
+    }
     if (!selectedSkillId || !filteredSkills.some((item) => item.id === selectedSkillId)) {
       setSelectedSkillId(filteredSkills[0].id)
     }
@@ -268,6 +300,49 @@ export default function AiSkillsSettingsView({ onBack }: AiSkillsSettingsViewPro
     }
   }
 
+  const installByNpx = async () => {
+    if (!window.mulby?.ai?.skills?.install) {
+      setError('Skills 安装 API 未就绪')
+      return
+    }
+    const command = String(npxCommandText || '').trim()
+    const repoRef = String(npxRepoRef || '').trim()
+    if (!command && !repoRef) {
+      setError('请粘贴 npx 命令，或在高级参数中填写仓库引用')
+      return
+    }
+    const skills = Array.from(
+      new Set(
+        String(npxSkillNames || '')
+          .split(/[\n,\s]+/)
+          .map((item) => item.trim())
+          .filter(Boolean)
+      )
+    )
+
+    setBusy(true)
+    try {
+      const installed = await window.mulby.ai.skills.install({
+        source: 'npx',
+        ref: repoRef,
+        ...(command ? { command } : {}),
+        ...(skills.length > 0 ? { skills } : {})
+      })
+      await loadSkills(true)
+      setInfo(`安装完成，共 ${installed.length} 个 skill`)
+      setError(null)
+      if (installed[0]?.id) {
+        setSelectedSkillId(installed[0].id)
+      }
+      setShowNpxModal(false)
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err)
+      setError(`npx 安装失败：${message}`)
+    } finally {
+      setBusy(false)
+    }
+  }
+
   const handleMarkdownLinkClick = async (href: string | undefined, event: MouseEvent<HTMLAnchorElement>) => {
     event.preventDefault()
     const url = String(href || '').trim()
@@ -329,6 +404,7 @@ export default function AiSkillsSettingsView({ onBack }: AiSkillsSettingsViewPro
         </div>
         <div className="flex items-center gap-2">
           <button className={`${secondaryPillClass} no-drag`} onClick={() => setShowZipModal(true)} disabled={loading || busy}>ZIP 安装</button>
+          <button className={`${secondaryPillClass} no-drag`} onClick={() => setShowNpxModal(true)} disabled={loading || busy}>npx 安装</button>
           <button className={`${secondaryPillClass} no-drag`} onClick={() => void loadSkills(true)} disabled={loading || busy}>刷新</button>
         </div>
       </div>
@@ -338,8 +414,40 @@ export default function AiSkillsSettingsView({ onBack }: AiSkillsSettingsViewPro
           <div className="mb-3 flex items-center justify-between">
             <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">已安装 Skills</h3>
             <span className="text-xs text-slate-500 dark:text-slate-400">
-              {skillSearchQuery.trim() ? `${filteredSkills.length}/${skills.length}` : skills.length}
+              {skillSearchQuery.trim() ? `${filteredSkills.length}/${scopedSkills.length}` : scopedSkills.length}
             </span>
+          </div>
+          <div className="mb-3 flex items-center gap-1 rounded-full border border-slate-200 bg-slate-50 p-1 dark:border-slate-700 dark:bg-slate-800/60">
+            <button
+              type="button"
+              onClick={() => setSkillListCategory('all')}
+              className={`no-drag flex-1 rounded-full px-2 py-1 text-xs transition ${skillListCategory === 'all'
+                ? 'bg-white text-slate-900 shadow-sm dark:bg-slate-900 dark:text-slate-100'
+                : 'text-slate-500 hover:text-slate-800 dark:text-slate-300 dark:hover:text-white'
+                }`}
+            >
+              全部 {categoryCounts.all}
+            </button>
+            <button
+              type="button"
+              onClick={() => setSkillListCategory('app')}
+              className={`no-drag flex-1 rounded-full px-2 py-1 text-xs transition ${skillListCategory === 'app'
+                ? 'bg-white text-slate-900 shadow-sm dark:bg-slate-900 dark:text-slate-100'
+                : 'text-slate-500 hover:text-slate-800 dark:text-slate-300 dark:hover:text-white'
+                }`}
+            >
+              应用内 {categoryCounts.app}
+            </button>
+            <button
+              type="button"
+              onClick={() => setSkillListCategory('global')}
+              className={`no-drag flex-1 rounded-full px-2 py-1 text-xs transition ${skillListCategory === 'global'
+                ? 'bg-white text-slate-900 shadow-sm dark:bg-slate-900 dark:text-slate-100'
+                : 'text-slate-500 hover:text-slate-800 dark:text-slate-300 dark:hover:text-white'
+                }`}
+            >
+              全局 {categoryCounts.global}
+            </button>
           </div>
           <div className="relative mb-3">
             <input
@@ -378,7 +486,7 @@ export default function AiSkillsSettingsView({ onBack }: AiSkillsSettingsViewPro
             )}
             {!loading && skills.length > 0 && filteredSkills.length === 0 && (
               <div className="rounded-2xl border border-dashed border-slate-200 p-4 text-xs text-slate-500 dark:border-slate-700 dark:text-slate-400">
-                没有匹配的 Skill，请调整搜索关键词。
+                {scopedSkills.length === 0 ? '当前分类下暂无 Skill。' : '没有匹配的 Skill，请调整搜索关键词。'}
               </div>
             )}
             {filteredSkills.map((skill) => {
@@ -567,6 +675,67 @@ export default function AiSkillsSettingsView({ onBack }: AiSkillsSettingsViewPro
             <div className="mt-5 flex items-center justify-end gap-2">
               <button className={`${secondaryPillClass} no-drag`} onClick={() => setShowZipModal(false)} disabled={busy}>取消</button>
               <button className={`${primaryPillClass} no-drag`} onClick={() => void handlePickZip()} disabled={busy}>选择 ZIP 文件</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showNpxModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4 no-drag">
+          <div className="w-full max-w-2xl rounded-[28px] border border-slate-200/80 bg-white p-6 shadow-2xl dark:border-slate-800/80 dark:bg-slate-900">
+            <div className="mb-4 flex items-center justify-between">
+              <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">npx 安装 Skill</h3>
+              <button className={`${actionButtonClass} no-drag`} onClick={() => setShowNpxModal(false)} disabled={busy}>关闭</button>
+            </div>
+            <div className="space-y-3">
+              <div>
+                <div className="mb-1 text-xs text-slate-500 dark:text-slate-400">直接粘贴命令（推荐）</div>
+                <textarea
+                  className={`${inputClass} min-h-[92px] resize-y py-3`}
+                  value={npxCommandText}
+                  onChange={(event) => setNpxCommandText(event.target.value)}
+                  placeholder="例如：npx skills add https://github.com/vercel-labs/agent-skills --skill vercel-react-best-practices"
+                />
+              </div>
+              <button
+                className={`${actionButtonClass} no-drag`}
+                onClick={() => setShowNpxAdvanced((value) => !value)}
+                type="button"
+              >
+                {showNpxAdvanced ? '收起高级参数' : '展开高级参数'}
+              </button>
+              {showNpxAdvanced && (
+                <div className="space-y-3 rounded-2xl border border-slate-200 bg-slate-50/60 p-3 dark:border-slate-700 dark:bg-slate-800/40">
+                  <div>
+                    <div className="mb-1 text-xs text-slate-500 dark:text-slate-400">仓库地址 / 源引用</div>
+                    <input
+                      className={inputClass}
+                      value={npxRepoRef}
+                      onChange={(event) => setNpxRepoRef(event.target.value)}
+                      placeholder="例如 vercel-labs/agent-skills 或 GitHub URL"
+                    />
+                  </div>
+                  <div>
+                    <div className="mb-1 text-xs text-slate-500 dark:text-slate-400">技能名（可选，多个用空格/逗号/换行分隔）</div>
+                    <textarea
+                      className={`${inputClass} min-h-[96px] resize-y py-3`}
+                      value={npxSkillNames}
+                      onChange={(event) => setNpxSkillNames(event.target.value)}
+                      placeholder="例如：vercel-react-best-practices"
+                    />
+                  </div>
+                </div>
+              )}
+            </div>
+            <div className="mt-5 flex items-center justify-end gap-2">
+              {busy && (
+                <div className="mr-auto inline-flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
+                  <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-slate-300 border-t-slate-600 dark:border-slate-700 dark:border-t-slate-300" />
+                  安装中，请稍候...
+                </div>
+              )}
+              <button className={`${secondaryPillClass} no-drag`} onClick={() => setShowNpxModal(false)} disabled={busy}>取消</button>
+              <button className={`${primaryPillClass} no-drag`} onClick={() => void installByNpx()} disabled={busy}>{busy ? '安装中...' : '开始安装'}</button>
             </div>
           </div>
         </div>
