@@ -106,7 +106,6 @@ export function ProviderSettingsSection({
   onToggleModelMaxTokens
 }: ProviderSettingsSectionProps) {
   const {
-    cardClass,
     cardClassTight,
     pillClass,
     primaryPillClass,
@@ -118,46 +117,51 @@ export function ProviderSettingsSection({
   } = classNames
 
   return (
-<div className={`${cardClass} space-y-4`}>
-  <div className="flex items-center justify-between gap-2">
-    <div className="text-sm font-medium text-slate-900 dark:text-white">供应商配置</div>
-    <div className="flex items-center gap-2">
-      <button className={`${primaryPillClass} no-drag`} onClick={() => onOpenAddProviderModal()}>
-        + 新增供应商
-      </button>
-    </div>
-  </div>
-
-  <div className="grid grid-cols-1 gap-4 md:grid-cols-[180px_1fr]">
-    <div className="space-y-2">
-      {(aiDraft?.providers || []).length === 0 ? (
-        <div className="rounded-2xl border border-dashed border-slate-200/80 bg-slate-50 px-4 py-6 text-center text-sm text-slate-500 dark:border-slate-800/80 dark:bg-slate-900/40 dark:text-slate-400">
-          暂无 Provider，请先新增
-        </div>
-      ) : (
-        sortedProviderEntries.map(({ provider, index }) => (
-          <button
-            key={`${provider.id}-${index}`}
-            className={`flex w-full items-center justify-between rounded-2xl border px-3 py-2 text-left text-sm transition ${index === selectedProviderIndex ? 'border-slate-900 bg-slate-900 text-white dark:border-white dark:bg-white dark:text-slate-900' : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-200'}`}
-            onClick={() => setSelectedProviderIndex(index)}
-          >
-            <div className="min-w-0">
-              <div className="truncate text-sm font-medium">{getProviderKey(provider)}</div>
-              <div className={`truncate text-xs ${index === selectedProviderIndex ? 'text-white/70 dark:text-slate-600' : 'text-slate-400 dark:text-slate-500'}`}>
-                {getProviderTypeLabel(provider)} · {provider.id}
+    <section className="h-full min-h-0 overflow-hidden rounded-[24px] bg-white dark:bg-slate-900">
+      <div className="flex h-full min-h-0 min-w-0 flex-row">
+        <aside className="flex min-h-0 w-[340px] shrink-0 flex-col border-r border-slate-200/70 bg-white p-4 dark:border-slate-800/80 dark:bg-slate-900">
+          <div className="mb-2 flex items-center justify-between gap-2">
+            <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">供应商配置</h3>
+            <button className={`${primaryPillClass} no-drag`} onClick={() => onOpenAddProviderModal()}>
+              + 新增供应商
+            </button>
+          </div>
+          <div className="mb-3 text-xs text-slate-500 dark:text-slate-400">
+            共 {(aiDraft?.providers || []).length} 个 Provider
+          </div>
+          <div className="min-h-0 flex-1 space-y-2 overflow-y-auto">
+            {(aiDraft?.providers || []).length === 0 ? (
+              <div className="rounded-2xl border border-dashed border-slate-200 p-4 text-xs text-slate-500 dark:border-slate-700 dark:text-slate-400">
+                暂无 Provider，请先新增
               </div>
-            </div>
-            <span
-              className={`inline-block h-2.5 w-2.5 shrink-0 rounded-full ${provider.enabled ? 'bg-emerald-500' : 'bg-rose-500'}`}
-              title={provider.enabled ? '已启用' : '已停用'}
-              aria-label={provider.enabled ? '已启用' : '已停用'}
-            />
-          </button>
-        ))
-      )}
-    </div>
+            ) : (
+              sortedProviderEntries.map(({ provider, index }) => (
+                <button
+                  key={`${provider.id}-${index}`}
+                  className={`w-full rounded-2xl border px-3 py-2 text-left transition ${index === selectedProviderIndex ? 'border-slate-400 bg-slate-50 dark:border-slate-500 dark:bg-slate-800/60' : 'border-slate-200 bg-white hover:border-slate-300 dark:border-slate-700 dark:bg-slate-950'}`}
+                  onClick={() => setSelectedProviderIndex(index)}
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="min-w-0">
+                      <div className="truncate text-sm font-medium text-slate-800 dark:text-slate-100">{getProviderKey(provider)}</div>
+                      <div className="truncate text-xs text-slate-500 dark:text-slate-400">
+                        {getProviderTypeLabel(provider)} · {provider.id}
+                      </div>
+                    </div>
+                    <span
+                      className={`inline-block h-2.5 w-2.5 shrink-0 rounded-full ${provider.enabled ? 'bg-emerald-500' : 'bg-rose-500'}`}
+                      title={provider.enabled ? '已启用' : '已停用'}
+                      aria-label={provider.enabled ? '已启用' : '已停用'}
+                    />
+                  </div>
+                </button>
+              ))
+            )}
+          </div>
+        </aside>
 
-    <div className={`${cardClassTight} space-y-3`}>
+        <main className="min-h-0 flex-1 overflow-y-auto p-4 md:p-6">
+          <div className={`${cardClassTight} space-y-3`}>
       {!selectedProvider ? (
         <div className="rounded-2xl border border-dashed border-slate-200/80 bg-slate-50 px-4 py-6 text-center text-sm text-slate-500 dark:border-slate-800/80 dark:bg-slate-900/40 dark:text-slate-400">
           请选择一个 Provider 查看详情
@@ -787,8 +791,9 @@ export function ProviderSettingsSection({
           </div>
         </>
       )}
-    </div>
-  </div>
-    </div>
+          </div>
+        </main>
+      </div>
+    </section>
   )
 }

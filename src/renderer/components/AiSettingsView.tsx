@@ -1029,58 +1029,64 @@ export default function AiSettingsView({ onBack, onOpenMcpSettings, onOpenSkills
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto no-drag">
-        <div className="mx-auto max-w-5xl px-6 pb-16 pt-8 space-y-4">
-          {hasProviderBlockingIssues && (
-            <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-700 dark:border-amber-900/60 dark:bg-amber-900/20 dark:text-amber-200">
-              检测到 Provider 配置问题（重复实例 ID 或缺少 API Key / Base URL），请先修复后再保存。
-            </div>
-          )}
-          {aiReasoning && (
-            <div className="rounded-2xl border border-slate-200/80 bg-white/80 px-4 py-3 text-xs text-slate-600 dark:border-slate-800/80 dark:bg-slate-900/70 dark:text-slate-300">
-              <div className="mb-2 text-[11px] uppercase tracking-[0.2em] text-slate-400 dark:text-slate-500">思考过程</div>
-              <div className="whitespace-pre-wrap font-mono text-xs leading-relaxed">{aiReasoning}</div>
+      <div className="flex min-h-0 flex-1 no-drag">
+        <div className="mx-auto flex min-h-0 w-full max-w-5xl flex-1 flex-col px-6 pb-6 pt-6">
+          {(hasProviderBlockingIssues || aiReasoning) && (
+            <div className="shrink-0 space-y-4 pb-4">
+              {hasProviderBlockingIssues && (
+                <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-700 dark:border-amber-900/60 dark:bg-amber-900/20 dark:text-amber-200">
+                  检测到 Provider 配置问题（重复实例 ID 或缺少 API Key / Base URL），请先修复后再保存。
+                </div>
+              )}
+              {aiReasoning && (
+                <div className="rounded-2xl border border-slate-200/80 bg-white/80 px-4 py-3 text-xs text-slate-600 dark:border-slate-800/80 dark:bg-slate-900/70 dark:text-slate-300">
+                  <div className="mb-2 text-[11px] uppercase tracking-[0.2em] text-slate-400 dark:text-slate-500">思考过程</div>
+                  <div className="whitespace-pre-wrap font-mono text-xs leading-relaxed">{aiReasoning}</div>
+                </div>
+              )}
             </div>
           )}
 
-          <ProviderSettingsSection
-            aiDraft={aiDraft}
-            sortedProviderEntries={sortedProviderEntries}
-            selectedProvider={selectedProvider}
-            selectedProviderIndex={selectedProviderIndex}
-            selectedProviderValidation={selectedProviderValidation}
-            selectedProviderIsSystemDefault={selectedProviderIsSystemDefault}
-            selectedProviderType={selectedProviderType}
-            selectedProviderSupportsEndpointRouting={selectedProviderSupportsEndpointRouting}
-            selectedProviderDefaultBaseURL={selectedProviderDefaultBaseURL}
-            selectedProviderDefaultAnthropicBaseURL={selectedProviderDefaultAnthropicBaseURL}
-            filteredModels={filteredModels}
-            isTestingConnection={isTestingConnection}
-            isFetchingModels={isFetchingModels}
-            setSelectedProviderIndex={setSelectedProviderIndex}
-            onOpenAddProviderModal={() => setShowAddProviderModal(true)}
-            onTestConnection={handleTestSelectedProviderConnection}
-            onUpdateSelectedProvider={handleUpdateSelectedProvider}
-            onRemoveSelectedProvider={handleRemoveSelectedProvider}
-            onSelectedProviderTypeChange={handleSelectedProviderTypeChange}
-            openApiKeyManager={openApiKeyManager}
-            onUpdateSelectedProviderParams={handleUpdateSelectedProviderParams}
-            onToggleSelectedProviderParam={handleToggleSelectedProviderParam}
-            onToggleSelectedProviderMaxTokens={handleToggleSelectedProviderMaxTokens}
-            onFetchModelsForSelectedProvider={handleFetchModelsForSelectedProvider}
-            openAddModelModal={openAddModelModal}
-            handleRemoveModel={handleRemoveModel}
-            handleUpdateModel={handleUpdateModel}
-            resolveProviderIdFromModel={resolveProviderIdFromModel}
-            getProviderKey={getProviderKey}
-            getProviderTypeLabel={getProviderTypeLabel}
-            getModelCapabilityState={getModelCapabilityState}
-            isCapabilityAuto={isCapabilityAuto}
-            updateModelCapabilities={updateModelCapabilities}
-            handleUpdateModelParams={handleUpdateModelParams}
-            onToggleModelParam={handleToggleModelParam}
-            onToggleModelMaxTokens={handleToggleModelMaxTokens}
-          />
+          <div className="min-h-0 flex-1">
+            <ProviderSettingsSection
+              aiDraft={aiDraft}
+              sortedProviderEntries={sortedProviderEntries}
+              selectedProvider={selectedProvider}
+              selectedProviderIndex={selectedProviderIndex}
+              selectedProviderValidation={selectedProviderValidation}
+              selectedProviderIsSystemDefault={selectedProviderIsSystemDefault}
+              selectedProviderType={selectedProviderType}
+              selectedProviderSupportsEndpointRouting={selectedProviderSupportsEndpointRouting}
+              selectedProviderDefaultBaseURL={selectedProviderDefaultBaseURL}
+              selectedProviderDefaultAnthropicBaseURL={selectedProviderDefaultAnthropicBaseURL}
+              filteredModels={filteredModels}
+              isTestingConnection={isTestingConnection}
+              isFetchingModels={isFetchingModels}
+              setSelectedProviderIndex={setSelectedProviderIndex}
+              onOpenAddProviderModal={() => setShowAddProviderModal(true)}
+              onTestConnection={handleTestSelectedProviderConnection}
+              onUpdateSelectedProvider={handleUpdateSelectedProvider}
+              onRemoveSelectedProvider={handleRemoveSelectedProvider}
+              onSelectedProviderTypeChange={handleSelectedProviderTypeChange}
+              openApiKeyManager={openApiKeyManager}
+              onUpdateSelectedProviderParams={handleUpdateSelectedProviderParams}
+              onToggleSelectedProviderParam={handleToggleSelectedProviderParam}
+              onToggleSelectedProviderMaxTokens={handleToggleSelectedProviderMaxTokens}
+              onFetchModelsForSelectedProvider={handleFetchModelsForSelectedProvider}
+              openAddModelModal={openAddModelModal}
+              handleRemoveModel={handleRemoveModel}
+              handleUpdateModel={handleUpdateModel}
+              resolveProviderIdFromModel={resolveProviderIdFromModel}
+              getProviderKey={getProviderKey}
+              getProviderTypeLabel={getProviderTypeLabel}
+              getModelCapabilityState={getModelCapabilityState}
+              isCapabilityAuto={isCapabilityAuto}
+              updateModelCapabilities={updateModelCapabilities}
+              handleUpdateModelParams={handleUpdateModelParams}
+              onToggleModelParam={handleToggleModelParam}
+              onToggleModelMaxTokens={handleToggleModelMaxTokens}
+            />
+          </div>
         </div>
       </div>
 

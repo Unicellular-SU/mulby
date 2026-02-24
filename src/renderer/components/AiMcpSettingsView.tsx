@@ -266,8 +266,9 @@ export default function AiMcpSettingsView({ onBack }: AiMcpSettingsViewProps) {
   const cardClass = 'rounded-[24px] border border-slate-200/80 bg-white p-6 dark:border-slate-800/80 dark:bg-slate-900'
   const cardClassTight = 'rounded-[20px] border border-slate-200/80 bg-white p-4 dark:border-slate-800/80 dark:bg-slate-900'
   const inputClass = 'w-full rounded-2xl border border-slate-200 bg-white px-4 py-2 text-sm text-slate-700 shadow-sm outline-none transition focus:border-slate-300 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-200'
-  const actionButtonClass = 'rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-700 transition hover:border-slate-300 hover:text-slate-900 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-200'
-  const primaryPillClass = 'rounded-full border border-slate-900 bg-slate-900 px-3 py-1 text-xs text-white shadow-sm transition dark:border-white dark:bg-white dark:text-slate-900'
+  const actionButtonClass = 'rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-700 transition hover:border-slate-300 hover:text-slate-900 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-200 disabled:cursor-not-allowed disabled:opacity-50'
+  const primaryPillClass = 'rounded-full border border-slate-900 bg-slate-900 px-3 py-1 text-xs text-white shadow-sm transition dark:border-white dark:bg-white dark:text-slate-900 disabled:cursor-not-allowed disabled:opacity-60'
+  const secondaryPillClass = 'rounded-full border border-slate-200 bg-white px-3 py-1 text-xs text-slate-600 shadow-sm transition hover:border-slate-300 hover:text-slate-900 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-300 dark:hover:text-white disabled:cursor-not-allowed disabled:opacity-50'
 
   const selectedServer = useMemo(
     () => (selectedServerId ? servers.find((server) => server.id === selectedServerId) || null : null),
@@ -640,19 +641,29 @@ export default function AiMcpSettingsView({ onBack }: AiMcpSettingsViewProps) {
           <div className="text-lg font-semibold text-slate-900 dark:text-slate-100">MCP 服务器管理</div>
         </div>
         <div className="flex items-center gap-2">
-          <button className={`${actionButtonClass} no-drag`} onClick={() => void loadServers()} disabled={loadingServers || operationBusy}>刷新</button>
-          <button className={`${actionButtonClass} no-drag`} onClick={handleCreateServer} disabled={operationBusy}>新建服务器</button>
-          <button className={`${actionButtonClass} no-drag`} onClick={handleOpenJsonImport} disabled={operationBusy}>JSON 导入</button>
+          <button className={`${secondaryPillClass} no-drag`} onClick={() => void loadServers()} disabled={loadingServers || operationBusy}>刷新</button>
+          <button className={`${secondaryPillClass} no-drag`} onClick={handleCreateServer} disabled={operationBusy}>新建服务器</button>
+          <button className={`${secondaryPillClass} no-drag`} onClick={handleOpenJsonImport} disabled={operationBusy}>JSON 导入</button>
           <button className={`${primaryPillClass} no-drag`} onClick={handleSaveServer} disabled={!draftServer || operationBusy}>保存</button>
         </div>
       </div>
 
       <div className="flex min-h-0 flex-1 no-drag">
-        <aside className="w-72 shrink-0 overflow-y-auto border-r border-slate-200/70 bg-white/60 p-4 dark:border-slate-800/80 dark:bg-slate-900/40">
-          <div className="mb-3 text-xs uppercase tracking-[0.25em] text-slate-500 dark:text-slate-400">Servers</div>
-          <div className="space-y-2">
-            {servers.length === 0 && (
-              <div className="rounded-2xl border border-dashed border-slate-300/80 px-3 py-4 text-xs text-slate-500 dark:border-slate-700 dark:text-slate-400">
+        <aside className="flex min-h-0 w-[340px] shrink-0 flex-col border-r border-slate-200/70 bg-white p-4 dark:border-slate-800/80 dark:bg-slate-900">
+          <div className="mb-3 flex items-center justify-between">
+            <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">已配置服务器</h3>
+            <span className="text-xs text-slate-500 dark:text-slate-400">{servers.length}</span>
+          </div>
+          <div className="relative min-h-0 flex-1 overflow-y-auto space-y-2">
+            {loadingServers && (
+              <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center">
+                <div className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs text-slate-500 shadow-sm dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300">
+                  加载中...
+                </div>
+              </div>
+            )}
+            {!loadingServers && servers.length === 0 && (
+              <div className="rounded-2xl border border-dashed border-slate-200 p-4 text-xs text-slate-500 dark:border-slate-700 dark:text-slate-400">
                 暂无服务器，点击右上角“新建服务器”。
               </div>
             )}
@@ -662,17 +673,17 @@ export default function AiMcpSettingsView({ onBack }: AiMcpSettingsViewProps) {
                 onClick={() => setSelectedServerId(server.id)}
                 className={`w-full rounded-2xl border px-3 py-3 text-left transition ${
                   selectedServerId === server.id
-                    ? 'border-slate-900 bg-slate-900 text-white dark:border-white dark:bg-white dark:text-slate-900'
-                    : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-200'
+                    ? 'border-slate-400 bg-slate-50 dark:border-slate-500 dark:bg-slate-800/60'
+                    : 'border-slate-200 bg-white hover:border-slate-300 dark:border-slate-700 dark:bg-slate-950'
                 }`}
               >
                 <div className="flex items-center justify-between gap-2">
-                  <div className="truncate text-sm font-medium">{server.name}</div>
-                  <span className={`rounded-full px-2 py-0.5 text-[10px] ${server.isActive ? 'bg-emerald-500/20 text-emerald-600 dark:text-emerald-300' : 'bg-slate-500/20 text-slate-500 dark:text-slate-400'}`}>
+                  <div className="truncate text-sm font-medium text-slate-800 dark:text-slate-100">{server.name}</div>
+                  <span className={`rounded-full px-2 py-0.5 text-[10px] ${server.isActive ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300' : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300'}`}>
                     {server.isActive ? '运行中' : '已停止'}
                   </span>
                 </div>
-                <div className="mt-1 truncate text-[11px] opacity-80">{server.type}</div>
+                <div className="mt-1 truncate text-[11px] text-slate-500 dark:text-slate-400">{server.type}</div>
               </button>
             ))}
           </div>
