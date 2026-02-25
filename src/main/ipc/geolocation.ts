@@ -14,9 +14,9 @@ export function registerGeolocationHandlers() {
   })
 
   // 请求位置权限
-  ipcMain.handle('geolocation:requestAccess', async () => {
+  ipcMain.handle('geolocation:requestAccess', async (event) => {
     log.info('[IPC] geolocation:requestAccess called')
-    const result = await pluginGeolocation.requestAccess()
+    const result = await pluginGeolocation.requestAccess(event.sender)
     log.info(`[IPC] geolocation:requestAccess result: ${result}`)
     return result
   })
@@ -34,10 +34,10 @@ export function registerGeolocationHandlers() {
   })
 
   // 获取当前位置（macOS 原生定位优先，IP 地理定位作为后备）
-  ipcMain.handle('geolocation:getCurrentPosition', async () => {
+  ipcMain.handle('geolocation:getCurrentPosition', async (event) => {
     log.info('[IPC] geolocation:getCurrentPosition called')
     try {
-      const position = await pluginGeolocation.getCurrentPosition()
+      const position = await pluginGeolocation.getCurrentPosition(event.sender)
       log.info('[IPC] geolocation:getCurrentPosition result:', position)
       return position
     } catch (error) {

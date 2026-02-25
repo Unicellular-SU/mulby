@@ -154,7 +154,8 @@ export class PermissionManager {
                 if (permType) {
                     const status = this.getStatus(permType)
                     if (permType === 'geolocation') {
-                        return status === 'granted' || status === 'not-determined'
+                        // geolocation 允许 unknown/not-determined 继续请求，避免首次请求被拦截
+                        return status !== 'denied' && status !== 'restricted'
                     }
                     return status === 'granted'
                 }
@@ -308,6 +309,9 @@ export class PermissionManager {
      */
     canRequest(type: PermissionType): boolean {
         const status = this.getStatus(type)
+        if (type === 'geolocation') {
+            return status !== 'denied' && status !== 'restricted'
+        }
         // 只有 not-determined 状态可以程序化请求
         return status === 'not-determined'
     }

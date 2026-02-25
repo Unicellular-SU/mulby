@@ -1,12 +1,6 @@
 import log from 'electron-log'
-import { net } from 'electron'
-import { dirname, join } from 'path'
-import { existsSync } from 'fs'
-import { promisify } from 'util'
-import { execFile } from 'child_process'
+import { net, BrowserWindow, WebContents } from 'electron'
 import { permissionManager, type PermissionStatus } from './permission-manager'
-
-const execFileAsync = promisify(execFile)
 
 export interface GeolocationPosition {
   latitude: number
@@ -22,16 +16,38 @@ export interface GeolocationPosition {
 
 export type GeolocationAccessStatus = 'not-determined' | 'granted' | 'denied' | 'restricted' | 'unknown'
 
+type NativeProbeSuccess = {
+  ok: true
+  coords: {
+    latitude: number
+    longitude: number
+    accuracy: number
+    altitude: number | null
+    altitudeAccuracy: number | null
+    heading: number | null
+    speed: number | null
+    timestamp: number
+    secureContext: boolean
+  }
+}
+
+type NativeProbeFailure = {
+  ok: false
+  error: {
+    code: number | null
+    message: string
+    secureContext: boolean
+    hasGeolocation: boolean
+  }
+}
+
+type NativeProbeResult = NativeProbeSuccess | NativeProbeFailure
+
+type ProbeError = Error & { code?: number | null }
+
 export class PluginGeolocation {
-  private nativeBinaryPath: string | null = null
   private nativeAccessStatus: GeolocationAccessStatus | null = null
   private nativeAccessAttempted = false
-
-  constructor() {
-    if (process.platform === 'darwin') {
-      this.nativeBinaryPath = this.resolveNativeBinaryPath()
-    }
-  }
 
   /**
    * 检查位置权限状态
@@ -51,12 +67,12 @@ export class PluginGeolocation {
         this.setNativeAccessStatus('restricted')
         return 'restricted'
       }
-      if (status === 'not-determined') {
+      if (status === 'not-determined' || status === 'unknown') {
         return 'not-determined'
       }
       if (status === 'denied') {
         // node-mac-permissions 在 location 上存在误报 denied 的问题：
-        // 未真实请求过时，先按 not-determined 处理，允许走一次原生请求流程。
+        // 未真实请求过时，先按 not-determined 处理，允许触发一次真实请求。
         return this.nativeAccessAttempted ? 'denied' : 'not-determined'
       }
       return 'unknown'
@@ -68,7 +84,7 @@ export class PluginGeolocation {
   /**
    * 请求位置权限
    */
-  async requestAccess(): Promise<GeolocationAccessStatus> {
+  async requestAccess(webContents?: WebContents): Promise<GeolocationAccessStatus> {
     const currentStatus = this.getAccessStatus()
     log.info(`[Geolocation] Requesting access, current status: ${currentStatus}`)
 
@@ -81,18 +97,12 @@ export class PluginGeolocation {
       return currentStatus
     }
 
-    // macOS: 通过原生 helper 触发真实授权
-    if (process.platform === 'darwin' && this.nativeBinaryPath) {
+    if (process.platform === 'darwin') {
       this.nativeAccessAttempted = true
       try {
-        const nativeResult = await this.fetchNativeLocation(15000)
-        const coordinates = this.parseCoordinates(nativeResult)
-        if (coordinates) {
-          this.setNativeAccessStatus('granted')
-          return 'granted'
-        }
-        this.setNativeAccessStatus('unknown')
-        return 'unknown'
+        await this.getNativePosition(webContents, 15000)
+        this.setNativeAccessStatus('granted')
+        return 'granted'
       } catch (error) {
         const status = this.classifyNativeError(error)
         this.setNativeAccessStatus(status)
@@ -103,12 +113,6 @@ export class PluginGeolocation {
       }
     }
 
-    if (currentStatus === 'denied' || currentStatus === 'restricted') {
-      permissionManager.openSystemSettings('geolocation')
-      return currentStatus
-    }
-
-    // 非 macOS 的后备逻辑
     const status = await permissionManager.request('geolocation')
     return this.normalizePermissionStatus(status)
   }
@@ -129,32 +133,21 @@ export class PluginGeolocation {
 
   /**
    * 获取当前位置
-   * macOS: 优先使用原生 Core Location API (精确定位)
+   * macOS: 优先使用主进程内 geolocation（无外部 helper）
    * 后备: 使用 IP 地理位置 (约 5km 精度)
    */
-  async getCurrentPosition(): Promise<GeolocationPosition> {
-    // macOS: 尝试使用原生定位（带超时）
-    if (process.platform === 'darwin' && this.nativeBinaryPath) {
+  async getCurrentPosition(webContents?: WebContents): Promise<GeolocationPosition> {
+    if (process.platform === 'darwin') {
       try {
-        const nativeResult = await this.fetchNativeLocation(10000)
-        const nativeCoordinates = this.parseCoordinates(nativeResult)
-        if (nativeCoordinates) {
-          this.setNativeAccessStatus('granted')
-          return {
-            latitude: nativeCoordinates.latitude,
-            longitude: nativeCoordinates.longitude,
-            accuracy: 10,
-            source: 'native',
-            timestamp: Date.now()
-          }
-        }
-        log.warn('[Geolocation] Native location output missing coordinates, fallback to IP')
+        const nativePosition = await this.getNativePosition(webContents, 10000)
+        this.setNativeAccessStatus('granted')
+        return nativePosition
       } catch (error) {
         const status = this.classifyNativeError(error)
         if (status === 'denied' || status === 'restricted') {
           this.setNativeAccessStatus(status)
         }
-        log.warn('[Geolocation] Native location failed, fallback to IP:', error)
+        log.warn('[Geolocation] Native position failed, fallback to IP:', error)
       }
     }
 
@@ -187,90 +180,145 @@ export class PluginGeolocation {
     permissionManager.setGeolocationStatus(permissionStatus)
   }
 
-  private resolveNativeBinaryPath(): string | null {
+  private pickWebContents(preferred?: WebContents): WebContents | null {
+    if (preferred && !preferred.isDestroyed()) {
+      return preferred
+    }
+
+    const focused = BrowserWindow.getFocusedWindow()
+    if (focused && !focused.isDestroyed()) {
+      return focused.webContents
+    }
+
+    const fallback = BrowserWindow.getAllWindows().find((win) => !win.isDestroyed())
+    if (fallback) {
+      return fallback.webContents
+    }
+
+    return null
+  }
+
+  private async getNativePosition(preferredWebContents: WebContents | undefined, timeoutMs: number): Promise<GeolocationPosition> {
+    const target = this.pickWebContents(preferredWebContents)
+    if (!target || target.isDestroyed()) {
+      const error: ProbeError = new Error('No available webContents to request geolocation')
+      error.code = null
+      throw error
+    }
+
+    const script = `
+      new Promise((resolve) => {
+        const secureContext = window.isSecureContext === true
+        const hasGeolocation = typeof navigator !== 'undefined' && !!navigator.geolocation
+
+        if (!hasGeolocation) {
+          resolve({
+            ok: false,
+            error: {
+              code: null,
+              message: 'navigator.geolocation is unavailable',
+              secureContext,
+              hasGeolocation
+            }
+          })
+          return
+        }
+
+        navigator.geolocation.getCurrentPosition(
+          (position) => {
+            resolve({
+              ok: true,
+              coords: {
+                latitude: position.coords.latitude,
+                longitude: position.coords.longitude,
+                accuracy: position.coords.accuracy,
+                altitude: position.coords.altitude,
+                altitudeAccuracy: position.coords.altitudeAccuracy,
+                heading: position.coords.heading,
+                speed: position.coords.speed,
+                timestamp: position.timestamp,
+                secureContext
+              }
+            })
+          },
+          (error) => {
+            resolve({
+              ok: false,
+              error: {
+                code: typeof error.code === 'number' ? error.code : null,
+                message: String(error.message || 'Unknown geolocation error'),
+                secureContext,
+                hasGeolocation
+              }
+            })
+          },
+          {
+            enableHighAccuracy: true,
+            timeout: ${Math.max(1000, Math.floor(timeoutMs))},
+            maximumAge: 0
+          }
+        )
+      })
+    `
+
+    let probeResult: NativeProbeResult
     try {
-      const moduleEntry = require.resolve('electron-get-location')
-      const moduleDir = dirname(moduleEntry)
-      const unpackedDir = moduleDir.replace('app.asar', 'app.asar.unpacked')
-
-      const candidates = [
-        join(moduleDir, 'main'),
-        join(unpackedDir, 'main'),
-        join(process.resourcesPath, 'app.asar.unpacked', 'node_modules', 'electron-get-location', 'main'),
-        join(process.cwd(), 'node_modules', 'electron-get-location', 'main')
-      ]
-
-      const found = candidates.find((candidate) => existsSync(candidate))
-      if (found) {
-        log.info(`[Geolocation] Native helper resolved: ${found}`)
-        return found
-      }
-
-      log.warn('[Geolocation] Native helper not found in candidates:', candidates)
-      return null
+      probeResult = await target.executeJavaScript(script, true) as NativeProbeResult
     } catch (error) {
-      log.warn('[Geolocation] Failed to resolve native helper path:', error)
-      return null
+      const probeError: ProbeError = new Error(
+        `Failed to execute geolocation probe: ${error instanceof Error ? error.message : String(error)}`
+      )
+      probeError.code = null
+      throw probeError
     }
-  }
 
-  private parseNativeOutput(output: string): Record<string, string> {
-    const result: Record<string, string> = {}
-    const lines = output.split('\n')
+    if (probeResult.ok) {
+      const coords = probeResult.coords
+      const latitude = this.parseCoordinate(coords.latitude)
+      const longitude = this.parseCoordinate(coords.longitude)
+      const accuracy = this.parseCoordinate(coords.accuracy)
 
-    for (const line of lines) {
-      const separatorIndex = line.indexOf(':')
-      if (separatorIndex <= 0) continue
-
-      const key = line.slice(0, separatorIndex).trim()
-      let value = line.slice(separatorIndex + 1).trim()
-      if (!key || !value) continue
-
-      if (key === 'timezone') {
-        value = value.replace(' (current)', '')
+      if (latitude === null || longitude === null || accuracy === null) {
+        const parseError: ProbeError = new Error('Native geolocation returned invalid coordinates')
+        parseError.code = null
+        throw parseError
       }
 
-      result[key] = value
+      log.info(
+        `[Geolocation] Native probe success (webContents=${target.id}, secure=${coords.secureContext}, accuracy=${accuracy})`
+      )
+
+      return {
+        latitude,
+        longitude,
+        accuracy,
+        source: 'native',
+        altitude: this.parseCoordinate(coords.altitude) ?? undefined,
+        altitudeAccuracy: this.parseCoordinate(coords.altitudeAccuracy) ?? undefined,
+        heading: this.parseCoordinate(coords.heading) ?? undefined,
+        speed: this.parseCoordinate(coords.speed) ?? undefined,
+        timestamp: Number.isFinite(coords.timestamp) ? coords.timestamp : Date.now()
+      }
     }
 
-    return result
-  }
+    const probeError: ProbeError = new Error(
+      `Native geolocation failed: ${probeResult.error.message}; code=${probeResult.error.code}; secure=${probeResult.error.secureContext}`
+    )
+    probeError.code = probeResult.error.code
 
-  private async fetchNativeLocation(timeoutMs: number): Promise<Record<string, string>> {
-    if (!this.nativeBinaryPath) {
-      throw new Error('Native location helper is unavailable')
-    }
+    log.warn(
+      `[Geolocation] Native probe failed (webContents=${target.id}, code=${probeResult.error.code}, secure=${probeResult.error.secureContext}, hasGeo=${probeResult.error.hasGeolocation}): ${probeResult.error.message}`
+    )
 
-    const { stdout, stderr } = await execFileAsync(this.nativeBinaryPath, [], {
-      timeout: timeoutMs,
-      maxBuffer: 256 * 1024
-    })
-
-    const stdoutText = String(stdout ?? '').trim()
-    const stderrText = String(stderr ?? '').trim()
-
-    if (stderrText.length > 0) {
-      throw new Error(stderrText)
-    }
-
-    if (!stdoutText) {
-      throw new Error('Native location helper returned empty output')
-    }
-
-    if (stdoutText.includes('Error:')) {
-      const message = stdoutText.split('Error:').pop()?.trim() || stdoutText
-      throw new Error(message)
-    }
-
-    const parsed = this.parseNativeOutput(stdoutText)
-    if (!parsed.latitude || !parsed.longitude) {
-      throw new Error(`Native location helper output missing coordinates: ${stdoutText}`)
-    }
-
-    return parsed
+    throw probeError
   }
 
   private classifyNativeError(error: unknown): GeolocationAccessStatus {
+    const code = (error as ProbeError | undefined)?.code
+    if (code === 1) {
+      return 'denied'
+    }
+
     const message = String(error instanceof Error ? error.message : error).toLowerCase()
     if (message.includes('restricted')) {
       return 'restricted'
@@ -279,7 +327,7 @@ export class PluginGeolocation {
       message.includes('denied') ||
       message.includes('not authorized') ||
       message.includes('not permitted') ||
-      message.includes('kclerrordomain') && (message.includes('code=1') || message.includes('error 1'))
+      message.includes('permission denied')
     ) {
       return 'denied'
     }
@@ -287,31 +335,6 @@ export class PluginGeolocation {
       return 'not-determined'
     }
     return 'unknown'
-  }
-
-  private parseCoordinates(rawLocation: unknown): { latitude: number; longitude: number } | null {
-    if (typeof rawLocation === 'string') {
-      const parts = rawLocation.split(',')
-      if (parts.length >= 2) {
-        const latitude = this.parseCoordinate(parts[0])
-        const longitude = this.parseCoordinate(parts[1])
-        if (latitude !== null && longitude !== null) {
-          return { latitude, longitude }
-        }
-      }
-      return null
-    }
-
-    if (rawLocation && typeof rawLocation === 'object') {
-      const location = rawLocation as Record<string, unknown>
-      const latitude = this.parseCoordinate(location.latitude ?? location.lat)
-      const longitude = this.parseCoordinate(location.longitude ?? location.lon)
-      if (latitude !== null && longitude !== null) {
-        return { latitude, longitude }
-      }
-    }
-
-    return null
   }
 
   private parseCoordinate(value: unknown): number | null {
