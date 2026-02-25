@@ -24,7 +24,7 @@ export class PluginInstaller {
   }
 
   async install(filePath: string): Promise<InstallResult> {
-    if (!filePath.endsWith('.inplugin')) {
+    if (!String(filePath).toLowerCase().endsWith('.inplugin')) {
       return { success: false, error: '无效的插件文件格式' }
     }
 

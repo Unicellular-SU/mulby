@@ -47,6 +47,14 @@ interface UiAttachment extends InputAttachment {
   previewUrl?: string
 }
 
+type DroppedFile = File & { path?: string }
+
+function isInpluginFile(file: DroppedFile): boolean {
+  const normalizedName = String(file.name || '').toLowerCase()
+  const normalizedPath = String(file.path || '').toLowerCase()
+  return normalizedName.endsWith('.inplugin') || normalizedPath.endsWith('.inplugin')
+}
+
 const SearchInput = forwardRef<SearchInputRef, SearchInputProps>(function SearchInput({
   value,
   onChange,
@@ -147,8 +155,9 @@ const SearchInput = forwardRef<SearchInputRef, SearchInputProps>(function Search
   }, [attachments, onAttachmentsChange])
 
   const handleDrop = useCallback(async (e: React.DragEvent<HTMLTextAreaElement>) => {
-    const files = Array.from(e.dataTransfer.files || [])
-    if (files.some((file) => file.path?.endsWith('.inplugin'))) return
+    const files = Array.from(e.dataTransfer.files || []) as DroppedFile[]
+    // .inplugin 交给上层 App 统一安装处理，这里不吞掉事件
+    if (files.some(isInpluginFile)) return
 
     e.preventDefault()
     e.stopPropagation()

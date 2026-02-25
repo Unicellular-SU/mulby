@@ -92,6 +92,7 @@ body {
   -webkit-backdrop-filter: blur(var(--glass-blur-strong));
   display: flex;
   flex-direction: column;
+  position: relative;
 }
 
 .app-home .plugin-grid {
@@ -283,6 +284,30 @@ body {
   align-items: center;
   flex: 1;
   gap: 12px;
+}
+
+.drop-hint {
+  position: absolute;
+  inset: 8px;
+  z-index: 40;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 12px;
+  border: 2px dashed rgba(59, 130, 246, 0.65);
+  background: rgba(219, 234, 254, 0.72);
+  color: #1e3a8a;
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  pointer-events: none;
+  -webkit-app-region: no-drag;
+}
+
+.dark .drop-hint {
+  border-color: rgba(96, 165, 250, 0.7);
+  background: rgba(30, 58, 138, 0.45);
+  color: #dbeafe;
 }
 
 .search-icon {

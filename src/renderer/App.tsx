@@ -32,7 +32,13 @@ interface SearchPerfTrace {
   attachmentCount: number
 }
 
+type DroppedFile = File & { path?: string }
 
+function isInpluginFile(file: DroppedFile): boolean {
+  const normalizedName = String(file.name || '').toLowerCase()
+  const normalizedPath = String(file.path || '').toLowerCase()
+  return normalizedName.endsWith('.inplugin') || normalizedPath.endsWith('.inplugin')
+}
 
 function App() {
   const [query, setQuery] = useState('')
@@ -447,16 +453,28 @@ function App() {
   // 拖拽安装插件
   const handleDrop = async (e: React.DragEvent) => {
     e.preventDefault()
+    e.stopPropagation()
     setIsDragging(false)
 
-    const file = e.dataTransfer.files[0]
-    if (file?.path?.endsWith('.inplugin')) {
-      const result = await window.mulby.plugin.install(file.path)
+    const files = Array.from(e.dataTransfer.files || []) as DroppedFile[]
+    const pluginFile = files.find(isInpluginFile)
+    if (!pluginFile) return
+
+    if (!pluginFile.path) {
+      window.mulby.notification.show('无法读取插件包路径，请从本地文件管理器拖放 .inplugin 文件', 'error')
+      return
+    }
+
+    try {
+      const result = await window.mulby.plugin.install(pluginFile.path)
       if (result.success) {
         window.mulby.notification.show(`插件 ${result.pluginName} 安装成功`)
       } else {
         window.mulby.notification.show(result.error || '安装失败', 'error')
       }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : '安装失败'
+      window.mulby.notification.show(message, 'error')
     }
   }
 
@@ -579,8 +597,17 @@ function App() {
   return (
     <div
       className={`app app-home ${isDragging ? 'dragging' : ''}`}
-      onDragOver={(e) => { e.preventDefault(); setIsDragging(true) }}
-      onDragLeave={() => setIsDragging(false)}
+      onDragOver={(e) => {
+        e.preventDefault()
+        if (!isDragging) {
+          setIsDragging(true)
+        }
+      }}
+      onDragLeave={(e) => {
+        const nextTarget = e.relatedTarget as Node | null
+        if (nextTarget && e.currentTarget.contains(nextTarget)) return
+        setIsDragging(false)
+      }}
       onDrop={handleDrop}
     >
       <div className={`search-box-container ${hasBottomPanel ? 'with-bottom-panel' : ''}`}>
