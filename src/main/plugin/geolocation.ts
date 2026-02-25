@@ -1,11 +1,18 @@
 import log from 'electron-log'
 import { net } from 'electron'
-import { permissionManager } from './permission-manager'
+import { dirname, join } from 'path'
+import { existsSync } from 'fs'
+import { promisify } from 'util'
+import { execFile } from 'child_process'
+import { permissionManager, type PermissionStatus } from './permission-manager'
+
+const execFileAsync = promisify(execFile)
 
 export interface GeolocationPosition {
   latitude: number
   longitude: number
   accuracy: number
+  source: 'native' | 'ip'
   altitude?: number
   altitudeAccuracy?: number
   heading?: number
@@ -15,29 +22,146 @@ export interface GeolocationPosition {
 
 export type GeolocationAccessStatus = 'not-determined' | 'granted' | 'denied' | 'restricted' | 'unknown'
 
-// 动态加载 electron-get-location（仅 macOS 可用）
-let getLocationNative: (() => Promise<string>) | null = null
-if (process.platform === 'darwin') {
-  try {
-    getLocationNative = require('electron-get-location')
-    log.info('[Geolocation] Loaded electron-get-location for macOS native location')
-  } catch (error) {
-    log.warn('[Geolocation] Failed to load electron-get-location:', error)
-  }
-}
-
 export class PluginGeolocation {
+  private nativeBinaryPath: string | null = null
+  private nativeAccessStatus: GeolocationAccessStatus | null = null
+  private nativeAccessAttempted = false
+
+  constructor() {
+    if (process.platform === 'darwin') {
+      this.nativeBinaryPath = this.resolveNativeBinaryPath()
+    }
+  }
+
   /**
    * 检查位置权限状态
    */
   getAccessStatus(): GeolocationAccessStatus {
-    log.info('[Geolocation] Getting access status...')
-    log.info(`[Geolocation] Platform: ${process.platform}`)
+    if (process.platform === 'darwin') {
+      if (this.nativeAccessStatus) {
+        return this.nativeAccessStatus
+      }
 
-    const status = permissionManager.getStatus('geolocation')
-    log.info(`[Geolocation] Permission manager status: ${status}`)
+      const status = permissionManager.getStatus('geolocation')
+      if (status === 'granted') {
+        this.setNativeAccessStatus('granted')
+        return 'granted'
+      }
+      if (status === 'restricted' || status === 'limited') {
+        this.setNativeAccessStatus('restricted')
+        return 'restricted'
+      }
+      if (status === 'not-determined') {
+        return 'not-determined'
+      }
+      if (status === 'denied') {
+        // node-mac-permissions 在 location 上存在误报 denied 的问题：
+        // 未真实请求过时，先按 not-determined 处理，允许走一次原生请求流程。
+        return this.nativeAccessAttempted ? 'denied' : 'not-determined'
+      }
+      return 'unknown'
+    }
 
-    // 标准化返回值
+    return this.normalizePermissionStatus(permissionManager.getStatus('geolocation'))
+  }
+
+  /**
+   * 请求位置权限
+   */
+  async requestAccess(): Promise<GeolocationAccessStatus> {
+    const currentStatus = this.getAccessStatus()
+    log.info(`[Geolocation] Requesting access, current status: ${currentStatus}`)
+
+    if (currentStatus === 'granted') {
+      return 'granted'
+    }
+
+    if ((currentStatus === 'denied' || currentStatus === 'restricted') && this.nativeAccessAttempted) {
+      permissionManager.openSystemSettings('geolocation')
+      return currentStatus
+    }
+
+    // macOS: 通过原生 helper 触发真实授权
+    if (process.platform === 'darwin' && this.nativeBinaryPath) {
+      this.nativeAccessAttempted = true
+      try {
+        const nativeResult = await this.fetchNativeLocation(15000)
+        const coordinates = this.parseCoordinates(nativeResult)
+        if (coordinates) {
+          this.setNativeAccessStatus('granted')
+          return 'granted'
+        }
+        this.setNativeAccessStatus('unknown')
+        return 'unknown'
+      } catch (error) {
+        const status = this.classifyNativeError(error)
+        this.setNativeAccessStatus(status)
+        if (status === 'denied' || status === 'restricted') {
+          permissionManager.openSystemSettings('geolocation')
+        }
+        return status
+      }
+    }
+
+    if (currentStatus === 'denied' || currentStatus === 'restricted') {
+      permissionManager.openSystemSettings('geolocation')
+      return currentStatus
+    }
+
+    // 非 macOS 的后备逻辑
+    const status = await permissionManager.request('geolocation')
+    return this.normalizePermissionStatus(status)
+  }
+
+  /**
+   * 检查是否可以获取位置
+   */
+  canGetPosition(): boolean {
+    return this.getAccessStatus() === 'granted'
+  }
+
+  /**
+   * 打开系统位置设置
+   */
+  openSettings(): void {
+    permissionManager.openSystemSettings('geolocation')
+  }
+
+  /**
+   * 获取当前位置
+   * macOS: 优先使用原生 Core Location API (精确定位)
+   * 后备: 使用 IP 地理位置 (约 5km 精度)
+   */
+  async getCurrentPosition(): Promise<GeolocationPosition> {
+    // macOS: 尝试使用原生定位（带超时）
+    if (process.platform === 'darwin' && this.nativeBinaryPath) {
+      try {
+        const nativeResult = await this.fetchNativeLocation(10000)
+        const nativeCoordinates = this.parseCoordinates(nativeResult)
+        if (nativeCoordinates) {
+          this.setNativeAccessStatus('granted')
+          return {
+            latitude: nativeCoordinates.latitude,
+            longitude: nativeCoordinates.longitude,
+            accuracy: 10,
+            source: 'native',
+            timestamp: Date.now()
+          }
+        }
+        log.warn('[Geolocation] Native location output missing coordinates, fallback to IP')
+      } catch (error) {
+        const status = this.classifyNativeError(error)
+        if (status === 'denied' || status === 'restricted') {
+          this.setNativeAccessStatus(status)
+        }
+        log.warn('[Geolocation] Native location failed, fallback to IP:', error)
+      }
+    }
+
+    return this.getPositionByIP()
+  }
+
+  private normalizePermissionStatus(status: PermissionStatus): GeolocationAccessStatus {
     switch (status) {
       case 'granted':
         return 'granted'
@@ -53,112 +177,154 @@ export class PluginGeolocation {
     }
   }
 
-  /**
-   * 请求位置权限
-   */
-  async requestAccess(): Promise<GeolocationAccessStatus> {
-    log.info('[Geolocation] Requesting access...')
+  private setNativeAccessStatus(status: GeolocationAccessStatus | null): void {
+    this.nativeAccessStatus = status
 
-    const currentStatus = this.getAccessStatus()
-    log.info(`[Geolocation] Current status before request: ${currentStatus}`)
+    let permissionStatus: PermissionStatus | null = null
+    if (status === 'granted' || status === 'denied' || status === 'not-determined' || status === 'restricted') {
+      permissionStatus = status
+    }
+    permissionManager.setGeolocationStatus(permissionStatus)
+  }
 
-    if (currentStatus === 'granted') {
-      log.info('[Geolocation] Already granted, no need to request')
-      return 'granted'
+  private resolveNativeBinaryPath(): string | null {
+    try {
+      const moduleEntry = require.resolve('electron-get-location')
+      const moduleDir = dirname(moduleEntry)
+      const unpackedDir = moduleDir.replace('app.asar', 'app.asar.unpacked')
+
+      const candidates = [
+        join(moduleDir, 'main'),
+        join(unpackedDir, 'main'),
+        join(process.resourcesPath, 'app.asar.unpacked', 'node_modules', 'electron-get-location', 'main'),
+        join(process.cwd(), 'node_modules', 'electron-get-location', 'main')
+      ]
+
+      const found = candidates.find((candidate) => existsSync(candidate))
+      if (found) {
+        log.info(`[Geolocation] Native helper resolved: ${found}`)
+        return found
+      }
+
+      log.warn('[Geolocation] Native helper not found in candidates:', candidates)
+      return null
+    } catch (error) {
+      log.warn('[Geolocation] Failed to resolve native helper path:', error)
+      return null
+    }
+  }
+
+  private parseNativeOutput(output: string): Record<string, string> {
+    const result: Record<string, string> = {}
+    const lines = output.split('\n')
+
+    for (const line of lines) {
+      const separatorIndex = line.indexOf(':')
+      if (separatorIndex <= 0) continue
+
+      const key = line.slice(0, separatorIndex).trim()
+      let value = line.slice(separatorIndex + 1).trim()
+      if (!key || !value) continue
+
+      if (key === 'timezone') {
+        value = value.replace(' (current)', '')
+      }
+
+      result[key] = value
     }
 
-    if (currentStatus === 'denied' || currentStatus === 'restricted') {
-      log.warn(`[Geolocation] Cannot request: status is ${currentStatus}`)
-      log.info('[Geolocation] User needs to enable location in system settings')
-      // 打开系统设置
-      permissionManager.openSystemSettings('geolocation')
-      return currentStatus
+    return result
+  }
+
+  private async fetchNativeLocation(timeoutMs: number): Promise<Record<string, string>> {
+    if (!this.nativeBinaryPath) {
+      throw new Error('Native location helper is unavailable')
     }
 
-    // 尝试请求权限
-    const result = await permissionManager.request('geolocation')
-    log.info(`[Geolocation] Request result: ${result}`)
+    const { stdout, stderr } = await execFileAsync(this.nativeBinaryPath, [], {
+      timeout: timeoutMs,
+      maxBuffer: 256 * 1024
+    })
 
-    return this.getAccessStatus()
+    const stdoutText = String(stdout ?? '').trim()
+    const stderrText = String(stderr ?? '').trim()
+
+    if (stderrText.length > 0) {
+      throw new Error(stderrText)
+    }
+
+    if (!stdoutText) {
+      throw new Error('Native location helper returned empty output')
+    }
+
+    if (stdoutText.includes('Error:')) {
+      const message = stdoutText.split('Error:').pop()?.trim() || stdoutText
+      throw new Error(message)
+    }
+
+    const parsed = this.parseNativeOutput(stdoutText)
+    if (!parsed.latitude || !parsed.longitude) {
+      throw new Error(`Native location helper output missing coordinates: ${stdoutText}`)
+    }
+
+    return parsed
   }
 
-  /**
-   * 检查是否可以获取位置
-   */
-  canGetPosition(): boolean {
-    const status = this.getAccessStatus()
-    const canGet = status === 'granted'
-    log.info(`[Geolocation] Can get position: ${canGet} (status: ${status})`)
-    return canGet
+  private classifyNativeError(error: unknown): GeolocationAccessStatus {
+    const message = String(error instanceof Error ? error.message : error).toLowerCase()
+    if (message.includes('restricted')) {
+      return 'restricted'
+    }
+    if (
+      message.includes('denied') ||
+      message.includes('not authorized') ||
+      message.includes('not permitted') ||
+      message.includes('kclerrordomain') && (message.includes('code=1') || message.includes('error 1'))
+    ) {
+      return 'denied'
+    }
+    if (message.includes('not determined')) {
+      return 'not-determined'
+    }
+    return 'unknown'
   }
 
-  /**
-   * 打开系统位置设置
-   */
-  openSettings(): void {
-    log.info('[Geolocation] Opening system location settings')
-    permissionManager.openSystemSettings('geolocation')
-  }
-
-  /**
-   * 获取当前位置
-   * macOS: 优先使用原生 Core Location API (精确定位)
-   * 后备: 使用 IP 地理位置 (约 5km 精度)
-   */
-  async getCurrentPosition(): Promise<GeolocationPosition> {
-    log.info('[Geolocation] Getting current position...')
-
-    // macOS: 尝试使用原生定位（带超时）
-    if (process.platform === 'darwin' && getLocationNative) {
-      try {
-        log.info('[Geolocation] Using native macOS Core Location...')
-
-        // 添加 10 秒超时
-        const result = await this.withTimeout(
-          getLocationNative(),
-          10000,
-          'Native location timeout'
-        )
-        log.info('[Geolocation] Native location result:', result)
-
-        // electron-get-location 返回格式: "latitude,longitude" 或包含更多信息
-        const parts = result.split(',').map((s: string) => parseFloat(s.trim()))
-        if (parts.length >= 2 && !isNaN(parts[0]) && !isNaN(parts[1])) {
-          return {
-            latitude: parts[0],
-            longitude: parts[1],
-            accuracy: 10, // 原生定位精度约 10 米
-            timestamp: Date.now()
-          }
+  private parseCoordinates(rawLocation: unknown): { latitude: number; longitude: number } | null {
+    if (typeof rawLocation === 'string') {
+      const parts = rawLocation.split(',')
+      if (parts.length >= 2) {
+        const latitude = this.parseCoordinate(parts[0])
+        const longitude = this.parseCoordinate(parts[1])
+        if (latitude !== null && longitude !== null) {
+          return { latitude, longitude }
         }
-      } catch (error) {
-        log.warn('[Geolocation] Native location failed, falling back to IP:', error)
+      }
+      return null
+    }
+
+    if (rawLocation && typeof rawLocation === 'object') {
+      const location = rawLocation as Record<string, unknown>
+      const latitude = this.parseCoordinate(location.latitude ?? location.lat)
+      const longitude = this.parseCoordinate(location.longitude ?? location.lon)
+      if (latitude !== null && longitude !== null) {
+        return { latitude, longitude }
       }
     }
 
-    // 后备：IP 地理位置
-    return this.getPositionByIP()
+    return null
   }
 
-  /**
-   * 带超时的 Promise 包装器
-   */
-  private withTimeout<T>(promise: Promise<T>, timeoutMs: number, errorMessage: string): Promise<T> {
-    return new Promise((resolve, reject) => {
-      const timer = setTimeout(() => {
-        reject(new Error(errorMessage))
-      }, timeoutMs)
+  private parseCoordinate(value: unknown): number | null {
+    if (typeof value === 'number') {
+      return Number.isFinite(value) ? value : null
+    }
 
-      promise
-        .then((result) => {
-          clearTimeout(timer)
-          resolve(result)
-        })
-        .catch((error) => {
-          clearTimeout(timer)
-          reject(error)
-        })
-    })
+    if (typeof value === 'string') {
+      const parsed = Number.parseFloat(value.trim())
+      return Number.isFinite(parsed) ? parsed : null
+    }
+
+    return null
   }
 
   /**
@@ -167,7 +333,6 @@ export class PluginGeolocation {
   private async getPositionByIP(): Promise<GeolocationPosition> {
     log.info('[Geolocation] Using IP geolocation fallback...')
 
-    // 尝试多个 IP 地理位置服务
     const services = [
       {
         name: 'freegeoip.app',
@@ -175,7 +340,7 @@ export class PluginGeolocation {
         parse: (data: any) => ({
           latitude: data.latitude,
           longitude: data.longitude,
-          accuracy: 5000, // IP 定位精度约 5km
+          accuracy: 5000,
         })
       },
       {
@@ -203,13 +368,16 @@ export class PluginGeolocation {
         log.info(`[Geolocation] Trying ${service.name}...`)
         const result = await this.fetchLocation(service.url)
         const parsed = service.parse(result)
+        const latitude = this.parseCoordinate(parsed.latitude)
+        const longitude = this.parseCoordinate(parsed.longitude)
 
-        if (parsed.latitude && parsed.longitude) {
+        if (latitude !== null && longitude !== null) {
           log.info(`[Geolocation] Got position from ${service.name}:`, parsed)
           return {
-            latitude: parsed.latitude,
-            longitude: parsed.longitude,
+            latitude,
+            longitude,
             accuracy: parsed.accuracy,
+            source: 'ip',
             timestamp: Date.now()
           }
         }
@@ -233,7 +401,7 @@ export class PluginGeolocation {
         response.on('end', () => {
           try {
             resolve(JSON.parse(data))
-          } catch (e) {
+          } catch {
             reject(new Error('Failed to parse response'))
           }
         })

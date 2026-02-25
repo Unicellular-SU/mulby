@@ -33,7 +33,7 @@ export function registerGeolocationHandlers() {
     pluginGeolocation.openSettings()
   })
 
-  // 获取当前位置（使用主进程 IP 地理定位，避免 Google 服务问题）
+  // 获取当前位置（macOS 原生定位优先，IP 地理定位作为后备）
   ipcMain.handle('geolocation:getCurrentPosition', async () => {
     log.info('[IPC] geolocation:getCurrentPosition called')
     try {
@@ -46,4 +46,3 @@ export function registerGeolocationHandlers() {
     }
   })
 }
-

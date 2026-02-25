@@ -73,6 +73,7 @@ function mapToMacPermissionType(type: PermissionType): string | null {
 export class PermissionManager {
     private static instance: PermissionManager
     private sessionHandlerSetup = false
+    private geolocationStatusOverride: PermissionStatus | null = null
 
     private constructor() {
         log.info('[PermissionManager] Initializing...')
@@ -120,6 +121,11 @@ export class PermissionManager {
                     if (process.platform === 'darwin') {
                         const status = this.getStatus(permType)
                         log.info(`[PermissionManager] macOS status for ${permType}: ${status}`)
+                        if (permType === 'geolocation') {
+                            // geolocation 在 not-determined 时必须允许请求，才能触发系统授权弹窗
+                            callback(status !== 'denied' && status !== 'restricted')
+                            return
+                        }
                         callback(status === 'granted')
                     } else {
                         // Windows/Linux: 默认允许（可以在这里添加自定义 UI）
@@ -147,6 +153,9 @@ export class PermissionManager {
                 const permType = this.mapElectronPermission(permission)
                 if (permType) {
                     const status = this.getStatus(permType)
+                    if (permType === 'geolocation') {
+                        return status === 'granted' || status === 'not-determined'
+                    }
                     return status === 'granted'
                 }
 
@@ -177,13 +186,29 @@ export class PermissionManager {
     getStatus(type: PermissionType): PermissionStatus {
         log.info(`[PermissionManager] Getting status for: ${type}`)
 
+        if (type === 'geolocation' && this.geolocationStatusOverride) {
+            return this.geolocationStatusOverride
+        }
+
         if (process.platform === 'darwin' && permissions) {
             const macType = mapToMacPermissionType(type)
             if (macType) {
                 try {
                     const status = permissions.getAuthStatus(macType)
                     log.info(`[PermissionManager] macOS ${type} status: ${status}`)
-                    return normalizeStatus(status)
+                    const normalized = normalizeStatus(status)
+
+                    if (type === 'geolocation') {
+                        if (normalized === 'granted' || normalized === 'restricted') {
+                            return normalized
+                        }
+                        if (normalized === 'denied') {
+                            // node-mac-permissions v2.5.0 在 location 未请求时也可能返回 denied
+                            return 'not-determined'
+                        }
+                    }
+
+                    return normalized
                 } catch (error) {
                     log.error(`[PermissionManager] Error getting status for ${type}:`, error)
                     return 'unknown'
@@ -329,6 +354,13 @@ export class PermissionManager {
     isAccessibilityTrusted(): boolean {
         if (process.platform !== 'darwin') return true
         return systemPreferences.isTrustedAccessibilityClient(false)
+    }
+
+    /**
+     * 供 geolocation 模块回写更可信的定位权限状态
+     */
+    setGeolocationStatus(status: PermissionStatus | null): void {
+        this.geolocationStatusOverride = status
     }
 }
 

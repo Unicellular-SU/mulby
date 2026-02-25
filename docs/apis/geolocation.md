@@ -82,6 +82,7 @@ interface GeolocationPosition {
   latitude: number      // 纬度
   longitude: number     // 经度
   accuracy: number      // 精度（米）
+  source: 'native' | 'ip' // 定位来源：原生或 IP 后备
   altitude?: number     // 海拔
   altitudeAccuracy?: number
   heading?: number      // 方向

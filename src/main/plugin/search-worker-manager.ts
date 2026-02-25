@@ -1,5 +1,6 @@
 import { app, utilityProcess, UtilityProcess } from 'electron'
 import { join } from 'path'
+import { existsSync } from 'fs'
 import type { InputPayload } from '../../shared/types/plugin'
 import type { SearchPluginData, SearchRequest, SearchResponse, SearchResultRef } from './search-protocol'
 
@@ -23,9 +24,7 @@ export class PluginSearchWorker {
   private readyTimeout: NodeJS.Timeout | null = null
 
   constructor() {
-    this.workerPath = app.isPackaged
-      ? join(process.resourcesPath, 'app', 'dist', 'worker', 'search-worker.js')
-      : join(process.cwd(), 'dist', 'worker', 'search-worker.js')
+    this.workerPath = this.resolveWorkerPath('search-worker.js')
   }
 
   async search(input: InputPayload, plugins: SearchPluginData[]): Promise<SearchResultRef[]> {
@@ -159,5 +158,24 @@ export class PluginSearchWorker {
 
   private generateId(): string {
     return `${Date.now()}-${Math.random().toString(36).slice(2, 11)}`
+  }
+
+  private resolveWorkerPath(fileName: string): string {
+    const candidates = [
+      join(process.cwd(), 'dist', 'worker', fileName),
+      join(app.getAppPath(), 'dist', 'worker', fileName),
+      join(process.resourcesPath, 'app.asar.unpacked', 'dist', 'worker', fileName),
+      join(process.resourcesPath, 'app', 'dist', 'worker', fileName),
+    ]
+
+    const found = candidates.find((candidate) => existsSync(candidate))
+    if (found) {
+      console.log(`[SearchWorker] Worker resolved: ${found}`)
+      return found
+    }
+
+    const fallback = join(app.getAppPath(), 'dist', 'worker', fileName)
+    console.warn(`[SearchWorker] Worker path fallback: ${fallback}`)
+    return fallback
   }
 }

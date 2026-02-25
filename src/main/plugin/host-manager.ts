@@ -5,6 +5,7 @@
 
 import { utilityProcess, UtilityProcess, app } from 'electron'
 import { join } from 'path'
+import { existsSync } from 'fs'
 import { EventEmitter } from 'events'
 import type {
   HostRequest,
@@ -49,10 +50,7 @@ export class PluginHostManager extends EventEmitter {
 
   constructor() {
     super()
-    // Worker 文件路径（编译后）
-    this.workerPath = app.isPackaged
-      ? join(process.resourcesPath, 'app', 'dist', 'worker', 'host-worker.js')
-      : join(process.cwd(), 'dist', 'worker', 'host-worker.js')
+    this.workerPath = this.resolveWorkerPath('host-worker.js')
 
     // 初始化 Watchdog
     this.watchdog = new PluginHostWatchdog()
@@ -61,6 +59,29 @@ export class PluginHostManager extends EventEmitter {
 
     // Phase 4: 初始化消息总线
     this.messageBus = new PluginMessageBus()
+  }
+
+  /**
+   * 解析 Worker 文件路径（兼容开发环境与 asar 打包环境）
+   */
+  private resolveWorkerPath(fileName: string): string {
+    const candidates = [
+      join(process.cwd(), 'dist', 'worker', fileName),
+      join(app.getAppPath(), 'dist', 'worker', fileName),
+      join(process.resourcesPath, 'app.asar.unpacked', 'dist', 'worker', fileName),
+      join(process.resourcesPath, 'app', 'dist', 'worker', fileName),
+    ]
+
+    const found = candidates.find((candidate) => existsSync(candidate))
+    if (found) {
+      console.log(`[HostManager] Worker resolved: ${found}`)
+      return found
+    }
+
+    // asar 虚拟路径在部分场景 existsSync 可能返回 false，回退到 app.getAppPath 路径
+    const fallback = join(app.getAppPath(), 'dist', 'worker', fileName)
+    console.warn(`[HostManager] Worker path fallback: ${fallback}`)
+    return fallback
   }
 
   /**

@@ -737,7 +737,7 @@ const mulbyApi = {
   },
 
   // Geolocation API
-  // 注意: 使用主进程 IP 定位来绕过 Google 服务在中国被屏蔽的问题
+  // 注意: 使用主进程定位（macOS 原生优先，IP 定位后备）
   geolocation: {
     getAccessStatus: () => ipcRenderer.invoke('geolocation:getAccessStatus'),
     requestAccess: () => ipcRenderer.invoke('geolocation:requestAccess'),

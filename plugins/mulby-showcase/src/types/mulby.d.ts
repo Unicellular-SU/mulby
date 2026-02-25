@@ -299,6 +299,7 @@ interface MulbyGeolocation {
     latitude: number
     longitude: number
     accuracy: number
+    source: 'native' | 'ip'
     altitude?: number | null
     altitudeAccuracy?: number | null
     heading?: number | null

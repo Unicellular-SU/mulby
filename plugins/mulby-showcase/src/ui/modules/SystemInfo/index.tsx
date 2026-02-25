@@ -29,7 +29,14 @@ interface Position {
     latitude: number
     longitude: number
     accuracy: number
+    source?: 'native' | 'ip'
     timestamp: number
+}
+
+type NativeLocationTestState = {
+    status: 'idle' | 'testing' | 'success' | 'failed'
+    message: string
+    checkedAt: number | null
 }
 
 export function SystemInfoModule() {
@@ -53,6 +60,11 @@ export function SystemInfoModule() {
     const [platform, setPlatform] = useState<{ isMacOS: boolean; isWindows: boolean; isLinux: boolean } | null>(null)
     const [fileIcon, setFileIcon] = useState<string | null>(null)
     const [iconPath, setIconPath] = useState<string>('.txt')
+    const [nativeLocationTest, setNativeLocationTest] = useState<NativeLocationTestState>({
+        status: 'idle',
+        message: '尚未测试',
+        checkedAt: null
+    })
 
     const loadData = useCallback(async () => {
         console.log('[SystemInfo] loadData start')
@@ -184,6 +196,89 @@ export function SystemInfoModule() {
             notify.error('获取位置失败: ' + (error instanceof Error ? error.message : String(error)))
         }
     }
+
+    const handleTestNativeLocation = async () => {
+        console.log('[SystemInfo] handleTestNativeLocation called')
+        setNativeLocationTest({
+            status: 'testing',
+            message: '正在测试原生定位...',
+            checkedAt: null
+        })
+
+        try {
+            const status = await geolocation.getAccessStatus()
+            if (!status) {
+                throw new Error('地理位置 API 不可用')
+            }
+
+            if (status === 'denied' || status === 'restricted') {
+                setNativeLocationTest({
+                    status: 'failed',
+                    message: '定位权限被拒绝或受限，无法验证原生定位',
+                    checkedAt: Date.now()
+                })
+                notify.error('定位权限不可用，请在系统设置中开启')
+                await geolocation.openSettings()
+                return
+            }
+
+            if (status === 'not-determined') {
+                const newStatus = await geolocation.requestAccess()
+                if (newStatus !== 'granted') {
+                    setNativeLocationTest({
+                        status: 'failed',
+                        message: '定位权限未授权，原生定位测试失败',
+                        checkedAt: Date.now()
+                    })
+                    notify.error('位置权限未授权')
+                    return
+                }
+            }
+
+            const pos = await geolocation.getCurrentPosition()
+            if (!pos) {
+                throw new Error('未返回定位结果')
+            }
+            setPosition(pos)
+
+            const accuracy = Number(pos.accuracy)
+            const source = pos.source ?? (Number.isFinite(accuracy) && accuracy <= 100 ? 'native' : 'ip')
+            if (source === 'native') {
+                setNativeLocationTest({
+                    status: 'success',
+                    message: `原生定位可用（source=native，精度约 ${Number.isFinite(accuracy) ? accuracy.toFixed(0) : '未知'} 米）`,
+                    checkedAt: Date.now()
+                })
+                notify.success('原生定位测试成功')
+                return
+            }
+
+            const accuracyText = Number.isFinite(accuracy) ? `${accuracy.toFixed(0)} 米` : '未知'
+            setNativeLocationTest({
+                status: 'failed',
+                message: `原生定位不可用（source=${source}，当前精度 ${accuracyText}）`,
+                checkedAt: Date.now()
+            })
+            notify.error('原生定位测试失败')
+        } catch (error) {
+            console.error('[SystemInfo] Error testing native geolocation:', error)
+            setNativeLocationTest({
+                status: 'failed',
+                message: error instanceof Error ? error.message : String(error),
+                checkedAt: Date.now()
+            })
+            notify.error('原生定位测试失败')
+        }
+    }
+
+    const nativeLocationStatusBadge: 'success' | 'warning' | 'error' | 'info' =
+        nativeLocationTest.status === 'success'
+            ? 'success'
+            : nativeLocationTest.status === 'failed'
+                ? 'error'
+                : nativeLocationTest.status === 'testing'
+                    ? 'warning'
+                    : 'info'
 
     const handleGetFileIcon = async () => {
         try {
@@ -407,27 +502,49 @@ export function SystemInfoModule() {
                 <Card
                     title="地理位置"
                     icon="📍"
-                    actions={<Button variant="secondary" onClick={handleGetLocation}>获取位置</Button>}
+                    actions={
+                        <div style={{ display: 'flex', gap: '8px' }}>
+                            <Button variant="secondary" onClick={handleGetLocation}>获取位置</Button>
+                            <Button onClick={handleTestNativeLocation} loading={nativeLocationTest.status === 'testing'}>
+                                测试原生定位
+                            </Button>
+                        </div>
+                    }
                 >
-                    {position ? (
-                        <div className="info-grid">
-                            <span className="info-label">纬度</span>
-                            <span className="info-value">{position.latitude.toFixed(6)}</span>
+                    <div className="info-grid">
+                        <span className="info-label">原生定位测试</span>
+                        <span className="info-value">
+                            <StatusBadge status={nativeLocationStatusBadge}>
+                                {nativeLocationTest.status === 'success' && '成功'}
+                                {nativeLocationTest.status === 'failed' && '失败'}
+                                {nativeLocationTest.status === 'testing' && '测试中'}
+                                {nativeLocationTest.status === 'idle' && '未测试'}
+                            </StatusBadge>
+                        </span>
 
-                            <span className="info-label">经度</span>
-                            <span className="info-value">{position.longitude.toFixed(6)}</span>
+                        <span className="info-label">测试结果</span>
+                        <span className="info-value">{nativeLocationTest.message}</span>
 
-                            <span className="info-label">精度</span>
-                            <span className="info-value">{position.accuracy.toFixed(0)} 米</span>
+                        <span className="info-label">测试时间</span>
+                        <span className="info-value">
+                            {nativeLocationTest.checkedAt ? new Date(nativeLocationTest.checkedAt).toLocaleString() : '-'}
+                        </span>
 
-                            <span className="info-label">时间</span>
-                            <span className="info-value">{new Date(position.timestamp).toLocaleString()}</span>
-                        </div>
-                    ) : (
-                        <div className="empty-state">
-                            <div>点击"获取位置"按钮获取当前位置</div>
-                        </div>
-                    )}
+                        <span className="info-label">纬度</span>
+                        <span className="info-value">{position ? position.latitude.toFixed(6) : '-'}</span>
+
+                        <span className="info-label">经度</span>
+                        <span className="info-value">{position ? position.longitude.toFixed(6) : '-'}</span>
+
+                        <span className="info-label">精度</span>
+                        <span className="info-value">{position ? `${position.accuracy.toFixed(0)} 米` : '-'}</span>
+
+                        <span className="info-label">来源</span>
+                        <span className="info-value">{position?.source ?? '-'}</span>
+
+                        <span className="info-label">时间</span>
+                        <span className="info-value">{position ? new Date(position.timestamp).toLocaleString() : '-'}</span>
+                    </div>
                 </Card>
 
                 {/* Raw Data */}
@@ -440,4 +557,3 @@ export function SystemInfoModule() {
         </div>
     )
 }
-

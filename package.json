@@ -86,7 +86,9 @@
       "node_modules/electron-get-location/**/*",
       "node_modules/better-sqlite3/**/*",
       "node_modules/node-mac-permissions/**/*",
-      "node_modules/sharp/**/*"
+      "node_modules/sharp/**/*",
+      "node_modules/@img/sharp-*/**/*",
+      "node_modules/@img/sharp-libvips-*/**/*"
     ],
     "extraResources": [
       {
