@@ -344,6 +344,7 @@ export interface ElectronAPI {
     onOpenPluginManager: (callback: () => void) => () => void
     onOpenBackgroundPlugins: (callback: () => void) => () => void
     onOpenTaskScheduler: (callback: () => void) => () => void
+    onOpenLogViewer: (callback: () => void) => () => void
   }
   clipboard: {
     readText: () => Promise<string>

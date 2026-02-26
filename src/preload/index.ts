@@ -355,6 +355,11 @@ const mulbyApi = {
       const listener = () => callback()
       ipcRenderer.on('app:openTaskScheduler', listener)
       return () => ipcRenderer.removeListener('app:openTaskScheduler', listener)
+    },
+    onOpenLogViewer: (callback: () => void) => {
+      const listener = () => callback()
+      ipcRenderer.on('app:openLogViewer', listener)
+      return () => ipcRenderer.removeListener('app:openLogViewer', listener)
     }
   },
 

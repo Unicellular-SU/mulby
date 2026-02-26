@@ -39,8 +39,12 @@ const SECTION_ITEMS: { id: SettingsSection; label: string }[] = [
 const SHORTCUTS: { id: AppShortcutAction; label: string; description: string }[] = [
   { id: 'toggleWindow', label: '唤起主窗口', description: '显示或隐藏主窗口' },
   { id: 'openSettings', label: '打开设置', description: '直接进入设置面板' },
+  { id: 'openAiSettings', label: '打开 AI 设置', description: '直接进入 AI 设置中心' },
   { id: 'openPluginStore', label: '打开插件商店', description: '直接进入插件商店页面' },
-  { id: 'openPluginManager', label: '打开插件管理', description: '直接进入插件管理页面' }
+  { id: 'openPluginManager', label: '打开插件管理', description: '直接进入插件管理页面' },
+  { id: 'openBackgroundPlugins', label: '打开运行中插件', description: '直接进入运行中的插件页面' },
+  { id: 'openTaskScheduler', label: '打开任务调度器', description: '直接进入任务调度器页面' },
+  { id: 'openLogViewer', label: '打开日志查看器', description: '直接进入开发者日志页面' }
 ]
 
 const PERMISSIONS = [

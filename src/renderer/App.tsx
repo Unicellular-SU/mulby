@@ -52,6 +52,7 @@ function App() {
   const [pluginManagerSection, setPluginManagerSection] = useState<'installed' | 'store'>('installed')
   const [backgroundPluginManagerReturnTarget, setBackgroundPluginManagerReturnTarget] = useState<'home' | 'settings'>('home')
   const [taskSchedulerReturnTarget, setTaskSchedulerReturnTarget] = useState<'home' | 'settings'>('home')
+  const [logViewerReturnTarget, setLogViewerReturnTarget] = useState<'home' | 'settings'>('settings')
   const [isDragging, setIsDragging] = useState(false)
   const [theme, setTheme] = useState<'light' | 'dark'>('light')
   const [attachments, setAttachments] = useState<UiAttachment[]>([])
@@ -233,6 +234,16 @@ function App() {
     setViewMode('task-scheduler')
   }, [pluginOpen])
 
+  const openLogViewer = useCallback((from: 'home' | 'settings' = 'home') => {
+    if (pluginOpen) {
+      window.mulby.window.close()
+      setPluginOpen(false)
+    }
+    setAttachmentsManagerOpen(false)
+    setLogViewerReturnTarget(from)
+    setViewMode('logs')
+  }, [pluginOpen])
+
   const openAiSettingsCenter = useCallback(() => {
     if (pluginOpen) {
       window.mulby.window.close()
@@ -327,6 +338,13 @@ function App() {
     })
     return cleanup
   }, [openTaskScheduler])
+
+  useEffect(() => {
+    const cleanup = window.mulby.app.onOpenLogViewer(() => {
+      openLogViewer('home')
+    })
+    return cleanup
+  }, [openLogViewer])
 
   const clearAttachments = useCallback(() => {
     attachments.forEach((attachment) => {
@@ -516,7 +534,9 @@ function App() {
           onOpenTaskScheduler={() => {
             openTaskScheduler('settings')
           }}
-          onOpenLogViewer={() => setViewMode('logs')}
+          onOpenLogViewer={() => {
+            openLogViewer('settings')
+          }}
           onOpenAiSettings={openAiSettingsCenter}
         />
       </div>
@@ -589,7 +609,7 @@ function App() {
   if (viewMode === 'logs') {
     return (
       <div className={`app ${isDragging ? 'dragging' : ''}`}>
-        <LogViewerView onClose={() => setViewMode('settings')} />
+        <LogViewerView onClose={() => setViewMode(logViewerReturnTarget === 'settings' ? 'settings' : 'home')} />
       </div>
     )
   }
