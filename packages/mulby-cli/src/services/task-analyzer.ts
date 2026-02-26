@@ -6,7 +6,15 @@ import { AIServiceFactory } from './ai';
  * and whether planning mode should be triggered
  */
 export class TaskAnalyzer {
-    private static aiService = AIServiceFactory.create();
+    private static _aiService: ReturnType<typeof AIServiceFactory.create> | null = null;
+
+    /** 延迟初始化 AI 服务，只在真正需要时创建 */
+    private static get aiService() {
+        if (!this._aiService) {
+            this._aiService = AIServiceFactory.create();
+        }
+        return this._aiService;
+    }
 
     /**
      * Use AI to analyze task complexity

@@ -2,7 +2,6 @@
 import chalk from 'chalk';
 import inquirer from 'inquirer';
 import { SessionManager } from '../services/session-manager';
-import { AIAgent } from '../services/ai-generator';
 import { tui } from '../services/tui';
 
 export async function resume(options: any) {
@@ -106,8 +105,8 @@ export async function resume(options: any) {
     }
 
     // Start UI
-    // Note: AIAgent will look for system prompt in history or default.
-    // Since we are resuming, we assume the agent can handle context.
+    // 动态导入，只在实际恢复会话时才加载 AI 相关模块
+    const { AIAgent } = await import('../services/ai-generator');
     const agent = new AIAgent(session);
     await agent.start({ waitForInput: true });
 }

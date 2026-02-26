@@ -1,7 +1,6 @@
 
 import chalk from 'chalk';
 import { SessionManager } from '../services/session-manager';
-import { aiCreate } from './create/ai-create';
 
 export async function sessionCommand(action: string, id: string) {
     const sessionManager = SessionManager.getInstance();
@@ -30,6 +29,8 @@ export async function sessionCommand(action: string, id: string) {
             break;
 
         case 'resume':
+            // 动态导入，只在恢复会话时才加载 AI 相关模块
+            const { aiCreate } = await import('./create/ai-create');
             if (id) {
                 await aiCreate('resuming', { resume: id });
             } else {

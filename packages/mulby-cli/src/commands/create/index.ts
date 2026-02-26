@@ -3,10 +3,11 @@ import * as path from 'path'
 import chalk from 'chalk'
 import { createBasicProject } from './basic'
 import { createReactProject } from './react'
-import { aiCreate } from './ai-create'
 
 export async function create(name: string, options: any) {
   if (options.ai || options.resume) {
+    // 动态导入，只在使用 AI 功能时才加载 AI 相关模块
+    const { aiCreate } = await import('./ai-create');
     await aiCreate(name, options);
     return;
   }
