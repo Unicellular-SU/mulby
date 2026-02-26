@@ -4,6 +4,7 @@ import { existsSync } from 'fs'
 import { InputAttachment, InputPayload, Plugin } from '../../shared/types/plugin'
 import { ThemeManager } from '../services/theme'
 import { loggerService } from '../services/logger'
+import { appSettingsManager } from '../services/app-settings'
 import { injectCustomTitleBar } from './titlebar'
 import { PluginPanelWindow } from './panel-window'
 import { clearSubInputState } from '../services/subinput-state'
@@ -35,6 +36,11 @@ export class PluginWindowManager {
 
   // 面板窗口管理器（跟随搜索框的插件窗口）
   private panelWindow: PluginPanelWindow | null = null
+
+  private shouldOpenPluginDevTools(): boolean {
+    const developer = appSettingsManager.getSettings().developer
+    return developer.enabled && developer.showDevTools === true
+  }
 
   // 更新 macOS Dock 图标显示状态
   private async updateDockVisibility(): Promise<void> {
@@ -338,8 +344,9 @@ export class PluginWindowManager {
       // 注入自定义标题栏
       await injectCustomTitleBar(win, plugin.manifest.displayName, currentTheme)
       win.show()
-      // TODO: 自动开启开发者工具，后面要根据开关启用和关闭
-      win.webContents.openDevTools({ mode: 'detach' })
+      if (this.shouldOpenPluginDevTools()) {
+        win.webContents.openDevTools({ mode: 'detach' })
+      }
       win.webContents.send('plugin:init', {
         pluginName: plugin.id,
         featureCode,
@@ -474,7 +481,9 @@ export class PluginWindowManager {
     win.once('ready-to-show', async () => {
       await injectCustomTitleBar(win, options?.title || plugin.manifest.displayName, currentTheme)
       win.show()
-      // win.webContents.openDevTools({ mode: 'detach' }) // Optional
+      if (this.shouldOpenPluginDevTools()) {
+        win.webContents.openDevTools({ mode: 'detach' })
+      }
 
       // 发送初始化消息，让插件知道自己在哪个路由
       win.webContents.send('plugin:init', {

@@ -40,6 +40,8 @@ export class PluginManager {
   private searchWorker: PluginSearchWorker
   private backgroundManager: BackgroundPluginManager
   private taskScheduler: TaskScheduler
+  private initPromise: Promise<void> | null = null
+  private isReloading: boolean = false
 
   constructor() {
     this.stateManager = new PluginStateManager()
@@ -75,14 +77,25 @@ export class PluginManager {
 
   // 初始化：加载所有插件
   async init() {
-    // 清理旧数据
-    this.plugins.clear()
-    this.runners.clear()
+    if (this.initPromise) {
+      return this.initPromise
+    }
+
+    this.initPromise = this.loadPlugins().finally(() => {
+      this.initPromise = null
+    })
+
+    return this.initPromise
+  }
+
+  private async loadPlugins() {
+    await this.resetRuntimeForInit()
 
     // 动态导入设置管理器，避免循环依赖
     const { appSettingsManager } = await import('../services/app-settings')
     const settings = appSettingsManager.getSettings()
     const developer = settings.developer
+    const shouldWatchDevPlugins = developer.enabled && developer.autoReload !== false
 
     // 用户数据目录的插件（已安装）
     const userPluginsDir = join(app.getPath('userData'), 'plugins')
@@ -131,7 +144,7 @@ export class PluginManager {
         this.plugins.set(plugin.id, plugin)
 
         // 如果是开发模式插件，启动文件监听
-        if (plugin.isDev && plugin.enabled) {
+        if (plugin.isDev && plugin.enabled && shouldWatchDevPlugins) {
           this.setupPluginWatcher(plugin)
         }
 
@@ -152,6 +165,35 @@ export class PluginManager {
     void this.searchWorker.warmup().catch((error) => {
       console.warn('[PluginManager] Search worker warmup failed', error)
     })
+  }
+
+  private async resetRuntimeForInit(): Promise<void> {
+    this.isReloading = true
+    try {
+      // 清理旧监听，避免重复注册和内存泄漏
+      this.clearWatchers()
+
+      // 关闭所有插件窗口，防止窗口持有旧运行时
+      if (this.windowManager) {
+        this.windowManager.closeAll()
+      }
+
+      // 停止后台插件，确保后台状态与新插件清单同步
+      await this.backgroundManager.stopAll()
+
+      // 销毁所有活跃 Host，后续按需重建
+      const activeHosts = this.hostManager.getActiveHosts()
+      if (activeHosts.length > 0) {
+        await Promise.all(activeHosts.map((pluginId) => this.hostManager.destroyHost(pluginId)))
+      }
+
+      // 清理旧内存状态
+      this.plugins.clear()
+      this.runners.clear()
+      this.initializedPlugins.clear()
+    } finally {
+      this.isReloading = false
+    }
   }
 
   // 获取所有插件
@@ -397,8 +439,8 @@ export class PluginManager {
     plugin.enabled = true
     this.stateManager.setEnabled(name, true)
 
-    // 如果是开发插件，启用监听
-    if (plugin.isDev) {
+    // 如果是开发插件且开启了自动热重载，启用监听
+    if (plugin.isDev && await this.shouldAutoReloadDevPlugins()) {
       this.setupPluginWatcher(plugin)
     }
 
@@ -408,6 +450,12 @@ export class PluginManager {
     }
 
     return { success: true }
+  }
+
+  private async shouldAutoReloadDevPlugins(): Promise<boolean> {
+    const { appSettingsManager } = await import('../services/app-settings')
+    const developer = appSettingsManager.getSettings().developer
+    return developer.enabled && developer.autoReload !== false
   }
 
   // 禁用插件
@@ -523,22 +571,30 @@ export class PluginManager {
 
   // 销毁所有资源
   async destroy(): Promise<void> {
-    // 停止所有监听
-    this.clearWatchers()
+    this.isReloading = true
+    try {
+      // 停止所有监听
+      this.clearWatchers()
 
-    // 优雅关闭后台插件
-    await this.backgroundManager.shutdown()
+      // 优雅关闭后台插件
+      await this.backgroundManager.shutdown()
 
-    // 关闭任务调度器
-    await this.taskScheduler.shutdown()
+      // 关闭任务调度器
+      await this.taskScheduler.shutdown()
 
-    // 销毁所有 Host 进程
-    await this.hostManager.destroyAll()
+      // 销毁所有 Host 进程
+      await this.hostManager.destroyAll()
 
-    // 清理内存
-    this.plugins.clear()
-    this.runners.clear()
-    this.initializedPlugins.clear()
+      // 停止搜索 Worker
+      await this.searchWorker.destroy()
+
+      // 清理内存
+      this.plugins.clear()
+      this.runners.clear()
+      this.initializedPlugins.clear()
+    } finally {
+      this.isReloading = false
+    }
   }
 
   // ================= 文件监听相关 =================
@@ -639,6 +695,13 @@ export class PluginManager {
    * 如果插件支持后台运行，则启动后台运行；否则销毁 Host 进程
    */
   private async handleWindowClosed(pluginId: string): Promise<void> {
+    if (this.isReloading) {
+      if (this.useUtilityProcess && this.hostManager.isHostReady(pluginId)) {
+        await this.hostManager.destroyHost(pluginId)
+      }
+      return
+    }
+
     const plugin = this.plugins.get(pluginId)
     if (!plugin) return
 

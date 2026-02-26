@@ -42,6 +42,7 @@ const REQUEST_TIMEOUT = 30000  // 30 秒请求超时
 
 export class PluginHostManager extends EventEmitter {
   private hosts: Map<string, PluginHost> = new Map()
+  private hostCreationPromises: Map<string, Promise<boolean>> = new Map()
   private workerPath: string
   private watchdog: PluginHostWatchdog
   private messageBus: PluginMessageBus
@@ -121,6 +122,23 @@ export class PluginHostManager extends EventEmitter {
    */
   async createHost(plugin: Plugin): Promise<boolean> {
     const pluginName = plugin.id
+    const pendingCreation = this.hostCreationPromises.get(pluginName)
+    if (pendingCreation) {
+      return pendingCreation
+    }
+
+    const creationPromise = this.createHostInternal(plugin).finally(() => {
+      if (this.hostCreationPromises.get(pluginName) === creationPromise) {
+        this.hostCreationPromises.delete(pluginName)
+      }
+    })
+
+    this.hostCreationPromises.set(pluginName, creationPromise)
+    return creationPromise
+  }
+
+  private async createHostInternal(plugin: Plugin): Promise<boolean> {
+    const pluginName = plugin.id
 
     // 如果已存在，先销毁
     if (this.hosts.has(pluginName)) {
@@ -169,6 +187,33 @@ export class PluginHostManager extends EventEmitter {
       console.error(`Failed to create host for ${pluginName}:`, err)
       return false
     }
+  }
+
+  private async ensureHostReady(plugin: Plugin): Promise<boolean> {
+    const pluginName = plugin.id
+    let host = this.hosts.get(pluginName)
+
+    if (!host) {
+      const created = await this.createHost(plugin)
+      if (!created) {
+        return false
+      }
+      host = this.hosts.get(pluginName)
+    }
+
+    if (!host) {
+      return false
+    }
+
+    if (!host.ready) {
+      const ready = await this.waitForReady(pluginName)
+      if (!ready) {
+        console.error(`Host ready timeout: ${pluginName}`)
+        return false
+      }
+    }
+
+    return true
   }
 
   /**
@@ -329,10 +374,6 @@ export class PluginHostManager extends EventEmitter {
         return
       }
 
-      const timer = setTimeout(() => {
-        resolve(false)
-      }, timeout)
-
       const onReady = (name: string) => {
         if (name === pluginName) {
           clearTimeout(timer)
@@ -340,6 +381,11 @@ export class PluginHostManager extends EventEmitter {
           resolve(true)
         }
       }
+
+      const timer = setTimeout(() => {
+        this.off('host:ready', onReady)
+        resolve(false)
+      }, timeout)
 
       this.on('host:ready', onReady)
     })
@@ -396,15 +442,8 @@ export class PluginHostManager extends EventEmitter {
   async initPlugin(plugin: Plugin): Promise<boolean> {
     const pluginName = plugin.id
 
-    // 确保 Host 存在
-    let host = this.hosts.get(pluginName)
-    if (!host) {
-      const created = await this.createHost(plugin)
-      if (!created) return false
-      host = this.hosts.get(pluginName)
-    }
-
-    if (!host) return false
+    const hostReady = await this.ensureHostReady(plugin)
+    if (!hostReady) return false
 
     try {
       await this.sendRequest(pluginName, {
@@ -434,12 +473,9 @@ export class PluginHostManager extends EventEmitter {
   ): Promise<void> {
     const pluginName = plugin.id
 
-    // 确保插件已初始化
-    if (!this.hosts.has(pluginName)) {
-      const inited = await this.initPlugin(plugin)
-      if (!inited) {
-        throw new Error(`Failed to init plugin: ${pluginName}`)
-      }
+    const inited = await this.initPlugin(plugin)
+    if (!inited) {
+      throw new Error(`Failed to init plugin: ${pluginName}`)
     }
 
     await this.sendRequest(pluginName, {
@@ -458,12 +494,9 @@ export class PluginHostManager extends EventEmitter {
   ): Promise<void> {
     const pluginName = plugin.id
 
-    // 确保插件已初始化
-    if (!this.hosts.has(pluginName)) {
-      const inited = await this.initPlugin(plugin)
-      if (!inited) {
-        throw new Error(`Failed to init plugin: ${pluginName}`)
-      }
+    const inited = await this.initPlugin(plugin)
+    if (!inited) {
+      throw new Error(`Failed to init plugin: ${pluginName}`)
     }
 
     await this.sendRequest(pluginName, {
@@ -484,16 +517,9 @@ export class PluginHostManager extends EventEmitter {
   ): Promise<unknown> {
     const pluginName = plugin.id
 
-    // 检查 Host 是否存在且准备好
-    const host = this.hosts.get(pluginName)
-    if (!host) {
-      // 尝试初始化
-      const inited = await this.initPlugin(plugin)
-      if (!inited) {
-        throw new Error(`Failed to init plugin: ${pluginName}`)
-      }
-    } else if (!host.ready) {
-      throw new Error(`Host not ready: ${pluginName}`)
+    const inited = await this.initPlugin(plugin)
+    if (!inited) {
+      throw new Error(`Failed to init plugin: ${pluginName}`)
     }
 
     return await this.sendRequest(pluginName, {

@@ -47,6 +47,16 @@ export class PluginLoader {
         return null
       }
 
+      const resolvedMain = this.resolveMainEntry(manifest.main, pluginPath)
+      if (!resolvedMain) {
+        console.warn(`Invalid plugin entry in ${pluginPath}: main file not found (${manifest.main})`)
+        return null
+      }
+      if (resolvedMain !== manifest.main) {
+        console.warn(`[PluginLoader] Main entry fallback applied for ${manifest.name}: ${manifest.main} -> ${resolvedMain}`)
+        manifest.main = resolvedMain
+      }
+
       const resolvedIcon = this.resolveIcon(manifest.icon, pluginPath)
 
       // 解析插件 ID：优先使用 manifest.id，否则使用 manifest.name
@@ -77,6 +87,28 @@ export class PluginLoader {
       return false
     }
     return true
+  }
+
+  private resolveMainEntry(mainEntry: string, pluginPath: string): string | null {
+    const declaredPath = join(pluginPath, mainEntry)
+    if (existsSync(declaredPath)) {
+      return mainEntry
+    }
+
+    const basename = String(mainEntry).split(/[/\\]/).pop()
+    const candidates = Array.from(new Set([
+      basename,
+      'main.js',
+      'index.js'
+    ].filter((item): item is string => Boolean(item && item.length > 0))))
+
+    for (const candidate of candidates) {
+      if (existsSync(join(pluginPath, candidate))) {
+        return candidate
+      }
+    }
+
+    return null
   }
 
   // 解析图标

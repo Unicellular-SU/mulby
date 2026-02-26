@@ -81,7 +81,7 @@ export function registerAllHandlers(
   registerInBrowserHandlers()
   registerSharpHandlers()
   registerFFmpegHandlers()
-  registerSettingsHandlers(appSettingsManager, appShortcutManager)
+  registerSettingsHandlers(appSettingsManager, appShortcutManager, pluginManager)
   registerDeveloperHandlers(pluginManager)
   registerSchedulerHandlers(pluginManager)
   registerAiHandlers()

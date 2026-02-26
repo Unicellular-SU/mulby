@@ -57,6 +57,23 @@ export class PluginSearchWorker {
     await this.waitUntilReady()
   }
 
+  async destroy(): Promise<void> {
+    const error = new Error('Search worker destroyed')
+    this.rejectReady?.(error)
+    this.rejectAllPending(error)
+
+    const current = this.worker
+    this.worker = null
+    this.clearReadyState()
+
+    if (!current) return
+    try {
+      current.kill()
+    } catch {
+      // ignore
+    }
+  }
+
   private waitUntilReady(): Promise<void> {
     this.ensureWorker()
     if (this.ready) {

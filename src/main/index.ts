@@ -26,6 +26,7 @@ import { TrayMenuWindowManager } from './services/tray-menu-window'
 import { ClipboardWatcher } from './services/clipboard-watcher-v2'
 import { ClipboardHistoryManager } from './services/clipboard-history'
 import { commandRunnerService } from './services/command-runner'
+import { setLoggerMinLevel } from './services/logger'
 import { patchConsoleWithTimestamp } from '../shared/utils/console'
 
 patchConsoleWithTimestamp()
@@ -56,10 +57,15 @@ let mainWindow: BrowserWindow | null = null
 let appTrayManager: AppTrayManager | null = null
 let trayMenuWindowManager: TrayMenuWindowManager | null = null
 let isQuitting = false
+let shouldRestartAfterQuit = false
+let shutdownFinalizeScheduled = false
+let hasShutdownCompleted = false
+let shutdownPromise: Promise<void> | null = null
 const pluginManager = new PluginManager()
 const pluginWindowManager = new PluginWindowManager()
 const themeManager = new ThemeManager()
 setUiDialogThemeResolver(() => themeManager.getActualTheme())
+setLoggerMinLevel(appSettingsManager.getSettings().developer.logLevel)
 const clipboardWatcher = new ClipboardWatcher()
 const clipboardHistoryManager = new ClipboardHistoryManager()
 const aiInternalToolRuntime = createAiInternalToolRuntime({
@@ -86,6 +92,76 @@ function isAbortLikeError(error: unknown): boolean {
   }
   const message = String(error || '').toLowerCase()
   return message.includes('abort') || message.includes('cancelled') || message.includes('canceled')
+}
+
+function isWindowAvailable(win: BrowserWindow | null): win is BrowserWindow {
+  if (!win) return false
+  try {
+    return !win.isDestroyed()
+  } catch {
+    return false
+  }
+}
+
+const handleSecondInstance = () => {
+  if (isQuitting) {
+    return
+  }
+
+  if (!isWindowAvailable(mainWindow)) {
+    mainWindow = null
+    if (app.isReady()) {
+      showMainWindow()
+    } else {
+      void app.whenReady().then(() => {
+        if (!isQuitting) {
+          showMainWindow()
+        }
+      })
+    }
+    return
+  }
+  try {
+    if (!mainWindow.isVisible()) {
+      toggleWindow()
+    } else {
+      mainWindow.focus()
+    }
+  } catch (error) {
+    console.warn('[Main] Failed to focus existing window on second-instance:', error)
+    mainWindow = null
+  }
+}
+
+const handleAppActivate = () => {
+  if (isQuitting) return
+
+  try {
+    app.show()
+  } catch (error) {
+    console.warn('[Main] Failed to restore app state on activate:', error)
+  }
+
+  const detachedWindows = pluginWindowManager.getAllDetachedWindows()
+  if (detachedWindows.length > 0) {
+    detachedWindows.forEach(win => {
+      if (!isWindowAvailable(win)) return
+      try {
+        if (!win.isVisible()) {
+          win.show()
+        }
+        if (win.isMinimized()) {
+          win.restore()
+        }
+        win.focus()
+      } catch (error) {
+        console.warn('[Main] Failed to restore detached window on activate:', error)
+      }
+    })
+    return
+  }
+
+  showMainWindow()
 }
 
 setAiToolExecutor(async ({ name, args, context, callId, abortSignal }) => {
@@ -165,6 +241,59 @@ setAiCapabilityPolicyResolver(({ option, requestedCapabilities, selectedSkills }
   })
 })
 
+async function shutdownMainProcessResources(): Promise<void> {
+  if (hasShutdownCompleted) {
+    return
+  }
+  if (shutdownPromise) {
+    return shutdownPromise
+  }
+
+  shutdownPromise = (async () => {
+    try {
+      clipboardHistoryManager.stop()
+    } catch (error) {
+      console.error('[Main] Failed to stop clipboard history manager:', error)
+    }
+
+    try {
+      clipboardWatcher.stop()
+    } catch (error) {
+      console.error('[Main] Failed to stop clipboard watcher:', error)
+    }
+
+    try {
+      await pluginManager.destroy()
+    } catch (error) {
+      console.error('[Main] Failed to destroy plugin manager:', error)
+    }
+
+    try {
+      appTrayManager?.destroy()
+      appTrayManager = null
+    } catch (error) {
+      console.error('[Main] Failed to destroy app tray manager:', error)
+    }
+
+    try {
+      trayMenuWindowManager?.destroy()
+      trayMenuWindowManager = null
+    } catch (error) {
+      console.error('[Main] Failed to destroy tray menu window manager:', error)
+    }
+
+    try {
+      globalShortcut.unregisterAll()
+    } catch (error) {
+      console.error('[Main] Failed to unregister global shortcuts:', error)
+    }
+  })().finally(() => {
+    hasShutdownCompleted = true
+  })
+
+  return shutdownPromise
+}
+
 // 单实例锁：确保只有一个应用实例运行
 const gotTheLock = app.requestSingleInstanceLock()
 if (!gotTheLock) {
@@ -172,15 +301,7 @@ if (!gotTheLock) {
   app.quit()
 } else {
   // 当第二个实例启动时，聚焦到已有窗口
-  app.on('second-instance', () => {
-    if (mainWindow) {
-      if (!mainWindow.isVisible()) {
-        toggleWindow()
-      } else {
-        mainWindow.focus()
-      }
-    }
-  })
+  app.on('second-instance', handleSecondInstance)
 }
 
 function getMainWindow() {
@@ -188,7 +309,10 @@ function getMainWindow() {
 }
 
 function hideMainWindow() {
-  if (!mainWindow || mainWindow.isDestroyed()) return
+  if (!isWindowAvailable(mainWindow)) {
+    mainWindow = null
+    return
+  }
 
   trayMenuWindowManager?.hide()
   pluginWindowManager.hidePanelWindow()
@@ -268,6 +392,10 @@ function createWindow() {
 
   mainWindow.once('ready-to-show', () => {
     // console.log('[Main] Window ready-to-show event fired')
+  })
+
+  mainWindow.on('closed', () => {
+    mainWindow = null
   })
 
   // 默认关闭行为：隐藏到托盘（显式退出时除外）
@@ -495,9 +623,8 @@ function resetMainWindowPosition() {
 
 function restartMainProcess() {
   if (isQuitting) return
-  isQuitting = true
-  app.relaunch()
-  app.exit(0)
+  shouldRestartAfterQuit = true
+  quitMainProcess()
 }
 
 function quitMainProcess() {
@@ -532,29 +659,7 @@ app.whenReady().then(async () => {
 
   // macOS: 监听 dock 图标点击事件
   if (process.platform === 'darwin') {
-    app.on('activate', () => {
-      // 先调用 app.show() 恢复应用状态
-      app.show()
-
-      // 点击 dock 图标时，显示所有隐藏的独立窗口
-      const detachedWindows = pluginWindowManager.getAllDetachedWindows()
-      if (detachedWindows.length > 0) {
-        detachedWindows.forEach(win => {
-          if (!win.isDestroyed() && !win.isVisible()) {
-            win.show()
-          }
-          if (!win.isDestroyed() && win.isMinimized()) {
-            win.restore()
-          }
-          if (!win.isDestroyed()) {
-            win.focus()
-          }
-        })
-      } else {
-        // 如果没有独立窗口，显示主窗口
-        showMainWindow()
-      }
-    })
+    app.on('activate', handleAppActivate)
   }
 
   // 注册 IPC 处理器
@@ -645,12 +750,61 @@ app.on('window-all-closed', () => {
   }
 })
 
-app.on('before-quit', () => {
+app.on('before-quit', (event) => {
   isQuitting = true
+  app.removeListener('second-instance', handleSecondInstance)
+  if (process.platform === 'darwin') {
+    app.removeListener('activate', handleAppActivate)
+  }
+
+  if (hasShutdownCompleted) {
+    return
+  }
+
+  event.preventDefault()
+
+  if (shutdownFinalizeScheduled) {
+    return
+  }
+  shutdownFinalizeScheduled = true
+
+  void shutdownMainProcessResources()
+    .catch((error) => {
+      console.error('[Main] Shutdown cleanup failed:', error)
+    })
+    .finally(() => {
+      if (shouldRestartAfterQuit) {
+        app.relaunch()
+      }
+      app.quit()
+    })
 })
 
 app.on('will-quit', () => {
-  appTrayManager?.destroy()
-  trayMenuWindowManager?.destroy()
-  globalShortcut.unregisterAll()
+  app.removeListener('second-instance', handleSecondInstance)
+  if (process.platform === 'darwin') {
+    app.removeListener('activate', handleAppActivate)
+  }
+
+  try {
+    appTrayManager?.destroy()
+  } catch (error) {
+    console.error('[Main] Failed to destroy app tray manager on will-quit:', error)
+  } finally {
+    appTrayManager = null
+  }
+
+  try {
+    trayMenuWindowManager?.destroy()
+  } catch (error) {
+    console.error('[Main] Failed to destroy tray menu window manager on will-quit:', error)
+  } finally {
+    trayMenuWindowManager = null
+  }
+
+  try {
+    globalShortcut.unregisterAll()
+  } catch (error) {
+    console.error('[Main] Failed to unregister global shortcuts on will-quit:', error)
+  }
 })

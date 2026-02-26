@@ -22,6 +22,17 @@ export interface LogEntry {
     }
 }
 
+type ConfigurableLogLevel = Exclude<LogEntry['level'], 'crash'>
+
+const LOG_LEVEL_PRIORITY: Record<ConfigurableLogLevel, number> = {
+    debug: 10,
+    info: 20,
+    warn: 30,
+    error: 40
+}
+
+let minLogLevel: ConfigurableLogLevel = 'debug'
+
 // 最近日志的内存缓存（用于崩溃时快速获取）
 const recentLogs: LogEntry[] = []
 const MAX_RECENT_LOGS = 200
@@ -44,6 +55,11 @@ log.transports.file.format = '[{y}-{m}-{d} {h}:{i}:{s}.{ms}] [{level}] {text}'
 log.transports.file.maxSize = 10 * 1024 * 1024 // 10MB
 log.transports.console.level = 'debug'
 log.transports.file.level = 'debug'
+
+function shouldLog(level: LogEntry['level']): boolean {
+    if (level === 'crash') return true
+    return LOG_LEVEL_PRIORITY[level] >= LOG_LEVEL_PRIORITY[minLogLevel]
+}
 
 /**
  * 格式化日志条目为字符串
@@ -99,6 +115,10 @@ export const loggerService = {
         message: string,
         args?: unknown[]
     ) {
+        if (!shouldLog(level)) {
+            return
+        }
+
         const entry: LogEntry = {
             timestamp: Date.now(),
             level,
@@ -293,6 +313,13 @@ export const loggerService = {
     getLogsDir(): string {
         return logsDir
     }
+}
+
+export function setLoggerMinLevel(level: ConfigurableLogLevel | undefined): void {
+    const next: ConfigurableLogLevel = level && level in LOG_LEVEL_PRIORITY ? level : 'debug'
+    minLogLevel = next
+    log.transports.console.level = next
+    log.transports.file.level = next
 }
 
 // 应用启动时清理旧日志

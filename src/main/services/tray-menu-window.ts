@@ -122,17 +122,27 @@ export class TrayMenuWindowManager {
 
   hide(): void {
     if (!this.window || this.window.isDestroyed()) return
-    this.window.hide()
+    try {
+      this.window.hide()
+    } catch (error) {
+      console.warn('[TrayMenu] Failed to hide tray menu window:', error)
+      this.window = null
+    }
   }
 
   destroy(): void {
     ipcMain.removeHandler('tray-menu:getState')
     ipcMain.removeHandler('tray-menu:action')
     ipcMain.removeHandler('tray-menu:close')
-    if (this.window && !this.window.isDestroyed()) {
-      this.window.destroy()
-    }
+    const win = this.window
     this.window = null
+    if (win && !win.isDestroyed()) {
+      try {
+        win.destroy()
+      } catch (error) {
+        console.warn('[TrayMenu] Failed to destroy tray menu window:', error)
+      }
+    }
   }
 
   private async ensureWindow(): Promise<BrowserWindow> {

@@ -57,11 +57,22 @@ export class AppTrayManager {
   }
 
   destroy(): void {
-    if (!this.tray) return
-    this.tray.removeListener('click', this.handleTrayActivation)
-    this.tray.removeListener('right-click', this.handleTrayContextMenu)
-    this.tray.destroy()
+    const tray = this.tray
+    if (!tray) return
     this.tray = null
+
+    try {
+      tray.removeListener('click', this.handleTrayActivation)
+      tray.removeListener('right-click', this.handleTrayContextMenu)
+    } catch (error) {
+      console.warn('[AppTray] Failed to remove tray listeners during destroy:', error)
+    }
+
+    try {
+      tray.destroy()
+    } catch (error) {
+      console.warn('[AppTray] Failed to destroy tray:', error)
+    }
   }
 
   isCreated(): boolean {
