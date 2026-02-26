@@ -1,12 +1,17 @@
 import { app } from 'electron'
 import { join } from 'path'
-import { existsSync, mkdirSync, readFileSync, rmSync } from 'fs'
+import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync } from 'fs'
 import extractZip from 'extract-zip'
 import { tmpdir } from 'os'
+import { compareVersions } from './version'
+
+export type InstallAction = 'installed' | 'updated' | 'already-installed' | 'downgrade-blocked'
 
 export interface InstallResult {
   success: boolean
   pluginName?: string
+  pluginId?: string
+  action?: InstallAction
   isUpdate?: boolean
   oldVersion?: string
   newVersion?: string
@@ -51,22 +56,48 @@ export class PluginInstaller {
         return { success: false, error: '无效的 manifest.json' }
       }
 
-      const targetDir = join(this.pluginsDir, manifest.name)
+      const pluginId = String(manifest.id || manifest.name)
+      const incomingVersion = String(manifest.version || '')
+      const existing = this.findInstalledById(pluginId)
+
       let isUpdate = false
       let oldVersion: string | undefined
+      let action: InstallAction = 'installed'
 
-      // 检查是否已存在
-      if (existsSync(targetDir)) {
-        const existingManifestPath = join(targetDir, 'manifest.json')
-        if (existsSync(existingManifestPath)) {
-          const existingManifest = JSON.parse(readFileSync(existingManifestPath, 'utf-8'))
-          oldVersion = existingManifest.version
-          isUpdate = true
-
-          // 删除旧版本
-          rmSync(targetDir, { recursive: true, force: true })
+      if (existing) {
+        oldVersion = existing.version
+        const compare = compareVersions(incomingVersion, oldVersion)
+        if (compare < 0) {
+          this.cleanupTemp(tempDir)
+          return {
+            success: false,
+            pluginName: manifest.name,
+            pluginId,
+            action: 'downgrade-blocked',
+            oldVersion,
+            newVersion: incomingVersion,
+            error: `检测到更高版本已安装（${oldVersion}），不允许降级到 ${incomingVersion}`
+          }
         }
+        if (compare === 0) {
+          this.cleanupTemp(tempDir)
+          return {
+            success: true,
+            pluginName: manifest.name,
+            pluginId,
+            action: 'already-installed',
+            oldVersion,
+            newVersion: incomingVersion,
+            isUpdate: false
+          }
+        }
+
+        isUpdate = true
+        action = 'updated'
+        rmSync(existing.path, { recursive: true, force: true })
       }
+
+      const targetDir = existing?.path || join(this.pluginsDir, manifest.name)
 
       // 解压到插件目录
       await extractZip(filePath, { dir: targetDir })
@@ -75,6 +106,8 @@ export class PluginInstaller {
       return {
         success: true,
         pluginName: manifest.name,
+        pluginId,
+        action,
         isUpdate,
         oldVersion,
         newVersion: manifest.version
@@ -84,6 +117,32 @@ export class PluginInstaller {
       const error = err instanceof Error ? err.message : '安装失败'
       return { success: false, error }
     }
+  }
+
+  private findInstalledById(pluginId: string): { path: string; version: string } | null {
+    if (!existsSync(this.pluginsDir)) return null
+
+    const dirs = readdirSync(this.pluginsDir, { withFileTypes: true })
+    for (const dir of dirs) {
+      if (!dir.isDirectory()) continue
+      const pluginPath = join(this.pluginsDir, dir.name)
+      const manifestPath = join(pluginPath, 'manifest.json')
+      if (!existsSync(manifestPath)) continue
+      try {
+        const manifest = JSON.parse(readFileSync(manifestPath, 'utf-8')) as {
+          id?: string
+          name?: string
+          version?: string
+        }
+        const existingId = String(manifest.id || manifest.name || '')
+        if (!existingId || existingId !== pluginId) continue
+        const version = String(manifest.version || '0.0.0')
+        return { path: pluginPath, version }
+      } catch {
+        // ignore invalid manifest
+      }
+    }
+    return null
   }
 
   // 清理临时目录

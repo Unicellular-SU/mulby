@@ -4,10 +4,12 @@ import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import type { PluginInfo } from '../../shared/types/electron'
 import type { BackgroundPluginInfo } from '../../shared/types/plugin'
+import type { StoreSource } from '../../shared/types/settings'
+import type { InstalledPluginUpdateInfo, PluginStoreEntry, PluginStoreSourceSyncResult } from '../../shared/types/plugin-store'
 
 interface PluginManagerViewProps {
   onBack: () => void
-  onOpenPluginDetails: (pluginName: string) => void
+  initialSection?: 'installed' | 'store'
 }
 
 const FILTERS = ['all', 'enabled', 'disabled'] as const
@@ -38,6 +40,11 @@ function formatCommand(cmd: FeatureCmd): CommandTag {
     default:
       return { kind: cmd.type || '命令', label: cmd.value || cmd.match || '未命名' }
   }
+}
+
+function formatStoreSyncTime(timestamp?: number): string {
+  if (!timestamp || !Number.isFinite(timestamp)) return '未同步'
+  return new Date(timestamp).toLocaleString()
 }
 
 function InfoItem({ label, value, mono = false }: { label: string; value?: string | number | ReactNode; mono?: boolean }) {
@@ -115,10 +122,9 @@ function PluginDetailsPanel({ pluginName, onClose, onUninstall }: { pluginName: 
   }
 
   const handleUninstall = async () => {
-    if (plugin && confirm(`确定要卸载插件 ${plugin.displayName || pluginName} 吗？`)) {
-      onUninstall(plugin)
-      onClose()
-    }
+    if (!plugin) return
+    onUninstall(plugin)
+    onClose()
   }
 
   if (loading) {
@@ -317,18 +323,58 @@ function PluginDetailsPanel({ pluginName, onClose, onUninstall }: { pluginName: 
   )
 }
 
-export default function PluginManagerView({ onBack }: PluginManagerViewProps) {
+export default function PluginManagerView({ onBack, initialSection = 'installed' }: PluginManagerViewProps) {
+  const [section, setSection] = useState<'installed' | 'store'>(initialSection)
   const [plugins, setPlugins] = useState<PluginInfo[]>([])
   const [runningPlugins, setRunningPlugins] = useState<BackgroundPluginInfo[]>([])
   const [pluginQuery, setPluginQuery] = useState('')
   const [pluginFilter, setPluginFilter] = useState<(typeof FILTERS)[number]>('all')
   const [pluginLoading, setPluginLoading] = useState(false)
   const [selectedPlugin, setSelectedPlugin] = useState<string | null>(null)
+  const [updates, setUpdates] = useState<InstalledPluginUpdateInfo[]>([])
+  const [updateLoading, setUpdateLoading] = useState(false)
+  const [updatingPluginId, setUpdatingPluginId] = useState<string | null>(null)
+  const [updatingAll, setUpdatingAll] = useState(false)
+  const [sources, setSources] = useState<StoreSource[]>([])
+  const [newSource, setNewSource] = useState<{ name: string; url: string }>({ name: '', url: '' })
+  const [sourceError, setSourceError] = useState<string | null>(null)
+  const [sourceModalOpen, setSourceModalOpen] = useState(false)
+  const [storeEntries, setStoreEntries] = useState<PluginStoreEntry[]>([])
+  const [storeSourceStates, setStoreSourceStates] = useState<PluginStoreSourceSyncResult[]>([])
+  const [storeLoading, setStoreLoading] = useState(false)
+  const [storeInstallingKey, setStoreInstallingKey] = useState<string | null>(null)
+  const [storeQuery, setStoreQuery] = useState('')
+
+  const topGhostButtonClass = 'inline-flex h-8 items-center justify-center whitespace-nowrap rounded-full border border-slate-200 bg-white px-3 text-xs leading-none text-slate-700 transition hover:border-slate-300 hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-60 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-200 no-drag'
+  const topPrimaryButtonClass = 'inline-flex h-8 items-center justify-center whitespace-nowrap rounded-full border border-slate-300 bg-white px-3 text-xs leading-none text-slate-900 transition hover:border-slate-400 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 dark:hover:border-slate-500 dark:hover:bg-slate-800 no-drag'
 
   useEffect(() => {
     void refreshPlugins()
     void refreshRunningPlugins()
+    void refreshUpdates()
+    void loadStoreSettings()
   }, [])
+
+  useEffect(() => {
+    setSection(initialSection)
+  }, [initialSection])
+
+  useEffect(() => {
+    if (section !== 'store') return
+    void loadStoreEntries()
+  }, [section])
+
+  useEffect(() => {
+    if (!sourceModalOpen) return
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        event.preventDefault()
+        setSourceModalOpen(false)
+      }
+    }
+    window.addEventListener('keydown', handleKeyDown, true)
+    return () => window.removeEventListener('keydown', handleKeyDown, true)
+  }, [sourceModalOpen])
 
   const refreshPlugins = async () => {
     setPluginLoading(true)
@@ -350,6 +396,168 @@ export default function PluginManagerView({ onBack }: PluginManagerViewProps) {
     }
   }
 
+  const refreshUpdates = async () => {
+    if (!window.mulby?.pluginStore?.checkUpdatesInstalled) return
+    setUpdateLoading(true)
+    try {
+      const result = await window.mulby.pluginStore.checkUpdatesInstalled()
+      setUpdates(result.updates)
+    } catch (err) {
+      console.error('Failed to check plugin updates:', err)
+      window.mulby.notification.show('检查更新失败', 'error')
+    } finally {
+      setUpdateLoading(false)
+    }
+  }
+
+  const loadStoreSettings = async () => {
+    try {
+      const result = await window.mulby.settings.get()
+      setSources(result.settings.storeSources || [])
+    } catch (err) {
+      console.error('Failed to load store sources:', err)
+    }
+  }
+
+  const updateStoreSources = async (nextSources: StoreSource[]) => {
+    const result = await window.mulby.settings.update({ storeSources: nextSources })
+    setSources(result.settings.storeSources || [])
+  }
+
+  const loadStoreEntries = async () => {
+    if (!window.mulby?.pluginStore?.fetch) return
+    setStoreLoading(true)
+    try {
+      const result = await window.mulby.pluginStore.fetch()
+      setStoreEntries(result.entries)
+      setStoreSourceStates(result.sources)
+      await loadStoreSettings()
+    } catch (err) {
+      console.error('Failed to fetch store entries:', err)
+      window.mulby.notification.show('加载仓库失败', 'error')
+    } finally {
+      setStoreLoading(false)
+    }
+  }
+
+  const handleAddSource = async () => {
+    const name = newSource.name.trim()
+    const url = newSource.url.trim()
+    if (!name || !url) {
+      setSourceError('名称和地址不能为空')
+      return
+    }
+    try {
+      new URL(url)
+    } catch {
+      setSourceError('地址格式不正确')
+      return
+    }
+    const id = typeof crypto !== 'undefined' && 'randomUUID' in crypto
+      ? crypto.randomUUID()
+      : `source-${Date.now()}`
+    const nextSource: StoreSource = {
+      id,
+      name,
+      url,
+      enabled: true,
+      priority: sources.length + 1
+    }
+    setSourceError(null)
+    setNewSource({ name: '', url: '' })
+    await updateStoreSources([...sources, nextSource])
+    await loadStoreEntries()
+  }
+
+  const handleToggleSource = async (id: string, enabled: boolean) => {
+    const next = sources.map((source) => source.id === id ? { ...source, enabled } : source)
+    await updateStoreSources(next)
+    await loadStoreEntries()
+  }
+
+  const handleRemoveSource = async (id: string) => {
+    const next = sources.filter((source) => source.id !== id)
+    await updateStoreSources(next)
+    await loadStoreEntries()
+  }
+
+  const installStorePlugin = async (entry: PluginStoreEntry) => {
+    const key = `${entry.plugin.id}:${entry.plugin.version}`
+    setStoreInstallingKey(key)
+    try {
+      const result = await window.mulby.pluginStore.installFromUrl({
+        pluginId: entry.plugin.id,
+        version: entry.plugin.version,
+        downloadUrl: entry.plugin.downloadUrl,
+        sourceId: entry.sourceId,
+        sourceName: entry.sourceName
+      })
+      if (!result.success) {
+        window.mulby.notification.show(result.error || '安装失败', 'error')
+        return
+      }
+      if (result.action === 'updated') {
+        window.mulby.notification.show(`插件 ${entry.plugin.name} 更新成功`, 'success')
+      } else if (result.action === 'already-installed') {
+        window.mulby.notification.show(`插件 ${entry.plugin.name} 已是当前版本`)
+      } else {
+        window.mulby.notification.show(`插件 ${entry.plugin.name} 安装成功`, 'success')
+      }
+      await Promise.all([refreshPlugins(), refreshUpdates(), loadStoreEntries()])
+    } catch (err) {
+      const message = err instanceof Error ? err.message : '安装失败'
+      window.mulby.notification.show(message, 'error')
+    } finally {
+      setStoreInstallingKey(null)
+    }
+  }
+
+  const handleUpdatePlugin = async (plugin: PluginInfo) => {
+    const update = updates.find((item) => item.pluginId === plugin.id)
+    if (!update || update.status !== 'updatable' || !update.downloadUrl) return
+    setUpdatingPluginId(plugin.id)
+    try {
+      const result = await window.mulby.pluginStore.installFromUrl({
+        pluginId: update.pluginId,
+        version: update.remoteVersion,
+        downloadUrl: update.downloadUrl,
+        sourceId: update.sourceId,
+        sourceName: update.sourceName
+      })
+      if (!result.success) {
+        window.mulby.notification.show(result.error || '更新失败', 'error')
+        return
+      }
+      window.mulby.notification.show(`插件 ${plugin.displayName} 已更新`, 'success')
+      await Promise.all([refreshPlugins(), refreshUpdates()])
+    } catch (err) {
+      const message = err instanceof Error ? err.message : '更新失败'
+      window.mulby.notification.show(message, 'error')
+    } finally {
+      setUpdatingPluginId(null)
+    }
+  }
+
+  const handleUpdateAll = async () => {
+    if (!window.mulby?.pluginStore?.updateAll) return
+    setUpdatingAll(true)
+    try {
+      const result = await window.mulby.pluginStore.updateAll()
+      const failed = result.results.filter((item) => !item.success)
+      if (failed.length > 0) {
+        window.mulby.notification.show(`批量更新完成，${failed.length} 个插件失败`, 'error')
+      } else {
+        window.mulby.notification.show(`批量更新完成，共 ${result.results.length} 个插件`, 'success')
+      }
+      await Promise.all([refreshPlugins(), refreshUpdates()])
+    } catch (err) {
+      const message = err instanceof Error ? err.message : '批量更新失败'
+      window.mulby.notification.show(message, 'error')
+    } finally {
+      setUpdatingAll(false)
+    }
+  }
+
   const handleUninstallPlugin = async (plugin: PluginInfo) => {
     if (plugin.builtin) {
       window.mulby.notification.show('内置插件不可卸载', 'error')
@@ -360,6 +568,7 @@ export default function PluginManagerView({ onBack }: PluginManagerViewProps) {
     const result = await window.mulby.plugin.uninstall(plugin.name)
     if (result.success) {
       setPlugins((prev) => prev.filter((item) => item.name !== plugin.name))
+      setUpdates((prev) => prev.filter((item) => item.pluginId !== plugin.id))
       if (selectedPlugin === plugin.name) {
         setSelectedPlugin(null)
       }
@@ -382,8 +591,27 @@ export default function PluginManagerView({ onBack }: PluginManagerViewProps) {
     })
   }, [plugins, pluginQuery, pluginFilter])
 
+  const filteredStoreEntries = useMemo(() => {
+    const query = storeQuery.trim().toLowerCase()
+    if (!query) return storeEntries
+    return storeEntries.filter((entry) => (
+      entry.plugin.name.toLowerCase().includes(query) ||
+      entry.plugin.id.toLowerCase().includes(query) ||
+      entry.plugin.description.toLowerCase().includes(query)
+    ))
+  }, [storeEntries, storeQuery])
+
+  const updatableCount = useMemo(
+    () => updates.filter((item) => item.status === 'updatable').length,
+    [updates]
+  )
+
   const isPluginRunning = (pluginName: string) => {
     return runningPlugins.some(rp => rp.pluginName === pluginName)
+  }
+
+  const getUpdateInfo = (pluginId: string) => {
+    return updates.find((item) => item.pluginId === pluginId)
   }
 
   const getPluginRunMode = (pluginName: string): 'background' | 'active' | null => {
@@ -442,15 +670,83 @@ export default function PluginManagerView({ onBack }: PluginManagerViewProps) {
             <div className="text-xs uppercase tracking-[0.35em] text-slate-500 dark:text-slate-400">Plugins</div>
             <div className="text-lg font-semibold text-slate-900 dark:text-white">插件管理</div>
           </div>
-          <button
-            className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-700 transition hover:border-slate-300 hover:text-slate-900 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-200 no-drag"
-            onClick={refreshPlugins}
-            disabled={pluginLoading}
-          >
-            {pluginLoading ? '刷新中...' : '刷新'}
-          </button>
+          <div className="flex items-center gap-2">
+            {section === 'installed' ? (
+              <>
+                <button
+                  className={topGhostButtonClass}
+                  onClick={() => void refreshUpdates()}
+                  disabled={updateLoading}
+                >
+                  {updateLoading ? '检查中...' : '检查更新'}
+                </button>
+                <button
+                  className={topPrimaryButtonClass}
+                  onClick={() => void handleUpdateAll()}
+                  disabled={updatingAll || updatableCount === 0}
+                >
+                  {updatingAll ? '更新中...' : `全部更新${updatableCount > 0 ? ` (${updatableCount})` : ''}`}
+                </button>
+              </>
+            ) : (
+              <>
+                <button
+                  className={topGhostButtonClass}
+                  onClick={() => setSourceModalOpen(true)}
+                >
+                  管理仓库源
+                </button>
+                <button
+                  className={topPrimaryButtonClass}
+                  onClick={() => void loadStoreEntries()}
+                  disabled={storeLoading}
+                >
+                  {storeLoading ? '加载中...' : '加载仓库'}
+                </button>
+              </>
+            )}
+            <button
+              className={topGhostButtonClass}
+              onClick={() => {
+                void refreshPlugins()
+                void refreshUpdates()
+                if (section === 'store') {
+                  void loadStoreEntries()
+                }
+              }}
+              disabled={pluginLoading}
+            >
+              {pluginLoading ? '刷新中...' : '刷新'}
+            </button>
+          </div>
         </div>
 
+        <div className="border-b border-slate-200/70 bg-white px-6 py-3 dark:border-slate-800/80 dark:bg-slate-900 no-drag">
+          <div className="inline-flex rounded-xl border border-slate-200 bg-slate-50 p-1 dark:border-slate-800 dark:bg-slate-950">
+            <button
+              className={`rounded-lg px-3 py-1.5 text-xs transition ${
+                section === 'installed'
+                  ? 'bg-slate-900 text-white dark:bg-white dark:text-slate-900'
+                  : 'text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white'
+              }`}
+              onClick={() => setSection('installed')}
+            >
+              已安装插件
+            </button>
+            <button
+              className={`rounded-lg px-3 py-1.5 text-xs transition ${
+                section === 'store'
+                  ? 'bg-slate-900 text-white dark:bg-white dark:text-slate-900'
+                  : 'text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white'
+              }`}
+              onClick={() => setSection('store')}
+            >
+              在线商店
+            </button>
+          </div>
+        </div>
+
+        {section === 'installed' ? (
         <div className="flex-1 min-h-0 flex no-drag">
           {/* 左侧插件列表 */}
           <div className="w-80 border-r border-slate-200/70 bg-white dark:border-slate-800/80 dark:bg-slate-900 flex flex-col">
@@ -505,6 +801,8 @@ export default function PluginManagerView({ onBack }: PluginManagerViewProps) {
                     const isRunning = isPluginRunning(plugin.name)
                     const runMode = getPluginRunMode(plugin.name)
                     const isSelected = selectedPlugin === plugin.name
+                    const updateInfo = getUpdateInfo(plugin.id)
+                    const canUpdate = updateInfo?.status === 'updatable'
                     return (
                       <button
                         key={plugin.id}
@@ -542,6 +840,25 @@ export default function PluginManagerView({ onBack }: PluginManagerViewProps) {
                             </div>
                           </div>
                           <div className="flex flex-col items-end gap-1">
+                            {canUpdate && (
+                              <button
+                                className="rounded-full bg-emerald-100 px-1.5 py-0.5 text-[10px] text-emerald-700 transition hover:bg-emerald-200 dark:bg-emerald-900/30 dark:text-emerald-300 dark:hover:bg-emerald-900/50"
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  void handleUpdatePlugin(plugin)
+                                }}
+                                disabled={updatingPluginId === plugin.id}
+                              >
+                                {updatingPluginId === plugin.id
+                                  ? '更新中...'
+                                  : `更新 ${updateInfo?.installedVersion ?? ''}→${updateInfo?.remoteVersion ?? ''}`}
+                              </button>
+                            )}
+                            {updateInfo?.status === 'latest' && (
+                              <span className="rounded-full bg-slate-100 px-1.5 py-0.5 text-[10px] text-slate-600 dark:bg-slate-800 dark:text-slate-400">
+                                已最新
+                              </span>
+                            )}
                             {isRunning && runMode && (
                               <span className={`rounded-full px-1.5 py-0.5 text-[10px] ${
                                 runMode === 'background'
@@ -593,6 +910,163 @@ export default function PluginManagerView({ onBack }: PluginManagerViewProps) {
             )}
           </div>
         </div>
+        ) : (
+          <div className="flex-1 min-h-0 overflow-auto no-drag">
+            <div className="mx-auto max-w-6xl space-y-5 px-6 pb-8 pt-6">
+              <div className="rounded-2xl border border-slate-200/80 bg-white p-5 dark:border-slate-800/80 dark:bg-slate-900">
+                <div className="mb-3 flex items-center justify-between gap-3">
+                  <div>
+                    <div className="text-sm font-medium text-slate-900 dark:text-white">在线插件</div>
+                    <div className="text-xs text-slate-500 dark:text-slate-400">
+                      已配置 {sources.length} 个仓库源
+                    </div>
+                  </div>
+                  <input
+                    className="w-64 rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-700 outline-none transition focus:border-slate-300 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-200"
+                    placeholder="搜索插件..."
+                    value={storeQuery}
+                    onChange={(e) => setStoreQuery(e.target.value)}
+                  />
+                </div>
+                {filteredStoreEntries.length === 0 ? (
+                  <div className="text-xs text-slate-500 dark:text-slate-400">
+                    {storeLoading ? '正在加载仓库索引...' : '暂无可安装插件，请先添加并加载来源。'}
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    {filteredStoreEntries.map((entry) => {
+                      const key = `${entry.plugin.id}:${entry.plugin.version}`
+                      const status = entry.installState.status
+                      const buttonLabel = status === 'updatable' ? '更新' : status === 'installed' ? '已安装' : '安装'
+                      const disabled = status === 'installed' || storeInstallingKey === key
+                      return (
+                        <div key={key} className="rounded-xl border border-slate-200/80 bg-slate-50/70 px-4 py-3 dark:border-slate-800 dark:bg-slate-950/70">
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="min-w-0">
+                              <div className="flex items-center gap-2">
+                                <span className="text-sm font-medium text-slate-900 dark:text-white">{entry.plugin.name}</span>
+                                <span className="text-xs text-slate-500 dark:text-slate-400">v{entry.plugin.version}</span>
+                                <span className="rounded-full border border-slate-200 px-2 py-0.5 text-[10px] text-slate-500 dark:border-slate-700 dark:text-slate-400">
+                                  {entry.sourceName}
+                                </span>
+                              </div>
+                              <div className="mt-1 text-xs text-slate-600 dark:text-slate-300">{entry.plugin.description}</div>
+                              <div className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">
+                                ID: {entry.plugin.id}
+                                {entry.installState.installedVersion && <span className="ml-2">本地 v{entry.installState.installedVersion}</span>}
+                                {entry.plugin.author && <span className="ml-2">作者: {entry.plugin.author}</span>}
+                              </div>
+                            </div>
+                            <button
+                              className={status === 'updatable'
+                                ? 'inline-flex h-7 min-w-[68px] shrink-0 items-center justify-center whitespace-nowrap rounded-full border border-slate-900 bg-slate-900 px-3 text-xs text-white transition hover:bg-slate-800 dark:border-white dark:bg-white dark:text-slate-900 dark:hover:bg-slate-200'
+                                : 'inline-flex h-7 min-w-[68px] shrink-0 items-center justify-center whitespace-nowrap rounded-full border border-slate-200 bg-white px-3 text-xs text-slate-700 transition hover:border-slate-300 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-200'
+                              }
+                              disabled={disabled}
+                              onClick={() => void installStorePlugin(entry)}
+                            >
+                              {storeInstallingKey === key ? '处理中...' : buttonLabel}
+                            </button>
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {sourceModalOpen && (
+          <div
+            className="absolute inset-0 z-40 flex items-center justify-center bg-slate-900/45 px-4 py-6 no-drag"
+            onClick={() => setSourceModalOpen(false)}
+          >
+            <div
+              className="w-full max-w-3xl rounded-2xl border border-slate-200/80 bg-white shadow-2xl dark:border-slate-800 dark:bg-slate-900"
+              onClick={(event) => event.stopPropagation()}
+            >
+              <div className="flex items-center justify-between border-b border-slate-200/80 px-5 py-4 dark:border-slate-800">
+                <div>
+                  <div className="text-sm font-medium text-slate-900 dark:text-white">仓库源管理</div>
+                  <div className="text-xs text-slate-500 dark:text-slate-400">统一维护插件索引 URL，不占用在线插件展示区</div>
+                </div>
+                <button
+                  className="rounded-full border border-slate-200 bg-white px-2 py-1 text-xs text-slate-700 transition hover:border-slate-300 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-200"
+                  onClick={() => setSourceModalOpen(false)}
+                >
+                  关闭
+                </button>
+              </div>
+
+              <div className="max-h-[70vh] overflow-auto px-5 py-4">
+                <div className="space-y-3">
+                  {sources.length === 0 ? (
+                    <div className="text-sm text-slate-500 dark:text-slate-400">还没有添加任何插件源。</div>
+                  ) : (
+                    sources.map((source) => {
+                      const syncState = storeSourceStates.find((item) => item.sourceId === source.id)
+                      return (
+                        <div key={source.id} className="flex items-center justify-between gap-4 rounded-xl border border-slate-200/80 bg-slate-50/70 px-4 py-3 dark:border-slate-800 dark:bg-slate-950/70">
+                          <div className="min-w-0">
+                            <div className="text-sm font-medium text-slate-900 dark:text-white">{source.name}</div>
+                            <div className="truncate text-xs text-slate-500 dark:text-slate-400">{source.url}</div>
+                            <div className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">
+                              最近同步：{formatStoreSyncTime(syncState?.lastSyncAt ?? source.lastSyncAt)}
+                              {((syncState && !syncState.success) || source.lastError) && (
+                                <span className="ml-2 text-red-500">{syncState?.error || source.lastError}</span>
+                              )}
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <button
+                              className={`rounded-full px-3 py-1 text-xs transition ${source.enabled
+                                ? 'border border-slate-900 bg-slate-900 text-white dark:border-white dark:bg-white dark:text-slate-900'
+                                : 'border border-slate-200 bg-white text-slate-600 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-300'
+                              }`}
+                              onClick={() => void handleToggleSource(source.id, !source.enabled)}
+                            >
+                              {source.enabled ? '已启用' : '已停用'}
+                            </button>
+                            <button
+                              className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs text-slate-700 transition hover:border-slate-300 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-200"
+                              onClick={() => void handleRemoveSource(source.id)}
+                            >
+                              删除
+                            </button>
+                          </div>
+                        </div>
+                      )
+                    })
+                  )}
+                </div>
+
+                <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-[180px_minmax(0,1fr)_100px]">
+                  <input
+                    className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 outline-none focus:border-slate-300 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-200"
+                    placeholder="来源名称"
+                    value={newSource.name}
+                    onChange={(e) => setNewSource((prev) => ({ ...prev, name: e.target.value }))}
+                  />
+                  <input
+                    className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 outline-none focus:border-slate-300 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-200"
+                    placeholder="JSON 索引地址"
+                    value={newSource.url}
+                    onChange={(e) => setNewSource((prev) => ({ ...prev, url: e.target.value }))}
+                  />
+                  <button
+                    className="rounded-xl border border-slate-900 bg-slate-900 px-3 py-2 text-sm text-white transition hover:bg-slate-800 dark:border-white dark:bg-white dark:text-slate-900 dark:hover:bg-slate-200"
+                    onClick={() => void handleAddSource()}
+                  >
+                    添加来源
+                  </button>
+                </div>
+                {sourceError && <div className="mt-2 text-xs text-red-500">{sourceError}</div>}
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   )

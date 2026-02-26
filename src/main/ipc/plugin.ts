@@ -4,11 +4,13 @@ import { PluginManager } from '../plugin'
 import { resolveIcon } from '../plugin/icon-resolver'
 import type { InputPayload, Plugin, PluginFeature } from '../../shared/types/plugin'
 import { PluginInstaller } from '../plugin/installer'
+import { PluginStoreService } from '../plugin/store-service'
 
 
 
 export function registerPluginHandlers(manager: PluginManager) {
   const installer = new PluginInstaller()
+  const storeService = new PluginStoreService(manager, installer)
   const userPluginsDir = resolve(app.getPath('userData'), 'plugins')
   const isBuiltin = (pluginPath: string) => !resolve(pluginPath).startsWith(userPluginsDir)
   const featureIconCache = new Map<string, Awaited<ReturnType<typeof resolveIcon>> | null>()
@@ -122,13 +124,33 @@ export function registerPluginHandlers(manager: PluginManager) {
   // 安装插件
   ipcMain.handle('plugin:install', async (_, filePath: string) => {
     const result = await installer.install(filePath)
-    if (result.success) {
+    if (result.success && result.action !== 'already-installed') {
       await manager.init() // 重新加载插件
       if (result.pluginName) {
         await manager.initializePlugin(result.pluginName)
       }
     }
     return result
+  })
+
+  // 拉取插件商店索引
+  ipcMain.handle('plugin:store:fetch', async () => {
+    return storeService.fetchStoreEntries()
+  })
+
+  // 从插件商店 URL 下载并安装
+  ipcMain.handle('plugin:store:installFromUrl', async (_, input) => {
+    return storeService.installFromUrl(input || {})
+  })
+
+  // 检查已安装插件更新
+  ipcMain.handle('plugin:store:checkUpdatesInstalled', async () => {
+    return storeService.checkInstalledUpdates()
+  })
+
+  // 批量更新
+  ipcMain.handle('plugin:store:updateAll', async (_, pluginIds?: string[]) => {
+    return storeService.updateAll(pluginIds)
   })
 
   // 启用插件

@@ -427,6 +427,13 @@ const mulbyApi = {
     outPlugin: (isKill?: boolean) => ipcRenderer.invoke('plugin:out', isKill)
   },
 
+  pluginStore: {
+    fetch: () => ipcRenderer.invoke('plugin:store:fetch'),
+    installFromUrl: (input: any) => ipcRenderer.invoke('plugin:store:installFromUrl', input),
+    checkUpdatesInstalled: () => ipcRenderer.invoke('plugin:store:checkUpdatesInstalled'),
+    updateAll: (pluginIds?: string[]) => ipcRenderer.invoke('plugin:store:updateAll', pluginIds)
+  },
+
   // 任务调度器 API
   scheduler: {
     listTasks: (filter?: { pluginId?: string; status?: string; type?: string; limit?: number; offset?: number }) =>

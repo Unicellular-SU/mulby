@@ -49,6 +49,7 @@ function App() {
   const [viewMode, setViewMode] = useState<'home' | 'plugin-details' | 'settings' | 'plugins' | 'logs' | 'background-plugins' | 'task-scheduler' | 'ai-settings' | 'ai-mcp-settings' | 'ai-skills-settings'>('home')
   const [settingsSection, setSettingsSection] = useState<SettingsSection>('general')
   const [pluginManagerReturnTarget, setPluginManagerReturnTarget] = useState<'home' | 'settings'>('home')
+  const [pluginManagerSection, setPluginManagerSection] = useState<'installed' | 'store'>('installed')
   const [backgroundPluginManagerReturnTarget, setBackgroundPluginManagerReturnTarget] = useState<'home' | 'settings'>('home')
   const [taskSchedulerReturnTarget, setTaskSchedulerReturnTarget] = useState<'home' | 'settings'>('home')
   const [isDragging, setIsDragging] = useState(false)
@@ -201,13 +202,14 @@ function App() {
     setViewMode('settings')
   }, [pluginOpen])
 
-  const openPluginManager = useCallback((from: 'home' | 'settings' = 'home') => {
+  const openPluginManager = useCallback((from: 'home' | 'settings' = 'home', section: 'installed' | 'store' = 'installed') => {
     if (pluginOpen) {
       window.mulby.window.close()
       setPluginOpen(false)
     }
     setAttachmentsManagerOpen(false)
     setPluginManagerReturnTarget(from)
+    setPluginManagerSection(section)
     setViewMode('plugins')
   }, [pluginOpen])
 
@@ -293,10 +295,10 @@ function App() {
 
   useEffect(() => {
     const cleanup = window.mulby.app.onOpenPluginStore(() => {
-      openSettings('store')
+      openPluginManager('home', 'store')
     })
     return cleanup
-  }, [openSettings])
+  }, [openPluginManager])
 
   useEffect(() => {
     const cleanup = window.mulby.app.onOpenPluginManager(() => {
@@ -468,7 +470,13 @@ function App() {
     try {
       const result = await window.mulby.plugin.install(pluginFile.path)
       if (result.success) {
-        window.mulby.notification.show(`插件 ${result.pluginName} 安装成功`)
+        if (result.action === 'already-installed') {
+          window.mulby.notification.show(`插件 ${result.pluginName} 已是当前版本`)
+        } else if (result.action === 'updated') {
+          window.mulby.notification.show(`插件 ${result.pluginName} 更新成功`)
+        } else {
+          window.mulby.notification.show(`插件 ${result.pluginName} 安装成功`)
+        }
       } else {
         window.mulby.notification.show(result.error || '安装失败', 'error')
       }
@@ -499,8 +507,8 @@ function App() {
           section={settingsSection}
           onSectionChange={setSettingsSection}
           onClose={() => setViewMode('home')}
-          onOpenPluginManager={() => {
-            openPluginManager('settings')
+          onOpenPluginManager={(section = 'installed') => {
+            openPluginManager('settings', section)
           }}
           onOpenBackgroundPluginManager={() => {
             openBackgroundPluginManager('settings')
@@ -551,12 +559,8 @@ function App() {
     return (
       <div className={`app ${isDragging ? 'dragging' : ''}`}>
         <PluginManagerView
+          initialSection={pluginManagerSection}
           onBack={() => setViewMode(pluginManagerReturnTarget === 'settings' ? 'settings' : 'home')}
-          onOpenPluginDetails={(pluginName) => {
-            setDetailsPluginName(pluginName)
-            setDetailsReturnTarget('plugins')
-            setViewMode('plugin-details')
-          }}
         />
       </div>
     )

@@ -5,15 +5,13 @@ import type {
   AppShortcutAction,
   CommandAuditItem,
   CommandRule,
-  ShortcutStatusMap,
-  StoreSource
+  ShortcutStatusMap
 } from '../../shared/types/settings'
 import { useInAppNotice } from './InAppNotice'
 import UnifiedSelect from './UnifiedSelect'
 type SettingsSection =
   | 'general'
   | 'shortcuts'
-  | 'store'
   | 'permissions'
   | 'security'
   | 'developer'
@@ -23,7 +21,7 @@ interface SettingsViewProps {
   section: SettingsSection
   onSectionChange: (section: SettingsSection) => void
   onClose: () => void
-  onOpenPluginManager: () => void
+  onOpenPluginManager: (section?: 'installed' | 'store') => void
   onOpenBackgroundPluginManager?: () => void
   onOpenTaskScheduler?: () => void
   onOpenLogViewer?: () => void
@@ -33,7 +31,6 @@ interface SettingsViewProps {
 const SECTION_ITEMS: { id: SettingsSection; label: string }[] = [
   { id: 'general', label: '通用' },
   { id: 'shortcuts', label: '快捷键' },
-  { id: 'store', label: '插件商店' },
   { id: 'permissions', label: '权限' },
   { id: 'security', label: '工具与命令' },
   { id: 'developer', label: '开发者' },
@@ -316,8 +313,6 @@ export default function SettingsView({ section, onSectionChange, onClose, onOpen
     allowEnvKeys: ''
   })
   const [appInfo, setAppInfo] = useState<{ name: string; version: string; userDataPath: string } | null>(null)
-  const [newSource, setNewSource] = useState<{ name: string; url: string }>({ name: '', url: '' })
-  const [sourceError, setSourceError] = useState<string | null>(null)
   const [_activeRecordings, setActiveRecordings] = useState(0)
 
   useEffect(() => {
@@ -360,7 +355,6 @@ export default function SettingsView({ section, onSectionChange, onClose, onOpen
     void loadAudit()
   }, [section, settings?.commandRunner.audit.records.length])
 
-  const sources = settings?.storeSources ?? []
   const visibleCapabilityGrants = useMemo(() => {
     if (!settings) return []
     return settings.aiTooling.capabilityPolicy.globalGrants || []
@@ -764,46 +758,6 @@ export default function SettingsView({ section, onSectionChange, onClose, onOpen
     })
   }
 
-  const handleAddSource = async () => {
-    const name = newSource.name.trim()
-    const url = newSource.url.trim()
-    if (!name || !url) {
-      setSourceError('名称和地址不能为空')
-      return
-    }
-
-    try {
-      new URL(url)
-    } catch {
-      setSourceError('地址格式不正确')
-      return
-    }
-
-    const id = typeof crypto !== 'undefined' && 'randomUUID' in crypto
-      ? crypto.randomUUID()
-      : `source-${Date.now()}`
-    const nextSource: StoreSource = {
-      id,
-      name,
-      url,
-      enabled: true,
-      priority: sources.length + 1
-    }
-    setSourceError(null)
-    setNewSource({ name: '', url: '' })
-    await updateSettings({ storeSources: [...sources, nextSource] })
-  }
-
-  const handleToggleSource = async (id: string, enabled: boolean) => {
-    const next = sources.map(source => source.id === id ? { ...source, enabled } : source)
-    await updateSettings({ storeSources: next })
-  }
-
-  const handleRemoveSource = async (id: string) => {
-    const next = sources.filter(source => source.id !== id)
-    await updateSettings({ storeSources: next })
-  }
-
   const currentSectionLabel = useMemo(
     () => SECTION_ITEMS.find(item => item.id === section)?.label ?? '',
     [section]
@@ -897,7 +851,7 @@ export default function SettingsView({ section, onSectionChange, onClose, onOpen
                       <div className="text-sm font-medium text-slate-900 dark:text-white">插件管理</div>
                       <div className="text-xs text-slate-500 dark:text-slate-400">管理插件启用状态、更新与卸载</div>
                     </div>
-                    <button className={primaryPillClass} onClick={onOpenPluginManager}>
+                    <button className={primaryPillClass} onClick={() => onOpenPluginManager('installed')}>
                       打开插件管理
                     </button>
                   </div>
@@ -943,74 +897,6 @@ export default function SettingsView({ section, onSectionChange, onClose, onOpen
                   ))}
                 </div>
               )}
-
-              {section === 'store' && settings && (
-                <div className="space-y-6">
-                  <div>
-                    <div className="mb-2 text-sm font-medium text-slate-900 dark:text-white">插件源</div>
-                    <div className="space-y-3">
-                      {sources.length === 0 && (
-                        <div className="text-sm text-slate-500 dark:text-slate-400">
-                          还没有添加任何插件源。
-                        </div>
-                      )}
-                      {sources.map(source => (
-                        <div
-                          key={source.id}
-                          className={`${cardClassTight} flex items-center justify-between gap-4`}
-                        >
-                          <div className="min-w-0">
-                            <div className="text-sm font-medium text-slate-900 dark:text-white">{source.name}</div>
-                            <div className="text-xs text-slate-500 dark:text-slate-400 truncate">{source.url}</div>
-                          </div>
-                          <div className="flex items-center gap-3">
-                            <button
-                              className={source.enabled ? primaryPillClass : pillClass}
-                              onClick={() => handleToggleSource(source.id, !source.enabled)}
-                            >
-                              {source.enabled ? '已启用' : '已停用'}
-                            </button>
-                            <button
-                              className={actionButtonClass}
-                              onClick={() => handleRemoveSource(source.id)}
-                            >
-                              删除
-                            </button>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-
-                  <div>
-                    <div className="mb-2 text-sm font-medium text-slate-900 dark:text-white">新增插件源</div>
-                    <div className="grid grid-cols-1 gap-3">
-                      <input
-                        className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-2 text-sm text-slate-700 shadow-sm outline-none transition focus:border-slate-300 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-200"
-                        placeholder="来源名称"
-                        value={newSource.name}
-                        onChange={(e) => setNewSource(prev => ({ ...prev, name: e.target.value }))}
-                      />
-                      <input
-                        className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-2 text-sm text-slate-700 shadow-sm outline-none transition focus:border-slate-300 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-200"
-                        placeholder="JSON 索引地址"
-                        value={newSource.url}
-                        onChange={(e) => setNewSource(prev => ({ ...prev, url: e.target.value }))}
-                      />
-                      {sourceError && (
-                        <div className="text-xs text-red-500">{sourceError}</div>
-                      )}
-                      <button
-                        className="inline-flex items-center justify-center rounded-full border border-slate-900 bg-slate-900 px-4 py-2 text-sm text-white transition hover:bg-slate-800 dark:border-white dark:bg-white dark:text-slate-900 dark:hover:bg-slate-100"
-                        onClick={handleAddSource}
-                      >
-                        添加来源
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              )}
-
 
               {section === 'permissions' && (
                 <div className="space-y-3">

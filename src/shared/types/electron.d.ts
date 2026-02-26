@@ -2,6 +2,12 @@ import { InBrowser } from './inbrowser'
 import type { InputPayload, InputAttachment, BackgroundPluginInfo } from './plugin'
 import type { AiApi } from './ai'
 import type { AppSettings, CommandAuditItem, CommandRunnerSettings, ShortcutStatusMap } from './settings'
+import type {
+  InstalledPluginUpdateResult,
+  PluginStoreBatchUpdateResult,
+  PluginStoreFetchResult,
+  PluginStoreInstallFromUrlInput
+} from './plugin-store'
 import type { Task, TaskExecution } from './task'
 
 // 日志条目接口
@@ -397,7 +403,7 @@ export interface ElectronAPI {
     search: (query: string | InputPayload) => Promise<SearchResultItem[]>
     run: (name: string, featureCode: string, input?: string | InputPayload) => Promise<{ success: boolean; hasUI?: boolean; error?: string }>
     getRecentUsed: (limit?: number) => Promise<SearchResultItem[]>
-    install: (filePath: string) => Promise<{ success: boolean; pluginName?: string; isUpdate?: boolean; oldVersion?: string; newVersion?: string; error?: string }>
+    install: (filePath: string) => Promise<{ success: boolean; pluginName?: string; pluginId?: string; action?: 'installed' | 'updated' | 'already-installed' | 'downgrade-blocked'; isUpdate?: boolean; oldVersion?: string; newVersion?: string; error?: string }>
     enable: (name: string) => Promise<{ success: boolean; error?: string }>
     disable: (name: string) => Promise<{ success: boolean; error?: string }>
     uninstall: (name: string) => Promise<{ success: boolean; error?: string }>
@@ -409,6 +415,12 @@ export interface ElectronAPI {
     startBackground: (pluginId: string) => Promise<{ success: boolean }>
     // 停止运行中的插件（包括 UI 插件和后台插件）
     stopPlugin: (pluginId: string) => Promise<{ success: boolean }>
+  }
+  pluginStore: {
+    fetch: () => Promise<PluginStoreFetchResult>
+    installFromUrl: (input: PluginStoreInstallFromUrlInput) => Promise<{ success: boolean; pluginName?: string; pluginId?: string; action?: 'installed' | 'updated' | 'already-installed' | 'downgrade-blocked'; isUpdate?: boolean; oldVersion?: string; newVersion?: string; error?: string }>
+    checkUpdatesInstalled: () => Promise<InstalledPluginUpdateResult>
+    updateAll: (pluginIds?: string[]) => Promise<PluginStoreBatchUpdateResult>
   }
   scheduler: {
     listTasks: (filter?: { pluginId?: string; status?: string; type?: string; limit?: number; offset?: number }) => Promise<Task[]>
