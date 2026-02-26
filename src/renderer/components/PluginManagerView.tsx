@@ -722,22 +722,22 @@ export default function PluginManagerView({ onBack, initialSection = 'installed'
         </div>
 
         <div className="border-b border-slate-200/70 bg-white px-6 py-3 dark:border-slate-800/80 dark:bg-slate-900 no-drag">
-          <div className="inline-flex rounded-xl border border-slate-200 bg-slate-50 p-1 dark:border-slate-800 dark:bg-slate-950">
+          <div className="mb-0 inline-flex items-center gap-1 rounded-full border border-slate-200 bg-slate-50 p-1 dark:border-slate-700 dark:bg-slate-800/60">
             <button
-              className={`rounded-lg px-3 py-1.5 text-xs transition ${
+              className={`no-drag rounded-full px-3 py-1 text-xs transition ${
                 section === 'installed'
-                  ? 'bg-slate-900 text-white dark:bg-white dark:text-slate-900'
-                  : 'text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white'
+                  ? 'bg-white text-slate-900 shadow-sm dark:bg-slate-900 dark:text-slate-100'
+                  : 'text-slate-500 hover:text-slate-800 dark:text-slate-300 dark:hover:text-white'
               }`}
               onClick={() => setSection('installed')}
             >
               已安装插件
             </button>
             <button
-              className={`rounded-lg px-3 py-1.5 text-xs transition ${
+              className={`no-drag rounded-full px-3 py-1 text-xs transition ${
                 section === 'store'
-                  ? 'bg-slate-900 text-white dark:bg-white dark:text-slate-900'
-                  : 'text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white'
+                  ? 'bg-white text-slate-900 shadow-sm dark:bg-slate-900 dark:text-slate-100'
+                  : 'text-slate-500 hover:text-slate-800 dark:text-slate-300 dark:hover:text-white'
               }`}
               onClick={() => setSection('store')}
             >
@@ -772,14 +772,14 @@ export default function PluginManagerView({ onBack, initialSection = 'installed'
                 value={pluginQuery}
                 onChange={(e) => setPluginQuery(e.target.value)}
               />
-              <div className="flex gap-1.5">
+              <div className="flex items-center gap-1 rounded-full border border-slate-200 bg-slate-50 p-1 dark:border-slate-700 dark:bg-slate-800/60">
                 {FILTERS.map((key) => (
                   <button
                     key={key}
-                    className={`flex-1 rounded-lg px-2 py-1 text-xs transition ${
+                    className={`no-drag flex-1 rounded-full px-2 py-1 text-xs transition ${
                       pluginFilter === key
-                        ? 'bg-slate-900 text-white dark:bg-white dark:text-slate-900'
-                        : 'bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700'
+                        ? 'bg-white text-slate-900 shadow-sm dark:bg-slate-900 dark:text-slate-100'
+                        : 'text-slate-500 hover:text-slate-800 dark:text-slate-300 dark:hover:text-white'
                     }`}
                     onClick={() => setPluginFilter(key)}
                   >
