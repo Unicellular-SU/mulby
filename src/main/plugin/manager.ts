@@ -12,6 +12,7 @@ import { pluginFeatureStore } from './dynamic-features'
 import {
   InputPayload,
   Plugin,
+  PluginCmd,
   PluginCommandDisabledToggleInput,
   PluginCommandDisabledToggleResult,
   PluginCommandItem,
@@ -23,6 +24,7 @@ import {
   PluginFeature
 } from '../../shared/types/plugin'
 import { PluginSearchWorker } from './search-worker-manager'
+import { SystemPluginWindowManager } from '../services/system-plugin-window-manager'
 import {
   filterAttachmentsByCmd,
   findBestMatch,
@@ -51,6 +53,63 @@ interface RecentUsedResult {
   useCount: number
 }
 
+function formatMatchRuleExplain(cmd: PluginCmd): string | undefined {
+  if (cmd.type === 'keyword') {
+    return undefined
+  }
+
+  if (cmd.type === 'regex') {
+    if (cmd.explain?.trim()) {
+      return cmd.explain.trim()
+    }
+    const range: string[] = []
+    if (typeof cmd.minLength === 'number') {
+      range.push(`最少 ${cmd.minLength} 字符`)
+    }
+    if (typeof cmd.maxLength === 'number') {
+      range.push(`最多 ${cmd.maxLength} 字符`)
+    }
+    return range.length > 0 ? `正则：${cmd.match}（${range.join('，')}）` : `正则：${cmd.match}`
+  }
+
+  if (cmd.type === 'files') {
+    const parts: string[] = []
+    if (cmd.exts && cmd.exts.length > 0) {
+      parts.push(`扩展名：${cmd.exts.join(', ')}`)
+    }
+    if (cmd.fileType && cmd.fileType !== 'any') {
+      parts.push(`类型：${cmd.fileType === 'directory' ? '目录' : '文件'}`)
+    }
+    if (cmd.match?.trim()) {
+      parts.push(`名称正则：${cmd.match.trim()}`)
+    }
+    if (typeof cmd.minLength === 'number' || typeof cmd.maxLength === 'number') {
+      const min = typeof cmd.minLength === 'number' ? cmd.minLength : 0
+      const max = typeof cmd.maxLength === 'number' ? cmd.maxLength : '∞'
+      parts.push(`数量：${min} ~ ${max}`)
+    }
+    return parts.length > 0 ? parts.join('；') : '文件匹配'
+  }
+
+  if (cmd.type === 'img') {
+    if (cmd.exts && cmd.exts.length > 0) {
+      return `图像扩展名：${cmd.exts.join(', ')}`
+    }
+    return '图像匹配'
+  }
+
+  const parts: string[] = []
+  if (cmd.exclude?.trim()) {
+    parts.push(`排除正则：${cmd.exclude.trim()}`)
+  }
+  if (typeof cmd.minLength === 'number' || typeof cmd.maxLength === 'number') {
+    const min = typeof cmd.minLength === 'number' ? cmd.minLength : 0
+    const max = typeof cmd.maxLength === 'number' ? cmd.maxLength : '∞'
+    parts.push(`文本长度：${min} ~ ${max}`)
+  }
+  return parts.length > 0 ? parts.join('；') : '文本匹配'
+}
+
 
 export class PluginManager {
   private plugins: Map<string, Plugin> = new Map()
@@ -65,6 +124,7 @@ export class PluginManager {
   private commandDisabledManager: PluginCommandDisabledManager
   private backgroundManager: BackgroundPluginManager
   private taskScheduler: TaskScheduler
+  private systemPluginWindowManager: SystemPluginWindowManager | null = null
   private initPromise: Promise<void> | null = null
   private isReloading: boolean = false
 
@@ -110,6 +170,10 @@ export class PluginManager {
     windowManager.setOnWindowClosedCallback(async (pluginId: string) => {
       await this.handleWindowClosed(pluginId)
     })
+  }
+
+  setSystemPluginWindowManager(manager: SystemPluginWindowManager) {
+    this.systemPluginWindowManager = manager
   }
 
   // 初始化：加载所有插件
@@ -290,7 +354,7 @@ export class PluginManager {
             cmdSignature: signature,
             commandKind: getCommandKind(cmd),
             displayLabel: getCommandDisplayLabel(cmd, feature.explain),
-            explain: cmd.type === 'regex' ? cmd.explain : undefined,
+            explain: formatMatchRuleExplain(cmd),
             bindable: isCommandBindable(cmd),
             disabled
           })
@@ -500,6 +564,9 @@ export class PluginManager {
           this.stateManager.recordRecentUsage(plugin.id, featureCode)
         }
         return { success, hasUI: true }
+      }
+      if (this.systemPluginWindowManager) {
+        await this.systemPluginWindowManager.prepareForAttachedPluginLaunch()
       }
       const success = this.windowManager.attachPlugin(plugin, featureCode, resolvedInput, route)
       if (success) {

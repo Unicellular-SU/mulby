@@ -70,6 +70,28 @@ function getCommandTypeLabel(command: PluginCommandItem): string {
   return '匹配指令'
 }
 
+function getMatchTypeLabel(command: PluginCommandItem): string {
+  switch (command.cmdType) {
+    case 'regex':
+      return '正则匹配'
+    case 'files':
+      return '文件匹配'
+    case 'img':
+      return '图像匹配'
+    case 'over':
+      return '文本匹配'
+    default:
+      return '匹配规则'
+  }
+}
+
+function getMatchRuleText(command: PluginCommandItem): string {
+  const explain = command.explain?.trim()
+  if (explain) return explain
+  if (command.cmdSignature) return `签名：${command.cmdSignature}`
+  return '暂无规则说明'
+}
+
 function commandTargetKey(command: PluginCommandItem): string {
   return `${command.pluginId}:${command.featureCode}:${command.cmdId}`
 }
@@ -94,6 +116,7 @@ export default function CommandShortcutPanel({
   const [loading, setLoading] = useState(false)
   const [quickCommandInput, setQuickCommandInput] = useState('')
   const [allCommandsQuery, setAllCommandsQuery] = useState('')
+  const [selectedPluginId, setSelectedPluginId] = useState('')
   const [commands, setCommands] = useState<PluginCommandItem[]>([])
   const [bindings, setBindings] = useState<PluginCommandShortcutBindingRecord[]>([])
   const [recordingCommand, setRecordingCommand] = useState<PluginCommandItem | null>(null)
@@ -184,7 +207,7 @@ export default function CommandShortcutPanel({
     })
   }, [commands, allCommandsQuery])
 
-  const groupedAllCommands = useMemo(() => {
+  const pluginGroups = useMemo(() => {
     const groups = new Map<
       string,
       {
@@ -192,21 +215,30 @@ export default function CommandShortcutPanel({
         pluginDisplayName: string
         pluginName: string
         items: PluginCommandItem[]
+        launchCount: number
+        matchCount: number
       }
     >()
 
     for (const command of filteredAllCommands) {
-      const key = `${command.pluginDisplayName}:${command.pluginId}`
+      const key = command.pluginId
       const existing = groups.get(key)
       if (existing) {
         existing.items.push(command)
+        if (command.commandKind === 'launch') {
+          existing.launchCount += 1
+        } else {
+          existing.matchCount += 1
+        }
         continue
       }
       groups.set(key, {
         pluginId: command.pluginId,
         pluginDisplayName: command.pluginDisplayName,
         pluginName: command.pluginName,
-        items: [command]
+        items: [command],
+        launchCount: command.commandKind === 'launch' ? 1 : 0,
+        matchCount: command.commandKind === 'launch' ? 0 : 1
       })
     }
 
@@ -217,6 +249,40 @@ export default function CommandShortcutPanel({
         items: group.items.sort((a, b) => a.displayLabel.localeCompare(b.displayLabel))
       }))
   }, [filteredAllCommands])
+
+  useEffect(() => {
+    if (mode !== 'all-commands') return
+    if (pluginGroups.length === 0) {
+      if (selectedPluginId) {
+        setSelectedPluginId('')
+      }
+      return
+    }
+    const exists = pluginGroups.some((group) => group.pluginId === selectedPluginId)
+    if (!exists) {
+      setSelectedPluginId(pluginGroups[0].pluginId)
+    }
+  }, [mode, pluginGroups, selectedPluginId])
+
+  const selectedPluginGroup = useMemo(() => {
+    if (pluginGroups.length === 0) return null
+    return pluginGroups.find((group) => group.pluginId === selectedPluginId) || pluginGroups[0]
+  }, [pluginGroups, selectedPluginId])
+
+  const selectedPluginCommands = useMemo(() => {
+    if (!selectedPluginGroup) return []
+    return selectedPluginGroup.items
+  }, [selectedPluginGroup])
+
+  const selectedPluginLaunchCommands = useMemo(
+    () => selectedPluginCommands.filter((item) => item.commandKind === 'launch'),
+    [selectedPluginCommands]
+  )
+
+  const selectedPluginMatchCommands = useMemo(
+    () => selectedPluginCommands.filter((item) => item.commandKind !== 'launch'),
+    [selectedPluginCommands]
+  )
 
   useEffect(() => {
     if (!recordingCommand) return
@@ -291,6 +357,10 @@ export default function CommandShortcutPanel({
 
   const openCommand = useCallback(
     async (command: PluginCommandItem) => {
+      if (command.commandKind !== 'launch') {
+        window.mulby.notification.show('匹配指令需通过匹配输入触发，不能直接打开', 'error')
+        return
+      }
       await onBeforeOpenCommand?.()
       const result = await window.mulby.plugin.runCommand({
         ...buildTargetPayload(command),
@@ -462,62 +532,139 @@ export default function CommandShortcutPanel({
         <div className="space-y-3">
           <input
             className="w-full rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-200"
-            placeholder="搜索插件名 / 功能名 / 指令名"
+            placeholder="搜索全部指令（插件名 / 功能名 / 指令名）"
             value={allCommandsQuery}
             onChange={(e) => setAllCommandsQuery(e.target.value)}
           />
 
-          <div className="max-h-[420px] space-y-3 overflow-auto pr-1">
-            {!loading && groupedAllCommands.length === 0 && (
-              <div className="rounded-xl border border-dashed border-slate-200 px-3 py-6 text-center text-xs text-slate-500 dark:border-slate-700 dark:text-slate-400">
-                暂无指令
-              </div>
-            )}
+          {!loading && filteredAllCommands.length === 0 ? (
+            <div className="rounded-xl border border-dashed border-slate-200 px-3 py-8 text-center text-xs text-slate-500 dark:border-slate-700 dark:text-slate-400">
+              未找到匹配指令
+            </div>
+          ) : (
+            <div className="flex flex-col gap-3 md:h-[520px] md:flex-row">
+              <aside className="rounded-2xl border border-slate-200/80 bg-slate-50/40 p-2 dark:border-slate-800/80 dark:bg-slate-950/40 md:w-48 md:shrink-0">
+                <div className="px-2 py-1.5 text-xs font-semibold text-slate-700 dark:text-slate-200">
+                  插件列表
+                </div>
+                <div className="max-h-[220px] space-y-2 overflow-auto pr-1 md:max-h-[460px]">
+                  {!loading && pluginGroups.length === 0 && (
+                    <div className="rounded-xl border border-dashed border-slate-200 px-3 py-6 text-center text-xs text-slate-500 dark:border-slate-700 dark:text-slate-400">
+                      暂无插件指令
+                    </div>
+                  )}
+                  {pluginGroups.map((group) => {
+                    const isActive = selectedPluginGroup?.pluginId === group.pluginId
+                    return (
+                      <button
+                        key={`${group.pluginId}:${group.pluginDisplayName}`}
+                        className={`w-full rounded-xl border px-3 py-2 text-left transition ${isActive
+                          ? 'border-slate-900 bg-slate-900 text-white dark:border-white dark:bg-white dark:text-slate-900'
+                          : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300 dark:border-slate-800 dark:bg-slate-900/70 dark:text-slate-200 dark:hover:border-slate-700'
+                          }`}
+                        onClick={() => {
+                          setSelectedPluginId(group.pluginId)
+                        }}
+                      >
+                        <div className="truncate text-xs font-semibold">{group.pluginDisplayName}</div>
+                        <div className={`mt-1 text-[10px] ${isActive ? 'text-slate-100 dark:text-slate-700' : 'text-slate-500 dark:text-slate-400'}`}>
+                          {group.items.length} 条指令 · 功能 {group.launchCount} · 匹配 {group.matchCount}
+                        </div>
+                      </button>
+                    )
+                  })}
+                </div>
+              </aside>
 
-            {groupedAllCommands.map((group) => (
-              <div
-                key={`${group.pluginDisplayName}:${group.pluginId}`}
-                className="rounded-2xl border border-slate-200/80 bg-slate-50/50 p-2 dark:border-slate-800/80 dark:bg-slate-950/30"
-              >
-                <div className="px-2 py-1.5">
-                  <div className="truncate text-xs font-semibold text-slate-800 dark:text-slate-100">
-                    {group.pluginDisplayName}
+              <section className="min-w-0 rounded-2xl border border-slate-200/80 bg-slate-50/40 p-3 dark:border-slate-800/80 dark:bg-slate-950/40 md:flex-1">
+                {!loading && !selectedPluginGroup && (
+                  <div className="rounded-xl border border-dashed border-slate-200 px-3 py-6 text-center text-xs text-slate-500 dark:border-slate-700 dark:text-slate-400">
+                    暂无指令
                   </div>
-                  <div className="truncate text-[11px] text-slate-500 dark:text-slate-400">
-                    {group.items.length} 条指令
-                  </div>
-                </div>
-                <div className="space-y-2">
-                  {group.items.map((command) => (
-                    <button
-                      key={`${commandTargetKey(command)}:${command.cmdSignature}`}
-                      className="w-full rounded-xl border border-slate-200/80 bg-white px-3 py-2 text-left transition hover:border-slate-300 dark:border-slate-800/80 dark:bg-slate-900/70 dark:hover:border-slate-700"
-                      onClick={() => setSelectedMenuCommand(command)}
-                    >
-                      <div className="flex items-center justify-between gap-2">
-                        <div className="min-w-0">
-                          <div className="truncate text-sm font-medium text-slate-900 dark:text-white">{command.displayLabel}</div>
-                          <div className="truncate text-[11px] text-slate-500 dark:text-slate-400">
-                            {command.featureExplain}
+                )}
+
+                {selectedPluginGroup && (
+                  <div className="space-y-3 md:flex md:h-full md:flex-col md:space-y-3">
+                    <div className="text-sm font-semibold text-slate-900 dark:text-white">
+                      {selectedPluginGroup.pluginDisplayName}
+                    </div>
+
+                    <div className="max-h-[420px] space-y-3 overflow-auto pr-1 md:max-h-none md:flex-1">
+                      <div className="space-y-2">
+                        <div className="text-xs font-semibold text-slate-600 dark:text-slate-300">功能指令</div>
+                        {selectedPluginLaunchCommands.length === 0 && (
+                          <div className="rounded-xl border border-dashed border-slate-200 px-3 py-4 text-center text-xs text-slate-500 dark:border-slate-700 dark:text-slate-400">
+                            暂无功能指令
                           </div>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <span className="rounded-full border border-slate-200 bg-white px-2 py-0.5 text-[10px] text-slate-600 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300">
-                            {getCommandTypeLabel(command)}
-                          </span>
-                          {command.disabled && (
-                            <span className="rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] text-amber-700 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-300">
-                              已禁用
-                            </span>
-                          )}
-                        </div>
+                        )}
+                        {selectedPluginLaunchCommands.map((command) => (
+                          <button
+                            key={`${commandTargetKey(command)}:${command.cmdSignature}`}
+                            className="w-full rounded-xl border border-slate-200/80 bg-white px-3 py-2 text-left transition hover:border-slate-300 dark:border-slate-800/80 dark:bg-slate-900/70 dark:hover:border-slate-700"
+                            onClick={() => setSelectedMenuCommand(command)}
+                          >
+                            <div className="flex items-center justify-between gap-2">
+                              <div className="min-w-0">
+                                <div className="truncate text-sm font-medium text-slate-900 dark:text-white">{command.displayLabel}</div>
+                                <div className="truncate text-[11px] text-slate-500 dark:text-slate-400">
+                                  {command.featureExplain}
+                                </div>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <span className="rounded-full border border-slate-200 bg-white px-2 py-0.5 text-[10px] text-slate-600 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300">
+                                  {getCommandTypeLabel(command)}
+                                </span>
+                                {command.disabled && (
+                                  <span className="rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] text-amber-700 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-300">
+                                    已禁用
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                          </button>
+                        ))}
                       </div>
-                    </button>
-                  ))}
-                </div>
-              </div>
-            ))}
-          </div>
+
+                      <div className="space-y-2">
+                        <div className="text-xs font-semibold text-slate-600 dark:text-slate-300">匹配指令</div>
+                        {selectedPluginMatchCommands.length === 0 && (
+                          <div className="rounded-xl border border-dashed border-slate-200 px-3 py-4 text-center text-xs text-slate-500 dark:border-slate-700 dark:text-slate-400">
+                            暂无匹配指令
+                          </div>
+                        )}
+                        {selectedPluginMatchCommands.map((command) => (
+                          <button
+                            key={`${commandTargetKey(command)}:${command.cmdSignature}`}
+                            className="w-full rounded-xl border border-slate-200/80 bg-white px-3 py-2 text-left transition hover:border-slate-300 dark:border-slate-800/80 dark:bg-slate-900/70 dark:hover:border-slate-700"
+                            onClick={() => setSelectedMenuCommand(command)}
+                          >
+                            <div className="flex items-center justify-between gap-2">
+                              <div className="min-w-0">
+                                <div className="truncate text-sm font-medium text-slate-900 dark:text-white">{command.displayLabel}</div>
+                                <div className="truncate text-[11px] text-slate-500 dark:text-slate-400">
+                                  {command.featureExplain}
+                                </div>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <span className="rounded-full border border-slate-200 bg-white px-2 py-0.5 text-[10px] text-slate-600 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300">
+                                  {getCommandTypeLabel(command)}
+                                </span>
+                                {command.disabled && (
+                                  <span className="rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] text-amber-700 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-300">
+                                    已禁用
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </section>
+            </div>
+          )}
         </div>
       )}
 
@@ -530,22 +677,36 @@ export default function CommandShortcutPanel({
                 {selectedMenuCommand.pluginDisplayName} · {selectedMenuCommand.featureExplain}
               </div>
             </div>
+            {selectedMenuCommand.commandKind !== 'launch' && (
+              <div className="mb-3 rounded-xl border border-slate-200/80 bg-slate-50/80 px-3 py-2 dark:border-slate-800/80 dark:bg-slate-950/50">
+                <div className="text-xs font-semibold text-slate-700 dark:text-slate-200">
+                  匹配规则 · {getMatchTypeLabel(selectedMenuCommand)}
+                </div>
+                <div className="mt-1 text-xs leading-5 text-slate-600 dark:text-slate-300">
+                  {getMatchRuleText(selectedMenuCommand)}
+                </div>
+              </div>
+            )}
             <div className="space-y-2">
-              <button
-                className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-left text-sm text-slate-700 transition hover:border-slate-300 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200"
-                onClick={() => void openCommand(selectedMenuCommand)}
-              >
-                打开指令
-              </button>
-              <button
-                className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-left text-sm text-slate-700 transition hover:border-slate-300 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200"
-                onClick={() => {
-                  onRequestQuickLaunch?.(selectedMenuCommand.displayLabel)
-                  setSelectedMenuCommand(null)
-                }}
-              >
-                设置全局快捷键
-              </button>
+              {selectedMenuCommand.commandKind === 'launch' && (
+                <button
+                  className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-left text-sm text-slate-700 transition hover:border-slate-300 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200"
+                  onClick={() => void openCommand(selectedMenuCommand)}
+                >
+                  打开指令
+                </button>
+              )}
+              {selectedMenuCommand.commandKind === 'launch' && (
+                <button
+                  className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-left text-sm text-slate-700 transition hover:border-slate-300 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200"
+                  onClick={() => {
+                    onRequestQuickLaunch?.(selectedMenuCommand.displayLabel)
+                    setSelectedMenuCommand(null)
+                  }}
+                >
+                  设置全局快捷键
+                </button>
+              )}
               <button
                 className="w-full rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-left text-sm text-red-700 transition hover:border-red-300 dark:border-red-900/60 dark:bg-red-950/30 dark:text-red-300"
                 onClick={() => void toggleCommandDisabled(selectedMenuCommand)}

@@ -2,6 +2,7 @@ import { contextBridge, ipcRenderer } from 'electron'
 import { inbrowser } from './inbrowser'
 import { patchConsoleWithTimestamp } from '../shared/utils/console'
 import type { InputPayload } from '../shared/types/plugin'
+import type { OpenSystemPluginPayload, SystemPluginBeforeAttachPayload } from '../shared/types/electron'
 
 // 检测是否启用了 contextIsolation
 // 当 contextIsolation 为 false 时，contextBridge 不可用，需要直接设置 window
@@ -326,10 +327,17 @@ const mulbyApi = {
 
   // App events
   app: {
-    onOpenSettings: (callback: () => void) => {
-      const listener = () => callback()
-      ipcRenderer.on('app:openSettings', listener)
-      return () => ipcRenderer.removeListener('app:openSettings', listener)
+    onOpenSystemPlugin: (callback: (payload: OpenSystemPluginPayload) => void) => {
+      const listener = (_: any, payload: OpenSystemPluginPayload) => callback(payload)
+      ipcRenderer.on('app:openSystemPlugin', listener)
+      return () => ipcRenderer.removeListener('app:openSystemPlugin', listener)
+    },
+    onSystemPluginBeforeAttach: (callback: (payload: SystemPluginBeforeAttachPayload) => void | Promise<void>) => {
+      const listener = (_: any, payload: SystemPluginBeforeAttachPayload) => {
+        void callback(payload)
+      }
+      ipcRenderer.on('app:systemPluginBeforeAttach', listener)
+      return () => ipcRenderer.removeListener('app:systemPluginBeforeAttach', listener)
     },
     onOpenAiSettings: (callback: () => void) => {
       const listener = () => callback()
@@ -366,6 +374,12 @@ const mulbyApi = {
       ipcRenderer.on('app:openCommandShortcuts', listener)
       return () => ipcRenderer.removeListener('app:openCommandShortcuts', listener)
     }
+  },
+
+  systemPlugin: {
+    setActive: (pluginId: string | null) => ipcRenderer.invoke('systemPlugin:setActive', pluginId),
+    notifyReadyForAttach: (requestId: string) => ipcRenderer.invoke('systemPlugin:notifyReadyForAttach', requestId),
+    getActive: () => ipcRenderer.invoke('systemPlugin:getActive')
   },
 
   // 窗口状态变化事件

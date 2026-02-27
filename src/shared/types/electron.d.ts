@@ -341,6 +341,16 @@ export interface AppInfo {
   userDataPath: string
 }
 
+export interface OpenSystemPluginPayload {
+  pluginId: string
+  params?: Record<string, unknown>
+}
+
+export interface SystemPluginBeforeAttachPayload {
+  requestId: string
+  pluginId: string
+}
+
 export interface ElectronAPI {
   window: {
     hide: () => void
@@ -361,7 +371,8 @@ export interface ElectronAPI {
   onThemeChange: (callback: (theme: 'light' | 'dark') => void) => () => void
   ai: AiApi
   app: {
-    onOpenSettings: (callback: () => void) => () => void
+    onOpenSystemPlugin: (callback: (payload: OpenSystemPluginPayload) => void) => () => void
+    onSystemPluginBeforeAttach: (callback: (payload: SystemPluginBeforeAttachPayload) => void | Promise<void>) => () => void
     onOpenAiSettings: (callback: () => void) => () => void
     onOpenPluginStore: (callback: () => void) => () => void
     onOpenPluginManager: (callback: () => void) => () => void
@@ -369,6 +380,11 @@ export interface ElectronAPI {
     onOpenTaskScheduler: (callback: () => void) => () => void
     onOpenLogViewer: (callback: () => void) => () => void
     onOpenCommandShortcuts: (callback: (payload?: { cmdLabel?: string }) => void) => () => void
+  }
+  systemPlugin: {
+    setActive: (pluginId: string | null) => Promise<boolean>
+    notifyReadyForAttach: (requestId: string) => Promise<boolean>
+    getActive: () => Promise<string | null>
   }
   clipboard: {
     readText: () => Promise<string>

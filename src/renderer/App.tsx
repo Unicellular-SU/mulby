@@ -6,12 +6,15 @@ import PluginManagerView from './components/PluginManagerView'
 import BackgroundPluginManagerView from './components/BackgroundPluginManagerView'
 import TaskSchedulerView from './components/TaskSchedulerView'
 import AttachmentManager from './components/AttachmentManager'
-import SettingsView, { SettingsSection } from './components/SettingsView'
+import type { SettingsSection } from './components/SettingsView'
 import AiSettingsView from './components/AiSettingsView'
 import AiMcpSettingsView from './components/AiMcpSettingsView'
 import AiSkillsSettingsView from './components/AiSkillsSettingsView'
 import LogViewerView from './components/LogViewerView'
+import SystemPluginHost from './system-plugins/SystemPluginHost'
+import { DEFAULT_SYSTEM_PLUGIN_ROUTE, type SystemPluginRoute } from './system-plugins/types'
 import type { InputAttachment, InputPayload } from '../shared/types/plugin'
+import type { OpenSystemPluginPayload, SystemPluginBeforeAttachPayload } from '../shared/types/electron'
 
 // 插件附着信息（Panel 模式）
 interface PluginInfo {
@@ -40,15 +43,33 @@ function isInpluginFile(file: DroppedFile): boolean {
   return normalizedName.endsWith('.inplugin') || normalizedPath.endsWith('.inplugin')
 }
 
+const SETTINGS_SECTION_SET = new Set<SettingsSection>([
+  'general',
+  'shortcuts',
+  'commandQuickLaunch',
+  'commandAll',
+  'permissions',
+  'security',
+  'developer',
+  'about'
+])
+
+function parseSettingsSection(value: unknown): SettingsSection | null {
+  if (typeof value !== 'string') return null
+  if (SETTINGS_SECTION_SET.has(value as SettingsSection)) {
+    return value as SettingsSection
+  }
+  return null
+}
+
 function App() {
   const [query, setQuery] = useState('')
   const [, setResultCount] = useState(0)
   const [pluginOpen, setPluginOpen] = useState(false) // 仅用于跟踪插件是否打开
   const [detailsPluginName, setDetailsPluginName] = useState<string | null>(null)
   const [detailsReturnTarget, setDetailsReturnTarget] = useState<'home' | 'settings' | 'plugins'>('home')
-  const [viewMode, setViewMode] = useState<'home' | 'plugin-details' | 'settings' | 'plugins' | 'logs' | 'background-plugins' | 'task-scheduler' | 'ai-settings' | 'ai-mcp-settings' | 'ai-skills-settings'>('home')
-  const [settingsSection, setSettingsSection] = useState<SettingsSection>('general')
-  const [shortcutCommandHint, setShortcutCommandHint] = useState('')
+  const [viewMode, setViewMode] = useState<'home' | 'plugin-details' | 'system-plugin' | 'plugins' | 'logs' | 'background-plugins' | 'task-scheduler' | 'ai-settings' | 'ai-mcp-settings' | 'ai-skills-settings'>('home')
+  const [systemPluginRoute, setSystemPluginRoute] = useState<SystemPluginRoute>(DEFAULT_SYSTEM_PLUGIN_ROUTE)
   const [pluginManagerReturnTarget, setPluginManagerReturnTarget] = useState<'home' | 'settings'>('home')
   const [pluginManagerSection, setPluginManagerSection] = useState<'installed' | 'store'>('installed')
   const [backgroundPluginManagerReturnTarget, setBackgroundPluginManagerReturnTarget] = useState<'home' | 'settings'>('home')
@@ -200,9 +221,14 @@ function App() {
       setPluginOpen(false)
     }
     setAttachmentsManagerOpen(false)
-    setSettingsSection(section)
-    setShortcutCommandHint(commandHint?.trim() || '')
-    setViewMode('settings')
+    setSystemPluginRoute({
+      pluginId: 'settings-center',
+      params: {
+        section,
+        shortcutCommandHint: commandHint?.trim() || ''
+      }
+    })
+    setViewMode('system-plugin')
   }, [pluginOpen])
 
   const openPluginManager = useCallback((from: 'home' | 'settings' = 'home', section: 'installed' | 'store' = 'installed') => {
@@ -300,8 +326,16 @@ function App() {
   }, [openSettings])
 
   useEffect(() => {
-    const cleanup = window.mulby.app.onOpenSettings(() => {
-      openSettings()
+    const cleanup = window.mulby.app.onOpenSystemPlugin((payload: OpenSystemPluginPayload) => {
+      if (!payload || payload.pluginId !== 'settings-center') {
+        return
+      }
+      const params = payload.params || {}
+      const section = parseSettingsSection(params.section) || 'general'
+      const shortcutHint = typeof params.shortcutCommandHint === 'string'
+        ? params.shortcutCommandHint
+        : undefined
+      openSettings(section, shortcutHint)
     })
     return cleanup
   }, [openSettings])
@@ -333,6 +367,34 @@ function App() {
     })
     return cleanup
   }, [openAiSettingsCenter])
+
+  const collapseSystemPluginForAttach = useCallback(async () => {
+    let collapsed = false
+    setViewMode((prev) => {
+      if (prev === 'system-plugin') {
+        collapsed = true
+        return 'home'
+      }
+      return prev
+    })
+    if (collapsed) {
+      await new Promise<void>((resolve) => setTimeout(resolve, 120))
+    }
+  }, [])
+
+  useEffect(() => {
+    const cleanup = window.mulby.app.onSystemPluginBeforeAttach(async (payload: SystemPluginBeforeAttachPayload) => {
+      if (!payload?.requestId) return
+      await collapseSystemPluginForAttach()
+      await window.mulby.systemPlugin.notifyReadyForAttach(payload.requestId)
+    })
+    return cleanup
+  }, [collapseSystemPluginForAttach])
+
+  useEffect(() => {
+    const activePluginId = viewMode === 'system-plugin' ? systemPluginRoute.pluginId : null
+    void window.mulby.systemPlugin.setActive(activePluginId)
+  }, [viewMode, systemPluginRoute.pluginId])
 
   useEffect(() => {
     const cleanup = window.mulby.app.onOpenBackgroundPlugins(() => {
@@ -520,25 +582,36 @@ function App() {
           pluginName={detailsPluginName}
           onBack={() => {
             setDetailsPluginName(null)
-            setViewMode(detailsReturnTarget === 'settings' ? 'settings' : detailsReturnTarget === 'plugins' ? 'plugins' : 'home')
+            setViewMode(detailsReturnTarget === 'settings' ? 'system-plugin' : detailsReturnTarget === 'plugins' ? 'plugins' : 'home')
           }}
         />
       </div>
     )
   }
 
-  if (viewMode === 'settings') {
+  if (viewMode === 'system-plugin') {
     return (
       <div className={`app ${isDragging ? 'dragging' : ''}`}>
-        <SettingsView
-          section={settingsSection}
-          shortcutCommandHint={shortcutCommandHint}
-          onShortcutCommandHintConsumed={() => setShortcutCommandHint('')}
-          onPrepareCommandLaunch={async () => {
-            setViewMode('home')
-            await new Promise<void>((resolve) => setTimeout(resolve, 120))
+        <SystemPluginHost
+          route={systemPluginRoute}
+          onSectionChange={(section) => {
+            setSystemPluginRoute((prev) => ({
+              ...prev,
+              params: {
+                ...prev.params,
+                section
+              }
+            }))
           }}
-          onSectionChange={setSettingsSection}
+          onShortcutCommandHintConsumed={() => {
+            setSystemPluginRoute((prev) => ({
+              ...prev,
+              params: {
+                ...prev.params,
+                shortcutCommandHint: ''
+              }
+            }))
+          }}
           onClose={() => setViewMode('home')}
           onOpenPluginManager={(section = 'installed') => {
             openPluginManager('settings', section)
@@ -562,7 +635,7 @@ function App() {
     return (
       <div className={`app ${isDragging ? 'dragging' : ''}`}>
         <AiSettingsView
-          onBack={() => setViewMode('settings')}
+          onBack={() => setViewMode('system-plugin')}
           onOpenMcpSettings={() => setViewMode('ai-mcp-settings')}
           onOpenSkillsSettings={() => setViewMode('ai-skills-settings')}
         />
@@ -595,7 +668,7 @@ function App() {
       <div className={`app ${isDragging ? 'dragging' : ''}`}>
         <PluginManagerView
           initialSection={pluginManagerSection}
-          onBack={() => setViewMode(pluginManagerReturnTarget === 'settings' ? 'settings' : 'home')}
+          onBack={() => setViewMode(pluginManagerReturnTarget === 'settings' ? 'system-plugin' : 'home')}
         />
       </div>
     )
@@ -605,7 +678,7 @@ function App() {
     return (
       <div className={`app ${isDragging ? 'dragging' : ''}`}>
         <BackgroundPluginManagerView
-          onBack={() => setViewMode(backgroundPluginManagerReturnTarget === 'settings' ? 'settings' : 'home')}
+          onBack={() => setViewMode(backgroundPluginManagerReturnTarget === 'settings' ? 'system-plugin' : 'home')}
         />
       </div>
     )
@@ -615,7 +688,7 @@ function App() {
     return (
       <div className={`app ${isDragging ? 'dragging' : ''}`}>
         <TaskSchedulerView
-          onBack={() => setViewMode(taskSchedulerReturnTarget === 'settings' ? 'settings' : 'home')}
+          onBack={() => setViewMode(taskSchedulerReturnTarget === 'settings' ? 'system-plugin' : 'home')}
         />
       </div>
     )
@@ -624,7 +697,7 @@ function App() {
   if (viewMode === 'logs') {
     return (
       <div className={`app ${isDragging ? 'dragging' : ''}`}>
-        <LogViewerView onClose={() => setViewMode(logViewerReturnTarget === 'settings' ? 'settings' : 'home')} />
+        <LogViewerView onClose={() => setViewMode(logViewerReturnTarget === 'settings' ? 'system-plugin' : 'home')} />
       </div>
     )
   }

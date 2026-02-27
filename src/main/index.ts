@@ -28,6 +28,7 @@ import { ClipboardWatcher } from './services/clipboard-watcher-v2'
 import { ClipboardHistoryManager } from './services/clipboard-history'
 import { commandRunnerService } from './services/command-runner'
 import { setLoggerMinLevel } from './services/logger'
+import { SystemPluginWindowManager } from './services/system-plugin-window-manager'
 import { patchConsoleWithTimestamp } from '../shared/utils/console'
 
 patchConsoleWithTimestamp()
@@ -69,6 +70,7 @@ setUiDialogThemeResolver(() => themeManager.getActualTheme())
 setLoggerMinLevel(appSettingsManager.getSettings().developer.logLevel)
 const clipboardWatcher = new ClipboardWatcher()
 const clipboardHistoryManager = new ClipboardHistoryManager()
+const systemPluginWindowManager = new SystemPluginWindowManager()
 const aiInternalToolRuntime = createAiInternalToolRuntime({
   getToolingSettings: () => appSettingsManager.getSettings().aiTooling,
   runCommand: (input, context) => commandRunnerService.runCommand(input, context),
@@ -396,6 +398,7 @@ function createWindow() {
   })
 
   mainWindow.on('closed', () => {
+    systemPluginWindowManager.setMainWindow(null)
     mainWindow = null
   })
 
@@ -581,14 +584,41 @@ function toggleWindow() {
   }
 }
 
-function openSettingsView() {
+type SettingsCenterSection =
+  | 'general'
+  | 'shortcuts'
+  | 'commandQuickLaunch'
+  | 'commandAll'
+  | 'permissions'
+  | 'security'
+  | 'developer'
+  | 'about'
+
+interface OpenSystemPluginPayload {
+  pluginId: string
+  params?: Record<string, unknown>
+}
+
+function openSystemPluginView(payload: OpenSystemPluginPayload) {
   showMainWindow()
-  mainWindow?.webContents.send('app:openSettings')
+  mainWindow?.webContents.send('app:openSystemPlugin', payload)
+}
+
+function openSettingsView(section: SettingsCenterSection = 'general') {
+  openSystemPluginView({
+    pluginId: 'settings-center',
+    params: { section }
+  })
 }
 
 function openCommandShortcutSettingsView(cmdLabel?: string) {
-  showMainWindow()
-  mainWindow?.webContents.send('app:openCommandShortcuts', { cmdLabel })
+  openSystemPluginView({
+    pluginId: 'settings-center',
+    params: {
+      section: 'commandQuickLaunch',
+      shortcutCommandHint: cmdLabel?.trim() || ''
+    }
+  })
 }
 
 function openPluginStoreView() {
@@ -685,7 +715,8 @@ app.whenReady().then(async () => {
     themeManager,
     appSettingsManager,
     appShortcutManager,
-    clipboardHistoryManager
+    clipboardHistoryManager,
+    systemPluginWindowManager
   )
 
   createWindow()
@@ -741,6 +772,7 @@ app.whenReady().then(async () => {
 
   // 设置主窗口到插件窗口管理器
   pluginWindowManager.setMainWindow(mainWindow!)
+  systemPluginWindowManager.setMainWindow(mainWindow!)
 
   // 设置主题管理器到插件窗口管理器
   pluginWindowManager.setThemeManager(themeManager)
@@ -750,6 +782,7 @@ app.whenReady().then(async () => {
 
   // 设置窗口管理器到插件管理器
   pluginManager.setWindowManager(pluginWindowManager)
+  pluginManager.setSystemPluginWindowManager(systemPluginWindowManager)
 
   appShortcutManager.apply(appSettingsManager.getSettings().shortcuts)
 
