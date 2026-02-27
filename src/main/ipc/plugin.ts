@@ -2,7 +2,14 @@ import { ipcMain, app } from 'electron'
 import { resolve } from 'path'
 import { PluginManager } from '../plugin'
 import { resolveIcon } from '../plugin/icon-resolver'
-import type { InputPayload, Plugin, PluginFeature } from '../../shared/types/plugin'
+import type {
+  InputPayload,
+  Plugin,
+  PluginCommandDisabledToggleInput,
+  PluginCommandRunInput,
+  PluginCommandShortcutBindInput,
+  PluginFeature
+} from '../../shared/types/plugin'
 import { PluginInstaller } from '../plugin/installer'
 import { PluginStoreService } from '../plugin/store-service'
 
@@ -86,6 +93,31 @@ export function registerPluginHandlers(manager: PluginManager) {
     }))
   })
 
+  // 获取命令清单（功能指令 + 匹配指令）
+  ipcMain.handle('plugin:listCommands', (_event, pluginId?: string) => {
+    return manager.listCommands(pluginId)
+  })
+
+  // 指令快捷键绑定列表
+  ipcMain.handle('plugin:commandShortcut:list', (_event, pluginId?: string) => {
+    return manager.listCommandShortcuts(pluginId)
+  })
+
+  // 绑定指令快捷键
+  ipcMain.handle('plugin:commandShortcut:bind', (_event, input: PluginCommandShortcutBindInput) => {
+    return manager.bindCommandShortcut(input)
+  })
+
+  // 解绑指令快捷键
+  ipcMain.handle('plugin:commandShortcut:unbind', (_event, bindingId: string) => {
+    return { success: manager.unbindCommandShortcut(bindingId) }
+  })
+
+  // 验证快捷键是否可用
+  ipcMain.handle('plugin:commandShortcut:validate', (_event, accelerator: string, bindingId?: string) => {
+    return manager.validateCommandShortcut(accelerator, bindingId)
+  })
+
   // 搜索插件（返回匹配的功能入口）
   ipcMain.handle('plugin:search', async (_, query: string | InputPayload) => {
     const searchResults = await manager.search(query)
@@ -119,6 +151,16 @@ export function registerPluginHandlers(manager: PluginManager) {
   // 执行插件
   ipcMain.handle('plugin:run', async (_, name: string, featureCode: string, input?: string | InputPayload) => {
     return manager.run(name, featureCode, input)
+  })
+
+  // 执行指定指令
+  ipcMain.handle('plugin:runCommand', async (_event, input: PluginCommandRunInput) => {
+    return manager.runCommand(input)
+  })
+
+  // 指令禁用/启用
+  ipcMain.handle('plugin:command:setDisabled', (_event, input: PluginCommandDisabledToggleInput) => {
+    return manager.setCommandDisabled(input)
   })
 
   // 安装插件

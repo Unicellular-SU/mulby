@@ -1,6 +1,6 @@
 import { extname } from 'path'
 import { pinyin } from 'pinyin-pro'
-import type { InputAttachment, InputPayload, PluginCmd, PluginFeature } from './types/plugin'
+import type { CommandKind, InputAttachment, InputPayload, PluginCmd, PluginFeature } from './types/plugin'
 
 export type MatchType = 'keyword' | 'regex' | 'files' | 'img' | 'over'
 
@@ -36,6 +36,66 @@ export function matchPriority(type: MatchType): number {
     case 'keyword':
       return 1
   }
+}
+
+export function getCommandKind(cmd: PluginCmd): CommandKind {
+  return cmd.type === 'keyword' ? 'launch' : 'match'
+}
+
+export function isCommandBindable(cmd: PluginCmd): boolean {
+  return getCommandKind(cmd) === 'launch'
+}
+
+function defaultMatchLabel(prefix: string, featureExplain?: string): string {
+  const featureName = featureExplain?.trim() || '未命名功能'
+  return `${prefix} · ${featureName}`
+}
+
+export function getCommandDisplayLabel(cmd: PluginCmd, featureExplain?: string): string {
+  if (cmd.type === 'keyword') {
+    return cmd.value.trim() || '未命名指令'
+  }
+  if (cmd.type === 'regex') {
+    return cmd.label?.trim() || cmd.explain?.trim() || defaultMatchLabel('正则匹配', featureExplain)
+  }
+  if (cmd.type === 'files') {
+    return cmd.label?.trim() || defaultMatchLabel('文件匹配', featureExplain)
+  }
+  if (cmd.type === 'img') {
+    return cmd.label?.trim() || defaultMatchLabel('图像匹配', featureExplain)
+  }
+  return cmd.label?.trim() || defaultMatchLabel('文本匹配', featureExplain)
+}
+
+export function getCommandSignature(cmd: PluginCmd): string {
+  if (cmd.type === 'keyword') {
+    return `keyword|${cmd.value.trim().toLowerCase()}`
+  }
+  if (cmd.type === 'regex') {
+    return `regex|${cmd.match}|${cmd.minLength ?? ''}|${cmd.maxLength ?? ''}`
+  }
+  if (cmd.type === 'files') {
+    return `files|${(cmd.exts || []).join(',')}|${cmd.fileType || ''}|${cmd.match || ''}|${cmd.minLength ?? ''}|${cmd.maxLength ?? ''}`
+  }
+  if (cmd.type === 'img') {
+    return `img|${(cmd.exts || []).join(',')}`
+  }
+  return `over|${cmd.exclude || ''}|${cmd.minLength ?? ''}|${cmd.maxLength ?? ''}`
+}
+
+function hashCommandSignature(value: string): string {
+  let hash = 2166136261
+  for (let i = 0; i < value.length; i += 1) {
+    hash ^= value.charCodeAt(i)
+    hash = Math.imul(hash, 16777619)
+  }
+  return (hash >>> 0).toString(36)
+}
+
+export function getCommandId(cmd: PluginCmd, occurrence: number): string {
+  const signature = getCommandSignature(cmd)
+  const hash = hashCommandSignature(signature)
+  return `${cmd.type}-${hash}-${occurrence}`
 }
 
 export function normalizeExt(value: string): string {

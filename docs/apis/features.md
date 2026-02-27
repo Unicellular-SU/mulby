@@ -34,13 +34,14 @@ type CmdRegex = {
 type FileType = 'file' | 'directory' | 'any'
 type CmdFiles = {
   type: 'files'
+  label?: string          // 指令名称（可选，未提供会自动补全）
   exts?: string[]         // 文件扩展名（可选）
   fileType?: FileType     // 文件类型过滤（默认 'any'）
   match?: string          // 匹配文件(夹)名称的正则表达式（与 exts 二选一）
   minLength?: number      // 最少文件数
   maxLength?: number      // 最多文件数
 }
-type CmdImg = { type: 'img'; exts?: string[] }
+type CmdImg = { type: 'img'; label?: string; exts?: string[] }
 type CmdOver = {
   type: 'over'
   label?: string       // 指令名称
@@ -173,7 +174,12 @@ for (const code of ['today', 'settings', 'window']) {
 features.redirectHotKeySetting(cmdLabel: string, autocopy?: boolean): void
 ```
 
-当前会弹出提示通知，建议使用 `shortcut` API 注册快捷键。
+跳转到 Mulby 的「设置 -> 快捷键 -> 指令快捷键」区域，并优先高亮/过滤 `cmdLabel` 对应指令，便于用户直接绑定全局快捷键。
+
+说明：
+
+- `autocopy` 参数为兼容字段，当前仅用于保留签名，不影响行为。
+- 指令快捷键当前仅支持功能指令（`keyword`）绑定。
 
 #### redirectAiModelsSetting
 [Backend]

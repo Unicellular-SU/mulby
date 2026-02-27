@@ -9,9 +9,12 @@ import type {
 } from '../../shared/types/settings'
 import { useInAppNotice } from './InAppNotice'
 import UnifiedSelect from './UnifiedSelect'
+import CommandShortcutPanel from './CommandShortcutPanel'
 type SettingsSection =
   | 'general'
   | 'shortcuts'
+  | 'commandQuickLaunch'
+  | 'commandAll'
   | 'permissions'
   | 'security'
   | 'developer'
@@ -19,6 +22,9 @@ type SettingsSection =
 
 interface SettingsViewProps {
   section: SettingsSection
+  shortcutCommandHint?: string
+  onShortcutCommandHintConsumed?: () => void
+  onPrepareCommandLaunch?: () => Promise<void> | void
   onSectionChange: (section: SettingsSection) => void
   onClose: () => void
   onOpenPluginManager: (section?: 'installed' | 'store') => void
@@ -31,6 +37,8 @@ interface SettingsViewProps {
 const SECTION_ITEMS: { id: SettingsSection; label: string }[] = [
   { id: 'general', label: '通用' },
   { id: 'shortcuts', label: '快捷键' },
+  { id: 'commandQuickLaunch', label: '快捷启动' },
+  { id: 'commandAll', label: '全部指令' },
   { id: 'permissions', label: '权限' },
   { id: 'security', label: '工具与命令' },
   { id: 'developer', label: '开发者' },
@@ -277,7 +285,19 @@ function ShortcutInput({
   )
 }
 
-export default function SettingsView({ section, onSectionChange, onClose, onOpenPluginManager, onOpenBackgroundPluginManager, onOpenTaskScheduler, onOpenLogViewer, onOpenAiSettings }: SettingsViewProps) {
+export default function SettingsView({
+  section,
+  shortcutCommandHint,
+  onShortcutCommandHintConsumed,
+  onPrepareCommandLaunch,
+  onSectionChange,
+  onClose,
+  onOpenPluginManager,
+  onOpenBackgroundPluginManager,
+  onOpenTaskScheduler,
+  onOpenLogViewer,
+  onOpenAiSettings
+}: SettingsViewProps) {
   const notice = useInAppNotice()
   const [settings, setSettings] = useState<AppSettings | null>(null)
   const [themeMode, setThemeMode] = useState<'light' | 'dark' | 'system'>('system')
@@ -308,6 +328,7 @@ export default function SettingsView({ section, onSectionChange, onClose, onOpen
     decision: 'deny',
     expiresAt: ''
   })
+  const [inlineShortcutCommandHint, setInlineShortcutCommandHint] = useState('')
   const [runScriptDraft, setRunScriptDraft] = useState({
     id: '',
     command: '',
@@ -900,6 +921,30 @@ export default function SettingsView({ section, onSectionChange, onClose, onOpen
                     />
                   ))}
                 </div>
+              )}
+
+              {section === 'commandQuickLaunch' && (
+                <CommandShortcutPanel
+                  active={section === 'commandQuickLaunch'}
+                  mode="quick-launch"
+                  initialQuery={inlineShortcutCommandHint || shortcutCommandHint}
+                  onInitialQueryConsumed={() => {
+                    setInlineShortcutCommandHint('')
+                    onShortcutCommandHintConsumed?.()
+                  }}
+                />
+              )}
+
+              {section === 'commandAll' && (
+                <CommandShortcutPanel
+                  active={section === 'commandAll'}
+                  mode="all-commands"
+                  onBeforeOpenCommand={onPrepareCommandLaunch}
+                  onRequestQuickLaunch={(commandLabel) => {
+                    setInlineShortcutCommandHint(commandLabel)
+                    onSectionChange('commandQuickLaunch')
+                  }}
+                />
               )}
 
               {section === 'permissions' && (

@@ -15,6 +15,7 @@ import { resolveAiCapabilityPolicy } from './ai/tools/capability-policy'
 import { isAiInternalToolName } from './ai/tools/internal-tools'
 import { PluginManager } from './plugin'
 import { pluginDesktop } from './plugin/desktop'
+import { setHotKeySettingRedirectHandler } from './plugin/dynamic-features'
 import { PluginWindowManager } from './plugin/window'
 import { ThemeManager } from './services/theme'
 import { setUiDialogThemeResolver } from './services/ui-dialog-service'
@@ -585,6 +586,11 @@ function openSettingsView() {
   mainWindow?.webContents.send('app:openSettings')
 }
 
+function openCommandShortcutSettingsView(cmdLabel?: string) {
+  showMainWindow()
+  mainWindow?.webContents.send('app:openCommandShortcuts', { cmdLabel })
+}
+
 function openPluginStoreView() {
   showMainWindow()
   mainWindow?.webContents.send('app:openPluginStore')
@@ -684,6 +690,10 @@ app.whenReady().then(async () => {
 
   createWindow()
 
+  setHotKeySettingRedirectHandler((cmdLabel?: string) => {
+    openCommandShortcutSettingsView(cmdLabel)
+  })
+
   trayMenuWindowManager = new TrayMenuWindowManager({
     pluginManager,
     settingsManager: appSettingsManager,
@@ -741,13 +751,13 @@ app.whenReady().then(async () => {
   // 设置窗口管理器到插件管理器
   pluginManager.setWindowManager(pluginWindowManager)
 
+  appShortcutManager.apply(appSettingsManager.getSettings().shortcuts)
+
   // 初始化插件管理器
   await pluginManager.init()
 
   // 预热系统应用搜索索引，降低冷启动首搜延迟
   pluginDesktop.warmupAppSearchIndex()
-
-  appShortcutManager.apply(appSettingsManager.getSettings().shortcuts)
 })
 
 app.on('window-all-closed', () => {

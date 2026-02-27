@@ -360,6 +360,11 @@ const mulbyApi = {
       const listener = () => callback()
       ipcRenderer.on('app:openLogViewer', listener)
       return () => ipcRenderer.removeListener('app:openLogViewer', listener)
+    },
+    onOpenCommandShortcuts: (callback: (payload?: { cmdLabel?: string }) => void) => {
+      const listener = (_: any, payload?: { cmdLabel?: string }) => callback(payload)
+      ipcRenderer.on('app:openCommandShortcuts', listener)
+      return () => ipcRenderer.removeListener('app:openCommandShortcuts', listener)
     }
   },
 
@@ -411,9 +416,11 @@ const mulbyApi = {
   // 插件
   plugin: {
     getAll: () => ipcRenderer.invoke('plugin:getAll'),
+    listCommands: (pluginId?: string) => ipcRenderer.invoke('plugin:listCommands', pluginId),
     search: (query: string | InputPayload) => ipcRenderer.invoke('plugin:search', query),
     run: (name: string, featureCode: string, input?: string | InputPayload) =>
       ipcRenderer.invoke('plugin:run', name, featureCode, input),
+    runCommand: (input: any) => ipcRenderer.invoke('plugin:runCommand', input),
     getRecentUsed: (limit?: number) => ipcRenderer.invoke('plugin:getRecentUsed', limit),
     install: (filePath: string) => ipcRenderer.invoke('plugin:install', filePath),
     enable: (name: string) => ipcRenderer.invoke('plugin:enable', name),
@@ -426,6 +433,12 @@ const mulbyApi = {
     getBackgroundInfo: (pluginId: string) => ipcRenderer.invoke('plugin:getBackgroundInfo', pluginId),
     startBackground: (pluginId: string) => ipcRenderer.invoke('plugin:startBackground', pluginId),
     stopPlugin: (pluginId: string) => ipcRenderer.invoke('plugin:stopPlugin', pluginId),
+    listCommandShortcuts: (pluginId?: string) => ipcRenderer.invoke('plugin:commandShortcut:list', pluginId),
+    bindCommandShortcut: (input: any) => ipcRenderer.invoke('plugin:commandShortcut:bind', input),
+    unbindCommandShortcut: (bindingId: string) => ipcRenderer.invoke('plugin:commandShortcut:unbind', bindingId),
+    validateCommandShortcut: (accelerator: string, bindingId?: string) =>
+      ipcRenderer.invoke('plugin:commandShortcut:validate', accelerator, bindingId),
+    setCommandDisabled: (input: any) => ipcRenderer.invoke('plugin:command:setDisabled', input),
     // 插件导航 API
     redirect: (label: string | [string, string], payload?: unknown) =>
       ipcRenderer.invoke('plugin:redirect', label, payload),

@@ -48,6 +48,7 @@ function App() {
   const [detailsReturnTarget, setDetailsReturnTarget] = useState<'home' | 'settings' | 'plugins'>('home')
   const [viewMode, setViewMode] = useState<'home' | 'plugin-details' | 'settings' | 'plugins' | 'logs' | 'background-plugins' | 'task-scheduler' | 'ai-settings' | 'ai-mcp-settings' | 'ai-skills-settings'>('home')
   const [settingsSection, setSettingsSection] = useState<SettingsSection>('general')
+  const [shortcutCommandHint, setShortcutCommandHint] = useState('')
   const [pluginManagerReturnTarget, setPluginManagerReturnTarget] = useState<'home' | 'settings'>('home')
   const [pluginManagerSection, setPluginManagerSection] = useState<'installed' | 'store'>('installed')
   const [backgroundPluginManagerReturnTarget, setBackgroundPluginManagerReturnTarget] = useState<'home' | 'settings'>('home')
@@ -193,13 +194,14 @@ function App() {
     }
   }, [pluginOpen, attachmentsManagerOpen])
 
-  const openSettings = useCallback((section: SettingsSection = 'general') => {
+  const openSettings = useCallback((section: SettingsSection = 'general', commandHint?: string) => {
     if (pluginOpen) {
       window.mulby.window.close()
       setPluginOpen(false)
     }
     setAttachmentsManagerOpen(false)
     setSettingsSection(section)
+    setShortcutCommandHint(commandHint?.trim() || '')
     setViewMode('settings')
   }, [pluginOpen])
 
@@ -300,6 +302,13 @@ function App() {
   useEffect(() => {
     const cleanup = window.mulby.app.onOpenSettings(() => {
       openSettings()
+    })
+    return cleanup
+  }, [openSettings])
+
+  useEffect(() => {
+    const cleanup = window.mulby.app.onOpenCommandShortcuts((payload) => {
+      openSettings('commandQuickLaunch', payload?.cmdLabel)
     })
     return cleanup
   }, [openSettings])
@@ -523,6 +532,12 @@ function App() {
       <div className={`app ${isDragging ? 'dragging' : ''}`}>
         <SettingsView
           section={settingsSection}
+          shortcutCommandHint={shortcutCommandHint}
+          onShortcutCommandHintConsumed={() => setShortcutCommandHint('')}
+          onPrepareCommandLaunch={async () => {
+            setViewMode('home')
+            await new Promise<void>((resolve) => setTimeout(resolve, 120))
+          }}
           onSectionChange={setSettingsSection}
           onClose={() => setViewMode('home')}
           onOpenPluginManager={(section = 'installed') => {

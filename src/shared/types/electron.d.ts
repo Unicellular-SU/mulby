@@ -1,5 +1,17 @@
 import { InBrowser } from './inbrowser'
-import type { InputPayload, InputAttachment, BackgroundPluginInfo } from './plugin'
+import type {
+  BackgroundPluginInfo,
+  InputAttachment,
+  InputPayload,
+  PluginCommandDisabledToggleInput,
+  PluginCommandDisabledToggleResult,
+  PluginCommandItem,
+  PluginCommandRunInput,
+  PluginCommandShortcutBindInput,
+  PluginCommandShortcutBindResult,
+  PluginCommandShortcutBindingRecord,
+  PluginCommandShortcutValidationResult
+} from './plugin'
 import type { AiApi } from './ai'
 import type { AppSettings, CommandAuditItem, CommandRunnerSettings, ShortcutStatusMap } from './settings'
 import type {
@@ -127,7 +139,18 @@ export interface PluginInfo {
   features: {
     code: string
     explain: string
-    cmds: { type: 'keyword' | 'regex' | 'files' | 'img' | 'over' | string; value?: string; match?: string; explain?: string; exts?: string[] }[]
+    cmds: {
+      type: 'keyword' | 'regex' | 'files' | 'img' | 'over' | string
+      value?: string
+      match?: string
+      explain?: string
+      label?: string
+      exts?: string[]
+      fileType?: 'file' | 'directory' | 'any'
+      minLength?: number
+      maxLength?: number
+      exclude?: string
+    }[]
     mode?: 'ui' | 'silent' | 'detached'
     route?: string
     icon?: {
@@ -345,6 +368,7 @@ export interface ElectronAPI {
     onOpenBackgroundPlugins: (callback: () => void) => () => void
     onOpenTaskScheduler: (callback: () => void) => () => void
     onOpenLogViewer: (callback: () => void) => () => void
+    onOpenCommandShortcuts: (callback: (payload?: { cmdLabel?: string }) => void) => () => void
   }
   clipboard: {
     readText: () => Promise<string>
@@ -401,8 +425,10 @@ export interface ElectronAPI {
   }
   plugin: {
     getAll: () => Promise<PluginInfo[]>
+    listCommands: (pluginId?: string) => Promise<PluginCommandItem[]>
     search: (query: string | InputPayload) => Promise<SearchResultItem[]>
     run: (name: string, featureCode: string, input?: string | InputPayload) => Promise<{ success: boolean; hasUI?: boolean; error?: string }>
+    runCommand: (input: PluginCommandRunInput) => Promise<{ success: boolean; hasUI?: boolean; error?: string }>
     getRecentUsed: (limit?: number) => Promise<SearchResultItem[]>
     install: (filePath: string) => Promise<{ success: boolean; pluginName?: string; pluginId?: string; action?: 'installed' | 'updated' | 'already-installed' | 'downgrade-blocked'; isUpdate?: boolean; oldVersion?: string; newVersion?: string; error?: string }>
     enable: (name: string) => Promise<{ success: boolean; error?: string }>
@@ -416,6 +442,11 @@ export interface ElectronAPI {
     startBackground: (pluginId: string) => Promise<{ success: boolean }>
     // 停止运行中的插件（包括 UI 插件和后台插件）
     stopPlugin: (pluginId: string) => Promise<{ success: boolean }>
+    listCommandShortcuts: (pluginId?: string) => Promise<PluginCommandShortcutBindingRecord[]>
+    bindCommandShortcut: (input: PluginCommandShortcutBindInput) => Promise<PluginCommandShortcutBindResult>
+    unbindCommandShortcut: (bindingId: string) => Promise<{ success: boolean }>
+    validateCommandShortcut: (accelerator: string, bindingId?: string) => Promise<PluginCommandShortcutValidationResult>
+    setCommandDisabled: (input: PluginCommandDisabledToggleInput) => Promise<PluginCommandDisabledToggleResult>
   }
   pluginStore: {
     fetch: () => Promise<PluginStoreFetchResult>

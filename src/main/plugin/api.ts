@@ -339,8 +339,8 @@ ${item.files.map(p => `    <string>${p}</string>`).join('\n')}
         pluginFeatureStore.setFeature(pluginName, feature)
       },
       removeFeature: (code: string) => pluginFeatureStore.removeFeature(pluginName, code),
-      redirectHotKeySetting: (cmdLabel: string, _autocopy?: boolean) => {
-        redirectHotKeySetting(cmdLabel)
+      redirectHotKeySetting: (cmdLabel: string, autocopy?: boolean) => {
+        redirectHotKeySetting(cmdLabel, autocopy)
       },
       redirectAiModelsSetting: () => {
         redirectAiModelsSetting()

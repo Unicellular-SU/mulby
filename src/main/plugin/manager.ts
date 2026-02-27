@@ -6,10 +6,33 @@ import { PluginRunner } from './runner'
 import { PluginStateManager } from './state'
 import { PluginWindowManager } from './window'
 import { PluginHostManager } from './host-manager'
+import { PluginCommandShortcutManager } from './command-shortcuts'
+import { PluginCommandDisabledManager } from './command-disabled'
 import { pluginFeatureStore } from './dynamic-features'
-import { InputPayload, Plugin, PluginFeature } from '../../shared/types/plugin'
+import {
+  InputPayload,
+  Plugin,
+  PluginCommandDisabledToggleInput,
+  PluginCommandDisabledToggleResult,
+  PluginCommandItem,
+  PluginCommandRunInput,
+  PluginCommandShortcutBindInput,
+  PluginCommandShortcutBindResult,
+  PluginCommandShortcutBindingRecord,
+  PluginCommandShortcutValidationResult,
+  PluginFeature
+} from '../../shared/types/plugin'
 import { PluginSearchWorker } from './search-worker-manager'
-import { filterAttachmentsByCmd, findBestMatch, normalizeInputPayload } from '../../shared/search-matcher'
+import {
+  filterAttachmentsByCmd,
+  findBestMatch,
+  getCommandDisplayLabel,
+  getCommandId,
+  getCommandKind,
+  getCommandSignature,
+  isCommandBindable,
+  normalizeInputPayload
+} from '../../shared/search-matcher'
 import type { MatchType } from '../../shared/search-matcher'
 import { BackgroundPluginManager } from './background-manager'
 import { TaskScheduler } from '../scheduler'
@@ -38,6 +61,8 @@ export class PluginManager {
   private useUtilityProcess: boolean = true  // 是否使用 UtilityProcess
   private initializedPlugins: Set<string> = new Set()  // 已初始化的插件（懒加载跟踪）
   private searchWorker: PluginSearchWorker
+  private commandShortcutManager: PluginCommandShortcutManager
+  private commandDisabledManager: PluginCommandDisabledManager
   private backgroundManager: BackgroundPluginManager
   private taskScheduler: TaskScheduler
   private initPromise: Promise<void> | null = null
@@ -47,6 +72,18 @@ export class PluginManager {
     this.stateManager = new PluginStateManager()
     this.hostManager = new PluginHostManager()
     this.searchWorker = new PluginSearchWorker()
+    this.commandDisabledManager = new PluginCommandDisabledManager()
+    this.commandShortcutManager = new PluginCommandShortcutManager({
+      listCommands: (pluginId?: string) => this.listCommands(pluginId),
+      getPlugin: (pluginId: string) => this.plugins.get(pluginId),
+      runPluginCommand: (
+        pluginId: string,
+        featureCode: string,
+        cmdId: string,
+        cmdSignature: string,
+        input?: string | InputPayload
+      ) => this.runCommand({ pluginId, featureCode, cmdId, cmdSignature, input })
+    })
     this.backgroundManager = new BackgroundPluginManager(
       this.hostManager,
       this.hostManager.getWatchdog(),
@@ -161,6 +198,9 @@ export class PluginManager {
     // 恢复持久化的后台插件
     await this.backgroundManager.restorePersistent(this.getAll())
 
+    // 恢复并刷新指令快捷键绑定
+    this.commandShortcutManager.initialize()
+
     // 预热搜索 worker，降低首次搜索延迟（不阻塞启动流程）
     void this.searchWorker.warmup().catch((error) => {
       console.warn('[PluginManager] Search worker warmup failed', error)
@@ -216,6 +256,105 @@ export class PluginManager {
     const plugin = this.plugins.get(name)
     if (!plugin) return []
     return this.getCombinedFeatures(plugin)
+  }
+
+  // 列出命令（用于“功能指令/匹配指令”管理与快捷键绑定）
+  listCommands(pluginId?: string): PluginCommandItem[] {
+    const plugins = pluginId ? [this.plugins.get(pluginId)].filter((item): item is Plugin => Boolean(item)) : this.getAll()
+    const commands: PluginCommandItem[] = []
+
+    for (const plugin of plugins) {
+      const features = this.getCombinedFeatures(plugin, true)
+      for (const feature of features) {
+        const signatureCounter = new Map<string, number>()
+        for (const cmd of feature.cmds) {
+          const signature = getCommandSignature(cmd)
+          const occurrence = (signatureCounter.get(signature) || 0) + 1
+          signatureCounter.set(signature, occurrence)
+          const cmdId = getCommandId(cmd, occurrence)
+          const disabled = this.commandDisabledManager.isDisabled({
+            pluginId: plugin.id,
+            featureCode: feature.code,
+            cmdId,
+            cmdSignature: signature
+          })
+
+          commands.push({
+            pluginId: plugin.id,
+            pluginName: plugin.manifest.name,
+            pluginDisplayName: plugin.manifest.displayName,
+            featureCode: feature.code,
+            featureExplain: feature.explain,
+            cmdId,
+            cmdType: cmd.type,
+            cmdSignature: signature,
+            commandKind: getCommandKind(cmd),
+            displayLabel: getCommandDisplayLabel(cmd, feature.explain),
+            explain: cmd.type === 'regex' ? cmd.explain : undefined,
+            bindable: isCommandBindable(cmd),
+            disabled
+          })
+        }
+      }
+    }
+
+    commands.sort((a, b) => {
+      const pluginCompare = a.pluginDisplayName.localeCompare(b.pluginDisplayName)
+      if (pluginCompare !== 0) return pluginCompare
+      const featureCompare = a.featureExplain.localeCompare(b.featureExplain)
+      if (featureCompare !== 0) return featureCompare
+      return a.displayLabel.localeCompare(b.displayLabel)
+    })
+    return commands
+  }
+
+  listCommandShortcuts(pluginId?: string): PluginCommandShortcutBindingRecord[] {
+    return this.commandShortcutManager.listBindings(pluginId)
+  }
+
+  bindCommandShortcut(input: PluginCommandShortcutBindInput): PluginCommandShortcutBindResult {
+    return this.commandShortcutManager.bind(input)
+  }
+
+  unbindCommandShortcut(bindingId: string): boolean {
+    return this.commandShortcutManager.unbind(bindingId)
+  }
+
+  validateCommandShortcut(accelerator: string, bindingId?: string): PluginCommandShortcutValidationResult {
+    return this.commandShortcutManager.validateAccelerator(accelerator, bindingId)
+  }
+
+  async runCommand(input: PluginCommandRunInput): Promise<{ success: boolean; hasUI?: boolean; error?: string }> {
+    const command = this.resolveCommandItem(input.pluginId, input.featureCode, input.cmdId, input.cmdSignature)
+    if (!command) {
+      return { success: false, error: '指令不存在' }
+    }
+    if (command.disabled) {
+      return { success: false, error: '指令已禁用' }
+    }
+    return this.run(input.pluginId, input.featureCode, input.input)
+  }
+
+  setCommandDisabled(input: PluginCommandDisabledToggleInput): PluginCommandDisabledToggleResult {
+    const command = this.resolveCommandItem(input.pluginId, input.featureCode, input.cmdId, input.cmdSignature)
+    if (!command) {
+      return {
+        success: false,
+        disabled: input.disabled,
+        error: '指令不存在'
+      }
+    }
+
+    const result = this.commandDisabledManager.setDisabled({
+      pluginId: input.pluginId,
+      featureCode: input.featureCode,
+      cmdId: command.cmdId,
+      cmdSignature: command.cmdSignature,
+      disabled: input.disabled
+    })
+
+    this.commandShortcutManager.refresh()
+    return result
   }
 
   // 获取最近使用的插件功能（按时间倒序）
@@ -449,6 +588,8 @@ export class PluginManager {
       await this.callPluginHook(plugin, 'onEnable')
     }
 
+    this.commandShortcutManager.refresh()
+
     return { success: true }
   }
 
@@ -488,6 +629,7 @@ export class PluginManager {
 
     plugin.enabled = false
     this.stateManager.setEnabled(name, false)
+    this.commandShortcutManager.refresh()
 
     return { success: true }
   }
@@ -525,6 +667,8 @@ export class PluginManager {
       this.runners.delete(name)
       this.stateManager.removePluginState(name)
       pluginFeatureStore.clearFeatures(name)
+      this.commandShortcutManager.removeByPlugin(name)
+      this.commandDisabledManager.removeByPlugin(name)
 
       return { success: true }
     } catch (err) {
@@ -587,6 +731,7 @@ export class PluginManager {
 
       // 停止搜索 Worker
       await this.searchWorker.destroy()
+      this.commandShortcutManager.destroy()
 
       // 清理内存
       this.plugins.clear()
@@ -741,11 +886,51 @@ export class PluginManager {
     }
   }
 
-  private getCombinedFeatures(plugin: Plugin): PluginFeature[] {
+  private getCombinedFeatures(plugin: Plugin, includeDisabledCommands = false): PluginFeature[] {
     const dynamicFeatures = pluginFeatureStore.getPluginFeatures(plugin.id)
     const dynamicCodes = new Set(dynamicFeatures.map(feature => feature.code))
     const staticFeatures = plugin.manifest.features.filter(feature => !dynamicCodes.has(feature.code))
-    return [...staticFeatures, ...dynamicFeatures]
+    const combined = [...staticFeatures, ...dynamicFeatures]
+
+    return combined
+      .map((feature) => {
+        const signatureCounter = new Map<string, number>()
+        const cmds = feature.cmds
+          .filter((cmd) => {
+            const signature = getCommandSignature(cmd)
+            const occurrence = (signatureCounter.get(signature) || 0) + 1
+            signatureCounter.set(signature, occurrence)
+            if (includeDisabledCommands) return true
+
+            const cmdId = getCommandId(cmd, occurrence)
+            return !this.commandDisabledManager.isDisabled({
+              pluginId: plugin.id,
+              featureCode: feature.code,
+              cmdId,
+              cmdSignature: signature
+            })
+          })
+          .map((cmd) => ({ ...cmd }))
+
+        if (cmds.length === 0) return null
+        return { ...feature, cmds }
+      })
+      .filter((feature): feature is PluginFeature => Boolean(feature))
+  }
+
+  private resolveCommandItem(
+    pluginId: string,
+    featureCode: string,
+    cmdId: string,
+    cmdSignature: string
+  ): PluginCommandItem | undefined {
+    const featureCommands = this
+      .listCommands(pluginId)
+      .filter((item) => item.featureCode === featureCode)
+
+    return featureCommands.find((item) => item.cmdId === cmdId && item.cmdSignature === cmdSignature)
+      || featureCommands.find((item) => item.cmdSignature === cmdSignature)
+      || featureCommands.find((item) => item.cmdId === cmdId)
   }
 
   /**

@@ -13,6 +13,8 @@ const storePath = (() => {
   return join(configDir, 'plugin-features.json')
 })()
 
+let hotKeySettingRedirectHandler: ((cmdLabel: string, autocopy?: boolean) => void) | null = null
+
 function normalizeCmd(cmd: DynamicCmdInput): PluginCmd {
   if (typeof cmd === 'string') {
     return { type: 'keyword', value: cmd }
@@ -47,6 +49,7 @@ function normalizeCmd(cmd: DynamicCmdInput): PluginCmd {
       }
       return {
         type: 'files',
+        label: cmd.label,
         exts: cmd.exts,
         fileType: cmd.fileType,
         match: cmd.match,
@@ -57,7 +60,7 @@ function normalizeCmd(cmd: DynamicCmdInput): PluginCmd {
       if (cmd.exts && (!Array.isArray(cmd.exts) || cmd.exts.length === 0)) {
         throw new Error('Img command exts must be a non-empty array')
       }
-      return { type: 'img', exts: cmd.exts }
+      return { type: 'img', label: cmd.label, exts: cmd.exts }
     case 'over':
       return {
         type: 'over',
@@ -184,7 +187,16 @@ class PluginFeatureStore {
 
 export const pluginFeatureStore = new PluginFeatureStore()
 
-export function redirectHotKeySetting(cmdLabel: string): void {
+export function setHotKeySettingRedirectHandler(handler: ((cmdLabel: string, autocopy?: boolean) => void) | null): void {
+  hotKeySettingRedirectHandler = handler
+}
+
+export function redirectHotKeySetting(cmdLabel: string, autocopy?: boolean): void {
+  if (hotKeySettingRedirectHandler) {
+    hotKeySettingRedirectHandler(cmdLabel, autocopy)
+    return
+  }
+
   new Notification({
     title: 'Mulby',
     body: `Shortcut settings are not available yet. Use api.shortcut.register for "${cmdLabel}".`

@@ -103,6 +103,7 @@ export type FileType = 'file' | 'directory' | 'any'
 
 export interface CmdFiles {
   type: 'files'
+  label?: string          // 指令名称
   exts?: string[]         // 文件扩展名（可选）
   fileType?: FileType     // 文件类型过滤（默认 'any'）
   match?: string          // 匹配文件(夹)名称的正则表达式（与 exts 二选一）
@@ -112,6 +113,7 @@ export interface CmdFiles {
 
 export interface CmdImg {
   type: 'img'
+  label?: string
   exts?: string[]
 }
 
@@ -124,6 +126,97 @@ export interface CmdOver {
 }
 
 export type PluginCmd = CmdKeyword | CmdRegex | CmdFiles | CmdImg | CmdOver
+export type CommandKind = 'launch' | 'match'
+
+export interface PluginCommandItem {
+  pluginId: string
+  pluginName: string
+  pluginDisplayName: string
+  featureCode: string
+  featureExplain: string
+  cmdId: string
+  cmdType: PluginCmd['type']
+  cmdSignature: string
+  commandKind: CommandKind
+  displayLabel: string
+  explain?: string
+  bindable: boolean
+  disabled: boolean
+}
+
+export interface PluginCommandShortcutBinding {
+  id: string
+  pluginId: string
+  featureCode: string
+  cmdId: string
+  cmdSignature: string
+  commandLabel: string
+  accelerator: string
+  createdAt: number
+  updatedAt: number
+}
+
+export type PluginCommandShortcutBindingState =
+  | 'active'
+  | 'plugin-disabled'
+  | 'plugin-missing'
+  | 'feature-missing'
+  | 'command-missing'
+  | 'command-not-bindable'
+  | 'command-disabled'
+  | 'shortcut-conflict'
+  | 'invalid-shortcut'
+
+export interface PluginCommandShortcutBindingRecord extends PluginCommandShortcutBinding {
+  state: PluginCommandShortcutBindingState
+  pluginDisplayName?: string
+  featureExplain?: string
+  cmdType?: PluginCmd['type']
+}
+
+export interface PluginCommandShortcutBindInput {
+  pluginId: string
+  featureCode: string
+  cmdId: string
+  cmdSignature: string
+  commandLabel: string
+  accelerator: string
+}
+
+export interface PluginCommandShortcutBindResult {
+  success: boolean
+  error?: string
+  state?: PluginCommandShortcutBindingState
+  binding?: PluginCommandShortcutBindingRecord
+}
+
+export interface PluginCommandShortcutValidationResult {
+  ok: boolean
+  error?: string
+  state?: PluginCommandShortcutBindingState
+}
+
+export interface PluginCommandRunInput {
+  pluginId: string
+  featureCode: string
+  cmdId: string
+  cmdSignature: string
+  input?: string | InputPayload
+}
+
+export interface PluginCommandDisabledToggleInput {
+  pluginId: string
+  featureCode: string
+  cmdId: string
+  cmdSignature: string
+  disabled: boolean
+}
+
+export interface PluginCommandDisabledToggleResult {
+  success: boolean
+  disabled: boolean
+  error?: string
+}
 
 export type DynamicCmdInput = string | PluginCmd
 

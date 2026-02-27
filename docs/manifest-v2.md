@@ -122,9 +122,16 @@
 |------|------|----------|
 | keyword | 关键词触发 | value: 关键词 |
 | regex | 正则匹配 | match: 正则, explain: 说明, label?: 指令名称, minLength?: 最少字符数, maxLength?: 最多字符数 |
-| files | 文件/文件夹 | exts?: 扩展名数组, fileType?: file/directory/any (默认 any), match?: 文件名正则 (与 exts 二选一), minLength?: 最少数量, maxLength?: 最多数量 |
-| img | 图片 | exts?: [".png", ".jpg"] |
+| files | 文件/文件夹 | label?: 指令名称, exts?: 扩展名数组, fileType?: file/directory/any (默认 any), match?: 文件名正则 (与 exts 二选一), minLength?: 最少数量, maxLength?: 最多数量 |
+| img | 图片 | label?: 指令名称, exts?: [".png", ".jpg"] |
 | over | 选中文本 | label?: 指令名称, exclude?: 排除正则, minLength?: 最少字符数, maxLength?: 最多字符数 (默认 10000) |
+
+#### 功能指令 vs 匹配指令
+
+- 功能指令：`keyword`
+- 匹配指令：`regex` / `files` / `img` / `over`
+
+当前指令快捷键仅支持绑定功能指令（`keyword`）。匹配指令在搜索输入满足条件时展示。
 
 #### 文件/图片匹配说明
 
