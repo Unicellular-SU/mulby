@@ -504,7 +504,8 @@ export function registerWindowHandlers(
   ipcMain.handle('plugin:getMode', (event) => {
     const win = BrowserWindow.fromWebContents(event.sender)
     const mainWin = getMainWindow()
-    return win === mainWin ? 'attached' : 'detached'
+    const panelWin = pluginWindowManager.getPanelWindow()?.getWindow()
+    return (win === mainWin || win === panelWin) ? 'attached' : 'detached'
   })
 
   // 最小化窗口

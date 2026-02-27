@@ -280,7 +280,7 @@ export class TaskScheduler extends EventEmitter {
 
         // 记录需要启动的插件
         const plugin = this.pluginManager?.get(task.pluginId)
-        if (plugin) {
+        if (plugin && plugin.enabled) {
           const supportsBackground = plugin.manifest.pluginSetting?.background === true
 
           if (supportsBackground) {
@@ -630,6 +630,16 @@ export class TaskScheduler extends EventEmitter {
    */
   private async cleanupPlugin(pluginId: string): Promise<void> {
     if (!this.pluginManager) return
+
+    const backgroundManager = this.pluginManager.getBackgroundManager?.()
+    if (backgroundManager?.isRunning?.(pluginId)) {
+      return
+    }
+
+    const activeWindowPlugins = this.pluginManager.getActiveWindowPlugins?.()
+    if (Array.isArray(activeWindowPlugins) && activeWindowPlugins.some((item: { pluginId: string }) => item.pluginId === pluginId)) {
+      return
+    }
 
     const hostManager = this.pluginManager.getHostManager()
     if (hostManager.isHostReady(pluginId)) {

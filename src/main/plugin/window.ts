@@ -15,6 +15,7 @@ interface AttachedPlugin {
   featureCode: string
   input: string
   attachments?: InputAttachment[]
+  startedAt: number
 }
 
 interface DetachedWindowInfo {
@@ -23,6 +24,7 @@ interface DetachedWindowInfo {
   featureCode: string
   input: string
   attachments?: InputAttachment[]
+  startedAt: number
   creatorId?: number  // 创建此窗口的父窗口 ID
 }
 
@@ -155,7 +157,8 @@ export class PluginWindowManager {
       plugin,
       featureCode,
       input: input?.text || '',
-      attachments: input?.attachments
+      attachments: input?.attachments,
+      startedAt: Date.now()
     }
 
     // 使用 Panel 模式（独立窗口跟随）
@@ -208,10 +211,8 @@ export class PluginWindowManager {
       this.mainWindow?.focus()
 
       // 触发窗口关闭回调（用于处理后台运行或销毁 Host）
-      if (pluginId && this.onWindowClosedCallback) {
-        this.onWindowClosedCallback(pluginId).catch(err => {
-          console.error('[PluginWindowManager] Error in window closed callback:', err)
-        })
+      if (pluginId) {
+        this.notifyPluginWindowClosed(pluginId)
       }
     }
   }
@@ -220,7 +221,7 @@ export class PluginWindowManager {
   detachCurrent(): BrowserWindow | null {
     if (!this.attachedPlugin) return null
 
-    const { plugin, featureCode, input, attachments } = this.attachedPlugin
+    const { plugin, featureCode, input, attachments, startedAt } = this.attachedPlugin
     this.attachedPlugin = null
 
     // 清理主进程中的 SubInput 状态
@@ -241,13 +242,15 @@ export class PluginWindowManager {
           plugin,
           featureCode,
           input,
-          attachments
+          attachments,
+          startedAt
         })
         this.updateDockVisibility()
 
         win.on('closed', () => {
           this.detachedWindows.delete(windowId)
           this.updateDockVisibility()
+          this.notifyPluginWindowClosed(plugin.id)
         })
 
         return win
@@ -392,7 +395,8 @@ export class PluginWindowManager {
       plugin,
       featureCode,
       input: input?.text || '',
-      attachments: input?.attachments
+      attachments: input?.attachments,
+      startedAt: Date.now()
     })
 
     // 显示 Dock 图标
@@ -415,11 +419,7 @@ export class PluginWindowManager {
       // 检查是否需要隐藏 Dock 图标
       this.updateDockVisibility()
       // 触发窗口关闭回调（用于处理后台运行）
-      if (this.onWindowClosedCallback) {
-        this.onWindowClosedCallback(plugin.id).catch(err => {
-          console.error('[PluginWindowManager] Error in window closed callback:', err)
-        })
-      }
+      this.notifyPluginWindowClosed(plugin.id)
     })
 
     return win
@@ -524,6 +524,7 @@ export class PluginWindowManager {
       featureCode: '',
       input: '',
       attachments: [],
+      startedAt: Date.now(),
       creatorId  // 记录创建者
     })
 
@@ -531,6 +532,7 @@ export class PluginWindowManager {
     win.on('closed', () => {
       this.detachedWindows.delete(windowId)
       this.updateDockVisibility()
+      this.notifyPluginWindowClosed(plugin.id)
     })
 
     return win
@@ -564,6 +566,38 @@ export class PluginWindowManager {
   getAllDetachedInfos(): DetachedWindowInfo[] {
     return Array.from(this.detachedWindows.values())
       .filter(info => !info.window.isDestroyed())
+  }
+
+  // 获取当前所有可见/存活窗口对应的插件（用于任务管理器）
+  getActiveWindowPlugins(): Array<{ pluginId: string; pluginName: string; displayName: string; startedAt: number }> {
+    const byPlugin = new Map<string, { pluginId: string; pluginName: string; displayName: string; startedAt: number }>()
+
+    if (this.attachedPlugin && this.panelWindow?.isOpen()) {
+      const current = this.attachedPlugin
+      byPlugin.set(current.plugin.id, {
+        pluginId: current.plugin.id,
+        pluginName: current.plugin.manifest.name,
+        displayName: current.plugin.manifest.displayName,
+        startedAt: current.startedAt
+      })
+    }
+
+    for (const info of this.detachedWindows.values()) {
+      if (info.window.isDestroyed()) continue
+      const existing = byPlugin.get(info.plugin.id)
+      if (existing) {
+        existing.startedAt = Math.min(existing.startedAt, info.startedAt)
+        continue
+      }
+      byPlugin.set(info.plugin.id, {
+        pluginId: info.plugin.id,
+        pluginName: info.plugin.manifest.name,
+        displayName: info.plugin.manifest.displayName,
+        startedAt: info.startedAt
+      })
+    }
+
+    return Array.from(byPlugin.values())
   }
 
   // 关闭所有窗口
@@ -621,5 +655,28 @@ export class PluginWindowManager {
   getParentWindowId(windowId: number): number | null {
     const info = this.detachedWindows.get(windowId)
     return info?.creatorId ?? null
+  }
+
+  private notifyPluginWindowClosed(pluginId: string): void {
+    if (!this.onWindowClosedCallback) return
+    if (this.hasOpenWindowsForPlugin(pluginId)) return
+
+    this.onWindowClosedCallback(pluginId).catch(err => {
+      console.error('[PluginWindowManager] Error in window closed callback:', err)
+    })
+  }
+
+  hasOpenWindowsForPlugin(pluginId: string): boolean {
+    if (this.attachedPlugin?.plugin.id === pluginId && this.panelWindow?.isOpen()) {
+      return true
+    }
+
+    for (const info of this.detachedWindows.values()) {
+      if (info.plugin.id === pluginId && !info.window.isDestroyed()) {
+        return true
+      }
+    }
+
+    return false
   }
 }

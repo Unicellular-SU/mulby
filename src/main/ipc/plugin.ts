@@ -3,6 +3,7 @@ import { resolve } from 'path'
 import { PluginManager } from '../plugin'
 import { resolveIcon } from '../plugin/icon-resolver'
 import type {
+  BackgroundPluginInfo,
   InputPayload,
   Plugin,
   PluginCommandDisabledToggleInput,
@@ -231,11 +232,16 @@ export function registerPluginHandlers(manager: PluginManager) {
   ipcMain.handle('plugin:listBackground', () => {
     const backgroundPlugins = manager.getBackgroundManager().list()
     const activeHosts = manager.getHostManager().getActiveHosts()
+    const activeWindowPlugins = manager.getActiveWindowPlugins()
     const allPlugins = manager.getAll()
+    const hostManager = manager.getHostManager()
+    const watchdog = hostManager.getWatchdog()
+    const now = Date.now()
 
     // 合并后台插件和其他活跃插件
-    const result = []
-    const addedPlugins = new Set<string>()
+    const result: BackgroundPluginInfo[] = []
+    const pluginIndex = new Map<string, number>()
+    const markAdded = (pluginId: string) => pluginIndex.set(pluginId, result.length - 1)
 
     // 先添加后台插件
     for (const bgPlugin of backgroundPlugins) {
@@ -243,38 +249,77 @@ export function registerPluginHandlers(manager: PluginManager) {
         ...bgPlugin,
         runMode: 'background' as const
       })
-      addedPlugins.add(bgPlugin.pluginId)
+      markAdded(bgPlugin.pluginId)
     }
 
     // 添加其他活跃的插件（有 Host 进程但不在后台列表中的）
     for (const hostPluginId of activeHosts) {
-      if (!addedPlugins.has(hostPluginId)) {
-        const plugin = allPlugins.find(p => p.id === hostPluginId)
-        if (plugin) {
-          const watchdog = manager.getHostManager().getWatchdog()
-          const health = watchdog.getHostHealth(hostPluginId)
-          const hostInfo = manager.getHostManager().getHostInfo(hostPluginId)
-
-          result.push({
-            pluginId: plugin.id,
-            pluginName: plugin.manifest.name,
-            displayName: plugin.manifest.displayName,
-            startedAt: hostInfo?.startedAt ?? Date.now(),
-            uptime: hostInfo?.startedAt ? Date.now() - hostInfo.startedAt : 0,
-            persistent: false,
-            maxRuntime: 0,
-            memoryUsage: health?.memoryUsage ?? 0,
-            cpuUsage: health?.cpuUsage ?? 0,
-            requestCount: health?.requestCount ?? 0,
-            errorCount: health?.errorCount ?? 0,
-            healthy: health ? watchdog.isHostHealthy(hostPluginId) : true, // 有健康数据才判断，否则视为健康
-            lastHeartbeat: health?.lastHeartbeat ?? 0,
-            missedHeartbeats: health?.missedHeartbeats ?? 0,
-            runMode: 'active' as const // 活跃插件（可能是独立窗口或面板）
-          })
-          addedPlugins.add(hostPluginId)
-        }
+      if (pluginIndex.has(hostPluginId)) {
+        continue
       }
+      const plugin = allPlugins.find(p => p.id === hostPluginId)
+      if (plugin) {
+        const health = watchdog.getHostHealth(hostPluginId)
+        const hostInfo = hostManager.getHostInfo(hostPluginId)
+        const startedAt = hostInfo?.startedAt ?? now
+
+        result.push({
+          pluginId: plugin.id,
+          pluginName: plugin.manifest.name,
+          displayName: plugin.manifest.displayName,
+          startedAt,
+          uptime: now - startedAt,
+          persistent: false,
+          maxRuntime: 0,
+          memoryUsage: health?.memoryUsage ?? 0,
+          cpuUsage: health?.cpuUsage ?? 0,
+          requestCount: health?.requestCount ?? 0,
+          errorCount: health?.errorCount ?? 0,
+          healthy: health ? watchdog.isHostHealthy(hostPluginId) : true, // 有健康数据才判断，否则视为健康
+          lastHeartbeat: health?.lastHeartbeat ?? 0,
+          missedHeartbeats: health?.missedHeartbeats ?? 0,
+          runMode: 'active' as const // 活跃插件（可能是独立窗口或面板）
+        })
+        markAdded(hostPluginId)
+      }
+    }
+
+    // 补充“有窗口但 Host 尚未注册/已异常”的活跃插件，避免任务管理器漏项
+    for (const windowPlugin of activeWindowPlugins) {
+      const existingIndex = pluginIndex.get(windowPlugin.pluginId)
+      const health = watchdog.getHostHealth(windowPlugin.pluginId)
+      const hostInfo = hostManager.getHostInfo(windowPlugin.pluginId)
+      const startedAt = hostInfo?.startedAt ?? windowPlugin.startedAt ?? now
+
+      if (existingIndex !== undefined) {
+        const existing = result[existingIndex]
+        result[existingIndex] = {
+          ...existing,
+          startedAt: Math.min(existing.startedAt, startedAt),
+          uptime: now - Math.min(existing.startedAt, startedAt),
+          runMode: 'active' as const
+        }
+        continue
+      }
+
+      result.push({
+        pluginId: windowPlugin.pluginId,
+        pluginName: windowPlugin.pluginName,
+        displayName: windowPlugin.displayName,
+        startedAt,
+        uptime: now - startedAt,
+        persistent: false,
+        maxRuntime: 0,
+        memoryUsage: health?.memoryUsage ?? 0,
+        cpuUsage: health?.cpuUsage ?? 0,
+        requestCount: health?.requestCount ?? 0,
+        errorCount: health?.errorCount ?? 0,
+        healthy: health ? watchdog.isHostHealthy(windowPlugin.pluginId) : true,
+        lastHeartbeat: health?.lastHeartbeat ?? 0,
+        missedHeartbeats: health?.missedHeartbeats ?? 0,
+        runMode: 'active' as const
+      })
+      markAdded(windowPlugin.pluginId)
     }
 
     return result

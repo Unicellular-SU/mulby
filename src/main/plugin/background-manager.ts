@@ -37,6 +37,7 @@ export class BackgroundPluginManager extends EventEmitter {
   private hostManager: PluginHostManager
   private watchdog: PluginHostWatchdog
   private stateManager: PluginStateManager
+  private restoreTimer: NodeJS.Timeout | null = null
 
   constructor(
     hostManager: PluginHostManager,
@@ -273,6 +274,8 @@ export class BackgroundPluginManager extends EventEmitter {
    * 恢复持久化的后台插件（应用启动时调用）
    */
   async restorePersistent(plugins: Plugin[]): Promise<void> {
+    this.cancelRestoreTimer()
+
     const pluginsToRestore = plugins.filter(plugin => {
       const state = this.stateManager.getPluginState(plugin.id)
       return (
@@ -292,7 +295,8 @@ export class BackgroundPluginManager extends EventEmitter {
       pluginsToRestore.map(p => p.id))
 
     // 延迟 2 秒启动，避免影响应用启动速度
-    setTimeout(async () => {
+    this.restoreTimer = setTimeout(async () => {
+      this.restoreTimer = null
       console.log('[BackgroundManager] Starting to restore persistent plugins...')
       const startTime = Date.now()
 
@@ -413,6 +417,7 @@ export class BackgroundPluginManager extends EventEmitter {
    * 停止所有后台插件
    */
   async stopAll(): Promise<void> {
+    this.cancelRestoreTimer()
     const pluginIds = Array.from(this.backgroundPlugins.keys())
     await Promise.all(pluginIds.map(id => this.stop(id, 'shutdown')))
   }
@@ -421,6 +426,7 @@ export class BackgroundPluginManager extends EventEmitter {
    * 应用退出时的优雅关闭
    */
   async shutdown(): Promise<void> {
+    this.cancelRestoreTimer()
     const plugins = this.list()
 
     if (plugins.length === 0) {
@@ -445,5 +451,11 @@ export class BackgroundPluginManager extends EventEmitter {
 
     const duration = Date.now() - startTime
     console.log(`[BackgroundManager] Shutdown completed in ${duration}ms`)
+  }
+
+  private cancelRestoreTimer(): void {
+    if (!this.restoreTimer) return
+    clearTimeout(this.restoreTimer)
+    this.restoreTimer = null
   }
 }

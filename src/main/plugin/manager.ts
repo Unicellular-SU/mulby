@@ -127,6 +127,7 @@ export class PluginManager {
   private systemPluginWindowManager: SystemPluginWindowManager | null = null
   private initPromise: Promise<void> | null = null
   private isReloading: boolean = false
+  private skipNextWindowClosedHandling: Set<string> = new Set()
 
   constructor() {
     this.stateManager = new PluginStateManager()
@@ -684,6 +685,9 @@ export class PluginManager {
     // 停止文件监听
     this.stopPluginWatcher(name)
 
+    // 关闭插件窗口，并抑制窗口关闭回调触发自动后台化
+    this.closePluginWindows(name, true)
+
     // 只有已初始化的插件才调用钩子
     if (this.initializedPlugins.has(name)) {
       await this.callPluginHook(plugin, 'onDisable')
@@ -692,6 +696,9 @@ export class PluginManager {
         await this.hostManager.destroyHost(name)
       }
       this.initializedPlugins.delete(name)
+    } else if (this.useUtilityProcess && this.hostManager.isHostReady(name) && !this.backgroundManager.isRunning(name)) {
+      // 兜底：可能由 redirect/initPlugin 直接拉起 Host，但未进入 initializedPlugins
+      await this.hostManager.destroyHost(name)
     }
 
     plugin.enabled = false
@@ -709,6 +716,9 @@ export class PluginManager {
     }
 
     try {
+      // 关闭插件窗口，并抑制窗口关闭回调触发自动后台化
+      this.closePluginWindows(name, true)
+
       // 停止后台运行（如果正在后台运行）
       if (this.backgroundManager.isRunning(name)) {
         await this.backgroundManager.stop(name, 'uninstalled')
@@ -724,6 +734,9 @@ export class PluginManager {
           await this.hostManager.destroyHost(name)
         }
         this.initializedPlugins.delete(name)
+      } else if (this.useUtilityProcess && this.hostManager.isHostReady(name) && !this.backgroundManager.isRunning(name)) {
+        // 兜底：可能由 redirect/initPlugin 直接拉起 Host，但未进入 initializedPlugins
+        await this.hostManager.destroyHost(name)
       }
 
       // 删除插件文件
@@ -769,6 +782,12 @@ export class PluginManager {
   // 获取 BackgroundPluginManager 实例
   getBackgroundManager(): BackgroundPluginManager {
     return this.backgroundManager
+  }
+
+  // 获取当前由窗口驱动的活跃插件（用于任务管理器补全）
+  getActiveWindowPlugins(): Array<{ pluginId: string; pluginName: string; displayName: string; startedAt: number }> {
+    if (!this.windowManager) return []
+    return this.windowManager.getActiveWindowPlugins()
   }
 
   // 首次安装后主动初始化插件（触发 onLoad）
@@ -907,6 +926,10 @@ export class PluginManager {
    * 如果插件支持后台运行，则启动后台运行；否则销毁 Host 进程
    */
   private async handleWindowClosed(pluginId: string): Promise<void> {
+    if (this.skipNextWindowClosedHandling.delete(pluginId)) {
+      return
+    }
+
     if (this.isReloading) {
       if (this.useUtilityProcess && this.hostManager.isHostReady(pluginId)) {
         await this.hostManager.destroyHost(pluginId)
@@ -916,6 +939,14 @@ export class PluginManager {
 
     const plugin = this.plugins.get(pluginId)
     if (!plugin) return
+
+    // 已禁用插件不应因窗口关闭被拉起后台
+    if (!plugin.enabled) {
+      if (this.useUtilityProcess && this.hostManager.isHostReady(pluginId) && !this.backgroundManager.isRunning(pluginId)) {
+        await this.hostManager.destroyHost(pluginId)
+      }
+      return
+    }
 
     // 检查插件是否支持后台运行
     const supportsBackground = plugin.manifest.pluginSetting?.background === true
@@ -1013,16 +1044,7 @@ export class PluginManager {
 
     try {
       // 1. 关闭插件窗口（如果有）
-      if (this.windowManager) {
-        // 关闭所有该插件的独立窗口
-        this.windowManager.closeDetachedWindowsByPlugin(pluginId)
-
-        // 如果当前附着的插件是该插件，关闭附着模式
-        const currentPlugin = this.windowManager.getPanelWindow()?.getCurrentPlugin()
-        if (currentPlugin?.id === pluginId) {
-          this.windowManager.closeAttached()
-        }
-      }
+      this.closePluginWindows(pluginId, !keepBackground)
 
       // 2. 如果不保留后台进程，停止后台运行
       if (!keepBackground && this.backgroundManager.isRunning(pluginId)) {
@@ -1053,5 +1075,28 @@ export class PluginManager {
     // 如果插件支持后台运行，保留后台进程
     const supportsBackground = plugin.manifest.pluginSetting?.background === true
     return await this.stopPlugin(pluginId, supportsBackground)
+  }
+
+  private closePluginWindows(pluginId: string, suppressWindowClosedHandling: boolean): void {
+    if (!this.windowManager) return
+
+    const shouldSuppress = suppressWindowClosedHandling && this.windowManager.hasOpenWindowsForPlugin(pluginId)
+    if (shouldSuppress) {
+      this.skipNextWindowClosedHandling.add(pluginId)
+    }
+
+    // 关闭所有该插件的独立窗口
+    this.windowManager.closeDetachedWindowsByPlugin(pluginId)
+
+    // 如果当前附着的插件是该插件，关闭附着模式
+    const currentPlugin = this.windowManager.getPanelWindow()?.getCurrentPlugin()
+    if (currentPlugin?.id === pluginId) {
+      this.windowManager.closeAttached()
+    }
+
+    // 没有窗口关闭回调触发时，主动清理抑制标记
+    if (shouldSuppress && !this.windowManager.hasOpenWindowsForPlugin(pluginId)) {
+      this.skipNextWindowClosedHandling.delete(pluginId)
+    }
   }
 }
