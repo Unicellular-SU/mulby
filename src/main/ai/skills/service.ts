@@ -38,8 +38,7 @@ import {
   encodeMulbyExtensions,
   validateSkillMarkdown
 } from './spec-validator'
-import { commandRunnerService } from '../../services/command-runner'
-import type { RunCommandInput, RunCommandResult } from '../../services/command-runner'
+import type { RunCommandInput, RunCommandResult } from '../../services/command-runner-core'
 
 const SKILL_MD_VARIANTS = ['SKILL.md']
 const SKILL_APP_ROOT_NAME = 'app'
@@ -51,6 +50,20 @@ interface AiSkillServiceDeps {
   getUserDataPath: () => string
   getHomeDir: () => string
   runCommand: (input: RunCommandInput) => Promise<RunCommandResult>
+}
+
+type DefaultRunCommand = (input: RunCommandInput) => Promise<RunCommandResult>
+let cachedDefaultRunCommand: DefaultRunCommand | null = null
+
+async function resolveDefaultRunCommand(): Promise<DefaultRunCommand> {
+  if (cachedDefaultRunCommand) return cachedDefaultRunCommand
+  const commandRunnerModule = await import('../../services/command-runner')
+  cachedDefaultRunCommand = (input) =>
+    commandRunnerModule.commandRunnerService.runCommand(input, {
+      source: 'app',
+      assumeUserApproved: true
+    })
+  return cachedDefaultRunCommand
 }
 
 const DEFAULT_SKILL_SETTINGS: AiSkillSettings = {
@@ -644,7 +657,10 @@ export class AiSkillService {
       now: deps?.now || (() => Date.now()),
       getUserDataPath: deps?.getUserDataPath || (() => app.getPath('userData')),
       getHomeDir: deps?.getHomeDir || (() => os.homedir()),
-      runCommand: deps?.runCommand || ((input) => commandRunnerService.runCommand(input, { source: 'app', assumeUserApproved: true }))
+      runCommand: deps?.runCommand || (async (input) => {
+        const runCommand = await resolveDefaultRunCommand()
+        return runCommand(input)
+      })
     }
   }
 

@@ -3,7 +3,20 @@ import { app } from 'electron'
 import { join } from 'path'
 import { mkdirSync, existsSync } from 'fs'
 
-const DB_DIR = join(app.getPath('userData'), 'db')
+function resolveUserDataPath(): string {
+  try {
+    if (app && typeof app.getPath === 'function') {
+      return app.getPath('userData')
+    }
+  } catch {
+    // ignore and use fallback
+  }
+
+  // Fallback for non-Electron contexts (unit tests/node runtime)
+  return process.env['MULBY_USER_DATA_PATH'] || join(process.cwd(), '.mulby-user-data')
+}
+
+const DB_DIR = join(resolveUserDataPath(), 'db')
 const DB_PATH = join(DB_DIR, 'storage.db')
 
 // 确保数据库目录存在

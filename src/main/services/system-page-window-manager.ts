@@ -1,6 +1,7 @@
 import { BrowserWindow, app, screen } from 'electron'
 import { join } from 'path'
 import { pathToFileURL } from 'url'
+import { existsSync } from 'fs'
 import { ThemeManager } from './theme'
 import { injectCustomTitleBar } from '../plugin/titlebar'
 import { isIgnoringBlur } from './blur-manager'
@@ -668,16 +669,22 @@ export class SystemPageWindowManager {
     const mainWindow = this.mainWindow
     if (mainWindow && !mainWindow.isDestroyed()) {
       const loadedUrl = mainWindow.webContents.getURL()
-      if (loadedUrl) return loadedUrl
+      if (loadedUrl && loadedUrl !== 'about:blank') return loadedUrl
     }
 
     if (process.env.VITE_DEV_SERVER_URL) {
       return process.env.VITE_DEV_SERVER_URL
     }
+
+    const filePath = join(__dirname, '../renderer/index.html')
+    if (app.isPackaged || existsSync(filePath)) {
+      return pathToFileURL(filePath).toString()
+    }
+
     if (!app.isPackaged) {
       return 'http://localhost:5173/'
     }
-    const filePath = join(__dirname, '../renderer/index.html')
+
     return pathToFileURL(filePath).toString()
   }
 }

@@ -328,7 +328,6 @@ export default function AiMcpSettingsView({ onBack }: AiMcpSettingsViewProps) {
 
   useEffect(() => {
     void loadServers()
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   useEffect(() => {
@@ -338,7 +337,6 @@ export default function AiMcpSettingsView({ onBack }: AiMcpSettingsViewProps) {
     setDraftEnvText(toKeyValueLines(selectedServer.env))
     setDraftHeadersText(toKeyValueLines(selectedServer.headers))
     void loadToolsAndLogs(selectedServer)
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedServerId, selectedServer?.id])
 
   const handleCreateServer = () => {

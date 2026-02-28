@@ -12,9 +12,9 @@
 ## In Progress
 
 ### P0 - 质量与发布基线
-- [ ] 修复 `lint` error（目标：0 error）
-- [ ] 修复 `test:unit` 失败用例并稳定通过
-- [ ] 建立统一本地验证命令（建议：`npm run verify`）
+- [x] 修复 `lint` error（目标：0 error）
+- [x] 修复 `test:unit` 失败用例并稳定通过
+- [x] 建立统一本地验证命令（`npm run verify`）
 - [ ] 建立最小 CI 流水线（typecheck + lint + test + build smoke）
 
 ### P0 - 文档治理
@@ -50,3 +50,9 @@
 - `npm run lint` 无 error
 - `npm run test:unit` 全通过
 - build smoke 通过
+
+## 最近基线结果（2026-02-28）
+- `typecheck`: 通过
+- `lint`: 0 error / 354 warnings
+- `test:unit`: 149 tests, 0 fail, 1 skip
+- `build smoke`: 通过

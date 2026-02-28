@@ -20,7 +20,7 @@
 
 ## Phases
 - [x] Phase 1: 计划冻结与文档治理基线
-- [ ] Phase 2: 质量门禁修复与基线稳定
+- [x] Phase 2: 质量门禁修复与基线稳定
 - [ ] Phase 3: 设置中心增强（开机自启动 + 更新中心）
 - [ ] Phase 4: CI 建设与发布前自动检查
 - [ ] Phase 5: 大文件拆分与模块边界收敛
@@ -48,7 +48,7 @@
 - 修复 `test:unit` 失败用例（含 Electron 依赖环境隔离）
 - 建立本地统一检查命令（如 `npm run verify`）
 
-**当前已知问题（基线）**：
+**历史基线（修复前）**：
 - `lint`: 58 errors / 324 warnings
 - `test:unit`: 140 项中 1 项失败（`skillsService.test.ts`）
 
@@ -56,6 +56,14 @@
 - `npm run typecheck` 通过
 - `npm run lint` 无 error
 - `npm run test:unit` 全通过
+- build smoke 通过
+
+**当前结果（2026-02-28）**：
+- `npm run typecheck`: 通过
+- `npm run lint`: 0 error / 354 warnings
+- `npm run test:unit`: 149 tests, 0 fail, 1 skip
+- `npm run build`（smoke）: 通过
+- 已新增 `npm run verify` 统一执行质量门禁链路
 
 ### Phase 3: 设置中心增强（开机自启动 + 更新中心）
 **目标**：设置中心可直接管理开机自启动，并提供更新能力入口。  
@@ -135,6 +143,7 @@
 
 ## Errors Encountered
 - `planning-with-files` 技能仓库内路径不可用，已切换到 `$HOME/.codex/skills/planning-with-files/SKILL.md` 读取。
+- `test:unit` 初始失败触发 `better-sqlite3` ABI 不匹配；已通过 `AiSkillService` 中默认 `command-runner` 懒加载隔离测试导入路径。
 
 ## Status
-**Currently in Phase 2** - Phase 1 已完成，开始处理质量门禁修复与基线稳定。
+**Phase 2 Completed** - 质量门禁本地链路已打通，下一步进入 Phase 3 / Phase 4。
