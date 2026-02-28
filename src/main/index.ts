@@ -625,7 +625,10 @@ function toggleWindow() {
 }
 
 function openSystemPageView(payload: OpenSystemPageWindowPayload) {
-  showMainWindow()
+  const detached = systemPageWindowManager.getDetachedWindow()
+  if (!detached) {
+    showMainWindow()
+  }
   void systemPageWindowManager.openAttached(payload)
 }
 

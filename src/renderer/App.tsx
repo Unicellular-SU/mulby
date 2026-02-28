@@ -265,6 +265,9 @@ function App() {
 
   // 调整窗口高度
   useEffect(() => {
+    if (isSystemWindow) {
+      return
+    }
     const SEARCH_BOX_HEIGHT = 62
     const BORDER_HEIGHT = 1
     const EXPANDED_HEIGHT = 800
@@ -304,7 +307,7 @@ function App() {
     } else if (!hasInput) {
       lastHeightRef.current = null
     }
-  }, [query, pluginOpen, systemPageAttached, detailsPluginName, attachments.length, attachmentsManagerOpen, managerMetrics.managerHeight, pluginListHeight, viewMode, perfTrace.id, perfTrace.startedAt])
+  }, [isSystemWindow, query, pluginOpen, systemPageAttached, detailsPluginName, attachments.length, attachmentsManagerOpen, managerMetrics.managerHeight, pluginListHeight, viewMode, perfTrace.id, perfTrace.startedAt])
 
   const handlePluginListHeightChange = useCallback((height: number) => {
     const normalized = Math.max(0, Math.round(height))

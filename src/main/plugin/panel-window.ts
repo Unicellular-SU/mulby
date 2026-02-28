@@ -8,6 +8,7 @@ import { loggerService } from '../services/logger'
 import { injectCustomTitleBar } from './titlebar'
 import { isIgnoringBlur } from '../services/blur-manager'
 import { getPluginPreloadPath } from './plugin-preload-wrapper'
+import { ATTACHED_PANEL_HEIGHT, ATTACHED_PANEL_MIN_OVERFLOW_HEIGHT } from '../constants/panel-window'
 
 function canReachUrl(url: string, timeoutMs = 800): Promise<boolean> {
     return new Promise((resolve) => {
@@ -54,9 +55,6 @@ export class PluginPanelWindow {
     private resizeHandler: (() => void) | null = null
     private syncScheduled = false
 
-    // 配置
-    private readonly PANEL_HEIGHT = 730
-
     constructor(mainWindow: BrowserWindow) {
         this.mainWindow = mainWindow
     }
@@ -102,7 +100,7 @@ export class PluginPanelWindow {
 
         this.panelWindow = new BrowserWindow({
             width,
-            height: this.PANEL_HEIGHT,
+            height: ATTACHED_PANEL_HEIGHT,
             x,
             y,
             frame: false,
@@ -293,7 +291,7 @@ export class PluginPanelWindow {
 
         // 如果面板超出屏幕底部，调整高度
         if (y + panelBounds.height > workArea.y + workArea.height) {
-            adjustedHeight = Math.max(200, workArea.y + workArea.height - y)
+            adjustedHeight = Math.max(ATTACHED_PANEL_MIN_OVERFLOW_HEIGHT, workArea.y + workArea.height - y)
         }
 
         // 批量设置位置和大小以减少闪烁

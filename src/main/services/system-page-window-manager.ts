@@ -4,6 +4,7 @@ import { pathToFileURL } from 'url'
 import { ThemeManager } from './theme'
 import { injectCustomTitleBar } from '../plugin/titlebar'
 import { isIgnoringBlur } from './blur-manager'
+import { ATTACHED_PANEL_HEIGHT, ATTACHED_PANEL_MIN_OVERFLOW_HEIGHT } from '../constants/panel-window'
 
 export type SystemPageMode = 'none' | 'attached' | 'detached'
 
@@ -134,8 +135,17 @@ export class SystemPageWindowManager {
 
     const existingDetached = this.getDetachedWindow()
     if (existingDetached) {
-      existingDetached.close()
-      this.detachedWindow = null
+      this.dispatchRoute(existingDetached, route)
+      existingDetached.setTitle(this.resolveTitle(route))
+      if (!existingDetached.isVisible()) {
+        existingDetached.show()
+      }
+      if (existingDetached.isMinimized()) {
+        existingDetached.restore()
+      }
+      existingDetached.focus()
+      this.emitState()
+      return true
     }
 
     const existingAttached = this.getAttachedWindow()
@@ -152,7 +162,7 @@ export class SystemPageWindowManager {
 
     const win = new BrowserWindow({
       width,
-      height: 730,
+      height: ATTACHED_PANEL_HEIGHT,
       x,
       y,
       frame: false,
@@ -627,7 +637,7 @@ export class SystemPageWindowManager {
     const workArea = display.workArea
     let height = bounds.height
     if (y + height > workArea.y + workArea.height) {
-      height = Math.max(320, workArea.y + workArea.height - y)
+      height = Math.max(ATTACHED_PANEL_MIN_OVERFLOW_HEIGHT, workArea.y + workArea.height - y)
     }
     attached.setBounds({ x, y, width, height })
   }
