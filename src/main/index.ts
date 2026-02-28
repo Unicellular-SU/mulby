@@ -29,6 +29,11 @@ import { ClipboardHistoryManager } from './services/clipboard-history'
 import { commandRunnerService } from './services/command-runner'
 import { setLoggerMinLevel } from './services/logger'
 import { SystemPluginWindowManager } from './services/system-plugin-window-manager'
+import {
+  SystemPageWindowManager,
+  type OpenSystemPagePayload as OpenSystemPageWindowPayload,
+  type SettingsCenterSection
+} from './services/system-page-window-manager'
 import { patchConsoleWithTimestamp } from '../shared/utils/console'
 
 patchConsoleWithTimestamp()
@@ -71,6 +76,7 @@ setLoggerMinLevel(appSettingsManager.getSettings().developer.logLevel)
 const clipboardWatcher = new ClipboardWatcher()
 const clipboardHistoryManager = new ClipboardHistoryManager()
 const systemPluginWindowManager = new SystemPluginWindowManager()
+const systemPageWindowManager = new SystemPageWindowManager()
 const aiInternalToolRuntime = createAiInternalToolRuntime({
   getToolingSettings: () => appSettingsManager.getSettings().aiTooling,
   runCommand: (input, context) => commandRunnerService.runCommand(input, context),
@@ -162,6 +168,22 @@ const handleAppActivate = () => {
       }
     })
     return
+  }
+
+  const systemDetached = systemPageWindowManager.getDetachedWindow()
+  if (systemDetached && isWindowAvailable(systemDetached)) {
+    try {
+      if (!systemDetached.isVisible()) {
+        systemDetached.show()
+      }
+      if (systemDetached.isMinimized()) {
+        systemDetached.restore()
+      }
+      systemDetached.focus()
+      return
+    } catch (error) {
+      console.warn('[Main] Failed to restore detached system page window on activate:', error)
+    }
   }
 
   showMainWindow()
@@ -272,6 +294,12 @@ async function shutdownMainProcessResources(): Promise<void> {
     }
 
     try {
+      systemPageWindowManager.closeAll()
+    } catch (error) {
+      console.error('[Main] Failed to close system page windows:', error)
+    }
+
+    try {
       appTrayManager?.destroy()
       appTrayManager = null
     } catch (error) {
@@ -319,11 +347,13 @@ function hideMainWindow() {
 
   trayMenuWindowManager?.hide()
   pluginWindowManager.hidePanelWindow()
+  systemPageWindowManager.hideAttached()
   mainWindow.hide()
 
   // macOS: 如果有独立窗口，确保 dock 图标保持显示
   if (process.platform === 'darwin' && app.dock) {
     const hasDetachedWindows = pluginWindowManager.getAllDetachedWindows().length > 0
+      || Boolean(systemPageWindowManager.getDetachedWindow())
     if (hasDetachedWindows) {
       void app.dock.show()
     }
@@ -399,6 +429,7 @@ function createWindow() {
 
   mainWindow.on('closed', () => {
     systemPluginWindowManager.setMainWindow(null)
+    systemPageWindowManager.setMainWindow(null)
     mainWindow = null
   })
 
@@ -423,8 +454,14 @@ function createWindow() {
       if (panelWin && panelWin.isFocused()) {
         return
       }
+      // 如果焦点转移到了系统页面附着窗口，不隐藏
+      const systemPageAttached = systemPageWindowManager.getAttachedWindow()
+      if (systemPageAttached && systemPageAttached.isFocused()) {
+        return
+      }
       // 焦点转移到其他地方，隐藏主窗口和面板
       pluginWindowManager.hidePanelWindow()
+      systemPageWindowManager.hideAttached()
       mainWindow?.hide()
     }, 50)
   })
@@ -507,6 +544,7 @@ function showMainWindow() {
       // 如果有独立窗口，在显示主窗口之前先确保 dock 图标显示
       // 并且设置一个短暂的延迟，确保 dock 状态稳定
       const hasDetachedWindows = pluginWindowManager.getAllDetachedWindows().length > 0
+        || Boolean(systemPageWindowManager.getDetachedWindow())
       if (hasDetachedWindows && app.dock) {
         void app.dock.show()
       }
@@ -545,6 +583,7 @@ function showMainWindow() {
 
     // 恢复之前隐藏的面板
     pluginWindowManager.showPanelWindow()
+    systemPageWindowManager.showAttached()
 
     // 智能剪贴板自动粘贴
     const appSettings = appSettingsManager.getSettings()
@@ -559,6 +598,7 @@ function showMainWindow() {
     // macOS: 再次确保 dock 图标状态正确（在 show 之后）
     if (process.platform === 'darwin' && app.dock) {
       const hasDetachedWindows = pluginWindowManager.getAllDetachedWindows().length > 0
+        || Boolean(systemPageWindowManager.getDetachedWindow())
       if (hasDetachedWindows) {
         // 使用 setImmediate 确保在下一个事件循环中执行
         setImmediate(() => {
@@ -584,71 +624,48 @@ function toggleWindow() {
   }
 }
 
-type SettingsCenterSection =
-  | 'general'
-  | 'shortcuts'
-  | 'commandQuickLaunch'
-  | 'commandAll'
-  | 'permissions'
-  | 'security'
-  | 'developer'
-  | 'about'
-
-interface OpenSystemPluginPayload {
-  pluginId: string
-  params?: Record<string, unknown>
-}
-
-function openSystemPluginView(payload: OpenSystemPluginPayload) {
+function openSystemPageView(payload: OpenSystemPageWindowPayload) {
   showMainWindow()
-  mainWindow?.webContents.send('app:openSystemPlugin', payload)
+  void systemPageWindowManager.openAttached(payload)
 }
 
 function openSettingsView(section: SettingsCenterSection = 'general') {
-  openSystemPluginView({
-    pluginId: 'settings-center',
-    params: { section }
+  openSystemPageView({
+    page: 'settings',
+    settingsSection: section
   })
 }
 
 function openCommandShortcutSettingsView(cmdLabel?: string) {
-  openSystemPluginView({
-    pluginId: 'settings-center',
-    params: {
-      section: 'commandQuickLaunch',
-      shortcutCommandHint: cmdLabel?.trim() || ''
-    }
+  openSystemPageView({
+    page: 'settings',
+    settingsSection: 'commandQuickLaunch',
+    shortcutCommandHint: cmdLabel?.trim() || ''
   })
 }
 
 function openPluginStoreView() {
-  showMainWindow()
-  mainWindow?.webContents.send('app:openPluginStore')
+  openSystemPageView({ page: 'plugin-store' })
 }
 
 function openPluginManagerView() {
-  showMainWindow()
-  mainWindow?.webContents.send('app:openPluginManager')
+  openSystemPageView({ page: 'plugin-manager' })
 }
 
 function openAiSettingsView() {
-  showMainWindow()
-  mainWindow?.webContents.send('app:openAiSettings')
+  openSystemPageView({ page: 'ai-settings' })
 }
 
 function openBackgroundPluginsView() {
-  showMainWindow()
-  mainWindow?.webContents.send('app:openBackgroundPlugins')
+  openSystemPageView({ page: 'background-plugins' })
 }
 
 function openTaskSchedulerView() {
-  showMainWindow()
-  mainWindow?.webContents.send('app:openTaskScheduler')
+  openSystemPageView({ page: 'task-scheduler' })
 }
 
 function openLogViewerView() {
-  showMainWindow()
-  mainWindow?.webContents.send('app:openLogViewer')
+  openSystemPageView({ page: 'log-viewer' })
 }
 
 function resetMainWindowPosition() {
@@ -716,7 +733,8 @@ app.whenReady().then(async () => {
     appSettingsManager,
     appShortcutManager,
     clipboardHistoryManager,
-    systemPluginWindowManager
+    systemPluginWindowManager,
+    systemPageWindowManager
   )
 
   createWindow()
@@ -767,15 +785,19 @@ app.whenReady().then(async () => {
     if (mainWindow && !mainWindow.isDestroyed()) windows.push(mainWindow)
     const panelWin = pluginWindowManager.getPanelWindow()?.getWindow()
     if (panelWin && !panelWin.isDestroyed()) windows.push(panelWin)
+    const systemPageWin = systemPageWindowManager.getAttachedWindow()
+    if (systemPageWin && !systemPageWin.isDestroyed()) windows.push(systemPageWin)
     return windows
   })
 
   // 设置主窗口到插件窗口管理器
   pluginWindowManager.setMainWindow(mainWindow!)
   systemPluginWindowManager.setMainWindow(mainWindow!)
+  systemPageWindowManager.setMainWindow(mainWindow!)
 
   // 设置主题管理器到插件窗口管理器
   pluginWindowManager.setThemeManager(themeManager)
+  systemPageWindowManager.setThemeManager(themeManager)
 
   // 注册主窗口到主题管理器
   themeManager.registerWindow(mainWindow!)

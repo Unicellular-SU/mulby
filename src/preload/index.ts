@@ -344,6 +344,16 @@ const mulbyApi = {
       ipcRenderer.on('app:openAiSettings', listener)
       return () => ipcRenderer.removeListener('app:openAiSettings', listener)
     },
+    onOpenAiMcpSettings: (callback: () => void) => {
+      const listener = () => callback()
+      ipcRenderer.on('app:openAiMcpSettings', listener)
+      return () => ipcRenderer.removeListener('app:openAiMcpSettings', listener)
+    },
+    onOpenAiSkillsSettings: (callback: () => void) => {
+      const listener = () => callback()
+      ipcRenderer.on('app:openAiSkillsSettings', listener)
+      return () => ipcRenderer.removeListener('app:openAiSkillsSettings', listener)
+    },
     onOpenPluginStore: (callback: () => void) => {
       const listener = () => callback()
       ipcRenderer.on('app:openPluginStore', listener)
@@ -380,6 +390,24 @@ const mulbyApi = {
     setActive: (pluginId: string | null) => ipcRenderer.invoke('systemPlugin:setActive', pluginId),
     notifyReadyForAttach: (requestId: string) => ipcRenderer.invoke('systemPlugin:notifyReadyForAttach', requestId),
     getActive: () => ipcRenderer.invoke('systemPlugin:getActive')
+  },
+
+  systemPage: {
+    open: (payload: {
+      page: 'settings' | 'plugin-manager' | 'plugin-store' | 'background-plugins' | 'task-scheduler' | 'log-viewer' | 'ai-settings' | 'ai-mcp-settings' | 'ai-skills-settings'
+      settingsSection?: 'general' | 'shortcuts' | 'commandQuickLaunch' | 'commandAll' | 'permissions' | 'security' | 'developer' | 'about'
+      shortcutCommandHint?: string
+    }) => ipcRenderer.invoke('systemPage:open', payload),
+    close: () => ipcRenderer.invoke('systemPage:close'),
+    detach: () => ipcRenderer.invoke('systemPage:detach'),
+    reload: () => ipcRenderer.invoke('systemPage:reload'),
+    getMode: () => ipcRenderer.invoke('systemPage:getMode'),
+    getState: () => ipcRenderer.invoke('systemPage:getState'),
+    onStateChange: (callback: (state: { open: boolean; mode: 'none' | 'attached' | 'detached'; page: string | null; title: string }) => void) => {
+      const listener = (_: any, state: { open: boolean; mode: 'none' | 'attached' | 'detached'; page: string | null; title: string }) => callback(state)
+      ipcRenderer.on('systemPage:state', listener)
+      return () => ipcRenderer.removeListener('systemPage:state', listener)
+    }
   },
 
   // 窗口状态变化事件

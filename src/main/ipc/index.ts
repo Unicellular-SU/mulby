@@ -42,6 +42,8 @@ import { ClipboardHistoryManager } from '../services/clipboard-history'
 import { registerAiHandlers } from './ai'
 import { registerSystemPluginHandlers } from './system-plugin'
 import { SystemPluginWindowManager } from '../services/system-plugin-window-manager'
+import { registerSystemPageHandlers } from './system-page'
+import { SystemPageWindowManager } from '../services/system-page-window-manager'
 
 
 export function registerAllHandlers(
@@ -52,7 +54,8 @@ export function registerAllHandlers(
   appSettingsManager: AppSettingsManager,
   appShortcutManager: AppShortcutManager,
   clipboardHistoryManager: ClipboardHistoryManager,
-  systemPluginWindowManager: SystemPluginWindowManager
+  systemPluginWindowManager: SystemPluginWindowManager,
+  systemPageWindowManager: SystemPageWindowManager
 ) {
   registerClipboardHandlers()
   registerClipboardHistoryHandlers(clipboardHistoryManager)
@@ -89,6 +92,7 @@ export function registerAllHandlers(
   registerSchedulerHandlers(pluginManager)
   registerAiHandlers()
   registerSystemPluginHandlers(getMainWindow, systemPluginWindowManager)
+  registerSystemPageHandlers(getMainWindow, systemPageWindowManager)
 
   // 注册日志 IPC 处理器，并设置开发者模式获取器
   setDeveloperModeGetter(() => appSettingsManager.getSettings().developer.enabled)

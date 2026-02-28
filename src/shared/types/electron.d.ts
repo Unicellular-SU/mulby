@@ -374,6 +374,8 @@ export interface ElectronAPI {
     onOpenSystemPlugin: (callback: (payload: OpenSystemPluginPayload) => void) => () => void
     onSystemPluginBeforeAttach: (callback: (payload: SystemPluginBeforeAttachPayload) => void | Promise<void>) => () => void
     onOpenAiSettings: (callback: () => void) => () => void
+    onOpenAiMcpSettings: (callback: () => void) => () => void
+    onOpenAiSkillsSettings: (callback: () => void) => () => void
     onOpenPluginStore: (callback: () => void) => () => void
     onOpenPluginManager: (callback: () => void) => () => void
     onOpenBackgroundPlugins: (callback: () => void) => () => void
@@ -385,6 +387,19 @@ export interface ElectronAPI {
     setActive: (pluginId: string | null) => Promise<boolean>
     notifyReadyForAttach: (requestId: string) => Promise<boolean>
     getActive: () => Promise<string | null>
+  }
+  systemPage: {
+    open: (payload: {
+      page: 'settings' | 'plugin-manager' | 'plugin-store' | 'background-plugins' | 'task-scheduler' | 'log-viewer' | 'ai-settings' | 'ai-mcp-settings' | 'ai-skills-settings'
+      settingsSection?: 'general' | 'shortcuts' | 'commandQuickLaunch' | 'commandAll' | 'permissions' | 'security' | 'developer' | 'about'
+      shortcutCommandHint?: string
+    }) => Promise<boolean>
+    close: () => Promise<boolean>
+    detach: () => Promise<boolean>
+    reload: () => Promise<boolean>
+    getMode: () => Promise<'none' | 'attached' | 'detached'>
+    getState: () => Promise<{ open: boolean; mode: 'none' | 'attached' | 'detached'; page: string | null; title: string }>
+    onStateChange: (callback: (state: { open: boolean; mode: 'none' | 'attached' | 'detached'; page: string | null; title: string }) => void) => () => void
   }
   clipboard: {
     readText: () => Promise<string>

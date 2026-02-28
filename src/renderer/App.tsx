@@ -62,19 +62,121 @@ function parseSettingsSection(value: unknown): SettingsSection | null {
   return null
 }
 
+type ViewMode =
+  | 'home'
+  | 'plugin-details'
+  | 'system-plugin'
+  | 'plugins'
+  | 'logs'
+  | 'background-plugins'
+  | 'task-scheduler'
+  | 'ai-settings'
+  | 'ai-mcp-settings'
+  | 'ai-skills-settings'
+
+interface SystemWindowBootstrap {
+  isSystemWindow: boolean
+  initialViewMode: ViewMode
+  initialSystemPluginRoute: SystemPluginRoute
+  initialPluginManagerSection: 'installed' | 'store'
+}
+
+interface SystemPageState {
+  open: boolean
+  mode: 'none' | 'attached' | 'detached'
+  page: string | null
+  title: string
+}
+
+function parseSystemWindowBootstrap(): SystemWindowBootstrap {
+  const params = new URLSearchParams(window.location.search)
+  const isSystemWindow = params.get('mulbySystemWindow') === '1'
+  if (!isSystemWindow) {
+    return {
+      isSystemWindow: false,
+      initialViewMode: 'home',
+      initialSystemPluginRoute: DEFAULT_SYSTEM_PLUGIN_ROUTE,
+      initialPluginManagerSection: 'installed'
+    }
+  }
+
+  const page = params.get('mulbySystemPage')
+  const section = parseSettingsSection(params.get('mulbySystemSection')) || 'general'
+  const shortcutCommandHint = params.get('mulbySystemHint') || ''
+
+  let initialViewMode: ViewMode = 'home'
+  let initialPluginManagerSection: 'installed' | 'store' = 'installed'
+
+  switch (page) {
+    case 'settings':
+      initialViewMode = 'system-plugin'
+      break
+    case 'plugin-manager':
+      initialViewMode = 'plugins'
+      initialPluginManagerSection = 'installed'
+      break
+    case 'plugin-store':
+      initialViewMode = 'plugins'
+      initialPluginManagerSection = 'store'
+      break
+    case 'background-plugins':
+      initialViewMode = 'background-plugins'
+      break
+    case 'task-scheduler':
+      initialViewMode = 'task-scheduler'
+      break
+    case 'log-viewer':
+      initialViewMode = 'logs'
+      break
+    case 'ai-settings':
+      initialViewMode = 'ai-settings'
+      break
+    case 'ai-mcp-settings':
+      initialViewMode = 'ai-mcp-settings'
+      break
+    case 'ai-skills-settings':
+      initialViewMode = 'ai-skills-settings'
+      break
+    default:
+      initialViewMode = 'home'
+      break
+  }
+
+  return {
+    isSystemWindow: true,
+    initialViewMode,
+    initialSystemPluginRoute: {
+      pluginId: 'settings-center',
+      params: {
+        section,
+        shortcutCommandHint
+      }
+    },
+    initialPluginManagerSection
+  }
+}
+
 function App() {
+  const systemWindowBootstrap = useMemo(() => parseSystemWindowBootstrap(), [])
+  const isSystemWindow = systemWindowBootstrap.isSystemWindow
   const [query, setQuery] = useState('')
   const [, setResultCount] = useState(0)
+  const [systemPageState, setSystemPageState] = useState<SystemPageState>({
+    open: false,
+    mode: 'none',
+    page: null,
+    title: ''
+  })
   const [pluginOpen, setPluginOpen] = useState(false) // 仅用于跟踪插件是否打开
   const [detailsPluginName, setDetailsPluginName] = useState<string | null>(null)
   const [detailsReturnTarget, setDetailsReturnTarget] = useState<'home' | 'settings' | 'plugins'>('home')
-  const [viewMode, setViewMode] = useState<'home' | 'plugin-details' | 'system-plugin' | 'plugins' | 'logs' | 'background-plugins' | 'task-scheduler' | 'ai-settings' | 'ai-mcp-settings' | 'ai-skills-settings'>('home')
-  const [systemPluginRoute, setSystemPluginRoute] = useState<SystemPluginRoute>(DEFAULT_SYSTEM_PLUGIN_ROUTE)
+  const [viewMode, setViewMode] = useState<ViewMode>(systemWindowBootstrap.initialViewMode)
+  const [systemPluginRoute, setSystemPluginRoute] = useState<SystemPluginRoute>(systemWindowBootstrap.initialSystemPluginRoute)
   const [pluginManagerReturnTarget, setPluginManagerReturnTarget] = useState<'home' | 'settings'>('home')
-  const [pluginManagerSection, setPluginManagerSection] = useState<'installed' | 'store'>('installed')
+  const [pluginManagerSection, setPluginManagerSection] = useState<'installed' | 'store'>(systemWindowBootstrap.initialPluginManagerSection)
   const [backgroundPluginManagerReturnTarget, setBackgroundPluginManagerReturnTarget] = useState<'home' | 'settings'>('home')
   const [taskSchedulerReturnTarget, setTaskSchedulerReturnTarget] = useState<'home' | 'settings'>('home')
-  const [logViewerReturnTarget, setLogViewerReturnTarget] = useState<'home' | 'settings'>('settings')
+  const [logViewerReturnTarget, setLogViewerReturnTarget] = useState<'home' | 'settings'>('home')
   const [isDragging, setIsDragging] = useState(false)
   const [theme, setTheme] = useState<'light' | 'dark'>('light')
   const [attachments, setAttachments] = useState<UiAttachment[]>([])
@@ -129,6 +231,8 @@ function App() {
     return { managerHeight, listHeight }
   }, [attachments.length])
 
+  const systemPageAttached = !isSystemWindow && systemPageState.open && systemPageState.mode === 'attached'
+
   // 初始化主题
   useEffect(() => {
     window.mulby.theme.getActual().then(setTheme)
@@ -141,6 +245,24 @@ function App() {
     document.documentElement.classList.toggle('dark', theme === 'dark')
   }, [theme])
 
+  useEffect(() => {
+    if (isSystemWindow) return
+    let mounted = true
+    window.mulby.systemPage.getState().then((state) => {
+      if (!mounted) return
+      setSystemPageState(state)
+    }).catch(() => {
+      // ignore
+    })
+    const cleanup = window.mulby.systemPage.onStateChange((state) => {
+      setSystemPageState(state)
+    })
+    return () => {
+      mounted = false
+      cleanup()
+    }
+  }, [isSystemWindow])
+
   // 调整窗口高度
   useEffect(() => {
     const SEARCH_BOX_HEIGHT = 62
@@ -152,7 +274,10 @@ function App() {
 
     let height = SEARCH_BOX_HEIGHT
     let allowResize = false
-    const showSearchPanel = (query.length > 0 || attachments.length > 0) && !pluginOpen && !attachmentsManagerOpen
+    const showSearchPanel = (query.length > 0 || attachments.length > 0)
+      && !pluginOpen
+      && !systemPageAttached
+      && !attachmentsManagerOpen
 
     if (viewMode !== 'home') {
       // 设置/详情页高度，允许自由调整大小
@@ -160,6 +285,9 @@ function App() {
       allowResize = true
     } else if (pluginOpen) {
       // 插件面板打开时，主窗口只保持搜索框高度（插件 UI 在独立的 Panel 窗口中）
+      height = SEARCH_BOX_HEIGHT
+    } else if (systemPageAttached) {
+      // 系统页面附着模式打开时，主窗口保持搜索框高度
       height = SEARCH_BOX_HEIGHT
     } else if (attachmentsManagerOpen && attachments.length > 0) {
       height = SEARCH_BOX_HEIGHT + BORDER_HEIGHT + MANAGER_HEIGHT
@@ -176,7 +304,7 @@ function App() {
     } else if (!hasInput) {
       lastHeightRef.current = null
     }
-  }, [query, pluginOpen, detailsPluginName, attachments.length, attachmentsManagerOpen, managerMetrics.managerHeight, pluginListHeight, viewMode, perfTrace.id, perfTrace.startedAt])
+  }, [query, pluginOpen, systemPageAttached, detailsPluginName, attachments.length, attachmentsManagerOpen, managerMetrics.managerHeight, pluginListHeight, viewMode, perfTrace.id, perfTrace.startedAt])
 
   const handlePluginListHeightChange = useCallback((height: number) => {
     const normalized = Math.max(0, Math.round(height))
@@ -186,6 +314,9 @@ function App() {
   // 监听插件附着事件
   useEffect(() => {
     const cleanupAttach = window.mulby.onPluginAttach((_data: PluginInfo) => {
+      if (systemPageAttached) {
+        void window.mulby.systemPage.close()
+      }
       setPluginOpen(true)
     })
 
@@ -201,7 +332,7 @@ function App() {
       cleanupAttach()
       cleanupDetached()
     }
-  }, [])
+  }, [systemPageAttached])
 
   useEffect(() => {
     if (attachments.length === 0 && attachmentsManagerOpen) {
@@ -210,10 +341,17 @@ function App() {
   }, [attachments.length, attachmentsManagerOpen])
 
   useEffect(() => {
-    if (pluginOpen && attachmentsManagerOpen) {
+    if ((pluginOpen || systemPageAttached) && attachmentsManagerOpen) {
       setAttachmentsManagerOpen(false)
     }
-  }, [pluginOpen, attachmentsManagerOpen])
+  }, [pluginOpen, systemPageAttached, attachmentsManagerOpen])
+
+  useEffect(() => {
+    if (pluginOpen && systemPageAttached) {
+      window.mulby.window.close()
+      setPluginOpen(false)
+    }
+  }, [pluginOpen, systemPageAttached])
 
   const openSettings = useCallback((section: SettingsSection = 'general', commandHint?: string) => {
     if (pluginOpen) {
@@ -221,6 +359,14 @@ function App() {
       setPluginOpen(false)
     }
     setAttachmentsManagerOpen(false)
+    if (!isSystemWindow) {
+      void window.mulby.systemPage.open({
+        page: 'settings',
+        settingsSection: section,
+        shortcutCommandHint: commandHint?.trim() || ''
+      })
+      return
+    }
     setSystemPluginRoute({
       pluginId: 'settings-center',
       params: {
@@ -229,7 +375,7 @@ function App() {
       }
     })
     setViewMode('system-plugin')
-  }, [pluginOpen])
+  }, [isSystemWindow, pluginOpen])
 
   const openPluginManager = useCallback((from: 'home' | 'settings' = 'home', section: 'installed' | 'store' = 'installed') => {
     if (pluginOpen) {
@@ -237,10 +383,16 @@ function App() {
       setPluginOpen(false)
     }
     setAttachmentsManagerOpen(false)
+    if (!isSystemWindow) {
+      void window.mulby.systemPage.open({
+        page: section === 'store' ? 'plugin-store' : 'plugin-manager'
+      })
+      return
+    }
     setPluginManagerReturnTarget(from)
     setPluginManagerSection(section)
     setViewMode('plugins')
-  }, [pluginOpen])
+  }, [isSystemWindow, pluginOpen])
 
   const openBackgroundPluginManager = useCallback((from: 'home' | 'settings' = 'home') => {
     if (pluginOpen) {
@@ -248,9 +400,13 @@ function App() {
       setPluginOpen(false)
     }
     setAttachmentsManagerOpen(false)
+    if (!isSystemWindow) {
+      void window.mulby.systemPage.open({ page: 'background-plugins' })
+      return
+    }
     setBackgroundPluginManagerReturnTarget(from)
     setViewMode('background-plugins')
-  }, [pluginOpen])
+  }, [isSystemWindow, pluginOpen])
 
   const openTaskScheduler = useCallback((from: 'home' | 'settings' = 'home') => {
     if (pluginOpen) {
@@ -258,9 +414,13 @@ function App() {
       setPluginOpen(false)
     }
     setAttachmentsManagerOpen(false)
+    if (!isSystemWindow) {
+      void window.mulby.systemPage.open({ page: 'task-scheduler' })
+      return
+    }
     setTaskSchedulerReturnTarget(from)
     setViewMode('task-scheduler')
-  }, [pluginOpen])
+  }, [isSystemWindow, pluginOpen])
 
   const openLogViewer = useCallback((from: 'home' | 'settings' = 'home') => {
     if (pluginOpen) {
@@ -268,9 +428,13 @@ function App() {
       setPluginOpen(false)
     }
     setAttachmentsManagerOpen(false)
+    if (!isSystemWindow) {
+      void window.mulby.systemPage.open({ page: 'log-viewer' })
+      return
+    }
     setLogViewerReturnTarget(from)
     setViewMode('logs')
-  }, [pluginOpen])
+  }, [isSystemWindow, pluginOpen])
 
   const openAiSettingsCenter = useCallback(() => {
     if (pluginOpen) {
@@ -278,8 +442,38 @@ function App() {
       setPluginOpen(false)
     }
     setAttachmentsManagerOpen(false)
+    if (!isSystemWindow) {
+      void window.mulby.systemPage.open({ page: 'ai-settings' })
+      return
+    }
     setViewMode('ai-settings')
-  }, [pluginOpen])
+  }, [isSystemWindow, pluginOpen])
+
+  const openAiMcpSettings = useCallback(() => {
+    if (pluginOpen) {
+      window.mulby.window.close()
+      setPluginOpen(false)
+    }
+    setAttachmentsManagerOpen(false)
+    if (!isSystemWindow) {
+      void window.mulby.systemPage.open({ page: 'ai-mcp-settings' })
+      return
+    }
+    setViewMode('ai-mcp-settings')
+  }, [isSystemWindow, pluginOpen])
+
+  const openAiSkillsSettings = useCallback(() => {
+    if (pluginOpen) {
+      window.mulby.window.close()
+      setPluginOpen(false)
+    }
+    setAttachmentsManagerOpen(false)
+    if (!isSystemWindow) {
+      void window.mulby.systemPage.open({ page: 'ai-skills-settings' })
+      return
+    }
+    setViewMode('ai-skills-settings')
+  }, [isSystemWindow, pluginOpen])
 
   // ESC 键分级退出处理
   useEffect(() => {
@@ -287,6 +481,10 @@ function App() {
       if (e.key === 'Escape') {
         e.preventDefault()
         if (viewMode !== 'home') {
+          if (isSystemWindow) {
+            void window.mulby.systemPage.close()
+            return
+          }
           setViewMode('home')
           setDetailsPluginName(null)
         } else if (attachmentsManagerOpen) {
@@ -294,25 +492,28 @@ function App() {
         } else if (pluginOpen) {
           // 1. 优先关闭插件
           window.mulby.window.close()
+        } else if (systemPageAttached) {
+          // 2. 关闭附着的系统页面
+          void window.mulby.systemPage.close()
         } else if (query.length > 0) {
-          // 2. 清空搜索框与附件
+          // 3. 清空搜索框与附件
           setQuery('')
           clearAttachments()
           setResultCount(0)
           setDetailsPluginName(null)
         } else if (attachments.length > 0) {
-          // 3. 清空附件
+          // 4. 清空附件
           clearAttachments()
           setResultCount(0)
         } else {
-          // 4. 隐藏窗口
+          // 5. 隐藏窗口
           window.mulby.window.hide()
         }
       }
     }
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [pluginOpen, query, attachments.length, attachmentsManagerOpen, viewMode])
+  }, [isSystemWindow, pluginOpen, systemPageAttached, query, attachments.length, attachmentsManagerOpen, viewMode])
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -368,6 +569,20 @@ function App() {
     return cleanup
   }, [openAiSettingsCenter])
 
+  useEffect(() => {
+    const cleanup = window.mulby.app.onOpenAiMcpSettings(() => {
+      openAiMcpSettings()
+    })
+    return cleanup
+  }, [openAiMcpSettings])
+
+  useEffect(() => {
+    const cleanup = window.mulby.app.onOpenAiSkillsSettings(() => {
+      openAiSkillsSettings()
+    })
+    return cleanup
+  }, [openAiSkillsSettings])
+
   const collapseSystemPluginForAttach = useCallback(async () => {
     let collapsed = false
     setViewMode((prev) => {
@@ -392,9 +607,10 @@ function App() {
   }, [collapseSystemPluginForAttach])
 
   useEffect(() => {
+    if (isSystemWindow) return
     const activePluginId = viewMode === 'system-plugin' ? systemPluginRoute.pluginId : null
     void window.mulby.systemPlugin.setActive(activePluginId)
-  }, [viewMode, systemPluginRoute.pluginId])
+  }, [isSystemWindow, viewMode, systemPluginRoute.pluginId])
 
   useEffect(() => {
     const cleanup = window.mulby.app.onOpenBackgroundPlugins(() => {
@@ -432,7 +648,7 @@ function App() {
 
     const cleanup = window.mulbyMain.clipboard.onAutoPaste(async () => {
       // 条件1：没有打开插件
-      if (pluginOpen) {
+      if (pluginOpen || systemPageAttached) {
         return
       }
 
@@ -507,13 +723,16 @@ function App() {
     })
 
     return cleanup
-  }, [query, pluginOpen, clearAttachments, attachments.length, beginPerfTrace])
+  }, [query, pluginOpen, systemPageAttached, clearAttachments, attachments.length, beginPerfTrace])
 
   const handleQueryChange = (value: string) => {
     // 如果有附着的插件，先关闭它
     if (pluginOpen) {
       window.mulby.window.close()
       setPluginOpen(false)
+    }
+    if (systemPageAttached) {
+      void window.mulby.systemPage.close()
     }
     if (attachmentsManagerOpen) {
       setAttachmentsManagerOpen(false)
@@ -531,6 +750,9 @@ function App() {
     if (pluginOpen) {
       window.mulby.window.close()
       setPluginOpen(false)
+    }
+    if (systemPageAttached) {
+      void window.mulby.systemPage.close()
     }
     beginPerfTrace('attachments', query.length, next.length)
     setAttachments(next)
@@ -612,7 +834,6 @@ function App() {
               }
             }))
           }}
-          onClose={() => setViewMode('home')}
           onOpenPluginManager={(section = 'installed') => {
             openPluginManager('settings', section)
           }}
@@ -626,6 +847,13 @@ function App() {
             openLogViewer('settings')
           }}
           onOpenAiSettings={openAiSettingsCenter}
+          onClose={() => {
+            if (isSystemWindow) {
+              void window.mulby.systemPage.close()
+              return
+            }
+            setViewMode('home')
+          }}
         />
       </div>
     )
@@ -636,8 +864,8 @@ function App() {
       <div className={`app ${isDragging ? 'dragging' : ''}`}>
         <AiSettingsView
           onBack={() => setViewMode('system-plugin')}
-          onOpenMcpSettings={() => setViewMode('ai-mcp-settings')}
-          onOpenSkillsSettings={() => setViewMode('ai-skills-settings')}
+          onOpenMcpSettings={openAiMcpSettings}
+          onOpenSkillsSettings={openAiSkillsSettings}
         />
       </div>
     )
@@ -668,7 +896,17 @@ function App() {
       <div className={`app ${isDragging ? 'dragging' : ''}`}>
         <PluginManagerView
           initialSection={pluginManagerSection}
-          onBack={() => setViewMode(pluginManagerReturnTarget === 'settings' ? 'system-plugin' : 'home')}
+          onBack={() => {
+            if (pluginManagerReturnTarget === 'settings') {
+              setViewMode('system-plugin')
+              return
+            }
+            if (isSystemWindow) {
+              void window.mulby.systemPage.close()
+              return
+            }
+            setViewMode('home')
+          }}
         />
       </div>
     )
@@ -678,7 +916,17 @@ function App() {
     return (
       <div className={`app ${isDragging ? 'dragging' : ''}`}>
         <BackgroundPluginManagerView
-          onBack={() => setViewMode(backgroundPluginManagerReturnTarget === 'settings' ? 'system-plugin' : 'home')}
+          onBack={() => {
+            if (backgroundPluginManagerReturnTarget === 'settings') {
+              setViewMode('system-plugin')
+              return
+            }
+            if (isSystemWindow) {
+              void window.mulby.systemPage.close()
+              return
+            }
+            setViewMode('home')
+          }}
         />
       </div>
     )
@@ -688,7 +936,17 @@ function App() {
     return (
       <div className={`app ${isDragging ? 'dragging' : ''}`}>
         <TaskSchedulerView
-          onBack={() => setViewMode(taskSchedulerReturnTarget === 'settings' ? 'system-plugin' : 'home')}
+          onBack={() => {
+            if (taskSchedulerReturnTarget === 'settings') {
+              setViewMode('system-plugin')
+              return
+            }
+            if (isSystemWindow) {
+              void window.mulby.systemPage.close()
+              return
+            }
+            setViewMode('home')
+          }}
         />
       </div>
     )
@@ -697,13 +955,25 @@ function App() {
   if (viewMode === 'logs') {
     return (
       <div className={`app ${isDragging ? 'dragging' : ''}`}>
-        <LogViewerView onClose={() => setViewMode(logViewerReturnTarget === 'settings' ? 'system-plugin' : 'home')} />
+        <LogViewerView
+          onClose={() => {
+            if (logViewerReturnTarget === 'settings') {
+              setViewMode('system-plugin')
+              return
+            }
+            if (isSystemWindow) {
+              void window.mulby.systemPage.close()
+              return
+            }
+            setViewMode('home')
+          }}
+        />
       </div>
     )
   }
 
   const showAttachmentManager = attachmentsManagerOpen && attachments.length > 0
-  const showPluginList = (query.length > 0 || attachments.length > 0) && !pluginOpen && !showAttachmentManager
+  const showPluginList = (query.length > 0 || attachments.length > 0) && !pluginOpen && !systemPageAttached && !showAttachmentManager
   const hasBottomPanel = showAttachmentManager || showPluginList
 
   return (
@@ -734,6 +1004,9 @@ function App() {
             if (pluginOpen) {
               window.mulby.window.close()
               setPluginOpen(false)
+            }
+            if (systemPageAttached) {
+              void window.mulby.systemPage.close()
             }
             setAttachmentsManagerOpen(true)
           }}
@@ -782,6 +1055,47 @@ function App() {
             </button>
           </div>
         )}
+        {systemPageAttached && (
+          <div className="plugin-controls">
+            <button
+              className="plugin-control-btn plugin-reload-btn"
+              onClick={() => {
+                void window.mulby.systemPage.reload()
+              }}
+              title="重载系统页面"
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M21 12a9 9 0 1 1-2.64-6.36" />
+                <path d="M21 3v6h-6" />
+              </svg>
+            </button>
+            <button
+              className="plugin-control-btn plugin-detach-btn"
+              onClick={() => {
+                void window.mulby.systemPage.detach()
+              }}
+              title="转为独立窗口"
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M21 9V3h-6M3 15v6h6M21 3l-7 7M3 21l7-7" />
+              </svg>
+            </button>
+            <button
+              className="plugin-control-btn plugin-close-btn"
+              onClick={() => {
+                void window.mulby.systemPage.close()
+                setTimeout(() => {
+                  searchInputRef.current?.focus()
+                }, 100)
+              }}
+              title="关闭系统页面"
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M18 6L6 18M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+        )}
       </div>
       {showAttachmentManager && (
         <AttachmentManager
@@ -819,7 +1133,7 @@ type UiAttachment = InputAttachment & { previewUrl?: string }
 function buildPayload(text: string, attachments: UiAttachment[]): InputPayload {
   return {
     text,
-    attachments: attachments.map(({ previewUrl, ...rest }) => rest)
+    attachments: attachments.map(({ previewUrl: _previewUrl, ...rest }) => rest)
   }
 }
 
