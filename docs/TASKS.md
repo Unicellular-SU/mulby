@@ -1,146 +1,52 @@
 # Mulby 开发任务跟踪
 
-> 最后更新：2026-01-09
+> 最后更新：2026-02-28
+> 维护原则：仅保留当前与近期可执行任务，历史完成记录统一归档到 `docs/archive/`。
 
-## 当前版本：v0.1.0-dev
+## 当前版本
+- `v0.1.x-dev`
 
----
+## 当前阶段
+- 阶段 A：工程稳定与治理
 
-## 已完成任务
+## In Progress
 
-### 2026-01-20
+### P0 - 质量与发布基线
+- [ ] 修复 `lint` error（目标：0 error）
+- [ ] 修复 `test:unit` 失败用例并稳定通过
+- [ ] 建立统一本地验证命令（建议：`npm run verify`）
+- [ ] 建立最小 CI 流水线（typecheck + lint + test + build smoke）
 
-#### AI 插件生成功能增强
-- [x] Scaffold-First Workflow (先脚手架后 AI)
-- [x] AI 思考过程可视化 (Reasoning Content Support)
-- [x] 实时 Time & Token Usage Logging
-- [x] 交互式完成 (Interactive Finish)
-- [x] 智能会话恢复 (Smart Resume)
-- [x] 知识库自动挂载 (Plugin Docs Injection)
+### P0 - 文档治理
+- [x] 建立阶段任务计划（`docs/task_plan.md`）
+- [x] 盘点并清理历史文档，迁移到 `docs/archive/`
+- [x] 建立文档索引与维护规范
+- [x] 同步核心文档与当前实现状态（代码对齐修补）
 
-#### 项目初始化
-- [x] 创建项目文档结构
-- [x] 编写产品需求文档 (PRD)
-- [x] 编写技术架构设计文档
-- [x] 编写插件系统规范（AI 友好）
-- [x] 编写 API 接口参考文档
-- [x] 编写 UI/UX 设计规范
-- [x] 编写项目路线图
+## Planned
 
-#### 项目框架搭建
-- [x] 初始化 package.json
-- [x] 配置 TypeScript (tsconfig.json)
-- [x] 配置 Vite 构建工具
-- [x] 配置 Tailwind CSS
-- [x] 创建目录结构
+### P1 - 产品体验增强
+- [ ] 设置中心：开机自启动管理
+- [ ] 设置中心：更新中心入口与状态展示
 
-#### Electron 主进程
-- [x] 创建主进程入口 (src/main/index.ts)
-- [x] 实现无边框窗口
-- [x] 实现全局快捷键 (Alt+Space)
-- [x] 创建 preload 脚本
+### P1 - 可维护性
+- [ ] 拆分超大文件：
+  - [ ] `src/main/ai/service.ts`
+  - [ ] `src/preload/index.ts`
+  - [ ] `src/main/plugin/manager.ts`
+  - [ ] `src/renderer/components/SettingsView.tsx`
+  - [ ] `src/renderer/components/PluginManagerView.tsx`
 
-#### 渲染进程 UI
-- [x] 创建 React 入口
-- [x] 实现 SearchInput 组件
-- [x] 实现 PluginList 组件
-- [x] 实现亮色/暗色主题 CSS 变量
+### P2 - 性能与架构
+- [ ] 任务调度器 UI 改为事件驱动（替代 1s 轮询）
 
-#### IPC 通信
-- [x] 创建 IPC 处理器模块结构
-- [x] 实现剪贴板 API (读写文本/图片/文件)
-- [x] 实现通知 API
-- [x] 实现窗口控制 API
-- [x] 更新 preload 脚本
-- [x] 更新类型定义
+## Deferred / Not Planned (This Cycle)
+- [ ] 插件商店安全增强（后期专题）
+- [ ] Python 插件运行时（废弃）
+- [ ] i18n 多语言体系（待定）
 
-#### 插件系统
-- [x] 创建插件类型定义
-- [x] 创建插件加载器 (PluginLoader)
-- [x] 创建插件管理器 (PluginManager)
-- [x] 插件 IPC 处理器
-- [x] 集成到主进程
-- [x] 创建示例插件 (3个)
-- [x] 插件沙箱运行时 (VM2)
-- [x] 插件 API 上下文
-- [x] 插件执行器 (PluginRunner)
-
----
-
-## 进行中任务
-
-（暂无）
-
----
-
-## 待办任务
-
-### 阶段一：MVP
-
-#### 插件系统
-| 任务 | 优先级 | 状态 |
-|------|--------|------|
-| 插件加载器 | P0 | 已完成 |
-| 插件沙箱运行时 | P0 | 已完成 |
-| 插件生命周期管理 | P0 | 已完成 |
-| 插件配置解析 (manifest.json) | P0 | 已完成 |
-
-#### 系统 API
-| 任务 | 优先级 | 状态 |
-|------|--------|------|
-| 剪贴板读写 | P0 | 已完成 |
-| 系统通知 | P0 | 已完成 |
-| 本地存储 | P1 | 已完成 |
-| 窗口大小控制 | P1 | 已完成 |
-
-#### 示例插件
-| 任务 | 优先级 | 状态 |
-|------|--------|------|
-| JSON 格式化插件 | P1 | 已完成 |
-| 时间戳转换插件 | P1 | 已完成 |
-| Base64 编解码插件 | P1 | 已完成 |
-
-#### UI 完善
-| 任务 | 优先级 | 状态 |
-|------|--------|------|
-| 键盘导航 (上下选择) | P0 | 已完成 |
-| 插件详情页 | P1 | 待开发 |
-| 设置页面 | P2 | 待开发 |
-| 窗口动画 | P2 | 待开发 |
-
----
-
-## 优先级说明
-
-| 级别 | 说明 |
-|------|------|
-| P0 | 核心功能，必须完成 |
-| P1 | 重要功能，MVP 需要 |
-| P2 | 增强功能，可延后 |
-
----
-
-## 开发规范
-
-### 分支策略
-- `main` - 稳定版本
-- `dev` - 开发分支
-- `feature/*` - 功能分支
-
-### 提交规范
-```
-feat: 新功能
-fix: 修复
-docs: 文档
-refactor: 重构
-style: 样式
-test: 测试
-```
-
----
-
-## 备注
-
-- 每完成一个任务，更新此文档
-- P0 任务优先完成
-- 遇到阻塞及时记录
+## 验收门槛（本轮）
+- `npm run typecheck` 通过
+- `npm run lint` 无 error
+- `npm run test:unit` 全通过
+- build smoke 通过
