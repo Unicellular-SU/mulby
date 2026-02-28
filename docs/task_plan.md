@@ -22,7 +22,7 @@
 - [x] Phase 1: 计划冻结与文档治理基线
 - [x] Phase 2: 质量门禁修复与基线稳定
 - [x] Phase 3: 设置中心增强（开机自启动 + 更新中心）
-- [ ] Phase 4: CI 建设与发布前自动检查
+- [x] Phase 4: CI 建设与发布前自动检查
 - [ ] Phase 5: 大文件拆分与模块边界收敛
 - [ ] Phase 6: 任务调度器事件驱动改造
 - [ ] Phase 7: 验收回归与文档收口
@@ -101,6 +101,17 @@
 - 任一质量门禁失败会阻断 CI
 - 主分支合并前可见完整检查结果
 
+**当前结果（2026-02-28）**：
+- 已新增 GitHub Actions 工作流：`.github/workflows/ci.yml`
+- 已接入流水线步骤：
+  - install (`npm ci`)
+  - typecheck (`npm run typecheck`)
+  - lint (`npm run lint`)
+  - unit test (`npm run test:unit`)
+  - build smoke (`npm run build:smoke`)
+- 已配置最小缓存策略：`actions/setup-node@v4` + `cache: npm`
+- 本地同链路验证通过：`npm run verify`
+
 ### Phase 5: 大文件拆分与模块边界收敛
 **目标**：降低超大文件维护风险，明确模块职责。  
 **优先拆分候选（按体量与风险）**：
@@ -159,4 +170,4 @@
 - `test:unit` 初始失败触发 `better-sqlite3` ABI 不匹配；已通过 `AiSkillService` 中默认 `command-runner` 懒加载隔离测试导入路径。
 
 ## Status
-**Phase 3 Completed** - 设置中心增强已落地，下一步进入 Phase 4（CI 建设）。
+**Phase 4 Completed** - CI 最小自动化检查已落地，下一步进入 Phase 5（大文件拆分）。

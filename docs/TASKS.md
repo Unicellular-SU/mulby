@@ -15,7 +15,7 @@
 - [x] 修复 `lint` error（目标：0 error）
 - [x] 修复 `test:unit` 失败用例并稳定通过
 - [x] 建立统一本地验证命令（`npm run verify`）
-- [ ] 建立最小 CI 流水线（typecheck + lint + test + build smoke）
+- [x] 建立最小 CI 流水线（typecheck + lint + test + build smoke）
 
 ### P0 - 文档治理
 - [x] 建立阶段任务计划（`docs/task_plan.md`）
