@@ -67,11 +67,21 @@ const SearchInput = forwardRef<SearchInputRef, SearchInputProps>(function Search
   const inputRef = useRef<HTMLTextAreaElement>(null)
   const [subInput, setSubInput] = useState<SubInputState>({ enabled: false, placeholder: '' })
   const [subInputValue, setSubInputValue] = useState('')
+  const setCaretToEnd = useCallback((input: HTMLTextAreaElement) => {
+    const end = input.value.length
+    input.setSelectionRange(end, end)
+  }, [])
+  const focusAtEnd = useCallback(() => {
+    const input = inputRef.current
+    if (!input) return
+    input.focus()
+    setCaretToEnd(input)
+  }, [setCaretToEnd])
 
   // 暴露方法给父组件
   useImperativeHandle(ref, () => ({
     focus: () => {
-      inputRef.current?.focus()
+      focusAtEnd()
     },
     blur: () => {
       inputRef.current?.blur()
@@ -79,7 +89,15 @@ const SearchInput = forwardRef<SearchInputRef, SearchInputProps>(function Search
     select: () => {
       inputRef.current?.select()
     }
-  }), [])
+  }), [focusAtEnd])
+
+  // 从其他页面返回 home 时，textarea 会重新挂载并触发 autoFocus
+  // 在已有文本时，主动将插入点校正到文本末尾，避免默认落在开头
+  useEffect(() => {
+    const input = inputRef.current
+    if (!input || document.activeElement !== input) return
+    setCaretToEnd(input)
+  }, [setCaretToEnd])
 
   // 监听 SubInput 事件
   useEffect(() => {
@@ -89,8 +107,8 @@ const SearchInput = forwardRef<SearchInputRef, SearchInputProps>(function Search
     const cleanupEnabled = api.onEnabled((data) => {
       setSubInput({ enabled: true, placeholder: data.placeholder })
       setSubInputValue('')
-      if (data.isFocus && inputRef.current) {
-        inputRef.current.focus()
+      if (data.isFocus) {
+        focusAtEnd()
       }
     })
 
@@ -104,7 +122,7 @@ const SearchInput = forwardRef<SearchInputRef, SearchInputProps>(function Search
     })
 
     const cleanupFocus = api.onFocus(() => {
-      inputRef.current?.focus()
+      focusAtEnd()
     })
 
     const cleanupBlur = api.onBlur(() => {
@@ -123,7 +141,7 @@ const SearchInput = forwardRef<SearchInputRef, SearchInputProps>(function Search
       cleanupBlur()
       cleanupSelect()
     }
-  }, [])
+  }, [focusAtEnd])
 
   // 处理输入变化
   const handleInputChange = useCallback((e: React.ChangeEvent<HTMLTextAreaElement>) => {
