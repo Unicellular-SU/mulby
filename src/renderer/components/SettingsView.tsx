@@ -7,6 +7,7 @@ import type {
   CommandRule,
   ShortcutStatusMap
 } from '../../shared/types/settings'
+import type { StartupOpenAtLoginState, UpdateCenterState } from '../../shared/types/electron'
 import { useInAppNotice } from './InAppNotice'
 import UnifiedSelect from './UnifiedSelect'
 import CommandShortcutPanel from './CommandShortcutPanel'
@@ -125,6 +126,26 @@ function toDateTimeLocalValue(input?: number): string {
   const date = new Date(input)
   const pad = (n: number) => String(n).padStart(2, '0')
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`
+}
+
+function formatUpdateStatus(status: UpdateCenterState['status']): string {
+  switch (status) {
+    case 'checking':
+      return '检查中'
+    case 'up-to-date':
+      return '已是最新版本'
+    case 'update-available':
+      return '发现新版本'
+    case 'error':
+      return '检查失败'
+    default:
+      return '未检查'
+  }
+}
+
+function formatCheckedAt(input?: number): string {
+  if (!input || !Number.isFinite(input)) return '尚未检查'
+  return new Date(input).toLocaleString()
 }
 
 function normalizeShortcutKey(event: KeyboardEvent) {
@@ -338,6 +359,10 @@ export default function SettingsView({
     allowEnvKeys: ''
   })
   const [appInfo, setAppInfo] = useState<{ name: string; version: string; userDataPath: string } | null>(null)
+  const [openAtLoginState, setOpenAtLoginState] = useState<StartupOpenAtLoginState>({ supported: false, enabled: false })
+  const [updateCenterState, setUpdateCenterState] = useState<UpdateCenterState | null>(null)
+  const [startupBusy, setStartupBusy] = useState(false)
+  const [updateBusy, setUpdateBusy] = useState(false)
   const [_activeRecordings, setActiveRecordings] = useState(0)
 
   useEffect(() => {
@@ -348,6 +373,16 @@ export default function SettingsView({
     window.mulby.theme.get().then((info) => setThemeMode(info.mode))
     window.mulby.system.getAppInfo().then((info) => {
       setAppInfo({ name: info.name, version: info.version, userDataPath: info.userDataPath })
+    })
+    window.mulby.settings.getOpenAtLoginState().then((state) => {
+      setOpenAtLoginState(state)
+    }).catch(() => {
+      setOpenAtLoginState({ supported: false, enabled: false })
+    })
+    window.mulby.settings.getUpdateCenterState().then((state) => {
+      setUpdateCenterState(state)
+    }).catch(() => {
+      setUpdateCenterState(null)
     })
   }, [])
 
@@ -401,6 +436,60 @@ export default function SettingsView({
     const result = await window.mulby.settings.get()
     setSettings(result.settings)
     setShortcutStatus(result.shortcutStatus)
+  }
+
+  const reloadStartupAndUpdateState = async () => {
+    const [startupState, updateState] = await Promise.all([
+      window.mulby.settings.getOpenAtLoginState(),
+      window.mulby.settings.getUpdateCenterState()
+    ])
+    setOpenAtLoginState(startupState)
+    setUpdateCenterState(updateState)
+  }
+
+  const toggleOpenAtLogin = async () => {
+    if (!openAtLoginState.supported || startupBusy) return
+    setStartupBusy(true)
+    try {
+      const next = await window.mulby.settings.setOpenAtLogin(!openAtLoginState.enabled)
+      setOpenAtLoginState(next)
+      notice.success(next.enabled ? '已开启开机自启动' : '已关闭开机自启动')
+    } catch (error) {
+      notice.error(error instanceof Error ? error.message : '设置开机自启动失败')
+    } finally {
+      setStartupBusy(false)
+    }
+  }
+
+  const checkAppUpdates = async () => {
+    if (updateBusy) return
+    setUpdateBusy(true)
+    try {
+      const next = await window.mulby.settings.checkAppUpdates()
+      setUpdateCenterState(next)
+      if (next.status === 'update-available') {
+        notice.success(next.message || '发现新版本')
+      } else if (next.status === 'up-to-date') {
+        notice.success(next.message || '当前已是最新版本')
+      } else if (next.status === 'error') {
+        notice.error(next.message || '更新检查失败')
+      }
+    } catch (error) {
+      notice.error(error instanceof Error ? error.message : '更新检查失败')
+    } finally {
+      setUpdateBusy(false)
+    }
+  }
+
+  const openUpdateReleasePage = async () => {
+    try {
+      const ok = await window.mulby.settings.openUpdateReleasePage()
+      if (!ok) {
+        notice.error('发布页地址不可用，请检查更新中心配置')
+      }
+    } catch (error) {
+      notice.error(error instanceof Error ? error.message : '打开发布页失败')
+    }
   }
 
   const updateCommandRunner = async (patch: Partial<AppSettings['commandRunner']>) => {
@@ -783,6 +872,13 @@ export default function SettingsView({
     })
   }
 
+  useEffect(() => {
+    if (section !== 'general' && section !== 'about') return
+    void reloadStartupAndUpdateState().catch(() => {
+      // ignore refresh errors in view layer
+    })
+  }, [section])
+
   const currentSectionLabel = useMemo(
     () => SECTION_ITEMS.find(item => item.id === section)?.label ?? '',
     [section]
@@ -860,6 +956,37 @@ export default function SettingsView({
                       ))}
                     </div>
                   </div>
+                  <div className={`${cardClass} space-y-4`}>
+                    <div className="text-sm font-medium text-slate-900 dark:text-white">开机自启动</div>
+                    <div className="text-xs text-slate-500 dark:text-slate-400">
+                      控制 Mulby 是否在系统登录后自动启动。
+                    </div>
+                    {!openAtLoginState.supported && (
+                      <div className="rounded-2xl border border-amber-200/80 bg-amber-50/70 px-3 py-2 text-xs text-amber-700 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-300">
+                        当前平台暂不支持开机自启动管理（仅支持 macOS / Windows）。
+                      </div>
+                    )}
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <div className="text-sm text-slate-900 dark:text-white">开机自启动</div>
+                        <div className="text-xs text-slate-500 dark:text-slate-400">
+                          状态：{openAtLoginState.enabled ? '已开启' : '已关闭'}
+                        </div>
+                      </div>
+                      <button
+                        disabled={!openAtLoginState.supported || startupBusy}
+                        className={`relative h-6 w-11 rounded-full transition-colors ${openAtLoginState.enabled
+                          ? 'bg-blue-500'
+                          : 'bg-gray-300 dark:bg-gray-600'
+                          } disabled:cursor-not-allowed disabled:opacity-60`}
+                        onClick={() => void toggleOpenAtLogin()}
+                      >
+                        <span
+                          className={`absolute top-0.5 left-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform ${openAtLoginState.enabled ? 'translate-x-5' : ''}`}
+                        />
+                      </button>
+                    </div>
+                  </div>
                   {onOpenAiSettings && (
                     <div className={`${cardClass} flex items-center justify-between gap-4`}>
                       <div>
@@ -904,7 +1031,6 @@ export default function SettingsView({
                   )}
                 </div>
               )}
-
 
               {section === 'shortcuts' && settings && (
                 <div className="space-y-3">
@@ -1965,7 +2091,62 @@ export default function SettingsView({
                   <div>
                     <div className="font-medium text-slate-900 dark:text-white">应用信息</div>
                     <div>名称：{appInfo?.name}</div>
-                    <div>版本：{appInfo?.version}</div>
+                    <div>版本：{updateCenterState?.currentVersion || appInfo?.version}</div>
+                  </div>
+                  <div className="space-y-3 rounded-2xl border border-slate-200/80 bg-white/70 p-3 dark:border-slate-800 dark:bg-slate-950/70">
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <div className="font-medium text-slate-900 dark:text-white">更新中心</div>
+                        <div className="text-xs text-slate-500 dark:text-slate-400">
+                          手动检查新版本并跳转发布页下载安装包。
+                        </div>
+                      </div>
+                      <span className={`rounded-full px-3 py-1 text-xs ${updateCenterState?.status === 'update-available'
+                        ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-300'
+                        : updateCenterState?.status === 'error'
+                          ? 'bg-red-100 text-red-700 dark:bg-red-500/20 dark:text-red-300'
+                          : 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300'
+                        }`}>
+                        {formatUpdateStatus(updateCenterState?.status || 'idle')}
+                      </span>
+                    </div>
+                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                      <div className="rounded-2xl border border-slate-200/80 bg-white/70 px-3 py-2 text-xs dark:border-slate-800 dark:bg-slate-950/70">
+                        <div className="text-slate-500 dark:text-slate-400">当前版本</div>
+                        <div className="mt-1 text-sm font-medium text-slate-900 dark:text-white">
+                          {updateCenterState?.currentVersion || appInfo?.version || '-'}
+                        </div>
+                      </div>
+                      <div className="rounded-2xl border border-slate-200/80 bg-white/70 px-3 py-2 text-xs dark:border-slate-800 dark:bg-slate-950/70">
+                        <div className="text-slate-500 dark:text-slate-400">最新版本</div>
+                        <div className="mt-1 text-sm font-medium text-slate-900 dark:text-white">
+                          {updateCenterState?.latestVersion || '未检查'}
+                        </div>
+                      </div>
+                    </div>
+                    <div className="space-y-1 text-xs text-slate-500 dark:text-slate-400">
+                      <div>最近检查：{formatCheckedAt(updateCenterState?.lastCheckedAt)}</div>
+                      <div className="break-all">发布页：{updateCenterState?.releasePageUrl || '未配置'}</div>
+                      {updateCenterState?.message && (
+                        <div>{updateCenterState.message}</div>
+                      )}
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      <button
+                        className={primaryPillClass}
+                        disabled={updateBusy}
+                        onClick={() => void checkAppUpdates()}
+                      >
+                        {updateBusy ? '检查中...' : '检查更新'}
+                      </button>
+                      <button
+                        className={actionButtonClass}
+                        disabled={!updateCenterState?.releasePageUrl}
+                        onClick={() => void openUpdateReleasePage()}
+                      >
+                        打开发布页
+                      </button>
+                    </div>
                   </div>
                   <div>
                     <div className="font-medium text-slate-900 dark:text-white">数据目录</div>

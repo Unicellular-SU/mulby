@@ -688,7 +688,12 @@ const mulbyApi = {
     update: (partial: unknown) => ipcRenderer.invoke('settings:update', partial),
     reset: () => ipcRenderer.invoke('settings:reset'),
     pauseShortcuts: () => ipcRenderer.invoke('settings:shortcuts:pause'),
-    resumeShortcuts: () => ipcRenderer.invoke('settings:shortcuts:resume')
+    resumeShortcuts: () => ipcRenderer.invoke('settings:shortcuts:resume'),
+    getOpenAtLoginState: () => ipcRenderer.invoke('settings:startup:getOpenAtLogin'),
+    setOpenAtLogin: (enabled: boolean) => ipcRenderer.invoke('settings:startup:setOpenAtLogin', enabled),
+    getUpdateCenterState: () => ipcRenderer.invoke('settings:updateCenter:getState'),
+    checkAppUpdates: () => ipcRenderer.invoke('settings:updateCenter:check'),
+    openUpdateReleasePage: () => ipcRenderer.invoke('settings:updateCenter:openReleasePage')
   },
 
   // 开发者模式 API

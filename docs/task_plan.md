@@ -21,7 +21,7 @@
 ## Phases
 - [x] Phase 1: 计划冻结与文档治理基线
 - [x] Phase 2: 质量门禁修复与基线稳定
-- [ ] Phase 3: 设置中心增强（开机自启动 + 更新中心）
+- [x] Phase 3: 设置中心增强（开机自启动 + 更新中心）
 - [ ] Phase 4: CI 建设与发布前自动检查
 - [ ] Phase 5: 大文件拆分与模块边界收敛
 - [ ] Phase 6: 任务调度器事件驱动改造
@@ -76,6 +76,19 @@
 **验收标准**：
 - 用户无需托盘菜单即可在设置中完成开机自启动开关
 - 更新中心入口可用，状态可见，失败可提示
+
+**当前结果（2026-02-28）**：
+- 设置中心按信息架构落位：
+  - 「开机自启动」放入「通用」
+  - 「更新中心」放入「关于」
+- 已接入开机自启动状态读取与切换（macOS / Windows）
+- 已接入更新中心最小能力：
+  - 当前版本 / 最新版本 / 最近检查时间展示
+  - 手动检查更新（GitHub latest release）
+  - 打开发布页（默认 `https://github.com/Unicellular-SU/mulby/releases`）
+- 新增 IPC 与 preload API：
+  - `settings:startup:getOpenAtLogin` / `settings:startup:setOpenAtLogin`
+  - `settings:updateCenter:getState` / `settings:updateCenter:check` / `settings:updateCenter:openReleasePage`
 
 ### Phase 4: CI 建设与发布前自动检查
 **目标**：提交后自动执行最小可发布检查。  
@@ -146,4 +159,4 @@
 - `test:unit` 初始失败触发 `better-sqlite3` ABI 不匹配；已通过 `AiSkillService` 中默认 `command-runner` 懒加载隔离测试导入路径。
 
 ## Status
-**Phase 2 Completed** - 质量门禁本地链路已打通，下一步进入 Phase 3 / Phase 4。
+**Phase 3 Completed** - 设置中心增强已落地，下一步进入 Phase 4（CI 建设）。

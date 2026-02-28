@@ -293,6 +293,27 @@ export interface TrayMenuState {
   recentActions: TrayMenuRecentItem[]
 }
 
+export interface StartupOpenAtLoginState {
+  supported: boolean
+  enabled: boolean
+}
+
+export type UpdateCenterStatus = 'idle' | 'checking' | 'up-to-date' | 'update-available' | 'error'
+
+export interface UpdateCenterState {
+  status: UpdateCenterStatus
+  currentVersion: string
+  latestVersion?: string
+  hasUpdate: boolean
+  releasePageUrl: string
+  latestReleaseApiUrl: string
+  releaseName?: string
+  releasePublishedAt?: string
+  releaseNotes?: string
+  message?: string
+  lastCheckedAt?: number
+}
+
 export interface RunCommandInput {
   command: string
   args?: string[]
@@ -447,6 +468,11 @@ export interface ElectronAPI {
     reset: () => Promise<{ settings: AppSettings; shortcutStatus: ShortcutStatusMap }>
     pauseShortcuts: () => Promise<ShortcutStatusMap>
     resumeShortcuts: () => Promise<ShortcutStatusMap>
+    getOpenAtLoginState: () => Promise<StartupOpenAtLoginState>
+    setOpenAtLogin: (enabled: boolean) => Promise<StartupOpenAtLoginState>
+    getUpdateCenterState: () => Promise<UpdateCenterState>
+    checkAppUpdates: () => Promise<UpdateCenterState>
+    openUpdateReleasePage: () => Promise<boolean>
   }
   developer: {
     addPluginPath: (path: string) => Promise<{ success: boolean; error?: string }>

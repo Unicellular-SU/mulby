@@ -1,9 +1,33 @@
-import { ipcMain } from 'electron'
+import { app, ipcMain } from 'electron'
 import type { AppSettings } from '../../shared/types/settings'
 import { AppSettingsManager } from '../services/app-settings'
 import { AppShortcutManager } from '../services/app-shortcuts'
 import { PluginManager } from '../plugin'
 import { setLoggerMinLevel } from '../services/logger'
+import { checkAppUpdates, getUpdateCenterState, openAppReleasePage } from '../services/update-center'
+
+function getOpenAtLoginState(): { supported: boolean; enabled: boolean } {
+  if (process.platform !== 'darwin' && process.platform !== 'win32') {
+    return { supported: false, enabled: false }
+  }
+  const loginItem = app.getLoginItemSettings()
+  return {
+    supported: true,
+    enabled: loginItem.openAtLogin === true
+  }
+}
+
+function setOpenAtLogin(enabled: boolean): { supported: boolean; enabled: boolean } {
+  if (process.platform !== 'darwin' && process.platform !== 'win32') {
+    return { supported: false, enabled: false }
+  }
+  if (process.platform === 'darwin') {
+    app.setLoginItemSettings({ openAtLogin: enabled })
+  } else {
+    app.setLoginItemSettings({ openAtLogin: enabled, openAsHidden: true })
+  }
+  return getOpenAtLoginState()
+}
 
 export function registerSettingsHandlers(
   settingsManager: AppSettingsManager,
@@ -57,5 +81,25 @@ export function registerSettingsHandlers(
   ipcMain.handle('settings:shortcuts:resume', () => {
     const next = settingsManager.getSettings()
     return shortcutManager.resume(next.shortcuts)
+  })
+
+  ipcMain.handle('settings:startup:getOpenAtLogin', () => {
+    return getOpenAtLoginState()
+  })
+
+  ipcMain.handle('settings:startup:setOpenAtLogin', (_event, enabled: unknown) => {
+    return setOpenAtLogin(enabled === true)
+  })
+
+  ipcMain.handle('settings:updateCenter:getState', () => {
+    return getUpdateCenterState()
+  })
+
+  ipcMain.handle('settings:updateCenter:check', async () => {
+    return await checkAppUpdates()
+  })
+
+  ipcMain.handle('settings:updateCenter:openReleasePage', async () => {
+    return await openAppReleasePage()
   })
 }
