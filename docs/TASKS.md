@@ -32,7 +32,7 @@
 ### P1 - 可维护性
 - [ ] 拆分超大文件：
   - [ ] `src/main/ai/service.ts`
-  - [ ] `src/preload/index.ts`
+  - [x] `src/preload/index.ts`
   - [ ] `src/main/plugin/manager.ts`
   - [ ] `src/renderer/components/SettingsView.tsx`
   - [ ] `src/renderer/components/PluginManagerView.tsx`

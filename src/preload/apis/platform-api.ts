@@ -1,0 +1,294 @@
+import type { IpcRenderer } from 'electron'
+
+export function createPlatformApi(ipcRenderer: IpcRenderer) {
+  return {
+    screen: {
+      getAllDisplays: () => ipcRenderer.invoke('screen:getAllDisplays'),
+      getPrimaryDisplay: () => ipcRenderer.invoke('screen:getPrimaryDisplay'),
+      getDisplayNearestPoint: (point: { x: number; y: number }) =>
+        ipcRenderer.invoke('screen:getDisplayNearestPoint', point),
+      getDisplayMatching: (rect: { x: number; y: number; width: number; height: number }) =>
+        ipcRenderer.invoke('screen:getDisplayMatching', rect),
+      getCursorScreenPoint: () => ipcRenderer.invoke('screen:getCursorScreenPoint'),
+      getSources: (options?: { types?: ('screen' | 'window')[]; thumbnailSize?: { width: number; height: number } }) =>
+        ipcRenderer.invoke('screen:getSources', options),
+      capture: (options?: { sourceId?: string; format?: 'png' | 'jpeg'; quality?: number }) =>
+        ipcRenderer.invoke('screen:capture', options),
+      captureRegion: (
+        region: { x: number; y: number; width: number; height: number },
+        options?: { format?: 'png' | 'jpeg'; quality?: number }
+      ) => ipcRenderer.invoke('screen:captureRegion', region, options),
+      getMediaStreamConstraints: (options: { sourceId: string; audio?: boolean; frameRate?: number }) =>
+        ipcRenderer.invoke('screen:getMediaStreamConstraints', options),
+      screenCapture: () => ipcRenderer.invoke('screen:startRegionCapture'),
+      colorPick: () => ipcRenderer.invoke('screen:colorPick')
+    },
+
+    shell: {
+      openPath: (path: string) => ipcRenderer.invoke('shell:openPath', path),
+      openExternal: (url: string) => ipcRenderer.invoke('shell:openExternal', url),
+      showItemInFolder: (path: string) => ipcRenderer.invoke('shell:showItemInFolder', path),
+      openFolder: (path: string) => ipcRenderer.invoke('shell:openFolder', path),
+      trashItem: (path: string) => ipcRenderer.invoke('shell:trashItem', path),
+      beep: () => ipcRenderer.invoke('shell:beep'),
+      runCommand: (input: any) => ipcRenderer.invoke('shell:runCommand', input),
+      getRunCommandPolicy: () => ipcRenderer.invoke('shell:getRunCommandPolicy'),
+      updateRunCommandPolicy: (patch: any) => ipcRenderer.invoke('shell:updateRunCommandPolicy', patch),
+      listRunCommandAudit: (limit?: number) => ipcRenderer.invoke('shell:listRunCommandAudit', limit),
+      clearRunCommandAudit: () => ipcRenderer.invoke('shell:clearRunCommandAudit'),
+      clearRunCommandTrusted: () => ipcRenderer.invoke('shell:clearRunCommandTrusted')
+    },
+
+    desktop: {
+      searchFiles: (query: string, limit?: number) => ipcRenderer.invoke('desktop:searchFiles', query, limit),
+      searchApps: (query: string, limit?: number) => ipcRenderer.invoke('desktop:searchApps', query, limit)
+    },
+
+    filesystem: {
+      readFile: (path: string, encoding?: 'utf-8' | 'base64') =>
+        ipcRenderer.invoke('filesystem:readFile', path, encoding),
+      writeFile: (path: string, data: string | ArrayBuffer, encoding?: 'utf-8' | 'base64') =>
+        ipcRenderer.invoke('filesystem:writeFile', path, data, encoding),
+      exists: (path: string) => ipcRenderer.invoke('filesystem:exists', path),
+      readdir: (path: string) => ipcRenderer.invoke('filesystem:readdir', path),
+      mkdir: (path: string) => ipcRenderer.invoke('filesystem:mkdir', path),
+      stat: (path: string) => ipcRenderer.invoke('filesystem:stat', path),
+      copy: (src: string, dest: string) => ipcRenderer.invoke('filesystem:copy', src, dest),
+      move: (src: string, dest: string) => ipcRenderer.invoke('filesystem:move', src, dest),
+      unlink: (path: string) => ipcRenderer.invoke('filesystem:unlink', path)
+    },
+
+    dialog: {
+      showOpenDialog: (options?: {
+        title?: string
+        defaultPath?: string
+        buttonLabel?: string
+        filters?: { name: string; extensions: string[] }[]
+        properties?: ('openFile' | 'openDirectory' | 'multiSelections' | 'showHiddenFiles')[]
+      }) => ipcRenderer.invoke('dialog:showOpenDialog', options),
+      showSaveDialog: (options?: {
+        title?: string
+        defaultPath?: string
+        buttonLabel?: string
+        filters?: { name: string; extensions: string[] }[]
+      }) => ipcRenderer.invoke('dialog:showSaveDialog', options),
+      showMessageBox: (options: {
+        type?: 'none' | 'info' | 'error' | 'question' | 'warning'
+        title?: string
+        message: string
+        detail?: string
+        buttons?: string[]
+        defaultId?: number
+        cancelId?: number
+      }) => ipcRenderer.invoke('dialog:showMessageBox', options),
+      showErrorBox: (title: string, content: string) =>
+        ipcRenderer.invoke('dialog:showErrorBox', title, content)
+    },
+
+    system: {
+      getSystemInfo: () => ipcRenderer.invoke('system:getSystemInfo'),
+      getAppInfo: () => ipcRenderer.invoke('system:getAppInfo'),
+      getPath: (name: string) => ipcRenderer.invoke('system:getPath', name),
+      getEnv: (name: string) => ipcRenderer.invoke('system:getEnv', name),
+      getIdleTime: () => ipcRenderer.invoke('system:getIdleTime'),
+      getFileIcon: (
+        filePath: string,
+        options?: { size?: number; kind?: 'app' | 'file' }
+      ) => ipcRenderer.invoke('system:getFileIcon', filePath, options),
+      getFileIcons: (
+        requests: Array<{ key: string; path: string; kind?: 'app' | 'file'; size?: number }>,
+        options?: { size?: number; concurrency?: number }
+      ) => ipcRenderer.invoke('system:getFileIcons', requests, options),
+      getNativeId: () => ipcRenderer.invoke('system:getNativeId'),
+      isDev: () => ipcRenderer.invoke('system:isDev'),
+      isMacOS: () => ipcRenderer.invoke('system:isMacOS'),
+      isWindows: () => ipcRenderer.invoke('system:isWindows'),
+      isLinux: () => ipcRenderer.invoke('system:isLinux')
+    },
+
+    permission: {
+      getStatus: (type: string) => ipcRenderer.invoke('permission:getStatus', type),
+      request: (type: string) => ipcRenderer.invoke('permission:request', type),
+      canRequest: (type: string) => ipcRenderer.invoke('permission:canRequest', type),
+      openSystemSettings: (type: string) => ipcRenderer.invoke('permission:openSystemSettings', type),
+      isAccessibilityTrusted: () => ipcRenderer.invoke('permission:isAccessibilityTrusted')
+    },
+
+    shortcut: {
+      register: (accelerator: string) => ipcRenderer.invoke('shortcut:register', accelerator),
+      unregister: (accelerator: string) => ipcRenderer.invoke('shortcut:unregister', accelerator),
+      unregisterAll: () => ipcRenderer.invoke('shortcut:unregisterAll'),
+      isRegistered: (accelerator: string) => ipcRenderer.invoke('shortcut:isRegistered', accelerator),
+      onTriggered: (callback: (accelerator: string) => void) => {
+        const listener = (_: any, accelerator: string) => callback(accelerator)
+        ipcRenderer.on('shortcut:triggered', listener)
+        return () => ipcRenderer.removeListener('shortcut:triggered', listener)
+      }
+    },
+
+    security: {
+      isEncryptionAvailable: () => ipcRenderer.invoke('security:isEncryptionAvailable'),
+      encryptString: (plainText: string) => ipcRenderer.invoke('security:encryptString', plainText),
+      decryptString: (encrypted: Buffer) => ipcRenderer.invoke('security:decryptString', encrypted)
+    },
+
+    storage: {
+      get: (key: string, namespace?: string) => ipcRenderer.invoke('storage:get', key, namespace),
+      set: (key: string, value: unknown, namespace?: string) => ipcRenderer.invoke('storage:set', key, value, namespace),
+      remove: (key: string, namespace?: string) => ipcRenderer.invoke('storage:remove', key, namespace)
+    },
+
+    settings: {
+      get: () => ipcRenderer.invoke('settings:get'),
+      update: (partial: unknown) => ipcRenderer.invoke('settings:update', partial),
+      reset: () => ipcRenderer.invoke('settings:reset'),
+      pauseShortcuts: () => ipcRenderer.invoke('settings:shortcuts:pause'),
+      resumeShortcuts: () => ipcRenderer.invoke('settings:shortcuts:resume'),
+      getOpenAtLoginState: () => ipcRenderer.invoke('settings:startup:getOpenAtLogin'),
+      setOpenAtLogin: (enabled: boolean) => ipcRenderer.invoke('settings:startup:setOpenAtLogin', enabled),
+      getUpdateCenterState: () => ipcRenderer.invoke('settings:updateCenter:getState'),
+      checkAppUpdates: () => ipcRenderer.invoke('settings:updateCenter:check'),
+      openUpdateReleasePage: () => ipcRenderer.invoke('settings:updateCenter:openReleasePage')
+    },
+
+    developer: {
+      addPluginPath: (path: string) => ipcRenderer.invoke('developer:addPluginPath', path),
+      removePluginPath: (path: string) => ipcRenderer.invoke('developer:removePluginPath', path),
+      reloadPlugins: () => ipcRenderer.invoke('developer:reloadPlugins'),
+      selectDirectory: () => ipcRenderer.invoke('developer:selectDirectory')
+    },
+
+    media: {
+      getAccessStatus: (mediaType: 'microphone' | 'camera') =>
+        ipcRenderer.invoke('media:getAccessStatus', mediaType),
+      askForAccess: (mediaType: 'microphone' | 'camera') =>
+        ipcRenderer.invoke('media:askForAccess', mediaType),
+      hasCameraAccess: () => ipcRenderer.invoke('media:hasCameraAccess'),
+      hasMicrophoneAccess: () => ipcRenderer.invoke('media:hasMicrophoneAccess')
+    },
+
+    power: {
+      getSystemIdleTime: () => ipcRenderer.invoke('power:getSystemIdleTime'),
+      getSystemIdleState: (idleThreshold: number) =>
+        ipcRenderer.invoke('power:getSystemIdleState', idleThreshold),
+      isOnBatteryPower: () => ipcRenderer.invoke('power:isOnBatteryPower'),
+      getCurrentThermalState: () => ipcRenderer.invoke('power:getCurrentThermalState'),
+      onSuspend: (callback: () => void) => {
+        const listener = () => callback()
+        ipcRenderer.on('power:suspend', listener)
+        return () => ipcRenderer.removeListener('power:suspend', listener)
+      },
+      onResume: (callback: () => void) => {
+        const listener = () => callback()
+        ipcRenderer.on('power:resume', listener)
+        return () => ipcRenderer.removeListener('power:resume', listener)
+      },
+      onAC: (callback: () => void) => {
+        const listener = () => callback()
+        ipcRenderer.on('power:on-ac', listener)
+        return () => ipcRenderer.removeListener('power:on-ac', listener)
+      },
+      onBattery: (callback: () => void) => {
+        const listener = () => callback()
+        ipcRenderer.on('power:on-battery', listener)
+        return () => ipcRenderer.removeListener('power:on-battery', listener)
+      },
+      onLockScreen: (callback: () => void) => {
+        const listener = () => callback()
+        ipcRenderer.on('power:lock-screen', listener)
+        return () => ipcRenderer.removeListener('power:lock-screen', listener)
+      },
+      onUnlockScreen: (callback: () => void) => {
+        const listener = () => callback()
+        ipcRenderer.on('power:unlock-screen', listener)
+        return () => ipcRenderer.removeListener('power:unlock-screen', listener)
+      }
+    },
+
+    tray: {
+      create: (options: { icon: string; tooltip?: string; title?: string }) =>
+        ipcRenderer.invoke('tray:create', options),
+      destroy: () => ipcRenderer.invoke('tray:destroy'),
+      setIcon: (icon: string) => ipcRenderer.invoke('tray:setIcon', icon),
+      setTooltip: (tooltip: string) => ipcRenderer.invoke('tray:setTooltip', tooltip),
+      setTitle: (title: string) => ipcRenderer.invoke('tray:setTitle', title),
+      exists: () => ipcRenderer.invoke('tray:exists')
+    },
+
+    trayMenu: {
+      getState: () => ipcRenderer.invoke('tray-menu:getState'),
+      action: (action: string, payload?: Record<string, unknown>) => ipcRenderer.invoke('tray-menu:action', action, payload),
+      close: () => ipcRenderer.invoke('tray-menu:close'),
+      onState: (callback: (state: unknown) => void) => {
+        const listener = (_: any, state: unknown) => callback(state)
+        ipcRenderer.on('tray-menu:state', listener)
+        return () => ipcRenderer.removeListener('tray-menu:state', listener)
+      }
+    },
+
+    http: {
+      request: (options: any) => ipcRenderer.invoke('http:request', options),
+      get: (url: string, headers?: Record<string, string>) => ipcRenderer.invoke('http:get', url, headers),
+      post: (url: string, body?: any, headers?: Record<string, string>) => ipcRenderer.invoke('http:post', url, body, headers),
+      put: (url: string, body?: any, headers?: Record<string, string>) => ipcRenderer.invoke('http:put', url, body, headers),
+      delete: (url: string, headers?: Record<string, string>) => ipcRenderer.invoke('http:delete', url, headers)
+    },
+
+    network: {
+      isOnline: () => ipcRenderer.invoke('network:isOnline'),
+      onOnline: (callback: () => void) => {
+        window.addEventListener('online', callback)
+      },
+      onOffline: (callback: () => void) => {
+        window.addEventListener('offline', callback)
+      }
+    },
+
+    menu: {
+      showContextMenu: (items: {
+        label: string
+        type?: 'normal' | 'separator' | 'checkbox' | 'radio'
+        checked?: boolean
+        enabled?: boolean
+        id?: string
+        submenu?: any[]
+      }[]) => ipcRenderer.invoke('menu:showContextMenu', items)
+    },
+
+    geolocation: {
+      getAccessStatus: () => ipcRenderer.invoke('geolocation:getAccessStatus'),
+      requestAccess: () => ipcRenderer.invoke('geolocation:requestAccess'),
+      canGetPosition: () => ipcRenderer.invoke('geolocation:canGetPosition'),
+      openSettings: () => ipcRenderer.invoke('geolocation:openSettings'),
+      getCurrentPosition: () => {
+        console.log('[Geolocation] getCurrentPosition called (using IPC)')
+        return ipcRenderer.invoke('geolocation:getCurrentPosition')
+      }
+    },
+
+    tts: {
+      speak: (text: string, options?: { lang?: string; rate?: number; pitch?: number; volume?: number }) => {
+        return new Promise<void>((resolve, reject) => {
+          const utterance = new SpeechSynthesisUtterance(text)
+          if (options?.lang) utterance.lang = options.lang
+          if (options?.rate) utterance.rate = options.rate
+          if (options?.pitch) utterance.pitch = options.pitch
+          if (options?.volume) utterance.volume = options.volume
+          utterance.onend = () => resolve()
+          utterance.onerror = (e) => reject(e)
+          speechSynthesis.speak(utterance)
+        })
+      },
+      stop: () => speechSynthesis.cancel(),
+      pause: () => speechSynthesis.pause(),
+      resume: () => speechSynthesis.resume(),
+      getVoices: () => speechSynthesis.getVoices().map(v => ({
+        name: v.name,
+        lang: v.lang,
+        default: v.default,
+        localService: v.localService
+      })),
+      isSpeaking: () => speechSynthesis.speaking
+    }
+  }
+}

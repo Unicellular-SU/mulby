@@ -130,6 +130,24 @@
 - 核心对外接口不变
 - 拆分后行为无回归，质量门禁持续通过
 
+**当前结果（2026-02-28）**：
+- 已完成 `src/preload/index.ts` 两轮拆分（接口保持不变）：
+  - 第一轮模块：
+    - `src/preload/apis/ai.ts`
+    - `src/preload/apis/sharp.ts`
+    - `src/preload/apis/ffmpeg.ts`
+    - `src/preload/mulby-main-api.ts`
+    - `src/preload/error-capture.ts`
+  - 第二轮模块：
+    - `src/preload/apis/core-api.ts`
+    - `src/preload/apis/app-plugin-api.ts`
+    - `src/preload/apis/platform-api.ts`
+    - `src/preload/apis/log-api.ts`
+- `src/preload/index.ts` 由 1174 行降至 50 行（改为组装入口）
+- 回归验证：
+  - `npm run typecheck` 通过
+  - `npm run test:unit` 通过（149 tests, 0 fail, 1 skip）
+
 ### Phase 6: 任务调度器事件驱动改造
 **目标**：替代前端高频轮询，减少资源消耗并提升状态实时性。  
 **工作项**：
@@ -170,4 +188,4 @@
 - `test:unit` 初始失败触发 `better-sqlite3` ABI 不匹配；已通过 `AiSkillService` 中默认 `command-runner` 懒加载隔离测试导入路径。
 
 ## Status
-**Phase 4 Completed** - CI 最小自动化检查已落地，下一步进入 Phase 5（大文件拆分）。
+**Phase 5 In Progress** - `src/preload/index.ts` 拆分已完成，下一步继续拆 `SettingsView.tsx` 或主进程大文件。
