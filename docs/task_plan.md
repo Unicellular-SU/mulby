@@ -136,14 +136,15 @@
     - `src/preload/apis/ai.ts`
     - `src/preload/apis/sharp.ts`
     - `src/preload/apis/ffmpeg.ts`
-    - `src/preload/mulby-main-api.ts`
-    - `src/preload/error-capture.ts`
+    - `src/preload/apis/mulby-main-api.ts`
+    - `src/preload/apis/error-capture.ts`
   - 第二轮模块：
     - `src/preload/apis/core-api.ts`
     - `src/preload/apis/app-plugin-api.ts`
     - `src/preload/apis/platform-api.ts`
     - `src/preload/apis/log-api.ts`
 - `src/preload/index.ts` 由 1174 行降至 50 行（改为组装入口）
+- 已统一目录规范：`src/preload/` 下除 `index.ts` 外的实现文件全部迁移到 `src/preload/apis/`
 - 回归验证：
   - `npm run typecheck` 通过
   - `npm run test:unit` 通过（149 tests, 0 fail, 1 skip）

@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer } from 'electron'
-import { inbrowser } from './inbrowser'
+import { inbrowser } from './apis/inbrowser'
 import { patchConsoleWithTimestamp } from '../shared/utils/console'
 import { createAiApi } from './apis/ai'
 import { createSharpApi } from './apis/sharp'
@@ -8,8 +8,8 @@ import { createCoreApi } from './apis/core-api'
 import { createAppPluginApi } from './apis/app-plugin-api'
 import { createPlatformApi } from './apis/platform-api'
 import { createLogApi } from './apis/log-api'
-import { createMulbyMainApi } from './mulby-main-api'
-import { installPreloadErrorCapture } from './error-capture'
+import { createMulbyMainApi } from './apis/mulby-main-api'
+import { installPreloadErrorCapture } from './apis/error-capture'
 
 // 检测是否启用了 contextIsolation
 // 当 contextIsolation 为 false 时，contextBridge 不可用，需要直接设置 window

@@ -1,5 +1,5 @@
 import { ipcRenderer } from 'electron';
-import { InBrowserOp, InBrowserOptions, InBrowserRunPayload } from '../shared/types/inbrowser';
+import { InBrowserOp, InBrowserOptions, InBrowserRunPayload } from '../../shared/types/inbrowser';
 
 export class InBrowserBuilder {
     private queue: InBrowserOp[] = [];

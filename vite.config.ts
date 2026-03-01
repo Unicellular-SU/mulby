@@ -46,7 +46,7 @@ export default defineConfig({
         }
       },
       {
-        entry: 'src/preload/region-capture.ts',
+        entry: 'src/preload/apis/region-capture.ts',
         vite: {
           build: {
             outDir: 'dist/preload'
@@ -54,7 +54,7 @@ export default defineConfig({
         }
       },
       {
-        entry: 'src/preload/color-pick.ts',
+        entry: 'src/preload/apis/color-pick.ts',
         vite: {
           build: {
             outDir: 'dist/preload'
