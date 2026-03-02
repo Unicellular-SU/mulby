@@ -20,7 +20,7 @@ import type {
   PluginStoreFetchResult,
   PluginStoreInstallFromUrlInput
 } from './plugin-store'
-import type { Task, TaskExecution } from './task'
+import type { Task, TaskExecution, TaskSchedulerEvent } from './task'
 
 // 日志条目接口
 export interface LogEntry {
@@ -525,6 +525,9 @@ export interface ElectronAPI {
     validateCron: (expression: string) => Promise<boolean>
     getNextCronTime: (expression: string, after?: Date) => Promise<Date>
     describeCron: (expression: string) => Promise<string>
+    subscribe: () => Promise<{ success: boolean; error?: string }>
+    unsubscribe: () => Promise<{ success: boolean; error?: string }>
+    onEvent: (callback: (event: TaskSchedulerEvent) => void) => () => void
   }
   onPluginInit: (callback: (data: { pluginName: string; featureCode: string; input: string; attachments?: InputAttachment[]; mode?: string }) => void) => () => void
   onPluginAttach: (callback: (data: { pluginName: string; displayName: string; featureCode: string; input: string; attachments?: InputAttachment[]; mode: 'panel' }) => void) => () => void

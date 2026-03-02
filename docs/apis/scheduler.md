@@ -17,6 +17,64 @@
 
 ## API 方法
 
+### subscribe()
+[Renderer]
+订阅任务调度实时事件流（主进程 -> 渲染进程）。
+
+```javascript
+const result = await window.mulby.scheduler.subscribe()
+if (!result.success) {
+  console.warn('订阅失败，将使用手动刷新或兜底刷新')
+}
+```
+
+**返回值**:
+- `Promise<{ success: boolean; error?: string }>`
+
+### onEvent(callback)
+[Renderer]
+监听调度事件。用于驱动任务列表/详情增量刷新，替代高频轮询。
+
+```javascript
+const off = window.mulby.scheduler.onEvent((event) => {
+  console.log(event.type, event.taskId)
+  // 常见做法：触发 refreshTasks()
+})
+
+// 销毁时取消监听
+off()
+```
+
+**事件结构**:
+```typescript
+{
+  type:
+    | 'task:created'
+    | 'task:cancelled'
+    | 'task:paused'
+    | 'task:resumed'
+    | 'task:success'
+    | 'task:failed'
+    | 'tasks:deleted'
+    | 'tasks:cleaned'
+  timestamp: number
+  taskId?: string
+  deletedCount?: number
+  taskIds?: string[]
+}
+```
+
+### unsubscribe()
+[Renderer]
+取消订阅任务调度事件流。
+
+```javascript
+await window.mulby.scheduler.unsubscribe()
+```
+
+**返回值**:
+- `Promise<{ success: boolean; error?: string }>`
+
 ### schedule(task)
 [Backend]
 创建定时任务。
@@ -701,7 +759,7 @@ await api.scheduler.schedule({
 - **清除记录**：一键清除已完成/失败/取消的任务（保留最近7天）
 - **任务详情**：查看任务配置和执行历史
 - **任务控制**：暂停/恢复/取消单个任务
-- **实时刷新**：自动刷新任务状态（可开关）
+- **实时刷新**：默认使用事件驱动刷新（可开关），并保留低频兜底恢复
 - **分页导航**：上一页/下一页，页码快速跳转
 
 ### 分页查询示例

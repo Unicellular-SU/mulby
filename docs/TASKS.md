@@ -1,6 +1,6 @@
 # Mulby 开发任务跟踪
 
-> 最后更新：2026-02-28
+> 最后更新：2026-03-02
 > 维护原则：仅保留当前与近期可执行任务，历史完成记录统一归档到 `docs/archive/`。
 
 ## 当前版本
@@ -34,11 +34,12 @@
   - [ ] `src/main/ai/service.ts`
   - [x] `src/preload/index.ts`
   - [ ] `src/main/plugin/manager.ts`
-  - [ ] `src/renderer/components/SettingsView.tsx`
+  - [x] `src/renderer/components/SettingsView.tsx`
   - [ ] `src/renderer/components/PluginManagerView.tsx`
+  - [x] `src/renderer/components/AiSettingsView.tsx`（含 controller/hook 分层）
 
 ### P2 - 性能与架构
-- [ ] 任务调度器 UI 改为事件驱动（替代 1s 轮询）
+- [x] 任务调度器 UI 改为事件驱动（替代 1s 轮询）
 
 ## Deferred / Not Planned (This Cycle)
 - [ ] 插件商店安全增强（后期专题）
@@ -51,7 +52,7 @@
 - `npm run test:unit` 全通过
 - build smoke 通过
 
-## 最近基线结果（2026-02-28）
+## 最近基线结果（2026-03-02）
 - `typecheck`: 通过
 - `lint`: 0 error / 354 warnings
 - `test:unit`: 149 tests, 0 fail, 1 skip

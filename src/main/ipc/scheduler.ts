@@ -4,10 +4,105 @@
 
 import { ipcMain } from 'electron'
 import type { PluginManager } from '../plugin/manager'
+import type { TaskSchedulerEvent } from '../../shared/types/task'
+
+interface SchedulerSubscriptionEntry {
+  sender: Electron.WebContents
+  cleanup: () => void
+  destroyHandler: () => void
+}
 
 export function registerSchedulerHandlers(pluginManager: PluginManager) {
+  const schedulerSubscriptions = new Map<number, SchedulerSubscriptionEntry>()
+
   const getScheduler = () => {
     return (pluginManager as any).taskScheduler
+  }
+
+  const clearSchedulerSubscription = (webContentsId: number) => {
+    const entry = schedulerSubscriptions.get(webContentsId)
+    if (!entry) return
+    entry.sender.removeListener('destroyed', entry.destroyHandler)
+    entry.cleanup()
+    schedulerSubscriptions.delete(webContentsId)
+  }
+
+  const subscribeSchedulerEvents = (sender: Electron.WebContents) => {
+    const scheduler = getScheduler()
+    const webContentsId = sender.id
+    clearSchedulerSubscription(webContentsId)
+
+    const extractTaskId = (input: unknown): string | undefined => {
+      if (!input || typeof input !== 'object') return undefined
+      const maybeTask = input as { id?: unknown }
+      return typeof maybeTask.id === 'string' ? maybeTask.id : undefined
+    }
+
+    const sendEvent = (payload: TaskSchedulerEvent) => {
+      if (!sender.isDestroyed()) {
+        sender.send('scheduler:event', payload)
+      }
+    }
+
+    const onTaskCreated = (task: unknown) => {
+      sendEvent({ type: 'task:created', timestamp: Date.now(), taskId: extractTaskId(task) })
+    }
+    const onTaskCancelled = (task: unknown) => {
+      sendEvent({ type: 'task:cancelled', timestamp: Date.now(), taskId: extractTaskId(task) })
+    }
+    const onTaskPaused = (task: unknown) => {
+      sendEvent({ type: 'task:paused', timestamp: Date.now(), taskId: extractTaskId(task) })
+    }
+    const onTaskResumed = (task: unknown) => {
+      sendEvent({ type: 'task:resumed', timestamp: Date.now(), taskId: extractTaskId(task) })
+    }
+    const onTaskSuccess = (task: unknown) => {
+      sendEvent({ type: 'task:success', timestamp: Date.now(), taskId: extractTaskId(task) })
+    }
+    const onTaskFailed = (task: unknown) => {
+      sendEvent({ type: 'task:failed', timestamp: Date.now(), taskId: extractTaskId(task) })
+    }
+    const onTasksDeleted = (payload?: { taskIds?: string[]; deletedCount?: number }) => {
+      sendEvent({
+        type: 'tasks:deleted',
+        timestamp: Date.now(),
+        deletedCount: payload?.deletedCount,
+        taskIds: payload?.taskIds
+      })
+    }
+    const onTasksCleaned = (payload?: { deletedCount?: number }) => {
+      sendEvent({
+        type: 'tasks:cleaned',
+        timestamp: Date.now(),
+        deletedCount: payload?.deletedCount
+      })
+    }
+
+    scheduler.on('task:created', onTaskCreated)
+    scheduler.on('task:cancelled', onTaskCancelled)
+    scheduler.on('task:paused', onTaskPaused)
+    scheduler.on('task:resumed', onTaskResumed)
+    scheduler.on('task:success', onTaskSuccess)
+    scheduler.on('task:failed', onTaskFailed)
+    scheduler.on('tasks:deleted', onTasksDeleted)
+    scheduler.on('tasks:cleaned', onTasksCleaned)
+
+    const cleanup = () => {
+      scheduler.off('task:created', onTaskCreated)
+      scheduler.off('task:cancelled', onTaskCancelled)
+      scheduler.off('task:paused', onTaskPaused)
+      scheduler.off('task:resumed', onTaskResumed)
+      scheduler.off('task:success', onTaskSuccess)
+      scheduler.off('task:failed', onTaskFailed)
+      scheduler.off('tasks:deleted', onTasksDeleted)
+      scheduler.off('tasks:cleaned', onTasksCleaned)
+    }
+
+    const destroyHandler = () => {
+      clearSchedulerSubscription(webContentsId)
+    }
+    sender.once('destroyed', destroyHandler)
+    schedulerSubscriptions.set(webContentsId, { sender, cleanup, destroyHandler })
   }
 
   // 列出任务
@@ -155,6 +250,28 @@ export function registerSchedulerHandlers(pluginManager: PluginManager) {
     } catch (err) {
       console.error('Failed to describe cron:', err)
       throw err
+    }
+  })
+
+  // 订阅任务调度事件
+  ipcMain.handle('scheduler:subscribe', (event) => {
+    try {
+      subscribeSchedulerEvents(event.sender)
+      return { success: true }
+    } catch (err) {
+      console.error('Failed to subscribe scheduler events:', err)
+      return { success: false, error: err instanceof Error ? err.message : String(err) }
+    }
+  })
+
+  // 取消订阅任务调度事件
+  ipcMain.handle('scheduler:unsubscribe', (event) => {
+    try {
+      clearSchedulerSubscription(event.sender.id)
+      return { success: true }
+    } catch (err) {
+      console.error('Failed to unsubscribe scheduler events:', err)
+      return { success: false, error: err instanceof Error ? err.message : String(err) }
     }
   })
 }

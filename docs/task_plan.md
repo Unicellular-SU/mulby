@@ -23,8 +23,8 @@
 - [x] Phase 2: 质量门禁修复与基线稳定
 - [x] Phase 3: 设置中心增强（开机自启动 + 更新中心）
 - [x] Phase 4: CI 建设与发布前自动检查
-- [ ] Phase 5: 大文件拆分与模块边界收敛
-- [ ] Phase 6: 任务调度器事件驱动改造
+- [x] Phase 5: 大文件拆分与模块边界收敛
+- [x] Phase 6: 任务调度器事件驱动改造
 - [ ] Phase 7: 验收回归与文档收口
 
 ## Phase Details
@@ -148,6 +148,12 @@
 - 回归验证：
   - `npm run typecheck` 通过
   - `npm run test:unit` 通过（149 tests, 0 fail, 1 skip）
+- 后续补充拆分（2026-03-02）：
+  - `src/renderer/components/AiSettingsView.tsx` 拆为布局层 + ViewModel + controller 组合层
+  - `useAiSettingsController.ts` 拆为 `Provider/Model/Modal` 子 hook
+  - `ProviderSettingsSection.tsx` 拆为 `ProviderSidebar` / `ProviderConfigPanel` / `ProviderModelsPanel`
+  - `ProviderModelsPanel.tsx` 继续拆为 `ProviderModelsHeader` / `ModelCapabilitiesEditor` / `ModelParamsEditor`
+  - 拆分后门禁持续通过（typecheck/lint/test:unit/build:smoke）
 
 ### Phase 6: 任务调度器事件驱动改造
 **目标**：替代前端高频轮询，减少资源消耗并提升状态实时性。  
@@ -159,6 +165,27 @@
 **验收标准**：
 - 默认路径不再依赖 1s 轮询
 - 列表/详情状态更新及时且无明显跳变
+
+**当前结果（2026-03-02）**：
+- 主进程新增调度事件订阅通道：
+  - `scheduler:subscribe` / `scheduler:unsubscribe`
+  - 事件通道 `scheduler:event`
+  - 事件类型覆盖：`task:created/cancelled/paused/resumed/success/failed`、`tasks:deleted/cleaned`
+- 调度核心补充批量删除/清理事件发射：
+  - `tasks:deleted`
+  - `tasks:cleaned`
+- preload 与类型层已对齐：
+  - `window.mulby.scheduler.subscribe()`
+  - `window.mulby.scheduler.unsubscribe()`
+  - `window.mulby.scheduler.onEvent(callback)`
+- 渲染层 `TaskSchedulerView` 改造完成：
+  - 移除 1s `setInterval` 轮询
+  - 改为事件驱动刷新（含任务详情联动刷新）
+  - 保留手动刷新 + 断线兜底恢复（低频 fallback + focus/visibility 恢复）
+- 回归验证：
+  - `npm run typecheck` 通过
+  - `npm run test:unit` 通过（149 tests, 0 fail, 1 skip）
+  - `npm run build:smoke` 通过
 
 ### Phase 7: 验收回归与文档收口
 **目标**：确保变更可交付并可维护。  
@@ -189,4 +216,4 @@
 - `test:unit` 初始失败触发 `better-sqlite3` ABI 不匹配；已通过 `AiSkillService` 中默认 `command-runner` 懒加载隔离测试导入路径。
 
 ## Status
-**Phase 5 In Progress** - `src/preload/index.ts` 拆分已完成，下一步继续拆 `SettingsView.tsx` 或主进程大文件。
+**Phase 7 Next** - 进入验收回归与文档收口（全量回归、文档状态同步、输出后续 backlog）。

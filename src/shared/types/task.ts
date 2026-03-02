@@ -52,3 +52,22 @@ export interface TaskExecution {
   error?: string
   duration?: number
 }
+
+export type TaskSchedulerEventType =
+  | 'task:created'
+  | 'task:cancelled'
+  | 'task:paused'
+  | 'task:resumed'
+  | 'task:success'
+  | 'task:failed'
+  | 'tasks:deleted'
+  | 'tasks:cleaned'
+
+export interface TaskSchedulerEvent {
+  type: TaskSchedulerEventType
+  timestamp: number
+  taskId?: string
+  task?: Task
+  deletedCount?: number
+  taskIds?: string[]
+}

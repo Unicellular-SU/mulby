@@ -209,6 +209,7 @@ export class TaskScheduler extends EventEmitter {
    */
   async deleteTasks(taskIds: string[]): Promise<number> {
     let deletedCount = 0
+    const deletedTaskIds: string[] = []
     for (const taskId of taskIds) {
       try {
         // 从队列中移除
@@ -216,9 +217,16 @@ export class TaskScheduler extends EventEmitter {
         // 从数据库删除
         await this.store.deleteTask(taskId)
         deletedCount++
+        deletedTaskIds.push(taskId)
       } catch (err) {
         console.error(`[TaskScheduler] Failed to delete task ${taskId}:`, err)
       }
+    }
+    if (deletedCount > 0) {
+      this.emit('tasks:deleted', {
+        taskIds: deletedTaskIds,
+        deletedCount
+      })
     }
     return deletedCount
   }
@@ -227,7 +235,13 @@ export class TaskScheduler extends EventEmitter {
    * 清除已完成/失败/取消的任务
    */
   async cleanupTasks(olderThan?: number): Promise<number> {
-    return await this.store.cleanupTasks(olderThan)
+    const deletedCount = await this.store.cleanupTasks(olderThan)
+    if (deletedCount > 0) {
+      this.emit('tasks:cleaned', {
+        deletedCount
+      })
+    }
+    return deletedCount
   }
 
   /**

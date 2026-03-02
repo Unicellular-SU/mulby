@@ -1,6 +1,7 @@
 import type { IpcRenderer } from 'electron'
 import type { InputPayload } from '../../shared/types/plugin'
 import type { OpenSystemPluginPayload, SystemPluginBeforeAttachPayload } from '../../shared/types/electron'
+import type { TaskSchedulerEvent } from '../../shared/types/task'
 
 export function createAppPluginApi(ipcRenderer: IpcRenderer) {
   return {
@@ -141,7 +142,14 @@ export function createAppPluginApi(ipcRenderer: IpcRenderer) {
       validateCron: (expression: string) => ipcRenderer.invoke('scheduler:validateCron', expression),
       getNextCronTime: (expression: string, after?: Date) =>
         ipcRenderer.invoke('scheduler:getNextCronTime', expression, after),
-      describeCron: (expression: string) => ipcRenderer.invoke('scheduler:describeCron', expression)
+      describeCron: (expression: string) => ipcRenderer.invoke('scheduler:describeCron', expression),
+      subscribe: () => ipcRenderer.invoke('scheduler:subscribe'),
+      unsubscribe: () => ipcRenderer.invoke('scheduler:unsubscribe'),
+      onEvent: (callback: (event: TaskSchedulerEvent) => void) => {
+        const listener = (_: any, event: TaskSchedulerEvent) => callback(event)
+        ipcRenderer.on('scheduler:event', listener)
+        return () => ipcRenderer.removeListener('scheduler:event', listener)
+      }
     },
 
     onPluginInit: (callback: (data: { pluginName: string; featureCode: string; input: string; mode?: string }) => void) => {

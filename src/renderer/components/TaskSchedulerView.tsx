@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import type { Task, TaskExecution } from '../../shared/types/task'
 
 interface TaskSchedulerViewProps {
@@ -72,6 +72,7 @@ export default function TaskSchedulerView({ onBack }: TaskSchedulerViewProps) {
   const [tasks, setTasks] = useState<Task[]>([])
   const [selectedTask, setSelectedTask] = useState<Task | null>(null)
   const [executions, setExecutions] = useState<TaskExecution[]>([])
+  const [, setClockTick] = useState(0)
   const [autoRefresh, setAutoRefresh] = useState(true)
   const [filter, setFilter] = useState<'all' | 'pending' | 'completed' | 'failed'>('all')
   const [currentPage, setCurrentPage] = useState(1)
@@ -84,16 +85,13 @@ export default function TaskSchedulerView({ onBack }: TaskSchedulerViewProps) {
   const actionButtonClass = 'rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-700 transition hover:border-slate-300 hover:text-slate-900 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-200 disabled:opacity-50 disabled:cursor-not-allowed'
   const dangerButtonClass = 'rounded-full border border-red-200 bg-red-50 px-3 py-1.5 text-xs text-red-700 transition hover:border-red-300 hover:bg-red-100 dark:border-red-900/50 dark:bg-red-950/50 dark:text-red-400 dark:hover:bg-red-900/30'
 
-  const getFilterStatus = () => {
-    if (filter === 'pending') return 'pending'
-    if (filter === 'completed') return 'completed'
-    if (filter === 'failed') return 'failed'
-    return undefined
-  }
-
-  const refreshTasks = async () => {
+  const refreshTasks = useCallback(async () => {
     try {
-      const statusFilter = getFilterStatus()
+      const statusFilter =
+        filter === 'pending' ? 'pending'
+          : filter === 'completed' ? 'completed'
+            : filter === 'failed' ? 'failed'
+              : undefined
       const [list, count] = await Promise.all([
         window.mulby.scheduler.listTasks({
           status: statusFilter,
@@ -106,24 +104,93 @@ export default function TaskSchedulerView({ onBack }: TaskSchedulerViewProps) {
       ])
       setTasks(list)
       setTotalCount(count)
+      setSelectedTaskIds((prev) => {
+        if (prev.size === 0) return prev
+        const currentIds = new Set(list.map((task) => task.id))
+        const next = new Set(Array.from(prev).filter((taskId) => currentIds.has(taskId)))
+        return next.size === prev.size ? prev : next
+      })
     } catch (err) {
       console.error('Failed to list tasks:', err)
     }
-  }
+  }, [currentPage, filter])
+
+  const refreshTaskDetails = useCallback(async (taskId: string) => {
+    try {
+      const [task, execs] = await Promise.all([
+        window.mulby.scheduler.getTask(taskId),
+        window.mulby.scheduler.getExecutions(taskId, 20)
+      ])
+      setSelectedTask(task)
+      setExecutions(execs)
+    } catch (err) {
+      console.error('Failed to refresh task details:', err)
+    }
+  }, [])
 
   useEffect(() => {
     void refreshTasks()
-  }, [currentPage, filter])
+  }, [refreshTasks])
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setClockTick((prev) => prev + 1)
+    }, 1000)
+    return () => clearInterval(timer)
+  }, [])
 
   useEffect(() => {
     if (!autoRefresh) return
 
-    const interval = setInterval(() => {
-      void refreshTasks()
-    }, 1000) // 每 1 秒刷新一次
+    let fallbackTimer: ReturnType<typeof setInterval> | null = null
+    const startFallback = () => {
+      if (fallbackTimer) return
+      fallbackTimer = setInterval(() => {
+        void refreshTasks()
+      }, 15000)
+    }
 
-    return () => clearInterval(interval)
-  }, [autoRefresh, currentPage, filter])
+    const unsubscribeEvent = window.mulby.scheduler.onEvent((event) => {
+      void refreshTasks()
+      if (selectedTask?.id && (!event.taskId || event.taskId === selectedTask.id)) {
+        void refreshTaskDetails(selectedTask.id)
+      }
+    })
+
+    void window.mulby.scheduler.subscribe()
+      .then((result) => {
+        if (!result?.success) {
+          startFallback()
+        }
+      })
+      .catch(() => {
+        startFallback()
+      })
+
+    const recoveryTimer = setInterval(() => {
+      void refreshTasks()
+    }, 30000)
+
+    const handleWindowFocus = () => {
+      void refreshTasks()
+    }
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        void refreshTasks()
+      }
+    }
+    window.addEventListener('focus', handleWindowFocus)
+    document.addEventListener('visibilitychange', handleVisibilityChange)
+
+    return () => {
+      unsubscribeEvent()
+      void window.mulby.scheduler.unsubscribe()
+      if (fallbackTimer) clearInterval(fallbackTimer)
+      clearInterval(recoveryTimer)
+      window.removeEventListener('focus', handleWindowFocus)
+      document.removeEventListener('visibilitychange', handleVisibilityChange)
+    }
+  }, [autoRefresh, refreshTasks, refreshTaskDetails, selectedTask?.id])
 
   const handleCancel = async (taskId: string) => {
     const confirmed = confirm('确定要取消此任务吗？')
@@ -133,7 +200,7 @@ export default function TaskSchedulerView({ onBack }: TaskSchedulerViewProps) {
       await window.mulby.scheduler.cancelTask(taskId)
       window.mulby.notification.show('任务已取消', 'success')
       await refreshTasks()
-    } catch (err) {
+    } catch {
       window.mulby.notification.show('取消失败', 'error')
     }
   }
@@ -143,7 +210,7 @@ export default function TaskSchedulerView({ onBack }: TaskSchedulerViewProps) {
       await window.mulby.scheduler.pauseTask(taskId)
       window.mulby.notification.show('任务已暂停', 'success')
       await refreshTasks()
-    } catch (err) {
+    } catch {
       window.mulby.notification.show('暂停失败', 'error')
     }
   }
@@ -153,19 +220,14 @@ export default function TaskSchedulerView({ onBack }: TaskSchedulerViewProps) {
       await window.mulby.scheduler.resumeTask(taskId)
       window.mulby.notification.show('任务已恢复', 'success')
       await refreshTasks()
-    } catch (err) {
+    } catch {
       window.mulby.notification.show('恢复失败', 'error')
     }
   }
 
   const handleViewDetails = async (task: Task) => {
     setSelectedTask(task)
-    try {
-      const execs = await window.mulby.scheduler.getExecutions(task.id, 20)
-      setExecutions(execs)
-    } catch (err) {
-      console.error('Failed to get executions:', err)
-    }
+    await refreshTaskDetails(task.id)
   }
 
   const handleBatchDelete = async () => {
@@ -182,7 +244,7 @@ export default function TaskSchedulerView({ onBack }: TaskSchedulerViewProps) {
       window.mulby.notification.show(`已删除 ${result.deletedCount} 个任务`, 'success')
       setSelectedTaskIds(new Set())
       await refreshTasks()
-    } catch (err) {
+    } catch {
       window.mulby.notification.show('批量删除失败', 'error')
     }
   }
@@ -195,7 +257,7 @@ export default function TaskSchedulerView({ onBack }: TaskSchedulerViewProps) {
       const result = await window.mulby.scheduler.cleanupTasks()
       window.mulby.notification.show(`已清除 ${result.deletedCount} 个任务`, 'success')
       await refreshTasks()
-    } catch (err) {
+    } catch {
       window.mulby.notification.show('清除失败', 'error')
     }
   }
