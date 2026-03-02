@@ -9,302 +9,16 @@ import type {
 } from '../../shared/types/settings'
 import type { StartupOpenAtLoginState, UpdateCenterState } from '../../shared/types/electron'
 import { useInAppNotice } from './InAppNotice'
-import UnifiedSelect from './UnifiedSelect'
 import CommandShortcutPanel from './CommandShortcutPanel'
-type SettingsSection =
-  | 'general'
-  | 'shortcuts'
-  | 'commandQuickLaunch'
-  | 'commandAll'
-  | 'permissions'
-  | 'security'
-  | 'developer'
-  | 'about'
-
-interface SettingsViewProps {
-  section: SettingsSection
-  shortcutCommandHint?: string
-  onShortcutCommandHintConsumed?: () => void
-  onPrepareCommandLaunch?: () => Promise<void> | void
-  onSectionChange: (section: SettingsSection) => void
-  onClose: () => void
-  onOpenPluginManager: (section?: 'installed' | 'store') => void
-  onOpenBackgroundPluginManager?: () => void
-  onOpenTaskScheduler?: () => void
-  onOpenLogViewer?: () => void
-  onOpenAiSettings?: () => void
-}
-
-const SECTION_ITEMS: { id: SettingsSection; label: string }[] = [
-  { id: 'general', label: '通用' },
-  { id: 'shortcuts', label: '快捷键' },
-  { id: 'commandQuickLaunch', label: '快捷启动' },
-  { id: 'commandAll', label: '全部指令' },
-  { id: 'permissions', label: '权限' },
-  { id: 'security', label: '工具与命令' },
-  { id: 'developer', label: '开发者' },
-  { id: 'about', label: '关于' }
-]
-const SHORTCUTS: { id: AppShortcutAction; label: string; description: string }[] = [
-  { id: 'toggleWindow', label: '唤起主窗口', description: '显示或隐藏主窗口' },
-  { id: 'openSettings', label: '打开设置', description: '直接进入设置面板' },
-  { id: 'openAiSettings', label: '打开 AI 设置', description: '直接进入 AI 设置中心' },
-  { id: 'openPluginStore', label: '打开插件商店', description: '直接进入插件商店页面' },
-  { id: 'openPluginManager', label: '打开插件管理', description: '直接进入插件管理页面' },
-  { id: 'openBackgroundPlugins', label: '打开运行中插件', description: '直接进入运行中的插件页面' },
-  { id: 'openTaskScheduler', label: '打开任务调度器', description: '直接进入任务调度器页面' },
-  { id: 'openLogViewer', label: '打开日志查看器', description: '直接进入开发者日志页面' }
-]
-
-const PERMISSIONS = [
-  { id: 'accessibility', label: '辅助功能' },
-  { id: 'screen', label: '屏幕录制' },
-  { id: 'microphone', label: '麦克风' },
-  { id: 'camera', label: '摄像头' },
-  { id: 'geolocation', label: '定位' }
-] as const
-
-const TOOL_CAPABILITY_OPTIONS = [
-  { value: 'shell.exec', label: 'shell.exec（执行系统命令）' },
-  { value: 'shell.script', label: 'shell.script（执行预置脚本）' },
-  { value: 'fs.read', label: 'fs.read（读取文件）' },
-  { value: 'fs.list', label: 'fs.list（列出目录）' },
-  { value: 'fs.search', label: 'fs.search（文本检索）' },
-  { value: 'patch.apply', label: 'patch.apply（补丁校验/应用）' },
-  { value: 'http.fetch', label: 'http.fetch（HTTP 请求）' },
-  { value: 'git.status', label: 'git.status（仓库状态）' },
-  { value: 'git.diff', label: 'git.diff（差异查看）' }
-] as const
-const DEFAULT_APP_CAPABILITIES = TOOL_CAPABILITY_OPTIONS.map((item) => item.value)
-
-function formatPermissionStatus(status: string) {
-  switch (status) {
-    case 'granted':
-      return '已授权'
-    case 'denied':
-      return '已拒绝'
-    case 'not-determined':
-      return '未确定'
-    case 'restricted':
-      return '受限'
-    case 'limited':
-      return '受限访问'
-    default:
-      return '未知'
-  }
-}
-
-function parseListDraft(value: string): string[] {
-  return value
-    .split(/[\n,]/)
-    .map((item) => item.trim())
-    .filter(Boolean)
-}
-
-function formatCommandAuditStatus(status: string): string {
-  switch (status) {
-    case 'allowed':
-      return '允许'
-    case 'blocked':
-      return '拦截'
-    case 'timeout':
-      return '超时'
-    case 'error':
-      return '错误'
-    default:
-      return status
-  }
-}
-
-function formatCapabilityLabel(capability: string): string {
-  const row = TOOL_CAPABILITY_OPTIONS.find((item) => item.value === capability)
-  return row?.label || capability
-}
-
-function toDateTimeLocalValue(input?: number): string {
-  if (!input || !Number.isFinite(input)) return ''
-  const date = new Date(input)
-  const pad = (n: number) => String(n).padStart(2, '0')
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`
-}
-
-function formatUpdateStatus(status: UpdateCenterState['status']): string {
-  switch (status) {
-    case 'checking':
-      return '检查中'
-    case 'up-to-date':
-      return '已是最新版本'
-    case 'update-available':
-      return '发现新版本'
-    case 'error':
-      return '检查失败'
-    default:
-      return '未检查'
-  }
-}
-
-function formatCheckedAt(input?: number): string {
-  if (!input || !Number.isFinite(input)) return '尚未检查'
-  return new Date(input).toLocaleString()
-}
-
-function normalizeShortcutKey(event: KeyboardEvent) {
-  const code = event.code
-  const key = event.key
-  if (key === 'Escape' || key === 'Dead') {
-    return null
-  }
-
-  const codeMap: Record<string, string> = {
-    Space: 'Space',
-    Comma: ',',
-    Period: '.',
-    Slash: '/',
-    Backslash: '\\',
-    Semicolon: ';',
-    Quote: '\'',
-    BracketLeft: '[',
-    BracketRight: ']',
-    Minus: '-',
-    Equal: '=',
-    Backquote: '`',
-    ArrowUp: 'Up',
-    ArrowDown: 'Down',
-    ArrowLeft: 'Left',
-    ArrowRight: 'Right'
-  }
-
-  if (code in codeMap) {
-    return codeMap[code]
-  }
-
-  if (code.startsWith('Key')) {
-    return code.slice(3).toUpperCase()
-  }
-
-  if (code.startsWith('Digit')) {
-    return code.slice(5)
-  }
-
-  if (code.startsWith('F')) {
-    return code
-  }
-
-  return null
-}
-
-function ShortcutInput({
-  label,
-  description,
-  value,
-  status,
-  onChange,
-  onRecordStart,
-  onRecordEnd
-}: {
-  label: string
-  description: string
-  value: string
-  status?: ShortcutStatusMap[keyof ShortcutStatusMap]
-  onChange: (next: string) => void
-  onRecordStart: () => void
-  onRecordEnd: () => void
-}) {
-  const [recording, setRecording] = useState(false)
-  const [preview, setPreview] = useState<string | null>(null)
-  const [error, setError] = useState<string | null>(null)
-
-  useEffect(() => {
-    if (!recording) return
-
-    const handleKeyDown = (event: KeyboardEvent) => {
-      event.preventDefault()
-      event.stopPropagation()
-
-      if (event.key === 'Escape') {
-        setRecording(false)
-        setError(null)
-        setPreview(null)
-        onRecordEnd()
-        return
-      }
-
-      const mainKey = normalizeShortcutKey(event)
-      const parts: string[] = []
-      if (event.metaKey || event.ctrlKey) {
-        parts.push('CommandOrControl')
-      }
-      if (event.altKey) {
-        parts.push('Alt')
-      }
-      if (event.shiftKey) {
-        parts.push('Shift')
-      }
-      if (mainKey) {
-        parts.push(mainKey)
-      }
-      const accelerator = parts.join('+')
-      setPreview(accelerator)
-
-      const hasPrimaryModifier = event.metaKey || event.ctrlKey || event.altKey
-      if (!mainKey || !hasPrimaryModifier) {
-        setError('需要至少一个修饰键')
-        return
-      }
-
-      setRecording(false)
-      setError(null)
-      setPreview(null)
-      onRecordEnd()
-      onChange(accelerator)
-    }
-
-    window.addEventListener('keydown', handleKeyDown, true)
-    return () => window.removeEventListener('keydown', handleKeyDown, true)
-  }, [recording, onChange, onRecordEnd])
-
-  const statusText = status?.ok
-    ? ''
-    : status?.reason === 'duplicate'
-      ? '快捷键冲突'
-      : status?.reason === 'in-use'
-        ? '被系统占用'
-        : status?.reason === 'invalid'
-          ? '格式无效'
-          : '注册失败'
-
-  const displayValue = recording ? (preview || '按下快捷键') : (value || '未设置')
-
-  return (
-    <div className="rounded-2xl border border-slate-200/80 bg-white p-4 dark:border-slate-800/80 dark:bg-slate-900 sm:p-5">
-      <div className="space-y-3">
-        <div className="text-sm font-semibold text-slate-900 dark:text-white">{label}</div>
-        <div className="text-xs text-slate-500 dark:text-slate-400">{description}</div>
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div className="min-w-[200px] flex-1 rounded-xl border border-slate-200 bg-white px-3 py-2 text-left text-sm text-slate-700 shadow-sm dark:border-slate-800 dark:bg-slate-950 dark:text-slate-200">
-            <div className="text-sm font-medium">{displayValue}</div>
-            {(error || statusText) && (
-              <div className="text-xs text-red-500">{error || statusText}</div>
-            )}
-          </div>
-          <button
-            className={`rounded-full border px-3 py-1.5 text-xs transition-colors ${recording
-              ? 'border-slate-900 bg-slate-900 text-white dark:border-white dark:bg-white dark:text-slate-900'
-              : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300 hover:text-slate-900 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-200'
-              }`}
-            onClick={() => {
-              setError(null)
-              setRecording(true)
-              onRecordStart()
-            }}
-          >
-            {recording ? '按下快捷键' : '录制'}
-          </button>
-        </div>
-      </div>
-    </div>
-  )
-}
+import GeneralSection from './settings/sections/GeneralSection'
+import ShortcutsSection from './settings/sections/ShortcutsSection'
+import PermissionsSection from './settings/sections/PermissionsSection'
+import AboutSection from './settings/sections/AboutSection'
+import SecuritySection from './settings/sections/SecuritySection'
+import DeveloperSection from './settings/sections/DeveloperSection'
+import type { SettingsViewProps } from './settings/types'
+import { DEFAULT_APP_CAPABILITIES, PERMISSIONS, SECTION_ITEMS } from './settings/constants'
+import { parseListDraft } from './settings/utils'
 
 export default function SettingsView({
   section,
@@ -363,7 +77,7 @@ export default function SettingsView({
   const [updateCenterState, setUpdateCenterState] = useState<UpdateCenterState | null>(null)
   const [startupBusy, setStartupBusy] = useState(false)
   const [updateBusy, setUpdateBusy] = useState(false)
-  const [_activeRecordings, setActiveRecordings] = useState(0)
+  const [, setActiveRecordings] = useState(0)
 
   useEffect(() => {
     window.mulby.settings.get().then(({ settings, shortcutStatus }) => {
@@ -935,118 +649,32 @@ export default function SettingsView({
           <main className="flex-1 min-h-0 overflow-auto no-drag">
             <div className="mx-auto max-w-5xl px-6 pb-16 pt-8">
               {section === 'general' && (
-                <div className="space-y-4">
-                  <div className={`${cardClass} space-y-4`}>
-                    <div className="text-sm font-medium text-slate-900 dark:text-white">主题模式</div>
-                    <div className="flex flex-wrap gap-3">
-                      {(['light', 'dark', 'system'] as const).map((mode) => (
-                        <button
-                          key={mode}
-                          className={`rounded-full border px-4 py-2 text-sm transition-colors ${themeMode === mode
-                            ? 'border-slate-900 bg-slate-900 text-white dark:border-white dark:bg-white dark:text-slate-900'
-                            : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:text-slate-900 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-300'
-                            }`}
-                          onClick={async () => {
-                            const info = await window.mulby.theme.set(mode)
-                            setThemeMode(info.mode)
-                          }}
-                        >
-                          {mode === 'light' ? '浅色' : mode === 'dark' ? '深色' : '跟随系统'}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                  <div className={`${cardClass} space-y-4`}>
-                    <div className="text-sm font-medium text-slate-900 dark:text-white">开机自启动</div>
-                    <div className="text-xs text-slate-500 dark:text-slate-400">
-                      控制 Mulby 是否在系统登录后自动启动。
-                    </div>
-                    {!openAtLoginState.supported && (
-                      <div className="rounded-2xl border border-amber-200/80 bg-amber-50/70 px-3 py-2 text-xs text-amber-700 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-300">
-                        当前平台暂不支持开机自启动管理（仅支持 macOS / Windows）。
-                      </div>
-                    )}
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <div className="text-sm text-slate-900 dark:text-white">开机自启动</div>
-                        <div className="text-xs text-slate-500 dark:text-slate-400">
-                          状态：{openAtLoginState.enabled ? '已开启' : '已关闭'}
-                        </div>
-                      </div>
-                      <button
-                        disabled={!openAtLoginState.supported || startupBusy}
-                        className={`relative h-6 w-11 rounded-full transition-colors ${openAtLoginState.enabled
-                          ? 'bg-blue-500'
-                          : 'bg-gray-300 dark:bg-gray-600'
-                          } disabled:cursor-not-allowed disabled:opacity-60`}
-                        onClick={() => void toggleOpenAtLogin()}
-                      >
-                        <span
-                          className={`absolute top-0.5 left-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform ${openAtLoginState.enabled ? 'translate-x-5' : ''}`}
-                        />
-                      </button>
-                    </div>
-                  </div>
-                  {onOpenAiSettings && (
-                    <div className={`${cardClass} flex items-center justify-between gap-4`}>
-                      <div>
-                        <div className="text-sm font-medium text-slate-900 dark:text-white">AI 设置中心</div>
-                        <div className="text-xs text-slate-500 dark:text-slate-400">配置 Provider、模型与默认策略</div>
-                      </div>
-                      <button className={primaryPillClass} onClick={onOpenAiSettings}>
-                        打开 AI 设置
-                      </button>
-                    </div>
-                  )}
-                  <div className={`${cardClass} flex items-center justify-between gap-4`}>
-                    <div>
-                      <div className="text-sm font-medium text-slate-900 dark:text-white">插件管理</div>
-                      <div className="text-xs text-slate-500 dark:text-slate-400">管理插件启用状态、更新与卸载</div>
-                    </div>
-                    <button className={primaryPillClass} onClick={() => onOpenPluginManager('installed')}>
-                      打开插件管理
-                    </button>
-                  </div>
-                  {onOpenBackgroundPluginManager && (
-                    <div className={`${cardClass} flex items-center justify-between gap-4`}>
-                      <div>
-                        <div className="text-sm font-medium text-slate-900 dark:text-white">运行中的插件</div>
-                        <div className="text-xs text-slate-500 dark:text-slate-400">查看和管理所有正在运行的插件</div>
-                      </div>
-                      <button className={primaryPillClass} onClick={onOpenBackgroundPluginManager}>
-                        打开任务管理器
-                      </button>
-                    </div>
-                  )}
-                  {onOpenTaskScheduler && (
-                    <div className={`${cardClass} flex items-center justify-between gap-4`}>
-                      <div>
-                        <div className="text-sm font-medium text-slate-900 dark:text-white">任务调度器</div>
-                        <div className="text-xs text-slate-500 dark:text-slate-400">查看和管理所有定时任务</div>
-                      </div>
-                      <button className={primaryPillClass} onClick={onOpenTaskScheduler}>
-                        打开任务调度器
-                      </button>
-                    </div>
-                  )}
-                </div>
+                <GeneralSection
+                  themeMode={themeMode}
+                  onThemeModeChange={async (mode) => {
+                    const info = await window.mulby.theme.set(mode)
+                    setThemeMode(info.mode)
+                  }}
+                  openAtLoginState={openAtLoginState}
+                  startupBusy={startupBusy}
+                  onToggleOpenAtLogin={toggleOpenAtLogin}
+                  onOpenAiSettings={onOpenAiSettings}
+                  onOpenPluginManager={onOpenPluginManager}
+                  onOpenBackgroundPluginManager={onOpenBackgroundPluginManager}
+                  onOpenTaskScheduler={onOpenTaskScheduler}
+                  cardClass={cardClass}
+                  primaryPillClass={primaryPillClass}
+                />
               )}
 
               {section === 'shortcuts' && settings && (
-                <div className="space-y-3">
-                  {SHORTCUTS.map(item => (
-                    <ShortcutInput
-                      key={item.id}
-                      label={item.label}
-                      description={item.description}
-                      value={settings.shortcuts[item.id]}
-                      status={shortcutStatus?.[item.id]}
-                      onChange={(accelerator) => handleShortcutChange(item.id, accelerator)}
-                      onRecordStart={handleRecordStart}
-                      onRecordEnd={handleRecordEnd}
-                    />
-                  ))}
-                </div>
+                <ShortcutsSection
+                  settings={settings}
+                  shortcutStatus={shortcutStatus}
+                  onShortcutChange={handleShortcutChange}
+                  onRecordStart={handleRecordStart}
+                  onRecordEnd={handleRecordEnd}
+                />
               )}
 
               {section === 'commandQuickLaunch' && (
@@ -1074,1091 +702,105 @@ export default function SettingsView({
               )}
 
               {section === 'permissions' && (
-                <div className="space-y-3">
-                  {PERMISSIONS.map(item => (
-                    <div
-                      key={item.id}
-                      className={`${cardClassTight} flex items-center justify-between gap-4`}
-                    >
-                      <div>
-                        <div className="text-sm font-medium text-slate-900 dark:text-white">{item.label}</div>
-                        <div className="text-xs text-slate-500 dark:text-slate-400">
-                          {formatPermissionStatus(permissionStatus[item.id])}
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <button
-                          className={actionButtonClass}
-                          onClick={() => window.mulby.permission.openSystemSettings(item.id)}
-                        >
-                          打开系统设置
-                        </button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
+                <PermissionsSection
+                  permissionStatus={permissionStatus}
+                  cardClassTight={cardClassTight}
+                  actionButtonClass={actionButtonClass}
+                />
               )}
 
               {section === 'security' && settings && (
-                <div className="space-y-5">
-                  <div className={`${cardClass} space-y-4`}>
-                    <div className="text-sm font-medium text-slate-900 dark:text-white">命令执行总开关</div>
-                    <div className="text-xs text-slate-500 dark:text-slate-400">
-                      这部分控制 `shell:runCommand` 的统一安全策略（独立于 Skill capability 授权层）。
-                    </div>
-                    <div className="flex items-center justify-between border-b border-slate-200/80 pb-3 dark:border-slate-800/80">
-                      <div>
-                        <div className="text-sm text-slate-900 dark:text-white">启用 runCommand</div>
-                        <div className="text-xs text-slate-500 dark:text-slate-400">关闭后将拒绝所有命令执行请求</div>
-                      </div>
-                      <button
-                        className={`relative w-11 h-6 rounded-full transition-colors ${settings.commandRunner.enabled
-                          ? 'bg-blue-500'
-                          : 'bg-gray-300 dark:bg-gray-600'
-                          }`}
-                        onClick={() => void updateCommandRunner({ enabled: !settings.commandRunner.enabled })}
-                      >
-                        <span
-                          className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${settings.commandRunner.enabled ? 'translate-x-5' : ''}`}
-                        />
-                      </button>
-                    </div>
-                    <div className="flex items-center justify-between border-b border-slate-200/80 pb-3 dark:border-slate-800/80">
-                      <div>
-                        <div className="text-sm text-slate-900 dark:text-white">首次启用确认</div>
-                        <div className="text-xs text-slate-500 dark:text-slate-400">同一命令指纹首次执行时弹窗确认</div>
-                      </div>
-                      <button
-                        className={`relative w-11 h-6 rounded-full transition-colors ${settings.commandRunner.requireConsent
-                          ? 'bg-blue-500'
-                          : 'bg-gray-300 dark:bg-gray-600'
-                          }`}
-                        onClick={() => void updateCommandRunner({ requireConsent: !settings.commandRunner.requireConsent })}
-                      >
-                        <span
-                          className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${settings.commandRunner.requireConsent ? 'translate-x-5' : ''}`}
-                        />
-                      </button>
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <div className="text-sm text-slate-900 dark:text-white">允许 shell=true</div>
-                        <div className="text-xs text-slate-500 dark:text-slate-400">启用后可执行 shell 解析命令，风险更高</div>
-                      </div>
-                      <button
-                        className={`relative w-11 h-6 rounded-full transition-colors ${settings.commandRunner.allowShell
-                          ? 'bg-amber-500'
-                          : 'bg-gray-300 dark:bg-gray-600'
-                          }`}
-                        onClick={() => void updateCommandRunner({ allowShell: !settings.commandRunner.allowShell })}
-                      >
-                        <span
-                          className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${settings.commandRunner.allowShell ? 'translate-x-5' : ''}`}
-                        />
-                      </button>
-                    </div>
-                  </div>
-
-                  <div className={`${cardClass} space-y-4`}>
-                    <div className="text-sm font-medium text-slate-900 dark:text-white">执行限制</div>
-                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                      <label className="space-y-1">
-                        <div className="text-xs text-slate-500 dark:text-slate-400">默认超时（ms）</div>
-                        <input
-                          type="number"
-                          min={1000}
-                          className="w-full rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-200"
-                          value={settings.commandRunner.defaultTimeoutMs}
-                          onChange={(e) => void updateCommandRunner({ defaultTimeoutMs: Number(e.target.value || 0) })}
-                        />
-                      </label>
-                      <label className="space-y-1">
-                        <div className="text-xs text-slate-500 dark:text-slate-400">最大超时（ms）</div>
-                        <input
-                          type="number"
-                          min={1000}
-                          className="w-full rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-200"
-                          value={settings.commandRunner.maxTimeoutMs}
-                          onChange={(e) => void updateCommandRunner({ maxTimeoutMs: Number(e.target.value || 0) })}
-                        />
-                      </label>
-                      <label className="space-y-1">
-                        <div className="text-xs text-slate-500 dark:text-slate-400">最大输出（bytes）</div>
-                        <input
-                          type="number"
-                          min={8192}
-                          className="w-full rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-200"
-                          value={settings.commandRunner.maxOutputBytes}
-                          onChange={(e) => void updateCommandRunner({ maxOutputBytes: Number(e.target.value || 0) })}
-                        />
-                      </label>
-                      <label className="space-y-1">
-                        <div className="text-xs text-slate-500 dark:text-slate-400">最大并发</div>
-                        <input
-                          type="number"
-                          min={1}
-                          className="w-full rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-200"
-                          value={settings.commandRunner.maxConcurrent}
-                          onChange={(e) => void updateCommandRunner({ maxConcurrent: Number(e.target.value || 0) })}
-                        />
-                      </label>
-                      <label className="space-y-1 sm:col-span-2">
-                        <div className="text-xs text-slate-500 dark:text-slate-400">审计保留条数</div>
-                        <input
-                          type="number"
-                          min={50}
-                          className="w-full rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-200"
-                          value={settings.commandRunner.audit.maxItems}
-                          onChange={(e) => void updateCommandRunner({
-                            audit: {
-                              ...settings.commandRunner.audit,
-                              maxItems: Number(e.target.value || 0)
-                            }
-                          })}
-                        />
-                      </label>
-                    </div>
-                  </div>
-
-                  <div className={`${cardClass} space-y-4`}>
-                    <div className="text-sm font-medium text-slate-900 dark:text-white">AI 内置工具总开关</div>
-                    <div className="flex items-center justify-between border-b border-slate-200/80 pb-3 dark:border-slate-800/80">
-                      <div>
-                        <div className="text-sm text-slate-900 dark:text-white">启用 aiTooling</div>
-                        <div className="text-xs text-slate-500 dark:text-slate-400">关闭后将拒绝所有内置工具（read/list/search/patch/http/script/git）</div>
-                      </div>
-                      <button
-                        className={`relative w-11 h-6 rounded-full transition-colors ${settings.aiTooling.enabled
-                          ? 'bg-blue-500'
-                          : 'bg-gray-300 dark:bg-gray-600'
-                          }`}
-                        onClick={() => void updateAiTooling({ enabled: !settings.aiTooling.enabled })}
-                      >
-                        <span
-                          className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${settings.aiTooling.enabled ? 'translate-x-5' : ''}`}
-                        />
-                      </button>
-                    </div>
-                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                      <label className="space-y-1">
-                        <div className="text-xs text-slate-500 dark:text-slate-400">filesystem 最大读取（bytes）</div>
-                        <input
-                          type="number"
-                          min={1024}
-                          className="w-full rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-200"
-                          value={settings.aiTooling.filesystem.maxReadBytes}
-                          onChange={(e) => void updateAiFilesystem({ maxReadBytes: Number(e.target.value || 0) })}
-                        />
-                      </label>
-                      <label className="space-y-1">
-                        <div className="text-xs text-slate-500 dark:text-slate-400">filesystem 搜索命中上限</div>
-                        <input
-                          type="number"
-                          min={10}
-                          className="w-full rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-200"
-                          value={settings.aiTooling.filesystem.maxSearchHits}
-                          onChange={(e) => void updateAiFilesystem({ maxSearchHits: Number(e.target.value || 0) })}
-                        />
-                      </label>
-                    </div>
-                  </div>
-
-                  <div className={`${cardClass} space-y-4`}>
-                    <div className="space-y-1">
-                      <div className="text-sm font-medium text-slate-900 dark:text-white">能力授权策略（Capability Policy）</div>
-                      <div className="text-xs text-slate-500 dark:text-slate-400">
-                        工具能力属于 AI 全局底层能力，优先级：会话策略 &gt; grant &gt; 默认能力。
-                      </div>
-                    </div>
-
-                    <div className="rounded-2xl border border-slate-200/80 bg-white/70 p-3 dark:border-slate-800 dark:bg-slate-950/70">
-                      <div className="mb-2 flex items-center justify-between gap-2">
-                        <div className="text-xs font-medium text-slate-700 dark:text-slate-200">defaultAppCapabilities（AI 全局默认能力）</div>
-                        <button
-                          className={actionButtonClass}
-                          disabled={isDefaultAppCapabilitiesAtDefault}
-                          onClick={() => void restoreDefaultAppCapabilities()}
-                        >
-                          恢复默认能力
-                        </button>
-                      </div>
-                      <div className="mb-2 flex flex-wrap gap-2">
-                        {(settings.aiTooling.capabilityPolicy.defaultAppCapabilities || []).map((item) => (
-                          <button
-                            key={`default-app-cap-${item}`}
-                            className={pillClass}
-                            onClick={() => void removeCapabilityFromPolicyList('defaultAppCapabilities', item)}
-                            title="点击删除"
-                          >
-                            {formatCapabilityLabel(item)}
-                          </button>
-                        ))}
-                      </div>
-                      <div className="grid grid-cols-1 gap-2 sm:grid-cols-[minmax(0,1fr)_100px]">
-                        <input
-                          className="rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm dark:border-slate-800 dark:bg-slate-950"
-                          placeholder="输入 capability，支持逗号或换行批量"
-                          value={appCapabilityDraft}
-                          onChange={(e) => setAppCapabilityDraft(e.target.value)}
-                        />
-                        <button
-                          className={actionButtonClass}
-                          onClick={() => void addCapabilityToPolicyList('defaultAppCapabilities', appCapabilityDraft, () => setAppCapabilityDraft(''))}
-                        >
-                          新增
-                        </button>
-                      </div>
-                    </div>
-
-                    <div className="space-y-3 rounded-2xl border border-slate-200/80 bg-white/70 p-3 dark:border-slate-800 dark:bg-slate-950/70">
-                      <div className="text-xs font-medium text-slate-700 dark:text-slate-200">
-                        globalGrants（全局能力放权规则）
-                      </div>
-                      <div className="text-xs text-slate-500 dark:text-slate-400">
-                        仅管理 AI 全局能力规则。
-                      </div>
-
-                      <div className="space-y-2">
-                        {(visibleCapabilityGrants || []).map((grant) => (
-                          <div
-                            key={grant.id}
-                            className="grid grid-cols-1 gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs dark:border-slate-800 dark:bg-slate-950 sm:grid-cols-[minmax(0,1fr)_120px_160px_70px]"
-                          >
-                            <div className="truncate text-slate-700 dark:text-slate-200">
-                              {formatCapabilityLabel(grant.capability)}
-                            </div>
-                            <UnifiedSelect
-                              className="rounded-xl px-2 py-1 pr-8 text-xs"
-                              value={grant.decision}
-                              onChange={(e) => void patchCapabilityGrant(grant.id, { decision: e.target.value as 'allow' | 'deny' })}
-                            >
-                              <option value="allow">allow（允许）</option>
-                              <option value="deny">deny（拒绝）</option>
-                            </UnifiedSelect>
-                            <input
-                              type="datetime-local"
-                              className="rounded-xl border border-slate-200 bg-white px-2 py-1 text-xs dark:border-slate-800 dark:bg-slate-950"
-                              value={toDateTimeLocalValue(grant.expiresAt)}
-                              onChange={(e) => {
-                                const text = e.target.value
-                                const parsed = text ? Date.parse(text) : undefined
-                                void patchCapabilityGrant(grant.id, { expiresAt: Number.isFinite(parsed || NaN) ? parsed : undefined })
-                              }}
-                            />
-                            <button className={actionButtonClass} onClick={() => void removeCapabilityGrant(grant.id)}>删除</button>
-                          </div>
-                        ))}
-                        {(visibleCapabilityGrants || []).length === 0 && (
-                          <div className="text-xs text-slate-500 dark:text-slate-400">暂无 global grant 规则。</div>
-                        )}
-                      </div>
-
-                      <div className="space-y-2 rounded-xl border border-dashed border-slate-300 p-3 dark:border-slate-700">
-                        <div className="text-xs font-medium text-slate-700 dark:text-slate-200">新增 global grant</div>
-                        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                          <UnifiedSelect
-                            className="rounded-xl px-2 py-1 pr-8 text-xs"
-                            value={grantDraft.capability}
-                            onChange={(e) => setGrantDraft((prev) => ({ ...prev, capability: e.target.value }))}
-                          >
-                            {TOOL_CAPABILITY_OPTIONS.map((item) => (
-                              <option key={`cap-option-${item.value}`} value={item.value}>{item.label}</option>
-                            ))}
-                          </UnifiedSelect>
-                          <UnifiedSelect
-                            className="rounded-xl px-2 py-1 pr-8 text-xs"
-                            value={grantDraft.decision}
-                            onChange={(e) => setGrantDraft((prev) => ({ ...prev, decision: e.target.value as 'allow' | 'deny' }))}
-                          >
-                            <option value="allow">allow（允许）</option>
-                            <option value="deny">deny（拒绝）</option>
-                          </UnifiedSelect>
-                          <input
-                            type="datetime-local"
-                            className="rounded-xl border border-slate-200 bg-white px-2 py-1 text-xs dark:border-slate-800 dark:bg-slate-950 sm:col-span-2"
-                            placeholder="过期时间（可选）"
-                            value={grantDraft.expiresAt}
-                            onChange={(e) => setGrantDraft((prev) => ({ ...prev, expiresAt: e.target.value }))}
-                          />
-                        </div>
-                        <div className="flex justify-end">
-                          <button className={actionButtonClass} onClick={() => void addCapabilityGrant()}>新增 grant</button>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className={`${cardClass} space-y-4`}>
-                    <div className="text-sm font-medium text-slate-900 dark:text-white">路径白名单（allowedRoots / allowedRepoRoots）</div>
-                    <div className="space-y-4">
-                      <div className="space-y-2">
-                        <div className="text-xs text-slate-500 dark:text-slate-400">filesystem.allowedRoots（文件读取/检索范围）</div>
-                        <div className="space-y-2">
-                          {(settings.aiTooling.filesystem.allowedRoots || []).map((item) => (
-                            <div key={`fs-${item}`} className="flex items-center justify-between gap-2 rounded-xl border border-slate-200/80 bg-white/70 px-3 py-2 text-xs dark:border-slate-800 dark:bg-slate-950/70">
-                              <div className="truncate">{item}</div>
-                              <button className={actionButtonClass} onClick={() => void removeFilesystemRoot(item)}>删除</button>
-                            </div>
-                          ))}
-                        </div>
-                        <div className="grid grid-cols-1 gap-2 sm:grid-cols-[minmax(0,1fr)_100px]">
-                          <input
-                            className="rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm dark:border-slate-800 dark:bg-slate-950"
-                            placeholder="新增路径，支持逗号或换行批量"
-                            value={filesystemRootDraft}
-                            onChange={(e) => setFilesystemRootDraft(e.target.value)}
-                          />
-                          <button className={actionButtonClass} onClick={() => void addFilesystemRoot()}>新增</button>
-                        </div>
-                      </div>
-
-                      <div className="space-y-2">
-                        <div className="text-xs text-slate-500 dark:text-slate-400">patch.allowedRoots（补丁应用范围）</div>
-                        <div className="space-y-2">
-                          {(settings.aiTooling.patch.allowedRoots || []).map((item) => (
-                            <div key={`patch-${item}`} className="flex items-center justify-between gap-2 rounded-xl border border-slate-200/80 bg-white/70 px-3 py-2 text-xs dark:border-slate-800 dark:bg-slate-950/70">
-                              <div className="truncate">{item}</div>
-                              <button className={actionButtonClass} onClick={() => void removePatchRoot(item)}>删除</button>
-                            </div>
-                          ))}
-                        </div>
-                        <div className="grid grid-cols-1 gap-2 sm:grid-cols-[minmax(0,1fr)_100px]">
-                          <input
-                            className="rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm dark:border-slate-800 dark:bg-slate-950"
-                            placeholder="新增路径，支持逗号或换行批量"
-                            value={patchRootDraft}
-                            onChange={(e) => setPatchRootDraft(e.target.value)}
-                          />
-                          <button className={actionButtonClass} onClick={() => void addPatchRoot()}>新增</button>
-                        </div>
-                      </div>
-
-                      <div className="space-y-2">
-                        <div className="text-xs text-slate-500 dark:text-slate-400">git.allowedRepoRoots（Git 仓库范围）</div>
-                        <div className="space-y-2">
-                          {(settings.aiTooling.git.allowedRepoRoots || []).map((item) => (
-                            <div key={`git-${item}`} className="flex items-center justify-between gap-2 rounded-xl border border-slate-200/80 bg-white/70 px-3 py-2 text-xs dark:border-slate-800 dark:bg-slate-950/70">
-                              <div className="truncate">{item}</div>
-                              <button className={actionButtonClass} onClick={() => void removeGitRoot(item)}>删除</button>
-                            </div>
-                          ))}
-                        </div>
-                        <div className="grid grid-cols-1 gap-2 sm:grid-cols-[minmax(0,1fr)_100px]">
-                          <input
-                            className="rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm dark:border-slate-800 dark:bg-slate-950"
-                            placeholder="新增路径，支持逗号或换行批量"
-                            value={gitRootDraft}
-                            onChange={(e) => setGitRootDraft(e.target.value)}
-                          />
-                          <button className={actionButtonClass} onClick={() => void addGitRoot()}>新增</button>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className={`${cardClass} space-y-4`}>
-                    <div className="text-sm font-medium text-slate-900 dark:text-white">HTTP 黑名单与限制</div>
-                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                      <label className="space-y-1">
-                        <div className="text-xs text-slate-500 dark:text-slate-400">超时（ms）</div>
-                        <input
-                          type="number"
-                          min={1000}
-                          className="w-full rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-200"
-                          value={settings.aiTooling.http.timeoutMs}
-                          onChange={(e) => void updateAiHttp({ timeoutMs: Number(e.target.value || 0) })}
-                        />
-                      </label>
-                      <label className="space-y-1">
-                        <div className="text-xs text-slate-500 dark:text-slate-400">响应体上限（bytes）</div>
-                        <input
-                          type="number"
-                          min={1024}
-                          className="w-full rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-200"
-                          value={settings.aiTooling.http.maxResponseBytes}
-                          onChange={(e) => void updateAiHttp({ maxResponseBytes: Number(e.target.value || 0) })}
-                        />
-                      </label>
-                    </div>
-
-                    <div className="space-y-2">
-                      <div className="text-xs text-slate-500 dark:text-slate-400">denyHosts（拒绝访问的域名）</div>
-                      {(settings.aiTooling.http.denyHosts || []).map((item) => (
-                        <div key={`deny-host-${item}`} className="flex items-center justify-between gap-2 rounded-xl border border-slate-200/80 bg-white/70 px-3 py-2 text-xs dark:border-slate-800 dark:bg-slate-950/70">
-                          <div className="truncate">{item}</div>
-                          <button className={actionButtonClass} onClick={() => void removeHttpDenyHost(item)}>删除</button>
-                        </div>
-                      ))}
-                      <div className="grid grid-cols-1 gap-2 sm:grid-cols-[minmax(0,1fr)_100px]">
-                        <input
-                          className="rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm dark:border-slate-800 dark:bg-slate-950"
-                          placeholder="例如 localhost, example.com"
-                          value={denyHostDraft}
-                          onChange={(e) => setDenyHostDraft(e.target.value)}
-                        />
-                        <button className={actionButtonClass} onClick={() => void addHttpDenyHost()}>新增</button>
-                      </div>
-                    </div>
-
-                    <div className="space-y-2">
-                      <div className="text-xs text-slate-500 dark:text-slate-400">denyCidrs（拒绝访问的网段）</div>
-                      {(settings.aiTooling.http.denyCidrs || []).map((item) => (
-                        <div key={`deny-cidr-${item}`} className="flex items-center justify-between gap-2 rounded-xl border border-slate-200/80 bg-white/70 px-3 py-2 text-xs dark:border-slate-800 dark:bg-slate-950/70">
-                          <div className="truncate">{item}</div>
-                          <button className={actionButtonClass} onClick={() => void removeHttpDenyCidr(item)}>删除</button>
-                        </div>
-                      ))}
-                      <div className="grid grid-cols-1 gap-2 sm:grid-cols-[minmax(0,1fr)_100px]">
-                        <input
-                          className="rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm dark:border-slate-800 dark:bg-slate-950"
-                          placeholder="例如 127.0.0.0/8"
-                          value={denyCidrDraft}
-                          onChange={(e) => setDenyCidrDraft(e.target.value)}
-                        />
-                        <button className={actionButtonClass} onClick={() => void addHttpDenyCidr()}>新增</button>
-                      </div>
-                    </div>
-
-                    <div className="space-y-2">
-                      <div className="text-xs text-slate-500 dark:text-slate-400">denyUrlPrefixes（拒绝访问的 URL 前缀）</div>
-                      {(settings.aiTooling.http.denyUrlPrefixes || []).map((item) => (
-                        <div key={`deny-prefix-${item}`} className="flex items-center justify-between gap-2 rounded-xl border border-slate-200/80 bg-white/70 px-3 py-2 text-xs dark:border-slate-800 dark:bg-slate-950/70">
-                          <div className="truncate">{item}</div>
-                          <button className={actionButtonClass} onClick={() => void removeHttpDenyPrefix(item)}>删除</button>
-                        </div>
-                      ))}
-                      <div className="grid grid-cols-1 gap-2 sm:grid-cols-[minmax(0,1fr)_100px]">
-                        <input
-                          className="rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm dark:border-slate-800 dark:bg-slate-950"
-                          placeholder="例如 https://internal.example.com/"
-                          value={denyPrefixDraft}
-                          onChange={(e) => setDenyPrefixDraft(e.target.value)}
-                        />
-                        <button className={actionButtonClass} onClick={() => void addHttpDenyPrefix()}>新增</button>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className={`${cardClass} space-y-4`}>
-                    <div className="space-y-1">
-                      <div className="text-sm font-medium text-slate-900 dark:text-white">runScript 注册表（预置脚本白名单）</div>
-                      <div className="text-xs text-slate-500 dark:text-slate-400">
-                        仅对 `shell.script` 能力生效；不影响 `shell.exec` 的直接命令执行。
-                      </div>
-                    </div>
-                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                      <label className="space-y-1">
-                        <div className="text-xs text-slate-500 dark:text-slate-400">默认超时（ms）</div>
-                        <input
-                          type="number"
-                          min={1000}
-                          className="w-full rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-200"
-                          value={settings.aiTooling.runScript.defaultTimeoutMs}
-                          onChange={(e) => void updateAiRunScript({ defaultTimeoutMs: Number(e.target.value || 0) })}
-                        />
-                      </label>
-                      <label className="space-y-1">
-                        <div className="text-xs text-slate-500 dark:text-slate-400">最大超时（ms）</div>
-                        <input
-                          type="number"
-                          min={5000}
-                          className="w-full rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-200"
-                          value={settings.aiTooling.runScript.maxTimeoutMs}
-                          onChange={(e) => void updateAiRunScript({ maxTimeoutMs: Number(e.target.value || 0) })}
-                        />
-                      </label>
-                    </div>
-
-                    <div className="space-y-3">
-                      {(settings.aiTooling.runScript.entries || []).map((entry, index) => (
-                        <div key={`script-${entry.id}-${index}`} className="space-y-2 rounded-2xl border border-slate-200/80 bg-white/70 p-3 dark:border-slate-800 dark:bg-slate-950/70">
-                          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                            <input
-                              className="rounded-xl border border-slate-200 bg-white px-2 py-1 text-xs dark:border-slate-800 dark:bg-slate-950"
-                              placeholder="脚本 ID（scriptId）"
-                              value={entry.id}
-                              onChange={(e) => void updateRunScriptEntry(index, { id: e.target.value })}
-                            />
-                            <input
-                              className="rounded-xl border border-slate-200 bg-white px-2 py-1 text-xs dark:border-slate-800 dark:bg-slate-950"
-                              placeholder="命令（command）"
-                              value={entry.command}
-                              onChange={(e) => void updateRunScriptEntry(index, { command: e.target.value })}
-                            />
-                            <input
-                              className="rounded-xl border border-slate-200 bg-white px-2 py-1 text-xs dark:border-slate-800 dark:bg-slate-950"
-                              placeholder="参数 args（逗号分隔）"
-                              value={(entry.args || []).join(', ')}
-                              onChange={(e) => void updateRunScriptEntry(index, { args: parseListDraft(e.target.value) })}
-                            />
-                            <input
-                              className="rounded-xl border border-slate-200 bg-white px-2 py-1 text-xs dark:border-slate-800 dark:bg-slate-950"
-                              placeholder="工作目录 cwd（可选）"
-                              value={entry.cwd || ''}
-                              onChange={(e) => void updateRunScriptEntry(index, { cwd: e.target.value || undefined })}
-                            />
-                            <input
-                              type="number"
-                              min={1000}
-                              className="rounded-xl border border-slate-200 bg-white px-2 py-1 text-xs dark:border-slate-800 dark:bg-slate-950"
-                              placeholder="超时 timeoutMs（可选）"
-                              value={entry.timeoutMs || ''}
-                              onChange={(e) => {
-                                const num = Number(e.target.value || 0)
-                                void updateRunScriptEntry(index, { timeoutMs: Number.isFinite(num) && num > 0 ? num : undefined })
-                              }}
-                            />
-                            <input
-                              className="rounded-xl border border-slate-200 bg-white px-2 py-1 text-xs dark:border-slate-800 dark:bg-slate-950"
-                              placeholder="允许环境变量 allowEnvKeys（逗号分隔）"
-                              value={(entry.allowEnvKeys || []).join(', ')}
-                              onChange={(e) => void updateRunScriptEntry(index, { allowEnvKeys: parseListDraft(e.target.value) })}
-                            />
-                          </div>
-                          <div className="flex justify-end">
-                            <button className={actionButtonClass} onClick={() => void removeRunScriptEntry(index)}>删除</button>
-                          </div>
-                        </div>
-                      ))}
-                      {(settings.aiTooling.runScript.entries || []).length === 0 && (
-                        <div className="text-xs text-slate-500 dark:text-slate-400">暂无脚本条目。</div>
-                      )}
-                    </div>
-
-                    <div className="space-y-2 rounded-2xl border border-dashed border-slate-300 p-3 dark:border-slate-700">
-                      <div className="text-xs text-slate-500 dark:text-slate-400">新增条目</div>
-                      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                        <input
-                          className="rounded-xl border border-slate-200 bg-white px-2 py-1 text-xs dark:border-slate-800 dark:bg-slate-950"
-                          placeholder="脚本 ID（scriptId）"
-                          value={runScriptDraft.id}
-                          onChange={(e) => setRunScriptDraft((prev) => ({ ...prev, id: e.target.value }))}
-                        />
-                        <input
-                          className="rounded-xl border border-slate-200 bg-white px-2 py-1 text-xs dark:border-slate-800 dark:bg-slate-950"
-                          placeholder="命令（command）"
-                          value={runScriptDraft.command}
-                          onChange={(e) => setRunScriptDraft((prev) => ({ ...prev, command: e.target.value }))}
-                        />
-                        <input
-                          className="rounded-xl border border-slate-200 bg-white px-2 py-1 text-xs dark:border-slate-800 dark:bg-slate-950"
-                          placeholder="参数 args（逗号分隔）"
-                          value={runScriptDraft.args}
-                          onChange={(e) => setRunScriptDraft((prev) => ({ ...prev, args: e.target.value }))}
-                        />
-                        <input
-                          className="rounded-xl border border-slate-200 bg-white px-2 py-1 text-xs dark:border-slate-800 dark:bg-slate-950"
-                          placeholder="工作目录 cwd（可选）"
-                          value={runScriptDraft.cwd}
-                          onChange={(e) => setRunScriptDraft((prev) => ({ ...prev, cwd: e.target.value }))}
-                        />
-                        <input
-                          type="number"
-                          min={1000}
-                          className="rounded-xl border border-slate-200 bg-white px-2 py-1 text-xs dark:border-slate-800 dark:bg-slate-950"
-                          placeholder="超时 timeoutMs（可选）"
-                          value={runScriptDraft.timeoutMs}
-                          onChange={(e) => setRunScriptDraft((prev) => ({ ...prev, timeoutMs: e.target.value }))}
-                        />
-                        <input
-                          className="rounded-xl border border-slate-200 bg-white px-2 py-1 text-xs dark:border-slate-800 dark:bg-slate-950"
-                          placeholder="允许环境变量 allowEnvKeys（逗号分隔）"
-                          value={runScriptDraft.allowEnvKeys}
-                          onChange={(e) => setRunScriptDraft((prev) => ({ ...prev, allowEnvKeys: e.target.value }))}
-                        />
-                      </div>
-                      <div className="flex justify-end">
-                        <button className={actionButtonClass} onClick={() => void addRunScriptEntry()}>新增 runScript 条目</button>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className={`${cardClass} space-y-4`}>
-                    <div className="flex items-center justify-between">
-                      <div className="text-sm font-medium text-slate-900 dark:text-white">白名单规则（allowList）</div>
-                      <span className="text-xs text-slate-500 dark:text-slate-400">{settings.commandRunner.allowList.length}</span>
-                    </div>
-                    <div className="space-y-2">
-                      {settings.commandRunner.allowList.map((rule) => (
-                        <div key={rule.id} className="grid grid-cols-1 gap-2 rounded-2xl border border-slate-200/80 bg-white/70 p-3 dark:border-slate-800 dark:bg-slate-950/70 sm:grid-cols-[110px_minmax(0,1fr)_80px_70px]">
-                          <UnifiedSelect
-                            className="rounded-xl px-2 py-1 pr-8 text-xs"
-                            value={rule.mode}
-                            onChange={(e) => void patchCommandRule('allowList', rule.id, { mode: e.target.value as 'exact' | 'prefix' })}
-                          >
-                            <option value="exact">exact（精确匹配）</option>
-                            <option value="prefix">prefix（前缀匹配）</option>
-                          </UnifiedSelect>
-                          <input
-                            className="rounded-xl border border-slate-200 bg-white px-2 py-1 text-xs dark:border-slate-800 dark:bg-slate-950"
-                            value={rule.value}
-                            onChange={(e) => void patchCommandRule('allowList', rule.id, { value: e.target.value })}
-                          />
-                          <button
-                            className={rule.enabled === false ? pillClass : primaryPillClass}
-                            onClick={() => void patchCommandRule('allowList', rule.id, { enabled: rule.enabled === false })}
-                          >
-                            {rule.enabled === false ? '启用' : '停用'}
-                          </button>
-                          <button className={actionButtonClass} onClick={() => void removeCommandRule('allowList', rule.id)}>删除</button>
-                        </div>
-                      ))}
-                      {settings.commandRunner.allowList.length === 0 && (
-                        <div className="text-xs text-slate-500 dark:text-slate-400">为空时表示不启用白名单强约束。</div>
-                      )}
-                    </div>
-                    <div className="grid grid-cols-1 gap-2 sm:grid-cols-[110px_minmax(0,1fr)_100px]">
-                      <UnifiedSelect
-                        className="rounded-2xl px-3 py-2 pr-9 text-sm"
-                        value={allowRuleDraft.mode}
-                        onChange={(e) => setAllowRuleDraft((prev) => ({ ...prev, mode: e.target.value as 'exact' | 'prefix' }))}
-                      >
-                        <option value="exact">exact（精确匹配）</option>
-                        <option value="prefix">prefix（前缀匹配）</option>
-                      </UnifiedSelect>
-                      <input
-                        className="rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm dark:border-slate-800 dark:bg-slate-950"
-                        placeholder="命令或命令前缀（可包含参数）"
-                        value={allowRuleDraft.value}
-                        onChange={(e) => setAllowRuleDraft((prev) => ({ ...prev, value: e.target.value }))}
-                      />
-                      <button className={actionButtonClass} onClick={() => void addCommandRule('allowList')}>新增</button>
-                    </div>
-                  </div>
-
-                  <div className={`${cardClass} space-y-4`}>
-                    <div className="flex items-center justify-between">
-                      <div className="text-sm font-medium text-slate-900 dark:text-white">黑名单规则（denyList）</div>
-                      <span className="text-xs text-slate-500 dark:text-slate-400">{settings.commandRunner.denyList.length}</span>
-                    </div>
-                    <div className="space-y-2">
-                      {settings.commandRunner.denyList.map((rule) => (
-                        <div key={rule.id} className="grid grid-cols-1 gap-2 rounded-2xl border border-slate-200/80 bg-white/70 p-3 dark:border-slate-800 dark:bg-slate-950/70 sm:grid-cols-[110px_minmax(0,1fr)_80px_70px]">
-                          <UnifiedSelect
-                            className="rounded-xl px-2 py-1 pr-8 text-xs"
-                            value={rule.mode}
-                            onChange={(e) => void patchCommandRule('denyList', rule.id, { mode: e.target.value as 'exact' | 'prefix' })}
-                          >
-                            <option value="exact">exact（精确匹配）</option>
-                            <option value="prefix">prefix（前缀匹配）</option>
-                          </UnifiedSelect>
-                          <input
-                            className="rounded-xl border border-slate-200 bg-white px-2 py-1 text-xs dark:border-slate-800 dark:bg-slate-950"
-                            value={rule.value}
-                            onChange={(e) => void patchCommandRule('denyList', rule.id, { value: e.target.value })}
-                          />
-                          <button
-                            className={rule.enabled === false ? pillClass : primaryPillClass}
-                            onClick={() => void patchCommandRule('denyList', rule.id, { enabled: rule.enabled === false })}
-                          >
-                            {rule.enabled === false ? '启用' : '停用'}
-                          </button>
-                          <button className={actionButtonClass} onClick={() => void removeCommandRule('denyList', rule.id)}>删除</button>
-                        </div>
-                      ))}
-                    </div>
-                    <div className="grid grid-cols-1 gap-2 sm:grid-cols-[110px_minmax(0,1fr)_100px]">
-                      <UnifiedSelect
-                        className="rounded-2xl px-3 py-2 pr-9 text-sm"
-                        value={denyRuleDraft.mode}
-                        onChange={(e) => setDenyRuleDraft((prev) => ({ ...prev, mode: e.target.value as 'exact' | 'prefix' }))}
-                      >
-                        <option value="exact">exact（精确匹配）</option>
-                        <option value="prefix">prefix（前缀匹配）</option>
-                      </UnifiedSelect>
-                      <input
-                        className="rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm dark:border-slate-800 dark:bg-slate-950"
-                        placeholder="命令或命令前缀（可包含参数）"
-                        value={denyRuleDraft.value}
-                        onChange={(e) => setDenyRuleDraft((prev) => ({ ...prev, value: e.target.value }))}
-                      />
-                      <button className={actionButtonClass} onClick={() => void addCommandRule('denyList')}>新增</button>
-                    </div>
-                  </div>
-
-                  <div className={`${cardClass} space-y-4`}>
-                    <div className="flex items-center justify-between">
-                      <div className="text-sm font-medium text-slate-900 dark:text-white">信任与审计</div>
-                      <div className="flex items-center gap-2">
-                        <button
-                          className={actionButtonClass}
-                          onClick={async () => {
-                            if (!window.mulby?.shell?.clearRunCommandTrusted) return
-                            await window.mulby.shell.clearRunCommandTrusted()
-                            await reloadSettings()
-                          }}
-                        >
-                          清空已信任命令
-                        </button>
-                        <button
-                          className={actionButtonClass}
-                          onClick={async () => {
-                            if (!window.mulby?.shell?.clearRunCommandAudit) return
-                            await window.mulby.shell.clearRunCommandAudit()
-                            await reloadSettings()
-                            setCommandAudit([])
-                          }}
-                        >
-                          清空审计
-                        </button>
-                        <button
-                          className={actionButtonClass}
-                          onClick={async () => {
-                            if (!window.mulby?.shell?.listRunCommandAudit) return
-                            const records = await window.mulby.shell.listRunCommandAudit(100)
-                            setCommandAudit(records)
-                          }}
-                        >
-                          刷新
-                        </button>
-                      </div>
-                    </div>
-                    <div className="text-xs text-slate-500 dark:text-slate-400">
-                      已信任命令指纹：{settings.commandRunner.trustedFingerprints.length} 条
-                    </div>
-                    <div className="max-h-72 space-y-2 overflow-auto">
-                      {(commandAudit.length > 0 ? commandAudit : [...settings.commandRunner.audit.records].reverse()).slice(0, 100).map((item) => (
-                        <div key={item.id} className="rounded-2xl border border-slate-200/80 bg-white/70 px-3 py-2 text-xs dark:border-slate-800 dark:bg-slate-950/70">
-                          <div className="flex items-center justify-between gap-2">
-                            <span className="font-medium text-slate-800 dark:text-slate-100">{item.command}</span>
-                            <span className={`rounded-full px-2 py-0.5 ${item.status === 'allowed'
-                              ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300'
-                              : item.status === 'blocked'
-                                ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300'
-                                : item.status === 'timeout'
-                                  ? 'bg-orange-100 text-orange-700 dark:bg-orange-900/40 dark:text-orange-300'
-                                  : 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300'
-                              }`}>
-                              {formatCommandAuditStatus(item.status)}
-                            </span>
-                          </div>
-                          <div className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">
-                            {item.source === 'plugin' ? `插件: ${item.pluginId || 'unknown'}` : '来源: 应用'}
-                            {' | 退出码: '}
-                            {item.exitCode ?? 'null'}
-                            {' | 耗时: '}
-                            {item.durationMs || 0}
-                            ms
-                          </div>
-                          {item.reason && (
-                            <div className="mt-1 text-[11px] text-red-500 dark:text-red-300">{item.reason}</div>
-                          )}
-                        </div>
-                      ))}
-                      {(commandAudit.length === 0 && settings.commandRunner.audit.records.length === 0) && (
-                        <div className="text-xs text-slate-500 dark:text-slate-400">暂无审计记录</div>
-                      )}
-                    </div>
-                  </div>
-                </div>
+                <SecuritySection
+                  settings={settings}
+                  commandAudit={commandAudit}
+                  setCommandAudit={setCommandAudit}
+                  allowRuleDraft={allowRuleDraft}
+                  setAllowRuleDraft={setAllowRuleDraft}
+                  denyRuleDraft={denyRuleDraft}
+                  setDenyRuleDraft={setDenyRuleDraft}
+                  filesystemRootDraft={filesystemRootDraft}
+                  setFilesystemRootDraft={setFilesystemRootDraft}
+                  patchRootDraft={patchRootDraft}
+                  setPatchRootDraft={setPatchRootDraft}
+                  gitRootDraft={gitRootDraft}
+                  setGitRootDraft={setGitRootDraft}
+                  denyHostDraft={denyHostDraft}
+                  setDenyHostDraft={setDenyHostDraft}
+                  denyCidrDraft={denyCidrDraft}
+                  setDenyCidrDraft={setDenyCidrDraft}
+                  denyPrefixDraft={denyPrefixDraft}
+                  setDenyPrefixDraft={setDenyPrefixDraft}
+                  appCapabilityDraft={appCapabilityDraft}
+                  setAppCapabilityDraft={setAppCapabilityDraft}
+                  grantDraft={grantDraft}
+                  setGrantDraft={setGrantDraft}
+                  runScriptDraft={runScriptDraft}
+                  setRunScriptDraft={setRunScriptDraft}
+                  visibleCapabilityGrants={visibleCapabilityGrants}
+                  isDefaultAppCapabilitiesAtDefault={isDefaultAppCapabilitiesAtDefault}
+                  reloadSettings={reloadSettings}
+                  updateCommandRunner={updateCommandRunner}
+                  updateAiTooling={updateAiTooling}
+                  updateAiFilesystem={updateAiFilesystem}
+                  updateAiHttp={updateAiHttp}
+                  updateAiRunScript={updateAiRunScript}
+                  restoreDefaultAppCapabilities={restoreDefaultAppCapabilities}
+                  removeCapabilityFromPolicyList={removeCapabilityFromPolicyList}
+                  addCapabilityToPolicyList={addCapabilityToPolicyList}
+                  addCapabilityGrant={addCapabilityGrant}
+                  removeCapabilityGrant={removeCapabilityGrant}
+                  patchCapabilityGrant={patchCapabilityGrant}
+                  addFilesystemRoot={addFilesystemRoot}
+                  removeFilesystemRoot={removeFilesystemRoot}
+                  addPatchRoot={addPatchRoot}
+                  removePatchRoot={removePatchRoot}
+                  addGitRoot={addGitRoot}
+                  removeGitRoot={removeGitRoot}
+                  addHttpDenyHost={addHttpDenyHost}
+                  removeHttpDenyHost={removeHttpDenyHost}
+                  addHttpDenyCidr={addHttpDenyCidr}
+                  removeHttpDenyCidr={removeHttpDenyCidr}
+                  addHttpDenyPrefix={addHttpDenyPrefix}
+                  removeHttpDenyPrefix={removeHttpDenyPrefix}
+                  updateRunScriptEntry={updateRunScriptEntry}
+                  removeRunScriptEntry={removeRunScriptEntry}
+                  addRunScriptEntry={addRunScriptEntry}
+                  addCommandRule={addCommandRule}
+                  removeCommandRule={removeCommandRule}
+                  patchCommandRule={patchCommandRule}
+                  cardClass={cardClass}
+                  actionButtonClass={actionButtonClass}
+                  pillClass={pillClass}
+                  primaryPillClass={primaryPillClass}
+                />
               )}
 
               {section === 'developer' && settings && (
-                <div className="space-y-5">
-                  {/* 开发者模式开关 */}
-                  <div className={`${cardClass} space-y-4`}>
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <div className="text-sm font-medium text-slate-900 dark:text-white">
-                          启用开发者模式
-                        </div>
-                        <div className="text-xs text-slate-500 dark:text-slate-400">
-                          开启后可从外部目录加载开发中的插件
-                        </div>
-                      </div>
-                      <button
-                        className={`relative w-11 h-6 rounded-full transition-colors ${settings.developer.enabled
-                          ? 'bg-blue-500'
-                          : 'bg-gray-300 dark:bg-gray-600'
-                          }`}
-                        onClick={() => {
-                          updateSettings({
-                            developer: {
-                              ...settings.developer,
-                              enabled: !settings.developer.enabled
-                            }
-                          })
-                        }}
-                      >
-                        <span
-                          className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${settings.developer.enabled ? 'translate-x-5' : ''
-                            }`}
-                        />
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* 插件开发目录 */}
-                  {settings.developer.enabled && (
-                    <div className={`${cardClass} space-y-4`}>
-                      <div className="text-sm font-medium text-slate-900 dark:text-white">
-                        插件开发目录
-                      </div>
-
-                      {settings.developer.pluginPaths.length === 0 ? (
-                        <div className="text-sm text-slate-500 dark:text-slate-400">
-                          还没有添加任何开发目录。
-                        </div>
-                      ) : (
-                        <div className="space-y-2">
-                          {settings.developer.pluginPaths.map((path) => (
-                            <div
-                              key={path}
-                              className="flex items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-white/70 px-3 py-2 text-sm text-slate-700 shadow-sm dark:border-slate-800 dark:bg-slate-950 dark:text-slate-200"
-                            >
-                              <div className="truncate flex-1">
-                                {path}
-                              </div>
-                              <button
-                                className="text-xs text-red-500 hover:text-red-600 dark:text-red-400 dark:hover:text-red-300"
-                                onClick={async () => {
-                                  await window.mulby.developer.removePluginPath(path)
-                                  const result = await window.mulby.settings.get()
-                                  setSettings(result.settings)
-                                }}
-                              >
-                                移除
-                              </button>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-
-                      <div className="flex gap-2">
-                        <button
-                          className={actionButtonClass}
-                          onClick={async () => {
-                            const path = await window.mulby.developer.selectDirectory()
-                            if (path) {
-                              const result = await window.mulby.developer.addPluginPath(path)
-                              if (result.success) {
-                                const settingsResult = await window.mulby.settings.get()
-                                setSettings(settingsResult.settings)
-                              } else {
-                                notice.error(result.error || '添加失败')
-                              }
-                            }
-                          }}
-                        >
-                          + 添加目录
-                        </button>
-                        <button
-                          className={actionButtonClass}
-                          onClick={async () => {
-                            await window.mulby.developer.reloadPlugins()
-                            notice.success('插件已刷新')
-                          }}
-                        >
-                          刷新插件
-                        </button>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* 调试选项 */}
-                  {settings.developer.enabled && (
-                    <div className={`${cardClass} space-y-4`}>
-                      <div className="text-sm font-medium text-slate-900 dark:text-white">
-                        调试选项
-                      </div>
-
-                      {/* 自动热重载 */}
-                      <div className="flex items-center justify-between border-b border-slate-200/80 py-2 dark:border-slate-800/80">
-                        <div>
-                          <div className="text-sm text-slate-900 dark:text-white">
-                            自动热重载
-                          </div>
-                          <div className="text-xs text-slate-500 dark:text-slate-400">
-                            检测文件变化时自动重新加载插件
-                          </div>
-                        </div>
-                        <button
-                          className={`relative w-11 h-6 rounded-full transition-colors ${settings.developer.autoReload
-                            ? 'bg-blue-500'
-                            : 'bg-gray-300 dark:bg-gray-600'
-                            }`}
-                          onClick={() => {
-                            updateSettings({
-                              developer: {
-                                ...settings.developer,
-                                autoReload: !settings.developer.autoReload
-                              }
-                            })
-                          }}
-                        >
-                          <span
-                            className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${settings.developer.autoReload ? 'translate-x-5' : ''
-                              }`}
-                          />
-                        </button>
-                      </div>
-
-                      {/* 自动打开 DevTools */}
-                      <div className="flex items-center justify-between border-b border-slate-200/80 py-2 dark:border-slate-800/80">
-                        <div>
-                          <div className="text-sm text-slate-900 dark:text-white">
-                            自动打开开发者工具
-                          </div>
-                          <div className="text-xs text-slate-500 dark:text-slate-400">
-                            打开插件窗口时自动打开 DevTools
-                          </div>
-                        </div>
-                        <button
-                          className={`relative w-11 h-6 rounded-full transition-colors ${settings.developer.showDevTools
-                            ? 'bg-blue-500'
-                            : 'bg-gray-300 dark:bg-gray-600'
-                            }`}
-                          onClick={() => {
-                            updateSettings({
-                              developer: {
-                                ...settings.developer,
-                                showDevTools: !settings.developer.showDevTools
-                              }
-                            })
-                          }}
-                        >
-                          <span
-                            className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${settings.developer.showDevTools ? 'translate-x-5' : ''
-                              }`}
-                          />
-                        </button>
-                      </div>
-
-                      {/* 日志级别 */}
-                      <div className="py-2">
-                        <div className="mb-2 text-sm text-slate-900 dark:text-white">
-                          日志级别
-                        </div>
-                        <div className="flex flex-wrap gap-2">
-                          {(['debug', 'info', 'warn', 'error'] as const).map((level) => (
-                            <button
-                              key={level}
-                              className={settings.developer.logLevel === level ? primaryPillClass : pillClass}
-                              onClick={() => {
-                                updateSettings({
-                                  developer: {
-                                    ...settings.developer,
-                                    logLevel: level
-                                  }
-                                })
-                              }}
-                            >
-                              {level.charAt(0).toUpperCase() + level.slice(1)}
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* 日志查看器入口 */}
-                  {settings.developer.enabled && onOpenLogViewer && (
-                    <div className={`${cardClass}`}>
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <div className="text-sm font-medium text-slate-900 dark:text-white">
-                            开发者日志
-                          </div>
-                          <div className="text-xs text-slate-500 dark:text-slate-400">
-                            查看插件日志和崩溃报告
-                          </div>
-                        </div>
-                        <button
-                          className={primaryPillClass}
-                          onClick={onOpenLogViewer}
-                        >
-                          打开日志查看器
-                        </button>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* 提示信息 */}
-                  <div className={`${cardClass} space-y-2 text-sm text-slate-600 dark:text-slate-300`}>
-                    <div className="font-medium text-slate-900 dark:text-white">使用提示</div>
-                    <ul className="list-disc list-inside text-xs space-y-1">
-                      <li>添加的开发目录应该包含插件文件夹（每个文件夹包含 manifest.json）</li>
-                      <li>开发目录的插件将显示「开发中」标记</li>
-                      <li>修改插件代码后，点击「刷新插件」或重启应用</li>
-                      <li>使用 <code className="px-1 py-0.5 bg-gray-100 dark:bg-gray-800 rounded">npm run dev</code> 启动 Vite 开发服务器支持 UI 热重载</li>
-                    </ul>
-                  </div>
-                </div>
+                <DeveloperSection
+                  settings={settings}
+                  setSettings={setSettings}
+                  updateSettings={updateSettings}
+                  notice={notice}
+                  onOpenLogViewer={onOpenLogViewer}
+                  cardClass={cardClass}
+                  actionButtonClass={actionButtonClass}
+                  pillClass={pillClass}
+                  primaryPillClass={primaryPillClass}
+                />
               )}
 
+
               {section === 'about' && (
-                <div className={`${cardClass} space-y-4 text-sm text-slate-600 dark:text-slate-300`}>
-                  <div>
-                    <div className="font-medium text-slate-900 dark:text-white">应用信息</div>
-                    <div>名称：{appInfo?.name}</div>
-                    <div>版本：{updateCenterState?.currentVersion || appInfo?.version}</div>
-                  </div>
-                  <div className="space-y-3 rounded-2xl border border-slate-200/80 bg-white/70 p-3 dark:border-slate-800 dark:bg-slate-950/70">
-                    <div className="flex items-start justify-between gap-3">
-                      <div>
-                        <div className="font-medium text-slate-900 dark:text-white">更新中心</div>
-                        <div className="text-xs text-slate-500 dark:text-slate-400">
-                          手动检查新版本并跳转发布页下载安装包。
-                        </div>
-                      </div>
-                      <span className={`rounded-full px-3 py-1 text-xs ${updateCenterState?.status === 'update-available'
-                        ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-300'
-                        : updateCenterState?.status === 'error'
-                          ? 'bg-red-100 text-red-700 dark:bg-red-500/20 dark:text-red-300'
-                          : 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300'
-                        }`}>
-                        {formatUpdateStatus(updateCenterState?.status || 'idle')}
-                      </span>
-                    </div>
-                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                      <div className="rounded-2xl border border-slate-200/80 bg-white/70 px-3 py-2 text-xs dark:border-slate-800 dark:bg-slate-950/70">
-                        <div className="text-slate-500 dark:text-slate-400">当前版本</div>
-                        <div className="mt-1 text-sm font-medium text-slate-900 dark:text-white">
-                          {updateCenterState?.currentVersion || appInfo?.version || '-'}
-                        </div>
-                      </div>
-                      <div className="rounded-2xl border border-slate-200/80 bg-white/70 px-3 py-2 text-xs dark:border-slate-800 dark:bg-slate-950/70">
-                        <div className="text-slate-500 dark:text-slate-400">最新版本</div>
-                        <div className="mt-1 text-sm font-medium text-slate-900 dark:text-white">
-                          {updateCenterState?.latestVersion || '未检查'}
-                        </div>
-                      </div>
-                    </div>
-                    <div className="space-y-1 text-xs text-slate-500 dark:text-slate-400">
-                      <div>最近检查：{formatCheckedAt(updateCenterState?.lastCheckedAt)}</div>
-                      <div className="break-all">发布页：{updateCenterState?.releasePageUrl || '未配置'}</div>
-                      {updateCenterState?.message && (
-                        <div>{updateCenterState.message}</div>
-                      )}
-                    </div>
-                    <div className="flex flex-wrap gap-2">
-                      <button
-                        className={primaryPillClass}
-                        disabled={updateBusy}
-                        onClick={() => void checkAppUpdates()}
-                      >
-                        {updateBusy ? '检查中...' : '检查更新'}
-                      </button>
-                      <button
-                        className={actionButtonClass}
-                        disabled={!updateCenterState?.releasePageUrl}
-                        onClick={() => void openUpdateReleasePage()}
-                      >
-                        打开发布页
-                      </button>
-                    </div>
-                  </div>
-                  <div>
-                    <div className="font-medium text-slate-900 dark:text-white">数据目录</div>
-                    <div className="text-xs text-slate-500 dark:text-slate-400 break-all">{appInfo?.userDataPath}</div>
-                  </div>
-                  <button
-                    className={actionButtonClass}
-                    onClick={() => appInfo?.userDataPath && window.mulby.shell.openFolder(appInfo.userDataPath)}
-                  >
-                    打开数据目录
-                  </button>
-                </div>
+                <AboutSection
+                  appInfo={appInfo}
+                  updateCenterState={updateCenterState}
+                  updateBusy={updateBusy}
+                  onCheckAppUpdates={checkAppUpdates}
+                  onOpenUpdateReleasePage={openUpdateReleasePage}
+                  cardClass={cardClass}
+                  primaryPillClass={primaryPillClass}
+                  actionButtonClass={actionButtonClass}
+                />
               )}
             </div>
           </main>
@@ -2168,4 +810,4 @@ export default function SettingsView({
   )
 }
 
-export type { SettingsSection }
+export type { SettingsSection } from './settings/types'
