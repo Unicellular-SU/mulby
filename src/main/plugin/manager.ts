@@ -38,6 +38,7 @@ import {
 import type { MatchType } from '../../shared/search-matcher'
 import { BackgroundPluginManager } from './background-manager'
 import { TaskScheduler } from '../scheduler'
+import type { ClipboardHistoryManager } from '../services/clipboard-history'
 
 // 搜索结果项
 interface SearchResult {
@@ -160,8 +161,12 @@ export class PluginManager {
   /**
    * 设置剪贴板历史管理器
    */
-  setClipboardHistoryManager(manager: any): void {
+  setClipboardHistoryManager(manager: ClipboardHistoryManager): void {
     this.hostManager.setClipboardHistoryManager(manager)
+  }
+
+  getTaskScheduler(): TaskScheduler {
+    return this.taskScheduler
   }
 
   // 设置窗口管理器

@@ -204,7 +204,7 @@ export const loggerService = {
      * 获取最近的日志
      */
     getRecentLogs(pluginId?: string, limit = 100): LogEntry[] {
-        let logs = pluginId
+        const logs = pluginId
             ? recentLogs.filter(l => l.pluginId === pluginId)
             : [...recentLogs]
 

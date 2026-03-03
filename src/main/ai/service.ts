@@ -793,7 +793,7 @@ export class AiService {
   }
 
   private async generateImageWithProgress(input: {
-    modelKey: any
+    modelKey: unknown
     prompt: string | { text?: string; images?: unknown[]; mask?: unknown }
     size?: string
     n?: number
@@ -811,7 +811,7 @@ export class AiService {
   }
 
   private async generateImageWithDecodeFallback(input: {
-    modelKey: any
+    modelKey: unknown
     prompt: string | { text?: string; images?: unknown[]; mask?: unknown }
     size?: string
     n?: number

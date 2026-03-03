@@ -83,7 +83,7 @@ export class InBrowserManager {
         }
     }
 
-    public async run(payload: InBrowserRunPayload, ownerId?: number): Promise<any[]> {
+    public async run(payload: InBrowserRunPayload, ownerId?: number): Promise<unknown[]> {
         let browserWindow: InBrowserWindow;
 
         // Check if ID is provided to reuse existing window
@@ -111,35 +111,30 @@ export class InBrowserManager {
         }
 
         // Execute Queue
-        try {
-            const result = await browserWindow.run(payload.queue);
-            // If the window is still open and not meant to be persistent, we might handle it here?
-            // uTools logic: if .show() was called, it stays open. If hidden, it might be reused or closed.
-            // For now, let's return the result.
+        const result = await browserWindow.run(payload.queue);
+        // If the window is still open and not meant to be persistent, we might handle it here?
+        // uTools logic: if .show() was called, it stays open. If hidden, it might be reused or closed.
+        // For now, let's return the result.
 
-            // We append the window ID to the result as the last element, per uTools API behavior.
-            // "run 返回将会返回一个包含数组的 Promise 对象，数组的最后一个元素是当前未关闭窗口的 InBrowser 实例"
-            // But the InBrowserInstance object structure is { id, url, title, ... }
-            // We need to construct this InBrowserInstance object.
+        // We append the window ID to the result as the last element, per uTools API behavior.
+        // "run 返回将会返回一个包含数组的 Promise 对象，数组的最后一个元素是当前未关闭窗口的 InBrowser 实例"
+        // But the InBrowserInstance object structure is { id, url, title, ... }
+        // We need to construct this InBrowserInstance object.
 
-            if (!browserWindow.window.isDestroyed()) {
-                const instanceInfo: InBrowserInstance = {
-                    id: browserWindow.id,
-                    url: browserWindow.window.webContents.getURL(),
-                    title: browserWindow.window.getTitle(),
-                    width: browserWindow.window.getBounds().width,
-                    height: browserWindow.window.getBounds().height,
-                    x: browserWindow.window.getBounds().x,
-                    y: browserWindow.window.getBounds().y
-                };
-                return [...result, instanceInfo];
-            }
-
-            return result;
-
-        } catch (e) {
-            throw e;
+        if (!browserWindow.window.isDestroyed()) {
+            const instanceInfo: InBrowserInstance = {
+                id: browserWindow.id,
+                url: browserWindow.window.webContents.getURL(),
+                title: browserWindow.window.getTitle(),
+                width: browserWindow.window.getBounds().width,
+                height: browserWindow.window.getBounds().height,
+                x: browserWindow.window.getBounds().x,
+                y: browserWindow.window.getBounds().y
+            };
+            return [...result, instanceInfo];
         }
+
+        return result;
     }
 
     public getIdleInBrowsers(): InBrowserInstance[] {

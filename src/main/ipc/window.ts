@@ -281,7 +281,7 @@ export function registerWindowHandlers(
   // 让我们先把 window:child:action 加上。
 
   // 控制子窗口 (BrowserWindowProxy)
-  ipcMain.handle('window:child:action', (_event, childId: number, action: string, ...args: any[]) => {
+  ipcMain.handle('window:child:action', (_event, childId: number, action: string, ...args: unknown[]) => {
     // 验证调用者是否有权限控制该窗口
     // 只有创建者（父窗口）或主窗口通常有权限。
     // 为简化，这里允许同一插件的窗口控制其创建的子窗口。
@@ -306,7 +306,7 @@ export function registerWindowHandlers(
         childWin.focus()
         break
       case 'setTitle':
-        childWin.setTitle(String(args[0]))
+        childWin.setTitle(String(args[0] ?? ''))
         break
       case 'setSize':
         if (typeof args[0] === 'number' && typeof args[1] === 'number') {
@@ -321,7 +321,7 @@ export function registerWindowHandlers(
         break
       case 'postMessage':
         // 发送消息给子窗口
-        childWin.webContents.send('window:childMessage', String(args[0]), ...args.slice(1))
+        childWin.webContents.send('window:childMessage', String(args[0] ?? ''), ...args.slice(1))
         break
       default:
         console.warn(`Unknown child action: ${action}`)
@@ -518,7 +518,11 @@ export function registerWindowHandlers(
   ipcMain.on('window:maximize', (event) => {
     const win = BrowserWindow.fromWebContents(event.sender)
     if (win) {
-      win.isMaximized() ? win.unmaximize() : win.maximize()
+      if (win.isMaximized()) {
+        win.unmaximize()
+      } else {
+        win.maximize()
+      }
     }
   })
 

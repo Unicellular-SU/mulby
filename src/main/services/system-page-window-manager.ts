@@ -593,7 +593,8 @@ export class SystemPageWindowManager {
     main.on('moved', this.moveHandler)
     main.on('resize', this.resizeHandler)
     if (process.platform === 'darwin') {
-      main.on('will-move' as any, this.moveHandler)
+      const willMoveEvent = 'will-move' as Parameters<BrowserWindow['on']>[0]
+      main.on(willMoveEvent, this.moveHandler)
     }
   }
 
@@ -608,7 +609,8 @@ export class SystemPageWindowManager {
       main.removeListener('move', this.moveHandler)
       main.removeListener('moved', this.moveHandler)
       if (process.platform === 'darwin') {
-        main.removeListener('will-move' as any, this.moveHandler)
+        const willMoveEvent = 'will-move' as Parameters<BrowserWindow['on']>[0]
+        main.removeListener(willMoveEvent, this.moveHandler)
       }
       this.moveHandler = null
     }

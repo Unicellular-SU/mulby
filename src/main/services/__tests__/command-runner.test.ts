@@ -216,7 +216,7 @@ describe('command runner service', () => {
       service.runCommand(
         {
           command: process.execPath,
-          args: ['-e', 'process.stdout.write(process.env.SECRET_TOKEN || \"\")'],
+          args: ['-e', 'process.stdout.write(process.env.SECRET_TOKEN || "")'],
           env: { SECRET_TOKEN: 'abc' }
         },
         { source: 'app' }

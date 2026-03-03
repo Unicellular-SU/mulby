@@ -25,8 +25,9 @@ interface ErrorLike {
 function getErrorMessage(error: unknown): string {
   if (error instanceof Error) return error.message || 'Unknown error'
   if (typeof error === 'string') return error
-  if (error && typeof error === 'object' && typeof (error as any).message === 'string') {
-    return (error as any).message
+  const candidate = toErrorLike(error)
+  if (typeof candidate?.message === 'string') {
+    return candidate.message
   }
   return 'Unknown error'
 }
@@ -71,7 +72,7 @@ function collectErrorSignals(error: unknown, depth = 0, bucket: string[] = []): 
   if (error instanceof Error) {
     if (error.name) bucket.push(error.name)
     if (error.message) bucket.push(error.message)
-    const cause = (error as any).cause
+    const cause = (error as Error & { cause?: unknown }).cause
     if (cause) collectErrorSignals(cause, depth + 1, bucket)
     return bucket
   }

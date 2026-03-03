@@ -89,13 +89,13 @@ export function buildTools(input: BuildToolsInput) {
       const schemaBase = fn.parameters || { type: 'object', properties: {} }
       const schema = {
         ...schemaBase,
-        required: (schemaBase as any).required || fn.required
+        required: schemaBase.required || fn.required
       }
       return [
         fn.name,
         tool({
           description: fn.description,
-          inputSchema: jsonSchema(schema as any),
+          inputSchema: jsonSchema(schema as unknown as Parameters<typeof jsonSchema>[0]),
           execute: async (toolInput: unknown) => {
             console.log('[AI] 工具执行开始', { toolName: fn.name, input: toolInput, context })
             let result: unknown

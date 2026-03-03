@@ -1,6 +1,7 @@
 import { ipcMain } from 'electron'
 import {
   pluginSystem,
+  type PathName,
   type SystemIconBatchOptions,
   type SystemIconRequest,
   type SystemIconSingleOptions
@@ -18,8 +19,8 @@ export function registerSystemHandlers() {
   })
 
   // 获取特定路径
-  ipcMain.handle('system:getPath', (_, name: string) => {
-    return pluginSystem.getPath(name as any)
+  ipcMain.handle('system:getPath', (_, name: PathName) => {
+    return pluginSystem.getPath(name)
   })
 
   // 获取环境变量

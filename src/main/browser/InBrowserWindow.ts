@@ -30,8 +30,8 @@ export class InBrowserWindow {
         }
     }
 
-    public async run(queue: InBrowserOp[]): Promise<any[]> {
-        const results: any[] = [];
+    public async run(queue: InBrowserOp[]): Promise<unknown[]> {
+        const results: unknown[] = [];
 
         for (const op of queue) {
             try {
@@ -94,7 +94,7 @@ export class InBrowserWindow {
         `;
     }
 
-    private async executeOp(op: InBrowserOp, results: any[]) {
+    private async executeOp(op: InBrowserOp, results: unknown[]) {
         const win = this.window;
         const contents = win.webContents;
         const args = op.args;
@@ -146,11 +146,11 @@ export class InBrowserWindow {
                     // wait: [msOrSelectorOrFunc, ...params]
 
                     let eFuncString: string = '';
-                    let eParams: any[] = [];
-                    let isWaitOrWhen = op.type === 'wait' || op.type === 'when';
+                    let eParams: unknown[] = [];
+                    const isWaitOrWhen = op.type === 'wait' || op.type === 'when';
 
                     if (op.type === 'evaluate') {
-                        [eFuncString, eParams] = args as [string, any[]];
+                        [eFuncString, eParams] = args as [string, unknown[]];
                     } else if (op.type === 'wait') {
                         const [firstArg, ...rest] = args;
                         if (typeof firstArg === 'number') {
@@ -723,7 +723,7 @@ export class InBrowserWindow {
                             let buffer: Buffer;
                             let ext = 'bin';
                             if (p.startsWith('data:')) {
-                                const matches = p.match(/^data:([A-Za-z-+\/]+);base64,(.+)$/);
+                                const matches = p.match(/^data:([A-Za-z-+/]+);base64,(.+)$/);
                                 if (matches && matches.length === 3) {
                                     ext = matches[1].split('/')[1] || 'bin';
                                     buffer = Buffer.from(matches[2], 'base64');

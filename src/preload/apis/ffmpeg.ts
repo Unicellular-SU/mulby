@@ -1,13 +1,30 @@
-import type { IpcRenderer } from 'electron'
+import type { IpcRenderer, IpcRendererEvent } from 'electron'
 
 export function createFfmpegApi(ipcRenderer: IpcRenderer) {
+  type DownloadProgress = {
+    phase: 'downloading' | 'extracting' | 'done'
+    percent: number
+    downloaded?: number
+    total?: number
+  }
+  type RunProgress = {
+    bitrate: string
+    fps: number
+    frame: number
+    percent?: number
+    q: number | string
+    size: string
+    speed: string
+    time: string
+  }
+
   return {
     isAvailable: () => ipcRenderer.invoke('ffmpeg:isAvailable'),
     getVersion: () => ipcRenderer.invoke('ffmpeg:getVersion'),
     getPath: () => ipcRenderer.invoke('ffmpeg:getPath'),
-    download: (onProgress?: (progress: { phase: 'downloading' | 'extracting' | 'done'; percent: number; downloaded?: number; total?: number }) => void) => {
+    download: (onProgress?: (progress: DownloadProgress) => void) => {
       if (onProgress) {
-        const listener = (_: any, progress: any) => onProgress(progress)
+        const listener = (_event: unknown, progress: DownloadProgress) => onProgress(progress)
         ipcRenderer.on('ffmpeg:downloadProgress', listener)
         return ipcRenderer.invoke('ffmpeg:download').finally(() => {
           ipcRenderer.removeListener('ffmpeg:downloadProgress', listener)
@@ -15,13 +32,13 @@ export function createFfmpegApi(ipcRenderer: IpcRenderer) {
       }
       return ipcRenderer.invoke('ffmpeg:download')
     },
-    run: (args: string[], onProgress?: (progress: { bitrate: string; fps: number; frame: number; percent?: number; q: number | string; size: string; speed: string; time: string }) => void) => {
+    run: (args: string[], onProgress?: (progress: RunProgress) => void) => {
       const taskId = `ffmpeg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
       console.log('[FFmpeg Preload] run() 启动任务, taskId:', taskId)
 
-      let progressListener: ((...args: any[]) => void) | null = null
+      let progressListener: ((event: IpcRendererEvent, data: { taskId: string; progress: RunProgress }) => void) | undefined
       if (onProgress) {
-        progressListener = (_: any, data: { taskId: string; progress: any }) => {
+        progressListener = (_event: IpcRendererEvent, data: { taskId: string; progress: RunProgress }) => {
           if (data.taskId === taskId) {
             onProgress(data.progress)
           }

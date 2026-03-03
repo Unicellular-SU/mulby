@@ -24,7 +24,12 @@ import type { PluginMessageBus } from './message-bus'
 import type { TaskScheduler } from '../scheduler'
 import type { TaskInput, TaskFilter } from '../scheduler/types'
 import type { ClipboardHistoryManager } from '../services/clipboard-history'
-import type { AiOption, AiMessage, AiImageGenerateProgressChunk } from '../../shared/types/ai'
+import type {
+  AiOption,
+  AiMessage,
+  AiImageGenerateProgressChunk,
+  AiPromiseLike
+} from '../../shared/types/ai'
 import { commandRunnerService } from '../services/command-runner'
 
 const pluginStorage = new PluginStorage()
@@ -33,6 +38,12 @@ const pluginHttp = new PluginHttp()
 
 interface CreatePluginApiOptions {
   runCommandAllowed?: boolean
+}
+
+function toAbortablePromise<T>(promise: Promise<T>, abort: () => void): AiPromiseLike<T> {
+  const abortable = promise as AiPromiseLike<T>
+  abortable.abort = abort
+  return abortable
 }
 
 // 创建插件可用的 API 上下文
@@ -374,23 +385,28 @@ ${item.files.map(p => `    <string>${p}</string>`).join('\n')}
     },
     ai: {
       call: (option: AiOption, onChunk?: (chunk: AiMessage) => void) => {
+        const optionWithContext: AiOption = {
+          ...option,
+          toolContext: { ...(option.toolContext || {}), pluginName }
+        }
+
         if (!onChunk) {
-          const promise = aiService.call({ ...option, toolContext: { ...(option as any).toolContext, pluginName } })
-          ;(promise as any).abort = () => {}
-          return promise as any
+          const promise = aiService.call(optionWithContext)
+          return toAbortablePromise(promise, () => {})
         }
 
         const requestId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
         const promise = aiService
           .stream(
-            { ...option, toolContext: { ...(option as any).toolContext, pluginName } },
+            optionWithContext,
             {
               onChunk: (chunk: AiMessage) => onChunk(chunk)
             },
             requestId
           )
-        ;(promise as any).abort = () => aiService.abort(requestId)
-        return promise as any
+        return toAbortablePromise(promise, () => {
+          void aiService.abort(requestId)
+        })
       },
       allModels: async () => aiService.allModels(),
       abort: (requestId: string) => aiService.abort(requestId),
@@ -422,8 +438,9 @@ ${item.files.map(p => `    <string>${p}</string>`).join('\n')}
         ) => {
           const requestId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
           const promise = aiService.generateImagesStream(input, onChunk, requestId)
-          ;(promise as any).abort = () => aiService.abort(requestId)
-          return promise as any
+          return toAbortablePromise(promise, () => {
+            void aiService.abort(requestId)
+          })
         },
         edit: async (input: { imageAttachmentId: string; prompt: string; model: string }) => await aiService.editImage(input)
       }

@@ -43,7 +43,7 @@ export interface SearchErrorResponse {
 export interface SearchReadyResponse {
   id: '__ready__'
   type: 'ready'
-  payload: {}
+  payload: Record<string, never>
 }
 
 export type SearchResponse = SearchResultResponse | SearchErrorResponse | SearchReadyResponse

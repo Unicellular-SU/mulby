@@ -77,10 +77,11 @@ ${paths.map(p => `    <string>${p}</string>`).join('\n')}
 
       // 检查 Electron 版本是否支持 clipboard.write({ files }) 
       // (Electron 20+ 支持)
-      // @ts-ignore
-      if (clipboard.write && typeof clipboard.write === 'function') {
-        // @ts-ignore
-        clipboard.write({ files: paths })
+      const clipboardWithWrite = clipboard as typeof clipboard & {
+        write?: (data: { files: string[] }) => void
+      }
+      if (typeof clipboardWithWrite.write === 'function') {
+        clipboardWithWrite.write({ files: paths })
         return true
       }
     } else {

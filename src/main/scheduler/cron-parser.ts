@@ -32,7 +32,7 @@ export class CronParser {
         tz: 'Asia/Shanghai'
       })
       return interval.next().toDate()
-    } catch (error) {
+    } catch {
       throw new Error(`Invalid cron expression: ${expression}`)
     }
   }
@@ -47,8 +47,8 @@ export class CronParser {
         currentDate: after || new Date(),
         tz: 'Asia/Shanghai'
       })
-      return interval.take(count).map((date: any) => date.toDate())
-    } catch (error) {
+      return (interval.take(count) as Array<{ toDate: () => Date }>).map(date => date.toDate())
+    } catch {
       throw new Error(`Invalid cron expression: ${expression}`)
     }
   }

@@ -137,8 +137,12 @@ export class PluginSearchWorker {
     this.worker.stderr?.on('data', (chunk) => {
       console.error('[SearchWorker]', chunk.toString())
     })
-    this.worker.on('message', (message: any) => {
-      const payload = (message.data || message) as SearchResponse
+    this.worker.on('message', (message: unknown) => {
+      const payload = (
+        typeof message === 'object' && message !== null && 'data' in message
+          ? (message as { data?: unknown }).data
+          : message
+      ) as SearchResponse
       if (!payload || !payload.id) return
       if (payload.type === 'ready') {
         this.ready = true

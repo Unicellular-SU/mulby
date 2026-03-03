@@ -84,7 +84,7 @@ export default function BackgroundPluginManagerView({ onBack }: BackgroundPlugin
       }
       window.mulby.notification.show(`${modeText}已停止`, 'success')
       await refreshPlugins()
-    } catch (err) {
+    } catch {
       window.mulby.notification.show('停止失败', 'error')
     }
   }
@@ -105,7 +105,7 @@ export default function BackgroundPluginManagerView({ onBack }: BackgroundPlugin
       }))
       window.mulby.notification.show('所有插件已停止', 'success')
       await refreshPlugins()
-    } catch (err) {
+    } catch {
       window.mulby.notification.show('停止失败', 'error')
     }
   }

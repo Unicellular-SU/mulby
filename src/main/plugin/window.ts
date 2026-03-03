@@ -124,7 +124,7 @@ export class PluginWindowManager {
     const isSingleMode = plugin.manifest.pluginSetting?.single !== false
     if (isSingleMode) {
       // 查找已存在的该插件的独立窗口
-      for (const [_, info] of this.detachedWindows) {
+      for (const info of this.detachedWindows.values()) {
         if (info.plugin.id === plugin.id) {
           const existingWindow = info.window
           if (existingWindow && !existingWindow.isDestroyed()) {
@@ -277,7 +277,7 @@ export class PluginWindowManager {
     const isSingleMode = plugin.manifest.pluginSetting?.single !== false
     if (isSingleMode) {
       // 查找已存在的该插件窗口
-      for (const [_, info] of this.detachedWindows) {
+      for (const info of this.detachedWindows.values()) {
         if (info.plugin.id === plugin.id) {
           // 已有窗口，显示并聚焦
           const existingWindow = info.window

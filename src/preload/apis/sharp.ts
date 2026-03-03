@@ -1,19 +1,19 @@
 import type { IpcRenderer } from 'electron'
 
 export function createSharpApi(ipcRenderer: IpcRenderer) {
-  return (input?: string | Buffer | ArrayBuffer | Uint8Array | object | any[], options?: object) => {
-    const operations: { method: string; args: any[] }[] = []
+  return (input?: string | Buffer | ArrayBuffer | Uint8Array | object | unknown[], options?: object) => {
+    const operations: Array<{ method: string; args: unknown[] }> = []
 
-    const createBuilder = (): any => {
+    const createBuilder = () => {
       const executeIpc = async () => {
         return ipcRenderer.invoke('sharp:execute', { input, options, operations })
       }
 
-      const builder: Record<string, any> = {}
+      const builder: Record<string, (...args: unknown[]) => unknown> = {}
 
       const terminalMethods = ['toBuffer', 'toFile', 'metadata', 'stats']
-      terminalMethods.forEach(method => {
-        builder[method] = async (...args: any[]) => {
+      terminalMethods.forEach((method) => {
+        builder[method] = async (...args: unknown[]) => {
           operations.push({ method, args })
           return executeIpc()
         }
@@ -33,17 +33,17 @@ export function createSharpApi(ipcRenderer: IpcRenderer) {
         'timeout', 'tile'
       ]
 
-      chainMethods.forEach(method => {
-        builder[method] = (...args: any[]) => {
+      chainMethods.forEach((method) => {
+        builder[method] = (...args: unknown[]) => {
           operations.push({ method, args })
           return builder
         }
       })
 
-      builder.clone = () => {
+      builder.clone = (..._args: unknown[]) => {
         const clonedOps = [...operations]
         const newBuilder = createBuilder()
-        clonedOps.forEach(op => operations.push(op))
+        clonedOps.forEach((op) => operations.push(op))
         return newBuilder
       }
 

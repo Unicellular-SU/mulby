@@ -40,9 +40,8 @@ if (isContextIsolated) {
   contextBridge.exposeInMainWorld('mulbyMain', mulbyMainApi)
 } else {
   // contextIsolation 禁用时，直接设置 window 属性（自定义 preload 模式）
-  // @ts-ignore - 在非隔离模式下直接访问 window
+  // @ts-expect-error - 在非隔离模式下直接访问 window
   window.mulby = mulbyApi
-  // @ts-ignore
   window.mulbyMain = mulbyMainApi
 }
 

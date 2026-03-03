@@ -9,7 +9,7 @@ const DEFAULT_REASONING_TAGS: ReasoningTagConfig[] = [
   { openingTag: '<thought>', closingTag: '</thought>', modelPattern: /gemini-2\.5/i },
   { openingTag: '<thinking>', closingTag: '</thinking>' },
   { openingTag: '###Thinking', closingTag: '###Response' },
-  { openingTag: '◁think▷', closingTag: '◁\/think▷', modelPattern: /kimi-vl-a3b-thinking/i },
+  { openingTag: '◁think▷', closingTag: '◁/think▷', modelPattern: /kimi-vl-a3b-thinking/i },
   { openingTag: '<seed:think>', closingTag: '</seed:think>', modelPattern: /seed-oss-36b/i }
 ]
 

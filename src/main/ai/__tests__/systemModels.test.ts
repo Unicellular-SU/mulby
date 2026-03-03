@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
+import type { AiModel } from '../../../shared/types/ai'
 import { getSystemDefaultModels, mergeWithSystemDefaultModels } from '../../../shared/ai/systemModels'
 
 describe('system default models', () => {
@@ -37,7 +38,7 @@ describe('system default models', () => {
         description: 'custom',
         providerRef: 'openai'
       }
-    ] as any)
+    ] as AiModel[])
     const matches = merged.filter((model) => model.id === 'openai:gpt-5')
     assert.equal(matches.length, 1)
     assert.equal(matches[0]?.description, 'custom')

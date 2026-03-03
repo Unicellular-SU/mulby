@@ -6,7 +6,7 @@ const execFileAsync = promisify(execFile)
 const FOCUS_DELAY_MS = 160
 
 // 记录隐藏前可见的窗口
-let hiddenWindows: Set<number> = new Set()
+const hiddenWindows: Set<number> = new Set()
 
 // macOS 键码映射 (key code)
 const MAC_KEY_CODES: Record<string, number> = {
@@ -236,10 +236,11 @@ ${paths.map(p => `    <string>${p}</string>`).join('\n')}
   }
 
   if (process.platform === 'win32') {
-    // @ts-ignore - Electron 20+ supports clipboard.write({ files })
-    if (clipboard.write && typeof clipboard.write === 'function') {
-      // @ts-ignore
-      clipboard.write({ files: paths })
+    const clipboardWithWrite = clipboard as typeof clipboard & {
+      write?: (data: { files: string[] }) => void
+    }
+    if (typeof clipboardWithWrite.write === 'function') {
+      clipboardWithWrite.write({ files: paths })
       return true
     }
     return false

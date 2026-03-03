@@ -16,7 +16,9 @@ import type {
   ApiResult,
   InitRequest,
   RunRequest,
-  CallHookRequest
+  CallHookRequest,
+  CallTaskCallbackRequest,
+  CallHostMethodRequest
 } from './host-protocol'
 
 // ============ 状态 ============
@@ -50,6 +52,7 @@ interface HookContext {
 }
 
 type PluginAPI = Record<string, unknown>
+type HostMethod = (context: HookContext, ...args: unknown[]) => unknown | Promise<unknown>
 
 interface InputAttachment {
   id: string
@@ -297,16 +300,16 @@ async function handleCallHook(request: CallHookRequest): Promise<void> {
 }
 
 /** 调用任务回调 */
-async function handleCallTaskCallback(request: any): Promise<void> {
+async function handleCallTaskCallback(request: CallTaskCallbackRequest): Promise<void> {
   const { callbackName, payload, task } = request.payload
 
   try {
     const module = await loadModule()
-    const callback = (module as any)[callbackName]
+    const callback = (module as Record<string, unknown>)[callbackName]
 
     if (typeof callback === 'function') {
       const api = createProxyAPI()
-      const result = await callback({ api, payload, task })
+      const result = await (callback as HostMethod)({ api }, payload, task)
 
       // 序列化结果以确保可以通过 postMessage 发送
       const serializedResult = cloneForMessage(result)
@@ -332,29 +335,29 @@ async function handleCallTaskCallback(request: any): Promise<void> {
 }
 
 /** 调用 host 方法 */
-async function handleCallHostMethod(request: any): Promise<void> {
+async function handleCallHostMethod(request: CallHostMethodRequest): Promise<void> {
   const { method, args } = request.payload
 
   try {
-    const module = await loadModule() as any
+    const module = (await loadModule()) as Record<string, unknown>
 
     // 方案1：按优先级查找方法
-    let targetMethod: Function | undefined
+    let targetMethod: HostMethod | undefined
 
     // 1. 首先检查是否直接导出了该方法名的函数
     if (typeof module[method] === 'function') {
-      targetMethod = module[method]
+      targetMethod = module[method] as HostMethod
     }
     // 2. 检查 host 对象（约定的默认导出对象）
-    else if (module.host && typeof module.host === 'object' && typeof module.host[method] === 'function') {
-      targetMethod = module.host[method]
+    else if (module.host && typeof module.host === 'object' && typeof (module.host as Record<string, unknown>)[method] === 'function') {
+      targetMethod = (module.host as Record<string, unknown>)[method] as HostMethod
     }
     // 3. 检查其他可能的导出对象（api, methods, exports 等常见名称）
     else {
       const commonNames = ['api', 'methods', 'exports', 'handlers']
       for (const name of commonNames) {
-        if (module[name] && typeof module[name] === 'object' && typeof module[name][method] === 'function') {
-          targetMethod = module[name][method]
+        if (module[name] && typeof module[name] === 'object' && typeof (module[name] as Record<string, unknown>)[method] === 'function') {
+          targetMethod = (module[name] as Record<string, unknown>)[method] as HostMethod
           break
         }
       }
@@ -369,8 +372,9 @@ async function handleCallHostMethod(request: any): Promise<void> {
         if (typeof module[key] === 'function' && !['run', 'onLoad', 'onUnload', 'onEnable', 'onDisable', 'onBackground', 'onForeground'].includes(key)) {
           availableMethods.push(key)
         } else if (module[key] && typeof module[key] === 'object') {
-          Object.keys(module[key]).forEach(subKey => {
-            if (typeof module[key][subKey] === 'function') {
+          const nestedModule = module[key] as Record<string, unknown>
+          Object.keys(nestedModule).forEach(subKey => {
+            if (typeof nestedModule[subKey] === 'function') {
               availableMethods.push(`${key}.${subKey}`)
             }
           })
@@ -387,7 +391,7 @@ async function handleCallHostMethod(request: any): Promise<void> {
     // 调用方法，传入 context 和其他参数
     const api = createProxyAPI()
     const context = { api }
-    const result = await targetMethod(context, ...args)
+    const result = await targetMethod(context, ...(Array.isArray(args) ? args : []))
 
     // 序列化结果
     const serializedResult = cloneForMessage(result)

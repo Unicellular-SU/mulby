@@ -24,7 +24,7 @@
 - [x] CI 建设（最小自动化检查流水线）
 - [x] 超大文件拆分收尾（本轮聚焦 `src/main/ai/service.ts`，其余候选项延期）
 - [x] 任务调度器 UI 事件驱动化（替代高频网络轮询，倒计时走本地 1s UI 刷新）
-- [ ] lint warnings 分批治理（当前基线：0 error / 310 warnings）
+- [x] lint warnings 分批治理（当前基线：0 error / 0 warnings）
 
 ---
 

@@ -1,6 +1,10 @@
 import { ipcRenderer } from 'electron';
 import { InBrowserOp, InBrowserOptions, InBrowserRunPayload } from '../../shared/types/inbrowser';
 
+type SerializableFn = (...args: unknown[]) => unknown;
+type MouseButton = 'left' | 'middle' | 'right';
+type ScreenshotTarget = string | { x: number; y: number; width: number; height: number };
+
 export class InBrowserBuilder {
     private queue: InBrowserOp[] = [];
 
@@ -92,7 +96,7 @@ export class InBrowserBuilder {
         return this;
     }
 
-    public when = (selectorOrFunc: string | Function, ...params: any[]): this => {
+    public when = (selectorOrFunc: string | SerializableFn, ...params: unknown[]): this => {
         let funcString: string | undefined;
         if (typeof selectorOrFunc === 'function') {
             funcString = selectorOrFunc.toString();
@@ -105,7 +109,7 @@ export class InBrowserBuilder {
         return this;
     }
 
-    public cookies = (nameOrFilter?: string | any): this => {
+    public cookies = (nameOrFilter?: unknown): this => {
         this.queue.push({ type: 'cookies', args: [nameOrFilter] });
         return this;
     }
@@ -135,7 +139,7 @@ export class InBrowserBuilder {
         return this;
     }
 
-    public scroll = (selectorOrYOrX: string | number, optionalOrY?: any | number): this => {
+    public scroll = (selectorOrYOrX: string | number, optionalOrY?: unknown): this => {
         // This is complex because of overloaded signatures.
         // scroll(selector, optional)
         // scroll(y)
@@ -179,7 +183,7 @@ export class InBrowserBuilder {
         return this;
     }
 
-    public download = (urlOrFunc: string | Function, savePath?: string | null, ...params: any[]): this => {
+    public download = (urlOrFunc: string | SerializableFn, savePath?: string | null, ...params: unknown[]): this => {
         let funcString: string | undefined;
         if (typeof urlOrFunc === 'function') {
             funcString = urlOrFunc.toString();
@@ -190,7 +194,7 @@ export class InBrowserBuilder {
         return this;
     }
 
-    public evaluate = (func: string | Function, ...params: any[]): this => {
+    public evaluate = (func: string | SerializableFn, ...params: unknown[]): this => {
         let funcString: string;
         if (typeof func === 'function') {
             funcString = func.toString();
@@ -208,7 +212,7 @@ export class InBrowserBuilder {
         return this;
     }
 
-    public wait = (msOrSelectorOrFunc: number | string | Function, ...args: any[]): this => {
+    public wait = (msOrSelectorOrFunc: number | string | SerializableFn, ...args: unknown[]): this => {
         if (typeof msOrSelectorOrFunc === 'function') {
             const funcString = msOrSelectorOrFunc.toString();
             this.queue.push({ type: 'wait', args: [funcString, ...args] });
@@ -228,8 +232,8 @@ export class InBrowserBuilder {
         return this;
     }
 
-    public run = async (idOrOptions?: number | InBrowserOptions, options?: InBrowserOptions): Promise<any[]> => {
-        let payload: InBrowserRunPayload = { queue: this.queue };
+    public run = async (idOrOptions?: number | InBrowserOptions, options?: InBrowserOptions): Promise<unknown[]> => {
+        const payload: InBrowserRunPayload = { queue: this.queue };
 
         if (typeof idOrOptions === 'number') {
             payload.id = idOrOptions;
@@ -249,17 +253,21 @@ export const inbrowser = {
 
     // Configuration / Setup
     useragent: (ua: string) => new InBrowserBuilder().useragent(ua),
-    device: (options: any) => new InBrowserBuilder().device(options),
+    device: (options: { userAgent: string; size: { width: number; height: number } } | string) => new InBrowserBuilder().device(options),
     viewport: (width: number, height: number) => new InBrowserBuilder().viewport(width, height),
     show: () => new InBrowserBuilder().show(),
     hide: () => new InBrowserBuilder().hide(),
     devTools: (mode?: 'right' | 'bottom' | 'undocked' | 'detach') => new InBrowserBuilder().devTools(mode),
 
     // Direct Actions
-    click: (selectorOrX: string | number, mouseButtonOrY?: any, mouseButton?: any) => new InBrowserBuilder().click(selectorOrX, mouseButtonOrY, mouseButton),
-    mousedown: (selectorOrX: string | number, mouseButtonOrY?: any, mouseButton?: any) => new InBrowserBuilder().mousedown(selectorOrX, mouseButtonOrY, mouseButton),
-    mouseup: (selectorOrX: string | number, mouseButtonOrY?: any, mouseButton?: any) => new InBrowserBuilder().mouseup(selectorOrX, mouseButtonOrY, mouseButton),
-    dblclick: (selectorOrX: string | number, mouseButtonOrY?: any, mouseButton?: any) => new InBrowserBuilder().dblclick(selectorOrX, mouseButtonOrY, mouseButton),
+    click: (selectorOrX: string | number, mouseButtonOrY?: MouseButton | number, mouseButton?: MouseButton) =>
+      new InBrowserBuilder().click(selectorOrX, mouseButtonOrY, mouseButton),
+    mousedown: (selectorOrX: string | number, mouseButtonOrY?: MouseButton | number, mouseButton?: MouseButton) =>
+      new InBrowserBuilder().mousedown(selectorOrX, mouseButtonOrY, mouseButton),
+    mouseup: (selectorOrX: string | number, mouseButtonOrY?: MouseButton | number, mouseButton?: MouseButton) =>
+      new InBrowserBuilder().mouseup(selectorOrX, mouseButtonOrY, mouseButton),
+    dblclick: (selectorOrX: string | number, mouseButtonOrY?: MouseButton | number, mouseButton?: MouseButton) =>
+      new InBrowserBuilder().dblclick(selectorOrX, mouseButtonOrY, mouseButton),
     hover: (selectorOrX: string | number, y?: number) => new InBrowserBuilder().hover(selectorOrX, y),
     type: (selector: string, text: string) => new InBrowserBuilder().type(selector, text),
     input: (selectorOrText: string, text?: string) => new InBrowserBuilder().input(selectorOrText, text),
@@ -268,22 +276,24 @@ export const inbrowser = {
     focus: (selector: string) => new InBrowserBuilder().focus(selector),
     paste: (text: string) => new InBrowserBuilder().paste(text),
     press: (key: string, modifiers?: string[]) => new InBrowserBuilder().press(key, modifiers),
-    scroll: (arg1: any, arg2?: any) => new InBrowserBuilder().scroll(arg1, arg2),
+    scroll: (arg1: string | number, arg2?: unknown) => new InBrowserBuilder().scroll(arg1, arg2),
     file: (selector: string, payload: string | string[]) => new InBrowserBuilder().file(selector, payload),
-    drop: (selectorOrX: string | number, optionalYOrPayload: any, payload?: any) => new InBrowserBuilder().drop(selectorOrX, optionalYOrPayload, payload),
-    download: (urlOrFunc: string | Function, savePath?: string | null, ...params: any[]) => new InBrowserBuilder().download(urlOrFunc, savePath, ...params),
-    screenshot: (target?: any, savePath?: string) => new InBrowserBuilder().screenshot(target, savePath),
+    drop: (selectorOrX: string | number, optionalYOrPayload: number | string | string[] | Buffer, payload?: string | string[] | Buffer) =>
+      new InBrowserBuilder().drop(selectorOrX, optionalYOrPayload, payload),
+    download: (urlOrFunc: string | SerializableFn, savePath?: string | null, ...params: unknown[]) =>
+      new InBrowserBuilder().download(urlOrFunc, savePath, ...params),
+    screenshot: (target?: ScreenshotTarget, savePath?: string) => new InBrowserBuilder().screenshot(target, savePath),
     markdown: (selector?: string) => new InBrowserBuilder().markdown(selector),
 
     // Data / Execution
-    evaluate: (func: string | Function, ...params: any[]) => new InBrowserBuilder().evaluate(func, ...params),
-    cookies: (nameOrFilter?: string | any) => new InBrowserBuilder().cookies(nameOrFilter),
+    evaluate: (func: string | SerializableFn, ...params: unknown[]) => new InBrowserBuilder().evaluate(func, ...params),
+    cookies: (nameOrFilter?: unknown) => new InBrowserBuilder().cookies(nameOrFilter),
     setCookies: (nameOrCookies: string | { name: string; value: string }[], value?: string) => new InBrowserBuilder().setCookies(nameOrCookies, value),
     removeCookies: (name: string) => new InBrowserBuilder().removeCookies(name),
     clearCookies: (url?: string) => new InBrowserBuilder().clearCookies(url),
     pdf: (options?: Electron.PrintToPDFOptions, savePath?: string) => new InBrowserBuilder().pdf(options, savePath),
-    wait: (msOrSelectorOrFunc: number | string | Function, ...args: any[]): InBrowserBuilder => new InBrowserBuilder().wait(msOrSelectorOrFunc, ...args),
-    when: (selectorOrFunc: string | Function, ...params: any[]) => new InBrowserBuilder().when(selectorOrFunc, ...params),
+    wait: (msOrSelectorOrFunc: number | string | SerializableFn, ...args: unknown[]): InBrowserBuilder => new InBrowserBuilder().wait(msOrSelectorOrFunc, ...args),
+    when: (selectorOrFunc: string | SerializableFn, ...params: unknown[]) => new InBrowserBuilder().when(selectorOrFunc, ...params),
 
     // Ending
     end: () => new InBrowserBuilder().end(),

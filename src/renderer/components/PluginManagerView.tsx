@@ -642,7 +642,7 @@ export default function PluginManagerView({ onBack, initialSection = 'installed'
       }
       window.mulby.notification.show(`${modeText}已停止`, 'success')
       await refreshRunningPlugins()
-    } catch (err) {
+    } catch {
       window.mulby.notification.show('停止失败', 'error')
     }
   }

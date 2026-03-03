@@ -111,6 +111,15 @@ export interface SystemIconResult {
   icon: string
 }
 
+export interface ContextMenuItem {
+  label: string
+  type?: 'normal' | 'separator' | 'checkbox' | 'radio'
+  checked?: boolean
+  enabled?: boolean
+  id?: string
+  submenu?: ContextMenuItem[]
+}
+
 export interface PluginInfo {
   id: string
   name: string
@@ -456,7 +465,7 @@ export interface ElectronAPI {
     show: (message: string, type?: string) => void
   }
   storage: {
-    get: (key: string, namespace?: string) => Promise<any>
+    get: (key: string, namespace?: string) => Promise<unknown>
     set: (key: string, value: unknown, namespace?: string) => Promise<boolean>
     remove: (key: string, namespace?: string) => Promise<boolean>
     getAll?: (namespace?: string) => Promise<Record<string, unknown>>
@@ -515,7 +524,7 @@ export interface ElectronAPI {
     listTasks: (filter?: { pluginId?: string; status?: string; type?: string; limit?: number; offset?: number }) => Promise<Task[]>
     getTaskCount: (filter?: { pluginId?: string; status?: string; type?: string }) => Promise<number>
     getTask: (taskId: string) => Promise<Task | null>
-    schedule: (task: any) => Promise<Task>
+    schedule: (task: Record<string, unknown>) => Promise<Task>
     cancelTask: (taskId: string) => Promise<{ success: boolean }>
     pauseTask: (taskId: string) => Promise<{ success: boolean }>
     resumeTask: (taskId: string) => Promise<{ success: boolean }>
@@ -646,14 +655,7 @@ export interface ElectronAPI {
     onOffline: (callback: () => void) => void
   }
   menu: {
-    showContextMenu: (items: {
-      label: string
-      type?: 'normal' | 'separator' | 'checkbox' | 'radio'
-      checked?: boolean
-      enabled?: boolean
-      id?: string
-      submenu?: any[]
-    }[]) => Promise<string | null>
+    showContextMenu: (items: ContextMenuItem[]) => Promise<string | null>
   }
   geolocation: {
     getAccessStatus: () => Promise<'not-determined' | 'granted' | 'denied' | 'restricted' | 'unknown'>
@@ -685,7 +687,7 @@ export interface ElectronAPI {
   }
   // Sharp 图像处理 API
   sharp: SharpFunction
-  getSharpVersion: () => Promise<{ sharp: Record<string, string>; format: Record<string, any> }>
+  getSharpVersion: () => Promise<{ sharp: Record<string, string>; format: Record<string, unknown> }>
   // FFmpeg 音视频处理 API
   ffmpeg: {
     isAvailable: () => Promise<boolean>
@@ -756,7 +758,7 @@ export interface SharpProxy {
   bandbool(boolOp: 'and' | 'or' | 'eor'): SharpProxy
 
   // 合成
-  composite(images: { input: string | Buffer | { create?: any; text?: any }; gravity?: string; top?: number; left?: number; tile?: boolean; blend?: string; density?: number; raw?: { width: number; height: number; channels: number } }[]): SharpProxy
+  composite(images: { input: string | Buffer | { create?: { width: number; height: number; channels: number; background?: string | object }; text?: { text: string; width?: number; height?: number; channels?: number; rgba?: boolean } }; gravity?: string; top?: number; left?: number; tile?: boolean; blend?: string; density?: number; raw?: { width: number; height: number; channels: number } }[]): SharpProxy
 
   // 输出格式
   png(options?: { progressive?: boolean; compressionLevel?: number; palette?: boolean; quality?: number; effort?: number; colors?: number; dither?: number }): SharpProxy
@@ -791,7 +793,7 @@ export interface SharpProxy {
  * Sharp 构造函数类型
  */
 export type SharpFunction = (
-  input?: string | Buffer | ArrayBuffer | Uint8Array | { create?: { width: number; height: number; channels: number; background?: string | object; noise?: { type: 'gaussian'; mean?: number; sigma?: number } }; text?: { text: string; width?: number; height?: number; channels?: number; rgba?: boolean } } | any[],
+  input?: string | Buffer | ArrayBuffer | Uint8Array | { create?: { width: number; height: number; channels: number; background?: string | object; noise?: { type: 'gaussian'; mean?: number; sigma?: number } }; text?: { text: string; width?: number; height?: number; channels?: number; rgba?: boolean } } | unknown[],
   options?: { raw?: { width: number; height: number; channels: number }; create?: { width: number; height: number; channels: number; background?: string | object }; text?: { text: string; width?: number; height?: number; channels?: number; rgba?: boolean }; animated?: boolean; limitInputPixels?: number; failOn?: 'error' | 'warning' | 'none'; density?: number; ignoreIcc?: boolean; pages?: number; page?: number; subifd?: number; level?: number; pdfBackground?: string | object }
 ) => SharpProxy
 

@@ -68,7 +68,11 @@ describe('streamChunkProtocol', () => {
 
     const resultChunk = createToolResultChunk({ id: 'c1', name: 'sumNumbers', result: { result: 3 } })
     assert.equal(resultChunk.chunkType, 'tool-result')
-    assert.equal((resultChunk.tool_result?.result as any)?.result, 3)
+    const toolResult = resultChunk.tool_result?.result
+    assert.equal(
+      typeof toolResult === 'object' && toolResult ? (toolResult as { result?: number }).result : undefined,
+      3
+    )
   })
 
   it('creates error chunk and end chunk (without duplicated content payload)', () => {

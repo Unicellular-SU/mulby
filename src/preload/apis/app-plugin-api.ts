@@ -7,12 +7,12 @@ export function createAppPluginApi(ipcRenderer: IpcRenderer) {
   return {
     app: {
       onOpenSystemPlugin: (callback: (payload: OpenSystemPluginPayload) => void) => {
-        const listener = (_: any, payload: OpenSystemPluginPayload) => callback(payload)
+        const listener = (_event: unknown, payload: OpenSystemPluginPayload) => callback(payload)
         ipcRenderer.on('app:openSystemPlugin', listener)
         return () => ipcRenderer.removeListener('app:openSystemPlugin', listener)
       },
       onSystemPluginBeforeAttach: (callback: (payload: SystemPluginBeforeAttachPayload) => void | Promise<void>) => {
-        const listener = (_: any, payload: SystemPluginBeforeAttachPayload) => {
+        const listener = (_event: unknown, payload: SystemPluginBeforeAttachPayload) => {
           void callback(payload)
         }
         ipcRenderer.on('app:systemPluginBeforeAttach', listener)
@@ -59,7 +59,7 @@ export function createAppPluginApi(ipcRenderer: IpcRenderer) {
         return () => ipcRenderer.removeListener('app:openLogViewer', listener)
       },
       onOpenCommandShortcuts: (callback: (payload?: { cmdLabel?: string }) => void) => {
-        const listener = (_: any, payload?: { cmdLabel?: string }) => callback(payload)
+        const listener = (_event: unknown, payload?: { cmdLabel?: string }) => callback(payload)
         ipcRenderer.on('app:openCommandShortcuts', listener)
         return () => ipcRenderer.removeListener('app:openCommandShortcuts', listener)
       }
@@ -83,7 +83,7 @@ export function createAppPluginApi(ipcRenderer: IpcRenderer) {
       getMode: () => ipcRenderer.invoke('systemPage:getMode'),
       getState: () => ipcRenderer.invoke('systemPage:getState'),
       onStateChange: (callback: (state: { open: boolean; mode: 'none' | 'attached' | 'detached'; page: string | null; title: string }) => void) => {
-        const listener = (_: any, state: { open: boolean; mode: 'none' | 'attached' | 'detached'; page: string | null; title: string }) => callback(state)
+        const listener = (_event: unknown, state: { open: boolean; mode: 'none' | 'attached' | 'detached'; page: string | null; title: string }) => callback(state)
         ipcRenderer.on('systemPage:state', listener)
         return () => ipcRenderer.removeListener('systemPage:state', listener)
       }
@@ -95,7 +95,7 @@ export function createAppPluginApi(ipcRenderer: IpcRenderer) {
       search: (query: string | InputPayload) => ipcRenderer.invoke('plugin:search', query),
       run: (name: string, featureCode: string, input?: string | InputPayload) =>
         ipcRenderer.invoke('plugin:run', name, featureCode, input),
-      runCommand: (input: any) => ipcRenderer.invoke('plugin:runCommand', input),
+      runCommand: (input: unknown) => ipcRenderer.invoke('plugin:runCommand', input),
       getRecentUsed: (limit?: number) => ipcRenderer.invoke('plugin:getRecentUsed', limit),
       install: (filePath: string) => ipcRenderer.invoke('plugin:install', filePath),
       enable: (name: string) => ipcRenderer.invoke('plugin:enable', name),
@@ -108,11 +108,11 @@ export function createAppPluginApi(ipcRenderer: IpcRenderer) {
       startBackground: (pluginId: string) => ipcRenderer.invoke('plugin:startBackground', pluginId),
       stopPlugin: (pluginId: string) => ipcRenderer.invoke('plugin:stopPlugin', pluginId),
       listCommandShortcuts: (pluginId?: string) => ipcRenderer.invoke('plugin:commandShortcut:list', pluginId),
-      bindCommandShortcut: (input: any) => ipcRenderer.invoke('plugin:commandShortcut:bind', input),
+      bindCommandShortcut: (input: unknown) => ipcRenderer.invoke('plugin:commandShortcut:bind', input),
       unbindCommandShortcut: (bindingId: string) => ipcRenderer.invoke('plugin:commandShortcut:unbind', bindingId),
       validateCommandShortcut: (accelerator: string, bindingId?: string) =>
         ipcRenderer.invoke('plugin:commandShortcut:validate', accelerator, bindingId),
-      setCommandDisabled: (input: any) => ipcRenderer.invoke('plugin:command:setDisabled', input),
+      setCommandDisabled: (input: unknown) => ipcRenderer.invoke('plugin:command:setDisabled', input),
       redirect: (label: string | [string, string], payload?: unknown) =>
         ipcRenderer.invoke('plugin:redirect', label, payload),
       outPlugin: (isKill?: boolean) => ipcRenderer.invoke('plugin:out', isKill)
@@ -120,7 +120,7 @@ export function createAppPluginApi(ipcRenderer: IpcRenderer) {
 
     pluginStore: {
       fetch: () => ipcRenderer.invoke('plugin:store:fetch'),
-      installFromUrl: (input: any) => ipcRenderer.invoke('plugin:store:installFromUrl', input),
+      installFromUrl: (input: unknown) => ipcRenderer.invoke('plugin:store:installFromUrl', input),
       checkUpdatesInstalled: () => ipcRenderer.invoke('plugin:store:checkUpdatesInstalled'),
       updateAll: (pluginIds?: string[]) => ipcRenderer.invoke('plugin:store:updateAll', pluginIds)
     },
@@ -131,7 +131,7 @@ export function createAppPluginApi(ipcRenderer: IpcRenderer) {
       getTaskCount: (filter?: { pluginId?: string; status?: string; type?: string }) =>
         ipcRenderer.invoke('scheduler:getTaskCount', filter),
       getTask: (taskId: string) => ipcRenderer.invoke('scheduler:getTask', taskId),
-      schedule: (task: any) => ipcRenderer.invoke('scheduler:schedule', task),
+      schedule: (task: unknown) => ipcRenderer.invoke('scheduler:schedule', task),
       cancelTask: (taskId: string) => ipcRenderer.invoke('scheduler:cancelTask', taskId),
       pauseTask: (taskId: string) => ipcRenderer.invoke('scheduler:pauseTask', taskId),
       resumeTask: (taskId: string) => ipcRenderer.invoke('scheduler:resumeTask', taskId),
@@ -146,20 +146,20 @@ export function createAppPluginApi(ipcRenderer: IpcRenderer) {
       subscribe: () => ipcRenderer.invoke('scheduler:subscribe'),
       unsubscribe: () => ipcRenderer.invoke('scheduler:unsubscribe'),
       onEvent: (callback: (event: TaskSchedulerEvent) => void) => {
-        const listener = (_: any, event: TaskSchedulerEvent) => callback(event)
+        const listener = (_event: unknown, event: TaskSchedulerEvent) => callback(event)
         ipcRenderer.on('scheduler:event', listener)
         return () => ipcRenderer.removeListener('scheduler:event', listener)
       }
     },
 
     onPluginInit: (callback: (data: { pluginName: string; featureCode: string; input: string; mode?: string }) => void) => {
-      const listener = (_: any, data: { pluginName: string; featureCode: string; input: string; mode?: string }) => callback(data)
+      const listener = (_event: unknown, data: { pluginName: string; featureCode: string; input: string; mode?: string }) => callback(data)
       ipcRenderer.on('plugin:init', listener)
       return () => ipcRenderer.removeListener('plugin:init', listener)
     },
 
     onPluginAttach: (callback: (data: { pluginName: string; displayName: string; featureCode: string; input: string; uiPath: string; preloadPath: string }) => void) => {
-      const listener = (_: any, data: { pluginName: string; displayName: string; featureCode: string; input: string; uiPath: string; preloadPath: string }) => callback(data)
+      const listener = (_event: unknown, data: { pluginName: string; displayName: string; featureCode: string; input: string; uiPath: string; preloadPath: string }) => callback(data)
       ipcRenderer.on('plugin:attach', listener)
       return () => ipcRenderer.removeListener('plugin:attach', listener)
     },

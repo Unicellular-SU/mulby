@@ -70,10 +70,10 @@
 
 ## 最近基线结果（2026-03-03）
 - `typecheck`: 通过
-- `lint`: 0 error / 310 warnings
+- `lint`: 0 error / 0 warnings
 - `test:unit`: 149 tests, 0 fail, 1 skip
 - `build smoke`: 通过
 
 ## Next Backlog（优先级）
-1. lint warnings 分批治理（先 AI 主链路，再测试与类型声明文件）。
-2. 继续细化 `src/main/ai/service.ts`（当前约 893 行，优先降低 `stream()` 主链路可读性复杂度）。
+1. 继续细化 `src/main/ai/service.ts`（当前约 893 行，优先降低 `stream()` 主链路可读性复杂度）。
+2. 插件商店安全增强方案设计（签名/来源校验/安装校验链）。

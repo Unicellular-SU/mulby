@@ -153,8 +153,8 @@ export function registerFFmpegHandlers() {
         try {
             const result = await downloadFFmpeg(callback)
             return { success: result }
-        } catch (error: any) {
-            return { success: false, error: error.message }
+        } catch (error: unknown) {
+            return { success: false, error: error instanceof Error ? error.message : String(error) }
         }
     })
 

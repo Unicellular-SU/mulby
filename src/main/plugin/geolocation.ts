@@ -45,6 +45,18 @@ type NativeProbeResult = NativeProbeSuccess | NativeProbeFailure
 
 type ProbeError = Error & { code?: number | null }
 
+interface IpGeolocationParseResult {
+  latitude: unknown
+  longitude: unknown
+  accuracy: number
+}
+
+interface IpGeolocationService {
+  name: string
+  url: string
+  parse: (data: Record<string, unknown>) => IpGeolocationParseResult
+}
+
 export class PluginGeolocation {
   private nativeAccessStatus: GeolocationAccessStatus | null = null
   private nativeAccessAttempted = false
@@ -356,11 +368,11 @@ export class PluginGeolocation {
   private async getPositionByIP(): Promise<GeolocationPosition> {
     log.info('[Geolocation] Using IP geolocation fallback...')
 
-    const services = [
+    const services: IpGeolocationService[] = [
       {
         name: 'freegeoip.app',
         url: 'https://freegeoip.app/json/',
-        parse: (data: any) => ({
+        parse: (data: Record<string, unknown>) => ({
           latitude: data.latitude,
           longitude: data.longitude,
           accuracy: 5000,
@@ -369,7 +381,7 @@ export class PluginGeolocation {
       {
         name: 'ip-api.com',
         url: 'http://ip-api.com/json/?fields=lat,lon,status,message',
-        parse: (data: any) => ({
+        parse: (data: Record<string, unknown>) => ({
           latitude: data.lat,
           longitude: data.lon,
           accuracy: 5000,
@@ -378,7 +390,7 @@ export class PluginGeolocation {
       {
         name: 'ipwho.is',
         url: 'https://ipwho.is/',
-        parse: (data: any) => ({
+        parse: (data: Record<string, unknown>) => ({
           latitude: data.latitude,
           longitude: data.longitude,
           accuracy: 5000,
@@ -412,7 +424,7 @@ export class PluginGeolocation {
     throw new Error('无法获取位置信息，所有定位服务均失败')
   }
 
-  private fetchLocation(url: string): Promise<any> {
+  private fetchLocation(url: string): Promise<Record<string, unknown>> {
     return new Promise((resolve, reject) => {
       const request = net.request(url)
       let data = ''
@@ -423,7 +435,12 @@ export class PluginGeolocation {
         })
         response.on('end', () => {
           try {
-            resolve(JSON.parse(data))
+            const parsed = JSON.parse(data) as unknown
+            if (!parsed || typeof parsed !== 'object') {
+              reject(new Error('Invalid location response payload'))
+              return
+            }
+            resolve(parsed as Record<string, unknown>)
           } catch {
             reject(new Error('Failed to parse response'))
           }

@@ -358,7 +358,7 @@ export class TrayMenuWindowManager {
   private async buildStatus() {
     const backgroundPluginCount = this.options.pluginManager.getBackgroundManager().list().length
     const activeHostCount = this.options.pluginManager.getHostManager().getActiveHosts().length
-    const scheduler = (this.options.pluginManager as any).taskScheduler
+    const scheduler = this.options.pluginManager.getTaskScheduler()
     let runningTaskCount = 0
     let pendingTaskCount = 0
     let pausedTaskCount = 0

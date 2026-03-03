@@ -245,15 +245,15 @@
 **当前结果（2026-03-03）**：
 - 全量门禁回归通过：`npm run typecheck` + `npm run lint` + `npm run test:unit` + `npm run build:smoke`
   - `typecheck`: 通过
-  - `lint`: 0 error / 310 warnings
+  - `lint`: 0 error / 0 warnings（已完成清零）
   - `test:unit`: 149 tests, 0 fail, 1 skip
   - `build:smoke`: 通过
 - 文档已同步：
   - `docs/TASKS.md`：基线结果与剩余任务更新
   - `docs/roadmap.md`：阶段状态与下一轮优先级更新
 - 后续 backlog（按优先级）：
-  1. lint warnings 分批治理（先业务代码，再类型声明与测试文件）
-  2. 继续细化 `src/main/ai/service.ts`（当前约 893 行，优先降低 `stream()` 主链路可读性复杂度）
+  1. 继续细化 `src/main/ai/service.ts`（当前约 893 行，优先降低 `stream()` 主链路可读性复杂度）
+  2. 补齐插件商店安全增强方案（签名、来源校验、安装校验链）
 
 ## Key Questions
 1. 更新中心第一版采用“内置下载/安装”还是“仅检查并跳转发布页”？
@@ -266,7 +266,7 @@
 - i18n 保持待定，不在本轮实施。
 - 设置中心增强、CI、大文件拆分、调度器事件驱动均纳入本轮。
 - 历史阶段报告/进度快照统一迁移到 `docs/archive/`，活跃目录仅保留当前可执行文档。
-- lint warnings 采用“分批治理”策略，不在本轮一次性清零。
+- lint warnings 已完成分批治理并清零（`0 error / 0 warnings`）。
 - `src/main/plugin/manager.ts` 和 `src/renderer/components/PluginManagerView.tsx` 拆分从本轮移除，仅保留 `src/main/ai/service.ts` 拆分。
 
 ## Errors Encountered
@@ -274,4 +274,4 @@
 - `test:unit` 初始失败触发 `better-sqlite3` ABI 不匹配；已通过 `AiSkillService` 中默认 `command-runner` 懒加载隔离测试导入路径。
 
 ## Status
-**Phase 7 Completed（2026-03-03）** - 当前轮次收口完成，进入下一轮 backlog 执行（以大文件拆分收尾和 warnings 治理为主）。
+**Phase 7 Completed（2026-03-03）** - 当前轮次收口完成，进入下一轮 backlog 执行（以大文件拆分收尾和插件商店安全方案为主）。

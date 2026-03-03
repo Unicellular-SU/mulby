@@ -36,7 +36,7 @@ export function createCoreApi(ipcRenderer: IpcRenderer) {
       sendToParent: (channel: string, ...args: unknown[]) =>
         ipcRenderer.send('window:sendToParent', channel, ...args),
       onChildMessage: (callback: (channel: string, ...args: unknown[]) => void) => {
-        const listener = (_: any, channel: string, ...args: unknown[]) => callback(channel, ...args)
+        const listener = (_event: unknown, channel: string, ...args: unknown[]) => callback(channel, ...args)
         ipcRenderer.on('window:childMessage', listener)
         return () => ipcRenderer.removeListener('window:childMessage', listener)
       },
@@ -56,7 +56,7 @@ export function createCoreApi(ipcRenderer: IpcRenderer) {
       blur: () => ipcRenderer.send('subInput:blur'),
       select: () => ipcRenderer.send('subInput:select'),
       onChange: (callback: (data: { text: string }) => void) => {
-        const listener = (_: any, data: { text: string }) => callback(data)
+        const listener = (_event: unknown, data: { text: string }) => callback(data)
         ipcRenderer.on('subInput:onChange', listener)
         return () => ipcRenderer.removeListener('subInput:onChange', listener)
       }
@@ -69,13 +69,13 @@ export function createCoreApi(ipcRenderer: IpcRenderer) {
     },
 
     onThemeChange: (callback: (theme: 'light' | 'dark') => void) => {
-      const listener = (_: any, theme: 'light' | 'dark') => callback(theme)
+      const listener = (_event: unknown, theme: 'light' | 'dark') => callback(theme)
       ipcRenderer.on('theme:changed', listener)
       return () => ipcRenderer.removeListener('theme:changed', listener)
     },
 
     onWindowStateChange: (callback: (state: { isMaximized: boolean }) => void) => {
-      const listener = (_: any, state: { isMaximized: boolean }) => callback(state)
+      const listener = (_event: unknown, state: { isMaximized: boolean }) => callback(state)
       ipcRenderer.on('window:stateChanged', listener)
       return () => ipcRenderer.removeListener('window:stateChanged', listener)
     },

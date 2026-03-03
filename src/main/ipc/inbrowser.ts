@@ -22,7 +22,7 @@ export function registerInBrowserHandlers() {
 
             const result = await manager.run(payload, senderId);
             return result;
-        } catch (error: any) {
+        } catch (error: unknown) {
             console.error('InBrowser IPC Error:', error);
             throw error; // Re-throw to renderer
         }

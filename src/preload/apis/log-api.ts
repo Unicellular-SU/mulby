@@ -19,7 +19,7 @@ export function createLogApi(ipcRenderer: IpcRenderer) {
     subscribe: () =>
       ipcRenderer.invoke('log:subscribe'),
     onLog: (callback: (entry: { timestamp: number; level: string; pluginId: string; message: string; args?: unknown[] }) => void) => {
-      const listener = (_: any, entry: { timestamp: number; level: string; pluginId: string; message: string; args?: unknown[] }) => callback(entry)
+      const listener = (_event: unknown, entry: { timestamp: number; level: string; pluginId: string; message: string; args?: unknown[] }) => callback(entry)
       ipcRenderer.on('log:new', listener)
       return () => ipcRenderer.removeListener('log:new', listener)
     }

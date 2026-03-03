@@ -29,8 +29,9 @@ interface ErrorLike {
 function getErrorMessage(error: unknown): string {
   if (error instanceof Error) return error.message || 'Unknown error'
   if (typeof error === 'string') return error
-  if (error && typeof error === 'object' && typeof (error as any).message === 'string') {
-    return (error as any).message
+  const candidate = toErrorLike(error)
+  if (typeof candidate?.message === 'string') {
+    return candidate.message
   }
   return 'Unknown error'
 }

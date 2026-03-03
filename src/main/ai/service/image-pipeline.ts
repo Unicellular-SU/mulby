@@ -35,6 +35,12 @@ interface ImagePipelineContext {
   resolveCompatBaseURL: (explicitBaseURL?: string, providerType?: string) => string
 }
 
+type UnknownRecord = Record<string, unknown>
+
+function asRecord(value: unknown): UnknownRecord | undefined {
+  return value && typeof value === 'object' ? value as UnknownRecord : undefined
+}
+
 export async function executeImageWithRetry<T>(
   stage: 'generateImages' | 'editImage',
   execute: () => Promise<T>,
@@ -83,7 +89,7 @@ export async function executeImageWithRetry<T>(
 }
 
 export async function generateImageWithProgress(input: ImagePipelineContext & {
-  modelKey: any
+  modelKey: unknown
   prompt: string | { text?: string; images?: unknown[]; mask?: unknown }
   size?: string
   n?: number
@@ -245,7 +251,7 @@ export async function generateImageWithProgress(input: ImagePipelineContext & {
 }
 
 export async function generateImageWithDecodeFallback(input: {
-  modelKey: any
+  modelKey: unknown
   prompt: string | { text?: string; images?: unknown[]; mask?: unknown }
   size?: string
   n?: number
@@ -270,14 +276,14 @@ export async function generateImageWithDecodeFallback(input: {
 
     const sdkStart = Date.now()
     try {
-      const result = await generateImage({
+      const result = await callGenerateImageSdk({
         model: input.modelKey,
-        prompt: input.prompt as any,
-        size: input.size as any,
+        prompt: input.prompt,
+        size: input.size,
         n: input.n,
         abortSignal: input.abortSignal
-      } as any)
-      const images = (result as any).images?.map((img: any) => img.base64) || []
+      })
+      const images = extractSdkGeneratedImages(result)
       console.info('[AI] image:generate:result', {
         stage: 'sdk',
         count: images.length,
@@ -440,7 +446,7 @@ async function requestImageJson(input: {
   headers: Record<string, string>
   body?: Record<string, unknown>
   abortSignal?: AbortSignal
-}): Promise<any> {
+}): Promise<unknown> {
   const requestHeaders: Record<string, string> = { ...input.headers }
   if (input.method === 'GET') {
     delete requestHeaders['Content-Type']
@@ -572,7 +578,7 @@ async function streamOpenAIImageGeneration(input: ImagePipelineContext & {
         const data = line.slice(5).trim()
         if (!data || data === '[DONE]') continue
 
-        let payload: any
+        let payload: unknown
         try {
           payload = JSON.parse(data)
         } catch {
@@ -601,7 +607,7 @@ async function streamOpenAIImageGeneration(input: ImagePipelineContext & {
     if (!sawSseData) {
       const payloadText = buffer.trim()
       if (!payloadText) return null
-      let payload: any
+      let payload: unknown
       try {
         payload = JSON.parse(payloadText)
       } catch {
@@ -631,13 +637,15 @@ async function streamOpenAIImageGeneration(input: ImagePipelineContext & {
 }
 
 async function generateImageByDirectModelCall(input: {
-  modelKey: any
+  modelKey: unknown
   prompt: string | { text?: string; images?: unknown[]; mask?: unknown }
   size?: string
   n?: number
   abortSignal?: AbortSignal
 }): Promise<string[]> {
-  const model = input.modelKey as { doGenerate?: (options: any) => Promise<any> }
+  const model = input.modelKey as {
+    doGenerate?: (options: Record<string, unknown>) => Promise<{ images?: unknown } | null | undefined>
+  }
   if (!model || typeof model.doGenerate !== 'function') {
     throw new Error('Image model does not support direct doGenerate fallback')
   }
@@ -656,4 +664,33 @@ async function generateImageByDirectModelCall(input: {
     abortSignal: input.abortSignal
   })
   return await normalizeRawGeneratedImagesHelper(response?.images, input.abortSignal)
+}
+
+async function callGenerateImageSdk(input: {
+  model: unknown
+  prompt: unknown
+  size?: string
+  n?: number
+  abortSignal?: AbortSignal
+}): Promise<unknown> {
+  const callGenerateImage = generateImage as unknown as (options: {
+    model: unknown
+    prompt: unknown
+    size?: string
+    n?: number
+    abortSignal?: AbortSignal
+  }) => Promise<unknown>
+  return await callGenerateImage(input)
+}
+
+function extractSdkGeneratedImages(result: unknown): string[] {
+  const images = asRecord(result)?.images
+  if (!Array.isArray(images)) return []
+  return images
+    .map((item) => {
+      if (typeof item === 'string') return item
+      const record = asRecord(item)
+      return typeof record?.base64 === 'string' ? record.base64 : ''
+    })
+    .filter((item): item is string => typeof item === 'string' && item.trim().length > 0)
 }

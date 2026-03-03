@@ -9,6 +9,29 @@ import { TaskQueue } from './task-queue'
 import { TaskStore } from './task-store'
 import { CronParser } from './cron-parser'
 import type { Task, TaskInput, TaskExecution, TaskFilter } from './types'
+import type { Plugin } from '../../shared/types/plugin'
+
+interface SchedulerHostManagerLike {
+  isHostReady(pluginId: string): boolean
+  initPlugin(plugin: Plugin): Promise<boolean>
+  callTaskCallback(plugin: Plugin, callback: string, payload: unknown, task: Task): Promise<unknown>
+  destroyHost(pluginId: string): Promise<void>
+  getWatchdog(): {
+    recordHeartbeat(pluginId: string): void
+  }
+}
+
+interface SchedulerBackgroundManagerLike {
+  isRunning(pluginId: string): boolean
+  start(plugin: Plugin, autoStart?: boolean): Promise<boolean>
+}
+
+interface SchedulerPluginManagerLike {
+  get(pluginId: string): Plugin | undefined
+  getHostManager(): SchedulerHostManagerLike
+  getBackgroundManager?(): SchedulerBackgroundManagerLike
+  getActiveWindowPlugins?(): Array<{ pluginId: string }>
+}
 
 export class TaskScheduler extends EventEmitter {
   private queue: TaskQueue
@@ -16,7 +39,7 @@ export class TaskScheduler extends EventEmitter {
   private cronParser: CronParser
   private timer: NodeJS.Timeout | null = null
   private running: boolean = false
-  private pluginManager: any  // 将在初始化时注入
+  private pluginManager: SchedulerPluginManagerLike | null = null  // 将在初始化时注入
   private pluginCleanupTimers: Map<string, NodeJS.Timeout> = new Map()
   private readonly CLEANUP_DELAY_SHORT = 30 * 1000  // 30秒：下一个任务即将执行
   private runningTasks: Set<string> = new Set()
@@ -32,7 +55,7 @@ export class TaskScheduler extends EventEmitter {
   /**
    * 设置插件管理器（用于调用插件回调）
    */
-  setPluginManager(pluginManager: any): void {
+  setPluginManager(pluginManager: SchedulerPluginManagerLike): void {
     this.pluginManager = pluginManager
   }
 
@@ -314,25 +337,30 @@ export class TaskScheduler extends EventEmitter {
 
     // 自动启动后台插件
     if (this.pluginManager && pluginsToStart.size > 0) {
-      const backgroundManager = (this.pluginManager as any).backgroundManager
+      const backgroundManager = this.pluginManager.getBackgroundManager?.()
+      if (!backgroundManager) {
+        console.warn('[TaskScheduler] Background manager unavailable, skip auto-starting background plugins')
+      }
 
-      for (const pluginId of pluginsToStart) {
-        const plugin = this.pluginManager.get(pluginId)
-        if (!plugin) {
-          continue
-        }
+      if (backgroundManager) {
+        for (const pluginId of pluginsToStart) {
+          const plugin = this.pluginManager.get(pluginId)
+          if (!plugin) {
+            continue
+          }
 
-        // 检查是否已在运行
-        if (backgroundManager.isRunning(pluginId)) {
-          continue
-        }
+          // 检查是否已在运行
+          if (backgroundManager.isRunning(pluginId)) {
+            continue
+          }
 
-        // 启动后台插件
-        try {
-          console.log(`[TaskScheduler] Auto-starting background plugin: ${pluginId}`)
-          await backgroundManager.start(plugin, true)
-        } catch (err) {
-          console.error(`[TaskScheduler] Error auto-starting plugin ${pluginId}:`, err)
+          // 启动后台插件
+          try {
+            console.log(`[TaskScheduler] Auto-starting background plugin: ${pluginId}`)
+            await backgroundManager.start(plugin, true)
+          } catch (err) {
+            console.error(`[TaskScheduler] Error auto-starting plugin ${pluginId}:`, err)
+          }
         }
       }
     }
@@ -477,15 +505,16 @@ export class TaskScheduler extends EventEmitter {
 
       this.emit('task:success', task, result)
 
-    } catch (error: any) {
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : String(error)
       execution.endTime = Date.now()
       execution.duration = execution.endTime - execution.startTime
-      execution.status = error.message === 'timeout' ? 'timeout' : 'failed'
-      execution.error = error.message
+      execution.status = errorMessage === 'timeout' ? 'timeout' : 'failed'
+      execution.error = errorMessage
 
       // 更新任务状态
       task.failureCount++
-      task.lastError = error.message
+      task.lastError = errorMessage
 
       // 重试逻辑
       if (task.maxRetries && task.failureCount <= task.maxRetries) {
@@ -550,7 +579,7 @@ export class TaskScheduler extends EventEmitter {
 
     // 获取 HostManager 和 BackgroundManager
     const hostManager = this.pluginManager.getHostManager()
-    const backgroundManager = (this.pluginManager as any).backgroundManager
+    const backgroundManager = this.pluginManager.getBackgroundManager?.()
     const watchdog = hostManager.getWatchdog()
 
     // 检查插件是否支持后台运行
@@ -563,7 +592,10 @@ export class TaskScheduler extends EventEmitter {
     }
 
     // 如果插件支持后台运行但未运行，自动启动后台进程
-    if (supportsBackground && !backgroundManager.isRunning(task.pluginId)) {
+    if (supportsBackground && !backgroundManager?.isRunning(task.pluginId)) {
+      if (!backgroundManager) {
+        throw new Error(`Background manager not available for plugin: ${task.pluginId}`)
+      }
       const started = await backgroundManager.start(plugin, true)
       if (!started) {
         throw new Error(`Failed to auto-start background plugin: ${task.pluginId}`)

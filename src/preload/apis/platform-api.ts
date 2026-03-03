@@ -31,9 +31,9 @@ export function createPlatformApi(ipcRenderer: IpcRenderer) {
       openFolder: (path: string) => ipcRenderer.invoke('shell:openFolder', path),
       trashItem: (path: string) => ipcRenderer.invoke('shell:trashItem', path),
       beep: () => ipcRenderer.invoke('shell:beep'),
-      runCommand: (input: any) => ipcRenderer.invoke('shell:runCommand', input),
+      runCommand: (input: unknown) => ipcRenderer.invoke('shell:runCommand', input),
       getRunCommandPolicy: () => ipcRenderer.invoke('shell:getRunCommandPolicy'),
-      updateRunCommandPolicy: (patch: any) => ipcRenderer.invoke('shell:updateRunCommandPolicy', patch),
+      updateRunCommandPolicy: (patch: unknown) => ipcRenderer.invoke('shell:updateRunCommandPolicy', patch),
       listRunCommandAudit: (limit?: number) => ipcRenderer.invoke('shell:listRunCommandAudit', limit),
       clearRunCommandAudit: () => ipcRenderer.invoke('shell:clearRunCommandAudit'),
       clearRunCommandTrusted: () => ipcRenderer.invoke('shell:clearRunCommandTrusted')
@@ -120,7 +120,7 @@ export function createPlatformApi(ipcRenderer: IpcRenderer) {
       unregisterAll: () => ipcRenderer.invoke('shortcut:unregisterAll'),
       isRegistered: (accelerator: string) => ipcRenderer.invoke('shortcut:isRegistered', accelerator),
       onTriggered: (callback: (accelerator: string) => void) => {
-        const listener = (_: any, accelerator: string) => callback(accelerator)
+        const listener = (_event: unknown, accelerator: string) => callback(accelerator)
         ipcRenderer.on('shortcut:triggered', listener)
         return () => ipcRenderer.removeListener('shortcut:triggered', listener)
       }
@@ -220,17 +220,17 @@ export function createPlatformApi(ipcRenderer: IpcRenderer) {
       action: (action: string, payload?: Record<string, unknown>) => ipcRenderer.invoke('tray-menu:action', action, payload),
       close: () => ipcRenderer.invoke('tray-menu:close'),
       onState: (callback: (state: unknown) => void) => {
-        const listener = (_: any, state: unknown) => callback(state)
+        const listener = (_event: unknown, state: unknown) => callback(state)
         ipcRenderer.on('tray-menu:state', listener)
         return () => ipcRenderer.removeListener('tray-menu:state', listener)
       }
     },
 
     http: {
-      request: (options: any) => ipcRenderer.invoke('http:request', options),
+      request: (options: unknown) => ipcRenderer.invoke('http:request', options),
       get: (url: string, headers?: Record<string, string>) => ipcRenderer.invoke('http:get', url, headers),
-      post: (url: string, body?: any, headers?: Record<string, string>) => ipcRenderer.invoke('http:post', url, body, headers),
-      put: (url: string, body?: any, headers?: Record<string, string>) => ipcRenderer.invoke('http:put', url, body, headers),
+      post: (url: string, body?: unknown, headers?: Record<string, string>) => ipcRenderer.invoke('http:post', url, body, headers),
+      put: (url: string, body?: unknown, headers?: Record<string, string>) => ipcRenderer.invoke('http:put', url, body, headers),
       delete: (url: string, headers?: Record<string, string>) => ipcRenderer.invoke('http:delete', url, headers)
     },
 
@@ -251,7 +251,7 @@ export function createPlatformApi(ipcRenderer: IpcRenderer) {
         checked?: boolean
         enabled?: boolean
         id?: string
-        submenu?: any[]
+        submenu?: Array<Record<string, unknown>>
       }[]) => ipcRenderer.invoke('menu:showContextMenu', items)
     },
 

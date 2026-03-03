@@ -8,6 +8,47 @@ import { app } from 'electron'
 import { join } from 'path'
 import type { Task, TaskExecution, TaskFilter } from './types'
 
+type TaskColumnInfo = { name?: string }
+
+type TaskRow = {
+  id: string
+  plugin_id: string
+  name: string
+  description: string | null
+  type: Task['type']
+  status: Task['status']
+  time: number | null
+  cron: string | null
+  delay: number | null
+  timezone: string | null
+  callback: string
+  payload: string | null
+  priority: number | null
+  max_retries: number | null
+  retry_delay: number | null
+  timeout: number | null
+  end_time: number | null
+  max_executions: number | null
+  next_run_time: number | null
+  last_run_time: number | null
+  execution_count: number | null
+  failure_count: number | null
+  last_error: string | null
+  created_at: number
+  updated_at: number
+}
+
+type ExecutionRow = {
+  id: string
+  task_id: string
+  start_time: number
+  end_time: number | null
+  status: TaskExecution['status']
+  result: string | null
+  error: string | null
+  duration: number | null
+}
+
 export class TaskStore {
   private db: ReturnType<typeof Database>
 
@@ -27,7 +68,7 @@ export class TaskStore {
    */
   private migrateDatabase(): void {
     // 检查 priority 字段是否存在
-    const columns = this.db.pragma('table_info(tasks)') as any[]
+    const columns = this.db.pragma('table_info(tasks)') as TaskColumnInfo[]
     const hasPriority = columns.some(col => col.name === 'priority')
 
     if (!hasPriority) {
@@ -204,7 +245,7 @@ export class TaskStore {
    */
   async getTask(taskId: string): Promise<Task | null> {
     const stmt = this.db.prepare('SELECT * FROM tasks WHERE id = ?')
-    const row = stmt.get(taskId) as any
+    const row = stmt.get(taskId) as TaskRow | undefined
 
     if (!row) return null
 
@@ -216,7 +257,7 @@ export class TaskStore {
    */
   async listTasks(filter?: TaskFilter): Promise<Task[]> {
     let query = 'SELECT * FROM tasks WHERE 1=1'
-    const params: any[] = []
+    const params: unknown[] = []
 
     if (filter?.pluginId) {
       query += ' AND plugin_id = ?'
@@ -246,7 +287,7 @@ export class TaskStore {
     }
 
     const stmt = this.db.prepare(query)
-    const rows = stmt.all(...params) as any[]
+    const rows = stmt.all(...params) as TaskRow[]
 
     return rows.map(row => this.rowToTask(row))
   }
@@ -256,7 +297,7 @@ export class TaskStore {
    */
   async getTaskCount(filter?: Omit<TaskFilter, 'limit' | 'offset'>): Promise<number> {
     let query = 'SELECT COUNT(*) as count FROM tasks WHERE 1=1'
-    const params: any[] = []
+    const params: unknown[] = []
 
     if (filter?.pluginId) {
       query += ' AND plugin_id = ?'
@@ -274,7 +315,7 @@ export class TaskStore {
     }
 
     const stmt = this.db.prepare(query)
-    const result = stmt.get(...params) as any
+    const result = stmt.get(...params) as { count: number }
     return result.count
   }
 
@@ -302,7 +343,7 @@ export class TaskStore {
       WHERE status = 'pending' AND next_run_time IS NOT NULL
       ORDER BY next_run_time ASC
     `)
-    const rows = stmt.all() as any[]
+    const rows = stmt.all() as TaskRow[]
 
     return rows.map(row => this.rowToTask(row))
   }
@@ -339,7 +380,7 @@ export class TaskStore {
       ORDER BY start_time DESC
       LIMIT ?
     `)
-    const rows = stmt.all(taskId, limit) as any[]
+    const rows = stmt.all(taskId, limit) as ExecutionRow[]
 
     return rows.map(row => this.rowToExecution(row))
   }
@@ -366,31 +407,31 @@ export class TaskStore {
   /**
    * 将数据库行转换为 Task 对象
    */
-  private rowToTask(row: any): Task {
+  private rowToTask(row: TaskRow): Task {
     return {
       id: row.id,
       pluginId: row.plugin_id,
       name: row.name,
-      description: row.description,
+      description: row.description ?? undefined,
       type: row.type,
       status: row.status,
-      time: row.time,
-      cron: row.cron,
-      delay: row.delay,
-      timezone: row.timezone,
+      time: row.time ?? undefined,
+      cron: row.cron ?? undefined,
+      delay: row.delay ?? undefined,
+      timezone: row.timezone ?? undefined,
       callback: row.callback,
       payload: row.payload ? JSON.parse(row.payload) : undefined,
       priority: row.priority ?? 5,
-      maxRetries: row.max_retries,
-      retryDelay: row.retry_delay,
-      timeout: row.timeout,
-      endTime: row.end_time,
-      maxExecutions: row.max_executions,
-      nextRunTime: row.next_run_time,
-      lastRunTime: row.last_run_time,
-      executionCount: row.execution_count,
-      failureCount: row.failure_count,
-      lastError: row.last_error,
+      maxRetries: row.max_retries ?? undefined,
+      retryDelay: row.retry_delay ?? undefined,
+      timeout: row.timeout ?? undefined,
+      endTime: row.end_time ?? undefined,
+      maxExecutions: row.max_executions ?? undefined,
+      nextRunTime: row.next_run_time ?? undefined,
+      lastRunTime: row.last_run_time ?? undefined,
+      executionCount: row.execution_count ?? 0,
+      failureCount: row.failure_count ?? 0,
+      lastError: row.last_error ?? undefined,
       createdAt: row.created_at,
       updatedAt: row.updated_at
     }
@@ -399,16 +440,16 @@ export class TaskStore {
   /**
    * 将数据库行转换为 TaskExecution 对象
    */
-  private rowToExecution(row: any): TaskExecution {
+  private rowToExecution(row: ExecutionRow): TaskExecution {
     return {
       id: row.id,
       taskId: row.task_id,
       startTime: row.start_time,
-      endTime: row.end_time,
+      endTime: row.end_time ?? undefined,
       status: row.status,
       result: row.result ? JSON.parse(row.result) : undefined,
-      error: row.error,
-      duration: row.duration
+      error: row.error ?? undefined,
+      duration: row.duration ?? undefined
     }
   }
 }

@@ -5,6 +5,7 @@
 import { ipcMain } from 'electron'
 import type { PluginManager } from '../plugin/manager'
 import type { TaskSchedulerEvent } from '../../shared/types/task'
+import type { TaskInput, TaskFilter } from '../scheduler/types'
 
 interface SchedulerSubscriptionEntry {
   sender: Electron.WebContents
@@ -16,7 +17,7 @@ export function registerSchedulerHandlers(pluginManager: PluginManager) {
   const schedulerSubscriptions = new Map<number, SchedulerSubscriptionEntry>()
 
   const getScheduler = () => {
-    return (pluginManager as any).taskScheduler
+    return pluginManager.getTaskScheduler()
   }
 
   const clearSchedulerSubscription = (webContentsId: number) => {
@@ -106,7 +107,7 @@ export function registerSchedulerHandlers(pluginManager: PluginManager) {
   }
 
   // 列出任务
-  ipcMain.handle('scheduler:listTasks', async (_, filter?: { pluginId?: string; status?: string; type?: string; limit?: number; offset?: number }) => {
+  ipcMain.handle('scheduler:listTasks', async (_, filter?: TaskFilter) => {
     try {
       const scheduler = getScheduler()
       return await scheduler.listTasks(filter)
@@ -117,7 +118,7 @@ export function registerSchedulerHandlers(pluginManager: PluginManager) {
   })
 
   // 获取任务总数
-  ipcMain.handle('scheduler:getTaskCount', async (_, filter?: { pluginId?: string; status?: string; type?: string }) => {
+  ipcMain.handle('scheduler:getTaskCount', async (_, filter?: Omit<TaskFilter, 'limit' | 'offset'>) => {
     try {
       const scheduler = getScheduler()
       return await scheduler.getTaskCount(filter)
@@ -163,7 +164,7 @@ export function registerSchedulerHandlers(pluginManager: PluginManager) {
   })
 
   // 创建任务
-  ipcMain.handle('scheduler:schedule', async (_, task: any) => {
+  ipcMain.handle('scheduler:schedule', async (_, task: TaskInput) => {
     try {
       const scheduler = getScheduler()
       return await scheduler.createTask(task)

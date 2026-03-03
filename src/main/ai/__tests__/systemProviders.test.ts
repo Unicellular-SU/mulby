@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
+import type { AiProviderConfig } from '../../../shared/types/ai'
 import {
   getSystemDefaultProviderById,
   getSystemDefaultProviders,
@@ -42,7 +43,7 @@ describe('system default providers', () => {
         apiKey: 'k',
         baseURL: 'https://api.openai.com/v1'
       }
-    ] as any)
+    ] as AiProviderConfig[])
     const openaiItems = merged.filter((provider) => String(provider.id) === 'openai')
     assert.equal(openaiItems.length, 1)
   })

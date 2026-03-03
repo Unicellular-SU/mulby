@@ -254,7 +254,8 @@ export class PluginPanelWindow {
 
         // macOS 上使用 will-move 获得更早的响应
         if (process.platform === 'darwin') {
-            this.mainWindow.on('will-move' as any, this.moveHandler)
+            const willMoveEvent = 'will-move' as Parameters<BrowserWindow['on']>[0]
+            this.mainWindow.on(willMoveEvent, this.moveHandler)
         }
     }
 
@@ -286,7 +287,7 @@ export class PluginPanelWindow {
         const display = screen.getDisplayNearestPoint({ x, y })
         const { workArea } = display
 
-        let adjustedY = y
+        const adjustedY = y
         let adjustedHeight = panelBounds.height
 
         // 如果面板超出屏幕底部，调整高度
@@ -311,7 +312,8 @@ export class PluginPanelWindow {
             this.mainWindow.removeListener('move', this.moveHandler)
             this.mainWindow.removeListener('moved', this.moveHandler)
             if (process.platform === 'darwin') {
-                this.mainWindow.removeListener('will-move' as any, this.moveHandler)
+                const willMoveEvent = 'will-move' as Parameters<BrowserWindow['on']>[0]
+                this.mainWindow.removeListener(willMoveEvent, this.moveHandler)
             }
         }
         if (this.resizeHandler) {

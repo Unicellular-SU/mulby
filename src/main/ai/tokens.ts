@@ -17,7 +17,7 @@ function getEncodingForModel(model?: string): Tiktoken | null {
 
   try {
     if (normalized) {
-      const encoding = encodingForModel(normalized as any)
+      const encoding = encodingForModel(normalized as Parameters<typeof encodingForModel>[0])
       encodingCache.set(key, encoding)
       return encoding
     }

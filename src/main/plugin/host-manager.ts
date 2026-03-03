@@ -19,6 +19,7 @@ import type { InputAttachment, Plugin } from '../../shared/types/plugin'
 import { resolveResourceLimits, applyResourceLimitsToWatchdog } from './resource-limits'
 import { PluginMessageBus } from './message-bus'
 import type { TaskScheduler } from '../scheduler'
+import type { ClipboardHistoryManager } from '../services/clipboard-history'
 
 // ============ 类型定义 ============
 
@@ -47,7 +48,7 @@ export class PluginHostManager extends EventEmitter {
   private watchdog: PluginHostWatchdog
   private messageBus: PluginMessageBus
   private taskScheduler?: TaskScheduler
-  private clipboardHistoryManager?: any
+  private clipboardHistoryManager?: ClipboardHistoryManager
 
   constructor() {
     super()
@@ -95,7 +96,7 @@ export class PluginHostManager extends EventEmitter {
   /**
    * 设置剪贴板历史管理器
    */
-  setClipboardHistoryManager(manager: any): void {
+  setClipboardHistoryManager(manager: ClipboardHistoryManager): void {
     this.clipboardHistoryManager = manager
   }
 

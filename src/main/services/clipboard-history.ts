@@ -3,6 +3,19 @@ import db from '../db'
 import { ClipboardWatcher } from './clipboard-watcher-v2'
 import { readFile } from 'fs/promises'
 
+interface ClipboardHistoryRow {
+  id: string
+  type: 'text' | 'image' | 'files'
+  content: string
+  plain_text: string | null
+  files: string | null
+  file_path: string | null
+  timestamp: number
+  size: number
+  favorite: number
+  tags: string | null
+}
+
 /**
  * 剪贴板历史条目
  */
@@ -71,9 +84,9 @@ export class ClipboardHistoryManager {
     // 迁移：添加 file_path 列（如果不存在）
     try {
       db.exec(`ALTER TABLE clipboard_history ADD COLUMN file_path TEXT`)
-    } catch (err: any) {
+    } catch (err: unknown) {
       // 列已存在，忽略错误
-      if (!err.message.includes('duplicate column name')) {
+      if (!(err instanceof Error) || !err.message.includes('duplicate column name')) {
         console.error('[ClipboardHistory] Migration error:', err)
       }
     }
@@ -206,7 +219,7 @@ export class ClipboardHistoryManager {
       if (process.platform === 'darwin') {
         const rawFiles = clipboard.read('public.file-url')
         if (rawFiles) {
-          let filePath = decodeURIComponent(rawFiles.replace('file://', ''))
+          const filePath = decodeURIComponent(rawFiles.replace('file://', ''))
 
           // macOS 使用 /.file/id= 格式，需要转换为真实路径
           if (filePath.startsWith('/.file/id=')) {
@@ -238,7 +251,7 @@ export class ClipboardHistoryManager {
                   return paths
                 }
               }
-            } catch (err) {
+            } catch {
               // 忽略错误
             }
           }
@@ -496,7 +509,7 @@ export class ClipboardHistoryManager {
     offset?: number
   }): ClipboardHistoryItem[] {
     let sql = 'SELECT * FROM clipboard_history WHERE 1=1'
-    const params: any[] = []
+    const params: unknown[] = []
 
     if (options.type) {
       sql += ' AND type = ?'
@@ -526,19 +539,19 @@ export class ClipboardHistoryManager {
     }
 
     const stmt = db.prepare(sql)
-    const rows = stmt.all(...params) as any[]
+    const rows = stmt.all(...params) as ClipboardHistoryRow[]
 
     return rows.map(row => ({
       id: row.id,
       type: row.type,
       content: row.content,
-      plainText: row.plain_text,
-      files: row.files ? JSON.parse(row.files) : undefined,
-      filePath: row.file_path,
+      plainText: row.plain_text ?? undefined,
+      files: row.files ? (JSON.parse(row.files) as string[]) : undefined,
+      filePath: row.file_path ?? undefined,
       timestamp: row.timestamp,
       size: row.size,
       favorite: row.favorite === 1,
-      tags: row.tags ? JSON.parse(row.tags) : undefined
+      tags: row.tags ? (JSON.parse(row.tags) as string[]) : undefined
     }))
   }
 

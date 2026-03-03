@@ -5,6 +5,12 @@ export type ImageCompatTaskDescriptor = {
   taskStatus?: string
 }
 
+type UnknownRecord = Record<string, unknown>
+
+function asRecord(value: unknown): UnknownRecord | undefined {
+  return value && typeof value === 'object' ? value as UnknownRecord : undefined
+}
+
 const DEFAULT_MAX_TOOL_STEPS = 20
 const MAX_TOOL_STEPS_LIMIT = 100
 
@@ -39,12 +45,13 @@ export function parseCompatToolCallArgs(rawArgs: unknown): unknown {
 
 export function mergeModelParams(...params: Array<AiModelParameters | undefined>) {
   const result: AiModelParameters = {}
+  const resultRecord = result as Record<string, unknown>
   for (const item of params) {
     if (!item) continue
     for (const [key, value] of Object.entries(item)) {
       if (value === undefined || value === null) continue
       if (Array.isArray(value) && value.length === 0) continue
-      ;(result as any)[key] = value
+      resultRecord[key] = value
     }
   }
   return result
@@ -62,8 +69,9 @@ export function sleep(ms: number): Promise<void> {
 export function getErrorMessageForLog(error: unknown): string {
   if (error instanceof Error) return error.message || error.name || 'Unknown error'
   if (typeof error === 'string') return error
-  if (error && typeof error === 'object' && typeof (error as any).message === 'string') {
-    return (error as any).message
+  const errorRecord = asRecord(error)
+  if (typeof errorRecord?.message === 'string') {
+    return errorRecord.message
   }
   return 'Unknown error'
 }
@@ -77,16 +85,16 @@ function collectErrorSignals(error: unknown, depth = 0, bucket: string[] = []): 
   if (error instanceof Error) {
     if (error.name) bucket.push(error.name)
     if (error.message) bucket.push(error.message)
-    const cause = (error as any).cause
+    const cause = (error as Error & { cause?: unknown }).cause
     if (cause) collectErrorSignals(cause, depth + 1, bucket)
     return bucket
   }
   if (typeof error === 'object') {
-    const item = error as any
-    if (typeof item.name === 'string') bucket.push(item.name)
-    if (typeof item.message === 'string') bucket.push(item.message)
-    if (typeof item.code === 'string') bucket.push(item.code)
-    if (item.cause) collectErrorSignals(item.cause, depth + 1, bucket)
+    const item = asRecord(error)
+    if (typeof item?.name === 'string') bucket.push(item.name)
+    if (typeof item?.message === 'string') bucket.push(item.message)
+    if (typeof item?.code === 'string') bucket.push(item.code)
+    if (item?.cause) collectErrorSignals(item.cause, depth + 1, bucket)
   }
   return bucket
 }
@@ -110,8 +118,8 @@ export function isCompatImageProviderType(providerType?: string): boolean {
   return ['openai', 'openai-response', 'openai-compatible', 'new-api', 'cherryin', 'deepseek', 'openrouter', 'azure-openai', 'azure', 'ollama'].includes(normalized)
 }
 
-export function getImageModelIdFromModelKey(modelKey: any): string | undefined {
-  const modelId = (modelKey as any)?.modelId
+export function getImageModelIdFromModelKey(modelKey: unknown): string | undefined {
+  const modelId = asRecord(modelKey)?.modelId
   if (typeof modelId === 'string' && modelId.trim()) return modelId.trim()
   return undefined
 }
@@ -121,7 +129,7 @@ export function truncateText(value: string, maxLength = 240): string {
   return `${value.slice(0, maxLength)}...`
 }
 
-export function parseJsonPayloadFromText(text: string): any | null {
+export function parseJsonPayloadFromText(text: string): unknown | null {
   const trimmed = text.trim()
   if (!trimmed) return null
 
@@ -131,7 +139,7 @@ export function parseJsonPayloadFromText(text: string): any | null {
     // Continue with tolerant parsing.
   }
 
-  const ssePayloads: any[] = []
+  const ssePayloads: unknown[] = []
   for (const line of trimmed.split(/\r?\n/)) {
     const matched = line.trim().match(/^data:\s*(.+)$/i)
     if (!matched) continue
@@ -196,7 +204,8 @@ function normalizeTaskStatus(status: unknown): string | undefined {
   return normalized || undefined
 }
 
-export function extractImageResponsePayload(payload: any): { images: string[]; taskId?: string; taskStatus?: string } {
+export function extractImageResponsePayload(payload: unknown): { images: string[]; taskId?: string; taskStatus?: string } {
+  const root = asRecord(payload)
   const images: string[] = []
   const seenImages = new Set<string>()
 
@@ -227,59 +236,69 @@ export function extractImageResponsePayload(payload: any): { images: string[]; t
     }
   }
 
-  collectFromObject(payload)
-  if (Array.isArray(payload?.data)) {
-    for (const item of payload.data) {
+  collectFromObject(root)
+
+  const data = root?.data
+  if (Array.isArray(data)) {
+    for (const item of data) {
       collectFromObject(item)
     }
   } else {
-    collectFromObject(payload?.data)
+    collectFromObject(data)
   }
-  if (Array.isArray(payload?.output)) {
-    for (const item of payload.output) {
+
+  const output = root?.output
+  if (Array.isArray(output)) {
+    for (const item of output) {
       collectFromObject(item)
     }
   } else {
-    collectFromObject(payload?.output)
+    collectFromObject(output)
   }
-  collectFromObject(payload?.item)
-  collectFromObject(payload?.result)
+
+  const item = root?.item
+  const result = root?.result
+  collectFromObject(item)
+  collectFromObject(result)
+
+  const dataRecord = asRecord(data)
+  const resultRecord = asRecord(result)
 
   const taskStatus = normalizeTaskStatus(
     firstNonEmptyString([
-      payload?.task_status,
-      payload?.taskStatus,
-      payload?.status,
-      payload?.state,
-      payload?.data?.task_status,
-      payload?.data?.taskStatus,
-      payload?.data?.status,
-      payload?.result?.task_status,
-      payload?.result?.taskStatus,
-      payload?.result?.status
+      root?.task_status,
+      root?.taskStatus,
+      root?.status,
+      root?.state,
+      dataRecord?.task_status,
+      dataRecord?.taskStatus,
+      dataRecord?.status,
+      resultRecord?.task_status,
+      resultRecord?.taskStatus,
+      resultRecord?.status
     ])
   )
   const taskId = firstNonEmptyString([
-    payload?.task_id,
-    payload?.taskId,
-    payload?.id,
-    payload?.request_id,
-    payload?.requestId,
-    payload?.data?.task_id,
-    payload?.data?.taskId,
-    payload?.data?.id,
-    payload?.result?.task_id,
-    payload?.result?.taskId,
-    payload?.result?.id
+    root?.task_id,
+    root?.taskId,
+    root?.id,
+    root?.request_id,
+    root?.requestId,
+    dataRecord?.task_id,
+    dataRecord?.taskId,
+    dataRecord?.id,
+    resultRecord?.task_id,
+    resultRecord?.taskId,
+    resultRecord?.id
   ])
 
   const hasExplicitTaskField =
-    typeof payload?.task_id === 'string' ||
-    typeof payload?.taskId === 'string' ||
-    typeof payload?.task_status === 'string' ||
-    typeof payload?.taskStatus === 'string' ||
-    typeof payload?.data?.task_id === 'string' ||
-    typeof payload?.data?.task_status === 'string'
+    typeof root?.task_id === 'string' ||
+    typeof root?.taskId === 'string' ||
+    typeof root?.task_status === 'string' ||
+    typeof root?.taskStatus === 'string' ||
+    typeof dataRecord?.task_id === 'string' ||
+    typeof dataRecord?.task_status === 'string'
 
   const hasTaskSignal = !!taskId && (hasExplicitTaskField || !!taskStatus || images.length === 0)
 
@@ -311,7 +330,8 @@ export function isAsyncTaskFailureStatus(status?: string): boolean {
   return ['failed', 'error', 'cancelled', 'canceled', 'rejected'].includes(normalized)
 }
 
-export function extractOpenAIImageStreamPayload(payload: any): { partials: string[]; finals: string[] } {
+export function extractOpenAIImageStreamPayload(payload: unknown): { partials: string[]; finals: string[] } {
+  const root = asRecord(payload)
   const partials: string[] = []
   const finals: string[] = []
 
@@ -326,27 +346,32 @@ export function extractOpenAIImageStreamPayload(payload: any): { partials: strin
     }
   }
 
-  pushMaybeImage(payload?.partial_image_b64, 'partial')
-  pushMaybeImage(payload?.b64_json, 'final')
-  pushMaybeImage(payload?.image, 'final')
-  pushMaybeImage(payload?.result, payload?.type?.includes?.('partial') ? 'partial' : 'final')
+  pushMaybeImage(root?.partial_image_b64, 'partial')
+  pushMaybeImage(root?.b64_json, 'final')
+  pushMaybeImage(root?.image, 'final')
+  pushMaybeImage(
+    root?.result,
+    typeof root?.type === 'string' && root.type.includes('partial') ? 'partial' : 'final'
+  )
 
-  if (Array.isArray(payload?.data)) {
-    for (const item of payload.data) {
-      pushMaybeImage(item?.b64_json, 'final')
-      pushMaybeImage(item?.url, 'final')
-      pushMaybeImage(item?.image, 'final')
-      pushMaybeImage(item?.result, 'final')
+  if (Array.isArray(root?.data)) {
+    for (const item of root.data) {
+      const itemRecord = asRecord(item)
+      pushMaybeImage(itemRecord?.b64_json, 'final')
+      pushMaybeImage(itemRecord?.url, 'final')
+      pushMaybeImage(itemRecord?.image, 'final')
+      pushMaybeImage(itemRecord?.result, 'final')
     }
   }
 
-  const item = payload?.item
-  if (item && typeof item === 'object') {
-    pushMaybeImage(item?.result, 'final')
-    if (Array.isArray(item?.data)) {
+  const item = asRecord(root?.item)
+  if (item) {
+    pushMaybeImage(item.result, 'final')
+    if (Array.isArray(item.data)) {
       for (const dataItem of item.data) {
-        pushMaybeImage(dataItem?.b64_json, 'final')
-        pushMaybeImage(dataItem?.url, 'final')
+        const dataRecord = asRecord(dataItem)
+        pushMaybeImage(dataRecord?.b64_json, 'final')
+        pushMaybeImage(dataRecord?.url, 'final')
       }
     }
   }
@@ -464,26 +489,35 @@ export function stringifyToolResult(result: unknown): string {
   }
 }
 
-export function pickOpenAICompatContentSource(choice: any):
+type OpenAICompatContentSource = {
+  content?: unknown
+  reasoning_content?: unknown
+  reasoning?: unknown
+  tool_calls?: unknown[]
+}
+
+export function pickOpenAICompatContentSource(choice: unknown):
   | {
       content?: unknown
       reasoning_content?: unknown
       reasoning?: unknown
-      tool_calls?: any[]
+      tool_calls?: unknown[]
     }
   | undefined {
-  const hasUsefulData = (source: any): boolean => {
-    if (!source || typeof source !== 'object') return false
-    if (typeof source.content === 'string' && source.content.length > 0) return true
-    if (Array.isArray(source.content) && source.content.length > 0) return true
-    if (typeof source.reasoning_content === 'string' && source.reasoning_content.length > 0) return true
-    if (typeof source.reasoning === 'string' && source.reasoning.length > 0) return true
-    if (Array.isArray(source.tool_calls) && source.tool_calls.length > 0) return true
+  const hasUsefulData = (source: unknown): source is OpenAICompatContentSource => {
+    const sourceRecord = asRecord(source)
+    if (!sourceRecord) return false
+    if (typeof sourceRecord.content === 'string' && sourceRecord.content.length > 0) return true
+    if (Array.isArray(sourceRecord.content) && sourceRecord.content.length > 0) return true
+    if (typeof sourceRecord.reasoning_content === 'string' && sourceRecord.reasoning_content.length > 0) return true
+    if (typeof sourceRecord.reasoning === 'string' && sourceRecord.reasoning.length > 0) return true
+    if (Array.isArray(sourceRecord.tool_calls) && sourceRecord.tool_calls.length > 0) return true
     return false
   }
 
-  if (hasUsefulData(choice?.delta)) return choice.delta
-  if (hasUsefulData(choice?.message)) return choice.message
+  const choiceRecord = asRecord(choice)
+  if (hasUsefulData(choiceRecord?.delta)) return choiceRecord.delta
+  if (hasUsefulData(choiceRecord?.message)) return choiceRecord.message
   return undefined
 }
 
@@ -493,8 +527,9 @@ export function extractOpenAICompatContentText(content: unknown): string {
     return content
       .map((part) => {
         if (typeof part === 'string') return part
-        if (part && typeof part === 'object' && typeof (part as any).text === 'string') {
-          return (part as any).text
+        const partRecord = asRecord(part)
+        if (typeof partRecord?.text === 'string') {
+          return partRecord.text
         }
         return ''
       })
@@ -503,21 +538,25 @@ export function extractOpenAICompatContentText(content: unknown): string {
   return ''
 }
 
-export function extractUsage(result: any): { inputTokens?: number; outputTokens?: number } | undefined {
-  const usage = result?.usage || result?.response?.usage || result?.metadata?.usage
-  if (!usage) return undefined
+export function extractUsage(result: unknown): { inputTokens?: number; outputTokens?: number } | undefined {
+  const resultRecord = asRecord(result)
+  const responseRecord = asRecord(resultRecord?.response)
+  const metadataRecord = asRecord(resultRecord?.metadata)
+  const usage = resultRecord?.usage ?? responseRecord?.usage ?? metadataRecord?.usage
+  const usageRecord = asRecord(usage)
+  if (!usageRecord) return undefined
   const inputTokens =
-    usage.inputTokens ??
-    usage.promptTokens ??
-    usage.prompt_tokens ??
-    usage.input_tokens ??
-    usage.totalTokens ??
-    usage.total_tokens
+    usageRecord.inputTokens ??
+    usageRecord.promptTokens ??
+    usageRecord.prompt_tokens ??
+    usageRecord.input_tokens ??
+    usageRecord.totalTokens ??
+    usageRecord.total_tokens
   const outputTokens =
-    usage.outputTokens ??
-    usage.completionTokens ??
-    usage.completion_tokens ??
-    usage.output_tokens
+    usageRecord.outputTokens ??
+    usageRecord.completionTokens ??
+    usageRecord.completion_tokens ??
+    usageRecord.output_tokens
   if (inputTokens === undefined && outputTokens === undefined) return undefined
   return {
     inputTokens: inputTokens !== undefined ? Number(inputTokens) : undefined,

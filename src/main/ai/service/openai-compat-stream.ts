@@ -335,7 +335,7 @@ export async function runOpenAICompatToolLoop(
   input: {
     model: string
     providerType?: string
-    messages: any[]
+    messages: unknown[]
     apiKey?: string
     baseURL?: string
     params: AiModelParameters
@@ -384,7 +384,7 @@ export async function runOpenAICompatToolLoop(
     if (stepResult.content) fullContent += stepResult.content
     if (stepResult.reasoning && input.allowReasoning) fullReasoning += stepResult.reasoning
 
-    const assistantMessage: any = {
+    const assistantMessage: Record<string, unknown> = {
       role: 'assistant',
       content: stepResult.content || ''
     }
@@ -514,7 +514,7 @@ export async function streamOpenAICompatToolStep(
   input: {
     model: string
     providerType?: string
-    messages: any[]
+    messages: unknown[]
     apiKey?: string
     baseURL?: string
     params: AiModelParameters
@@ -694,16 +694,20 @@ export async function streamOpenAICompatToolStep(
 
         if (Array.isArray(contentSource.tool_calls)) {
           for (const chunk of contentSource.tool_calls) {
-            const index = typeof chunk?.index === 'number' ? chunk.index : 0
+            const chunkRecord = chunk && typeof chunk === 'object' ? chunk as Record<string, unknown> : undefined
+            const chunkFunction = chunkRecord?.function && typeof chunkRecord.function === 'object'
+              ? chunkRecord.function as Record<string, unknown>
+              : undefined
+            const index = typeof chunkRecord?.index === 'number' ? chunkRecord.index : 0
             const current = toolCallsMap.get(index) || {
               id: '',
               type: 'function' as const,
               function: { name: '', arguments: '' }
             }
-            if (chunk?.id) current.id = chunk.id
-            if (chunk?.type === 'function') current.type = 'function'
-            if (chunk?.function?.name) current.function.name += chunk.function.name
-            if (chunk?.function?.arguments) current.function.arguments += chunk.function.arguments
+            if (typeof chunkRecord?.id === 'string') current.id = chunkRecord.id
+            if (chunkRecord?.type === 'function') current.type = 'function'
+            if (typeof chunkFunction?.name === 'string') current.function.name += chunkFunction.name
+            if (typeof chunkFunction?.arguments === 'string') current.function.arguments += chunkFunction.arguments
             toolCallsMap.set(index, current)
           }
         }

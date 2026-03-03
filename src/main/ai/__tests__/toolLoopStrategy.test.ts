@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
+import type { AiProviderConfig } from '../../../shared/types/ai'
 import { shouldUseCompatToolLoop } from '../toolLoopStrategy'
 
 describe('toolLoopStrategy', () => {
@@ -9,7 +10,7 @@ describe('toolLoopStrategy', () => {
       type: 'deepseek',
       enabled: true,
       baseURL: 'https://api.deepseek.com'
-    } as any)
+    } as AiProviderConfig)
     assert.equal(enabled, true)
   })
 
@@ -19,7 +20,7 @@ describe('toolLoopStrategy', () => {
       type: 'openai',
       enabled: true,
       baseURL: 'https://api.openai.com/v1'
-    } as any)
+    } as AiProviderConfig)
     assert.equal(enabled, false)
   })
 
@@ -29,8 +30,7 @@ describe('toolLoopStrategy', () => {
       type: 'openai-compatible',
       enabled: true,
       baseURL: 'https://api.v3.cm/v1'
-    } as any)
+    } as AiProviderConfig)
     assert.equal(enabled, true)
   })
 })
-

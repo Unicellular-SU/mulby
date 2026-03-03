@@ -243,7 +243,7 @@ setAiToolExecutor(async ({ name, args, context, callId, abortSignal }) => {
 
   // 解包 host 返回的结果：{ success: true, data: {...} } -> {...}
   if (result && typeof result === 'object' && 'success' in result && 'data' in result) {
-    return (result as any).data
+    return (result as { data: unknown }).data
   }
 
   return result

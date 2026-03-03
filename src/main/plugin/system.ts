@@ -285,7 +285,7 @@ export class PluginSystem {
 
 
       return nativeImage.createEmpty()
-    } catch (error) {
+    } catch {
 
       return nativeImage.createEmpty()
     }

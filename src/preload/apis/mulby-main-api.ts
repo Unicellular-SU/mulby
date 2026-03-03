@@ -4,7 +4,7 @@ export function createMulbyMainApi(ipcRenderer: IpcRenderer) {
   return {
     subInput: {
       onEnabled: (callback: (data: { placeholder: string; isFocus: boolean }) => void) => {
-        const listener = (_: any, data: { placeholder: string; isFocus: boolean }) => callback(data)
+        const listener = (_event: unknown, data: { placeholder: string; isFocus: boolean }) => callback(data)
         ipcRenderer.on('subInput:enabled', listener)
         return () => ipcRenderer.removeListener('subInput:enabled', listener)
       },
@@ -14,7 +14,7 @@ export function createMulbyMainApi(ipcRenderer: IpcRenderer) {
         return () => ipcRenderer.removeListener('subInput:disabled', listener)
       },
       onSetValue: (callback: (text: string) => void) => {
-        const listener = (_: any, text: string) => callback(text)
+        const listener = (_event: unknown, text: string) => callback(text)
         ipcRenderer.on('subInput:setValue', listener)
         return () => ipcRenderer.removeListener('subInput:setValue', listener)
       },

@@ -52,6 +52,7 @@ export interface CookieFilter {
 
 export interface InBrowserOp {
     type: 'goto' | 'show' | 'hide' | 'viewport' | 'click' | 'type' | 'press' | 'evaluate' | 'wait' | 'css' | 'when' | 'cookies' | 'pdf' | 'value' | 'check' | 'scroll' | 'devTools' | 'useragent' | 'focus' | 'end' | 'paste' | 'file' | 'device' | 'mousedown' | 'mouseup' | 'input' | 'clearCookies' | 'dblclick' | 'hover' | 'screenshot' | 'markdown' | 'setCookies' | 'removeCookies' | 'download' | 'drop';
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     args: any[];
 }
 
@@ -72,7 +73,8 @@ export interface InBrowser {
     hide(): InBrowser;
     show(): InBrowser;
     css(css: string): InBrowser;
-    evaluate(func: string | Function, ...params: any[]): InBrowser;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    evaluate(func: string | ((...params: any[]) => unknown), ...params: any[]): InBrowser;
     press(key: string, modifiers?: string[]): InBrowser;
     click(selector: string, mouseButton?: 'left' | 'middle' | 'right'): InBrowser;
     click(x: number, y: number, mouseButton?: 'left' | 'middle' | 'right'): InBrowser;
@@ -111,7 +113,8 @@ export interface InBrowser {
     wait(selector: string, option?: { timeout?: number, interval?: number, result?: boolean }): InBrowser;
     // wait(func...) complex signatures omitted for brevity but supported via generic args pass-through
     when(selector: string, result?: boolean): InBrowser;
-    when(func: string | Function, ...params: any[]): InBrowser;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    when(func: string | ((...params: any[]) => unknown), ...params: any[]): InBrowser;
     end(): InBrowser;
     devTools(mode?: 'right' | 'bottom' | 'undocked' | 'detach'): InBrowser;
     cookies(name?: string): InBrowser;
@@ -122,6 +125,8 @@ export interface InBrowser {
     removeCookies(name: string): InBrowser;
     clearCookies(url?: string): InBrowser;
 
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     run(ubrowserId?: number, options?: InBrowserOptions): Promise<any[]>;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     run(options?: InBrowserOptions): Promise<any[]>;
 }

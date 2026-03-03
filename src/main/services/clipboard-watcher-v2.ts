@@ -16,8 +16,17 @@ import { app } from 'electron'
  * - Windows/Linux: 真正的系统事件，零开销
  */
 
+interface NativeClipboardWatcher {
+  start(): void
+  stop(): void
+}
+
+interface NativeClipboardAddon {
+  ClipboardWatcher: new (onChange: () => void) => NativeClipboardWatcher
+}
+
 // 尝试加载 native addon
-let nativeClipboard: any = null
+let nativeClipboard: NativeClipboardAddon | null = null
 try {
   // 开发模式和生产模式的路径不同
   const isDev = !app.isPackaged
@@ -31,7 +40,7 @@ try {
     addonPath = path.join(process.resourcesPath, 'native/build/Release/clipboard_watcher.node')
   }
 
-  nativeClipboard = require(addonPath)
+  nativeClipboard = require(addonPath) as NativeClipboardAddon
   console.log('✅ [ClipboardWatcher] Native addon loaded successfully from:', addonPath)
 } catch (err) {
   console.warn('⚠️ [ClipboardWatcher] Native addon not available, falling back to polling')
@@ -44,7 +53,7 @@ export class ClipboardWatcher extends EventEmitter {
   private isWatching: boolean = false
 
   // Native watcher
-  private nativeWatcher: any = null
+  private nativeWatcher: NativeClipboardWatcher | null = null
 
   // Fallback polling
   private pollInterval: number = 1000
@@ -89,6 +98,11 @@ export class ClipboardWatcher extends EventEmitter {
    * 使用 Native API 监听（零开销）
    */
   private startNativeWatching() {
+    if (!nativeClipboard) {
+      this.startPolling()
+      return
+    }
+
     try {
       this.nativeWatcher = new nativeClipboard.ClipboardWatcher(() => {
         this.lastChangeTime = Date.now()
