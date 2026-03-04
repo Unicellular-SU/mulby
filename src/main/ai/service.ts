@@ -14,38 +14,16 @@ import type {
 } from '../../shared/types/ai'
 import { attachmentStore } from './attachments'
 import { estimateTokens } from './tokens'
-import { getAllModels, resolveModelId } from './models'
+import { getAllModels } from './models'
 import { getAiSettings } from './config'
-import { getProviderMethodAdapter } from './providerMethodAdapters'
-import { buildProviderIdCounts } from '../../shared/ai/providerValidation'
-import { getProviderProtocolCapabilityRule } from '../../shared/ai/providerCapabilityGovernance'
-import { shouldUseCompatToolLoop } from './toolLoopStrategy'
-import { classifyAiStreamError } from '../../shared/ai/streamDiagnostics'
-import { getRotatedApiKey } from '../../shared/ai/apiKeyPool'
-import {
-  createAiStreamMetrics,
-  finishAiStreamMetricsError,
-  finishAiStreamMetricsSuccess,
-  markAiStreamRoute,
-  recordAiStreamChunk
-} from './streamMetrics'
 import { aiMcpService } from './mcp'
 import { aiSkillService } from './skills'
-import {
-  ensureRuntimeCapabilityIntrospectionTool
-} from './tools/runtime-capability-introspection-tool'
 import {
   type AiToolCapabilityName
 } from './tools/capabilities'
 import {
-  buildApiKeyScope,
-  resolveMaxToolSteps
-} from './service/utils'
-import {
   abortTrackedMcpCalls as abortTrackedMcpCallsHelper,
-  emitDebugMetaChunk as emitDebugMetaChunkHelper,
-  emitErrorChunk as emitErrorChunkHelper,
-  hasMultimodalContent as hasMultimodalContentHelper
+  emitDebugMetaChunk as emitDebugMetaChunkHelper
 } from './service/stream-helpers'
 import {
   resolveExecutionProviderContext as resolveExecutionProviderContextHelper,
@@ -55,6 +33,11 @@ import { resolveCompatBaseURL as resolveCompatBaseURLHelper } from './service/co
 import {
   uploadAttachmentToProviderInternal as uploadAttachmentToProviderInternalHelper
 } from './service/upload-helpers'
+import {
+  executeUploadAttachmentOrchestration,
+  resolveUploadAttachmentMeta,
+  resolveUploadProviderConfig
+} from './service/upload-orchestration'
 import { resolveGenerationParams as resolveGenerationParamsHelper } from './service/generation-params'
 import { createOpenAICompatBridge } from './service/openai-compat-bridge'
 import { buildTools as buildToolsHelper } from './service/tool-builders'
@@ -63,6 +46,12 @@ import {
   generateImageWithDecodeFallback as generateImageWithDecodeFallbackHelper,
   generateImageWithProgress as generateImageWithProgressHelper
 } from './service/image-pipeline'
+import {
+  executeEditImageOrchestration,
+  executeGenerateImagesOrchestration,
+  executeGenerateImagesStreamOrchestration,
+  resolveImageProvider
+} from './service/image-orchestration'
 import { executeProviderCallOrchestration } from './service/provider-call-orchestration'
 import { executeProviderStreamOrchestration } from './service/provider-stream-orchestration'
 import {
@@ -83,6 +72,17 @@ import {
   type TestConnectionInput
 } from './service/test-connection'
 import { executeFetchModels } from './service/fetch-models'
+import {
+  prepareChatRequest,
+  type PreparedChatRequest
+} from './service/request-preparation'
+import {
+  createStreamRuntime,
+  finishStreamRuntimeSuccess,
+  handleStreamRuntimeError,
+  markStreamRuntimeRoute,
+  type StreamRuntimeState
+} from './service/stream-runtime-orchestration'
 import {
   injectInternalRuntimeTools as injectInternalRuntimeToolsHelper,
   type CapabilityPolicyResolver,
@@ -203,96 +203,65 @@ export class AiService {
     if (!option.messages || option.messages.length === 0) {
       throw new Error('AI messages are required')
     }
-    await aiSkillService.ensureCatalogLoaded()
-    const skillResolution = aiSkillService.resolveForAiCall(option)
-    const resolvedOption = aiSkillService.applyResolutionToOption(option, skillResolution)
-    const effective = this.injectInternalRuntimeTools({
-      option: resolvedOption,
-      skillCapabilities: skillResolution.capabilities,
-      skillInternalTools: skillResolution.internalTools,
-      selectedSkills: skillResolution.selectedSkills
-    })
-    const effectiveOption = effective.option
-    const policyDebug = this.buildPolicyDebugInfo({
-      requestedOption: option,
-      effectiveOption,
-      skillResolution
-    })
-    console.log('[AI] call 开始', {
-      model: effectiveOption.model,
-      messageCount: effectiveOption.messages.length,
-      hasTools: !!effectiveOption.tools && effectiveOption.tools.length > 0,
-      toolContext: effectiveOption.toolContext,
-      hasOnChunk: !!onChunk,
-      skills: skillResolution.selectedSkillNames
-    })
     const requestId = this.createRequestId()
     const controller = new AbortController()
     this.controllers.set(requestId, controller)
 
     try {
+      const prepared = await prepareChatRequest({
+        option,
+        controllerSignal: controller.signal,
+        injectInternalRuntimeTools: (input) => this.injectInternalRuntimeTools(input),
+        buildPolicyDebugInfo: (input) => this.buildPolicyDebugInfo(input),
+        resolveMergedTools: async (effectiveOption) => await this.resolveMergedTools(effectiveOption),
+        buildTools: (tools, context, modelId, capabilityDebug, policyDebug, abortSignal) =>
+          this.buildTools(tools, context, modelId, capabilityDebug, policyDebug, abortSignal),
+        resolveLanguageModel: (modelId) => this.resolveLanguageModel(modelId),
+        applyContextWindow: (messages, limit) => this.applyContextWindow(messages, limit)
+      })
+      console.log('[AI] call 开始', {
+        model: prepared.effectiveOption.model,
+        messageCount: prepared.effectiveOption.messages.length,
+        hasTools: !!prepared.effectiveOption.tools && prepared.effectiveOption.tools.length > 0,
+        toolContext: prepared.effectiveOption.toolContext,
+        hasOnChunk: !!onChunk,
+        skills: prepared.skillResolution.selectedSkillNames
+      })
+
       if (onChunk) {
         console.log('[AI] call: 使用流式模式')
         return await this.stream(option, { onChunk }, requestId)
       }
 
-      const resolvedTools = await this.resolveMergedTools(effectiveOption)
-      const introspectionReadyTools = ensureRuntimeCapabilityIntrospectionTool(resolvedTools)
-      const tools = this.buildTools(
-        introspectionReadyTools,
-        effectiveOption.toolContext,
-        effectiveOption.model,
-        effective.capabilityDebug,
-        policyDebug,
-        controller.signal
-      )
-
-      const { modelKey } = this.resolveLanguageModel(effectiveOption.model)
-      const params = resolveGenerationParamsHelper(effectiveOption, effectiveOption.model)
-      const trimmedMessages = this.applyContextWindow(effectiveOption.messages, params.contextWindow)
-      const resolved = resolveModelId(effectiveOption.model)
-      const { providerType, providerConfig } = resolveExecutionProviderContextHelper({
-        modelId: effectiveOption.model,
-        providerIdOverride: resolved.providerId
-      })
-      const requestApiKey = getRotatedApiKey(
-        providerConfig?.apiKey,
-        buildApiKeyScope({
-          providerId: providerConfig?.id ? String(providerConfig.id) : undefined,
-          providerType,
-          baseURL: providerConfig?.baseURL
-        })
-      )
-      const methodAdapter = getProviderMethodAdapter(providerType)
       const openAICompatBridge = this.createOpenAICompatBridge()
       const providerCallDeps = createProviderCallOrchestrationDeps({
         openAICompat: openAICompatBridge
       })
       const finalMessage = await executeProviderCallOrchestration({
-        methodAdapter,
-        hasTools: !!tools,
-        hasMultimodalContent: hasMultimodalContentHelper(trimmedMessages),
-        shouldUseCompatToolLoop: shouldUseCompatToolLoop(effectiveOption.model, providerConfig),
-        effectiveOption,
-        trimmedMessages,
-        resolvedModelId: resolved.modelId,
-        providerType,
-        providerConfig,
-        requestApiKey,
-        params,
-        modelKey,
-        tools,
-        introspectionReadyTools,
+        methodAdapter: prepared.methodAdapter,
+        hasTools: prepared.hasTools,
+        hasMultimodalContent: prepared.hasMultimodalContent,
+        shouldUseCompatToolLoop: prepared.compatToolLoop,
+        effectiveOption: prepared.effectiveOption,
+        trimmedMessages: prepared.trimmedMessages,
+        resolvedModelId: prepared.resolvedModelId,
+        providerType: prepared.providerType,
+        providerConfig: prepared.providerConfig,
+        requestApiKey: prepared.requestApiKey,
+        params: prepared.params,
+        modelKey: prepared.modelKey,
+        tools: prepared.tools,
+        introspectionReadyTools: prepared.introspectionReadyTools,
         requestId,
         controllerSignal: controller.signal,
-        capabilityDebug: effective.capabilityDebug,
-        policyDebug,
+        capabilityDebug: prepared.effective.capabilityDebug,
+        policyDebug: prepared.policyDebug,
         deps: providerCallDeps
       })
       return {
         ...finalMessage,
-        capability_debug: effective.capabilityDebug,
-        policy_debug: policyDebug
+        capability_debug: prepared.effective.capabilityDebug,
+        policy_debug: prepared.policyDebug
       }
     } finally {
       this.controllers.delete(requestId)
@@ -304,97 +273,48 @@ export class AiService {
     if (!option.messages || option.messages.length === 0) {
       throw new Error('AI messages are required')
     }
-    await aiSkillService.ensureCatalogLoaded()
-    const skillResolution = aiSkillService.resolveForAiCall(option)
-    const resolvedOption = aiSkillService.applyResolutionToOption(option, skillResolution)
-    const effective = this.injectInternalRuntimeTools({
-      option: resolvedOption,
-      skillCapabilities: skillResolution.capabilities,
-      skillInternalTools: skillResolution.internalTools,
-      selectedSkills: skillResolution.selectedSkills
-    })
-    const effectiveOption = effective.option
-    const policyDebug = this.buildPolicyDebugInfo({
-      requestedOption: option,
-      effectiveOption,
-      skillResolution
-    })
     const id = requestId || this.createRequestId()
     const controller = new AbortController()
     this.controllers.set(id, controller)
-    let trackedOnChunk: ((chunk: AiMessage) => void) | undefined
-    let metrics: ReturnType<typeof createAiStreamMetrics> | undefined
+    let prepared: PreparedChatRequest | undefined
+    let runtime: StreamRuntimeState | undefined
 
     try {
       console.info('[AI] stream:prepare:start', {
         requestId: id,
-        model: effectiveOption.model
+        model: option.model
       })
-      const resolvedTools = await this.resolveMergedTools(effectiveOption)
-      const introspectionReadyTools = ensureRuntimeCapabilityIntrospectionTool(resolvedTools)
-      const tools = this.buildTools(
-        introspectionReadyTools,
-        effectiveOption.toolContext,
-        effectiveOption.model,
-        effective.capabilityDebug,
-        policyDebug,
-        controller.signal
-      )
+      prepared = await prepareChatRequest({
+        option,
+        controllerSignal: controller.signal,
+        injectInternalRuntimeTools: (input) => this.injectInternalRuntimeTools(input),
+        buildPolicyDebugInfo: (input) => this.buildPolicyDebugInfo(input),
+        resolveMergedTools: async (effectiveOption) => await this.resolveMergedTools(effectiveOption),
+        buildTools: (tools, context, modelId, capabilityDebug, policyDebug, abortSignal) =>
+          this.buildTools(tools, context, modelId, capabilityDebug, policyDebug, abortSignal),
+        resolveLanguageModel: (modelId) => this.resolveLanguageModel(modelId),
+        applyContextWindow: (messages, limit) => this.applyContextWindow(messages, limit)
+      })
       console.info('[AI] stream:prepare:tools-ready', {
         requestId: id,
-        model: effectiveOption.model,
-        resolvedToolCount: introspectionReadyTools?.length || 0,
-        hasRuntimeTools: !!tools
+        model: prepared.effectiveOption.model,
+        resolvedToolCount: prepared.introspectionReadyTools?.length || 0,
+        hasRuntimeTools: prepared.hasTools
       })
-      const { modelKey } = this.resolveLanguageModel(effectiveOption.model)
-      const params = resolveGenerationParamsHelper(effectiveOption, effectiveOption.model)
-      const trimmedMessages = this.applyContextWindow(effectiveOption.messages, params.contextWindow)
-      const resolved = resolveModelId(effectiveOption.model)
-      const { providerType, providerConfig } = resolveExecutionProviderContextHelper({
-        modelId: effectiveOption.model,
-        providerIdOverride: resolved.providerId
-      })
-      const requestApiKey = getRotatedApiKey(
-        providerConfig?.apiKey,
-        buildApiKeyScope({
-          providerId: providerConfig?.id ? String(providerConfig.id) : undefined,
-          providerType,
-          baseURL: providerConfig?.baseURL
-        })
-      )
-      const methodAdapter = getProviderMethodAdapter(providerType)
-      const compatToolLoop = shouldUseCompatToolLoop(effectiveOption.model, providerConfig)
-      metrics = createAiStreamMetrics({
+      runtime = createStreamRuntime({
         requestId: id,
-        providerType,
-        model: effectiveOption.model,
-        hasTools: !!tools,
-        compatToolLoop,
-        maxToolSteps: resolveMaxToolSteps(effectiveOption.maxToolSteps)
+        providerType: prepared.providerType,
+        model: prepared.effectiveOption.model,
+        hasTools: prepared.hasTools,
+        compatToolLoop: prepared.compatToolLoop,
+        maxToolSteps: prepared.effectiveOption.maxToolSteps,
+        selectedSkillNames: prepared.skillResolution.selectedSkillNames,
+        resolvedMcpMode: prepared.effectiveOption.mcp?.mode || 'off',
+        onChunk: callbacks.onChunk
       })
-      trackedOnChunk = (chunk: AiMessage) => {
-        recordAiStreamChunk(metrics!, chunk)
-        callbacks.onChunk?.(chunk)
-      }
-      console.info('[AI] stream:boot', {
-        requestId: id,
-        model: effectiveOption.model,
-        providerType,
-        resolvedMcpMode: effectiveOption.mcp?.mode || 'off',
-        resolvedSkillNames: skillResolution.selectedSkillNames
-      })
-      console.info('[AI] stream:metrics:start', {
-        requestId: id,
-        providerType,
-        model: effectiveOption.model,
-        hasTools: metrics.hasTools,
-        compatToolLoop: metrics.compatToolLoop,
-        maxToolSteps: metrics.maxToolSteps,
-        skills: skillResolution.selectedSkillNames
-      })
-      emitDebugMetaChunkHelper(trackedOnChunk, {
-        capabilityDebug: effective.capabilityDebug,
-        policyDebug
+      emitDebugMetaChunkHelper(runtime.trackedOnChunk, {
+        capabilityDebug: prepared.effective.capabilityDebug,
+        policyDebug: prepared.policyDebug
       })
       const openAICompatBridge = this.createOpenAICompatBridge()
       const providerStreamDeps = createProviderStreamOrchestrationDeps({
@@ -402,62 +322,41 @@ export class AiService {
       })
 
       const finalMessage = await executeProviderStreamOrchestration({
-        methodAdapter,
-        hasTools: !!tools,
-        hasMultimodalContent: hasMultimodalContentHelper(trimmedMessages),
-        shouldUseCompatToolLoop: compatToolLoop,
-        effectiveOption,
-        trimmedMessages,
-        resolvedModelId: resolved.modelId,
-        providerType,
-        providerConfig,
-        requestApiKey,
-        params,
-        modelKey,
-        tools,
-        introspectionReadyTools,
+        methodAdapter: prepared.methodAdapter,
+        hasTools: prepared.hasTools,
+        hasMultimodalContent: prepared.hasMultimodalContent,
+        shouldUseCompatToolLoop: prepared.compatToolLoop,
+        effectiveOption: prepared.effectiveOption,
+        trimmedMessages: prepared.trimmedMessages,
+        resolvedModelId: prepared.resolvedModelId,
+        providerType: prepared.providerType,
+        providerConfig: prepared.providerConfig,
+        requestApiKey: prepared.requestApiKey,
+        params: prepared.params,
+        modelKey: prepared.modelKey,
+        tools: prepared.tools,
+        introspectionReadyTools: prepared.introspectionReadyTools,
         requestId: id,
         controllerSignal: controller.signal,
-        trackedOnChunk,
-        capabilityDebug: effective.capabilityDebug,
-        policyDebug,
+        trackedOnChunk: runtime.trackedOnChunk,
+        capabilityDebug: prepared.effective.capabilityDebug,
+        policyDebug: prepared.policyDebug,
         onEnd: callbacks.onEnd,
-        markRoute: (route) => markAiStreamRoute(metrics!, route),
+        markRoute: (route) => markStreamRuntimeRoute(runtime!, route),
         deps: providerStreamDeps
       })
-      const successMetrics = finishAiStreamMetricsSuccess(metrics, finalMessage.usage)
-      console.info('[AI] stream:metrics:end', successMetrics)
+      finishStreamRuntimeSuccess(runtime, finalMessage.usage)
       return finalMessage
     } catch (err) {
-      const classification = classifyAiStreamError(err)
-      const error = err instanceof Error ? err : new Error(classification.message || 'AI stream failed')
-      emitErrorChunkHelper(trackedOnChunk || callbacks.onChunk, error, classification)
-      callbacks.onError?.(error)
-      if (metrics) {
-        const finalizedMetrics = finishAiStreamMetricsError(metrics, classification)
-        console.error('[AI] stream:error', {
-          requestId: id,
-          providerType: metrics.providerType,
-          model: effectiveOption.model,
-          code: classification.code,
-          category: classification.category,
-          retryable: classification.retryable,
-          statusCode: classification.statusCode,
-          message: classification.message
-        })
-        console.info('[AI] stream:metrics:end', finalizedMetrics)
-      } else {
-        console.error('[AI] stream:error', {
-          requestId: id,
-          model: effectiveOption.model,
-          code: classification.code,
-          category: classification.category,
-          retryable: classification.retryable,
-          statusCode: classification.statusCode,
-          message: classification.message
-        })
-      }
-      throw error
+      throw handleStreamRuntimeError({
+        error: err,
+        requestId: id,
+        model: prepared?.effectiveOption.model || option.model,
+        providerType: prepared?.providerType,
+        runtime,
+        onChunk: callbacks.onChunk,
+        onError: callbacks.onError
+      })
     } finally {
       this.controllers.delete(id)
       this.requestMcpCallIds.delete(id)
@@ -517,62 +416,21 @@ export class AiService {
   }
 
   async generateImages(input: { prompt: string; model: string; size?: string; count?: number }): Promise<{ images: string[]; tokens: AiTokenBreakdown }> {
-    const { providerType, providerConfig } = resolveExecutionProviderContextHelper({ modelId: input.model })
-    const providerForCapability: AiProviderConfig = providerConfig || {
-      id: providerType,
-      type: providerType,
-      enabled: true
-    }
-    const providerIdCounts = buildProviderIdCounts(getAiSettings().providers)
-    const imageCapability = getProviderProtocolCapabilityRule(providerForCapability, 'image', providerIdCounts)
-    console.info('[AI] capability:protocol', {
+    const resolved = resolveImageProvider({
       stage: 'generateImages',
-      providerType,
       model: input.model,
-      capability: imageCapability.capability,
-      enabled: imageCapability.enabled,
-      source: imageCapability.source,
-      reason: imageCapability.reason
+      providers: getAiSettings().providers,
+      resolveExecutionProviderContext: ({ modelId }) => resolveExecutionProviderContextHelper({ modelId })
     })
-    if (!imageCapability.enabled) {
-      throw new Error(imageCapability.reason)
-    }
-    const methodAdapter = getProviderMethodAdapter(providerType)
-    return await methodAdapter.generateImages({
-      executeSdkGenerate: async () => {
-        const { modelKey, model } = this.resolveImageModel(input.model)
-        console.info('[AI] generateImages:start', {
-          modelInput: input.model,
-          resolvedModel: model,
-          size: input.size,
-          count: input.count
-        })
-        const result = await this.executeImageWithRetry(
-          'generateImages',
-          async () =>
-            await this.generateImageWithProgress({
-              modelKey,
-              prompt: input.prompt,
-              size: input.size,
-              n: input.count,
-              providerType,
-              providerConfig
-            }),
-          {
-            modelInput: input.model,
-            resolvedModel: model,
-            size: input.size,
-            count: input.count
-          }
-        )
-
-        const images = result.images || []
-        const tokens = await this.estimateTokens({ model: input.model, messages: [] })
-        return { images, tokens }
-      },
-      executeSdkEdit: async () => {
-        throw new Error('Unsupported path')
-      }
+    return await executeGenerateImagesOrchestration({
+      ...input,
+      providerType: resolved.providerType,
+      providerConfig: resolved.providerConfig,
+      methodAdapter: resolved.methodAdapter,
+      resolveImageModel: (modelId) => this.resolveImageModel(modelId),
+      executeImageWithRetry: (stage, execute, context) => this.executeImageWithRetry(stage, execute, context),
+      generateImageWithProgress: (payload) => this.generateImageWithProgress(payload),
+      estimateTokens: async ({ model }) => await this.estimateTokens({ model, messages: [] })
     })
   }
 
@@ -586,77 +444,23 @@ export class AiService {
     this.controllers.set(id, controller)
 
     try {
-      const { providerType, providerConfig } = resolveExecutionProviderContextHelper({ modelId: input.model })
-      const providerForCapability: AiProviderConfig = providerConfig || {
-        id: providerType,
-        type: providerType,
-        enabled: true
-      }
-      const providerIdCounts = buildProviderIdCounts(getAiSettings().providers)
-      const imageCapability = getProviderProtocolCapabilityRule(providerForCapability, 'image', providerIdCounts)
-      console.info('[AI] capability:protocol', {
+      const resolved = resolveImageProvider({
         stage: 'generateImagesStream',
-        providerType,
         model: input.model,
-        capability: imageCapability.capability,
-        enabled: imageCapability.enabled,
-        source: imageCapability.source,
-        reason: imageCapability.reason
+        providers: getAiSettings().providers,
+        resolveExecutionProviderContext: ({ modelId }) => resolveExecutionProviderContextHelper({ modelId })
       })
-      if (!imageCapability.enabled) {
-        throw new Error(imageCapability.reason)
-      }
-
-      const methodAdapter = getProviderMethodAdapter(providerType)
-      return await methodAdapter.generateImages({
-        executeSdkGenerate: async () => {
-          const { modelKey, model } = this.resolveImageModel(input.model)
-          console.info('[AI] generateImagesStream:start', {
-            modelInput: input.model,
-            resolvedModel: model,
-            size: input.size,
-            count: input.count
-          })
-          onChunk({
-            type: 'status',
-            stage: 'start',
-            message: '开始生成图片...'
-          })
-
-          const result = await this.executeImageWithRetry(
-            'generateImages',
-            async () =>
-              await this.generateImageWithProgress({
-                modelKey,
-                prompt: input.prompt,
-                size: input.size,
-                n: input.count,
-                providerType,
-                providerConfig,
-                abortSignal: controller.signal,
-                onChunk
-              }),
-            {
-              modelInput: input.model,
-              resolvedModel: model,
-              size: input.size,
-              count: input.count
-            }
-          )
-
-          const tokens = await this.estimateTokens({ model: input.model, messages: [] })
-          onChunk({
-            type: 'status',
-            stage: 'completed',
-            message: `生成完成，返回 ${result.images.length} 张`,
-            received: result.images.length,
-            total: input.count || result.images.length
-          })
-          return { images: result.images, tokens }
-        },
-        executeSdkEdit: async () => {
-          throw new Error('Unsupported path')
-        }
+      return await executeGenerateImagesStreamOrchestration({
+        ...input,
+        providerType: resolved.providerType,
+        providerConfig: resolved.providerConfig,
+        methodAdapter: resolved.methodAdapter,
+        abortSignal: controller.signal,
+        onChunk,
+        resolveImageModel: (modelId) => this.resolveImageModel(modelId),
+        executeImageWithRetry: (stage, execute, context) => this.executeImageWithRetry(stage, execute, context),
+        generateImageWithProgress: (payload) => this.generateImageWithProgress(payload),
+        estimateTokens: async ({ model }) => await this.estimateTokens({ model, messages: [] })
       })
     } finally {
       this.controllers.delete(id)
@@ -664,61 +468,21 @@ export class AiService {
   }
 
   async editImage(input: { imageAttachmentId: string; prompt: string; model: string }): Promise<{ images: string[]; tokens: AiTokenBreakdown }> {
-    const { providerType, providerConfig } = resolveExecutionProviderContextHelper({ modelId: input.model })
-    const providerForCapability: AiProviderConfig = providerConfig || {
-      id: providerType,
-      type: providerType,
-      enabled: true
-    }
-    const providerIdCounts = buildProviderIdCounts(getAiSettings().providers)
-    const imageCapability = getProviderProtocolCapabilityRule(providerForCapability, 'image', providerIdCounts)
-    console.info('[AI] capability:protocol', {
+    const resolved = resolveImageProvider({
       stage: 'editImage',
-      providerType,
       model: input.model,
-      capability: imageCapability.capability,
-      enabled: imageCapability.enabled,
-      source: imageCapability.source,
-      reason: imageCapability.reason
+      providers: getAiSettings().providers,
+      resolveExecutionProviderContext: ({ modelId }) => resolveExecutionProviderContextHelper({ modelId })
     })
-    if (!imageCapability.enabled) {
-      throw new Error(imageCapability.reason)
-    }
-    const methodAdapter = getProviderMethodAdapter(providerType)
-    return await methodAdapter.editImage({
-      executeSdkGenerate: async () => {
-        throw new Error('Unsupported path')
-      },
-      executeSdkEdit: async () => {
-        const { modelKey, model } = this.resolveImageModel(input.model)
-        console.info('[AI] editImage:start', {
-          modelInput: input.model,
-          resolvedModel: model,
-          imageAttachmentId: input.imageAttachmentId
-        })
-        const image = await attachmentStore.read(input.imageAttachmentId)
-
-        const result = await this.executeImageWithRetry(
-          'editImage',
-          async () =>
-            await this.generateImageWithDecodeFallback({
-              modelKey,
-              prompt: {
-                text: input.prompt,
-                images: [image]
-              }
-            }),
-          {
-            modelInput: input.model,
-            resolvedModel: model,
-            imageAttachmentId: input.imageAttachmentId
-          }
-        )
-
-        const images = result.images || []
-        const tokens = await this.estimateTokens({ model: input.model, messages: [] })
-        return { images, tokens }
-      }
+    return await executeEditImageOrchestration({
+      ...input,
+      providerType: resolved.providerType,
+      methodAdapter: resolved.methodAdapter,
+      resolveImageModel: (modelId) => this.resolveImageModel(modelId),
+      readAttachment: async (attachmentId) => await attachmentStore.read(attachmentId),
+      executeImageWithRetry: (stage, execute, context) => this.executeImageWithRetry(stage, execute, context),
+      generateImageWithDecodeFallback: (payload) => this.generateImageWithDecodeFallback(payload),
+      estimateTokens: async ({ model }) => await this.estimateTokens({ model, messages: [] })
     })
   }
 
@@ -839,43 +603,25 @@ export class AiService {
   async uploadAttachmentToProvider(
     input: { attachmentId: string; model?: string; providerId?: string; purpose?: string }
   ): Promise<{ providerId: string; fileId: string; uri?: string }> {
-    const providerConfig = input.model
-      ? resolveExecutionProviderContextHelper({ modelId: input.model }).providerConfig
-      : resolveProviderByIdHelper(input.providerId)
-    if (!providerConfig) {
-      console.error('[AI] uploadAttachmentToProvider:provider_not_found', { input })
-      throw new Error('Provider config not found for attachment upload')
-    }
-    const attachment = attachmentStore.get(input.attachmentId)
-    if (!attachment) {
-      console.error('[AI] uploadAttachmentToProvider:attachment_not_found', { attachmentId: input.attachmentId })
-      throw new Error(`Attachment not found: ${input.attachmentId}`)
-    }
-    const filename = attachment?.filename || 'attachment'
-    const mimeType = attachment?.mimeType || 'application/octet-stream'
-    try {
-      const remote = await uploadAttachmentToProviderInternalHelper(
-        { attachmentId: input.attachmentId, filename, mimeType, purpose: input.purpose },
-        providerConfig
-      )
-      if (!remote?.fileId) {
-        console.error('[AI] uploadAttachmentToProvider:missing_file_id', {
-          providerId: providerConfig.id,
-          attachmentId: input.attachmentId
-        })
-        throw new Error('Failed to upload attachment to provider: missing file id')
-      }
-      return { providerId: String(providerConfig.id), fileId: remote.fileId, uri: remote.uri }
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err)
-      console.error('[AI] uploadAttachmentToProvider:fail', {
-        providerId: providerConfig.id,
-        attachmentId: input.attachmentId,
-        baseURL: providerConfig.baseURL,
-        error: message
-      })
-      throw new Error(message)
-    }
+    const providerConfig = resolveUploadProviderConfig({
+      model: input.model,
+      providerId: input.providerId,
+      resolveExecutionProviderContext: ({ modelId }) => resolveExecutionProviderContextHelper({ modelId }),
+      resolveProviderById: (providerId) => resolveProviderByIdHelper(providerId)
+    })
+    const attachmentMeta = resolveUploadAttachmentMeta({
+      attachmentId: input.attachmentId,
+      getAttachment: (attachmentId) => attachmentStore.get(attachmentId)
+    })
+    return await executeUploadAttachmentOrchestration({
+      attachmentId: input.attachmentId,
+      purpose: input.purpose,
+      providerConfig,
+      filename: attachmentMeta.filename,
+      mimeType: attachmentMeta.mimeType,
+      uploadAttachmentToProviderInternal: async (payload, config) =>
+        await uploadAttachmentToProviderInternalHelper(payload, config)
+    })
   }
 
   private createRequestId(): string {

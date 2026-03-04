@@ -191,9 +191,21 @@
     - generation params 收口到 `src/main/ai/service/generation-params.ts`
     - provider context + 上传链路依赖装配收口到 `src/main/ai/service/provider-orchestration-deps.ts`
     - `src/main/ai/service.ts` 进一步降至 893 行
+  - 继续拆分（2026-03-03）：
+    - `call/stream` 共同前置编排抽离到 `src/main/ai/service/request-preparation.ts`
+    - `stream` 运行时壳（metrics/route/error）抽离到 `src/main/ai/service/stream-runtime-orchestration.ts`
+    - `src/main/ai/service.ts` 进一步降至 784 行
+  - 继续拆分（2026-03-03）：
+    - image provider capability/adapter 编排抽离到 `src/main/ai/service/image-orchestration.ts`
+    - `generateImages` / `generateImagesStream` / `editImage` 改为编排模块委托，`AiService` 保留 facade
+    - `src/main/ai/service.ts` 进一步降至 652 行
+  - 继续拆分（2026-03-04）：
+    - upload provider 解析与 attachment 元数据解析抽离到 `src/main/ai/service/upload-orchestration.ts`
+    - `uploadAttachmentToProvider` 错误映射与远端返回收口到 upload orchestration
+    - `src/main/ai/service.ts` 进一步降至 639 行
   - 回归验证：
     - `npm run typecheck` 通过
-    - `npm run lint` 通过（0 error / 310 warnings）
+    - `npm run lint` 通过（0 error / 0 warnings）
     - `npm run test:unit` 通过（149 tests, 0 fail, 1 skip）
     - `npm run build:smoke` 通过
 
@@ -252,7 +264,7 @@
   - `docs/TASKS.md`：基线结果与剩余任务更新
   - `docs/roadmap.md`：阶段状态与下一轮优先级更新
 - 后续 backlog（按优先级）：
-  1. 继续细化 `src/main/ai/service.ts`（当前约 893 行，优先降低 `stream()` 主链路可读性复杂度）
+  1. 继续细化 `src/main/ai/service.ts`（当前约 639 行，优先收敛 provider 编排主链路与上传依赖边界）
   2. 补齐插件商店安全增强方案（签名、来源校验、安装校验链）
 
 ## Key Questions

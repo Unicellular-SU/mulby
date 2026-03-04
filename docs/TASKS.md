@@ -1,6 +1,6 @@
 # Mulby 开发任务跟踪
 
-> 最后更新：2026-03-03
+> 最后更新：2026-03-04
 > 维护原则：仅保留当前与近期可执行任务，历史完成记录统一归档到 `docs/archive/`。
 
 ## 当前版本
@@ -48,6 +48,8 @@
   - [x] test/fetch provider shared deps 收口到 `src/main/ai/service/provider-shared-deps.ts`
   - [x] generation params 收口到 `src/main/ai/service/generation-params.ts`
   - [x] provider context + 上传链路依赖装配收口到 `src/main/ai/service/provider-orchestration-deps.ts`
+  - [x] image provider 编排抽离到 `src/main/ai/service/image-orchestration.ts`
+  - [x] uploadAttachmentToProvider 编排抽离到 `src/main/ai/service/upload-orchestration.ts`
   - [x] `src/preload/index.ts`
   - [x] `src/renderer/components/SettingsView.tsx`
   - [x] `src/renderer/components/AiSettingsView.tsx`（含 controller/hook 分层）
@@ -75,5 +77,5 @@
 - `build smoke`: 通过
 
 ## Next Backlog（优先级）
-1. 继续细化 `src/main/ai/service.ts`（当前约 893 行，优先降低 `stream()` 主链路可读性复杂度）。
+1. 继续细化 `src/main/ai/service.ts`（当前约 639 行，优先收敛 provider 编排主链路与上传依赖边界）。
 2. 插件商店安全增强方案设计（签名/来源校验/安装校验链）。
