@@ -1,20 +1,9 @@
 import type { BrowserWindow, Input } from 'electron'
 
-const WM_SYSCOMMAND = 0x0112
-const WM_SYSKEYDOWN = 0x0104
-const WM_SYSKEYUP = 0x0105
-const HOOKED_MSGS = [WM_SYSCOMMAND, WM_SYSKEYDOWN, WM_SYSKEYUP] as const
-
-const VK_SHIFT = 0x10
-const VK_CONTROL = 0x11
-const VK_MENU = 0x12
-const VK_LWIN = 0x5B
-const VK_RWIN = 0x5C
+const WM_INITMENU = 0x0116
 
 const recordingWebContentsIds = new Set<number>()
 const windowsByWebContentsId = new Map<number, BrowserWindow>()
-
-let sysKeyShiftHeld = false
 
 const NON_MAIN_KEYS = new Set([
   'alt',
@@ -94,135 +83,62 @@ function toAccelerator(input: Input): string | null {
 }
 
 // ---------------------------------------------------------------------------
-// Win32 message hooks — block the system-menu path at three levels:
-//   WM_SYSKEYDOWN  → prevents DefWindowProc from ever generating WM_SYSCOMMAND
-//   WM_SYSKEYUP    → prevents Alt-release from activating the menu bar
-//   WM_SYSCOMMAND   → belt-and-suspenders catch for any remaining SC_KEYMENU
+// WM_INITMENU hook — suppress the system menu during recording
 //
-// Hooks are applied to ALL tracked windows so that parent ↔ child forwarding
-// (e.g. attached panel → main window) is also covered.
+// Windows sends WM_INITMENU (0x0116) to the top-level window right before any
+// menu (including the Alt+Space system menu) is shown. By briefly toggling
+// setEnabled the menu initialisation is aborted and the menu never appears.
+//
+// This is a well-known Electron workaround:
+//   https://github.com/electron/electron/issues/24893#issuecomment-1109262719
 // ---------------------------------------------------------------------------
 
 export function setShortcutRecordingActive(webContentsId: number, active: boolean): void {
   if (!Number.isInteger(webContentsId) || webContentsId <= 0) return
   if (active) {
     recordingWebContentsIds.add(webContentsId)
-    hookAllWindows(webContentsId)
+    hookInitMenuOnAllWindows()
   } else {
     recordingWebContentsIds.delete(webContentsId)
-    if (recordingWebContentsIds.size === 0) unhookAllWindows()
+    if (recordingWebContentsIds.size === 0) unhookInitMenuOnAllWindows()
   }
 }
 
-function hookAllWindows(recordingWcId: number): void {
+function hookInitMenuOnAllWindows(): void {
   if (process.platform !== 'win32') return
-  sysKeyShiftHeld = false
-  const recordingWin = windowsByWebContentsId.get(recordingWcId) ?? null
-
   for (const [, win] of windowsByWebContentsId) {
     if (win.isDestroyed()) continue
-    hookSingleWindow(win, recordingWin)
+    try {
+      if (!win.isWindowMessageHooked(WM_INITMENU)) {
+        win.hookWindowMessage(WM_INITMENU, () => {
+          if (!win.isDestroyed()) {
+            win.setEnabled(false)
+            win.setEnabled(true)
+          }
+        })
+      }
+    } catch { /* ignore */ }
   }
 }
 
-function hookSingleWindow(win: BrowserWindow, recordingWin: BrowserWindow | null): void {
-  try {
-    if (!win.isWindowMessageHooked(WM_SYSCOMMAND)) {
-      win.hookWindowMessage(WM_SYSCOMMAND, () => { /* block */ })
-    }
-  } catch { /* ignore */ }
-
-  try {
-    if (!win.isWindowMessageHooked(WM_SYSKEYDOWN)) {
-      win.hookWindowMessage(WM_SYSKEYDOWN, (wParam: Buffer, lParam: Buffer) => {
-        if (recordingWebContentsIds.size === 0) return
-
-        const vk = readVK(wParam)
-
-        if (vk === VK_SHIFT) { sysKeyShiftHeld = true; return }
-        if (vk === VK_CONTROL || vk === VK_MENU || vk === VK_LWIN || vk === VK_RWIN) return
-
-        const isRepeat = lParam.length >= 4 ? ((lParam.readUInt32LE(0) >>> 30) & 1) === 1 : false
-        if (isRepeat) return
-
-        const target = recordingWin && !recordingWin.isDestroyed() ? recordingWin : null
-        if (!target) return
-
-        const mainKey = virtualKeyToAcceleratorKey(vk)
-        if (!mainKey) return
-
-        const parts: string[] = ['Alt']
-        if (sysKeyShiftHeld) parts.push('Shift')
-        parts.push(mainKey)
-        target.webContents.send('settings:shortcut:captured', parts.join('+'))
-      })
-    }
-  } catch { /* ignore */ }
-
-  try {
-    if (!win.isWindowMessageHooked(WM_SYSKEYUP)) {
-      win.hookWindowMessage(WM_SYSKEYUP, (wParam: Buffer) => {
-        if (readVK(wParam) === VK_SHIFT) sysKeyShiftHeld = false
-      })
-    }
-  } catch { /* ignore */ }
-}
-
-function unhookAllWindows(): void {
+function unhookInitMenuOnAllWindows(): void {
   if (process.platform !== 'win32') return
-  sysKeyShiftHeld = false
   for (const [, win] of windowsByWebContentsId) {
     if (win.isDestroyed()) continue
-    for (const msg of HOOKED_MSGS) {
-      try {
-        if (win.isWindowMessageHooked(msg)) win.unhookWindowMessage(msg)
-      } catch { /* ignore */ }
-    }
+    try {
+      if (win.isWindowMessageHooked(WM_INITMENU)) {
+        win.unhookWindowMessage(WM_INITMENU)
+      }
+    } catch { /* ignore */ }
   }
-}
-
-function readVK(wParam: Buffer): number {
-  return wParam.length >= 4 ? wParam.readUInt32LE(0) & 0xFF : 0
-}
-
-function virtualKeyToAcceleratorKey(vk: number): string | null {
-  if (vk >= 0x41 && vk <= 0x5A) return String.fromCharCode(vk)
-  if (vk >= 0x30 && vk <= 0x39) return String.fromCharCode(vk)
-  if (vk === 0x20) return 'Space'
-  if (vk >= 0x70 && vk <= 0x7B) return `F${vk - 0x6F}`
-  if (vk === 0x25) return 'Left'
-  if (vk === 0x26) return 'Up'
-  if (vk === 0x27) return 'Right'
-  if (vk === 0x28) return 'Down'
-  if (vk === 0x09) return 'Tab'
-  if (vk === 0x2D) return 'Insert'
-  if (vk === 0x2E) return 'Delete'
-  if (vk === 0x24) return 'Home'
-  if (vk === 0x23) return 'End'
-  if (vk === 0x21) return 'PageUp'
-  if (vk === 0x22) return 'PageDown'
-  if (vk === 0xBA) return ';'
-  if (vk === 0xBB) return '='
-  if (vk === 0xBC) return ','
-  if (vk === 0xBD) return '-'
-  if (vk === 0xBE) return '.'
-  if (vk === 0xBF) return '/'
-  if (vk === 0xC0) return '`'
-  if (vk === 0xDB) return '['
-  if (vk === 0xDC) return '\\'
-  if (vk === 0xDD) return ']'
-  if (vk === 0xDE) return '\''
-  return null
 }
 
 /**
  * Attach recording guard to a BrowserWindow.
  *
- * Alt+key shortcuts are captured via WM_SYSKEYDOWN hooks (Win32 message level)
- * so the system menu / menu-bar activation never fires.
- *
- * Non-Alt shortcuts (Ctrl+key, Ctrl+Shift+key, etc.) still flow through
- * Chromium's input pipeline and are captured via before-input-event.
+ * Shortcut capture uses before-input-event which fires for all key
+ * combinations including Alt+Space. During recording WM_INITMENU is
+ * hooked to suppress the system menu that Alt+Space would otherwise show.
  */
 export function attachShortcutRecordingGuard(win: BrowserWindow): void {
   if (process.platform !== 'win32') return
@@ -233,24 +149,17 @@ export function attachShortcutRecordingGuard(win: BrowserWindow): void {
   const cleanup = () => {
     recordingWebContentsIds.delete(webContentsId)
     if (!win.isDestroyed()) {
-      for (const msg of HOOKED_MSGS) {
-        try {
-          if (win.isWindowMessageHooked(msg)) win.unhookWindowMessage(msg)
-        } catch { /* ignore */ }
-      }
+      try {
+        if (win.isWindowMessageHooked(WM_INITMENU)) win.unhookWindowMessage(WM_INITMENU)
+      } catch { /* ignore */ }
     }
     windowsByWebContentsId.delete(webContentsId)
-    if (recordingWebContentsIds.size === 0) sysKeyShiftHeld = false
   }
   win.webContents.once('destroyed', cleanup)
   win.once('closed', cleanup)
 
   win.webContents.on('before-input-event', (event, input) => {
     if (!recordingWebContentsIds.has(webContentsId)) return
-
-    if (input.type === 'keyDown' && input.key === 'Shift') sysKeyShiftHeld = true
-    if (input.type === 'keyUp' && input.key === 'Shift') sysKeyShiftHeld = false
-
     if (input.type !== 'keyDown' || input.isAutoRepeat) return
     const accelerator = toAccelerator(input)
     if (!accelerator) return
