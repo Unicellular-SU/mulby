@@ -53,6 +53,8 @@ export class SystemPageWindowManager {
   private moveHandler: (() => void) | null = null
   private resizeHandler: (() => void) | null = null
   private syncScheduled = false
+  private preferredAttachedHeight = ATTACHED_PANEL_HEIGHT
+  private syncingBounds = false
 
   setMainWindow(window: BrowserWindow | null): void {
     this.mainWindow = window
@@ -161,6 +163,7 @@ export class SystemPageWindowManager {
     const currentTheme = this.themeManager?.getActualTheme() || 'dark'
     const backgroundColor = currentTheme === 'dark' ? '#1e293b' : '#ffffff'
 
+    this.preferredAttachedHeight = ATTACHED_PANEL_HEIGHT
     const win = new BrowserWindow({
       width,
       height: ATTACHED_PANEL_HEIGHT,
@@ -225,6 +228,12 @@ export class SystemPageWindowManager {
         }
         this.emitState()
       }
+    })
+
+    win.on('resize', () => {
+      if (this.syncingBounds || !this.attachedWindow || this.attachedWindow.isDestroyed()) return
+      const nextHeight = this.attachedWindow.getBounds().height
+      this.preferredAttachedHeight = Math.max(ATTACHED_PANEL_MIN_OVERFLOW_HEIGHT, nextHeight)
     })
 
     if (this.themeManager) {
@@ -635,20 +644,26 @@ export class SystemPageWindowManager {
     if (!main || main.isDestroyed() || !attached) return
 
     const { x, y, width } = this.calculateAttachedBounds()
-    const bounds = attached.getBounds()
     const display = screen.getDisplayNearestPoint({ x, y })
     const workArea = display.workArea
-    let height = bounds.height
+    let height = this.preferredAttachedHeight
     if (y + height > workArea.y + workArea.height) {
       height = Math.max(ATTACHED_PANEL_MIN_OVERFLOW_HEIGHT, workArea.y + workArea.height - y)
     }
-    attached.setBounds({ x, y, width, height })
+    this.syncingBounds = true
+    try {
+      attached.setBounds({ x, y, width, height })
+    } finally {
+      this.syncingBounds = false
+    }
   }
 
   private cleanupAttached(): void {
     this.removePositionSync()
     this.attachedWindow = null
     this.syncScheduled = false
+    this.preferredAttachedHeight = ATTACHED_PANEL_HEIGHT
+    this.syncingBounds = false
   }
 
   private buildWindowLoadTarget(route: OpenSystemPagePayload, mode: 'attached' | 'detached'): string {

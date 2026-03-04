@@ -38,6 +38,14 @@ import { patchConsoleWithTimestamp } from '../shared/utils/console'
 
 patchConsoleWithTimestamp()
 
+const APP_DISPLAY_NAME = 'Mulby'
+const WINDOWS_APP_USER_MODEL_ID = 'com.mulby.app'
+
+app.setName(APP_DISPLAY_NAME)
+if (process.platform === 'win32') {
+  app.setAppUserModelId(WINDOWS_APP_USER_MODEL_ID)
+}
+
 // 开发模式下禁用安全警告（Vite HMR 需要 unsafe-eval）
 const isDev = !app.isPackaged
 if (isDev) {
@@ -52,8 +60,8 @@ app.commandLine.appendSwitch('disable-software-rasterizer')
 // 启动崩溃报告器（生成本地 crash dump，用于分析 Native 层崩溃）
 // 必须在 app 模块加载后尽早调用
 crashReporter.start({
-  productName: 'Mulby',
-  companyName: 'Mulby',
+  productName: APP_DISPLAY_NAME,
+  companyName: APP_DISPLAY_NAME,
   submitURL: '', // 不上传，只保存本地
   uploadToServer: false,
   ignoreSystemCrashHandler: false

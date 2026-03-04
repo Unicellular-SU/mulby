@@ -54,6 +54,8 @@ export class PluginPanelWindow {
     private moveHandler: (() => void) | null = null
     private resizeHandler: (() => void) | null = null
     private syncScheduled = false
+    private preferredPanelHeight = ATTACHED_PANEL_HEIGHT
+    private syncingBounds = false
 
     constructor(mainWindow: BrowserWindow) {
         this.mainWindow = mainWindow
@@ -98,6 +100,7 @@ export class PluginPanelWindow {
         const preloadPath = getPluginPreloadPath(basePreloadPath, plugin)
         const hasCustomPreload = !!plugin.manifest.preload
 
+        this.preferredPanelHeight = ATTACHED_PANEL_HEIGHT
         this.panelWindow = new BrowserWindow({
             width,
             height: ATTACHED_PANEL_HEIGHT,
@@ -169,6 +172,13 @@ export class PluginPanelWindow {
         // 监听焦点变化 - 点击面板时获取焦点
         this.panelWindow.on('focus', () => {
             // 面板获得焦点是正常的
+        })
+
+        // 仅在手动调整面板高度时更新目标高度，避免移动过程中累积漂移
+        this.panelWindow.on('resize', () => {
+            if (this.syncingBounds || !this.panelWindow || this.panelWindow.isDestroyed()) return
+            const nextHeight = this.panelWindow.getBounds().height
+            this.preferredPanelHeight = Math.max(ATTACHED_PANEL_MIN_OVERFLOW_HEIGHT, nextHeight)
         })
 
         // 面板失焦时检查焦点去向
@@ -281,27 +291,31 @@ export class PluginPanelWindow {
         if (this.mainWindow.isDestroyed()) return
 
         const { x, y, width } = this.calculatePanelBounds()
-        const panelBounds = this.panelWindow.getBounds()
 
         // 检查是否超出屏幕边界
         const display = screen.getDisplayNearestPoint({ x, y })
         const { workArea } = display
 
         const adjustedY = y
-        let adjustedHeight = panelBounds.height
+        let adjustedHeight = this.preferredPanelHeight
 
         // 如果面板超出屏幕底部，调整高度
-        if (y + panelBounds.height > workArea.y + workArea.height) {
+        if (y + adjustedHeight > workArea.y + workArea.height) {
             adjustedHeight = Math.max(ATTACHED_PANEL_MIN_OVERFLOW_HEIGHT, workArea.y + workArea.height - y)
         }
 
         // 批量设置位置和大小以减少闪烁
-        this.panelWindow.setBounds({
-            x,
-            y: adjustedY,
-            width,
-            height: adjustedHeight
-        })
+        this.syncingBounds = true
+        try {
+            this.panelWindow.setBounds({
+                x,
+                y: adjustedY,
+                width,
+                height: adjustedHeight
+            })
+        } finally {
+            this.syncingBounds = false
+        }
     }
 
     /**
@@ -466,6 +480,8 @@ export class PluginPanelWindow {
         this.currentInput = ''
         this.currentAttachments = []
         this.syncScheduled = false
+        this.preferredPanelHeight = ATTACHED_PANEL_HEIGHT
+        this.syncingBounds = false
     }
 
     /**

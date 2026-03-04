@@ -1,11 +1,11 @@
 import { app, Menu, Tray, nativeImage } from 'electron'
 import { existsSync } from 'node:fs'
-import { join } from 'node:path'
+import { dirname, join } from 'node:path'
 import type { AppSettings } from '../../shared/types/settings'
 
 const MAIN_TRAY_GUID = 'bfec5f16-92a2-4b89-b5a0-65f1678d0b9c'
 const FALLBACK_ICON_DATA_URL =
-  'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAOqz9uoAAAAASUVORK5CYII='
+  'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAwMBAd0X4n4AAAAASUVORK5CYII='
 
 export interface AppTrayCallbacks {
   toggleMainWindow: () => void
@@ -38,7 +38,8 @@ export class AppTrayManager {
         ? new Tray(icon, MAIN_TRAY_GUID)
         : new Tray(icon)
 
-      this.tray.setToolTip('Mulby')
+      this.tray.setImage(icon)
+      this.tray.setToolTip(app.getName() || 'Mulby')
       if (process.platform === 'darwin' || process.platform === 'win32') {
         this.tray.setIgnoreDoubleClickEvents(true)
         this.tray.on('click', this.handleTrayActivation)
@@ -126,11 +127,13 @@ export class AppTrayManager {
     const candidates = this.getIconCandidates()
 
     let image = nativeImage.createEmpty()
+    let selectedPath = ''
     for (const filePath of candidates) {
       if (!existsSync(filePath)) continue
       const next = nativeImage.createFromPath(filePath)
       if (!next.isEmpty()) {
         image = next
+        selectedPath = filePath
         break
       }
     }
@@ -140,7 +143,10 @@ export class AppTrayManager {
     }
 
     const iconSize = process.platform === 'darwin' ? 18 : 16
-    image = image.resize({ width: iconSize, height: iconSize })
+    const fromIco = process.platform === 'win32' && selectedPath.toLowerCase().endsWith('.ico')
+    if (!fromIco) {
+      image = image.resize({ width: iconSize, height: iconSize })
+    }
 
     if (process.platform === 'darwin') {
       image.setTemplateImage(true)
@@ -151,7 +157,14 @@ export class AppTrayManager {
 
   private getIconCandidates(): string[] {
     const appPath = app.getAppPath()
-    const roots = [appPath, process.cwd(), process.resourcesPath]
+    const roots = [
+      appPath,
+      dirname(appPath),
+      process.cwd(),
+      process.resourcesPath,
+      join(process.resourcesPath, 'app.asar.unpacked'),
+      dirname(process.execPath)
+    ]
     const uniqueRoots = Array.from(new Set(roots))
 
     if (process.platform === 'darwin') {
@@ -165,7 +178,9 @@ export class AppTrayManager {
     if (process.platform === 'win32') {
       return this.resolveCandidates(uniqueRoots, [
         'resources/tray/icon.ico',
-        'resources/tray/icon.png'
+        'resources/tray/icon.png',
+        'tray/icon.ico',
+        'tray/icon.png'
       ])
     }
 

@@ -198,14 +198,14 @@ export function redirectHotKeySetting(cmdLabel: string, autocopy?: boolean): voi
   }
 
   new Notification({
-    title: 'Mulby',
+    title: app.getName() || 'Mulby',
     body: `Shortcut settings are not available yet. Use api.shortcut.register for "${cmdLabel}".`
   }).show()
 }
 
 export function redirectAiModelsSetting(): void {
   new Notification({
-    title: 'Mulby',
+    title: app.getName() || 'Mulby',
     body: 'AI model settings are not available yet.'
   }).show()
 }

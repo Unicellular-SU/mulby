@@ -31,6 +31,19 @@ export class AppShortcutManager {
     this.actions = actions
   }
 
+  private registerAccelerator(
+    accelerator: string,
+    action: AppShortcutAction
+  ): { ok: true } | { ok: false; reason: 'in-use' | 'invalid' } {
+    try {
+      const success = globalShortcut.register(accelerator, this.actions[action])
+      if (success) return { ok: true }
+      return { ok: false, reason: 'in-use' }
+    } catch {
+      return { ok: false, reason: 'invalid' }
+    }
+  }
+
   apply(shortcuts: AppShortcutSettings): ShortcutStatusMap {
     if (this.paused) {
       return this.status
@@ -59,44 +72,48 @@ export class AppShortcutManager {
         continue
       }
 
-      if (used.has(accelerator)) {
+      const key = accelerator.toLowerCase()
+
+      if (used.has(key)) {
         nextStatus[action] = { ok: false, reason: 'duplicate' }
         continue
       }
 
-      if (previous === accelerator) {
-        if (!globalShortcut.isRegistered(accelerator)) {
-          try {
-            globalShortcut.register(accelerator, this.actions[action])
-          } catch {
-            nextStatus[action] = { ok: false, reason: 'invalid' }
+      if (previous && previous.toLowerCase() === key) {
+        if (!globalShortcut.isRegistered(previous)) {
+          const result = this.registerAccelerator(previous, action)
+          if (!result.ok) {
+            nextStatus[action] = { ok: false, reason: result.reason }
+            this.registered.delete(action)
             continue
           }
         }
-        used.set(accelerator, action)
+        this.registered.set(action, accelerator)
+        used.set(key, action)
         continue
       }
 
-      if (globalShortcut.isRegistered(accelerator)) {
-        nextStatus[action] = { ok: false, reason: 'in-use' }
+      if (previous) {
+        globalShortcut.unregister(previous)
+        this.registered.delete(action)
+      }
+
+      const result = this.registerAccelerator(accelerator, action)
+      if (result.ok) {
+        this.registered.set(action, accelerator)
+        used.set(key, action)
+        nextStatus[action] = { ok: true }
         continue
       }
 
-      try {
-        const success = globalShortcut.register(accelerator, this.actions[action])
-        if (success) {
-          if (previous) {
-            globalShortcut.unregister(previous)
-            this.registered.delete(action)
-          }
-          this.registered.set(action, accelerator)
-          used.set(accelerator, action)
-          nextStatus[action] = { ok: true }
-        } else {
-          nextStatus[action] = { ok: false, reason: 'in-use' }
+      nextStatus[action] = { ok: false, reason: result.reason }
+
+      if (previous) {
+        const rollback = this.registerAccelerator(previous, action)
+        if (rollback.ok) {
+          this.registered.set(action, previous)
+          used.set(previous.toLowerCase(), action)
         }
-      } catch {
-        nextStatus[action] = { ok: false, reason: 'invalid' }
       }
     }
 

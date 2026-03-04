@@ -64,8 +64,8 @@ export default function ShortcutInput({
       setRecording(false)
       setError(null)
       setPreview(null)
-      onRecordEnd()
       onChange(accelerator)
+      onRecordEnd()
     }
 
     window.addEventListener('keydown', handleKeyDown, true)
