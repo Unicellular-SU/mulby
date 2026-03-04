@@ -83,18 +83,6 @@ function formatSystemReservedShortcutError(reason: SystemReservedShortcutReason)
   }
 }
 
-function createSystemReservedShortcutConflict(reason: SystemReservedShortcutReason): {
-  ok: false
-  state: 'system-reserved-shortcut'
-  error: string
-} {
-  return {
-    ok: false,
-    state: 'system-reserved-shortcut',
-    error: formatSystemReservedShortcutError(reason)
-  }
-}
-
 export class PluginCommandShortcutManager {
   private readonly options: PluginCommandShortcutManagerOptions
   private readonly app: CommandShortcutAppLike
@@ -343,11 +331,6 @@ export class PluginCommandShortcutManager {
       return { ok: false, state: 'shortcut-conflict', error: '该快捷键正在被其他指令占用' }
     }
 
-    const reservedReason = detectSystemReservedShortcut(accelerator)
-    if (reservedReason) {
-      return createSystemReservedShortcutConflict(reservedReason)
-    }
-
     if (this.globalShortcut.isRegistered(accelerator) && ownerId !== excludeBindingId) {
       return { ok: false, state: 'shortcut-conflict', error: '该快捷键已被系统或应用占用' }
     }
@@ -424,14 +407,6 @@ export class PluginCommandShortcutManager {
       }
     }
 
-    const reservedReason = detectSystemReservedShortcut(binding.accelerator)
-    if (reservedReason) {
-      return {
-        state: 'system-reserved-shortcut',
-        error: formatSystemReservedShortcutError(reservedReason)
-      }
-    }
-
     if (this.globalShortcut.isRegistered(binding.accelerator)) {
       return {
         state: 'shortcut-conflict',
@@ -466,6 +441,13 @@ export class PluginCommandShortcutManager {
       })
 
       if (!success) {
+        const reservedReason = detectSystemReservedShortcut(binding.accelerator)
+        if (reservedReason) {
+          return {
+            state: 'system-reserved-shortcut',
+            error: formatSystemReservedShortcutError(reservedReason)
+          }
+        }
         return {
           state: 'shortcut-conflict',
           error: '该快捷键已被系统或应用占用'

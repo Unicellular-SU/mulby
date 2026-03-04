@@ -3,6 +3,7 @@ import { join } from 'path'
 import { pathToFileURL } from 'url'
 import { existsSync } from 'fs'
 import { ThemeManager } from './theme'
+import { attachShortcutRecordingGuard } from './shortcut-recording-guard'
 import { injectCustomTitleBar } from '../plugin/titlebar'
 import { isIgnoringBlur } from './blur-manager'
 import { ATTACHED_PANEL_HEIGHT, ATTACHED_PANEL_MIN_OVERFLOW_HEIGHT } from '../constants/panel-window'
@@ -191,6 +192,7 @@ export class SystemPageWindowManager {
       }
     })
     this.suppressSystemContextMenu(win)
+    attachShortcutRecordingGuard(win)
 
     this.attachedWindow = win
     this.setupPositionSync()
@@ -303,6 +305,7 @@ export class SystemPageWindowManager {
       }
     })
     this.suppressSystemContextMenu(detachedWindow)
+    attachShortcutRecordingGuard(detachedWindow)
 
     this.detachedWindow = detachedWindow
 

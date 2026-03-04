@@ -477,6 +477,8 @@ export interface ElectronAPI {
     reset: () => Promise<{ settings: AppSettings; shortcutStatus: ShortcutStatusMap }>
     pauseShortcuts: () => Promise<ShortcutStatusMap>
     resumeShortcuts: () => Promise<ShortcutStatusMap>
+    setShortcutRecordingActive: (active: boolean) => Promise<boolean>
+    onShortcutCaptured: (callback: (accelerator: string) => void) => () => void
     getOpenAtLoginState: () => Promise<StartupOpenAtLoginState>
     setOpenAtLogin: (enabled: boolean) => Promise<StartupOpenAtLoginState>
     getUpdateCenterState: () => Promise<UpdateCenterState>

@@ -36,15 +36,10 @@ export class AppShortcutManager {
     accelerator: string,
     action: AppShortcutAction
   ): { ok: true } | { ok: false; reason: 'in-use' | 'invalid' | 'system-reserved' } {
-    const reservedReason = detectSystemReservedShortcut(accelerator)
-    const allowReservedForToggle = reservedReason === 'win-alt-space' && action === 'toggleWindow'
-    if (reservedReason && !allowReservedForToggle) {
-      return { ok: false, reason: 'system-reserved' }
-    }
     try {
       const success = globalShortcut.register(accelerator, this.actions[action])
       if (success) return { ok: true }
-      return { ok: false, reason: 'in-use' }
+      return { ok: false, reason: detectSystemReservedShortcut(accelerator) ? 'system-reserved' : 'in-use' }
     } catch {
       return { ok: false, reason: 'invalid' }
     }

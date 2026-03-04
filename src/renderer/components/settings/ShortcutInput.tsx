@@ -109,6 +109,10 @@ export default function ShortcutInput({
     if (!recording) return
 
     let finished = false
+    void window.mulby.settings.setShortcutRecordingActive(true).catch(() => {
+      // Ignore recording activation failures in view layer.
+    })
+
     const cancelRecording = () => {
       if (finished) return
       finished = true
@@ -172,6 +176,16 @@ export default function ShortcutInput({
       cancelRecording()
     }
 
+    const offShortcutCaptured = window.mulby.settings.onShortcutCaptured((accelerator) => {
+      if (finished) return
+      finished = true
+      setRecording(false)
+      setError(null)
+      setPreview(null)
+      onChange(accelerator)
+      onRecordEnd()
+    })
+
     window.addEventListener('keydown', handleKeyDown, true)
     window.addEventListener('keyup', handleKeyUp, true)
     window.addEventListener('blur', handleBlur)
@@ -179,6 +193,10 @@ export default function ShortcutInput({
       window.removeEventListener('keydown', handleKeyDown, true)
       window.removeEventListener('keyup', handleKeyUp, true)
       window.removeEventListener('blur', handleBlur)
+      offShortcutCaptured()
+      void window.mulby.settings.setShortcutRecordingActive(false).catch(() => {
+        // Ignore recording deactivation failures in view layer.
+      })
     }
   }, [recording, onChange, onRecordEnd])
 

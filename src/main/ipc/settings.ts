@@ -5,6 +5,7 @@ import { AppShortcutManager } from '../services/app-shortcuts'
 import { PluginManager } from '../plugin'
 import { setLoggerMinLevel } from '../services/logger'
 import { checkAppUpdates, getUpdateCenterState, openAppReleasePage } from '../services/update-center'
+import { setShortcutRecordingActive } from '../services/shortcut-recording-guard'
 
 function getOpenAtLoginState(): { supported: boolean; enabled: boolean } {
   if (process.platform !== 'darwin' && process.platform !== 'win32') {
@@ -81,6 +82,11 @@ export function registerSettingsHandlers(
   ipcMain.handle('settings:shortcuts:resume', () => {
     const next = settingsManager.getSettings()
     return shortcutManager.resume(next.shortcuts)
+  })
+
+  ipcMain.handle('settings:shortcuts:recording:setActive', (event, active: unknown) => {
+    setShortcutRecordingActive(event.sender.id, active === true)
+    return true
   })
 
   ipcMain.handle('settings:startup:getOpenAtLogin', () => {

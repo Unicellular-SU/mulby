@@ -289,11 +289,38 @@ export default function CommandShortcutPanel({
   useEffect(() => {
     if (!recordingCommand) return
 
+    let finished = false
+    const currentCommand = recordingCommand
+    void window.mulby.settings.setShortcutRecordingActive(true).catch(() => {
+      // Ignore recording activation failures in view layer.
+    })
+
+    const submitBinding = (accelerator: string) => {
+      if (finished) return
+      finished = true
+      setRecordError('')
+      setRecordingCommand(null)
+      void (async () => {
+        const result = await window.mulby.plugin.bindCommandShortcut({
+          ...buildTargetPayload(currentCommand),
+          commandLabel: currentCommand.displayLabel,
+          accelerator
+        })
+        if (!result.success) {
+          setRecordError(result.error || '绑定失败')
+        } else {
+          window.mulby.notification.show(`已绑定：${currentCommand.displayLabel} -> ${accelerator}`)
+        }
+        await loadData()
+      })()
+    }
+
     const handleKeyDown = (event: KeyboardEvent) => {
       event.preventDefault()
       event.stopPropagation()
 
       if (event.key === 'Escape') {
+        finished = true
         setRecordingCommand(null)
         setRecordError('')
         return
@@ -312,25 +339,21 @@ export default function CommandShortcutPanel({
         return
       }
 
-      setRecordError('')
-      setRecordingCommand(null)
-      void (async () => {
-        const result = await window.mulby.plugin.bindCommandShortcut({
-          ...buildTargetPayload(recordingCommand),
-          commandLabel: recordingCommand.displayLabel,
-          accelerator
-        })
-        if (!result.success) {
-          setRecordError(result.error || '绑定失败')
-        } else {
-          window.mulby.notification.show(`已绑定：${recordingCommand.displayLabel} -> ${accelerator}`)
-        }
-        await loadData()
-      })()
+      submitBinding(accelerator)
     }
 
+    const offShortcutCaptured = window.mulby.settings.onShortcutCaptured((accelerator) => {
+      submitBinding(accelerator)
+    })
+
     window.addEventListener('keydown', handleKeyDown, true)
-    return () => window.removeEventListener('keydown', handleKeyDown, true)
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown, true)
+      offShortcutCaptured()
+      void window.mulby.settings.setShortcutRecordingActive(false).catch(() => {
+        // Ignore recording deactivation failures in view layer.
+      })
+    }
   }, [recordingCommand, loadData])
 
   const startRecord = useCallback((command: PluginCommandItem) => {

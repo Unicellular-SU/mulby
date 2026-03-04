@@ -144,6 +144,12 @@ export function createPlatformApi(ipcRenderer: IpcRenderer) {
       reset: () => ipcRenderer.invoke('settings:reset'),
       pauseShortcuts: () => ipcRenderer.invoke('settings:shortcuts:pause'),
       resumeShortcuts: () => ipcRenderer.invoke('settings:shortcuts:resume'),
+      setShortcutRecordingActive: (active: boolean) => ipcRenderer.invoke('settings:shortcuts:recording:setActive', active),
+      onShortcutCaptured: (callback: (accelerator: string) => void) => {
+        const listener = (_event: unknown, accelerator: string) => callback(accelerator)
+        ipcRenderer.on('settings:shortcut:captured', listener)
+        return () => ipcRenderer.removeListener('settings:shortcut:captured', listener)
+      },
       getOpenAtLoginState: () => ipcRenderer.invoke('settings:startup:getOpenAtLogin'),
       setOpenAtLogin: (enabled: boolean) => ipcRenderer.invoke('settings:startup:setOpenAtLogin', enabled),
       getUpdateCenterState: () => ipcRenderer.invoke('settings:updateCenter:getState'),

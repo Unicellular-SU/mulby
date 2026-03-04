@@ -28,6 +28,7 @@ import { ClipboardWatcher } from './services/clipboard-watcher-v2'
 import { ClipboardHistoryManager } from './services/clipboard-history'
 import { commandRunnerService } from './services/command-runner'
 import { setLoggerMinLevel } from './services/logger'
+import { attachShortcutRecordingGuard } from './services/shortcut-recording-guard'
 import { SystemPluginWindowManager } from './services/system-plugin-window-manager'
 import {
   SystemPageWindowManager,
@@ -443,6 +444,7 @@ function createWindow() {
   })
 
   suppressSystemContextMenu(mainWindow)
+  attachShortcutRecordingGuard(mainWindow)
 
   mainWindow.on('closed', () => {
     systemPluginWindowManager.setMainWindow(null)
