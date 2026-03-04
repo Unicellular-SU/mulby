@@ -1,5 +1,6 @@
 import { globalShortcut } from 'electron'
 import type { AppShortcutAction, AppShortcutSettings, ShortcutStatusMap } from '../../shared/types/settings'
+import { detectSystemReservedShortcut } from './system-reserved-shortcuts'
 
 const ACTION_ORDER: AppShortcutAction[] = [
   'toggleWindow',
@@ -34,7 +35,12 @@ export class AppShortcutManager {
   private registerAccelerator(
     accelerator: string,
     action: AppShortcutAction
-  ): { ok: true } | { ok: false; reason: 'in-use' | 'invalid' } {
+  ): { ok: true } | { ok: false; reason: 'in-use' | 'invalid' | 'system-reserved' } {
+    const reservedReason = detectSystemReservedShortcut(accelerator)
+    const allowReservedForToggle = reservedReason === 'win-alt-space' && action === 'toggleWindow'
+    if (reservedReason && !allowReservedForToggle) {
+      return { ok: false, reason: 'system-reserved' }
+    }
     try {
       const success = globalShortcut.register(accelerator, this.actions[action])
       if (success) return { ok: true }

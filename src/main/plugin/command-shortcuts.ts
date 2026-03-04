@@ -12,6 +12,10 @@ import type {
   PluginCommandShortcutBindingState,
   PluginCommandShortcutValidationResult
 } from '../../shared/types/plugin'
+import {
+  detectSystemReservedShortcut,
+  type SystemReservedShortcutReason
+} from '../services/system-reserved-shortcuts'
 
 interface PluginCommandShortcutManagerOptions {
   listCommands: (pluginId?: string) => PluginCommandItem[]
@@ -58,6 +62,37 @@ interface CommandShortcutStateInfo {
 const EMPTY_PAYLOAD: InputPayload = {
   text: '',
   attachments: []
+}
+
+function formatSystemReservedShortcutError(reason: SystemReservedShortcutReason): string {
+  switch (reason) {
+    case 'win-meta':
+      return '包含 Win 键的快捷键由系统保留'
+    case 'win-alt-space':
+      return 'Alt+Space 为 Windows 系统窗口菜单快捷键'
+    case 'win-alt-tab':
+      return 'Alt+Tab 为 Windows 任务切换快捷键'
+    case 'win-alt-escape':
+      return 'Alt+Esc 为 Windows 窗口切换快捷键'
+    case 'win-alt-f4':
+      return 'Alt+F4 为 Windows 窗口关闭快捷键'
+    case 'win-ctrl-escape':
+      return 'Ctrl+Esc 为 Windows 开始菜单快捷键'
+    default:
+      return '该快捷键由系统保留'
+  }
+}
+
+function createSystemReservedShortcutConflict(reason: SystemReservedShortcutReason): {
+  ok: false
+  state: 'system-reserved-shortcut'
+  error: string
+} {
+  return {
+    ok: false,
+    state: 'system-reserved-shortcut',
+    error: formatSystemReservedShortcutError(reason)
+  }
 }
 
 export class PluginCommandShortcutManager {
@@ -308,6 +343,11 @@ export class PluginCommandShortcutManager {
       return { ok: false, state: 'shortcut-conflict', error: '该快捷键正在被其他指令占用' }
     }
 
+    const reservedReason = detectSystemReservedShortcut(accelerator)
+    if (reservedReason) {
+      return createSystemReservedShortcutConflict(reservedReason)
+    }
+
     if (this.globalShortcut.isRegistered(accelerator) && ownerId !== excludeBindingId) {
       return { ok: false, state: 'shortcut-conflict', error: '该快捷键已被系统或应用占用' }
     }
@@ -383,6 +423,15 @@ export class PluginCommandShortcutManager {
         error: '该快捷键正在被其他指令占用'
       }
     }
+
+    const reservedReason = detectSystemReservedShortcut(binding.accelerator)
+    if (reservedReason) {
+      return {
+        state: 'system-reserved-shortcut',
+        error: formatSystemReservedShortcutError(reservedReason)
+      }
+    }
+
     if (this.globalShortcut.isRegistered(binding.accelerator)) {
       return {
         state: 'shortcut-conflict',

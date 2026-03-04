@@ -211,7 +211,9 @@ export interface AppSettings {
 
 export interface ShortcutStatus {
   ok: boolean
-  reason?: string
+  reason?: ShortcutStatusReason
 }
+
+export type ShortcutStatusReason = 'duplicate' | 'in-use' | 'invalid' | 'system-reserved'
 
 export type ShortcutStatusMap = Record<AppShortcutAction, ShortcutStatus>

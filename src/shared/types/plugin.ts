@@ -164,6 +164,7 @@ export type PluginCommandShortcutBindingState =
   | 'command-missing'
   | 'command-not-bindable'
   | 'command-disabled'
+  | 'system-reserved-shortcut'
   | 'shortcut-conflict'
   | 'invalid-shortcut'
 

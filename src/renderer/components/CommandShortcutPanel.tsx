@@ -56,6 +56,8 @@ function getBindingStateLabel(state: PluginCommandShortcutBindingRecord['state']
       return '不可绑定'
     case 'command-disabled':
       return '指令已禁用'
+    case 'system-reserved-shortcut':
+      return '系统保留快捷键'
     case 'shortcut-conflict':
       return '快捷键冲突'
     case 'invalid-shortcut':
@@ -287,6 +289,10 @@ export default function CommandShortcutPanel({
   useEffect(() => {
     if (!recordingCommand) return
 
+    void window.mulby.settings.pauseShortcuts().catch(() => {
+      // Ignore pause failures in view layer.
+    })
+
     const handleKeyDown = (event: KeyboardEvent) => {
       event.preventDefault()
       event.stopPropagation()
@@ -328,7 +334,12 @@ export default function CommandShortcutPanel({
     }
 
     window.addEventListener('keydown', handleKeyDown, true)
-    return () => window.removeEventListener('keydown', handleKeyDown, true)
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown, true)
+      void window.mulby.settings.resumeShortcuts().catch(() => {
+        // Ignore resume failures in view layer.
+      })
+    }
   }, [recordingCommand, loadData])
 
   const startRecord = useCallback((command: PluginCommandItem) => {

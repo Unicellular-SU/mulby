@@ -190,6 +190,7 @@ export class SystemPageWindowManager {
         webviewTag: true
       }
     })
+    this.suppressSystemContextMenu(win)
 
     this.attachedWindow = win
     this.setupPositionSync()
@@ -301,6 +302,7 @@ export class SystemPageWindowManager {
         webviewTag: true
       }
     })
+    this.suppressSystemContextMenu(detachedWindow)
 
     this.detachedWindow = detachedWindow
 
@@ -664,6 +666,13 @@ export class SystemPageWindowManager {
     this.syncScheduled = false
     this.preferredAttachedHeight = ATTACHED_PANEL_HEIGHT
     this.syncingBounds = false
+  }
+
+  private suppressSystemContextMenu(win: BrowserWindow): void {
+    if (process.platform !== 'win32') return
+    win.on('system-context-menu', (event) => {
+      event.preventDefault()
+    })
   }
 
   private buildWindowLoadTarget(route: OpenSystemPagePayload, mode: 'attached' | 'detached'): string {

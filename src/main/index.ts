@@ -347,6 +347,13 @@ function getMainWindow() {
   return mainWindow
 }
 
+function suppressSystemContextMenu(win: BrowserWindow): void {
+  if (process.platform !== 'win32') return
+  win.on('system-context-menu', (event) => {
+    event.preventDefault()
+  })
+}
+
 function hideMainWindow() {
   if (!isWindowAvailable(mainWindow)) {
     mainWindow = null
@@ -434,6 +441,8 @@ function createWindow() {
   mainWindow.once('ready-to-show', () => {
     // console.log('[Main] Window ready-to-show event fired')
   })
+
+  suppressSystemContextMenu(mainWindow)
 
   mainWindow.on('closed', () => {
     systemPluginWindowManager.setMainWindow(null)
@@ -617,6 +626,7 @@ function showMainWindow() {
       }
     }
   } catch (e) {
+    stopIgnoringBlur()
     console.error('Error in show sequence:', e)
   }
 }
