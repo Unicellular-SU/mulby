@@ -289,10 +289,6 @@ export default function CommandShortcutPanel({
   useEffect(() => {
     if (!recordingCommand) return
 
-    void window.mulby.settings.pauseShortcuts().catch(() => {
-      // Ignore pause failures in view layer.
-    })
-
     const handleKeyDown = (event: KeyboardEvent) => {
       event.preventDefault()
       event.stopPropagation()
@@ -334,12 +330,7 @@ export default function CommandShortcutPanel({
     }
 
     window.addEventListener('keydown', handleKeyDown, true)
-    return () => {
-      window.removeEventListener('keydown', handleKeyDown, true)
-      void window.mulby.settings.resumeShortcuts().catch(() => {
-        // Ignore resume failures in view layer.
-      })
-    }
+    return () => window.removeEventListener('keydown', handleKeyDown, true)
   }, [recordingCommand, loadData])
 
   const startRecord = useCallback((command: PluginCommandItem) => {

@@ -2,6 +2,88 @@ import { useEffect, useState } from 'react'
 import type { ShortcutStatusMap } from '../../../shared/types/settings'
 import { normalizeShortcutKey } from './utils'
 
+function normalizeManualShortcut(raw: string): string | null {
+  const tokens = raw
+    .split('+')
+    .map((item) => item.trim())
+    .filter(Boolean)
+  if (tokens.length === 0) return null
+
+  const modifiers: string[] = []
+  let hasPrimaryModifier = false
+  let mainKey: string | null = null
+  for (const token of tokens) {
+    const lower = token.toLowerCase()
+    if (
+      lower === 'commandorcontrol'
+      || lower === 'cmdorctrl'
+      || lower === 'ctrl'
+      || lower === 'control'
+      || lower === 'cmd'
+      || lower === 'command'
+      || lower === 'meta'
+      || lower === 'super'
+      || lower === 'win'
+      || lower === 'windows'
+    ) {
+      if (!modifiers.includes('CommandOrControl')) modifiers.push('CommandOrControl')
+      hasPrimaryModifier = true
+      continue
+    }
+    if (lower === 'alt' || lower === 'option') {
+      if (!modifiers.includes('Alt')) modifiers.push('Alt')
+      hasPrimaryModifier = true
+      continue
+    }
+    if (lower === 'shift') {
+      if (!modifiers.includes('Shift')) modifiers.push('Shift')
+      continue
+    }
+
+    if (mainKey) return null
+    if (lower === 'space' || lower === 'spacebar') {
+      mainKey = 'Space'
+      continue
+    }
+    if (lower === 'up') {
+      mainKey = 'Up'
+      continue
+    }
+    if (lower === 'down') {
+      mainKey = 'Down'
+      continue
+    }
+    if (lower === 'left') {
+      mainKey = 'Left'
+      continue
+    }
+    if (lower === 'right') {
+      mainKey = 'Right'
+      continue
+    }
+    if (/^f\d{1,2}$/i.test(token)) {
+      mainKey = token.toUpperCase()
+      continue
+    }
+    if (/^[a-z]$/i.test(token)) {
+      mainKey = token.toUpperCase()
+      continue
+    }
+    if (/^\d$/.test(token)) {
+      mainKey = token
+      continue
+    }
+    if ([',', '.', '/', '\\', ';', '\'', '[', ']', '-', '=', '`'].includes(token)) {
+      mainKey = token
+      continue
+    }
+    return null
+  }
+
+  if (!mainKey || !hasPrimaryModifier) return null
+  return [...modifiers, mainKey].join('+')
+}
+
 export default function ShortcutInput({
   label,
   description,
@@ -26,18 +108,17 @@ export default function ShortcutInput({
   useEffect(() => {
     if (!recording) return
 
-    const handleKeyDown = (event: KeyboardEvent) => {
-      event.preventDefault()
-      event.stopPropagation()
+    let finished = false
+    const cancelRecording = () => {
+      if (finished) return
+      finished = true
+      setRecording(false)
+      setError(null)
+      setPreview(null)
+      onRecordEnd()
+    }
 
-      if (event.key === 'Escape') {
-        setRecording(false)
-        setError(null)
-        setPreview(null)
-        onRecordEnd()
-        return
-      }
-
+    const commitAccelerator = (event: KeyboardEvent) => {
       const mainKey = normalizeShortcutKey(event)
       const parts: string[] = []
       if (event.metaKey || event.ctrlKey) {
@@ -60,7 +141,8 @@ export default function ShortcutInput({
         setError('需要至少一个修饰键')
         return
       }
-
+      if (finished) return
+      finished = true
       setRecording(false)
       setError(null)
       setPreview(null)
@@ -68,8 +150,36 @@ export default function ShortcutInput({
       onRecordEnd()
     }
 
+    const handleKeyDown = (event: KeyboardEvent) => {
+      event.preventDefault()
+      event.stopPropagation()
+
+      if (event.key === 'Escape') {
+        cancelRecording()
+        return
+      }
+      commitAccelerator(event)
+    }
+
+    const handleKeyUp = (event: KeyboardEvent) => {
+      event.preventDefault()
+      event.stopPropagation()
+      if (event.key === 'Escape') return
+      commitAccelerator(event)
+    }
+
+    const handleBlur = () => {
+      cancelRecording()
+    }
+
     window.addEventListener('keydown', handleKeyDown, true)
-    return () => window.removeEventListener('keydown', handleKeyDown, true)
+    window.addEventListener('keyup', handleKeyUp, true)
+    window.addEventListener('blur', handleBlur)
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown, true)
+      window.removeEventListener('keyup', handleKeyUp, true)
+      window.removeEventListener('blur', handleBlur)
+    }
   }, [recording, onChange, onRecordEnd])
 
   const statusText = status?.ok
@@ -110,6 +220,22 @@ export default function ShortcutInput({
             }}
           >
             {recording ? '按下快捷键' : '录制'}
+          </button>
+          <button
+            className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-700 transition hover:border-slate-300 hover:text-slate-900 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-200"
+            onClick={() => {
+              const raw = window.prompt('手动输入快捷键（例如 Alt+Space）', value || '')
+              if (raw == null) return
+              const normalized = normalizeManualShortcut(raw)
+              if (!normalized) {
+                setError('格式无效，请使用如 Alt+Space')
+                return
+              }
+              setError(null)
+              onChange(normalized)
+            }}
+          >
+            手动输入
           </button>
         </div>
       </div>
