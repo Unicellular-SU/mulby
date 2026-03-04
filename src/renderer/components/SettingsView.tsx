@@ -77,7 +77,7 @@ export default function SettingsView({
   const [updateCenterState, setUpdateCenterState] = useState<UpdateCenterState | null>(null)
   const [startupBusy, setStartupBusy] = useState(false)
   const [updateBusy, setUpdateBusy] = useState(false)
-  const [, setActiveRecordings] = useState(0)
+  const [activeRecordings, setActiveRecordings] = useState(0)
 
   useEffect(() => {
     window.mulby.settings.get().then(({ settings, shortcutStatus }) => {
@@ -99,6 +99,23 @@ export default function SettingsView({
       setUpdateCenterState(null)
     })
   }, [])
+
+  useEffect(() => {
+    return () => {
+      void window.mulby.settings.resumeShortcuts().catch(() => {
+        // Ignore resume failures during settings cleanup.
+      })
+    }
+  }, [])
+
+  useEffect(() => {
+    if (section === 'shortcuts') return
+    if (activeRecordings <= 0) return
+    setActiveRecordings(0)
+    void window.mulby.settings.resumeShortcuts().then(setShortcutStatus).catch(() => {
+      // Ignore resume failures when leaving shortcuts section.
+    })
+  }, [activeRecordings, section])
 
   useEffect(() => {
     if (section !== 'permissions') return
@@ -560,7 +577,9 @@ export default function SettingsView({
     setActiveRecordings((count) => {
       const next = count + 1
       if (next === 1) {
-        window.mulby.settings.pauseShortcuts()
+        void window.mulby.settings.pauseShortcuts().catch(() => {
+          // Ignore pause failures in view layer.
+        })
       }
       return next
     })
@@ -570,7 +589,9 @@ export default function SettingsView({
     setActiveRecordings((count) => {
       const next = Math.max(0, count - 1)
       if (next === 0) {
-        window.mulby.settings.resumeShortcuts().then(setShortcutStatus)
+        void window.mulby.settings.resumeShortcuts().then(setShortcutStatus).catch(() => {
+          // Ignore resume failures in view layer.
+        })
       }
       return next
     })

@@ -190,6 +190,10 @@ export default function ShortcutInput({
     window.addEventListener('keyup', handleKeyUp, true)
     window.addEventListener('blur', handleBlur)
     return () => {
+      if (!finished) {
+        finished = true
+        onRecordEnd()
+      }
       window.removeEventListener('keydown', handleKeyDown, true)
       window.removeEventListener('keyup', handleKeyUp, true)
       window.removeEventListener('blur', handleBlur)
