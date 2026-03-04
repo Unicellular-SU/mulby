@@ -79,6 +79,11 @@ function toAccelerator(input: Input): string | null {
   return parts.join('+')
 }
 
+function isModifierOnlyInput(input: Input): boolean {
+  const key = String(input.key || '').trim().toLowerCase()
+  return NON_MAIN_KEYS.has(key)
+}
+
 export function setShortcutRecordingActive(webContentsId: number, active: boolean): void {
   if (!Number.isInteger(webContentsId) || webContentsId <= 0) return
   if (active) {
@@ -105,6 +110,15 @@ export function attachShortcutRecordingGuard(win: BrowserWindow): void {
 
   win.webContents.on('before-input-event', (event, input) => {
     if (!recordingWebContentsIds.has(webContentsId)) return
+    if (input.type !== 'keyDown' && input.type !== 'keyUp') return
+
+    // Swallow pure modifier events during recording so Windows won't enter
+    // native menu mode (e.g. Alt state before a chord is completed).
+    if (isModifierOnlyInput(input)) {
+      event.preventDefault()
+      return
+    }
+
     if (input.type !== 'keyDown' || input.isAutoRepeat) return
     const accelerator = toAccelerator(input)
     if (!accelerator) return
