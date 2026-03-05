@@ -41,6 +41,35 @@ patchConsoleWithTimestamp()
 
 const APP_DISPLAY_NAME = 'Mulby'
 const WINDOWS_APP_USER_MODEL_ID = 'com.mulby.app'
+const MAIN_WINDOW_SHADOW_MARGIN = 12
+const MAIN_WINDOW_SHADOW_HTML = `<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <style>
+    html, body {
+      margin: 0;
+      width: 100%;
+      height: 100%;
+      background: transparent;
+      overflow: hidden;
+      pointer-events: none;
+    }
+    .shadow {
+      position: absolute;
+      inset: ${MAIN_WINDOW_SHADOW_MARGIN}px;
+      border-radius: 12px;
+      box-shadow:
+        0 2px 10px rgba(15, 23, 42, 0.14),
+        0 1px 2px rgba(15, 23, 42, 0.1);
+    }
+  </style>
+</head>
+<body>
+  <div class="shadow"></div>
+</body>
+</html>`
+const MAIN_WINDOW_SHADOW_URL = `data:text/html;charset=UTF-8,${encodeURIComponent(MAIN_WINDOW_SHADOW_HTML)}`
 
 app.setName(APP_DISPLAY_NAME)
 if (process.platform === 'win32') {
@@ -70,6 +99,7 @@ crashReporter.start({
 console.log('[CrashReporter] 崩溃报告器已启动，dump 目录:', app.getPath('crashDumps'))
 
 let mainWindow: BrowserWindow | null = null
+let mainShadowWindow: BrowserWindow | null = null
 let appTrayManager: AppTrayManager | null = null
 let trayMenuWindowManager: TrayMenuWindowManager | null = null
 let isQuitting = false
@@ -357,6 +387,7 @@ function suppressSystemContextMenu(win: BrowserWindow): void {
 
 function hideMainWindow() {
   if (!isWindowAvailable(mainWindow)) {
+    closeMainShadowWindow()
     mainWindow = null
     return
   }
@@ -365,6 +396,7 @@ function hideMainWindow() {
   pluginWindowManager.hidePanelWindow()
   systemPageWindowManager.hideAttached()
   mainWindow.hide()
+  mainShadowWindow?.hide()
 
   // macOS: 如果有独立窗口，确保 dock 图标保持显示
   if (process.platform === 'darwin' && app.dock) {
@@ -374,6 +406,78 @@ function hideMainWindow() {
       void app.dock.show()
     }
   }
+}
+
+function createMainShadowWindow() {
+  if (!isWindowAvailable(mainWindow)) return
+  if (isWindowAvailable(mainShadowWindow)) return
+
+  const shadow = new BrowserWindow({
+    width: 1,
+    height: 1,
+    x: 0,
+    y: 0,
+    frame: false,
+    show: false,
+    transparent: true,
+    hasShadow: false,
+    resizable: false,
+    movable: false,
+    minimizable: false,
+    maximizable: false,
+    fullscreenable: false,
+    focusable: false,
+    parent: mainWindow,
+    modal: false,
+    skipTaskbar: true,
+    backgroundColor: '#00000000',
+    webPreferences: {
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: true
+    }
+  })
+
+  shadow.setIgnoreMouseEvents(true, { forward: true })
+  void shadow.loadURL(MAIN_WINDOW_SHADOW_URL)
+  shadow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true })
+
+  shadow.on('closed', () => {
+    if (mainShadowWindow && mainShadowWindow.id === shadow.id) {
+      mainShadowWindow = null
+    }
+  })
+
+  mainShadowWindow = shadow
+}
+
+function syncMainShadowBounds() {
+  if (!isWindowAvailable(mainWindow) || !isWindowAvailable(mainShadowWindow)) return
+  const bounds = mainWindow.getBounds()
+  const margin = MAIN_WINDOW_SHADOW_MARGIN
+  mainShadowWindow.setBounds({
+    x: bounds.x - margin,
+    y: bounds.y - margin,
+    width: Math.max(1, bounds.width + margin * 2),
+    height: Math.max(1, bounds.height + margin * 2)
+  })
+}
+
+function showMainShadowWindow() {
+  if (!isWindowAvailable(mainWindow)) return
+  if (!isWindowAvailable(mainShadowWindow)) {
+    createMainShadowWindow()
+  }
+  if (!isWindowAvailable(mainShadowWindow)) return
+  syncMainShadowBounds()
+  mainShadowWindow.showInactive()
+}
+
+function closeMainShadowWindow() {
+  if (isWindowAvailable(mainShadowWindow)) {
+    mainShadowWindow.close()
+  }
+  mainShadowWindow = null
 }
 
 function canReachUrl(url: string, timeoutMs = 800): Promise<boolean> {
@@ -419,7 +523,7 @@ function createWindow() {
     minWidth: 400,   // 设置最小宽度
     skipTaskbar: true,
     transparent: true,
-    hasShadow: false, // 透明窗口禁用原生阴影，由 CSS box-shadow 控制
+    hasShadow: false, // 透明无边框窗口使用自定义阴影，避免原生阴影黑边
     type: 'panel', // macOS 上 panel 类型有助于浮动在全屏应用之上
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
@@ -438,6 +542,7 @@ function createWindow() {
   } else {
     mainWindow.setAlwaysOnTop(true)
   }
+  createMainShadowWindow()
 
   mainWindow.once('ready-to-show', () => {
     // console.log('[Main] Window ready-to-show event fired')
@@ -447,6 +552,7 @@ function createWindow() {
   attachShortcutRecordingGuard(mainWindow)
 
   mainWindow.on('closed', () => {
+    closeMainShadowWindow()
     systemPluginWindowManager.setMainWindow(null)
     systemPageWindowManager.setMainWindow(null)
     mainWindow = null
@@ -479,9 +585,7 @@ function createWindow() {
         return
       }
       // 焦点转移到其他地方，隐藏主窗口和面板
-      pluginWindowManager.hidePanelWindow()
-      systemPageWindowManager.hideAttached()
-      mainWindow?.hide()
+      hideMainWindow()
     }, 50)
   })
 
@@ -518,6 +622,13 @@ function createWindow() {
   // 监听窗口调整和移动
   mainWindow.on('resize', saveState)
   mainWindow.on('move', saveState)
+  mainWindow.on('resize', syncMainShadowBounds)
+  mainWindow.on('show', showMainShadowWindow)
+  mainWindow.on('hide', () => {
+    if (isWindowAvailable(mainShadowWindow)) {
+      mainShadowWindow.hide()
+    }
+  })
 
   const loadApp = async () => {
     if (process.env.VITE_DEV_SERVER_URL) {

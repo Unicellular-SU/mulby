@@ -8,6 +8,36 @@ import { injectCustomTitleBar } from '../plugin/titlebar'
 import { isIgnoringBlur } from './blur-manager'
 import { ATTACHED_PANEL_HEIGHT, ATTACHED_PANEL_MIN_OVERFLOW_HEIGHT } from '../constants/panel-window'
 
+const ATTACHED_SYSTEM_SHADOW_MARGIN = 12
+const ATTACHED_SYSTEM_SHADOW_HTML = `<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <style>
+    html, body {
+      margin: 0;
+      width: 100%;
+      height: 100%;
+      background: transparent;
+      overflow: hidden;
+      pointer-events: none;
+    }
+    .shadow {
+      position: absolute;
+      inset: ${ATTACHED_SYSTEM_SHADOW_MARGIN}px;
+      border-radius: 12px;
+      box-shadow:
+        0 2px 10px rgba(15, 23, 42, 0.12),
+        0 1px 2px rgba(15, 23, 42, 0.08);
+    }
+  </style>
+</head>
+<body>
+  <div class="shadow"></div>
+</body>
+</html>`
+const ATTACHED_SYSTEM_SHADOW_URL = `data:text/html;charset=UTF-8,${encodeURIComponent(ATTACHED_SYSTEM_SHADOW_HTML)}`
+
 export type SystemPageMode = 'none' | 'attached' | 'detached'
 
 export type SystemPageId =
@@ -48,6 +78,7 @@ export class SystemPageWindowManager {
   private mainWindow: BrowserWindow | null = null
   private themeManager: ThemeManager | null = null
   private attachedWindow: BrowserWindow | null = null
+  private attachedShadowWindow: BrowserWindow | null = null
   private detachedWindow: BrowserWindow | null = null
   private currentRoute: OpenSystemPagePayload | null = null
 
@@ -165,6 +196,7 @@ export class SystemPageWindowManager {
     const backgroundColor = currentTheme === 'dark' ? '#1e293b' : '#ffffff'
 
     this.preferredAttachedHeight = ATTACHED_PANEL_HEIGHT
+    this.createAttachedShadowWindow(mainWindow)
     const win = new BrowserWindow({
       width,
       height: ATTACHED_PANEL_HEIGHT,
@@ -182,7 +214,7 @@ export class SystemPageWindowManager {
       alwaysOnTop: true,
       skipTaskbar: true,
       backgroundColor,
-      hasShadow: true,
+      hasShadow: false, // 使用自定义阴影层，避免原生阴影黑边
       roundedCorners: true,
       webPreferences: {
         preload: join(__dirname, '../preload/index.js'),
@@ -203,6 +235,7 @@ export class SystemPageWindowManager {
       if (!mainWindow.isVisible()) {
         mainWindow.show()
       }
+      this.showAttachedShadow()
       this.attachedWindow.show()
       if (this.currentRoute) {
         this.dispatchRoute(this.attachedWindow, this.currentRoute)
@@ -466,12 +499,18 @@ export class SystemPageWindowManager {
     if (attached) {
       attached.hide()
     }
+    this.hideAttachedShadow()
   }
 
   showAttached(): void {
     const attached = this.getAttachedWindow()
     if (!attached) return
+    const main = this.mainWindow
+    if (main && !main.isDestroyed()) {
+      this.createAttachedShadowWindow(main)
+    }
     this.syncPosition()
+    this.showAttachedShadow()
     attached.showInactive()
   }
 
@@ -596,6 +635,81 @@ export class SystemPageWindowManager {
     }
   }
 
+  private createAttachedShadowWindow(mainWindow: BrowserWindow): void {
+    if (this.attachedShadowWindow && !this.attachedShadowWindow.isDestroyed()) {
+      return
+    }
+
+    const shadowWindow = new BrowserWindow({
+      width: 1,
+      height: 1,
+      x: 0,
+      y: 0,
+      frame: false,
+      show: false,
+      transparent: true,
+      hasShadow: false,
+      resizable: false,
+      movable: false,
+      minimizable: false,
+      maximizable: false,
+      fullscreenable: false,
+      focusable: false,
+      parent: mainWindow,
+      modal: false,
+      alwaysOnTop: true,
+      skipTaskbar: true,
+      backgroundColor: '#00000000',
+      webPreferences: {
+        contextIsolation: true,
+        nodeIntegration: false,
+        sandbox: true
+      }
+    })
+
+    shadowWindow.setIgnoreMouseEvents(true, { forward: true })
+    void shadowWindow.loadURL(ATTACHED_SYSTEM_SHADOW_URL)
+
+    shadowWindow.on('closed', () => {
+      if (this.attachedShadowWindow && this.attachedShadowWindow.id === shadowWindow.id) {
+        this.attachedShadowWindow = null
+      }
+    })
+
+    this.attachedShadowWindow = shadowWindow
+  }
+
+  private setAttachedShadowBounds(x: number, y: number, width: number, height: number): void {
+    const shadow = this.attachedShadowWindow
+    if (!shadow || shadow.isDestroyed()) return
+    const margin = ATTACHED_SYSTEM_SHADOW_MARGIN
+    shadow.setBounds({
+      x: x - margin,
+      y: y - margin,
+      width: Math.max(1, width + margin * 2),
+      height: Math.max(1, height + margin * 2)
+    })
+  }
+
+  private showAttachedShadow(): void {
+    if (this.attachedShadowWindow && !this.attachedShadowWindow.isDestroyed()) {
+      this.attachedShadowWindow.showInactive()
+    }
+  }
+
+  private hideAttachedShadow(): void {
+    if (this.attachedShadowWindow && !this.attachedShadowWindow.isDestroyed()) {
+      this.attachedShadowWindow.hide()
+    }
+  }
+
+  private closeAttachedShadow(): void {
+    if (this.attachedShadowWindow && !this.attachedShadowWindow.isDestroyed()) {
+      this.attachedShadowWindow.close()
+    }
+    this.attachedShadowWindow = null
+  }
+
   private setupPositionSync(): void {
     const main = this.mainWindow
     if (!main || main.isDestroyed()) return
@@ -658,6 +772,7 @@ export class SystemPageWindowManager {
     this.syncingBounds = true
     try {
       attached.setBounds({ x, y, width, height })
+      this.setAttachedShadowBounds(x, y, width, height)
     } finally {
       this.syncingBounds = false
     }
@@ -665,6 +780,7 @@ export class SystemPageWindowManager {
 
   private cleanupAttached(): void {
     this.removePositionSync()
+    this.closeAttachedShadow()
     this.attachedWindow = null
     this.syncScheduled = false
     this.preferredAttachedHeight = ATTACHED_PANEL_HEIGHT

@@ -10,6 +10,36 @@ import { isIgnoringBlur } from '../services/blur-manager'
 import { getPluginPreloadPath } from './plugin-preload-wrapper'
 import { ATTACHED_PANEL_HEIGHT, ATTACHED_PANEL_MIN_OVERFLOW_HEIGHT } from '../constants/panel-window'
 
+const ATTACHED_PANEL_SHADOW_MARGIN = 12
+const ATTACHED_PANEL_SHADOW_HTML = `<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <style>
+    html, body {
+      margin: 0;
+      width: 100%;
+      height: 100%;
+      background: transparent;
+      overflow: hidden;
+      pointer-events: none;
+    }
+    .shadow {
+      position: absolute;
+      inset: ${ATTACHED_PANEL_SHADOW_MARGIN}px;
+      border-radius: 12px;
+      box-shadow:
+        0 2px 10px rgba(15, 23, 42, 0.12),
+        0 1px 2px rgba(15, 23, 42, 0.08);
+    }
+  </style>
+</head>
+<body>
+  <div class="shadow"></div>
+</body>
+</html>`
+const ATTACHED_PANEL_SHADOW_URL = `data:text/html;charset=UTF-8,${encodeURIComponent(ATTACHED_PANEL_SHADOW_HTML)}`
+
 function canReachUrl(url: string, timeoutMs = 800): Promise<boolean> {
     return new Promise((resolve) => {
         try {
@@ -43,6 +73,7 @@ function canReachUrl(url: string, timeoutMs = 800): Promise<boolean> {
  */
 export class PluginPanelWindow {
     private panelWindow: BrowserWindow | null = null
+    private shadowWindow: BrowserWindow | null = null
     private mainWindow: BrowserWindow
     private themeManager: ThemeManager | null = null
     private currentPlugin: Plugin | null = null
@@ -101,6 +132,7 @@ export class PluginPanelWindow {
         const hasCustomPreload = !!plugin.manifest.preload
 
         this.preferredPanelHeight = ATTACHED_PANEL_HEIGHT
+        this.createShadowWindow()
         this.panelWindow = new BrowserWindow({
             width,
             height: ATTACHED_PANEL_HEIGHT,
@@ -118,7 +150,7 @@ export class PluginPanelWindow {
             alwaysOnTop: true,
             skipTaskbar: true,
             backgroundColor,
-            hasShadow: true,
+            hasShadow: false, // 使用自定义阴影层，避免原生阴影黑边
             roundedCorners: true,
             webPreferences: {
                 preload: preloadPath,
@@ -150,6 +182,7 @@ export class PluginPanelWindow {
                 this.mainWindow.show()
             }
 
+            this.showShadow()
             // 显示窗口 (使用 show() 抢夺焦点，确保显示)
             this.panelWindow.show()
 
@@ -246,6 +279,83 @@ export class PluginPanelWindow {
         }
     }
 
+    private createShadowWindow() {
+        if (this.shadowWindow && !this.shadowWindow.isDestroyed()) {
+            return
+        }
+        if (this.mainWindow.isDestroyed()) {
+            return
+        }
+
+        const shadowWindow = new BrowserWindow({
+            width: 1,
+            height: 1,
+            x: 0,
+            y: 0,
+            frame: false,
+            show: false,
+            transparent: true,
+            hasShadow: false,
+            resizable: false,
+            movable: false,
+            minimizable: false,
+            maximizable: false,
+            fullscreenable: false,
+            focusable: false,
+            parent: this.mainWindow,
+            modal: false,
+            alwaysOnTop: true,
+            skipTaskbar: true,
+            backgroundColor: '#00000000',
+            webPreferences: {
+                contextIsolation: true,
+                nodeIntegration: false,
+                sandbox: true
+            }
+        })
+
+        shadowWindow.setIgnoreMouseEvents(true, { forward: true })
+        void shadowWindow.loadURL(ATTACHED_PANEL_SHADOW_URL)
+
+        shadowWindow.on('closed', () => {
+            if (this.shadowWindow && this.shadowWindow.id === shadowWindow.id) {
+                this.shadowWindow = null
+            }
+        })
+
+        this.shadowWindow = shadowWindow
+    }
+
+    private setShadowBounds(x: number, y: number, width: number, height: number) {
+        if (!this.shadowWindow || this.shadowWindow.isDestroyed()) return
+        const margin = ATTACHED_PANEL_SHADOW_MARGIN
+        this.shadowWindow.setBounds({
+            x: x - margin,
+            y: y - margin,
+            width: Math.max(1, width + margin * 2),
+            height: Math.max(1, height + margin * 2)
+        })
+    }
+
+    private showShadow() {
+        if (this.shadowWindow && !this.shadowWindow.isDestroyed()) {
+            this.shadowWindow.showInactive()
+        }
+    }
+
+    private hideShadow() {
+        if (this.shadowWindow && !this.shadowWindow.isDestroyed()) {
+            this.shadowWindow.hide()
+        }
+    }
+
+    private closeShadowWindow() {
+        if (this.shadowWindow && !this.shadowWindow.isDestroyed()) {
+            this.shadowWindow.close()
+        }
+        this.shadowWindow = null
+    }
+
     /**
      * 设置位置同步监听器
      * 使用 requestAnimationFrame 级别的同步以避免割裂感
@@ -313,6 +423,7 @@ export class PluginPanelWindow {
                 width,
                 height: adjustedHeight
             })
+            this.setShadowBounds(x, adjustedY, width, adjustedHeight)
         } finally {
             this.syncingBounds = false
         }
@@ -356,6 +467,7 @@ export class PluginPanelWindow {
         this.panelWindow.close()
         this.panelWindow = null
         this.removePositionSync()
+        this.closeShadowWindow()
 
         // 创建独立窗口
         const currentTheme = this.themeManager?.getActualTheme() || 'dark'
@@ -474,6 +586,7 @@ export class PluginPanelWindow {
      */
     private cleanup() {
         this.removePositionSync()
+        this.closeShadowWindow()
         this.panelWindow = null
         this.currentPlugin = null
         this.currentFeatureCode = ''
@@ -512,6 +625,7 @@ export class PluginPanelWindow {
         if (this.panelWindow && !this.panelWindow.isDestroyed()) {
             this.panelWindow.hide()
         }
+        this.hideShadow()
     }
 
     /**
@@ -519,7 +633,9 @@ export class PluginPanelWindow {
      */
     show() {
         if (this.panelWindow && !this.panelWindow.isDestroyed()) {
+            this.createShadowWindow()
             this.syncPosition() // 确保位置正确
+            this.showShadow()
             this.panelWindow.showInactive()
         }
     }
