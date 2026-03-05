@@ -42,6 +42,9 @@ patchConsoleWithTimestamp()
 const APP_DISPLAY_NAME = 'Mulby'
 const WINDOWS_APP_USER_MODEL_ID = 'com.mulby.app'
 const MAIN_WINDOW_SHADOW_MARGIN = 12
+const WINDOWS_WM_INITMENU = 0x0116
+const MAIN_WINDOW_TOGGLE_DEBOUNCE_MS = 180
+const WINDOWS_SHOW_BLUR_GUARD_MS = 260
 const MAIN_WINDOW_SHADOW_HTML = `<!doctype html>
 <html>
 <head>
@@ -107,6 +110,9 @@ let shouldRestartAfterQuit = false
 let shutdownFinalizeScheduled = false
 let hasShutdownCompleted = false
 let shutdownPromise: Promise<void> | null = null
+let mainWindowBlurHideTimer: NodeJS.Timeout | null = null
+let suppressMainBlurHideUntil = 0
+let lastMainWindowToggleAt = 0
 const pluginManager = new PluginManager()
 const pluginWindowManager = new PluginWindowManager()
 const themeManager = new ThemeManager()
@@ -383,15 +389,54 @@ function suppressSystemContextMenu(win: BrowserWindow): void {
   win.on('system-context-menu', (event) => {
     event.preventDefault()
   })
+  try {
+    if (!win.isWindowMessageHooked(WINDOWS_WM_INITMENU)) {
+      // Suppress Alt+Space system menu to avoid focus jitter on frameless window.
+      win.hookWindowMessage(WINDOWS_WM_INITMENU, () => {
+        if (!win.isDestroyed()) {
+          win.setEnabled(false)
+          win.setEnabled(true)
+        }
+      })
+    }
+  } catch (error) {
+    console.warn('[Main] Failed to hook WM_INITMENU on main window:', error)
+  }
+  win.once('closed', () => {
+    try {
+      if (!win.isDestroyed() && win.isWindowMessageHooked(WINDOWS_WM_INITMENU)) {
+        win.unhookWindowMessage(WINDOWS_WM_INITMENU)
+      }
+    } catch {
+      // ignore
+    }
+  })
+}
+
+function clearMainWindowBlurHideTimer(): void {
+  if (!mainWindowBlurHideTimer) return
+  clearTimeout(mainWindowBlurHideTimer)
+  mainWindowBlurHideTimer = null
+}
+
+function shouldSuppressMainBlurHide(): boolean {
+  return process.platform === 'win32' && Date.now() < suppressMainBlurHideUntil
+}
+
+function extendMainBlurHideSuppression(durationMs: number): void {
+  if (process.platform !== 'win32') return
+  suppressMainBlurHideUntil = Math.max(suppressMainBlurHideUntil, Date.now() + durationMs)
 }
 
 function hideMainWindow() {
   if (!isWindowAvailable(mainWindow)) {
+    clearMainWindowBlurHideTimer()
     closeMainShadowWindow()
     mainWindow = null
     return
   }
 
+  clearMainWindowBlurHideTimer()
   trayMenuWindowManager?.hide()
   pluginWindowManager.hidePanelWindow()
   systemPageWindowManager.hideAttached()
@@ -552,6 +597,7 @@ function createWindow() {
   attachShortcutRecordingGuard(mainWindow)
 
   mainWindow.on('closed', () => {
+    clearMainWindowBlurHideTimer()
     closeMainShadowWindow()
     systemPluginWindowManager.setMainWindow(null)
     systemPageWindowManager.setMainWindow(null)
@@ -570,10 +616,14 @@ function createWindow() {
 
   // 失焦隐藏（类似 uTools 的交互）
   mainWindow.on('blur', () => {
-    if (isIgnoringBlur()) return
+    if (isIgnoringBlur() || shouldSuppressMainBlurHide()) return
+
+    clearMainWindowBlurHideTimer()
 
     // 延迟检查，让焦点转移完成
-    setTimeout(() => {
+    mainWindowBlurHideTimer = setTimeout(() => {
+      mainWindowBlurHideTimer = null
+      if (isIgnoringBlur() || shouldSuppressMainBlurHide()) return
       // 如果焦点转移到了面板窗口，不隐藏
       const panelWin = pluginWindowManager.getPanelWindow()?.getWindow()
       if (panelWin && panelWin.isFocused()) {
@@ -663,6 +713,7 @@ function showMainWindow() {
   if (!mainWindow || mainWindow.isDestroyed()) {
     return
   }
+  clearMainWindowBlurHideTimer()
   trayMenuWindowManager?.hide()
 
   // 每次显示前都强制重置关键属性，确保窗口行为正确
@@ -707,6 +758,7 @@ function showMainWindow() {
 
     // 临时忽略 blur 事件，防止 show/focus 过程中误触发
     startIgnoringBlur()
+    extendMainBlurHideSuppression(WINDOWS_SHOW_BLUR_GUARD_MS)
 
     mainWindow.show()
     mainWindow.focus()
@@ -748,6 +800,11 @@ function toggleWindow() {
   if (!mainWindow || mainWindow.isDestroyed()) {
     return
   }
+  const now = Date.now()
+  if (now - lastMainWindowToggleAt < MAIN_WINDOW_TOGGLE_DEBOUNCE_MS) {
+    return
+  }
+  lastMainWindowToggleAt = now
   if (mainWindow.isVisible()) {
     hideMainWindow()
   } else {
