@@ -430,6 +430,12 @@ function extendMainBlurHideSuppression(durationMs: number): void {
   suppressMainBlurHideUntil = Math.max(suppressMainBlurHideUntil, Date.now() + durationMs)
 }
 
+function shouldUseMainShadowWindow(): boolean {
+  // Windows already renders the search surface shadow in the renderer.
+  // A second transparent owner window causes severe DWM flicker while dragging.
+  return process.platform !== 'win32'
+}
+
 function hideMainWindow() {
   if (!isWindowAvailable(mainWindow)) {
     clearMainWindowBlurHideTimer()
@@ -456,6 +462,7 @@ function hideMainWindow() {
 }
 
 function createMainShadowWindow() {
+  if (!shouldUseMainShadowWindow()) return
   if (!isWindowAvailable(mainWindow)) return
   if (isWindowAvailable(mainShadowWindow)) return
 
@@ -499,6 +506,7 @@ function createMainShadowWindow() {
 }
 
 function syncMainShadowBounds() {
+  if (!shouldUseMainShadowWindow()) return
   if (!isWindowAvailable(mainWindow) || !isWindowAvailable(mainShadowWindow)) return
   const bounds = mainWindow.getBounds()
   const margin = MAIN_WINDOW_SHADOW_MARGIN
@@ -511,6 +519,7 @@ function syncMainShadowBounds() {
 }
 
 function showMainShadowWindow() {
+  if (!shouldUseMainShadowWindow()) return
   if (deferMainShadowShow) return
   if (!isWindowAvailable(mainWindow)) return
   if (!isWindowAvailable(mainShadowWindow)) {
@@ -590,7 +599,9 @@ function createWindow() {
   } else {
     mainWindow.setAlwaysOnTop(true)
   }
-  createMainShadowWindow()
+  if (shouldUseMainShadowWindow()) {
+    createMainShadowWindow()
+  }
 
   mainWindow.once('ready-to-show', () => {
     // console.log('[Main] Window ready-to-show event fired')

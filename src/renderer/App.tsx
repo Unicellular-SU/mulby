@@ -246,6 +246,21 @@ function App() {
   }, [theme])
 
   useEffect(() => {
+    let mounted = true
+    void window.mulby.system.isWindows().then((isWindows) => {
+      if (!mounted) return
+      document.documentElement.classList.toggle('platform-win-main', isWindows && !isSystemWindow)
+    }).catch(() => {
+      if (!mounted) return
+      document.documentElement.classList.remove('platform-win-main')
+    })
+    return () => {
+      mounted = false
+      document.documentElement.classList.remove('platform-win-main')
+    }
+  }, [isSystemWindow])
+
+  useEffect(() => {
     if (isSystemWindow) return
     let mounted = true
     window.mulby.systemPage.getState().then((state) => {
