@@ -42,7 +42,6 @@ patchConsoleWithTimestamp()
 const APP_DISPLAY_NAME = 'Mulby'
 const WINDOWS_APP_USER_MODEL_ID = 'com.mulby.app'
 const MAIN_WINDOW_SHADOW_MARGIN = 12
-const WINDOWS_WM_INITMENU = 0x0116
 const MAIN_WINDOW_TOGGLE_DEBOUNCE_MS = 180
 const WINDOWS_SHOW_BLUR_GUARD_MS = 260
 const MAIN_WINDOW_SHADOW_HTML = `<!doctype html>
@@ -113,6 +112,8 @@ let shutdownPromise: Promise<void> | null = null
 let mainWindowBlurHideTimer: NodeJS.Timeout | null = null
 let suppressMainBlurHideUntil = 0
 let lastMainWindowToggleAt = 0
+let mainWindowHasBeenShown = false
+let deferMainShadowShow = false
 const pluginManager = new PluginManager()
 const pluginWindowManager = new PluginWindowManager()
 const themeManager = new ThemeManager()
@@ -384,6 +385,8 @@ function getMainWindow() {
   return mainWindow
 }
 
+const WINDOWS_WM_INITMENU = 0x0116
+
 function suppressSystemContextMenu(win: BrowserWindow): void {
   if (process.platform !== 'win32') return
   win.on('system-context-menu', (event) => {
@@ -391,7 +394,6 @@ function suppressSystemContextMenu(win: BrowserWindow): void {
   })
   try {
     if (!win.isWindowMessageHooked(WINDOWS_WM_INITMENU)) {
-      // Suppress Alt+Space system menu to avoid focus jitter on frameless window.
       win.hookWindowMessage(WINDOWS_WM_INITMENU, () => {
         if (!win.isDestroyed()) {
           win.setEnabled(false)
@@ -509,6 +511,7 @@ function syncMainShadowBounds() {
 }
 
 function showMainShadowWindow() {
+  if (deferMainShadowShow) return
   if (!isWindowAvailable(mainWindow)) return
   if (!isWindowAvailable(mainShadowWindow)) {
     createMainShadowWindow()
@@ -760,8 +763,32 @@ function showMainWindow() {
     startIgnoringBlur()
     extendMainBlurHideSuppression(WINDOWS_SHOW_BLUR_GUARD_MS)
 
+    // Windows transparent window anti-flicker:
+    // When a transparent window is re-shown after hide(), DWM briefly composites
+    // a stale cached frame before the Chromium renderer produces a fresh one,
+    // causing a visible show→blank→show flicker. Setting opacity to 0 before
+    // show() makes the stale frame invisible; we restore opacity once the
+    // compositor has had time to produce a fresh frame.
+    const needsOpacityGuard = process.platform === 'win32' && mainWindowHasBeenShown
+    if (needsOpacityGuard) {
+      deferMainShadowShow = true
+      mainWindow.setOpacity(0)
+    }
+
     mainWindow.show()
     mainWindow.focus()
+    mainWindowHasBeenShown = true
+
+    if (needsOpacityGuard) {
+      mainWindow.webContents.invalidate()
+      setTimeout(() => {
+        deferMainShadowShow = false
+        if (mainWindow && !mainWindow.isDestroyed() && mainWindow.isVisible()) {
+          mainWindow.setOpacity(1)
+          showMainShadowWindow()
+        }
+      }, 50)
+    }
 
     // 恢复之前隐藏的面板
     pluginWindowManager.showPanelWindow()
