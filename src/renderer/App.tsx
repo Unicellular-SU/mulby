@@ -996,7 +996,7 @@ function App() {
 
   return (
     <div
-      className={`app app-home ${isDragging ? 'dragging' : ''}`}
+      className={`app-frame ${isDragging ? 'dragging' : ''}`}
       onDragOver={(e) => {
         e.preventDefault()
         if (!isDragging) {
@@ -1010,7 +1010,8 @@ function App() {
       }}
       onDrop={handleDrop}
     >
-      <div className={`search-box-container ${hasBottomPanel ? 'with-bottom-panel' : ''}`}>
+      <div className={`app app-home ${isDragging ? 'dragging' : ''}`}>
+        <div className={`search-box-container ${hasBottomPanel ? 'with-bottom-panel' : ''}`}>
         <SearchInput
           ref={searchInputRef}
           value={query}
@@ -1142,6 +1143,7 @@ function App() {
         />
       )}
       {isDragging && <div className="drop-hint">拖放 .inplugin 文件安装插件</div>}
+      </div>
     </div>
   )
 }

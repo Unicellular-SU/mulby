@@ -9,6 +9,11 @@ import { injectCustomTitleBar } from './titlebar'
 import { PluginPanelWindow } from './panel-window'
 import { clearSubInputState } from '../services/subinput-state'
 import { getPluginPreloadPath } from './plugin-preload-wrapper'
+import {
+  applyWindowsFramelessSurface,
+  getWindowsFramelessSurfaceInsets,
+  shouldUseWindowsFramelessSurface
+} from '../services/window-surface'
 
 interface AttachedPlugin {
   plugin: Plugin
@@ -307,7 +312,11 @@ export class PluginWindowManager {
     // 根据当前主题设置窗口背景色，避免重载时闪白
     const currentTheme = this.themeManager?.getActualTheme() || 'dark'
     const isDark = currentTheme === 'dark'
-    const backgroundColor = isDark ? '#1e293b' : '#ffffff'
+    const useWindowsFramelessSurface = shouldUseWindowsFramelessSurface()
+    const windowInsets = getWindowsFramelessSurfaceInsets()
+    const toWindowWidth = (value: number | undefined) => value == null ? undefined : value + windowInsets.left + windowInsets.right
+    const toWindowHeight = (value: number | undefined) => value == null ? undefined : value + windowInsets.top + windowInsets.bottom
+    const backgroundColor = useWindowsFramelessSurface ? '#00000000' : (isDark ? '#1e293b' : '#ffffff')
 
     // 从 manifest.window 读取窗口配置
     const windowConfig = plugin.manifest.window || {}
@@ -318,15 +327,17 @@ export class PluginWindowManager {
     const hasCustomPreload = !!plugin.manifest.preload
 
     const win = new BrowserWindow({
-      width: windowConfig.width ?? 500,
-      height: windowConfig.height ?? 400,
-      minWidth: windowConfig.minWidth ?? 300,
-      minHeight: windowConfig.minHeight ?? 200,
-      maxWidth: windowConfig.maxWidth,
-      maxHeight: windowConfig.maxHeight,
+      width: toWindowWidth(windowConfig.width ?? 500)!,
+      height: toWindowHeight(windowConfig.height ?? 400)!,
+      minWidth: toWindowWidth(windowConfig.minWidth ?? 300)!,
+      minHeight: toWindowHeight(windowConfig.minHeight ?? 200)!,
+      maxWidth: toWindowWidth(windowConfig.maxWidth),
+      maxHeight: toWindowHeight(windowConfig.maxHeight),
       show: false,
       frame: false,
       backgroundColor,
+      transparent: useWindowsFramelessSurface,
+      hasShadow: !useWindowsFramelessSurface,
       title: plugin.manifest.displayName,
       webPreferences: {
         preload: preloadPath,
@@ -346,6 +357,10 @@ export class PluginWindowManager {
     win.once('ready-to-show', async () => {
       // 注入自定义标题栏
       await injectCustomTitleBar(win, plugin.manifest.displayName, currentTheme)
+      if (useWindowsFramelessSurface) {
+        await applyWindowsFramelessSurface(win, { includeTitleBar: true })
+        if (win.isDestroyed()) return
+      }
       win.show()
       if (this.shouldOpenPluginDevTools()) {
         win.webContents.openDevTools({ mode: 'detach' })
@@ -381,6 +396,9 @@ export class PluginWindowManager {
       if (!hasTitleBar) {
         const theme = this.themeManager?.getActualTheme() || 'dark'
         await injectCustomTitleBar(win, plugin.manifest.displayName, theme)
+      }
+      if (useWindowsFramelessSurface && !win.isDestroyed()) {
+        await applyWindowsFramelessSurface(win, { includeTitleBar: true })
       }
     })
 
@@ -439,7 +457,11 @@ export class PluginWindowManager {
 
     const currentTheme = this.themeManager?.getActualTheme() || 'dark'
     const isDark = currentTheme === 'dark'
-    const backgroundColor = isDark ? '#1e293b' : '#ffffff'
+    const useWindowsFramelessSurface = shouldUseWindowsFramelessSurface()
+    const windowInsets = getWindowsFramelessSurfaceInsets()
+    const toWindowWidth = (value: number | undefined) => value == null ? undefined : value + windowInsets.left + windowInsets.right
+    const toWindowHeight = (value: number | undefined) => value == null ? undefined : value + windowInsets.top + windowInsets.bottom
+    const backgroundColor = useWindowsFramelessSurface ? '#00000000' : (isDark ? '#1e293b' : '#ffffff')
 
     // 从 manifest.window 读取窗口配置（辅助窗口优先使用传入的 options）
     const windowConfig = plugin.manifest.window || {}
@@ -450,15 +472,17 @@ export class PluginWindowManager {
     const hasCustomPreload = !!plugin.manifest.preload
 
     const win = new BrowserWindow({
-      width: options?.width || windowConfig.width || 800,
-      height: options?.height || windowConfig.height || 600,
-      minWidth: windowConfig.minWidth ?? 300,
-      minHeight: windowConfig.minHeight ?? 200,
-      maxWidth: windowConfig.maxWidth,
-      maxHeight: windowConfig.maxHeight,
+      width: toWindowWidth(options?.width || windowConfig.width || 800)!,
+      height: toWindowHeight(options?.height || windowConfig.height || 600)!,
+      minWidth: toWindowWidth(windowConfig.minWidth ?? 300)!,
+      minHeight: toWindowHeight(windowConfig.minHeight ?? 200)!,
+      maxWidth: toWindowWidth(windowConfig.maxWidth),
+      maxHeight: toWindowHeight(windowConfig.maxHeight),
       show: false,
       frame: false,
       backgroundColor,
+      transparent: useWindowsFramelessSurface,
+      hasShadow: !useWindowsFramelessSurface,
       title: options?.title || plugin.manifest.displayName,
       webPreferences: {
         preload: preloadPath,
@@ -480,6 +504,10 @@ export class PluginWindowManager {
 
     win.once('ready-to-show', async () => {
       await injectCustomTitleBar(win, options?.title || plugin.manifest.displayName, currentTheme)
+      if (useWindowsFramelessSurface) {
+        await applyWindowsFramelessSurface(win, { includeTitleBar: true })
+        if (win.isDestroyed()) return
+      }
       win.show()
       if (this.shouldOpenPluginDevTools()) {
         win.webContents.openDevTools({ mode: 'detach' })
@@ -510,6 +538,9 @@ export class PluginWindowManager {
       if (!hasTitleBar) {
         const theme = this.themeManager?.getActualTheme() || 'dark'
         await injectCustomTitleBar(win, options?.title || plugin.manifest.displayName, theme)
+      }
+      if (useWindowsFramelessSurface && !win.isDestroyed()) {
+        await applyWindowsFramelessSurface(win, { includeTitleBar: true })
       }
     })
 

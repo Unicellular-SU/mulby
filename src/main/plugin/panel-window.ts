@@ -9,6 +9,13 @@ import { injectCustomTitleBar } from './titlebar'
 import { isIgnoringBlur } from '../services/blur-manager'
 import { getPluginPreloadPath } from './plugin-preload-wrapper'
 import { ATTACHED_PANEL_HEIGHT, ATTACHED_PANEL_MIN_OVERFLOW_HEIGHT } from '../constants/panel-window'
+import {
+    applyWindowsFramelessSurface,
+    getWindowsFramelessSurfaceInsets,
+    getWindowsFramelessSurfaceVisibleBounds,
+    getWindowsFramelessSurfaceWindowBounds,
+    shouldUseWindowsFramelessSurface
+} from '../services/window-surface'
 import { getMainWindowVisibleBounds } from '../main-window-frame'
 
 const ATTACHED_PANEL_SHADOW_MARGIN = 12
@@ -93,6 +100,10 @@ export class PluginPanelWindow {
         this.mainWindow = mainWindow
     }
 
+    private shouldUseShadowWindow() {
+        return process.platform !== 'win32'
+    }
+
     setThemeManager(manager: ThemeManager) {
         this.themeManager = manager
     }
@@ -121,11 +132,18 @@ export class PluginPanelWindow {
 
         // 计算初始位置
         const { x, y, width } = this.calculatePanelBounds()
+        const useWindowsFramelessSurface = shouldUseWindowsFramelessSurface()
+        const initialBounds = getWindowsFramelessSurfaceWindowBounds({
+            x,
+            y,
+            width,
+            height: ATTACHED_PANEL_HEIGHT
+        })
 
         // 根据当前主题设置窗口背景色
         const currentTheme = this.themeManager?.getActualTheme() || 'dark'
         const isDark = currentTheme === 'dark'
-        const backgroundColor = isDark ? '#1e293b' : '#ffffff'
+        const backgroundColor = useWindowsFramelessSurface ? '#00000000' : (isDark ? '#1e293b' : '#ffffff')
 
         // 获取插件 preload 路径（支持自定义 preload）
         const basePreloadPath = join(__dirname, '../preload/index.js')
@@ -133,12 +151,14 @@ export class PluginPanelWindow {
         const hasCustomPreload = !!plugin.manifest.preload
 
         this.preferredPanelHeight = ATTACHED_PANEL_HEIGHT
-        this.createShadowWindow()
+        if (this.shouldUseShadowWindow()) {
+            this.createShadowWindow()
+        }
         this.panelWindow = new BrowserWindow({
-            width,
-            height: ATTACHED_PANEL_HEIGHT,
-            x,
-            y,
+            width: initialBounds.width,
+            height: initialBounds.height,
+            x: initialBounds.x,
+            y: initialBounds.y,
             frame: false,
             show: false,
             resizable: true,
@@ -151,6 +171,7 @@ export class PluginPanelWindow {
             alwaysOnTop: true,
             skipTaskbar: true,
             backgroundColor,
+            transparent: useWindowsFramelessSurface,
             hasShadow: false, // 使用自定义阴影层，避免原生阴影黑边
             roundedCorners: true,
             webPreferences: {
@@ -174,6 +195,11 @@ export class PluginPanelWindow {
         // 面板加载完成后处理
         this.panelWindow.once('ready-to-show', async () => {
             if (!this.panelWindow) return
+
+            if (useWindowsFramelessSurface) {
+                await applyWindowsFramelessSurface(this.panelWindow)
+                if (!this.panelWindow || this.panelWindow.isDestroyed()) return
+            }
 
             // 同步位置确保正确
             this.syncPosition()
@@ -204,6 +230,11 @@ export class PluginPanelWindow {
         })
 
         // 监听焦点变化 - 点击面板时获取焦点
+        this.panelWindow.webContents.on('did-finish-load', () => {
+            if (!useWindowsFramelessSurface || !this.panelWindow || this.panelWindow.isDestroyed()) return
+            void applyWindowsFramelessSurface(this.panelWindow)
+        })
+
         this.panelWindow.on('focus', () => {
             // 面板获得焦点是正常的
         })
@@ -211,7 +242,7 @@ export class PluginPanelWindow {
         // 仅在手动调整面板高度时更新目标高度，避免移动过程中累积漂移
         this.panelWindow.on('resize', () => {
             if (this.syncingBounds || !this.panelWindow || this.panelWindow.isDestroyed()) return
-            const nextHeight = this.panelWindow.getBounds().height
+            const nextHeight = getWindowsFramelessSurfaceVisibleBounds(this.panelWindow.getBounds()).height
             this.preferredPanelHeight = Math.max(ATTACHED_PANEL_MIN_OVERFLOW_HEIGHT, nextHeight)
         })
 
@@ -281,6 +312,9 @@ export class PluginPanelWindow {
     }
 
     private createShadowWindow() {
+        if (!this.shouldUseShadowWindow()) {
+            return
+        }
         if (this.shadowWindow && !this.shadowWindow.isDestroyed()) {
             return
         }
@@ -328,6 +362,7 @@ export class PluginPanelWindow {
     }
 
     private setShadowBounds(x: number, y: number, width: number, height: number) {
+        if (!this.shouldUseShadowWindow()) return
         if (!this.shadowWindow || this.shadowWindow.isDestroyed()) return
         const margin = ATTACHED_PANEL_SHADOW_MARGIN
         this.shadowWindow.setBounds({
@@ -339,18 +374,24 @@ export class PluginPanelWindow {
     }
 
     private showShadow() {
+        if (!this.shouldUseShadowWindow()) return
         if (this.shadowWindow && !this.shadowWindow.isDestroyed()) {
             this.shadowWindow.showInactive()
         }
     }
 
     private hideShadow() {
+        if (!this.shouldUseShadowWindow()) return
         if (this.shadowWindow && !this.shadowWindow.isDestroyed()) {
             this.shadowWindow.hide()
         }
     }
 
     private closeShadowWindow() {
+        if (!this.shouldUseShadowWindow()) {
+            this.shadowWindow = null
+            return
+        }
         if (this.shadowWindow && !this.shadowWindow.isDestroyed()) {
             this.shadowWindow.close()
         }
@@ -418,12 +459,12 @@ export class PluginPanelWindow {
         // 批量设置位置和大小以减少闪烁
         this.syncingBounds = true
         try {
-            this.panelWindow.setBounds({
+            this.panelWindow.setBounds(getWindowsFramelessSurfaceWindowBounds({
                 x,
                 y: adjustedY,
                 width,
                 height: adjustedHeight
-            })
+            }))
             this.setShadowBounds(x, adjustedY, width, adjustedHeight)
         } finally {
             this.syncingBounds = false
@@ -456,7 +497,7 @@ export class PluginPanelWindow {
         if (!this.currentPlugin) return null
 
         // 保存当前状态
-        const bounds = this.panelWindow.getBounds()
+        const bounds = getWindowsFramelessSurfaceVisibleBounds(this.panelWindow.getBounds())
         const url = this.panelWindow.webContents.getURL()
         const plugin = this.currentPlugin
         const uiPath = join(plugin.path, plugin.manifest.ui!)
@@ -473,7 +514,11 @@ export class PluginPanelWindow {
         // 创建独立窗口
         const currentTheme = this.themeManager?.getActualTheme() || 'dark'
         const isDark = currentTheme === 'dark'
-        const backgroundColor = isDark ? '#1e293b' : '#ffffff'
+        const useWindowsFramelessSurface = shouldUseWindowsFramelessSurface()
+        const windowInsets = getWindowsFramelessSurfaceInsets()
+        const toWindowWidth = (value: number | undefined) => value == null ? undefined : value + windowInsets.left + windowInsets.right
+        const toWindowHeight = (value: number | undefined) => value == null ? undefined : value + windowInsets.top + windowInsets.bottom
+        const backgroundColor = useWindowsFramelessSurface ? '#00000000' : (isDark ? '#1e293b' : '#ffffff')
 
         // 从 manifest.window 读取窗口配置
         const windowConfig = plugin.manifest.window || {}
@@ -483,20 +528,29 @@ export class PluginPanelWindow {
         const preloadPath = getPluginPreloadPath(basePreloadPath, plugin)
         const hasCustomPreload = !!plugin.manifest.preload
 
-        const independentWindow = new BrowserWindow({
-            width: Math.max(bounds.width, windowConfig.width ?? 500),
-            height: Math.max(bounds.height, windowConfig.height ?? 400),
+        const detachedBounds = getWindowsFramelessSurfaceWindowBounds({
             x: bounds.x,
             y: bounds.y,
-            minWidth: windowConfig.minWidth ?? 300,
-            minHeight: windowConfig.minHeight ?? 200,
-            maxWidth: windowConfig.maxWidth,
-            maxHeight: windowConfig.maxHeight,
+            width: Math.max(bounds.width, windowConfig.width ?? 500),
+            height: Math.max(bounds.height, windowConfig.height ?? 400)
+        })
+
+        const independentWindow = new BrowserWindow({
+            width: detachedBounds.width,
+            height: detachedBounds.height,
+            x: detachedBounds.x,
+            y: detachedBounds.y,
+            minWidth: toWindowWidth(windowConfig.minWidth ?? 300)!,
+            minHeight: toWindowHeight(windowConfig.minHeight ?? 200)!,
+            maxWidth: toWindowWidth(windowConfig.maxWidth),
+            maxHeight: toWindowHeight(windowConfig.maxHeight),
             frame: false, // 使用自定义标题栏
             show: false,
             resizable: true,
             movable: true,
             backgroundColor,
+            transparent: useWindowsFramelessSurface,
+            hasShadow: !useWindowsFramelessSurface,
             title: plugin.manifest.displayName,
             webPreferences: {
                 preload: preloadPath,
@@ -522,6 +576,10 @@ export class PluginPanelWindow {
         independentWindow.once('ready-to-show', async () => {
             // 注入自定义标题栏
             await injectCustomTitleBar(independentWindow, plugin.manifest.displayName, currentTheme)
+            if (useWindowsFramelessSurface) {
+                await applyWindowsFramelessSurface(independentWindow, { includeTitleBar: true })
+                if (independentWindow.isDestroyed()) return
+            }
             independentWindow.show()
 
             // 发送初始化数据（模式变更为 detached）
@@ -555,6 +613,9 @@ export class PluginPanelWindow {
             if (!hasTitleBar) {
                 const theme = this.themeManager?.getActualTheme() || 'dark'
                 await injectCustomTitleBar(independentWindow, plugin.manifest.displayName, theme)
+            }
+            if (useWindowsFramelessSurface && !independentWindow.isDestroyed()) {
+                await applyWindowsFramelessSurface(independentWindow, { includeTitleBar: true })
             }
         })
 
@@ -634,7 +695,9 @@ export class PluginPanelWindow {
      */
     show() {
         if (this.panelWindow && !this.panelWindow.isDestroyed()) {
-            this.createShadowWindow()
+            if (this.shouldUseShadowWindow()) {
+                this.createShadowWindow()
+            }
             this.syncPosition() // 确保位置正确
             this.showShadow()
             this.panelWindow.showInactive()

@@ -67,8 +67,8 @@ const MAIN_WINDOW_SHADOW_HTML = `<!doctype html>
       inset: ${MAIN_WINDOW_SHADOW_MARGIN}px;
       border-radius: 12px;
       box-shadow:
-        0 2px 10px rgba(15, 23, 42, 0.14),
-        0 1px 2px rgba(15, 23, 42, 0.1);
+        0 2px 10px rgba(15, 23, 42, 0.12),
+        0 1px 2px rgba(15, 23, 42, 0.08);
     }
   </style>
 </head>

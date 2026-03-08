@@ -8,6 +8,13 @@ import { injectCustomTitleBar } from '../plugin/titlebar'
 import { isIgnoringBlur } from './blur-manager'
 import { ATTACHED_PANEL_HEIGHT, ATTACHED_PANEL_MIN_OVERFLOW_HEIGHT } from '../constants/panel-window'
 import { getMainWindowVisibleBounds } from '../main-window-frame'
+import {
+  applyWindowsFramelessSurface,
+  getWindowsFramelessSurfaceInsets,
+  getWindowsFramelessSurfaceVisibleBounds,
+  getWindowsFramelessSurfaceWindowBounds,
+  shouldUseWindowsFramelessSurface
+} from './window-surface'
 
 const ATTACHED_SYSTEM_SHADOW_MARGIN = 12
 const ATTACHED_SYSTEM_SHADOW_HTML = `<!doctype html>
@@ -88,6 +95,10 @@ export class SystemPageWindowManager {
   private syncScheduled = false
   private preferredAttachedHeight = ATTACHED_PANEL_HEIGHT
   private syncingBounds = false
+
+  private shouldUseAttachedShadowWindow(): boolean {
+    return process.platform !== 'win32'
+  }
 
   setMainWindow(window: BrowserWindow | null): void {
     this.mainWindow = window
@@ -194,15 +205,24 @@ export class SystemPageWindowManager {
 
     const { x, y, width } = this.calculateAttachedBounds()
     const currentTheme = this.themeManager?.getActualTheme() || 'dark'
-    const backgroundColor = currentTheme === 'dark' ? '#1e293b' : '#ffffff'
-
-    this.preferredAttachedHeight = ATTACHED_PANEL_HEIGHT
-    this.createAttachedShadowWindow(mainWindow)
-    const win = new BrowserWindow({
-      width,
-      height: ATTACHED_PANEL_HEIGHT,
+    const useWindowsFramelessSurface = shouldUseWindowsFramelessSurface()
+    const initialBounds = getWindowsFramelessSurfaceWindowBounds({
       x,
       y,
+      width,
+      height: ATTACHED_PANEL_HEIGHT
+    })
+    const backgroundColor = useWindowsFramelessSurface ? '#00000000' : (currentTheme === 'dark' ? '#1e293b' : '#ffffff')
+
+    this.preferredAttachedHeight = ATTACHED_PANEL_HEIGHT
+    if (this.shouldUseAttachedShadowWindow()) {
+      this.createAttachedShadowWindow(mainWindow)
+    }
+    const win = new BrowserWindow({
+      width: initialBounds.width,
+      height: initialBounds.height,
+      x: initialBounds.x,
+      y: initialBounds.y,
       frame: false,
       show: false,
       resizable: true,
@@ -215,6 +235,7 @@ export class SystemPageWindowManager {
       alwaysOnTop: true,
       skipTaskbar: true,
       backgroundColor,
+      transparent: useWindowsFramelessSurface,
       hasShadow: false, // 使用自定义阴影层，避免原生阴影黑边
       roundedCorners: true,
       webPreferences: {
@@ -230,8 +251,12 @@ export class SystemPageWindowManager {
     this.attachedWindow = win
     this.setupPositionSync()
 
-    win.once('ready-to-show', () => {
+    win.once('ready-to-show', async () => {
       if (!this.attachedWindow || this.attachedWindow.isDestroyed()) return
+      if (useWindowsFramelessSurface) {
+        await applyWindowsFramelessSurface(this.attachedWindow)
+        if (!this.attachedWindow || this.attachedWindow.isDestroyed()) return
+      }
       this.syncPosition()
       if (!mainWindow.isVisible()) {
         mainWindow.show()
@@ -242,6 +267,11 @@ export class SystemPageWindowManager {
         this.dispatchRoute(this.attachedWindow, this.currentRoute)
       }
       this.emitState()
+    })
+
+    win.webContents.on('did-finish-load', () => {
+      if (!useWindowsFramelessSurface || !this.attachedWindow || this.attachedWindow.isDestroyed()) return
+      void applyWindowsFramelessSurface(this.attachedWindow)
     })
 
     win.on('blur', () => {
@@ -269,7 +299,7 @@ export class SystemPageWindowManager {
 
     win.on('resize', () => {
       if (this.syncingBounds || !this.attachedWindow || this.attachedWindow.isDestroyed()) return
-      const nextHeight = this.attachedWindow.getBounds().height
+      const nextHeight = getWindowsFramelessSurfaceVisibleBounds(this.attachedWindow.getBounds()).height
       this.preferredAttachedHeight = Math.max(ATTACHED_PANEL_MIN_OVERFLOW_HEIGHT, nextHeight)
     })
 
@@ -312,24 +342,36 @@ export class SystemPageWindowManager {
       return existingDetached
     }
 
-    const bounds = attached.getBounds()
+    const bounds = getWindowsFramelessSurfaceVisibleBounds(attached.getBounds())
     this.closeAttached(true)
 
     const currentTheme = this.themeManager?.getActualTheme() || 'dark'
-    const backgroundColor = currentTheme === 'dark' ? '#1e293b' : '#ffffff'
-
-    const detachedWindow = new BrowserWindow({
-      width: Math.max(bounds.width, 900),
-      height: Math.max(bounds.height, 600),
+    const useWindowsFramelessSurface = shouldUseWindowsFramelessSurface()
+    const windowInsets = getWindowsFramelessSurfaceInsets()
+    const toWindowWidth = (value: number | undefined) => value == null ? undefined : value + windowInsets.left + windowInsets.right
+    const toWindowHeight = (value: number | undefined) => value == null ? undefined : value + windowInsets.top + windowInsets.bottom
+    const detachedBounds = getWindowsFramelessSurfaceWindowBounds({
       x: bounds.x,
       y: bounds.y,
-      minWidth: 800,
-      minHeight: 500,
+      width: Math.max(bounds.width, 900),
+      height: Math.max(bounds.height, 600)
+    })
+    const backgroundColor = useWindowsFramelessSurface ? '#00000000' : (currentTheme === 'dark' ? '#1e293b' : '#ffffff')
+
+    const detachedWindow = new BrowserWindow({
+      width: detachedBounds.width,
+      height: detachedBounds.height,
+      x: detachedBounds.x,
+      y: detachedBounds.y,
+      minWidth: toWindowWidth(800)!,
+      minHeight: toWindowHeight(500)!,
       frame: false,
       show: false,
       resizable: true,
       movable: true,
       backgroundColor,
+      transparent: useWindowsFramelessSurface,
+      hasShadow: !useWindowsFramelessSurface,
       title: this.resolveTitle(route),
       webPreferences: {
         preload: join(__dirname, '../preload/index.js'),
@@ -348,6 +390,10 @@ export class SystemPageWindowManager {
       if (!activeDetached) return
       try {
         await injectCustomTitleBar(activeDetached, this.resolveTitle(route), currentTheme)
+        if (useWindowsFramelessSurface) {
+          await applyWindowsFramelessSurface(activeDetached, { includeTitleBar: true })
+          if (activeDetached.isDestroyed()) return
+        }
       } catch (error) {
         console.error('[SystemPageWindowManager] Failed to inject custom titlebar:', error)
       }
@@ -384,6 +430,9 @@ export class SystemPageWindowManager {
         if (!hasTitleBar) {
           const theme = this.themeManager?.getActualTheme() || 'dark'
           await injectCustomTitleBar(activeDetached, this.resolveTitle(route), theme)
+        }
+        if (useWindowsFramelessSurface && !activeDetached.isDestroyed()) {
+          await applyWindowsFramelessSurface(activeDetached, { includeTitleBar: true })
         }
       } catch (error) {
         console.error('[SystemPageWindowManager] Failed to re-inject titlebar:', error)
@@ -507,7 +556,7 @@ export class SystemPageWindowManager {
     const attached = this.getAttachedWindow()
     if (!attached) return
     const main = this.mainWindow
-    if (main && !main.isDestroyed()) {
+    if (main && !main.isDestroyed() && this.shouldUseAttachedShadowWindow()) {
       this.createAttachedShadowWindow(main)
     }
     this.syncPosition()
@@ -637,6 +686,9 @@ export class SystemPageWindowManager {
   }
 
   private createAttachedShadowWindow(mainWindow: BrowserWindow): void {
+    if (!this.shouldUseAttachedShadowWindow()) {
+      return
+    }
     if (this.attachedShadowWindow && !this.attachedShadowWindow.isDestroyed()) {
       return
     }
@@ -681,6 +733,7 @@ export class SystemPageWindowManager {
   }
 
   private setAttachedShadowBounds(x: number, y: number, width: number, height: number): void {
+    if (!this.shouldUseAttachedShadowWindow()) return
     const shadow = this.attachedShadowWindow
     if (!shadow || shadow.isDestroyed()) return
     const margin = ATTACHED_SYSTEM_SHADOW_MARGIN
@@ -693,18 +746,24 @@ export class SystemPageWindowManager {
   }
 
   private showAttachedShadow(): void {
+    if (!this.shouldUseAttachedShadowWindow()) return
     if (this.attachedShadowWindow && !this.attachedShadowWindow.isDestroyed()) {
       this.attachedShadowWindow.showInactive()
     }
   }
 
   private hideAttachedShadow(): void {
+    if (!this.shouldUseAttachedShadowWindow()) return
     if (this.attachedShadowWindow && !this.attachedShadowWindow.isDestroyed()) {
       this.attachedShadowWindow.hide()
     }
   }
 
   private closeAttachedShadow(): void {
+    if (!this.shouldUseAttachedShadowWindow()) {
+      this.attachedShadowWindow = null
+      return
+    }
     if (this.attachedShadowWindow && !this.attachedShadowWindow.isDestroyed()) {
       this.attachedShadowWindow.close()
     }
@@ -772,7 +831,7 @@ export class SystemPageWindowManager {
     }
     this.syncingBounds = true
     try {
-      attached.setBounds({ x, y, width, height })
+      attached.setBounds(getWindowsFramelessSurfaceWindowBounds({ x, y, width, height }))
       this.setAttachedShadowBounds(x, y, width, height)
     } finally {
       this.syncingBounds = false

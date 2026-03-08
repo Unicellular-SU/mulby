@@ -1,28 +1,47 @@
 import type { Rectangle } from 'electron'
 
-export const MAIN_WINDOW_WINDOWS_SHADOW_INSET = 12
+interface WindowFrameInsets {
+  top: number
+  right: number
+  bottom: number
+  left: number
+}
 
-function getMainWindowWindowsShadowInset(): number {
-  return process.platform === 'win32' ? MAIN_WINDOW_WINDOWS_SHADOW_INSET : 0
+const ZERO_INSETS: WindowFrameInsets = {
+  top: 0,
+  right: 0,
+  bottom: 0,
+  left: 0
+}
+
+export const MAIN_WINDOW_WINDOWS_FRAME_INSETS: Readonly<WindowFrameInsets> = {
+  top: 10,
+  right: 16,
+  bottom: 24,
+  left: 16
+}
+
+function getMainWindowFrameInsets(): WindowFrameInsets {
+  return process.platform === 'win32' ? MAIN_WINDOW_WINDOWS_FRAME_INSETS : ZERO_INSETS
 }
 
 export function getMainWindowVisibleBounds(bounds: Rectangle): Rectangle {
-  const inset = getMainWindowWindowsShadowInset()
+  const { top, right, bottom, left } = getMainWindowFrameInsets()
   return {
-    x: Math.round(bounds.x + inset),
-    y: Math.round(bounds.y + inset),
-    width: Math.max(1, Math.round(bounds.width - inset * 2)),
-    height: Math.max(1, Math.round(bounds.height - inset * 2))
+    x: Math.round(bounds.x + left),
+    y: Math.round(bounds.y + top),
+    width: Math.max(1, Math.round(bounds.width - left - right)),
+    height: Math.max(1, Math.round(bounds.height - top - bottom))
   }
 }
 
 export function getMainWindowWindowBounds(bounds: Rectangle): Rectangle {
-  const inset = getMainWindowWindowsShadowInset()
+  const { top, right, bottom, left } = getMainWindowFrameInsets()
   return {
-    x: Math.round(bounds.x - inset),
-    y: Math.round(bounds.y - inset),
-    width: Math.max(1, Math.round(bounds.width + inset * 2)),
-    height: Math.max(1, Math.round(bounds.height + inset * 2))
+    x: Math.round(bounds.x - left),
+    y: Math.round(bounds.y - top),
+    width: Math.max(1, Math.round(bounds.width + left + right)),
+    height: Math.max(1, Math.round(bounds.height + top + bottom))
   }
 }
 
