@@ -7,6 +7,7 @@ import { attachShortcutRecordingGuard } from './shortcut-recording-guard'
 import { injectCustomTitleBar } from '../plugin/titlebar'
 import { isIgnoringBlur } from './blur-manager'
 import { ATTACHED_PANEL_HEIGHT, ATTACHED_PANEL_MIN_OVERFLOW_HEIGHT } from '../constants/panel-window'
+import { getMainWindowVisibleBounds } from '../main-window-frame'
 
 const ATTACHED_SYSTEM_SHADOW_MARGIN = 12
 const ATTACHED_SYSTEM_SHADOW_HTML = `<!doctype html>
@@ -627,7 +628,7 @@ export class SystemPageWindowManager {
       return { x: 0, y: 0, width: 900 }
     }
 
-    const bounds = main.getBounds()
+    const bounds = getMainWindowVisibleBounds(main.getBounds())
     return {
       x: bounds.x,
       y: bounds.y + bounds.height + 8,

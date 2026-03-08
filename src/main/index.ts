@@ -35,6 +35,11 @@ import {
   type OpenSystemPagePayload as OpenSystemPageWindowPayload,
   type SettingsCenterSection
 } from './services/system-page-window-manager'
+import {
+  getMainWindowVisibleBounds,
+  getMainWindowWindowBounds,
+  getMainWindowWindowSize
+} from './main-window-frame'
 import { patchConsoleWithTimestamp } from '../shared/utils/console'
 
 patchConsoleWithTimestamp()
@@ -566,18 +571,19 @@ function canReachUrl(url: string, timeoutMs = 800): Promise<boolean> {
 
 function createWindow() {
   const settings = appSettingsManager.getSettings()
-  // 默认宽度 800
-  const width = settings.window?.width || 800
+  const visibleWidth = settings.window?.width || 800
+  const initialSize = getMainWindowWindowSize(visibleWidth, 62)
+  const minCollapsedSize = getMainWindowWindowSize(400, 62)
 
   mainWindow = new BrowserWindow({
-    width,
-    height: 62,
+    width: initialSize.width,
+    height: initialSize.height,
     show: false,
     frame: false,
     resizable: true, // 允许用户调整大小
-    minHeight: 62,   // 锁定初始高度
-    maxHeight: 62,
-    minWidth: 400,   // 设置最小宽度
+    minHeight: minCollapsedSize.height,   // 锁定初始高度
+    maxHeight: minCollapsedSize.height,
+    minWidth: minCollapsedSize.width,   // 设置最小宽度
     skipTaskbar: true,
     transparent: true,
     hasShadow: false, // 透明无边框窗口使用自定义阴影，避免原生阴影黑边
@@ -659,7 +665,7 @@ function createWindow() {
     if (saveTimer) clearTimeout(saveTimer)
     saveTimer = setTimeout(() => {
       if (!mainWindow || mainWindow.isDestroyed()) return
-      const bounds = mainWindow.getBounds()
+      const bounds = getMainWindowVisibleBounds(mainWindow.getBounds())
       // 只保存系统页面模式的高度（高度 > 100 说明是展开状态）
       // 搜索框模式只保存宽度和位置
       if (bounds.height > 100) {
@@ -754,7 +760,13 @@ function showMainWindow() {
     // 优先使用保存的位置
     const settings = appSettingsManager.getSettings()
     if (settings.window?.x !== undefined && settings.window?.y !== undefined) {
-      mainWindow.setPosition(settings.window.x, settings.window.y)
+      const visibleBounds = getMainWindowVisibleBounds(mainWindow.getBounds())
+      const windowBounds = getMainWindowWindowBounds({
+        ...visibleBounds,
+        x: settings.window.x,
+        y: settings.window.y
+      })
+      mainWindow.setPosition(windowBounds.x, windowBounds.y)
     } else {
       // 获取当前鼠标所在的显示器
       const cursorPoint = screen.getCursorScreenPoint()
@@ -763,11 +775,16 @@ function showMainWindow() {
       const { x: screenX, y: screenY } = display.workArea
 
       // 计算窗口位置：水平居中，垂直方向在屏幕 1/5 处
-      const windowBounds = mainWindow.getBounds()
-      const x = screenX + Math.round((screenWidth - windowBounds.width) / 2)
+      const visibleBounds = getMainWindowVisibleBounds(mainWindow.getBounds())
+      const x = screenX + Math.round((screenWidth - visibleBounds.width) / 2)
       const y = screenY + Math.round(screenHeight / 5)
+      const windowBounds = getMainWindowWindowBounds({
+        ...visibleBounds,
+        x,
+        y
+      })
 
-      mainWindow.setPosition(x, y)
+      mainWindow.setPosition(windowBounds.x, windowBounds.y)
     }
 
     // 临时忽略 blur 事件，防止 show/focus 过程中误触发

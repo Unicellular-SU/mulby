@@ -9,6 +9,7 @@ import { injectCustomTitleBar } from './titlebar'
 import { isIgnoringBlur } from '../services/blur-manager'
 import { getPluginPreloadPath } from './plugin-preload-wrapper'
 import { ATTACHED_PANEL_HEIGHT, ATTACHED_PANEL_MIN_OVERFLOW_HEIGHT } from '../constants/panel-window'
+import { getMainWindowVisibleBounds } from '../main-window-frame'
 
 const ATTACHED_PANEL_SHADOW_MARGIN = 12
 const ATTACHED_PANEL_SHADOW_HTML = `<!doctype html>
@@ -269,7 +270,7 @@ export class PluginPanelWindow {
      * 计算面板窗口的位置和尺寸
      */
     private calculatePanelBounds(): { x: number; y: number; width: number } {
-        const mainBounds = this.mainWindow.getBounds()
+        const mainBounds = getMainWindowVisibleBounds(this.mainWindow.getBounds())
 
         // 面板位于主窗口正下方，宽度相同
         return {

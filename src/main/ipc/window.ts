@@ -4,6 +4,7 @@ import { PluginWindowManager } from '../plugin/window'
 import { ThemeManager } from '../services/theme'
 import { PluginManager } from '../plugin/manager'
 import { AppSettingsManager } from '../services/app-settings'
+import { getMainWindowVisibleBounds, getMainWindowWindowSize } from '../main-window-frame'
 import { InputPayload, Plugin, PluginFeature } from '../../shared/types/plugin'
 import {
   setSubInputState,
@@ -28,6 +29,8 @@ export function registerWindowHandlers(
   appSettingsManager: AppSettingsManager,
   pluginManager?: PluginManager
 ) {
+  const toMainWindowWindowSize = (width: number, height: number) => getMainWindowWindowSize(width, height)
+
   // =========================================
   // SubInput 子输入框 API
   // =========================================
@@ -343,16 +346,23 @@ export function registerWindowHandlers(
           const savedHeight = settings.window?.height && settings.window.height >= 500
             ? settings.window.height
             : height
+          const minSize = toMainWindowWindowSize(800, 500)
+          const maxSize = toMainWindowWindowSize(9999, 9999)
+          const nextSize = toMainWindowWindowSize(savedWidth, savedHeight)
 
-          win.setMinimumSize(800, 500)
-          win.setMaximumSize(9999, 9999)
-          win.setSize(savedWidth, savedHeight)
+          win.setMinimumSize(minSize.width, minSize.height)
+          win.setMaximumSize(maxSize.width, maxSize.height)
+          win.setSize(nextSize.width, nextSize.height)
         } else {
           // 更新最小/最大高度限制，锁定高度但允许宽度调整
-          const [width] = win.getSize()
-          win.setMinimumSize(400, height)
-          win.setMaximumSize(9999, height)
-          win.setSize(width, height)
+          const visibleBounds = getMainWindowVisibleBounds(win.getBounds())
+          const minSize = toMainWindowWindowSize(400, height)
+          const maxSize = toMainWindowWindowSize(9999, height)
+          const nextSize = toMainWindowWindowSize(visibleBounds.width, height)
+
+          win.setMinimumSize(minSize.width, minSize.height)
+          win.setMaximumSize(maxSize.width, maxSize.height)
+          win.setSize(nextSize.width, nextSize.height)
         }
       } else {
         const [width] = win.getSize()
@@ -457,13 +467,20 @@ export function registerWindowHandlers(
       if (win === mainWin) {
         if (allowResize) {
           // 允许自由调整大小（用于系统页面）
-          win.setMinimumSize(800, 500)
-          win.setMaximumSize(9999, 9999)
+          const minSize = toMainWindowWindowSize(800, 500)
+          const maxSize = toMainWindowWindowSize(9999, 9999)
+          win.setMinimumSize(minSize.width, minSize.height)
+          win.setMaximumSize(maxSize.width, maxSize.height)
         } else {
           // 更新最小/最大高度限制，锁定高度但允许宽度调整
-          win.setMinimumSize(400, height)
-          win.setMaximumSize(9999, height)
+          const minSize = toMainWindowWindowSize(400, height)
+          const maxSize = toMainWindowWindowSize(9999, height)
+          win.setMinimumSize(minSize.width, minSize.height)
+          win.setMaximumSize(maxSize.width, maxSize.height)
         }
+        const nextSize = toMainWindowWindowSize(width, height)
+        win.setSize(nextSize.width, nextSize.height)
+        return
       }
       // 直接调整大小，无需切换 resizable 状态
       // setSize 在 macOS 上对无边框窗口也有效
