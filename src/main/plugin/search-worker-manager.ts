@@ -11,7 +11,9 @@ interface PendingRequest {
 }
 
 const REQUEST_TIMEOUT = 2000
-const WORKER_READY_TIMEOUT = 1200
+const SEARCH_READY_WAIT_TIMEOUT = 1200
+const WARMUP_READY_WAIT_TIMEOUT = 5000
+const WORKER_READY_HARD_TIMEOUT = 10000
 
 export class PluginSearchWorker {
   private worker: UtilityProcess | null = null
@@ -29,7 +31,7 @@ export class PluginSearchWorker {
 
   async search(input: InputPayload, plugins: SearchPluginData[]): Promise<SearchResultRef[]> {
     this.ensureWorker()
-    await this.waitUntilReady()
+    await this.waitUntilReady(SEARCH_READY_WAIT_TIMEOUT)
 
     const requestId = this.generateId()
     const request: SearchRequest = {
@@ -54,7 +56,7 @@ export class PluginSearchWorker {
 
   async warmup(): Promise<void> {
     this.ensureWorker()
-    await this.waitUntilReady()
+    await this.waitUntilReady(WARMUP_READY_WAIT_TIMEOUT)
   }
 
   async destroy(): Promise<void> {
@@ -74,12 +76,29 @@ export class PluginSearchWorker {
     }
   }
 
-  private waitUntilReady(): Promise<void> {
+  private waitUntilReady(timeoutMs: number): Promise<void> {
     this.ensureWorker()
     if (this.ready) {
       return Promise.resolve()
     }
-    return this.readyPromise ?? Promise.reject(new Error('Search worker is not initialized'))
+    const readyPromise = this.readyPromise
+    if (!readyPromise) {
+      return Promise.reject(new Error('Search worker is not initialized'))
+    }
+
+    return new Promise<void>((resolve, reject) => {
+      const timer = setTimeout(() => {
+        reject(new Error(`Search worker ready timeout (${timeoutMs}ms)`))
+      }, timeoutMs)
+
+      readyPromise.then(() => {
+        clearTimeout(timer)
+        resolve()
+      }, (error) => {
+        clearTimeout(timer)
+        reject(error)
+      })
+    })
   }
 
   private clearReadyState(): void {
@@ -125,11 +144,11 @@ export class PluginSearchWorker {
     })
     this.readyTimeout = setTimeout(() => {
       if (this.ready) return
-      const error = new Error('Search worker ready timeout')
+      const error = new Error(`Search worker hard ready timeout (${WORKER_READY_HARD_TIMEOUT}ms)`)
       this.rejectReady?.(error)
       this.rejectAllPending(error)
-      this.restartWorker('ready-timeout')
-    }, WORKER_READY_TIMEOUT)
+      this.restartWorker('hard-ready-timeout')
+    }, WORKER_READY_HARD_TIMEOUT)
 
     this.worker.stdout?.on('data', (chunk) => {
       console.log('[SearchWorker]', chunk.toString())

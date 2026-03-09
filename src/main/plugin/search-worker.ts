@@ -3,6 +3,9 @@ import type { PluginFeature } from '../../shared/types/plugin'
 import { findBestMatch, normalizeInputPayload } from '../../shared/search-matcher'
 
 const parentPort = process.parentPort ?? null
+const keepAliveTimer = setInterval(() => {
+  // Keep the utility process alive while idle so warmup and first search use the same worker.
+}, 60_000)
 
 function send(message: SearchResponse): void {
   if (parentPort) {
@@ -67,4 +70,9 @@ send({
   id: '__ready__',
   type: 'ready',
   payload: {}
+})
+
+process.on('disconnect', () => {
+  clearInterval(keepAliveTimer)
+  process.exit(0)
 })

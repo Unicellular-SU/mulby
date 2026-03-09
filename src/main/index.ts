@@ -1,4 +1,4 @@
-import { app, BrowserWindow, globalShortcut, screen, crashReporter } from 'electron'
+import { app, BrowserWindow, globalShortcut, screen, crashReporter, type Rectangle } from 'electron'
 import http from 'http'
 import https from 'https'
 import { join } from 'path'
@@ -49,6 +49,7 @@ const WINDOWS_APP_USER_MODEL_ID = 'com.mulby.app'
 const MAIN_WINDOW_SHADOW_MARGIN = 12
 const MAIN_WINDOW_TOGGLE_DEBOUNCE_MS = 180
 const WINDOWS_SHOW_BLUR_GUARD_MS = 260
+const MAIN_WINDOW_STATE_SAVE_DEBOUNCE_MS = 500
 const MAIN_WINDOW_SHADOW_HTML = `<!doctype html>
 <html>
 <head>
@@ -115,6 +116,7 @@ let shutdownFinalizeScheduled = false
 let hasShutdownCompleted = false
 let shutdownPromise: Promise<void> | null = null
 let mainWindowBlurHideTimer: NodeJS.Timeout | null = null
+let mainWindowStateSaveTimer: NodeJS.Timeout | null = null
 let suppressMainBlurHideUntil = 0
 let lastMainWindowToggleAt = 0
 let mainWindowHasBeenShown = false
@@ -426,6 +428,80 @@ function clearMainWindowBlurHideTimer(): void {
   mainWindowBlurHideTimer = null
 }
 
+function clearMainWindowStateSaveTimer(): void {
+  if (!mainWindowStateSaveTimer) return
+  clearTimeout(mainWindowStateSaveTimer)
+  mainWindowStateSaveTimer = null
+}
+
+function persistMainWindowState(): void {
+  if (!isWindowAvailable(mainWindow)) {
+    return
+  }
+
+  const bounds = getMainWindowVisibleBounds(mainWindow.getBounds())
+  if (bounds.height > 100) {
+    appSettingsManager.updateSettings({
+      window: {
+        width: bounds.width,
+        height: bounds.height,
+        x: bounds.x,
+        y: bounds.y
+      }
+    })
+    return
+  }
+
+  appSettingsManager.updateSettings({
+    window: {
+      width: bounds.width,
+      x: bounds.x,
+      y: bounds.y
+    }
+  })
+}
+
+function scheduleMainWindowStateSave(): void {
+  clearMainWindowStateSaveTimer()
+  mainWindowStateSaveTimer = setTimeout(() => {
+    mainWindowStateSaveTimer = null
+    persistMainWindowState()
+  }, MAIN_WINDOW_STATE_SAVE_DEBOUNCE_MS)
+}
+
+function flushMainWindowStateSave(): void {
+  clearMainWindowStateSaveTimer()
+  persistMainWindowState()
+}
+
+function getDefaultMainWindowVisiblePosition(visibleBounds: Rectangle): { x: number; y: number } {
+  const cursorPoint = screen.getCursorScreenPoint()
+  const display = screen.getDisplayNearestPoint(cursorPoint)
+  const { width: screenWidth, height: screenHeight } = display.workAreaSize
+  const { x: screenX, y: screenY } = display.workArea
+
+  return {
+    x: screenX + Math.round((screenWidth - visibleBounds.width) / 2),
+    y: screenY + Math.round(screenHeight / 5)
+  }
+}
+
+function resolveMainWindowVisibleBounds(currentVisibleBounds: Rectangle): Rectangle {
+  const settings = appSettingsManager.getSettings()
+  if (settings.window?.x !== undefined && settings.window?.y !== undefined) {
+    return {
+      ...currentVisibleBounds,
+      x: settings.window.x,
+      y: settings.window.y
+    }
+  }
+
+  return {
+    ...currentVisibleBounds,
+    ...getDefaultMainWindowVisiblePosition(currentVisibleBounds)
+  }
+}
+
 function shouldSuppressMainBlurHide(): boolean {
   return process.platform === 'win32' && Date.now() < suppressMainBlurHideUntil
 }
@@ -572,12 +648,20 @@ function canReachUrl(url: string, timeoutMs = 800): Promise<boolean> {
 function createWindow() {
   const settings = appSettingsManager.getSettings()
   const visibleWidth = settings.window?.width || 800
-  const initialSize = getMainWindowWindowSize(visibleWidth, 62)
+  const initialVisibleBounds = resolveMainWindowVisibleBounds({
+    x: 0,
+    y: 0,
+    width: visibleWidth,
+    height: 62
+  })
+  const initialWindowBounds = getMainWindowWindowBounds(initialVisibleBounds)
   const minCollapsedSize = getMainWindowWindowSize(400, 62)
 
   mainWindow = new BrowserWindow({
-    width: initialSize.width,
-    height: initialSize.height,
+    width: initialWindowBounds.width,
+    height: initialWindowBounds.height,
+    x: initialWindowBounds.x,
+    y: initialWindowBounds.y,
     show: false,
     frame: false,
     resizable: true, // 允许用户调整大小
@@ -618,6 +702,7 @@ function createWindow() {
 
   mainWindow.on('closed', () => {
     clearMainWindowBlurHideTimer()
+    clearMainWindowStateSaveTimer()
     closeMainShadowWindow()
     systemPluginWindowManager.setMainWindow(null)
     systemPageWindowManager.setMainWindow(null)
@@ -626,6 +711,7 @@ function createWindow() {
 
   // 默认关闭行为：隐藏到托盘（显式退出时除外）
   mainWindow.on('close', (event) => {
+    flushMainWindowStateSave()
     const closeToTray = appSettingsManager.getSettings().tray.closeToTray
     if (isQuitting || !closeToTray) {
       return
@@ -686,15 +772,16 @@ function createWindow() {
           }
         })
       }
-    }, 500)
+    }, MAIN_WINDOW_STATE_SAVE_DEBOUNCE_MS)
   }
 
   // 监听窗口调整和移动
   mainWindow.on('resize', saveState)
-  mainWindow.on('move', saveState)
+  mainWindow.on('move', scheduleMainWindowStateSave)
   mainWindow.on('resize', syncMainShadowBounds)
   mainWindow.on('show', showMainShadowWindow)
   mainWindow.on('hide', () => {
+    flushMainWindowStateSave()
     if (isWindowAvailable(mainShadowWindow)) {
       mainShadowWindow.hide()
     }
@@ -757,35 +844,10 @@ function showMainWindow() {
   }
 
   try {
-    // 优先使用保存的位置
-    const settings = appSettingsManager.getSettings()
-    if (settings.window?.x !== undefined && settings.window?.y !== undefined) {
-      const visibleBounds = getMainWindowVisibleBounds(mainWindow.getBounds())
-      const windowBounds = getMainWindowWindowBounds({
-        ...visibleBounds,
-        x: settings.window.x,
-        y: settings.window.y
-      })
-      mainWindow.setPosition(windowBounds.x, windowBounds.y)
-    } else {
-      // 获取当前鼠标所在的显示器
-      const cursorPoint = screen.getCursorScreenPoint()
-      const display = screen.getDisplayNearestPoint(cursorPoint)
-      const { width: screenWidth, height: screenHeight } = display.workAreaSize
-      const { x: screenX, y: screenY } = display.workArea
-
-      // 计算窗口位置：水平居中，垂直方向在屏幕 1/5 处
-      const visibleBounds = getMainWindowVisibleBounds(mainWindow.getBounds())
-      const x = screenX + Math.round((screenWidth - visibleBounds.width) / 2)
-      const y = screenY + Math.round(screenHeight / 5)
-      const windowBounds = getMainWindowWindowBounds({
-        ...visibleBounds,
-        x,
-        y
-      })
-
-      mainWindow.setPosition(windowBounds.x, windowBounds.y)
-    }
+    const visibleBounds = getMainWindowVisibleBounds(mainWindow.getBounds())
+    const targetVisibleBounds = resolveMainWindowVisibleBounds(visibleBounds)
+    const windowBounds = getMainWindowWindowBounds(targetVisibleBounds)
+    mainWindow.setPosition(windowBounds.x, windowBounds.y)
 
     // 临时忽略 blur 事件，防止 show/focus 过程中误触发
     startIgnoringBlur()
@@ -1072,6 +1134,7 @@ app.on('window-all-closed', () => {
 
 app.on('before-quit', (event) => {
   isQuitting = true
+  flushMainWindowStateSave()
   app.removeListener('second-instance', handleSecondInstance)
   if (process.platform === 'darwin') {
     app.removeListener('activate', handleAppActivate)
