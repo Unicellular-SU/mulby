@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
+import { useState, useEffect, useMemo, useCallback, useRef, type PointerEvent as ReactPointerEvent } from 'react'
 import SearchInput, { SearchInputRef } from './components/SearchInput'
 import PluginList from './components/PluginList'
 import PluginDetails from './components/PluginDetails'
@@ -87,6 +87,27 @@ interface SystemPageState {
   page: string | null
   title: string
 }
+
+type WindowResizeEdge =
+  | 'top'
+  | 'right'
+  | 'bottom'
+  | 'left'
+  | 'top-left'
+  | 'top-right'
+  | 'bottom-right'
+  | 'bottom-left'
+
+const MAIN_WINDOW_RESIZE_EDGES: WindowResizeEdge[] = [
+  'top',
+  'right',
+  'bottom',
+  'left',
+  'top-left',
+  'top-right',
+  'bottom-right',
+  'bottom-left'
+]
 
 function parseSystemWindowBootstrap(): SystemWindowBootstrap {
   const params = new URLSearchParams(window.location.search)
@@ -182,6 +203,7 @@ function App() {
   const [attachments, setAttachments] = useState<UiAttachment[]>([])
   const [attachmentsManagerOpen, setAttachmentsManagerOpen] = useState(false)
   const [pluginListHeight, setPluginListHeight] = useState(240)
+  const [isWindowsMain, setIsWindowsMain] = useState(false)
   const payload = useMemo(() => buildPayload(query, attachments), [query, attachments])
   const [perfTrace, setPerfTrace] = useState<SearchPerfTrace>({
     id: 0,
@@ -195,6 +217,7 @@ function App() {
   const searchInputRef = useRef<SearchInputRef>(null)
   const perfTraceSeqRef = useRef(0)
   const lastHeightRef = useRef<number | null>(null)
+  const resizeAnimationFrameRef = useRef<number | null>(null)
 
   const beginPerfTrace = useCallback((source: SearchPerfTraceSource, textLength: number, attachmentCount: number) => {
     const nextId = perfTraceSeqRef.current + 1
@@ -249,16 +272,105 @@ function App() {
     let mounted = true
     void window.mulby.system.isWindows().then((isWindows) => {
       if (!mounted) return
-      document.documentElement.classList.toggle('platform-win-main', isWindows && !isSystemWindow)
+      const nextIsWindowsMain = isWindows && !isSystemWindow
+      setIsWindowsMain(nextIsWindowsMain)
+      document.documentElement.classList.toggle('platform-win-main', nextIsWindowsMain)
     }).catch(() => {
       if (!mounted) return
+      setIsWindowsMain(false)
       document.documentElement.classList.remove('platform-win-main')
     })
     return () => {
       mounted = false
+      setIsWindowsMain(false)
       document.documentElement.classList.remove('platform-win-main')
     }
   }, [isSystemWindow])
+
+  useEffect(() => {
+    return () => {
+      if (resizeAnimationFrameRef.current !== null) {
+        window.cancelAnimationFrame(resizeAnimationFrameRef.current)
+      }
+    }
+  }, [])
+
+  const beginMainWindowResize = useCallback((edge: WindowResizeEdge) => (event: ReactPointerEvent<HTMLDivElement>) => {
+    if (event.button !== 0) return
+
+    const target = event.currentTarget
+    const baseBounds = {
+      x: window.screenX,
+      y: window.screenY,
+      width: window.outerWidth,
+      height: window.outerHeight
+    }
+
+    const state = {
+      pointerId: event.pointerId,
+      startX: event.screenX,
+      startY: event.screenY,
+      lastX: event.screenX,
+      lastY: event.screenY
+    }
+
+    const flushResize = () => {
+      resizeAnimationFrameRef.current = null
+      window.mulby.window.resizeDrag({
+        edge,
+        startX: state.startX,
+        startY: state.startY,
+        currentX: state.lastX,
+        currentY: state.lastY,
+        baseBounds
+      })
+    }
+
+    const cleanup = () => {
+      if (resizeAnimationFrameRef.current !== null) {
+        window.cancelAnimationFrame(resizeAnimationFrameRef.current)
+        resizeAnimationFrameRef.current = null
+      }
+      target.removeEventListener('pointermove', onPointerMove)
+      target.removeEventListener('pointerup', onPointerUp)
+      target.removeEventListener('pointercancel', onPointerCancel)
+      if (target.hasPointerCapture(state.pointerId)) {
+        target.releasePointerCapture(state.pointerId)
+      }
+    }
+
+    const onPointerMove = (moveEvent: PointerEvent) => {
+      if (moveEvent.pointerId !== state.pointerId) return
+      state.lastX = moveEvent.screenX
+      state.lastY = moveEvent.screenY
+      if (resizeAnimationFrameRef.current !== null) return
+      resizeAnimationFrameRef.current = window.requestAnimationFrame(flushResize)
+    }
+
+    const onPointerUp = (upEvent: PointerEvent) => {
+      if (upEvent.pointerId !== state.pointerId) return
+      state.lastX = upEvent.screenX
+      state.lastY = upEvent.screenY
+      if (resizeAnimationFrameRef.current !== null) {
+        window.cancelAnimationFrame(resizeAnimationFrameRef.current)
+        resizeAnimationFrameRef.current = null
+      }
+      flushResize()
+      cleanup()
+    }
+
+    const onPointerCancel = (cancelEvent: PointerEvent) => {
+      if (cancelEvent.pointerId !== state.pointerId) return
+      cleanup()
+    }
+
+    event.preventDefault()
+    event.stopPropagation()
+    target.setPointerCapture(state.pointerId)
+    target.addEventListener('pointermove', onPointerMove)
+    target.addEventListener('pointerup', onPointerUp)
+    target.addEventListener('pointercancel', onPointerCancel)
+  }, [])
 
   useEffect(() => {
     if (isSystemWindow) return
@@ -1010,6 +1122,17 @@ function App() {
       }}
       onDrop={handleDrop}
     >
+      {isWindowsMain && (
+        <div className="main-window-resize-layer" aria-hidden="true">
+          {MAIN_WINDOW_RESIZE_EDGES.map((edge) => (
+            <div
+              key={edge}
+              className={`main-window-resize-handle main-window-resize-handle-${edge} no-drag`}
+              onPointerDown={beginMainWindowResize(edge)}
+            />
+          ))}
+        </div>
+      )}
       <div className={`app app-home ${isDragging ? 'dragging' : ''}`}>
         <div className={`search-box-container ${hasBottomPanel ? 'with-bottom-panel' : ''}`}>
         <SearchInput

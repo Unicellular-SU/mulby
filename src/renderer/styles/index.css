@@ -21,6 +21,8 @@
   --win-main-shadow-inset-top: 10px;
   --win-main-shadow-inset-x: 16px;
   --win-main-shadow-inset-bottom: 24px;
+  --win-main-resize-handle-size: 12px;
+  --win-main-resize-corner-size: 16px;
   --win-main-surface-shadow:
     0 18px 32px -20px rgba(15, 23, 42, 0.3),
     0 8px 18px -12px rgba(15, 23, 42, 0.16),
@@ -92,6 +94,10 @@ body {
   position: relative;
 }
 
+.main-window-resize-layer {
+  display: none;
+}
+
 .app {
   background: var(--bg-primary);
   border-radius: 12px;
@@ -125,6 +131,86 @@ html.platform-win-main .app {
 html.platform-win-main .app-frame {
   padding: var(--win-main-shadow-inset-top) var(--win-main-shadow-inset-x) var(--win-main-shadow-inset-bottom);
   background: transparent;
+}
+
+html.platform-win-main .main-window-resize-layer {
+  display: block;
+  position: absolute;
+  inset: var(--win-main-shadow-inset-top) var(--win-main-shadow-inset-x) var(--win-main-shadow-inset-bottom);
+  pointer-events: none;
+  z-index: 6;
+}
+
+html.platform-win-main .main-window-resize-handle {
+  position: absolute;
+  pointer-events: auto;
+  background: transparent;
+  touch-action: none;
+  -webkit-app-region: no-drag;
+}
+
+html.platform-win-main .main-window-resize-handle-top {
+  top: 0;
+  left: var(--win-main-resize-corner-size);
+  right: var(--win-main-resize-corner-size);
+  height: var(--win-main-resize-handle-size);
+  cursor: ns-resize;
+}
+
+html.platform-win-main .main-window-resize-handle-right {
+  top: var(--win-main-resize-corner-size);
+  right: 0;
+  bottom: var(--win-main-resize-corner-size);
+  width: var(--win-main-resize-handle-size);
+  cursor: ew-resize;
+}
+
+html.platform-win-main .main-window-resize-handle-bottom {
+  left: var(--win-main-resize-corner-size);
+  right: var(--win-main-resize-corner-size);
+  bottom: 0;
+  height: var(--win-main-resize-handle-size);
+  cursor: ns-resize;
+}
+
+html.platform-win-main .main-window-resize-handle-left {
+  top: var(--win-main-resize-corner-size);
+  left: 0;
+  bottom: var(--win-main-resize-corner-size);
+  width: var(--win-main-resize-handle-size);
+  cursor: ew-resize;
+}
+
+html.platform-win-main .main-window-resize-handle-top-left {
+  top: 0;
+  left: 0;
+  width: var(--win-main-resize-corner-size);
+  height: var(--win-main-resize-corner-size);
+  cursor: nwse-resize;
+}
+
+html.platform-win-main .main-window-resize-handle-top-right {
+  top: 0;
+  right: 0;
+  width: var(--win-main-resize-corner-size);
+  height: var(--win-main-resize-corner-size);
+  cursor: nesw-resize;
+}
+
+html.platform-win-main .main-window-resize-handle-bottom-right {
+  right: 0;
+  bottom: 0;
+  width: var(--win-main-resize-corner-size);
+  height: var(--win-main-resize-corner-size);
+  cursor: nwse-resize;
+}
+
+html.platform-win-main .main-window-resize-handle-bottom-left {
+  left: 0;
+  bottom: 0;
+  width: var(--win-main-resize-corner-size);
+  height: var(--win-main-resize-corner-size);
+  cursor: nesw-resize;
 }
 
 html.platform-win-main,

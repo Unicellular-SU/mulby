@@ -224,6 +224,7 @@ export class SystemPageWindowManager {
       x: initialBounds.x,
       y: initialBounds.y,
       frame: false,
+      thickFrame: !useWindowsFramelessSurface,
       show: false,
       resizable: true,
       movable: false,
@@ -254,7 +255,7 @@ export class SystemPageWindowManager {
     win.once('ready-to-show', async () => {
       if (!this.attachedWindow || this.attachedWindow.isDestroyed()) return
       if (useWindowsFramelessSurface) {
-        await applyWindowsFramelessSurface(this.attachedWindow)
+        await applyWindowsFramelessSurface(this.attachedWindow, { resizeMode: 'bottom' })
         if (!this.attachedWindow || this.attachedWindow.isDestroyed()) return
       }
       this.syncPosition()
@@ -271,7 +272,7 @@ export class SystemPageWindowManager {
 
     win.webContents.on('did-finish-load', () => {
       if (!useWindowsFramelessSurface || !this.attachedWindow || this.attachedWindow.isDestroyed()) return
-      void applyWindowsFramelessSurface(this.attachedWindow)
+      void applyWindowsFramelessSurface(this.attachedWindow, { resizeMode: 'bottom' })
     })
 
     win.on('blur', () => {
@@ -366,6 +367,7 @@ export class SystemPageWindowManager {
       minWidth: toWindowWidth(800)!,
       minHeight: toWindowHeight(500)!,
       frame: false,
+      thickFrame: !useWindowsFramelessSurface,
       show: false,
       resizable: true,
       movable: true,
@@ -391,7 +393,7 @@ export class SystemPageWindowManager {
       try {
         await injectCustomTitleBar(activeDetached, this.resolveTitle(route), currentTheme)
         if (useWindowsFramelessSurface) {
-          await applyWindowsFramelessSurface(activeDetached, { includeTitleBar: true })
+          await applyWindowsFramelessSurface(activeDetached, { includeTitleBar: true, resizeMode: 'all' })
           if (activeDetached.isDestroyed()) return
         }
       } catch (error) {
@@ -432,7 +434,7 @@ export class SystemPageWindowManager {
           await injectCustomTitleBar(activeDetached, this.resolveTitle(route), theme)
         }
         if (useWindowsFramelessSurface && !activeDetached.isDestroyed()) {
-          await applyWindowsFramelessSurface(activeDetached, { includeTitleBar: true })
+          await applyWindowsFramelessSurface(activeDetached, { includeTitleBar: true, resizeMode: 'all' })
         }
       } catch (error) {
         console.error('[SystemPageWindowManager] Failed to re-inject titlebar:', error)

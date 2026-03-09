@@ -160,6 +160,7 @@ export class PluginPanelWindow {
             x: initialBounds.x,
             y: initialBounds.y,
             frame: false,
+            thickFrame: !useWindowsFramelessSurface,
             show: false,
             resizable: true,
             movable: false, // 禁止直接拖动，跟随父窗口
@@ -197,7 +198,7 @@ export class PluginPanelWindow {
             if (!this.panelWindow) return
 
             if (useWindowsFramelessSurface) {
-                await applyWindowsFramelessSurface(this.panelWindow)
+                await applyWindowsFramelessSurface(this.panelWindow, { resizeMode: 'bottom' })
                 if (!this.panelWindow || this.panelWindow.isDestroyed()) return
             }
 
@@ -232,7 +233,7 @@ export class PluginPanelWindow {
         // 监听焦点变化 - 点击面板时获取焦点
         this.panelWindow.webContents.on('did-finish-load', () => {
             if (!useWindowsFramelessSurface || !this.panelWindow || this.panelWindow.isDestroyed()) return
-            void applyWindowsFramelessSurface(this.panelWindow)
+            void applyWindowsFramelessSurface(this.panelWindow, { resizeMode: 'bottom' })
         })
 
         this.panelWindow.on('focus', () => {
@@ -548,6 +549,7 @@ export class PluginPanelWindow {
             show: false,
             resizable: true,
             movable: true,
+            thickFrame: !useWindowsFramelessSurface,
             backgroundColor,
             transparent: useWindowsFramelessSurface,
             hasShadow: !useWindowsFramelessSurface,
@@ -577,7 +579,7 @@ export class PluginPanelWindow {
             // 注入自定义标题栏
             await injectCustomTitleBar(independentWindow, plugin.manifest.displayName, currentTheme)
             if (useWindowsFramelessSurface) {
-                await applyWindowsFramelessSurface(independentWindow, { includeTitleBar: true })
+                await applyWindowsFramelessSurface(independentWindow, { includeTitleBar: true, resizeMode: 'all' })
                 if (independentWindow.isDestroyed()) return
             }
             independentWindow.show()
@@ -615,7 +617,7 @@ export class PluginPanelWindow {
                 await injectCustomTitleBar(independentWindow, plugin.manifest.displayName, theme)
             }
             if (useWindowsFramelessSurface && !independentWindow.isDestroyed()) {
-                await applyWindowsFramelessSurface(independentWindow, { includeTitleBar: true })
+                await applyWindowsFramelessSurface(independentWindow, { includeTitleBar: true, resizeMode: 'all' })
             }
         })
 

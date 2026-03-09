@@ -17,6 +17,14 @@ export function createCoreApi(ipcRenderer: IpcRenderer) {
       minimize: () => ipcRenderer.send('window:minimize'),
       maximize: () => ipcRenderer.send('window:maximize'),
       getState: () => ipcRenderer.invoke('window:getState'),
+      resizeDrag: (payload: {
+        edge: 'top' | 'right' | 'bottom' | 'left' | 'top-left' | 'top-right' | 'bottom-right' | 'bottom-left'
+        startX: number
+        startY: number
+        currentX: number
+        currentY: number
+        baseBounds: { x: number; y: number; width: number; height: number }
+      }) => ipcRenderer.send('window:resizeDrag', payload),
       reload: () => ipcRenderer.send('plugin:reload'),
       create: async (url: string, options?: { width?: number; height?: number; title?: string }) => {
         const id = await ipcRenderer.invoke('window:create', url, options)

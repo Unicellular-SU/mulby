@@ -392,6 +392,14 @@ export interface ElectronAPI {
     reload: () => void
     setAlwaysOnTop: (flag: boolean) => void
     getMode: () => Promise<'attached' | 'detached'>
+    resizeDrag: (payload: {
+      edge: 'top' | 'right' | 'bottom' | 'left' | 'top-left' | 'top-right' | 'bottom-right' | 'bottom-left'
+      startX: number
+      startY: number
+      currentX: number
+      currentY: number
+      baseBounds: { x: number; y: number; width: number; height: number }
+    }) => void
   }
   theme: {
     get: () => Promise<ThemeInfo>

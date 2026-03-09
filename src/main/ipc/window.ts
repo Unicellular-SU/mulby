@@ -553,6 +553,81 @@ export function registerWindowHandlers(
   })
 
   // 重新加载插件
+  ipcMain.on('window:resizeDrag', (event, payload: {
+    edge: 'top' | 'right' | 'bottom' | 'left' | 'top-left' | 'top-right' | 'bottom-right' | 'bottom-left'
+    startX: number
+    startY: number
+    currentX: number
+    currentY: number
+    baseBounds: { x: number; y: number; width: number; height: number }
+  }) => {
+    const win = BrowserWindow.fromWebContents(event.sender)
+    if (!win || win.isDestroyed() || !win.isResizable()) return
+    if (win.isMaximized() || win.isMinimized() || win.isFullScreen()) return
+
+    const { edge, startX, startY, currentX, currentY, baseBounds } = payload ?? {}
+    if (
+      typeof edge !== 'string'
+      || typeof startX !== 'number'
+      || typeof startY !== 'number'
+      || typeof currentX !== 'number'
+      || typeof currentY !== 'number'
+      || !baseBounds
+      || typeof baseBounds.x !== 'number'
+      || typeof baseBounds.y !== 'number'
+      || typeof baseBounds.width !== 'number'
+      || typeof baseBounds.height !== 'number'
+    ) {
+      return
+    }
+
+    const dx = currentX - startX
+    const dy = currentY - startY
+    const resizeLeft = edge.includes('left')
+    const resizeRight = edge.includes('right')
+    const resizeTop = edge.includes('top')
+    const resizeBottom = edge.includes('bottom')
+
+    let nextX = baseBounds.x
+    let nextY = baseBounds.y
+    let nextWidth = baseBounds.width
+    let nextHeight = baseBounds.height
+
+    if (resizeLeft) {
+      nextX += dx
+      nextWidth -= dx
+    }
+    if (resizeRight) {
+      nextWidth += dx
+    }
+    if (resizeTop) {
+      nextY += dy
+      nextHeight -= dy
+    }
+    if (resizeBottom) {
+      nextHeight += dy
+    }
+
+    const [minWidth, minHeight] = win.getMinimumSize()
+    const [maxWidth, maxHeight] = win.getMaximumSize()
+    const clampedWidth = Math.max(minWidth || 1, maxWidth > 0 ? Math.min(nextWidth, maxWidth) : nextWidth)
+    const clampedHeight = Math.max(minHeight || 1, maxHeight > 0 ? Math.min(nextHeight, maxHeight) : nextHeight)
+
+    if (resizeLeft) {
+      nextX = baseBounds.x + (baseBounds.width - clampedWidth)
+    }
+    if (resizeTop) {
+      nextY = baseBounds.y + (baseBounds.height - clampedHeight)
+    }
+
+    win.setBounds({
+      x: Math.round(nextX),
+      y: Math.round(nextY),
+      width: Math.max(1, Math.round(clampedWidth)),
+      height: Math.max(1, Math.round(clampedHeight))
+    })
+  })
+
   ipcMain.on('plugin:reload', (event) => {
     const senderWin = BrowserWindow.fromWebContents(event.sender)
     if (senderWin) {
