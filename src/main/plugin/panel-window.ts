@@ -19,6 +19,7 @@ import {
 import { getMainWindowVisibleBounds } from '../main-window-frame'
 
 const ATTACHED_PANEL_SHADOW_MARGIN = 12
+const WINDOWS_PANEL_SHOW_OPACITY_GUARD_MS = 50
 const ATTACHED_PANEL_SHADOW_HTML = `<!doctype html>
 <html>
 <head>
@@ -75,6 +76,16 @@ function canReachUrl(url: string, timeoutMs = 800): Promise<boolean> {
     })
 }
 
+function areBoundsEqual(
+    left: { x: number; y: number; width: number; height: number },
+    right: { x: number; y: number; width: number; height: number }
+): boolean {
+    return left.x === right.x
+        && left.y === right.y
+        && left.width === right.width
+        && left.height === right.height
+}
+
 /**
  * 插件面板窗口管理器
  * 负责创建和管理跟随主窗口的面板式插件窗口
@@ -95,6 +106,8 @@ export class PluginPanelWindow {
     private syncScheduled = false
     private preferredPanelHeight = ATTACHED_PANEL_HEIGHT
     private syncingBounds = false
+    private panelWindowHasBeenShown = false
+    private opacityRestoreTimer: NodeJS.Timeout | null = null
 
     constructor(mainWindow: BrowserWindow) {
         this.mainWindow = mainWindow
@@ -213,6 +226,7 @@ export class PluginPanelWindow {
             this.showShadow()
             // 显示窗口 (使用 show() 抢夺焦点，确保显示)
             this.panelWindow.show()
+            this.panelWindowHasBeenShown = true
 
             // 发送初始化数据
             this.panelWindow.webContents.send('plugin:init', {
@@ -460,12 +474,15 @@ export class PluginPanelWindow {
         // 批量设置位置和大小以减少闪烁
         this.syncingBounds = true
         try {
-            this.panelWindow.setBounds(getWindowsFramelessSurfaceWindowBounds({
+            const nextBounds = getWindowsFramelessSurfaceWindowBounds({
                 x,
                 y: adjustedY,
                 width,
                 height: adjustedHeight
-            }))
+            })
+            if (!areBoundsEqual(this.panelWindow.getBounds(), nextBounds)) {
+                this.panelWindow.setBounds(nextBounds)
+            }
             this.setShadowBounds(x, adjustedY, width, adjustedHeight)
         } finally {
             this.syncingBounds = false
@@ -649,6 +666,7 @@ export class PluginPanelWindow {
      * 清理资源
      */
     private cleanup() {
+        this.clearOpacityRestoreTimer(false)
         this.removePositionSync()
         this.closeShadowWindow()
         this.panelWindow = null
@@ -659,6 +677,7 @@ export class PluginPanelWindow {
         this.syncScheduled = false
         this.preferredPanelHeight = ATTACHED_PANEL_HEIGHT
         this.syncingBounds = false
+        this.panelWindowHasBeenShown = false
     }
 
     /**
@@ -686,6 +705,7 @@ export class PluginPanelWindow {
      * 隐藏面板（但不关闭）
      */
     hide() {
+        this.clearOpacityRestoreTimer(true)
         if (this.panelWindow && !this.panelWindow.isDestroyed()) {
             this.panelWindow.hide()
         }
@@ -701,9 +721,41 @@ export class PluginPanelWindow {
                 this.createShadowWindow()
             }
             this.syncPosition() // 确保位置正确
+            const needsOpacityGuard = process.platform === 'win32'
+                && this.panelWindowHasBeenShown
+                && !this.panelWindow.isVisible()
+            this.clearOpacityRestoreTimer(false)
+            if (needsOpacityGuard) {
+                this.panelWindow.setOpacity(0)
+            } else {
+                this.panelWindow.setOpacity(1)
+            }
             this.showShadow()
             this.panelWindow.showInactive()
+            this.panelWindowHasBeenShown = true
+            if (needsOpacityGuard) {
+                this.panelWindow.webContents.invalidate()
+                this.opacityRestoreTimer = setTimeout(() => {
+                    this.opacityRestoreTimer = null
+                    if (!this.panelWindow || this.panelWindow.isDestroyed() || !this.panelWindow.isVisible()) {
+                        return
+                    }
+                    this.panelWindow.setOpacity(1)
+                }, WINDOWS_PANEL_SHOW_OPACITY_GUARD_MS)
+            }
         }
+    }
+
+    // Clean up the deferred opacity restore used by the Windows show guard.
+    private clearOpacityRestoreTimer(resetOpacity: boolean) {
+        if (this.opacityRestoreTimer) {
+            clearTimeout(this.opacityRestoreTimer)
+            this.opacityRestoreTimer = null
+        }
+        if (!resetOpacity) return
+        if (process.platform !== 'win32') return
+        if (!this.panelWindow || this.panelWindow.isDestroyed()) return
+        this.panelWindow.setOpacity(1)
     }
 
     /**
