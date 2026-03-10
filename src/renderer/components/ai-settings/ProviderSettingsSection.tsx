@@ -26,6 +26,7 @@ interface ProviderSettingsSectionProps {
   isTestingConnection: boolean
   isFetchingModels: boolean
   setSelectedProviderIndex: (index: number) => void
+  onToggleProviderEnabled: (index: number) => void
   onOpenAddProviderModal: () => void
   onTestConnection: () => void
   onUpdateSelectedProvider: (patch: Partial<AiProviderConfig>) => void
@@ -65,6 +66,7 @@ export function ProviderSettingsSection({
   isTestingConnection,
   isFetchingModels,
   setSelectedProviderIndex,
+  onToggleProviderEnabled,
   onOpenAddProviderModal,
   onTestConnection,
   onUpdateSelectedProvider,
@@ -108,9 +110,9 @@ export function ProviderSettingsSection({
           selectedProviderIndex={selectedProviderIndex}
           primaryPillClass={primaryPillClass}
           setSelectedProviderIndex={setSelectedProviderIndex}
+          onToggleProviderEnabled={onToggleProviderEnabled}
           onOpenAddProviderModal={onOpenAddProviderModal}
           getProviderKey={getProviderKey}
-          getProviderTypeLabel={getProviderTypeLabel}
         />
 
         <main className="min-h-0 flex-1 overflow-y-auto p-4 md:p-6">

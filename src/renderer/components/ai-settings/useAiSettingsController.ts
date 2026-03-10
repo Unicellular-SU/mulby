@@ -136,6 +136,7 @@ export function useAiSettingsController() {
     isTestingConnection: provider.isTestingConnection,
     isFetchingModels: model.isFetchingModels,
     setSelectedProviderIndex: provider.setSelectedProviderIndex,
+    handleToggleProviderEnabled: provider.handleToggleProviderEnabled,
     setShowAddProviderModal: provider.setShowAddProviderModal,
     handleTestSelectedProviderConnection: provider.handleTestSelectedProviderConnection,
     handleUpdateSelectedProvider: provider.handleUpdateSelectedProvider,

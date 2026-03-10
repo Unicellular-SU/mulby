@@ -300,6 +300,13 @@ export function useAiProviderController({
     handleToggleProviderMaxTokens(selectedProviderIndex)
   }
 
+  const handleToggleProviderEnabled = (index: number) => {
+    if (!aiDraft) return
+    const provider = aiDraft.providers[index]
+    if (!provider) return
+    handleUpdateProvider(index, { enabled: provider.enabled === false })
+  }
+
   return {
     hasProviderBlockingIssues,
     sortedProviderEntries,
@@ -324,6 +331,7 @@ export function useAiProviderController({
     testingApiKeyIndex: apiKeys.testingApiKeyIndex,
     apiKeyTestStatusMap: apiKeys.apiKeyTestStatusMap,
     setSelectedProviderIndex,
+    handleToggleProviderEnabled,
     setShowAddProviderModal,
     setShowApiKeyManagerModal: apiKeys.setShowApiKeyManagerModal,
     setNewApiKeyInput: apiKeys.setNewApiKeyInput,

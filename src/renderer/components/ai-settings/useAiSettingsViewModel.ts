@@ -24,8 +24,6 @@ export function useAiSettingsViewModel({
   const controller = useAiSettingsController()
 
   const headerProps: ComponentProps<typeof AiSettingsHeader> = {
-    pillClass: controller.pillClass,
-    primaryPillClass: controller.primaryPillClass,
     hasProviderBlockingIssues: controller.hasProviderBlockingIssues,
     onBack,
     onOpenGlobalDefaultModelModal: controller.openGlobalDefaultModelModal,
@@ -56,6 +54,7 @@ export function useAiSettingsViewModel({
     isTestingConnection: controller.isTestingConnection,
     isFetchingModels: controller.isFetchingModels,
     setSelectedProviderIndex: controller.setSelectedProviderIndex,
+    onToggleProviderEnabled: controller.handleToggleProviderEnabled,
     onOpenAddProviderModal: () => controller.setShowAddProviderModal(true),
     onTestConnection: controller.handleTestSelectedProviderConnection,
     onUpdateSelectedProvider: controller.handleUpdateSelectedProvider,

@@ -2,6 +2,7 @@ import { ProviderSettingsSection } from './ai-settings/ProviderSettingsSection'
 import AiSettingsHeader from './ai-settings/AiSettingsHeader'
 import AiSettingsStatusPanels from './ai-settings/AiSettingsStatusPanels'
 import AiSettingsModalsHost from './ai-settings/AiSettingsModalsHost'
+import { SettingsLikePageShell } from './SettingsLikePageChrome'
 import { useAiSettingsViewModel } from './ai-settings/useAiSettingsViewModel'
 
 interface AiSettingsViewProps {
@@ -23,7 +24,7 @@ export default function AiSettingsView({ onBack, onOpenMcpSettings, onOpenSkills
   })
 
   return (
-    <div className="flex h-full flex-col bg-white/50 dark:bg-slate-900/30">
+    <SettingsLikePageShell>
       <AiSettingsHeader {...headerProps} />
 
       <div className="flex min-h-0 flex-1 no-drag">
@@ -37,6 +38,6 @@ export default function AiSettingsView({ onBack, onOpenMcpSettings, onOpenSkills
       </div>
 
       <AiSettingsModalsHost {...modalsHostProps} />
-    </div>
+    </SettingsLikePageShell>
   )
 }

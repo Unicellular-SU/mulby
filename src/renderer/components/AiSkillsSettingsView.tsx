@@ -5,6 +5,11 @@ import remarkGfm from 'remark-gfm'
 import YAML from 'yaml'
 import type { AiSkillRecord } from '../../shared/types/ai'
 import { useInAppNotice } from './InAppNotice'
+import {
+  SettingsLikePageHeader,
+  SettingsLikePageShell,
+  settingsLikeHeaderGhostButtonClass
+} from './SettingsLikePageChrome'
 
 interface AiSkillsSettingsViewProps {
   onBack: () => void
@@ -257,7 +262,7 @@ export default function AiSkillsSettingsView({ onBack }: AiSkillsSettingsViewPro
       setShowZipModal(false)
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err)
-      setError(`ZIP 安装失败：${message}`)
+      setError(`zip 安装失败：${message}`)
     } finally {
       setBusy(false)
       setDraggingZip(false)
@@ -387,8 +392,20 @@ export default function AiSkillsSettingsView({ onBack }: AiSkillsSettingsViewPro
   }
 
   return (
-    <div className="flex h-full flex-col bg-white/50 dark:bg-slate-900/30">
-      <div className="flex items-center gap-3 border-b border-slate-200/70 bg-white px-6 py-4 dark:border-slate-800/80 dark:bg-slate-900">
+    <SettingsLikePageShell>
+      <SettingsLikePageHeader
+        eyebrow="AI Skills"
+        title="Skills 管理中心"
+        onBack={onBack}
+        actions={(
+          <>
+            <button className={settingsLikeHeaderGhostButtonClass} onClick={() => setShowZipModal(true)} disabled={loading || busy}>zip 安装</button>
+            <button className={settingsLikeHeaderGhostButtonClass} onClick={() => setShowNpxModal(true)} disabled={loading || busy}>npx 安装</button>
+            <button className={settingsLikeHeaderGhostButtonClass} onClick={() => void loadSkills(true)} disabled={loading || busy}>刷新</button>
+          </>
+        )}
+      />
+      <div className="hidden" aria-hidden="true">
         <button
           onClick={onBack}
           className="flex h-8 w-8 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-600 transition hover:border-slate-300 hover:text-slate-900 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:text-white no-drag"
@@ -403,7 +420,7 @@ export default function AiSkillsSettingsView({ onBack }: AiSkillsSettingsViewPro
           <div className="text-lg font-semibold text-slate-900 dark:text-slate-100">Skills 管理中心</div>
         </div>
         <div className="flex items-center gap-2">
-          <button className={`${secondaryPillClass} no-drag`} onClick={() => setShowZipModal(true)} disabled={loading || busy}>ZIP 安装</button>
+          <button className={`${secondaryPillClass} no-drag`} onClick={() => setShowZipModal(true)} disabled={loading || busy}>zip 安装</button>
           <button className={`${secondaryPillClass} no-drag`} onClick={() => setShowNpxModal(true)} disabled={loading || busy}>npx 安装</button>
           <button className={`${secondaryPillClass} no-drag`} onClick={() => void loadSkills(true)} disabled={loading || busy}>刷新</button>
         </div>
@@ -481,7 +498,7 @@ export default function AiSkillsSettingsView({ onBack }: AiSkillsSettingsViewPro
             )}
             {!loading && skills.length === 0 && (
               <div className="rounded-2xl border border-dashed border-slate-200 p-4 text-xs text-slate-500 dark:border-slate-700 dark:text-slate-400">
-                暂无 Skills。请点击右上角“ZIP 安装”。
+                暂无 Skills。请点击右上角“zip 安装”。
               </div>
             )}
             {!loading && skills.length > 0 && filteredSkills.length === 0 && (
@@ -648,7 +665,7 @@ export default function AiSkillsSettingsView({ onBack }: AiSkillsSettingsViewPro
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4 no-drag">
           <div className="w-full max-w-2xl rounded-[28px] border border-slate-200/80 bg-white p-6 shadow-2xl dark:border-slate-800/80 dark:bg-slate-900">
             <div className="mb-4 flex items-center justify-between">
-              <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">ZIP 安装 Skill</h3>
+              <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">zip 安装 Skill</h3>
               <button className={`${actionButtonClass} no-drag`} onClick={() => setShowZipModal(false)} disabled={busy}>关闭</button>
             </div>
             <div
@@ -740,6 +757,6 @@ export default function AiSkillsSettingsView({ onBack }: AiSkillsSettingsViewPro
           </div>
         </div>
       )}
-    </div>
+    </SettingsLikePageShell>
   )
 }

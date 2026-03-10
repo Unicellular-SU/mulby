@@ -2,6 +2,12 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { AiMcpServer, AiMcpTool, AiMcpServerLogEntry } from '../../shared/types/ai'
 import { useInAppNotice } from './InAppNotice'
 import UnifiedSelect from './UnifiedSelect'
+import {
+  SettingsLikePageHeader,
+  SettingsLikePageShell,
+  settingsLikeHeaderGhostButtonClass,
+  settingsLikeHeaderPrimaryButtonClass
+} from './SettingsLikePageChrome'
 
 interface AiMcpSettingsViewProps {
   onBack: () => void
@@ -623,8 +629,21 @@ export default function AiMcpSettingsView({ onBack }: AiMcpSettingsViewProps) {
   }, [recomputeToolDescriptionOverflow])
 
   return (
-    <div className="flex h-full flex-col bg-white/50 dark:bg-slate-900/30">
-      <div className="flex items-center gap-3 border-b border-slate-200/70 bg-white px-6 py-4 dark:border-slate-800/80 dark:bg-slate-900">
+    <SettingsLikePageShell>
+      <SettingsLikePageHeader
+        eyebrow="AI Settings"
+        title="MCP 服务器管理"
+        onBack={onBack}
+        actions={(
+          <>
+            <button className={settingsLikeHeaderGhostButtonClass} onClick={() => void loadServers()} disabled={loadingServers || operationBusy}>刷新</button>
+            <button className={settingsLikeHeaderGhostButtonClass} onClick={handleCreateServer} disabled={operationBusy}>新建服务器</button>
+            <button className={settingsLikeHeaderGhostButtonClass} onClick={handleOpenJsonImport} disabled={operationBusy}>JSON 导入</button>
+            <button className={settingsLikeHeaderPrimaryButtonClass} onClick={handleSaveServer} disabled={!draftServer || operationBusy}>保存</button>
+          </>
+        )}
+      />
+      <div className="hidden" aria-hidden="true">
         <button
           onClick={onBack}
           className="no-drag flex h-8 w-8 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-600 transition hover:border-slate-300 hover:text-slate-900 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:text-white"
@@ -1048,6 +1067,6 @@ export default function AiMcpSettingsView({ onBack }: AiMcpSettingsViewProps) {
           </div>
         </div>
       )}
-    </div>
+    </SettingsLikePageShell>
   )
 }
