@@ -3,7 +3,9 @@ import type { InputAttachment } from '../../shared/types/plugin'
 
 interface SearchInputProps {
   value: string
+  summaryText: string
   onChange: (value: string) => void
+  onSummaryChange: (value: string) => void
   attachments: UiAttachment[]
   onAttachmentsChange: (attachments: UiAttachment[]) => void
   attachmentsManagerOpen: boolean
@@ -11,14 +13,12 @@ interface SearchInputProps {
   onAttachmentsManagerClose: () => void
 }
 
-// 暴露给父组件的方法
 export interface SearchInputRef {
   focus: () => void
   blur: () => void
   select: () => void
 }
 
-// mulbyMain 类型声明
 declare global {
   interface Window {
     mulbyMain?: {
@@ -48,6 +48,10 @@ interface UiAttachment extends InputAttachment {
 }
 
 type DroppedFile = File & { path?: string }
+type SummaryInfo = {
+  preview: string
+  meta: string
+}
 
 function isInpluginFile(file: DroppedFile): boolean {
   const normalizedName = String(file.name || '').toLowerCase()
@@ -57,7 +61,9 @@ function isInpluginFile(file: DroppedFile): boolean {
 
 const SearchInput = forwardRef<SearchInputRef, SearchInputProps>(function SearchInput({
   value,
+  summaryText,
   onChange,
+  onSummaryChange,
   attachments,
   onAttachmentsChange,
   attachmentsManagerOpen,
@@ -67,10 +73,12 @@ const SearchInput = forwardRef<SearchInputRef, SearchInputProps>(function Search
   const inputRef = useRef<HTMLTextAreaElement>(null)
   const [subInput, setSubInput] = useState<SubInputState>({ enabled: false, placeholder: '' })
   const [subInputValue, setSubInputValue] = useState('')
+
   const setCaretToEnd = useCallback((input: HTMLTextAreaElement) => {
     const end = input.value.length
     input.setSelectionRange(end, end)
   }, [])
+
   const focusAtEnd = useCallback(() => {
     const input = inputRef.current
     if (!input) return
@@ -78,7 +86,6 @@ const SearchInput = forwardRef<SearchInputRef, SearchInputProps>(function Search
     setCaretToEnd(input)
   }, [setCaretToEnd])
 
-  // 暴露方法给父组件
   useImperativeHandle(ref, () => ({
     focus: () => {
       focusAtEnd()
@@ -91,15 +98,12 @@ const SearchInput = forwardRef<SearchInputRef, SearchInputProps>(function Search
     }
   }), [focusAtEnd])
 
-  // 从其他页面返回 home 时，textarea 会重新挂载并触发 autoFocus
-  // 在已有文本时，主动将插入点校正到文本末尾，避免默认落在开头
   useEffect(() => {
     const input = inputRef.current
     if (!input || document.activeElement !== input) return
     setCaretToEnd(input)
   }, [setCaretToEnd])
 
-  // 监听 SubInput 事件
   useEffect(() => {
     const api = window.mulbyMain?.subInput
     if (!api) return
@@ -143,18 +147,15 @@ const SearchInput = forwardRef<SearchInputRef, SearchInputProps>(function Search
     }
   }, [focusAtEnd])
 
-  // 处理输入变化
   const handleInputChange = useCallback((e: React.ChangeEvent<HTMLTextAreaElement>) => {
     const text = e.target.value
     if (subInput.enabled) {
-      // SubInput 模式：更新本地值并通知主进程转发给插件
       setSubInputValue(text)
       window.mulbyMain?.subInput.sendChange(text)
-    } else {
-      // 正常模式：调用父组件回调
-      onChange(text)
+      return
     }
-  }, [subInput.enabled, onChange])
+    onChange(text)
+  }, [onChange, subInput.enabled])
 
   const handlePaste = useCallback(async (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
     const items = Array.from(e.clipboardData.items)
@@ -163,18 +164,30 @@ const SearchInput = forwardRef<SearchInputRef, SearchInputProps>(function Search
       .map((item) => item.getAsFile())
       .filter((file): file is File => Boolean(file))
 
-    if (files.length === 0) return
+    if (files.length > 0) {
+      e.preventDefault()
+      const next = await buildAttachments(files, attachments)
+      if (next.length > 0) {
+        onAttachmentsChange(next)
+      }
+      return
+    }
+
+    if (subInput.enabled) {
+      return
+    }
+
+    const pastedText = e.clipboardData.getData('text/plain')
+    if (pastedText === '') {
+      return
+    }
 
     e.preventDefault()
-    const next = await buildAttachments(files, attachments)
-    if (next.length > 0) {
-      onAttachmentsChange(next)
-    }
-  }, [attachments, onAttachmentsChange])
+    onChange(pastedText)
+  }, [attachments, onAttachmentsChange, onChange, subInput.enabled])
 
   const handleDrop = useCallback(async (e: React.DragEvent<HTMLTextAreaElement>) => {
     const files = Array.from(e.dataTransfer.files || []) as DroppedFile[]
-    // .inplugin 交给上层 App 统一安装处理，这里不吞掉事件
     if (files.some(isInpluginFile)) return
 
     e.preventDefault()
@@ -188,31 +201,39 @@ const SearchInput = forwardRef<SearchInputRef, SearchInputProps>(function Search
   }, [attachments, onAttachmentsChange])
 
   const totalAttachmentSize = attachments.reduce((sum, attachment) => sum + attachment.size, 0)
+
   const handleToggleManager = useCallback(() => {
     if (attachmentsManagerOpen) {
       onAttachmentsManagerClose()
-    } else {
-      onAttachmentsManagerOpen()
+      return
     }
+    onAttachmentsManagerOpen()
   }, [attachmentsManagerOpen, onAttachmentsManagerClose, onAttachmentsManagerOpen])
 
   const handleClearAttachments = useCallback(() => {
-    // 释放所有 blob URLs
     attachments.forEach((attachment) => {
       if (attachment.previewUrl?.startsWith('blob:')) {
         URL.revokeObjectURL(attachment.previewUrl)
       }
     })
-    // 清空附件列表
     onAttachmentsChange([])
   }, [attachments, onAttachmentsChange])
 
-  const isSummaryMode = !subInput.enabled && value.length > SUMMARY_THRESHOLD
-  const displayValue = subInput.enabled ? subInputValue : (isSummaryMode ? '' : value)
-  const summary = isSummaryMode ? buildSummary(value) : null
+  const hasSummary = !subInput.enabled && summaryText.length > 0
+  const displayValue = subInput.enabled ? subInputValue : value
+  const summary = hasSummary ? buildSummary(summaryText) : null
+
   const handleClearSummary = useCallback(() => {
-    onChange('')
-  }, [onChange])
+    onSummaryChange('')
+  }, [onSummaryChange])
+
+  const handleSummaryMouseDown = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
+    if ((e.target as HTMLElement).closest('button')) {
+      return
+    }
+    e.preventDefault()
+    focusAtEnd()
+  }, [focusAtEnd])
 
   return (
     <div className={`search-box ${attachments.length > 0 ? 'has-attachments' : ''}`}>
@@ -220,68 +241,59 @@ const SearchInput = forwardRef<SearchInputRef, SearchInputProps>(function Search
         <circle cx="11" cy="11" r="8" />
         <path d="m21 21-4.35-4.35" />
       </svg>
-      {isSummaryMode && (
-        <div className="input-summary-card no-drag" aria-hidden="true">
-          <div className="input-summary-text">
-            <span className="input-summary-head">{summary?.head}</span>
-            <span className="input-summary-ellipsis">...</span>
-            <span className="input-summary-tail">{summary?.tail}</span>
+      <div className={`search-input-wrap ${hasSummary ? 'has-summary' : ''}`}>
+        {hasSummary && summary && (
+          <div className="input-summary-card no-drag" onMouseDown={handleSummaryMouseDown}>
+            <div className="input-summary-body">
+              <div className="input-summary-preview">{summary.preview}</div>
+              <div className="input-summary-meta">{summary.meta}</div>
+            </div>
+            <button
+              className="input-summary-clear"
+              type="button"
+              onClick={handleClearSummary}
+              aria-label="\u6e05\u7a7a\u8f93\u5165"
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                <path d="M18 6L6 18M6 6l12 12" />
+              </svg>
+            </button>
           </div>
-          <div className="input-summary-meta">共 {value.length} 字</div>
-          <button
-            className="input-summary-clear"
-            type="button"
-            onClick={handleClearSummary}
-            aria-label="清空输入"
-          >
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
-              <path d="M18 6L6 18M6 6l12 12" />
-            </svg>
-          </button>
-        </div>
-      )}
-      <div className="search-input-wrap">
+        )}
         <textarea
           ref={inputRef}
           rows={1}
           className="search-input"
-          placeholder={isSummaryMode ? '' : (subInput.enabled ? subInput.placeholder : '输入关键词搜索插件...')}
+          placeholder={subInput.enabled ? subInput.placeholder : '\u8f93\u5165\u5173\u952e\u8bcd\u641c\u7d22\u63d2\u4ef6...'}
           value={displayValue}
           onChange={handleInputChange}
           onKeyDown={(e) => {
-            // Prevent Enter from creating a newline, unless Shift is pressed
             if (e.key === 'Enter' && !e.shiftKey) {
               e.preventDefault()
               return
             }
 
-            // 处理 Backspace 删除附件
             if (e.key === 'Backspace') {
-              // 如果是摘要模式，清空文本
-              if (isSummaryMode && !subInput.enabled) {
+              if (!subInput.enabled && value === '' && summaryText) {
                 e.preventDefault()
-                onChange('')
+                onSummaryChange('')
                 return
               }
 
-              // 如果文本为空且有附件，删除最后一个附件
               const currentValue = subInput.enabled ? subInputValue : value
               if (currentValue === '' && attachments.length > 0) {
                 e.preventDefault()
                 const lastAttachment = attachments[attachments.length - 1]
-                // 释放 blob URL
                 if (lastAttachment.previewUrl?.startsWith('blob:')) {
                   URL.revokeObjectURL(lastAttachment.previewUrl)
                 }
-                // 删除最后一个附件
                 onAttachmentsChange(attachments.slice(0, -1))
               }
             }
 
-            // 处理 Delete 键（摘要模式）
-            if (e.key === 'Delete' && isSummaryMode && !subInput.enabled) {
+            if (e.key === 'Delete' && !subInput.enabled && value === '' && summaryText) {
               e.preventDefault()
-              onChange('')
+              onSummaryChange('')
             }
           }}
           onPaste={handlePaste}
@@ -292,15 +304,15 @@ const SearchInput = forwardRef<SearchInputRef, SearchInputProps>(function Search
         {attachments.length > 0 && (
           <div className="attachment-summary attachment-summary-inline no-drag">
             <div className="attachment-summary-info">
-              附件 {attachments.length} · {formatBytes(totalAttachmentSize)}
+              {'\u9644\u4ef6'} {attachments.length} {'\u00b7'} {formatBytes(totalAttachmentSize)}
             </div>
             <div className="attachment-summary-actions">
               <button
                 type="button"
                 className="attachment-summary-clear"
                 onClick={handleClearAttachments}
-                aria-label="清空附件"
-                title="清空附件"
+                aria-label="\u6e05\u7a7a\u9644\u4ef6"
+                title="\u6e05\u7a7a\u9644\u4ef6"
               >
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                   <path d="M18 6L6 18M6 6l12 12" />
@@ -312,14 +324,14 @@ const SearchInput = forwardRef<SearchInputRef, SearchInputProps>(function Search
                 onClick={handleToggleManager}
                 aria-expanded={attachmentsManagerOpen}
               >
-                {attachmentsManagerOpen ? '收起' : '管理'}
+                {attachmentsManagerOpen ? '\u6536\u8d77' : '\u7ba1\u7406'}
               </button>
             </div>
           </div>
         )}
       </div>
       {subInput.enabled && (
-        <div className="subinput-indicator" title="SubInput 模式">
+        <div className="subinput-indicator" title={`SubInput ${'\u6a21\u5f0f'}`}>
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
             <path d="M12 19V5M5 12l7-7 7 7" />
           </svg>
@@ -341,6 +353,7 @@ async function buildAttachments(files: File[], existing: UiAttachment[]): Promis
       }
       return item.name === attachment.name && item.size === attachment.size && item.mime === attachment.mime
     })
+
     if (!duplicate) {
       next.push(attachment)
     } else if (attachment.previewUrl?.startsWith('blob:')) {
@@ -407,17 +420,64 @@ function formatBytes(bytes: number): string {
 }
 
 const SUMMARY_THRESHOLD = 400
-const SUMMARY_HEAD_LENGTH = 8
-const SUMMARY_TAIL_LENGTH = 8
+const SUMMARY_PREVIEW_HEAD_LENGTH = 12
+const SUMMARY_PREVIEW_TAIL_LENGTH = 12
 
-function buildSummary(text: string): { head: string; tail: string } {
-  if (text.length <= SUMMARY_HEAD_LENGTH + SUMMARY_TAIL_LENGTH) {
-    return { head: text, tail: '' }
+function shouldUseSummary(text: string): boolean {
+  return hasMultipleLines(text) || text.length > SUMMARY_THRESHOLD
+}
+
+function hasMultipleLines(text: string): boolean {
+  return normalizeSummaryText(text).includes('\n')
+}
+
+function buildSummary(text: string): SummaryInfo {
+  const normalized = normalizeSummaryText(text)
+  const lines = normalized.split('\n')
+  const preview = buildSummaryPreview(normalized)
+  const charCount = countSummaryCharacters(normalized)
+
+  if (lines.length > 1) {
+    return {
+      preview: preview || '\u7a7a\u884c',
+      meta: `${lines.length}\u884c ${charCount}\u5b57`
+    }
   }
+
   return {
-    head: text.slice(0, SUMMARY_HEAD_LENGTH),
-    tail: text.slice(-SUMMARY_TAIL_LENGTH)
+    preview: preview || '\u7a7a\u6587\u672c',
+    meta: `${charCount}\u5b57`
   }
+}
+
+function buildSummaryPreview(text: string): string {
+  const compacted = compactSummaryPreviewText(text)
+  if (!compacted) {
+    return ''
+  }
+  const characters = Array.from(compacted)
+  if (characters.length <= SUMMARY_PREVIEW_HEAD_LENGTH + SUMMARY_PREVIEW_TAIL_LENGTH) {
+    return compacted
+  }
+  return `${characters.slice(0, SUMMARY_PREVIEW_HEAD_LENGTH).join('')}...${characters.slice(-SUMMARY_PREVIEW_TAIL_LENGTH).join('')}`
+}
+
+function countSummaryCharacters(text: string): number {
+  return Array.from(text.replace(/\n/g, '')).length
+}
+
+function normalizeSummaryText(text: string): string {
+  return text.replace(/\r\n?/g, '\n')
+}
+
+function compactSummaryPreviewText(text: string): string {
+  return normalizeSummaryText(text)
+    .replace(/[\s\u3000]+/g, '')
+    .trim()
+}
+
+export function shouldUseSummaryText(text: string): boolean {
+  return shouldUseSummary(text)
 }
 
 export default SearchInput

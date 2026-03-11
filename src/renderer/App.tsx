@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useCallback, useRef, type PointerEvent as ReactPointerEvent } from 'react'
-import SearchInput, { SearchInputRef } from './components/SearchInput'
+import SearchInput, { SearchInputRef, shouldUseSummaryText } from './components/SearchInput'
 import PluginList from './components/PluginList'
 import PluginDetails from './components/PluginDetails'
 import PluginManagerView from './components/PluginManagerView'
@@ -181,6 +181,7 @@ function App() {
   const systemWindowBootstrap = useMemo(() => parseSystemWindowBootstrap(), [])
   const isSystemWindow = systemWindowBootstrap.isSystemWindow
   const [query, setQuery] = useState('')
+  const [payloadText, setPayloadText] = useState('')
   const [, setResultCount] = useState(0)
   const [systemPageState, setSystemPageState] = useState<SystemPageState>({
     open: false,
@@ -204,7 +205,10 @@ function App() {
   const [attachmentsManagerOpen, setAttachmentsManagerOpen] = useState(false)
   const [pluginListHeight, setPluginListHeight] = useState(240)
   const [isWindowsMain, setIsWindowsMain] = useState(false)
-  const payload = useMemo(() => buildPayload(query, attachments), [query, attachments])
+  const searchText = query.length > 0 ? query : payloadText
+  const runText = payloadText || query
+  const searchPayload = useMemo(() => buildPayload(searchText, attachments), [searchText, attachments])
+  const runPayload = useMemo(() => buildPayload(runText, attachments), [runText, attachments])
   const [perfTrace, setPerfTrace] = useState<SearchPerfTrace>({
     id: 0,
     startedAt: 0,
@@ -255,6 +259,7 @@ function App() {
   }, [attachments.length])
 
   const systemPageAttached = !isSystemWindow && systemPageState.open && systemPageState.mode === 'attached'
+  const hasTextInput = query.length > 0 || payloadText.length > 0
 
   // 初始化主题
   useEffect(() => {
@@ -404,7 +409,7 @@ function App() {
 
     let height = SEARCH_BOX_HEIGHT
     let allowResize = false
-    const showSearchPanel = (query.length > 0 || attachments.length > 0)
+    const showSearchPanel = (hasTextInput || attachments.length > 0)
       && !pluginOpen
       && !systemPageAttached
       && !attachmentsManagerOpen
@@ -427,14 +432,14 @@ function App() {
     }
     window.mulby.window.setExpendHeight(height, allowResize)
 
-    const hasInput = query.length > 0 || attachments.length > 0
+    const hasInput = hasTextInput || attachments.length > 0
     if (hasInput && lastHeightRef.current !== height) {
       lastHeightRef.current = height
 
     } else if (!hasInput) {
       lastHeightRef.current = null
     }
-  }, [isSystemWindow, query, pluginOpen, systemPageAttached, detailsPluginName, attachments.length, attachmentsManagerOpen, managerMetrics.managerHeight, pluginListHeight, viewMode, perfTrace.id, perfTrace.startedAt])
+  }, [isSystemWindow, hasTextInput, pluginOpen, systemPageAttached, detailsPluginName, attachments.length, attachmentsManagerOpen, managerMetrics.managerHeight, pluginListHeight, viewMode, perfTrace.id, perfTrace.startedAt])
 
   const handlePluginListHeightChange = useCallback((height: number) => {
     const normalized = Math.max(0, Math.round(height))
@@ -605,6 +610,15 @@ function App() {
     setViewMode('ai-skills-settings')
   }, [isSystemWindow, pluginOpen])
 
+  const clearAttachments = useCallback(() => {
+    attachments.forEach((attachment) => {
+      if (attachment.previewUrl?.startsWith('blob:')) {
+        URL.revokeObjectURL(attachment.previewUrl)
+      }
+    })
+    setAttachments([])
+  }, [attachments])
+
   // ESC 键分级退出处理
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -625,9 +639,10 @@ function App() {
         } else if (systemPageAttached) {
           // 2. 关闭附着的系统页面
           void window.mulby.systemPage.close()
-        } else if (query.length > 0) {
+        } else if (hasTextInput) {
           // 3. 清空搜索框与附件
           setQuery('')
+          setPayloadText('')
           clearAttachments()
           setResultCount(0)
           setDetailsPluginName(null)
@@ -643,7 +658,7 @@ function App() {
     }
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [isSystemWindow, pluginOpen, systemPageAttached, query, attachments.length, attachmentsManagerOpen, viewMode])
+  }, [attachments.length, attachmentsManagerOpen, clearAttachments, hasTextInput, isSystemWindow, pluginOpen, systemPageAttached, viewMode])
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -763,14 +778,29 @@ function App() {
     return cleanup
   }, [openLogViewer])
 
-  const clearAttachments = useCallback(() => {
-    attachments.forEach((attachment) => {
-      if (attachment.previewUrl?.startsWith('blob:')) {
-        URL.revokeObjectURL(attachment.previewUrl)
-      }
-    })
-    setAttachments([])
-  }, [attachments])
+  const clearTextInputs = useCallback(() => {
+    setQuery('')
+    setPayloadText('')
+  }, [])
+
+  const applySearchTextInput = useCallback((value: string) => {
+    if (shouldUseSummaryText(value)) {
+      setPayloadText(value)
+      setQuery('')
+      return
+    }
+    setQuery(value)
+  }, [])
+
+  const replaceTextInput = useCallback((value: string) => {
+    if (shouldUseSummaryText(value)) {
+      setPayloadText(value)
+      setQuery('')
+      return
+    }
+    setPayloadText('')
+    setQuery(value)
+  }, [])
 
   // 监听自动粘贴事件
   useEffect(() => {
@@ -795,7 +825,7 @@ function App() {
               clearAttachments()
             }
             // 设置文本（如果搜索框为空，或者覆盖旧文本）
-            setQuery(text)
+            replaceTextInput(text)
             beginPerfTrace('text', text.length, 0)
           }
         } else if (format === 'image') {
@@ -823,7 +853,7 @@ function App() {
             }
             setAttachments([attachment])
             // 清空搜索框，让用户专注于附件
-            setQuery('')
+            clearTextInputs()
             beginPerfTrace('attachments', 0, 1)
           }
         } else if (format === 'files') {
@@ -843,7 +873,7 @@ function App() {
             }))
             setAttachments(newAttachments)
             // 清空搜索框，让用户专注于附件
-            setQuery('')
+            clearTextInputs()
             beginPerfTrace('attachments', 0, newAttachments.length)
           }
         }
@@ -853,7 +883,7 @@ function App() {
     })
 
     return cleanup
-  }, [query, pluginOpen, systemPageAttached, clearAttachments, attachments.length, beginPerfTrace])
+  }, [attachments.length, beginPerfTrace, clearAttachments, clearTextInputs, pluginOpen, replaceTextInput, systemPageAttached])
 
   const handleQueryChange = (value: string) => {
     // 如果有附着的插件，先关闭它
@@ -868,13 +898,22 @@ function App() {
       setAttachmentsManagerOpen(false)
     }
     beginPerfTrace('text', value.length, attachments.length)
-    setQuery(value)
-    if (value.length === 0 && attachments.length === 0) {
+    applySearchTextInput(value)
+    if (value.length === 0 && payloadText.length === 0 && attachments.length === 0) {
       setResultCount(0)
       setDetailsPluginName(null)
       setViewMode('home')
     }
   }
+
+  const handlePayloadTextChange = useCallback((value: string) => {
+    setPayloadText(value)
+    if (value.length === 0 && query.length === 0 && attachments.length === 0) {
+      setResultCount(0)
+      setDetailsPluginName(null)
+      setViewMode('home')
+    }
+  }, [attachments.length, query.length])
 
   const handleAttachmentsChange = (next: UiAttachment[]) => {
     if (pluginOpen) {
@@ -884,9 +923,9 @@ function App() {
     if (systemPageAttached) {
       void window.mulby.systemPage.close()
     }
-    beginPerfTrace('attachments', query.length, next.length)
+    beginPerfTrace('attachments', searchText.length, next.length)
     setAttachments(next)
-    if (next.length === 0 && query.length === 0) {
+    if (next.length === 0 && !hasTextInput) {
       setResultCount(0)
       setDetailsPluginName(null)
       setViewMode('home')
@@ -1103,7 +1142,7 @@ function App() {
   }
 
   const showAttachmentManager = attachmentsManagerOpen && attachments.length > 0
-  const showPluginList = (query.length > 0 || attachments.length > 0) && !pluginOpen && !systemPageAttached && !showAttachmentManager
+  const showPluginList = (hasTextInput || attachments.length > 0) && !pluginOpen && !systemPageAttached && !showAttachmentManager
   const hasBottomPanel = showAttachmentManager || showPluginList
 
   return (
@@ -1138,7 +1177,9 @@ function App() {
         <SearchInput
           ref={searchInputRef}
           value={query}
+          summaryText={payloadText}
           onChange={handleQueryChange}
+          onSummaryChange={handlePayloadTextChange}
           attachments={attachments}
           onAttachmentsChange={handleAttachmentsChange}
           attachmentsManagerOpen={attachmentsManagerOpen}
@@ -1249,7 +1290,8 @@ function App() {
       )}
       {showPluginList && (
         <PluginList
-          payload={payload}
+          searchPayload={searchPayload}
+          runPayload={runPayload}
           traceId={perfTrace.id}
           traceStartedAt={perfTrace.startedAt}
           traceSource={perfTrace.source}

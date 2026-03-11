@@ -1,5 +1,6 @@
 import { existsSync, readdirSync, statSync } from 'fs'
 import { basename, extname, join } from 'path'
+import { isSystemSearchQueryEligible } from '../../../../shared/system-search'
 import type {
   AppSearchResult,
   DesktopSearchProvider,
@@ -42,10 +43,9 @@ export class WindowsSearchProvider implements DesktopSearchProvider {
 
   async searchFiles(query: string, limit: number): Promise<FileSearchResult[]> {
     const normalizedQuery = query.trim()
-    if (!normalizedQuery) return []
-
     this.execution.cancelSearchProcess(SEARCH_KEY_FILES)
     this.execution.cancelSearchProcess(SEARCH_KEY_FILES_FALLBACK)
+    if (!isSystemSearchQueryEligible(normalizedQuery)) return []
 
     let paths: string[] = []
     try {
@@ -90,12 +90,11 @@ export class WindowsSearchProvider implements DesktopSearchProvider {
 
   async searchApps(query: string, limit: number): Promise<AppSearchResult[]> {
     const normalizedQuery = query.trim()
-    if (!normalizedQuery) return []
-
     this.execution.cancelSearchProcess(SEARCH_KEY_APPS)
     this.execution.cancelSearchProcess(SEARCH_KEY_APPS_FALLBACK)
     this.execution.cancelSearchProcess(SEARCH_KEY_APPS_REGISTRY)
     this.execution.cancelSearchProcess(SEARCH_KEY_APPS_APPX)
+    if (!isSystemSearchQueryEligible(normalizedQuery)) return []
 
     const quickLimit = Math.max(limit * 3, 90)
     let quickPaths: string[] = []

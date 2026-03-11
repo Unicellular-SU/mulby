@@ -6,10 +6,12 @@ import type {
   SystemIconKind,
   SystemIconRequest
 } from '../../shared/types/electron'
+import { isSystemSearchQueryEligible } from '../../shared/system-search'
 import type { InputPayload } from '../../shared/types/plugin'
 
 interface PluginListProps {
-  payload: InputPayload
+  searchPayload: InputPayload
+  runPayload: InputPayload
   traceId: number
   traceStartedAt: number
   traceSource: 'text' | 'attachments'
@@ -289,7 +291,8 @@ const ResultCard = memo(function ResultCard({
 })
 
 function PluginList({
-  payload,
+  searchPayload,
+  runPayload,
   traceId,
   traceStartedAt,
   traceSource,
@@ -313,7 +316,7 @@ function PluginList({
   const [columns, setColumns] = useState(() => getColumns(window.innerWidth))
   const [systemIconVersion, setSystemIconVersion] = useState(0)
 
-  const payloadRef = useRef(payload)
+  const payloadRef = useRef(runPayload)
   const panelContentRef = useRef<HTMLDivElement | null>(null)
   const requestIdRef = useRef(0)
   const searchStartedAtRef = useRef(0)
@@ -328,8 +331,8 @@ function PluginList({
   const systemIconPendingRef = useRef<Set<string>>(new Set())
 
   useEffect(() => {
-    payloadRef.current = payload
-  }, [payload])
+    payloadRef.current = runPayload
+  }, [runPayload])
 
   useEffect(() => {
     let active = true
@@ -356,7 +359,7 @@ function PluginList({
     return () => window.removeEventListener('resize', handleResize)
   }, [])
 
-  const payloadHash = useMemo(() => hashPayload(payload), [payload.text, payload.attachments])
+  const payloadHash = useMemo(() => hashPayload(searchPayload), [searchPayload.text, searchPayload.attachments])
   const maxItemsPerSection = Math.max(columns * 2, 2)
 
   useEffect(() => {
@@ -365,7 +368,7 @@ function PluginList({
     let systemTimer: ReturnType<typeof setTimeout> | null = null
 
     const runSearch = () => {
-      const currentPayload = payload
+      const currentPayload = searchPayload
       const searchToken = `${traceId}:${payloadHash}`
       if (launchedSearchTokenRef.current === searchToken) {
         return
@@ -422,8 +425,8 @@ function PluginList({
 
       const query = currentPayload.text.trim()
       const hasTextOnlyInput = query.length > 0 && currentPayload.attachments.length === 0
-      const shouldSearchApps = hasTextOnlyInput
-      const shouldSearchFiles = hasTextOnlyInput && query.length >= 2
+      const shouldSearchApps = hasTextOnlyInput && isSystemSearchQueryEligible(query)
+      const shouldSearchFiles = shouldSearchApps && query.length >= 2
 
       if (!hasTextOnlyInput) {
         setSystemApps([])
@@ -517,7 +520,7 @@ function PluginList({
         clearTimeout(systemTimer)
       }
     }
-  }, [payload, payloadHash, traceAttachmentCount, traceId, traceInputLength, traceSource, traceStartedAt])
+  }, [payloadHash, searchPayload, traceAttachmentCount, traceId, traceInputLength, traceSource, traceStartedAt])
 
   const promoteRecent = useCallback((pluginItem: SearchResultItem) => {
     setRecentPlugins((prev) => {
@@ -538,25 +541,25 @@ function PluginList({
   const bestPlugins = useMemo(() => {
     const sorted = dedupePluginResults(pluginResults).slice()
     sorted.sort((a, b) => {
-      const scoreDiff = getSearchScore(b, payload.text, recentOrderMap) - getSearchScore(a, payload.text, recentOrderMap)
+      const scoreDiff = getSearchScore(b, searchPayload.text, recentOrderMap) - getSearchScore(a, searchPayload.text, recentOrderMap)
       if (scoreDiff !== 0) return scoreDiff
       return a.displayName.localeCompare(b.displayName)
     })
     return sorted.slice(0, maxItemsPerSection)
-  }, [pluginResults, payload.text, recentOrderMap, maxItemsPerSection])
+  }, [pluginResults, searchPayload.text, recentOrderMap, maxItemsPerSection])
 
   const bestKeys = useMemo(() => {
     return new Set(bestPlugins.map((item) => getPluginKey(item)))
   }, [bestPlugins])
 
   const recentDisplayItems = useMemo(() => {
-    const filtered = payload.text.trim().length > 0
-      ? recentPlugins.filter((item) => isLooseMatch(item, payload.text))
+    const filtered = searchPayload.text.trim().length > 0
+      ? recentPlugins.filter((item) => isLooseMatch(item, searchPayload.text))
       : recentPlugins
     return filtered
       .filter((item) => !bestKeys.has(getPluginKey(item)))
       .slice(0, maxItemsPerSection)
-  }, [recentPlugins, payload.text, bestKeys, maxItemsPerSection])
+  }, [recentPlugins, searchPayload.text, bestKeys, maxItemsPerSection])
 
   const appDisplayItems = useMemo(() => {
     const seen = new Set<string>()
