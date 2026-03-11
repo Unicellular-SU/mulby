@@ -117,8 +117,8 @@ export default function LogViewerView({ onClose }: LogViewerViewProps) {
         return `${timeStr}.${ms}`
     }
 
-    const pillClass = 'rounded-full border border-slate-200 bg-white px-3 py-1 text-xs text-slate-600 shadow-sm transition hover:border-slate-300 hover:text-slate-900 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-300 dark:hover:text-white'
-    const primaryPillClass = 'rounded-full border border-slate-900 bg-slate-900 px-3 py-1 text-xs text-white shadow-sm transition dark:border-white dark:bg-white dark:text-slate-900'
+    const pillClass = 'rounded-full border border-slate-200 bg-white px-3 py-1 text-xs text-slate-600 shadow-sm transition hover:border-slate-300 hover:text-slate-900 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-300 dark:hover:text-white no-drag'
+    const primaryPillClass = 'rounded-full border border-slate-900 bg-slate-900 px-3 py-1 text-xs text-white shadow-sm transition dark:border-white dark:bg-white dark:text-slate-900 no-drag'
 
     return (
         <div className="relative h-full overflow-hidden bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-100">
@@ -145,7 +145,7 @@ export default function LogViewerView({ onClose }: LogViewerViewProps) {
                         <div className="text-xs uppercase tracking-[0.35em] text-slate-500 dark:text-slate-400">Developer</div>
                         <div className="text-lg font-semibold text-slate-900 dark:text-slate-100">日志查看器</div>
                     </div>
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 no-drag">
                         <button className={pillClass} onClick={handleOpenLogsDir}>
                             打开日志目录
                         </button>
@@ -159,7 +159,7 @@ export default function LogViewerView({ onClose }: LogViewerViewProps) {
                 </div>
 
                 {/* 过滤器 */}
-                <div className="flex flex-wrap items-center gap-4 border-b border-slate-200/70 bg-white/50 px-6 py-3  dark:border-slate-800/80 dark:bg-slate-900/40">
+                <div className="flex flex-wrap items-center gap-4 border-b border-slate-200/70 bg-white/50 px-6 py-3 no-drag dark:border-slate-800/80 dark:bg-slate-900/40">
                     {/* 级别过滤 */}
                     <div className="flex items-center gap-2">
                         <span className="text-xs text-slate-500 dark:text-slate-400">级别:</span>
@@ -180,7 +180,8 @@ export default function LogViewerView({ onClose }: LogViewerViewProps) {
                     <div className="flex items-center gap-2">
                         <span className="text-xs text-slate-500 dark:text-slate-400">插件:</span>
                         <UnifiedSelect
-                            wrapperClassName="w-44"
+                            wrapperClassName="w-44 no-drag"
+                            className="no-drag"
                             value={filterPlugin}
                             onChange={e => setFilterPlugin(e.target.value)}
                         >
@@ -195,7 +196,7 @@ export default function LogViewerView({ onClose }: LogViewerViewProps) {
                     <div className="flex-1 min-w-[200px]">
                         <input
                             type="text"
-                            className="w-full rounded-full border border-slate-200 bg-white px-4 py-1.5 text-xs text-slate-700 shadow-sm outline-none transition focus:border-slate-300 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-200"
+                            className="w-full rounded-full border border-slate-200 bg-white px-4 py-1.5 text-xs text-slate-700 shadow-sm outline-none transition focus:border-slate-300 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-200 no-drag"
                             placeholder="搜索日志内容..."
                             value={searchText}
                             onChange={e => setSearchText(e.target.value)}
