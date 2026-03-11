@@ -3,8 +3,12 @@ export interface PluginStorePlugin {
   name: string
   version: string
   author?: string
+  publisher?: string
   description: string
   downloadUrl: string
+  homepage?: string
+  repository?: string
+  sha256?: string
   lastPackageTime?: string
 }
 
@@ -25,6 +29,7 @@ export interface PluginStoreEntry {
   plugin: PluginStorePlugin
   sourceId: string
   sourceName: string
+  sourceUrl: string
   sourcePriority: number
   installState: PluginStoreInstallState
 }
@@ -50,6 +55,29 @@ export interface PluginStoreInstallFromUrlInput {
   downloadUrl: string
   sourceId?: string
   sourceName?: string
+  sourceUrl?: string
+  publisher?: string
+  homepage?: string
+  repository?: string
+  sha256?: string
+}
+
+export type PluginStoreIntegrityStatus = 'verified' | 'missing'
+
+export interface PluginStoreInstallResult {
+  success: boolean
+  pluginName?: string
+  pluginId?: string
+  action?: 'installed' | 'updated' | 'already-installed' | 'downgrade-blocked'
+  isUpdate?: boolean
+  oldVersion?: string
+  newVersion?: string
+  error?: string
+  sourceId?: string
+  sourceName?: string
+  sourceUrl?: string
+  integrityStatus?: PluginStoreIntegrityStatus
+  integrityDigest?: string
 }
 
 export type InstalledPluginUpdateStatus = 'updatable' | 'latest' | 'no-source'
@@ -64,6 +92,11 @@ export interface InstalledPluginUpdateInfo {
   downloadUrl?: string
   sourceId?: string
   sourceName?: string
+  sourceUrl?: string
+  publisher?: string
+  homepage?: string
+  repository?: string
+  sha256?: string
 }
 
 export interface InstalledPluginUpdateResult {

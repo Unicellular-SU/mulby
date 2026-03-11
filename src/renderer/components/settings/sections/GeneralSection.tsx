@@ -46,18 +46,17 @@ export default function GeneralSection({
           ))}
         </div>
       </div>
+
       <div className={`${cardClass} space-y-4`}>
         <div className="text-sm font-medium text-slate-900 dark:text-white">开机自启动</div>
         {!openAtLoginState.supported && (
           <div className="rounded-2xl border border-amber-200/80 bg-amber-50/70 px-3 py-2 text-xs text-amber-700 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-300">
-            当前平台暂不支持开机自启动管理（仅支持 macOS / Windows）。
+            当前平台暂不支持开机自启动管理，仅支持 macOS 和 Windows。
           </div>
         )}
         <div className="flex items-center justify-between">
-          <div>
-            <div className="text-xs text-slate-500 dark:text-slate-400">
-              状态：{openAtLoginState.enabled ? '已开启' : '已关闭'}
-            </div>
+          <div className="text-xs text-slate-500 dark:text-slate-400">
+            状态：{openAtLoginState.enabled ? '已开启' : '已关闭'}
           </div>
           <button
             disabled={!openAtLoginState.supported || startupBusy}
@@ -73,6 +72,7 @@ export default function GeneralSection({
           </button>
         </div>
       </div>
+
       {onOpenAiSettings && (
         <div className={`${cardClass} flex items-center justify-between gap-4`}>
           <div>
@@ -84,6 +84,7 @@ export default function GeneralSection({
           </button>
         </div>
       )}
+
       <div className={`${cardClass} flex items-center justify-between gap-4`}>
         <div>
           <div className="text-sm font-medium text-slate-900 dark:text-white">插件管理</div>
@@ -93,6 +94,7 @@ export default function GeneralSection({
           打开插件管理
         </button>
       </div>
+
       {onOpenBackgroundPluginManager && (
         <div className={`${cardClass} flex items-center justify-between gap-4`}>
           <div>
@@ -104,6 +106,7 @@ export default function GeneralSection({
           </button>
         </div>
       )}
+
       {onOpenTaskScheduler && (
         <div className={`${cardClass} flex items-center justify-between gap-4`}>
           <div>

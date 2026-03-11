@@ -11,14 +11,15 @@ import type {
   PluginStoreEntry,
   PluginStoreFetchResult,
   PluginStoreIndex,
+  PluginStoreInstallResult,
   PluginStoreInstallFromUrlInput,
   PluginStorePlugin,
   PluginStoreSourceSyncResult
 } from '../../shared/types/plugin-store'
 import { appSettingsManager } from '../services/app-settings'
-import type { InstallResult } from './installer'
 import { PluginInstaller } from './installer'
 import { PluginManager } from './manager'
+import { computeSha256Hex, isAllowedStoreTransport, normalizeSha256 } from './store-security'
 import { compareVersions } from './version'
 
 interface SourceFetchResult {
@@ -109,6 +110,7 @@ export class PluginStoreService {
         plugin,
         sourceId: source.id,
         sourceName: source.name,
+        sourceUrl: source.url,
         sourcePriority: source.priority,
         installState: {
           status,
@@ -164,7 +166,12 @@ export class PluginStoreService {
           remoteVersion: remote.plugin.version,
           downloadUrl: remote.plugin.downloadUrl,
           sourceId: remote.sourceId,
-          sourceName: remote.sourceName
+          sourceName: remote.sourceName,
+          sourceUrl: remote.sourceUrl,
+          publisher: remote.plugin.publisher,
+          homepage: remote.plugin.homepage,
+          repository: remote.plugin.repository,
+          sha256: remote.plugin.sha256
         }
       }
 
@@ -176,7 +183,12 @@ export class PluginStoreService {
         status: 'latest',
         remoteVersion: remote.plugin.version,
         sourceId: remote.sourceId,
-        sourceName: remote.sourceName
+        sourceName: remote.sourceName,
+        sourceUrl: remote.sourceUrl,
+        publisher: remote.plugin.publisher,
+        homepage: remote.plugin.homepage,
+        repository: remote.plugin.repository,
+        sha256: remote.plugin.sha256
       }
     })
 
@@ -194,10 +206,14 @@ export class PluginStoreService {
     }
   }
 
-  async installFromUrl(input: PluginStoreInstallFromUrlInput): Promise<InstallResult> {
+  async installFromUrl(input: PluginStoreInstallFromUrlInput): Promise<PluginStoreInstallResult> {
     const downloadUrl = String(input.downloadUrl || '').trim()
     if (!downloadUrl || !isHttpUrl(downloadUrl)) {
       return { success: false, error: '无效的下载地址' }
+    }
+
+    if (!isAllowedStoreTransport(downloadUrl)) {
+      return { success: false, error: 'Plugin downloads must use HTTPS. Only localhost may use HTTP.' }
     }
 
     const tempDir = join(app.getPath('temp'), 'mulby-plugin-store')
@@ -208,22 +224,61 @@ export class PluginStoreService {
     const safeId = String(input.pluginId || 'plugin').replace(/[^a-zA-Z0-9._-]/g, '_')
     const safeVersion = String(input.version || 'unknown').replace(/[^a-zA-Z0-9._-]/g, '_')
     const tempFilePath = join(tempDir, `${safeId}-${safeVersion}-${Date.now()}.inplugin`)
+    const expectedSha256 = normalizeSha256(input.sha256)
 
     try {
       const binary = await this.requestBinary(downloadUrl, DOWNLOAD_TIMEOUT_MS)
+      const integrityDigest = computeSha256Hex(binary)
+      if (expectedSha256 && integrityDigest !== expectedSha256) {
+        return {
+          success: false,
+          error: 'Downloaded plugin checksum did not match the store index.',
+          sourceId: input.sourceId,
+          sourceName: input.sourceName,
+          sourceUrl: input.sourceUrl,
+          integrityStatus: 'verified',
+          integrityDigest
+        }
+      }
       writeFileSync(tempFilePath, binary)
 
-      const result = await this.installer.install(tempFilePath)
+      const result = await this.installer.install(tempFilePath, {
+        sourceId: input.sourceId,
+        sourceName: input.sourceName,
+        sourceUrl: input.sourceUrl,
+        downloadUrl,
+        publisher: input.publisher,
+        homepage: input.homepage,
+        repository: input.repository,
+        sha256: expectedSha256,
+        integrityStatus: expectedSha256 ? 'verified' : 'missing',
+        integrityDigest,
+        downloadedAt: Date.now()
+      })
       if (result.success && result.action !== 'already-installed') {
         await this.manager.init()
         if (result.pluginName) {
           await this.manager.initializePlugin(result.pluginName)
         }
       }
-      return result
+      return {
+        ...result,
+        sourceId: input.sourceId,
+        sourceName: input.sourceName,
+        sourceUrl: input.sourceUrl,
+        integrityStatus: expectedSha256 ? 'verified' : 'missing',
+        integrityDigest
+      }
     } catch (error) {
       const message = error instanceof Error ? error.message : '下载或安装失败'
-      return { success: false, error: message }
+      return {
+        success: false,
+        error: message,
+        sourceId: input.sourceId,
+        sourceName: input.sourceName,
+        sourceUrl: input.sourceUrl,
+        integrityStatus: expectedSha256 ? 'verified' : 'missing'
+      }
     } finally {
       try {
         rmSync(tempFilePath, { force: true })
@@ -250,7 +305,12 @@ export class PluginStoreService {
         version: item.remoteVersion,
         downloadUrl: item.downloadUrl || '',
         sourceId: item.sourceId,
-        sourceName: item.sourceName
+        sourceName: item.sourceName,
+        sourceUrl: item.sourceUrl,
+        publisher: item.publisher,
+        homepage: item.homepage,
+        repository: item.repository,
+        sha256: item.sha256
       })
       results.push({
         pluginId: item.pluginId,
@@ -308,6 +368,16 @@ export class PluginStoreService {
           plugins: [],
           lastSyncAt,
           error: '来源地址必须为 http(s) URL'
+        }
+      }
+
+      if (!isAllowedStoreTransport(source.url)) {
+        return {
+          source,
+          success: false,
+          plugins: [],
+          lastSyncAt,
+          error: 'Store sources must use HTTPS. Only localhost may use HTTP.'
         }
       }
 
@@ -376,7 +446,14 @@ export class PluginStoreService {
       }
 
       const author = String(candidate.author || '').trim()
+      const publisher = String(candidate.publisher || '').trim()
       const lastPackageTime = String(candidate.lastPackageTime || '').trim()
+      const homepage = this.resolveOptionalUrl(candidate.homepage, sourceUrl)
+      const repository = this.resolveOptionalUrl(candidate.repository, sourceUrl)
+      const sha256 = normalizeSha256(candidate.sha256)
+      if (candidate.sha256 !== undefined && !sha256) {
+        continue
+      }
       plugins.push({
         id,
         name,
@@ -384,6 +461,10 @@ export class PluginStoreService {
         description,
         downloadUrl,
         author: author || undefined,
+        publisher: publisher || undefined,
+        homepage,
+        repository,
+        sha256,
         lastPackageTime: lastPackageTime || undefined
       })
     }
@@ -453,5 +534,16 @@ export class PluginStoreService {
       })
       request.end()
     })
+  }
+
+  private resolveOptionalUrl(value: unknown, baseUrl: string): string | undefined {
+    const raw = String(value || '').trim()
+    if (!raw) return undefined
+    try {
+      const resolved = new URL(raw, baseUrl).toString()
+      return isHttpUrl(resolved) ? resolved : undefined
+    } catch {
+      return undefined
+    }
   }
 }

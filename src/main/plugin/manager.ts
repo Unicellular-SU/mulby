@@ -198,9 +198,8 @@ export class PluginManager {
   private async loadPlugins() {
     await this.resetRuntimeForInit()
 
-    // 动态导入设置管理器，避免循环依赖
-    const { appSettingsManager } = await import('../services/app-settings')
-    const settings = appSettingsManager.getSettings()
+    const { getAppSettings } = await import('../services/app-settings-runtime')
+    const settings = getAppSettings()
     const developer = settings.developer
     const shouldWatchDevPlugins = developer.enabled && developer.autoReload !== false
 
@@ -667,8 +666,8 @@ export class PluginManager {
   }
 
   private async shouldAutoReloadDevPlugins(): Promise<boolean> {
-    const { appSettingsManager } = await import('../services/app-settings')
-    const developer = appSettingsManager.getSettings().developer
+    const { getAppSettings } = await import('../services/app-settings-runtime')
+    const developer = getAppSettings().developer
     return developer.enabled && developer.autoReload !== false
   }
 

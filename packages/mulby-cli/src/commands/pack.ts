@@ -3,6 +3,13 @@ import * as path from 'path'
 import archiver from 'archiver'
 import chalk from 'chalk'
 
+interface PluginPackageManifest {
+  name: string
+  version: string
+  preload?: string
+  dependencies?: Record<string, string>
+}
+
 export async function pack() {
   const cwd = process.cwd()
   const manifestPath = path.join(cwd, 'manifest.json')
@@ -33,14 +40,14 @@ export async function pack() {
 async function createArchive(
   cwd: string,
   outputPath: string,
-  manifest: any
+  manifest: PluginPackageManifest
 ): Promise<void> {
   return new Promise((resolve, reject) => {
     const output = fs.createWriteStream(outputPath)
     const archive = archiver('zip', { zlib: { level: 9 } })
 
     output.on('close', () => resolve())
-    archive.on('error', (err) => reject(err))
+    archive.on('error', (err: Error) => reject(err))
 
     archive.pipe(output)
 

@@ -47,6 +47,66 @@ function formatStoreSyncTime(timestamp?: number): string {
   return new Date(timestamp).toLocaleString()
 }
 
+function getStoreTransportMeta(url: string): { label: string; allowInstall: boolean; className: string } {
+  try {
+    const parsed = new URL(url)
+    if (parsed.protocol === 'https:') {
+      return {
+        label: 'HTTPS',
+        allowInstall: true,
+        className: 'border-emerald-200 text-emerald-700 dark:border-emerald-500/30 dark:text-emerald-300'
+      }
+    }
+    const hostname = parsed.hostname.toLowerCase()
+    if (parsed.protocol === 'http:' && ['localhost', '127.0.0.1', '::1', '[::1]'].includes(hostname)) {
+      return {
+        label: 'Local HTTP',
+        allowInstall: true,
+        className: 'border-blue-200 text-blue-700 dark:border-blue-500/30 dark:text-blue-300'
+      }
+    }
+    return {
+      label: 'Need HTTPS',
+      allowInstall: false,
+      className: 'border-amber-200 text-amber-700 dark:border-amber-500/30 dark:text-amber-300'
+    }
+  } catch {
+    return {
+      label: 'Invalid URL',
+      allowInstall: false,
+      className: 'border-red-200 text-red-700 dark:border-red-500/30 dark:text-red-300'
+    }
+  }
+}
+
+function getStoreIntegrityMeta(entry: PluginStoreEntry): { label: string; className: string } {
+  if (entry.plugin.sha256) {
+    return {
+      label: 'SHA256',
+      className: 'border-emerald-200 text-emerald-700 dark:border-emerald-500/30 dark:text-emerald-300'
+    }
+  }
+  return {
+    label: 'No checksum',
+    className: 'border-slate-200 text-slate-500 dark:border-slate-700 dark:text-slate-400'
+  }
+}
+
+function buildInstallMessage(
+  pluginName: string,
+  action: 'installed' | 'updated' | 'already-installed' | 'downgrade-blocked' | undefined,
+  integrityStatus?: 'verified' | 'missing'
+): string {
+  if (action === 'already-installed') {
+    return `插件 ${pluginName} 已是当前版本`
+  }
+  const actionText = action === 'updated' ? '更新成功' : '安装成功'
+  if (integrityStatus === 'verified') {
+    return `插件 ${pluginName} ${actionText}，SHA256 已校验`
+  }
+  return `插件 ${pluginName} ${actionText}，未提供 SHA256 校验`
+}
+
 function InfoItem({ label, value, mono = false }: { label: string; value?: string | number | ReactNode; mono?: boolean }) {
   const displayValue = value === undefined || value === null || value === '' ? '—' : value
   return (
@@ -490,7 +550,12 @@ export default function PluginManagerView({ onBack, initialSection = 'installed'
         version: entry.plugin.version,
         downloadUrl: entry.plugin.downloadUrl,
         sourceId: entry.sourceId,
-        sourceName: entry.sourceName
+        sourceName: entry.sourceName,
+        sourceUrl: entry.sourceUrl,
+        publisher: entry.plugin.publisher,
+        homepage: entry.plugin.homepage,
+        repository: entry.plugin.repository,
+        sha256: entry.plugin.sha256
       })
       if (!result.success) {
         window.mulby.notification.show(result.error || '安装失败', 'error')
@@ -503,6 +568,12 @@ export default function PluginManagerView({ onBack, initialSection = 'installed'
       } else {
         window.mulby.notification.show(`插件 ${entry.plugin.name} 安装成功`, 'success')
       }
+      if (result.integrityStatus === 'verified' && result.action !== 'already-installed') {
+        window.mulby.notification.show(`插件 ${entry.plugin.name} 的 SHA256 已通过校验`)
+      } else if (result.integrityStatus === 'missing' && result.action !== 'already-installed') {
+        window.mulby.notification.show(`插件 ${entry.plugin.name} 未提供 SHA256 校验信息`)
+      }
+      void buildInstallMessage(entry.plugin.name, result.action, result.integrityStatus)
       await Promise.all([refreshPlugins(), refreshUpdates(), loadStoreEntries()])
     } catch (err) {
       const message = err instanceof Error ? err.message : '安装失败'
@@ -522,13 +593,23 @@ export default function PluginManagerView({ onBack, initialSection = 'installed'
         version: update.remoteVersion,
         downloadUrl: update.downloadUrl,
         sourceId: update.sourceId,
-        sourceName: update.sourceName
+        sourceName: update.sourceName,
+        sourceUrl: update.sourceUrl,
+        publisher: update.publisher,
+        homepage: update.homepage,
+        repository: update.repository,
+        sha256: update.sha256
       })
       if (!result.success) {
         window.mulby.notification.show(result.error || '更新失败', 'error')
         return
       }
       window.mulby.notification.show(`插件 ${plugin.displayName} 已更新`, 'success')
+      if (result.integrityStatus === 'verified') {
+        window.mulby.notification.show(`插件 ${plugin.displayName} 的 SHA256 已通过校验`)
+      } else if (result.integrityStatus === 'missing') {
+        window.mulby.notification.show(`插件 ${plugin.displayName} 未提供 SHA256 校验信息`)
+      }
       await Promise.all([refreshPlugins(), refreshUpdates()])
     } catch (err) {
       const message = err instanceof Error ? err.message : '更新失败'
@@ -928,6 +1009,9 @@ export default function PluginManagerView({ onBack, initialSection = 'installed'
                     onChange={(e) => setStoreQuery(e.target.value)}
                   />
                 </div>
+                <div className="mb-3 rounded-2xl border border-slate-200/80 bg-slate-50/80 px-3 py-2 text-[11px] text-slate-500 dark:border-slate-800 dark:bg-slate-950/70 dark:text-slate-400">
+                  远程仓库源和下载链接默认要求 HTTPS。只有 localhost 可使用 HTTP；提供 SHA256 的插件会在安装前自动校验。
+                </div>
                 {filteredStoreEntries.length === 0 ? (
                   <div className="text-xs text-slate-500 dark:text-slate-400">
                     {storeLoading ? '正在加载仓库索引...' : '暂无可安装插件，请先添加并加载来源。'}
@@ -937,6 +1021,8 @@ export default function PluginManagerView({ onBack, initialSection = 'installed'
                     {filteredStoreEntries.map((entry) => {
                       const key = `${entry.plugin.id}:${entry.plugin.version}`
                       const status = entry.installState.status
+                      const transportMeta = getStoreTransportMeta(entry.plugin.downloadUrl)
+                      const integrityMeta = getStoreIntegrityMeta(entry)
                       const buttonLabel = status === 'updatable' ? '更新' : status === 'installed' ? '已安装' : '安装'
                       const disabled = status === 'installed' || storeInstallingKey === key
                       return (
@@ -948,6 +1034,12 @@ export default function PluginManagerView({ onBack, initialSection = 'installed'
                                 <span className="text-xs text-slate-500 dark:text-slate-400">v{entry.plugin.version}</span>
                                 <span className="rounded-full border border-slate-200 px-2 py-0.5 text-[10px] text-slate-500 dark:border-slate-700 dark:text-slate-400">
                                   {entry.sourceName}
+                                </span>
+                                <span className={`rounded-full border px-2 py-0.5 text-[10px] ${transportMeta.className}`}>
+                                  {transportMeta.label}
+                                </span>
+                                <span className={`rounded-full border px-2 py-0.5 text-[10px] ${integrityMeta.className}`}>
+                                  {integrityMeta.label}
                                 </span>
                               </div>
                               <div className="mt-1 text-xs text-slate-600 dark:text-slate-300">{entry.plugin.description}</div>
@@ -962,7 +1054,7 @@ export default function PluginManagerView({ onBack, initialSection = 'installed'
                                 ? 'inline-flex h-7 min-w-[68px] shrink-0 items-center justify-center whitespace-nowrap rounded-full border border-slate-900 bg-slate-900 px-3 text-xs text-white transition hover:bg-slate-800 dark:border-white dark:bg-white dark:text-slate-900 dark:hover:bg-slate-200'
                                 : 'inline-flex h-7 min-w-[68px] shrink-0 items-center justify-center whitespace-nowrap rounded-full border border-slate-200 bg-white px-3 text-xs text-slate-700 transition hover:border-slate-300 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-200'
                               }
-                              disabled={disabled}
+                              disabled={disabled || !transportMeta.allowInstall}
                               onClick={() => void installStorePlugin(entry)}
                             >
                               {storeInstallingKey === key ? '处理中...' : buttonLabel}

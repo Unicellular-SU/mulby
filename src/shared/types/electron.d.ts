@@ -18,6 +18,7 @@ import type {
   InstalledPluginUpdateResult,
   PluginStoreBatchUpdateResult,
   PluginStoreFetchResult,
+  PluginStoreInstallResult,
   PluginStoreInstallFromUrlInput
 } from './plugin-store'
 import type { Task, TaskExecution, TaskSchedulerEvent } from './task'
@@ -526,7 +527,7 @@ export interface ElectronAPI {
   }
   pluginStore: {
     fetch: () => Promise<PluginStoreFetchResult>
-    installFromUrl: (input: PluginStoreInstallFromUrlInput) => Promise<{ success: boolean; pluginName?: string; pluginId?: string; action?: 'installed' | 'updated' | 'already-installed' | 'downgrade-blocked'; isUpdate?: boolean; oldVersion?: string; newVersion?: string; error?: string }>
+    installFromUrl: (input: PluginStoreInstallFromUrlInput) => Promise<PluginStoreInstallResult>
     checkUpdatesInstalled: () => Promise<InstalledPluginUpdateResult>
     updateAll: (pluginIds?: string[]) => Promise<PluginStoreBatchUpdateResult>
   }

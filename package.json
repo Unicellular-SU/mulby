@@ -7,12 +7,16 @@
     "dev": "vite",
     "build": "tsc && vite build",
     "build:smoke": "npm run build",
+    "install:cli-deps": "npm ci --prefix packages/mulby-cli --no-audit --no-fund",
     "electron:dev": "vite",
     "electron:build": "vite build && electron-builder",
     "lint": "eslint src",
     "typecheck": "tsc --noEmit",
-    "test:unit": "node --import tsx --test src/main/ai/__tests__/*.test.ts src/main/services/__tests__/*.test.ts",
-    "verify": "npm run typecheck && npm run lint && npm run test:unit && npm run build:smoke"
+    "test:unit": "node scripts/run-unit-tests.mjs",
+    "verify:app": "npm run typecheck && npm run lint && npm run test:unit && npm run build:smoke",
+    "verify:cli": "npm run verify --prefix packages/mulby-cli",
+    "verify:repo": "npm run verify:app && npm run verify:cli",
+    "verify": "npm run verify:app"
   },
   "author": "",
   "license": "MIT",

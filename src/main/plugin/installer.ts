@@ -1,6 +1,6 @@
 import { app } from 'electron'
 import { join } from 'path'
-import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync } from 'fs'
+import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'fs'
 import extractZip from 'extract-zip'
 import { tmpdir } from 'os'
 import { compareVersions } from './version'
@@ -16,6 +16,21 @@ export interface InstallResult {
   oldVersion?: string
   newVersion?: string
   error?: string
+  installPath?: string
+}
+
+export interface PluginInstallSourceMetadata {
+  sourceId?: string
+  sourceName?: string
+  sourceUrl?: string
+  downloadUrl?: string
+  publisher?: string
+  homepage?: string
+  repository?: string
+  sha256?: string
+  integrityStatus?: 'verified' | 'missing'
+  integrityDigest?: string
+  downloadedAt?: number
 }
 
 export class PluginInstaller {
@@ -28,7 +43,7 @@ export class PluginInstaller {
     }
   }
 
-  async install(filePath: string): Promise<InstallResult> {
+  async install(filePath: string, sourceMetadata?: PluginInstallSourceMetadata): Promise<InstallResult> {
     if (!String(filePath).toLowerCase().endsWith('.inplugin')) {
       return { success: false, error: '无效的插件文件格式' }
     }
@@ -101,6 +116,14 @@ export class PluginInstaller {
 
       // 解压到插件目录
       await extractZip(filePath, { dir: targetDir })
+      if (sourceMetadata) {
+        this.writeInstallMetadata(targetDir, {
+          pluginId,
+          pluginName: String(manifest.name),
+          version: String(manifest.version || '0.0.0'),
+          ...sourceMetadata
+        })
+      }
       this.cleanupTemp(tempDir)
 
       return {
@@ -110,7 +133,8 @@ export class PluginInstaller {
         action,
         isUpdate,
         oldVersion,
-        newVersion: manifest.version
+        newVersion: manifest.version,
+        installPath: targetDir
       }
     } catch (err) {
       this.cleanupTemp(tempDir)
@@ -152,5 +176,31 @@ export class PluginInstaller {
         rmSync(tempDir, { recursive: true, force: true })
       }
     } catch {}
+  }
+
+  private writeInstallMetadata(
+    installPath: string,
+    payload: PluginInstallSourceMetadata & {
+      pluginId: string
+      pluginName: string
+      version: string
+    }
+  ): void {
+    try {
+      writeFileSync(
+        join(installPath, '.mulby-install.json'),
+        JSON.stringify(
+          {
+            ...payload,
+            installedAt: Date.now()
+          },
+          null,
+          2
+        ),
+        'utf-8'
+      )
+    } catch (error) {
+      console.warn('[PluginInstaller] Failed to write install metadata:', error)
+    }
   }
 }

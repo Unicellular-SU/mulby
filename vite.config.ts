@@ -2,6 +2,27 @@ import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import electron from 'vite-plugin-electron'
 import { resolve } from 'path'
+import { readFileSync } from 'fs'
+
+const packageJson = JSON.parse(readFileSync(resolve(__dirname, 'package.json'), 'utf8')) as {
+  dependencies?: Record<string, string>
+  optionalDependencies?: Record<string, string>
+}
+
+const runtimeDependencyNames = new Set([
+  ...Object.keys(packageJson.dependencies || {}),
+  ...Object.keys(packageJson.optionalDependencies || {})
+])
+
+function isRuntimeExternal(id: string): boolean {
+  if (id === 'electron') return true
+  for (const dependencyName of runtimeDependencyNames) {
+    if (id === dependencyName || id.startsWith(`${dependencyName}/`)) {
+      return true
+    }
+  }
+  return false
+}
 
 export default defineConfig({
   plugins: [
@@ -13,7 +34,7 @@ export default defineConfig({
           build: {
             outDir: 'dist/main',
             rollupOptions: {
-              external: ['electron', 'better-sqlite3', 'sharp']
+              external: isRuntimeExternal
             }
           }
         }

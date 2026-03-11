@@ -1,20 +1,31 @@
-import { useState, useEffect, useMemo, useCallback, useRef, type PointerEvent as ReactPointerEvent } from 'react'
+import {
+  Suspense,
+  lazy,
+  useState,
+  useEffect,
+  useMemo,
+  useCallback,
+  useRef,
+  type PointerEvent as ReactPointerEvent,
+  type ReactNode
+} from 'react'
 import SearchInput, { SearchInputRef, shouldUseSummaryText } from './components/SearchInput'
 import PluginList from './components/PluginList'
-import PluginDetails from './components/PluginDetails'
-import PluginManagerView from './components/PluginManagerView'
-import BackgroundPluginManagerView from './components/BackgroundPluginManagerView'
-import TaskSchedulerView from './components/TaskSchedulerView'
 import AttachmentManager from './components/AttachmentManager'
 import type { SettingsSection } from './components/SettingsView'
-import AiSettingsView from './components/AiSettingsView'
-import AiMcpSettingsView from './components/AiMcpSettingsView'
-import AiSkillsSettingsView from './components/AiSkillsSettingsView'
-import LogViewerView from './components/LogViewerView'
-import SystemPluginHost from './system-plugins/SystemPluginHost'
 import { DEFAULT_SYSTEM_PLUGIN_ROUTE, type SystemPluginRoute } from './system-plugins/types'
 import type { InputAttachment, InputPayload } from '../shared/types/plugin'
 import type { OpenSystemPluginPayload, SystemPluginBeforeAttachPayload } from '../shared/types/electron'
+
+const PluginDetails = lazy(() => import('./components/PluginDetails'))
+const PluginManagerView = lazy(() => import('./components/PluginManagerView'))
+const BackgroundPluginManagerView = lazy(() => import('./components/BackgroundPluginManagerView'))
+const TaskSchedulerView = lazy(() => import('./components/TaskSchedulerView'))
+const AiSettingsView = lazy(() => import('./components/AiSettingsView'))
+const AiMcpSettingsView = lazy(() => import('./components/AiMcpSettingsView'))
+const AiSkillsSettingsView = lazy(() => import('./components/AiSkillsSettingsView'))
+const LogViewerView = lazy(() => import('./components/LogViewerView'))
+const SystemPluginHost = lazy(() => import('./system-plugins/SystemPluginHost'))
 
 // 插件附着信息（Panel 模式）
 interface PluginInfo {
@@ -60,6 +71,22 @@ function parseSettingsSection(value: unknown): SettingsSection | null {
     return value as SettingsSection
   }
   return null
+}
+
+function LazyViewFrame({ isDragging, children }: { isDragging: boolean; children: ReactNode }) {
+  return (
+    <div className={`app ${isDragging ? 'dragging' : ''}`}>
+      <Suspense
+        fallback={
+          <div className="flex min-h-[320px] items-center justify-center text-sm text-slate-500 dark:text-slate-400">
+            Loading...
+          </div>
+        }
+      >
+        {children}
+      </Suspense>
+    </div>
+  )
 }
 
 type ViewMode =
@@ -968,7 +995,7 @@ function App() {
 
   if (viewMode === 'plugin-details' && detailsPluginName) {
     return (
-      <div className={`app ${isDragging ? 'dragging' : ''}`}>
+      <LazyViewFrame isDragging={isDragging}>
         <PluginDetails
           pluginName={detailsPluginName}
           onBack={() => {
@@ -976,13 +1003,13 @@ function App() {
             setViewMode(detailsReturnTarget === 'settings' ? 'system-plugin' : detailsReturnTarget === 'plugins' ? 'plugins' : 'home')
           }}
         />
-      </div>
+      </LazyViewFrame>
     )
   }
 
   if (viewMode === 'system-plugin') {
     return (
-      <div className={`app ${isDragging ? 'dragging' : ''}`}>
+      <LazyViewFrame isDragging={isDragging}>
         <SystemPluginHost
           route={systemPluginRoute}
           onSectionChange={(section) => {
@@ -1024,45 +1051,45 @@ function App() {
             setViewMode('home')
           }}
         />
-      </div>
+      </LazyViewFrame>
     )
   }
 
   if (viewMode === 'ai-settings') {
     return (
-      <div className={`app ${isDragging ? 'dragging' : ''}`}>
+      <LazyViewFrame isDragging={isDragging}>
         <AiSettingsView
           onBack={() => setViewMode('system-plugin')}
           onOpenMcpSettings={openAiMcpSettings}
           onOpenSkillsSettings={openAiSkillsSettings}
         />
-      </div>
+      </LazyViewFrame>
     )
   }
 
   if (viewMode === 'ai-mcp-settings') {
     return (
-      <div className={`app ${isDragging ? 'dragging' : ''}`}>
+      <LazyViewFrame isDragging={isDragging}>
         <AiMcpSettingsView
           onBack={() => setViewMode('ai-settings')}
         />
-      </div>
+      </LazyViewFrame>
     )
   }
 
   if (viewMode === 'ai-skills-settings') {
     return (
-      <div className={`app ${isDragging ? 'dragging' : ''}`}>
+      <LazyViewFrame isDragging={isDragging}>
         <AiSkillsSettingsView
           onBack={() => setViewMode('ai-settings')}
         />
-      </div>
+      </LazyViewFrame>
     )
   }
 
   if (viewMode === 'plugins') {
     return (
-      <div className={`app ${isDragging ? 'dragging' : ''}`}>
+      <LazyViewFrame isDragging={isDragging}>
         <PluginManagerView
           initialSection={pluginManagerSection}
           onBack={() => {
@@ -1077,13 +1104,13 @@ function App() {
             setViewMode('home')
           }}
         />
-      </div>
+      </LazyViewFrame>
     )
   }
 
   if (viewMode === 'background-plugins') {
     return (
-      <div className={`app ${isDragging ? 'dragging' : ''}`}>
+      <LazyViewFrame isDragging={isDragging}>
         <BackgroundPluginManagerView
           onBack={() => {
             if (backgroundPluginManagerReturnTarget === 'settings') {
@@ -1097,13 +1124,13 @@ function App() {
             setViewMode('home')
           }}
         />
-      </div>
+      </LazyViewFrame>
     )
   }
 
   if (viewMode === 'task-scheduler') {
     return (
-      <div className={`app ${isDragging ? 'dragging' : ''}`}>
+      <LazyViewFrame isDragging={isDragging}>
         <TaskSchedulerView
           onBack={() => {
             if (taskSchedulerReturnTarget === 'settings') {
@@ -1117,13 +1144,13 @@ function App() {
             setViewMode('home')
           }}
         />
-      </div>
+      </LazyViewFrame>
     )
   }
 
   if (viewMode === 'logs') {
     return (
-      <div className={`app ${isDragging ? 'dragging' : ''}`}>
+      <LazyViewFrame isDragging={isDragging}>
         <LogViewerView
           onClose={() => {
             if (logViewerReturnTarget === 'settings') {
@@ -1137,7 +1164,7 @@ function App() {
             setViewMode('home')
           }}
         />
-      </div>
+      </LazyViewFrame>
     )
   }
 

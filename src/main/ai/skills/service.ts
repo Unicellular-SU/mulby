@@ -57,12 +57,8 @@ let cachedDefaultRunCommand: DefaultRunCommand | null = null
 
 async function resolveDefaultRunCommand(): Promise<DefaultRunCommand> {
   if (cachedDefaultRunCommand) return cachedDefaultRunCommand
-  const commandRunnerModule = await import('../../services/command-runner')
-  cachedDefaultRunCommand = (input) =>
-    commandRunnerModule.commandRunnerService.runCommand(input, {
-      source: 'app',
-      assumeUserApproved: true
-    })
+  const commandRunnerModule = await import('../../services/command-runner-app-runtime')
+  cachedDefaultRunCommand = commandRunnerModule.runCommandAsApp
   return cachedDefaultRunCommand
 }
 
