@@ -91,9 +91,9 @@ function buildWindowSurfaceCss(includeTitleBar: boolean): string {
   const contentRadius = includeTitleBar
     ? `0 0 ${WINDOW_SURFACE_RADIUS_PX}px ${WINDOW_SURFACE_RADIUS_PX}px`
     : `${WINDOW_SURFACE_RADIUS_PX}px`
-  const hostHeight = contentTopPadding > 0
-    ? `calc(100% - ${contentTopPadding + bottom}px)`
-    : '100%'
+  // body already uses border-box + padding to reserve top/bottom insets, so host should
+  // fill the body content box directly instead of subtracting those insets again.
+  const hostHeight = '100%'
 
   return `
 html,
