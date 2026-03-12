@@ -6,6 +6,8 @@ interface SearchInputProps {
   summaryText: string
   onChange: (value: string) => void
   onSummaryChange: (value: string) => void
+  onOpenSettings: () => void
+  showSettingsButton: boolean
   attachments: UiAttachment[]
   onAttachmentsChange: (attachments: UiAttachment[]) => void
   attachmentsManagerOpen: boolean
@@ -53,6 +55,14 @@ type SummaryInfo = {
   meta: string
 }
 
+const CLEAR_INPUT_LABEL = '\u6e05\u7a7a\u8f93\u5165'
+const SEARCH_PLACEHOLDER = '\u8f93\u5165\u5173\u952e\u8bcd\u641c\u7d22\u63d2\u4ef6...'
+const ATTACHMENTS_LABEL = '\u9644\u4ef6'
+const CLEAR_ATTACHMENTS_LABEL = '\u6e05\u7a7a\u9644\u4ef6'
+const COLLAPSE_LABEL = '\u6536\u8d77'
+const MANAGE_LABEL = '\u7ba1\u7406'
+const OPEN_SETTINGS_LABEL = '\u6253\u5f00\u8bbe\u7f6e'
+
 function isInpluginFile(file: DroppedFile): boolean {
   const normalizedName = String(file.name || '').toLowerCase()
   const normalizedPath = String(file.path || '').toLowerCase()
@@ -64,6 +74,8 @@ const SearchInput = forwardRef<SearchInputRef, SearchInputProps>(function Search
   summaryText,
   onChange,
   onSummaryChange,
+  onOpenSettings,
+  showSettingsButton,
   attachments,
   onAttachmentsChange,
   attachmentsManagerOpen,
@@ -235,6 +247,10 @@ const SearchInput = forwardRef<SearchInputRef, SearchInputProps>(function Search
     focusAtEnd()
   }, [focusAtEnd])
 
+  const handleOpenSettings = useCallback(() => {
+    onOpenSettings()
+  }, [onOpenSettings])
+
   return (
     <div className={`search-box ${attachments.length > 0 ? 'has-attachments' : ''}`}>
       <svg className="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor">
@@ -252,7 +268,7 @@ const SearchInput = forwardRef<SearchInputRef, SearchInputProps>(function Search
               className="input-summary-clear"
               type="button"
               onClick={handleClearSummary}
-              aria-label="\u6e05\u7a7a\u8f93\u5165"
+              aria-label={CLEAR_INPUT_LABEL}
             >
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
                 <path d="M18 6L6 18M6 6l12 12" />
@@ -264,7 +280,7 @@ const SearchInput = forwardRef<SearchInputRef, SearchInputProps>(function Search
           ref={inputRef}
           rows={1}
           className="search-input"
-          placeholder={subInput.enabled ? subInput.placeholder : '\u8f93\u5165\u5173\u952e\u8bcd\u641c\u7d22\u63d2\u4ef6...'}
+          placeholder={subInput.enabled ? subInput.placeholder : SEARCH_PLACEHOLDER}
           value={displayValue}
           onChange={handleInputChange}
           onKeyDown={(e) => {
@@ -304,15 +320,15 @@ const SearchInput = forwardRef<SearchInputRef, SearchInputProps>(function Search
         {attachments.length > 0 && (
           <div className="attachment-summary attachment-summary-inline no-drag">
             <div className="attachment-summary-info">
-              {'\u9644\u4ef6'} {attachments.length} {'\u00b7'} {formatBytes(totalAttachmentSize)}
+              {ATTACHMENTS_LABEL} {attachments.length} {'\u00b7'} {formatBytes(totalAttachmentSize)}
             </div>
             <div className="attachment-summary-actions">
               <button
                 type="button"
                 className="attachment-summary-clear"
                 onClick={handleClearAttachments}
-                aria-label="\u6e05\u7a7a\u9644\u4ef6"
-                title="\u6e05\u7a7a\u9644\u4ef6"
+                aria-label={CLEAR_ATTACHMENTS_LABEL}
+                title={CLEAR_ATTACHMENTS_LABEL}
               >
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                   <path d="M18 6L6 18M6 6l12 12" />
@@ -324,17 +340,36 @@ const SearchInput = forwardRef<SearchInputRef, SearchInputProps>(function Search
                 onClick={handleToggleManager}
                 aria-expanded={attachmentsManagerOpen}
               >
-                {attachmentsManagerOpen ? '\u6536\u8d77' : '\u7ba1\u7406'}
+                {attachmentsManagerOpen ? COLLAPSE_LABEL : MANAGE_LABEL}
               </button>
             </div>
           </div>
         )}
       </div>
-      {subInput.enabled && (
-        <div className="subinput-indicator" title={`SubInput ${'\u6a21\u5f0f'}`}>
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-            <path d="M12 19V5M5 12l7-7 7 7" />
-          </svg>
+      {(showSettingsButton || subInput.enabled) && (
+        <div className="search-box-actions no-drag">
+          {showSettingsButton && (
+            <button
+              type="button"
+              className="search-settings-button"
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={handleOpenSettings}
+              aria-label={OPEN_SETTINGS_LABEL}
+              title={OPEN_SETTINGS_LABEL}
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true">
+                <circle cx="12" cy="12" r="3.25" />
+                <path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.1 1.6c.2.1.4.1.6.1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z" />
+              </svg>
+            </button>
+          )}
+          {subInput.enabled && (
+            <div className="subinput-indicator" title={`SubInput ${'\u6a21\u5f0f'}`}>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M12 19V5M5 12l7-7 7 7" />
+              </svg>
+            </div>
+          )}
         </div>
       )}
     </div>

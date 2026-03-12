@@ -539,6 +539,13 @@ function App() {
     setViewMode('system-plugin')
   }, [isSystemWindow, pluginOpen])
 
+  const showSearchSettingsButton =
+    query.trim().length === 0 &&
+    payloadText.trim().length === 0 &&
+    attachments.length === 0 &&
+    !pluginOpen &&
+    !systemPageAttached
+
   const openPluginManager = useCallback((from: 'home' | 'settings' = 'home', section: 'installed' | 'store' = 'installed') => {
     if (pluginOpen) {
       window.mulby.window.close()
@@ -1201,27 +1208,29 @@ function App() {
       )}
       <div className={`app app-home ${isDragging ? 'dragging' : ''}`}>
         <div className={`search-box-container ${hasBottomPanel ? 'with-bottom-panel' : ''}`}>
-        <SearchInput
-          ref={searchInputRef}
-          value={query}
-          summaryText={payloadText}
-          onChange={handleQueryChange}
-          onSummaryChange={handlePayloadTextChange}
-          attachments={attachments}
-          onAttachmentsChange={handleAttachmentsChange}
-          attachmentsManagerOpen={attachmentsManagerOpen}
-          onAttachmentsManagerOpen={() => {
-            if (pluginOpen) {
-              window.mulby.window.close()
-              setPluginOpen(false)
-            }
-            if (systemPageAttached) {
-              void window.mulby.systemPage.close()
-            }
-            setAttachmentsManagerOpen(true)
-          }}
-          onAttachmentsManagerClose={() => setAttachmentsManagerOpen(false)}
-        />
+          <SearchInput
+            ref={searchInputRef}
+            value={query}
+            summaryText={payloadText}
+            onChange={handleQueryChange}
+            onSummaryChange={handlePayloadTextChange}
+            onOpenSettings={openSettings}
+            showSettingsButton={showSearchSettingsButton}
+            attachments={attachments}
+            onAttachmentsChange={handleAttachmentsChange}
+            attachmentsManagerOpen={attachmentsManagerOpen}
+            onAttachmentsManagerOpen={() => {
+              if (pluginOpen) {
+                window.mulby.window.close()
+                setPluginOpen(false)
+              }
+              if (systemPageAttached) {
+                void window.mulby.systemPage.close()
+              }
+              setAttachmentsManagerOpen(true)
+            }}
+            onAttachmentsManagerClose={() => setAttachmentsManagerOpen(false)}
+          />
         {pluginOpen && (
           <div className="plugin-controls">
             <button
