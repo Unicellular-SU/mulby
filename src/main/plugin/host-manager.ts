@@ -40,6 +40,39 @@ interface PluginHost {
 // ============ 常量 ============
 
 const REQUEST_TIMEOUT = 30000  // 30 秒请求超时
+const utf8FatalDecoder = new TextDecoder('utf-8', { fatal: true })
+const gb18030Decoder = createGb18030Decoder()
+
+function createGb18030Decoder(): TextDecoder | null {
+  if (process.platform !== 'win32') return null
+  try {
+    return new TextDecoder('gb18030')
+  } catch {
+    return null
+  }
+}
+
+function decodeHostOutput(chunk: Buffer): string {
+  const utf8 = chunk.toString('utf8')
+  if (!gb18030Decoder || isValidUtf8(chunk)) {
+    return utf8
+  }
+
+  try {
+    return gb18030Decoder.decode(chunk)
+  } catch {
+    return utf8
+  }
+}
+
+function isValidUtf8(chunk: Buffer): boolean {
+  try {
+    utf8FatalDecoder.decode(chunk)
+    return true
+  } catch {
+    return false
+  }
+}
 
 export class PluginHostManager extends EventEmitter {
   private hosts: Map<string, PluginHost> = new Map()
@@ -236,13 +269,13 @@ export class PluginHostManager extends EventEmitter {
     })
 
     // 监听标准输出（调试用）
-    child.stdout?.on('data', (data) => {
-      console.log(`[${pluginName}] stdout:`, data.toString())
+    child.stdout?.on('data', (data: Buffer) => {
+      console.log(`[${pluginName}] stdout:`, decodeHostOutput(data))
     })
 
     // 监听标准错误
-    child.stderr?.on('data', (data) => {
-      console.error(`[${pluginName}] stderr:`, data.toString())
+    child.stderr?.on('data', (data: Buffer) => {
+      console.error(`[${pluginName}] stderr:`, decodeHostOutput(data))
     })
   }
 

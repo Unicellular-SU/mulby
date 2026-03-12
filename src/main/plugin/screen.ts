@@ -217,31 +217,54 @@ export class PluginScreen {
   ): Promise<Buffer> {
     const format = options.format || 'png'
     const quality = options.quality || 90
-
-    // 获取包含该区域的显示器
-    const display = screen.getDisplayNearestPoint({ x: region.x, y: region.y })
+    const normalizedRegion = normalizeCaptureRegion(region)
+    const display = screen.getDisplayMatching(normalizedRegion)
 
     // 获取该显示器的截图
     const sources = await desktopCapturer.getSources({
       types: ['screen'],
       thumbnailSize: {
-        width: display.bounds.width * display.scaleFactor,
-        height: display.bounds.height * display.scaleFactor
+        width: Math.max(1, Math.round(display.bounds.width * display.scaleFactor)),
+        height: Math.max(1, Math.round(display.bounds.height * display.scaleFactor))
       }
     })
 
-    const source = sources.find(s => s.display_id === String(display.id)) || sources[0]
+    const source = sources.find((s) => s.display_id === String(display.id)) || sources[0]
     if (!source) {
       throw new Error('No screen source available')
     }
 
     // 裁剪区域
     const image = source.thumbnail
+    const imageSize = image.getSize()
+    if (imageSize.width <= 0 || imageSize.height <= 0) {
+      throw new Error('Invalid screen source thumbnail size')
+    }
+
+    const logicalLeft = Math.max(normalizedRegion.x, display.bounds.x)
+    const logicalTop = Math.max(normalizedRegion.y, display.bounds.y)
+    const logicalRight = Math.min(normalizedRegion.x + normalizedRegion.width, display.bounds.x + display.bounds.width)
+    const logicalBottom = Math.min(normalizedRegion.y + normalizedRegion.height, display.bounds.y + display.bounds.height)
+    if (logicalRight <= logicalLeft || logicalBottom <= logicalTop) {
+      throw new Error('Selected region is outside the current display bounds')
+    }
+
+    const scaleFactor = display.scaleFactor || 1
+    const rawCropX = Math.round((logicalLeft - display.bounds.x) * scaleFactor)
+    const rawCropY = Math.round((logicalTop - display.bounds.y) * scaleFactor)
+    const rawCropWidth = Math.max(1, Math.round((logicalRight - logicalLeft) * scaleFactor))
+    const rawCropHeight = Math.max(1, Math.round((logicalBottom - logicalTop) * scaleFactor))
+    const cropX = clampInteger(rawCropX, 0, Math.max(0, imageSize.width - 1))
+    const cropY = clampInteger(rawCropY, 0, Math.max(0, imageSize.height - 1))
+    const maxCropWidth = Math.max(1, imageSize.width - cropX)
+    const maxCropHeight = Math.max(1, imageSize.height - cropY)
+    const cropWidth = Math.min(rawCropWidth, maxCropWidth)
+    const cropHeight = Math.min(rawCropHeight, maxCropHeight)
     const cropped = image.crop({
-      x: Math.max(0, region.x - display.bounds.x) * display.scaleFactor,
-      y: Math.max(0, region.y - display.bounds.y) * display.scaleFactor,
-      width: region.width * display.scaleFactor,
-      height: region.height * display.scaleFactor
+      x: cropX,
+      y: cropY,
+      width: cropWidth,
+      height: cropHeight
     })
 
     if (format === 'jpeg') {
@@ -272,5 +295,35 @@ export class PluginScreen {
   }
 }
 
+function normalizeCaptureRegion(region: { x: number; y: number; width: number; height: number }): {
+  x: number
+  y: number
+  width: number
+  height: number
+} {
+  const rawX = Number.isFinite(region.x) ? region.x : 0
+  const rawY = Number.isFinite(region.y) ? region.y : 0
+  const rawWidth = Number.isFinite(region.width) ? region.width : 0
+  const rawHeight = Number.isFinite(region.height) ? region.height : 0
+  const x = rawWidth >= 0 ? rawX : rawX + rawWidth
+  const y = rawHeight >= 0 ? rawY : rawY + rawHeight
+  const width = Math.max(1, Math.round(Math.abs(rawWidth)))
+  const height = Math.max(1, Math.round(Math.abs(rawHeight)))
+
+  return {
+    x: Math.round(x),
+    y: Math.round(y),
+    width,
+    height
+  }
+}
+
+function clampInteger(value: number, min: number, max: number): number {
+  if (max < min) return min
+  const rounded = Math.round(value)
+  if (rounded <= min) return min
+  if (rounded >= max) return max
+  return rounded
+}
 // 单例
 export const pluginScreen = new PluginScreen()

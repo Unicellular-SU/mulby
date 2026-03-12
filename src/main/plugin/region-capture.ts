@@ -41,16 +41,19 @@ function getRegionCaptureHTML(displayInfo: object): string {
     let isDrawing = false, startX = 0, startY = 0, currentX = 0, currentY = 0;
     
     function resizeCanvas() {
-      canvas.width = window.innerWidth * window.devicePixelRatio;
-      canvas.height = window.innerHeight * window.devicePixelRatio;
+      const dpr = Math.max(1, window.devicePixelRatio || 1);
+      canvas.width = Math.max(1, Math.round(window.innerWidth * dpr));
+      canvas.height = Math.max(1, Math.round(window.innerHeight * dpr));
       canvas.style.width = window.innerWidth + 'px';
       canvas.style.height = window.innerHeight + 'px';
-      ctx.scale(window.devicePixelRatio, window.devicePixelRatio);
+      // Reset transform before scaling to avoid cumulative scaling after repeated resize events.
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+      ctx.scale(dpr, dpr);
       draw();
     }
     
     function draw() {
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.clearRect(0, 0, window.innerWidth, window.innerHeight);
       ctx.fillStyle = 'rgba(0,0,0,0.5)';
       ctx.fillRect(0, 0, window.innerWidth, window.innerHeight);
       if (isDrawing) {
@@ -159,7 +162,7 @@ export async function startRegionCapture(): Promise<string | null> {
         resizable: false,
         movable: false,
         fullscreenable: true,
-        simpleFullscreen: true, // macOS: 使用简单全屏模式
+        simpleFullscreen: process.platform === 'darwin', // Only meaningful on macOS.
         enableLargerThanScreen: true,
         hasShadow: false,
         show: false, // 先隐藏，等加载完成后显示
@@ -170,11 +173,9 @@ export async function startRegionCapture(): Promise<string | null> {
         }
       })
 
-      // 设置全屏并确保覆盖整个显示器
-      win.setSimpleFullScreen(true)
-
       // macOS 特殊处理
       if (process.platform === 'darwin') {
+        win.setSimpleFullScreen(true)
         win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true })
         win.setAlwaysOnTop(true, 'screen-saver')
       }

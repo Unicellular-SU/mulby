@@ -454,17 +454,8 @@ function formatBytes(bytes: number): string {
   return `${size.toFixed(size < 10 ? 1 : 0)} ${units[unitIndex]}`
 }
 
-const SUMMARY_THRESHOLD = 400
 const SUMMARY_PREVIEW_HEAD_LENGTH = 12
 const SUMMARY_PREVIEW_TAIL_LENGTH = 12
-
-function shouldUseSummary(text: string): boolean {
-  return hasMultipleLines(text) || text.length > SUMMARY_THRESHOLD
-}
-
-function hasMultipleLines(text: string): boolean {
-  return normalizeSummaryText(text).includes('\n')
-}
 
 function buildSummary(text: string): SummaryInfo {
   const normalized = normalizeSummaryText(text)
@@ -509,10 +500,6 @@ function compactSummaryPreviewText(text: string): string {
   return normalizeSummaryText(text)
     .replace(/[\s\u3000]+/g, '')
     .trim()
-}
-
-export function shouldUseSummaryText(text: string): boolean {
-  return shouldUseSummary(text)
 }
 
 export default SearchInput

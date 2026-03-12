@@ -9,9 +9,10 @@ import {
   type PointerEvent as ReactPointerEvent,
   type ReactNode
 } from 'react'
-import SearchInput, { SearchInputRef, shouldUseSummaryText } from './components/SearchInput'
+import SearchInput, { SearchInputRef } from './components/SearchInput'
 import PluginList from './components/PluginList'
 import AttachmentManager from './components/AttachmentManager'
+import { shouldUseSummaryText } from './utils/summary-text'
 import type { SettingsSection } from './components/SettingsView'
 import { DEFAULT_SYSTEM_PLUGIN_ROUTE, type SystemPluginRoute } from './system-plugins/types'
 import type { InputAttachment, InputPayload } from '../shared/types/plugin'
