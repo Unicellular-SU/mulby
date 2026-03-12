@@ -12,3 +12,4 @@ release
 build
 cs
 package-lock.json
+.tmp-*

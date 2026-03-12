@@ -69,18 +69,24 @@
   "optionalDependencies": {
     "node-mac-permissions": "^2.5.0"
   },
-  "build": {
-    "appId": "com.mulby.app",
-    "productName": "Mulby",
-    "directories": {
-      "output": "release"
-    },
-    "mac": {
-      "category": "public.app-category.developer-tools",
-      "target": [
-        "dmg",
-        "zip"
+    "build": {
+      "appId": "com.mulby.app",
+      "productName": "Mulby",
+      "files": [
+        "dist/**/*",
+        "package.json"
       ],
+      "directories": {
+        "output": "release",
+        "buildResources": "build"
+      },
+      "mac": {
+        "icon": "icon.icns",
+        "category": "public.app-category.developer-tools",
+        "target": [
+          "dmg",
+          "zip"
+        ],
       "extendInfo": {
         "NSLocationWhenInUseUsageDescription": "Mulby 需要访问您的位置以提供位置相关功能（如地图定位、天气查询等）",
         "NSLocationUsageDescription": "Mulby 需要访问您的位置以提供位置相关功能",
@@ -97,23 +103,34 @@
       "node_modules/@img/sharp-libvips-*/**/*"
     ],
     "afterPack": "scripts/electron-builder-after-pack.cjs",
-    "extraResources": [
-      {
-        "from": "resources/bin",
-        "to": "bin"
+      "extraResources": [
+        {
+          "from": "resources/bin",
+          "to": "bin"
+        },
+        {
+          "from": "resources/tray",
+          "to": "resources/tray"
+        }
+      ],
+      "win": {
+        "icon": "icon.ico",
+        "target": [
+          "nsis",
+          "portable"
+        ]
+      },
+      "nsis": {
+        "installerIcon": "build/icon.ico",
+        "uninstallerIcon": "build/icon.ico",
+        "installerHeaderIcon": "build/icon.ico"
+      },
+      "linux": {
+        "icon": "build/icons/linux",
+        "target": [
+          "AppImage",
+          "deb"
+        ]
       }
-    ],
-    "win": {
-      "target": [
-        "nsis",
-        "portable"
-      ]
-    },
-    "linux": {
-      "target": [
-        "AppImage",
-        "deb"
-      ]
-    }
   }
 }

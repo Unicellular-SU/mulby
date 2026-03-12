@@ -1,0 +1,4 @@
+interface:
+  display_name: "Generate Electron Icons"
+  short_description: "Generate Electron app and tray icons from SVG."
+  default_prompt: "Generate Electron application and tray icons from the provided SVG files, output ready-to-use ICO, ICNS, and PNG assets in cross-platform sizes, and copy them into the project if requested."
