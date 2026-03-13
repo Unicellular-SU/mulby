@@ -1,11 +1,31 @@
+export type PluginStoreIconKind = 'url' | 'emoji'
+
+export interface PluginStoreIcon {
+  type: PluginStoreIconKind
+  value: string
+}
+
+export interface PluginStoreScreenshot {
+  url: string
+  caption?: string
+}
+
 export interface PluginStorePlugin {
   id: string
   name: string
+  displayName?: string
   version: string
   author?: string
   publisher?: string
   description: string
   downloadUrl: string
+  icon?: PluginStoreIcon
+  banner?: string
+  screenshots?: PluginStoreScreenshot[]
+  details?: string
+  tags?: string[]
+  categories?: string[]
+  license?: string
   homepage?: string
   repository?: string
   sha256?: string

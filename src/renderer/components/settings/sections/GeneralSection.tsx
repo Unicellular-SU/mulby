@@ -73,6 +73,26 @@ export default function GeneralSection({
         </div>
       </div>
 
+      <div className={`${cardClass} flex items-center justify-between gap-4`}>
+        <div>
+          <div className="text-sm font-medium text-slate-900 dark:text-white">插件管理</div>
+          <div className="text-xs text-slate-500 dark:text-slate-400">管理插件启用状态、更新与卸载</div>
+        </div>
+        <button className={primaryPillClass} onClick={() => onOpenPluginManager('installed')}>
+          打开插件管理
+        </button>
+      </div>
+
+      <div className={`${cardClass} flex items-center justify-between gap-4`}>
+        <div>
+          <div className="text-sm font-medium text-slate-900 dark:text-white">插件商店</div>
+          <div className="text-xs text-slate-500 dark:text-slate-400">浏览在线插件、查看详情并安装新插件</div>
+        </div>
+        <button className={primaryPillClass} onClick={() => onOpenPluginManager('store')}>
+          打开插件商店
+        </button>
+      </div>
+
       {onOpenAiSettings && (
         <div className={`${cardClass} flex items-center justify-between gap-4`}>
           <div>
@@ -85,15 +105,7 @@ export default function GeneralSection({
         </div>
       )}
 
-      <div className={`${cardClass} flex items-center justify-between gap-4`}>
-        <div>
-          <div className="text-sm font-medium text-slate-900 dark:text-white">插件管理</div>
-          <div className="text-xs text-slate-500 dark:text-slate-400">管理插件启用状态、更新与卸载</div>
-        </div>
-        <button className={primaryPillClass} onClick={() => onOpenPluginManager('installed')}>
-          打开插件管理
-        </button>
-      </div>
+
 
       {onOpenBackgroundPluginManager && (
         <div className={`${cardClass} flex items-center justify-between gap-4`}>

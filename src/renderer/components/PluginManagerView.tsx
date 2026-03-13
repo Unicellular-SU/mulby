@@ -9,6 +9,7 @@ import type { InstalledPluginUpdateInfo, PluginStoreEntry, PluginStoreSourceSync
 
 interface PluginManagerViewProps {
   onBack: () => void
+  onOpenStore?: () => void
   initialSection?: 'installed' | 'store'
 }
 
@@ -383,7 +384,7 @@ function PluginDetailsPanel({ pluginName, onClose, onUninstall }: { pluginName: 
   )
 }
 
-export default function PluginManagerView({ onBack, initialSection = 'installed' }: PluginManagerViewProps) {
+export default function PluginManagerView({ onBack, onOpenStore, initialSection = 'installed' }: PluginManagerViewProps) {
   const [section, setSection] = useState<'installed' | 'store'>(initialSection)
   const [plugins, setPlugins] = useState<PluginInfo[]>([])
   const [runningPlugins, setRunningPlugins] = useState<BackgroundPluginInfo[]>([])
@@ -754,6 +755,14 @@ export default function PluginManagerView({ onBack, initialSection = 'installed'
           <div className="flex items-center gap-2">
             {section === 'installed' ? (
               <>
+                {onOpenStore && (
+                  <button
+                    className={topGhostButtonClass}
+                    onClick={onOpenStore}
+                  >
+                    前往插件商店
+                  </button>
+                )}
                 <button
                   className={topGhostButtonClass}
                   onClick={() => void refreshUpdates()}
@@ -798,31 +807,6 @@ export default function PluginManagerView({ onBack, initialSection = 'installed'
               disabled={pluginLoading}
             >
               {pluginLoading ? '刷新中...' : '刷新'}
-            </button>
-          </div>
-        </div>
-
-        <div className="border-b border-slate-200/70 bg-white px-6 py-3 dark:border-slate-800/80 dark:bg-slate-900 no-drag">
-          <div className="mb-0 inline-flex items-center gap-1 rounded-full border border-slate-200 bg-slate-50 p-1 dark:border-slate-700 dark:bg-slate-800/60">
-            <button
-              className={`no-drag rounded-full px-3 py-1 text-xs transition ${
-                section === 'installed'
-                  ? 'bg-white text-slate-900 shadow-sm dark:bg-slate-900 dark:text-slate-100'
-                  : 'text-slate-500 hover:text-slate-800 dark:text-slate-300 dark:hover:text-white'
-              }`}
-              onClick={() => setSection('installed')}
-            >
-              已安装插件
-            </button>
-            <button
-              className={`no-drag rounded-full px-3 py-1 text-xs transition ${
-                section === 'store'
-                  ? 'bg-white text-slate-900 shadow-sm dark:bg-slate-900 dark:text-slate-100'
-                  : 'text-slate-500 hover:text-slate-800 dark:text-slate-300 dark:hover:text-white'
-              }`}
-              onClick={() => setSection('store')}
-            >
-              在线商店
             </button>
           </div>
         </div>
@@ -1008,9 +992,6 @@ export default function PluginManagerView({ onBack, initialSection = 'installed'
                     value={storeQuery}
                     onChange={(e) => setStoreQuery(e.target.value)}
                   />
-                </div>
-                <div className="mb-3 rounded-2xl border border-slate-200/80 bg-slate-50/80 px-3 py-2 text-[11px] text-slate-500 dark:border-slate-800 dark:bg-slate-950/70 dark:text-slate-400">
-                  远程仓库源和下载链接默认要求 HTTPS。只有 localhost 可使用 HTTP；提供 SHA256 的插件会在安装前自动校验。
                 </div>
                 {filteredStoreEntries.length === 0 ? (
                   <div className="text-xs text-slate-500 dark:text-slate-400">

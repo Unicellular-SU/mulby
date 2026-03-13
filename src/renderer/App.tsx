@@ -17,9 +17,12 @@ import type { SettingsSection } from './components/SettingsView'
 import { DEFAULT_SYSTEM_PLUGIN_ROUTE, type SystemPluginRoute } from './system-plugins/types'
 import type { InputAttachment, InputPayload } from '../shared/types/plugin'
 import type { OpenSystemPluginPayload, SystemPluginBeforeAttachPayload } from '../shared/types/electron'
+import type { PluginStoreEntry } from '../shared/types/plugin-store'
 
 const PluginDetails = lazy(() => import('./components/PluginDetails'))
 const PluginManagerView = lazy(() => import('./components/PluginManagerView'))
+const PluginStoreView = lazy(() => import('./components/PluginStoreView'))
+const PluginStoreDetailsView = lazy(() => import('./components/PluginStoreDetailsView'))
 const BackgroundPluginManagerView = lazy(() => import('./components/BackgroundPluginManagerView'))
 const TaskSchedulerView = lazy(() => import('./components/TaskSchedulerView'))
 const AiSettingsView = lazy(() => import('./components/AiSettingsView'))
@@ -74,6 +77,21 @@ function parseSettingsSection(value: unknown): SettingsSection | null {
   return null
 }
 
+function buildPluginStoreBreadcrumbs(
+  pluginStoreReturnTarget: 'home' | 'settings' | 'plugins',
+  pluginManagerReturnTarget: 'home' | 'settings'
+): string[] {
+  if (pluginStoreReturnTarget === 'settings') {
+    return ['设置', '插件商店']
+  }
+  if (pluginStoreReturnTarget === 'plugins') {
+    return pluginManagerReturnTarget === 'settings'
+      ? ['设置', '插件管理', '插件商店']
+      : ['主页', '插件管理', '插件商店']
+  }
+  return ['主页', '插件商店']
+}
+
 function LazyViewFrame({ isDragging, children }: { isDragging: boolean; children: ReactNode }) {
   return (
     <div className={`app ${isDragging ? 'dragging' : ''}`}>
@@ -95,6 +113,8 @@ type ViewMode =
   | 'plugin-details'
   | 'system-plugin'
   | 'plugins'
+  | 'plugin-store'
+  | 'plugin-store-details'
   | 'logs'
   | 'background-plugins'
   | 'task-scheduler'
@@ -106,7 +126,6 @@ interface SystemWindowBootstrap {
   isSystemWindow: boolean
   initialViewMode: ViewMode
   initialSystemPluginRoute: SystemPluginRoute
-  initialPluginManagerSection: 'installed' | 'store'
 }
 
 interface SystemPageState {
@@ -144,8 +163,7 @@ function parseSystemWindowBootstrap(): SystemWindowBootstrap {
     return {
       isSystemWindow: false,
       initialViewMode: 'home',
-      initialSystemPluginRoute: DEFAULT_SYSTEM_PLUGIN_ROUTE,
-      initialPluginManagerSection: 'installed'
+      initialSystemPluginRoute: DEFAULT_SYSTEM_PLUGIN_ROUTE
     }
   }
 
@@ -154,7 +172,6 @@ function parseSystemWindowBootstrap(): SystemWindowBootstrap {
   const shortcutCommandHint = params.get('mulbySystemHint') || ''
 
   let initialViewMode: ViewMode = 'home'
-  let initialPluginManagerSection: 'installed' | 'store' = 'installed'
 
   switch (page) {
     case 'settings':
@@ -162,11 +179,9 @@ function parseSystemWindowBootstrap(): SystemWindowBootstrap {
       break
     case 'plugin-manager':
       initialViewMode = 'plugins'
-      initialPluginManagerSection = 'installed'
       break
     case 'plugin-store':
-      initialViewMode = 'plugins'
-      initialPluginManagerSection = 'store'
+      initialViewMode = 'plugin-store'
       break
     case 'background-plugins':
       initialViewMode = 'background-plugins'
@@ -200,8 +215,7 @@ function parseSystemWindowBootstrap(): SystemWindowBootstrap {
         section,
         shortcutCommandHint
       }
-    },
-    initialPluginManagerSection
+    }
   }
 }
 
@@ -223,7 +237,8 @@ function App() {
   const [viewMode, setViewMode] = useState<ViewMode>(systemWindowBootstrap.initialViewMode)
   const [systemPluginRoute, setSystemPluginRoute] = useState<SystemPluginRoute>(systemWindowBootstrap.initialSystemPluginRoute)
   const [pluginManagerReturnTarget, setPluginManagerReturnTarget] = useState<'home' | 'settings'>('home')
-  const [pluginManagerSection, setPluginManagerSection] = useState<'installed' | 'store'>(systemWindowBootstrap.initialPluginManagerSection)
+  const [pluginStoreReturnTarget, setPluginStoreReturnTarget] = useState<'home' | 'settings' | 'plugins'>('home')
+  const [selectedStoreEntry, setSelectedStoreEntry] = useState<PluginStoreEntry | null>(null)
   const [backgroundPluginManagerReturnTarget, setBackgroundPluginManagerReturnTarget] = useState<'home' | 'settings'>('home')
   const [taskSchedulerReturnTarget, setTaskSchedulerReturnTarget] = useState<'home' | 'settings'>('home')
   const [logViewerReturnTarget, setLogViewerReturnTarget] = useState<'home' | 'settings'>('home')
@@ -285,6 +300,15 @@ function App() {
 
     return { managerHeight, listHeight }
   }, [attachments.length])
+
+  const pluginStoreBreadcrumbItems = useMemo(
+    () => buildPluginStoreBreadcrumbs(pluginStoreReturnTarget, pluginManagerReturnTarget),
+    [pluginManagerReturnTarget, pluginStoreReturnTarget]
+  )
+  const pluginStoreDetailsBreadcrumbItems = useMemo(
+    () => [...pluginStoreBreadcrumbItems, '插件详情'],
+    [pluginStoreBreadcrumbItems]
+  )
 
   const systemPageAttached = !isSystemWindow && systemPageState.open && systemPageState.mode === 'attached'
   const hasTextInput = query.length > 0 || payloadText.length > 0
@@ -547,22 +571,38 @@ function App() {
     !pluginOpen &&
     !systemPageAttached
 
-  const openPluginManager = useCallback((from: 'home' | 'settings' = 'home', section: 'installed' | 'store' = 'installed') => {
+  const openPluginStore = useCallback((from: 'home' | 'settings' | 'plugins' = 'home') => {
     if (pluginOpen) {
       window.mulby.window.close()
       setPluginOpen(false)
     }
     setAttachmentsManagerOpen(false)
     if (!isSystemWindow) {
-      void window.mulby.systemPage.open({
-        page: section === 'store' ? 'plugin-store' : 'plugin-manager'
-      })
+      void window.mulby.systemPage.open({ page: 'plugin-store' })
+      return
+    }
+    setPluginStoreReturnTarget(from)
+    setSelectedStoreEntry(null)
+    setViewMode('plugin-store')
+  }, [isSystemWindow, pluginOpen])
+
+  const openPluginManager = useCallback((from: 'home' | 'settings' = 'home', section: 'installed' | 'store' = 'installed') => {
+    if (section === 'store') {
+      openPluginStore(from)
+      return
+    }
+    if (pluginOpen) {
+      window.mulby.window.close()
+      setPluginOpen(false)
+    }
+    setAttachmentsManagerOpen(false)
+    if (!isSystemWindow) {
+      void window.mulby.systemPage.open({ page: 'plugin-manager' })
       return
     }
     setPluginManagerReturnTarget(from)
-    setPluginManagerSection(section)
     setViewMode('plugins')
-  }, [isSystemWindow, pluginOpen])
+  }, [isSystemWindow, openPluginStore, pluginOpen])
 
   const openBackgroundPluginManager = useCallback((from: 'home' | 'settings' = 'home') => {
     if (pluginOpen) {
@@ -730,10 +770,10 @@ function App() {
 
   useEffect(() => {
     const cleanup = window.mulby.app.onOpenPluginStore(() => {
-      openPluginManager('home', 'store')
+      openPluginStore('home')
     })
     return cleanup
-  }, [openPluginManager])
+  }, [openPluginStore])
 
   useEffect(() => {
     const cleanup = window.mulby.app.onOpenPluginManager(() => {
@@ -1099,7 +1139,7 @@ function App() {
     return (
       <LazyViewFrame isDragging={isDragging}>
         <PluginManagerView
-          initialSection={pluginManagerSection}
+          onOpenStore={() => openPluginStore('plugins')}
           onBack={() => {
             if (pluginManagerReturnTarget === 'settings') {
               setViewMode('system-plugin')
@@ -1110,6 +1150,55 @@ function App() {
               return
             }
             setViewMode('home')
+          }}
+        />
+      </LazyViewFrame>
+    )
+  }
+
+  if (viewMode === 'plugin-store') {
+    return (
+      <LazyViewFrame isDragging={isDragging}>
+        <PluginStoreView
+          breadcrumbItems={pluginStoreBreadcrumbItems}
+          onOpenDetails={(entry) => {
+            setSelectedStoreEntry(entry)
+            setViewMode('plugin-store-details')
+          }}
+          onBack={() => {
+            setSelectedStoreEntry(null)
+            if (pluginStoreReturnTarget === 'plugins') {
+              setViewMode('plugins')
+              return
+            }
+            if (pluginStoreReturnTarget === 'settings') {
+              setViewMode('system-plugin')
+              return
+            }
+            if (isSystemWindow) {
+              void window.mulby.systemPage.close()
+              return
+            }
+            setViewMode('home')
+          }}
+        />
+      </LazyViewFrame>
+    )
+  }
+
+  if (viewMode === 'plugin-store-details' && selectedStoreEntry) {
+    return (
+      <LazyViewFrame isDragging={isDragging}>
+        <PluginStoreDetailsView
+          breadcrumbItems={pluginStoreDetailsBreadcrumbItems}
+          entry={selectedStoreEntry}
+          onClose={() => {
+            setSelectedStoreEntry(null)
+            setViewMode('plugin-store')
+          }}
+          onBack={() => {
+            setSelectedStoreEntry(null)
+            setViewMode('plugin-store')
           }}
         />
       </LazyViewFrame>

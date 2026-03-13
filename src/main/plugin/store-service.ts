@@ -10,10 +10,12 @@ import type {
   PluginStoreBatchUpdateResult,
   PluginStoreEntry,
   PluginStoreFetchResult,
+  PluginStoreIcon,
   PluginStoreIndex,
   PluginStoreInstallResult,
   PluginStoreInstallFromUrlInput,
   PluginStorePlugin,
+  PluginStoreScreenshot,
   PluginStoreSourceSyncResult
 } from '../../shared/types/plugin-store'
 import { appSettingsManager } from '../services/app-settings'
@@ -124,7 +126,7 @@ export class PluginStoreService {
       const statusRank: Record<string, number> = { updatable: 0, 'not-installed': 1, installed: 2 }
       const statusDiff = statusRank[a.installState.status] - statusRank[b.installState.status]
       if (statusDiff !== 0) return statusDiff
-      return a.plugin.name.localeCompare(b.plugin.name)
+      return this.getPluginLabel(a.plugin).localeCompare(this.getPluginLabel(b.plugin))
     })
 
     return {
@@ -428,10 +430,20 @@ export class PluginStoreService {
       const candidate = row as Record<string, unknown>
       const id = String(candidate.id || '').trim()
       const name = String(candidate.name || '').trim()
+      const displayName = this.resolveOptionalText(candidate.displayName)
       const pluginVersion = String(candidate.version || '').trim()
-      const description = String(candidate.description || '').trim()
+      const description = this.resolveOptionalText(candidate.description)
+      const details = this.resolveOptionalText(candidate.details)
+        || this.resolveOptionalText(candidate.detail)
+        || this.resolveOptionalText(candidate.longDescription)
+        || this.resolveOptionalText(candidate.readme)
       const rawDownloadUrl = String(candidate.downloadUrl || '').trim()
-      if (!id || !name || !pluginVersion || !description || !rawDownloadUrl) {
+      if (!id || !name || !pluginVersion || !rawDownloadUrl) {
+        continue
+      }
+
+      const summary = description || details
+      if (!summary) {
         continue
       }
 
@@ -448,6 +460,15 @@ export class PluginStoreService {
       const author = String(candidate.author || '').trim()
       const publisher = String(candidate.publisher || '').trim()
       const lastPackageTime = String(candidate.lastPackageTime || '').trim()
+      const icon = this.resolveStoreIcon(candidate.icon ?? candidate.iconUrl, sourceUrl)
+      const banner = this.resolveOptionalUrl(candidate.banner ?? candidate.bannerUrl, sourceUrl)
+      const screenshots = this.resolveStoreScreenshots(
+        candidate.screenshots ?? candidate.screenShots ?? candidate.gallery,
+        sourceUrl
+      )
+      const tags = this.resolveOptionalStringList(candidate.tags)
+      const categories = this.resolveOptionalStringList(candidate.categories)
+      const license = this.resolveOptionalText(candidate.license)
       const homepage = this.resolveOptionalUrl(candidate.homepage, sourceUrl)
       const repository = this.resolveOptionalUrl(candidate.repository, sourceUrl)
       const sha256 = normalizeSha256(candidate.sha256)
@@ -457,11 +478,19 @@ export class PluginStoreService {
       plugins.push({
         id,
         name,
+        displayName,
         version: pluginVersion,
-        description,
+        description: summary,
         downloadUrl,
         author: author || undefined,
         publisher: publisher || undefined,
+        icon,
+        banner,
+        screenshots,
+        details,
+        tags,
+        categories,
+        license,
         homepage,
         repository,
         sha256,
@@ -534,6 +563,76 @@ export class PluginStoreService {
       })
       request.end()
     })
+  }
+
+  private getPluginLabel(plugin: PluginStorePlugin): string {
+    return String(plugin.displayName || plugin.name || plugin.id).trim()
+  }
+
+  private resolveOptionalText(value: unknown): string | undefined {
+    const text = String(value || '').trim()
+    return text || undefined
+  }
+
+  private resolveOptionalStringList(value: unknown): string[] | undefined {
+    const normalized = Array.isArray(value)
+      ? value.map((item) => String(item || '').trim())
+      : typeof value === 'string'
+        ? value.split(',').map((item) => item.trim())
+        : []
+    const deduped = Array.from(new Set(normalized.filter(Boolean)))
+    return deduped.length > 0 ? deduped : undefined
+  }
+
+  private resolveStoreIcon(value: unknown, baseUrl: string): PluginStoreIcon | undefined {
+    if (typeof value === 'string') {
+      const raw = value.trim()
+      if (!raw) return undefined
+      const resolved = this.resolveOptionalUrl(raw, baseUrl)
+      if (resolved) return { type: 'url', value: resolved }
+      if (raw.length <= 4) return { type: 'emoji', value: raw }
+      return undefined
+    }
+
+    if (!value || typeof value !== 'object' || Array.isArray(value)) {
+      return undefined
+    }
+
+    const icon = value as Record<string, unknown>
+    const iconType = String(icon.type || '').trim().toLowerCase()
+    const rawValue = String(icon.value ?? icon.url ?? '').trim()
+    if (!rawValue) return undefined
+    if (iconType === 'emoji') {
+      return { type: 'emoji', value: rawValue }
+    }
+    const resolved = this.resolveOptionalUrl(rawValue, baseUrl)
+    if (!resolved) return undefined
+    return { type: 'url', value: resolved }
+  }
+
+  private resolveStoreScreenshots(value: unknown, baseUrl: string): PluginStoreScreenshot[] | undefined {
+    if (!Array.isArray(value)) return undefined
+    const screenshots: PluginStoreScreenshot[] = []
+    for (const row of value) {
+      if (typeof row === 'string') {
+        const url = this.resolveOptionalUrl(row, baseUrl)
+        if (url) {
+          screenshots.push({ url })
+        }
+        continue
+      }
+
+      if (!row || typeof row !== 'object' || Array.isArray(row)) {
+        continue
+      }
+
+      const shot = row as Record<string, unknown>
+      const url = this.resolveOptionalUrl(shot.url ?? shot.src, baseUrl)
+      if (!url) continue
+      const caption = this.resolveOptionalText(shot.caption ?? shot.title ?? shot.alt)
+      screenshots.push(caption ? { url, caption } : { url })
+    }
+    return screenshots.length > 0 ? screenshots : undefined
   }
 
   private resolveOptionalUrl(value: unknown, baseUrl: string): string | undefined {
