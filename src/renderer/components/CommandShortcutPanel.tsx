@@ -67,11 +67,6 @@ function getBindingStateLabel(state: PluginCommandShortcutBindingRecord['state']
   }
 }
 
-function getCommandTypeLabel(command: PluginCommandItem): string {
-  if (command.commandKind === 'launch') return '功能指令'
-  return '匹配指令'
-}
-
 function getMatchTypeLabel(command: PluginCommandItem): string {
   switch (command.cmdType) {
     case 'regex':
@@ -635,16 +630,13 @@ export default function CommandShortcutPanel({
                                   {command.featureExplain}
                                 </div>
                               </div>
-                              <div className="flex items-center gap-2">
-                                <span className="rounded-full border border-slate-200 bg-white px-2 py-0.5 text-[10px] text-slate-600 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300">
-                                  {getCommandTypeLabel(command)}
-                                </span>
-                                {command.disabled && (
+                              {command.disabled && (
+                                <div className="flex items-center gap-2">
                                   <span className="rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] text-amber-700 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-300">
                                     已禁用
                                   </span>
-                                )}
-                              </div>
+                                </div>
+                              )}
                             </div>
                           </button>
                         ))}
@@ -670,16 +662,13 @@ export default function CommandShortcutPanel({
                                   {command.featureExplain}
                                 </div>
                               </div>
-                              <div className="flex items-center gap-2">
-                                <span className="rounded-full border border-slate-200 bg-white px-2 py-0.5 text-[10px] text-slate-600 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300">
-                                  {getCommandTypeLabel(command)}
-                                </span>
-                                {command.disabled && (
+                              {command.disabled && (
+                                <div className="flex items-center gap-2">
                                   <span className="rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] text-amber-700 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-300">
                                     已禁用
                                   </span>
-                                )}
-                              </div>
+                                </div>
+                              )}
                             </div>
                           </button>
                         ))}
