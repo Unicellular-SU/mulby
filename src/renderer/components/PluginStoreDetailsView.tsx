@@ -5,7 +5,6 @@ import StorePluginDetailsPage from './StorePluginDetailsPage'
 interface PluginStoreDetailsViewProps {
   entry: PluginStoreEntry
   onBack: () => void
-  onClose: () => void
 }
 
 function buildInstalledState(entry: PluginStoreEntry): PluginStoreEntry {
@@ -21,8 +20,7 @@ function buildInstalledState(entry: PluginStoreEntry): PluginStoreEntry {
 
 export default function PluginStoreDetailsView({
   entry,
-  onBack,
-  onClose
+  onBack
 }: PluginStoreDetailsViewProps) {
   const [currentEntry, setCurrentEntry] = useState(entry)
   const [installing, setInstalling] = useState(false)
@@ -81,7 +79,6 @@ export default function PluginStoreDetailsView({
       entry={currentEntry}
       installing={installing}
       onBack={onBack}
-      onClose={onClose}
       onInstall={(nextEntry) => void handleInstall(nextEntry)}
     />
   )

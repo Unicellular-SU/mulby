@@ -17,6 +17,7 @@ import {
 } from './window-surface'
 
 const ATTACHED_SYSTEM_SHADOW_MARGIN = 12
+const WINDOWS_ATTACHED_SHOW_OPACITY_GUARD_MS = 50
 const ATTACHED_SYSTEM_SHADOW_HTML = `<!doctype html>
 <html>
 <head>
@@ -95,6 +96,8 @@ export class SystemPageWindowManager {
   private syncScheduled = false
   private preferredAttachedHeight = ATTACHED_PANEL_HEIGHT
   private syncingBounds = false
+  private attachedWindowHasBeenShown = false
+  private attachedOpacityRestoreTimer: NodeJS.Timeout | null = null
 
   private shouldUseAttachedShadowWindow(): boolean {
     return process.platform !== 'win32'
@@ -264,6 +267,7 @@ export class SystemPageWindowManager {
       }
       this.showAttachedShadow()
       this.attachedWindow.show()
+      this.attachedWindowHasBeenShown = true
       if (this.currentRoute) {
         this.dispatchRoute(this.attachedWindow, this.currentRoute)
       }
@@ -548,6 +552,7 @@ export class SystemPageWindowManager {
 
   hideAttached(): void {
     const attached = this.getAttachedWindow()
+    this.clearAttachedOpacityRestoreTimer(true)
     if (attached) {
       attached.hide()
     }
@@ -562,8 +567,27 @@ export class SystemPageWindowManager {
       this.createAttachedShadowWindow(main)
     }
     this.syncPosition()
+    const needsOpacityGuard = process.platform === 'win32'
+      && this.attachedWindowHasBeenShown
+      && !attached.isVisible()
+    this.clearAttachedOpacityRestoreTimer(false)
+    if (needsOpacityGuard) {
+      attached.setOpacity(0)
+    } else {
+      attached.setOpacity(1)
+    }
     this.showAttachedShadow()
     attached.showInactive()
+    this.attachedWindowHasBeenShown = true
+    if (needsOpacityGuard) {
+      attached.webContents.invalidate()
+      this.attachedOpacityRestoreTimer = setTimeout(() => {
+        this.attachedOpacityRestoreTimer = null
+        const activeAttached = this.getAttachedWindow()
+        if (!activeAttached || !activeAttached.isVisible()) return
+        activeAttached.setOpacity(1)
+      }, WINDOWS_ATTACHED_SHOW_OPACITY_GUARD_MS)
+    }
   }
 
   closeAll(): void {
@@ -841,12 +865,26 @@ export class SystemPageWindowManager {
   }
 
   private cleanupAttached(): void {
+    this.clearAttachedOpacityRestoreTimer(true)
     this.removePositionSync()
     this.closeAttachedShadow()
     this.attachedWindow = null
     this.syncScheduled = false
     this.preferredAttachedHeight = ATTACHED_PANEL_HEIGHT
     this.syncingBounds = false
+    this.attachedWindowHasBeenShown = false
+  }
+
+  private clearAttachedOpacityRestoreTimer(resetOpacity: boolean): void {
+    if (this.attachedOpacityRestoreTimer) {
+      clearTimeout(this.attachedOpacityRestoreTimer)
+      this.attachedOpacityRestoreTimer = null
+    }
+    if (!resetOpacity) return
+    if (process.platform !== 'win32') return
+    const attached = this.getAttachedWindow()
+    if (!attached) return
+    attached.setOpacity(1)
   }
 
   private suppressSystemContextMenu(win: BrowserWindow): void {

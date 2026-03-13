@@ -1166,10 +1166,6 @@ function App() {
       <LazyViewFrame isDragging={isDragging}>
         <PluginStoreDetailsView
           entry={selectedStoreEntry}
-          onClose={() => {
-            setSelectedStoreEntry(null)
-            setViewMode('plugin-store')
-          }}
           onBack={() => {
             setSelectedStoreEntry(null)
             setViewMode('plugin-store')

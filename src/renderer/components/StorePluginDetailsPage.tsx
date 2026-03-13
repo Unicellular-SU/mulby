@@ -9,7 +9,6 @@ interface StorePluginDetailsPageProps {
   entry: PluginStoreEntry
   installing: boolean
   onBack?: () => void
-  onClose: () => void
   onInstall: (entry: PluginStoreEntry) => void
 }
 
@@ -201,7 +200,6 @@ export default function StorePluginDetailsPage({
   entry,
   installing,
   onBack,
-  onClose,
   onInstall
 }: StorePluginDetailsPageProps) {
   const title = getStorePluginDisplayName(entry.plugin)
@@ -219,7 +217,6 @@ export default function StorePluginDetailsPage({
       ? '已安装'
       : '安装插件'
   const actionDisabled = entry.installState.status === 'installed' || installing || !transportMeta.allowInstall
-  const topGhostButtonClass = 'inline-flex h-8 items-center justify-center whitespace-nowrap rounded-full border border-slate-200 bg-white px-3 text-xs leading-none text-slate-700 transition hover:border-slate-300 hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-60 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-200 no-drag'
   const topPrimaryButtonClass = 'inline-flex h-8 items-center justify-center whitespace-nowrap rounded-full border border-slate-300 bg-white px-3 text-xs leading-none text-slate-900 transition hover:border-slate-400 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 dark:hover:border-slate-500 dark:hover:bg-slate-800 no-drag'
   const topEmphasisButtonClass = 'inline-flex h-8 items-center justify-center whitespace-nowrap rounded-full border border-slate-900 bg-slate-900 px-3 text-xs leading-none text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60 dark:border-white dark:bg-white dark:text-slate-900 dark:hover:bg-slate-200 no-drag'
   const cardClass = 'rounded-2xl border border-slate-200/80 bg-white p-5 dark:border-slate-800/80 dark:bg-slate-900'
