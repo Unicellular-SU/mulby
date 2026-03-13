@@ -28,6 +28,7 @@ export class AIAgent {
     private planCommandHandler: PlanCommandHandler;
     private currentPlan: TaskPlan | null = null;
     private lastCompressedTokens: number = 0;  // 记录上次压缩后的 token 数
+    private lastPluginValidation: { passed: boolean; report: string } | null = null;
 
 
     constructor(private session: GenerationSession, private systemPrompt?: string) {
@@ -325,6 +326,8 @@ export class AIAgent {
                 return await this.handleFetchUrl(args.url);
             case 'check_types':
                 return await this.handleCheckTypes();
+            case 'validate_plugin':
+                return await this.handleValidatePlugin(args.runBuild);
 
             // Legacy/Deprecated
             case 'plan_files':
@@ -434,6 +437,7 @@ export class AIAgent {
         const fullPath = path.resolve(this.session.targetDir, filePath);
         try {
             await fs.remove(fullPath);
+            this.invalidatePluginValidation();
             tui.log(chalk.yellow(`  ✓ Deleted ${filePath}`));
             return `Deleted ${filePath}`;
         } catch (e: any) {
@@ -446,6 +450,7 @@ export class AIAgent {
         const fullDest = path.resolve(this.session.targetDir, dest);
         try {
             await fs.move(fullSource, fullDest, { overwrite: true });
+            this.invalidatePluginValidation();
             tui.log(chalk.yellow(`  ✓ Moved ${source} -> ${dest}`));
             return `Moved ${source} to ${dest}`;
         } catch (e: any) {
@@ -483,6 +488,214 @@ export class AIAgent {
         }
     }
 
+    private async handleValidatePlugin(runBuild: boolean = true): Promise<string> {
+        tui.log(chalk.cyan('  🔍 Validating Mulby plugin integration...'));
+
+        const errors: string[] = [];
+        const warnings: string[] = [];
+        const info: string[] = [];
+
+        const manifestPath = path.join(this.session.targetDir, 'manifest.json');
+        const packageJsonPath = path.join(this.session.targetDir, 'package.json');
+        const srcMainPath = path.join(this.session.targetDir, 'src', 'main.ts');
+        const srcUiAppPath = path.join(this.session.targetDir, 'src', 'ui', 'App.tsx');
+
+        let manifest: any = null;
+        let packageJson: any = null;
+
+        if (!await fs.pathExists(manifestPath)) {
+            errors.push('缺少 manifest.json。');
+        } else {
+            try {
+                manifest = await fs.readJson(manifestPath);
+                info.push('manifest.json 可读取且 JSON 解析成功。');
+            } catch (e: any) {
+                errors.push(`manifest.json 解析失败: ${e.message}`);
+            }
+        }
+
+        if (await fs.pathExists(packageJsonPath)) {
+            try {
+                packageJson = await fs.readJson(packageJsonPath);
+                info.push('package.json 可读取。');
+            } catch (e: any) {
+                warnings.push(`package.json 解析失败: ${e.message}`);
+            }
+        } else {
+            warnings.push('缺少 package.json，无法完整验证构建流程。');
+        }
+
+        if (manifest) {
+            const requiredStringFields = ['name', 'displayName', 'version', 'description', 'main'] as const;
+            for (const field of requiredStringFields) {
+                if (typeof manifest[field] !== 'string' || manifest[field].trim().length === 0) {
+                    errors.push(`manifest.json 缺少必填字符串字段 "${field}"。`);
+                }
+            }
+
+            if (typeof manifest.id !== 'string' || manifest.id.trim().length === 0) {
+                warnings.push('manifest.json 未声明 id，建议显式配置稳定的插件 ID。');
+            }
+
+            if (!Array.isArray(manifest.features) || manifest.features.length === 0) {
+                errors.push('manifest.json 必须包含至少一个 features 项。');
+            } else {
+                const seenCodes = new Set<string>();
+                const allowedCommandTypes = new Set(['keyword', 'regex', 'files', 'img', 'over']);
+
+                manifest.features.forEach((feature: any, index: number) => {
+                    const prefix = `features[${index}]`;
+                    if (!feature || typeof feature !== 'object') {
+                        errors.push(`${prefix} 必须是对象。`);
+                        return;
+                    }
+
+                    if (typeof feature.code !== 'string' || feature.code.trim().length === 0) {
+                        errors.push(`${prefix}.code 不能为空。`);
+                    } else if (seenCodes.has(feature.code)) {
+                        errors.push(`feature.code "${feature.code}" 重复。`);
+                    } else {
+                        seenCodes.add(feature.code);
+                    }
+
+                    if (typeof feature.explain !== 'string' || feature.explain.trim().length === 0) {
+                        warnings.push(`${prefix}.explain 建议填写清晰描述。`);
+                    }
+
+                    if (!Array.isArray(feature.cmds) || feature.cmds.length === 0) {
+                        errors.push(`${prefix}.cmds 至少需要一个触发器。`);
+                    } else {
+                        feature.cmds.forEach((cmd: any, cmdIndex: number) => {
+                            const cmdPrefix = `${prefix}.cmds[${cmdIndex}]`;
+                            if (!cmd || typeof cmd !== 'object') {
+                                errors.push(`${cmdPrefix} 必须是对象。`);
+                                return;
+                            }
+
+                            if (typeof cmd.type !== 'string' || !allowedCommandTypes.has(cmd.type)) {
+                                warnings.push(`${cmdPrefix}.type="${cmd?.type ?? 'unknown'}" 不在常见触发器列表中，请确认宿主是否支持。`);
+                            }
+                        });
+                    }
+
+                    if (feature.route && typeof manifest.ui !== 'string') {
+                        errors.push(`${prefix}.route 已配置，但 manifest.json 未声明 ui 入口。`);
+                    }
+                });
+            }
+
+            if (typeof manifest.main === 'string' && path.isAbsolute(manifest.main)) {
+                warnings.push('manifest.main 建议使用相对路径，而不是绝对路径。');
+            }
+
+            if (typeof manifest.ui === 'string' && path.isAbsolute(manifest.ui)) {
+                warnings.push('manifest.ui 建议使用相对路径，而不是绝对路径。');
+            }
+
+            if (typeof manifest.preload === 'string') {
+                if (!manifest.preload.endsWith('.cjs')) {
+                    errors.push('manifest.preload 必须指向 .cjs 文件。');
+                }
+
+                const preloadPath = path.join(this.session.targetDir, manifest.preload);
+                if (!await fs.pathExists(preloadPath)) {
+                    errors.push(`manifest.preload 指向的文件不存在: ${manifest.preload}`);
+                } else {
+                    const preloadContent = await fs.readFile(preloadPath, 'utf-8');
+                    if (/\bimport\s.+from\s/.test(preloadContent)) {
+                        warnings.push('preload.cjs 中检测到 ESM import，请确认它仍然使用 CommonJS 语法。');
+                    }
+                }
+            }
+
+            const iconPath = this.resolveManifestAssetPath(manifest.icon);
+            if (iconPath) {
+                const fullIconPath = path.join(this.session.targetDir, iconPath);
+                if (!await fs.pathExists(fullIconPath)) {
+                    warnings.push(`manifest.icon 指向的本地资源不存在: ${iconPath}`);
+                }
+            }
+        }
+
+        if (!await fs.pathExists(srcMainPath)) {
+            errors.push('缺少 src/main.ts。');
+        } else {
+            const mainContent = await fs.readFile(srcMainPath, 'utf-8');
+            const hasRunExport = /export\s+async\s+function\s+run\s*\(/.test(mainContent)
+                || /export\s+function\s+run\s*\(/.test(mainContent)
+                || /run\s*:\s*(?:async\s*)?\(/.test(mainContent);
+
+            if (!hasRunExport) {
+                errors.push('src/main.ts 未检测到 run 入口导出。');
+            }
+
+            if (manifest?.features?.length > 1 && !mainContent.includes('featureCode')) {
+                warnings.push('插件声明了多个 feature，但 src/main.ts 中未看到 featureCode 分流，请确认多入口逻辑。');
+            }
+        }
+
+        if (manifest?.ui) {
+            if (!await fs.pathExists(srcUiAppPath)) {
+                errors.push('manifest.json 声明了 ui，但缺少 src/ui/App.tsx。');
+            } else {
+                info.push('检测到 UI 源文件 src/ui/App.tsx。');
+            }
+        }
+
+        if (packageJson?.name && manifest?.name && packageJson.name !== manifest.name) {
+            warnings.push(`package.json.name (${packageJson.name}) 与 manifest.name (${manifest.name}) 不一致。`);
+        }
+
+        if (runBuild) {
+            if (!packageJson?.scripts?.build) {
+                errors.push('package.json 缺少 scripts.build，无法执行接入验证构建。');
+            } else if (!await fs.pathExists(path.join(this.session.targetDir, 'node_modules'))) {
+                errors.push('缺少 node_modules，无法执行 npm run build。请先安装依赖。');
+            } else {
+                tui.log(chalk.cyan('  🏗️ Running npm run build for validation...'));
+                const buildResult = await this.runLocalCommand('npm run build');
+                if (buildResult.code !== 0) {
+                    errors.push(`npm run build 失败:\n${this.truncateOutput(buildResult.stderr || buildResult.stdout)}`);
+                } else {
+                    info.push('npm run build 执行成功。');
+                }
+            }
+        } else {
+            warnings.push('本次跳过了构建验证（runBuild=false）。');
+        }
+
+        if (manifest?.main && typeof manifest.main === 'string') {
+            const mainOutputPath = path.join(this.session.targetDir, manifest.main);
+            if (!await fs.pathExists(mainOutputPath)) {
+                errors.push(`manifest.main 指向的构建产物不存在: ${manifest.main}`);
+            } else {
+                info.push(`检测到后端构建产物: ${manifest.main}`);
+            }
+        }
+
+        if (manifest?.ui && typeof manifest.ui === 'string') {
+            const uiOutputPath = path.join(this.session.targetDir, manifest.ui);
+            if (!await fs.pathExists(uiOutputPath)) {
+                errors.push(`manifest.ui 指向的构建产物不存在: ${manifest.ui}`);
+            } else {
+                info.push(`检测到 UI 构建产物: ${manifest.ui}`);
+            }
+        }
+
+        const passed = errors.length === 0;
+        const sections = [
+            `Plugin validation ${passed ? 'PASSED' : 'FAILED'}`,
+            info.length > 0 ? `Info:\n- ${info.join('\n- ')}` : '',
+            warnings.length > 0 ? `Warnings:\n- ${warnings.join('\n- ')}` : '',
+            errors.length > 0 ? `Errors:\n- ${errors.join('\n- ')}` : ''
+        ].filter(Boolean);
+
+        const report = sections.join('\n\n');
+        this.lastPluginValidation = { passed, report };
+
+        return report;
+    }
+
     private async handleReadFile(filePath: string): Promise<string> {
         const fullPath = path.resolve(this.session.targetDir, filePath);
         if (!await fs.pathExists(fullPath)) {
@@ -493,6 +706,7 @@ export class AIAgent {
 
     private async handleWriteFile(filePath: string, content: string): Promise<string> {
         await this.fileWriter.writeFile(filePath, content);
+        this.invalidatePluginValidation();
         tui.log(chalk.green(`  ✓ Wrote ${filePath}`));
         return `Successfully wrote file: ${filePath}`;
     }
@@ -505,6 +719,7 @@ export class AIAgent {
 
         try {
             await createReactProject(targetDir, pluginName);
+            this.invalidatePluginValidation();
             tui.log(chalk.green('✓ 脚手架创建完成'));
             return `Project scaffold created successfully at ${targetDir}. The following files were generated:
 - package.json
@@ -546,6 +761,7 @@ Now you can start implementing the features by modifying these files.`;
 
         const newContent = content.replace(target, replacement);
         await this.fileWriter.writeFile(filePath, newContent);
+        this.invalidatePluginValidation();
         tui.log(chalk.green(`  ✓ Modified ${filePath}`));
 
         return `Successfully replaced content in ${filePath}.`;
@@ -991,8 +1207,15 @@ ${text}
     // ... (rest of the class)
 
     private async handleFinish(summary: string): Promise<string> {
+        if (!this.lastPluginValidation?.passed) {
+            const lastReport = this.lastPluginValidation?.report ?? '尚未执行 validate_plugin。';
+            return `Cannot finish yet. You MUST run validate_plugin and fix all errors before finish.\n\nLatest validation state:\n${lastReport}`;
+        }
+
         tui.log(chalk.green('\n✅ AI 认为任务已完成:'));
         tui.log(chalk.white(summary));
+        tui.log(chalk.gray('\n最近一次接入校验结果:'));
+        tui.log(chalk.gray(this.lastPluginValidation.report));
 
         tui.log(chalk.gray('(输入新需求继续，或输入 /exit 退出)'));
         const input = await this.safePromptTui('请输入修改需求:');
@@ -1042,5 +1265,59 @@ ${text}
         }
 
         return fileMap.trim();
+    }
+
+    private invalidatePluginValidation() {
+        this.lastPluginValidation = null;
+    }
+
+    private resolveManifestAssetPath(icon: any): string | null {
+        if (!icon) return null;
+
+        if (typeof icon === 'string') {
+            const value = icon.trim();
+            if (!value) return null;
+            if (value.startsWith('http://') || value.startsWith('https://')) return null;
+            if (value.startsWith('<svg')) return null;
+            if (!/[./\\]/.test(value)) return null;
+            return value;
+        }
+
+        if (typeof icon === 'object' && icon.type === 'file' && typeof icon.value === 'string') {
+            return icon.value;
+        }
+
+        return null;
+    }
+
+    private truncateOutput(output: string, maxChars: number = 3000): string {
+        if (!output) return '(no command output)';
+        const normalized = output.trim();
+        if (normalized.length <= maxChars) return normalized;
+        return `...${normalized.slice(-maxChars)}`;
+    }
+
+    private async runLocalCommand(command: string): Promise<{ code: number | null; stdout: string; stderr: string }> {
+        return await new Promise((resolve) => {
+            const child = spawn(command, {
+                cwd: this.session.targetDir,
+                shell: true,
+                stdio: ['ignore', 'pipe', 'pipe']
+            });
+
+            let stdout = '';
+            let stderr = '';
+
+            child.stdout.on('data', (d) => { stdout += d.toString(); });
+            child.stderr.on('data', (d) => { stderr += d.toString(); });
+
+            child.on('close', (code) => {
+                resolve({ code, stdout, stderr });
+            });
+
+            child.on('error', (err) => {
+                resolve({ code: -1, stdout, stderr: err.message });
+            });
+        });
     }
 }

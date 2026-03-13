@@ -5,35 +5,12 @@
 ### 1. 添加 AI 供应商配置
 
 ```bash
-# 智谱AI (GLM) - 最新模型 glm-4.7
-mulby ai add glm-main \
-  --provider glm \
-  --api-key your-glm-api-key \
-  --model glm-4.7
+# 推荐：快速配置默认 provider
+mulby ai setup
 
-# OpenAI
-mulby ai add openai-main \
-  --provider openai \
-  --api-key sk-xxx \
-  --model gpt-4o
-
-# Claude
-mulby ai add claude-main \
-  --provider claude \
-  --api-key sk-ant-xxx \
-  --model claude-3-5-sonnet-20241022
-
-# DeepSeek - 推理模型
-mulby ai add deepseek-main \
-  --provider deepseek \
-  --api-key your-deepseek-key \
-  --model deepseek-reasoner
-
-# Gemini
-mulby ai add gemini-main \
-  --provider gemini \
-  --api-key AIza-xxx \
-  --model gemini-2.0-flash-exp
+# 需要多套配置时，再添加命名 provider
+mulby ai add glm-main
+mulby ai add openai-main
 ```
 
 ### 2. 查看所有配置
@@ -70,18 +47,32 @@ mulby ai use glm-main
 mulby create my-plugin --ai
 ```
 
+### 4.1 AI 创建插件的固定流程
+
+`mulby create xxx --ai` 现在建议按一套固定流程推进，而不是让模型直接“自由生成”：
+
+1. 接入梳理：先读取 `manifest.json`、`src/main.ts`、`src/ui/App.tsx`
+2. 需求确认：明确插件目标、`features/cmds` 触发方式、UI/后台/预加载分工
+3. 接入契约：先约定要改哪些文件、每个 `feature.code` 如何映射、如何验证
+4. 最小闭环：优先做一个能在 Mulby 中真正触发并跑通的 happy path
+5. 完整实现：再补剩余功能、样式和交互细节
+6. 接入验收：运行 `validate_plugin`，通过后再结束会话
+
+这套流程参考了 uTools 官方开发文档里比较成熟的思路：先把 `plugin.json` / 入口脚本 / 预加载约束说清楚，再走开发调试、打包和发布，而不是一上来就堆代码。
+
 ## 📝 常用命令
 
 ### 配置管理
 
 | 命令 | 说明 |
 |------|------|
-| `mulby ai add <name>` | 添加新配置（交互式） |
+| `mulby ai setup` | 快速配置默认 provider（推荐） |
+| `mulby ai add [name]` | 添加新配置，名称可省略 |
 | `mulby ai list` | 列出所有配置 |
-| `mulby ai show <name>` | 查看配置详情 |
-| `mulby ai use <name>` | 设置默认配置 |
-| `mulby ai update <name>` | 更新配置 |
-| `mulby ai remove <name>` | 删除配置 |
+| `mulby ai show [name]` | 查看配置详情，默认查看当前默认配置 |
+| `mulby ai use [name]` | 设置默认配置 |
+| `mulby ai update [name]` | 更新配置，默认更新当前默认配置 |
+| `mulby ai remove [name]` | 删除配置，默认删除当前默认配置 |
 
 ### 会话中命令
 
@@ -102,19 +93,13 @@ mulby create my-plugin --ai
 ### 示例 1: 配置智谱AI并创建插件
 
 ```bash
-# 1. 添加智谱AI配置
-mulby ai add my-glm \
-  --provider glm \
-  --api-key your-api-key \
-  --model glm-4.7
+# 1. 快速配置默认 provider
+mulby ai setup
 
-# 2. 设为默认
-mulby ai use my-glm
-
-# 3. 创建插件
+# 2. 创建插件
 mulby create weather-plugin --ai
 
-# 4. 在会话中...
+# 3. 在会话中...
 > 我想创建一个天气查询插件
 ```
 
@@ -193,11 +178,11 @@ mulby config ai add my-config --provider glm
 
 ### 2. 未配置 AI 服务
 
-**错误**: `未配置 AI 服务。请使用 mulby ai add <name> 添加供应商配置。`
+**错误**: `未配置 AI 服务。请使用 mulby ai setup 快速配置，或使用 mulby ai add [name] 添加供应商配置。`
 
 **解决**: 先添加至少一个供应商配置
 ```bash
-mulby ai add my-glm --provider glm --api-key your-key
+mulby ai setup
 ```
 
 ### 3. 配置不存在
@@ -227,6 +212,7 @@ mulby ai list
 
 1. **为不同场景配置多个供应商**
    ```bash
+   mulby ai setup                              # 默认 provider
    mulby ai add design-ai --provider claude    # 产品设计
    mulby ai add code-ai --provider deepseek    # 代码生成
    mulby ai add fast-ai --provider gemini      # 快速原型
@@ -249,8 +235,8 @@ mulby ai list
 ## 🚀 开始使用
 
 ```bash
-# 1. 添加配置
-mulby ai add my-glm --provider glm --api-key your-key --model glm-4.7
+# 1. 快速配置默认 provider
+mulby ai setup
 
 # 2. 创建插件
 mulby create my-plugin --ai

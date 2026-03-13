@@ -4,14 +4,18 @@ import chalk from 'chalk'
 import { ConfigManager } from '../services/config-manager'
 import {
   AIConfig,
-  type AIProviderConfig,
-  type AIProviderType,
-  PROVIDER_MODELS,
-  PROVIDER_ENDPOINTS
+  type AIProviderConfig
 } from '../types/ai'
+import {
+  getAiConfig,
+  promptForProviderConfig,
+  resolveDefaultConfigName,
+  saveProviderConfig,
+  suggestProviderName
+} from '../services/ai-config'
 
 interface AddAiConfigOptions {
-  provider?: AIProviderType
+  provider?: 'openai' | 'claude' | 'deepseek' | 'gemini' | 'glm' | 'minimax' | 'custom'
   apiKey?: string
   model?: string
   endpoint?: string
@@ -21,20 +25,6 @@ interface UpdateAiConfigOptions {
   apiKey?: string
   model?: string
   endpoint?: string
-}
-
-const PROVIDER_CHOICES: Array<{ name: string; value: AIProviderType }> = [
-  { name: 'OpenAI', value: 'openai' },
-  { name: 'Claude (Anthropic)', value: 'claude' },
-  { name: 'DeepSeek', value: 'deepseek' },
-  { name: 'Gemini (Google)', value: 'gemini' },
-  { name: 'GLM', value: 'glm' },
-  { name: 'MiniMax', value: 'minimax' },
-  { name: 'Custom', value: 'custom' }
-]
-
-function getAiConfig(configManager: ConfigManager): AIConfig {
-  return configManager.get<AIConfig>('ai') || { providers: {} }
 }
 
 function ensureProviderExists(aiConfig: AIConfig, name: string): AIProviderConfig | null {
@@ -61,22 +51,21 @@ export function createAIConfigCommand() {
     .description('管理 AI 提供商配置')
 
   command
-    .command('add <name>')
-    .description('新增 AI 提供商配置')
-    .option('-p, --provider <provider>', '提供商类型')
-    .option('-k, --api-key <key>', 'API Key')
-    .option('-m, --model <model>', '模型名称')
-    .option('-e, --endpoint <url>', 'API 端点')
-    .action(async (name: string, options: AddAiConfigOptions) => {
+    .command('setup')
+    .description('快速配置默认 AI 提供商（推荐）')
+    .action(async () => {
       try {
         const configManager = ConfigManager.getInstance()
         const aiConfig = getAiConfig(configManager)
+        const currentDefaultName = resolveDefaultConfigName(aiConfig)
+        const currentDefaultConfig = currentDefaultName ? aiConfig.providers[currentDefaultName] : undefined
+        const targetName = currentDefaultName || 'default'
 
-        if (aiConfig.providers[name]) {
+        if (currentDefaultConfig) {
           const { confirm } = await inquirer.prompt<{ confirm: boolean }>([{
             type: 'confirm',
             name: 'confirm',
-            message: `配置 "${name}" 已存在，是否覆盖？`,
+            message: `默认配置 "${targetName}" 已存在，是否覆盖？`,
             default: false
           }])
           if (!confirm) {
@@ -85,71 +74,50 @@ export function createAIConfigCommand() {
           }
         }
 
-        let provider = options.provider
-        let apiKey = options.apiKey
-        let model = options.model
-        let endpoint = options.endpoint
+        const providerConfig = await promptForProviderConfig(currentDefaultConfig)
+        saveProviderConfig(configManager, targetName, providerConfig, { setAsDefault: true })
+        console.log(chalk.green(`已保存默认配置 "${targetName}"`))
+        console.log(chalk.gray('需要多套配置时，再使用 `mulby ai add [name]` 添加额外 provider。'))
+      } catch (error) {
+        console.error(chalk.red('配置默认 provider 失败:'), toErrorMessage(error))
+      }
+    })
 
-        if (!provider) {
-          const { selectedProvider } = await inquirer.prompt<{ selectedProvider: AIProviderType }>([{
-            type: 'list',
-            name: 'selectedProvider',
-            message: '选择 AI 提供商',
-            choices: PROVIDER_CHOICES
+  command
+    .command('add [name]')
+    .description('新增 AI 提供商配置')
+    .option('-p, --provider <provider>', '提供商类型')
+    .option('-k, --api-key <key>', 'API Key')
+    .option('-m, --model <model>', '模型名称')
+    .option('-e, --endpoint <url>', 'API 端点')
+    .action(async (name: string | undefined, options: AddAiConfigOptions) => {
+      try {
+        const configManager = ConfigManager.getInstance()
+        const aiConfig = getAiConfig(configManager)
+        const providerConfig = await promptForProviderConfig(undefined, {
+          provider: options.provider,
+          apiKey: options.apiKey,
+          model: options.model,
+          endpoint: options.endpoint
+        })
+        const targetName = suggestProviderName(aiConfig, providerConfig.provider, name)
+
+        if (aiConfig.providers[targetName]) {
+          const { confirm } = await inquirer.prompt<{ confirm: boolean }>([{
+            type: 'confirm',
+            name: 'confirm',
+            message: `配置 "${targetName}" 已存在，是否覆盖？`,
+            default: false
           }])
-          provider = selectedProvider
-        }
-
-        if (!apiKey) {
-          const { inputKey } = await inquirer.prompt<{ inputKey: string }>([{
-            type: 'password',
-            name: 'inputKey',
-            message: '输入 API Key:',
-            validate: (input: string) => input.length > 0 || 'API Key 不能为空'
-          }])
-          apiKey = inputKey
-        }
-
-        const presetModels = provider ? PROVIDER_MODELS[provider] : []
-        if (!model && presetModels.length > 0) {
-          const { selectedModel } = await inquirer.prompt<{ selectedModel: string }>([{
-            type: 'list',
-            name: 'selectedModel',
-            message: '选择模型',
-            choices: presetModels,
-            default: presetModels[0]
-          }])
-          model = selectedModel
-        }
-
-        if (!endpoint) {
-          if (provider === 'custom') {
-            const { inputEndpoint } = await inquirer.prompt<{ inputEndpoint: string }>([{
-              type: 'input',
-              name: 'inputEndpoint',
-              message: '输入 API 端点:',
-              validate: (input: string) => input.length > 0 || 'API 端点不能为空'
-            }])
-            endpoint = inputEndpoint
-          } else if (provider) {
-            endpoint = PROVIDER_ENDPOINTS[provider]
+          if (!confirm) {
+            console.log(chalk.yellow('已取消'))
+            return
           }
         }
 
-        aiConfig.providers[name] = {
-          provider: provider as AIProviderType,
-          apiKey: apiKey || '',
-          model,
-          apiEndpoint: endpoint
-        }
-
-        if (!aiConfig.default) {
-          aiConfig.default = name
-        }
-
-        configManager.set('ai', aiConfig)
-        console.log(chalk.green(`已保存配置 "${name}"`))
-        if (aiConfig.default === name) {
+        const savedConfig = saveProviderConfig(configManager, targetName, providerConfig)
+        console.log(chalk.green(`已保存配置 "${targetName}"`))
+        if (savedConfig.default === targetName) {
           console.log(chalk.blue('当前为默认配置'))
         }
       } catch (error) {
@@ -169,7 +137,7 @@ export function createAIConfigCommand() {
 
         if (entries.length === 0) {
           console.log(chalk.yellow('还没有 AI 配置'))
-          console.log(chalk.gray('使用 `mulby ai add <name>` 添加配置'))
+          console.log(chalk.gray('使用 `mulby ai setup` 快速配置，或使用 `mulby ai add [name]` 添加配置'))
           return
         }
 
@@ -191,21 +159,26 @@ export function createAIConfigCommand() {
     })
 
   command
-    .command('remove <name>')
+    .command('remove [name]')
     .alias('rm')
     .description('删除指定 AI 配置')
-    .action(async (name: string) => {
+    .action(async (name?: string) => {
       try {
         const configManager = ConfigManager.getInstance()
         const aiConfig = getAiConfig(configManager)
-        if (!ensureProviderExists(aiConfig, name)) {
+        const targetName = name || resolveDefaultConfigName(aiConfig)
+        if (!targetName) {
+          console.log(chalk.yellow('请先指定配置名称，或先运行 `mulby ai setup` 创建默认配置'))
+          return
+        }
+        if (!ensureProviderExists(aiConfig, targetName)) {
           return
         }
 
         const { confirm } = await inquirer.prompt<{ confirm: boolean }>([{
           type: 'confirm',
           name: 'confirm',
-          message: `确定删除配置 "${name}" 吗？`,
+          message: `确定删除配置 "${targetName}" 吗？`,
           default: false
         }])
         if (!confirm) {
@@ -213,13 +186,13 @@ export function createAIConfigCommand() {
           return
         }
 
-        delete aiConfig.providers[name]
-        if (aiConfig.default === name) {
+        delete aiConfig.providers[targetName]
+        if (aiConfig.default === targetName) {
           aiConfig.default = Object.keys(aiConfig.providers)[0]
         }
 
         configManager.set('ai', aiConfig)
-        console.log(chalk.green(`已删除配置 "${name}"`))
+        console.log(chalk.green(`已删除配置 "${targetName}"`))
         if (aiConfig.default) {
           console.log(chalk.blue(`默认配置已切换为 "${aiConfig.default}"`))
         }
@@ -229,37 +202,48 @@ export function createAIConfigCommand() {
     })
 
   command
-    .command('use <name>')
+    .command('use [name]')
     .description('设置默认 AI 配置')
-    .action((name: string) => {
+    .action((name?: string) => {
       try {
         const configManager = ConfigManager.getInstance()
         const aiConfig = getAiConfig(configManager)
-        if (!ensureProviderExists(aiConfig, name)) {
+        const targetName = name || resolveDefaultConfigName(aiConfig)
+        if (!targetName) {
+          console.log(chalk.yellow('请先指定配置名称，或先运行 `mulby ai setup` 创建默认配置'))
+          return
+        }
+        if (!ensureProviderExists(aiConfig, targetName)) {
           return
         }
 
-        aiConfig.default = name
+        aiConfig.default = targetName
         configManager.set('ai', aiConfig)
-        console.log(chalk.green(`已将 "${name}" 设为默认配置`))
+        console.log(chalk.green(`已将 "${targetName}" 设为默认配置`))
       } catch (error) {
         console.error(chalk.red('设置默认配置失败:'), toErrorMessage(error))
       }
     })
 
   command
-    .command('show <name>')
+    .command('show [name]')
     .description('查看指定 AI 配置详情')
-    .action((name: string) => {
+    .action((name?: string) => {
       try {
         const configManager = ConfigManager.getInstance()
         const aiConfig = getAiConfig(configManager)
-        const config = ensureProviderExists(aiConfig, name)
+        const targetName = name || resolveDefaultConfigName(aiConfig)
+        if (!targetName) {
+          console.log(chalk.yellow('请先指定配置名称，或先运行 `mulby ai setup` 创建默认配置'))
+          return
+        }
+
+        const config = ensureProviderExists(aiConfig, targetName)
         if (!config) {
           return
         }
 
-        console.log(chalk.bold(`\n配置: ${name}`) + (aiConfig.default === name ? chalk.gray(' (默认)') : ''))
+        console.log(chalk.bold(`\n配置: ${targetName}`) + (aiConfig.default === targetName ? chalk.gray(' (默认)') : ''))
         console.log(chalk.gray('-'.repeat(50)))
         console.log(`${chalk.gray('提供商:')} ${config.provider}`)
         console.log(`${chalk.gray('模型:')} ${config.model || '未指定'}`)
@@ -280,16 +264,22 @@ export function createAIConfigCommand() {
     })
 
   command
-    .command('update <name>')
+    .command('update [name]')
     .description('更新已有 AI 配置')
     .option('-k, --api-key <key>', '更新 API Key')
     .option('-m, --model <model>', '更新模型')
     .option('-e, --endpoint <url>', '更新 API 端点')
-    .action((name: string, options: UpdateAiConfigOptions) => {
+    .action((name: string | undefined, options: UpdateAiConfigOptions) => {
       try {
         const configManager = ConfigManager.getInstance()
         const aiConfig = getAiConfig(configManager)
-        const config = ensureProviderExists(aiConfig, name)
+        const targetName = name || resolveDefaultConfigName(aiConfig)
+        if (!targetName) {
+          console.log(chalk.yellow('请先指定配置名称，或先运行 `mulby ai setup` 创建默认配置'))
+          return
+        }
+
+        const config = ensureProviderExists(aiConfig, targetName)
         if (!config) {
           return
         }
@@ -315,7 +305,7 @@ export function createAIConfigCommand() {
         }
 
         configManager.set('ai', aiConfig)
-        console.log(chalk.green(`已更新配置 "${name}"`))
+        console.log(chalk.green(`已更新配置 "${targetName}"`))
       } catch (error) {
         console.error(chalk.red('更新配置失败:'), toErrorMessage(error))
       }

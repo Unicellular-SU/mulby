@@ -43,12 +43,13 @@ mulby config delete theme
 
 **命令**:
 ```bash
-mulby ai add <name>              # 添加 AI 供应商配置（交互式）
+mulby ai setup                   # 快速配置默认 provider（推荐）
+mulby ai add [name]              # 添加 AI 供应商配置（交互式）
 mulby ai list                    # 列出所有 AI 配置
-mulby ai show <name>             # 查看配置详情
-mulby ai use <name>              # 设置默认配置
-mulby ai update <name>           # 更新配置
-mulby ai remove <name>           # 删除配置
+mulby ai show [name]             # 查看配置详情
+mulby ai use [name]              # 设置默认配置
+mulby ai update [name]           # 更新配置
+mulby ai remove [name]           # 删除配置
 ```
 
 **使用场景**:
@@ -59,10 +60,10 @@ mulby ai remove <name>           # 删除配置
 
 **示例**:
 ```bash
-# 添加智谱AI配置（交互式）
-mulby ai add glm-main
+# 快速配置默认 provider
+mulby ai setup
 
-# 或使用命令行参数
+# 添加额外 provider（名称可省略）
 mulby ai add glm-main \
   --provider glm \
   --api-key your-key \
@@ -129,7 +130,7 @@ mulby ai update glm-main --model glm-4-plus
 
 ```bash
 # 推荐方式
-mulby ai add my-glm --provider glm --api-key xxx
+mulby ai setup
 ```
 
 ### 何时使用 `mulby config`
@@ -163,7 +164,7 @@ mulby ai add my-glm --provider glm --api-key xxx
 
 ```bash
 # 使用 mulby ai（推荐）
-mulby ai add glm-main --provider glm --api-key xxx --model glm-4.7
+mulby ai setup
 
 # 查看配置
 mulby ai list
@@ -214,9 +215,10 @@ mulby config list
 
 ```bash
 # AI 配置（推荐）
-mulby ai add <name>              # 添加 AI 配置
+mulby ai setup                   # 快速配置默认 provider
+mulby ai add [name]              # 添加 AI 配置
 mulby ai list                    # 列出 AI 配置
-mulby ai use <name>              # 设置默认
+mulby ai use [name]              # 设置默认
 
 # 通用配置
 mulby config list                # 查看所有配置

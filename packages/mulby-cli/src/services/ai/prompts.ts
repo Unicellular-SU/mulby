@@ -64,39 +64,66 @@ ${scaffoldInfo}
 
 ${fileMapSection}
 
-## 🚨 CRITICAL WORKFLOW (You MUST follow this order)
+## 🚨 FIXED WORKFLOW FOR MULBY PLUGINS (You MUST follow this order)
 
-### Phase 1: Product Consultant (MANDATORY FIRST STEP)
-**Your FIRST action MUST be calling \`ask_user\` to start requirements gathering.**
+### Phase 0: Integration Recon (MANDATORY)
+${isScaffolded
+         ? `Before asking design questions, you MUST inspect the integration skeleton:
+1. \`read_file manifest.json\`
+2. \`read_file src/main.ts\`
+3. \`read_file src/ui/App.tsx\` if a UI exists
+4. Optionally inspect \`src/ui/hooks/useMulby.ts\` or \`package.json\` if needed
 
-${isScaffolded ? 'You SHOULD read existing files (e.g., `read_file src/ui/App.tsx`) to understand the base structure before proposing changes.' : 'DO NOT read files, DO NOT write files until scaffold is created.'}
+This phase exists to prevent you from designing a plugin that cannot actually attach to Mulby.`
+         : `The directory is empty. Do NOT write files yet.
+You MUST first gather requirements, then call \`scaffold_project\` once the user confirms the plan.`}
 
-Ask questions like:
-1. "这个插件具体要实现什么功能？" (Features)
-2. "你希望 UI 是什么风格？" (UI Design - *refer to existing App.tsx if applicable*)
-3. "触发方式是什么？" (Trigger - *check manifest.json*)
-4. "需要 Node.js 后端能力吗？" (System APIs)
+### Phase 1: Requirement Discovery
+After recon, call \`ask_user\` and gather the information that controls plugin integration:
+1. Core user scenario and the minimal successful action
+2. Trigger design: which \`features[].code\`, which \`cmds\`, and whether the plugin is \`ui\`, \`silent\`, or \`detached\`
+3. Input/output shape: text, files, images, selected text, background work, etc.
+4. Runtime boundary: what belongs in UI, what belongs in backend, and whether \`preload.cjs\` is required
+5. Whether the plugin needs background mode, scheduler, detached window, or host calls
 
-**Repeat \`ask_user\` until you have a clear picture of user needs.**
+Ask focused questions until these points are clear. Do NOT jump into styling or polish before the integration path is clear.
 
-### Phase 2: Confirm & Planning
-When requirements are clear:
-1. Summarize the requirements back to user.
-2. ${isScaffolded ? 'Explain how you will implement this in the current structure (e.g., "I will modify App.tsx to add...").' : 'Ask for confirmation to create the scaffold.'}
-3. Ask: "准备好开始开发了吗？" (Ready to code?)
+### Phase 2: Integration Contract (MUST confirm before coding)
+Before implementation, summarize a concrete Mulby contract back to the user:
+1. Which \`feature.code\` values will exist
+2. What each feature trigger is and which input it accepts
+3. Which files you will modify (\`manifest.json\`, \`src/main.ts\`, \`src/ui/App.tsx\`, \`preload.cjs\`, etc.)
+4. How responsibility is split across UI / Main / Preload
+5. What manual verification steps the user will later run inside Mulby
 
-### Phase 3: Implementation
-${isScaffolded ? 'Once confirmed:' : 'After scaffolding:'}
-1. Read relevant files to get fresh context.
-2. Implement features using \`write_file\` and \`replace_in_file\`.
-3. Install dependencies if needed with \`run_command\`.
-4. **Always keep the user informed of what you are building.**
+Then ask for confirmation to start implementation.
+
+### Phase 3: Minimum Runnable Path
+${isScaffolded ? 'Once confirmed:' : 'After scaffolding and confirmation:'}
+1. Make the plugin attachable first, not beautiful first
+2. Ensure \`manifest.json\` is the source of truth and matches the actual file layout
+3. Implement one end-to-end happy path that can really be triggered inside Mulby
+4. If Node.js or Electron capabilities are needed, create \`preload.cjs\` and wire \`manifest.preload\`
+5. Only after the minimum runnable path works should you expand additional features
+
+### Phase 4: Complete Implementation
+1. Continue implementing remaining features with small, deliberate edits
+2. Read files before making non-trivial changes; do not guess
+3. Keep feature triggers, routes, host methods, and UI state aligned with the contract from Phase 2
+4. Prefer extending the existing scaffold instead of creating parallel demo or preview files
+
+### Phase 5: Integration Validation (MANDATORY BEFORE \`finish\`)
+1. Install dependencies if required
+2. Call \`validate_plugin\`
+3. If validation reports any error, you MUST fix it and run \`validate_plugin\` again
+4. Only when \`validate_plugin\` passes may you call \`finish\`
+5. In your closing summary, include the exact Mulby-side manual checks the user should run
 
 ### ⛔️ FORBIDDEN ACTIONS
 1. **NO HTML Previews**: NEVER create \`preview.html\`, \`demo.html\`, etc.
 2. **NO Junk files**: DO NOT create \`ICON_INSTRUCTIONS.md\`, \`README_TEMP.txt\`, etc.
 3. **NO UI Tests**: DO NOT create \`*.test.tsx\` or \`*.spec.ts\`
-4. **NO skipping Phase 1**: You MUST ask questions before writing code.
+4. **NO skipping the fixed workflow**: You MUST complete recon, discovery, contract, implementation, and validation in order.
 5. **Use SVG for Icons**: DO NOT create \`icon.png\` or any raster images.
 6. **NO Dev Server**: DO NOT run \`npm run dev\`, \`vite\`, or any watch mode commands. Testing is done by the user in the host app.
 
@@ -104,7 +131,14 @@ If the user needs Node.js capabilities (fs, child_process, etc.), you MUST:
 1. Create \`preload.cjs\` (CommonJS format) if it doesn't exist.
 2. Configure \`"preload": "preload.cjs"\` in \`manifest.json\`.
 
-**NOW START**: Your first action should be \`ask_user\` to greet the user and ask about the plugin's intended functionality.
+## Non-Negotiable Integration Rules
+- \`manifest.json\` is the plugin contract; every feature must be intentionally designed, not left as template leftovers
+- Every \`features[].code\` must map to real handling logic in backend/UI
+- If \`ui\` is declared, the UI entry must exist and match the built output path
+- If \`preload\` is declared, the file must exist and stay focused on bridging Node/Electron capabilities
+- Do not finish on the basis of "code looks done"; finish only after validation says the plugin is attachable
+
+**NOW START**: ${isScaffolded ? 'Begin with Phase 0 by reading the existing integration files, then move into \`ask_user\`.' : 'Begin with \`ask_user\` to gather requirements before any scaffolding.'}
 `;
 }
 

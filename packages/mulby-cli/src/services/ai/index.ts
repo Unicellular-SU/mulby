@@ -20,7 +20,7 @@ export class AIServiceFactory {
 
         if (!aiConfig || !aiConfig.providers || Object.keys(aiConfig.providers).length === 0) {
             throw new Error(
-                '未配置 AI 服务。请使用 `mulby ai add <name>` 添加供应商配置。'
+                '未配置 AI 服务。请使用 `mulby ai setup` 快速配置，或使用 `mulby ai add [name]` 添加供应商配置。'
             );
         }
 

@@ -4,21 +4,14 @@ import * as path from 'path'
 import { SessionManager } from '../../services/session-manager'
 import { AIAgent } from '../../services/ai-generator'
 import { ConfigManager } from '../../services/config-manager'
+import { promptForProviderConfig, saveProviderConfig } from '../../services/ai-config'
 import { buildSystemPrompt } from '../../services/ai/prompts'
 import { createReactProject } from './react'
-import { type AIConfig, type AIProviderType, PROVIDER_MODELS } from '../../types/ai'
+import { type AIConfig } from '../../types/ai'
 
 interface AiCreateOptions {
   resume?: string | boolean
   desc?: string
-}
-
-interface BootstrapAnswers {
-  configName: string
-  provider: AIProviderType
-  apiKey: string
-  model?: string
-  apiEndpoint?: string
 }
 
 export async function aiCreate(name: string, options: AiCreateOptions) {
@@ -36,67 +29,13 @@ export async function aiCreate(name: string, options: AiCreateOptions) {
     }])
 
     if (!configure) {
-      console.log('已取消。请先运行 mulby ai add <name> 完成配置。')
+      console.log('已取消。请先运行 mulby ai setup 完成配置。')
       return
     }
 
-    const answers = await inquirer.prompt([
-      {
-        type: 'input',
-        name: 'configName',
-        message: '配置名称（例如: my-openai）:',
-        default: 'default',
-        validate: (input: string) => input.length > 0
-      },
-      {
-        type: 'list',
-        name: 'provider',
-        message: '选择服务商',
-        choices: [
-          { name: 'OpenAI', value: 'openai' },
-          { name: 'Claude (Anthropic)', value: 'claude' },
-          { name: 'DeepSeek', value: 'deepseek' },
-          { name: 'Gemini (Google)', value: 'gemini' },
-          { name: 'GLM', value: 'glm' },
-          { name: 'Custom', value: 'custom' }
-        ],
-        default: 'openai'
-      },
-      {
-        type: 'password',
-        name: 'apiKey',
-        message: 'API Key:',
-        validate: (input: string) => input.length > 0
-      },
-      {
-        type: 'list',
-        name: 'model',
-        message: '选择模型',
-        choices: (answers: BootstrapAnswers) => PROVIDER_MODELS[answers.provider] || [],
-        when: (answers: BootstrapAnswers) => (PROVIDER_MODELS[answers.provider] || []).length > 0
-      },
-      {
-        type: 'input',
-        name: 'apiEndpoint',
-        message: 'API Endpoint:',
-        when: (answers: BootstrapAnswers) => answers.provider === 'custom',
-        validate: (input: string) => input.length > 0
-      }
-    ] as never) as BootstrapAnswers
-
-    configManager.set('ai', {
-      default: answers.configName,
-      providers: {
-        [answers.configName]: {
-          provider: answers.provider,
-          apiKey: answers.apiKey,
-          model: answers.model,
-          apiEndpoint: answers.apiEndpoint
-        }
-      }
-    } satisfies AIConfig)
-
-    console.log(chalk.green(`配置 "${answers.configName}" 已保存`))
+    const providerConfig = await promptForProviderConfig()
+    saveProviderConfig(configManager, 'default', providerConfig, { setAsDefault: true })
+    console.log(chalk.green('默认 AI 配置已保存'))
   }
 
   if (options.resume) {
@@ -137,7 +76,12 @@ export async function aiCreate(name: string, options: AiCreateOptions) {
   let initialPrompt = `我想创建一个名为 "${name}" 的 Mulby 插件。`
   initialPrompt += '\n\n项目脚手架已经创建完成（React 18 + Tailwind CSS v3 + Vite + Mulby API）。'
   initialPrompt += '\n当前文件结构已包含 manifest.json、src/ui/App.tsx、src/main.ts 等基础文件。'
-  initialPrompt += '\n请先读取现有文件结构，再作为产品顾问通过提问帮助我明确功能需求和 UI 设计。'
+  initialPrompt += '\n请严格按照 Mulby AI 插件固定流程推进，而不是直接自由发挥。'
+  initialPrompt += '\n1. 先读取 manifest.json、src/main.ts、src/ui/App.tsx，确认当前接入骨架。'
+  initialPrompt += '\n2. 再通过提问和我确认：插件目标、features/cmds 触发方式、UI/后台/预加载分工、是否需要 Node.js 能力。'
+  initialPrompt += '\n3. 编码前先给出一份“接入契约”摘要：manifest 计划改动、featureCode 映射、UI/Main/Preload 职责、后续验证步骤。'
+  initialPrompt += '\n4. 先实现一个能在 Mulby 里跑通的最小闭环，再扩展细节和体验。'
+  initialPrompt += '\n5. 完成前必须运行 validate_plugin，确认接入检查通过后再收尾。'
   if (options.desc) {
     initialPrompt += `\n\n插件初步设想: ${options.desc}\n`
   }

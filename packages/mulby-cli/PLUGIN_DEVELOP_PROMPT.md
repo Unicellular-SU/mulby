@@ -54,6 +54,55 @@ export default function App() {
 }
 ```
 
+## 1.2 Fixed AI Development Workflow
+
+When AI is used to generate or modify a Mulby plugin, it MUST follow this fixed workflow.
+The goal is not "write some code", but "produce a plugin that can really attach to Mulby".
+
+### Phase 0: Integration Recon
+Before proposing implementation details, inspect the current integration skeleton:
+- `manifest.json`
+- `src/main.ts`
+- `src/ui/App.tsx` (if the plugin has UI)
+- `preload.cjs` (if present)
+
+### Phase 1: Define the Plugin Contract
+Lock down the contract before coding:
+- Which `features[].code` values exist
+- Which `cmds` trigger each feature
+- Whether each feature is `ui`, `silent`, or `detached`
+- Which logic belongs to UI, backend, and preload
+- Whether background mode / scheduler / host APIs are needed
+
+### Phase 2: Build a Minimum Runnable Path
+Implement one end-to-end happy path first:
+- `manifest.json` points to the correct entry files
+- `src/main.ts` contains the real entry logic
+- UI plugins have a usable `src/ui/App.tsx`
+- `preload.cjs` is only added when Node.js / Electron bridging is required
+
+### Phase 3: Expand Features
+Only after the minimum path is attachable should you:
+- add additional feature triggers
+- refine UX and styling
+- add host methods or background capabilities
+
+### Phase 4: Validate Before Handoff
+Before claiming completion, verify all of the following:
+- `manifest.json` required fields are complete
+- every `feature.code` maps to real handling logic
+- `main`, `ui`, and `preload` paths point to files that really exist
+- `preload` uses `.cjs` and CommonJS when present
+- the plugin can be built successfully
+
+### Manual Host-Side Acceptance Checklist
+The final delivery should tell the user to test these points inside Mulby:
+1. The plugin can be installed / loaded without manifest errors
+2. At least one trigger path (`keyword`, `regex`, `files`, `img`, or `over`) actually enters the plugin
+3. The expected UI opens, or the silent feature completes without UI
+4. Detached / background / preload behavior works if configured
+5. The core user task succeeds on a realistic sample input
+
 ## 2. Manifest Configuration (`manifest.json`)
 
 ```json

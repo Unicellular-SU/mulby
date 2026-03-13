@@ -184,6 +184,23 @@ export const PLUGIN_GENERATION_TOOLS = [
             }
         }
     },
+    {
+        type: 'function',
+        function: {
+            name: 'validate_plugin',
+            description: 'Validate Mulby plugin integration before finish. Checks manifest.json, feature configuration, entry files, preload conventions, and optionally runs npm run build. You MUST call this and fix all errors before finish.',
+            parameters: {
+                type: 'object',
+                properties: {
+                    runBuild: {
+                        type: 'boolean',
+                        description: 'Whether to run npm run build during validation. Default true.'
+                    }
+                },
+                required: []
+            }
+        }
+    },
 
     {
         type: 'function',

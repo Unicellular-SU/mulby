@@ -18,10 +18,10 @@ Mulby CLI 现在支持多个 AI 供应商，并允许在会话中灵活切换供
 ### 添加供应商配置
 
 ```bash
-# 交互式添加配置
-mulby ai add my-openai
+# 推荐：快速配置默认 provider
+mulby ai setup
 
-# 使用命令行参数
+# 需要多套配置时，添加命名配置
 mulby ai add my-claude \
   --provider claude \
   --api-key sk-ant-xxx \
@@ -54,7 +54,7 @@ AI 供应商配置:
 ### 查看配置详情
 
 ```bash
-mulby ai show my-openai
+mulby ai show
 ```
 
 ### 设置默认配置
@@ -67,10 +67,10 @@ mulby ai use my-claude
 
 ```bash
 # 更新 API Key
-mulby ai update my-openai --api-key sk-new-key
+mulby ai update --api-key sk-new-key
 
 # 更新模型
-mulby ai update my-openai --model gpt-4o-mini
+mulby ai update --model gpt-4o-mini
 
 # 更新端点
 mulby ai update my-custom --endpoint https://api.example.com/v1
@@ -79,7 +79,7 @@ mulby ai update my-custom --endpoint https://api.example.com/v1
 ### 删除配置
 
 ```bash
-mulby ai remove my-openai
+mulby ai remove
 # 或
 mulby ai rm my-openai
 ```
@@ -287,10 +287,10 @@ mulby create my-plugin --ai
 ### 配置未找到
 
 ```bash
-错误: 未配置 AI 服务。请使用 `mulby ai add <name>` 添加供应商配置。
+错误: 未配置 AI 服务。请使用 `mulby ai setup` 快速配置，或使用 `mulby ai add [name]` 添加供应商配置。
 ```
 
-解决方法: 使用 `mulby ai add` 添加至少一个供应商配置。
+解决方法: 使用 `mulby ai setup` 添加默认配置，或使用 `mulby ai add` 添加至少一个供应商配置。
 
 ### 供应商切换失败
 
