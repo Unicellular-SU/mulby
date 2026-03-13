@@ -3,7 +3,6 @@ import type { PluginStoreEntry } from '../../shared/types/plugin-store'
 import StorePluginDetailsPage from './StorePluginDetailsPage'
 
 interface PluginStoreDetailsViewProps {
-  breadcrumbItems: string[]
   entry: PluginStoreEntry
   onBack: () => void
   onClose: () => void
@@ -21,7 +20,6 @@ function buildInstalledState(entry: PluginStoreEntry): PluginStoreEntry {
 }
 
 export default function PluginStoreDetailsView({
-  breadcrumbItems,
   entry,
   onBack,
   onClose
@@ -80,7 +78,6 @@ export default function PluginStoreDetailsView({
 
   return (
     <StorePluginDetailsPage
-      breadcrumbItems={breadcrumbItems}
       entry={currentEntry}
       installing={installing}
       onBack={onBack}

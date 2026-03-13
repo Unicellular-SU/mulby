@@ -1,17 +1,21 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import type { ReactNode } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import type { PluginStoreEntry, PluginStorePlugin } from '../../shared/types/plugin-store'
-import StorePageTitleCard from './StorePageTitleCard'
+import useCachedRemoteImage from '../hooks/useCachedRemoteImage'
 
 interface StorePluginDetailsPageProps {
-  breadcrumbItems: string[]
   entry: PluginStoreEntry
   installing: boolean
   onBack?: () => void
   onClose: () => void
   onInstall: (entry: PluginStoreEntry) => void
+}
+
+interface StoreScreenshotPreview {
+  url: string
+  label: string
 }
 
 function getStorePluginDisplayName(plugin: PluginStorePlugin): string {
@@ -117,14 +121,15 @@ function MetaItem({ label, value, mono = false }: { label: string; value?: strin
 function StorePluginIcon({ plugin, size = 'md' }: { plugin: PluginStorePlugin; size?: 'md' | 'lg' }) {
   const [iconFailed, setIconFailed] = useState(false)
   const icon = plugin.icon
+  const cachedIconSrc = useCachedRemoteImage(icon?.type === 'url' ? icon.value : null)
   const shellClass = size === 'lg' ? 'h-16 w-16 rounded-2xl' : 'h-10 w-10 rounded-xl'
   const imageClass = size === 'lg' ? 'h-11 w-11 rounded-xl' : 'h-7 w-7 rounded-lg'
   const textClass = size === 'lg' ? 'text-xl' : 'text-sm'
 
-  if (icon?.type === 'url' && !iconFailed) {
+  if (icon?.type === 'url' && !iconFailed && cachedIconSrc) {
     return (
       <div className={`flex shrink-0 items-center justify-center bg-slate-100 dark:bg-slate-800 ${shellClass}`}>
-        <img src={icon.value} alt="" className={`${imageClass} object-cover`} onError={() => setIconFailed(true)} />
+        <img src={cachedIconSrc} alt="" className={`${imageClass} object-cover`} onError={() => setIconFailed(true)} />
       </div>
     )
   }
@@ -148,16 +153,19 @@ function StorePluginScreenshot({
   plugin,
   url,
   caption,
-  index
+  index,
+  onPreview
 }: {
   plugin: PluginStorePlugin
   url: string
   caption?: string
   index: number
+  onPreview: (preview: StoreScreenshotPreview) => void
 }) {
   const [failed, setFailed] = useState(false)
   const title = getStorePluginDisplayName(plugin)
   const label = caption || `${title} 截图 ${index + 1}`
+  const cachedScreenshotSrc = useCachedRemoteImage(url)
 
   if (failed) {
     return (
@@ -171,27 +179,25 @@ function StorePluginScreenshot({
   }
 
   return (
-    <a
-      href={url}
-      target="_blank"
-      rel="noreferrer"
-      className="group overflow-hidden rounded-xl border border-slate-200/80 bg-slate-50/80 transition hover:border-slate-300 dark:border-slate-800/80 dark:bg-slate-950/60 dark:hover:border-slate-700"
+    <button
+      type="button"
+      className="group overflow-hidden rounded-xl border border-slate-200/80 bg-slate-50/80 text-left transition hover:border-slate-300 dark:border-slate-800/80 dark:bg-slate-950/60 dark:hover:border-slate-700"
+      onClick={() => onPreview({ url, label })}
     >
       <div className="aspect-[16/10] overflow-hidden">
         <img
-          src={url}
+          src={cachedScreenshotSrc || url}
           alt={label}
           className="h-full w-full object-cover transition duration-300 group-hover:scale-[1.02]"
           onError={() => setFailed(true)}
         />
       </div>
       <div className="px-4 py-3 text-sm text-slate-600 dark:text-slate-300">{label}</div>
-    </a>
+    </button>
   )
 }
 
 export default function StorePluginDetailsPage({
-  breadcrumbItems,
   entry,
   installing,
   onBack,
@@ -200,6 +206,9 @@ export default function StorePluginDetailsPage({
 }: StorePluginDetailsPageProps) {
   const title = getStorePluginDisplayName(entry.plugin)
   const screenshots = entry.plugin.screenshots || []
+  const [previewImage, setPreviewImage] = useState<StoreScreenshotPreview | null>(null)
+  const [previewFailed, setPreviewFailed] = useState(false)
+  const previewImageSrc = useCachedRemoteImage(previewImage?.url)
   const details = entry.plugin.details?.trim() || entry.plugin.description
   const statusMeta = getStoreStatusMeta(entry.installState.status)
   const transportMeta = getStoreTransportMeta(entry.plugin.downloadUrl)
@@ -218,6 +227,22 @@ export default function StorePluginDetailsPage({
   const actionButtonClass = entry.installState.status === 'updatable'
     ? topEmphasisButtonClass
     : topPrimaryButtonClass
+
+  useEffect(() => {
+    setPreviewFailed(false)
+  }, [previewImage])
+
+  useEffect(() => {
+    if (!previewImage) return
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        event.preventDefault()
+        setPreviewImage(null)
+      }
+    }
+    window.addEventListener('keydown', handleKeyDown, true)
+    return () => window.removeEventListener('keydown', handleKeyDown, true)
+  }, [previewImage])
 
   return (
     <div className="relative h-full overflow-hidden bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-100">
@@ -246,12 +271,6 @@ export default function StorePluginDetailsPage({
           </div>
           <div className="flex items-center gap-2">
             <button
-              onClick={onClose}
-              className={topGhostButtonClass}
-            >
-              返回列表
-            </button>
-            <button
               className={actionButtonClass}
               disabled={actionDisabled}
               onClick={() => onInstall(entry)}
@@ -263,14 +282,7 @@ export default function StorePluginDetailsPage({
 
         <div className="flex-1 overflow-y-auto no-drag">
           <div className="mx-auto max-w-6xl px-6 pb-8 pt-6">
-            <StorePageTitleCard
-              sectionLabel="Store"
-              title="插件详情"
-              description={`查看 ${title} 的完整介绍、截图与来源信息。`}
-              breadcrumbItems={breadcrumbItems}
-            />
-
-            <div className={`mt-6 ${cardClass}`}>
+            <div className={cardClass}>
               <div className="flex flex-col gap-5">
                 <div className="flex flex-col gap-4 md:flex-row md:items-start">
                   <StorePluginIcon plugin={entry.plugin} size="lg" />
@@ -356,6 +368,7 @@ export default function StorePluginDetailsPage({
                       url={shot.url}
                       caption={shot.caption}
                       index={index}
+                      onPreview={setPreviewImage}
                     />
                   ))}
                 </div>
@@ -402,6 +415,46 @@ export default function StorePluginDetailsPage({
             </div>
           </div>
         </div>
+
+        {previewImage && (
+          <div
+            className="absolute inset-0 z-50 flex items-center justify-center bg-transparent p-6 no-drag"
+            onClick={() => setPreviewImage(null)}
+          >
+            <div
+              className="flex h-full w-full max-w-6xl flex-col overflow-hidden rounded-3xl border border-slate-200/70 bg-white/92 shadow-[0_24px_80px_rgba(15,23,42,0.22)] backdrop-blur-md dark:border-slate-700/70 dark:bg-slate-950/82"
+              onClick={(event) => event.stopPropagation()}
+            >
+              <div className="flex items-center justify-between border-b border-slate-200/70 px-5 py-4 dark:border-slate-800/80">
+                <div className="min-w-0">
+                  <div className="text-sm font-medium text-slate-900 dark:text-white">{previewImage.label}</div>
+                  <div className="mt-1 text-xs text-slate-500 dark:text-slate-400">点击遮罩或按 Esc 关闭预览</div>
+                </div>
+                <button
+                  type="button"
+                  className="inline-flex h-9 items-center justify-center rounded-full border border-slate-200 bg-white px-4 text-sm text-slate-700 transition hover:border-slate-300 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:border-slate-600"
+                  onClick={() => setPreviewImage(null)}
+                >
+                  关闭
+                </button>
+              </div>
+              <div className="flex min-h-0 flex-1 items-center justify-center p-5">
+                {previewFailed ? (
+                  <div className="flex h-full w-full items-center justify-center rounded-2xl border border-slate-200/70 bg-slate-50/90 dark:border-slate-800/80 dark:bg-slate-900/80">
+                    <StorePluginIcon plugin={entry.plugin} size="lg" />
+                  </div>
+                ) : (
+                  <img
+                    src={previewImageSrc || previewImage.url}
+                    alt={previewImage.label}
+                    className="max-h-full max-w-full rounded-2xl object-contain"
+                    onError={() => setPreviewFailed(true)}
+                  />
+                )}
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   )

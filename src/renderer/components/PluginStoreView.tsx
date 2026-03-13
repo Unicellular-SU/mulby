@@ -5,10 +5,10 @@ import type {
   PluginStorePlugin,
   PluginStoreSourceSyncResult
 } from '../../shared/types/plugin-store'
+import useCachedRemoteImage from '../hooks/useCachedRemoteImage'
 import StorePageTitleCard from './StorePageTitleCard'
 
 interface PluginStoreViewProps {
-  breadcrumbItems: string[]
   onBack: () => void
   onOpenDetails: (entry: PluginStoreEntry) => void
 }
@@ -100,10 +100,11 @@ function getStoreStatusMeta(status: PluginStoreEntry['installState']['status']):
 function StoreCardIcon({ plugin }: { plugin: PluginStorePlugin }) {
   const icon = plugin.icon
   const [iconFailed, setIconFailed] = useState(false)
-  if (icon?.type === 'url' && !iconFailed) {
+  const cachedIconSrc = useCachedRemoteImage(icon?.type === 'url' ? icon.value : null)
+  if (icon?.type === 'url' && !iconFailed && cachedIconSrc) {
     return (
       <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-slate-100 dark:bg-slate-800">
-        <img src={icon.value} alt="" className="h-7 w-7 rounded-lg object-cover" onError={() => setIconFailed(true)} />
+        <img src={cachedIconSrc} alt="" className="h-7 w-7 rounded-lg object-cover" onError={() => setIconFailed(true)} />
       </div>
     )
   }
@@ -121,7 +122,7 @@ function StoreCardIcon({ plugin }: { plugin: PluginStorePlugin }) {
   )
 }
 
-export default function PluginStoreView({ breadcrumbItems, onBack, onOpenDetails }: PluginStoreViewProps) {
+export default function PluginStoreView({ onBack, onOpenDetails }: PluginStoreViewProps) {
   const [sources, setSources] = useState<StoreSource[]>([])
   const [newSource, setNewSource] = useState<{ name: string; url: string }>({ name: '', url: '' })
   const [sourceError, setSourceError] = useState<string | null>(null)
@@ -315,7 +316,6 @@ export default function PluginStoreView({ breadcrumbItems, onBack, onOpenDetails
                 sectionLabel="Store"
                 title="插件商店"
                 description="浏览在线插件、查看详情，并安装到 Mulby。"
-                breadcrumbItems={breadcrumbItems}
                 aside={(
                   <div className="flex w-full justify-end">
                     <div className="flex w-full gap-2 md:max-w-[380px] md:justify-end">

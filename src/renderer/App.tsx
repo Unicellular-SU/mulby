@@ -77,21 +77,6 @@ function parseSettingsSection(value: unknown): SettingsSection | null {
   return null
 }
 
-function buildPluginStoreBreadcrumbs(
-  pluginStoreReturnTarget: 'home' | 'settings' | 'plugins',
-  pluginManagerReturnTarget: 'home' | 'settings'
-): string[] {
-  if (pluginStoreReturnTarget === 'settings') {
-    return ['设置', '插件商店']
-  }
-  if (pluginStoreReturnTarget === 'plugins') {
-    return pluginManagerReturnTarget === 'settings'
-      ? ['设置', '插件管理', '插件商店']
-      : ['主页', '插件管理', '插件商店']
-  }
-  return ['主页', '插件商店']
-}
-
 function LazyViewFrame({ isDragging, children }: { isDragging: boolean; children: ReactNode }) {
   return (
     <div className={`app ${isDragging ? 'dragging' : ''}`}>
@@ -300,15 +285,6 @@ function App() {
 
     return { managerHeight, listHeight }
   }, [attachments.length])
-
-  const pluginStoreBreadcrumbItems = useMemo(
-    () => buildPluginStoreBreadcrumbs(pluginStoreReturnTarget, pluginManagerReturnTarget),
-    [pluginManagerReturnTarget, pluginStoreReturnTarget]
-  )
-  const pluginStoreDetailsBreadcrumbItems = useMemo(
-    () => [...pluginStoreBreadcrumbItems, '插件详情'],
-    [pluginStoreBreadcrumbItems]
-  )
 
   const systemPageAttached = !isSystemWindow && systemPageState.open && systemPageState.mode === 'attached'
   const hasTextInput = query.length > 0 || payloadText.length > 0
@@ -1160,7 +1136,6 @@ function App() {
     return (
       <LazyViewFrame isDragging={isDragging}>
         <PluginStoreView
-          breadcrumbItems={pluginStoreBreadcrumbItems}
           onOpenDetails={(entry) => {
             setSelectedStoreEntry(entry)
             setViewMode('plugin-store-details')
@@ -1190,7 +1165,6 @@ function App() {
     return (
       <LazyViewFrame isDragging={isDragging}>
         <PluginStoreDetailsView
-          breadcrumbItems={pluginStoreDetailsBreadcrumbItems}
           entry={selectedStoreEntry}
           onClose={() => {
             setSelectedStoreEntry(null)
