@@ -12,6 +12,10 @@ function createSystemModel(providerId: string, modelId: string, description = 'ç
 
 const SYSTEM_DEFAULT_MODELS: AiModel[] = [
   // openai
+  createSystemModel('openai', 'gpt-5.4'),
+  createSystemModel('openai', 'gpt-5.4-pro'),
+  createSystemModel('openai', 'gpt-5.2'),
+  createSystemModel('openai', 'gpt-5.2-pro'),
   createSystemModel('openai', 'gpt-5.1'),
   createSystemModel('openai', 'gpt-5'),
   createSystemModel('openai', 'gpt-5-mini'),
@@ -30,8 +34,11 @@ const SYSTEM_DEFAULT_MODELS: AiModel[] = [
   createSystemModel('gemini', 'gemini-2.5-flash-image-preview'),
   createSystemModel('gemini', 'gemini-3-pro-image-preview'),
   createSystemModel('gemini', 'gemini-3-pro-preview'),
+  createSystemModel('gemini', 'gemini-3.1-pro-preview'),
 
   // anthropic
+  createSystemModel('anthropic', 'claude-opus-4-6'),
+  createSystemModel('anthropic', 'claude-sonnet-4-6'),
   createSystemModel('anthropic', 'claude-sonnet-4-5'),
   createSystemModel('anthropic', 'claude-haiku-4-5'),
   createSystemModel('anthropic', 'claude-opus-4-5'),
@@ -42,6 +49,8 @@ const SYSTEM_DEFAULT_MODELS: AiModel[] = [
   createSystemModel('silicon', 'BAAI/bge-m3'),
 
   // zhipu
+  createSystemModel('zhipu', 'glm-5'),
+  createSystemModel('zhipu', 'glm-4.7'),
   createSystemModel('zhipu', 'glm-4.5-flash'),
   createSystemModel('zhipu', 'glm-4.6'),
   createSystemModel('zhipu', 'glm-4.6v'),
@@ -67,6 +76,11 @@ const SYSTEM_DEFAULT_MODELS: AiModel[] = [
   // moonshot
   createSystemModel('moonshot', 'moonshot-v1-auto'),
   createSystemModel('moonshot', 'kimi-k2-0711-preview'),
+  createSystemModel('moonshot', 'kimi-k2.5'),
+  createSystemModel('moonshot', 'kimi-k2-0905-Preview'),
+  createSystemModel('moonshot', 'kimi-k2-turbo-preview'),
+  createSystemModel('moonshot', 'kimi-k2-thinking'),
+  createSystemModel('moonshot', 'kimi-k2-thinking-turbo'),
 
   // baichuan
   createSystemModel('baichuan', 'Baichuan4'),
@@ -86,6 +100,8 @@ const SYSTEM_DEFAULT_MODELS: AiModel[] = [
   createSystemModel('dashscope', 'qwen-plus'),
   createSystemModel('dashscope', 'qwen-max'),
   createSystemModel('dashscope', 'qwen3-max'),
+  createSystemModel('dashscope', 'qwen3.5-plus'),
+  createSystemModel('dashscope', 'qwen3.5-397b-a17b'),
   createSystemModel('dashscope', 'text-embedding-v4'),
   createSystemModel('dashscope', 'text-embedding-v3'),
   createSystemModel('dashscope', 'text-embedding-v2'),
@@ -115,16 +131,24 @@ const SYSTEM_DEFAULT_MODELS: AiModel[] = [
   createSystemModel('doubao', 'doubao-embedding-text-240715'),
   createSystemModel('doubao', 'doubao-embedding-vision-241215'),
   createSystemModel('doubao', 'doubao-vision-lite-32k-241015'),
+  createSystemModel('doubao', 'doubao-seed-2-0-pro-260215'),
+  createSystemModel('doubao', 'doubao-seed-2-0-lite-260215'),
+  createSystemModel('doubao', 'doubao-seed-2-0-code-preview-260215'),
+  createSystemModel('doubao', 'doubao-seed-2-0-mini-260215'),
 
   // minimax
+  createSystemModel('minimax', 'MiniMax-M2.5'),
+  createSystemModel('minimax', 'MiniMax-M2.5-lightning'),
+  createSystemModel('minimax', 'MiniMax-M2.1'),
+  createSystemModel('minimax', 'MiniMax-M2.1-lightning'),
+  createSystemModel('minimax', 'MiniMax-M2'),
+  createSystemModel('minimax', 'M2-her'),
   createSystemModel('minimax', 'abab6.5s-chat'),
   createSystemModel('minimax', 'abab6.5g-chat'),
   createSystemModel('minimax', 'abab6.5t-chat'),
   createSystemModel('minimax', 'abab5.5s-chat'),
   createSystemModel('minimax', 'minimax-text-01'),
-  createSystemModel('minimax', 'MiniMax-M2'),
   createSystemModel('minimax', 'MiniMax-M2-Stable'),
-  createSystemModel('minimax', 'MiniMax-M2.1'),
 
   // grok
   createSystemModel('grok', 'grok-4'),

@@ -83,7 +83,7 @@ function LazyViewFrame({ isDragging, children }: { isDragging: boolean; children
       <Suspense
         fallback={
           <div className="flex min-h-[320px] items-center justify-center text-sm text-slate-500 dark:text-slate-400">
-            Loading...
+            正在载入页面...
           </div>
         }
       >
@@ -1291,119 +1291,119 @@ function App() {
             }}
             onAttachmentsManagerClose={() => setAttachmentsManagerOpen(false)}
           />
-        {pluginOpen && (
-          <div className="plugin-controls">
-            <button
-              className="plugin-control-btn plugin-reload-btn"
-              onClick={() => {
-                window.mulby.window.reload()
-              }}
-              title="重载插件"
-            >
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M21 12a9 9 0 1 1-2.64-6.36" />
-                <path d="M21 3v6h-6" />
-              </svg>
-            </button>
-            <button
-              className="plugin-control-btn plugin-detach-btn"
-              onClick={() => {
-                window.mulby.window.detach()
-              }}
-              title="转为独立窗口"
-            >
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M21 9V3h-6M3 15v6h6M21 3l-7 7M3 21l7-7" />
-              </svg>
-            </button>
-            <button
-              className="plugin-control-btn plugin-close-btn"
-              onClick={() => {
-                window.mulby.window.close()
-                setPluginOpen(false)
-                // 关闭插件后，让搜索框重新获取焦点
-                setTimeout(() => {
-                  searchInputRef.current?.focus()
-                }, 100)
-              }}
-              title="关闭插件"
-            >
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M18 6L6 18M6 6l12 12" />
-              </svg>
-            </button>
-          </div>
+          {pluginOpen && (
+            <div className="plugin-controls">
+              <button
+                className="plugin-control-btn plugin-reload-btn"
+                onClick={() => {
+                  window.mulby.window.reload()
+                }}
+                title="重载插件"
+              >
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M21 12a9 9 0 1 1-2.64-6.36" />
+                  <path d="M21 3v6h-6" />
+                </svg>
+              </button>
+              <button
+                className="plugin-control-btn plugin-detach-btn"
+                onClick={() => {
+                  window.mulby.window.detach()
+                }}
+                title="转为独立窗口"
+              >
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M21 9V3h-6M3 15v6h6M21 3l-7 7M3 21l7-7" />
+                </svg>
+              </button>
+              <button
+                className="plugin-control-btn plugin-close-btn"
+                onClick={() => {
+                  window.mulby.window.close()
+                  setPluginOpen(false)
+                  // 关闭插件后，让搜索框重新获取焦点
+                  setTimeout(() => {
+                    searchInputRef.current?.focus()
+                  }, 100)
+                }}
+                title="关闭插件"
+              >
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M18 6L6 18M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+          )}
+          {systemPageAttached && (
+            <div className="plugin-controls">
+              <button
+                className="plugin-control-btn plugin-reload-btn"
+                onClick={() => {
+                  void window.mulby.systemPage.reload()
+                }}
+                title="重载系统页面"
+              >
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M21 12a9 9 0 1 1-2.64-6.36" />
+                  <path d="M21 3v6h-6" />
+                </svg>
+              </button>
+              <button
+                className="plugin-control-btn plugin-detach-btn"
+                onClick={() => {
+                  void window.mulby.systemPage.detach()
+                }}
+                title="转为独立窗口"
+              >
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M21 9V3h-6M3 15v6h6M21 3l-7 7M3 21l7-7" />
+                </svg>
+              </button>
+              <button
+                className="plugin-control-btn plugin-close-btn"
+                onClick={() => {
+                  void window.mulby.systemPage.close()
+                  setTimeout(() => {
+                    searchInputRef.current?.focus()
+                  }, 100)
+                }}
+                title="关闭系统页面"
+              >
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M18 6L6 18M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+          )}
+        </div>
+        {showAttachmentManager && (
+          <AttachmentManager
+            attachments={attachments}
+            onAttachmentsChange={handleAttachmentsChange}
+            onClose={() => setAttachmentsManagerOpen(false)}
+            listMaxHeight={managerMetrics.listHeight}
+          />
         )}
-        {systemPageAttached && (
-          <div className="plugin-controls">
-            <button
-              className="plugin-control-btn plugin-reload-btn"
-              onClick={() => {
-                void window.mulby.systemPage.reload()
-              }}
-              title="重载系统页面"
-            >
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M21 12a9 9 0 1 1-2.64-6.36" />
-                <path d="M21 3v6h-6" />
-              </svg>
-            </button>
-            <button
-              className="plugin-control-btn plugin-detach-btn"
-              onClick={() => {
-                void window.mulby.systemPage.detach()
-              }}
-              title="转为独立窗口"
-            >
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M21 9V3h-6M3 15v6h6M21 3l-7 7M3 21l7-7" />
-              </svg>
-            </button>
-            <button
-              className="plugin-control-btn plugin-close-btn"
-              onClick={() => {
-                void window.mulby.systemPage.close()
-                setTimeout(() => {
-                  searchInputRef.current?.focus()
-                }, 100)
-              }}
-              title="关闭系统页面"
-            >
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M18 6L6 18M6 6l12 12" />
-              </svg>
-            </button>
-          </div>
+        {showPluginList && (
+          <PluginList
+            searchPayload={searchPayload}
+            runPayload={runPayload}
+            traceId={perfTrace.id}
+            traceStartedAt={perfTrace.startedAt}
+            traceSource={perfTrace.source}
+            traceInputLength={perfTrace.textLength}
+            traceAttachmentCount={perfTrace.attachmentCount}
+            onResultsChange={setResultCount}
+            onPanelHeightChange={handlePluginListHeightChange}
+            onShowDetails={(pluginName) => {
+              setDetailsPluginName(pluginName)
+              setDetailsReturnTarget('home')
+              setViewMode('plugin-details')
+            }}
+            onOpenSettings={() => openSettings()}
+          />
         )}
-      </div>
-      {showAttachmentManager && (
-        <AttachmentManager
-          attachments={attachments}
-          onAttachmentsChange={handleAttachmentsChange}
-          onClose={() => setAttachmentsManagerOpen(false)}
-          listMaxHeight={managerMetrics.listHeight}
-        />
-      )}
-      {showPluginList && (
-        <PluginList
-          searchPayload={searchPayload}
-          runPayload={runPayload}
-          traceId={perfTrace.id}
-          traceStartedAt={perfTrace.startedAt}
-          traceSource={perfTrace.source}
-          traceInputLength={perfTrace.textLength}
-          traceAttachmentCount={perfTrace.attachmentCount}
-          onResultsChange={setResultCount}
-          onPanelHeightChange={handlePluginListHeightChange}
-          onShowDetails={(pluginName) => {
-            setDetailsPluginName(pluginName)
-            setDetailsReturnTarget('home')
-            setViewMode('plugin-details')
-          }}
-          onOpenSettings={() => openSettings()}
-        />
-      )}
-      {isDragging && <div className="drop-hint">拖放 .inplugin 文件安装插件</div>}
+        {isDragging && <div className="drop-hint">拖放 .inplugin 文件安装插件</div>}
       </div>
     </div>
   )

@@ -15,7 +15,7 @@ import type {
 import { inferProviderType } from './providerCatalog'
 import { resolveProviderBaseURL } from '../../shared/ai/providerDefaults'
 import { getSystemDefaultProviderById, getSystemDefaultProviders, mergeWithSystemDefaultProviders } from '../../shared/ai/systemProviders'
-import { getSystemDefaultModels } from '../../shared/ai/systemModels'
+import { getSystemDefaultModels, mergeWithSystemDefaultModels } from '../../shared/ai/systemModels'
 
 const DEFAULT_MCP_SETTINGS: AiMcpSettings = {
   servers: [],
@@ -311,7 +311,7 @@ export function loadAiSettings(): AiSettings {
       (parsed.providers || []).map((provider, index) => normalizeProvider(provider, index))
     )
     // 仅在旧配置缺失 models 字段时注入系统默认模型；不覆盖用户显式删除的默认模型。
-    const inputModels = Array.isArray(parsed.models) ? parsed.models : getSystemDefaultModels()
+    const inputModels = Array.isArray(parsed.models) ? mergeWithSystemDefaultModels(parsed.models) : getSystemDefaultModels()
     const normalizedModels = inputModels.map((model) =>
       normalizeModel(model, normalizedProviders)
     )
