@@ -21,3 +21,16 @@
 - `progress.md`
 - `progress/2026-01-28-update-messaging-api.md`
 - `progress/plugins_build_progress.md`
+
+## 本轮归档（2026-03-13）
+- `2026-03-doc-cleanup/Agent Skills 规范符合性评估报告.md`
+- `2026-03-doc-cleanup/AI_CREATE_DESIGN.md`
+- `2026-03-doc-cleanup/message-scoring-mechanism.md`
+- `2026-03-doc-cleanup/NATIVE_CLIPBOARD_GUIDE.md`
+- `2026-03-doc-cleanup/phase5-stream-tool-regression-checklist.md`
+- `2026-03-doc-cleanup/PLUGIN_DEVELOP_PROMPT.md`
+- `2026-03-doc-cleanup/refactor-ai-skills-creation-prompt.md`
+- `2026-03-doc-cleanup/subinput-fix.md`
+- `2026-03-doc-cleanup/task-scheduler-phase4-analysis.md`
+- `2026-03-doc-cleanup/TASK_SCHEDULER_IMPROVEMENTS.md`
+- `2026-03-doc-cleanup/ubrowser.md`

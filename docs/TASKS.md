@@ -58,11 +58,10 @@
 - [x] 任务调度器 UI 改为事件驱动（替代 1s 网络轮询，倒计时保留本地 1s UI 刷新）
 
 ## Deferred / Not Planned (This Cycle)
-- [ ] 插件商店安全增强（后期专题）
-- [ ] Python 插件运行时（废弃）
+- [x] 插件商店安全增强
 - [ ] i18n 多语言体系（待定）
-- [ ] `src/main/plugin/manager.ts` 拆分（本轮取消）
-- [ ] `src/renderer/components/PluginManagerView.tsx` 拆分（本轮取消）
+- [x] `src/main/plugin/manager.ts` 拆分
+- [x] `src/renderer/components/PluginManagerView.tsx` 拆分
 
 ## 验收门槛（本轮）
 - `npm run typecheck` 通过

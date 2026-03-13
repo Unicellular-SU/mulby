@@ -31,8 +31,6 @@ Mulby 采用 Electron 三层架构：
 - 插件窗口由 `PluginWindowManager` 管理，支持附着与分离模式
 - 后台插件由 `BackgroundPluginManager` 管理
 
-> 状态：Python 插件运行时方案已废弃，不在近期路线。
-
 ## 3. 目录与模块（当前实现）
 
 ```text

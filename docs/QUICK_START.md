@@ -14,16 +14,15 @@
 - 插件索引如果提供 `sha256`，Mulby 会在安装前自动校验下载包
 - 安装后的来源元数据会写入插件目录下的 `.mulby-install.json`
 
-## 3. 从仓库里的示例开始
+## 3. 从插件示例仓库开始
 
-示例目录:
-- `examples/plugins/hello-clipboard`
-- `examples/plugins/timestamp-tools`
+示例仓库:
+- `https://github.com/Unicellular-SU/mulby_plugins`
 
 建议顺序:
-1. 先看各目录下的 `manifest.json`
-2. 再看 `main.js`
-3. 最后看各自的 `README.md`
+1. 先看目标插件目录下的 `manifest.json`
+2. 再看 `main.js`（或对应入口文件）
+3. 最后看插件目录中的 `README.md`
 
 ## 4. 本轮推荐验证项
 

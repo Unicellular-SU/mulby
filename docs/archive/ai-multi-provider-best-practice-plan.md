@@ -150,7 +150,7 @@
 - 已完成：新增 shared `streamDiagnostics`，将 stream/tool 异常统一归类为错误码（如 `AI_STREAM_ABORTED`、`AI_STREAM_TOOL_EXECUTION_ERROR`、`AI_STREAM_HTTP_4XX/5XX` 等），并在 error chunk 回传错误码元数据。
 - 已完成：新增 `streamMetrics`，对流式请求输出结构化统计（provider/model/route、chunk 计数、字符计数、耗时、usage、异常分类），日志统一为 `stream:metrics:start/end` 与 `stream:error`。
 - 已完成：工具执行异常统一包装为 `[AI_TOOL_EXECUTION_ERROR]` 前缀，确保 SDK tool 与 compat tool loop 两条链路可被同一分类器稳定识别。
-- 产物：`scripts/phase5-regression.sh`、`docs/phase5-stream-tool-regression-checklist.md`。
+- 产物：`scripts/phase5-regression.sh`、`docs/archive/2026-03-doc-cleanup/phase5-stream-tool-regression-checklist.md`。
 
 ## Phase 6: 测试与发布治理
 
