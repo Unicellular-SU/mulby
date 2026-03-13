@@ -1,27 +1,23 @@
 # 插件管理 API (plugin)
-本文档描述 插件管理 API (plugin) 的使用方法与接口。
+本文档描述插件管理 API (plugin) 的使用方式与接口。
 
 > 入口：`window.mulby.plugin`
 
 ### plugin.getAll()
 [Renderer]
-获取所有插件信息。
+获取全部插件信息。
 
 ```javascript
 const plugins = await window.mulby.plugin.getAll();
 ```
 
-**返回值**:
+### plugin.listCommands(pluginId?)
+[Renderer]
+获取命令列表（功能指令 + 匹配指令）。
 
-```typescript
-interface PluginInfo {
-  id: string;
-  name: string;
-  displayName: string;
-  description?: string;
-  features: Array<{ code: string; explain?: string }>;
-  enabled: boolean;
-}
+```javascript
+const allCommands = await window.mulby.plugin.listCommands();
+const translatorCommands = await window.mulby.plugin.listCommands('translator');
 ```
 
 ### plugin.search(query)
@@ -32,20 +28,6 @@ interface PluginInfo {
 const results = await window.mulby.plugin.search('translate');
 ```
 
-**返回值**:
-
-```typescript
-interface PluginSearchResult {
-  pluginId: string;
-  pluginName: string;
-  displayName: string;
-  featureCode: string;
-  featureExplain?: string;
-  matchType: 'keyword' | 'regex' | 'prefix' | 'exact' | string;
-  icon?: string;
-}
-```
-
 ### plugin.run(name, featureCode[, input])
 [Renderer]
 执行插件功能入口。
@@ -54,10 +36,28 @@ interface PluginSearchResult {
 const result = await window.mulby.plugin.run('translator', 'translate', 'hello');
 ```
 
-**返回值**:
+返回值：`{ success: boolean; hasUI?: boolean; error?: string }`
 
-```typescript
-{ success: boolean; hasUI?: boolean; error?: string }
+### plugin.runCommand(input)
+[Renderer]
+按插件命令输入结构直接执行指令。
+
+```javascript
+const result = await window.mulby.plugin.runCommand({
+  pluginId: 'translator',
+  featureCode: 'translate',
+  input: 'hello'
+});
+```
+
+返回值：`{ success: boolean; hasUI?: boolean; error?: string }`
+
+### plugin.getRecentUsed(limit?)
+[Renderer]
+获取最近使用的插件功能列表。
+
+```javascript
+const recent = await window.mulby.plugin.getRecentUsed(20);
 ```
 
 ### plugin.install(filePath)
@@ -66,12 +66,6 @@ const result = await window.mulby.plugin.run('translator', 'translate', 'hello')
 
 ```javascript
 const result = await window.mulby.plugin.install('/path/to/plugin.zip');
-```
-
-**返回值**:
-
-```typescript
-{ success: boolean; pluginName?: string; error?: string }
 ```
 
 ### plugin.enable(name) / plugin.disable(name) / plugin.uninstall(name)
@@ -84,37 +78,46 @@ await window.mulby.plugin.disable('translator');
 await window.mulby.plugin.uninstall('translator');
 ```
 
-**返回值**:
-
-```typescript
-{ success: boolean; error?: string }
-```
+返回值：`{ success: boolean; error?: string }`
 
 ### plugin.getReadme(name)
 [Renderer]
-获取插件 README 文档内容。
+获取插件 README 文本内容。
 
 ```javascript
 const markdown = await window.mulby.plugin.getReadme('translator');
 ```
 
-**返回值**: `string | null`
+返回值：`string | null`
+
+### plugin.listCommandShortcuts(pluginId?)
+[Renderer]
+列出命令快捷键绑定。
+
+### plugin.bindCommandShortcut(input)
+[Renderer]
+绑定命令快捷键。
+
+### plugin.unbindCommandShortcut(bindingId)
+[Renderer]
+解绑命令快捷键。
+
+### plugin.validateCommandShortcut(accelerator, bindingId?)
+[Renderer]
+校验快捷键是否可绑定。
+
+### plugin.setCommandDisabled(input)
+[Renderer]
+设置命令启用/禁用状态。
 
 ### plugin.redirect(label, payload?)
 [Renderer]
 从当前插件跳转到其他插件。
 
 ```javascript
-// 按 featureCode 跳转
 await window.mulby.plugin.redirect('translate', { text: 'hello' });
-
-// 指定插件 + featureCode
 await window.mulby.plugin.redirect(['translator', 'translate'], { text: 'hello' });
 ```
-
-**返回值**:
-- `false` / `true`
-- 或 `{ candidates: Array<{ name: string; displayName: string }> }`（存在多个匹配时）
 
 ### plugin.outPlugin(isKill?)
 [Renderer]
@@ -122,10 +125,10 @@ await window.mulby.plugin.redirect(['translator', 'translate'], { text: 'hello' 
 
 ```javascript
 await window.mulby.plugin.outPlugin();
-await window.mulby.plugin.outPlugin(true); // 强制销毁独立窗口
+await window.mulby.plugin.outPlugin(true);
 ```
 
-**返回值**: `boolean`
+返回值：`boolean`
 
 ### onPluginInit(callback)
 [Renderer]
@@ -141,13 +144,11 @@ await window.mulby.plugin.outPlugin(true); // 强制销毁独立窗口
 
 ### plugin.listBackground()
 [Renderer]
-获取所有后台运行的插件及活跃的插件宿主进程信息。
+获取后台运行插件与活跃 host 信息。
 
 ```javascript
 const processes = await window.mulby.plugin.listBackground();
 ```
-
-**返回值**: `Array<BackgroundPluginInfo>` (包含插件的基础信息、运行模式、资源占用、健康状态等)
 
 ### plugin.startBackground(pluginId)
 [Renderer]
@@ -157,7 +158,7 @@ const processes = await window.mulby.plugin.listBackground();
 await window.mulby.plugin.startBackground('my-plugin');
 ```
 
-**返回值**: `{ success: boolean; error?: string }`
+返回值：`{ success: boolean; error?: string }`
 
 ### plugin.stopBackground(pluginId)
 [Renderer]
@@ -167,7 +168,7 @@ await window.mulby.plugin.startBackground('my-plugin');
 await window.mulby.plugin.stopBackground('my-plugin');
 ```
 
-**返回值**: `{ success: boolean }`
+返回值：`{ success: boolean }`
 
 ### plugin.getBackgroundInfo(pluginId)
 [Renderer]
@@ -177,17 +178,15 @@ await window.mulby.plugin.stopBackground('my-plugin');
 const info = await window.mulby.plugin.getBackgroundInfo('my-plugin');
 ```
 
-**返回值**: `any`
-
 ### plugin.stopPlugin(pluginId)
 [Renderer]
-停止运行中的插件（关闭窗口并销毁 Host 进程）。
+停止运行中的插件（关闭窗口并终止 Host 进程）。
 
 ```javascript
-await window.mulby.plugin.stopPlugin('my-plugin');
+const result = await window.mulby.plugin.stopPlugin('my-plugin');
 ```
 
-**返回值**: `Promise<void>`
+返回值：`{ success: boolean; error?: string }`
 
 ### 完整示例
 
@@ -204,8 +203,3 @@ window.mulby.onPluginDetached(() => {
   console.log('detached');
 });
 ```
-
-**事件说明**:
-- `onPluginInit`: 插件窗口初始化
-- `onPluginAttach`: 主窗口附着插件
-- `onPluginDetached`: 主窗口插件分离

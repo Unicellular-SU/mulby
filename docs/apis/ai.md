@@ -375,47 +375,25 @@ const logs = await ai.mcp.getLogs('filesystem');
 ### skills.refresh()
 ### skills.listEnabled()
 ### skills.get(skillId)
-### skills.listCreateModels()
 [Renderer]
 
 ```javascript
 const all = await ai.skills.list();
 const enabled = await ai.skills.listEnabled();
 const one = await ai.skills.get('my-skill-id');
-const models = await ai.skills.listCreateModels();
 ```
 
-### skills.createWithAi(input)
-### skills.createWithAiStream(input, onChunk)
-[Renderer]
-
-```javascript
-const req = ai.skills.createWithAiStream(
-  {
-    requirements: '创建一个用于代码审查的技能',
-    model: 'openai:gpt-4o-mini'
-  },
-  (chunk) => console.log(chunk.type, chunk.text)
-);
-
-req.abort?.();
-```
-
-### skills.create(input)
 ### skills.install(input)
-### skills.importFromJson(input)
-### skills.update(skillId, patch)
 ### skills.remove(skillId)
 ### skills.enable(skillId)
 ### skills.disable(skillId)
 [Renderer]
 
 ```javascript
-await ai.skills.create({
-  name: 'My Skill',
-  description: '示例技能',
-  mode: 'manual',
-  promptTemplate: 'You are a strict reviewer.'
+await ai.skills.install({
+  source: 'npx',
+  ref: '@openai/codex-agent-skill-example',
+  enabled: true
 });
 ```
 

@@ -75,6 +75,26 @@ await window.mulby.scheduler.unsubscribe()
 **返回值**:
 - `Promise<{ success: boolean; error?: string }>`
 
+### listTasks(filter?)
+[Renderer]
+List tasks from the main-process global scheduler with filter and pagination.
+
+### getTask(taskId)
+[Renderer]
+Get a single task by id.
+
+### cancelTask(taskId)
+[Renderer]
+Cancel a task.
+
+### pauseTask(taskId)
+[Renderer]
+Pause a task.
+
+### resumeTask(taskId)
+[Renderer]
+Resume a paused task.
+
 ### schedule(task)
 [Backend]
 创建定时任务。
@@ -232,19 +252,19 @@ const page2 = await api.scheduler.list({ limit: 20, offset: 20 })
 **返回值**:
 - `Promise<Task[]>` - 任务列表
 
-### count(filter?)
-[Backend]
+### getTaskCount(filter?)
+[Renderer]
 获取任务总数（仅统计当前插件创建的任务）。
 
 ```javascript
 // 获取所有任务数量
-const total = await api.scheduler.count()
+const total = await window.mulby.scheduler.getTaskCount()
 
 // 获取等待中的任务数量
-const pendingCount = await api.scheduler.count({ status: 'pending' })
+const pendingCount = await window.mulby.scheduler.getTaskCount({ status: 'pending' })
 
 // 获取失败的任务数量
-const failedCount = await api.scheduler.count({ status: 'failed' })
+const failedCount = await window.mulby.scheduler.getTaskCount({ status: 'failed' })
 ```
 
 **参数**:
@@ -256,18 +276,18 @@ const failedCount = await api.scheduler.count({ status: 'failed' })
 - `Promise<number>` - 任务总数
 
 ### deleteTasks(taskIds)
-[Backend]
+[Renderer]
 批量删除任务。
 
 ```javascript
 // 删除多个任务
-const result = await api.scheduler.deleteTasks([taskId1, taskId2, taskId3])
+const result = await window.mulby.scheduler.deleteTasks([taskId1, taskId2, taskId3])
 console.log(`已删除 ${result.deletedCount} 个任务`)
 
 // 删除所有失败的任务
-const failedTasks = await api.scheduler.list({ status: 'failed' })
+const failedTasks = await window.mulby.scheduler.listTasks({ status: 'failed' })
 const taskIds = failedTasks.map(t => t.id)
-await api.scheduler.deleteTasks(taskIds)
+await window.mulby.scheduler.deleteTasks(taskIds)
 ```
 
 **参数**:
@@ -278,21 +298,21 @@ await api.scheduler.deleteTasks(taskIds)
   - `success` (boolean) - 是否成功
   - `deletedCount` (number) - 实际删除的任务数量
 
-### cleanup(olderThan?)
-[Backend]
+### cleanupTasks(olderThan?)
+[Renderer]
 清除已完成、失败或已取消的任务记录。
 
 ```javascript
 // 清除7天前的任务记录（默认）
-const result = await api.scheduler.cleanup()
+const result = await window.mulby.scheduler.cleanupTasks()
 console.log(`已清除 ${result.deletedCount} 个任务`)
 
 // 清除30天前的任务记录
 const thirtyDaysAgo = Date.now() - 30 * 24 * 60 * 60 * 1000
-await api.scheduler.cleanup(thirtyDaysAgo)
+await window.mulby.scheduler.cleanupTasks(thirtyDaysAgo)
 
 // 清除所有已完成的任务
-await api.scheduler.cleanup(Date.now())
+await window.mulby.scheduler.cleanupTasks(Date.now())
 ```
 
 **参数**:
@@ -770,14 +790,14 @@ const pageSize = 20
 const currentPage = 1
 
 // 获取当前页数据
-const tasks = await api.scheduler.list({
+const tasks = await window.mulby.scheduler.listTasks({
   status: 'pending',
   limit: pageSize,
   offset: (currentPage - 1) * pageSize
 })
 
 // 获取总数（用于计算总页数）
-const totalCount = await api.scheduler.count({ status: 'pending' })
+const totalCount = await window.mulby.scheduler.getTaskCount({ status: 'pending' })
 const totalPages = Math.ceil(totalCount / pageSize)
 
 console.log(`第 ${currentPage}/${totalPages} 页，共 ${totalCount} 个任务`)
@@ -787,13 +807,13 @@ console.log(`第 ${currentPage}/${totalPages} 页，共 ${totalCount} 个任务`
 
 ```javascript
 // 批量删除失败的任务
-const failedTasks = await api.scheduler.list({ status: 'failed' })
+const failedTasks = await window.mulby.scheduler.listTasks({ status: 'failed' })
 const taskIds = failedTasks.map(t => t.id)
-const result = await api.scheduler.deleteTasks(taskIds)
+const result = await window.mulby.scheduler.deleteTasks(taskIds)
 console.log(`已删除 ${result.deletedCount} 个失败任务`)
 
 // 定期清理旧任务（保留最近30天）
 const thirtyDaysAgo = Date.now() - 30 * 24 * 60 * 60 * 1000
-const cleanupResult = await api.scheduler.cleanup(thirtyDaysAgo)
+const cleanupResult = await window.mulby.scheduler.cleanupTasks(thirtyDaysAgo)
 console.log(`已清理 ${cleanupResult.deletedCount} 个旧任务`)
 ```

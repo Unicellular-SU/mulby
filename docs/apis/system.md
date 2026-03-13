@@ -101,7 +101,7 @@ if (idleSeconds > 300) {
 **返回值**: `number` - 空闲时间（秒）
 
 ### getFileIcon(filePath)
-[Renderer] [Backend]
+[Renderer]
 获取文件/文件夹的系统图标。
 
 ```javascript
@@ -121,8 +121,23 @@ const folderIcon = await system.getFileIcon('folder');
 
 **返回值**: `string` - base64 Data URL 格式的图标
 
+### getFileIcons(requests, options?)
+[Renderer]
+Batch get file/app icons for high-throughput list rendering.
+
+```javascript
+const icons = await system.getFileIcons(
+  [
+    { key: 'readme', path: '/path/to/README.md', kind: 'file' },
+    { key: 'vscode', path: '/Applications/Visual Studio Code.app', kind: 'app' }
+  ],
+  { size: 128, concurrency: 6 }
+);
+// returns: [{ key, path, kind, icon }]
+```
+
 ### getNativeId()
-[Renderer] [Backend]
+[Renderer]
 获取设备唯一标识。
 
 ```javascript
@@ -135,7 +150,7 @@ storage.set(`${deviceId}/settings`, { ... });
 **返回值**: `string` - 32位设备唯一标识
 
 ### isDev()
-[Renderer] [Backend]
+[Renderer]
 判断是否为开发环境。
 
 ```javascript
@@ -147,7 +162,7 @@ if (await system.isDev()) {
 **返回值**: `boolean`
 
 ### isMacOS() / isWindows() / isLinux()
-[Renderer] [Backend]
+[Renderer]
 判断当前操作系统平台。
 
 ```javascript

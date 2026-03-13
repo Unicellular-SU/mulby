@@ -1,27 +1,27 @@
 # 窗口 API (window)
-本文档描述 窗口 API (window) 的使用方法与接口。
+本文档描述窗口 API (window) 的使用方式与接口。
 
 > 入口：`window.mulby.window`
 
 ### hide(isRestorePreWindow?)
 [Renderer]
-隐藏当前窗口（附着/面板/独立窗口）。
+隐藏当前窗口。
 
 ### show()
 [Renderer]
-显示当前窗口，并在必要时恢复并聚焦。
+显示当前窗口。
 
 ### setSize(width, height)
 [Renderer]
 设置窗口大小。
 
-### setExpendHeight(height)
+### setExpendHeight(height, allowResize?)
 [Renderer]
 仅调整窗口高度。
 
 ### center()
 [Renderer]
-将窗口居中。
+窗口居中。
 
 ### setAlwaysOnTop(flag)
 [Renderer]
@@ -29,7 +29,7 @@
 
 ### detach()
 [Renderer]
-在附着模式下将插件分离为独立窗口。
+将插件窗口分离为独立窗口。
 
 ### close()
 [Renderer]
@@ -59,6 +59,10 @@
 [Renderer]
 最大化/还原窗口。
 
+### resizeDrag(payload)
+[Renderer]
+在自定义标题栏/边框场景下，驱动主进程执行窗口边缘拖拽缩放。
+
 ### create(url, options?)
 [Renderer]
 创建子窗口并返回控制句柄。
@@ -87,7 +91,7 @@ interface ChildWindowHandle {
 
 ### findInPage(text, options?)
 [Renderer]
-在页面内查找文字，返回 `requestId`。
+在页面内查找文本。
 
 ### stopFindInPage(action?)
 [Renderer]
@@ -95,7 +99,7 @@ interface ChildWindowHandle {
 
 ### startDrag(filePath)
 [Renderer]
-触发系统原生拖拽（文件必须存在）。
+触发系统原生文件拖拽。
 
 ### onWindowStateChange(callback)
 [Renderer]
@@ -131,44 +135,45 @@ interface ChildWindowHandle {
 
 ### mulbyMain.subInput.onEnabled(callback)
 [Renderer]
-主窗口监听子输入框启用事件。
+主窗口侧监听子输入框启用事件。
 
 ### mulbyMain.subInput.onDisabled(callback)
 [Renderer]
-主窗口监听子输入框移除事件。
+主窗口侧监听子输入框移除事件。
 
 ### mulbyMain.subInput.onSetValue(callback)
 [Renderer]
-主窗口监听子输入框设置值事件。
+主窗口侧监听子输入框设值事件。
 
 ### mulbyMain.subInput.onFocus(callback)
 [Renderer]
-主窗口监听子输入框聚焦事件。
+主窗口侧监听子输入框聚焦事件。
 
 ### mulbyMain.subInput.onBlur(callback)
 [Renderer]
-主窗口监听子输入框失焦事件。
+主窗口侧监听子输入框失焦事件。
 
 ### mulbyMain.subInput.onSelect(callback)
 [Renderer]
-主窗口监听子输入框选中事件。
+主窗口侧监听子输入框选中文本事件。
 
 ### mulbyMain.subInput.sendChange(text)
 [Renderer]
-主窗口向主进程发送输入变化（转发给插件）。
+主窗口向主进程发送输入变更（转发给插件）。
+
+### mulbyMain.clipboard.onAutoPaste(callback)
+[Renderer]
+主窗口侧监听 `clipboard:autoPaste` 事件。
 
 ### 完整示例
 
 ```javascript
-// 调整窗口大小并居中
 window.mulby.window.setSize(680, 420);
 window.mulby.window.center();
 
-// 创建子窗口
 const child = await window.mulby.window.create('https://example.com', { width: 800, height: 600 });
 child?.postMessage('ready');
 
-// 子输入框
 await window.mulby.subInput.set('请输入...', true);
 window.mulby.subInput.onChange(({ text }) => console.log(text));
 ```

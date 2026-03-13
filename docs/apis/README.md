@@ -1,7 +1,7 @@
 # Mulby API 接口参考（代码对齐）
 
-> 最后更新：2026-02-28
-> 对齐基准：`src/preload/index.ts`、`src/main/plugin/api.ts`、`src/main/ipc/index.ts`
+> 最后更新：2026-03-13
+> 对齐基准：`src/preload/apis/*.ts`、`src/main/plugin/api.ts`、`src/main/ipc/index.ts`；自动校验命令：`npm run check:api-docs`（已接入 CI 的 `verify:app`）
 
 ## 系统与应用
 - [System API (system)](./system.md)
@@ -59,3 +59,4 @@
 ## 说明
 - 文档以代码实现为准，接口签名请同时参考 `src/shared/types/electron.d.ts`。
 - 如发现文档与实现不一致，请以代码为准并提报文档修正。
+- 日常可执行 `npm run check:api-docs` 做一致性检查；CI 会在 `npm run verify:app` 中强制校验。
