@@ -12,6 +12,7 @@ import {
   isSubInputEnabled,
   getSubInputOwnerId
 } from '../services/subinput-state'
+import { shouldUseWindowsFramelessSurface } from '../services/window-surface'
 
 // 重新导出 clearSubInputState 供其他模块使用
 export { clearSubInputState } from '../services/subinput-state'
@@ -632,6 +633,7 @@ export function registerWindowHandlers(
     const senderWin = BrowserWindow.fromWebContents(event.sender)
     if (senderWin) {
       const mainWin = getMainWindow()
+      const useWindowsFramelessSurface = shouldUseWindowsFramelessSurface()
       // 主窗口触发时，重载当前附着的 Panel 插件窗口；其他情况重载发送者窗口。
       const panelWin = pluginWindowManager.getPanelWindow()?.getWindow()
       const win = senderWin === mainWin && panelWin ? panelWin : senderWin
@@ -646,6 +648,11 @@ export function registerWindowHandlers(
       const onFinishLoad = () => {
         // 延迟一点再显示，确保页面完全渲染
         setTimeout(() => {
+          if (win.isDestroyed()) return
+          if (useWindowsFramelessSurface) {
+            win.setBackgroundColor('#00000000')
+          }
+          win.webContents.send('theme:changed', themeManager.getActualTheme())
           win.setOpacity(1)
         }, 50)
         win.webContents.removeListener('did-finish-load', onFinishLoad)

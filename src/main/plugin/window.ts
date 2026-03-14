@@ -401,6 +401,9 @@ export class PluginWindowManager {
       if (useWindowsFramelessSurface && !win.isDestroyed()) {
         await applyWindowsFramelessSurface(win, { includeTitleBar: true })
       }
+      if (this.themeManager && !win.isDestroyed()) {
+        win.webContents.send('theme:changed', this.themeManager.getActualTheme())
+      }
     })
 
     // 注册窗口到主题管理器
@@ -543,6 +546,9 @@ export class PluginWindowManager {
       }
       if (useWindowsFramelessSurface && !win.isDestroyed()) {
         await applyWindowsFramelessSurface(win, { includeTitleBar: true })
+      }
+      if (this.themeManager && !win.isDestroyed()) {
+        win.webContents.send('theme:changed', this.themeManager.getActualTheme())
       }
     })
 

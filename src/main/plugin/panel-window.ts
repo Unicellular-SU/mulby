@@ -245,9 +245,14 @@ export class PluginPanelWindow {
         })
 
         // 监听焦点变化 - 点击面板时获取焦点
-        this.panelWindow.webContents.on('did-finish-load', () => {
-            if (!useWindowsFramelessSurface || !this.panelWindow || this.panelWindow.isDestroyed()) return
-            void applyWindowsFramelessSurface(this.panelWindow, { resizeMode: 'bottom' })
+        this.panelWindow.webContents.on('did-finish-load', async () => {
+            if (!this.panelWindow || this.panelWindow.isDestroyed()) return
+            if (useWindowsFramelessSurface) {
+                await applyWindowsFramelessSurface(this.panelWindow, { resizeMode: 'bottom' })
+            }
+            if (this.themeManager && !this.panelWindow.isDestroyed()) {
+                this.panelWindow.webContents.send('theme:changed', this.themeManager.getActualTheme())
+            }
         })
 
         this.panelWindow.on('focus', () => {
@@ -635,6 +640,9 @@ export class PluginPanelWindow {
             }
             if (useWindowsFramelessSurface && !independentWindow.isDestroyed()) {
                 await applyWindowsFramelessSurface(independentWindow, { includeTitleBar: true, resizeMode: 'all' })
+            }
+            if (this.themeManager && !independentWindow.isDestroyed()) {
+                independentWindow.webContents.send('theme:changed', this.themeManager.getActualTheme())
             }
         })
 
