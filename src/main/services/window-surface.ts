@@ -25,6 +25,8 @@ const WINDOW_SURFACE_RADIUS_PX = 12
 const WINDOW_SURFACE_TITLEBAR_HEIGHT_PX = 36
 const WINDOW_RESIZE_HANDLE_THICKNESS_PX = 12
 const WINDOW_RESIZE_HANDLE_CORNER_PX = 16
+const WINDOW_SURFACE_BACKGROUND_LIGHT = '#ffffff'
+const WINDOW_SURFACE_BACKGROUND_DARK = '#1e293b'
 const WINDOW_SURFACE_SHADOW_LIGHT = [
   'inset 0 18px 28px -28px rgba(255, 255, 255, 0.3)',
   'inset 0 -18px 28px -24px rgba(15, 23, 42, 0.18)',
@@ -137,7 +139,13 @@ body {
   overflow: hidden !important;
   border-radius: ${contentRadius} !important;
   z-index: 1 !important;
-  background: transparent !important;
+  background: ${WINDOW_SURFACE_BACKGROUND_LIGHT} !important;
+}
+
+.dark #mulby-window-content-host,
+.light.dark #mulby-window-content-host,
+:root.dark #mulby-window-content-host {
+  background: ${WINDOW_SURFACE_BACKGROUND_DARK} !important;
 }
 
 ${includeTitleBar ? `
