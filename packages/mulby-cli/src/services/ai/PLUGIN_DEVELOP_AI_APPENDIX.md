@@ -1,12 +1,14 @@
 ## CLI AI Appendix
 
-This appendix is injected only into Mulby CLI AI generation sessions. It adds agent-specific working rules on top of the shared plugin development guide.
+This appendix is injected only into Mulby CLI AI generation sessions. It adds CLI-specific working rules on top of the bundled skill workflow.
 
 ### Working Mode
 
-- Treat the shared `PLUGIN_DEVELOP_PROMPT.md` as the architectural base.
+- Treat `@skills/develop-mulby-plugin/SKILL.md` as the primary architectural base.
+- Read `@skills/develop-mulby-plugin/SKILL.md` before major Mulby-specific design decisions.
+- Read `@skills/generate-electron-icons/SKILL.md` before final icon generation or icon replacement.
 - When repository docs are available, prefer `docs/apis/README.md`, the relevant `docs/apis/*.md` files, and `src/shared/types/electron.d.ts` over memory or stale examples.
-- If the shared guide and the actual scaffold or runtime types differ, follow the scaffold and runtime types.
+- If the bundled skill guidance and the actual scaffold or runtime types differ, follow the scaffold and runtime types.
 
 ### Required Execution Order
 

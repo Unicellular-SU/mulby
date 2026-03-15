@@ -37,13 +37,6 @@ export async function createReactProject(targetDir: string, name: string) {
   createMulbyTypes(targetDir)
   createGitignore(targetDir)
   createReadme(targetDir, name)
-
-  // 复制 API 参考文档
-  const apiDocSrc = path.join(__dirname, '../../..', 'PLUGIN_DEVELOP_PROMPT.md')
-  if (fs.existsSync(apiDocSrc)) {
-    fs.copyFileSync(apiDocSrc, path.join(targetDir, 'PLUGIN_DEVELOP_PROMPT.md'))
-    console.log(chalk.green('  ✓ PLUGIN_DEVELOP_PROMPT.md'))
-  }
 }
 
 function createReactManifest(targetDir: string, name: string) {

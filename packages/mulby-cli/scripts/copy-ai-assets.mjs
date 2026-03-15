@@ -5,12 +5,16 @@ import { fileURLToPath } from 'node:url'
 const scriptDir = dirname(fileURLToPath(import.meta.url))
 const packageRoot = resolve(scriptDir, '..')
 const targetDir = resolve(packageRoot, 'dist/services/ai')
+const bundledSkillsTargetDir = resolve(targetDir, 'bundled-skills')
 
 mkdirSync(targetDir, { recursive: true })
+rmSync(bundledSkillsTargetDir, { recursive: true, force: true })
+mkdirSync(bundledSkillsTargetDir, { recursive: true })
 
-const legacyBaseCopyPath = resolve(targetDir, 'PLUGIN_DEVELOP_PROMPT.md')
-if (existsSync(legacyBaseCopyPath)) {
-  rmSync(legacyBaseCopyPath)
+// Remove the legacy copied prompt artifact from older builds.
+const legacyPromptArtifactPath = resolve(targetDir, 'PLUGIN_DEVELOP_PROMPT.md')
+if (existsSync(legacyPromptArtifactPath)) {
+  rmSync(legacyPromptArtifactPath)
 }
 
 const assets = [
@@ -20,4 +24,20 @@ const assets = [
 for (const asset of assets) {
   if (!existsSync(asset.source)) continue
   cpSync(asset.source, asset.target)
+}
+
+const bundledSkills = [
+  {
+    source: resolve(packageRoot, '..', '..', 'skills', 'develop-mulby-plugin'),
+    target: resolve(bundledSkillsTargetDir, 'develop-mulby-plugin')
+  },
+  {
+    source: resolve(packageRoot, '..', '..', 'skills', 'generate-electron-icons'),
+    target: resolve(bundledSkillsTargetDir, 'generate-electron-icons')
+  }
+]
+
+for (const bundledSkill of bundledSkills) {
+  if (!existsSync(bundledSkill.source)) continue
+  cpSync(bundledSkill.source, bundledSkill.target, { recursive: true })
 }

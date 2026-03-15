@@ -16,6 +16,7 @@ import { PlanManager } from './plan-manager';
 import { PlanCommandHandler } from './plan-command-handler';
 import { TaskAnalyzer } from './task-analyzer';
 import { TaskPlan, Task, TaskComplexity } from '../types/plan';
+import { isPathInside, resolveBundledSkillFile } from './ai/bundled-skills';
 
 export class AIAgent {
     private aiService = AIServiceFactory.create();
@@ -339,25 +340,75 @@ export class AIAgent {
 
     // --- New Tool Handlers ---
 
+    private resolveReadablePath(inputPath: string): {
+        fullPath: string;
+        displayPath: string;
+        rootPath: string;
+        displayRoot: string;
+    } | null {
+        const skillPath = resolveBundledSkillFile(inputPath);
+        if (skillPath) {
+            return {
+                fullPath: skillPath.fullPath,
+                displayPath: skillPath.aliasPath,
+                rootPath: skillPath.skill.rootPath,
+                displayRoot: `@skills/${skillPath.skill.id}`
+            };
+        }
+
+        const fullPath = path.resolve(this.session.targetDir, inputPath);
+        if (!isPathInside(this.session.targetDir, fullPath)) {
+            return null;
+        }
+
+        return {
+            fullPath,
+            displayPath: inputPath,
+            rootPath: this.session.targetDir,
+            displayRoot: '.'
+        };
+    }
+
+    private resolveWritablePath(inputPath: string): string | null {
+        const fullPath = path.resolve(this.session.targetDir, inputPath);
+        if (!isPathInside(this.session.targetDir, fullPath)) {
+            return null;
+        }
+        return fullPath;
+    }
+
+    private formatResolvedPath(
+        resolved: { rootPath: string; displayRoot: string },
+        fullPath: string
+    ): string {
+        const relative = path.relative(resolved.rootPath, fullPath).replace(/\\/g, '/');
+        if (resolved.displayRoot === '.') {
+            return relative || '.';
+        }
+        return relative ? `${resolved.displayRoot}/${relative}` : resolved.displayRoot;
+    }
+
     private async handleListDir(dirPath: string): Promise<string> {
-        const fullPath = path.resolve(this.session.targetDir, dirPath);
-        if (!await fs.pathExists(fullPath)) return `Directory not found: ${dirPath}`;
+        const resolved = this.resolveReadablePath(dirPath);
+        if (!resolved) return `Invalid path: ${dirPath}`;
+        if (!await fs.pathExists(resolved.fullPath)) return `Directory not found: ${dirPath}`;
 
         try {
-            const files = await fs.readdir(fullPath);
+            const files = await fs.readdir(resolved.fullPath);
             const detailed = await Promise.all(files.map(async f => {
-                const stat = await fs.stat(path.join(fullPath, f));
+                const stat = await fs.stat(path.join(resolved.fullPath, f));
                 return `${f}${stat.isDirectory() ? '/' : ''}`;
             }));
-            return `Contents of ${dirPath}:\n${detailed.join('\n')}`;
+            return `Contents of ${resolved.displayPath}:\n${detailed.join('\n')}`;
         } catch (e: any) {
             return `Error listing directory: ${e.message}`;
         }
     }
 
     private async handleSearchFiles(query: string, searchPath: string = '.'): Promise<string> {
-        const fullPath = path.resolve(this.session.targetDir, searchPath);
-        if (!await fs.pathExists(fullPath)) return `Path not found: ${searchPath}`;
+        const resolved = this.resolveReadablePath(searchPath);
+        if (!resolved) return `Invalid path: ${searchPath}`;
+        if (!await fs.pathExists(resolved.fullPath)) return `Path not found: ${searchPath}`;
 
         const results: string[] = [];
         try {
@@ -390,7 +441,7 @@ export class AIAgent {
                                 const lines = content.split('\n');
                                 lines.forEach((line, idx) => {
                                     if (line.includes(query) || (new RegExp(query).test(line))) {
-                                        results.push(`${path.relative(this.session.targetDir, fPath)}:${idx + 1}: ${line.trim().slice(0, 100)}`);
+                                        results.push(`${this.formatResolvedPath(resolved, fPath)}:${idx + 1}: ${line.trim().slice(0, 100)}`);
                                     }
                                 });
                             }
@@ -398,7 +449,7 @@ export class AIAgent {
                     }
                 }
             };
-            await walk(fullPath);
+            await walk(resolved.fullPath);
             return results.length > 0 ? results.join('\n') : 'No matches found.';
         } catch (e: any) {
             return `Error searching files: ${e.message}`;
@@ -406,11 +457,12 @@ export class AIAgent {
     }
 
     private async handleReadFileOutline(filePath: string): Promise<string> {
-        const fullPath = path.resolve(this.session.targetDir, filePath);
-        if (!await fs.pathExists(fullPath)) return `File not found: ${filePath}`;
+        const resolved = this.resolveReadablePath(filePath);
+        if (!resolved) return `Invalid path: ${filePath}`;
+        if (!await fs.pathExists(resolved.fullPath)) return `File not found: ${filePath}`;
 
         try {
-            const content = await fs.readFile(fullPath, 'utf-8');
+            const content = await fs.readFile(resolved.fullPath, 'utf-8');
             const lines = content.split('\n');
             const outline = lines
                 .map((line, idx) => ({ line, idx: idx + 1 }))
@@ -434,7 +486,8 @@ export class AIAgent {
     }
 
     private async handleDeleteFile(filePath: string): Promise<string> {
-        const fullPath = path.resolve(this.session.targetDir, filePath);
+        const fullPath = this.resolveWritablePath(filePath);
+        if (!fullPath) return `Invalid path: ${filePath}`;
         try {
             await fs.remove(fullPath);
             this.invalidatePluginValidation();
@@ -446,8 +499,9 @@ export class AIAgent {
     }
 
     private async handleMoveFile(source: string, dest: string): Promise<string> {
-        const fullSource = path.resolve(this.session.targetDir, source);
-        const fullDest = path.resolve(this.session.targetDir, dest);
+        const fullSource = this.resolveWritablePath(source);
+        const fullDest = this.resolveWritablePath(dest);
+        if (!fullSource || !fullDest) return `Invalid move path: ${source} -> ${dest}`;
         try {
             await fs.move(fullSource, fullDest, { overwrite: true });
             this.invalidatePluginValidation();
@@ -697,11 +751,14 @@ export class AIAgent {
     }
 
     private async handleReadFile(filePath: string): Promise<string> {
-        const fullPath = path.resolve(this.session.targetDir, filePath);
-        if (!await fs.pathExists(fullPath)) {
+        const resolved = this.resolveReadablePath(filePath);
+        if (!resolved) {
+            return `Invalid path: ${filePath}`;
+        }
+        if (!await fs.pathExists(resolved.fullPath)) {
             return `File not found: ${filePath}`;
         }
-        return await fs.readFile(fullPath, 'utf-8');
+        return await fs.readFile(resolved.fullPath, 'utf-8');
     }
 
     private async handleWriteFile(filePath: string, content: string): Promise<string> {
@@ -740,7 +797,10 @@ Now you can start implementing the features by modifying these files.`;
 
 
     private async handleReplaceInFile(filePath: string, target: string, replacement: string): Promise<string> {
-        const fullPath = path.resolve(this.session.targetDir, filePath);
+        const fullPath = this.resolveWritablePath(filePath);
+        if (!fullPath) {
+            return `Invalid path: ${filePath}`;
+        }
 
         if (!await fs.pathExists(fullPath)) {
             return `File not found: ${filePath}`;

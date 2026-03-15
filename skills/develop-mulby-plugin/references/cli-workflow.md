@@ -57,8 +57,8 @@ Choose `basic` when the plugin is:
 
 The common scaffold behavior is:
 
-- `react` creates `manifest.json`, `package.json`, `tsconfig.json`, `vite.config.ts`, frontend files under `src/ui/`, backend entry `src/main.ts`, `src/types/mulby.d.ts`, and copies `PLUGIN_DEVELOP_PROMPT.md`.
-- `basic` creates `manifest.json`, `package.json`, `src/main.ts`, and copies `PLUGIN_DEVELOP_PROMPT.md`.
+- `react` creates `manifest.json`, `package.json`, `tsconfig.json`, `vite.config.ts`, frontend files under `src/ui/`, backend entry `src/main.ts`, and `src/types/mulby.d.ts`.
+- `basic` creates `manifest.json`, `package.json`, and `src/main.ts`.
 - Both templates scaffold a default root `icon.png` that should be replaced before shipping a branded plugin.
 
 Important defaults from the templates:

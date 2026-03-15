@@ -5,8 +5,7 @@
   "main": "dist/index.js",
   "files": [
     "dist",
-    "assets",
-    "PLUGIN_DEVELOP_PROMPT.md"
+    "assets"
   ],
   "bin": {
     "mulby": "dist/index.js"

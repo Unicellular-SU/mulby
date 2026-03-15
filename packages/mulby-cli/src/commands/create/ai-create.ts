@@ -66,7 +66,7 @@ export async function aiCreate(name: string, options: AiCreateOptions) {
     await createReactProject(targetDir, name)
     console.log(chalk.green('脚手架创建完成\n'))
   } catch (error) {
-    console.error(chalk.red('脚手架创建失败'), error)
+    console.error(chalk.red('脚手架创建失败:'), error)
     return
   }
 
@@ -74,14 +74,14 @@ export async function aiCreate(name: string, options: AiCreateOptions) {
   session.pluginName = name
 
   let initialPrompt = `我想创建一个名为 "${name}" 的 Mulby 插件。`
-  initialPrompt += '\n\n项目脚手架已经创建完成（React 18 + Tailwind CSS v3 + Vite + Mulby API）。'
-  initialPrompt += '\n当前文件结构已包含 manifest.json、src/ui/App.tsx、src/main.ts 等基础文件。'
-  initialPrompt += '\n请严格按照 Mulby AI 插件固定流程推进，而不是直接自由发挥。'
-  initialPrompt += '\n1. 先读取 manifest.json、src/main.ts、src/ui/App.tsx，确认当前接入骨架。'
-  initialPrompt += '\n2. 再通过提问和我确认：插件目标、features/cmds 触发方式、UI/后台/预加载分工、是否需要 Node.js 能力。'
-  initialPrompt += '\n3. 编码前先给出一份“接入契约”摘要：manifest 计划改动、featureCode 映射、UI/Main/Preload 职责、后续验证步骤。'
-  initialPrompt += '\n4. 先实现一个能在 Mulby 里跑通的最小闭环，再扩展细节和体验。'
-  initialPrompt += '\n5. 完成前必须运行 validate_plugin，确认接入检查通过后再收尾。'
+  initialPrompt += '\n\n项目脚手架已经创建完成（React + Vite + Mulby API）。'
+  initialPrompt += '\n请默认使用内置的 develop-mulby-plugin skill 作为主工作流。'
+  initialPrompt += '\n1. 先读 @skills/develop-mulby-plugin/SKILL.md，再检查 manifest.json、src/main.ts、src/ui/App.tsx。'
+  initialPrompt += '\n2. 通过提问与我确认插件目标、features/cmds、UI/Main/Preload 分工、是否需要 Node.js 或 Electron bridging。'
+  initialPrompt += '\n3. 编码前先给出一份“接入契约”摘要，说明 manifest 计划、featureCode 映射、文件修改范围和后续验证步骤。'
+  initialPrompt += '\n4. 先实现一个能在 Mulby 里跑通的最小闭环，再扩展功能和 UI。'
+  initialPrompt += '\n5. 如果涉及图标定稿，请在功能和主题稳定后再读 @skills/generate-electron-icons/SKILL.md，并用它的脚本生成最终 icon.png。'
+  initialPrompt += '\n6. 完成前必须运行 validate_plugin，确认通过后再收尾。'
   if (options.desc) {
     initialPrompt += `\n\n插件初步设想: ${options.desc}\n`
   }

@@ -3,11 +3,11 @@ export const PLUGIN_GENERATION_TOOLS = [
         type: 'function',
         function: {
             name: 'read_file',
-            description: 'Read the content of a file. Use this to examine existing code or check file status.',
+            description: 'Read the content of a file. Use this to examine project files or bundled skill files under @skills/<skill-id>/....',
             parameters: {
                 type: 'object',
                 properties: {
-                    path: { type: 'string', description: 'Relative path to the file (e.g., package.json, src/ui/App.tsx)' }
+                    path: { type: 'string', description: 'Project-relative file path or read-only bundled skill path such as @skills/develop-mulby-plugin/SKILL.md' }
                 },
                 required: ['path']
             }
@@ -90,11 +90,11 @@ export const PLUGIN_GENERATION_TOOLS = [
         type: 'function',
         function: {
             name: 'list_dir',
-            description: 'List files and directories in a specific path. Use this to explore the project structure.',
+            description: 'List files and directories in a specific path. Use this to explore the project structure or bundled skills under @skills/<skill-id>/....',
             parameters: {
                 type: 'object',
                 properties: {
-                    path: { type: 'string', description: 'Relative path to list (e.g., ".", "src/components")' }
+                    path: { type: 'string', description: 'Project-relative directory or bundled skill path such as @skills/develop-mulby-plugin/references' }
                 },
                 required: ['path']
             }
@@ -104,12 +104,12 @@ export const PLUGIN_GENERATION_TOOLS = [
         type: 'function',
         function: {
             name: 'search_files',
-            description: 'Search for a string or pattern in files. Useful for finding component usage or specific code snippets.',
+            description: 'Search for a string or pattern in files. Useful for finding code snippets in the project or bundled skill references.',
             parameters: {
                 type: 'object',
                 properties: {
                     query: { type: 'string', description: 'String or Regex to search for' },
-                    path: { type: 'string', description: 'Directory to search in (default: ".")' }
+                    path: { type: 'string', description: 'Project-relative directory or bundled skill path (default: ".")' }
                 },
                 required: ['query']
             }
@@ -119,11 +119,11 @@ export const PLUGIN_GENERATION_TOOLS = [
         type: 'function',
         function: {
             name: 'read_file_outline',
-            description: 'Read the outline (symbols, functions, classes) of a file without reading the full content. Saves tokens.',
+            description: 'Read the outline (symbols, functions, classes) of a file without reading the full content. Works for project files and bundled skill files.',
             parameters: {
                 type: 'object',
                 properties: {
-                    path: { type: 'string', description: 'Relative path to the file' }
+                    path: { type: 'string', description: 'Project-relative file path or bundled skill file path' }
                 },
                 required: ['path']
             }
