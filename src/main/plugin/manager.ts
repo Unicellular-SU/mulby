@@ -1,6 +1,7 @@
 import { app } from 'electron'
 import { join } from 'path'
 import { existsSync, rmSync } from 'fs'
+import { collectDevPluginWatchTargets } from './dev-reload-utils'
 import { PluginLoader } from './loader'
 import { PluginRunner } from './runner'
 import { PluginStateManager } from './state'
@@ -834,14 +835,56 @@ export class PluginManager {
 
   // ================= 文件监听相关 =================
 
-  private watchers: Map<string, import('fs').FSWatcher> = new Map()
+  private watchers: Map<string, import('fs').FSWatcher[]> = new Map()
   private debounceTimers: Map<string, NodeJS.Timeout> = new Map()
+  private metadataDebounceTimers: Map<string, NodeJS.Timeout> = new Map()
 
   private setupPluginWatcher(plugin: Plugin) {
     // 防止重复监听
     if (this.watchers.has(plugin.id)) return
 
     try {
+      const pathModule = require('path')
+      const fsModule = require('fs')
+      const targetsByDir = new Map<string, Map<string, Set<'code' | 'metadata'>>>()
+
+      for (const target of collectDevPluginWatchTargets(plugin).filter((item) => item.kind === 'metadata')) {
+        const nextWatchDir = pathModule.dirname(target.filePath)
+        if (!existsSync(nextWatchDir)) continue
+
+        const filename = pathModule.basename(target.filePath).toLowerCase()
+        let dirTargets = targetsByDir.get(nextWatchDir)
+        if (!dirTargets) {
+          dirTargets = new Map()
+          targetsByDir.set(nextWatchDir, dirTargets)
+        }
+
+        const kinds = dirTargets.get(filename) || new Set<'code' | 'metadata'>()
+        kinds.add(target.kind)
+        dirTargets.set(filename, kinds)
+      }
+
+      const pluginWatchers: import('fs').FSWatcher[] = []
+
+      for (const [nextWatchDir, dirTargets] of targetsByDir) {
+        const watcher = fsModule.watch(nextWatchDir, (_eventType: string, triggerFilename: string | null) => {
+          if (!triggerFilename) return
+
+          const normalizedFilename = pathModule.basename(String(triggerFilename)).toLowerCase()
+          const kinds = dirTargets.get(normalizedFilename)
+          if (!kinds) return
+
+          if (kinds.has('metadata')) {
+            this.triggerMetadataReload(plugin.id)
+          }
+          if (kinds.has('code')) {
+            this.triggerHotReload(plugin.id)
+          }
+        })
+
+        pluginWatchers.push(watcher)
+      }
+
       const mainFile = join(plugin.path, plugin.manifest.main)
       const watchDir = require('path').dirname(mainFile)
       const filename = require('path').basename(mainFile)
@@ -859,22 +902,32 @@ export class PluginManager {
         }
       })
 
-      this.watchers.set(plugin.id, watcher)
+      pluginWatchers.push(watcher)
+      if (!this.watchers.has(plugin.id)) {
+        this.watchers.set(plugin.id, pluginWatchers)
+      }
     } catch (err) {
       console.warn(`[PluginManager] Failed to watch plugin ${plugin.id}:`, err)
     }
   }
 
   private stopPluginWatcher(pluginId: string) {
-    const watcher = this.watchers.get(pluginId)
-    if (watcher) {
-      watcher.close()
+    const watchers = this.watchers.get(pluginId)
+    if (watchers) {
+      for (const watcher of watchers) {
+        watcher.close()
+      }
       this.watchers.delete(pluginId)
     }
     const timer = this.debounceTimers.get(pluginId)
     if (timer) {
       clearTimeout(timer)
       this.debounceTimers.delete(pluginId)
+    }
+    const metadataTimer = this.metadataDebounceTimers.get(pluginId)
+    if (metadataTimer) {
+      clearTimeout(metadataTimer)
+      this.metadataDebounceTimers.delete(pluginId)
     }
   }
 
@@ -891,11 +944,24 @@ export class PluginManager {
     }
 
     const timer = setTimeout(() => {
-      this.reloadBackend(pluginId)
+      void this.reloadBackend(pluginId)
       this.debounceTimers.delete(pluginId)
     }, 300)
 
     this.debounceTimers.set(pluginId, timer)
+  }
+
+  private triggerMetadataReload(pluginId: string) {
+    if (this.metadataDebounceTimers.has(pluginId)) {
+      clearTimeout(this.metadataDebounceTimers.get(pluginId)!)
+    }
+
+    const timer = setTimeout(() => {
+      void this.reloadPluginMetadata(pluginId)
+      this.metadataDebounceTimers.delete(pluginId)
+    }, 300)
+
+    this.metadataDebounceTimers.set(pluginId, timer)
   }
 
   private async reloadBackend(pluginId: string) {
@@ -929,6 +995,64 @@ export class PluginManager {
    * 处理窗口关闭事件
    * 如果插件支持后台运行，则启动后台运行；否则销毁 Host 进程
    */
+  // Reload manifest/icon updates without tearing down the whole app.
+  private async reloadPluginMetadata(pluginId: string) {
+    console.log(`[PluginManager] Reloading plugin metadata: ${pluginId}`)
+    const currentPlugin = this.plugins.get(pluginId)
+    if (!currentPlugin) return
+
+    const loader = new PluginLoader(currentPlugin.path)
+    const nextPlugin = loader.loadPlugin(currentPlugin.path)
+    if (!nextPlugin) {
+      console.warn(`[PluginManager] Skipped metadata reload for ${pluginId}: plugin manifest is temporarily invalid`)
+      return
+    }
+
+    if (nextPlugin.id !== currentPlugin.id) {
+      console.warn(`[PluginManager] Plugin identity changed during metadata reload (${currentPlugin.id} -> ${nextPlugin.id}), reloading all plugins`)
+      await this.init()
+      return
+    }
+
+    nextPlugin.enabled = currentPlugin.enabled
+    nextPlugin.isDev = currentPlugin.isDev
+
+    const wasInitialized = this.initializedPlugins.has(pluginId)
+    const wasBackgroundRunning = this.backgroundManager.isRunning(pluginId)
+
+    this.stopPluginWatcher(pluginId)
+    this.closePluginWindows(pluginId, true)
+
+    if (wasBackgroundRunning) {
+      await this.backgroundManager.stop(pluginId, 'metadata-reload')
+    } else if (this.useUtilityProcess && this.hostManager.isHostReady(pluginId)) {
+      await this.hostManager.destroyHost(pluginId)
+    }
+
+    this.runners.delete(pluginId)
+    this.initializedPlugins.delete(pluginId)
+    this.plugins.set(pluginId, nextPlugin)
+
+    if (nextPlugin.isDev && nextPlugin.enabled && await this.shouldAutoReloadDevPlugins()) {
+      this.setupPluginWatcher(nextPlugin)
+    }
+
+    this.commandShortcutManager.refresh()
+
+    if (!nextPlugin.enabled) {
+      return
+    }
+
+    if (wasInitialized) {
+      await this.initializePlugin(pluginId)
+    }
+
+    if (wasBackgroundRunning && nextPlugin.manifest.pluginSetting?.background) {
+      await this.backgroundManager.start(nextPlugin, true)
+    }
+  }
+
+  // Decide whether a plugin should keep running after its last window closes.
   private async handleWindowClosed(pluginId: string): Promise<void> {
     if (this.skipNextWindowClosedHandling.delete(pluginId)) {
       return

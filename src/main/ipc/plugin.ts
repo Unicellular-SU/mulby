@@ -1,6 +1,7 @@
 import { ipcMain, app } from 'electron'
 import { resolve } from 'path'
 import { PluginManager } from '../plugin'
+import { buildFeatureIconCacheKey } from '../plugin/dev-reload-utils'
 import { resolveIcon } from '../plugin/icon-resolver'
 import type {
   BackgroundPluginInfo,
@@ -24,11 +25,11 @@ export function registerPluginHandlers(manager: PluginManager) {
   const featureIconCache = new Map<string, Awaited<ReturnType<typeof resolveIcon>> | null>()
 
   const resolveResultIcon = async (
-    cacheKey: string,
-    pluginPath: string,
-    featureIcon: PluginFeature['icon'] | undefined,
+    plugin: Plugin,
+    feature: PluginFeature,
     fallback: Plugin['resolvedIcon']
   ) => {
+    const featureIcon = feature.icon
     if (!featureIcon) {
       return {
         icon: fallback,
@@ -36,6 +37,7 @@ export function registerPluginHandlers(manager: PluginManager) {
         cacheHit: false
       }
     }
+    const cacheKey = buildFeatureIconCacheKey(plugin.id, feature, plugin.path)
     const cached = featureIconCache.get(cacheKey)
     if (cached !== undefined) {
       return {
@@ -44,7 +46,7 @@ export function registerPluginHandlers(manager: PluginManager) {
         cacheHit: true
       }
     }
-    const resolved = await resolveIcon(featureIcon, pluginPath)
+    const resolved = await resolveIcon(featureIcon, plugin.path)
     featureIconCache.set(cacheKey, resolved || null)
     return {
       icon: resolved || fallback,
@@ -54,12 +56,11 @@ export function registerPluginHandlers(manager: PluginManager) {
   }
 
   const formatResultItem = async (
-    cacheKey: string,
     plugin: Plugin,
     feature: PluginFeature,
     matchType: string
   ) => {
-    const iconMeta = await resolveResultIcon(cacheKey, plugin.path, feature.icon, plugin.resolvedIcon)
+    const iconMeta = await resolveResultIcon(plugin, feature, plugin.resolvedIcon)
 
     return {
       pluginId: plugin.id,
@@ -124,7 +125,6 @@ export function registerPluginHandlers(manager: PluginManager) {
     const searchResults = await manager.search(query)
     const formattedResults = await Promise.all(searchResults.map((result) =>
       formatResultItem(
-        `${result.plugin.id}:${result.feature.code}`,
         result.plugin,
         result.feature,
         result.matchType
@@ -140,7 +140,6 @@ export function registerPluginHandlers(manager: PluginManager) {
     const recentResults = manager.getRecentUsed(normalizedLimit)
     const formattedResults = await Promise.all(recentResults.map((result) =>
       formatResultItem(
-        `${result.plugin.id}:${result.feature.code}`,
         result.plugin,
         result.feature,
         'keyword'
