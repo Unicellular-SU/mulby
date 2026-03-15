@@ -12,9 +12,10 @@
   },
   "scripts": {
     "build": "tsc && node scripts/copy-ai-assets.mjs",
+    "check:template-api-sync": "node scripts/check-template-api-sync.mjs",
     "dev": "tsc -w",
     "typecheck": "tsc --noEmit",
-    "verify": "npm run typecheck && npm run build"
+    "verify": "npm run typecheck && npm run check:template-api-sync && npm run build"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.71.2",
