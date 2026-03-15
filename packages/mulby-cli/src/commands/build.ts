@@ -46,6 +46,8 @@ async function buildBackend(cwd: string) {
       entryPoints: [entryPoint],
       bundle: true,
       platform: 'node',
+      external: ['electron'], // 这里很重要，防止宿主环境依赖被打进主进程
+      treeShaking: true,      // 确保摇树优化开启
       outfile: path.join(cwd, 'dist/main.js'),
       minify: true
     })

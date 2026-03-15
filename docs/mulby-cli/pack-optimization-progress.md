@@ -10,7 +10,18 @@
 ### 具体的变更点 (@/packages/mulby-cli/src/commands/pack.ts)
 1. **安装工具包**: 在 `mulby-cli` 引入了依赖追踪库 `@vercel/nft`。
 2. **移除冗余逻辑**: 彻底删除了原来的 `collectAllDependencies` 长链条递归调用。
-3. **精准追踪**: 从入口 `manifest.preload` 切入，根据导入关系仅把真实需要的文件抽取并打包入 zip (跳过多余的前端依赖及 Readme / 测试等没用文件)。
+32. **精准追踪**: 从入口 `manifest.preload` 切入，根据导入关系仅把真实需要的文件抽取并打包入 zip (跳过多余的前端依赖及 Readme / 测试等没用文件)。
+
+### 第二阶段补充优化点
+#### 1. esbuild `external: ['electron']` (build.ts)
+默认的 esbuild 会将任何发现的原生依赖全部打包。由于插件通常运行在 Electron 主进程（或预加载沙箱）中，如果在 `package.json` 引进了类似于 `electron` 的库，也会被直接卷入 `main.js`。这显然是不对的。
+- 增加了 `external: ['electron']` 配置，使任何引用被直接标记为外部依赖跳过打包。
+- 增加了 `treeShaking: true` 配置，深度修剪未使用代码。
+
+#### 2. 自定义打包白名单 `assets: []` (pack.ts)
+由于旧版的打死逻辑，任何不是写死的特定的目录（如 `locales/` 等等）都被抛弃。
+- 在 `PluginPackageManifest` 和文件收集逻辑中，增加了对 `manifest.assets` 字段的遍历支持。
+- 现在开发者可在 `manifest.json` 中配置 `"assets": ["locales", "my-config.json"]`，打包时会自适应将它们加入 zip 文件内。
 
 ## 📈 预期效果
 - 当开发者在插件目录中使用 `npx mulby pack` 打包时，不会再出现巨大的未使用依赖包。

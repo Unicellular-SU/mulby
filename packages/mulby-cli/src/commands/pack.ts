@@ -8,6 +8,7 @@ interface PluginPackageManifest {
   version: string
   preload?: string
   dependencies?: Record<string, string>
+  assets?: string[]
 }
 
 export async function pack() {
@@ -111,6 +112,25 @@ async function createArchive(
     const readmePath = path.join(cwd, 'README.md')
     if (fs.existsSync(readmePath)) {
       archive.file(readmePath, { name: 'README.md' })
+    }
+
+    // 添加自定义 assets 目录/文件（如果有）
+    if (manifest.assets && Array.isArray(manifest.assets)) {
+      for (const assetPath of manifest.assets) {
+        const fullPath = path.join(cwd, assetPath)
+        if (fs.existsSync(fullPath)) {
+          const stat = fs.statSync(fullPath)
+          if (stat.isDirectory()) {
+            archive.directory(fullPath, assetPath)
+            console.log(chalk.gray(`  + 目录: ${assetPath}/`))
+          } else if (stat.isFile()) {
+            archive.file(fullPath, { name: assetPath })
+            console.log(chalk.gray(`  + 文件: ${assetPath}`))
+          }
+        } else {
+          console.log(chalk.yellow(`警告: assets 配置的路径不存在: ${assetPath}`))
+        }
+      }
     }
 
     archive.finalize()
