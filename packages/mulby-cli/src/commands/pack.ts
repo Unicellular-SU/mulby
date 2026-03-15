@@ -42,7 +42,7 @@ async function createArchive(
   outputPath: string,
   manifest: PluginPackageManifest
 ): Promise<void> {
-  return new Promise((resolve, reject) => {
+  return new Promise(async (resolve, reject) => {
     const output = fs.createWriteStream(outputPath)
     const archive = archiver('zip', { zlib: { level: 9 } })
 
@@ -76,36 +76,31 @@ async function createArchive(
         archive.file(preloadPath, { name: manifest.preload })
         console.log(chalk.gray(`  + ${manifest.preload}`))
 
-        // 当有 preload 时，打包 node_modules 中的生产依赖
-        const nodeModulesDir = path.join(cwd, 'node_modules')
-        const pkgJsonPath = path.join(cwd, 'package.json')
+        try {
+          console.log(chalk.blue('  使用 @vercel/nft 分析 preload 依赖...'))
+          const { nodeFileTrace } = await import('@vercel/nft')
+          const { fileList } = await nodeFileTrace([preloadPath], {
+            base: cwd
+          })
 
-        if (fs.existsSync(nodeModulesDir) && fs.existsSync(pkgJsonPath)) {
-          const pkgJson = fs.readJsonSync(pkgJsonPath)
-          const dependencies = Object.keys(pkgJson.dependencies || {})
+          let depsCount = 0
+          for (const file of fileList) {
+            // 跳过 preload 文件自身，上面已经单独处理了
+            if (file === manifest.preload) continue
 
-          if (dependencies.length > 0) {
-            console.log(chalk.gray('  + node_modules/ (生产依赖)'))
-
-            // 打包每个生产依赖及其子依赖
-            for (const dep of dependencies) {
-              const depPath = path.join(nodeModulesDir, dep)
-              if (fs.existsSync(depPath)) {
-                archive.directory(depPath, `node_modules/${dep}`)
-              }
-            }
-
-            // 递归收集所有需要的依赖（包括依赖的依赖）
-            const allDeps = collectAllDependencies(cwd, dependencies)
-            for (const dep of allDeps) {
-              if (!dependencies.includes(dep)) {
-                const depPath = path.join(nodeModulesDir, dep)
-                if (fs.existsSync(depPath)) {
-                  archive.directory(depPath, `node_modules/${dep}`)
-                }
+            const abspath = path.join(cwd, file)
+            if (fs.existsSync(abspath)) {
+              const stat = fs.statSync(abspath)
+              // 只打包真实存在的文件
+              if (stat.isFile()) {
+                archive.file(abspath, { name: file })
+                depsCount++
               }
             }
           }
+          console.log(chalk.green(`  ✓ 已精确打包 ${depsCount} 个 preload 依赖文件 (告别冗余)`))
+        } catch (err) {
+          console.log(chalk.yellow(`  ⚠️ 解析 preload 依赖时出错: ${err}`))
         }
       } else {
         console.log(chalk.yellow(`警告: preload 文件不存在: ${manifest.preload}`))
@@ -122,36 +117,4 @@ async function createArchive(
   })
 }
 
-/**
- * 递归收集所有依赖（包括依赖的依赖）
- */
-function collectAllDependencies(cwd: string, dependencies: string[]): string[] {
-  const nodeModulesDir = path.join(cwd, 'node_modules')
-  const collected = new Set<string>()
-  const queue = [...dependencies]
-
-  while (queue.length > 0) {
-    const dep = queue.shift()!
-    if (collected.has(dep)) continue
-    collected.add(dep)
-
-    // 读取该依赖的 package.json 获取其依赖
-    const depPkgPath = path.join(nodeModulesDir, dep, 'package.json')
-    if (fs.existsSync(depPkgPath)) {
-      try {
-        const depPkg = fs.readJsonSync(depPkgPath)
-        const subDeps = Object.keys(depPkg.dependencies || {})
-        for (const subDep of subDeps) {
-          if (!collected.has(subDep)) {
-            queue.push(subDep)
-          }
-        }
-      } catch {
-        // 忽略读取错误
-      }
-    }
-  }
-
-  return Array.from(collected)
-}
 
