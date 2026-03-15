@@ -27,6 +27,7 @@ Keep responsibilities clear:
 ```text
 my-plugin/
 |- manifest.json
+|- icon.png               # packaged plugin icon
 |- package.json
 |- tsconfig.json
 |- vite.config.ts
@@ -40,6 +41,7 @@ my-plugin/
 |     |- hooks/
 |        |- useMulby.ts
 |- assets/
+|  `- icon.svg            # editable icon source (recommended)
 ```
 
 For basic plugins without UI, the minimum structure is usually:
@@ -47,9 +49,12 @@ For basic plugins without UI, the minimum structure is usually:
 ```text
 my-plugin/
 |- manifest.json
+|- icon.png
 |- package.json
 |- src/
 |  |- main.ts
+|- assets/
+|  `- icon.svg
 ```
 
 ## Fixed Workflow
@@ -93,7 +98,17 @@ Only after the minimum path works:
 - add background or host integrations
 - add preload bridges if truly needed
 
-### Phase 4: Validate Before Handoff
+### Phase 4: Finalize Icon Assets
+
+Once the plugin behavior and theme are stable:
+
+- keep an editable source icon such as `assets/icon.svg`
+- generate a plugin-specific SVG that matches the plugin purpose and color palette
+- prefer the `generate-electron-icons` skill when it is available, or use an equivalent deterministic SVG-to-PNG workflow
+- replace the scaffolded root `icon.png` with the final 512x512 export
+- keep `manifest.icon` aligned, usually as `icon.png`
+
+### Phase 5: Validate Before Handoff
 
 Verify all applicable items:
 
@@ -115,10 +130,22 @@ Typical top-level fields:
 - `main`: backend entry, typically `dist/main.js`
 - `ui`: frontend entry when the plugin has UI, typically `ui/index.html`
 - `preload`: optional preload path, typically `preload.cjs`
-- `icon`
+- `icon`: packaged plugin icon, typically `icon.png`
 - `pluginSetting`
 - `window`
 - `features`
+
+## Icon Workflow
+
+Use this when the plugin code is done or the UI theme has clearly settled:
+
+1. Keep the editable icon source as SVG, for example `assets/icon.svg`.
+2. Ask the image model or design workflow to produce an SVG that matches the plugin function, tone, and color palette.
+3. Convert that SVG into the final 512x512 `icon.png`.
+4. Prefer the `generate-electron-icons` skill when it is available. If it is not, use an equivalent deterministic SVG-to-PNG workflow.
+5. Copy the final PNG to the plugin root as `icon.png`, replacing the scaffold default.
+6. Leave `manifest.icon` pointed at `icon.png` unless the project intentionally uses another supported format.
+7. Before packaging, visually review the final icon against the plugin UI and confirm it is the file that will be bundled.
 
 ## Feature Essentials
 
@@ -166,4 +193,5 @@ The final handoff should tell the user to verify these points inside Mulby:
 2. At least one trigger path actually enters the plugin.
 3. The expected UI opens, or the silent feature completes without UI.
 4. Detached, background, or preload behavior works if configured.
-5. The core user task succeeds on realistic sample input.
+5. The final `icon.png` is the intended branded icon, not the scaffold default, when icon work is part of the task.
+6. The core user task succeeds on realistic sample input.

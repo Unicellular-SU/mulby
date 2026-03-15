@@ -59,6 +59,7 @@ The common scaffold behavior is:
 
 - `react` creates `manifest.json`, `package.json`, `tsconfig.json`, `vite.config.ts`, frontend files under `src/ui/`, backend entry `src/main.ts`, `src/types/mulby.d.ts`, and copies `PLUGIN_DEVELOP_PROMPT.md`.
 - `basic` creates `manifest.json`, `package.json`, `src/main.ts`, and copies `PLUGIN_DEVELOP_PROMPT.md`.
+- Both templates scaffold a default root `icon.png` that should be replaced before shipping a branded plugin.
 
 Important defaults from the templates:
 
@@ -90,11 +91,20 @@ The common packaging behavior is:
 
 The output filename is `<manifest.name>-<manifest.version>.inplugin`.
 
+## Icon Finalization
+
+- Keep an editable SVG source such as `assets/icon.svg` while the plugin feature set or theme is still changing.
+- Once the plugin direction is stable, generate a plugin-specific SVG that matches the plugin purpose and palette.
+- Prefer the `generate-electron-icons` skill when it is available. If it is not, use an equivalent deterministic SVG-to-PNG workflow.
+- Export the final 512x512 PNG and replace the scaffold default root `icon.png` before `mulby pack`.
+- Keep `manifest.icon` pointing to `icon.png` unless the project intentionally uses another supported icon form.
+
 ## Practical Loop
 
 1. Scaffold with `create`.
 2. Install dependencies in the plugin directory.
 3. Edit `manifest.json` and the real entry files.
 4. Run `npm run build`.
-5. Run `npm run pack` when a distributable package is needed.
-6. Tell the user exactly how to validate the plugin inside Mulby.
+5. After the plugin behavior or UI theme is stable, replace the scaffold default `icon.png` with the final 512x512 export.
+6. Run `npm run pack` when a distributable package is needed.
+7. Tell the user exactly how to validate the plugin inside Mulby.

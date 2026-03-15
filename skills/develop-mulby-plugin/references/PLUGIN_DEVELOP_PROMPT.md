@@ -9,6 +9,7 @@
 ```text
 my-plugin/
 |- manifest.json        # Plugin Configuration (Manifest V2)
+|- icon.png            # Final packaged plugin icon
 |- package.json         # Dependencies (React, Vite, etc.)
 |- tsconfig.json        # TypeScript Configuration
 |- vite.config.ts       # Vite Configuration
@@ -24,7 +25,8 @@ my-plugin/
 |     |- styles.css
 |     `- hooks/
 |        `- useMulby.ts
-`- assets/              # Icons, etc.
+`- assets/              # Icons and editable sources
+   `- icon.svg          # Recommended editable icon source
 ```
 
 ## 1.1 Entry Points & Patterns
@@ -173,6 +175,13 @@ The final delivery should tell the user to test these points inside Mulby:
 ### Icon Configuration
 - **Formats**: Path (`"icon.png"`), URL (`"https://..."`), Emoji (`"🚀"`), or SVG Code (`"<svg>..."`).
 - **Object Notation**: `{ "type": "file", "value": "path/to/icon.png" }`.
+
+### Recommended Icon Workflow
+- During development, keep an editable source icon such as `assets/icon.svg`.
+- After the plugin behavior and UI theme are stable, generate a plugin-specific SVG that matches the plugin purpose and color palette.
+- Prefer the `generate-electron-icons` skill when it is available. Otherwise use an equivalent deterministic SVG-to-PNG workflow.
+- Export the final 512x512 PNG as the root `icon.png` and replace the scaffold default before packaging.
+- Keep `manifest.icon` pointing to `icon.png` unless you intentionally choose another supported icon form.
 
 ### Feature Configuration (`features`)
 | Field | Type | Description |

@@ -33,6 +33,12 @@ When modifying an existing plugin or a freshly scaffolded plugin, do this in ord
 - Prefer build validation before handoff.
 - In the final response, include concrete Mulby-side manual checks.
 
+### Icon Rules
+
+- Keep editable icon source files as SVG during development, for example `assets/icon.svg`.
+- Do not treat the scaffolded `icon.png` as the final branded icon.
+- Once the plugin behavior and UI theme are stable, replace the scaffold default with a final 512x512 `icon.png` before packaging or final handoff when icon work is in scope.
+
 ### Forbidden Shortcuts
 
 - Do not create `preview.html`, `demo.html`, or other browser-only preview files.

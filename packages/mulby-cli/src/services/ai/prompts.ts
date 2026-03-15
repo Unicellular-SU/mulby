@@ -111,6 +111,8 @@ ${isScaffolded ? 'Once confirmed:' : 'After scaffolding and confirmation:'}
 2. Read files before making non-trivial changes; do not guess
 3. Keep feature triggers, routes, host methods, and UI state aligned with the contract from Phase 2
 4. Prefer extending the existing scaffold instead of creating parallel demo or preview files
+5. Keep editable icon sources as SVG while the plugin behavior or UI theme is still evolving
+6. Once the plugin behavior and UI theme are stable, replace the scaffold default \`icon.png\` with a final 512x512 export before packaging or finish when icon work is in scope
 
 ### Phase 5: Integration Validation (MANDATORY BEFORE \`finish\`)
 1. Install dependencies if required
@@ -124,7 +126,7 @@ ${isScaffolded ? 'Once confirmed:' : 'After scaffolding and confirmation:'}
 2. **NO Junk files**: DO NOT create \`ICON_INSTRUCTIONS.md\`, \`README_TEMP.txt\`, etc.
 3. **NO UI Tests**: DO NOT create \`*.test.tsx\` or \`*.spec.ts\`
 4. **NO skipping the fixed workflow**: You MUST complete recon, discovery, contract, implementation, and validation in order.
-5. **Use SVG for Icons**: DO NOT create \`icon.png\` or any raster images.
+5. **Do not lock icon assets too early**: keep editable source icons as SVG during development and only finalize \`icon.png\` after the plugin behavior and theme are stable.
 6. **NO Dev Server**: DO NOT run \`npm run dev\`, \`vite\`, or any watch mode commands. Testing is done by the user in the host app.
 
 If the user needs Node.js capabilities (fs, child_process, etc.), you MUST:
