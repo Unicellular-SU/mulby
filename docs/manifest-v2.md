@@ -81,11 +81,20 @@
 
 ### Window 配置
 
-配置插件在独立窗口模式下的默认尺寸。
+配置插件在独立窗口模式下的窗口行为和尺寸。
+
+#### 窗口类型
+
+通过 `type` 字段控制窗口的外观模式：
+
+- **`default`**（默认）：带有 Mulby 标题栏的标准独立窗口，包含置顶、最小化、最大化、关闭等按钮。
+- **`borderless`**：无边框窗口，没有标题栏和系统边框。插件 UI 完全控制窗口外观，需要自行处理拖拽区域（通过 CSS `-webkit-app-region: drag`）。
+- **`fullscreen`**：全屏窗口，自动占满主屏幕工作区，没有标题栏。适合截图标注、画板等沉浸式工具。
 
 ```json
 {
   "window": {
+    "type": "default",
     "width": 800,
     "height": 600,
     "minWidth": 400,
@@ -96,8 +105,38 @@
 }
 ```
 
+#### 无边框窗口示例
+
+```json
+{
+  "window": {
+    "type": "borderless",
+    "width": 300,
+    "height": 200
+  }
+}
+```
+
+> 无边框窗口需要插件 UI 自行实现拖拽和关闭逻辑。拖拽区域可通过 CSS 指定：
+> ```css
+> .drag-region { -webkit-app-region: drag; }
+> .no-drag { -webkit-app-region: no-drag; }
+> ```
+
+#### 全屏窗口示例
+
+```json
+{
+  "window": {
+    "type": "fullscreen"
+  }
+}
+```
+
 | 字段 | 类型 | 默认值 | 说明 |
 |------|------|--------|------|
+| type | string | `"default"` | 窗口类型：`default`（带标题栏）、`borderless`（无边框）、`fullscreen`（全屏） |
+| titleBar | boolean | - | 是否显示 Mulby 标题栏（`default` 默认 `true`，其他类型默认 `false`） |
 | width | number | 500 | 默认宽度 |
 | height | number | 400 | 默认高度 |
 | minWidth | number | 300 | 最小宽度 |

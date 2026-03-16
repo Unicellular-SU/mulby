@@ -26,7 +26,17 @@ export function createCoreApi(ipcRenderer: IpcRenderer) {
         baseBounds: { x: number; y: number; width: number; height: number }
       }) => ipcRenderer.send('window:resizeDrag', payload),
       reload: () => ipcRenderer.send('plugin:reload'),
-      create: async (url: string, options?: { width?: number; height?: number; title?: string }) => {
+      create: async (url: string, options?: {
+        width?: number; height?: number; title?: string;
+        type?: 'default' | 'borderless' | 'fullscreen';
+        titleBar?: boolean;
+        fullscreen?: boolean;
+        alwaysOnTop?: boolean;
+        resizable?: boolean;
+        x?: number; y?: number;
+        minWidth?: number; minHeight?: number;
+        maxWidth?: number; maxHeight?: number;
+      }) => {
         const id = await ipcRenderer.invoke('window:create', url, options)
         if (!id) return null
         return {

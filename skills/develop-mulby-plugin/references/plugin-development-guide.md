@@ -133,7 +133,16 @@ Typical top-level fields:
 - `icon`: packaged plugin icon, typically `icon.png`
 - `pluginSetting`
 - `window`
+  - `type`: window type (`default` with titlebar, `borderless` without frame, `fullscreen` fills screen)
+  - `titleBar`: explicitly control whether Mulby injects a titlebar (`default` type defaults to `true`, others to `false`)
+  - `width`, `height`, `minWidth`, `minHeight`, `maxWidth`, `maxHeight`: size constraints
 - `features`
+
+### Window Types
+
+- **`default`** (default): Standard detached window with Mulby-injected titlebar (pin, minimize, maximize, close buttons).
+- **`borderless`**: No frame or titlebar. Plugin UI must handle dragging with CSS `-webkit-app-region: drag` and closing via `window.mulby.window.close()`.
+- **`fullscreen`**: Window fills the primary screen work area. No titlebar injected. Suitable for immersive tools like screenshot editors or canvas apps.
 
 ## Icon Workflow
 

@@ -1,7 +1,7 @@
-import { BrowserWindow, app, Menu } from 'electron'
+import { BrowserWindow, app, Menu, screen } from 'electron'
 import { join } from 'path'
 import { existsSync } from 'fs'
-import { InputAttachment, InputPayload, Plugin } from '../../shared/types/plugin'
+import { InputAttachment, InputPayload, Plugin, WindowOptions } from '../../shared/types/plugin'
 import { ThemeManager } from '../services/theme'
 import { loggerService } from '../services/logger'
 import { appSettingsManager } from '../services/app-settings'
@@ -31,6 +31,27 @@ interface DetachedWindowInfo {
   attachments?: InputAttachment[]
   startedAt: number
   creatorId?: number  // 创建此窗口的父窗口 ID
+}
+
+// 子窗口创建选项
+interface AuxiliaryWindowOptions {
+  width?: number
+  height?: number
+  title?: string
+  // 窗口类型，覆盖 manifest.window.type
+  type?: 'default' | 'borderless' | 'fullscreen'
+  // 是否显示标题栏，覆盖 manifest.window.titleBar
+  titleBar?: boolean
+  // Electron 原生选项
+  fullscreen?: boolean
+  alwaysOnTop?: boolean
+  resizable?: boolean
+  x?: number
+  y?: number
+  minWidth?: number
+  minHeight?: number
+  maxWidth?: number
+  maxHeight?: number
 }
 
 export class PluginWindowManager {
@@ -322,21 +343,31 @@ export class PluginWindowManager {
 
     // 从 manifest.window 读取窗口配置
     const windowConfig = plugin.manifest.window || {}
+    const windowType = windowConfig.type || 'default'
+    const showTitleBar = shouldShowTitleBar(windowConfig)
+    const isFullscreen = windowType === 'fullscreen'
 
     // 获取插件 preload 路径（支持自定义 preload）
     const basePreloadPath = join(__dirname, '../preload/index.js')
     const preloadPath = getPluginPreloadPath(basePreloadPath, plugin)
     const hasCustomPreload = !!plugin.manifest.preload
 
+    // 全屏模式：获取主屏幕工作区大小
+    const fullscreenBounds = isFullscreen ? screen.getPrimaryDisplay().workArea : null
+
     const win = new BrowserWindow({
-      width: toWindowWidth(windowConfig.width ?? 500)!,
-      height: toWindowHeight(windowConfig.height ?? 400)!,
-      minWidth: toWindowWidth(windowConfig.minWidth ?? 300)!,
-      minHeight: toWindowHeight(windowConfig.minHeight ?? 200)!,
-      maxWidth: toWindowWidth(windowConfig.maxWidth),
-      maxHeight: toWindowHeight(windowConfig.maxHeight),
+      width: isFullscreen ? fullscreenBounds!.width : toWindowWidth(windowConfig.width ?? 500)!,
+      height: isFullscreen ? fullscreenBounds!.height : toWindowHeight(windowConfig.height ?? 400)!,
+      x: isFullscreen ? fullscreenBounds!.x : undefined,
+      y: isFullscreen ? fullscreenBounds!.y : undefined,
+      minWidth: isFullscreen ? undefined : toWindowWidth(windowConfig.minWidth ?? 300)!,
+      minHeight: isFullscreen ? undefined : toWindowHeight(windowConfig.minHeight ?? 200)!,
+      maxWidth: isFullscreen ? undefined : toWindowWidth(windowConfig.maxWidth),
+      maxHeight: isFullscreen ? undefined : toWindowHeight(windowConfig.maxHeight),
       show: false,
       frame: false,
+      fullscreen: isFullscreen,
+      fullscreenable: isFullscreen,
       thickFrame: !useWindowsFramelessSurface,
       backgroundColor,
       transparent: useWindowsFramelessSurface,
@@ -358,10 +389,12 @@ export class PluginWindowManager {
     }
 
     win.once('ready-to-show', async () => {
-      // 注入自定义标题栏
-      await injectCustomTitleBar(win, plugin.manifest.displayName, currentTheme)
+      // 仅在需要标题栏时注入
+      if (showTitleBar) {
+        await injectCustomTitleBar(win, plugin.manifest.displayName, currentTheme)
+      }
       if (useWindowsFramelessSurface) {
-        await applyWindowsFramelessSurface(win, { includeTitleBar: true })
+        await applyWindowsFramelessSurface(win, { includeTitleBar: showTitleBar })
         if (win.isDestroyed()) return
       }
       win.show()
@@ -374,6 +407,7 @@ export class PluginWindowManager {
         input: input?.text || '',
         attachments: input?.attachments,
         mode: 'detached',
+        windowType,
         route,
         nonce: Date.now()
       })
@@ -391,18 +425,20 @@ export class PluginWindowManager {
       win.webContents.send('window:stateChanged', { isMaximized: false })
     })
 
-    // 监听页面重载，重新注入标题栏
+    // 监听页面重载，重新注入标题栏（仅在需要标题栏时）
     win.webContents.on('did-finish-load', async () => {
-      // 检查标题栏是否已存在，避免首次加载时重复注入
-      const hasTitleBar = await win.webContents.executeJavaScript(
-        'document.getElementById("mulby-titlebar") !== null'
-      )
-      if (!hasTitleBar) {
-        const theme = this.themeManager?.getActualTheme() || 'dark'
-        await injectCustomTitleBar(win, plugin.manifest.displayName, theme)
+      if (showTitleBar) {
+        // 检查标题栏是否已存在，避免首次加载时重复注入
+        const hasTitleBar = await win.webContents.executeJavaScript(
+          'document.getElementById("mulby-titlebar") !== null'
+        )
+        if (!hasTitleBar) {
+          const theme = this.themeManager?.getActualTheme() || 'dark'
+          await injectCustomTitleBar(win, plugin.manifest.displayName, theme)
+        }
       }
       if (useWindowsFramelessSurface && !win.isDestroyed()) {
-        await applyWindowsFramelessSurface(win, { includeTitleBar: true })
+        await applyWindowsFramelessSurface(win, { includeTitleBar: showTitleBar })
       }
       if (this.themeManager && !win.isDestroyed()) {
         win.webContents.send('theme:changed', this.themeManager.getActualTheme())
@@ -454,7 +490,7 @@ export class PluginWindowManager {
   createAuxiliaryWindow(
     plugin: Plugin,
     path: string, // 路由路径，如 /img-editor
-    options?: { width?: number; height?: number; title?: string },
+    options?: AuxiliaryWindowOptions,
     creatorId?: number  // 创建此窗口的父窗口 ID
   ): BrowserWindow | null {
     if (!plugin.manifest.ui) return null
@@ -472,21 +508,39 @@ export class PluginWindowManager {
 
     // 从 manifest.window 读取窗口配置（辅助窗口优先使用传入的 options）
     const windowConfig = plugin.manifest.window || {}
+    // 子窗口的 type/titleBar 优先使用 options 传入值，否则回退到 manifest
+    const resolvedWindowConfig: WindowOptions = {
+      ...windowConfig,
+      type: options?.type ?? windowConfig.type ?? 'default',
+      titleBar: options?.titleBar ?? windowConfig.titleBar,
+    }
+    const showTitleBar = shouldShowTitleBar(resolvedWindowConfig)
+    const windowType = resolvedWindowConfig.type || 'default'
+    const isFullscreen = options?.fullscreen === true || windowType === 'fullscreen'
 
     // 获取插件 preload 路径（支持自定义 preload）
     const basePreloadPath = join(__dirname, '../preload/index.js')
     const preloadPath = getPluginPreloadPath(basePreloadPath, plugin)
     const hasCustomPreload = !!plugin.manifest.preload
 
+    // 全屏模式：获取主屏幕工作区大小
+    const fullscreenBounds = isFullscreen ? screen.getPrimaryDisplay().workArea : null
+
     const win = new BrowserWindow({
-      width: toWindowWidth(options?.width || windowConfig.width || 800)!,
-      height: toWindowHeight(options?.height || windowConfig.height || 600)!,
-      minWidth: toWindowWidth(windowConfig.minWidth ?? 300)!,
-      minHeight: toWindowHeight(windowConfig.minHeight ?? 200)!,
-      maxWidth: toWindowWidth(windowConfig.maxWidth),
-      maxHeight: toWindowHeight(windowConfig.maxHeight),
+      width: isFullscreen ? fullscreenBounds!.width : toWindowWidth(options?.width || windowConfig.width || 800)!,
+      height: isFullscreen ? fullscreenBounds!.height : toWindowHeight(options?.height || windowConfig.height || 600)!,
+      x: isFullscreen ? fullscreenBounds!.x : options?.x,
+      y: isFullscreen ? fullscreenBounds!.y : options?.y,
+      minWidth: isFullscreen ? undefined : toWindowWidth(options?.minWidth ?? windowConfig.minWidth ?? 300)!,
+      minHeight: isFullscreen ? undefined : toWindowHeight(options?.minHeight ?? windowConfig.minHeight ?? 200)!,
+      maxWidth: isFullscreen ? undefined : toWindowWidth(options?.maxWidth ?? windowConfig.maxWidth),
+      maxHeight: isFullscreen ? undefined : toWindowHeight(options?.maxHeight ?? windowConfig.maxHeight),
       show: false,
       frame: false,
+      fullscreen: isFullscreen,
+      fullscreenable: isFullscreen,
+      alwaysOnTop: options?.alwaysOnTop,
+      resizable: options?.resizable,
       thickFrame: !useWindowsFramelessSurface,
       backgroundColor,
       transparent: useWindowsFramelessSurface,
@@ -511,9 +565,11 @@ export class PluginWindowManager {
     }
 
     win.once('ready-to-show', async () => {
-      await injectCustomTitleBar(win, options?.title || plugin.manifest.displayName, currentTheme)
+      if (showTitleBar) {
+        await injectCustomTitleBar(win, options?.title || plugin.manifest.displayName, currentTheme)
+      }
       if (useWindowsFramelessSurface) {
-        await applyWindowsFramelessSurface(win, { includeTitleBar: true })
+        await applyWindowsFramelessSurface(win, { includeTitleBar: showTitleBar })
         if (win.isDestroyed()) return
       }
       win.show()
@@ -528,6 +584,7 @@ export class PluginWindowManager {
         input: '',
         attachments: [],
         mode: 'detached',
+        windowType,
         route: path, // 额外字段，通知前端跳转
         nonce: Date.now()
       })
@@ -541,15 +598,17 @@ export class PluginWindowManager {
     win.on('maximize', () => win.webContents.send('window:stateChanged', { isMaximized: true }))
     win.on('unmaximize', () => win.webContents.send('window:stateChanged', { isMaximized: false }))
 
-    // 页面加载完成
+    // 页面加载完成（仅在需要标题栏时重新注入）
     win.webContents.on('did-finish-load', async () => {
-      const hasTitleBar = await win.webContents.executeJavaScript('document.getElementById("mulby-titlebar") !== null')
-      if (!hasTitleBar) {
-        const theme = this.themeManager?.getActualTheme() || 'dark'
-        await injectCustomTitleBar(win, options?.title || plugin.manifest.displayName, theme)
+      if (showTitleBar) {
+        const hasTitleBar = await win.webContents.executeJavaScript('document.getElementById("mulby-titlebar") !== null')
+        if (!hasTitleBar) {
+          const theme = this.themeManager?.getActualTheme() || 'dark'
+          await injectCustomTitleBar(win, options?.title || plugin.manifest.displayName, theme)
+        }
       }
       if (useWindowsFramelessSurface && !win.isDestroyed()) {
-        await applyWindowsFramelessSurface(win, { includeTitleBar: true })
+        await applyWindowsFramelessSurface(win, { includeTitleBar: showTitleBar })
       }
       if (this.themeManager && !win.isDestroyed()) {
         win.webContents.send('theme:changed', this.themeManager.getActualTheme())
@@ -722,4 +781,17 @@ export class PluginWindowManager {
 
     return false
   }
+}
+
+/**
+ * 判断窗口是否应该显示 Mulby 标题栏
+ * - default 类型：默认显示（除非 titleBar 显式设为 false）
+ * - borderless / fullscreen 类型：默认不显示（除非 titleBar 显式设为 true）
+ */
+function shouldShowTitleBar(windowConfig: WindowOptions): boolean {
+  const windowType = windowConfig.type || 'default'
+  if (windowConfig.titleBar !== undefined) {
+    return windowConfig.titleBar
+  }
+  return windowType === 'default'
 }

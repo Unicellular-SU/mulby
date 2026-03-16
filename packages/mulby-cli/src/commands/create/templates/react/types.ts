@@ -245,6 +245,8 @@ interface PluginInfo {
   main?: string
   ui?: string
   window?: {
+    type?: 'default' | 'borderless' | 'fullscreen'
+    titleBar?: boolean
     width?: number
     height?: number
     minWidth?: number

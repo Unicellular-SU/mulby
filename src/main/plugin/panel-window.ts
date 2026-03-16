@@ -2,7 +2,7 @@ import { BrowserWindow, screen } from 'electron'
 import http from 'http'
 import https from 'https'
 import { join } from 'path'
-import { InputAttachment, InputPayload, Plugin } from '../../shared/types/plugin'
+import { InputAttachment, InputPayload, Plugin, WindowOptions } from '../../shared/types/plugin'
 import { ThemeManager } from '../services/theme'
 import { loggerService } from '../services/logger'
 import { injectCustomTitleBar } from './titlebar'
@@ -546,6 +546,7 @@ export class PluginPanelWindow {
 
         // 从 manifest.window 读取窗口配置
         const windowConfig = plugin.manifest.window || {}
+        const showTitleBar = shouldShowTitleBarForPanel(windowConfig)
 
         // 获取插件 preload 路径（支持自定义 preload）
         const basePreloadPath = join(__dirname, '../preload/index.js')
@@ -599,10 +600,12 @@ export class PluginPanelWindow {
         }
 
         independentWindow.once('ready-to-show', async () => {
-            // 注入自定义标题栏
-            await injectCustomTitleBar(independentWindow, plugin.manifest.displayName, currentTheme)
+            // 仅在需要标题栏时注入
+            if (showTitleBar) {
+                await injectCustomTitleBar(independentWindow, plugin.manifest.displayName, currentTheme)
+            }
             if (useWindowsFramelessSurface) {
-                await applyWindowsFramelessSurface(independentWindow, { includeTitleBar: true, resizeMode: 'all' })
+                await applyWindowsFramelessSurface(independentWindow, { includeTitleBar: showTitleBar, resizeMode: 'all' })
                 if (independentWindow.isDestroyed()) return
             }
             independentWindow.show()
@@ -614,6 +617,7 @@ export class PluginPanelWindow {
                 input,
                 attachments,
                 mode: 'detached',
+                windowType: windowConfig.type || 'default',
                 nonce: Date.now()
             })
 
@@ -631,17 +635,19 @@ export class PluginPanelWindow {
             independentWindow.webContents.send('window:stateChanged', { isMaximized: false })
         })
 
-        // 页面重载时重新注入标题栏
+        // 页面重载时重新注入标题栏（仅在需要标题栏时）
         independentWindow.webContents.on('did-finish-load', async () => {
-            const hasTitleBar = await independentWindow.webContents.executeJavaScript(
-                'document.getElementById("mulby-titlebar") !== null'
-            )
-            if (!hasTitleBar) {
-                const theme = this.themeManager?.getActualTheme() || 'dark'
-                await injectCustomTitleBar(independentWindow, plugin.manifest.displayName, theme)
+            if (showTitleBar) {
+                const hasTitleBar = await independentWindow.webContents.executeJavaScript(
+                    'document.getElementById("mulby-titlebar") !== null'
+                )
+                if (!hasTitleBar) {
+                    const theme = this.themeManager?.getActualTheme() || 'dark'
+                    await injectCustomTitleBar(independentWindow, plugin.manifest.displayName, theme)
+                }
             }
             if (useWindowsFramelessSurface && !independentWindow.isDestroyed()) {
-                await applyWindowsFramelessSurface(independentWindow, { includeTitleBar: true, resizeMode: 'all' })
+                await applyWindowsFramelessSurface(independentWindow, { includeTitleBar: showTitleBar, resizeMode: 'all' })
             }
             if (this.themeManager && !independentWindow.isDestroyed()) {
                 independentWindow.webContents.send('theme:changed', this.themeManager.getActualTheme())
@@ -776,4 +782,17 @@ export class PluginPanelWindow {
             this.panelWindow.webContents.send(channel, ...args)
         }
     }
+}
+
+/**
+ * 判断窗口是否应该显示 Mulby 标题栏
+ * - default 类型：默认显示（除非 titleBar 显式设为 false）
+ * - borderless / fullscreen 类型：默认不显示（除非 titleBar 显式设为 true）
+ */
+function shouldShowTitleBarForPanel(windowConfig: WindowOptions): boolean {
+    const windowType = windowConfig.type || 'default'
+    if (windowConfig.titleBar !== undefined) {
+        return windowConfig.titleBar
+    }
+    return windowType === 'default'
 }

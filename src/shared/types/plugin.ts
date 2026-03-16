@@ -258,6 +258,9 @@ export interface PluginFeature {
   preCapture?: 'region' | 'fullscreen'  // 在启动插件前先执行截图，截图数据作为 attachment 传入
 }
 
+// 窗口类型
+export type WindowType = 'default' | 'borderless' | 'fullscreen'
+
 // 独立窗口配置
 export interface WindowOptions {
   width?: number       // 默认宽度
@@ -266,6 +269,8 @@ export interface WindowOptions {
   minHeight?: number   // 最小高度
   maxWidth?: number    // 最大宽度
   maxHeight?: number   // 最大高度
+  type?: WindowType    // 窗口类型：default(带标题栏)、borderless(无边框)、fullscreen(全屏)
+  titleBar?: boolean   // 是否显示 Mulby 标题栏（default 类型默认 true，其他类型默认 false）
 }
 
 // Phase 4: 资源限制配置

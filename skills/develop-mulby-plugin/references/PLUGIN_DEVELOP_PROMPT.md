@@ -168,9 +168,14 @@ The final delivery should tell the user to test these points inside Mulby:
 |---|---|---|---|
 | `pluginSetting.single` | bool | `true` | Prevent multiple instances |
 | `pluginSetting.height` | number | - | Initial height |
+| `window.type` | string | `"default"` | Window type: `default` (with titlebar), `borderless` (no frame/titlebar), `fullscreen` (fills screen) |
+| `window.titleBar` | bool | varies | Show Mulby titlebar (default: `true` for `default` type, `false` for others) |
 | `window.width` / `height` | number | 500/400 | Default size (detached) |
 | `window.minWidth` / `Height` | number | 300/200 | Minimum size |
 | `window.maxWidth` / `Height` | number | - | Maximum size |
+
+> **Borderless windows**: Plugin UI must handle drag (`-webkit-app-region: drag`) and close (via `window.mulby.window.close()`) on its own.
+> **Fullscreen windows**: Window fills the primary screen's work area. No titlebar injected by default.
 
 ### Icon Configuration
 - **Formats**: Path (`"icon.png"`), URL (`"https://..."`), Emoji (`"🚀"`), or SVG Code (`"<svg>..."`).

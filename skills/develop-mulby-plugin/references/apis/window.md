@@ -67,6 +67,22 @@
 [Renderer]
 创建子窗口并返回控制句柄。
 
+**options 参数：**
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| width | number | 窗口宽度 |
+| height | number | 窗口高度 |
+| title | string | 窗口标题 |
+| type | string | 窗口类型：`default`（带标题栏）、`borderless`（无边框）、`fullscreen`（全屏） |
+| titleBar | boolean | 是否显示 Mulby 标题栏（覆盖 manifest 设置） |
+| fullscreen | boolean | 是否全屏 |
+| alwaysOnTop | boolean | 是否置顶 |
+| resizable | boolean | 是否可调大小 |
+| x / y | number | 窗口位置 |
+| minWidth / minHeight | number | 最小尺寸 |
+| maxWidth / maxHeight | number | 最大尺寸 |
+
 ```typescript
 interface ChildWindowHandle {
   id: number;
@@ -79,6 +95,26 @@ interface ChildWindowHandle {
   setPosition(x: number, y: number): Promise<void>;
   postMessage(channel: string, ...args: unknown[]): Promise<void>;
 }
+```
+
+**示例：**
+
+```javascript
+// 创建标准子窗口
+const child = await window.mulby.window.create('/editor', { width: 800, height: 600 });
+
+// 创建无边框悬浮窗
+const floater = await window.mulby.window.create('/widget', {
+  type: 'borderless',
+  width: 300,
+  height: 200,
+  alwaysOnTop: true
+});
+
+// 创建全屏画板
+const canvas = await window.mulby.window.create('/canvas', {
+  type: 'fullscreen'
+});
 ```
 
 ### sendToParent(channel, ...args)
