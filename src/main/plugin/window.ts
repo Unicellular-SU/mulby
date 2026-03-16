@@ -147,7 +147,8 @@ export class PluginWindowManager {
               input: input?.text || '',
               attachments: input?.attachments || [],
               mode: 'detached',
-              route
+              route,
+              nonce: Date.now()
             })
             return true
           }
@@ -301,7 +302,8 @@ export class PluginWindowManager {
               input: input?.text || '',
               attachments: input?.attachments || [],
               mode: 'detached',
-              route
+              route,
+              nonce: Date.now()
             })
             return existingWindow
           }
@@ -372,7 +374,8 @@ export class PluginWindowManager {
         input: input?.text || '',
         attachments: input?.attachments,
         mode: 'detached',
-        route
+        route,
+        nonce: Date.now()
       })
       // 发送初始主题
       if (this.themeManager) {
@@ -525,7 +528,8 @@ export class PluginWindowManager {
         input: '',
         attachments: [],
         mode: 'detached',
-        route: path // 额外字段，通知前端跳转
+        route: path, // 额外字段，通知前端跳转
+        nonce: Date.now()
       })
 
       if (this.themeManager) {

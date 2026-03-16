@@ -235,7 +235,8 @@ export class PluginPanelWindow {
                 input: this.currentInput,
                 attachments: this.currentAttachments,
                 mode: 'panel',
-                route
+                route,
+                nonce: Date.now()
             })
 
             // 发送主题
@@ -612,7 +613,8 @@ export class PluginPanelWindow {
                 featureCode,
                 input,
                 attachments,
-                mode: 'detached'
+                mode: 'detached',
+                nonce: Date.now()
             })
 
             // 发送主题

@@ -551,6 +551,43 @@ export class PluginManager {
       this.windowManager.hidePanelWindow()
     }
 
+    // preCapture：在启动插件窗口前先执行截图
+    if (feature?.preCapture) {
+      try {
+        let capturedDataUrl: string | null = null
+
+        if (feature.preCapture === 'region') {
+          const { startRegionCapture } = await import('./region-capture')
+          capturedDataUrl = await startRegionCapture()
+        } else if (feature.preCapture === 'fullscreen') {
+          const { pluginScreen } = await import('./screen')
+          const primaryDisplay = pluginScreen.getPrimaryDisplay()
+          const sources = await pluginScreen.getSources({ types: ['screen'], thumbnailSize: { width: 1, height: 1 } })
+          const match = sources.find(s => s.displayId && String(primaryDisplay.id) === String(s.displayId))
+          const buffer = await pluginScreen.captureScreen({ sourceId: match?.id, format: 'png' })
+          const base64 = buffer.toString('base64')
+          capturedDataUrl = `data:image/png;base64,${base64}`
+        }
+
+        // 用户取消截图 → 不启动插件
+        if (!capturedDataUrl) {
+          return { success: false, error: 'Capture cancelled' }
+        }
+
+        // 将截图数据注入 attachments
+        resolvedInput.attachments = [{
+          id: `pre-capture-${Date.now()}`,
+          name: feature.preCapture === 'region' ? 'region-shot.png' : 'fullscreen-shot.png',
+          size: capturedDataUrl.length,
+          kind: 'image' as const,
+          dataUrl: capturedDataUrl
+        }]
+      } catch (err) {
+        console.error(`[PluginManager] preCapture failed for ${name}:`, err)
+        // preCapture 失败时回退到旧流程（让插件自行截图）
+      }
+    }
+
     // 如果插件有 UI 且非静默指令，打开 UI 窗口
     if (useUI) {
       if (!this.windowManager) {

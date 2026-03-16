@@ -255,6 +255,7 @@ export interface PluginFeature {
   icon?: PluginIcon     // 功能独立图标（支持路径/svg/网络链接）
   mainPush?: boolean    // 是否向搜索框推送内容
   mainHide?: boolean    // 触发该功能时不显示主窗口
+  preCapture?: 'region' | 'fullscreen'  // 在启动插件前先执行截图，截图数据作为 attachment 传入
 }
 
 // 独立窗口配置
