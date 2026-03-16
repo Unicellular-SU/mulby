@@ -1,12 +1,20 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { PluginCommandItem, PluginCommandShortcutBindingRecord } from '../../shared/types/plugin'
 
+// 精确命令标识，用于从全部指令跳转或候选列表点选
+interface CommandTarget {
+  pluginId: string
+  featureCode: string
+  cmdId: string
+}
+
 interface CommandShortcutPanelProps {
   active: boolean
   mode: 'quick-launch' | 'all-commands'
   initialQuery?: string
+  initialCommandTarget?: CommandTarget
   onInitialQueryConsumed?: () => void
-  onRequestQuickLaunch?: (commandLabel: string) => void
+  onRequestQuickLaunch?: (commandLabel: string, target: CommandTarget) => void
   onBeforeOpenCommand?: () => Promise<void> | void
 }
 
@@ -106,6 +114,7 @@ export default function CommandShortcutPanel({
   active,
   mode,
   initialQuery,
+  initialCommandTarget,
   onInitialQueryConsumed,
   onRequestQuickLaunch,
   onBeforeOpenCommand
@@ -119,6 +128,8 @@ export default function CommandShortcutPanel({
   const [recordingCommand, setRecordingCommand] = useState<PluginCommandItem | null>(null)
   const [recordError, setRecordError] = useState('')
   const [selectedMenuCommand, setSelectedMenuCommand] = useState<PluginCommandItem | null>(null)
+  // 用户从候选列表点选或从全部指令跳转时，精确锁定到某个命令
+  const [pinnedCommand, setPinnedCommand] = useState<CommandTarget | null>(null)
 
   const loadData = useCallback(async () => {
     if (!active) return
@@ -143,8 +154,12 @@ export default function CommandShortcutPanel({
   useEffect(() => {
     if (!active || mode !== 'quick-launch' || !initialQuery) return
     setQuickCommandInput(initialQuery)
+    // 如果有精确命令标识，设置 pinnedCommand
+    if (initialCommandTarget) {
+      setPinnedCommand(initialCommandTarget)
+    }
     onInitialQueryConsumed?.()
-  }, [active, mode, initialQuery, onInitialQueryConsumed])
+  }, [active, mode, initialQuery, initialCommandTarget, onInitialQueryConsumed])
 
   const bindingByTarget = useMemo(() => {
     const map = new Map<string, PluginCommandShortcutBindingRecord>()
@@ -176,8 +191,28 @@ export default function CommandShortcutPanel({
   const quickExactTarget = useMemo(() => {
     const keyword = quickCommandInput.trim().toLowerCase()
     if (!keyword) return null
-    return quickMatchedCommands.find((item) => item.displayLabel.trim().toLowerCase() === keyword) || null
-  }, [quickMatchedCommands, quickCommandInput])
+
+    // 如果有精确锁定的命令标识，优先使用
+    if (pinnedCommand) {
+      const pinned = quickMatchedCommands.find(
+        (item) =>
+          item.pluginId === pinnedCommand.pluginId &&
+          item.featureCode === pinnedCommand.featureCode &&
+          item.cmdId === pinnedCommand.cmdId
+      )
+      if (pinned) return pinned
+    }
+
+    // 当有多个候选时，不自动选中——让用户从候选列表中选择
+    if (quickMatchedCommands.length > 1) return null
+
+    // 唯一候选时，检查是否完全匹配 displayLabel
+    if (quickMatchedCommands.length === 1) {
+      const only = quickMatchedCommands[0]
+      if (only.displayLabel.trim().toLowerCase() === keyword) return only
+    }
+    return null
+  }, [quickMatchedCommands, quickCommandInput, pinnedCommand])
 
   const quickLaunchTarget = useMemo(() => {
     if (quickExactTarget) return quickExactTarget
@@ -447,7 +482,10 @@ export default function CommandShortcutPanel({
             className="w-full rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-200"
             placeholder="输入指令（例如：open / 翻译）"
             value={quickCommandInput}
-            onChange={(e) => setQuickCommandInput(e.target.value)}
+            onChange={(e) => {
+              setPinnedCommand(null)
+              setQuickCommandInput(e.target.value)
+            }}
           />
 
           {quickLaunchTarget && (
@@ -489,7 +527,15 @@ export default function CommandShortcutPanel({
                 <button
                   key={`${commandTargetKey(command)}:${command.cmdSignature}`}
                   className="flex w-full items-center justify-between rounded-xl border border-slate-200/80 bg-white px-3 py-2 text-left text-xs text-slate-700 transition hover:border-slate-300 dark:border-slate-800/80 dark:bg-slate-950 dark:text-slate-200"
-                  onClick={() => setQuickCommandInput(command.displayLabel)}
+                  onClick={() => {
+                    // 锁定到用户选择的具体命令
+                    setPinnedCommand({
+                      pluginId: command.pluginId,
+                      featureCode: command.featureCode,
+                      cmdId: command.cmdId
+                    })
+                    setQuickCommandInput(command.displayLabel)
+                  }}
                 >
                   <span className="truncate">{command.displayLabel}</span>
                   <span className="truncate text-slate-500 dark:text-slate-400">{command.pluginDisplayName}</span>
@@ -714,7 +760,11 @@ export default function CommandShortcutPanel({
                 <button
                   className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-left text-sm text-slate-700 transition hover:border-slate-300 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200"
                   onClick={() => {
-                    onRequestQuickLaunch?.(selectedMenuCommand.displayLabel)
+                    onRequestQuickLaunch?.(selectedMenuCommand.displayLabel, {
+                      pluginId: selectedMenuCommand.pluginId,
+                      featureCode: selectedMenuCommand.featureCode,
+                      cmdId: selectedMenuCommand.cmdId
+                    })
                     setSelectedMenuCommand(null)
                   }}
                 >

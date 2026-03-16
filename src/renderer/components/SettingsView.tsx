@@ -64,6 +64,11 @@ export default function SettingsView({
     expiresAt: ''
   })
   const [inlineShortcutCommandHint, setInlineShortcutCommandHint] = useState('')
+  const [inlineShortcutCommandTarget, setInlineShortcutCommandTarget] = useState<{
+    pluginId: string
+    featureCode: string
+    cmdId: string
+  } | null>(null)
   const [runScriptDraft, setRunScriptDraft] = useState({
     id: '',
     command: '',
@@ -703,8 +708,10 @@ export default function SettingsView({
                   active={section === 'commandQuickLaunch'}
                   mode="quick-launch"
                   initialQuery={inlineShortcutCommandHint || shortcutCommandHint}
+                  initialCommandTarget={inlineShortcutCommandTarget || undefined}
                   onInitialQueryConsumed={() => {
                     setInlineShortcutCommandHint('')
+                    setInlineShortcutCommandTarget(null)
                     onShortcutCommandHintConsumed?.()
                   }}
                 />
@@ -715,8 +722,9 @@ export default function SettingsView({
                   active={section === 'commandAll'}
                   mode="all-commands"
                   onBeforeOpenCommand={onPrepareCommandLaunch}
-                  onRequestQuickLaunch={(commandLabel) => {
+                  onRequestQuickLaunch={(commandLabel, target) => {
                     setInlineShortcutCommandHint(commandLabel)
+                    setInlineShortcutCommandTarget(target)
                     onSectionChange('commandQuickLaunch')
                   }}
                 />
