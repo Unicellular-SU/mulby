@@ -440,6 +440,8 @@ export default function PluginManagerView({ onBack, onOpenStore, initialSection 
   const refreshPlugins = async () => {
     setPluginLoading(true)
     try {
+      // 先重新从磁盘扫描加载插件，再获取最新列表
+      await window.mulby.developer?.reloadPlugins?.()
       const list = await window.mulby.plugin.getAll()
       setPlugins(list)
     } finally {

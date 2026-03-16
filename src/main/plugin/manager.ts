@@ -311,9 +311,15 @@ export class PluginManager {
     return Array.from(this.plugins.values())
   }
 
-  // 根据名称获取插件
+  // 根据 ID 或 manifest.name 获取插件
   get(name: string): Plugin | undefined {
-    return this.plugins.get(name)
+    return this.resolve(name)
+  }
+
+  // 统一查找：先按 id 精确匹配，再按 manifest.name 回退
+  private resolve(nameOrId: string): Plugin | undefined {
+    return this.plugins.get(nameOrId)
+      || Array.from(this.plugins.values()).find(p => p.manifest.name === nameOrId)
   }
 
   // 获取启用的插件
@@ -323,7 +329,7 @@ export class PluginManager {
 
   // 获取插件所有功能入口（包含动态指令）
   getFeatures(name: string): PluginFeature[] {
-    const plugin = this.plugins.get(name)
+    const plugin = this.resolve(name)
     if (!plugin) return []
     return this.getCombinedFeatures(plugin)
   }
@@ -511,7 +517,7 @@ export class PluginManager {
     featureCode: string,
     input?: string | InputPayload
   ): Promise<{ success: boolean; hasUI?: boolean; error?: string }> {
-    const plugin = this.plugins.get(name)
+    const plugin = this.resolve(name)
     if (!plugin) {
       return { success: false, error: 'Plugin not found' }
     }
@@ -640,7 +646,7 @@ export class PluginManager {
 
   // 启用插件
   async enable(name: string): Promise<{ success: boolean; error?: string }> {
-    const plugin = this.plugins.get(name)
+    const plugin = this.resolve(name)
     if (!plugin) {
       return { success: false, error: '插件不存在' }
     }
@@ -648,8 +654,10 @@ export class PluginManager {
       return { success: true }
     }
 
+    const pluginId = plugin.id
+
     plugin.enabled = true
-    this.stateManager.setEnabled(name, true)
+    this.stateManager.setEnabled(pluginId, true)
 
     // 如果是开发插件且开启了自动热重载，启用监听
     if (plugin.isDev && await this.shouldAutoReloadDevPlugins()) {
@@ -657,7 +665,7 @@ export class PluginManager {
     }
 
     // 只有已初始化的插件才调用 onEnable 钩子
-    if (this.initializedPlugins.has(name)) {
+    if (this.initializedPlugins.has(pluginId)) {
       await this.callPluginHook(plugin, 'onEnable')
     }
 
@@ -674,7 +682,7 @@ export class PluginManager {
 
   // 禁用插件
   async disable(name: string): Promise<{ success: boolean; error?: string }> {
-    const plugin = this.plugins.get(name)
+    const plugin = this.resolve(name)
     if (!plugin) {
       return { success: false, error: '插件不存在' }
     }
@@ -682,32 +690,34 @@ export class PluginManager {
       return { success: true }
     }
 
+    const pluginId = plugin.id
+
     // 停止后台运行（如果正在后台运行）
-    if (this.backgroundManager.isRunning(name)) {
-      await this.backgroundManager.stop(name, 'disabled')
+    if (this.backgroundManager.isRunning(pluginId)) {
+      await this.backgroundManager.stop(pluginId, 'disabled')
     }
 
     // 停止文件监听
-    this.stopPluginWatcher(name)
+    this.stopPluginWatcher(pluginId)
 
     // 关闭插件窗口，并抑制窗口关闭回调触发自动后台化
-    this.closePluginWindows(name, true)
+    this.closePluginWindows(pluginId, true)
 
     // 只有已初始化的插件才调用钩子
-    if (this.initializedPlugins.has(name)) {
+    if (this.initializedPlugins.has(pluginId)) {
       await this.callPluginHook(plugin, 'onDisable')
       // 销毁 Host 进程
       if (this.useUtilityProcess) {
-        await this.hostManager.destroyHost(name)
+        await this.hostManager.destroyHost(pluginId)
       }
-      this.initializedPlugins.delete(name)
-    } else if (this.useUtilityProcess && this.hostManager.isHostReady(name) && !this.backgroundManager.isRunning(name)) {
+      this.initializedPlugins.delete(pluginId)
+    } else if (this.useUtilityProcess && this.hostManager.isHostReady(pluginId) && !this.backgroundManager.isRunning(pluginId)) {
       // 兜底：可能由 redirect/initPlugin 直接拉起 Host，但未进入 initializedPlugins
-      await this.hostManager.destroyHost(name)
+      await this.hostManager.destroyHost(pluginId)
     }
 
     plugin.enabled = false
-    this.stateManager.setEnabled(name, false)
+    this.stateManager.setEnabled(pluginId, false)
     this.commandShortcutManager.refresh()
 
     return { success: true }
@@ -715,45 +725,47 @@ export class PluginManager {
 
   // 卸载插件
   async uninstall(name: string): Promise<{ success: boolean; error?: string }> {
-    const plugin = this.plugins.get(name)
+    const plugin = this.resolve(name)
     if (!plugin) {
       return { success: false, error: '插件不存在' }
     }
 
+    const pluginId = plugin.id
+
     try {
       // 关闭插件窗口，并抑制窗口关闭回调触发自动后台化
-      this.closePluginWindows(name, true)
+      this.closePluginWindows(pluginId, true)
 
       // 停止后台运行（如果正在后台运行）
-      if (this.backgroundManager.isRunning(name)) {
-        await this.backgroundManager.stop(name, 'uninstalled')
+      if (this.backgroundManager.isRunning(pluginId)) {
+        await this.backgroundManager.stop(pluginId, 'uninstalled')
       }
 
       // 停止监听
-      this.stopPluginWatcher(name)
+      this.stopPluginWatcher(pluginId)
 
       // 只有已初始化的插件才调用钩子和销毁 Host
-      if (this.initializedPlugins.has(name)) {
+      if (this.initializedPlugins.has(pluginId)) {
         await this.callPluginHook(plugin, 'onUnload')
         if (this.useUtilityProcess) {
-          await this.hostManager.destroyHost(name)
+          await this.hostManager.destroyHost(pluginId)
         }
-        this.initializedPlugins.delete(name)
-      } else if (this.useUtilityProcess && this.hostManager.isHostReady(name) && !this.backgroundManager.isRunning(name)) {
+        this.initializedPlugins.delete(pluginId)
+      } else if (this.useUtilityProcess && this.hostManager.isHostReady(pluginId) && !this.backgroundManager.isRunning(pluginId)) {
         // 兜底：可能由 redirect/initPlugin 直接拉起 Host，但未进入 initializedPlugins
-        await this.hostManager.destroyHost(name)
+        await this.hostManager.destroyHost(pluginId)
       }
 
       // 删除插件文件
       rmSync(plugin.path, { recursive: true, force: true })
 
       // 清理内存
-      this.plugins.delete(name)
-      this.runners.delete(name)
-      this.stateManager.removePluginState(name)
-      pluginFeatureStore.clearFeatures(name)
-      this.commandShortcutManager.removeByPlugin(name)
-      this.commandDisabledManager.removeByPlugin(name)
+      this.plugins.delete(pluginId)
+      this.runners.delete(pluginId)
+      this.stateManager.removePluginState(pluginId)
+      pluginFeatureStore.clearFeatures(pluginId)
+      this.commandShortcutManager.removeByPlugin(pluginId)
+      this.commandDisabledManager.removeByPlugin(pluginId)
 
       return { success: true }
     } catch (err) {
@@ -764,7 +776,7 @@ export class PluginManager {
 
   // 获取插件 README
   getReadme(name: string): string | null {
-    const plugin = this.plugins.get(name)
+    const plugin = this.resolve(name)
     if (!plugin) return null
 
     const readmePath = join(plugin.path, 'README.md')
@@ -797,7 +809,7 @@ export class PluginManager {
 
   // 首次安装后主动初始化插件（触发 onLoad）
   async initializePlugin(name: string): Promise<void> {
-    const plugin = this.plugins.get(name) || this.getAll().find(p => p.manifest.name === name)
+    const plugin = this.resolve(name)
     if (!plugin) return
     if (this.initializedPlugins.has(plugin.id)) return
     await this.callPluginHook(plugin, 'onLoad')
