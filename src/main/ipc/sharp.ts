@@ -19,7 +19,7 @@ interface SharpOperation {
 type SharpInputObject = Record<string, unknown>
 
 interface SharpExecutePayload {
-  input?: string | Buffer | ArrayBufferView | SharpInputObject | unknown[]
+  input?: string | Buffer | ArrayBuffer | ArrayBufferView | SharpInputObject | unknown[]
   options?: SharpOptions
   operations: SharpOperation[]
 }
@@ -39,17 +39,19 @@ export function registerSharpHandlers() {
     try {
       const { input, options, operations } = payload
 
-      // 创建 Sharp 实例
+      // 创建 Sharp 实例（Sharp 必须要有输入：路径、Buffer 或 ArrayBuffer）
       let instance: Sharp
-      if (input === undefined) {
-        console.log('[Sharp] 创建: 无参数')
-        instance = sharp(options)
+      if (input === undefined || input === null) {
+        throw new Error('Sharp 需要输入：请传入图片文件路径、Buffer 或 ArrayBuffer，例如 mulby.sharp(文件路径) 或 mulby.sharp(图片Buffer)')
       } else if (typeof input === 'string') {
         console.log('[Sharp] 创建: 文件路径 =', input)
         instance = sharp(input, options)
       } else if (Buffer.isBuffer(input)) {
         console.log('[Sharp] 创建: Buffer')
         instance = sharp(input, options)
+      } else if (input instanceof ArrayBuffer) {
+        console.log('[Sharp] 创建: ArrayBuffer')
+        instance = sharp(Buffer.from(input), options)
       } else if (ArrayBuffer.isView(input)) {
         console.log('[Sharp] 创建: ArrayBufferView')
         instance = sharp(
@@ -66,6 +68,10 @@ export function registerSharpHandlers() {
         throw new Error('不支持的输入类型')
       }
 
+      if (instance == null || typeof (instance as unknown as Record<string, unknown>)[operations[0]?.method ?? ''] !== 'function') {
+        throw new Error('Sharp 实例创建异常或输入数据无效，请确保已传入有效的图片（路径、Buffer 或 ArrayBuffer）')
+      }
+
       // 执行操作链
       for (const { method, args } of operations) {
         console.log('[Sharp] 执行:', method)
@@ -76,7 +82,16 @@ export function registerSharpHandlers() {
           throw new Error(`Sharp 不存在方法: ${method}`)
         }
 
-        const result = methodFn(...args)
+        // 必须用 instance 作为 this 调用，否则 Sharp 内部 this.options 为 undefined
+        const result = methodFn.call(instance, ...args)
+
+        // 链式方法必须返回新的 Sharp 实例
+        if (!TERMINAL_METHOD_SET.has(method)) {
+          if (result == null) {
+            throw new Error(`Sharp 链式方法 ${method}() 返回了空值，当前输入或上一步结果可能无效`)
+          }
+          instance = result as Sharp
+        }
 
         // 终结方法返回 Promise
         if (TERMINAL_METHOD_SET.has(method)) {
@@ -124,9 +139,6 @@ export function registerSharpHandlers() {
           console.log('[Sharp] 返回原始结果')
           return finalResult
         }
-
-        // 链式方法返回 Sharp 实例
-        instance = result as Sharp
       }
 
       console.log('[Sharp] 警告: 没有终结方法')
