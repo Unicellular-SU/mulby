@@ -8,6 +8,7 @@ import type {
 } from '../../shared/types/electron'
 import { isSystemSearchQueryEligible } from '../../shared/system-search'
 import type { InputPayload } from '../../shared/types/plugin'
+import type { SearchSettings } from '../../shared/types/settings'
 
 interface PluginListProps {
   searchPayload: InputPayload
@@ -329,10 +330,23 @@ function PluginList({
   const systemFileCacheRef = useRef<Map<string, DesktopFileSearchResult[]>>(new Map())
   const systemIconCacheRef = useRef<Map<string, string>>(new Map())
   const systemIconPendingRef = useRef<Set<string>>(new Set())
+  // 搜索设置：控制是否搜索本机应用和文件
+  const searchSettingsRef = useRef<SearchSettings>({ enableApps: true, enableFiles: false })
 
   useEffect(() => {
     payloadRef.current = runPayload
   }, [runPayload])
+
+  // 挂载时获取搜索设置
+  useEffect(() => {
+    void window.mulby.settings.get().then(({ settings }) => {
+      if (settings?.search) {
+        searchSettingsRef.current = settings.search
+      }
+    }).catch(() => {
+      // 获取设置失败，保持默认值
+    })
+  }, [])
 
   useEffect(() => {
     let active = true
@@ -425,8 +439,8 @@ function PluginList({
 
       const query = currentPayload.text.trim()
       const hasTextOnlyInput = query.length > 0 && currentPayload.attachments.length === 0
-      const shouldSearchApps = hasTextOnlyInput && isSystemSearchQueryEligible(query)
-      const shouldSearchFiles = shouldSearchApps && query.length >= 2
+      const shouldSearchApps = hasTextOnlyInput && isSystemSearchQueryEligible(query) && searchSettingsRef.current.enableApps
+      const shouldSearchFiles = hasTextOnlyInput && isSystemSearchQueryEligible(query) && searchSettingsRef.current.enableFiles && query.length >= 2
 
       if (!hasTextOnlyInput) {
         setSystemApps([])

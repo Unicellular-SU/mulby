@@ -1119,8 +1119,10 @@ app.whenReady().then(async () => {
   // 初始化插件管理器
   await pluginManager.init()
 
-  // 预热系统应用搜索索引，降低冷启动首搜延迟
-  pluginDesktop.warmupAppSearchIndex()
+  // 预热系统应用搜索索引，降低冷启动首搜延迟（仅在启用搜索本机应用时执行）
+  if (appSettingsManager.getSettings().search.enableApps) {
+    pluginDesktop.warmupAppSearchIndex()
+  }
 })
 
 app.on('window-all-closed', () => {

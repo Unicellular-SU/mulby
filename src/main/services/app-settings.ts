@@ -133,6 +133,10 @@ const DEFAULT_SETTINGS: AppSettings = {
   window: {
     width: 800
   },
+  search: {
+    enableApps: true,
+    enableFiles: false
+  },
   input: {
     autoPasteOnShow: true,
     autoPasteMaxAge: 5000
@@ -433,6 +437,10 @@ function mergeSettings(current: AppSettings, next: Partial<AppSettings>): AppSet
     window: {
       ...(current.window || { width: 800 }),
       ...(next.window || {})
+    },
+    search: {
+      ...current.search,
+      ...(next.search || {})
     },
     input: {
       ...current.input,

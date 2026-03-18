@@ -167,6 +167,12 @@ export interface AiToolingSettings {
 // 日志级别类型
 export type LogLevel = 'debug' | 'info' | 'warn' | 'error'
 
+// 搜索设置
+export interface SearchSettings {
+  enableApps: boolean             // 搜索框是否搜索本机应用
+  enableFiles: boolean            // 搜索框是否搜索本机文件
+}
+
 // 输入设置
 export interface InputSettings {
   autoPasteOnShow: boolean       // 窗口唤起时自动粘贴剪贴板内容
@@ -205,6 +211,7 @@ export interface AppSettings {
   commandRunner: CommandRunnerSettings
   aiTooling: AiToolingSettings
   window?: WindowSettings
+  search: SearchSettings
   input: InputSettings
   tray: TraySettings
 }

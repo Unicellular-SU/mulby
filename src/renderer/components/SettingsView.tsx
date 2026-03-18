@@ -684,6 +684,16 @@ export default function SettingsView({
                   openAtLoginState={openAtLoginState}
                   startupBusy={startupBusy}
                   onToggleOpenAtLogin={toggleOpenAtLogin}
+                  searchSettings={settings?.search ?? { enableApps: true, enableFiles: false }}
+                  onSearchSettingsChange={async (patch) => {
+                    if (!settings) return
+                    await updateSettings({
+                      search: {
+                        ...settings.search,
+                        ...patch
+                      }
+                    })
+                  }}
                   onOpenAiSettings={onOpenAiSettings}
                   onOpenPluginManager={onOpenPluginManager}
                   onOpenBackgroundPluginManager={onOpenBackgroundPluginManager}

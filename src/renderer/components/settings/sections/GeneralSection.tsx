@@ -1,4 +1,5 @@
 import type { StartupOpenAtLoginState } from '../../../../shared/types/electron'
+import type { SearchSettings } from '../../../../shared/types/settings'
 
 interface GeneralSectionProps {
   themeMode: 'light' | 'dark' | 'system'
@@ -6,6 +7,8 @@ interface GeneralSectionProps {
   openAtLoginState: StartupOpenAtLoginState
   startupBusy: boolean
   onToggleOpenAtLogin: () => Promise<void> | void
+  searchSettings: SearchSettings
+  onSearchSettingsChange: (patch: Partial<SearchSettings>) => Promise<void> | void
   onOpenAiSettings?: () => void
   onOpenPluginManager: (section?: 'installed' | 'store') => void
   onOpenBackgroundPluginManager?: () => void
@@ -20,6 +23,8 @@ export default function GeneralSection({
   openAtLoginState,
   startupBusy,
   onToggleOpenAtLogin,
+  searchSettings,
+  onSearchSettingsChange,
   onOpenAiSettings,
   onOpenPluginManager,
   onOpenBackgroundPluginManager,
@@ -68,6 +73,43 @@ export default function GeneralSection({
           >
             <span
               className={`absolute top-0.5 left-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform ${openAtLoginState.enabled ? 'translate-x-5' : ''}`}
+            />
+          </button>
+        </div>
+      </div>
+
+      <div className={`${cardClass} space-y-4`}>
+        <div className="text-sm font-medium text-slate-900 dark:text-white">搜索设置</div>
+
+        <div className="flex items-center justify-between">
+          <div>
+            <div className="text-sm text-slate-700 dark:text-slate-200">搜索本机应用</div>
+          </div>
+          <button
+            className={`relative h-6 w-11 rounded-full transition-colors ${searchSettings.enableApps
+              ? 'bg-blue-500'
+              : 'bg-gray-300 dark:bg-gray-600'
+              }`}
+            onClick={() => void onSearchSettingsChange({ enableApps: !searchSettings.enableApps })}
+          >
+            <span
+              className={`absolute top-0.5 left-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform ${searchSettings.enableApps ? 'translate-x-5' : ''}`}
+            />
+          </button>
+        </div>
+        <div className="flex items-center justify-between">
+          <div>
+            <div className="text-sm text-slate-700 dark:text-slate-200">搜索本机文件</div>
+          </div>
+          <button
+            className={`relative h-6 w-11 rounded-full transition-colors ${searchSettings.enableFiles
+              ? 'bg-blue-500'
+              : 'bg-gray-300 dark:bg-gray-600'
+              }`}
+            onClick={() => void onSearchSettingsChange({ enableFiles: !searchSettings.enableFiles })}
+          >
+            <span
+              className={`absolute top-0.5 left-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform ${searchSettings.enableFiles ? 'translate-x-5' : ''}`}
             />
           </button>
         </div>
