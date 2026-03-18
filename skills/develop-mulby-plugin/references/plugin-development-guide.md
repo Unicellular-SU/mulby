@@ -79,6 +79,7 @@ Lock down the contract before major coding:
 - whether each feature is `ui`, `silent`, or `detached`
 - what belongs in UI, Main, and preload
 - whether background mode, scheduler work, or host APIs are needed
+- whether the plugin should expose tools for AI Agent (`manifest.tools`)
 
 ### Phase 2: Minimum Runnable Path
 
@@ -138,6 +139,7 @@ Typical top-level fields:
   - `width`, `height`, `minWidth`, `minHeight`, `maxWidth`, `maxHeight`: size constraints
   - `opacity`: initial window opacity (0.0 ~ 1.0, adjustable at runtime via `window.mulby.window.setOpacity()`)
   - `transparent`: enable window background transparency (combine with CSS `background: transparent` for see-through areas, only effective at creation time)
+- `tools`: optional AI tool declarations (see Plugin Tools section below)
 - `features`
 
 ### Window Types
@@ -179,6 +181,54 @@ Common trigger types:
 - `over`
 
 Design the feature list intentionally. Do not ship leftover template features that do not map to actual behavior.
+
+## Plugin Tools (AI Agent Integration)
+
+Plugins can declare tools that AI Agents can discover and call. This turns a plugin into an AI tool provider, similar to an MCP Server but managed through the Mulby plugin system.
+
+### Manifest Declaration
+
+Add a top-level `tools` array to `manifest.json`:
+
+```json
+{
+  "tools": [
+    {
+      "name": "search_docs",
+      "description": "Search documentation by keyword",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "query": { "type": "string", "description": "Search keyword" }
+        },
+        "required": ["query"]
+      }
+    }
+  ]
+}
+```
+
+### Handler Registration
+
+Register handlers in `main.ts` using `context.api.tools`:
+
+```typescript
+export function onLoad() {
+  const { tools } = context.api
+  tools.register('search_docs', async (args) => {
+    const { query } = args
+    return await performSearch(query)
+  })
+}
+```
+
+### Key Rules
+
+- Tool names must match `[a-zA-Z0-9_-]` and be unique per plugin.
+- Every tool declared in manifest must have a corresponding handler registered in `onLoad`.
+- A plugin can have `tools` without `features` (pure AI tool provider).
+- Priority order: Built-in tools > MCP tools > Plugin tools.
+- See `references/apis/tools.md` for the full API reference.
 
 ## Preload Rules
 

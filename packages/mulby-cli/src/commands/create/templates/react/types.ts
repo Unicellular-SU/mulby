@@ -1682,6 +1682,10 @@ interface BackendPluginAPIDirect {
   messaging: BackendMessaging
   ai: BackendMulbyAi
   scheduler: BackendScheduler
+  tools: {
+    register(name: string, handler: (args: unknown) => unknown | Promise<unknown>): void
+    unregister(name: string): void
+  }
 }
 
 type Asyncify<T> = {

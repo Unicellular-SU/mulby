@@ -513,6 +513,17 @@ ${item.files.map(p => `    <string>${p}</string>`).join('\n')}
         }
         return taskScheduler.describeCron(expression)
       }
+    },
+    // Plugin Tools API（主进程备用执行器使用，实际 handler 注册在 host-worker 内）
+    tools: {
+      register: (_name: string, _handler: (args: unknown) => unknown | Promise<unknown>) => {
+        // 主进程备用执行器中 tools.register 为空操作
+        // 实际的 handler 注册在 UtilityProcess (host-worker) 内完成
+        console.warn('[PluginAPI] tools.register is only effective in UtilityProcess host-worker')
+      },
+      unregister: (_name: string) => {
+        console.warn('[PluginAPI] tools.unregister is only effective in UtilityProcess host-worker')
+      }
     }
   }
 }

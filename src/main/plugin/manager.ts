@@ -130,6 +130,7 @@ export class PluginManager {
   private initPromise: Promise<void> | null = null
   private isReloading: boolean = false
   private skipNextWindowClosedHandling: Set<string> = new Set()
+  private pluginToolsListener?: (event: 'refresh' | 'remove', pluginId: string, pluginName: string, tools: import('../../shared/types/plugin').PluginToolSchema[]) => void
 
   constructor() {
     this.stateManager = new PluginStateManager()
@@ -181,6 +182,19 @@ export class PluginManager {
 
   setSystemPluginWindowManager(manager: SystemPluginWindowManager) {
     this.systemPluginWindowManager = manager
+  }
+
+  // 设置 plugin tools 变更监听器（用于同步 pluginToolRegistry）
+  setPluginToolsListener(listener: (event: 'refresh' | 'remove', pluginId: string, pluginName: string, tools: import('../../shared/types/plugin').PluginToolSchema[]) => void): void {
+    this.pluginToolsListener = listener
+  }
+
+  private notifyPluginToolsChanged(plugin: Plugin, event: 'refresh' | 'remove'): void {
+    if (!this.pluginToolsListener) return
+    const tools = event === 'refresh' && plugin.enabled
+      ? (plugin.manifest.tools || [])
+      : []
+    this.pluginToolsListener(event, plugin.id, plugin.manifest.name, tools)
   }
 
   // 初始化：加载所有插件
@@ -249,6 +263,11 @@ export class PluginManager {
         plugin.enabled = state.enabled
 
         this.plugins.set(plugin.id, plugin)
+
+        // 注册 plugin tools（如果有声明）
+        if (plugin.enabled && plugin.manifest.tools && plugin.manifest.tools.length > 0) {
+          this.notifyPluginToolsChanged(plugin, 'refresh')
+        }
 
         // 如果是开发模式插件，启动文件监听
         if (plugin.isDev && plugin.enabled && shouldWatchDevPlugins) {
@@ -708,6 +727,9 @@ export class PluginManager {
 
     this.commandShortcutManager.refresh()
 
+    // 注册 plugin tools
+    this.notifyPluginToolsChanged(plugin, 'refresh')
+
     return { success: true }
   }
 
@@ -757,6 +779,9 @@ export class PluginManager {
     this.stateManager.setEnabled(pluginId, false)
     this.commandShortcutManager.refresh()
 
+    // 注销 plugin tools
+    this.notifyPluginToolsChanged(plugin, 'remove')
+
     return { success: true }
   }
 
@@ -803,6 +828,9 @@ export class PluginManager {
       pluginFeatureStore.clearFeatures(pluginId)
       this.commandShortcutManager.removeByPlugin(pluginId)
       this.commandDisabledManager.removeByPlugin(pluginId)
+
+      // 注销 plugin tools
+      this.notifyPluginToolsChanged(plugin, 'remove')
 
       return { success: true }
     } catch (err) {
@@ -1087,6 +1115,9 @@ export class PluginManager {
     }
 
     this.commandShortcutManager.refresh()
+
+    // 刷新 plugin tools 注册
+    this.notifyPluginToolsChanged(nextPlugin, 'refresh')
 
     if (!nextPlugin.enabled) {
       return

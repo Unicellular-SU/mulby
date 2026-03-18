@@ -39,6 +39,7 @@
 - [任务调度 API (scheduler)](./scheduler.md)
 - [动态指令 API (features)](./features.md)
 - [插件间通信 API (messaging)](./messaging.md)
+- [插件 Tools API (tools)](./tools.md)
 - [InBrowser API (inbrowser)](./inbrowser.md)
 
 ## 文件、网络与位置

@@ -56,6 +56,20 @@ export const host = {
 export default { onLoad, onUnload, onEnable, onDisable, run, host };
 ```
 
+**Backend with Plugin Tools (`src/main.ts`)**:
+```typescript
+// 纯工具插件示例：只需 manifest.tools 和 handler 注册，无需 features
+export function onLoad() {
+  // context.api.tools 在 UtilityProcess 中可用
+  const { tools } = (globalThis as any).__mulby_context__.api;
+  tools.register('search_docs', async (args: any) => {
+    const { query } = args;
+    return { results: [`Result for: ${query}`] };
+  });
+}
+export default { onLoad };
+```
+
 **Frontend (`src/ui/App.tsx`)**:
 ```typescript
 import { useMulby } from './hooks/useMulby';
@@ -85,6 +99,7 @@ Lock down the contract before coding:
 - Whether each feature is `ui`, `silent`, or `detached`
 - Which logic belongs to UI, backend, and preload
 - Whether background mode / scheduler / host APIs are needed
+- Whether the plugin should expose tools for AI Agent (`manifest.tools`)
 
 ### Phase 2: Build a Minimum Runnable Path
 Implement one end-to-end happy path first:
@@ -158,6 +173,19 @@ The final delivery should tell the user to test these points inside Mulby:
       ],
       "mainPush": true,         // Push content to search bar
       "mainHide": true          // Hide main window on trigger
+    }
+  ],
+  "tools": [                      // AI Agent tools (optional)
+    {
+      "name": "search_docs",
+      "description": "Search documentation by keyword",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "query": { "type": "string", "description": "Search keyword" }
+        },
+        "required": ["query"]
+      }
     }
   ]
 }

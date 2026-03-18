@@ -3,7 +3,7 @@ import http from 'http'
 import https from 'https'
 import { join } from 'path'
 import { registerAllHandlers } from './ipc'
-import { setAiCapabilityPolicyResolver, setAiToolExecutor } from './ai'
+import { setAiCapabilityPolicyResolver, setAiToolExecutor, setAiPluginToolResolver } from './ai'
 import { aiMcpService, isMcpToolName } from './ai/mcp'
 import {
   AI_RUN_COMMAND_TOOL_NAME,
@@ -14,6 +14,7 @@ import { createAiInternalToolRuntime } from './ai/tools/internal-tool-runtime'
 import { resolveAiCapabilityPolicy } from './ai/tools/capability-policy'
 import { isAiInternalToolName } from './ai/tools/internal-tools'
 import { PluginManager } from './plugin'
+import { PluginToolRegistry, isPluginToolName, parsePluginToolId } from './plugin/plugin-tools'
 import { pluginDesktop } from './plugin/desktop'
 import { setHotKeySettingRedirectHandler } from './plugin/dynamic-features'
 import { PluginWindowManager } from './plugin/window'
@@ -145,6 +146,10 @@ const aiInternalToolRuntime = createAiInternalToolRuntime({
     }
   }
 })
+
+// 创建 Plugin Tools 注册中心并注入到 AI 管道
+const pluginToolRegistry = new PluginToolRegistry()
+setAiPluginToolResolver(() => pluginToolRegistry.resolveToolsForAi())
 
 function isAbortLikeError(error: unknown): boolean {
   if (error instanceof Error) {
@@ -285,6 +290,38 @@ setAiToolExecutor(async ({ name, args, context, callId, abortSignal }) => {
       context,
       callId
     })
+  }
+
+  // Plugin Tool 分派：通过 plugin_tool__{sanitizedPluginId}__{toolName} 格式识别
+  if (isPluginToolName(name)) {
+    const { pluginId: sanitizedId, toolName } = parsePluginToolId(name)
+
+    // 通过注册中心还原原始 pluginId（sanitizedId → originalPluginId）
+    const pluginId = pluginToolRegistry.resolveOriginalPluginId(sanitizedId) || sanitizedId
+
+    // 确保插件 host 已初始化（懒加载：首次调用时自动启动 host 进程）
+    const plugin = pluginManager.get(pluginId)
+    if (!plugin) {
+      throw new Error(`Plugin not found: ${pluginId} (sanitized: ${sanitizedId})`)
+    }
+    if (!plugin.enabled) {
+      throw new Error(`Plugin is disabled: ${pluginId}`)
+    }
+    await pluginManager.initializePlugin(pluginId)
+
+    const hostManager = pluginManager.getHostManager()
+    // initPlugin 会确保 host 进程创建并就绪
+    const inited = await hostManager.initPlugin(plugin)
+    if (!inited) {
+      throw new Error(`Failed to initialize host for plugin: ${pluginId}`)
+    }
+
+    const result = await hostManager.callHostMethod(pluginId, `__plugin_tool__${toolName}`, [args])
+    // 解包 host 返回的结果
+    if (result && typeof result === 'object' && 'success' in result && 'data' in result) {
+      return (result as { data: unknown }).data
+    }
+    return result
   }
 
   const pluginName = context?.pluginName
@@ -1115,6 +1152,15 @@ app.whenReady().then(async () => {
   pluginManager.setSystemPluginWindowManager(systemPluginWindowManager)
 
   appShortcutManager.apply(appSettingsManager.getSettings().shortcuts)
+
+  // 绑定 plugin tools 变更监听器到注册中心
+  pluginManager.setPluginToolsListener((event, pluginId, pluginName, tools) => {
+    if (event === 'remove') {
+      pluginToolRegistry.removePlugin(pluginId)
+    } else {
+      pluginToolRegistry.refreshPlugin(pluginId, pluginName, tools)
+    }
+  })
 
   // 初始化插件管理器
   await pluginManager.init()

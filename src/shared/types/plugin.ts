@@ -301,6 +301,31 @@ export interface PluginPermissions {
   runCommand?: boolean
 }
 
+// 插件 AI Tool 声明（在 manifest 中声明，供 AI Agent 发现和调用）
+export interface PluginToolSchema {
+  name: string                   // tool 名称（插件范围内唯一，仅允许 [a-zA-Z0-9_-]）
+  description: string            // tool 描述（AI 用来理解功能）
+  inputSchema: {                 // 输入参数 JSON Schema
+    type: 'object'
+    properties: Record<string, unknown>
+    required?: string[]
+    additionalProperties?: boolean
+  }
+  outputSchema?: {               // 输出 JSON Schema（可选，提升 AI 理解）
+    type: 'object'
+    properties: Record<string, unknown>
+  }
+}
+
+// 插件 Tool 执行上下文
+export interface PluginToolCallContext {
+  callId?: string
+  abortSignal?: AbortSignal
+}
+
+// 插件 Tool Handler 函数签名
+export type PluginToolHandler = (args: unknown, ctx?: PluginToolCallContext) => unknown | Promise<unknown>
+
 // 插件清单
 export interface PluginManifest {
   id?: string  // 唯一标识符（推荐格式：@scope/name 或 com.example.name）
@@ -317,6 +342,7 @@ export interface PluginManifest {
   icon?: PluginIcon  // 插件图标（可选）
   permissions?: PluginPermissions  // 权限声明（可选）
   features: PluginFeature[]
+  tools?: PluginToolSchema[]     // 插件声明的 AI 工具（可选，供 AI Agent 调用）
   window?: WindowOptions  // 独立窗口配置（可选）
   pluginSetting?: PluginSetting  // 插件行为设置（可选）
 }
@@ -480,6 +506,10 @@ export interface PluginAPI {
       ) => Promise<{ images: string[]; tokens: AiTokenBreakdown }>
       edit: (input: { imageAttachmentId: string; prompt: string; model: string }) => Promise<{ images: string[]; tokens: AiTokenBreakdown }>
     }
+  }
+  tools: {
+    register: (name: string, handler: PluginToolHandler) => void   // 注册 tool handler（需先在 manifest.tools 中声明）
+    unregister: (name: string) => void                              // 注销 tool handler
   }
 }
 

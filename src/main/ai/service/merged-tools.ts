@@ -9,6 +9,7 @@ interface ResolveMergedToolsDeps {
     }
     context?: AiOption['toolContext']
   }) => Promise<AiTool[]>
+  resolvePluginTools?: () => AiTool[]
 }
 
 export async function resolveMergedTools(
@@ -16,9 +17,15 @@ export async function resolveMergedTools(
   deps: ResolveMergedToolsDeps
 ): Promise<AiTool[] | undefined> {
   const declaredTools = Array.isArray(option.tools) ? option.tools : []
+  const pluginTools = deps.resolvePluginTools?.() || []
   const mcpMode = option.mcp ? (option.mcp.mode || 'auto') : 'off'
+
+  // MCP 关闭时，仍需合并 declared + plugin tools
   if (mcpMode === 'off') {
-    return declaredTools.length > 0 ? declaredTools : undefined
+    if (declaredTools.length === 0 && pluginTools.length === 0) {
+      return undefined
+    }
+    return mergeToolLists(declaredTools, [], pluginTools)
   }
 
   const mcpTools = await deps.resolveMcpTools({
@@ -35,6 +42,7 @@ export async function resolveMergedTools(
     scopeAllowedServerIds: option.toolContext?.mcpScope?.allowedServerIds || [],
     scopeAllowedToolIds: option.toolContext?.mcpScope?.allowedToolIds?.length || 0,
     resolvedMcpToolCount: mcpTools.length,
+    pluginToolCount: pluginTools.length,
     declaredToolCount: declaredTools.length
   })
   if (mcpTools.length === 0) {
@@ -47,25 +55,44 @@ export async function resolveMergedTools(
     })
   }
 
-  if (declaredTools.length === 0) {
-    return mcpTools.length > 0 ? mcpTools : undefined
-  }
-  if (mcpTools.length === 0) {
-    return declaredTools
+  if (declaredTools.length === 0 && mcpTools.length === 0 && pluginTools.length === 0) {
+    return undefined
   }
 
-  const merged = [...declaredTools]
-  const knownNames = new Set(
-    declaredTools
-      .map((item) => item.function?.name)
-      .filter((name): name is string => !!name)
-  )
-  for (const toolItem of mcpTools) {
-    const name = toolItem.function?.name
-    if (!name) continue
-    if (knownNames.has(name)) continue
-    merged.push(toolItem)
+  return mergeToolLists(declaredTools, mcpTools, pluginTools)
+}
+
+/**
+ * 合并工具列表，按优先级去重: declared > MCP > plugin tools
+ * 同名时高优先级覆盖低优先级
+ */
+function mergeToolLists(declaredTools: AiTool[], mcpTools: AiTool[], pluginTools: AiTool[]): AiTool[] | undefined {
+  const merged: AiTool[] = []
+  const knownNames = new Set<string>()
+
+  // 优先级 1: declared tools（来自 AiOption.tools 或 internal tools）
+  for (const tool of declaredTools) {
+    const name = tool.function?.name
+    if (!name || knownNames.has(name)) continue
+    merged.push(tool)
     knownNames.add(name)
   }
-  return merged
+
+  // 优先级 2: MCP tools
+  for (const tool of mcpTools) {
+    const name = tool.function?.name
+    if (!name || knownNames.has(name)) continue
+    merged.push(tool)
+    knownNames.add(name)
+  }
+
+  // 优先级 3: Plugin tools
+  for (const tool of pluginTools) {
+    const name = tool.function?.name
+    if (!name || knownNames.has(name)) continue
+    merged.push(tool)
+    knownNames.add(name)
+  }
+
+  return merged.length > 0 ? merged : undefined
 }

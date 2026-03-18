@@ -25,6 +25,7 @@ Use this skill for both new Mulby plugins and existing plugin fixes. The goal is
    - Decide the mode for each feature: `ui`, `silent`, or `detached`.
    - Decide whether logic belongs in backend, UI, or `preload.cjs`.
    - Decide which Mulby APIs are needed.
+   - Decide whether the plugin should expose tools for AI Agent (via `manifest.tools` and `context.api.tools`).
 5. Build one minimum runnable path first.
    - Make `manifest.json` match real files.
    - Implement one happy path that can actually be triggered inside Mulby.
@@ -57,6 +58,7 @@ Use this skill for both new Mulby plugins and existing plugin fixes. The goal is
 - Read [references/api-map.md](references/api-map.md) when you need a bundled Mulby API navigator and module selection guide.
 - Read [references/PLUGIN_DEVELOP_PROMPT.md](references/PLUGIN_DEVELOP_PROMPT.md) when you need the fuller Mulby plugin development prompt and examples.
 - Read [references/apis/README.md](references/apis/README.md) first when a task depends on specific Mulby APIs, then open the relevant `references/apis/*.md` files for exact module details.
+- Read [references/apis/tools.md](references/apis/tools.md) when the plugin needs to expose tools for AI Agent integration.
 
 ## Handoff Checklist
 
@@ -64,6 +66,7 @@ Before claiming completion, verify all of the following when applicable:
 
 - `manifest.json` required fields are complete.
 - Every `feature.code` maps to real handling logic.
+- If `manifest.tools` is declared, every tool has a matching handler registered in `onLoad`.
 - `main`, `ui`, and `preload` paths point to files that exist.
 - `preload.cjs` is only present when needed and stays CommonJS.
 - If icon work is in scope, an editable SVG source is kept and the scaffold default `icon.png` has been replaced with the final 512x512 export.

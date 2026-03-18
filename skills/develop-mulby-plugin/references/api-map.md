@@ -28,6 +28,8 @@ Use this reference as the navigator for the bundled Mulby API docs under `refere
   - Inter-plugin messages and broadcasts.
 - `references/apis/host.md`
   - Host-provided methods exposed to plugins.
+- `references/apis/tools.md`
+  - Plugin Tools for AI Agent: manifest declaration, handler registration, and tool schema.
 
 ## Common Requirement -> Bundled Doc Mapping
 
@@ -42,6 +44,8 @@ Use this reference as the navigator for the bundled Mulby API docs under `refere
   - `references/apis/messaging.md`
 - Plugin-host calls or host capability boundaries
   - `references/apis/host.md`
+- Plugin as AI tool provider (AI Agent integration)
+  - `references/apis/tools.md`
 - Filesystem access
   - `references/apis/filesystem.md`
 - HTTP requests

@@ -64,6 +64,17 @@ export const host = {
   }
 }
 
+// --- Plugin Tools (AI Agent 工具) ---
+// 如果 manifest.json 中声明了 tools，在 onLoad 中注册 handler：
+//
+// export function onLoad() {
+//   const { tools } = (globalThis as any).__mulby_context__.api
+//   tools.register('my_tool', async (args) => {
+//     // args 对应 manifest.tools[].inputSchema 定义的参数
+//     return { result: '处理结果' }
+//   })
+// }
+
 const plugin = { onLoad, onUnload, onEnable, onDisable, run, host }
 export default plugin
 `

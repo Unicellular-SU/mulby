@@ -1,5 +1,5 @@
 import { AiService } from './service'
-import type { AiOption, AiSkillSelectionMeta } from '../../shared/types/ai'
+import type { AiOption, AiSkillSelectionMeta, AiTool } from '../../shared/types/ai'
 import type { AiToolCapabilityName } from './tools/capabilities'
 
 export const aiService = new AiService()
@@ -25,3 +25,8 @@ export function setAiCapabilityPolicyResolver(
 ) {
   aiService.setCapabilityPolicyResolver(resolver)
 }
+
+export function setAiPluginToolResolver(resolver?: () => AiTool[]): void {
+  aiService.setPluginToolResolver(resolver)
+}
+

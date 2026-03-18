@@ -71,6 +71,10 @@ const pendingApiCalls = new Map<string, {
   reject: (error: Error) => void
 }>()
 
+// Plugin Tool Handlers 注册表
+// 插件通过 mulby.tools.register(name, handler) 注册，AI 通过 __plugin_tool__{name} 调用
+const pluginToolHandlers = new Map<string, (args: unknown) => unknown | Promise<unknown>>()
+
 // ============ 消息处理 ============
 
 /** 发送消息到主进程 */
@@ -124,6 +128,24 @@ function createProxyAPI(): PluginAPI {
   const handler: ProxyHandler<object> = {
     get(_target, prop: string) {
       if (typeof prop !== 'string') return undefined
+
+      // 特殊处理 tools 命名空间：register/unregister 直接在 worker 内处理
+      if (prop === 'tools') {
+        return {
+          register: (name: string, toolHandler: (args: unknown) => unknown | Promise<unknown>) => {
+            if (typeof name !== 'string' || !name.trim()) {
+              throw new Error('Tool name must be a non-empty string')
+            }
+            if (typeof toolHandler !== 'function') {
+              throw new Error('Tool handler must be a function')
+            }
+            pluginToolHandlers.set(name.trim(), toolHandler)
+          },
+          unregister: (name: string) => {
+            pluginToolHandlers.delete(String(name || '').trim())
+          }
+        }
+      }
 
       // 返回一个代理对象，用于处理嵌套属性访问
       return new Proxy({}, {
@@ -339,6 +361,30 @@ async function handleCallHostMethod(request: CallHostMethodRequest): Promise<voi
   const { method, args } = request.payload
 
   try {
+    // Plugin Tool 路由：__plugin_tool__{toolName} 格式直接查找已注册的 handler
+    const PLUGIN_TOOL_PREFIX = '__plugin_tool__'
+    if (method.startsWith(PLUGIN_TOOL_PREFIX)) {
+      const toolName = method.slice(PLUGIN_TOOL_PREFIX.length)
+      const handler = pluginToolHandlers.get(toolName)
+      if (!handler) {
+        throw new Error(
+          `Plugin tool handler not registered: "${toolName}"\n` +
+          `Please call mulby.tools.register("${toolName}", handler) before AI can invoke this tool.\n` +
+          `Registered tools: ${pluginToolHandlers.size > 0 ? Array.from(pluginToolHandlers.keys()).join(', ') : 'none'}`
+        )
+      }
+      const toolArgs = Array.isArray(args) ? args[0] : args
+      const result = await handler(toolArgs)
+      const serializedResult = cloneForMessage(result)
+
+      send({
+        id: request.id,
+        type: 'result',
+        payload: { success: true, data: serializedResult }
+      })
+      return
+    }
+
     const module = (await loadModule()) as Record<string, unknown>
 
     // 方案1：按优先级查找方法

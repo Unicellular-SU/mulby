@@ -116,6 +116,7 @@ export class AiService {
     abortSignal?: AbortSignal
   }) => Promise<unknown>
   private capabilityPolicyResolver?: CapabilityPolicyResolver
+  private pluginToolResolver?: () => AiTool[]
 
   private injectInternalRuntimeTools(input: {
     option: AiOption
@@ -403,6 +404,10 @@ export class AiService {
     this.capabilityPolicyResolver = resolver
   }
 
+  setPluginToolResolver(resolver?: () => AiTool[]): void {
+    this.pluginToolResolver = resolver
+  }
+
   async uploadAttachment(input: { filePath?: string; buffer?: ArrayBuffer; mimeType: string; purpose?: string }): Promise<AiAttachmentRef> {
     return await attachmentStore.upload(input)
   }
@@ -521,7 +526,8 @@ export class AiService {
 
   private async resolveMergedTools(option: AiOption): Promise<AiTool[] | undefined> {
     return await resolveMergedToolsHelper(option, {
-      resolveMcpTools: async (input) => await aiMcpService.resolveToolsForAi(input)
+      resolveMcpTools: async (input) => await aiMcpService.resolveToolsForAi(input),
+      resolvePluginTools: this.pluginToolResolver
     })
   }
 
