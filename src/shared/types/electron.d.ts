@@ -138,6 +138,8 @@ export interface PluginInfo {
     minHeight?: number
     maxWidth?: number
     maxHeight?: number
+    opacity?: number
+    transparent?: boolean
   }
   icon?: {
     type: 'url' | 'svg' | 'data-url' | 'emoji'
@@ -392,7 +394,10 @@ export interface ElectronAPI {
     close: () => void
     reload: () => void
     setAlwaysOnTop: (flag: boolean) => void
+    setOpacity: (opacity: number) => Promise<void>
+    getOpacity: () => Promise<number>
     getMode: () => Promise<'attached' | 'detached'>
+    getState: () => Promise<{ isMaximized: boolean; isAlwaysOnTop: boolean; opacity: number }>
     resizeDrag: (payload: {
       edge: 'top' | 'right' | 'bottom' | 'left' | 'top-left' | 'top-right' | 'bottom-right' | 'bottom-left'
       startX: number

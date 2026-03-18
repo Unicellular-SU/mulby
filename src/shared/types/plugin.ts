@@ -271,6 +271,8 @@ export interface WindowOptions {
   maxHeight?: number   // 最大高度
   type?: WindowType    // 窗口类型：default(带标题栏)、borderless(无边框)、fullscreen(全屏)
   titleBar?: boolean   // 是否显示 Mulby 标题栏（default 类型默认 true，其他类型默认 false）
+  opacity?: number     // 窗口透明度（0.0 完全透明 ~ 1.0 完全不透明，运行时可调）
+  transparent?: boolean // 窗口背景透明（配合 CSS background: transparent 实现穿透效果，仅创建时生效）
 }
 
 // Phase 4: 资源限制配置

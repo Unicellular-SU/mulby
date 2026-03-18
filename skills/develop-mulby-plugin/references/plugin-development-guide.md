@@ -136,6 +136,8 @@ Typical top-level fields:
   - `type`: window type (`default` with titlebar, `borderless` without frame, `fullscreen` fills screen)
   - `titleBar`: explicitly control whether Mulby injects a titlebar (`default` type defaults to `true`, others to `false`)
   - `width`, `height`, `minWidth`, `minHeight`, `maxWidth`, `maxHeight`: size constraints
+  - `opacity`: initial window opacity (0.0 ~ 1.0, adjustable at runtime via `window.mulby.window.setOpacity()`)
+  - `transparent`: enable window background transparency (combine with CSS `background: transparent` for see-through areas, only effective at creation time)
 - `features`
 
 ### Window Types

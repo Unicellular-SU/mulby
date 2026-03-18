@@ -1,6 +1,6 @@
 {
   "name": "mulby-cli",
-  "version": "1.1.9",
+  "version": "1.1.10",
   "description": "Mulby 插件开发 CLI 工具",
   "main": "dist/index.js",
   "files": [

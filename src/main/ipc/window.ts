@@ -323,6 +323,11 @@ export function registerWindowHandlers(
           childWin.setPosition(args[0], args[1])
         }
         break
+      case 'setOpacity':
+        if (typeof args[0] === 'number') {
+          childWin.setOpacity(Math.max(0, Math.min(1, args[0])))
+        }
+        break
       case 'postMessage':
         // 发送消息给子窗口
         childWin.webContents.send('window:childMessage', String(args[0] ?? ''), ...args.slice(1))
@@ -518,6 +523,21 @@ export function registerWindowHandlers(
     win?.setAlwaysOnTop(flag)
   })
 
+  // 设置窗口透明度（0.0 ~ 1.0）
+  ipcMain.handle('window:setOpacity', (event, opacity: number) => {
+    const win = BrowserWindow.fromWebContents(event.sender)
+    if (!win) return
+    // 值域校验：夹在 [0.0, 1.0] 范围内
+    const clamped = Math.max(0, Math.min(1, opacity))
+    win.setOpacity(clamped)
+  })
+
+  // 获取窗口透明度
+  ipcMain.handle('window:getOpacity', (event) => {
+    const win = BrowserWindow.fromWebContents(event.sender)
+    return win?.getOpacity() ?? 1
+  })
+
   // 获取插件模式
   ipcMain.handle('plugin:getMode', (event) => {
     const win = BrowserWindow.fromWebContents(event.sender)
@@ -549,7 +569,8 @@ export function registerWindowHandlers(
     const win = BrowserWindow.fromWebContents(event.sender)
     return {
       isMaximized: win?.isMaximized() ?? false,
-      isAlwaysOnTop: win?.isAlwaysOnTop() ?? false
+      isAlwaysOnTop: win?.isAlwaysOnTop() ?? false,
+      opacity: win?.getOpacity() ?? 1
     }
   })
 

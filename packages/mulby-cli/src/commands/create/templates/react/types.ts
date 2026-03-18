@@ -77,6 +77,7 @@ interface BrowserWindowProxy {
   setTitle(title: string): Promise<void>
   setSize(width: number, height: number): Promise<void>
   setPosition(x: number, y: number): Promise<void>
+  setOpacity(opacity: number): Promise<void>
   postMessage(channel: string, ...args: unknown[]): Promise<void>
 }
 
@@ -86,15 +87,29 @@ interface MulbyWindow {
   setSize(width: number, height: number): void
   setExpendHeight(height: number, allowResize?: boolean): void
   center(): void
-  create(url: string, options?: { width?: number; height?: number; title?: string }): Promise<BrowserWindowProxy | null>
+  create(url: string, options?: {
+    width?: number; height?: number; title?: string;
+    type?: 'default' | 'borderless' | 'fullscreen';
+    titleBar?: boolean;
+    fullscreen?: boolean;
+    alwaysOnTop?: boolean;
+    resizable?: boolean;
+    x?: number; y?: number;
+    minWidth?: number; minHeight?: number;
+    maxWidth?: number; maxHeight?: number;
+    opacity?: number;
+    transparent?: boolean;
+  }): Promise<BrowserWindowProxy | null>
   close(): void
   detach(): void
   setAlwaysOnTop(flag: boolean): void
+  setOpacity(opacity: number): Promise<void>
+  getOpacity(): Promise<number>
   getMode(): Promise<'attached' | 'detached'>
   getWindowType(): Promise<'main' | 'detach'>
   minimize(): void
   maximize(): void
-  getState(): Promise<{ isMaximized: boolean; isAlwaysOnTop: boolean }>
+  getState(): Promise<{ isMaximized: boolean; isAlwaysOnTop: boolean; opacity: number }>
   resizeDrag(payload: {
     edge: 'top' | 'right' | 'bottom' | 'left' | 'top-left' | 'top-right' | 'bottom-right' | 'bottom-left'
     startX: number
@@ -253,6 +268,8 @@ interface PluginInfo {
     minHeight?: number
     maxWidth?: number
     maxHeight?: number
+    opacity?: number
+    transparent?: boolean
   }
   icon?: ResolvedIcon
   path?: string

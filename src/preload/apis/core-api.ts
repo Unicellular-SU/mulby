@@ -12,6 +12,8 @@ export function createCoreApi(ipcRenderer: IpcRenderer) {
       detach: () => ipcRenderer.send('plugin:detach'),
       close: () => ipcRenderer.send('plugin:close'),
       setAlwaysOnTop: (flag: boolean) => ipcRenderer.send('window:alwaysOnTop', flag),
+      setOpacity: (opacity: number) => ipcRenderer.invoke('window:setOpacity', opacity),
+      getOpacity: () => ipcRenderer.invoke('window:getOpacity'),
       getMode: () => ipcRenderer.invoke('plugin:getMode'),
       getWindowType: () => ipcRenderer.invoke('window:getType'),
       minimize: () => ipcRenderer.send('window:minimize'),
@@ -36,6 +38,8 @@ export function createCoreApi(ipcRenderer: IpcRenderer) {
         x?: number; y?: number;
         minWidth?: number; minHeight?: number;
         maxWidth?: number; maxHeight?: number;
+        opacity?: number;
+        transparent?: boolean;
       }) => {
         const id = await ipcRenderer.invoke('window:create', url, options)
         if (!id) return null
@@ -48,6 +52,7 @@ export function createCoreApi(ipcRenderer: IpcRenderer) {
           setTitle: (title: string) => ipcRenderer.invoke('window:child:action', id, 'setTitle', title),
           setSize: (width: number, height: number) => ipcRenderer.invoke('window:child:action', id, 'setSize', width, height),
           setPosition: (x: number, y: number) => ipcRenderer.invoke('window:child:action', id, 'setPosition', x, y),
+          setOpacity: (opacity: number) => ipcRenderer.invoke('window:child:action', id, 'setOpacity', opacity),
           postMessage: (channel: string, ...args: unknown[]) => ipcRenderer.invoke('window:child:action', id, 'postMessage', channel, ...args)
         }
       },

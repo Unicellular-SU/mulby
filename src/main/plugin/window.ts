@@ -52,6 +52,9 @@ interface AuxiliaryWindowOptions {
   minHeight?: number
   maxWidth?: number
   maxHeight?: number
+  // 透明度相关
+  opacity?: number     // 初始透明度（0.0 ~ 1.0，运行时可调）
+  transparent?: boolean // 窗口背景透明（配合 CSS 实现穿透效果，仅创建时生效）
 }
 
 export class PluginWindowManager {
@@ -369,9 +372,9 @@ export class PluginWindowManager {
       fullscreen: isFullscreen,
       fullscreenable: isFullscreen,
       thickFrame: !useWindowsFramelessSurface,
-      backgroundColor,
-      transparent: useWindowsFramelessSurface,
-      hasShadow: !useWindowsFramelessSurface,
+      backgroundColor: (windowConfig.transparent || useWindowsFramelessSurface) ? '#00000000' : backgroundColor,
+      transparent: windowConfig.transparent || useWindowsFramelessSurface,
+      hasShadow: windowConfig.transparent ? false : !useWindowsFramelessSurface,
       title: plugin.manifest.displayName,
       webPreferences: {
         preload: preloadPath,
@@ -396,6 +399,10 @@ export class PluginWindowManager {
       if (useWindowsFramelessSurface) {
         await applyWindowsFramelessSurface(win, { includeTitleBar: showTitleBar })
         if (win.isDestroyed()) return
+      }
+      // 应用 manifest.window.opacity 初始透明度
+      if (windowConfig.opacity !== undefined) {
+        win.setOpacity(Math.max(0, Math.min(1, windowConfig.opacity)))
       }
       win.show()
       if (this.shouldOpenPluginDevTools()) {
@@ -517,6 +524,9 @@ export class PluginWindowManager {
     const showTitleBar = shouldShowTitleBar(resolvedWindowConfig)
     const windowType = resolvedWindowConfig.type || 'default'
     const isFullscreen = options?.fullscreen === true || windowType === 'fullscreen'
+    // 透明度相关：options 优先于 manifest
+    const resolvedTransparent = options?.transparent ?? windowConfig.transparent ?? false
+    const resolvedOpacity = options?.opacity ?? windowConfig.opacity
 
     // 获取插件 preload 路径（支持自定义 preload）
     const basePreloadPath = join(__dirname, '../preload/index.js')
@@ -542,9 +552,9 @@ export class PluginWindowManager {
       alwaysOnTop: options?.alwaysOnTop,
       resizable: options?.resizable,
       thickFrame: !useWindowsFramelessSurface,
-      backgroundColor,
-      transparent: useWindowsFramelessSurface,
-      hasShadow: !useWindowsFramelessSurface,
+      backgroundColor: (resolvedTransparent || useWindowsFramelessSurface) ? '#00000000' : backgroundColor,
+      transparent: resolvedTransparent || useWindowsFramelessSurface,
+      hasShadow: resolvedTransparent ? false : !useWindowsFramelessSurface,
       title: options?.title || plugin.manifest.displayName,
       webPreferences: {
         preload: preloadPath,
@@ -573,6 +583,10 @@ export class PluginWindowManager {
         if (win.isDestroyed()) return
       }
       win.show()
+      // 应用初始透明度
+      if (resolvedOpacity !== undefined) {
+        win.setOpacity(Math.max(0, Math.min(1, resolvedOpacity)))
+      }
       if (this.shouldOpenPluginDevTools()) {
         win.webContents.openDevTools({ mode: 'detach' })
       }
