@@ -86,6 +86,31 @@ export class PluginLoader {
     if (!Array.isArray(manifest.features) || manifest.features.length === 0) {
       return false
     }
+
+    // 校验 cmds 字段常见误用
+    for (const feature of manifest.features) {
+      if (!Array.isArray(feature.cmds)) continue
+      for (const cmd of feature.cmds) {
+        if (cmd.type === 'regex') {
+          const raw = cmd as unknown as Record<string, unknown>
+          // 常见错误：将 keyword 的 "value" 字段误用于 regex（regex 应使用 "match"）
+          if (!raw.match && typeof raw.value === 'string') {
+            console.warn(
+              `[PluginLoader] 插件 "${manifest.name}" 的 regex 命令使用了 "value" 字段，` +
+              `应为 "match"。已自动纠正，请修改 manifest.json。`
+            )
+            raw.match = raw.value
+            delete raw.value
+          }
+          if (!raw.match) {
+            console.warn(
+              `[PluginLoader] 插件 "${manifest.name}" 的 regex 命令缺少 "match" 字段，该命令将不会匹配任何输入。`
+            )
+          }
+        }
+      }
+    }
+
     return true
   }
 

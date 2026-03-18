@@ -151,6 +151,9 @@ interface KeywordSearchIndex {
 }
 
 function getCachedRegex(pattern: string): RegExp | null {
+  // 防御：undefined/null/空字符串 → 拒绝，避免 new RegExp(undefined) 生成匹配一切的 /(?:)/
+  if (!pattern) return null
+
   if (regexCache.has(pattern)) {
     return regexCache.get(pattern)!
   }
