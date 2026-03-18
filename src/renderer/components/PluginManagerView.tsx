@@ -38,6 +38,8 @@ function formatCommand(cmd: FeatureCmd): CommandTag {
       return { kind: '图片', label: cmd.exts && cmd.exts.length > 0 ? cmd.exts.map(ext => `.${ext}`).join(', ') : '任意格式' }
     case 'over':
       return { kind: '覆盖', label: '无需输入' }
+    case 'window':
+      return { kind: '窗口', label: cmd.app || cmd.title || cmd.bundleId || '当前应用' }
     default:
       return { kind: cmd.type || '命令', label: cmd.value || cmd.match || '未命名' }
   }

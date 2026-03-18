@@ -155,6 +155,7 @@ type PluginCmd =
   | { type: 'files'; exts?: string[]; fileType?: 'file' | 'directory' | 'any'; match?: string; minLength?: number; maxLength?: number }
   | { type: 'img'; exts?: string[] }
   | { type: 'over'; label?: string; exclude?: string; minLength?: number; maxLength?: number }
+  | { type: 'window'; app?: string; title?: string; bundleId?: string; label?: string }
 
 type CommandKind = 'launch' | 'match'
 
@@ -1673,6 +1674,7 @@ interface BackendPluginAPIDirect {
         | { type: 'files'; exts?: string[]; fileType?: 'file' | 'directory' | 'any'; match?: string; minLength?: number; maxLength?: number }
         | { type: 'img'; exts?: string[] }
         | { type: 'over'; label?: string; exclude?: string; minLength?: number; maxLength?: number }
+        | { type: 'window'; app?: string; title?: string; bundleId?: string; label?: string }
       >
     }): void
     removeFeature(code: string): boolean

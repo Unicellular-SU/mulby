@@ -69,6 +69,19 @@ function normalizeCmd(cmd: DynamicCmdInput): PluginCmd {
         minLength: cmd.minLength,
         maxLength: cmd.maxLength
       }
+    case 'window':
+      if (!cmd.app && !cmd.title && !cmd.bundleId) {
+        throw new Error('Window command requires at least one of: app, title, bundleId')
+      }
+      return {
+        type: 'window',
+        label: cmd.label,
+        app: cmd.app,
+        title: cmd.title,
+        bundleId: cmd.bundleId
+      }
+    default:
+      throw new Error(`Unknown command type: ${(cmd as { type: string }).type}`)
   }
 }
 

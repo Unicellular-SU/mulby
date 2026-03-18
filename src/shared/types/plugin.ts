@@ -68,9 +68,23 @@ export interface InputAttachment {
   dataUrl?: string
 }
 
+/** 系统前台窗口信息 */
+export interface ActiveWindowInfo {
+  /** 应用名称 (如 "Safari", "Visual Studio Code") */
+  app: string
+  /** 窗口标题 */
+  title: string
+  /** 进程 ID */
+  pid?: number
+  /** macOS Bundle ID (如 "com.apple.Safari") */
+  bundleId?: string
+}
+
 export interface InputPayload {
   text: string
   attachments: InputAttachment[]
+  /** 搜索时的系统前台窗口上下文 */
+  activeWindow?: ActiveWindowInfo
 }
 
 // Phase 4: 插件间通信消息
@@ -125,7 +139,15 @@ export interface CmdOver {
   maxLength?: number   // 最多字符数（默认 10000）
 }
 
-export type PluginCmd = CmdKeyword | CmdRegex | CmdFiles | CmdImg | CmdOver
+export interface CmdWindow {
+  type: 'window'
+  app?: string         // 应用名称匹配（"/正则/" 或精确匹配，忽略大小写）
+  title?: string       // 窗口标题匹配（"/正则/" 或精确匹配，忽略大小写）
+  bundleId?: string    // macOS Bundle ID 精确匹配（如 "com.apple.Safari"）
+  label?: string       // 指令名称
+}
+
+export type PluginCmd = CmdKeyword | CmdRegex | CmdFiles | CmdImg | CmdOver | CmdWindow
 export type CommandKind = 'launch' | 'match'
 
 export interface PluginCommandItem {

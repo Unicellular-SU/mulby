@@ -75,7 +75,7 @@ export interface SearchResultItem {
   featureCode: string
   featureExplain: string
   featureRoute?: string
-  matchType: 'keyword' | 'regex' | 'files' | 'img' | 'over'
+  matchType: 'keyword' | 'regex' | 'files' | 'img' | 'over' | 'window'
   icon?: {
     type: 'url' | 'svg' | 'data-url' | 'emoji'
     value: string
@@ -152,7 +152,7 @@ export interface PluginInfo {
     code: string
     explain: string
     cmds: {
-      type: 'keyword' | 'regex' | 'files' | 'img' | 'over' | string
+      type: 'keyword' | 'regex' | 'files' | 'img' | 'over' | 'window' | string
       value?: string
       match?: string
       explain?: string
@@ -162,6 +162,9 @@ export interface PluginInfo {
       minLength?: number
       maxLength?: number
       exclude?: string
+      app?: string       // CmdWindow: 应用名称匹配
+      title?: string     // CmdWindow: 窗口标题匹配
+      bundleId?: string  // CmdWindow: macOS Bundle ID
     }[]
     mode?: 'ui' | 'silent' | 'detached'
     route?: string

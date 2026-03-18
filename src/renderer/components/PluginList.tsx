@@ -86,7 +86,9 @@ const SYSTEM_FILE_ICON_SVG = `
 
 // 简单哈希用于缓存键
 function hashPayload(payload: InputPayload): string {
-  return `${payload.text}|${payload.attachments.map((a) => `${a.id}:${a.name}`).join(',')}`
+  const aw = payload.activeWindow
+  const awKey = aw ? `${aw.app}|${aw.title}|${aw.bundleId || ''}` : ''
+  return `${payload.text}|${payload.attachments.map((a) => `${a.id}:${a.name}`).join(',')}|${awKey}`
 }
 
 function getSystemIconCacheKey(kind: SystemIconKind, path: string): string {
@@ -123,6 +125,8 @@ function dedupePluginResults(items: SearchResultItem[]): SearchResultItem[] {
 
 function getMatchWeight(matchType: SearchResultItem['matchType']): number {
   switch (matchType) {
+    case 'window':
+      return 600
     case 'files':
       return 520
     case 'img':
@@ -399,14 +403,38 @@ function PluginList({
 
       const hasInput = currentPayload.text.trim().length > 0 || currentPayload.attachments.length > 0
       if (!hasInput) {
-        setPluginResults([])
+        // 即使无输入，也调用 plugin.search 以支持窗口匹配（CmdWindow）
+        // 主进程会注入 activeWindow 上下文并返回 window 匹配的插件
         setSystemApps([])
         setSystemFiles([])
         setSystemAppsResultHash('')
         setSystemFilesResultHash('')
-        setIsPluginLoading(false)
         setIsSystemAppsLoading(false)
         setIsSystemFilesLoading(false)
+
+        const emptyCache = pluginCacheRef.current.get(payloadHash)
+        if (emptyCache) {
+          setPluginResults(emptyCache)
+          setIsPluginLoading(false)
+          return
+        }
+
+        setIsPluginLoading(true)
+        void window.mulby.plugin.search(currentPayload)
+          .then((result) => {
+            if (cancelled || currentRequestId !== requestIdRef.current) return
+            const merged = dedupePluginResults(result)
+            setLruCache(pluginCacheRef.current, payloadHash, merged, MAX_CACHE_SIZE)
+            setPluginResults(merged)
+          })
+          .catch((error) => {
+            if (cancelled || currentRequestId !== requestIdRef.current) return
+            console.warn('[PluginList] Empty-query plugin search failed', error)
+          })
+          .finally(() => {
+            if (cancelled || currentRequestId !== requestIdRef.current) return
+            setIsPluginLoading(false)
+          })
         return
       }
 

@@ -1,8 +1,8 @@
 import { extname } from 'path'
 import { pinyin } from 'pinyin-pro'
-import type { CommandKind, InputAttachment, InputPayload, PluginCmd, PluginFeature } from './types/plugin'
+import type { ActiveWindowInfo, CommandKind, InputAttachment, InputPayload, PluginCmd, PluginFeature } from './types/plugin'
 
-export type MatchType = 'keyword' | 'regex' | 'files' | 'img' | 'over'
+export type MatchType = 'keyword' | 'regex' | 'files' | 'img' | 'over' | 'window'
 
 export interface FeatureMatch {
   matchType: MatchType
@@ -19,12 +19,15 @@ export function normalizeInputPayload(input?: string | InputPayload): InputPaylo
   }
   return {
     text: input.text || '',
-    attachments: Array.isArray(input.attachments) ? input.attachments : []
+    attachments: Array.isArray(input.attachments) ? input.attachments : [],
+    activeWindow: input.activeWindow
   }
 }
 
 export function matchPriority(type: MatchType): number {
   switch (type) {
+    case 'window':
+      return 4
     case 'img':
       return 3
     case 'files':
@@ -39,7 +42,9 @@ export function matchPriority(type: MatchType): number {
 }
 
 export function getCommandKind(cmd: PluginCmd): CommandKind {
-  return cmd.type === 'keyword' ? 'launch' : 'match'
+  if (cmd.type === 'keyword') return 'launch'
+  if (cmd.type === 'window') return 'match'
+  return 'match'
 }
 
 export function isCommandBindable(cmd: PluginCmd): boolean {
@@ -64,6 +69,9 @@ export function getCommandDisplayLabel(cmd: PluginCmd, featureExplain?: string):
   if (cmd.type === 'img') {
     return cmd.label?.trim() || defaultMatchLabel('图像匹配', featureExplain)
   }
+  if (cmd.type === 'window') {
+    return cmd.label?.trim() || defaultMatchLabel('窗口匹配', featureExplain)
+  }
   return cmd.label?.trim() || defaultMatchLabel('文本匹配', featureExplain)
 }
 
@@ -79,6 +87,9 @@ export function getCommandSignature(cmd: PluginCmd): string {
   }
   if (cmd.type === 'img') {
     return `img|${(cmd.exts || []).join(',')}`
+  }
+  if (cmd.type === 'window') {
+    return `window|${cmd.app || ''}|${cmd.title || ''}|${cmd.bundleId || ''}`
   }
   return `over|${cmd.exclude || ''}|${cmd.minLength ?? ''}|${cmd.maxLength ?? ''}`
 }
@@ -380,6 +391,13 @@ export function findBestMatch(feature: PluginFeature, input: InputPayload): Feat
       matchType = 'over'
     }
 
+    if (cmd.type === 'window') {
+      if (!input.activeWindow) continue
+      if (matchesWindow(cmd, input.activeWindow)) {
+        matchType = 'window'
+      }
+    }
+
     if (!matchType) continue
 
     const score = matchPriority(matchType)
@@ -389,6 +407,70 @@ export function findBestMatch(feature: PluginFeature, input: InputPayload): Feat
   }
 
   return best
+}
+
+/**
+ * 解析匹配模式字符串：
+ * - "/pattern/" 格式 → 正则表达式（忽略大小写）
+ * - 普通字符串 → 精确匹配（忽略大小写）
+ */
+function parseMatchPattern(pattern: string): RegExp | null {
+  if (!pattern) return null
+
+  // 正则格式: /pattern/ 或 /pattern/flags
+  const regexMatch = pattern.match(/^\/(.+)\/([gimsuy]*)$/)
+  if (regexMatch) {
+    try {
+      const flags = regexMatch[2].includes('i') ? regexMatch[2] : regexMatch[2] + 'i'
+      return new RegExp(regexMatch[1], flags)
+    } catch {
+      return null
+    }
+  }
+
+  // 普通字符串：转义后精确匹配（忽略大小写）
+  const escaped = pattern.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  return new RegExp(`^${escaped}$`, 'i')
+}
+
+/**
+ * 检查 CmdWindow 是否匹配当前活跃窗口
+ */
+export function matchesWindow(
+  cmd: { app?: string; title?: string; bundleId?: string },
+  activeWindow: ActiveWindowInfo
+): boolean {
+  const { app, title, bundleId } = activeWindow
+
+  // bundleId 精确匹配（大小写不敏感）
+  if (cmd.bundleId) {
+    if (cmd.bundleId.toLowerCase() !== (bundleId || '').toLowerCase()) {
+      return false
+    }
+  }
+
+  // app 模式匹配
+  if (cmd.app) {
+    const regex = parseMatchPattern(cmd.app)
+    if (!regex || !regex.test(app)) {
+      return false
+    }
+  }
+
+  // title 模式匹配
+  if (cmd.title) {
+    const regex = parseMatchPattern(cmd.title)
+    if (!regex || !regex.test(title)) {
+      return false
+    }
+  }
+
+  // 至少需要声明一个匹配条件
+  if (!cmd.bundleId && !cmd.app && !cmd.title) {
+    return false
+  }
+
+  return true
 }
 
 export function filterAttachmentsByCmd(attachments: InputAttachment[], cmd?: PluginCmd): InputAttachment[] {

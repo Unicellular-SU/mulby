@@ -169,7 +169,12 @@ The final delivery should tell the user to test these points inside Mulby:
         // Image Trigger
         { "type": "img", "exts": [".png", ".jpg"] },
         // Text Selection Trigger
-        { "type": "over", "label": "Format Selection", "minLength": 1 }
+        { "type": "over", "label": "Format Selection", "minLength": 1 },
+        // Window Match Trigger (matches when invoked from specific apps)
+        // app/title: "/regex/" for regex, plain string for exact match (case-insensitive)
+        { "type": "window", "app": "/Chrome|Safari|Firefox/", "label": "Browser Tools" }
+        // bundleId: macOS Bundle ID exact match
+        // { "type": "window", "bundleId": "com.apple.Safari" }
       ],
       "mainPush": true,         // Push content to search bar
       "mainHide": true          // Hide main window on trigger
@@ -236,6 +241,7 @@ The final delivery should tell the user to test these points inside Mulby:
 | `files` | `exts`, `fileType`, `match` | File/Dir drop (`match`=name regex) |
 | `img` | `exts` | Image drag & drop |
 | `over` | `label`, `exclude`, `minLength` | Text selection from other apps |
+| `window` | `app`, `title`, `bundleId`, `label` | Match when invoked from specific foreground app. `app`/`title`: `/regex/` or exact string (case-insensitive). `bundleId`: macOS bundle ID exact match |
 
 ## 3. Preload Script (`preload.cjs`)
 

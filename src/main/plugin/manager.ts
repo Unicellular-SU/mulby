@@ -26,6 +26,7 @@ import {
 } from '../../shared/types/plugin'
 import { PluginSearchWorker } from './search-worker-manager'
 import { SystemPluginWindowManager } from '../services/system-plugin-window-manager'
+import { getActiveWindow } from '../services/active-window'
 import {
   filterAttachmentsByCmd,
   findBestMatch,
@@ -98,6 +99,20 @@ function formatMatchRuleExplain(cmd: PluginCmd): string | undefined {
       return `图像扩展名：${cmd.exts.join(', ')}`
     }
     return '图像匹配'
+  }
+
+  if (cmd.type === 'window') {
+    const parts: string[] = []
+    if (cmd.app?.trim()) {
+      parts.push(`应用：${cmd.app.trim()}`)
+    }
+    if (cmd.title?.trim()) {
+      parts.push(`标题：${cmd.title.trim()}`)
+    }
+    if (cmd.bundleId?.trim()) {
+      parts.push(`Bundle ID：${cmd.bundleId.trim()}`)
+    }
+    return parts.length > 0 ? parts.join('；') : '窗口匹配'
   }
 
   const parts: string[] = []
@@ -489,7 +504,36 @@ export class PluginManager {
     const hasText = text.trim().length > 0
     const hasAttachments = attachments.length > 0
 
+    // 注入系统前台窗口上下文（用于 CmdWindow 匹配）
+    if (!normalizedInput.activeWindow) {
+      const activeWindow = await getActiveWindow()
+      if (activeWindow) {
+        normalizedInput.activeWindow = activeWindow
+      }
+    }
+
     if (!hasText && !hasAttachments) {
+      // 有 activeWindow 时，先找 window 匹配的插件置顶
+      if (normalizedInput.activeWindow) {
+        const windowMatched: SearchResult[] = []
+        const rest: SearchResult[] = []
+        for (const plugin of enabledPlugins) {
+          let matched = false
+          for (const feature of this.getCombinedFeatures(plugin)) {
+            const match = findBestMatch(feature, normalizedInput)
+            if (match && match.matchType === 'window') {
+              windowMatched.push({ plugin, feature, matchType: 'window' })
+              matched = true
+              break
+            }
+          }
+          if (!matched && plugin.manifest.features[0]) {
+            rest.push({ plugin, feature: plugin.manifest.features[0], matchType: 'keyword' })
+          }
+        }
+        return [...windowMatched, ...rest]
+      }
+
       return enabledPlugins.map(p => ({
         plugin: p,
         feature: p.manifest.features[0],

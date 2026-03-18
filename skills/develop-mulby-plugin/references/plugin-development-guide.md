@@ -80,6 +80,7 @@ Lock down the contract before major coding:
 - what belongs in UI, Main, and preload
 - whether background mode, scheduler work, or host APIs are needed
 - whether the plugin should expose tools for AI Agent (`manifest.tools`)
+- whether any feature should match by foreground app (`cmds` with `type: 'window'`)
 
 ### Phase 2: Minimum Runnable Path
 
