@@ -24,14 +24,11 @@ export function useAiSettingsViewModel({
   const controller = useAiSettingsController()
 
   const headerProps: ComponentProps<typeof AiSettingsHeader> = {
-    hasProviderBlockingIssues: controller.hasProviderBlockingIssues,
     onBack,
     onOpenGlobalDefaultModelModal: controller.openGlobalDefaultModelModal,
     onOpenDefaultParamsModal: () => controller.setShowDefaultParamsModal(true),
     onOpenSkillsSettings,
-    onOpenMcpSettings,
-    onReset: controller.handleResetAiSettings,
-    onSave: controller.handleSaveAiSettings
+    onOpenMcpSettings
   }
 
   const statusProps: ComponentProps<typeof AiSettingsStatusPanels> = {

@@ -1,29 +1,22 @@
 import {
   SettingsLikePageHeader,
-  settingsLikeHeaderGhostButtonClass,
-  settingsLikeHeaderPrimaryButtonClass
+  settingsLikeHeaderGhostButtonClass
 } from '../SettingsLikePageChrome'
 
 interface AiSettingsHeaderProps {
-  hasProviderBlockingIssues: boolean
   onBack: () => void
   onOpenGlobalDefaultModelModal: () => void
   onOpenDefaultParamsModal: () => void
   onOpenSkillsSettings?: () => void
   onOpenMcpSettings?: () => void
-  onReset: () => void
-  onSave: () => void
 }
 
 export default function AiSettingsHeader({
-  hasProviderBlockingIssues,
   onBack,
   onOpenGlobalDefaultModelModal,
   onOpenDefaultParamsModal,
   onOpenSkillsSettings,
-  onOpenMcpSettings,
-  onReset,
-  onSave
+  onOpenMcpSettings
 }: AiSettingsHeaderProps) {
   return (
     <SettingsLikePageHeader
@@ -68,25 +61,9 @@ export default function AiSettingsHeader({
               MCP 管理
             </button>
           )}
-          <button
-            type="button"
-            className={settingsLikeHeaderGhostButtonClass}
-            onClick={onReset}
-            title="恢复到上次保存的配置"
-          >
-            恢复
-          </button>
-          <button
-            type="button"
-            className={settingsLikeHeaderPrimaryButtonClass}
-            onClick={onSave}
-            disabled={hasProviderBlockingIssues}
-            title={hasProviderBlockingIssues ? '存在 Provider 配置错误，请先修复' : '保存'}
-          >
-            保存
-          </button>
         </>
       )}
     />
   )
 }
+
