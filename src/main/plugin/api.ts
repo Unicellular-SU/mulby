@@ -72,8 +72,34 @@ export function createPluginAPI(
         clipboard.writeImage(image)
       },
       readFiles: () => {
-        // macOS: 通过 file URL 读取
+        // macOS: 优先使用 NSFilenamesPboardType（支持多文件）
         if (process.platform === 'darwin') {
+          const nsFiles = clipboard.read('NSFilenamesPboardType')
+          if (nsFiles) {
+            // NSFilenamesPboardType 是 XML plist 格式
+            const pathMatches = nsFiles.match(/<string>([^<]+)<\/string>/g)
+            if (pathMatches && pathMatches.length > 0) {
+              const paths = pathMatches
+                .map(match => match.replace(/<\/?string>/g, ''))
+                .filter(path => path.startsWith('/'))
+              if (paths.length > 0) {
+                return paths.map(filePath => {
+                  try {
+                    const stats = statSync(filePath)
+                    return {
+                      path: filePath,
+                      name: basename(filePath),
+                      size: stats.size,
+                      isDirectory: stats.isDirectory()
+                    }
+                  } catch {
+                    return { path: filePath, name: basename(filePath), size: 0, isDirectory: false }
+                  }
+                })
+              }
+            }
+          }
+          // 兜底：尝试 public.file-url（单文件）
           const rawFiles = clipboard.read('public.file-url')
           if (rawFiles) {
             const filePath = decodeURIComponent(rawFiles.replace('file://', ''))
@@ -111,8 +137,15 @@ export function createPluginAPI(
         return []
       },
       getFormat: () => {
-        if (clipboard.availableFormats().some(f => f.includes('image'))) return 'image'
+        // macOS 特有格式检测（与 ipc/clipboard.ts 保持一致）
+        if (process.platform === 'darwin') {
+          const nsFilenames = clipboard.read('NSFilenamesPboardType')
+          if (nsFilenames && nsFilenames.includes('/')) return 'files'
+          const publicFileUrl = clipboard.read('public.file-url')
+          if (publicFileUrl && publicFileUrl.startsWith('file://')) return 'files'
+        }
         if (clipboard.availableFormats().some(f => f.includes('file'))) return 'files'
+        if (!clipboard.readImage().isEmpty()) return 'image'
         if (clipboard.readText()) return 'text'
         return 'empty'
       }
@@ -312,7 +345,10 @@ ${item.files.map(p => `    <string>${p}</string>`).join('\n')}
       getAppInfo: () => pluginSystem.getAppInfo(),
       getPath: (name: 'home' | 'appData' | 'userData' | 'temp' | 'desktop' | 'documents' | 'downloads' | 'music' | 'pictures' | 'videos') => pluginSystem.getPath(name),
       getEnv: (name: string) => pluginSystem.getEnv(name),
-      getIdleTime: () => pluginSystem.getIdleTime()
+      getIdleTime: () => pluginSystem.getIdleTime(),
+      isMacOS: () => pluginSystem.isMacOS(),
+      isWindows: () => pluginSystem.isWindows(),
+      isLinux: () => pluginSystem.isLinux()
     },
     shortcut: createPluginGlobalShortcut(pluginName),
     security: createPluginSecurity(),

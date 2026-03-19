@@ -691,12 +691,12 @@ export class PluginHostManager extends EventEmitter {
     const apiNamespace = pluginApi[namespace as keyof typeof pluginApi]
 
     if (!apiNamespace || typeof apiNamespace !== 'object') {
-      throw new Error(`Unknown API namespace: ${namespace}`)
+      throw new Error(`Unknown API namespace: ${namespace}. If you meant to call a plugin backend method, use host.call('${pluginName}', '${methodName || method}', ...args) instead of host.invoke().`)
     }
 
     const apiMethod = (apiNamespace as Record<string, unknown>)[methodName]
     if (typeof apiMethod !== 'function') {
-      throw new Error(`Unknown API method: ${method}`)
+      throw new Error(`Unknown API method: ${method}. If you meant to call a plugin backend method, use host.call('${pluginName}', '${methodName}', ...args) instead of host.invoke().`)
     }
 
     return await apiMethod(...args)

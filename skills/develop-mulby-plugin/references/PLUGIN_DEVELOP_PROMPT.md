@@ -1275,5 +1275,24 @@ export default function App() {
 
 ### 7.3 与 host.invoke 的区别
 
-- **host.call(method, ...args)** - 调用插件自定义方法（main.ts 中导出的）
-- **host.invoke(method, ...args)** - 调用主进程 API（如 clipboard.readText）
+> ⚠️ **这是最常见的混淆点**，误用会导致 `Unknown API method` 错误。
+
+| | `host.call` ✅ 常用 | `host.invoke` |
+|---|---|---|
+| 调用目标 | 插件 **自定义方法**（main.ts 导出的） | Mulby **内置 API**（主进程） |
+| method 格式 | 纯方法名（如 `processData`） | `namespace.method`（如 `clipboard.readText`） |
+| 使用场景 | 从 UI 调用插件后端逻辑 | 从 UI 直接调用系统 API（通常不需要） |
+
+绝大多数情况下只需 `host.call`。渲染进程已有 `window.mulby.clipboard` 等 API 可直接使用，无需通过 `host.invoke`。
+
+### 7.4 后端 API 全异步
+
+在后端 `context.api.*` 中，**所有方法调用都经过 IPC 代理，实际返回 `Promise`**。即使类型签名看起来是同步的，也必须用 `await`：
+
+```typescript
+// ❌ 错误：format 是 Promise，不是字符串
+const format = context.api.clipboard.getFormat()
+
+// ✅ 正确
+const format = await context.api.clipboard.getFormat()
+```
