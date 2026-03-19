@@ -36,7 +36,7 @@ import { registerSettingsHandlers } from './settings'
 import { AppSettingsManager } from '../services/app-settings'
 import { AppShortcutManager } from '../services/app-shortcuts'
 import { registerDeveloperHandlers } from './developer'
-import { registerLogIpc, setDeveloperModeGetter } from './log'
+import { registerLogIpc } from './log'
 import { registerSchedulerHandlers } from './scheduler'
 import { ClipboardHistoryManager } from '../services/clipboard-history'
 import { registerAiHandlers } from './ai'
@@ -94,7 +94,6 @@ export function registerAllHandlers(
   registerSystemPluginHandlers(getMainWindow, systemPluginWindowManager)
   registerSystemPageHandlers(getMainWindow, systemPageWindowManager)
 
-  // 注册日志 IPC 处理器，并设置开发者模式获取器
-  setDeveloperModeGetter(() => appSettingsManager.getSettings().developer.enabled)
+  // 注册日志 IPC 处理器
   registerLogIpc()
 }

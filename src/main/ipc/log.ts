@@ -5,38 +5,27 @@
 import { ipcMain, BrowserWindow } from 'electron'
 import { loggerService, LogEntry } from '../services/logger'
 
-// 存储开发者模式状态的获取器
-let getDeveloperModeEnabled: () => boolean = () => false
-
-/**
- * 设置开发者模式状态获取器
- */
-export function setDeveloperModeGetter(getter: () => boolean) {
-    getDeveloperModeEnabled = getter
-}
-
 /**
  * 从 webContents 获取插件 ID
+ * 优先从 URL 路径提取 plugin.id（最准确），回退到窗口标题
  */
 function getPluginIdFromSender(sender: Electron.WebContents): string {
-    // 尝试从窗口获取插件信息
-    const win = BrowserWindow.fromWebContents(sender)
-    if (win) {
-        // 窗口标题可能包含插件名称
-        const title = win.getTitle()
-        if (title && title !== 'Mulby') {
-            return title
-        }
-    }
-
-    // 尝试从 URL 解析
+    // 优先从 URL 路径解析插件 ID（这是最准确的，始终返回 plugin.id）
+    // 例如: file:///path/to/plugins/pdf-tools/dist/index.html
     const url = sender.getURL()
     if (url) {
-        // 从文件路径解析插件 ID
-        // 例如: file:///path/to/plugins/pdf-tools/dist/index.html
         const match = url.match(/plugins\/([^/]+)\//)
         if (match) {
             return match[1]
+        }
+    }
+
+    // 回退：从窗口标题获取（注意：这可能是 displayName 而非 id）
+    const win = BrowserWindow.fromWebContents(sender)
+    if (win) {
+        const title = win.getTitle()
+        if (title && title !== 'Mulby') {
+            return title
         }
     }
 
@@ -47,11 +36,8 @@ function getPluginIdFromSender(sender: Electron.WebContents): string {
  * 注册日志 IPC 处理器
  */
 export function registerLogIpc() {
-    // 接收日志写入请求
+    // 接收日志写入请求（始终记录，日志查看器是发布模式下的调试工具）
     ipcMain.on('log:write', (event, level: LogEntry['level'], message: string, args?: unknown[]) => {
-        // 只有开发者模式开启时才记录日志
-        if (!getDeveloperModeEnabled()) return
-
         const pluginId = getPluginIdFromSender(event.sender)
         loggerService.write(level, pluginId, message, args)
     })

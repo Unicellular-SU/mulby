@@ -16,6 +16,7 @@ import { generateRequestId } from './host-protocol'
 import { createPluginAPI } from './api'
 import { PluginHostWatchdog } from './watchdog'
 import type { InputAttachment, Plugin } from '../../shared/types/plugin'
+import { loggerService } from '../services/logger'
 import { resolveResourceLimits, applyResourceLimitsToWatchdog } from './resource-limits'
 import { PluginMessageBus } from './message-bus'
 import type { TaskScheduler } from '../scheduler'
@@ -268,14 +269,22 @@ export class PluginHostManager extends EventEmitter {
       this.emit('host:exit', pluginName, code ?? 0)
     })
 
-    // 监听标准输出（调试用）
+    // 监听标准输出（转发到日志系统）
     child.stdout?.on('data', (data: Buffer) => {
-      console.log(`[${pluginName}] stdout:`, decodeHostOutput(data))
+      const text = decodeHostOutput(data).trim()
+      if (text) {
+        console.log(`[${pluginName}] stdout:`, text)
+        loggerService.write('info', pluginName, text)
+      }
     })
 
-    // 监听标准错误
+    // 监听标准错误（转发到日志系统）
     child.stderr?.on('data', (data: Buffer) => {
-      console.error(`[${pluginName}] stderr:`, decodeHostOutput(data))
+      const text = decodeHostOutput(data).trim()
+      if (text) {
+        console.error(`[${pluginName}] stderr:`, text)
+        loggerService.write('error', pluginName, text)
+      }
     })
   }
 

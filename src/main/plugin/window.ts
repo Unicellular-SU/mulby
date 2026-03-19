@@ -4,6 +4,7 @@ import { existsSync } from 'fs'
 import { InputAttachment, InputPayload, Plugin, WindowOptions } from '../../shared/types/plugin'
 import { ThemeManager } from '../services/theme'
 import { loggerService } from '../services/logger'
+import { installConsoleCapture } from './console-capture'
 import { appSettingsManager } from '../services/app-settings'
 import { injectCustomTitleBar } from './titlebar'
 import { PluginPanelWindow } from './panel-window'
@@ -470,6 +471,9 @@ export class PluginWindowManager {
     // 显示 Dock 图标
     void this.updateDockVisibility()
 
+    // 安装 console 输出捕获（主进程侧捕获插件 console 输出）
+    installConsoleCapture(win, plugin.id)
+
     // 监听渲染进程崩溃
     win.webContents.on('render-process-gone', (_event, details) => {
       // 记录崩溃日志到持久化存储
@@ -645,6 +649,10 @@ export class PluginWindowManager {
     })
 
     this.updateDockVisibility()
+
+    // 安装 console 输出捕获（主进程侧捕获插件 console 输出）
+    installConsoleCapture(win, plugin.id)
+
     win.on('closed', () => {
       this.detachedWindows.delete(windowId)
       this.updateDockVisibility()

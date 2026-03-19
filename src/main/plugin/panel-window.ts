@@ -5,6 +5,7 @@ import { join } from 'path'
 import { InputAttachment, InputPayload, Plugin, WindowOptions } from '../../shared/types/plugin'
 import { ThemeManager } from '../services/theme'
 import { loggerService } from '../services/logger'
+import { installConsoleCapture } from './console-capture'
 import { injectCustomTitleBar } from './titlebar'
 import { isIgnoringBlur } from '../services/blur-manager'
 import { getPluginPreloadPath } from './plugin-preload-wrapper'
@@ -286,6 +287,9 @@ export class PluginPanelWindow {
                 this.mainWindow.hide()
             }, 50)
         })
+
+        // 安装 console 输出捕获（主进程侧捕获插件 console 输出）
+        installConsoleCapture(this.panelWindow, plugin.id)
 
         // 监听渲染进程崩溃
         this.panelWindow.webContents.on('render-process-gone', (_event, details) => {
@@ -658,6 +662,9 @@ export class PluginPanelWindow {
         if (this.themeManager) {
             this.themeManager.registerWindow(independentWindow)
         }
+
+        // 安装 console 输出捕获（主进程侧捕获插件 console 输出）
+        installConsoleCapture(independentWindow, plugin.id)
 
         // 清理当前状态
         this.currentPlugin = null

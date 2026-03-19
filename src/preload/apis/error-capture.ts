@@ -1,36 +1,13 @@
 import type { IpcRenderer } from 'electron'
 
+/**
+ * 安装 preload 层错误捕获
+ *
+ * 职责：仅捕获 uncaught error 和 unhandled rejection，通过 IPC 发送到日志系统。
+ * console.log/info/warn/error 的捕获由主进程侧的 console-message 事件统一处理
+ * （见 console-capture.ts），不在此处覆写，避免与 patchConsoleWithTimestamp 冲突导致重复日志。
+ */
 export function installPreloadErrorCapture(ipcRenderer: IpcRenderer) {
-  const originalConsoleError = console.error
-  const originalConsoleWarn = console.warn
-
-  console.error = (...args: unknown[]) => {
-    originalConsoleError.apply(console, args)
-    try {
-      const message = args.map(arg => {
-        if (arg instanceof Error) {
-          return `${arg.message}\n${arg.stack || ''}`
-        }
-        return typeof arg === 'object' ? JSON.stringify(arg) : String(arg)
-      }).join(' ')
-      ipcRenderer.send('log:write', 'error', message)
-    } catch {
-      // ignore serialization errors
-    }
-  }
-
-  console.warn = (...args: unknown[]) => {
-    originalConsoleWarn.apply(console, args)
-    try {
-      const message = args.map(arg =>
-        typeof arg === 'object' ? JSON.stringify(arg) : String(arg)
-      ).join(' ')
-      ipcRenderer.send('log:write', 'warn', message)
-    } catch {
-      // ignore serialization errors
-    }
-  }
-
   window.addEventListener('error', (event) => {
     try {
       const message = event.error
