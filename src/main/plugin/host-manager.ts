@@ -40,7 +40,7 @@ interface PluginHost {
 
 // ============ 常量 ============
 
-const REQUEST_TIMEOUT = 30000  // 30 秒请求超时
+const REQUEST_TIMEOUT = 300000  // 5 分钟请求超时（适配 AI 长调用）
 const utf8FatalDecoder = new TextDecoder('utf-8', { fatal: true })
 const gb18030Decoder = createGb18030Decoder()
 

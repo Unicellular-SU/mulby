@@ -101,13 +101,13 @@ async function callMainApi(api: string, args: unknown[]): Promise<unknown> {
       payload: { api, args: sanitizedArgs }
     })
 
-    // 30 秒超时
+    // 5 分钟超时（适配 AI 长调用）
     setTimeout(() => {
       if (pendingApiCalls.has(id)) {
         pendingApiCalls.delete(id)
         reject(new Error(`API call timeout: ${api}`))
       }
-    }, 30000)
+    }, 300000)
   })
 }
 
