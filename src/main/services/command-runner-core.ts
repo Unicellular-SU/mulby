@@ -1,5 +1,4 @@
 import { spawn } from 'node:child_process'
-import { createHash } from 'node:crypto'
 import type {
   CommandAuditItem,
   CommandRule,
@@ -166,26 +165,12 @@ function sanitizeEnvKeysForAudit(keys: string[], settings: CommandRunnerSettings
   return keys.map((key) => (maskSet.has(key) ? `${key}=***` : key))
 }
 
-function buildFingerprint(input: {
-  source: 'app' | 'plugin'
-  pluginId?: string
-  command: string
-  args: string[]
-  env?: Record<string, string>
-  shell: boolean
-}): string {
-  const envEntries = Object.entries(input.env || {})
-    .map(([key, value]) => [normalizeEnvKey(key), String(value ?? '')] as const)
-    .sort(([a], [b]) => a.localeCompare(b))
-  const payload = JSON.stringify({
-    source: input.source,
-    pluginId: input.pluginId || '',
-    command: normalizeCommandToken(input.command),
-    args: input.args.map((arg) => String(arg || '').trim()),
-    env: envEntries,
-    shell: input.shell
-  })
-  return createHash('sha256').update(payload).digest('hex')
+/**
+ * 构建信任前缀：仅保留可执行文件名（标准化后），用于前缀匹配。
+ * 例如 command="node", args=["-e", "console.log(1)"] => prefix="node"
+ */
+function buildTrustPrefix(command: string): string {
+  return normalizeCommandToken(command)
 }
 
 export class CommandRunnerService {
@@ -364,7 +349,7 @@ export class CommandRunnerService {
     context: RunCommandContext
     settings: CommandRunnerSettings
   }): Promise<void> {
-    const { command, args, env, envKeys, sanitizedEnvKeys, cwd, shell, context, settings } = input
+    const { command, args, envKeys, sanitizedEnvKeys, cwd, shell, context, settings } = input
     if (!settings.enabled) {
       throw new CommandPolicyError('命令执行能力已在设置中禁用')
     }
@@ -398,20 +383,24 @@ export class CommandRunnerService {
 
     if (!settings.requireConsent) return
     if (context.source === 'app' && context.assumeUserApproved === true) return
-    const fingerprint = buildFingerprint({
-      source: context.source,
-      pluginId: context.pluginId,
-      command,
-      args,
-      env,
-      shell
+
+    // 信任匹配：精确匹配可执行文件名 + source/pluginId + shell 兼容性
+    // - 用 executable 精确匹配（非 commandLine 前缀），避免 git 匹配到 git-lfs
+    // - shell:false 信任不覆盖 shell:true 执行（shell:true 风险面更大）
+    const trusted = (settings.trustedFingerprints || []).find((item) => {
+      if (item.source !== context.source) return false
+      if ((item.pluginId || '') !== (context.pluginId || '')) return false
+      if (executable !== item.prefix) return false
+      // shell 兼容性：shell:true 信任覆盖所有；shell:false 仅覆盖非 shell 执行
+      if (shell && !item.shell) return false
+      return true
     })
-    const trusted = (settings.trustedFingerprints || []).find((item) => item.fingerprint === fingerprint)
     if (trusted) {
-      this.updateTrustedLastUsed(fingerprint)
+      this.updateTrustedLastUsed(trusted.prefix, context.source, context.pluginId)
       return
     }
 
+    const prefix = buildTrustPrefix(command)
     const preview = [command, ...args].join(' ').trim()
     const request: CommandConsentRequest = {
       source: context.source,
@@ -429,6 +418,7 @@ export class CommandRunnerService {
         : '应用请求执行系统命令',
       detail: [
         `命令: ${preview || command}`,
+        `信任前缀: ${prefix}（信任后，以此开头的命令将自动允许）`,
         `cwd: ${cwd || process.cwd()}`,
         sanitizedEnvKeys.length > 0 ? `env keys: ${sanitizedEnvKeys.join(', ')}` : 'env keys: (none)',
         `shell: ${shell ? 'true' : 'false'}`,
@@ -444,8 +434,8 @@ export class CommandRunnerService {
       throw new CommandPolicyError('用户拒绝执行命令')
     }
     if (decision === 'trust') {
-      this.addTrustedFingerprint({
-        fingerprint,
+      this.addTrustedPrefix({
+        prefix,
         source: context.source,
         pluginId: context.pluginId,
         command,
@@ -601,8 +591,8 @@ export class CommandRunnerService {
     })
   }
 
-  private addTrustedFingerprint(input: {
-    fingerprint: string
+  private addTrustedPrefix(input: {
+    prefix: string
     source: 'app' | 'plugin'
     pluginId?: string
     command: string
@@ -612,7 +602,12 @@ export class CommandRunnerService {
     const policy = this.getPolicy()
     const now = this.now()
     const nextRecords = [...(policy.trustedFingerprints || [])]
-    const existedIndex = nextRecords.findIndex((item) => item.fingerprint === input.fingerprint)
+    // 查找同 source + pluginId + prefix 的已有记录
+    const existedIndex = nextRecords.findIndex((item) =>
+      item.prefix === input.prefix &&
+      item.source === input.source &&
+      (item.pluginId || '') === (input.pluginId || '')
+    )
     if (existedIndex >= 0) {
       nextRecords[existedIndex] = {
         ...nextRecords[existedIndex],
@@ -620,7 +615,7 @@ export class CommandRunnerService {
       }
     } else {
       const nextRecord: CommandTrustRecord = {
-        fingerprint: input.fingerprint,
+        prefix: input.prefix,
         source: input.source,
         pluginId: input.pluginId,
         command: input.command,
@@ -636,10 +631,14 @@ export class CommandRunnerService {
     })
   }
 
-  private updateTrustedLastUsed(fingerprint: string): void {
+  private updateTrustedLastUsed(prefix: string, source: string, pluginId?: string): void {
     const policy = this.getPolicy()
     const list = [...(policy.trustedFingerprints || [])]
-    const index = list.findIndex((item) => item.fingerprint === fingerprint)
+    const index = list.findIndex((item) =>
+      item.prefix === prefix &&
+      item.source === source &&
+      (item.pluginId || '') === (pluginId || '')
+    )
     if (index < 0) return
     list[index] = {
       ...list[index],

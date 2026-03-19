@@ -58,7 +58,12 @@ export default function AuditPanel({
         </div>
       </div>
       <div className="text-xs text-slate-500 dark:text-slate-400">
-        已信任命令指纹：{settings.commandRunner.trustedFingerprints.length} 条
+        已信任命令前缀：{settings.commandRunner.trustedFingerprints.length} 条
+        {settings.commandRunner.trustedFingerprints.length > 0 && (
+          <span className="ml-1">
+            ({settings.commandRunner.trustedFingerprints.map((item) => item.prefix).join(', ')})
+          </span>
+        )}
       </div>
       <div className="max-h-72 space-y-2 overflow-auto">
         {(commandAudit.length > 0 ? commandAudit : [...settings.commandRunner.audit.records].reverse()).slice(0, 100).map((item) => (

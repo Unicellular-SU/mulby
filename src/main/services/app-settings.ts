@@ -338,20 +338,26 @@ function normalizeCommandRunnerSettings(input: Partial<CommandRunnerSettings> | 
 
   const trustedFingerprints: CommandTrustRecord[] = Array.isArray(current.trustedFingerprints)
     ? current.trustedFingerprints
-      .filter((item) => item && typeof item === 'object' && String(item.fingerprint || '').trim())
+      .filter((item) => {
+        if (!item || typeof item !== 'object') return false
+        // 兼容旧数据：带 fingerprint（SHA256 hash）的旧记录无法反向转为前缀，直接丢弃
+        if ('fingerprint' in item && !('prefix' in item)) return false
+        return !!String((item as CommandTrustRecord).prefix || '').trim()
+      })
       .map((item) => {
-        const fingerprint = String(item.fingerprint).trim()
-        const source: CommandCallerSource = item.source === 'plugin' ? 'plugin' : 'app'
+        const record = item as CommandTrustRecord
+        const prefix = String(record.prefix).trim().toLowerCase()
+        const source: CommandCallerSource = record.source === 'plugin' ? 'plugin' : 'app'
         const now = Date.now()
         return {
-          fingerprint,
+          prefix,
           source,
-          pluginId: String(item.pluginId || '').trim() || undefined,
-          command: String(item.command || '').trim(),
-          args: Array.isArray(item.args) ? item.args.map((arg) => String(arg)) : [],
-          shell: item.shell === true,
-          createdAt: Number(item.createdAt || now),
-          lastUsedAt: Number(item.lastUsedAt || now)
+          pluginId: String(record.pluginId || '').trim() || undefined,
+          command: String(record.command || '').trim(),
+          args: Array.isArray(record.args) ? record.args.map((arg) => String(arg)) : [],
+          shell: record.shell === true,
+          createdAt: Number(record.createdAt || now),
+          lastUsedAt: Number(record.lastUsedAt || now)
         }
       })
     : []

@@ -41,7 +41,7 @@ export interface CommandRule {
 export type CommandCallerSource = 'app' | 'plugin'
 
 export interface CommandTrustRecord {
-  fingerprint: string
+  prefix: string
   source: CommandCallerSource
   pluginId?: string
   command: string
