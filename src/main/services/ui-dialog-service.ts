@@ -244,16 +244,22 @@ function buildMessageBoxHtml(input: {
   <title>${title}</title>
   <style>
     :root { color-scheme: ${input.theme}; }
+    html, body { height: 100%; }
     * { box-sizing: border-box; }
     body {
       margin: 0;
       width: 100%;
+      display: flex;
+      flex-direction: column;
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
       background: ${palette.pageBg};
       color: ${palette.text};
     }
     .card {
       width: 100%;
+      flex: 1;
+      display: flex;
+      flex-direction: column;
       border-radius: 0;
       border: 1px solid ${palette.cardBorder};
       background: ${palette.cardBg};
@@ -284,9 +290,11 @@ function buildMessageBoxHtml(input: {
       white-space: nowrap;
     }
     .body {
+      flex: 1;
       padding: 16px 18px;
       display: grid;
       gap: 10px;
+      align-content: start;
     }
     .message {
       font-size: 14px;
