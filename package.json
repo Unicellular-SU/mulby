@@ -20,7 +20,7 @@
     "verify:repo": "npm run verify:app && npm run verify:cli",
     "verify": "npm run verify:app"
   },
-  "author": "Unicellular-SU <nicellular.su@gmail.com>",
+  "author": "Unicellular-SU <UnicellularSU@gmail.com>",
   "license": "MIT",
   "devDependencies": {
     "@eslint/js": "^9.39.2",
