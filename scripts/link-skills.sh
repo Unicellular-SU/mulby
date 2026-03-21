@@ -64,9 +64,20 @@ case "$(uname -s)" in
   *)            OS="linux" ;; # 回退到 Linux 兼容模式
 esac
 
-# Windows 下 HOME 可能需要从 USERPROFILE 推导
-if [[ "$OS" == "windows" && -z "${HOME:-}" ]]; then
-  HOME="${USERPROFILE:-/c/Users/$(whoami)}"
+# Windows 下 IDE 配置始终在 USERPROFILE 目录下
+# 注意: MSYS2/Cygwin 的 $HOME 可能指向 /home/<user> 而非真实的 Windows 用户目录
+if [[ "$OS" == "windows" ]]; then
+  # 优先使用 USERPROFILE，回退到 HOMEDRIVE+HOMEPATH
+  if [[ -n "${USERPROFILE:-}" ]]; then
+    WIN_HOME=$(cygpath -u "$USERPROFILE" 2>/dev/null || echo "$USERPROFILE")
+  elif [[ -n "${HOMEDRIVE:-}" && -n "${HOMEPATH:-}" ]]; then
+    WIN_HOME=$(cygpath -u "${HOMEDRIVE}${HOMEPATH}" 2>/dev/null || echo "${HOMEDRIVE}${HOMEPATH}")
+  else
+    WIN_HOME="$HOME"
+  fi
+  SKILL_HOME="$WIN_HOME"
+else
+  SKILL_HOME="$HOME"
 fi
 
 # ── 源目录（脚本相对定位到项目根目录） ──────────────────────────────────────
@@ -81,13 +92,13 @@ fi
 # ── 目标目录列表（覆盖主流 AI 编码工具） ──────────────────────────────────────
 # 格式: "标签|路径"
 TARGET_LIST=(
-  "Agents (通用标准)|$HOME/.agents/skills"
-  "Gemini CLI|$HOME/.gemini/skills"
-  "Antigravity|$HOME/.gemini/antigravity/skills"
-  "Codex CLI|$HOME/.codex/skills"
-  "Claude Code|$HOME/.claude/skills"
-  "Cursor|$HOME/.cursor/skills"
-  "Windsurf|$HOME/.codeium/windsurf/skills"
+  "Agents (通用标准)|$SKILL_HOME/.agents/skills"
+  "Gemini CLI|$SKILL_HOME/.gemini/skills"
+  "Antigravity|$SKILL_HOME/.gemini/antigravity/skills"
+  "Codex CLI|$SKILL_HOME/.codex/skills"
+  "Claude Code|$SKILL_HOME/.claude/skills"
+  "Cursor|$SKILL_HOME/.cursor/skills"
+  "Windsurf|$SKILL_HOME/.codeium/windsurf/skills"
 )
 
 # ── 符号链接创建函数（跨平台） ────────────────────────────────────────────────
@@ -144,12 +155,11 @@ for entry in "${TARGET_LIST[@]}"; do
     target_path="$target_dir/$skill_name"
 
     # 如果已经是正确的符号链接，跳过
+    # 使用 realpath 解析，兼容相对路径和绝对路径的符号链接
     if [[ -L "$target_path" ]]; then
-      existing_target=$(readlink "$target_path" 2>/dev/null || echo "")
-      # 规范化路径比较（去掉末尾斜杠）
-      norm_skill="${skill_path%/}"
-      norm_existing="${existing_target%/}"
-      if [[ "$norm_existing" == "$norm_skill" ]]; then
+      resolved_existing=$(realpath "$target_path" 2>/dev/null || readlink -f "$target_path" 2>/dev/null || echo "")
+      resolved_skill=$(realpath "${skill_path%/}" 2>/dev/null || readlink -f "${skill_path%/}" 2>/dev/null || echo "${skill_path%/}")
+      if [[ "$resolved_existing" == "$resolved_skill" ]]; then
         echo -e "   ${GREEN}✓${RESET} $label/$skill_name ${DIM}(已链接)${RESET}"
         continue
       fi
