@@ -4,7 +4,7 @@ import { AppSettingsManager } from '../services/app-settings'
 import { AppShortcutManager } from '../services/app-shortcuts'
 import { PluginManager } from '../plugin'
 import { setLoggerMinLevel } from '../services/logger'
-import { checkAppUpdates, getUpdateCenterState, openAppReleasePage } from '../services/update-center'
+import { checkAppUpdates, downloadUpdate, getUpdateCenterState, installUpdate, openAppReleasePage } from '../services/update-center'
 import { setShortcutRecordingActive } from '../services/shortcut-recording-guard'
 
 function getOpenAtLoginState(): { supported: boolean; enabled: boolean } {
@@ -107,5 +107,14 @@ export function registerSettingsHandlers(
 
   ipcMain.handle('settings:updateCenter:openReleasePage', async () => {
     return await openAppReleasePage()
+  })
+
+  ipcMain.handle('settings:updateCenter:downloadUpdate', async () => {
+    return await downloadUpdate()
+  })
+
+  ipcMain.handle('settings:updateCenter:installUpdate', () => {
+    installUpdate()
+    return true
   })
 }

@@ -28,6 +28,7 @@ import { TrayMenuWindowManager } from './services/tray-menu-window'
 import { ClipboardWatcher } from './services/clipboard-watcher-v2'
 import { ClipboardHistoryManager } from './services/clipboard-history'
 import { commandRunnerService } from './services/command-runner'
+import { initAutoUpdater } from './services/update-center'
 import { setLoggerMinLevel } from './services/logger'
 import { attachShortcutRecordingGuard } from './services/shortcut-recording-guard'
 import { SystemPluginWindowManager } from './services/system-plugin-window-manager'
@@ -1158,6 +1159,11 @@ app.whenReady().then(async () => {
         pluginToolRegistry.refreshPlugin(pluginId, pluginName, tools)
       }
     })
+
+    // 初始化自动更新检查器（仅在生产环境下启用）
+    if (app.isPackaged) {
+      initAutoUpdater()
+    }
   }
 
   // 检查是否需要显示引导窗口

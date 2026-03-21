@@ -10,6 +10,7 @@
     "install:cli-deps": "npm ci --prefix packages/mulby-cli --no-audit --no-fund",
     "electron:dev": "vite",
     "electron:build": "vite build && electron-builder",
+    "electron:publish": "vite build && electron-builder --publish always",
     "lint": "eslint src",
     "typecheck": "tsc --noEmit",
     "check:api-docs": "node scripts/check-api-docs.mjs",
@@ -54,6 +55,7 @@
     "cron-parser": "^5.5.0",
     "electron-get-location": "^1.0.1",
     "electron-log": "^5.0.0",
+    "electron-updater": "^6.8.3",
     "extract-zip": "^2.0.1",
     "js-tiktoken": "^1.0.21",
     "lucide-react": "^0.562.0",
@@ -70,24 +72,30 @@
   "optionalDependencies": {
     "node-mac-permissions": "^2.5.0"
   },
-    "build": {
-      "appId": "com.mulby.app",
-      "productName": "Mulby",
-      "files": [
-        "dist/**/*",
-        "package.json"
+  "build": {
+    "appId": "com.mulby.app",
+    "productName": "Mulby",
+    "files": [
+      "dist/**/*",
+      "package.json"
+    ],
+    "directories": {
+      "output": "release",
+      "buildResources": "build"
+    },
+    "publish": {
+      "provider": "github",
+      "owner": "Unicellular-SU",
+      "repo": "mulby-releases",
+      "releaseType": "release"
+    },
+    "mac": {
+      "icon": "icon.icns",
+      "category": "public.app-category.developer-tools",
+      "target": [
+        "dmg",
+        "zip"
       ],
-      "directories": {
-        "output": "release",
-        "buildResources": "build"
-      },
-      "mac": {
-        "icon": "icon.icns",
-        "category": "public.app-category.developer-tools",
-        "target": [
-          "dmg",
-          "zip"
-        ],
       "extendInfo": {
         "NSLocationWhenInUseUsageDescription": "Mulby 需要访问您的位置以提供位置相关功能（如地图定位、天气查询等）",
         "NSLocationUsageDescription": "Mulby 需要访问您的位置以提供位置相关功能",
@@ -104,34 +112,34 @@
       "node_modules/@img/sharp-libvips-*/**/*"
     ],
     "afterPack": "scripts/electron-builder-after-pack.cjs",
-      "extraResources": [
-        {
-          "from": "resources/bin",
-          "to": "bin"
-        },
-        {
-          "from": "resources/tray",
-          "to": "resources/tray"
-        }
-      ],
-      "win": {
-        "icon": "icon.ico",
-        "target": [
-          "nsis",
-          "portable"
-        ]
+    "extraResources": [
+      {
+        "from": "resources/bin",
+        "to": "bin"
       },
-      "nsis": {
-        "installerIcon": "build/icon.ico",
-        "uninstallerIcon": "build/icon.ico",
-        "installerHeaderIcon": "build/icon.ico"
-      },
-      "linux": {
-        "icon": "build/icons/linux",
-        "target": [
-          "AppImage",
-          "deb"
-        ]
+      {
+        "from": "resources/tray",
+        "to": "resources/tray"
       }
+    ],
+    "win": {
+      "icon": "icon.ico",
+      "target": [
+        "nsis",
+        "portable"
+      ]
+    },
+    "nsis": {
+      "installerIcon": "build/icon.ico",
+      "uninstallerIcon": "build/icon.ico",
+      "installerHeaderIcon": "build/icon.ico"
+    },
+    "linux": {
+      "icon": "build/icons/linux",
+      "target": [
+        "AppImage",
+        "deb"
+      ]
+    }
   }
 }

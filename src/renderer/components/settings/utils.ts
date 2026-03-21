@@ -60,6 +60,10 @@ export function formatUpdateStatus(status: UpdateCenterState['status']): string 
       return '已是最新版本'
     case 'update-available':
       return '发现新版本'
+    case 'downloading':
+      return '下载中'
+    case 'downloaded':
+      return '已下载，待安装'
     case 'error':
       return '检查失败'
     default:

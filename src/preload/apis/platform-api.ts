@@ -154,7 +154,14 @@ export function createPlatformApi(ipcRenderer: IpcRenderer) {
       setOpenAtLogin: (enabled: boolean) => ipcRenderer.invoke('settings:startup:setOpenAtLogin', enabled),
       getUpdateCenterState: () => ipcRenderer.invoke('settings:updateCenter:getState'),
       checkAppUpdates: () => ipcRenderer.invoke('settings:updateCenter:check'),
-      openUpdateReleasePage: () => ipcRenderer.invoke('settings:updateCenter:openReleasePage')
+      openUpdateReleasePage: () => ipcRenderer.invoke('settings:updateCenter:openReleasePage'),
+      downloadUpdate: () => ipcRenderer.invoke('settings:updateCenter:downloadUpdate'),
+      installUpdate: () => ipcRenderer.invoke('settings:updateCenter:installUpdate'),
+      onUpdateStateChanged: (callback: (state: unknown) => void) => {
+        const listener = (_event: unknown, state: unknown) => callback(state)
+        ipcRenderer.on('updateCenter:stateChanged', listener)
+        return () => ipcRenderer.removeListener('updateCenter:stateChanged', listener)
+      }
     },
 
     developer: {

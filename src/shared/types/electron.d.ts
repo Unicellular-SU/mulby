@@ -313,7 +313,7 @@ export interface StartupOpenAtLoginState {
   enabled: boolean
 }
 
-export type UpdateCenterStatus = 'idle' | 'checking' | 'up-to-date' | 'update-available' | 'error'
+export type UpdateCenterStatus = 'idle' | 'checking' | 'up-to-date' | 'update-available' | 'downloading' | 'downloaded' | 'error'
 
 export interface UpdateCenterState {
   status: UpdateCenterStatus
@@ -327,6 +327,12 @@ export interface UpdateCenterState {
   releaseNotes?: string
   message?: string
   lastCheckedAt?: number
+  downloadProgress?: {
+    bytesPerSecond: number
+    percent: number
+    transferred: number
+    total: number
+  }
 }
 
 export interface RunCommandInput {
@@ -529,6 +535,9 @@ export interface ElectronAPI {
     getUpdateCenterState: () => Promise<UpdateCenterState>
     checkAppUpdates: () => Promise<UpdateCenterState>
     openUpdateReleasePage: () => Promise<boolean>
+    downloadUpdate: () => Promise<UpdateCenterState>
+    installUpdate: () => Promise<boolean>
+    onUpdateStateChanged: (callback: (state: UpdateCenterState) => void) => () => void
   }
   developer: {
     addPluginPath: (path: string) => Promise<{ success: boolean; error?: string }>

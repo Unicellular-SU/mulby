@@ -228,6 +228,22 @@ export default function SettingsView({
     }
   }
 
+  const downloadUpdate = async () => {
+    if (updateBusy) return
+    setUpdateBusy(true)
+    try {
+      await window.mulby.settings.downloadUpdate()
+    } catch (error) {
+      notice.error(error instanceof Error ? error.message : '下载更新失败')
+    } finally {
+      setUpdateBusy(false)
+    }
+  }
+
+  const installUpdate = () => {
+    void window.mulby.settings.installUpdate()
+  }
+
   const updateCommandRunner = async (patch: Partial<AppSettings['commandRunner']>) => {
     if (!settings) return
     await updateSettings({
@@ -619,6 +635,14 @@ export default function SettingsView({
     })
   }, [section])
 
+  // 监听 autoUpdater 推送的状态变化（实时进度等）
+  useEffect(() => {
+    const unsub = window.mulby.settings.onUpdateStateChanged((state) => {
+      setUpdateCenterState(state)
+    })
+    return unsub
+  }, [])
+
   const currentSectionLabel = useMemo(
     () => SECTION_ITEMS.find(item => item.id === section)?.label ?? '',
     [section]
@@ -839,6 +863,8 @@ export default function SettingsView({
                   updateBusy={updateBusy}
                   onCheckAppUpdates={checkAppUpdates}
                   onOpenUpdateReleasePage={openUpdateReleasePage}
+                  onDownloadUpdate={downloadUpdate}
+                  onInstallUpdate={installUpdate}
                   cardClass={cardClass}
                   primaryPillClass={primaryPillClass}
                   actionButtonClass={actionButtonClass}
