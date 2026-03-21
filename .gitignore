@@ -13,3 +13,4 @@ build
 cs
 package-lock.json
 .tmp-*
+.vscode
