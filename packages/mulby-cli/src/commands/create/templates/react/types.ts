@@ -788,6 +788,9 @@ interface MulbySettings {
   getUpdateCenterState(): Promise<UpdateCenterState>
   checkAppUpdates(): Promise<UpdateCenterState>
   openUpdateReleasePage(): Promise<boolean>
+  downloadUpdate(): Promise<unknown>
+  installUpdate(): Promise<unknown>
+  onUpdateStateChanged(callback: (state: unknown) => void): Disposable
 }
 
 interface MulbyDeveloper {
@@ -1319,7 +1322,31 @@ interface PluginInitData {
   attachments?: Attachment[]
 }
 
+interface MulbyOnboarding {
+  getSettings(): Promise<unknown>
+  updateShortcut(action: string, accelerator: string): Promise<unknown>
+  updateTheme(mode: string): Promise<unknown>
+  updateAiProvider(provider: {
+    id: string
+    type?: string
+    label?: string
+    enabled: boolean
+    apiKey?: string
+    baseURL?: string
+  }): Promise<unknown>
+  updateStoreSources(sources: {
+    id: string
+    name: string
+    url: string
+    enabled: boolean
+    priority: number
+  }[]): Promise<unknown>
+  complete(): Promise<unknown>
+  onClose(callback: () => void): Disposable
+}
+
 interface MulbyAPI {
+  onboarding: MulbyOnboarding
   app: MulbyApp
   systemPlugin: MulbySystemPlugin
   systemPage: MulbySystemPage
@@ -1602,6 +1629,9 @@ interface BackendPluginAPIDirect {
     getPath(name: 'home' | 'appData' | 'userData' | 'temp' | 'desktop' | 'documents' | 'downloads' | 'music' | 'pictures' | 'videos'): Promise<string>
     getEnv(name: string): Promise<string>
     getIdleTime(): Promise<number>
+    isMacOS(): boolean
+    isWindows(): boolean
+    isLinux(): boolean
   }
   shortcut: {
     register(accelerator: string, callback: () => void): boolean
