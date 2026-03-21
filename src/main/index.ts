@@ -974,7 +974,7 @@ function openSystemPageView(payload: OpenSystemPageWindowPayload) {
   void systemPageWindowManager.openAttached(payload)
 }
 
-function openSettingsView(section: SettingsCenterSection = 'general') {
+function openSettingsView(section: SettingsCenterSection = 'dashboard') {
   openSystemPageView({
     page: 'settings',
     settingsSection: section

@@ -61,6 +61,7 @@ export type SystemPageId =
   | 'ai-skills-settings'
 
 export type SettingsCenterSection =
+  | 'dashboard'
   | 'general'
   | 'shortcuts'
   | 'commandQuickLaunch'
@@ -638,7 +639,7 @@ export class SystemPageWindowManager {
     }
     return {
       page: 'settings',
-      settingsSection: input.settingsSection || 'general',
+      settingsSection: input.settingsSection || 'dashboard',
       shortcutCommandHint: (input.shortcutCommandHint || '').trim()
     }
   }
@@ -651,7 +652,7 @@ export class SystemPageWindowManager {
         target.webContents.send('app:openSystemPlugin', {
           pluginId: 'settings-center',
           params: {
-            section: route.settingsSection || 'general',
+            section: route.settingsSection || 'dashboard',
             shortcutCommandHint: route.shortcutCommandHint || ''
           }
         })
@@ -901,7 +902,7 @@ export class SystemPageWindowManager {
     parsed.searchParams.set('mulbySystemMode', mode)
     parsed.searchParams.set('mulbySystemPage', route.page)
     if (route.page === 'settings') {
-      parsed.searchParams.set('mulbySystemSection', route.settingsSection || 'general')
+      parsed.searchParams.set('mulbySystemSection', route.settingsSection || 'dashboard')
       parsed.searchParams.set('mulbySystemHint', route.shortcutCommandHint || '')
     } else {
       parsed.searchParams.delete('mulbySystemSection')

@@ -19,6 +19,7 @@ const SYSTEM_PAGE_IDS: SystemPageId[] = [
 ]
 
 const SETTINGS_SECTIONS: SettingsCenterSection[] = [
+  'dashboard',
   'general',
   'shortcuts',
   'commandQuickLaunch',
@@ -49,7 +50,7 @@ function normalizeOpenPayload(input: unknown): OpenSystemPagePayload | null {
   const section = payload.settingsSection
   const normalizedSection = typeof section === 'string' && SETTINGS_SECTIONS.includes(section as SettingsCenterSection)
     ? section as SettingsCenterSection
-    : 'general'
+    : 'dashboard'
   const shortcutCommandHint = typeof payload.shortcutCommandHint === 'string'
     ? payload.shortcutCommandHint
     : ''

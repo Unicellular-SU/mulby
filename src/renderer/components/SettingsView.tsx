@@ -10,6 +10,7 @@ import type {
 import type { StartupOpenAtLoginState, UpdateCenterState } from '../../shared/types/electron'
 import { useInAppNotice } from './InAppNotice'
 import CommandShortcutPanel from './CommandShortcutPanel'
+import DashboardSection from './settings/sections/DashboardSection'
 import GeneralSection from './settings/sections/GeneralSection'
 import ShortcutsSection from './settings/sections/ShortcutsSection'
 import PermissionsSection from './settings/sections/PermissionsSection'
@@ -674,6 +675,17 @@ export default function SettingsView({
 
           <main className="flex-1 min-h-0 overflow-auto no-drag">
             <div className="mx-auto max-w-5xl px-6 pb-16 pt-8">
+              {section === 'dashboard' && (
+                <DashboardSection
+                  onOpenAiSettings={onOpenAiSettings}
+                  onOpenPluginManager={onOpenPluginManager}
+                  onOpenBackgroundPluginManager={onOpenBackgroundPluginManager}
+                  onOpenTaskScheduler={onOpenTaskScheduler}
+                  cardClass={cardClass}
+                  primaryPillClass={primaryPillClass}
+                />
+              )}
+
               {section === 'general' && (
                 <GeneralSection
                   themeMode={themeMode}
@@ -694,12 +706,7 @@ export default function SettingsView({
                       }
                     })
                   }}
-                  onOpenAiSettings={onOpenAiSettings}
-                  onOpenPluginManager={onOpenPluginManager}
-                  onOpenBackgroundPluginManager={onOpenBackgroundPluginManager}
-                  onOpenTaskScheduler={onOpenTaskScheduler}
                   cardClass={cardClass}
-                  primaryPillClass={primaryPillClass}
                 />
               )}
 

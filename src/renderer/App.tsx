@@ -59,6 +59,7 @@ function isInpluginFile(file: DroppedFile): boolean {
 }
 
 const SETTINGS_SECTION_SET = new Set<SettingsSection>([
+  'dashboard',
   'general',
   'shortcuts',
   'commandQuickLaunch',
@@ -153,7 +154,7 @@ function parseSystemWindowBootstrap(): SystemWindowBootstrap {
   }
 
   const page = params.get('mulbySystemPage')
-  const section = parseSettingsSection(params.get('mulbySystemSection')) || 'general'
+  const section = parseSettingsSection(params.get('mulbySystemSection')) || 'dashboard'
   const shortcutCommandHint = params.get('mulbySystemHint') || ''
 
   let initialViewMode: ViewMode = 'home'
@@ -516,7 +517,7 @@ function App() {
     }
   }, [pluginOpen, systemPageAttached])
 
-  const openSettings = useCallback((section: SettingsSection = 'general', commandHint?: string) => {
+  const openSettings = useCallback((section: SettingsSection = 'dashboard', commandHint?: string) => {
     if (pluginOpen) {
       window.mulby.window.close()
       setPluginOpen(false)
@@ -728,7 +729,7 @@ function App() {
         return
       }
       const params = payload.params || {}
-      const section = parseSettingsSection(params.section) || 'general'
+      const section = parseSettingsSection(params.section) || 'dashboard'
       const shortcutHint = typeof params.shortcutCommandHint === 'string'
         ? params.shortcutCommandHint
         : undefined

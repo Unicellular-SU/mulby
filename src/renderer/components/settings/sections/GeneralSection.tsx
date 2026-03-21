@@ -9,12 +9,7 @@ interface GeneralSectionProps {
   onToggleOpenAtLogin: () => Promise<void> | void
   searchSettings: SearchSettings
   onSearchSettingsChange: (patch: Partial<SearchSettings>) => Promise<void> | void
-  onOpenAiSettings?: () => void
-  onOpenPluginManager: (section?: 'installed' | 'store') => void
-  onOpenBackgroundPluginManager?: () => void
-  onOpenTaskScheduler?: () => void
   cardClass: string
-  primaryPillClass: string
 }
 
 export default function GeneralSection({
@@ -25,12 +20,7 @@ export default function GeneralSection({
   onToggleOpenAtLogin,
   searchSettings,
   onSearchSettingsChange,
-  onOpenAiSettings,
-  onOpenPluginManager,
-  onOpenBackgroundPluginManager,
-  onOpenTaskScheduler,
-  cardClass,
-  primaryPillClass
+  cardClass
 }: GeneralSectionProps) {
   return (
     <div className="space-y-4">
@@ -114,64 +104,7 @@ export default function GeneralSection({
           </button>
         </div>
       </div>
-
-      <div className={`${cardClass} flex items-center justify-between gap-4`}>
-        <div>
-          <div className="text-sm font-medium text-slate-900 dark:text-white">插件管理</div>
-          <div className="text-xs text-slate-500 dark:text-slate-400">管理插件启用状态、更新与卸载</div>
-        </div>
-        <button className={primaryPillClass} onClick={() => onOpenPluginManager('installed')}>
-          打开插件管理
-        </button>
-      </div>
-
-      <div className={`${cardClass} flex items-center justify-between gap-4`}>
-        <div>
-          <div className="text-sm font-medium text-slate-900 dark:text-white">插件商店</div>
-          <div className="text-xs text-slate-500 dark:text-slate-400">浏览在线插件、查看详情并安装新插件</div>
-        </div>
-        <button className={primaryPillClass} onClick={() => onOpenPluginManager('store')}>
-          打开插件商店
-        </button>
-      </div>
-
-      {onOpenAiSettings && (
-        <div className={`${cardClass} flex items-center justify-between gap-4`}>
-          <div>
-            <div className="text-sm font-medium text-slate-900 dark:text-white">AI 设置中心</div>
-            <div className="text-xs text-slate-500 dark:text-slate-400">配置 Provider、模型与默认策略</div>
-          </div>
-          <button className={primaryPillClass} onClick={onOpenAiSettings}>
-            打开 AI 设置
-          </button>
-        </div>
-      )}
-
-
-
-      {onOpenBackgroundPluginManager && (
-        <div className={`${cardClass} flex items-center justify-between gap-4`}>
-          <div>
-            <div className="text-sm font-medium text-slate-900 dark:text-white">运行中的插件</div>
-            <div className="text-xs text-slate-500 dark:text-slate-400">查看和管理所有正在运行的插件</div>
-          </div>
-          <button className={primaryPillClass} onClick={onOpenBackgroundPluginManager}>
-            打开任务管理器
-          </button>
-        </div>
-      )}
-
-      {onOpenTaskScheduler && (
-        <div className={`${cardClass} flex items-center justify-between gap-4`}>
-          <div>
-            <div className="text-sm font-medium text-slate-900 dark:text-white">任务调度器</div>
-            <div className="text-xs text-slate-500 dark:text-slate-400">查看和管理所有定时任务</div>
-          </div>
-          <button className={primaryPillClass} onClick={onOpenTaskScheduler}>
-            打开任务调度器
-          </button>
-        </div>
-      )}
     </div>
   )
 }
+

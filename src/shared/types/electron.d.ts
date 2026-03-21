@@ -438,7 +438,7 @@ export interface ElectronAPI {
   systemPage: {
     open: (payload: {
       page: 'settings' | 'plugin-manager' | 'plugin-store' | 'background-plugins' | 'task-scheduler' | 'log-viewer' | 'ai-settings' | 'ai-mcp-settings' | 'ai-skills-settings'
-      settingsSection?: 'general' | 'shortcuts' | 'commandQuickLaunch' | 'commandAll' | 'permissions' | 'security' | 'developer' | 'about'
+      settingsSection?: 'dashboard' | 'general' | 'shortcuts' | 'commandQuickLaunch' | 'commandAll' | 'permissions' | 'security' | 'developer' | 'about'
       shortcutCommandHint?: string
     }) => Promise<boolean>
     close: () => Promise<boolean>

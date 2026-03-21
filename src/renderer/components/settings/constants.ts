@@ -2,6 +2,7 @@ import type { AppShortcutAction } from '../../../shared/types/settings'
 import type { SettingsSection } from './types'
 
 export const SECTION_ITEMS: { id: SettingsSection; label: string }[] = [
+  { id: 'dashboard', label: '控制中心' },
   { id: 'general', label: '通用' },
   { id: 'shortcuts', label: '快捷键' },
   { id: 'commandQuickLaunch', label: '快捷启动' },

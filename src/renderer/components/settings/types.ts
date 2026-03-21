@@ -1,4 +1,5 @@
 export type SettingsSection =
+  | 'dashboard'
   | 'general'
   | 'shortcuts'
   | 'commandQuickLaunch'
