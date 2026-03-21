@@ -102,7 +102,7 @@ export default function DashboardSection({
 
     const loadDashboardData = async () => {
       try {
-        // 并行加载所有数据
+        // 并行加载所有本地数据（不含网络请求）
         const [
           plugins,
           backgroundPlugins,
@@ -112,21 +112,10 @@ export default function DashboardSection({
         ] = await Promise.all([
           window.mulby.plugin.getAll().catch(() => [] as PluginInfo[]),
           window.mulby.plugin.listBackground().catch(() => [] as BackgroundPluginInfo[]),
-          window.mulby.scheduler.getTaskCount({ status: 'active' }).catch(() => 0),
+          window.mulby.scheduler.getTaskCount().catch(() => 0),
           window.mulby.system.getAppInfo().catch(() => null),
           window.mulby.settings.getUpdateCenterState().catch(() => null)
         ])
-
-        if (!mounted) return
-
-        // 尝试获取可更新插件数
-        let updatableCount = 0
-        try {
-          const updateResult = await window.mulby.pluginStore.checkUpdatesInstalled()
-          updatableCount = (updateResult?.updates ?? []).filter((u) => u.status === 'updatable').length
-        } catch {
-          // 网络不可用时忽略
-        }
 
         if (!mounted) return
 
@@ -135,12 +124,23 @@ export default function DashboardSection({
           enabledPlugins: plugins.filter((p) => p.enabled).length,
           backgroundPlugins: backgroundPlugins.length,
           scheduledTasks: taskCount,
-          updatablePlugins: updatableCount
+          updatablePlugins: 0
         })
         setAppInfo(appInfoResult)
         setUpdateState(updateCenterState)
       } finally {
         if (mounted) setLoading(false)
+      }
+
+      // 可更新插件数异步加载，不阻塞骨架屏消失
+      try {
+        const updateResult = await window.mulby.pluginStore.checkUpdatesInstalled()
+        const count = (updateResult?.updates ?? []).filter((u) => u.status === 'updatable').length
+        if (mounted) {
+          setStats((prev) => ({ ...prev, updatablePlugins: count }))
+        }
+      } catch {
+        // 网络不可用时忽略
       }
     }
 
@@ -313,20 +313,26 @@ export default function DashboardSection({
                 <span className="text-xs text-slate-500 dark:text-slate-400">更新</span>
                 {updateState ? (
                   <span className="flex items-center gap-1.5 text-xs font-medium">
-                    {updateState.hasUpdate ? (
+                    {updateState.status === 'update-available' && updateState.hasUpdate ? (
                       <>
                         <span className="h-2 w-2 rounded-full bg-blue-500" />
                         <span className="text-blue-600 dark:text-blue-400">
                           v{updateState.latestVersion} 可用
                         </span>
                       </>
-                    ) : (
+                    ) : updateState.status === 'up-to-date' ? (
                       <>
                         <svg className="h-3.5 w-3.5 text-emerald-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                           <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                         </svg>
                         <span className="text-emerald-600 dark:text-emerald-400">已是最新</span>
                       </>
+                    ) : updateState.status === 'checking' ? (
+                      <span className="text-slate-500 dark:text-slate-400">检查中…</span>
+                    ) : updateState.status === 'error' ? (
+                      <span className="text-amber-600 dark:text-amber-400">检查失败</span>
+                    ) : (
+                      <span className="text-slate-400 dark:text-slate-500">未检查</span>
                     )}
                   </span>
                 ) : (
