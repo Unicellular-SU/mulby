@@ -5,7 +5,7 @@ import type {
   PluginStorePlugin,
   PluginStoreSourceSyncResult
 } from '../../shared/types/plugin-store'
-import useCachedRemoteImage from '../hooks/useCachedRemoteImage'
+import useCachedRemoteImage, { clearRemoteImageCache } from '../hooks/useCachedRemoteImage'
 import StorePageTitleCard from './StorePageTitleCard'
 
 interface PluginStoreViewProps {
@@ -177,6 +177,7 @@ export default function PluginStoreView({ onBack, onOpenDetails }: PluginStoreVi
     if (!window.mulby?.pluginStore?.fetch) return
     setStoreLoading(true)
     try {
+      await clearRemoteImageCache()
       const result = await window.mulby.pluginStore.fetch()
       setStoreEntries(result.entries)
       setStoreSourceStates(result.sources)

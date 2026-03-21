@@ -53,7 +53,7 @@ async function loadCachedRemoteImage(url: string): Promise<string | null> {
       return rememberObjectUrl(url, await cachedResponse.blob())
     }
 
-    const response = await fetch(url, { cache: 'force-cache', mode: 'cors' })
+    const response = await fetch(url, { cache: 'no-cache', mode: 'cors' })
     if (!response.ok) {
       throw new Error(`Failed to fetch remote image: ${response.status}`)
     }
@@ -71,6 +71,25 @@ async function loadCachedRemoteImage(url: string): Promise<string | null> {
 
   pendingCache.set(url, task)
   return task
+}
+
+/**
+ * 清除远程图片缓存（内存 + Cache API）。
+ * 在插件商店重新加载索引时调用，确保图标能刷新。
+ */
+export async function clearRemoteImageCache(): Promise<void> {
+  for (const objectUrl of objectUrlCache.values()) {
+    URL.revokeObjectURL(objectUrl)
+  }
+  objectUrlCache.clear()
+  pendingCache.clear()
+  try {
+    if (typeof window !== 'undefined' && 'caches' in window) {
+      await window.caches.delete(REMOTE_IMAGE_CACHE_NAME)
+    }
+  } catch {
+    // 忽略清除 Cache API 失败
+  }
 }
 
 export default function useCachedRemoteImage(url?: string | null): string | null {
