@@ -72,4 +72,5 @@ Before claiming completion, verify all of the following when applicable:
 - If icon work is in scope, an editable SVG source is kept and the scaffold default `icon.png` has been replaced with the final 512x512 export.
 - `npm run build` succeeds.
 - `npm run pack` succeeds when a package is requested.
+- `README.md` has been updated to document the plugin's functionality, usage instructions, and any configuration options. Include at minimum: plugin description, supported features/commands, usage examples, and any prerequisites or dependencies.
 - The user receives a short manual acceptance checklist for testing inside Mulby.
