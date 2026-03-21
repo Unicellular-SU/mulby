@@ -41,6 +41,15 @@
 ### openUpdateReleasePage()
 打开更新发布页。
 
+### downloadUpdate()
+下载已发现的新版本更新包。
+
+### installUpdate()
+安装已下载的更新并重启应用。
+
+### onUpdateStateChanged(callback)
+监听更新状态实时变化（下载进度等）。返回取消监听函数。
+
 ## 示例
 
 ```ts

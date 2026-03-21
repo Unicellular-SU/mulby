@@ -101,6 +101,14 @@ interface ChildWindowHandle {
 [Renderer]
 触发系统原生文件拖拽。
 
+### getOpacity()
+[Renderer]
+获取当前窗口透明度（0-1）。
+
+### setOpacity(opacity)
+[Renderer]
+设置窗口透明度（0-1）。
+
 ### onWindowStateChange(callback)
 [Renderer]
 监听窗口最大化状态变化事件。
