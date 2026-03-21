@@ -649,8 +649,15 @@ export default function PluginManagerView({ onBack, onOpenStore, initialSection 
       window.mulby.notification.show('内置插件不可卸载', 'error')
       return
     }
-    const confirmed = confirm(`确定要卸载插件 ${plugin.displayName} 吗？`)
-    if (!confirmed) return
+    const { response } = await window.mulby.dialog.showMessageBox({
+      type: 'question',
+      title: '卸载插件',
+      message: `确定要卸载插件「${plugin.displayName}」吗？`,
+      buttons: ['取消', '卸载'],
+      defaultId: 0,
+      cancelId: 0
+    })
+    if (response !== 1) return
     const result = await window.mulby.plugin.uninstall(plugin.name)
     if (result.success) {
       setPlugins((prev) => prev.filter((item) => item.name !== plugin.name))
@@ -718,7 +725,15 @@ export default function PluginManagerView({ onBack, onOpenStore, initialSection 
     const runMode = getPluginRunMode(pluginName)
     const modeText = runMode === 'background' ? '后台插件' : '插件'
 
-    if (!confirm(`确定要停止此${modeText}吗？`)) return
+    const { response } = await window.mulby.dialog.showMessageBox({
+      type: 'question',
+      title: '停止插件',
+      message: `确定要停止此${modeText}吗？`,
+      buttons: ['取消', '停止'],
+      defaultId: 0,
+      cancelId: 0
+    })
+    if (response !== 1) return
 
     try {
       if (runMode === 'background') {
