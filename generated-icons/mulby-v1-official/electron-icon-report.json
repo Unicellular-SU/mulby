@@ -1,33 +1,35 @@
 {
-  "generatedAt": "2026-03-11T15:16:06.725780+00:00",
+  "generatedAt": "2026-03-21T15:24:12.309062+00:00",
   "inputs": {
-    "appSvg": "D:\\Node.js\\mulby\\resources\\tray\\mulby-v1.svg",
-    "traySvg": "D:\\Node.js\\mulby\\resources\\tray\\mulby-v1.svg",
+    "appSvg": "/Users/su/workspace/mulby/resources/tray/mulby-v1.svg",
+    "traySvg": "/Users/su/workspace/mulby/resources/tray/mulby-v1.svg",
     "appPadding": 0.08,
-    "trayPadding": 0.02,
+    "trayPadding": 0.06,
     "trayColor": "#000000"
   },
-  "bundleRoot": "D:\\Node.js\\mulby\\generated-icons\\mulby-v1-official",
+  "bundleRoot": "/Users/su/workspace/mulby/generated-icons/mulby-v1-official",
   "outputs": {
-    "desktopPreviewDir": "D:\\Node.js\\mulby\\generated-icons\\mulby-v1-official\\build\\icons\\desktop",
-    "appWindowsIco": "D:\\Node.js\\mulby\\generated-icons\\mulby-v1-official\\build\\icon.ico",
-    "appMacIcns": "D:\\Node.js\\mulby\\generated-icons\\mulby-v1-official\\build\\icon.icns",
-    "appLinuxDir": "D:\\Node.js\\mulby\\generated-icons\\mulby-v1-official\\build\\icons\\linux",
-    "trayWindowsIco": "D:\\Node.js\\mulby\\generated-icons\\mulby-v1-official\\tray\\win\\icon.ico",
-    "trayLinuxPng": "D:\\Node.js\\mulby\\generated-icons\\mulby-v1-official\\tray\\linux\\icon.png",
-    "trayMacTemplate": "D:\\Node.js\\mulby\\generated-icons\\mulby-v1-official\\tray\\mac\\iconTemplate.png",
-    "trayMacTemplate2x": "D:\\Node.js\\mulby\\generated-icons\\mulby-v1-official\\tray\\mac\\iconTemplate@2x.png"
+    "desktopPreviewDir": "/Users/su/workspace/mulby/generated-icons/mulby-v1-official/build/icons/desktop",
+    "appWindowsIco": "/Users/su/workspace/mulby/generated-icons/mulby-v1-official/build/icon.ico",
+    "appMacIcns": "/Users/su/workspace/mulby/generated-icons/mulby-v1-official/build/icon.icns",
+    "appLinuxDir": "/Users/su/workspace/mulby/generated-icons/mulby-v1-official/build/icons/linux",
+    "trayWindowsIco": "/Users/su/workspace/mulby/generated-icons/mulby-v1-official/tray/win/icon.ico",
+    "trayLinuxPng": "/Users/su/workspace/mulby/generated-icons/mulby-v1-official/tray/linux/icon.png",
+    "trayMacTemplate": "/Users/su/workspace/mulby/generated-icons/mulby-v1-official/tray/mac/iconTemplate.png",
+    "trayMacTemplate2x": "/Users/su/workspace/mulby/generated-icons/mulby-v1-official/tray/mac/iconTemplate@2x.png"
   },
   "copiedIntoProject": {
-    "build/icon.ico": "D:\\Node.js\\mulby\\build\\icon.ico",
-    "build/icon.icns": "D:\\Node.js\\mulby\\build\\icon.icns",
-    "build/icon.png": "D:\\Node.js\\mulby\\build\\icon.png",
-    "tray/icon.ico": "D:\\Node.js\\mulby\\resources\\tray\\icon.ico",
-    "tray/icon.png": "D:\\Node.js\\mulby\\resources\\tray\\icon.png",
-    "tray/iconTemplate.png": "D:\\Node.js\\mulby\\resources\\tray\\iconTemplate.png",
-    "tray/iconTemplate@2x.png": "D:\\Node.js\\mulby\\resources\\tray\\iconTemplate@2x.png",
-    "build/icons/linux": "D:\\Node.js\\mulby\\build\\icons\\linux",
-    "build/icons/desktop": "D:\\Node.js\\mulby\\build\\icons\\desktop"
+    "build/icon.ico": "/Users/su/workspace/mulby/build/icon.ico",
+    "build/icon.icns": "/Users/su/workspace/mulby/build/icon.icns",
+    "build/icon.png": "/Users/su/workspace/mulby/build/icon.png",
+    "tray/icon.ico": "/Users/su/workspace/mulby/resources/tray/icon.ico",
+    "tray/icon.png": "/Users/su/workspace/mulby/resources/tray/icon.png",
+    "tray/iconTemplate.png": "/Users/su/workspace/mulby/resources/tray/iconTemplate.png",
+    "tray/iconTemplate@2x.png": "/Users/su/workspace/mulby/resources/tray/iconTemplate@2x.png",
+    "build/icons/linux": "/Users/su/workspace/mulby/build/icons/linux",
+    "build/icons/desktop": "/Users/su/workspace/mulby/build/icons/desktop",
+    "icon.ico": "/Users/su/workspace/mulby/icon.ico",
+    "icon.icns": "/Users/su/workspace/mulby/icon.icns"
   },
   "recommendedElectronBuilderConfig": {
     "directories": {
