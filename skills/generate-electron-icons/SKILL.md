@@ -69,6 +69,7 @@ When `--project-root` is provided, the script also copies:
 - app icons into `<project-root>/<build-resources>/`
 - desktop preview PNGs into `<project-root>/<build-resources>/icons/desktop/`
 - tray icons into `<project-root>/<tray-resources>/`
+- `icon.ico` and `icon.icns` into `<project-root>/`（供 electron-builder 的 `win.icon` / `mac.icon` 直接引用）
 
 ## Dependency Rules
 

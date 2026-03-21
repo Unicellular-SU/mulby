@@ -300,6 +300,11 @@ def copy_outputs_into_project(
         shutil.rmtree(desktop_icons_target)
     shutil.copytree(output_paths["desktop_previews"], desktop_icons_target)
     copied["build/icons/desktop"] = str(desktop_icons_target)
+
+    # 将图标复制到项目根目录（electron-builder 的 win.icon / mac.icon 可能指向根目录）
+    copied["icon.ico"] = copy_file(output_paths["build_root"] / "icon.ico", project_root / "icon.ico")
+    copied["icon.icns"] = copy_file(output_paths["build_root"] / "icon.icns", project_root / "icon.icns")
+
     return copied
 
 
