@@ -153,7 +153,7 @@ const SEARCH_SEPARATOR_REGEX = /[\s\-_./\\|,:;，。！？、：；'"`‘’“�
 const CAMEL_CASE_BOUNDARY_REGEX = /([a-z0-9])([A-Z])/g
 const NON_ALNUM_REGEX = /[^a-z0-9]+/g
 
-interface KeywordSearchIndex {
+export interface KeywordSearchIndex {
   normalized: string
   compact: string
   latinInitials: string
@@ -183,11 +183,11 @@ function getCachedRegex(pattern: string): RegExp | null {
   }
 }
 
-function normalizeSearchText(value: string): string {
+export function normalizeSearchText(value: string): string {
   return value.trim().toLowerCase().normalize('NFKC')
 }
 
-function compactSearchText(value: string): string {
+export function compactSearchText(value: string): string {
   return normalizeSearchText(value).replace(SEARCH_SEPARATOR_REGEX, '')
 }
 
@@ -215,7 +215,7 @@ function buildPinyinValue(value: string, pattern: 'pinyin' | 'first'): string {
   }
 }
 
-function getCachedKeywordIndex(value: string): KeywordSearchIndex {
+export function getCachedKeywordIndex(value: string): KeywordSearchIndex {
   const cached = keywordCache.get(value)
   if (cached) return cached
 
@@ -235,7 +235,7 @@ function getCachedKeywordIndex(value: string): KeywordSearchIndex {
   return index
 }
 
-function isSubsequenceMatch(target: string, query: string): boolean {
+export function isSubsequenceMatch(target: string, query: string): boolean {
   if (!target || !query || query.length > target.length) return false
   let targetIndex = 0
   for (const queryChar of query) {
@@ -246,11 +246,9 @@ function isSubsequenceMatch(target: string, query: string): boolean {
   return true
 }
 
-function matchesKeywordQuery(keywordValue: string, queryText: string): boolean {
-  const normalizedQuery = normalizeSearchText(queryText)
+function matchesKeywordQuery(keywordValue: string, normalizedQuery: string, queryCompact: string): boolean {
   if (!normalizedQuery) return false
 
-  const queryCompact = compactSearchText(normalizedQuery)
   const index = getCachedKeywordIndex(keywordValue)
 
   // 直接包含：保留原有行为（中英文连续匹配）
@@ -335,11 +333,15 @@ export function isImageAttachment(attachment: InputAttachment): boolean {
 
 export function findBestMatch(feature: PluginFeature, input: InputPayload): FeatureMatch | null {
   const text = input.text
-  const q = text.toLowerCase()
   const hasText = text.trim().length > 0
   const hasAttachments = input.attachments.length > 0
 
+  // 方案B: 预计算查询文本的 normalize/compact，避免每个 cmd 重复计算
+  const normalizedQuery = hasText ? normalizeSearchText(text) : ''
+  const queryCompact = hasText ? compactSearchText(normalizedQuery) : ''
+
   let best: FeatureMatch | null = null
+  const maxScore = 4 // window 类型是最高优先级
 
   for (const cmd of feature.cmds) {
     let matchType: MatchType | null = null
@@ -358,7 +360,7 @@ export function findBestMatch(feature: PluginFeature, input: InputPayload): Feat
 
     if (cmd.type === 'keyword') {
       if (!hasText) continue
-      if (matchesKeywordQuery(cmd.value, q)) {
+      if (matchesKeywordQuery(cmd.value, normalizedQuery, queryCompact)) {
         matchType = 'keyword'
       }
     }
@@ -403,6 +405,8 @@ export function findBestMatch(feature: PluginFeature, input: InputPayload): Feat
     const score = matchPriority(matchType)
     if (!best || score > best.score) {
       best = { matchType, cmd, score }
+      // 方案C: 已达最高优先级，无需继续遍历
+      if (score >= maxScore) break
     }
   }
 

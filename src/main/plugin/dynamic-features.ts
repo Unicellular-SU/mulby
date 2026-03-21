@@ -119,9 +119,21 @@ function matchesPlatform(feature: DynamicFeature): boolean {
 
 class PluginFeatureStore {
   private data: FeatureStoreData = {}
+  // 变更回调，用于通知外部（如搜索 Worker）同步
+  private changeListeners: Array<() => void> = []
 
   constructor() {
     this.load()
+  }
+
+  onChange(listener: () => void): void {
+    this.changeListeners.push(listener)
+  }
+
+  private notifyChange(): void {
+    for (const listener of this.changeListeners) {
+      try { listener() } catch { /* ignore */ }
+    }
   }
 
   private load(): void {
@@ -171,6 +183,7 @@ class PluginFeatureStore {
 
     this.data[pluginId] = list
     this.save()
+    this.notifyChange()
     return feature
   }
 
@@ -189,6 +202,7 @@ class PluginFeatureStore {
     }
 
     this.save()
+    this.notifyChange()
     return true
   }
 

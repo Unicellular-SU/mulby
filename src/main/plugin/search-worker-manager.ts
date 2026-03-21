@@ -2,10 +2,10 @@ import { app, utilityProcess, UtilityProcess } from 'electron'
 import { join } from 'path'
 import { existsSync } from 'fs'
 import type { InputPayload } from '../../shared/types/plugin'
-import type { SearchPluginData, SearchRequest, SearchResponse, SearchResultRef } from './search-protocol'
+import type { SearchPluginData, SearchRequest, SearchResponse, SearchResultRef, SyncRequest } from './search-protocol'
 
 interface PendingRequest {
-  resolve: (value: SearchResultRef[]) => void
+  resolve: (value: unknown) => void
   reject: (error: Error) => void
   timeout: NodeJS.Timeout
 }
@@ -24,20 +24,57 @@ export class PluginSearchWorker {
   private resolveReady: (() => void) | null = null
   private rejectReady: ((error: Error) => void) | null = null
   private readyTimeout: NodeJS.Timeout | null = null
+  // 方案A: 缓存最新的插件数据，用于增量同步和 Worker 重启后恢复
+  private lastSyncedPlugins: SearchPluginData[] | null = null
+  private synced = false
 
   constructor() {
     this.workerPath = this.resolveWorkerPath('search-worker.js')
   }
 
-  async search(input: InputPayload, plugins: SearchPluginData[]): Promise<SearchResultRef[]> {
+  // 方案A: 同步插件数据到 Worker（仅在插件列表变更时调用）
+  async syncPlugins(plugins: SearchPluginData[]): Promise<void> {
+    this.lastSyncedPlugins = plugins
+    // P1 修复: 立即标记未同步，确保并发搜索等待同步完成而非使用旧快照
+    this.synced = false
+    this.ensureWorker()
+    await this.waitUntilReady(WARMUP_READY_WAIT_TIMEOUT)
+
+    const requestId = this.generateId()
+    const request: SyncRequest = {
+      id: requestId,
+      type: 'sync',
+      payload: { plugins }
+    }
+
+    return new Promise((resolve, reject) => {
+      const timeout = setTimeout(() => {
+        const pending = this.pending.get(requestId)
+        if (!pending) return
+        this.pending.delete(requestId)
+        pending.reject(new Error('Sync request timeout'))
+      }, REQUEST_TIMEOUT)
+
+      this.pending.set(requestId, { resolve: () => { this.synced = true; resolve() }, reject, timeout })
+      this.worker?.postMessage(request)
+    })
+  }
+
+  // 方案A: search 不再传入 plugins，使用已同步的快照
+  async search(input: InputPayload): Promise<SearchResultRef[]> {
     this.ensureWorker()
     await this.waitUntilReady(SEARCH_READY_WAIT_TIMEOUT)
+
+    // 如果 Worker 尚未同步过插件数据，先同步
+    if (!this.synced && this.lastSyncedPlugins) {
+      await this.syncPlugins(this.lastSyncedPlugins)
+    }
 
     const requestId = this.generateId()
     const request: SearchRequest = {
       id: requestId,
       type: 'search',
-      payload: { input, plugins }
+      payload: { input }
     }
 
     return new Promise((resolve, reject) => {
@@ -49,7 +86,7 @@ export class PluginSearchWorker {
         this.restartWorker('request-timeout')
       }, REQUEST_TIMEOUT)
 
-      this.pending.set(requestId, { resolve, reject, timeout })
+      this.pending.set(requestId, { resolve: resolve as (value: unknown) => void, reject, timeout })
       this.worker?.postMessage(request)
     })
   }
@@ -131,6 +168,8 @@ export class PluginSearchWorker {
       // ignore
     }
     console.warn(`[SearchWorker] Restarted due to ${reason}`)
+    // Worker 重启后标记未同步，下次搜索时会自动重新同步
+    this.synced = false
   }
 
   private ensureWorker(): void {
@@ -183,6 +222,11 @@ export class PluginSearchWorker {
         pending.reject(new Error(payload.payload.message))
         return
       }
+      if (payload.type === 'sync-ack') {
+        // sync-ack 回复：resolve void
+        pending.resolve(undefined)
+        return
+      }
       pending.resolve(payload.payload.results)
     })
 
@@ -193,6 +237,8 @@ export class PluginSearchWorker {
       this.rejectAllPending(error)
       this.clearReadyState()
       this.worker = null
+      // P2b 修复: Worker 退出后标记未同步，下次搜索会先重新同步
+      this.synced = false
     })
   }
 

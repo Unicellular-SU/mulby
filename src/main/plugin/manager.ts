@@ -173,6 +173,11 @@ export class PluginManager {
     this.taskScheduler = new TaskScheduler()
     this.taskScheduler.setPluginManager(this)
     this.hostManager.setTaskScheduler(this.taskScheduler)
+
+    // P2a 修复: 动态特性变更时自动同步搜索 Worker
+    pluginFeatureStore.onChange(() => {
+      void this.syncSearchWorker().catch(() => {})
+    })
   }
 
   /**
@@ -305,10 +310,23 @@ export class PluginManager {
     // 恢复并刷新指令快捷键绑定
     this.commandShortcutManager.initialize()
 
-    // 预热搜索 worker，降低首次搜索延迟（不阻塞启动流程）
-    void this.searchWorker.warmup().catch((error) => {
-      console.warn('[PluginManager] Search worker warmup failed', error)
+    // 预热搜索 worker 并同步插件数据（不阻塞启动流程）
+    void this.syncSearchWorker().catch((error) => {
+      console.warn('[PluginManager] Search worker sync failed', error)
     })
+  }
+
+  // 方案A: 构建并同步插件数据到搜索 Worker
+  private async syncSearchWorker(): Promise<void> {
+    await this.searchWorker.warmup()
+    const pluginData = this.getEnabled().map((plugin) => ({
+      pluginId: plugin.id,
+      features: this.getCombinedFeatures(plugin).map((feature) => ({
+        code: feature.code,
+        cmds: feature.cmds
+      }))
+    }))
+    await this.searchWorker.syncPlugins(pluginData)
   }
 
   private async resetRuntimeForInit(): Promise<void> {
@@ -464,6 +482,10 @@ export class PluginManager {
     })
 
     this.commandShortcutManager.refresh()
+
+    // P2a 修复: 指令禁用状态变更后同步搜索 Worker
+    void this.syncSearchWorker().catch(() => {})
+
     return result
   }
 
@@ -542,14 +564,7 @@ export class PluginManager {
     }
 
     try {
-      const pluginData = enabledPlugins.map((plugin) => ({
-        pluginId: plugin.id,
-        features: this.getCombinedFeatures(plugin).map((feature) => ({
-          code: feature.code,
-          cmds: feature.cmds
-        }))
-      }))
-      const matches = await this.searchWorker.search(normalizedInput, pluginData)
+      const matches = await this.searchWorker.search(normalizedInput)
       return matches
         .map((match) => {
           const plugin = this.plugins.get(match.pluginId)
@@ -774,6 +789,9 @@ export class PluginManager {
     // 注册 plugin tools
     this.notifyPluginToolsChanged(plugin, 'refresh')
 
+    // 同步搜索 Worker 插件快照
+    void this.syncSearchWorker().catch(() => {})
+
     return { success: true }
   }
 
@@ -826,6 +844,9 @@ export class PluginManager {
     // 注销 plugin tools
     this.notifyPluginToolsChanged(plugin, 'remove')
 
+    // 同步搜索 Worker 插件快照
+    void this.syncSearchWorker().catch(() => {})
+
     return { success: true }
   }
 
@@ -875,6 +896,9 @@ export class PluginManager {
 
       // 注销 plugin tools
       this.notifyPluginToolsChanged(plugin, 'remove')
+
+      // 同步搜索 Worker 插件快照
+      void this.syncSearchWorker().catch(() => {})
 
       return { success: true }
     } catch (err) {
@@ -1174,6 +1198,9 @@ export class PluginManager {
     if (wasBackgroundRunning && nextPlugin.manifest.pluginSetting?.background) {
       await this.backgroundManager.start(nextPlugin, true)
     }
+
+    // P2a 修复: 插件元数据热重载后同步搜索 Worker
+    void this.syncSearchWorker().catch(() => {})
   }
 
   // Decide whether a plugin should keep running after its last window closes.

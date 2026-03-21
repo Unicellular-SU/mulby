@@ -9,11 +9,20 @@ export interface SearchPluginData {
   }>
 }
 
+// 搜索请求：仅携带输入，插件数据已通过 sync 预同步
 export interface SearchRequest {
   id: string
   type: 'search'
   payload: {
     input: InputPayload
+  }
+}
+
+// 增量同步：当插件列表变更时，一次性同步完整插件数据到 Worker
+export interface SyncRequest {
+  id: string
+  type: 'sync'
+  payload: {
     plugins: SearchPluginData[]
   }
 }
@@ -46,4 +55,11 @@ export interface SearchReadyResponse {
   payload: Record<string, never>
 }
 
-export type SearchResponse = SearchResultResponse | SearchErrorResponse | SearchReadyResponse
+export interface SyncAckResponse {
+  id: string
+  type: 'sync-ack'
+  payload: Record<string, never>
+}
+
+export type SearchResponse = SearchResultResponse | SearchErrorResponse | SearchReadyResponse | SyncAckResponse
+
