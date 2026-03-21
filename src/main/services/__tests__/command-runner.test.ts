@@ -269,7 +269,7 @@ describe('command runner service', () => {
         { source: 'app' }
       ),
       // git-lfs 不存在会抛出执行错误，但重点是 consent 被触发了
-      (err: unknown) => {
+      (_err: unknown) => {
         // consent 应该被调用（未被信任记录跳过）
         assert.equal(consentCount, 1)
         return true
