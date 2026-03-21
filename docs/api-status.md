@@ -13,16 +13,16 @@
 
 当前主 API 面（按模块）如下：
 
-- `window` / `subInput` / `theme`
+- `window` / `theme`
 - `ai` / `app` / `systemPlugin` / `systemPage`
-- `clipboard` / `input` / `notification`
+- `clipboard` / `clipboardHistory` / `input` / `notification` / `onboarding`
 - `plugin` / `pluginStore` / `scheduler`
-- `screen` / `shell` / `desktop` / `filesystem` / `dialog` / `system`
+- `screen` / `shell` / `desktop` / `dialog` / `system`
 - `permission` / `shortcut` / `security` / `storage`
 - `settings` / `developer`
 - `media` / `power` / `tray` / `trayMenu`
-- `http` / `network` / `menu` / `geolocation`
-- `tts` / `host` / `inbrowser` / `sharp` / `ffmpeg` / `log`
+- `network` / `menu` / `geolocation`
+- `tts` / `inbrowser` / `sharp` / `getSharpVersion` / `ffmpeg` / `log`
 
 另外包含事件类入口：
 - `onThemeChange`
@@ -55,6 +55,7 @@
 - `messaging`
 - `ai`
 - `scheduler`
+- `tools`
 
 ## 3. IPC 模块注册状态
 
@@ -85,6 +86,8 @@
 - `host`
 - `filesystem`
 - `storage`
+- `region-capture`
+- `color-pick`
 - `inbrowser`
 - `sharp`
 - `ffmpeg`
@@ -95,6 +98,7 @@
 - `ai`
 - `system-plugin`
 - `system-page`
+- `onboarding`
 
 说明：`tray-menu` 相关 handler 位于服务层（`src/main/services/tray-menu-window.ts`），不在 `src/main/ipc` 目录内。
 

@@ -1,4 +1,4 @@
-# Mulby 插件 Manifest 规范 v2
+# Mulby 插件 Manifest 规范
 
 ## 核心概念
 
@@ -164,11 +164,12 @@
 | files | 文件/文件夹 | label?: 指令名称, exts?: 扩展名数组, fileType?: file/directory/any (默认 any), match?: 文件名正则 (与 exts 二选一), minLength?: 最少数量, maxLength?: 最多数量 |
 | img | 图片 | label?: 指令名称, exts?: [".png", ".jpg"] |
 | over | 选中文本 | label?: 指令名称, exclude?: 排除正则, minLength?: 最少字符数, maxLength?: 最多字符数 (默认 10000) |
+| window| 窗口聚焦 | label?: 指令名称, app?: 匹配应用名称, title?: 匹配窗口标题, bundleId?: 匹配 macOS bundle ID |
 
 #### 功能指令 vs 匹配指令
 
 - 功能指令：`keyword`
-- 匹配指令：`regex` / `files` / `img` / `over`
+- 匹配指令：`regex` / `files` / `img` / `over` / `window`
 
 当前指令快捷键仅支持绑定功能指令（`keyword`）。匹配指令在搜索输入满足条件时展示。
 
