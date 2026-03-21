@@ -226,8 +226,15 @@ export default function AiSkillsSettingsView({ onBack }: AiSkillsSettingsViewPro
 
   const handleDeleteSkill = async () => {
     if (!selectedSkill || selectedSkill.readonly || selectedSkill.origin === 'system' || !window.mulby?.ai?.skills?.remove) return
-    const ok = window.confirm(`确认删除 Skill「${selectedSkill.descriptor.name || selectedSkill.id}」吗？`)
-    if (!ok) return
+    const { response } = await window.mulby.dialog.showMessageBox({
+      type: 'question',
+      title: '删除 Skill',
+      message: `确认删除 Skill「${selectedSkill.descriptor.name || selectedSkill.id}」吗？`,
+      buttons: ['取消', '删除'],
+      defaultId: 0,
+      cancelId: 0
+    })
+    if (response !== 1) return
     setBusy(true)
     try {
       await window.mulby.ai.skills.remove(selectedSkill.id)

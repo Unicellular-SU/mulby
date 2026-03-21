@@ -73,8 +73,15 @@ export default function BackgroundPluginManagerView({ onBack }: BackgroundPlugin
 
   const handleStop = async (pluginId: string, runMode: 'background' | 'active') => {
     const modeText = runMode === 'background' ? '后台插件' : '插件'
-    const confirmed = confirm(`确定要停止此${modeText}吗？`)
-    if (!confirmed) return
+    const { response } = await window.mulby.dialog.showMessageBox({
+      type: 'question',
+      title: '停止插件',
+      message: `确定要停止此${modeText}吗？`,
+      buttons: ['取消', '停止'],
+      defaultId: 0,
+      cancelId: 0
+    })
+    if (response !== 1) return
 
     try {
       if (runMode === 'background') {
@@ -92,8 +99,15 @@ export default function BackgroundPluginManagerView({ onBack }: BackgroundPlugin
   const handleStopAll = async () => {
     if (plugins.length === 0) return
 
-    const confirmed = confirm(`确定要停止所有 ${plugins.length} 个插件吗？`)
-    if (!confirmed) return
+    const { response } = await window.mulby.dialog.showMessageBox({
+      type: 'question',
+      title: '停止所有插件',
+      message: `确定要停止所有 ${plugins.length} 个插件吗？`,
+      buttons: ['取消', '全部停止'],
+      defaultId: 0,
+      cancelId: 0
+    })
+    if (response !== 1) return
 
     try {
       await Promise.all(plugins.map(p => {

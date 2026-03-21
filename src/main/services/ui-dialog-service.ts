@@ -232,7 +232,8 @@ function buildMessageBoxHtml(input: {
     .map((label, index) => {
       const escaped = escapeHtml(label)
       const isPrimary = index === input.defaultId
-      return `<button data-index="${index}" class="btn ${isPrimary ? 'btn-primary' : 'btn-default'}">${escaped}</button>`
+      const autoFocus = isPrimary ? ' autofocus' : ''
+      return `<button data-index="${index}" class="btn ${isPrimary ? 'btn-primary' : 'btn-default'}"${autoFocus}>${escaped}</button>`
     })
     .join('')
 
@@ -245,100 +246,117 @@ function buildMessageBoxHtml(input: {
   <style>
     :root { color-scheme: ${input.theme}; }
     html, body { height: 100%; }
-    * { box-sizing: border-box; }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
     body {
-      margin: 0;
       width: 100%;
       display: flex;
       flex-direction: column;
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Helvetica Neue', sans-serif;
       background: ${palette.pageBg};
       color: ${palette.text};
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
     }
     .card {
       width: 100%;
       flex: 1;
       display: flex;
       flex-direction: column;
-      border-radius: 0;
-      border: 1px solid ${palette.cardBorder};
       background: ${palette.cardBg};
-      box-shadow: ${palette.cardShadow};
       overflow: hidden;
     }
     .head {
       display: flex;
       align-items: center;
       justify-content: space-between;
-      gap: 10px;
-      padding: 14px 18px;
+      gap: 12px;
+      padding: 18px 22px;
       border-bottom: 1px solid ${palette.divider};
+      -webkit-app-region: drag;
+      user-select: none;
     }
     .title {
-      margin: 0;
       font-size: 15px;
       font-weight: 650;
-      line-height: 1.35;
+      line-height: 1.4;
+      letter-spacing: -0.01em;
     }
     .chip {
+      -webkit-app-region: no-drag;
       border-radius: 999px;
       font-size: 11px;
-      padding: 3px 8px;
+      font-weight: 500;
+      padding: 3px 10px;
       background: ${typeStyle.chipBg};
       color: ${typeStyle.chipText};
-      border: 1px solid rgba(148, 163, 184, 0.4);
+      border: 1px solid ${isDark ? 'rgba(148, 163, 184, 0.2)' : 'rgba(148, 163, 184, 0.35)'};
       white-space: nowrap;
+      letter-spacing: 0.02em;
     }
     .body {
       flex: 1;
-      padding: 16px 18px;
-      display: grid;
-      gap: 10px;
-      align-content: start;
+      padding: 20px 22px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
     }
     .message {
       font-size: 14px;
-      line-height: 1.5;
+      line-height: 1.6;
       color: ${palette.messageText};
-      white-space: pre-wrap;
       word-break: break-word;
     }
     .detail {
-      font-size: 12px;
-      line-height: 1.5;
+      font-size: 13px;
+      line-height: 1.55;
       color: ${palette.detailText};
-      white-space: pre-wrap;
       word-break: break-word;
-      border-radius: 12px;
+      border-radius: 10px;
       border: 1px solid ${palette.detailBorder};
       background: ${palette.detailBg};
-      padding: 10px 12px;
+      padding: 10px 14px;
     }
     .actions {
       display: flex;
       justify-content: flex-end;
       gap: 8px;
-      padding: 12px 18px 16px;
+      padding: 14px 22px 18px;
       border-top: 1px solid ${palette.divider};
     }
     .btn {
       appearance: none;
+      outline: none;
       border-radius: 999px;
-      font-size: 12px;
-      padding: 8px 12px;
+      font-size: 13px;
+      font-weight: 500;
+      padding: 7px 18px;
+      min-width: 72px;
       border: 1px solid ${palette.buttonBorder};
       cursor: pointer;
       background: ${palette.buttonBg};
       color: ${palette.buttonText};
+      transition: all 0.15s ease;
+      -webkit-app-region: no-drag;
     }
-    .btn-default:hover { border-color: ${palette.buttonHoverBorder}; }
+    .btn:active { transform: scale(0.97); }
+    .btn:focus-visible {
+      outline: 2px solid ${isDark ? '#60a5fa' : '#3b82f6'};
+      outline-offset: 2px;
+    }
+    .btn-default:hover {
+      border-color: ${palette.buttonHoverBorder};
+      background: ${isDark ? '#1e293b' : '#f1f5f9'};
+    }
     .btn-primary {
       background: ${palette.primaryBg};
       color: ${palette.primaryText};
       border-color: ${palette.primaryBg};
       font-weight: 600;
     }
-    .btn-primary:hover { background: ${palette.primaryHoverBg}; }
+    .btn-primary:hover {
+      background: ${palette.primaryHoverBg};
+      box-shadow: ${isDark ? '0 2px 8px rgba(226, 232, 240, 0.15)' : '0 2px 8px rgba(15, 23, 42, 0.2)'};
+    }
   </style>
 </head>
 <body>
@@ -359,7 +377,12 @@ function buildMessageBoxHtml(input: {
     const channel = ${JSON.stringify(input.channel)};
     const defaultId = ${input.defaultId};
     const cancelId = ${input.cancelId};
-    const send = (index) => ipcRenderer.send(channel, index);
+    let sent = false;
+    const send = (index) => {
+      if (sent) return;
+      sent = true;
+      ipcRenderer.send(channel, index);
+    };
 
     for (const btn of document.querySelectorAll('.btn')) {
       btn.addEventListener('click', () => {

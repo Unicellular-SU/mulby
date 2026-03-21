@@ -110,14 +110,21 @@ export default function PluginDetails({ pluginName, onBack }: PluginDetailsProps
     }
 
     const handleUninstall = async () => {
-        if (confirm(`确定要卸载插件 ${plugin?.displayName || pluginName} 吗？`)) {
-            const result = await window.mulby.plugin.uninstall(pluginName)
-            if (result.success) {
-                window.mulby.notification.show('插件已卸载')
-                onBack()
-            } else {
-                window.mulby.notification.show(result.error || '卸载失败', 'error')
-            }
+        const { response } = await window.mulby.dialog.showMessageBox({
+            type: 'question',
+            title: '卸载插件',
+            message: `确定要卸载插件「${plugin?.displayName || pluginName}」吗？`,
+            buttons: ['取消', '卸载'],
+            defaultId: 0,
+            cancelId: 0
+        })
+        if (response !== 1) return
+        const result = await window.mulby.plugin.uninstall(pluginName)
+        if (result.success) {
+            window.mulby.notification.show('插件已卸载')
+            onBack()
+        } else {
+            window.mulby.notification.show(result.error || '卸载失败', 'error')
         }
     }
 

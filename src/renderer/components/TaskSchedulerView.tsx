@@ -193,8 +193,15 @@ export default function TaskSchedulerView({ onBack }: TaskSchedulerViewProps) {
   }, [autoRefresh, refreshTasks, refreshTaskDetails, selectedTask?.id])
 
   const handleCancel = async (taskId: string) => {
-    const confirmed = confirm('确定要取消此任务吗？')
-    if (!confirmed) return
+    const { response } = await window.mulby.dialog.showMessageBox({
+      type: 'question',
+      title: '取消任务',
+      message: '确定要取消此任务吗？',
+      buttons: ['取消', '确定'],
+      defaultId: 0,
+      cancelId: 0
+    })
+    if (response !== 1) return
 
     try {
       await window.mulby.scheduler.cancelTask(taskId)
@@ -236,8 +243,15 @@ export default function TaskSchedulerView({ onBack }: TaskSchedulerViewProps) {
       return
     }
 
-    const confirmed = confirm(`确定要删除选中的 ${selectedTaskIds.size} 个任务吗？`)
-    if (!confirmed) return
+    const { response } = await window.mulby.dialog.showMessageBox({
+      type: 'question',
+      title: '批量删除',
+      message: `确定要删除选中的 ${selectedTaskIds.size} 个任务吗？`,
+      buttons: ['取消', '删除'],
+      defaultId: 0,
+      cancelId: 0
+    })
+    if (response !== 1) return
 
     try {
       const result = await window.mulby.scheduler.deleteTasks(Array.from(selectedTaskIds))
@@ -250,8 +264,16 @@ export default function TaskSchedulerView({ onBack }: TaskSchedulerViewProps) {
   }
 
   const handleCleanup = async () => {
-    const confirmed = confirm('确定要清除所有已完成、失败和已取消的任务吗？（保留最近7天）')
-    if (!confirmed) return
+    const { response } = await window.mulby.dialog.showMessageBox({
+      type: 'question',
+      title: '清除记录',
+      message: '确定要清除所有已完成、失败和已取消的任务吗？',
+      detail: '保留最近7天的记录',
+      buttons: ['取消', '清除'],
+      defaultId: 0,
+      cancelId: 0
+    })
+    if (response !== 1) return
 
     try {
       const result = await window.mulby.scheduler.cleanupTasks()
