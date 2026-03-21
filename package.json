@@ -93,8 +93,14 @@
       "icon": "icon.icns",
       "category": "public.app-category.developer-tools",
       "target": [
-        "dmg",
-        "zip"
+        {
+          "target": "dmg",
+          "arch": ["x64", "arm64"]
+        },
+        {
+          "target": "zip",
+          "arch": ["x64", "arm64"]
+        }
       ],
       "extendInfo": {
         "NSLocationWhenInUseUsageDescription": "Mulby 需要访问您的位置以提供位置相关功能（如地图定位、天气查询等）",
