@@ -44,6 +44,36 @@ jobs:
       - name: Install dependencies
         run: npm ci --no-audit --no-fund
 
+      - name: Initialize releases repo (if empty)
+        if: matrix.os == 'macos-latest'
+        env:
+          GH_TOKEN: ${{ secrets.GH_TOKEN }}
+        run: |
+          # 检查 mulby-releases 仓库是否为空
+          HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" \
+            -H "Authorization: token $GH_TOKEN" \
+            "https://api.github.com/repos/Unicellular-SU/mulby-releases/commits?per_page=1")
+          if [ "$HTTP_CODE" = "409" ]; then
+            echo "mulby-releases 仓库为空，正在初始化..."
+            TMP_DIR=$(mktemp -d)
+            cd "$TMP_DIR"
+            git init
+            git checkout -b main
+            echo "# Mulby Releases" > README.md
+            echo "" >> README.md
+            echo "此仓库用于托管 Mulby 应用的自动更新发布文件。" >> README.md
+            git add README.md
+            git -c user.name="github-actions[bot]" -c user.email="github-actions[bot]@users.noreply.github.com" \
+              commit -m "chore: initialize releases repository"
+            git remote add origin "https://x-access-token:${GH_TOKEN}@github.com/Unicellular-SU/mulby-releases.git"
+            git push -u origin main
+            cd -
+            rm -rf "$TMP_DIR"
+            echo "初始化完成"
+          else
+            echo "mulby-releases 仓库已有内容，跳过初始化"
+          fi
+
       - name: Build and Publish
         run: npm run electron:publish
         env:
