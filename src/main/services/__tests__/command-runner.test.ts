@@ -257,24 +257,22 @@ describe('command runner service', () => {
     const service = new CommandRunnerService({
       getPolicy: () => settings,
       updatePolicy: (next) => { settings = next; return settings },
-      requestConsent: async () => { consentCount += 1; return 'trust' },
+      // 返回 deny，确保命令被策略层拒绝（跨平台一致的 reject 行为）
+      requestConsent: async () => { consentCount += 1; return 'deny' },
       now: () => Date.now(),
       randomId: () => Math.random().toString(36).slice(2, 8)
     })
 
-    // "git-lfs" 不应被 "git" 的信任记录覆盖
+    // "git-nonexistent-xyz" 不应被 "git" 的信任记录覆盖，应触发 consent 并被拒绝
     await assert.rejects(
       service.runCommand(
-        { command: 'git-lfs', args: ['install'] },
+        { command: 'git-nonexistent-xyz', args: ['install'] },
         { source: 'app' }
       ),
-      // git-lfs 不存在会抛出执行错误，但重点是 consent 被触发了
-      (_err: unknown) => {
-        // consent 应该被调用（未被信任记录跳过）
-        assert.equal(consentCount, 1)
-        return true
-      }
+      /拒绝/
     )
+    // consent 应该被调用（未被信任记录跳过）
+    assert.equal(consentCount, 1)
   })
 
   it('marks timeout when command exceeds timeout', async () => {
