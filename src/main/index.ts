@@ -41,6 +41,7 @@ import {
   getMainWindowWindowBounds,
   getMainWindowWindowSize
 } from './main-window-frame'
+import { OnboardingWindowManager } from './services/onboarding-window'
 import { patchConsoleWithTimestamp } from '../shared/utils/console'
 
 patchConsoleWithTimestamp()
@@ -131,6 +132,7 @@ const clipboardWatcher = new ClipboardWatcher()
 const clipboardHistoryManager = new ClipboardHistoryManager()
 const systemPluginWindowManager = new SystemPluginWindowManager()
 const systemPageWindowManager = new SystemPageWindowManager()
+const onboardingWindowManager = new OnboardingWindowManager()
 const aiInternalToolRuntime = createAiInternalToolRuntime({
   getToolingSettings: () => appSettingsManager.getSettings().aiTooling,
   runCommand: (input, context) => commandRunnerService.runCommand(input, context),
@@ -1071,95 +1073,122 @@ app.whenReady().then(async () => {
     appShortcutManager,
     clipboardHistoryManager,
     systemPluginWindowManager,
-    systemPageWindowManager
+    systemPageWindowManager,
+    onboardingWindowManager
   )
 
-  createWindow()
+  // 主窗口创建及相关初始化（抽取为函数，引导模式下延迟调用）
+  function initMainWindow() {
+    createWindow()
 
-  setHotKeySettingRedirectHandler((cmdLabel?: string) => {
-    openCommandShortcutSettingsView(cmdLabel)
-  })
+    setHotKeySettingRedirectHandler((cmdLabel?: string) => {
+      openCommandShortcutSettingsView(cmdLabel)
+    })
 
-  trayMenuWindowManager = new TrayMenuWindowManager({
-    pluginManager,
-    settingsManager: appSettingsManager,
-    themeManager,
-    showMainWindow,
-    openSettings: openSettingsView,
-    openAiSettings: openAiSettingsView,
-    openPluginManager: openPluginManagerView,
-    openBackgroundPlugins: openBackgroundPluginsView,
-    openTaskScheduler: openTaskSchedulerView,
-    openPluginStore: openPluginStoreView,
-    resetMainWindowPosition,
-    reloadPlugins: async () => {
-      await pluginManager.init()
-    },
-    restartMainProcess,
-    quitMainProcess
-  })
-
-  appTrayManager = new AppTrayManager(
-    () => appSettingsManager.getSettings(),
-    {
-      toggleMainWindow: toggleWindow,
-      openMainWindow: showMainWindow,
-      openTrayMenu: (anchorBounds) => {
-        void trayMenuWindowManager?.toggle(anchorBounds)
+    trayMenuWindowManager = new TrayMenuWindowManager({
+      pluginManager,
+      settingsManager: appSettingsManager,
+      themeManager,
+      showMainWindow,
+      openSettings: openSettingsView,
+      openAiSettings: openAiSettingsView,
+      openPluginManager: openPluginManagerView,
+      openBackgroundPlugins: openBackgroundPluginsView,
+      openTaskScheduler: openTaskSchedulerView,
+      openPluginStore: openPluginStoreView,
+      resetMainWindowPosition,
+      reloadPlugins: async () => {
+        await pluginManager.init()
       },
-      restartApp: restartMainProcess,
-      quitApp: quitMainProcess
+      restartMainProcess,
+      quitMainProcess
+    })
+
+    appTrayManager = new AppTrayManager(
+      () => appSettingsManager.getSettings(),
+      {
+        toggleMainWindow: toggleWindow,
+        openMainWindow: showMainWindow,
+        openTrayMenu: (anchorBounds) => {
+          void trayMenuWindowManager?.toggle(anchorBounds)
+        },
+        restartApp: restartMainProcess,
+        quitApp: quitMainProcess
+      }
+    )
+    const trayCreated = appTrayManager.create()
+    if (!trayCreated) {
+      console.warn('[AppTray] Tray unavailable, fallback to global shortcuts.')
     }
-  )
-  const trayCreated = appTrayManager.create()
-  if (!trayCreated) {
-    console.warn('[AppTray] Tray unavailable, fallback to global shortcuts.')
+
+    // 设置全局窗口提供者，用于系统对话框打开时临时隐藏窗口
+    setWindowsProvider(() => {
+      const windows: BrowserWindow[] = []
+      if (mainWindow && !mainWindow.isDestroyed()) windows.push(mainWindow)
+      const panelWin = pluginWindowManager.getPanelWindow()?.getWindow()
+      if (panelWin && !panelWin.isDestroyed()) windows.push(panelWin)
+      const systemPageWin = systemPageWindowManager.getAttachedWindow()
+      if (systemPageWin && !systemPageWin.isDestroyed()) windows.push(systemPageWin)
+      return windows
+    })
+
+    // 设置主窗口到插件窗口管理器
+    pluginWindowManager.setMainWindow(mainWindow!)
+    systemPluginWindowManager.setMainWindow(mainWindow!)
+    systemPageWindowManager.setMainWindow(mainWindow!)
+
+    // 设置主题管理器到插件窗口管理器
+    pluginWindowManager.setThemeManager(themeManager)
+    systemPageWindowManager.setThemeManager(themeManager)
+
+    // 注册主窗口到主题管理器
+    themeManager.registerWindow(mainWindow!)
+
+    // 设置窗口管理器到插件管理器
+    pluginManager.setWindowManager(pluginWindowManager)
+    pluginManager.setSystemPluginWindowManager(systemPluginWindowManager)
+
+    appShortcutManager.apply(appSettingsManager.getSettings().shortcuts)
+
+    // 绑定 plugin tools 变更监听器到注册中心
+    pluginManager.setPluginToolsListener((event, pluginId, pluginName, tools) => {
+      if (event === 'remove') {
+        pluginToolRegistry.removePlugin(pluginId)
+      } else {
+        pluginToolRegistry.refreshPlugin(pluginId, pluginName, tools)
+      }
+    })
   }
 
-  // 设置全局窗口提供者，用于系统对话框打开时临时隐藏窗口
-  setWindowsProvider(() => {
-    const windows: BrowserWindow[] = []
-    if (mainWindow && !mainWindow.isDestroyed()) windows.push(mainWindow)
-    const panelWin = pluginWindowManager.getPanelWindow()?.getWindow()
-    if (panelWin && !panelWin.isDestroyed()) windows.push(panelWin)
-    const systemPageWin = systemPageWindowManager.getAttachedWindow()
-    if (systemPageWin && !systemPageWin.isDestroyed()) windows.push(systemPageWin)
-    return windows
-  })
+  // 检查是否需要显示引导窗口
+  const needsOnboarding = !appSettingsManager.getSettings().onboardingCompleted
+  if (needsOnboarding) {
+    console.log('[Onboarding] 首次启动，显示引导窗口')
+    onboardingWindowManager.setThemeManager(themeManager)
+    onboardingWindowManager.onComplete(() => {
+      console.log('[Onboarding] 引导完成，初始化并展示主窗口')
+      initMainWindow()
+      showMainWindow()
+      // 初始化插件管理器
+      pluginManager.init().then(() => {
+        // 预热系统应用搜索索引
+        if (appSettingsManager.getSettings().search.enableApps) {
+          pluginDesktop.warmupAppSearchIndex()
+        }
+      })
+    })
+    void onboardingWindowManager.show()
+  } else {
+    // 正常启动流程
+    initMainWindow()
 
-  // 设置主窗口到插件窗口管理器
-  pluginWindowManager.setMainWindow(mainWindow!)
-  systemPluginWindowManager.setMainWindow(mainWindow!)
-  systemPageWindowManager.setMainWindow(mainWindow!)
+    // 初始化插件管理器
+    await pluginManager.init()
 
-  // 设置主题管理器到插件窗口管理器
-  pluginWindowManager.setThemeManager(themeManager)
-  systemPageWindowManager.setThemeManager(themeManager)
-
-  // 注册主窗口到主题管理器
-  themeManager.registerWindow(mainWindow!)
-
-  // 设置窗口管理器到插件管理器
-  pluginManager.setWindowManager(pluginWindowManager)
-  pluginManager.setSystemPluginWindowManager(systemPluginWindowManager)
-
-  appShortcutManager.apply(appSettingsManager.getSettings().shortcuts)
-
-  // 绑定 plugin tools 变更监听器到注册中心
-  pluginManager.setPluginToolsListener((event, pluginId, pluginName, tools) => {
-    if (event === 'remove') {
-      pluginToolRegistry.removePlugin(pluginId)
-    } else {
-      pluginToolRegistry.refreshPlugin(pluginId, pluginName, tools)
+    // 预热系统应用搜索索引，降低冷启动首搜延迟（仅在启用搜索本机应用时执行）
+    if (appSettingsManager.getSettings().search.enableApps) {
+      pluginDesktop.warmupAppSearchIndex()
     }
-  })
-
-  // 初始化插件管理器
-  await pluginManager.init()
-
-  // 预热系统应用搜索索引，降低冷启动首搜延迟（仅在启用搜索本机应用时执行）
-  if (appSettingsManager.getSettings().search.enableApps) {
-    pluginDesktop.warmupAppSearchIndex()
   }
 })
 

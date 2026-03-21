@@ -202,6 +202,7 @@ export interface AppSettings {
   search: SearchSettings
   input: InputSettings
   tray: TraySettings
+  onboardingCompleted?: boolean
 }
 
 export interface ShortcutStatus {

@@ -481,6 +481,34 @@ export interface ElectronAPI {
   notification: {
     show: (message: string, type?: string) => void
   }
+  onboarding: {
+    getSettings: () => Promise<{
+      shortcuts: { toggleWindow: string; openSettings: string }
+      storeSources: { id: string; name: string; url: string; enabled: boolean; priority: number }[]
+      theme: string
+      aiProviders: { id: string; type?: string; label?: string; enabled: boolean; apiKey?: string; baseURL?: string }[]
+      onboardingCompleted: boolean
+    }>
+    updateShortcut: (action: string, accelerator: string) => Promise<boolean>
+    updateTheme: (mode: string) => Promise<boolean>
+    updateAiProvider: (provider: {
+      id: string
+      type?: string
+      label?: string
+      enabled: boolean
+      apiKey?: string
+      baseURL?: string
+    }) => Promise<boolean>
+    updateStoreSources: (sources: {
+      id: string
+      name: string
+      url: string
+      enabled: boolean
+      priority: number
+    }[]) => Promise<boolean>
+    complete: () => Promise<boolean>
+    onClose: (callback: () => void) => () => void
+  }
   storage: {
     get: (key: string, namespace?: string) => Promise<unknown>
     set: (key: string, value: unknown, namespace?: string) => Promise<boolean>

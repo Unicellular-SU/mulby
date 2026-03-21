@@ -44,6 +44,8 @@ import { registerSystemPluginHandlers } from './system-plugin'
 import { SystemPluginWindowManager } from '../services/system-plugin-window-manager'
 import { registerSystemPageHandlers } from './system-page'
 import { SystemPageWindowManager } from '../services/system-page-window-manager'
+import { OnboardingWindowManager } from '../services/onboarding-window'
+import { registerOnboardingHandlers } from './onboarding'
 
 
 export function registerAllHandlers(
@@ -55,7 +57,8 @@ export function registerAllHandlers(
   appShortcutManager: AppShortcutManager,
   clipboardHistoryManager: ClipboardHistoryManager,
   systemPluginWindowManager: SystemPluginWindowManager,
-  systemPageWindowManager: SystemPageWindowManager
+  systemPageWindowManager: SystemPageWindowManager,
+  onboardingWindowManager: OnboardingWindowManager
 ) {
   registerClipboardHandlers()
   registerClipboardHistoryHandlers(clipboardHistoryManager)
@@ -96,4 +99,7 @@ export function registerAllHandlers(
 
   // 注册日志 IPC 处理器
   registerLogIpc()
+
+  // 注册引导窗口 IPC 处理器
+  registerOnboardingHandlers(appSettingsManager, appShortcutManager, themeManager, onboardingWindowManager)
 }

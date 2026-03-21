@@ -135,6 +135,35 @@ export function createCoreApi(ipcRenderer: IpcRenderer) {
     notification: {
       show: (message: string, type?: string) =>
         ipcRenderer.send('notification:show', message, type)
+    },
+
+    onboarding: {
+      getSettings: () => ipcRenderer.invoke('onboarding:getSettings'),
+      updateShortcut: (action: string, accelerator: string) =>
+        ipcRenderer.invoke('onboarding:updateShortcut', action, accelerator),
+      updateTheme: (mode: string) =>
+        ipcRenderer.invoke('onboarding:updateTheme', mode),
+      updateAiProvider: (provider: {
+        id: string
+        type?: string
+        label?: string
+        enabled: boolean
+        apiKey?: string
+        baseURL?: string
+      }) => ipcRenderer.invoke('onboarding:updateAiProvider', provider),
+      updateStoreSources: (sources: {
+        id: string
+        name: string
+        url: string
+        enabled: boolean
+        priority: number
+      }[]) => ipcRenderer.invoke('onboarding:updateStoreSources', sources),
+      complete: () => ipcRenderer.invoke('onboarding:complete'),
+      onClose: (callback: () => void) => {
+        const listener = () => callback()
+        ipcRenderer.on('onboarding:close', listener)
+        return () => ipcRenderer.removeListener('onboarding:close', listener)
+      }
     }
   }
 }

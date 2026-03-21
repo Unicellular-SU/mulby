@@ -30,6 +30,7 @@ const AiMcpSettingsView = lazy(() => import('./components/AiMcpSettingsView'))
 const AiSkillsSettingsView = lazy(() => import('./components/AiSkillsSettingsView'))
 const LogViewerView = lazy(() => import('./components/LogViewerView'))
 const SystemPluginHost = lazy(() => import('./system-plugins/SystemPluginHost'))
+const OnboardingView = lazy(() => import('./components/OnboardingView'))
 
 // 插件附着信息（Panel 模式）
 interface PluginInfo {
@@ -207,6 +208,24 @@ function parseSystemWindowBootstrap(): SystemWindowBootstrap {
 }
 
 function App() {
+  // 检测引导模式：?mulbyOnboarding=1
+  const isOnboarding = useMemo(() => {
+    const params = new URLSearchParams(window.location.search)
+    return params.get('mulbyOnboarding') === '1'
+  }, [])
+
+  if (isOnboarding) {
+    return (
+      <Suspense fallback={null}>
+        <OnboardingView />
+      </Suspense>
+    )
+  }
+
+  return <MainApp />
+}
+
+function MainApp() {
   const systemWindowBootstrap = useMemo(() => parseSystemWindowBootstrap(), [])
   const isSystemWindow = systemWindowBootstrap.isSystemWindow
   const [query, setQuery] = useState('')

@@ -139,7 +139,8 @@ const DEFAULT_SETTINGS: AppSettings = {
     enabled: true,
     closeToTray: true,
     clickAction: 'toggleWindow'
-  }
+  },
+  onboardingCompleted: false
 }
 
 function normalizeTraySettings(input: Partial<TraySettings> | undefined): TraySettings {
@@ -449,7 +450,8 @@ function mergeSettings(current: AppSettings, next: Partial<AppSettings>): AppSet
     tray: normalizeTraySettings({
       ...current.tray,
       ...(next.tray || {})
-    })
+    }),
+    onboardingCompleted: next.onboardingCompleted ?? current.onboardingCompleted ?? false
   }
 }
 
@@ -487,12 +489,17 @@ export class AppSettingsManager {
 
     const row = stmtGet.get(SETTINGS_NAMESPACE, SETTINGS_KEY) as { value: string } | undefined
     if (!row?.value) {
+      // 全新安装，使用默认设置（onboardingCompleted = false）
       this.cache = { ...DEFAULT_SETTINGS }
       return this.cache
     }
 
     try {
       const parsed = JSON.parse(row.value) as Partial<AppSettings>
+      // 升级安装：如果已有存储设置但没有 onboardingCompleted 字段，视为已完成引导
+      if (parsed.onboardingCompleted === undefined) {
+        parsed.onboardingCompleted = true
+      }
       const merged = mergeSettings({ ...DEFAULT_SETTINGS }, parsed)
       const sanitized = sanitizeShortcuts(merged)
       this.cache = sanitized
