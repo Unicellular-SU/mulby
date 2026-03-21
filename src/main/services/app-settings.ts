@@ -41,13 +41,7 @@ const DEFAULT_RUN_COMMAND_MASK_ENV_KEYS = [
 const DEFAULT_SETTINGS: AppSettings = {
   shortcuts: {
     toggleWindow: 'Alt+Space',
-    openSettings: 'CommandOrControl+,',
-    openAiSettings: 'CommandOrControl+Shift+A',
-    openPluginStore: 'CommandOrControl+I',
-    openPluginManager: 'CommandOrControl+Shift+M',
-    openBackgroundPlugins: 'CommandOrControl+Shift+B',
-    openTaskScheduler: 'CommandOrControl+Shift+T',
-    openLogViewer: 'CommandOrControl+Shift+L'
+    openSettings: 'CommandOrControl+,'
   },
   storeSources: [],
   developer: {
@@ -478,30 +472,6 @@ function sanitizeShortcuts(settings: AppSettings): AppSettings {
 
   if (next.shortcuts.openSettings.includes('Dead')) {
     next.shortcuts.openSettings = DEFAULT_SETTINGS.shortcuts.openSettings
-  }
-
-  if (next.shortcuts.openAiSettings.includes('Dead')) {
-    next.shortcuts.openAiSettings = DEFAULT_SETTINGS.shortcuts.openAiSettings
-  }
-
-  if (next.shortcuts.openPluginStore.includes('Dead')) {
-    next.shortcuts.openPluginStore = DEFAULT_SETTINGS.shortcuts.openPluginStore
-  }
-
-  if (next.shortcuts.openPluginManager.includes('Dead')) {
-    next.shortcuts.openPluginManager = DEFAULT_SETTINGS.shortcuts.openPluginManager
-  }
-
-  if (next.shortcuts.openBackgroundPlugins.includes('Dead')) {
-    next.shortcuts.openBackgroundPlugins = DEFAULT_SETTINGS.shortcuts.openBackgroundPlugins
-  }
-
-  if (next.shortcuts.openTaskScheduler.includes('Dead')) {
-    next.shortcuts.openTaskScheduler = DEFAULT_SETTINGS.shortcuts.openTaskScheduler
-  }
-
-  if (next.shortcuts.openLogViewer.includes('Dead')) {
-    next.shortcuts.openLogViewer = DEFAULT_SETTINGS.shortcuts.openLogViewer
   }
 
   return next

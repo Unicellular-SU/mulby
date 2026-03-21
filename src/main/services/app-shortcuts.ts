@@ -4,26 +4,14 @@ import { detectSystemReservedShortcut } from './system-reserved-shortcuts'
 
 const ACTION_ORDER: AppShortcutAction[] = [
   'toggleWindow',
-  'openSettings',
-  'openAiSettings',
-  'openPluginStore',
-  'openPluginManager',
-  'openBackgroundPlugins',
-  'openTaskScheduler',
-  'openLogViewer'
+  'openSettings'
 ]
 
 export class AppShortcutManager {
   private registered = new Map<AppShortcutAction, string>()
   private status: ShortcutStatusMap = {
     toggleWindow: { ok: true },
-    openSettings: { ok: true },
-    openAiSettings: { ok: true },
-    openPluginStore: { ok: true },
-    openPluginManager: { ok: true },
-    openBackgroundPlugins: { ok: true },
-    openTaskScheduler: { ok: true },
-    openLogViewer: { ok: true }
+    openSettings: { ok: true }
   }
   private paused = false
   private actions: Record<AppShortcutAction, () => void>
@@ -51,13 +39,7 @@ export class AppShortcutManager {
     }
     const nextStatus: ShortcutStatusMap = {
       toggleWindow: { ok: true },
-      openSettings: { ok: true },
-      openAiSettings: { ok: true },
-      openPluginStore: { ok: true },
-      openPluginManager: { ok: true },
-      openBackgroundPlugins: { ok: true },
-      openTaskScheduler: { ok: true },
-      openLogViewer: { ok: true }
+      openSettings: { ok: true }
     }
     const used = new Map<string, AppShortcutAction>()
 

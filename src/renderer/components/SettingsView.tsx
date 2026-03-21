@@ -12,7 +12,6 @@ import { useInAppNotice } from './InAppNotice'
 import CommandShortcutPanel from './CommandShortcutPanel'
 import DashboardSection from './settings/sections/DashboardSection'
 import GeneralSection from './settings/sections/GeneralSection'
-import ShortcutsSection from './settings/sections/ShortcutsSection'
 import PermissionsSection from './settings/sections/PermissionsSection'
 import AboutSection from './settings/sections/AboutSection'
 import SecuritySection from './settings/sections/SecuritySection'
@@ -115,11 +114,11 @@ export default function SettingsView({
   }, [])
 
   useEffect(() => {
-    if (section === 'shortcuts') return
+    if (section === 'general') return
     if (activeRecordings <= 0) return
     setActiveRecordings(0)
     void window.mulby.settings.resumeShortcuts().then(setShortcutStatus).catch(() => {
-      // Ignore resume failures when leaving shortcuts section.
+      // 离开通用设置页时恢复快捷键
     })
   }, [activeRecordings, section])
 
@@ -706,19 +705,16 @@ export default function SettingsView({
                       }
                     })
                   }}
-                  cardClass={cardClass}
-                />
-              )}
-
-              {section === 'shortcuts' && settings && (
-                <ShortcutsSection
                   settings={settings}
                   shortcutStatus={shortcutStatus}
                   onShortcutChange={handleShortcutChange}
                   onRecordStart={handleRecordStart}
                   onRecordEnd={handleRecordEnd}
+                  cardClass={cardClass}
                 />
               )}
+
+
 
               {section === 'commandQuickLaunch' && (
                 <CommandShortcutPanel

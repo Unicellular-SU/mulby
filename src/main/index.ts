@@ -1009,9 +1009,7 @@ function openTaskSchedulerView() {
   openSystemPageView({ page: 'task-scheduler' })
 }
 
-function openLogViewerView() {
-  openSystemPageView({ page: 'log-viewer' })
-}
+
 
 function resetMainWindowPosition() {
   const settings = appSettingsManager.getSettings()
@@ -1055,13 +1053,7 @@ app.whenReady().then(async () => {
 
   const appShortcutManager = new AppShortcutManager({
     toggleWindow: () => toggleWindow(),
-    openSettings: () => openSettingsView(),
-    openAiSettings: () => openAiSettingsView(),
-    openPluginStore: () => openPluginStoreView(),
-    openPluginManager: () => openPluginManagerView(),
-    openBackgroundPlugins: () => openBackgroundPluginsView(),
-    openTaskScheduler: () => openTaskSchedulerView(),
-    openLogViewer: () => openLogViewerView()
+    openSettings: () => openSettingsView()
   })
 
   // macOS: 监听 dock 图标点击事件

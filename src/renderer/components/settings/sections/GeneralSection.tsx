@@ -1,5 +1,7 @@
 import type { StartupOpenAtLoginState } from '../../../../shared/types/electron'
-import type { SearchSettings } from '../../../../shared/types/settings'
+import type { AppSettings, SearchSettings, ShortcutStatusMap } from '../../../../shared/types/settings'
+import { SHORTCUTS } from '../constants'
+import ShortcutInput from '../ShortcutInput'
 
 interface GeneralSectionProps {
   themeMode: 'light' | 'dark' | 'system'
@@ -9,6 +11,11 @@ interface GeneralSectionProps {
   onToggleOpenAtLogin: () => Promise<void> | void
   searchSettings: SearchSettings
   onSearchSettingsChange: (patch: Partial<SearchSettings>) => Promise<void> | void
+  settings: AppSettings | null
+  shortcutStatus: ShortcutStatusMap | null
+  onShortcutChange: (action: keyof AppSettings['shortcuts'], accelerator: string) => Promise<void> | void
+  onRecordStart: () => Promise<void> | void
+  onRecordEnd: () => Promise<void> | void
   cardClass: string
 }
 
@@ -20,6 +27,11 @@ export default function GeneralSection({
   onToggleOpenAtLogin,
   searchSettings,
   onSearchSettingsChange,
+  settings,
+  shortcutStatus,
+  onShortcutChange,
+  onRecordStart,
+  onRecordEnd,
   cardClass
 }: GeneralSectionProps) {
   return (
@@ -104,7 +116,24 @@ export default function GeneralSection({
           </button>
         </div>
       </div>
+
+      {settings && (
+        <div className={`${cardClass} space-y-3`}>
+          <div className="text-sm font-medium text-slate-900 dark:text-white">全局快捷键</div>
+          {SHORTCUTS.map(item => (
+            <ShortcutInput
+              key={item.id}
+              label={item.label}
+              description={item.description}
+              value={settings.shortcuts[item.id]}
+              status={shortcutStatus?.[item.id]}
+              onChange={(accelerator) => onShortcutChange(item.id, accelerator)}
+              onRecordStart={onRecordStart}
+              onRecordEnd={onRecordEnd}
+            />
+          ))}
+        </div>
+      )}
     </div>
   )
 }
-

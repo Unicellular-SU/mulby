@@ -1,22 +1,10 @@
 export type AppShortcutAction =
   | 'toggleWindow'
   | 'openSettings'
-  | 'openAiSettings'
-  | 'openPluginStore'
-  | 'openPluginManager'
-  | 'openBackgroundPlugins'
-  | 'openTaskScheduler'
-  | 'openLogViewer'
 
 export interface AppShortcutSettings {
   toggleWindow: string
   openSettings: string
-  openAiSettings: string
-  openPluginStore: string
-  openPluginManager: string
-  openBackgroundPlugins: string
-  openTaskScheduler: string
-  openLogViewer: string
 }
 
 export interface StoreSource {

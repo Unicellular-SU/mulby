@@ -61,7 +61,6 @@ function isInpluginFile(file: DroppedFile): boolean {
 const SETTINGS_SECTION_SET = new Set<SettingsSection>([
   'dashboard',
   'general',
-  'shortcuts',
   'commandQuickLaunch',
   'commandAll',
   'permissions',
@@ -72,6 +71,8 @@ const SETTINGS_SECTION_SET = new Set<SettingsSection>([
 
 function parseSettingsSection(value: unknown): SettingsSection | null {
   if (typeof value !== 'string') return null
+  // 兼容旧的 'shortcuts' 深链接，快捷键设置已合并到通用面板
+  if (value === 'shortcuts') return 'general'
   if (SETTINGS_SECTION_SET.has(value as SettingsSection)) {
     return value as SettingsSection
   }
