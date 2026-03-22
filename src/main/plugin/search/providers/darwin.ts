@@ -10,7 +10,7 @@ import type {
 } from '../types'
 
 const SEARCH_KEY_FILES = 'darwin-files'
-const SEARCH_KEY_APPS = 'darwin-apps'
+
 const SEARCH_KEY_APPS_CATALOG = 'darwin-apps-catalog'
 
 const DARWIN_APP_CATALOG_LIMIT = 6000
@@ -45,6 +45,10 @@ export class DarwinSearchProvider implements DesktopSearchProvider {
     void this.getDarwinAppCatalogPaths()
       .then((paths) => {
         if (this.appDisplayNameCache.size >= paths.length && paths.length > 0) {
+          // 持久缓存已覆盖所有路径，跳过种子批次直接全量 hydrate
+          // 注意：仍需执行 hydrate 以清理已卸载应用的旧缓存
+          this.hydrateDarwinDisplayNames(paths)
+          this.preheatCatalogKeywordIndexes(paths)
           return
         }
 
@@ -54,10 +58,27 @@ export class DarwinSearchProvider implements DesktopSearchProvider {
         }
 
         this.hydrateDarwinDisplayNames(paths)
+
+        // displayName hydrate 是异步的，延迟预热拼音索引以等待部分 displayName 就绪
+        setTimeout(() => this.preheatCatalogKeywordIndexes(paths), 2000)
       })
       .catch(() => {
         // ignore warmup errors
       })
+  }
+
+  /** 为 catalog 中的所有应用名预计算拼音索引 */
+  private preheatCatalogKeywordIndexes(paths: string[]): void {
+    const names: string[] = []
+    for (const appPath of paths) {
+      const fallbackName = this.ranking.normalizeAppDisplayName(basename(appPath))
+      names.push(fallbackName)
+      const cachedName = this.appDisplayNameCache.get(appPath)
+      if (cachedName && cachedName !== fallbackName) {
+        names.push(cachedName)
+      }
+    }
+    this.ranking.preheatKeywordIndexes(names)
   }
 
   async searchFiles(query: string, limit: number): Promise<FileSearchResult[]> {
@@ -117,98 +138,12 @@ export class DarwinSearchProvider implements DesktopSearchProvider {
     const normalizedQuery = query.trim()
     if (!normalizedQuery) return []
 
-    this.execution.cancelSearchProcess(SEARCH_KEY_APPS)
-
-    let paths: string[] = []
-    try {
-      const baseLimit = Math.max(limit * 8, 120)
-      paths = await this.execution.runCommand('mdfind', ['-name', normalizedQuery], baseLimit, SEARCH_KEY_APPS)
-
-      if (paths.length < limit * 3) {
-        const wildcard = this.ranking.buildWildcardPattern(normalizedQuery)
-        if (wildcard && wildcard.toLowerCase() !== normalizedQuery.toLowerCase()) {
-          const fallback = await this.execution.runCommand('mdfind', ['-name', wildcard], baseLimit, SEARCH_KEY_APPS)
-          paths = this.ranking.mergeUniquePaths(paths, fallback, baseLimit)
-        }
-      }
-    } catch (error) {
-      if (this.execution.isKilledProcessError(error)) {
-        return []
-      }
-      console.error('darwin app search failed:', error)
-      return []
-    }
-
-    const quickLimit = Math.max(limit * 3, 90)
-    const quickResults = await this.formatAppResults(paths, quickLimit, normalizedQuery, 'spotlight')
-
-    if (quickResults.length >= limit) {
-      return quickResults.slice(0, limit)
-    }
-
-    const catalogMatches = await this.searchDarwinCatalogByFuzzy(normalizedQuery, quickLimit)
-    const merged = new Map<string, AppSearchResult>()
-
-    for (const item of [...quickResults, ...catalogMatches]) {
-      if (!merged.has(item.path)) {
-        merged.set(item.path, item)
-      }
-    }
-
-    const finalResults = Array.from(merged.values())
-      .map((item) => ({
-        ...item,
-        score: this.ranking.scoreApp(item, normalizedQuery, this.ranking.normalizeAppDisplayName(basename(item.path)))
-      }))
-      .sort((a, b) => (b.score || 0) - (a.score || 0))
-      .slice(0, limit)
-
-    return finalResults
+    // 内存优先搜索：直接从 catalog 缓存匹配，零外部进程开销
+    // catalog 由 warmupAppSearchIndex() 在启动时构建并定期后台刷新
+    return this.searchDarwinCatalogByFuzzy(normalizedQuery, limit)
   }
 
-  private async formatAppResults(
-    paths: string[],
-    limit: number,
-    query: string,
-    source: string
-  ): Promise<AppSearchResult[]> {
-    const candidates: string[] = []
-    const seen = new Set<string>()
-    const candidateLimit = Math.max(limit * 8, 120)
 
-    for (const rawPath of paths) {
-      const appPath = rawPath.trim()
-      if (!appPath || seen.has(appPath) || !existsSync(appPath)) continue
-      if (!appPath.toLowerCase().endsWith('.app')) continue
-
-      seen.add(appPath)
-      candidates.push(appPath)
-      if (candidates.length >= candidateLimit) break
-    }
-
-    if (candidates.length === 0) return []
-
-    const raw = await Promise.all(
-      candidates.map(async (appPath) => {
-        const name = await this.resolveAppDisplayName(appPath)
-        const item: AppSearchResult = {
-          name,
-          path: appPath,
-          kind: 'application',
-          source
-        }
-        return item
-      })
-    )
-
-    return raw
-      .map((item) => ({
-        ...item,
-        score: this.ranking.scoreApp(item, query, this.ranking.normalizeAppDisplayName(basename(item.path)))
-      }))
-      .sort((a, b) => (b.score || 0) - (a.score || 0))
-      .slice(0, limit)
-  }
 
   private getDarwinCacheFilePath(): string {
     return join(app.getPath('userData'), 'cache', DARWIN_APP_CACHE_FILE)
@@ -405,22 +340,7 @@ export class DarwinSearchProvider implements DesktopSearchProvider {
     })
   }
 
-  private async resolveAppDisplayName(appPath: string): Promise<string> {
-    const fallbackName = this.ranking.normalizeAppDisplayName(basename(appPath))
-    const cachedName = this.appDisplayNameCache.get(appPath)
-    if (cachedName) {
-      return cachedName
-    }
 
-    const resolved = await this.resolveDarwinAppDisplayName(appPath)
-    if (resolved) {
-      this.setCachedAppDisplayName(appPath, resolved)
-      this.schedulePersistDarwinCache()
-      return resolved
-    }
-
-    return fallbackName
-  }
 
   private async resolveDarwinAppDisplayName(appPath: string): Promise<string | undefined> {
     try {
@@ -454,16 +374,4 @@ export class DarwinSearchProvider implements DesktopSearchProvider {
     return trimmed
   }
 
-  private setCachedAppDisplayName(appPath: string, name: string): void {
-    if (this.appDisplayNameCache.has(appPath)) {
-      this.appDisplayNameCache.delete(appPath)
-    }
-    this.appDisplayNameCache.set(appPath, name)
-
-    while (this.appDisplayNameCache.size > 5000) {
-      const oldestKey = this.appDisplayNameCache.keys().next().value as string | undefined
-      if (!oldestKey) break
-      this.appDisplayNameCache.delete(oldestKey)
-    }
-  }
 }

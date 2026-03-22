@@ -1,5 +1,5 @@
-import { existsSync, readdirSync, statSync } from 'fs'
-import { basename, extname, join } from 'path'
+import { existsSync, readdirSync, readFileSync, statSync } from 'fs'
+import { basename, dirname, extname, join } from 'path'
 import { isSystemSearchQueryEligible } from '../../../../shared/system-search'
 import type {
   AppSearchResult,
@@ -10,11 +10,10 @@ import type {
 } from '../types'
 
 const SEARCH_KEY_FILES = 'win-files'
-const SEARCH_KEY_APPS = 'win-apps'
 const SEARCH_KEY_FILES_FALLBACK = 'win-files-fallback'
-const SEARCH_KEY_APPS_FALLBACK = 'win-apps-fallback'
 const SEARCH_KEY_APPS_REGISTRY = 'win-apps-registry'
 const SEARCH_KEY_APPS_APPX = 'win-apps-appx'
+const SEARCH_KEY_APPX_ICONS = 'win-appx-icons'
 
 const CATALOG_TTL_MS = 10 * 60 * 1000
 
@@ -33,8 +32,16 @@ export class WindowsSearchProvider implements DesktopSearchProvider {
 
   warmupAppSearchIndex(): void {
     void this.getCatalog()
-      .then(() => {
-        // no-op
+      .then((catalog) => {
+        // catalog 构建完成后，预计算所有应用名的拼音索引
+        const names: string[] = []
+        for (const entry of catalog) {
+          names.push(entry.name)
+          if (entry.aliases) {
+            names.push(...entry.aliases)
+          }
+        }
+        this.ranking.preheatKeywordIndexes(names)
       })
       .catch(() => {
         // ignore warmup errors
@@ -90,60 +97,21 @@ export class WindowsSearchProvider implements DesktopSearchProvider {
 
   async searchApps(query: string, limit: number): Promise<AppSearchResult[]> {
     const normalizedQuery = query.trim()
-    this.execution.cancelSearchProcess(SEARCH_KEY_APPS)
-    this.execution.cancelSearchProcess(SEARCH_KEY_APPS_FALLBACK)
-    this.execution.cancelSearchProcess(SEARCH_KEY_APPS_REGISTRY)
-    this.execution.cancelSearchProcess(SEARCH_KEY_APPS_APPX)
     if (!isSystemSearchQueryEligible(normalizedQuery)) return []
 
-    const quickLimit = Math.max(limit * 3, 90)
-    let quickPaths: string[] = []
-
-    try {
-      const esPath = this.resolveEsPath()
-      quickPaths = await this.execution.runCommand(esPath, [normalizedQuery, '-n', String(Math.max(limit * 4, 120))], Math.max(limit * 4, 120), SEARCH_KEY_APPS)
-    } catch {
-      try {
-        quickPaths = await this.fallbackWindowsAppSearch(normalizedQuery, Math.max(limit * 4, 120))
-      } catch (fallbackError) {
-        if (this.execution.isKilledProcessError(fallbackError)) {
-          return []
-        }
-        // ignore app fallback errors
-      }
-    }
-
-    const quickEntries = this.formatPathEntries(quickPaths, 'everything')
-    const quickResults = this.sortEntriesByQuery(quickEntries, normalizedQuery).slice(0, quickLimit)
-
+    // 内存优先搜索：直接从 catalog 缓存匹配，零外部进程开销
+    // catalog 由 warmupAppSearchIndex() 在启动时构建（开始菜单 + 注册表 + AppX）
     const catalog = await this.getCatalog()
-    const catalogMatches = this.sortEntriesByQuery(catalog, normalizedQuery).slice(0, quickLimit)
+    const results = this.sortEntriesByQuery(catalog, normalizedQuery).slice(0, limit)
 
-    const merged = new Map<string, WindowsCatalogEntry>()
-    for (const entry of [...quickResults, ...catalogMatches]) {
-      const key = entry.path.toLowerCase()
-      const existing = merged.get(key)
-      if (!existing) {
-        merged.set(key, entry)
-        continue
-      }
-      if ((entry.score || 0) > (existing.score || 0)) {
-        merged.set(key, entry)
-      }
-    }
-
-    const finalResults = Array.from(merged.values())
-      .sort((a, b) => (b.score || 0) - (a.score || 0))
-      .slice(0, limit)
-      .map((entry) => ({
-        name: entry.name,
-        path: entry.path,
-        kind: entry.kind,
-        source: entry.source,
-        score: entry.score
-      }))
-
-    return finalResults
+    return results.map((entry) => ({
+      name: entry.name,
+      path: entry.path,
+      kind: entry.kind,
+      iconPath: entry.iconPath,
+      source: entry.source,
+      score: entry.score
+    }))
   }
 
   private resolveEsPath(): string {
@@ -188,27 +156,7 @@ export class WindowsSearchProvider implements DesktopSearchProvider {
     }
   }
 
-  private formatPathEntries(paths: string[], source: string): WindowsCatalogEntry[] {
-    const entries: WindowsCatalogEntry[] = []
-    const seen = new Set<string>()
 
-    for (const rawPath of paths) {
-      const appPath = rawPath.trim()
-      if (!appPath) continue
-      const dedupeKey = appPath.toLowerCase()
-      if (seen.has(dedupeKey)) continue
-      seen.add(dedupeKey)
-
-      if (!existsSync(appPath)) continue
-      const kind = this.resolveKindFromPath(appPath)
-      if (!kind) continue
-
-      const name = this.ranking.normalizeAppDisplayName(basename(appPath))
-      entries.push(this.createCatalogEntry(name, appPath, kind, source))
-    }
-
-    return entries
-  }
 
   private scoreCatalogEntry(entry: WindowsCatalogEntry, query: string): number {
     const baseScore = this.ranking.scoreApp(entry, query, this.ranking.normalizeAppDisplayName(basename(entry.path)))
@@ -272,10 +220,13 @@ export class WindowsSearchProvider implements DesktopSearchProvider {
         }
       }
 
-      const appxNames = await this.collectAppxNames()
-      if (appxNames.length > 0) {
-        this.attachAppxAliases(map, appxNames)
+      const appxApps = await this.collectAppxApps()
+      if (appxApps.length > 0) {
+        this.mergeAppxEntries(map, appxApps)
       }
+
+      // 为 AppX 独立条目预解析 UWP Logo 图标路径
+      await this.resolveAppxIconPaths(map)
 
       return Array.from(map.values())
     })
@@ -409,8 +360,8 @@ export class WindowsSearchProvider implements DesktopSearchProvider {
     return entries
   }
 
-  private async collectAppxNames(): Promise<string[]> {
-    const script = 'Get-StartApps | ForEach-Object { Write-Output $_.Name }'
+  private async collectAppxApps(): Promise<{ name: string; appId: string }[]> {
+    const script = 'Get-StartApps | ForEach-Object { Write-Output ("$($_.Name)|||$($_.AppID)") }'
 
     try {
       const lines = await this.execution.runCommand(
@@ -419,15 +370,27 @@ export class WindowsSearchProvider implements DesktopSearchProvider {
         3000,
         SEARCH_KEY_APPS_APPX
       )
-      return lines.map((line) => line.trim()).filter(Boolean)
+      const results: { name: string; appId: string }[] = []
+      for (const line of lines) {
+        const trimmed = line.trim()
+        if (!trimmed) continue
+        const sepIndex = trimmed.indexOf('|||')
+        if (sepIndex < 0) continue
+        const name = trimmed.slice(0, sepIndex).trim()
+        const appId = trimmed.slice(sepIndex + 3).trim()
+        if (name && appId) {
+          results.push({ name, appId })
+        }
+      }
+      return results
     } catch {
       return []
     }
   }
 
-  private attachAppxAliases(map: Map<string, WindowsCatalogEntry>, names: string[]): void {
+  private mergeAppxEntries(map: Map<string, WindowsCatalogEntry>, apps: { name: string; appId: string }[]): void {
+    // 构建名称桶，用于快速匹配
     const nameBuckets = new Map<string, WindowsCatalogEntry[]>()
-
     for (const entry of map.values()) {
       const key = this.normalizeName(entry.name)
       const bucket = nameBuckets.get(key)
@@ -438,10 +401,11 @@ export class WindowsSearchProvider implements DesktopSearchProvider {
       }
     }
 
-    for (const appxName of names) {
+    for (const { name: appxName, appId } of apps) {
       const normalized = this.normalizeName(appxName)
       if (!normalized) continue
 
+      // 精确匹配：名称完全一致
       const direct = nameBuckets.get(normalized)
       if (direct && direct.length > 0) {
         direct.forEach((entry) => {
@@ -452,7 +416,8 @@ export class WindowsSearchProvider implements DesktopSearchProvider {
         continue
       }
 
-      // 近似回填：尝试把 AppX 名称作为包含关系别名挂到相似条目上。
+      // 近似匹配：包含关系
+      let matched = false
       for (const entry of map.values()) {
         const entryNorm = this.normalizeName(entry.name)
         if (!entryNorm) continue
@@ -460,9 +425,144 @@ export class WindowsSearchProvider implements DesktopSearchProvider {
           if (!entry.aliases.includes(appxName)) {
             entry.aliases.push(appxName)
           }
+          matched = true
           break
         }
       }
+
+      // 无法匹配到现有条目 → 创建独立的 AppX catalog 条目
+      if (!matched) {
+        const appPath = `shell:AppsFolder\\${appId}`
+        const key = appPath.toLowerCase()
+        if (!map.has(key)) {
+          map.set(key, this.createCatalogEntry(appxName, appPath, 'application', 'appx'))
+        }
+      }
+    }
+  }
+
+  /**
+   * 为 source === 'appx' 的 catalog 条目批量预解析 UWP Logo 图标路径。
+   * 使用单次 PowerShell 获取 PackageFamilyName → InstallLocation 映射，
+   * 再从 AppxManifest.xml 解析 Logo 路径，设置 iconPath。
+   */
+  private async resolveAppxIconPaths(map: Map<string, WindowsCatalogEntry>): Promise<void> {
+    // 收集需要解析图标的 AppX 条目
+    const appxEntries: { entry: WindowsCatalogEntry; familyName: string }[] = []
+    for (const entry of map.values()) {
+      if (entry.source !== 'appx') continue
+      // AppID 格式: shell:AppsFolder\{PackageFamilyName}!{EntryPoint}
+      const appId = entry.path.replace(/^shell:AppsFolder\\/, '')
+      const bangIndex = appId.indexOf('!')
+      const familyName = bangIndex > 0 ? appId.slice(0, bangIndex) : appId
+      if (familyName) {
+        appxEntries.push({ entry, familyName })
+      }
+    }
+
+    if (appxEntries.length === 0) return
+
+    // 单次 PowerShell 获取所有 AppX 包的 PackageFamilyName → InstallLocation
+    const script = 'Get-AppxPackage | Where-Object { $_.InstallLocation } | ForEach-Object { Write-Output "$($_.PackageFamilyName)|||$($_.InstallLocation)" }'
+    let lines: string[] = []
+    try {
+      lines = await this.execution.runCommand(
+        'powershell',
+        ['-NoProfile', '-Command', script],
+        5000,
+        SEARCH_KEY_APPX_ICONS
+      )
+    } catch {
+      return
+    }
+
+    // 构建 PackageFamilyName → InstallLocation 映射
+    const locationMap = new Map<string, string>()
+    for (const line of lines) {
+      const trimmed = line.trim()
+      if (!trimmed) continue
+      const sepIndex = trimmed.indexOf('|||')
+      if (sepIndex < 0) continue
+      const familyName = trimmed.slice(0, sepIndex).trim()
+      const installLocation = trimmed.slice(sepIndex + 3).trim()
+      if (familyName && installLocation) {
+        locationMap.set(familyName.toLowerCase(), installLocation)
+      }
+    }
+
+    // 为每个 AppX 条目解析 Logo 路径
+    for (const { entry, familyName } of appxEntries) {
+      const installLocation = locationMap.get(familyName.toLowerCase())
+      if (!installLocation) continue
+
+      const logoPath = this.findAppxLogoAsset(installLocation)
+      if (logoPath) {
+        entry.iconPath = logoPath
+      }
+    }
+  }
+
+  /**
+   * 从 AppX 安装目录的 AppxManifest.xml 解析 Logo 路径，
+   * 并查找实际的 scale 变体文件（.scale-200.png 等）。
+   */
+  private findAppxLogoAsset(installLocation: string): string | null {
+    try {
+      const manifestPath = join(installLocation, 'AppxManifest.xml')
+      if (!existsSync(manifestPath)) return null
+
+      const manifest = readFileSync(manifestPath, 'utf-8')
+
+      // 优先查找 Square44x44Logo（小图标，适合列表显示），其次 Square150x150Logo，最后 Logo
+      const logoPatterns = [
+        /Square44x44Logo\s*=\s*"([^"]+)"/i,
+        /Square150x150Logo\s*=\s*"([^"]+)"/i,
+        /Logo\s*=\s*"([^"]+)"/i
+      ]
+
+      let relativeLogoPath: string | null = null
+      for (const pattern of logoPatterns) {
+        const match = manifest.match(pattern)
+        if (match?.[1]) {
+          relativeLogoPath = match[1].trim()
+          break
+        }
+      }
+
+      if (!relativeLogoPath) return null
+
+      // Logo 路径形如 "Assets\StoreLogo.png"，实际文件可能是 scale 变体
+      const logoDir = join(installLocation, dirname(relativeLogoPath))
+      const logoBasename = basename(relativeLogoPath)
+      const logoNameWithoutExt = logoBasename.replace(/\.[^.]+$/, '')
+      const logoExt = extname(logoBasename) || '.png'
+
+      // 直接路径
+      const directPath = join(installLocation, relativeLogoPath)
+      if (existsSync(directPath)) return directPath
+
+      // 查找 scale 变体（优先高分辨率）
+      const scaleVariants = [
+        `${logoNameWithoutExt}.scale-200${logoExt}`,
+        `${logoNameWithoutExt}.scale-150${logoExt}`,
+        `${logoNameWithoutExt}.scale-100${logoExt}`,
+        `${logoNameWithoutExt}.scale-400${logoExt}`,
+        `${logoNameWithoutExt}.targetsize-256${logoExt}`,
+        `${logoNameWithoutExt}.targetsize-48${logoExt}`,
+        `${logoNameWithoutExt}.targetsize-32${logoExt}`,
+        `${logoNameWithoutExt}.targetsize-24${logoExt}`
+      ]
+
+      if (existsSync(logoDir)) {
+        for (const variant of scaleVariants) {
+          const variantPath = join(logoDir, variant)
+          if (existsSync(variantPath)) return variantPath
+        }
+      }
+
+      return null
+    } catch {
+      return null
     }
   }
 
@@ -484,27 +584,4 @@ export class WindowsSearchProvider implements DesktopSearchProvider {
     return this.execution.runCommand('powershell', ['-NoProfile', '-Command', script], limit, searchKey)
   }
 
-  private async fallbackWindowsAppSearch(query: string, limit: number): Promise<string[]> {
-    const safeQuery = query.replace(/'/g, "''")
-    const script = `
-      $targets = @(
-        "$env:ProgramData\\Microsoft\\Windows\\Start Menu\\Programs",
-        "$env:APPDATA\\Microsoft\\Windows\\Start Menu\\Programs"
-      )
-      $results = New-Object System.Collections.ArrayList
-      foreach ($base in $targets) {
-        if (-not (Test-Path $base)) { continue }
-        Get-ChildItem -Path $base -Recurse -File -ErrorAction SilentlyContinue |
-          Where-Object { $_.Name -like '*${safeQuery}*' -and ($_.Extension -ieq '.lnk' -or $_.Extension -ieq '.exe' -or $_.Extension -ieq '.appref-ms') } |
-          ForEach-Object {
-            if ($results.Count -lt ${limit}) {
-              [void]$results.Add($_.FullName)
-            }
-          }
-      }
-      foreach ($item in $results) { Write-Output $item }
-    `
-
-    return this.execution.runCommand('powershell', ['-NoProfile', '-Command', script], limit, SEARCH_KEY_APPS_FALLBACK)
-  }
 }

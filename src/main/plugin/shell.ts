@@ -8,6 +8,11 @@ export class PluginShell {
    * @param path 文件路径
    */
   async openPath(path: string): Promise<string> {
+    // Windows AppX/UWP 应用使用 shell: URI 启动
+    if (process.platform === 'win32' && path.startsWith('shell:')) {
+      await shell.openExternal(path)
+      return ''
+    }
     if (!existsSync(path)) {
       throw new Error(`File not found: ${path}`)
     }

@@ -1,4 +1,4 @@
-import { app, nativeImage, NativeImage } from 'electron'
+import { app, nativeImage, NativeImage, shell } from 'electron'
 import * as os from 'os'
 import * as crypto from 'crypto'
 import { existsSync, readFileSync } from 'fs'
@@ -239,6 +239,19 @@ export class PluginSystem {
         return { icon: bundleIcon, source: 'bundle' }
       }
 
+    }
+
+    // Windows .lnk 快捷方式：解析目标路径，用目标 .exe 请求图标
+    if (process.platform === 'win32' && ext === '.lnk') {
+      try {
+        const shortcutDetails = shell.readShortcutLink(normalizedPath)
+        const targetPath = shortcutDetails.target
+        if (targetPath && targetPath !== normalizedPath && existsSync(targetPath)) {
+          return this.resolveNativeIcon(targetPath, options)
+        }
+      } catch {
+        // readShortcutLink 失败时继续走默认流程
+      }
     }
 
     if (options.kind === 'file' && this.isDirectImagePath(normalizedPath)) {

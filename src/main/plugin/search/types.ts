@@ -30,6 +30,7 @@ export interface SearchRankingContext {
   scoreApp(item: AppSearchResult, query: string, fallbackName?: string): number
   scoreFile(item: FileSearchResult, query: string): number
   normalizeAppDisplayName(filename: string): string
+  preheatKeywordIndexes(names: string[]): void
 }
 
 export interface DesktopSearchProvider {

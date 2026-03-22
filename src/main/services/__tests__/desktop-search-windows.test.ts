@@ -48,6 +48,6 @@ describe('WindowsSearchProvider system search query guard', () => {
 
     assert.deepEqual(result, [])
     assert.equal(runCommandCalls.length, 0)
-    assert.deepEqual(cancelled, ['win-apps', 'win-apps-fallback', 'win-apps-registry', 'win-apps-appx'])
+    assert.deepEqual(cancelled, [])
   })
 })

@@ -147,7 +147,7 @@ export interface CmdFilesMatch {
 const regexCache = new Map<string, RegExp>()
 const MAX_CACHE_SIZE = 1000
 const keywordCache = new Map<string, KeywordSearchIndex>()
-const MAX_KEYWORD_CACHE_SIZE = 3000
+const MAX_KEYWORD_CACHE_SIZE = 8000
 
 const SEARCH_SEPARATOR_REGEX = /[\s\-_./\\|,:;，。！？、：；'"`‘’“”()（）[\]【】{}<>《》+*&^%$#@!~]+/g
 const CAMEL_CASE_BOUNDARY_REGEX = /([a-z0-9])([A-Z])/g

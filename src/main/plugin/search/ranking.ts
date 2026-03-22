@@ -78,4 +78,30 @@ export class SearchRanking implements SearchRankingContext {
       .replace(/\.exe$/i, '')
       .replace(/\.appref-ms$/i, '')
   }
+
+  /**
+   * 预计算应用名的拼音索引，使首次搜索零 pinyin-pro 调用开销。
+   * 使用 setTimeout 分片执行，避免阻塞主线程。
+   */
+  preheatKeywordIndexes(names: string[]): void {
+    const unique = Array.from(new Set(names.filter(Boolean)))
+    if (unique.length === 0) return
+
+    const BATCH_SIZE = 50
+    let cursor = 0
+
+    const processBatch = () => {
+      const end = Math.min(cursor + BATCH_SIZE, unique.length)
+      for (let i = cursor; i < end; i++) {
+        getCachedKeywordIndex(unique[i])
+      }
+      cursor = end
+      if (cursor < unique.length) {
+        setTimeout(processBatch, 0)
+      }
+    }
+
+    // 首批立即执行（同步），后续分片以避免阻塞
+    processBatch()
+  }
 }
