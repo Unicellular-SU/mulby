@@ -643,6 +643,14 @@ export default function SettingsView({
     return unsub
   }, [])
 
+  // 监听主进程推送的快捷键状态变化（后台重试成功时触发）
+  useEffect(() => {
+    const unsub = window.mulby.settings.onShortcutStatusChanged((status) => {
+      setShortcutStatus(status)
+    })
+    return unsub
+  }, [])
+
   const currentSectionLabel = useMemo(
     () => SECTION_ITEMS.find(item => item.id === section)?.label ?? '',
     [section]

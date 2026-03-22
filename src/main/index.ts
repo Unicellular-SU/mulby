@@ -23,6 +23,7 @@ import { setUiDialogThemeResolver } from './services/ui-dialog-service'
 import { isIgnoringBlur, startIgnoringBlur, stopIgnoringBlur, setWindowsProvider } from './services/blur-manager'
 import { appSettingsManager } from './services/app-settings'
 import { AppShortcutManager } from './services/app-shortcuts'
+import { KeyboardHookService } from './services/keyboard-hook'
 import { AppTrayManager } from './services/app-tray'
 import { TrayMenuWindowManager } from './services/tray-menu-window'
 import { ClipboardWatcher } from './services/clipboard-watcher-v2'
@@ -1058,9 +1059,23 @@ app.whenReady().then(async () => {
   // 设置剪贴板历史管理器到插件管理器
   pluginManager.setClipboardHistoryManager(clipboardHistoryManager)
 
+  // 底层键盘钩子服务（globalShortcut 失败时的兜底）
+  const keyboardHookService = new KeyboardHookService()
+
   const appShortcutManager = new AppShortcutManager({
-    toggleWindow: () => toggleWindow(),
-    openSettings: () => openSettingsView()
+    actions: {
+      toggleWindow: () => toggleWindow(),
+      openSettings: () => openSettingsView()
+    },
+    onStatusChange: (status) => {
+      // 后台重试成功后，推送快捷键状态到所有渲染窗口
+      for (const win of BrowserWindow.getAllWindows()) {
+        if (!win.isDestroyed()) {
+          win.webContents.send('settings:shortcutStatus:changed', status)
+        }
+      }
+    },
+    keyboardHook: keyboardHookService
   })
 
   // macOS: 监听 dock 图标点击事件

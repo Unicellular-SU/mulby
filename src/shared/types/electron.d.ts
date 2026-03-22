@@ -538,6 +538,7 @@ export interface ElectronAPI {
     downloadUpdate: () => Promise<UpdateCenterState>
     installUpdate: () => Promise<boolean>
     onUpdateStateChanged: (callback: (state: UpdateCenterState) => void) => () => void
+    onShortcutStatusChanged: (callback: (status: ShortcutStatusMap) => void) => () => void
   }
   developer: {
     addPluginPath: (path: string) => Promise<{ success: boolean; error?: string }>

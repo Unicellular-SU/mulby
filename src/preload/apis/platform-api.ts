@@ -161,6 +161,11 @@ export function createPlatformApi(ipcRenderer: IpcRenderer) {
         const listener = (_event: unknown, state: unknown) => callback(state)
         ipcRenderer.on('updateCenter:stateChanged', listener)
         return () => ipcRenderer.removeListener('updateCenter:stateChanged', listener)
+      },
+      onShortcutStatusChanged: (callback: (status: unknown) => void) => {
+        const listener = (_event: unknown, status: unknown) => callback(status)
+        ipcRenderer.on('settings:shortcutStatus:changed', listener)
+        return () => ipcRenderer.removeListener('settings:shortcutStatus:changed', listener)
       }
     },
 

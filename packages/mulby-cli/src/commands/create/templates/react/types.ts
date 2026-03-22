@@ -791,6 +791,7 @@ interface MulbySettings {
   downloadUpdate(): Promise<unknown>
   installUpdate(): Promise<unknown>
   onUpdateStateChanged(callback: (state: unknown) => void): Disposable
+  onShortcutStatusChanged(callback: (status: unknown) => void): Disposable
 }
 
 interface MulbyDeveloper {

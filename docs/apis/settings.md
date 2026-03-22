@@ -50,6 +50,9 @@
 ### onUpdateStateChanged(callback)
 监听更新状态实时变化（下载进度等）。返回取消监听函数。
 
+### onShortcutStatusChanged(callback)
+监听快捷键注册状态变化（后台重试抢回快捷键成功时触发）。返回取消监听函数。
+
 ## 示例
 
 ```ts

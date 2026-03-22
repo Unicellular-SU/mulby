@@ -130,13 +130,13 @@ export default function ShortcutInput({
   }, [recording, onChange, onRecordEnd])
 
   const statusText = status?.ok
-    ? ''
+    ? (status.via === 'hook' ? '已通过底层监听接管，其他应用可能同时响应' : '')
     : status?.reason === 'duplicate'
       ? '快捷键冲突'
       : status?.reason === 'system-reserved'
         ? '系统保留快捷键'
         : status?.reason === 'in-use'
-          ? '被系统或其他应用占用'
+          ? '被其他应用占用，正在尝试抢回…'
           : status?.reason === 'invalid'
             ? '格式无效'
             : '注册失败'
@@ -152,7 +152,7 @@ export default function ShortcutInput({
           <div className="min-w-[200px] flex-1 rounded-xl border border-slate-200 bg-white px-3 py-2 text-left text-sm text-slate-700 shadow-sm dark:border-slate-800 dark:bg-slate-950 dark:text-slate-200">
             <div className="text-sm font-medium">{displayValue}</div>
             {(error || statusText) && (
-              <div className="text-xs text-red-500">{error || statusText}</div>
+              <div className={`text-xs ${status?.ok && status?.via === 'hook' ? 'text-amber-500' : 'text-red-500'}`}>{error || statusText}</div>
             )}
           </div>
           <button

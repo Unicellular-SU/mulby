@@ -208,6 +208,8 @@ export interface AppSettings {
 export interface ShortcutStatus {
   ok: boolean
   reason?: ShortcutStatusReason
+  /** 快捷键生效方式：'hook' 表示通过底层键盘钩子接管 */
+  via?: 'hook'
 }
 
 export type ShortcutStatusReason = 'duplicate' | 'in-use' | 'invalid' | 'system-reserved'
