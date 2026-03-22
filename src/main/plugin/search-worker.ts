@@ -1,7 +1,7 @@
 import type { SearchRequest, SearchResponse, SyncRequest } from './search-protocol'
 import type { SearchPluginData } from './search-protocol'
 import type { PluginFeature } from '../../shared/types/plugin'
-import { findBestMatch, normalizeInputPayload } from '../../shared/search-matcher'
+import { findBestMatch, normalizeInputPayload, getCachedKeywordIndex } from '../../shared/search-matcher'
 
 const parentPort = process.parentPort ?? null
 const keepAliveTimer = setInterval(() => {
@@ -21,6 +21,24 @@ function send(message: SearchResponse): void {
   }
 }
 
+/**
+ * 预热所有 keyword cmd 的拼音索引
+ *
+ * 在 sync 完成后异步执行，确保首次搜索时所有拼音索引已在缓存中，
+ * 消除 pinyin-pro 冷启动延迟（50-200ms）。
+ */
+function preheatKeywordIndexes(plugins: SearchPluginData[]): void {
+  for (const plugin of plugins) {
+    for (const feature of plugin.features) {
+      for (const cmd of feature.cmds) {
+        if (cmd.type === 'keyword' && typeof cmd.value === 'string') {
+          getCachedKeywordIndex(cmd.value)
+        }
+      }
+    }
+  }
+}
+
 const onMessage = (request: unknown) => {
   const payload = (
     typeof request === 'object' && request !== null && 'data' in request
@@ -37,6 +55,8 @@ const onMessage = (request: unknown) => {
       type: 'sync-ack',
       payload: {}
     })
+    // 异步预热拼音索引，不阻塞 sync-ack 响应
+    preheatKeywordIndexes(pluginSnapshot)
     return
   }
 

@@ -547,10 +547,20 @@ function PluginList({
       }
     }
 
-    if (import.meta.env.DEV) {
-      kickoffTimer = setTimeout(runSearch, 0)
+    // 无输入时立即响应，有输入时 debounce 80ms 合并快速连续输入
+    const hasInput = searchPayload.text.trim().length > 0 || searchPayload.attachments.length > 0
+    const SEARCH_DEBOUNCE_MS = 80
+
+    if (!hasInput) {
+      // 清空输入立即响应
+      if (import.meta.env.DEV) {
+        kickoffTimer = setTimeout(runSearch, 0)
+      } else {
+        runSearch()
+      }
     } else {
-      runSearch()
+      // 有输入时 debounce，合并连续键入
+      kickoffTimer = setTimeout(runSearch, SEARCH_DEBOUNCE_MS)
     }
 
     return () => {

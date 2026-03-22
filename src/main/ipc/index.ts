@@ -59,12 +59,12 @@ export function registerAllHandlers(
   systemPluginWindowManager: SystemPluginWindowManager,
   systemPageWindowManager: SystemPageWindowManager,
   onboardingWindowManager: OnboardingWindowManager
-) {
+): { warmupFeatureIconCache: () => void } {
   registerClipboardHandlers()
   registerClipboardHistoryHandlers(clipboardHistoryManager)
   registerNotificationHandlers()
   registerWindowHandlers(getMainWindow, pluginWindowManager, themeManager, appSettingsManager, pluginManager)
-  registerPluginHandlers(pluginManager)
+  const pluginHooks = registerPluginHandlers(pluginManager)
   registerThemeHandlers(themeManager)
   registerScreenHandlers()
   registerShellHandlers()
@@ -102,4 +102,6 @@ export function registerAllHandlers(
 
   // 注册引导窗口 IPC 处理器
   registerOnboardingHandlers(appSettingsManager, appShortcutManager, themeManager, onboardingWindowManager)
+
+  return pluginHooks
 }

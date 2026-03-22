@@ -43,6 +43,7 @@ import {
   getMainWindowWindowSize
 } from './main-window-frame'
 import { OnboardingWindowManager } from './services/onboarding-window'
+import { refreshActiveWindowCache } from './services/active-window'
 import { patchConsoleWithTimestamp } from '../shared/utils/console'
 
 patchConsoleWithTimestamp()
@@ -909,6 +910,9 @@ function showMainWindow() {
     mainWindow.focus()
     mainWindowHasBeenShown = true
 
+    // 刷新活跃窗口缓存，供搜索路径同步读取（异步执行，不阻塞窗口显示）
+    refreshActiveWindowCache()
+
     if (needsOpacityGuard) {
       mainWindow.webContents.invalidate()
       setTimeout(() => {
@@ -1065,7 +1069,7 @@ app.whenReady().then(async () => {
   }
 
   // 注册 IPC 处理器
-  registerAllHandlers(
+  const ipcHooks = registerAllHandlers(
     getMainWindow,
     pluginManager,
     pluginWindowManager,
@@ -1181,6 +1185,8 @@ app.whenReady().then(async () => {
         if (appSettingsManager.getSettings().search.enableApps) {
           pluginDesktop.warmupAppSearchIndex()
         }
+        // 预热 feature 图标缓存（必须在 init 完成后）
+        ipcHooks.warmupFeatureIconCache()
       })
     })
     void onboardingWindowManager.show()
@@ -1195,6 +1201,9 @@ app.whenReady().then(async () => {
     if (appSettingsManager.getSettings().search.enableApps) {
       pluginDesktop.warmupAppSearchIndex()
     }
+
+    // 预热 feature 图标缓存（必须在 init 完成后，getEnabled() 才有数据）
+    ipcHooks.warmupFeatureIconCache()
   }
 })
 

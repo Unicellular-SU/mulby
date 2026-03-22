@@ -26,7 +26,7 @@ import {
 } from '../../shared/types/plugin'
 import { PluginSearchWorker } from './search-worker-manager'
 import { SystemPluginWindowManager } from '../services/system-plugin-window-manager'
-import { getActiveWindow } from '../services/active-window'
+import { getCachedActiveWindow, getActiveWindow } from '../services/active-window'
 import {
   filterAttachmentsByCmd,
   findBestMatch,
@@ -527,10 +527,18 @@ export class PluginManager {
     const hasAttachments = attachments.length > 0
 
     // 注入系统前台窗口上下文（用于 CmdWindow 匹配）
+    // 策略：缓存有值时同步读取（零开销），缓存为空时回退异步调用（确保首次搜索窗口匹配正确）
+    // 缓存在主窗口 show 事件中异步刷新
     if (!normalizedInput.activeWindow) {
-      const activeWindow = await getActiveWindow()
-      if (activeWindow) {
-        normalizedInput.activeWindow = activeWindow
+      const cached = getCachedActiveWindow()
+      if (cached) {
+        normalizedInput.activeWindow = cached
+      } else {
+        // 缓存冷启动（首次搜索或应用刚启动），回退到异步调用
+        const activeWindow = await getActiveWindow()
+        if (activeWindow) {
+          normalizedInput.activeWindow = activeWindow
+        }
       }
     }
 
@@ -575,6 +583,10 @@ export class PluginManager {
         })
         .filter((item): item is SearchResult => Boolean(item))
     } catch (error) {
+      // P2: 被更新的搜索请求取消时，不回退到主进程搜索，直接返回空
+      if (error instanceof Error && error.message === 'Search request superseded') {
+        return []
+      }
       console.warn('[PluginManager] Search worker failed, falling back to main process search', error)
       const results: SearchResult[] = []
       for (const plugin of enabledPlugins) {

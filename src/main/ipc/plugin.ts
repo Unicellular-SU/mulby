@@ -17,12 +17,34 @@ import { PluginStoreService } from '../plugin/store-service'
 
 
 
-export function registerPluginHandlers(manager: PluginManager) {
+export function registerPluginHandlers(manager: PluginManager): { warmupFeatureIconCache: () => void } {
   const installer = new PluginInstaller()
   const storeService = new PluginStoreService(manager, installer)
   const userPluginsDir = resolve(app.getPath('userData'), 'plugins')
   const isBuiltin = (pluginPath: string) => !resolve(pluginPath).startsWith(userPluginsDir)
   const featureIconCache = new Map<string, Awaited<ReturnType<typeof resolveIcon>> | null>()
+
+  // 预热所有启用插件的 feature 图标缓存
+  // 搜索时 formatResultItem 直接从缓存读取，零异步开销
+  // 注意：此函数必须在 pluginManager.init() 完成后调用，否则 getEnabled() 为空
+  const warmupFeatureIconCache = () => {
+    const enabledPlugins = manager.getEnabled()
+    if (enabledPlugins.length === 0) return
+    for (const plugin of enabledPlugins) {
+      const features = manager.getFeatures(plugin.id)
+      for (const feature of features) {
+        if (!feature.icon) continue
+        const cacheKey = buildFeatureIconCacheKey(plugin.id, feature, plugin.path)
+        if (featureIconCache.has(cacheKey)) continue
+        // 异步预热，不阻塞
+        void resolveIcon(feature.icon, plugin.path).then((resolved) => {
+          featureIconCache.set(cacheKey, resolved || null)
+        }).catch(() => {
+          featureIconCache.set(cacheKey, null)
+        })
+      }
+    }
+  }
 
   const resolveResultIcon = async (
     plugin: Plugin,
@@ -349,4 +371,6 @@ export function registerPluginHandlers(manager: PluginManager) {
   ipcMain.handle('plugin:stopPlugin', async (_, pluginId: string) => {
     return manager.stopPlugin(pluginId)
   })
+
+  return { warmupFeatureIconCache }
 }

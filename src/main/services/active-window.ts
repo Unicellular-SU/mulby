@@ -51,6 +51,33 @@ export async function getActiveWindow(): Promise<ActiveWindowInfo | null> {
   }
 }
 
+/**
+ * 异步刷新活跃窗口缓存
+ *
+ * 在主窗口显示时调用一次，将结果缓存供搜索路径同步读取。
+ * 这样搜索时不再需要等待外部进程（osascript/PowerShell）。
+ */
+export function refreshActiveWindowCache(): void {
+  getActiveWindowPlatform()
+    .then((result) => {
+      cachedResult = result
+      cachedAt = Date.now()
+    })
+    .catch(() => {
+      // 刷新失败不影响搜索，保留旧缓存
+    })
+}
+
+/**
+ * 同步返回已缓存的活跃窗口信息
+ *
+ * 搜索热路径专用：直接返回缓存值，零等待。
+ * 如果缓存为空（应用刚启动时），返回 null。
+ */
+export function getCachedActiveWindow(): ActiveWindowInfo | null {
+  return cachedResult
+}
+
 /** 清除缓存（测试用） */
 export function clearActiveWindowCache(): void {
   cachedResult = null

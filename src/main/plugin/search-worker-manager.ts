@@ -70,7 +70,16 @@ export class PluginSearchWorker {
       await this.syncPlugins(this.lastSyncedPlugins)
     }
 
-    const requestId = this.generateId()
+    // P2: 取消所有之前未完成的搜索请求，避免过时结果无谓等待
+    for (const [pendingId, pending] of this.pending) {
+      if (pendingId.startsWith('search:')) {
+        clearTimeout(pending.timeout)
+        pending.reject(new Error('Search request superseded'))
+        this.pending.delete(pendingId)
+      }
+    }
+
+    const requestId = `search:${this.generateId()}`
     const request: SearchRequest = {
       id: requestId,
       type: 'search',
