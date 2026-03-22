@@ -6,7 +6,8 @@ export class InBrowserWindow {
     public id: number;
     private readonly cleanupSessionOnClose: boolean;
     private readonly ownedSession: Session;
-    private sessionCleanupPromise: Promise<void> | null = null;
+    // 公开 session 清理 promise，供 Manager 在退出前等待
+    public sessionCleanupPromise: Promise<void> | null = null;
 
     constructor(options: InBrowserOptions, cleanupSessionOnClose: boolean = false) {
         this.window = new BrowserWindow({
@@ -25,7 +26,7 @@ export class InBrowserWindow {
 
         if (this.cleanupSessionOnClose) {
             this.window.once('closed', () => {
-                void this.cleanupSessionData();
+                this.sessionCleanupPromise = this.cleanupSessionData();
             });
         }
     }

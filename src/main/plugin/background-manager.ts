@@ -38,6 +38,9 @@ export class BackgroundPluginManager extends EventEmitter {
   private watchdog: PluginHostWatchdog
   private stateManager: PluginStateManager
   private restoreTimer: NodeJS.Timeout | null = null
+  // 持有 watchdog 监听器引用，便于 shutdown 时移除
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  private watchdogHandlers: { event: string; handler: (...args: any[]) => void }[] = []
 
   constructor(
     hostManager: PluginHostManager,
@@ -55,34 +58,56 @@ export class BackgroundPluginManager extends EventEmitter {
    * 设置 Watchdog 事件监听
    */
   private setupWatchdogListeners(): void {
-    this.watchdog.on('host:unresponsive', (pluginId: string) => {
+    const onUnresponsive = (pluginId: string) => {
       if (this.isRunning(pluginId)) {
         console.warn(`[BackgroundManager] Plugin ${pluginId} unresponsive, stopping`)
         this.stop(pluginId, 'unresponsive')
       }
-    })
+    }
 
-    this.watchdog.on('host:memory-exceeded', (pluginId: string, memoryMB: number) => {
+    const onMemoryExceeded = (pluginId: string, memoryMB: number) => {
       if (this.isRunning(pluginId)) {
         console.warn(`[BackgroundManager] Plugin ${pluginId} memory exceeded: ${memoryMB}MB, stopping`)
         this.stop(pluginId, 'memory-exceeded')
       }
-    })
+    }
 
-    this.watchdog.on('host:error-threshold', (pluginId: string, errorCount: number) => {
+    const onErrorThreshold = (pluginId: string, errorCount: number) => {
       if (this.isRunning(pluginId)) {
         console.warn(`[BackgroundManager] Plugin ${pluginId} error threshold: ${errorCount}, stopping`)
         this.stop(pluginId, 'error-threshold')
       }
-    })
+    }
 
     // Phase 4: 内存泄漏警告
-    this.watchdog.on('host:memory-leak-warning', (pluginId: string, growthRate: number) => {
+    const onMemoryLeak = (pluginId: string, growthRate: number) => {
       if (this.isRunning(pluginId)) {
         console.warn(`[BackgroundManager] Plugin ${pluginId} memory leak detected: ${growthRate.toFixed(2)}MB/min`)
         // 记录警告但不立即停止，让用户决定是否停止
       }
-    })
+    }
+
+    this.watchdog.on('host:unresponsive', onUnresponsive)
+    this.watchdog.on('host:memory-exceeded', onMemoryExceeded)
+    this.watchdog.on('host:error-threshold', onErrorThreshold)
+    this.watchdog.on('host:memory-leak-warning', onMemoryLeak)
+
+    this.watchdogHandlers = [
+      { event: 'host:unresponsive', handler: onUnresponsive },
+      { event: 'host:memory-exceeded', handler: onMemoryExceeded },
+      { event: 'host:error-threshold', handler: onErrorThreshold },
+      { event: 'host:memory-leak-warning', handler: onMemoryLeak },
+    ]
+  }
+
+  /**
+   * 移除 watchdog 事件监听器，防止 EventEmitter 泄漏
+   */
+  private removeWatchdogListeners(): void {
+    for (const { event, handler } of this.watchdogHandlers) {
+      this.watchdog.removeListener(event, handler)
+    }
+    this.watchdogHandlers = []
   }
 
   /**
@@ -427,6 +452,7 @@ export class BackgroundPluginManager extends EventEmitter {
    */
   async shutdown(): Promise<void> {
     this.cancelRestoreTimer()
+    this.removeWatchdogListeners()
     const plugins = this.list()
 
     if (plugins.length === 0) {

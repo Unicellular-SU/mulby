@@ -31,6 +31,7 @@ interface PluginHost {
   ready: boolean
   activeRequests: number  // 活跃请求计数器
   startedAt: number       // 启动时间戳
+  cachedApi?: ReturnType<typeof createPluginAPI>  // 缓存 API 实例，避免每次请求重建
   pendingRequests: Map<string, {
     resolve: (value: unknown) => void
     reject: (error: Error) => void
@@ -361,13 +362,17 @@ export class PluginHostManager extends EventEmitter {
     const [namespace, method] = api.split('.')
 
     try {
-      const pluginApi = createPluginAPI(
-        plugin.id,
-        this.messageBus,
-        this.taskScheduler,
-        this.clipboardHistoryManager,
-        { runCommandAllowed: host.runCommandAllowed }
-      )
+      // 缓存 pluginAPI 实例，避免每次 API 调用都重新创建
+      if (!host.cachedApi) {
+        host.cachedApi = createPluginAPI(
+          plugin.id,
+          this.messageBus,
+          this.taskScheduler,
+          this.clipboardHistoryManager,
+          { runCommandAllowed: host.runCommandAllowed }
+        )
+      }
+      const pluginApi = host.cachedApi
       const apiNamespace = pluginApi[namespace as keyof typeof pluginApi]
 
       if (!apiNamespace || typeof apiNamespace !== 'object') {
@@ -690,13 +695,17 @@ export class PluginHostManager extends EventEmitter {
 
     // 直接调用主进程的 API（因为 API 实现在主进程中）
     const [namespace, methodName] = method.split('.')
-    const pluginApi = createPluginAPI(
-      pluginName,
-      this.messageBus,
-      this.taskScheduler,
-      this.clipboardHistoryManager,
-      { runCommandAllowed: host.runCommandAllowed }
-    )
+    // 缓存 pluginAPI 实例，避免每次调用都重新创建
+    if (!host.cachedApi) {
+      host.cachedApi = createPluginAPI(
+        pluginName,
+        this.messageBus,
+        this.taskScheduler,
+        this.clipboardHistoryManager,
+        { runCommandAllowed: host.runCommandAllowed }
+      )
+    }
+    const pluginApi = host.cachedApi
     const apiNamespace = pluginApi[namespace as keyof typeof pluginApi]
 
     if (!apiNamespace || typeof apiNamespace !== 'object') {

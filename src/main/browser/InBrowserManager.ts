@@ -211,4 +211,20 @@ export class InBrowserManager {
         this.windowOwners.clear();
         this.ownerToWindows.clear();
     }
+
+    /**
+     * 等待所有未完成的 session 清理（应用退出前调用）
+     * 确保通过用户关闭（closed 事件触发的 fire-and-forget 路径）的窗口也完成清理
+     */
+    public async waitForPendingCleanups(): Promise<void> {
+        const promises: Promise<void>[] = []
+        for (const win of this.windows.values()) {
+            if (win.sessionCleanupPromise) {
+                promises.push(win.sessionCleanupPromise)
+            }
+        }
+        if (promises.length > 0) {
+            await Promise.allSettled(promises)
+        }
+    }
 }

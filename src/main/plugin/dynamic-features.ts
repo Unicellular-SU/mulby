@@ -120,14 +120,18 @@ function matchesPlatform(feature: DynamicFeature): boolean {
 class PluginFeatureStore {
   private data: FeatureStoreData = {}
   // 变更回调，用于通知外部（如搜索 Worker）同步
-  private changeListeners: Array<() => void> = []
+  private changeListeners: Set<() => void> = new Set()
 
   constructor() {
     this.load()
   }
 
   onChange(listener: () => void): void {
-    this.changeListeners.push(listener)
+    this.changeListeners.add(listener)
+  }
+
+  offChange(listener: () => void): void {
+    this.changeListeners.delete(listener)
   }
 
   private notifyChange(): void {
