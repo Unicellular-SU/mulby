@@ -1133,6 +1133,28 @@ app.whenReady().then(async () => {
           type: r.kind
         }))
       },
+      searchFiles: async (query: string, limit: number) => {
+        const results = await pluginDesktop.searchFiles(query, limit)
+        return results.map((r) => ({
+          name: r.name,
+          path: r.path,
+          type: r.isDirectory ? 'directory' : 'file'
+        }))
+      },
+      searchPlugins: async (query: string) => {
+        const results = await pluginManager.search({ text: query, attachments: [] })
+        return results.map((r) => ({
+          pluginId: r.plugin.id,
+          pluginName: r.plugin.manifest.name,
+          displayName: r.plugin.manifest.displayName || r.plugin.manifest.name,
+          featureCode: r.feature.code,
+          featureExplain: r.feature.explain,
+          matchType: r.matchType
+        }))
+      },
+      runPlugin: async (pluginId: string, featureCode: string, input?: string) => {
+        return pluginManager.run(pluginId, featureCode, input)
+      },
       canvas: { getMainWindow }
     })
 

@@ -47,7 +47,15 @@ export function createSystemHandlers(deps: SystemHandlerDeps): Record<string, { 
         const timeoutMs = typeof params.timeoutMs === 'number' ? params.timeoutMs : 30_000
 
         const result = await deps.runCommand(
-          { command, args, cwd, shell, timeoutMs },
+          {
+            command: shell && args?.length
+              ? `${command} ${args.map((a) => `'${a.replace(/'/g, "'\\''")}'`).join(' ')}`
+              : command,
+            args: shell && args?.length ? undefined : args,
+            cwd,
+            shell,
+            timeoutMs
+          },
           { source: 'app', runCommandAllowed: true, allowShellOverride: true }
         ) as { exitCode?: number | null; timedOut?: boolean; success?: boolean; stdout?: string; stderr?: string }
 

@@ -47,6 +47,7 @@ export class CommandRegistry {
       if (name.startsWith('mulby.plugin.') && !security.exposePlugins) continue
       if (name.startsWith('mulby.clipboard.') && !security.exposeClipboard) continue
       if (name === 'mulby.search' && !security.exposeSearch) continue
+      if (name === 'mulby.launch' && !security.exposeSearch) continue
       result.push(name)
     }
     return result
@@ -59,6 +60,7 @@ export class CommandRegistry {
       if (name.startsWith('mulby.plugin.') && !security.exposePlugins) continue
       if (name.startsWith('mulby.clipboard.') && !security.exposeClipboard) continue
       if (name === 'mulby.search' && !security.exposeSearch) continue
+      if (name === 'mulby.launch' && !security.exposeSearch) continue
       caps.add(meta.cap)
     }
     return [...caps]
@@ -79,6 +81,7 @@ export class CommandRegistry {
     if (commandName.startsWith('mulby.plugin.') && !security.exposePlugins) return false
     if (commandName.startsWith('mulby.clipboard.') && !security.exposeClipboard) return false
     if (commandName === 'mulby.search' && !security.exposeSearch) return false
+    if (commandName === 'mulby.launch' && !security.exposeSearch) return false
     return true
   }
 }

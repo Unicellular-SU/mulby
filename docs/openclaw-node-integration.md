@@ -198,7 +198,7 @@ openclaw nodes invoke --node Mulby --command canvas.eval \
 
 以下命令是 Mulby 的独有能力，需在设置中开启对应开关，并在 Gateway 端通过 `gateway.nodes.allowCommands` 允许。
 
-#### `mulby.search` — 搜索本地应用和文件
+#### `mulby.search` — 综合搜索（插件 + 桌面应用）
 
 **开关：** `exposeSearch`
 
@@ -217,9 +217,73 @@ openclaw nodes invoke --node Mulby --command mulby.search \
 {
   "query": "微信",
   "results": [
-    { "name": "微信", "path": "/Applications/WeChat.app", "type": "application" },
-    { "name": "微信输入法", "path": "/Library/Input Methods/WeType.app", "type": "application" }
+    {
+      "type": "plugin",
+      "name": "微信消息助手",
+      "explain": "快速发送微信消息",
+      "pluginId": "wechat-helper",
+      "featureCode": "send",
+      "matchType": "keyword"
+    },
+    {
+      "type": "application",
+      "name": "微信",
+      "path": "/Applications/WeChat.app"
+    },
+    {
+      "type": "application",
+      "name": "微信输入法",
+      "path": "/Library/Input Methods/WeType.app"
+    }
   ]
+}
+```
+
+> 与 Mulby 搜索框体验一致，插件匹配使用内置的拼音 + 关键词 + 正则匹配引擎。
+
+---
+
+#### `mulby.launch` — 搜索并启动（应用/文件/插件）
+
+**开关：** `exposeSearch`
+
+| 参数 | 类型 | 必填 | 说明 |
+|:--|:--|:--|:--|
+| `query` | string | ✅ | 搜索关键词（支持拼音） |
+| `input` | string | | 传递给插件的输入文本（仅插件类型有效） |
+
+自动并行搜索**插件功能**和**桌面应用**，按最佳匹配启动：
+
+```bash
+# 启动应用（如匹配到桌面应用）
+openclaw nodes invoke --node Mulby --command mulby.launch \
+  --params '{"query":"微信"}'
+
+# 启动插件功能（如匹配到已安装插件）
+openclaw nodes invoke --node Mulby --command mulby.launch \
+  --params '{"query":"取色器"}'
+```
+
+**返回示例（应用）：**
+```json
+{
+  "ok": true,
+  "type": "application",
+  "launched": { "name": "微信", "path": "/Applications/WeChat.app" }
+}
+```
+
+**返回示例（插件）：**
+```json
+{
+  "ok": true,
+  "type": "plugin",
+  "launched": {
+    "pluginId": "color-picker",
+    "name": "取色器",
+    "featureCode": "pick",
+    "explain": "屏幕取色工具"
+  }
 }
 ```
 
@@ -317,15 +381,11 @@ openclaw nodes invoke --node Mulby --command mulby.clipboard.set \
 # 查看当前节点
 openclaw nodes list
 
-# 允许自定义命令（在 Gateway 端执行）
-openclaw config set gateway.nodes.allowCommands '[
-  "mulby.search",
-  "mulby.plugin.list",
-  "mulby.plugin.invoke",
-  "mulby.clipboard.get",
-  "mulby.clipboard.set"
-]'
+# 一键开放 Mulby 所有自定义命令（在 Gateway 端执行）
+openclaw config set gateway.nodes.allowCommands '["mulby.search", "mulby.launch", "mulby.plugin.list", "mulby.plugin.invoke", "mulby.clipboard.get", "mulby.clipboard.set"]'
 ```
+
+> 💡 标准命令（`system.*`、`device.*`、`canvas.*`）由 Gateway 默认允许，无需额外配置。上述命令仅针对 `mulby.*` 前缀的自定义命令。
 
 ---
 
