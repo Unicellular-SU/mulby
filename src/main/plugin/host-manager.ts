@@ -31,6 +31,8 @@ interface PluginHost {
   ready: boolean
   activeRequests: number  // 活跃请求计数器
   startedAt: number       // 启动时间戳
+  idleTimer: NodeJS.Timeout | null  // 空闲超时计时器
+  idleTimeoutMs: number             // 空闲超时时长（0 = 永不销毁）
   cachedApi?: ReturnType<typeof createPluginAPI>  // 缓存 API 实例，避免每次请求重建
   pendingRequests: Map<string, {
     resolve: (value: unknown) => void
@@ -42,6 +44,8 @@ interface PluginHost {
 // ============ 常量 ============
 
 const REQUEST_TIMEOUT = 300000  // 5 分钟请求超时（适配 AI 长调用）
+/** 插件宿主进程默认空闲超时：5 分钟 */
+const DEFAULT_IDLE_TIMEOUT_MS = 5 * 60 * 1000
 const utf8FatalDecoder = new TextDecoder('utf-8', { fatal: true })
 const gb18030Decoder = createGb18030Decoder()
 
@@ -84,6 +88,8 @@ export class PluginHostManager extends EventEmitter {
   private messageBus: PluginMessageBus
   private taskScheduler?: TaskScheduler
   private clipboardHistoryManager?: ClipboardHistoryManager
+  /** 注入此回调以检查插件是否有活跃 UI 窗口（有则不销毁宿主进程） */
+  hasActiveWindow?: (pluginId: string) => boolean
 
   constructor() {
     super()
@@ -187,6 +193,16 @@ export class PluginHostManager extends EventEmitter {
         stdio: 'pipe'
       })
 
+      // 解析空闲超时配置
+      // 优先级：background: true → 永不销毁 > idleTimeoutMs: 'never'/0 → 永不销毁 > 自定义 ms > 默认 5 分钟
+      const isBackgroundPlugin = plugin.manifest.pluginSetting?.background === true
+      const idleTimeoutCfg = plugin.manifest.pluginSetting?.idleTimeoutMs
+      const idleTimeoutMs = isBackgroundPlugin || idleTimeoutCfg === 'never' || idleTimeoutCfg === 0
+        ? 0
+        : typeof idleTimeoutCfg === 'number' && idleTimeoutCfg > 0
+          ? idleTimeoutCfg
+          : DEFAULT_IDLE_TIMEOUT_MS
+
       const host: PluginHost = {
         process: child,
         pluginName,
@@ -194,6 +210,8 @@ export class PluginHostManager extends EventEmitter {
         ready: false,
         activeRequests: 0,
         startedAt: Date.now(),
+        idleTimer: null,
+        idleTimeoutMs,
         pendingRequests: new Map()
       }
 
@@ -455,11 +473,16 @@ export class PluginHostManager extends EventEmitter {
         return
       }
 
-      // 增加活跃请求计数
+      // 请求开始：取消 idle timer，保证进程不在请求期间被销毁
+      this.cancelIdleCleanup(pluginName)
       host.activeRequests++
 
       const cleanup = () => {
         host.activeRequests--
+        // 请求结束：若队列已空，调度空闲超时销毁
+        if (host.activeRequests === 0) {
+          this.scheduleIdleCleanup(pluginName)
+        }
       }
 
       const timeout = setTimeout(() => {
@@ -482,6 +505,45 @@ export class PluginHostManager extends EventEmitter {
 
       host.process.postMessage(request)
     })
+  }
+
+  // ==================== 空闲超时销毁 ====================
+
+  /**
+   * 调度空闲超时销毁
+   * - 只在 activeRequests === 0 且无活跃 UI 窗口时销毁
+   * - 使用 .unref() 保证 timer 不会阻止 Electron 进程退出
+   */
+  private scheduleIdleCleanup(pluginName: string): void {
+    const host = this.hosts.get(pluginName)
+    if (!host || host.idleTimeoutMs === 0) return  // 永不销毁
+    if (host.idleTimer) return  // 已有 timer，避免重复调度
+
+    host.idleTimer = setTimeout(async () => {
+      const h = this.hosts.get(pluginName)
+      if (!h) return
+      h.idleTimer = null
+
+      // 双重保险：timer 触发时已有新请求进来
+      if (h.activeRequests > 0) return
+
+      // UI 窗口保护：有活跃窗口则推迟销毁（等待窗口关闭）
+      if (this.hasActiveWindow?.(pluginName)) {
+        this.scheduleIdleCleanup(pluginName)
+        return
+      }
+
+      console.info(`[HostManager] Idle timeout → destroying host: ${pluginName}`)
+      await this.destroyHost(pluginName)
+    }, host.idleTimeoutMs).unref()
+  }
+
+  /** 取消空闲超时计时器 */
+  private cancelIdleCleanup(pluginName: string): void {
+    const host = this.hosts.get(pluginName)
+    if (!host?.idleTimer) return
+    clearTimeout(host.idleTimer)
+    host.idleTimer = null
   }
 
   /**
@@ -612,6 +674,12 @@ export class PluginHostManager extends EventEmitter {
   private cleanupHost(pluginName: string): void {
     const host = this.hosts.get(pluginName)
     if (!host) return
+
+    // 清理 idle timer（防止 host 销毁后 timer 仍悬挂触发）
+    if (host.idleTimer) {
+      clearTimeout(host.idleTimer)
+      host.idleTimer = null
+    }
 
     // 注销 Watchdog 监控
     this.watchdog.unregisterHost(pluginName)

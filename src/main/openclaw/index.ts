@@ -6,6 +6,7 @@
 
 import type { OpenClawSettings } from '../../shared/types/settings'
 import type { NodeStatusInfo } from '../../shared/types/openclaw-protocol'
+import type { AiTool } from '../../shared/types/ai'
 import { OpenClawNodeClient } from './node-client'
 import { CommandRegistry } from './command-registry'
 import { createSystemHandlers, type SystemHandlerDeps } from './handlers/system-handler'
@@ -15,6 +16,8 @@ import { createCanvasHandlers, type CanvasHandlerDeps } from './handlers/canvas-
 export interface OpenClawNodeServiceDeps extends SystemHandlerDeps, MulbyHandlerDeps {
   /** Canvas 命令所需的依赖（可选，不提供则不注册 canvas 命令） */
   canvas?: CanvasHandlerDeps
+  /** 获取当前所有已加载插件注册的 AI Tools */
+  getAiTools?: () => AiTool[]
 }
 
 /**

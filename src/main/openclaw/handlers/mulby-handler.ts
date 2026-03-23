@@ -2,7 +2,8 @@
  * Mulby 自定义命令处理器
  *
  * 核心差异化能力 — 让 OpenClaw Agent 远程调用 Mulby 插件生态：
- * - mulby.plugin.list: 列出已安装且已启用的插件
+ * - mulby.plugin.list:  列出已安装且已启用的插件
+ * - mulby.plugin.tools: 列出所有插件注册的 AI Tools Schema（供 Gateway LLM 注册）
  * - mulby.plugin.invoke: 调用指定插件方法
  * - mulby.search: 综合搜索（插件 + 应用 + 文件）
  * - mulby.launch: 搜索并启动（应用/文件/插件）
@@ -12,6 +13,8 @@
 
 import { clipboard, shell } from 'electron'
 import type { CommandHandler } from '../command-registry'
+import type { AiTool } from '../../../shared/types/ai'
+import { parsePluginToolId, isPluginToolName } from '../../plugin/plugin-tools'
 
 /** 插件搜索结果 */
 interface PluginSearchResult {
@@ -64,6 +67,12 @@ export interface MulbyHandlerDeps {
     hasUI?: boolean
     error?: string
   }>
+
+  /** 获取所有插件注册的 AI Tools（可选，供 mulby.plugin.tools 命令使用） */
+  getAiTools?: () => AiTool[]
+
+  /** 将 sanitizedPluginId 还原为原始 pluginId（供 mulby.plugin.invoke 通过 toolId 调用时使用） */
+  resolveOriginalPluginId?: (sanitizedId: string) => string | undefined
 }
 
 /**
@@ -89,22 +98,58 @@ export function createMulbyHandlers(deps: MulbyHandlerDeps): Record<string, { ha
       }
     },
 
+    'mulby.plugin.tools': {
+      cap: 'mulby',
+      description: '列出所有插件注册的 AI Tool Schema（供 Gateway/LLM 发现并注册工具能力）',
+      handler: async () => {
+        const tools = deps.getAiTools?.() ?? []
+        return {
+          count: tools.length,
+          tools
+        }
+      }
+    },
+
     'mulby.plugin.invoke': {
       cap: 'mulby',
-      description: '调用指定的 Mulby 插件方法',
+      description: '调用指定的 Mulby 插件 AI Tool 接口。支持两种调用方式：1) toolId: 使用 mulby.plugin.tools 返回的 function.name（如 plugin_tool__qrcode-helper__generate_qrcode）+ args 对象；2) pluginId + method + args 数组',
       handler: async (params) => {
-        const pluginId = String(params.pluginId || '').trim()
-        if (!pluginId) throw new Error('pluginId is required')
+        let pluginId: string
+        let method: string
+        let args: unknown[]
 
-        const method = String(params.method || '').trim()
-        if (!method) throw new Error('method is required')
+        const toolId = String(params.toolId || '').trim()
+        if (toolId) {
+          // 方式一：通过 toolId 调用（直接对应 mulby.plugin.tools 返回的 name 字段）
+          if (!isPluginToolName(toolId)) {
+            throw new Error(`无效的 toolId 格式: ${toolId}，应以 'plugin_tool__' 开头`)
+          }
+          const { pluginId: sanitizedId, toolName } = parsePluginToolId(toolId)
+          const resolvedId = deps.resolveOriginalPluginId?.(sanitizedId)
+          if (!resolvedId) {
+            throw new Error(`无法解析 toolId: ${toolId}，请确认该 Tool 已加载`)
+          }
+          pluginId = resolvedId
+          method = toolName
+          // args 兼容 object（AI 通常传 key/value） 和 array 两种格式
+          const rawArgs = params.args
+          args = Array.isArray(rawArgs) ? rawArgs : (rawArgs && typeof rawArgs === 'object') ? [rawArgs] : []
+        } else {
+          // 方式二：显式传 pluginId + method（兼容旧用法）
+          pluginId = String(params.pluginId || '').trim()
+          if (!pluginId) throw new Error('pluginId 或 toolId 至少需要一个')
 
-        const args = Array.isArray(params.args) ? params.args : []
+          method = String(params.method || '').trim()
+          if (!method) throw new Error('method is required')
+
+          args = Array.isArray(params.args) ? params.args : []
+        }
 
         const result = await deps.invokePlugin(pluginId, method, args)
         return result
       }
     },
+
 
     'mulby.search': {
       cap: 'mulby',

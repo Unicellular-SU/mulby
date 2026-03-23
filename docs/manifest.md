@@ -77,7 +77,8 @@
 | defaultDetached | boolean | false | 是否默认以独立窗口运行 |
 | background | boolean | false | 是否允许后台运行 |
 | persistent | boolean | false | 是否持久化（重启后自动恢复，需开启 background） |
-| maxRuntime | number | 0 | 最大运行时间（毫秒，0 表示无限制） |
+| maxRuntime | number | 0 | 最大运行时间（毫秒，0 表示无限制），仅对 background 插件有效 |
+| idleTimeoutMs | number \| 'never' | 300000 | 宿主进程空闲多久后自动销毁（毫秒）。`'never'` 或 `0` 表示永不销毁。**注意：`background: true` 的插件自动等同于 `'never'`，无需重复配置。** |
 
 ### Window 配置
 

@@ -317,6 +317,12 @@ export interface PluginSetting {
   persistent?: boolean      // 是否持久化（重启后自动恢复，默认 false）
   maxRuntime?: number       // 最大运行时间（毫秒，0 表示无限制，默认 0）
   resourceLimits?: ResourceLimits | ResourceLimitPreset  // 资源限制配置或预设
+  /**
+   * 宿主进程空闲超时后自动销毁的等待时间（毫秒）。
+   * - 不设置：使用默认值（5 分钟）
+   * - 0 / 'never'：永不自动销毁（适合需要持久连接的后台调度插件）
+   */
+  idleTimeoutMs?: number | 'never'
 }
 
 export interface PluginPermissions {

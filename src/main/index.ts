@@ -1110,6 +1110,7 @@ app.whenReady().then(async () => {
   // 创建 OpenClaw Node 服务并注册 IPC
   let openclawService: OpenClawNodeService | null = null
   try {
+    const hostManager = pluginManager.getHostManager()
     openclawService = createOpenClawNodeService({
       runCommand: (input, context) => commandRunnerService.runCommand(input, context),
       getPluginList: () => pluginManager.getAll().map((p) => ({
@@ -1120,10 +1121,36 @@ app.whenReady().then(async () => {
         enabled: p.enabled
       })),
       invokePlugin: async (pluginId: string, method: string, args: unknown[]) => {
-        // 通过 pluginManager.run 调用插件，method 对应 featureCode
-        // args[0] 作为 input 传入，后续可扩展更多参数
-        const result = await pluginManager.run(pluginId, method, args[0] as string | undefined)
-        return result
+        const plugin = pluginManager.get(pluginId)
+        if (!plugin) throw new Error(`Plugin not found: ${pluginId}`)
+        if (!plugin.enabled) throw new Error(`Plugin is disabled: ${pluginId}`)
+
+        // 检测是否是 AI Tool
+        const isAiTool = plugin.manifest.tools?.some((t) => t.name === method)
+
+        if (isAiTool) {
+          // 初始化插件环境
+          await pluginManager.initializePlugin(pluginId)
+          const inited = await hostManager.initPlugin(plugin)
+          if (!inited) {
+            throw new Error(`Failed to initialize host for plugin: ${pluginId}`)
+          }
+          // 调用插件注册的 AI Tool 接口 (api.tools.register)
+          // callHostMethod 返回 { success, data, error? } 信封，需要解包
+          const toolMethodName = `__plugin_tool__${method}`
+          const envelope = await hostManager.callHostMethod(pluginId, toolMethodName, args) as {
+            success: boolean
+            data?: unknown
+            error?: string
+          }
+          if (!envelope.success) {
+            throw new Error(envelope.error ?? `Plugin tool '${method}' execution failed`)
+          }
+          return envelope.data
+        }
+
+        // 回退兼容：执行标准插件 Feature
+        return await pluginManager.run(pluginId, method, args[0] as string | undefined)
       },
       searchDesktop: async (query: string, limit: number) => {
         const results = await pluginDesktop.searchApps(query, limit)
@@ -1155,6 +1182,8 @@ app.whenReady().then(async () => {
       runPlugin: async (pluginId: string, featureCode: string, input?: string) => {
         return pluginManager.run(pluginId, featureCode, input)
       },
+      getAiTools: () => pluginToolRegistry.resolveToolsForAi(),
+      resolveOriginalPluginId: (sanitizedId) => pluginToolRegistry.resolveOriginalPluginId(sanitizedId),
       canvas: { getMainWindow }
     })
 
@@ -1186,12 +1215,8 @@ app.whenReady().then(async () => {
       })
     })
 
-    // 自动连接逻辑
-    const initSettings = appSettingsManager.getSettings()
-    if (initSettings.openclaw.enabled && initSettings.openclaw.node.autoConnect) {
-      console.log('[OpenClaw] 自动连接已启用，尝试连接...')
-      void openclawService.connect(initSettings.openclaw)
-    }
+    // 自动连接逻辑推迟到 pluginManager.init() 之后执行（见下方调用处）
+    // 确保 pluginToolRegistry 已填充，消除 Gateway 一次性发现工具时的竞争窗口
 
     console.log('[OpenClaw] Node 服务初始化完成')
   } catch (err) {
@@ -1280,6 +1305,20 @@ app.whenReady().then(async () => {
       }
     })
 
+    // 给宿主进程管理器注入「有活跃 UI 窗口」检测回调
+    // 有窗口时不触发 idle 销毁，保证用户操作连贯性
+    const hostManager = pluginManager.getHostManager()
+    hostManager.hasActiveWindow = (pluginId: string): boolean => {
+      // 检查面板窗口（主窗口内嵌插件）
+      const panelPlugin = pluginWindowManager.getPanelWindow()?.getCurrentPlugin()
+      if (panelPlugin?.id === pluginId) return true
+      // 检查所有独立窗口（detached / auxiliary）
+      return pluginWindowManager.getAllDetachedWindows().some(
+        (win) => pluginWindowManager.getPluginByWindow(win)?.id === pluginId
+      )
+    }
+
+
     // 初始化自动更新检查器（仅在生产环境下启用）
     if (app.isPackaged) {
       initAutoUpdater()
@@ -1303,6 +1342,14 @@ app.whenReady().then(async () => {
         }
         // 预热 feature 图标缓存（必须在 init 完成后）
         ipcHooks.warmupFeatureIconCache()
+        // pluginToolRegistry 已填充，现在才安全触发 OpenClaw 自动连接
+        if (openclawService) {
+          const s = appSettingsManager.getSettings()
+          if (s.openclaw.enabled && s.openclaw.node.autoConnect) {
+            console.log('[OpenClaw] 插件初始化完成，自动连接...')
+            void openclawService.connect(s.openclaw)
+          }
+        }
       })
     })
     void onboardingWindowManager.show()
@@ -1320,6 +1367,15 @@ app.whenReady().then(async () => {
 
     // 预热 feature 图标缓存（必须在 init 完成后，getEnabled() 才有数据）
     ipcHooks.warmupFeatureIconCache()
+
+    // pluginToolRegistry 已填充，现在才安全触发 OpenClaw 自动连接
+    if (openclawService) {
+      const s = appSettingsManager.getSettings()
+      if (s.openclaw.enabled && s.openclaw.node.autoConnect) {
+        console.log('[OpenClaw] 插件初始化完成，自动连接...')
+        void openclawService.connect(s.openclaw)
+      }
+    }
   }
 })
 
