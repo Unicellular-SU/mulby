@@ -152,6 +152,57 @@ export interface AiToolingSettings {
   capabilityPolicy: AiToolCapabilityPolicySettings
 }
 
+// ==================== OpenClaw Node 设置 ====================
+
+/** 命令执行安全模式 */
+export type OpenClawSecurityMode = 'deny' | 'allowlist' | 'full'
+
+/** 审批询问模式 */
+export type OpenClawAskMode = 'off' | 'on-miss' | 'always'
+
+/** OpenClaw Gateway 连接配置 */
+export interface OpenClawGatewayConfig {
+  host: string
+  port: number
+  useTls: boolean
+  tlsFingerprint?: string
+}
+
+/** OpenClaw 认证配置 */
+export interface OpenClawAuthConfig {
+  token?: string
+  /** 配对后 Gateway 颁发的 device token（自动管理，用户不可编辑） */
+  deviceToken?: string
+}
+
+/** OpenClaw Node 标识配置 */
+export interface OpenClawNodeConfig {
+  displayName: string
+  autoConnect: boolean
+}
+
+/** OpenClaw 安全策略配置 */
+export interface OpenClawSecurityConfig {
+  execMode: OpenClawSecurityMode
+  execAsk: OpenClawAskMode
+  allowedCommands: string[]
+  /** 是否暴露 Mulby 插件调用能力 */
+  exposePlugins: boolean
+  /** 是否暴露剪贴板读写能力 */
+  exposeClipboard: boolean
+  /** 是否暴露搜索能力 */
+  exposeSearch: boolean
+}
+
+/** OpenClaw Node 完整设置 */
+export interface OpenClawSettings {
+  enabled: boolean
+  gateway: OpenClawGatewayConfig
+  auth: OpenClawAuthConfig
+  node: OpenClawNodeConfig
+  security: OpenClawSecurityConfig
+}
+
 // 日志级别类型
 export type LogLevel = 'debug' | 'info' | 'warn' | 'error'
 
@@ -203,6 +254,7 @@ export interface AppSettings {
   input: InputSettings
   tray: TraySettings
   onboardingCompleted?: boolean
+  openclaw: OpenClawSettings
 }
 
 export interface ShortcutStatus {

@@ -12,7 +12,8 @@ import type {
   CommandRunnerSettings,
   CommandRule,
   TraySettings,
-  CommandTrustRecord
+  CommandTrustRecord,
+  OpenClawSettings
 } from '../../shared/types/settings'
 
 const SETTINGS_NAMESPACE = 'app'
@@ -140,7 +141,84 @@ const DEFAULT_SETTINGS: AppSettings = {
     closeToTray: true,
     clickAction: 'toggleWindow'
   },
-  onboardingCompleted: false
+  onboardingCompleted: false,
+  openclaw: {
+    enabled: false,
+    gateway: {
+      host: '127.0.0.1',
+      port: 18789,
+      useTls: false
+    },
+    auth: {},
+    node: {
+      displayName: 'Mulby',
+      autoConnect: false
+    },
+    security: {
+      execMode: 'deny',
+      execAsk: 'on-miss',
+      allowedCommands: [],
+      exposePlugins: true,
+      exposeClipboard: false,
+      exposeSearch: true
+    }
+  }
+}
+
+function normalizeOpenClawSettings(input: Partial<OpenClawSettings> | undefined): OpenClawSettings {
+  const defaults = DEFAULT_SETTINGS.openclaw
+  const current = {
+    ...defaults,
+    ...(input || {})
+  }
+
+  const gateway = {
+    ...defaults.gateway,
+    ...(current.gateway || {})
+  }
+  // 端口范围校验
+  if (typeof gateway.port !== 'number' || gateway.port < 1 || gateway.port > 65535) {
+    gateway.port = defaults.gateway.port
+  }
+
+  const auth = {
+    ...defaults.auth,
+    ...(current.auth || {})
+  }
+
+  const node = {
+    ...defaults.node,
+    ...(current.node || {})
+  }
+  if (!node.displayName || typeof node.displayName !== 'string') {
+    node.displayName = defaults.node.displayName
+  }
+
+  const securityInput = current.security || {}
+  const security = {
+    ...defaults.security,
+    ...securityInput
+  }
+  // 验证枚举值
+  const validExecModes = ['deny', 'allowlist', 'full'] as const
+  if (!validExecModes.includes(security.execMode as typeof validExecModes[number])) {
+    security.execMode = defaults.security.execMode
+  }
+  const validAskModes = ['off', 'on-miss', 'always'] as const
+  if (!validAskModes.includes(security.execAsk as typeof validAskModes[number])) {
+    security.execAsk = defaults.security.execAsk
+  }
+  if (!Array.isArray(security.allowedCommands)) {
+    security.allowedCommands = []
+  }
+
+  return {
+    enabled: current.enabled === true,
+    gateway,
+    auth,
+    node,
+    security
+  }
 }
 
 function normalizeTraySettings(input: Partial<TraySettings> | undefined): TraySettings {
@@ -451,7 +529,11 @@ function mergeSettings(current: AppSettings, next: Partial<AppSettings>): AppSet
       ...current.tray,
       ...(next.tray || {})
     }),
-    onboardingCompleted: next.onboardingCompleted ?? current.onboardingCompleted ?? false
+    onboardingCompleted: next.onboardingCompleted ?? current.onboardingCompleted ?? false,
+    openclaw: normalizeOpenClawSettings({
+      ...current.openclaw,
+      ...(next.openclaw || {})
+    })
   }
 }
 

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import type { PluginInfo, UpdateCenterState, AppInfo } from '../../../../shared/types/electron'
 import type { BackgroundPluginInfo } from '../../../../shared/types/plugin'
+import type { NodeStatusInfo } from '../../../../shared/types/openclaw-protocol'
 
 // 快捷入口定义
 const QUICK_ENTRIES = [
@@ -75,6 +76,7 @@ interface DashboardSectionProps {
   onOpenBackgroundPluginManager?: () => void
   onOpenTaskScheduler?: () => void
   onOpenAiSettings?: () => void
+  onNavigateTo?: (section: string) => void
   cardClass: string
   primaryPillClass: string
 }
@@ -84,6 +86,7 @@ export default function DashboardSection({
   onOpenBackgroundPluginManager,
   onOpenTaskScheduler,
   onOpenAiSettings,
+  onNavigateTo,
   cardClass
 }: DashboardSectionProps) {
   const [stats, setStats] = useState<DashboardStats>({
@@ -95,6 +98,7 @@ export default function DashboardSection({
   })
   const [appInfo, setAppInfo] = useState<AppInfo | null>(null)
   const [updateState, setUpdateState] = useState<UpdateCenterState | null>(null)
+  const [openclawStatus, setOpenclawStatus] = useState<NodeStatusInfo | null>(null)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
@@ -108,13 +112,15 @@ export default function DashboardSection({
           backgroundPlugins,
           taskCount,
           appInfoResult,
-          updateCenterState
+          updateCenterState,
+          openclawStatusResult
         ] = await Promise.all([
           window.mulby.plugin.getAll().catch(() => [] as PluginInfo[]),
           window.mulby.plugin.listBackground().catch(() => [] as BackgroundPluginInfo[]),
           window.mulby.scheduler.getTaskCount().catch(() => 0),
           window.mulby.system.getAppInfo().catch(() => null),
-          window.mulby.settings.getUpdateCenterState().catch(() => null)
+          window.mulby.settings.getUpdateCenterState().catch(() => null),
+          window.mulby.openclaw.getStatus().catch(() => null) as Promise<NodeStatusInfo | null>
         ])
 
         if (!mounted) return
@@ -128,6 +134,7 @@ export default function DashboardSection({
         })
         setAppInfo(appInfoResult)
         setUpdateState(updateCenterState)
+        setOpenclawStatus(openclawStatusResult)
       } finally {
         if (mounted) setLoading(false)
       }
@@ -146,8 +153,14 @@ export default function DashboardSection({
 
     void loadDashboardData()
 
+    // 监听 OpenClaw 状态变化
+    const unsubOpenClaw = window.mulby.openclaw.onStatusChanged((s: unknown) => {
+      if (mounted) setOpenclawStatus(s as NodeStatusInfo)
+    })
+
     return () => {
       mounted = false
+      unsubOpenClaw()
     }
   }, [])
 
@@ -285,6 +298,44 @@ export default function DashboardSection({
           </div>
         </div>
       </div>
+
+      {/* 区域 2.5：OpenClaw 连接状态 */}
+      {openclawStatus && openclawStatus.status !== 'disconnected' && (
+        <div>
+          <div className="mb-3 text-sm font-medium text-slate-500 dark:text-slate-400">OpenClaw</div>
+          <button
+            className={`${cardClass} w-full cursor-pointer text-left transition-all hover:border-blue-400/60 hover:shadow-md hover:shadow-blue-500/5 dark:hover:border-blue-500/40`}
+            onClick={() => onNavigateTo?.('openclaw')}
+          >
+            <div className="flex items-center gap-3">
+              {/* 状态指示灯 */}
+              <div className={`h-3 w-3 rounded-full ${
+                openclawStatus.status === 'connected' ? 'bg-emerald-500' :
+                openclawStatus.status === 'connecting' || openclawStatus.status === 'pairing' ? 'bg-amber-500 animate-pulse' :
+                openclawStatus.status === 'error' ? 'bg-red-500' :
+                'bg-slate-400'
+              }`} />
+              <div className="flex-1">
+                <div className="text-sm font-medium text-slate-800 dark:text-slate-100">
+                  {openclawStatus.status === 'connected' ? '已连接到 Gateway' :
+                   openclawStatus.status === 'connecting' ? '正在连接…' :
+                   openclawStatus.status === 'pairing' ? '等待配对…' :
+                   openclawStatus.status === 'error' ? '连接错误' : '未连接'}
+                </div>
+                <div className="mt-0.5 text-xs text-slate-400 dark:text-slate-500">
+                  {openclawStatus.gatewayHost && `${openclawStatus.gatewayHost}:${openclawStatus.gatewayPort}`}
+                  {openclawStatus.connectedAt && ` · 已连接 ${Math.floor((Date.now() - openclawStatus.connectedAt) / 60000)} 分钟`}
+                  {openclawStatus.error && ` · ${openclawStatus.error}`}
+                </div>
+              </div>
+              {/* 箭头 */}
+              <svg className="h-4 w-4 text-slate-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
+              </svg>
+            </div>
+          </button>
+        </div>
+      )}
 
       {/* 区域三：环境信息 */}
       <div>

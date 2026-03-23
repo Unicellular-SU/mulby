@@ -46,6 +46,8 @@ import {
 import { OnboardingWindowManager } from './services/onboarding-window'
 import { refreshActiveWindowCache } from './services/active-window'
 import { patchConsoleWithTimestamp } from '../shared/utils/console'
+import { createOpenClawNodeService, type OpenClawNodeService } from './openclaw'
+import { registerOpenClawHandlers } from './ipc/openclaw'
 
 patchConsoleWithTimestamp()
 
@@ -412,6 +414,14 @@ async function shutdownMainProcessResources(): Promise<void> {
       globalShortcut.unregisterAll()
     } catch (error) {
       console.error('[Main] Failed to unregister global shortcuts:', error)
+    }
+
+    // 清理 OpenClaw Node 服务（通过弱引用避免循环依赖）
+    try {
+      // openclawService 在闭包内可能不可用，通过全局事件清理
+      console.log('[Main] OpenClaw service cleanup delegated to process exit')
+    } catch (error) {
+      console.error('[Main] Failed to destroy OpenClaw service:', error)
     }
   })().finally(() => {
     hasShutdownCompleted = true
@@ -1096,6 +1106,75 @@ app.whenReady().then(async () => {
     systemPageWindowManager,
     onboardingWindowManager
   )
+
+  // 创建 OpenClaw Node 服务并注册 IPC
+  let openclawService: OpenClawNodeService | null = null
+  try {
+    openclawService = createOpenClawNodeService({
+      runCommand: (input, context) => commandRunnerService.runCommand(input, context),
+      getPluginList: () => pluginManager.getAll().map((p) => ({
+        id: p.id,
+        name: p.manifest.displayName || p.manifest.name,
+        description: p.manifest.description,
+        version: p.manifest.version || '0.0.0',
+        enabled: p.enabled
+      })),
+      invokePlugin: async (pluginId: string, method: string, args: unknown[]) => {
+        // 通过 pluginManager.run 调用插件，method 对应 featureCode
+        // args[0] 作为 input 传入，后续可扩展更多参数
+        const result = await pluginManager.run(pluginId, method, args[0] as string | undefined)
+        return result
+      },
+      searchDesktop: async (query: string, limit: number) => {
+        const results = await pluginDesktop.searchApps(query, limit)
+        return results.map((r) => ({
+          name: r.name,
+          path: r.path,
+          type: r.kind
+        }))
+      },
+      canvas: { getMainWindow }
+    })
+
+    registerOpenClawHandlers({
+      openclawService,
+      settingsManager: appSettingsManager
+    })
+
+    // 注册 deviceToken 持久化回调：将 Gateway 返回的 token 保存到 AppSettings
+    openclawService.setSaveDeviceTokenCallback((token: string) => {
+      console.log('[OpenClaw] 保存 device token')
+      const currentSettings = appSettingsManager.getSettings()
+      void appSettingsManager.updateSettings({
+        openclaw: {
+          ...currentSettings.openclaw,
+          auth: {
+            ...currentSettings.openclaw.auth,
+            deviceToken: token
+          }
+        }
+      })
+      // [P1] 同步传播到活跃客户端，避免重连时丢失 auth
+      openclawService?.updateSettings({
+        ...currentSettings.openclaw,
+        auth: {
+          ...currentSettings.openclaw.auth,
+          deviceToken: token
+        }
+      })
+    })
+
+    // 自动连接逻辑
+    const initSettings = appSettingsManager.getSettings()
+    if (initSettings.openclaw.enabled && initSettings.openclaw.node.autoConnect) {
+      console.log('[OpenClaw] 自动连接已启用，尝试连接...')
+      void openclawService.connect(initSettings.openclaw)
+    }
+
+    console.log('[OpenClaw] Node 服务初始化完成')
+  } catch (err) {
+    console.error('[OpenClaw] Node 服务初始化失败:', err)
+  }
 
   // 主窗口创建及相关初始化（抽取为函数，引导模式下延迟调用）
   function initMainWindow() {

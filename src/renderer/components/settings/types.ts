@@ -5,6 +5,7 @@ export type SettingsSection =
   | 'commandAll'
   | 'permissions'
   | 'security'
+  | 'openclaw'
   | 'developer'
   | 'about'
 

@@ -13,7 +13,8 @@ import type {
   PluginCommandShortcutValidationResult
 } from './plugin'
 import type { AiApi } from './ai'
-import type { AppSettings, CommandAuditItem, CommandRunnerSettings, ShortcutStatusMap } from './settings'
+import type { AppSettings, CommandAuditItem, CommandRunnerSettings, ShortcutStatusMap, OpenClawSettings } from './settings'
+import type { NodeStatusInfo } from './openclaw-protocol'
 import type {
   InstalledPluginUpdateResult,
   PluginStoreBatchUpdateResult,
@@ -444,7 +445,7 @@ export interface ElectronAPI {
   systemPage: {
     open: (payload: {
       page: 'settings' | 'plugin-manager' | 'plugin-store' | 'background-plugins' | 'task-scheduler' | 'log-viewer' | 'ai-settings' | 'ai-mcp-settings' | 'ai-skills-settings'
-      settingsSection?: 'dashboard' | 'general' | 'shortcuts' | 'commandQuickLaunch' | 'commandAll' | 'permissions' | 'security' | 'developer' | 'about'
+      settingsSection?: 'dashboard' | 'general' | 'shortcuts' | 'commandQuickLaunch' | 'commandAll' | 'permissions' | 'security' | 'openclaw' | 'developer' | 'about'
       shortcutCommandHint?: string
     }) => Promise<boolean>
     close: () => Promise<boolean>
@@ -738,6 +739,20 @@ export interface ElectronAPI {
     resume: () => void
     getVoices: () => { name: string; lang: string; default: boolean; localService: boolean }[]
     isSpeaking: () => boolean
+  }
+  openclaw: {
+    getSettings: () => Promise<OpenClawSettings>
+    updateSettings: (partial: Partial<OpenClawSettings>) => Promise<OpenClawSettings>
+    connect: () => Promise<{ ok: boolean; error?: string }>
+    disconnect: () => Promise<void>
+    getStatus: () => Promise<NodeStatusInfo>
+    testConnection: (settings: OpenClawSettings) => Promise<{ ok: boolean; error?: string }>
+    onStatusChanged: (callback: (status: NodeStatusInfo) => void) => () => void
+    onInvoked: (callback: (data: { command: string; success: boolean; timestamp: number }) => void) => () => void
+    getLogs: () => Promise<Array<{ id: number; level: string; time: number; tag: string; message: string; detail?: string }>>
+    clearLogs: () => Promise<void>
+    onLog: (callback: (entry: { id: number; level: string; time: number; tag: string; message: string; detail?: string }) => void) => () => void
+    onLogsCleared: (callback: () => void) => () => void
   }
   inbrowser: {
     goto: (url: string, headers?: Record<string, string>, timeout?: number) => InBrowser

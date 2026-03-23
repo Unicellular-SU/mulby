@@ -16,6 +16,7 @@ import PermissionsSection from './settings/sections/PermissionsSection'
 import AboutSection from './settings/sections/AboutSection'
 import SecuritySection from './settings/sections/SecuritySection'
 import DeveloperSection from './settings/sections/DeveloperSection'
+import OpenClawSection from './settings/sections/OpenClawSection'
 import type { SettingsViewProps } from './settings/types'
 import { DEFAULT_APP_CAPABILITIES, PERMISSIONS, SECTION_ITEMS } from './settings/constants'
 import { parseListDraft } from './settings/utils'
@@ -712,6 +713,7 @@ export default function SettingsView({
                   onOpenPluginManager={onOpenPluginManager}
                   onOpenBackgroundPluginManager={onOpenBackgroundPluginManager}
                   onOpenTaskScheduler={onOpenTaskScheduler}
+                  onNavigateTo={(s) => onSectionChange(s as typeof section)}
                   cardClass={cardClass}
                   primaryPillClass={primaryPillClass}
                 />
@@ -846,6 +848,13 @@ export default function SettingsView({
                   actionButtonClass={actionButtonClass}
                   pillClass={pillClass}
                   primaryPillClass={primaryPillClass}
+                />
+              )}
+
+              {section === 'openclaw' && settings && (
+                <OpenClawSection
+                  cardClass={cardClass}
+                  actionButtonClass={actionButtonClass}
                 />
               )}
 

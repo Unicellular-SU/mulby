@@ -68,6 +68,7 @@ export type SettingsCenterSection =
   | 'commandAll'
   | 'permissions'
   | 'security'
+  | 'openclaw'
   | 'developer'
   | 'about'
 

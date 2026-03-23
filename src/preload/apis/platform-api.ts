@@ -307,6 +307,37 @@ export function createPlatformApi(ipcRenderer: IpcRenderer) {
         localService: v.localService
       })),
       isSpeaking: () => speechSynthesis.speaking
+    },
+
+    openclaw: {
+      getSettings: () => ipcRenderer.invoke('openclaw:getSettings'),
+      updateSettings: (partial: unknown) => ipcRenderer.invoke('openclaw:updateSettings', partial),
+      connect: () => ipcRenderer.invoke('openclaw:connect'),
+      disconnect: () => ipcRenderer.invoke('openclaw:disconnect'),
+      getStatus: () => ipcRenderer.invoke('openclaw:getStatus'),
+      testConnection: (settings: unknown) => ipcRenderer.invoke('openclaw:testConnection', settings),
+      onStatusChanged: (callback: (status: unknown) => void) => {
+        const listener = (_event: unknown, status: unknown) => callback(status)
+        ipcRenderer.on('openclaw:statusChanged', listener)
+        return () => ipcRenderer.removeListener('openclaw:statusChanged', listener)
+      },
+      onInvoked: (callback: (data: unknown) => void) => {
+        const listener = (_event: unknown, data: unknown) => callback(data)
+        ipcRenderer.on('openclaw:invoked', listener)
+        return () => ipcRenderer.removeListener('openclaw:invoked', listener)
+      },
+      getLogs: () => ipcRenderer.invoke('openclaw:getLogs'),
+      clearLogs: () => ipcRenderer.invoke('openclaw:clearLogs'),
+      onLog: (callback: (entry: unknown) => void) => {
+        const listener = (_event: unknown, entry: unknown) => callback(entry)
+        ipcRenderer.on('openclaw:log', listener)
+        return () => ipcRenderer.removeListener('openclaw:log', listener)
+      },
+      onLogsCleared: (callback: () => void) => {
+        const listener = () => callback()
+        ipcRenderer.on('openclaw:logsCleared', listener)
+        return () => ipcRenderer.removeListener('openclaw:logsCleared', listener)
+      }
     }
   }
 }
