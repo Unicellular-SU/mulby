@@ -1,8 +1,11 @@
 #!/bin/bash
 # ============================================================================
 # link-skills.sh
-# 将 mulby/skills/ 下的 skills 以符号链接同步到各 AI 编码工具的 skills 目录
+# 将 mulby/skills/ 下的 skills 以 cp -r 复制同步到各 AI 编码工具的 skills 目录
 # 支持 macOS / Linux / Windows (Git Bash, MSYS2, Cygwin, WSL)
+#
+# 注意: 部分 AI 工具（如 Antigravity）不支持跟随符号链接读取 skill，
+#       因此改用 cp -r 复制真实文件。每次修改 skill 后需重新运行本脚本同步。
 #
 # 用法:
 #   bash scripts/link-skills.sh           # 同步到已安装的 IDE
@@ -10,17 +13,18 @@
 #   bash scripts/link-skills.sh --help    # 查看帮助
 #
 # 支持的 IDE:
-#   - Agents (通用标准)    ~/.agents/skills/
-#   - Gemini CLI          ~/.gemini/skills/
-#   - Antigravity         ~/.gemini/antigravity/skills/
-#   - Codex CLI           ~/.codex/skills/
-#   - Claude Code         ~/.claude/skills/
-#   - Cursor              ~/.cursor/skills/
-#   - Windsurf            ~/.codeium/windsurf/skills/
+#   - Antigravity (workspace)  .agent/skills/
+#   - Agents (通用标准)        ~/.agents/skills/
+#   - Gemini CLI               ~/.gemini/skills/
+#   - Antigravity (global)     ~/.gemini/antigravity/skills/
+#   - Codex CLI                ~/.codex/skills/
+#   - Claude Code              ~/.claude/skills/
+#   - Cursor                   ~/.cursor/skills/
+#   - Windsurf                 ~/.codeium/windsurf/skills/
 #
-# 默认行为: 仅对已安装（父目录存在）的 IDE 创建链接，未安装的自动跳过。
-# 使用 --force 可为所有 IDE 强制创建目录和链接。
-# 已存在的同名真实目录会被备份为 .bak.时间戳 后再替换。
+# 默认行为: 仅对已安装（父目录存在）的 IDE 同步，未安装的自动跳过。
+# 使用 --force 可为所有 IDE 强制创建目录并同步。
+# 已存在的同名目录若 SKILL.md 有更新则备份后重新复制。
 # ============================================================================
 
 set -euo pipefail
@@ -91,35 +95,56 @@ fi
 
 # ── 目标目录列表（覆盖主流 AI 编码工具） ──────────────────────────────────────
 # 格式: "标签|路径"
+# 注意: Antigravity 实际读取的是 workspace 内的 .agent/skills/，
+#       而非全局的 ~/.gemini/antigravity/skills/
 TARGET_LIST=(
+  "Antigravity (workspace)|$SCRIPT_DIR/../.agent/skills"
   "Agents (通用标准)|$SKILL_HOME/.agents/skills"
   "Gemini CLI|$SKILL_HOME/.gemini/skills"
-  "Antigravity|$SKILL_HOME/.gemini/antigravity/skills"
+  "Antigravity (global)|$SKILL_HOME/.gemini/antigravity/skills"
   "Codex CLI|$SKILL_HOME/.codex/skills"
   "Claude Code|$SKILL_HOME/.claude/skills"
   "Cursor|$SKILL_HOME/.cursor/skills"
   "Windsurf|$SKILL_HOME/.codeium/windsurf/skills"
 )
 
-# ── 符号链接创建函数（跨平台） ────────────────────────────────────────────────
-create_symlink() {
-  local source="$1"
-  local target="$2"
+# ── skill 同步函数（cp -r 复制，基于 SKILL.md 修改时间增量判断） ──────────────
+# 返回值: 0=已复制/更新, 1=已是最新跳过
+sync_skill() {
+  local source="$1"   # 源 skill 目录（不含末尾斜杠）
+  local target="$2"   # 目标路径
 
-  if [[ "$OS" == "windows" ]]; then
-    # Windows: 使用 mklink /D 创建目录符号链接
-    # 需要将 Unix 风格路径转换为 Windows 路径
-    local win_source win_target
-    win_source=$(cygpath -w "$source" 2>/dev/null || echo "$source")
-    win_target=$(cygpath -w "$target" 2>/dev/null || echo "$target")
-    cmd //c "mklink /D \"$win_target\" \"$win_source\"" > /dev/null 2>&1
-  else
-    ln -s "$source" "$target"
+  local src_skill="$source/SKILL.md"
+  local dst_skill="$target/SKILL.md"
+
+  # 如果目标已存在且 SKILL.md 修改时间相同，跳过
+  if [[ -d "$target" && -f "$dst_skill" && -f "$src_skill" ]]; then
+    local src_mtime dst_mtime
+    if [[ "$OS" == "macos" ]]; then
+      src_mtime=$(stat -f "%m" "$src_skill" 2>/dev/null || echo 0)
+      dst_mtime=$(stat -f "%m" "$dst_skill" 2>/dev/null || echo 0)
+    else
+      src_mtime=$(stat -c "%Y" "$src_skill" 2>/dev/null || echo 0)
+      dst_mtime=$(stat -c "%Y" "$dst_skill" 2>/dev/null || echo 0)
+    fi
+    if [[ "$src_mtime" -le "$dst_mtime" ]]; then
+      return 1  # 已是最新，跳过
+    fi
   fi
+
+  # 目标已存在则先备份
+  if [[ -e "$target" || -L "$target" ]]; then
+    local backup_path="${target}.bak.$(date +%Y%m%d%H%M%S)"
+    echo -e "   ${YELLOW}⚠${RESET} 备份: ${DIM}$target → $backup_path${RESET}"
+    mv "$target" "$backup_path"
+  fi
+
+  cp -r "$source" "$target"
+  return 0
 }
 
 # ── 主逻辑 ─────────────────────────────────────────────────────────────────
-echo -e "${CYAN}🔗 Mulby Skills 符号链接同步工具${RESET}"
+echo -e "${CYAN}📦 Mulby Skills 复制同步工具${RESET}"
 echo -e "${DIM}   源目录: $SOURCE_DIR${RESET}"
 echo -e "${DIM}   系统: $OS${RESET}"
 echo ""
@@ -154,36 +179,26 @@ for entry in "${TARGET_LIST[@]}"; do
 
     target_path="$target_dir/$skill_name"
 
-    # 如果已经是正确的符号链接，跳过
-    # 使用 realpath 解析，兼容相对路径和绝对路径的符号链接
+    # 如果目标是符号链接，先清理（改为 cp 模式后不再使用链接）
     if [[ -L "$target_path" ]]; then
-      resolved_existing=$(realpath "$target_path" 2>/dev/null || readlink -f "$target_path" 2>/dev/null || echo "")
-      resolved_skill=$(realpath "${skill_path%/}" 2>/dev/null || readlink -f "${skill_path%/}" 2>/dev/null || echo "${skill_path%/}")
-      if [[ "$resolved_existing" == "$resolved_skill" ]]; then
-        echo -e "   ${GREEN}✓${RESET} $label/$skill_name ${DIM}(已链接)${RESET}"
-        continue
-      fi
+      echo -e "   ${YELLOW}⚠${RESET} 移除旧符号链接: ${DIM}$target_path${RESET}"
+      rm "$target_path"
     fi
 
-    # 如果存在真实目录或错误链接，先备份
-    if [[ -e "$target_path" || -L "$target_path" ]]; then
-      backup_path="${target_path}.bak.$(date +%Y%m%d%H%M%S)"
-      echo -e "   ${YELLOW}⚠${RESET} 备份: ${DIM}$target_path → $backup_path${RESET}"
-      mv "$target_path" "$backup_path"
+    if sync_skill "${skill_path%/}" "$target_path"; then
+      echo -e "   ${GREEN}✅${RESET} $label/$skill_name ${DIM}(已复制)${RESET}"
+      ((linked_count++)) || true
+    else
+      echo -e "   ${GREEN}✓${RESET} $label/$skill_name ${DIM}(已是最新)${RESET}"
     fi
-
-    # 创建符号链接
-    create_symlink "$skill_path" "$target_path"
-    echo -e "   ${GREEN}✅${RESET} $label/$skill_name → ${DIM}$skill_path${RESET}"
-    ((linked_count++)) || true
   done
 done
 
 echo ""
 if [[ $linked_count -gt 0 ]]; then
-  echo -e "${GREEN}完成！新建 $linked_count 个符号链接。${RESET}"
+  echo -e "${GREEN}完成！已同步 $linked_count 个 skill。${RESET}"
 else
-  echo -e "${GREEN}完成！所有链接已是最新状态。${RESET}"
+  echo -e "${GREEN}完成！所有 skill 已是最新状态。${RESET}"
 fi
 if [[ $skipped_count -gt 0 ]]; then
   echo -e "${DIM}跳过了 $skipped_count 个未安装的 IDE（使用 --force 强制创建）${RESET}"
