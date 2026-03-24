@@ -56,9 +56,10 @@ jobs:
         run: |
           # macos-latest runner 是 arm64，npm ci 只装了 arm64 的 sharp binary。
           # 额外安装 x64 的 native binary，使打包产物同时支持 Intel Mac。
+          # --force 跳过 EBADPLATFORM 的平台硬性验证，允许在 arm64 上安装 x64 包。
           SHARP_VER=$(node -p "require('./node_modules/sharp/package.json').optionalDependencies['@img/sharp-darwin-x64']")
           LIBVIPS_VER=$(node -p "require('./node_modules/sharp/package.json').optionalDependencies['@img/sharp-libvips-darwin-x64']")
-          npm install --no-save --no-audit --no-fund --os=darwin --cpu=x64 \
+          npm install --no-save --no-audit --no-fund --force \
             "@img/sharp-darwin-x64@${SHARP_VER}" \
             "@img/sharp-libvips-darwin-x64@${LIBVIPS_VER}"
 
