@@ -135,7 +135,14 @@ export class PluginManager {
   private windowManager: PluginWindowManager | null = null
   private hostManager: PluginHostManager
   private useUtilityProcess: boolean = true  // 是否使用 UtilityProcess
-  private initializedPlugins: Set<string> = new Set()  // 已初始化的插件（懒加载跟踪）
+  private initializedPlugins: Set<string> = new Set()  // 生命周期已初始化（用于 onDisable/onUnload 判断）
+  /**
+   * 跟踪「当前 Worker 进程」是否已执行过 onLoad。
+   * 独立于 initializedPlugins，因为 Worker 进程可能因空闲超时/崩溃被销毁，
+   * 进程重建后内存清空，pluginToolHandlers 等 Worker 内注册的状态也会丢失，
+   * 需要重新触发 onLoad，但不能影响 initializedPlugins 的生命周期语义。
+   */
+  private workerOnloadedPlugins: Set<string> = new Set()
   private searchWorker: PluginSearchWorker
   private commandShortcutManager: PluginCommandShortcutManager
   private commandDisabledManager: PluginCommandDisabledManager
@@ -177,6 +184,22 @@ export class PluginManager {
     // P2a 修复: 动态特性变更时自动同步搜索 Worker
     pluginFeatureStore.onChange(() => {
       void this.syncSearchWorker().catch(() => {})
+    })
+
+    // 修复：Worker 进程退出后（空闲销毁/崩溃）清除 Worker 级 onLoad 标记，
+    // 使下次 AI 工具调用时能重新触发 onLoad，重建 Worker 内的 tool handler 等状态。
+    //
+    // 注意：仅清除 workerOnloadedPlugins，不动 initializedPlugins（生命周期标记），
+    // 保证 disable()/uninstall() 仍能正常调用 onDisable/onUnload 清理主进程资源。
+    //
+    // P2 竞态防护：用 isHostReady 检查，若新 Host 已就绪（reloadBackend 场景），
+    // 说明此 exit 事件属于旧进程，跳过清除，不影响新 Host 的初始化状态。
+    this.hostManager.on('host:exit', (pluginId: string) => {
+      if (this.hostManager.isHostReady(pluginId)) {
+        // 新 Host 已经就绪，这是旧进程的 stale exit 事件，忽略
+        return
+      }
+      this.workerOnloadedPlugins.delete(pluginId)
     })
   }
 
@@ -616,9 +639,12 @@ export class PluginManager {
     }
 
     // 懒加载：首次运行时调用 onLoad 钩子
-    if (!this.initializedPlugins.has(name)) {
+    // 同时检查 workerOnloadedPlugins：若 Worker 进程被重建（空闲销毁后重启），
+    // 需要重新执行 onLoad 以重建 Worker 内的状态（如 AI tool handler 注册）
+    if (!this.initializedPlugins.has(name) || !this.workerOnloadedPlugins.has(name)) {
       await this.callPluginHook(plugin, 'onLoad')
       this.initializedPlugins.add(name)
+      this.workerOnloadedPlugins.add(name)
     }
 
     const feature = this.getCombinedFeatures(plugin).find(item => item.code === featureCode)
@@ -844,6 +870,7 @@ export class PluginManager {
         await this.hostManager.destroyHost(pluginId)
       }
       this.initializedPlugins.delete(pluginId)
+      this.workerOnloadedPlugins.delete(pluginId)
     } else if (this.useUtilityProcess && this.hostManager.isHostReady(pluginId) && !this.backgroundManager.isRunning(pluginId)) {
       // 兜底：可能由 redirect/initPlugin 直接拉起 Host，但未进入 initializedPlugins
       await this.hostManager.destroyHost(pluginId)
@@ -890,6 +917,7 @@ export class PluginManager {
           await this.hostManager.destroyHost(pluginId)
         }
         this.initializedPlugins.delete(pluginId)
+        this.workerOnloadedPlugins.delete(pluginId)
       } else if (this.useUtilityProcess && this.hostManager.isHostReady(pluginId) && !this.backgroundManager.isRunning(pluginId)) {
         // 兜底：可能由 redirect/initPlugin 直接拉起 Host，但未进入 initializedPlugins
         await this.hostManager.destroyHost(pluginId)
@@ -952,13 +980,17 @@ export class PluginManager {
     return this.windowManager.getActiveWindowPlugins()
   }
 
-  // 首次安装后主动初始化插件（触发 onLoad）
+  // 主动初始化插件（触发 onLoad）
+  // 满足以下任一条件时触发 onLoad：
+  // 1. initializedPlugins 中无记录（首次初始化）
+  // 2. workerOnloadedPlugins 中无记录（Worker 进程已重建，需重注册 tool handler 等）
   async initializePlugin(name: string): Promise<void> {
     const plugin = this.resolve(name)
     if (!plugin) return
-    if (this.initializedPlugins.has(plugin.id)) return
+    if (this.initializedPlugins.has(plugin.id) && this.workerOnloadedPlugins.has(plugin.id)) return
     await this.callPluginHook(plugin, 'onLoad')
     this.initializedPlugins.add(plugin.id)
+    this.workerOnloadedPlugins.add(plugin.id)
   }
 
   // 销毁所有资源
@@ -985,6 +1017,7 @@ export class PluginManager {
       this.plugins.clear()
       this.runners.clear()
       this.initializedPlugins.clear()
+      this.workerOnloadedPlugins.clear()
     } finally {
       this.isReloading = false
     }
@@ -1133,8 +1166,9 @@ export class PluginManager {
 
     // 2. 如果插件已初始化（触发过 onLoad），重新触发 onLoad
     if (this.initializedPlugins.has(pluginId)) {
-      // 重新标记为未初始化，以便 run() 或其他方法再次触发初始化
-      this.initializedPlugins.delete(pluginId)
+      // 清除 Worker 级标记，保留生命周期标记
+      // initializePlugin 会因 workerOnloadedPlugins 缺失而重新调用 onLoad
+      this.workerOnloadedPlugins.delete(pluginId)
 
       // 注意：这里是否立即调用 onLoad 取决于需求。
       // 如果插件是后台运行的（如 onLoad 启动了某些服务），应该立即重启。
@@ -1188,6 +1222,7 @@ export class PluginManager {
 
     this.runners.delete(pluginId)
     this.initializedPlugins.delete(pluginId)
+    this.workerOnloadedPlugins.delete(pluginId)
     this.plugins.set(pluginId, nextPlugin)
 
     if (nextPlugin.isDev && nextPlugin.enabled && await this.shouldAutoReloadDevPlugins()) {
