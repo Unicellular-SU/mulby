@@ -49,11 +49,11 @@ export interface ProviderStreamOrchestrationDeps {
       messages: Array<{
         role: 'system' | 'user' | 'assistant'
         content:
-          | string
-          | Array<
-              | { type: 'text'; text: string }
-              | { type: 'image_url'; image_url: { url: string } }
-            >
+        | string
+        | Array<
+          | { type: 'text'; text: string }
+          | { type: 'image_url'; image_url: { url: string } }
+        >
       }>
       apiKey?: string
       baseURL?: string
@@ -186,11 +186,11 @@ export async function executeProviderStreamOrchestration(
         messages: messages as Array<{
           role: 'system' | 'user' | 'assistant'
           content:
-            | string
-            | Array<
-                | { type: 'text'; text: string }
-                | { type: 'image_url'; image_url: { url: string } }
-              >
+          | string
+          | Array<
+            | { type: 'text'; text: string }
+            | { type: 'image_url'; image_url: { url: string } }
+          >
         }>,
         apiKey: input.requestApiKey,
         baseURL: input.providerConfig?.baseURL,
@@ -277,7 +277,7 @@ export async function executeProviderStreamOrchestration(
         abortSignal: input.controllerSignal,
         assertNotAborted: input.deps.assertNotAborted,
         onPart: (part) => {
-          console.log('[AI] stream part:', part?.type, part)
+          // console.log('[AI] stream part:', part?.type, part)
         },
         onText: (text) => input.deps.emitTextChunk(input.trackedOnChunk, text),
         onReasoning: (text) => input.deps.emitReasoningChunk(input.trackedOnChunk, text),

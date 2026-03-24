@@ -3,6 +3,39 @@ import { getRotatedApiKey } from '../../../shared/ai/apiKeyPool'
 import { attachmentStore } from '../attachments'
 import { buildApiKeyScope } from './utils'
 
+/**
+ * 将 reader.read() 与 AbortSignal 竞争：
+ * 当 abort 触发时立刻 cancel reader 并 throw，不等轮询检查。
+ */
+async function readWithAbort(
+  reader: ReadableStreamDefaultReader<Uint8Array>,
+  abortSignal?: AbortSignal
+): Promise<ReadableStreamReadResult<Uint8Array>> {
+  if (!abortSignal) return reader.read()
+  if (abortSignal.aborted) {
+    await reader.cancel().catch(() => {})
+    throw new Error('AI stream aborted by user')
+  }
+  return new Promise<ReadableStreamReadResult<Uint8Array>>((resolve, reject) => {
+    const onAbort = () => {
+      reader.cancel().catch(() => {}).finally(() => {
+        reject(new Error('AI stream aborted by user'))
+      })
+    }
+    abortSignal.addEventListener('abort', onAbort, { once: true })
+    reader.read().then(
+      (result) => {
+        abortSignal.removeEventListener('abort', onAbort)
+        resolve(result)
+      },
+      (err) => {
+        abortSignal.removeEventListener('abort', onAbort)
+        reject(err)
+      }
+    )
+  })
+}
+
 type AnthropicContentPart =
   | { type: 'text'; text: string }
   | { type: 'image'; source: { type: 'base64'; media_type: string; data: string } }
@@ -222,7 +255,7 @@ export async function streamAnthropicMessages(
   let reasoning = ''
 
   while (true) {
-    const { value, done } = await reader.read()
+    const { value, done } = await readWithAbort(reader, options.abortSignal)
     if (done) break
     buffer += decoder.decode(value, { stream: true })
 

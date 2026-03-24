@@ -370,6 +370,8 @@ export class AiService {
       console.info('[AI] abort:request', { requestId })
       controller.abort()
       this.controllers.delete(requestId)
+    } else {
+      console.warn('[AI] abort:no-controller', { requestId, knownIds: [...this.controllers.keys()] })
     }
     const trackedCount = this.requestMcpCallIds.get(requestId)?.size || 0
     if (trackedCount > 0) {

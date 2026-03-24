@@ -43,6 +43,7 @@ export function registerAiHandlers() {
   })
 
   ipcMain.handle('ai:abort', async (_event: IpcMainInvokeEvent, requestId: string) => {
+    console.info('[AI] IPC ai:abort received', { requestId })
     aiService.abort(requestId)
   })
 

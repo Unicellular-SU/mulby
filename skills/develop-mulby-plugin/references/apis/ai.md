@@ -39,7 +39,7 @@ const message = await ai.call({
 
 **返回值**:
 - `AiPromiseLike<AiMessage>` - 最终消息（包含可选 `usage`）
-- 返回 Promise 附带 `abort()` 方法；传入 `onChunk` 时可中止当前流式请求
+- 流式调用时，第一个 chunk 会携带 `__requestId` 字段，可用于后续调用 `ai.abort(requestId)` 中止请求
 
 ```javascript
 const req = ai.call(
@@ -50,22 +50,102 @@ const req = ai.call(
   (chunk) => console.log(chunk.content)
 );
 
-// 中止请求
-req.abort?.();
+// ❌ 错误：在渲染进程（contextBridge 环境）中，req.abort 不可用
+// req.abort?.();
+
+// ✅ 正确：使用独立的 ai.abort(requestId)（见下文）
 ```
 
 ### abort(requestId)
 [Renderer] [Backend]
-中止指定请求 ID 的进行中调用。
+中止指定请求 ID 的进行中调用。**在渲染进程（插件 UI）中，这是唯一可靠的中止方式。**
 
 ```javascript
 await ai.abort(requestId);
 ```
 
-> 通常优先使用 `ai.call(...).abort()`；当你拿到了 `requestId`（例如并发管理）时可直接用 `ai.abort(requestId)`。
+> **重要**：在渲染进程中，`ai.call()` 返回的 `req.abort()` 方法由于 Electron `contextBridge` 的序列化限制**无法正常工作**（附加在 Promise 对象上的属性在跨越 context 边界时会丢失）。请始终使用 `ai.abort(requestId)`。
 
-> 说明：`tools` 在插件后端会通过插件 host 方法执行（工具名=插件方法名）。  
-> 渲染进程不直接执行工具函数，如需在 UI 使用工具调用，请通过 `window.mulby.host.call` 调用插件后端方法执行。
+---
+
+## ⚠️ 流式调用 + 中止 完整最佳实践（渲染进程）
+
+在渲染进程（插件 UI）中实现流式 AI 调用并支持用户中止，必须遵循以下模式：
+
+```tsx
+import { useRef, useState } from 'react';
+
+const ai = () => (window as any).mulby?.ai;
+
+function MyAiComponent() {
+  const [isStreaming, setIsStreaming] = useState(false);
+  const abortedRef = useRef(false);        // 用户已点击中止的标志
+  const requestIdRef = useRef<string | null>(null);  // 当前请求的 requestId
+
+  const handleSend = async (userMessage: string) => {
+    abortedRef.current = false;
+    requestIdRef.current = null;
+    setIsStreaming(true);
+
+    try {
+      const req = ai().call(
+        { model: 'openai:gpt-4o-mini', messages: [{ role: 'user', content: userMessage }] },
+        (chunk: any) => {
+          // 第一个 chunk 携带 __requestId，必须捕获以便后续中止
+          if (chunk.__requestId) {
+            requestIdRef.current = chunk.__requestId;
+            return;
+          }
+          // 用户已中止时忽略后续 chunk（防止 UI 继续更新）
+          if (abortedRef.current) return;
+
+          if (chunk.chunkType === 'text') {
+            // 更新 UI...
+          }
+        }
+      );
+
+      const finalMsg = await req;
+      if (abortedRef.current) return; // 中止后不写入最终结果
+
+      // 使用 finalMsg...
+    } catch (err: any) {
+      const isAbort = abortedRef.current
+        || err?.name === 'AbortError'
+        || String(err?.message).toLowerCase().includes('aborted');
+      if (isAbort) return; // 中止后静默退出
+      // 处理其他错误...
+    } finally {
+      setIsStreaming(false);
+    }
+  };
+
+  const handleStop = () => {
+    abortedRef.current = true;
+    // ✅ 正确：使用顶层 ai.abort(requestId)，contextBridge 安全
+    if (requestIdRef.current) {
+      ai()?.abort?.(requestIdRef.current);
+    }
+    setIsStreaming(false);
+  };
+
+  return (
+    <div>
+      {isStreaming && <button onClick={handleStop}>停止</button>}
+    </div>
+  );
+}
+```
+
+**关键点说明**：
+
+| 事项 | 说明 |
+|------|------|
+| `req.abort()` | ❌ 渲染进程不可用。原因：`contextBridge` 序列化时会丢失附加在 Promise 上的属性 |
+| `ai.abort(requestId)` | ✅ 渲染进程唯一可靠的中止方式，通过标准 IPC 通道发送 |
+| `chunk.__requestId` | 第一个 chunk 携带的请求 ID，**必须在 chunk 回调中捕获** |
+| `abortedRef` | 必须用 `useRef`（不是 `useState`），中止后立刻同步生效，防止后续 chunk 继续写入 UI |
+| `catch` 中 isAbort 判断 | `abort` 会导致 Promise reject，需要在 catch 中静默处理 |
 
 ### MCP 参与调用
 
