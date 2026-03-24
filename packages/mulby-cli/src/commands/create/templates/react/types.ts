@@ -1437,6 +1437,20 @@ interface MulbyAPI {
     clearInBrowserCache: () => Promise<boolean>
     run: (idOrOptions?: number | any, options?: any) => Promise<any[]>
   }
+  openclaw: {
+    getSettings(): Promise<unknown>
+    updateSettings(partial: unknown): Promise<unknown>
+    connect(): Promise<unknown>
+    disconnect(): Promise<unknown>
+    getStatus(): Promise<unknown>
+    testConnection(settings: unknown): Promise<unknown>
+    onStatusChanged(callback: (status: unknown) => void): Disposable
+    onInvoked(callback: (data: unknown) => void): Disposable
+    getLogs(): Promise<unknown>
+    clearLogs(): Promise<unknown>
+    onLog(callback: (entry: unknown) => void): Disposable
+    onLogsCleared(callback: () => void): Disposable
+  }
   sharp: MulbySharpFunction
   getSharpVersion: () => Promise<{ sharp: Record<string, string>; format: Record<string, any> }>
   ffmpeg: MulbyFFmpeg
