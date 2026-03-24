@@ -1,5 +1,5 @@
 const { execFileSync } = require('child_process')
-const { existsSync, readdirSync, statSync } = require('fs')
+const { existsSync, readdirSync, statSync, copyFileSync } = require('fs')
 const path = require('path')
 
 function run(command, args) {
@@ -122,6 +122,44 @@ function signWithIdentity(targetPath, identityHash) {
   ])
 }
 
+/**
+ * 修复 sharp 在 Electron 28 + asar.unpacked 环境下的 exports subpath 兼容问题。
+ * sharp.js 调用 require('@img/sharp-darwin-x64/sharp.node')，依赖 package.json exports map
+ * 将 ./sharp.node 映射到 ./lib/sharp-darwin-x64.node。
+ * 但 Electron 旧版本从 asar.unpacked 加载时无法正确解析 exports subpath，
+ * 会直接在包根目录查找 sharp.node 文件。
+ * 因此在包根目录额外复制一份命名为 sharp.node，让直接路径访问也可以工作。
+ */
+function fixSharpNativeBinaries(unpackedDir) {
+  const imgDir = path.join(unpackedDir, 'node_modules', '@img')
+  if (!existsSync(imgDir)) return
+
+  const sharpPkgs = readdirSync(imgDir).filter((name) => name.startsWith('sharp-') && !name.startsWith('sharp-libvips'))
+  let fixedCount = 0
+
+  for (const pkgName of sharpPkgs) {
+    const pkgDir = path.join(imgDir, pkgName)
+    const libDir = path.join(pkgDir, 'lib')
+    if (!existsSync(libDir)) continue
+
+    // 找到 lib/ 下的 .node 文件（如 sharp-darwin-x64.node）
+    const nodeFiles = readdirSync(libDir).filter((f) => f.endsWith('.node'))
+    if (nodeFiles.length === 0) continue
+
+    // 在包根目录创建 sharp.node，供 Electron 无法解析 exports subpath 时的直接路径访问
+    const destPath = path.join(pkgDir, 'sharp.node')
+    if (existsSync(destPath)) continue  // 已存在，跳过
+
+    copyFileSync(path.join(libDir, nodeFiles[0]), destPath)
+    fixedCount++
+    console.log(`[afterPack] Copied ${pkgName}/lib/${nodeFiles[0]} -> ${pkgName}/sharp.node`)
+  }
+
+  if (fixedCount > 0) {
+    console.log(`[afterPack] Fixed ${fixedCount} sharp native binary/binaries`)
+  }
+}
+
 module.exports = async function afterPack(context) {
   if (context.electronPlatformName !== 'darwin') {
     return
@@ -145,6 +183,9 @@ module.exports = async function afterPack(context) {
 
   // 先签 app.asar.unpacked 下的 Mach-O 文件（例如 .node/native helper）
   const unpackedDir = path.join(appPath, 'Contents', 'Resources', 'app.asar.unpacked')
+
+  // 修复 sharp exports subpath 兼容问题（Electron 28 asar.unpacked）
+  fixSharpNativeBinaries(unpackedDir)
   let signedNestedCount = 0
   if (existsSync(unpackedDir)) {
     const codeObjects = listFilesRecursively(unpackedDir).filter((filePath) => {

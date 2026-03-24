@@ -51,6 +51,15 @@ jobs:
       - name: Install dependencies
         run: npm ci --no-audit --no-fund
 
+      - name: Install macOS cross-arch sharp binaries
+        if: runner.os == 'macOS'
+        run: |
+          # macos-latest runner 是 arm64，npm ci 只装了 arm64 的 sharp binary。
+          # 额外安装 x64 的 native binary，使打包产物同时支持 Intel Mac。
+          npm install --no-save --no-audit --no-fund \
+            @img/sharp-darwin-x64@$(node -p "require('./node_modules/sharp/package.json').optionalDependencies['@img/sharp-darwin-x64']") \
+            @img/sharp-libvips-darwin-x64@$(node -p "require('./node_modules/sharp/package.json').optionalDependencies['@img/sharp-libvips-darwin-x64']")
+
       - name: Initialize releases repo (if empty)
         if: matrix.os == 'macos-latest'
         env:
