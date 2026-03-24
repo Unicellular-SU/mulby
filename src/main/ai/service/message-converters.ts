@@ -92,6 +92,34 @@ export async function toOpenAIChatMessages(input: {
   return results
 }
 
+/** 将文件内容转为可读文本 part（文本类直接 UTF-8，其余 base64）
+ *  @param maxBytes 超过此字节数则返回提示而非内容；不传则不限制，超出 context 由 provider API 自然报错
+ */
+async function fileToTextPart(
+  attachmentId: string,
+  filename: string,
+  mimeType: string,
+  maxBytes = Infinity
+): Promise<{ type: 'text'; text: string }> {
+  const data = await attachmentStore.read(attachmentId)
+  const buffer = Buffer.from(data)
+  if (buffer.length > maxBytes) {
+    return {
+      type: 'text',
+      text: `[File ${filename} (${mimeType}, ${buffer.length} bytes) is too large to inline. Please use a smaller file or summarize its contents first.]`
+    }
+  }
+  const isText = mimeType.startsWith('text/')
+    || mimeType === 'application/json'
+    || mimeType === 'application/xml'
+    || mimeType === 'application/javascript'
+    || mimeType === 'application/typescript'
+  if (isText) {
+    return { type: 'text', text: `--- File: ${filename} ---\n${buffer.toString('utf-8')}\n---` }
+  }
+  return { type: 'text', text: `File ${filename} (${mimeType}) base64:\n${buffer.toString('base64')}` }
+}
+
 export async function toSdkMessages(input: {
   messages: AiMessage[]
   modelId?: string
@@ -133,6 +161,7 @@ export async function toSdkMessages(input: {
         const sizeLimit = getFileSizeLimit(input.modelId, providerConfig, mimeType)
 
         if (mimeType === 'application/pdf' && supportsPdfInput(input.modelId, providerConfig)) {
+          // 大文件先尝试远端上传
           if (size > sizeLimit && supportsLargeFileUpload(input.modelId, providerConfig)) {
             const remote = await input.uploadAttachmentToProviderInternal({
               attachmentId: part.attachmentId,
@@ -161,10 +190,17 @@ export async function toSdkMessages(input: {
               }
             }
           }
+          // 小文件或上传失败：以 inline file part 发送（supportsPdfInput 已确认 SDK 支持）
+          // 注意：不依赖 providerType 白名单，避免 openai-response / qwen 等特殊路由被误判
+          const data = await attachmentStore.read(part.attachmentId)
+          parts.push({ type: 'file', data, mediaType: mimeType, filename })
+          continue
         }
 
-        const data = await attachmentStore.read(part.attachmentId)
-        parts.push({ type: 'file', data, mediaType: mimeType, filename })
+        // 非 PDF 文件（含 application/json 等）：回退为文本内嵌
+        // 以 sizeLimit（来自 getFileSizeLimit）作为上限；Infinity 时不限制，
+        // 超出 provider context window 由 API 自然报错，无需写死字节数
+        parts.push(await fileToTextPart(part.attachmentId, filename, mimeType, sizeLimit))
       }
     }
 

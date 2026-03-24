@@ -276,8 +276,8 @@ export async function executeProviderStreamOrchestration(
         modelId: input.effectiveOption.model,
         abortSignal: input.controllerSignal,
         assertNotAborted: input.deps.assertNotAborted,
-        onPart: (part) => {
-          // console.log('[AI] stream part:', part?.type, part)
+        onPart: (_part) => {
+          // console.log('[AI] stream part:', _part?.type, _part)
         },
         onText: (text) => input.deps.emitTextChunk(input.trackedOnChunk, text),
         onReasoning: (text) => input.deps.emitReasoningChunk(input.trackedOnChunk, text),
