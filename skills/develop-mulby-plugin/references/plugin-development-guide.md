@@ -231,6 +231,26 @@ export function onLoad() {
 - Priority order: Built-in tools > MCP tools > Plugin tools.
 - See `references/apis/tools.md` for the full API reference.
 
+## Backend Build Rules
+
+When a plugin has backend code that needs bundling (e.g. TypeScript → JavaScript):
+
+- Use `--packages=external` with esbuild to **externalize all npm dependencies**.
+- The build command should be: `esbuild src/main.ts --bundle --platform=node --outfile=dist/main.js --packages=external`
+- This produces a small bundle containing only the plugin's own source code.
+- All npm packages (`sharp`, `svgo`, `image-size`, etc.) are loaded from `node_modules` at runtime.
+
+**Why this matters**: esbuild cannot correctly bundle certain npm packages that use:
+
+- `createRequire(import.meta.url)` — produces `createRequire(undefined)` when transpiled to CJS
+- Glob require patterns (`require('./types/**/*')`) — generates mismatched extension keys
+- Relative JSON file loading via `createRequire` — paths break when flattened into a single file
+- Top-level scope variables that depend on proper module context
+
+Without `--packages=external`, any plugin with complex Node.js dependencies (image processing, SVG optimization, PDF generation, etc.) will fail at runtime with cryptic errors.
+
+**The `.gitignore` should NOT exclude `node_modules`** when using `--packages=external`, because the plugin needs `node_modules` at runtime. However, if packing the plugin as `.inplugin`, the pack process should handle dependency inclusion.
+
 ## Preload Rules
 
 Use `preload.cjs` only when the UI needs a bridge to Node.js or Electron capabilities such as:

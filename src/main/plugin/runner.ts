@@ -54,24 +54,13 @@ export class PluginRunner {
       const module = await import(`file://${mainPath}${cacheBuster}`)
       this.pluginModule = module.default || module
     } else {
-      // CommonJS 格式：使用 Function 执行
-      const moduleObj = { exports: {} as Record<string, unknown> }
-      const exportsObj = moduleObj.exports
-
-      const wrapper = new Function(
-        'module', 'exports', 'require', '__filename', '__dirname',
-        'console', 'Buffer', 'setTimeout', 'setInterval', 'clearTimeout', 'clearInterval',
-        'setImmediate', 'clearImmediate', 'process',
-        code
-      )
-
-      wrapper(
-        moduleObj, exportsObj, require, mainPath, dirname(mainPath),
-        console, Buffer, setTimeout, setInterval, clearTimeout, clearInterval,
-        setImmediate, clearImmediate, process
-      )
-
-      this.pluginModule = (moduleObj.exports.default || moduleObj.exports) as PluginModule
+      // CommonJS 格式：使用 Module._compile() 加载
+      const Module = require('module') as typeof import('module')
+      const m = new (Module as any)(mainPath)
+      m.filename = mainPath
+      m.paths = (Module as any)._nodeModulePaths(dirname(mainPath))
+      m._compile(code, mainPath)
+      this.pluginModule = (m.exports.default || m.exports) as PluginModule
     }
 
     return this.pluginModule!
