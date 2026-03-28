@@ -1,5 +1,6 @@
 import type { AiTool } from '../../../shared/types/ai'
 import type { RunCommandInput, RunCommandResult } from '../../services/command-runner'
+import { sanitizeControlCharsInJsonStrings } from '../service/utils'
 
 export const AI_RUN_COMMAND_TOOL_NAME = 'mulby_run_command'
 
@@ -8,13 +9,43 @@ function tryParsePossiblyMalformedJson(input: string): unknown {
   try {
     return JSON.parse(source)
   } catch {
+    // Most common cause: LLM produces literal newline/tab/CR chars inside JSON
+    // string values. Use context-aware sanitizer that only escapes control chars
+    // inside string literals, preserving structural whitespace in pretty-printed JSON.
+    const controlFixed = sanitizeControlCharsInJsonStrings(source)
+    if (controlFixed) {
+      try {
+        return JSON.parse(controlFixed)
+      } catch {
+        // fall through
+      }
+    }
     // Some providers return non-standard escapes like "\|", which breaks JSON.parse.
     // Recover by escaping only backslashes that are not valid JSON escapes.
-    const sanitized = source.replace(/\\(?!["\\/bfnrtu])/g, '\\\\')
-    if (sanitized !== source) {
-      return JSON.parse(sanitized)
+    const base = controlFixed ?? source
+    const escapeSanitized = base.replace(/\\(?!["\\/bfnrtu])/g, '\\\\')
+    if (escapeSanitized !== base) {
+      try {
+        return JSON.parse(escapeSanitized)
+      } catch {
+        // fall through to embedded object extraction
+      }
     }
-    throw new Error('runCommand args must be an object')
+    // Last resort: try extracting an embedded JSON object from within the string.
+    // Some models produce args like: 'Here is the command: {"command":"...","args":[...]}'
+    const extractBase = controlFixed ?? source
+    const firstBrace = extractBase.indexOf('{')
+    const lastBrace = extractBase.lastIndexOf('}')
+    if (firstBrace >= 0 && lastBrace > firstBrace) {
+      const slice = extractBase.slice(firstBrace, lastBrace + 1)
+      try {
+        return JSON.parse(slice)
+      } catch {
+        // ignore
+      }
+    }
+    const preview = source.length > 120 ? source.slice(0, 120) + '...' : source
+    throw new Error(`runCommand args must be an object (got unparseable string: ${preview})`)
   }
 }
 
@@ -23,18 +54,20 @@ function parseRunCommandArgsObject(args: unknown): Record<string, unknown> {
     return args as Record<string, unknown>
   }
   if (typeof args !== 'string') {
-    throw new Error('runCommand args must be an object')
+    const typeName = args === null ? 'null' : Array.isArray(args) ? 'array' : typeof args
+    throw new Error(`runCommand args must be an object (got ${typeName})`)
   }
   const firstRaw = args.trim()
   if (!firstRaw) {
-    throw new Error('runCommand args must be an object')
+    throw new Error('runCommand args must be an object (got empty string)')
   }
 
   let firstParsed: unknown
   try {
     firstParsed = tryParsePossiblyMalformedJson(firstRaw)
   } catch {
-    throw new Error('runCommand args must be an object')
+    const preview = firstRaw.length > 120 ? firstRaw.slice(0, 120) + '...' : firstRaw
+    throw new Error(`runCommand args must be an object (failed to parse: ${preview})`)
   }
 
   if (firstParsed && typeof firstParsed === 'object' && !Array.isArray(firstParsed)) {
@@ -42,18 +75,33 @@ function parseRunCommandArgsObject(args: unknown): Record<string, unknown> {
   }
   if (typeof firstParsed === 'string') {
     const secondRaw = firstParsed.trim()
-    if (!secondRaw) throw new Error('runCommand args must be an object')
+    if (!secondRaw) throw new Error('runCommand args must be an object (double-stringified empty)')
     try {
       const secondParsed = tryParsePossiblyMalformedJson(secondRaw)
       if (secondParsed && typeof secondParsed === 'object' && !Array.isArray(secondParsed)) {
         return secondParsed as Record<string, unknown>
+      }
+      // Handle triple-stringified edge case
+      if (typeof secondParsed === 'string') {
+        const thirdRaw = secondParsed.trim()
+        if (thirdRaw) {
+          try {
+            const thirdParsed = tryParsePossiblyMalformedJson(thirdRaw)
+            if (thirdParsed && typeof thirdParsed === 'object' && !Array.isArray(thirdParsed)) {
+              return thirdParsed as Record<string, unknown>
+            }
+          } catch {
+            // ignore
+          }
+        }
       }
     } catch {
       // ignore and throw unified error below
     }
   }
 
-  throw new Error('runCommand args must be an object')
+  const preview = firstRaw.length > 120 ? firstRaw.slice(0, 120) + '...' : firstRaw
+  throw new Error(`runCommand args must be an object (parsed to ${typeof firstParsed}, raw: ${preview})`)
 }
 
 export function buildAiRunCommandTool(): AiTool {

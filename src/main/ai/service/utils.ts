@@ -24,6 +24,69 @@ export function buildApiKeyScope(input: { providerId?: string; providerType?: st
   return `provider:${providerToken}:${baseURL}`
 }
 
+/**
+ * Replace literal control characters (LF, CR, TAB) that appear **inside JSON
+ * string values** with their JSON escape equivalents (`\n`, `\t`).
+ *
+ * Structural whitespace between JSON tokens (e.g., in pretty-printed output)
+ * is left untouched so that valid formatted JSON remains parseable.
+ *
+ * Returns `null` when no in-string control characters were found (nothing to fix).
+ */
+export function sanitizeControlCharsInJsonStrings(source: string): string | null {
+  let changed = false
+  let inString = false
+  const out: string[] = []
+  let i = 0
+  while (i < source.length) {
+    const ch = source[i]
+    if (inString) {
+      if (ch === '\\') {
+        // Escaped character – copy backslash + next char verbatim
+        out.push(ch)
+        i++
+        if (i < source.length) {
+          out.push(source[i])
+        }
+        i++
+        continue
+      }
+      if (ch === '"') {
+        inString = false
+        out.push(ch)
+        i++
+        continue
+      }
+      const code = ch.charCodeAt(0)
+      if (code === 0x0D) { // CR
+        // Handle CRLF as a single unit
+        if (i + 1 < source.length && source.charCodeAt(i + 1) === 0x0A) {
+          i++ // skip the LF half
+        }
+        out.push('\\', 'n')
+        changed = true
+      } else if (code === 0x0A) { // LF
+        out.push('\\', 'n')
+        changed = true
+      } else if (code === 0x09) { // TAB
+        out.push('\\', 't')
+        changed = true
+      } else {
+        out.push(ch)
+      }
+      i++
+      continue
+    }
+    // Outside a string literal
+    if (ch === '"') {
+      inString = true
+    }
+    out.push(ch)
+    i++
+  }
+  return changed ? out.join('') : null
+}
+
 export function parseCompatToolCallArgs(rawArgs: unknown): unknown {
   if (typeof rawArgs !== 'string') return rawArgs ?? {}
   const source = rawArgs.trim()
@@ -39,6 +102,39 @@ export function parseCompatToolCallArgs(rawArgs: unknown): unknown {
       return parsed
     }
   } catch {
+    // Most common cause: LLM produces literal newline/tab/CR chars inside JSON
+    // string values. Use context-aware sanitizer that only escapes control chars
+    // inside string literals, preserving structural whitespace in pretty-printed JSON.
+    const controlFixed = sanitizeControlCharsInJsonStrings(source)
+    if (controlFixed) {
+      try {
+        return JSON.parse(controlFixed)
+      } catch {
+        // fall through
+      }
+    }
+    // Try sanitizing non-standard backslash escapes (e.g. "\|" from some providers)
+    const base = controlFixed ?? source
+    const escapeSanitized = base.replace(/\\(?!["\\/bfnrtu])/g, '\\\\')
+    if (escapeSanitized !== base) {
+      try {
+        return JSON.parse(escapeSanitized)
+      } catch {
+        // fall through
+      }
+    }
+    // Try extracting an embedded JSON object from within the string
+    const extractBase = controlFixed ?? source
+    const firstBrace = extractBase.indexOf('{')
+    const lastBrace = extractBase.lastIndexOf('}')
+    if (firstBrace >= 0 && lastBrace > firstBrace) {
+      const slice = extractBase.slice(firstBrace, lastBrace + 1)
+      try {
+        return JSON.parse(slice)
+      } catch {
+        // fall through
+      }
+    }
     return rawArgs
   }
 }

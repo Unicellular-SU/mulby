@@ -122,7 +122,12 @@ export function buildTools(input: BuildToolsInput) {
                   throw new Error('AI stream aborted by user')
                 }
                 const message = error instanceof Error ? error.message : String(error)
-                throw new Error(`[AI_TOOL_EXECUTION_ERROR] ${fn.name}: ${message}`)
+                console.warn('[AI] 工具执行失败（返回错误结果给模型）', { toolName: fn.name, error: message })
+                result = {
+                  success: false,
+                  error: message,
+                  hint: 'Tool execution failed. Please check the arguments format and retry. Arguments must be a valid JSON object.'
+                }
               }
             }
             console.log('[AI] 工具执行完成', { toolName: fn.name, result })
