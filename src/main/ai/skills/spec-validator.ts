@@ -6,6 +6,7 @@ const FRONTMATTER_PATTERN = /^---\s*\r?\n([\s\S]*?)\r?\n---\s*(?:\r?\n|$)([\s\S]
 const ALLOWED_FRONTMATTER_KEYS = new Set([
   'name',
   'description',
+  'version',
   'license',
   'compatibility',
   'metadata',
@@ -112,11 +113,12 @@ function normalizeMetadata(input: unknown, errors: string[]): Record<string, str
       errors.push('metadata key must not be empty')
       continue
     }
-    if (typeof rawValue !== 'string') {
-      errors.push(`metadata.${key} must be a string`)
-      continue
+    if (typeof rawValue === 'string') {
+      out[key] = rawValue
+    } else {
+      // Auto-stringify non-string metadata values (e.g. nested objects from third-party skills)
+      out[key] = JSON.stringify(rawValue)
     }
-    out[key] = rawValue
   }
   return Object.keys(out).length > 0 ? out : undefined
 }
