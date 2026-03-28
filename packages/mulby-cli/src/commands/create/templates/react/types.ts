@@ -983,7 +983,7 @@ type AiModelParameters = {
 }
 type AiMcpSelection = { mode?: 'off' | 'manual' | 'auto'; serverIds?: string[]; allowedToolIds?: string[] }
 type AiSkillSelection = {
-  mode?: 'off' | 'manual' | 'auto'
+  mode?: 'off' | 'manual' | 'progressive'
   skillIds?: string[]
   variables?: Record<string, string>
 }
@@ -1098,7 +1098,6 @@ type AiSkillRecord = {
     author?: string
     tags?: string[]
     triggerPhrases?: string[]
-    mode?: 'manual' | 'auto' | 'both'
     promptTemplate?: string
     mcpPolicy?: AiSkillMcpPolicy
     capabilities?: string[]
@@ -1108,7 +1107,6 @@ type AiSkillRecord = {
 type AiSkillSettings = {
   enabled: boolean
   activeSkillIds: string[]
-  autoSelect?: { enabled?: boolean; maxSkillsPerCall?: number; minScore?: number }
   records: AiSkillRecord[]
 }
 type AiSkillPreview = {
@@ -1121,6 +1119,7 @@ type AiSkillResolveResult = {
   selectedSkillIds: string[]
   selectedSkillNames: string[]
   selectedSkills?: Array<{ id: string; source: AiSkillSource; trustLevel: AiSkillTrustLevel }>
+  availableSkillsPrompt?: string
   systemPrompts: string[]
   mergedMcp?: AiMcpSelection
   toolContextPatch?: AiToolContext['mcpScope']
@@ -1141,7 +1140,6 @@ type AiSkillCreateWithAiInput = {
   replaceSkillId?: string
   enabled?: boolean
   trustLevel?: AiSkillTrustLevel
-  modePreference?: 'manual' | 'auto' | 'both'
 }
 type AiSkillCreateWithAiResult = {
   record: AiSkillRecord
@@ -1156,6 +1154,7 @@ type AiSkillCreateProgressChunk = {
 type AiToolContext = {
   pluginName?: string
   internalTag?: string
+  requestId?: string
   mcpScope?: { allowedServerIds?: string[]; allowedToolIds?: string[] }
 }
 type AiSettings = {
