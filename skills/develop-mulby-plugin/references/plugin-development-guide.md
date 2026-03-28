@@ -235,21 +235,35 @@ export function onLoad() {
 
 When a plugin has backend code that needs bundling (e.g. TypeScript → JavaScript):
 
-- Use `--packages=external` with esbuild to **externalize all npm dependencies**.
-- The build command should be: `esbuild src/main.ts --bundle --platform=node --outfile=dist/main.js --packages=external`
-- This produces a small bundle containing only the plugin's own source code.
-- All npm packages (`sharp`, `svgo`, `image-size`, etc.) are loaded from `node_modules` at runtime.
+- Default build command: `esbuild src/main.ts --bundle --platform=node --outfile=dist/main.js`
+- This bundles the plugin source **and all npm dependencies** into a single file.
+- For most plugins, this is the correct default — it works with `mulby pack` and requires no `node_modules` at runtime.
 
-**Why this matters**: esbuild cannot correctly bundle certain npm packages that use:
+### When to externalize specific packages
 
-- `createRequire(import.meta.url)` — produces `createRequire(undefined)` when transpiled to CJS
-- Glob require patterns (`require('./types/**/*')`) — generates mismatched extension keys
-- Relative JSON file loading via `createRequire` — paths break when flattened into a single file
-- Top-level scope variables that depend on proper module context
+Some npm packages cannot be bundled by esbuild. Add `--external:packagename` for each one:
 
-Without `--packages=external`, any plugin with complex Node.js dependencies (image processing, SVG optimization, PDF generation, etc.) will fail at runtime with cryptic errors.
+```bash
+esbuild src/main.ts --bundle --platform=node --outfile=dist/main.js --external:sharp --external:svgo
+```
 
-**The `.gitignore` should NOT exclude `node_modules`** when using `--packages=external`, because the plugin needs `node_modules` at runtime. However, if packing the plugin as `.inplugin`, the pack process should handle dependency inclusion.
+Known categories of packages that need `--external`:
+
+| Category | Examples | Reason |
+|----------|----------|--------|
+| Native addons | `sharp`, `better-sqlite3` | Contain `.node` binary files |
+| Uses `createRequire(import.meta.url)` | `svgo`, `csso`, `css-tree` | esbuild converts `import.meta` to `{}`, causing `undefined` URL |
+| Glob require patterns | `image-size` | esbuild generates extension-mismatched key maps |
+
+### `--packages=external` (all dependencies external)
+
+Use `--packages=external` **only for development plugins** that won't be packaged as `.inplugin`:
+
+```bash
+esbuild src/main.ts --bundle --platform=node --outfile=dist/main.js --packages=external
+```
+
+⚠️ **Packaging limitation**: `mulby pack` does not include `node_modules` in `.inplugin` archives. Plugins using `--packages=external` will fail after installation unless the pack process is extended to ship dependencies.
 
 ## Preload Rules
 

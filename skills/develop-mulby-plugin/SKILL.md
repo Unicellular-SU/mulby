@@ -49,7 +49,7 @@ Use this skill for both new Mulby plugins and existing plugin fixes. The goal is
 - Keep editable icon source files as SVG during development; packaged plugins should normally end with a final root `icon.png`.
 - Do not create preview-only HTML files such as `preview.html` or `demo.html`.
 - Avoid watch mode or long-running dev commands unless the user explicitly asks for them.
-- When the plugin has a backend esbuild step, always include `--packages=external` to avoid bundling npm packages that break at runtime (glob require, `createRequire`, native addons, etc.).
+- When the plugin backend imports npm packages that fail with esbuild bundling (native addons like `sharp`, packages using `createRequire` like `svgo`), externalize them individually with `--external:packagename`. Do not use `--packages=external` for plugins that will be packaged as `.inplugin` because `mulby pack` does not ship `node_modules`.
 - If bundled references and the target environment diverge, trust the target environment's implementation and current type definitions.
 
 ## What To Read
