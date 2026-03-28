@@ -105,42 +105,80 @@ export function injectInternalRuntimeTools(
   const skillRequestedCapabilities = normalizeAiToolCapabilityNames(input.skillCapabilities || [])
   const legacyOptionCapabilities = mapInternalToolsToCapabilities(option.internalTools || [])
   const legacySkillCapabilities = mapInternalToolsToCapabilities(input.skillInternalTools || [])
-  const requestedCapabilities: AiToolCapabilityName[] = normalizeAiToolCapabilityNames([
+
+  // ── Primary capabilities: from the caller/option (NOT from skills) ──
+  // These determine whether the default capability baseline is used.
+  // If empty (and no custom tools), resolveAiCapabilityPolicy adds ALL defaults.
+  const primaryRequestedCapabilities: AiToolCapabilityName[] = normalizeAiToolCapabilityNames([
     ...optionRequestedCapabilities,
+    ...legacyOptionCapabilities
+  ])
+
+  // ── Additive skill capabilities: ALWAYS merged on top of defaults ──
+  // These should NOT suppress the default baseline. For example, progressive
+  // disclosure adds 'skill.activate' — this must coexist with all default
+  // tools (shell, fs, git, etc.), not replace them.
+  // Legacy skill internalTools are also additive for the same reason.
+  const additiveSkillCapabilities = normalizeAiToolCapabilityNames([
     ...skillRequestedCapabilities,
-    ...legacyOptionCapabilities,
     ...legacySkillCapabilities
   ])
+
   const hasDeclaredTools = Array.isArray(option.tools) && option.tools.length > 0
-  const fallbackRequested = requestedCapabilities.length === 0 &&
+  const fallbackRequested = primaryRequestedCapabilities.length === 0 &&
     !hasDeclaredTools &&
     option.toolingPolicy?.enableInternalTools !== false &&
     shouldAutoInjectRunCommandByIntent(option.messages)
-  const withFallback = fallbackRequested ? normalizeAiToolCapabilityNames(['shell.exec']) : requestedCapabilities
+  const withFallback = fallbackRequested ? normalizeAiToolCapabilityNames(['shell.exec']) : primaryRequestedCapabilities
+
+  // Resolve policy against the primary capabilities (which may include
+  // baseline defaults via resolveAiCapabilityPolicy's own fallback).
   const capabilityDecision = resolveCapabilityDecision({
     option,
     requestedCapabilities: withFallback,
     selectedSkills: input.selectedSkills
   }, deps)
+
+  // Merge additive skill capabilities into the allowed set.
+  // They go through a separate policy check to respect deny lists.
+  const additiveDecision = additiveSkillCapabilities.length > 0
+    ? resolveCapabilityDecision({
+        option,
+        requestedCapabilities: additiveSkillCapabilities,
+        selectedSkills: input.selectedSkills
+      }, deps)
+    : { allowedCapabilities: [] as AiToolCapabilityName[], deniedCapabilities: [] as AiToolCapabilityName[], reasons: [] as string[] }
+
+  const mergedAllowed = normalizeAiToolCapabilityNames([
+    ...capabilityDecision.allowedCapabilities,
+    ...additiveDecision.allowedCapabilities
+  ])
+  const mergedDenied = normalizeAiToolCapabilityNames([
+    ...capabilityDecision.deniedCapabilities,
+    ...additiveDecision.deniedCapabilities
+  ])
+  const mergedReasons = [
+    ...capabilityDecision.reasons,
+    ...additiveDecision.reasons,
+    ...(fallbackRequested ? ['shell.exec requested by intent fallback'] : [])
+  ]
+
   const capabilityDebug: AiCapabilityDebugInfo = {
-    requested: withFallback,
-    allowed: capabilityDecision.allowedCapabilities,
-    denied: capabilityDecision.deniedCapabilities,
-    reasons: [
-      ...capabilityDecision.reasons,
-      ...(fallbackRequested ? ['shell.exec requested by intent fallback'] : [])
-    ],
+    requested: normalizeAiToolCapabilityNames([...withFallback, ...additiveSkillCapabilities]),
+    allowed: mergedAllowed,
+    denied: mergedDenied,
+    reasons: mergedReasons,
     selectedSkills: input.selectedSkills && input.selectedSkills.length > 0
       ? input.selectedSkills
       : undefined
   }
 
-  const requestedTools: AiInternalToolName[] = mapCapabilitiesToInternalToolNames(capabilityDecision.allowedCapabilities)
+  const requestedTools: AiInternalToolName[] = mapCapabilitiesToInternalToolNames(mergedAllowed)
   if (requestedTools.length === 0) {
     return {
       option: {
         ...option,
-        capabilities: capabilityDecision.allowedCapabilities,
+        capabilities: mergedAllowed,
         internalTools: requestedTools
       },
       capabilityDebug
@@ -179,7 +217,7 @@ export function injectInternalRuntimeTools(
       ...option,
       messages,
       tools: [...existingTools, ...injectedTools],
-      capabilities: capabilityDecision.allowedCapabilities,
+      capabilities: mergedAllowed,
       internalTools: requestedTools
     },
     capabilityDebug

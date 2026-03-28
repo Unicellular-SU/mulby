@@ -75,7 +75,6 @@ describe('skill service', () => {
         skills: {
           enabled: true,
           activeSkillIds: [],
-          autoSelect: { enabled: false, maxSkillsPerCall: 3, minScore: 1 },
           records: []
         }
       }
@@ -142,7 +141,6 @@ describe('skill service', () => {
         skills: {
           enabled: true,
           activeSkillIds: [],
-          autoSelect: { enabled: false, maxSkillsPerCall: 3, minScore: 1 },
           records: []
         }
       }
@@ -229,7 +227,6 @@ describe('skill service', () => {
         skills: {
           enabled: true,
           activeSkillIds: [],
-          autoSelect: { enabled: false, maxSkillsPerCall: 2, minScore: 1 },
           records: []
         }
       }
@@ -291,7 +288,6 @@ Provide concrete bug-fix steps.`,
         skills: {
           enabled: true,
           activeSkillIds: [],
-          autoSelect: { enabled: true, maxSkillsPerCall: 2, minScore: 1 },
           records: []
         }
       }
@@ -308,11 +304,13 @@ Provide concrete bug-fix steps.`,
     assert.equal(installed[0].descriptor.name, 'bug-fixer')
     assert.equal(getSettings().skills?.records.length, 1)
 
-    const autoResolved = service.resolveForAiCall({
-      messages: [{ role: 'user', content: 'please fix this bug quickly' }],
-      skills: { mode: 'auto' }
+    // Default mode is progressive: metadata only, no skills selected
+    const progressiveResolved = service.resolveForAiCall({
+      messages: [{ role: 'user', content: 'please fix this bug quickly' }]
     })
-    assert.equal(autoResolved.selectedSkillIds.length, 1)
+    assert.equal(progressiveResolved.selectedSkillIds.length, 0)
+    assert.equal(progressiveResolved.reasons?.[0]?.startsWith('progressive:'), true)
+    assert.deepEqual(progressiveResolved.capabilities, ['skill.activate'])
   })
 
   it('installs skill via npx command parsing into app skills directory', async (t) => {
@@ -330,7 +328,6 @@ Provide concrete bug-fix steps.`,
         skills: {
           enabled: true,
           activeSkillIds: [],
-          autoSelect: { enabled: false, maxSkillsPerCall: 2, minScore: 1 },
           records: []
         }
       },
@@ -417,7 +414,6 @@ App prompt`, 'utf8')
         skills: {
           enabled: true,
           activeSkillIds: [],
-          autoSelect: { enabled: false, maxSkillsPerCall: 3, minScore: 1 },
           records: []
         }
       }
@@ -459,7 +455,6 @@ System prompt`, 'utf8')
         skills: {
           enabled: true,
           activeSkillIds: [],
-          autoSelect: { enabled: false, maxSkillsPerCall: 3, minScore: 1 },
           records: []
         }
       }
@@ -500,7 +495,6 @@ System prompt`, 'utf8')
         skills: {
           enabled: true,
           activeSkillIds: [],
-          autoSelect: { enabled: false, maxSkillsPerCall: 3, minScore: 1 },
           records: []
         }
       }
@@ -562,7 +556,6 @@ Generated prompt`,
         skills: {
           enabled: true,
           activeSkillIds: [],
-          autoSelect: { enabled: false, maxSkillsPerCall: 3, minScore: 1 },
           records: []
         }
       }
@@ -596,7 +589,6 @@ Generated prompt`,
         skills: {
           enabled: true,
           activeSkillIds: [],
-          autoSelect: { enabled: false, maxSkillsPerCall: 3, minScore: 1 },
           records: []
         }
       }

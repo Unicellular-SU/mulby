@@ -9,6 +9,7 @@ export const AI_HTTP_FETCH_TOOL_NAME = 'mulby_http_fetch'
 export const AI_RUN_SCRIPT_TOOL_NAME = 'mulby_run_script'
 export const AI_GIT_STATUS_TOOL_NAME = 'mulby_git_status'
 export const AI_GIT_DIFF_TOOL_NAME = 'mulby_git_diff'
+export const AI_ACTIVATE_SKILL_TOOL_NAME = 'mulby_activate_skill'
 
 export const AI_INTERNAL_TOOL_NAMES = [
   AI_RUN_COMMAND_TOOL_NAME,
@@ -19,7 +20,8 @@ export const AI_INTERNAL_TOOL_NAMES = [
   AI_HTTP_FETCH_TOOL_NAME,
   AI_RUN_SCRIPT_TOOL_NAME,
   AI_GIT_STATUS_TOOL_NAME,
-  AI_GIT_DIFF_TOOL_NAME
+  AI_GIT_DIFF_TOOL_NAME,
+  AI_ACTIVATE_SKILL_TOOL_NAME
 ] as const
 
 export type AiInternalToolName = typeof AI_INTERNAL_TOOL_NAMES[number]
@@ -191,6 +193,15 @@ export function buildAiInternalTool(name: AiInternalToolName): AiTool {
           target: { type: 'string', enum: ['working', 'staged', 'commit'], description: 'Diff target. Default working.' },
           ref: { type: 'string', description: 'Commit ref for target=commit. Default HEAD.' },
           maxBytes: { type: 'number', description: 'Optional max output bytes.' }
+        }
+      })
+    case AI_ACTIVATE_SKILL_TOOL_NAME:
+      return createInternalTool({
+        name,
+        description: 'Load the full instructions for an agent skill. Call this when a task matches a skill\'s description in the available_skills list. Returns the skill body content with structured context.',
+        required: ['name'],
+        properties: {
+          name: { type: 'string', description: 'Skill name from the <available_skills> list.' }
         }
       })
     default:

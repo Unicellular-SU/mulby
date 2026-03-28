@@ -65,11 +65,6 @@ async function resolveDefaultRunCommand(): Promise<DefaultRunCommand> {
 const DEFAULT_SKILL_SETTINGS: AiSkillSettings = {
   enabled: true,
   activeSkillIds: [],
-  autoSelect: {
-    enabled: false,
-    maxSkillsPerCall: 3,
-    minScore: 1
-  },
   records: []
 }
 
@@ -358,22 +353,6 @@ function buildSkillMarkdown(descriptor: AiSkillDescriptor): string {
   })
 }
 
-function collectPromptText(messages: AiMessage[] | undefined): string {
-  if (!messages || messages.length === 0) return ''
-  return messages
-    .map((message) => {
-      if (typeof message.content === 'string') return message.content
-      if (Array.isArray(message.content)) {
-        return message.content
-          .filter((part) => part.type === 'text')
-          .map((part) => ('text' in part ? part.text : ''))
-          .join(' ')
-      }
-      return ''
-    })
-    .join('\n')
-    .toLowerCase()
-}
 
 function buildAvailableSkillsPrompt(records: AiSkillRecord[]): string | undefined {
   if (!records || records.length === 0) return undefined
@@ -665,10 +644,6 @@ export class AiSkillService {
     return {
       ...DEFAULT_SKILL_SETTINGS,
       ...current,
-      autoSelect: {
-        ...DEFAULT_SKILL_SETTINGS.autoSelect,
-        ...(current?.autoSelect || {})
-      },
       records: current?.records || []
     }
   }
@@ -682,10 +657,6 @@ export class AiSkillService {
       ? {
           ...DEFAULT_SKILL_SETTINGS,
           ...settings,
-          autoSelect: {
-            ...DEFAULT_SKILL_SETTINGS.autoSelect,
-            ...(settings.autoSelect || {})
-          },
           records: settings.records || []
         }
       : this.getSkillSettings()
@@ -1519,38 +1490,6 @@ export class AiSkillService {
     return await this.update(skillId, { enabled: false })
   }
 
-  private modeAllowed(record: AiSkillRecord, requestedMode: 'manual' | 'auto'): boolean {
-    const descriptorMode = record.descriptor.mulbyExtensions?.mode || record.descriptor.mode
-    if (!descriptorMode || descriptorMode === 'both') return true
-    return descriptorMode === requestedMode
-  }
-
-  private scoreAutoSkill(record: AiSkillRecord, promptText: string): number {
-    const text = promptText.toLowerCase()
-    let score = 0
-    const name = record.descriptor.name.toLowerCase()
-    if (name && text.includes(name)) score += 2
-    const triggers = record.descriptor.mulbyExtensions?.triggerPhrases || record.descriptor.triggerPhrases || []
-    for (const trigger of triggers) {
-      if (text.includes(trigger.toLowerCase())) score += 3
-    }
-    const description = String(record.descriptor.description || '').toLowerCase()
-    if (description) {
-      const keywords = Array.from(
-        new Set(
-          description
-            .split(/[^a-z0-9\u4e00-\u9fa5]+/i)
-            .map((item) => item.trim())
-            .filter((item) => item.length >= 3)
-        )
-      ).slice(0, 10)
-      for (const keyword of keywords) {
-        if (text.includes(keyword)) score += 1
-      }
-    }
-    return score
-  }
-
   resolveForAiCall(option: AiOption): AiSkillResolveResult {
     const settings = this.getSkillSettings()
     if (!settings.enabled) {
@@ -1559,10 +1498,17 @@ export class AiSkillService {
     const availableCandidates = settings.records.filter((record) => record.enabled && record.trustLevel !== 'untrusted')
     const availableSkillsPrompt = buildAvailableSkillsPrompt(availableCandidates)
 
-    const requestedMode = option.skills?.mode
-    const mode: 'off' | 'manual' | 'auto' =
-      requestedMode ||
-      (settings.autoSelect?.enabled ? 'auto' : settings.activeSkillIds.length > 0 ? 'manual' : 'off')
+    // Mode resolution:
+    // - Explicit skillIds from caller → manual (user-explicit activation per spec)
+    // - Explicit mode 'off' → off
+    // - Otherwise → progressive (model-driven activation per spec)
+    const hasExplicitSkillIds = option.skills?.skillIds && option.skills.skillIds.length > 0
+    const mode: 'off' | 'manual' | 'progressive' =
+      option.skills?.mode === 'off' ? 'off'
+      : option.skills?.mode === 'manual' || hasExplicitSkillIds ? 'manual'
+      : availableCandidates.length > 0 ? 'progressive'
+      : 'off'
+
     if (mode === 'off') {
       return {
         selectedSkillIds: [],
@@ -1572,29 +1518,26 @@ export class AiSkillService {
       }
     }
 
-    const candidates = availableCandidates
-    const reasons: string[] = []
-    let selected: AiSkillRecord[] = []
-
-    if (mode === 'manual') {
-      const requestedIds = option.skills?.skillIds && option.skills.skillIds.length > 0
-        ? option.skills.skillIds
-        : settings.activeSkillIds
-      const include = new Set(requestedIds)
-      selected = candidates.filter((record) => include.has(record.id) && this.modeAllowed(record, 'manual'))
-      reasons.push(`manual:${selected.length}`)
-    } else {
-      const promptText = collectPromptText(option.messages)
-      const minScore = Math.max(Math.floor(settings.autoSelect?.minScore || 1), 1)
-      const maxSkills = Math.max(Math.floor(settings.autoSelect?.maxSkillsPerCall || 3), 1)
-      const scored = candidates
-        .filter((record) => this.modeAllowed(record, 'auto'))
-        .map((record) => ({ record, score: this.scoreAutoSkill(record, promptText) }))
-        .filter((item) => item.score >= minScore)
-        .sort((a, b) => b.score - a.score)
-      selected = scored.slice(0, maxSkills).map((item) => item.record)
-      reasons.push(`auto:${selected.length}`)
+    // ─── Progressive mode (default): Tier 1 metadata only, model activates on demand ───
+    if (mode === 'progressive') {
+      return {
+        selectedSkillIds: [],
+        selectedSkillNames: [],
+        selectedSkills: [],
+        availableSkillsPrompt,
+        systemPrompts: [],
+        capabilities: ['skill.activate'],
+        reasons: ['progressive:' + availableCandidates.length]
+      }
     }
+
+    // ─── Manual mode: user-explicit activation (inject full body of specified skills) ───
+    const requestedIds = option.skills?.skillIds && option.skills.skillIds.length > 0
+      ? option.skills.skillIds
+      : settings.activeSkillIds
+    const include = new Set(requestedIds)
+    const selected = availableCandidates.filter((record) => include.has(record.id))
+    const reasons: string[] = [`manual:${selected.length}`]
 
     const prompts: string[] = []
     for (const record of selected) {
@@ -1672,6 +1615,41 @@ export class AiSkillService {
   }
 
   applyResolutionToOption(option: AiOption, resolution: AiSkillResolveResult): AiOption {
+    const isProgressive = resolution.reasons?.some((r) => r.startsWith('progressive:'))
+
+    // ─── Progressive mode: inject metadata catalog + behavioral instruction only ───
+    if (isProgressive) {
+      const availablePrompt = String(resolution.availableSkillsPrompt || '').trim()
+      if (!availablePrompt) return option
+
+      const behavioralInstruction = [
+        'The following skills provide specialized instructions for specific tasks.',
+        'When a task matches a skill\'s description, call the "mulby_activate_skill" tool',
+        'with the skill\'s name to load its full instructions before proceeding.',
+        'Do NOT activate skills that are not relevant to the current task.',
+        'When a skill references relative paths, resolve them against the skill\'s',
+        'directory and use absolute paths in tool calls.'
+      ].join(' ')
+
+      const injectedSystemPrompt = [behavioralInstruction, availablePrompt].join('\n\n')
+
+      // NOTE: Do NOT set option.capabilities here. The skill.activate capability
+      // is passed through skillResolution.capabilities → skillCapabilities in
+      // prepareChatRequest, which correctly merges with the default app
+      // capabilities via injectInternalRuntimeTools. Setting it on
+      // option.capabilities would make requestedCapabilities non-empty and
+      // prevent the default capability fallback in resolveAiCapabilityPolicy,
+      // stripping all default tools (shell, fs, git, etc).
+      return {
+        ...option,
+        messages: [
+          { role: 'system' as const, content: injectedSystemPrompt },
+          ...option.messages
+        ]
+      }
+    }
+
+    // ─── Manual mode: inject full body of explicitly selected skills ───
     const injectedSystemPrompt = [
       String(resolution.availableSkillsPrompt || '').trim(),
       resolution.systemPrompts.join('\n\n').trim()
@@ -1736,7 +1714,7 @@ export class AiSkillService {
       mcp: input.option?.mcp,
       skills: {
         ...(input.option?.skills || {}),
-        mode: input.option?.skills?.mode || (input.skillIds && input.skillIds.length > 0 ? 'manual' : 'auto'),
+        mode: input.option?.skills?.mode || (input.skillIds && input.skillIds.length > 0 ? 'manual' : 'progressive'),
         skillIds: input.skillIds || input.option?.skills?.skillIds
       },
       toolContext: input.option?.toolContext,

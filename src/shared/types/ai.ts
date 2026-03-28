@@ -248,16 +248,11 @@ export interface AiSkillRecord {
 export interface AiSkillSettings {
   enabled: boolean
   activeSkillIds: string[]
-  autoSelect?: {
-    enabled?: boolean
-    maxSkillsPerCall?: number
-    minScore?: number
-  }
   records: AiSkillRecord[]
 }
 
 export interface AiSkillSelection {
-  mode?: 'off' | 'manual' | 'auto'
+  mode?: 'off' | 'manual' | 'progressive'
   skillIds?: string[]
   variables?: Record<string, string>
 }
@@ -313,6 +308,8 @@ export interface AiOption {
 export interface AiToolContext {
   pluginName?: string
   internalTag?: string
+  /** Per-request identifier for scoping runtime state (e.g. skill activation deduplication). */
+  requestId?: string
   mcpScope?: {
     allowedServerIds?: string[]
     allowedToolIds?: string[]

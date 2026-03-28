@@ -11,6 +11,7 @@ import type { AiToolingSettings } from '../../../shared/types/settings'
 import type { RunCommandContext, RunCommandInput, RunCommandResult } from '../../services/command-runner'
 import { normalizeFailedRunCommandResult } from './run-command-tool'
 import {
+  AI_ACTIVATE_SKILL_TOOL_NAME,
   AI_APPLY_PATCH_TOOL_NAME,
   AI_GIT_DIFF_TOOL_NAME,
   AI_GIT_STATUS_TOOL_NAME,
@@ -311,7 +312,30 @@ function normalizeToolError(error: unknown): { success: false; error: string } {
 }
 
 export class AiInternalToolRuntime {
+  /** Per-request skill activation deduplication. Key = requestId */
+  private readonly activationScopes = new Map<string, Set<string>>()
+
   constructor(private readonly deps: InternalToolRuntimeDeps) {}
+
+  /** Create an activation scope for a specific request. */
+  createActivationScope(requestId: string): void {
+    this.activationScopes.set(requestId, new Set())
+  }
+
+  /** Clean up the activation scope when a request finishes. */
+  cleanupActivationScope(requestId: string): void {
+    this.activationScopes.delete(requestId)
+  }
+
+  private getActivatedSkillIds(requestId?: string): Set<string> {
+    if (!requestId) return new Set() // no scope → no dedup (safe fallback)
+    let scope = this.activationScopes.get(requestId)
+    if (!scope) {
+      scope = new Set()
+      this.activationScopes.set(requestId, scope)
+    }
+    return scope
+  }
 
   private async runManagedCommand(input: RunCommandInput, context?: AiToolContext): Promise<RunCommandResult> {
     return await this.deps.runCommand(
@@ -342,6 +366,8 @@ export class AiInternalToolRuntime {
           return await this.gitStatusTool(input.args, input.context)
         case AI_GIT_DIFF_TOOL_NAME:
           return await this.gitDiffTool(input.args, input.context)
+        case AI_ACTIVATE_SKILL_TOOL_NAME:
+          return await this.activateSkillTool(input.args, input.context)
         default:
           return normalizeToolError(`Unsupported internal tool: ${input.name}`)
       }
@@ -862,6 +888,124 @@ export class AiInternalToolRuntime {
       exitCode: result.exitCode,
       timedOut: result.timedOut,
       truncated: result.truncated || result.stdout.length > maxBytes
+    }
+  }
+
+  private async activateSkillTool(args: unknown, context?: AiToolContext): Promise<unknown> {
+    const input = parseObject(args)
+    const skillName = String(input.name || '').trim()
+    if (!skillName) throw new Error('name is required')
+
+    const { aiSkillService } = await import('../skills')
+    const enabledSkills = aiSkillService.listEnabled()
+    const record = enabledSkills.find(
+      (r) => r.descriptor.name === skillName || r.id === skillName
+    )
+    if (!record) {
+      return {
+        success: false,
+        error: `Skill not found or not enabled: ${skillName}`
+      }
+    }
+
+    const activatedSkillIds = this.getActivatedSkillIds(context?.requestId)
+    if (activatedSkillIds.has(record.id)) {
+      return {
+        success: true,
+        skillId: record.id,
+        skillName: record.descriptor.name,
+        alreadyActivated: true,
+        content: `Skill "${record.descriptor.name}" is already active in this conversation.`
+      }
+    }
+    activatedSkillIds.add(record.id)
+
+    // Load SKILL.md body (Tier 2)
+    let promptTemplate: string | undefined
+    const existing = String(record.descriptor.promptTemplate || '').trim()
+    if (existing) {
+      promptTemplate = existing
+    } else if (record.skillMdPath) {
+      try {
+        const content = await fs.readFile(record.skillMdPath, 'utf8')
+        const match = content.match(/^---\s*\r?\n[\s\S]*?\r?\n---\s*(?:\r?\n|$)([\s\S]*)$/)
+        const body = String(match?.[1] || '').trim()
+        promptTemplate = body || undefined
+      } catch {
+        // file read error; template stays undefined
+      }
+    }
+
+    // List bundled resources (Tier 3 references)
+    const resources: string[] = []
+    if (record.installPath) {
+      const resourceDirs = ['scripts', 'references', 'assets']
+      for (const dir of resourceDirs) {
+        const dirPath = path.join(record.installPath, dir)
+        try {
+          const entries = await fs.readdir(dirPath, { withFileTypes: true })
+          for (const entry of entries) {
+            if (entry.isFile()) {
+              resources.push(`${dir}/${entry.name}`)
+            }
+          }
+        } catch {
+          // directory doesn't exist
+        }
+      }
+    }
+
+    // Build runtime hint
+    const installPath = String(record.installPath || '').trim()
+    const runtimeHintLines: string[] = []
+    if (installPath) {
+      runtimeHintLines.push(`Skill directory: ${installPath}`)
+      runtimeHintLines.push('Relative paths in this skill are relative to the skill directory.')
+      runtimeHintLines.push('Reuse existing scripts from this skill before writing ad-hoc inline scripts.')
+    }
+
+    // Build structured wrapping per Agent Skills spec
+    const lines: string[] = []
+    lines.push(`<skill_content name="${record.descriptor.name}">`)
+    if (promptTemplate) lines.push(promptTemplate)
+    if (runtimeHintLines.length > 0) {
+      lines.push('')
+      lines.push(runtimeHintLines.join('\n'))
+    }
+    if (resources.length > 0) {
+      lines.push('')
+      lines.push('<skill_resources>')
+      for (const file of resources) {
+        lines.push(`  <file>${file}</file>`)
+      }
+      lines.push('</skill_resources>')
+    }
+    lines.push('</skill_content>')
+
+    return {
+      success: true,
+      skillId: record.id,
+      skillName: record.descriptor.name,
+      content: lines.join('\n'),
+      // Expose the skill's declared grants for informational purposes.
+      //
+      // KNOWN LIMITATION: These grants are returned but NOT dynamically applied
+      // to the current request's tool set. The tool set is resolved once at
+      // request start (in prepareChatRequest → resolveAiCapabilityPolicy →
+      // buildTools), before any tool calls execute. There is no mid-request
+      // tool injection mechanism yet.
+      //
+      // For skills that need additional MCP servers or non-default internal
+      // tools, use manual mode (explicit skillIds) so their grants are
+      // pre-resolved in the initial tool set.
+      //
+      // TODO: Implement dynamic tool injection in the tool loop to fully
+      // support progressive disclosure for skills with custom grants.
+      grants: {
+        capabilities: record.descriptor.mulbyExtensions?.capabilities || record.descriptor.capabilities || [],
+        internalTools: record.descriptor.mulbyExtensions?.internalTools || record.descriptor.internalTools || [],
+        mcpPolicy: record.descriptor.mulbyExtensions?.mcpPolicy || record.descriptor.mcpPolicy || undefined
+      }
     }
   }
 }

@@ -50,8 +50,22 @@ function normalizeGrants(input: unknown): AiToolCapabilityGrant[] {
   return out
 }
 
+// System-level capabilities that must always be in the baseline regardless of
+// user settings. These are internal mechanics the user shouldn't need to manage.
+// Regular tool capabilities (shell.exec, fs.read, etc.) are NOT listed here —
+// users can remove them from defaultAppCapabilities via Settings.
+const SYSTEM_REQUIRED_CAPABILITIES: AiToolCapabilityName[] = ['skill.activate']
+
 function normalizePolicy(input: Partial<AiToolCapabilityPolicySettings> | undefined): NormalizedAiCapabilityPolicy {
-  const defaultAppCapabilities = normalizeAiToolCapabilityNames(input?.defaultAppCapabilities || AI_DEFAULT_APP_CAPABILITIES)
+  // Use stored settings if explicitly set (including empty array = user cleared all).
+  // Fall back to code defaults only when the field is not provided at all.
+  // Then ensure system-required capabilities are always present (settings migration).
+  const stored = input?.defaultAppCapabilities
+  const base = Array.isArray(stored) ? stored : AI_DEFAULT_APP_CAPABILITIES
+  const defaultAppCapabilities = normalizeAiToolCapabilityNames([
+    ...base,
+    ...SYSTEM_REQUIRED_CAPABILITIES
+  ])
   const globalGrants = normalizeGrants(input?.globalGrants)
   return {
     defaultAppCapabilities,

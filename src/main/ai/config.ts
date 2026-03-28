@@ -29,11 +29,6 @@ const DEFAULT_MCP_SETTINGS: AiMcpSettings = {
 const DEFAULT_SKILL_SETTINGS: AiSkillSettings = {
   enabled: true,
   activeSkillIds: [],
-  autoSelect: {
-    enabled: false,
-    maxSkillsPerCall: 3,
-    minScore: 1
-  },
   records: []
 }
 
@@ -281,10 +276,6 @@ function normalizeSkillSettings(settings?: AiSkillSettings): AiSkillSettings {
   return {
     enabled: source.enabled !== false,
     activeSkillIds: Array.from(activeSet),
-    autoSelect: {
-      ...DEFAULT_SKILL_SETTINGS.autoSelect,
-      ...(source.autoSelect || {})
-    },
     records
   }
 }

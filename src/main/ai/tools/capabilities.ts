@@ -1,5 +1,6 @@
 import type { AiInternalToolName } from './internal-tools'
 import {
+  AI_ACTIVATE_SKILL_TOOL_NAME,
   AI_APPLY_PATCH_TOOL_NAME,
   AI_GIT_DIFF_TOOL_NAME,
   AI_GIT_STATUS_TOOL_NAME,
@@ -21,7 +22,8 @@ export const AI_TOOL_CAPABILITY_NAMES = [
   'patch.apply',
   'http.fetch',
   'git.status',
-  'git.diff'
+  'git.diff',
+  'skill.activate'
 ] as const
 
 export type AiToolCapabilityName = typeof AI_TOOL_CAPABILITY_NAMES[number]
@@ -83,7 +85,10 @@ const CAPABILITY_ALIAS_MAP: Record<string, AiToolCapabilityName> = {
   mulbyapplypatch: 'patch.apply',
   mulbyhttpfetch: 'http.fetch',
   mulbygitstatus: 'git.status',
-  mulbygitdiff: 'git.diff'
+  mulbygitdiff: 'git.diff',
+  skillactivate: 'skill.activate',
+  activateskill: 'skill.activate',
+  mulbyactivateskill: 'skill.activate'
 }
 
 function normalizeStringList(input: unknown): string[] {
@@ -139,6 +144,8 @@ function mapInternalToolToCapability(name: AiInternalToolName): AiToolCapability
       return 'git.status'
     case AI_GIT_DIFF_TOOL_NAME:
       return 'git.diff'
+    case AI_ACTIVATE_SKILL_TOOL_NAME:
+      return 'skill.activate'
     default:
       return undefined
   }
@@ -177,6 +184,8 @@ function mapCapabilityToInternalTools(capability: AiToolCapabilityName): AiInter
       return [AI_GIT_STATUS_TOOL_NAME]
     case 'git.diff':
       return [AI_GIT_DIFF_TOOL_NAME]
+    case 'skill.activate':
+      return [AI_ACTIVATE_SKILL_TOOL_NAME]
     default:
       return []
   }

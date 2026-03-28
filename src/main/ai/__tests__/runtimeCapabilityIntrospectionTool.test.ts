@@ -61,10 +61,10 @@ describe('runtime capability introspection tool', () => {
       },
       policyDebug: {
         skills: {
-          requested: { mode: 'auto' },
+          requested: { mode: 'manual' },
           selectedSkillIds: ['doc-reader'],
           selectedSkillNames: ['Doc Reader'],
-          reasons: ['auto:1']
+          reasons: ['manual:1']
         },
         mcp: {
           requested: { mode: 'auto' },

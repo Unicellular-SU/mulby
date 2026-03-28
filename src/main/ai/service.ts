@@ -117,6 +117,10 @@ export class AiService {
   }) => Promise<unknown>
   private capabilityPolicyResolver?: CapabilityPolicyResolver
   private pluginToolResolver?: () => AiTool[]
+  private skillActivationScopeManager?: {
+    create: (requestId: string) => void
+    cleanup: (requestId: string) => void
+  }
 
   private injectInternalRuntimeTools(input: {
     option: AiOption
@@ -209,8 +213,15 @@ export class AiService {
     this.controllers.set(requestId, controller)
 
     try {
+      // Create per-request skill activation scope
+      this.skillActivationScopeManager?.create(requestId)
+      // Thread requestId into toolContext for per-request tool state scoping
+      const scopedOption = {
+        ...option,
+        toolContext: { ...option.toolContext, requestId }
+      }
       const prepared = await prepareChatRequest({
-        option,
+        option: scopedOption,
         controllerSignal: controller.signal,
         injectInternalRuntimeTools: (input) => this.injectInternalRuntimeTools(input),
         buildPolicyDebugInfo: (input) => this.buildPolicyDebugInfo(input),
@@ -267,6 +278,7 @@ export class AiService {
     } finally {
       this.controllers.delete(requestId)
       this.requestMcpCallIds.delete(requestId)
+      this.skillActivationScopeManager?.cleanup(requestId)
     }
   }
 
@@ -285,8 +297,15 @@ export class AiService {
         requestId: id,
         model: option.model
       })
+      // Create per-request skill activation scope
+      this.skillActivationScopeManager?.create(id)
+      // Thread requestId into toolContext for per-request tool state scoping
+      const scopedOption = {
+        ...option,
+        toolContext: { ...option.toolContext, requestId: id }
+      }
       prepared = await prepareChatRequest({
-        option,
+        option: scopedOption,
         controllerSignal: controller.signal,
         injectInternalRuntimeTools: (input) => this.injectInternalRuntimeTools(input),
         buildPolicyDebugInfo: (input) => this.buildPolicyDebugInfo(input),
@@ -361,6 +380,7 @@ export class AiService {
     } finally {
       this.controllers.delete(id)
       this.requestMcpCallIds.delete(id)
+      this.skillActivationScopeManager?.cleanup(id)
     }
   }
 
@@ -408,6 +428,13 @@ export class AiService {
 
   setPluginToolResolver(resolver?: () => AiTool[]): void {
     this.pluginToolResolver = resolver
+  }
+
+  setSkillActivationScopeManager(manager?: {
+    create: (requestId: string) => void
+    cleanup: (requestId: string) => void
+  }): void {
+    this.skillActivationScopeManager = manager
   }
 
   async uploadAttachment(input: { filePath?: string; buffer?: ArrayBuffer; mimeType: string; purpose?: string }): Promise<AiAttachmentRef> {

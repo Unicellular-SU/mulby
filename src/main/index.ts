@@ -3,7 +3,7 @@ import http from 'http'
 import https from 'https'
 import { join } from 'path'
 import { registerAllHandlers } from './ipc'
-import { setAiCapabilityPolicyResolver, setAiToolExecutor, setAiPluginToolResolver } from './ai'
+import { setAiCapabilityPolicyResolver, setAiToolExecutor, setAiPluginToolResolver, setAiSkillActivationScopeManager } from './ai'
 import { aiMcpService, isMcpToolName } from './ai/mcp'
 import {
   AI_RUN_COMMAND_TOOL_NAME,
@@ -157,6 +157,10 @@ const aiInternalToolRuntime = createAiInternalToolRuntime({
 // 创建 Plugin Tools 注册中心并注入到 AI 管道
 const pluginToolRegistry = new PluginToolRegistry()
 setAiPluginToolResolver(() => pluginToolRegistry.resolveToolsForAi())
+setAiSkillActivationScopeManager({
+  create: (requestId) => aiInternalToolRuntime.createActivationScope(requestId),
+  cleanup: (requestId) => aiInternalToolRuntime.cleanupActivationScope(requestId)
+})
 
 function isAbortLikeError(error: unknown): boolean {
   if (error instanceof Error) {

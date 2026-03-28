@@ -30,3 +30,10 @@ export function setAiPluginToolResolver(resolver?: () => AiTool[]): void {
   aiService.setPluginToolResolver(resolver)
 }
 
+export function setAiSkillActivationScopeManager(manager?: {
+  create: (requestId: string) => void
+  cleanup: (requestId: string) => void
+}): void {
+  aiService.setSkillActivationScopeManager(manager)
+}
+
