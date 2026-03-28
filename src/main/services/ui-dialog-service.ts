@@ -111,39 +111,38 @@ function buildCenteredBounds(input: {
   }
 }
 
-async function measureContentLayout(
-  win: BrowserWindow,
-  fallback: number
-): Promise<{ contentHeight: number; overflowHeight: number }> {
+async function measureNaturalHeight(win: BrowserWindow): Promise<number> {
   try {
-    const raw = await win.webContents.executeJavaScript(
+    const height = await win.webContents.executeJavaScript(
       `(() => {
         const card = document.querySelector('.card');
-        const cardHeight = card ? Math.ceil(card.getBoundingClientRect().height) : 0;
-        const body = document.body;
-        const docEl = document.documentElement;
-        const bodyScrollHeight = body ? Math.max(body.scrollHeight, body.offsetHeight) : 0;
-        const docScrollHeight = docEl ? Math.max(docEl.scrollHeight, docEl.offsetHeight) : 0;
-        const contentHeight = Math.max(cardHeight, bodyScrollHeight, docScrollHeight, ${fallback});
-        const viewportHeight = Math.max(
-          body ? body.clientHeight : 0,
-          docEl ? docEl.clientHeight : 0
-        );
-        const overflowHeight = Math.max(0, contentHeight - viewportHeight);
-        return { contentHeight, overflowHeight };
+        if (!card) return 200;
+        return Math.ceil(card.getBoundingClientRect().height);
       })()`,
       true
     )
-    if (!raw || typeof raw !== 'object') {
-      return { contentHeight: fallback, overflowHeight: 0 }
-    }
-    const contentValue = Number((raw as { contentHeight?: unknown }).contentHeight)
-    const overflowValue = Number((raw as { overflowHeight?: unknown }).overflowHeight)
-    const contentHeight = Number.isFinite(contentValue) && contentValue > 0 ? Math.ceil(contentValue) : fallback
-    const overflowHeight = Number.isFinite(overflowValue) && overflowValue > 0 ? Math.ceil(overflowValue) : 0
-    return { contentHeight, overflowHeight }
+    const value = Number(height)
+    return Number.isFinite(value) && value > 0 ? value : 200
   } catch {
-    return { contentHeight: fallback, overflowHeight: 0 }
+    return 200
+  }
+}
+
+async function applyConstrainedLayout(win: BrowserWindow): Promise<void> {
+  try {
+    await win.webContents.executeJavaScript(
+      `(() => {
+        document.documentElement.style.cssText = 'height:100%;overflow:hidden';
+        Object.assign(document.body.style, { height:'100%', overflow:'hidden' });
+        const card = document.querySelector('.card');
+        if (card) Object.assign(card.style, { height:'100%', flex:'1', overflow:'hidden' });
+        const bd = document.querySelector('.body');
+        if (bd) Object.assign(bd.style, { flex:'1', minHeight:'0', overflowY:'auto' });
+      })()`,
+      true
+    )
+  } catch {
+    // ignore
   }
 }
 
@@ -245,7 +244,6 @@ function buildMessageBoxHtml(input: {
   <title>${title}</title>
   <style>
     :root { color-scheme: ${input.theme}; }
-    html, body { height: 100%; }
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body {
       width: 100%;
@@ -259,24 +257,27 @@ function buildMessageBoxHtml(input: {
     }
     .card {
       width: 100%;
-      flex: 1;
       display: flex;
       flex-direction: column;
       background: ${palette.cardBg};
-      overflow: hidden;
     }
+    @keyframes dialogIn {
+      from { opacity: 0; transform: translateY(6px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    .card { animation: dialogIn 0.18s ease-out; }
     .head {
       display: flex;
       align-items: center;
       justify-content: space-between;
       gap: 12px;
-      padding: 18px 22px;
+      padding: 14px 18px;
       border-bottom: 1px solid ${palette.divider};
       -webkit-app-region: drag;
       user-select: none;
     }
     .title {
-      font-size: 15px;
+      font-size: 14px;
       font-weight: 650;
       line-height: 1.4;
       letter-spacing: -0.01em;
@@ -294,24 +295,23 @@ function buildMessageBoxHtml(input: {
       letter-spacing: 0.02em;
     }
     .body {
-      flex: 1;
-      padding: 20px 22px;
+      padding: 14px 18px;
       display: flex;
       flex-direction: column;
-      gap: 12px;
+      gap: 10px;
     }
     .message {
-      font-size: 14px;
+      font-size: 13.5px;
       line-height: 1.6;
       color: ${palette.messageText};
       word-break: break-word;
     }
     .detail {
-      font-size: 13px;
+      font-size: 12.5px;
       line-height: 1.55;
       color: ${palette.detailText};
       word-break: break-word;
-      border-radius: 10px;
+      border-radius: 8px;
       border: 1px solid ${palette.detailBorder};
       background: ${palette.detailBg};
       padding: 10px 14px;
@@ -320,7 +320,7 @@ function buildMessageBoxHtml(input: {
       display: flex;
       justify-content: flex-end;
       gap: 8px;
-      padding: 14px 22px 18px;
+      padding: 10px 18px 14px;
       border-top: 1px solid ${palette.divider};
     }
     .btn {
@@ -329,8 +329,8 @@ function buildMessageBoxHtml(input: {
       border-radius: 999px;
       font-size: 13px;
       font-weight: 500;
-      padding: 7px 18px;
-      min-width: 72px;
+      padding: 6px 16px;
+      min-width: 64px;
       border: 1px solid ${palette.buttonBorder};
       cursor: pointer;
       background: ${palette.buttonBg};
@@ -356,6 +356,15 @@ function buildMessageBoxHtml(input: {
     .btn-primary:hover {
       background: ${palette.primaryHoverBg};
       box-shadow: ${isDark ? '0 2px 8px rgba(226, 232, 240, 0.15)' : '0 2px 8px rgba(15, 23, 42, 0.2)'};
+    }
+    .body::-webkit-scrollbar { width: 5px; }
+    .body::-webkit-scrollbar-track { background: transparent; }
+    .body::-webkit-scrollbar-thumb {
+      background: ${isDark ? 'rgba(148,163,184,0.25)' : 'rgba(100,116,139,0.2)'};
+      border-radius: 3px;
+    }
+    .body::-webkit-scrollbar-thumb:hover {
+      background: ${isDark ? 'rgba(148,163,184,0.4)' : 'rgba(100,116,139,0.35)'};
     }
   </style>
 </head>
@@ -411,16 +420,17 @@ export async function showInternalMessageBox(
   const buttons = normalizeButtons(options.buttons)
   const defaultId = clampIndex(options.defaultId, buttons.length, 0)
   const cancelId = clampIndex(options.cancelId, buttons.length, 0)
-  const width = 600
-  const initialHeight = 260
+  const width = 480
+  const measureHeight = 800
 
   return await withIgnoringBlur(async () => {
     const channel = `ui-dialog:message-box:${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
     const parent = pickDefaultParent(input?.parentWindow)
     const display = pickDisplay(parent)
+    const maxHeight = Math.max(200, display.workArea.height - 48)
     const win = new BrowserWindow({
       width,
-      height: initialHeight,
+      height: measureHeight,
       useContentSize: true,
       show: false,
       frame: false,
@@ -437,7 +447,8 @@ export async function showInternalMessageBox(
       }
     })
 
-    win.setBounds(buildCenteredBounds({ parent, display, width, height: initialHeight }))
+    // Place off-screen for invisible measurement
+    win.setPosition(-9999, -9999)
 
     const html = buildMessageBoxHtml({ options, channel, buttons, defaultId, cancelId, theme })
     const dataUrl = `data:text/html;charset=utf-8,${encodeURIComponent(html)}`
@@ -468,19 +479,17 @@ export async function showInternalMessageBox(
 
       win.webContents.once('did-finish-load', () => {
         void (async () => {
-          const measured = await measureContentLayout(win, initialHeight)
-          const maxHeight = Math.max(200, display.workArea.height - 24)
-          let finalHeight = clamp(measured.contentHeight, 220, maxHeight)
-          if (measured.overflowHeight > 0 && finalHeight < maxHeight) {
-            finalHeight = clamp(finalHeight + measured.overflowHeight + 8, 220, maxHeight)
-          }
+          if (win.isDestroyed()) return
+          // Measure natural content height (HTML has no height constraints)
+          const naturalHeight = await measureNaturalHeight(win)
+          const finalHeight = clamp(naturalHeight, 120, maxHeight)
+
+          if (win.isDestroyed()) return
+          // Apply constrained layout so .body scrolls when content exceeds window
+          await applyConstrainedLayout(win)
+
           if (win.isDestroyed()) return
           win.setBounds(buildCenteredBounds({ parent, display, width, height: finalHeight }))
-          const secondPass = await measureContentLayout(win, finalHeight)
-          if (secondPass.overflowHeight > 0 && finalHeight < maxHeight && !win.isDestroyed()) {
-            finalHeight = clamp(finalHeight + secondPass.overflowHeight + 4, 220, maxHeight)
-            win.setBounds(buildCenteredBounds({ parent, display, width, height: finalHeight }))
-          }
           win.show()
           win.focus()
         })()
