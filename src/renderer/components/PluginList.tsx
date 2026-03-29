@@ -19,7 +19,6 @@ interface PluginListProps {
   traceInputLength: number
   traceAttachmentCount: number
   onResultsChange?: (count: number) => void
-  onPanelHeightChange?: (height: number) => void
   onShowDetails?: (pluginName: string) => void
   onOpenSettings?: () => void
 }
@@ -29,6 +28,7 @@ type RenderItemType = 'plugin' | 'recent' | 'system-app' | 'system-file'
 
 interface RenderItem {
   key: string
+  iconKey?: string
   type: RenderItemType
   title: string
   subtitle: string
@@ -275,6 +275,8 @@ const ResultCard = memo(function ResultCard({
       className={`plugin-card ${systemClass} ${isSettings ? 'settings' : ''} ${isSelected ? 'selected' : ''}`}
       role="option"
       aria-selected={isSelected}
+      data-item-key={item.key}
+      data-icon-key={item.iconKey || undefined}
       onClick={() => {
         void onRun(item)
       }}
@@ -304,7 +306,6 @@ function PluginList({
   traceInputLength,
   traceAttachmentCount,
   onResultsChange,
-  onPanelHeightChange,
   onShowDetails,
   onOpenSettings
 }: PluginListProps) {
@@ -318,11 +319,11 @@ function PluginList({
   const [isSystemAppsLoading, setIsSystemAppsLoading] = useState(false)
   const [isSystemFilesLoading, setIsSystemFilesLoading] = useState(false)
   const [selectedKey, setSelectedKey] = useState('')
+  const scrollContainerRef = useRef<HTMLDivElement | null>(null)
   const [columns, setColumns] = useState(() => getColumns(window.innerWidth))
   const [systemIconVersion, setSystemIconVersion] = useState(0)
 
   const payloadRef = useRef(runPayload)
-  const panelContentRef = useRef<HTMLDivElement | null>(null)
   const requestIdRef = useRef(0)
   const searchStartedAtRef = useRef(0)
   const searchStartedPayloadHashRef = useRef('')
@@ -378,7 +379,6 @@ function PluginList({
   }, [])
 
   const payloadHash = useMemo(() => hashPayload(searchPayload), [searchPayload.text, searchPayload.attachments])
-  const maxItemsPerSection = Math.max(columns * 2, 2)
 
   useEffect(() => {
     let cancelled = false
@@ -597,8 +597,8 @@ function PluginList({
       if (scoreDiff !== 0) return scoreDiff
       return a.displayName.localeCompare(b.displayName)
     })
-    return sorted.slice(0, maxItemsPerSection)
-  }, [pluginResults, searchPayload.text, recentOrderMap, maxItemsPerSection])
+    return sorted
+  }, [pluginResults, searchPayload.text, recentOrderMap])
 
   const bestKeys = useMemo(() => {
     return new Set(bestPlugins.map((item) => getPluginKey(item)))
@@ -610,8 +610,7 @@ function PluginList({
       : recentPlugins
     return filtered
       .filter((item) => !bestKeys.has(getPluginKey(item)))
-      .slice(0, maxItemsPerSection)
-  }, [recentPlugins, searchPayload.text, bestKeys, maxItemsPerSection])
+  }, [recentPlugins, searchPayload.text, bestKeys])
 
   const appDisplayItems = useMemo(() => {
     const seen = new Set<string>()
@@ -622,8 +621,7 @@ function PluginList({
         seen.add(item.path)
         return true
       })
-      .slice(0, maxItemsPerSection)
-  }, [maxItemsPerSection, payloadHash, systemApps, systemAppsResultHash])
+  }, [payloadHash, systemApps, systemAppsResultHash])
 
   const fileDisplayItems = useMemo(() => {
     const seen = new Set<string>()
@@ -636,74 +634,117 @@ function PluginList({
         seen.add(item.path)
         return true
       })
-      .slice(0, maxItemsPerSection)
-  }, [maxItemsPerSection, payloadHash, systemFiles, systemFilesResultHash])
+  }, [payloadHash, systemFiles, systemFilesResultHash])
 
+  // 懒加载系统图标：只对可视区内的卡片请求图标
   useEffect(() => {
-    const requests: SystemIconRequest[] = [
-      ...appDisplayItems.map((item) => ({
-        key: getSystemIconCacheKey('app', item.path),
-        path: item.iconPath || item.path,
-        kind: item.iconPath ? ('file' as const) : ('app' as const)
-      })),
-      ...fileDisplayItems.map((item) => ({
-        key: getSystemIconCacheKey('file', item.path),
-        path: item.path,
-        kind: 'file' as const
-      }))
-    ]
-    if (requests.length === 0) return
+    const container = scrollContainerRef.current
+    if (!container) return
 
-    const pendingRequests = requests.filter((request) => {
-      if (systemIconCacheRef.current.has(request.key)) return false
-      if (systemIconPendingRef.current.has(request.key)) return false
-      return true
-    })
-    if (pendingRequests.length === 0) return
+    // 收集所有需要图标的数据
+    const allIconTargets = new Map<string, { path: string; kind: 'app' | 'file' }>()
+    for (const item of appDisplayItems) {
+      const key = getSystemIconCacheKey('app', item.path)
+      if (!systemIconCacheRef.current.has(key)) {
+        allIconTargets.set(key, { path: item.iconPath || item.path, kind: item.iconPath ? 'file' : 'app' })
+      }
+    }
+    for (const item of fileDisplayItems) {
+      const key = getSystemIconCacheKey('file', item.path)
+      if (!systemIconCacheRef.current.has(key)) {
+        allIconTargets.set(key, { path: item.path, kind: 'file' })
+      }
+    }
 
-    const pendingKeys = pendingRequests.map((request) => request.key)
-    pendingKeys.forEach((key) => systemIconPendingRef.current.add(key))
+    if (allIconTargets.size === 0) return
 
+    // 用 IntersectionObserver 监控系统类型卡片，只有进入视口才加载图标
+    const pendingBatch: SystemIconRequest[] = []
+    let batchTimer: ReturnType<typeof setTimeout> | null = null
 
+    const flushBatch = () => {
+      batchTimer = null
+      if (pendingBatch.length === 0) return
+      const batch = pendingBatch.splice(0)
+      const batchKeys = batch.map(r => r.key)
 
+      // 标记 pending
+      batchKeys.forEach(k => systemIconPendingRef.current.add(k))
 
-    void window.mulby.system.getFileIcons(pendingRequests, {
-      size: SYSTEM_ICON_TARGET_SIZE,
-      concurrency: SYSTEM_ICON_BATCH_CONCURRENCY
-    })
-      .then((results) => {
-        if (!Array.isArray(results)) return
-
-        let changed = false
-
-        for (const result of results) {
-          if (!result.icon || !isValidIconDataUrl(result.icon)) {
-            continue
+      void window.mulby.system.getFileIcons(batch, {
+        size: SYSTEM_ICON_TARGET_SIZE,
+        concurrency: SYSTEM_ICON_BATCH_CONCURRENCY
+      })
+        .then((results) => {
+          if (!Array.isArray(results)) return
+          let changed = false
+          for (const result of results) {
+            if (!result.icon || !isValidIconDataUrl(result.icon)) continue
+            if (systemIconCacheRef.current.get(result.key) === result.icon) continue
+            systemIconCacheRef.current.set(result.key, result.icon)
+            changed = true
           }
-
-          if (systemIconCacheRef.current.get(result.key) === result.icon) {
-            continue
+          if (changed) {
+            setSystemIconVersion(prev => prev + 1)
           }
-          systemIconCacheRef.current.set(result.key, result.icon)
-          changed = true
-        }
+        })
+        .catch(() => { /* ignore icon load errors */ })
+        .finally(() => {
+          batchKeys.forEach(k => systemIconPendingRef.current.delete(k))
+        })
+    }
 
+    const scheduleBatch = (request: SystemIconRequest) => {
+      pendingBatch.push(request)
+      if (batchTimer === null) {
+        batchTimer = setTimeout(flushBatch, 80)
+      }
+    }
 
+    const observer = new IntersectionObserver((entries) => {
+      for (const entry of entries) {
+        if (!entry.isIntersecting) continue
+        const el = entry.target as HTMLElement
+        const itemKey = el.dataset.iconKey
+        if (!itemKey) continue
 
-        if (changed) {
-          setSystemIconVersion((prev) => prev + 1)
-        }
-      })
-      .catch((_) => {
-        // ignore icon load errors
-      })
-      .finally(() => {
-        pendingKeys.forEach((key) => systemIconPendingRef.current.delete(key))
-      })
+        const target = allIconTargets.get(itemKey)
+        if (!target) continue
+        if (systemIconCacheRef.current.has(itemKey)) continue
+        if (systemIconPendingRef.current.has(itemKey)) continue
+
+        scheduleBatch({ key: itemKey, path: target.path, kind: target.kind })
+        observer.unobserve(el)
+      }
+    }, { root: container, rootMargin: '100px' })
+
+    // 观察所有系统卡片
+    const cards = container.querySelectorAll('[data-icon-key]')
+    cards.forEach(card => observer.observe(card))
+
+    return () => {
+      observer.disconnect()
+      if (batchTimer !== null) clearTimeout(batchTimer)
+    }
   }, [appDisplayItems, fileDisplayItems, payloadHash, traceId])
 
   const sections = useMemo((): ResultSection[] => {
     const next: ResultSection[] = []
+
+    // 最近使用：置顶，紧凑单行，最多显示一行（columns 个）
+    const recentItems: RenderItem[] = recentDisplayItems
+      .slice(0, columns)
+      .map((item) => ({
+        key: `recent:${getPluginKey(item)}`,
+        type: 'recent',
+        title: item.displayName,
+        subtitle: item.featureExplain,
+        icon: item.icon,
+        pluginItem: item
+      }))
+    if (recentItems.length > 0) {
+      next.push({ key: 'recent', title: '最近使用', items: recentItems })
+    }
 
     const bestItems: RenderItem[] = bestPlugins.map((item) => ({
       key: `plugin:${getPluginKey(item)}`,
@@ -719,6 +760,7 @@ function PluginList({
 
     const apps: RenderItem[] = appDisplayItems.map((item) => ({
       key: `app:${item.path}`,
+      iconKey: getSystemIconCacheKey('app', item.path),
       type: 'system-app',
       title: item.name,
       subtitle: item.kind === 'shortcut' ? '系统应用快捷方式' : '系统应用',
@@ -733,6 +775,7 @@ function PluginList({
 
     const files: RenderItem[] = fileDisplayItems.map((item) => ({
       key: `file:${item.path}`,
+      iconKey: getSystemIconCacheKey('file', item.path),
       type: 'system-file',
       title: item.name,
       subtitle: trimPath(item.path),
@@ -745,20 +788,8 @@ function PluginList({
       next.push({ key: 'files', title: '系统文件', items: files })
     }
 
-    const recentItems: RenderItem[] = recentDisplayItems.map((item) => ({
-      key: `recent:${getPluginKey(item)}`,
-      type: 'recent',
-      title: item.displayName,
-      subtitle: item.featureExplain,
-      icon: item.icon,
-      pluginItem: item
-    }))
-    if (recentItems.length > 0) {
-      next.push({ key: 'recent', title: '最近使用插件', items: recentItems })
-    }
-
     return next
-  }, [bestPlugins, appDisplayItems, fileDisplayItems, recentDisplayItems, systemIconVersion])
+  }, [bestPlugins, appDisplayItems, fileDisplayItems, recentDisplayItems, systemIconVersion, columns])
 
   const flatItems = useMemo(() => sections.flatMap((section) => section.items), [sections])
   const isSystemLoading = isSystemAppsLoading || isSystemFilesLoading
@@ -767,38 +798,6 @@ function PluginList({
   useEffect(() => {
     onResultsChange?.(flatItems.length)
   }, [flatItems.length, onResultsChange])
-
-  useEffect(() => {
-    if (!onPanelHeightChange) return
-    const element = panelContentRef.current
-    if (!element) return
-
-    let frameId = 0
-    const reportHeight = () => {
-      frameId = 0
-      onPanelHeightChange(Math.ceil(element.offsetHeight))
-    }
-    const scheduleReport = () => {
-      if (frameId !== 0) return
-      frameId = window.requestAnimationFrame(reportHeight)
-    }
-
-    scheduleReport()
-
-    const observer = new ResizeObserver(() => {
-      scheduleReport()
-    })
-    observer.observe(element)
-
-    return () => {
-      if (frameId !== 0) {
-        window.cancelAnimationFrame(frameId)
-      }
-      observer.disconnect()
-    }
-  }, [onPanelHeightChange])
-
-
 
   useEffect(() => {
     if (flatItems.length === 0) {
@@ -855,12 +854,23 @@ function PluginList({
       const currentIndex = Math.max(0, flatItems.findIndex((item) => item.key === selectedKey))
       const maxIndex = flatItems.length - 1
 
+      const scrollToKey = (key: string) => {
+        const container = scrollContainerRef.current
+        if (!container) return
+        const el = container.querySelector(`[data-item-key="${CSS.escape(key)}"]`)
+        if (el) {
+          el.scrollIntoView({ block: 'nearest' })
+        }
+      }
+
       switch (e.key) {
         case 'ArrowUp': {
           e.preventDefault()
           const nextIndex = currentIndex - columns
           if (nextIndex >= 0) {
-            setSelectedKey(flatItems[nextIndex].key)
+            const nextKey = flatItems[nextIndex].key
+            setSelectedKey(nextKey)
+            scrollToKey(nextKey)
           }
           break
         }
@@ -868,20 +878,26 @@ function PluginList({
           e.preventDefault()
           const nextIndex = currentIndex + columns
           if (nextIndex <= maxIndex) {
-            setSelectedKey(flatItems[nextIndex].key)
+            const nextKey = flatItems[nextIndex].key
+            setSelectedKey(nextKey)
+            scrollToKey(nextKey)
           }
           break
         }
         case 'ArrowLeft': {
           e.preventDefault()
           const nextIndex = Math.max(0, currentIndex - 1)
-          setSelectedKey(flatItems[nextIndex].key)
+          const nextKey = flatItems[nextIndex].key
+          setSelectedKey(nextKey)
+          scrollToKey(nextKey)
           break
         }
         case 'ArrowRight': {
           e.preventDefault()
           const nextIndex = Math.min(maxIndex, currentIndex + 1)
-          setSelectedKey(flatItems[nextIndex].key)
+          const nextKey = flatItems[nextIndex].key
+          setSelectedKey(nextKey)
+          scrollToKey(nextKey)
           break
         }
         case 'Enter':
@@ -907,28 +923,56 @@ function PluginList({
   }, [flatItems, selectedKey, columns, handleRun, onShowDetails])
 
   return (
-    <div className="plugin-grid" role="listbox" aria-label="搜索结果">
-      <div className="plugin-grid-content" ref={panelContentRef}>
+    <div className="plugin-grid" role="listbox" aria-label="搜索结果" ref={scrollContainerRef}>
+      <div className="plugin-grid-content">
         {flatItems.length === 0 ? (
           <div className="result-empty">{isSearching ? '正在搜索...' : '没有匹配结果'}</div>
         ) : (
           sections.map((section) => (
-            <section key={section.key} className="result-section" aria-label={section.title}>
-              <div className="result-section-title">{section.title}</div>
-              <div className="result-section-grid" role="group" aria-label={section.title}>
-                {section.items.map((item) => {
-                  return (
-                    <ResultCard
-                      key={item.key}
-                      item={item}
-                      isSelected={item.key === selectedKey}
-                      onRun={handleRun}
-                      onShowDetails={onShowDetails}
-                    />
-                  )
-                })}
-              </div>
-            </section>
+            section.key === 'recent' ? (
+              <section key="recent" className="result-section result-section-recent" aria-label={section.title}>
+                <div className="recent-bar" role="group" aria-label={section.title}>
+                  {section.items.map((item) => {
+                    const isSettings = item.pluginItem ? isSettingsItem(item.pluginItem) : false
+                    return (
+                      <div
+                        key={item.key}
+                        className={`recent-chip ${item.key === selectedKey ? 'selected' : ''}`}
+                        role="option"
+                        aria-selected={item.key === selectedKey}
+                        data-item-key={item.key}
+                        onClick={() => { void handleRun(item) }}
+                        onContextMenu={(e) => {
+                          e.preventDefault()
+                          if (!item.pluginItem || isSettings) return
+                          onShowDetails?.(item.pluginItem.pluginName)
+                        }}
+                      >
+                        <PluginIcon icon={item.icon} />
+                        <span className="recent-chip-name">{item.title}</span>
+                      </div>
+                    )
+                  })}
+                </div>
+              </section>
+            ) : (
+              <section key={section.key} className="result-section" aria-label={section.title}>
+                <div className="result-section-title">{section.title}</div>
+                <div className="result-section-grid" role="group" aria-label={section.title}>
+                  {section.items.map((item) => {
+                    return (
+                      <ResultCard
+                        key={item.key}
+                        item={item}
+                        isSelected={item.key === selectedKey}
+                        onRun={handleRun}
+                        onShowDetails={onShowDetails}
+                      />
+                    )
+                  })}
+                </div>
+              </section>
+            )
           ))
         )}
       </div>

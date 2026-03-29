@@ -228,7 +228,7 @@ html.platform-win-main .app-home {
 
 html.platform-win-main .app-home .plugin-grid {
   border-radius: 0 0 12px 12px;
-  overflow: hidden;
+  overflow-x: hidden;
 }
 
 html.platform-win-main .drop-hint {
@@ -1123,6 +1123,76 @@ html.platform-win-main .search-box-container.with-bottom-panel {
   }
 }
 
+/* Recent Quick-Launch Bar */
+.result-section-recent {
+  gap: 4px;
+}
+
+.recent-bar {
+  display: flex;
+  gap: 6px;
+  overflow: hidden;
+}
+
+.recent-chip {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 10px;
+  border-radius: 10px;
+  border: 1px solid var(--glass-border);
+  background: var(--glass-bg-strong);
+  cursor: pointer;
+  white-space: nowrap;
+  flex: 1 1 0;
+  min-width: 0;
+  max-width: 180px;
+  transition: transform 0.1s ease, background-color 0.1s ease, border-color 0.1s ease;
+  -webkit-app-region: no-drag;
+}
+
+.recent-chip:hover {
+  background: var(--glass-bg);
+  border-color: rgba(59, 130, 246, 0.3);
+  transform: translateY(-1px);
+}
+
+.recent-chip.selected {
+  background: var(--glass-bg);
+  border-color: rgba(59, 130, 246, 0.4);
+  box-shadow: 0 0 0 1px rgba(59, 130, 246, 0.15);
+}
+
+.recent-chip .plugin-icon {
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+}
+
+.recent-chip .plugin-icon svg {
+  width: 14px;
+  height: 14px;
+}
+
+.recent-chip .plugin-icon img {
+  width: 18px;
+  height: 18px;
+}
+
+.dark .recent-chip .plugin-icon:not(.plugin-icon-default) svg {
+  filter: invert(1) hue-rotate(180deg);
+}
+
+.recent-chip-name {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  line-height: 1.2;
+}
+
 /* Plugin Grid */
 .plugin-grid {
   flex: 1;
@@ -1160,12 +1230,19 @@ html.platform-win-main .search-box-container.with-bottom-panel {
 }
 
 .result-section-title {
-  padding: 0 2px;
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  padding: 6px 14px;
+  margin: 0 -12px;
   font-size: 11px;
   font-weight: 600;
   letter-spacing: 0.04em;
   color: var(--text-secondary);
   text-transform: uppercase;
+  background: var(--glass-bg-strong);
+  backdrop-filter: blur(var(--glass-blur));
+  -webkit-backdrop-filter: blur(var(--glass-blur));
 }
 
 .result-section-grid {

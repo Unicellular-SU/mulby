@@ -252,7 +252,6 @@ function MainApp() {
   const [theme, setTheme] = useState<'light' | 'dark'>('light')
   const [attachments, setAttachments] = useState<UiAttachment[]>([])
   const [attachmentsManagerOpen, setAttachmentsManagerOpen] = useState(false)
-  const [pluginListHeight, setPluginListHeight] = useState(240)
   const [isWindowsMain, setIsWindowsMain] = useState(false)
   const searchText = query.length > 0 ? query : payloadText
   const runText = payloadText || query
@@ -476,8 +475,7 @@ function MainApp() {
     } else if (attachmentsManagerOpen && attachments.length > 0) {
       height = SEARCH_BOX_HEIGHT + BORDER_HEIGHT + MANAGER_HEIGHT
     } else if (showSearchPanel) {
-      const nextPanelHeight = Math.min(SEARCH_PANEL_MAX_HEIGHT, Math.max(0, pluginListHeight))
-      height = SEARCH_BOX_HEIGHT + BORDER_HEIGHT + nextPanelHeight
+      height = SEARCH_BOX_HEIGHT + BORDER_HEIGHT + SEARCH_PANEL_MAX_HEIGHT
     }
     window.mulby.window.setExpendHeight(height, allowResize)
 
@@ -488,12 +486,8 @@ function MainApp() {
     } else if (!hasInput) {
       lastHeightRef.current = null
     }
-  }, [isSystemWindow, hasTextInput, pluginOpen, systemPageAttached, detailsPluginName, attachments.length, attachmentsManagerOpen, managerMetrics.managerHeight, pluginListHeight, viewMode, perfTrace.id, perfTrace.startedAt])
+  }, [isSystemWindow, hasTextInput, pluginOpen, systemPageAttached, detailsPluginName, attachments.length, attachmentsManagerOpen, managerMetrics.managerHeight, viewMode, perfTrace.id, perfTrace.startedAt])
 
-  const handlePluginListHeightChange = useCallback((height: number) => {
-    const normalized = Math.max(0, Math.round(height))
-    setPluginListHeight((prev) => (prev === normalized ? prev : normalized))
-  }, [])
 
   // 监听插件附着事件
   useEffect(() => {
@@ -1415,7 +1409,6 @@ function MainApp() {
             traceInputLength={perfTrace.textLength}
             traceAttachmentCount={perfTrace.attachmentCount}
             onResultsChange={setResultCount}
-            onPanelHeightChange={handlePluginListHeightChange}
             onShowDetails={(pluginName) => {
               setDetailsPluginName(pluginName)
               setDetailsReturnTarget('home')
