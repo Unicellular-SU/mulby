@@ -270,6 +270,9 @@ function MainApp() {
   const perfTraceSeqRef = useRef(0)
   const lastHeightRef = useRef<number | null>(null)
   const resizeAnimationFrameRef = useRef<number | null>(null)
+  const searchPanelContentHeightRef = useRef(0)
+  const shrinkTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const [searchPanelHeight, setSearchPanelHeight] = useState(0)
 
   const beginPerfTrace = useCallback((source: SearchPerfTraceSource, textLength: number, attachmentCount: number) => {
     const nextId = perfTraceSeqRef.current + 1
@@ -443,6 +446,45 @@ function MainApp() {
     }
   }, [isSystemWindow])
 
+  // Dynamic search panel height: grow immediately, shrink with delay
+  const SEARCH_PANEL_MIN_HEIGHT = 120
+  const SEARCH_PANEL_MAX_HEIGHT_CONST = 737 // 800 - 62 - 1
+  const SHRINK_DELAY_MS = 280
+
+  const handleContentHeightChange = useCallback((contentHeight: number) => {
+    const clamped = Math.min(Math.max(contentHeight, SEARCH_PANEL_MIN_HEIGHT), SEARCH_PANEL_MAX_HEIGHT_CONST)
+
+    const prev = searchPanelContentHeightRef.current
+    searchPanelContentHeightRef.current = contentHeight
+
+    if (clamped >= prev || prev === 0) {
+      // Growing or first measurement: apply immediately
+      if (shrinkTimerRef.current) {
+        clearTimeout(shrinkTimerRef.current)
+        shrinkTimerRef.current = null
+      }
+      setSearchPanelHeight(clamped)
+    } else {
+      // Shrinking: delay to avoid flicker during fast typing
+      if (shrinkTimerRef.current) {
+        clearTimeout(shrinkTimerRef.current)
+      }
+      shrinkTimerRef.current = setTimeout(() => {
+        shrinkTimerRef.current = null
+        setSearchPanelHeight(clamped)
+      }, SHRINK_DELAY_MS)
+    }
+  }, [])
+
+  // Clean up shrink timer
+  useEffect(() => {
+    return () => {
+      if (shrinkTimerRef.current) {
+        clearTimeout(shrinkTimerRef.current)
+      }
+    }
+  }, [])
+
   // 调整窗口高度
   useEffect(() => {
     if (isSystemWindow) {
@@ -450,8 +492,6 @@ function MainApp() {
     }
     const SEARCH_BOX_HEIGHT = 62
     const BORDER_HEIGHT = 1
-    const EXPANDED_HEIGHT = 800
-    const SEARCH_PANEL_MAX_HEIGHT = EXPANDED_HEIGHT - SEARCH_BOX_HEIGHT - BORDER_HEIGHT
     const SYSTEM_PAGE_HEIGHT = 800
     const MANAGER_HEIGHT = managerMetrics.managerHeight
 
@@ -475,18 +515,22 @@ function MainApp() {
     } else if (attachmentsManagerOpen && attachments.length > 0) {
       height = SEARCH_BOX_HEIGHT + BORDER_HEIGHT + MANAGER_HEIGHT
     } else if (showSearchPanel) {
-      height = SEARCH_BOX_HEIGHT + BORDER_HEIGHT + SEARCH_PANEL_MAX_HEIGHT
+      // Dynamic height based on actual content
+      const panelH = searchPanelHeight > 0 ? searchPanelHeight : SEARCH_PANEL_MAX_HEIGHT_CONST
+      height = SEARCH_BOX_HEIGHT + BORDER_HEIGHT + panelH
     }
     window.mulby.window.setExpendHeight(height, allowResize)
 
     const hasInput = hasTextInput || attachments.length > 0
     if (hasInput && lastHeightRef.current !== height) {
       lastHeightRef.current = height
-
     } else if (!hasInput) {
       lastHeightRef.current = null
+      // Reset panel height when input is cleared
+      searchPanelContentHeightRef.current = 0
+      setSearchPanelHeight(0)
     }
-  }, [isSystemWindow, hasTextInput, pluginOpen, systemPageAttached, detailsPluginName, attachments.length, attachmentsManagerOpen, managerMetrics.managerHeight, viewMode, perfTrace.id, perfTrace.startedAt])
+  }, [isSystemWindow, hasTextInput, pluginOpen, systemPageAttached, detailsPluginName, attachments.length, attachmentsManagerOpen, managerMetrics.managerHeight, viewMode, perfTrace.id, perfTrace.startedAt, searchPanelHeight])
 
 
   // 监听插件附着事件
@@ -1409,6 +1453,7 @@ function MainApp() {
             traceInputLength={perfTrace.textLength}
             traceAttachmentCount={perfTrace.attachmentCount}
             onResultsChange={setResultCount}
+            onContentHeightChange={handleContentHeightChange}
             onShowDetails={(pluginName) => {
               setDetailsPluginName(pluginName)
               setDetailsReturnTarget('home')

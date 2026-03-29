@@ -19,6 +19,7 @@ interface PluginListProps {
   traceInputLength: number
   traceAttachmentCount: number
   onResultsChange?: (count: number) => void
+  onContentHeightChange?: (height: number) => void
   onShowDetails?: (pluginName: string) => void
   onOpenSettings?: () => void
 }
@@ -306,6 +307,7 @@ function PluginList({
   traceInputLength,
   traceAttachmentCount,
   onResultsChange,
+  onContentHeightChange,
   onShowDetails,
   onOpenSettings
 }: PluginListProps) {
@@ -320,6 +322,7 @@ function PluginList({
   const [isSystemFilesLoading, setIsSystemFilesLoading] = useState(false)
   const [selectedKey, setSelectedKey] = useState('')
   const scrollContainerRef = useRef<HTMLDivElement | null>(null)
+  const contentRef = useRef<HTMLDivElement | null>(null)
   const [columns, setColumns] = useState(() => getColumns(window.innerWidth))
   const [systemIconVersion, setSystemIconVersion] = useState(0)
 
@@ -799,6 +802,25 @@ function PluginList({
     onResultsChange?.(flatItems.length)
   }, [flatItems.length, onResultsChange])
 
+  // Measure actual content height and report to parent for dynamic window sizing
+  useEffect(() => {
+    if (!onContentHeightChange) return
+    const el = contentRef.current
+    if (!el) return
+
+    const report = () => {
+      const h = el.scrollHeight
+      onContentHeightChange(h)
+    }
+
+    // Initial measurement
+    report()
+
+    const observer = new ResizeObserver(report)
+    observer.observe(el)
+    return () => observer.disconnect()
+  }, [onContentHeightChange, flatItems.length, sections.length])
+
   useEffect(() => {
     if (flatItems.length === 0) {
       setSelectedKey('')
@@ -924,7 +946,7 @@ function PluginList({
 
   return (
     <div className="plugin-grid" role="listbox" aria-label="搜索结果" ref={scrollContainerRef}>
-      <div className="plugin-grid-content">
+      <div className="plugin-grid-content" ref={contentRef}>
         {flatItems.length === 0 ? (
           <div className="result-empty">{isSearching ? '正在搜索...' : '没有匹配结果'}</div>
         ) : (
