@@ -12,6 +12,27 @@ import type {
 } from './types'
 
 export class DesktopSearchService implements SearchExecutionContext {
+  /**
+   * 在 Windows 上包装 spawn 调用：通过 shell + chcp 65001 强制非 PowerShell 子进程使用 UTF-8 编码输出，
+   * 解决 es.exe 等控制台程序默认使用系统 OEM 编码页（如 GBK）导致中文路径乱码的问题。
+   * PowerShell 命令不走 cmd 包装（其脚本含 $|>&等 cmd 元字符），
+   * 由调用方通过 wrapPsUtf8() 注入 [Console]::OutputEncoding = UTF8 处理。
+   */
+  private spawnUtf8(cmd: string, args: string[]) {
+    if (process.platform === 'win32' && !cmd.toLowerCase().includes('powershell')) {
+      // 非 PowerShell 命令（如 es.exe）通过 shell + chcp 65001 设置 UTF-8 编码页，
+      // 由 Node.js 的 shell: true 自动处理路径空格和特殊字符的转义
+      const quotedCmd = cmd.includes(' ') ? `"${cmd}"` : cmd
+      const quotedArgs = args.map((a) => a.includes(' ') ? `"${a}"` : a).join(' ')
+      return spawn(`chcp 65001>nul && ${quotedCmd} ${quotedArgs}`, {
+        stdio: ['ignore', 'pipe', 'pipe'] as const,
+        shell: true,
+        windowsHide: true
+      })
+    }
+    return spawn(cmd, args, { stdio: ['ignore', 'pipe', 'pipe'] as const })
+  }
+
   private searchProcesses: Map<string, ChildProcess> = new Map()
   private ranking = new SearchRanking()
 
@@ -64,7 +85,7 @@ export class DesktopSearchService implements SearchExecutionContext {
 
   runCommand(cmd: string, args: string[], limit: number, searchKey: string): Promise<string[]> {
     return new Promise((resolve, reject) => {
-      const child = spawn(cmd, args)
+      const child = this.spawnUtf8(cmd, args)
       this.searchProcesses.set(searchKey, child)
 
       let output = ''
@@ -124,7 +145,7 @@ export class DesktopSearchService implements SearchExecutionContext {
 
   runQuickCommand(cmd: string, args: string[], timeoutMs: number = 1500): Promise<string> {
     return new Promise((resolve, reject) => {
-      const child = spawn(cmd, args)
+      const child = this.spawnUtf8(cmd, args)
       let stdout = ''
       let stderr = ''
       let settled = false
