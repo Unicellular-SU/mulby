@@ -2,10 +2,8 @@
  * 跨平台获取系统前台活跃窗口信息
  *
  * - macOS: 通过 osascript 调用 AppleScript
- * - Windows: 通过 PowerShell 获取前台窗口
+ * - Windows: 通过 Koffi FFI 直接调用 user32.dll / kernel32.dll（亚毫秒级）
  * - Linux: 通过 xdotool + xprop
- *
- * 零依赖方案，不需要安装任何 npm 原生模块。
  */
 import { execFile } from 'child_process'
 import { promisify } from 'util'
@@ -142,47 +140,100 @@ end tell`
 }
 
 /**
- * Windows: 通过 PowerShell 获取前台窗口信息
+ * Windows: 通过 Koffi FFI 直接调用 user32.dll / kernel32.dll
+ *
+ * 零进程启动开销，亚毫秒级同步调用。
+ * 替代旧方案（PowerShell + Add-Type C# 编译），彻底消除 3-8 秒冷启动延迟。
  */
-async function getActiveWindowWindows(): Promise<ActiveWindowInfo | null> {
-  // 使用 PowerShell 获取前台窗口的进程名和标题
-  const script = `
-Add-Type @"
-using System;
-using System.Runtime.InteropServices;
-using System.Text;
-public class Win32 {
-  [DllImport("user32.dll")] public static extern IntPtr GetForegroundWindow();
-  [DllImport("user32.dll")] public static extern int GetWindowText(IntPtr hWnd, StringBuilder text, int count);
-  [DllImport("user32.dll")] public static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint processId);
+
+// --- Win32 FFI 绑定（懒加载，仅 Windows 平台首次调用时初始化） ---
+
+interface Win32Api {
+  GetForegroundWindow: () => unknown
+  GetWindowTextW: (hWnd: unknown, buf: Buffer, maxCount: number) => number
+  GetWindowThreadProcessId: (hWnd: unknown, pidOut: unknown[]) => number
+  OpenProcess: (access: number, inherit: number, pid: number) => unknown
+  QueryFullProcessImageNameW: (hProcess: unknown, flags: number, buf: Buffer, sizeInout: unknown[]) => number
+  CloseHandle: (handle: unknown) => number
+  koffi: typeof import('koffi')
 }
-"@
-$hwnd = [Win32]::GetForegroundWindow()
-$sb = New-Object System.Text.StringBuilder 256
-[void][Win32]::GetWindowText($hwnd, $sb, 256)
-$title = $sb.ToString()
-$pid = 0
-[void][Win32]::GetWindowThreadProcessId($hwnd, [ref]$pid)
-$proc = Get-Process -Id $pid -ErrorAction SilentlyContinue
-$name = if ($proc) { $proc.ProcessName } else { "" }
-Write-Output "$name|||$title|||$pid"
-`
 
-  const { stdout } = await execFileAsync('powershell', ['-NoProfile', '-Command', script], {
-    timeout: 3000,
-    encoding: 'utf8'
-  })
+let _win32: Win32Api | null = null
 
-  const parts = stdout.trim().split('|||')
-  if (parts.length < 3) return null
+function getWin32(): Win32Api {
+  if (_win32) return _win32
 
-  const [app, title, pidStr] = parts
-  const pid = parseInt(pidStr, 10)
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const koffi = require('koffi') as typeof import('koffi')
+  const user32 = koffi.load('user32.dll')
+  const kernel32 = koffi.load('kernel32.dll')
+
+  _win32 = {
+    // user32.dll
+    GetForegroundWindow: user32.func('void* __stdcall GetForegroundWindow()'),
+    GetWindowTextW: user32.func('int __stdcall GetWindowTextW(void *hWnd, _Out_ uint8_t *lpString, int nMaxCount)'),
+    GetWindowThreadProcessId: user32.func('uint32_t __stdcall GetWindowThreadProcessId(void *hWnd, _Out_ uint32_t *lpdwProcessId)'),
+
+    // kernel32.dll — 用于获取进程可执行文件路径（替代 tasklist/Get-Process）
+    OpenProcess: kernel32.func('void* __stdcall OpenProcess(uint32_t dwDesiredAccess, int bInheritHandle, uint32_t dwProcessId)'),
+    QueryFullProcessImageNameW: kernel32.func('int __stdcall QueryFullProcessImageNameW(void *hProcess, uint32_t dwFlags, _Out_ uint8_t *lpExeName, _Inout_ uint32_t *lpdwSize)'),
+    CloseHandle: kernel32.func('int __stdcall CloseHandle(void *hObject)'),
+
+    koffi
+  }
+
+  return _win32
+}
+
+const PROCESS_QUERY_LIMITED_INFORMATION = 0x1000
+
+function getActiveWindowWindows(): ActiveWindowInfo | null {
+  const api = getWin32()
+
+  // 1. 获取前台窗口句柄
+  const hWnd = api.GetForegroundWindow()
+  if (!hWnd) return null
+
+  // 2. 获取窗口标题（Unicode / UTF-16LE）
+  const titleBuf = Buffer.alloc(512) // 256 chars × 2 bytes
+  const titleLen = api.GetWindowTextW(hWnd, titleBuf, 256)
+  const title = titleLen > 0
+    ? api.koffi.decode(titleBuf, 'char16_t', titleLen) as string
+    : ''
+
+  // 3. 获取进程 ID
+  const pidOut: unknown[] = [null]
+  const tid = api.GetWindowThreadProcessId(hWnd, pidOut)
+  const pid = pidOut[0] as number
+  if (!tid || !pid) {
+    return { app: '', title, pid: undefined }
+  }
+
+  // 4. 获取进程名（纯 FFI，无子进程）
+  let app = ''
+  const hProc = api.OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, 0, pid)
+  if (hProc) {
+    try {
+      const pathBuf = Buffer.alloc(520 * 2) // MAX_PATH × 2
+      const sizeInout: unknown[] = [520]
+      const ok = api.QueryFullProcessImageNameW(hProc, 0, pathBuf, sizeInout)
+      if (ok) {
+        const pathLen = sizeInout[0] as number
+        const fullPath = api.koffi.decode(pathBuf, 'char16_t', pathLen) as string
+        // 从完整路径提取文件名（去除 .exe 后缀）
+        const lastSep = Math.max(fullPath.lastIndexOf('\\'), fullPath.lastIndexOf('/'))
+        const fileName = lastSep >= 0 ? fullPath.slice(lastSep + 1) : fullPath
+        app = fileName.replace(/\.exe$/i, '')
+      }
+    } finally {
+      api.CloseHandle(hProc)
+    }
+  }
 
   return {
-    app: app || '',
-    title: title || '',
-    pid: isNaN(pid) ? undefined : pid
+    app,
+    title,
+    pid: pid > 0 ? pid : undefined
   }
 }
 

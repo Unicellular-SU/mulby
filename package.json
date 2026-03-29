@@ -59,6 +59,7 @@
     "electron-updater": "^6.8.3",
     "extract-zip": "^2.0.1",
     "js-tiktoken": "^1.0.21",
+    "koffi": "^2.15.2",
     "lucide-react": "^0.562.0",
     "node-addon-api": "^8.5.0",
     "pinyin-pro": "^3.28.0",
@@ -125,7 +126,8 @@
       "node_modules/sharp/**/*",
       "node_modules/@img/sharp-*/**/*",
       "node_modules/@img/sharp-libvips-*/**/*",
-      "node_modules/uiohook-napi/**/*"
+      "node_modules/uiohook-napi/**/*",
+      "node_modules/koffi/**/*"
     ],
     "afterPack": "scripts/electron-builder-after-pack.cjs",
     "extraResources": [

@@ -24,7 +24,7 @@
 #
 # 默认行为: 仅对已安装（父目录存在）的 IDE 同步，未安装的自动跳过。
 # 使用 --force 可为所有 IDE 强制创建目录并同步。
-# 已存在的同名目录若 SKILL.md 有更新则备份后重新复制。
+# 已存在的同名目录若 SKILL.md 有更新则直接覆盖（不备份）。
 # ============================================================================
 
 set -eu
@@ -135,11 +135,9 @@ sync_skill() {
     fi
   fi
 
-  # 目标已存在则先备份
+  # 目标已存在则直接删除（不再备份，因为备份目录会被 AI 工具误识别为 skill）
   if [ -e "$target_skill" ] || [ -L "$target_skill" ]; then
-    backup_path="${target_skill}.bak.$(date +%Y%m%d%H%M%S)"
-    printf "   %b\n" "${YELLOW}⚠${RESET} 备份: ${DIM}$target_skill → $backup_path${RESET}"
-    mv "$target_skill" "$backup_path"
+    rm -rf "$target_skill"
   fi
 
   cp -r "$source_skill" "$target_skill"
@@ -180,6 +178,13 @@ for entry in $TARGET_LIST; do
 
   # 确保 skills 目录存在
   mkdir -p "$target_dir"
+
+  # 清理旧版备份目录（*.bak.*），避免被 AI 工具误识别为 skill
+  for bak_dir in "$target_dir"/*.bak.*; do
+    [ -e "$bak_dir" ] || continue
+    rm -rf "$bak_dir"
+    printf "   %b\n" "${YELLOW}🗑${RESET} 清理旧备份: ${DIM}$(basename "$bak_dir")${RESET}"
+  done
 
   # 遍历每个 skill 子目录
   for skill_path in "$SOURCE_DIR"/*/; do
