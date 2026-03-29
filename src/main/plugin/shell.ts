@@ -1,4 +1,5 @@
 import { shell } from 'electron'
+import { spawn } from 'child_process'
 import { existsSync } from 'fs'
 import { dirname } from 'path'
 
@@ -8,9 +9,10 @@ export class PluginShell {
    * @param path 文件路径
    */
   async openPath(path: string): Promise<string> {
-    // Windows AppX/UWP 应用使用 shell: URI 启动
+    // Windows AppX/UWP 应用使用 shell: URI 启动，通过 explorer.exe 打开
     if (process.platform === 'win32' && path.startsWith('shell:')) {
-      await shell.openExternal(path)
+      const child = spawn('explorer', [path], { detached: true, stdio: 'ignore' })
+      child.unref()
       return ''
     }
     if (!existsSync(path)) {

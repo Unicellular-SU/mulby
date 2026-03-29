@@ -156,7 +156,14 @@ export class WindowsSearchProvider implements DesktopSearchProvider {
     }
   }
 
-
+  /**
+   * 在 PowerShell 脚本前注入 UTF-8 编码设置，
+   * 确保子进程 stdout 使用 UTF-8 而非系统默认 OEM/ANSI 编码页（如 GBK）。
+   * 这样 Node.js 默认的 Buffer.toString('utf8') 就能正确解码中文等非 ASCII 字符。
+   */
+  private wrapPsUtf8(script: string): string {
+    return '[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; ' + script
+  }
 
   private scoreCatalogEntry(entry: WindowsCatalogEntry, query: string): number {
     const baseScore = this.ranking.scoreApp(entry, query, this.ranking.normalizeAppDisplayName(basename(entry.path)))
@@ -288,7 +295,7 @@ export class WindowsSearchProvider implements DesktopSearchProvider {
   }
 
   private async collectRegistryApps(): Promise<WindowsCatalogEntry[]> {
-    const script = `
+    const script = this.wrapPsUtf8(`
       $targets = @(
         "HKLM:\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\*",
         "HKLM:\\Software\\WOW6432Node\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\*",
@@ -321,7 +328,7 @@ export class WindowsSearchProvider implements DesktopSearchProvider {
             }
           }
       }
-    `
+    `)
 
     let lines: string[] = []
     try {
@@ -361,7 +368,7 @@ export class WindowsSearchProvider implements DesktopSearchProvider {
   }
 
   private async collectAppxApps(): Promise<{ name: string; appId: string }[]> {
-    const script = 'Get-StartApps | ForEach-Object { Write-Output ("$($_.Name)|||$($_.AppID)") }'
+    const script = this.wrapPsUtf8('Get-StartApps | ForEach-Object { Write-Output ("$($_.Name)|||$($_.AppID)") }')
 
     try {
       const lines = await this.execution.runCommand(
@@ -463,7 +470,7 @@ export class WindowsSearchProvider implements DesktopSearchProvider {
     if (appxEntries.length === 0) return
 
     // 单次 PowerShell 获取所有 AppX 包的 PackageFamilyName → InstallLocation
-    const script = 'Get-AppxPackage | Where-Object { $_.InstallLocation } | ForEach-Object { Write-Output "$($_.PackageFamilyName)|||$($_.InstallLocation)" }'
+    const script = this.wrapPsUtf8('Get-AppxPackage | Where-Object { $_.InstallLocation } | ForEach-Object { Write-Output "$($_.PackageFamilyName)|||$($_.InstallLocation)" }')
     let lines: string[] = []
     try {
       lines = await this.execution.runCommand(
@@ -568,7 +575,7 @@ export class WindowsSearchProvider implements DesktopSearchProvider {
 
   private async fallbackWindowsSearch(query: string, limit: number, searchKey: string): Promise<string[]> {
     const safeQuery = query.replace(/'/g, "''")
-    const script = `
+    const script = this.wrapPsUtf8(`
       $query = "SELECT TOP ${limit} System.ItemPathDisplay FROM SystemIndex WHERE System.ItemName LIKE '%${safeQuery}%'"
       $provider = "Provider=Search.CollatorDSO;Extended Properties='Application=Windows';"
       $adapter = New-Object System.Data.OleDb.OleDbDataAdapter($query, $provider)
@@ -579,7 +586,7 @@ export class WindowsSearchProvider implements DesktopSearchProvider {
           Write-Output $row["System.ItemPathDisplay"]
         }
       }
-    `
+    `)
 
     return this.execution.runCommand('powershell', ['-NoProfile', '-Command', script], limit, searchKey)
   }

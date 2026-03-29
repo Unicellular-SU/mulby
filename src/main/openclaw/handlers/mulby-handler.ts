@@ -11,10 +11,11 @@
  * - mulby.clipboard.set: 设置剪贴板内容
  */
 
-import { clipboard, shell } from 'electron'
+import { clipboard } from 'electron'
 import type { CommandHandler } from '../command-registry'
 import type { AiTool } from '../../../shared/types/ai'
 import { parsePluginToolId, isPluginToolName } from '../../plugin/plugin-tools'
+import { pluginShell } from '../../plugin/shell'
 
 /** 插件搜索结果 */
 interface PluginSearchResult {
@@ -293,9 +294,13 @@ export function createMulbyHandlers(deps: MulbyHandlerDeps): Record<string, { ha
 
         // 打开应用/文件
         if (bestDesktop) {
-          const openError = await shell.openPath(bestDesktop.path)
-          if (openError) {
-            return { ok: false, type: bestDesktop.type || 'application', error: openError }
+          try {
+            const openError = await pluginShell.openPath(bestDesktop.path)
+            if (openError) {
+              return { ok: false, type: bestDesktop.type || 'application', error: openError }
+            }
+          } catch (err) {
+            return { ok: false, type: bestDesktop.type || 'application', error: String(err) }
           }
           return {
             ok: true,
