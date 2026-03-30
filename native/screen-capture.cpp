@@ -17,6 +17,10 @@
 // ============================================================
 #ifdef _WIN32
 #include <windows.h>
+#include <windowsx.h>
+#include <thread>
+#include <atomic>
+#include <vector>
 
 /**
  * 截取指定区域的屏幕内容
@@ -223,6 +227,454 @@ static Napi::Value GetDisplays(const Napi::CallbackInfo& info) {
     }
 
     return result;
+}
+
+// ============================================================
+// Windows: Native Region Capture (fullscreen overlay)
+// ============================================================
+#include <dwmapi.h>
+#pragma comment(lib, "dwmapi.lib")
+
+struct RegionCaptureResult {
+    bool success;
+    int x, y, width, height;
+    std::vector<uint8_t> pixels;
+    int imageWidth, imageHeight;
+};
+
+// Window rectangle for snapping
+struct WinRect { RECT r; };
+
+static const wchar_t* RC_CLASS = L"MulbyRegionCapture";
+static bool g_rcClassRegistered = false;
+static std::atomic<bool> g_rcActive{false};
+
+struct RCState {
+    int vsX, vsY, vsW, vsH;
+    // Screen bitmaps
+    HDC hOrigDC, hDimDC;
+    HBITMAP hOrigBmp, hDimBmp;
+    HBITMAP hOldOrig, hOldDim;
+    void* pOrigBits;
+    void* pDimBits;
+    // Double buffer
+    HDC hBackDC;
+    HBITMAP hBackBmp, hOldBack;
+    // Selection state
+    bool selecting;
+    int sx, sy, cx, cy;
+    // Result
+    bool success;
+    int selL, selT, selW, selH;
+    // Font
+    HFONT hFont;
+    // Window snapping
+    std::vector<WinRect> winRects;
+    int hoverIdx; // -1 = no window hovered
+};
+
+static inline void RCNormRect(int x1, int y1, int x2, int y2, int& l, int& t, int& w, int& h) {
+    l = (x1 < x2) ? x1 : x2;
+    t = (y1 < y2) ? y1 : y2;
+    w = abs(x2 - x1);
+    h = abs(y2 - y1);
+}
+
+// Enumerate visible windows for snapping
+static BOOL CALLBACK RCEnumWinProc(HWND hwnd, LPARAM lParam) {
+    if (!IsWindowVisible(hwnd) || IsIconic(hwnd)) return TRUE;
+
+    // Skip desktop and shell windows
+    if (hwnd == GetDesktopWindow() || hwnd == GetShellWindow()) return TRUE;
+
+    // Skip DWM-cloaked windows (UWP suspended apps, virtual desktops)
+    DWORD cloaked = 0;
+    DwmGetWindowAttribute(hwnd, DWMWA_CLOAKED, &cloaked, sizeof(cloaked));
+    if (cloaked) return TRUE;
+
+    // Skip windows without a title (many system-internal windows)
+    int titleLen = GetWindowTextLengthW(hwnd);
+    if (titleLen == 0) return TRUE;
+
+    // Skip tool windows (tooltips, floating palettes)
+    LONG_PTR exStyle = GetWindowLongPtr(hwnd, GWL_EXSTYLE);
+    if (exStyle & WS_EX_TOOLWINDOW) return TRUE;
+
+    RECT r;
+    if (SUCCEEDED(DwmGetWindowAttribute(hwnd, DWMWA_EXTENDED_FRAME_BOUNDS, &r, sizeof(r)))) {
+        // DWM gives us the visual frame bounds (excludes invisible resize borders)
+    } else {
+        GetWindowRect(hwnd, &r);
+    }
+    int w = r.right - r.left, h = r.bottom - r.top;
+    if (w < 20 || h < 20) return TRUE;
+    auto* v = (std::vector<WinRect>*)lParam;
+    v->push_back({r});
+    return TRUE;
+}
+
+// Find topmost window under screen point
+static int RCFindWindow(const RCState& s, int clientX, int clientY) {
+    int screenX = clientX + s.vsX;
+    int screenY = clientY + s.vsY;
+    // EnumWindows returns Z-order; our overlay was not yet created during enum
+    for (size_t i = 0; i < s.winRects.size(); i++) {
+        const RECT& r = s.winRects[i].r;
+        if (screenX >= r.left && screenX < r.right && screenY >= r.top && screenY < r.bottom)
+            return (int)i;
+    }
+    return -1;
+}
+
+static void RCPaintTo(HDC hdc, RCState* s) {
+    // 1. Dimmed background
+    BitBlt(hdc, 0, 0, s->vsW, s->vsH, s->hDimDC, 0, 0, SRCCOPY);
+
+    if (s->selecting) {
+        int l, t, w, h;
+        RCNormRect(s->sx, s->sy, s->cx, s->cy, l, t, w, h);
+        if (w > 0 && h > 0) {
+            // Bright selection area
+            BitBlt(hdc, l, t, w, h, s->hOrigDC, l, t, SRCCOPY);
+            // Blue border
+            HPEN pen = CreatePen(PS_SOLID, 2, RGB(0, 122, 255));
+            HPEN oldP = (HPEN)SelectObject(hdc, pen);
+            HBRUSH oldB = (HBRUSH)SelectObject(hdc, GetStockObject(NULL_BRUSH));
+            Rectangle(hdc, l, t, l + w, t + h);
+            SelectObject(hdc, oldP); SelectObject(hdc, oldB); DeleteObject(pen);
+            // Corner handles
+            int cs = 6;
+            HBRUSH cb = CreateSolidBrush(RGB(0, 122, 255));
+            RECT cn[4] = {
+                {l-cs/2, t-cs/2, l+cs/2, t+cs/2}, {l+w-cs/2, t-cs/2, l+w+cs/2, t+cs/2},
+                {l-cs/2, t+h-cs/2, l+cs/2, t+h+cs/2}, {l+w-cs/2, t+h-cs/2, l+w+cs/2, t+h+cs/2}
+            };
+            for (int i = 0; i < 4; i++) FillRect(hdc, &cn[i], cb);
+            DeleteObject(cb);
+            // Dimension text
+            wchar_t txt[64];
+            swprintf_s(txt, L"%d \u00D7 %d", w, h);
+            HFONT oldF = (HFONT)SelectObject(hdc, s->hFont);
+            SIZE sz; GetTextExtentPoint32W(hdc, txt, (int)wcslen(txt), &sz);
+            int tx = l, ty = t < 30 ? t + h + 8 : t - sz.cy - 12;
+            RECT bg = {tx-6, ty-3, tx+sz.cx+6, ty+sz.cy+3};
+            HBRUSH tbg = CreateSolidBrush(RGB(0,0,0));
+            FillRect(hdc, &bg, tbg); DeleteObject(tbg);
+            SetTextColor(hdc, RGB(255,255,255)); SetBkMode(hdc, TRANSPARENT);
+            TextOutW(hdc, tx, ty, txt, (int)wcslen(txt));
+            SelectObject(hdc, oldF);
+        }
+    } else {
+        // Window snapping highlight
+        if (s->hoverIdx >= 0 && s->hoverIdx < (int)s->winRects.size()) {
+            const RECT& wr = s->winRects[s->hoverIdx].r;
+            int l = wr.left - s->vsX, t = wr.top - s->vsY;
+            int w = wr.right - wr.left, h = wr.bottom - wr.top;
+            // Clamp to virtual screen
+            if (l < 0) { w += l; l = 0; } if (t < 0) { h += t; t = 0; }
+            if (l + w > s->vsW) w = s->vsW - l;
+            if (t + h > s->vsH) h = s->vsH - t;
+            if (w > 0 && h > 0) {
+                BitBlt(hdc, l, t, w, h, s->hOrigDC, l, t, SRCCOPY);
+                HPEN pen = CreatePen(PS_SOLID, 2, RGB(0, 122, 255));
+                HPEN op = (HPEN)SelectObject(hdc, pen);
+                HBRUSH ob = (HBRUSH)SelectObject(hdc, GetStockObject(NULL_BRUSH));
+                Rectangle(hdc, l, t, l + w, t + h);
+                SelectObject(hdc, op); SelectObject(hdc, ob); DeleteObject(pen);
+            }
+        }
+        // Tip text
+        wchar_t tip[] = L"Drag to select region, ESC to cancel";
+        HFONT oldF = (HFONT)SelectObject(hdc, s->hFont);
+        SIZE sz; GetTextExtentPoint32W(hdc, tip, (int)wcslen(tip), &sz);
+        int tx = (s->vsW - sz.cx) / 2, ty = 30;
+        RECT bg = {tx-12, ty-6, tx+sz.cx+12, ty+sz.cy+6};
+        HBRUSH tbg = CreateSolidBrush(RGB(0,0,0));
+        FillRect(hdc, &bg, tbg); DeleteObject(tbg);
+        SetTextColor(hdc, RGB(255,255,255)); SetBkMode(hdc, TRANSPARENT);
+        TextOutW(hdc, tx, ty, tip, (int)wcslen(tip));
+        SelectObject(hdc, oldF);
+    }
+}
+
+static LRESULT CALLBACK RCWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
+    RCState* s = (RCState*)GetWindowLongPtr(hwnd, GWLP_USERDATA);
+
+    switch (msg) {
+    case WM_CREATE: {
+        CREATESTRUCT* cs = (CREATESTRUCT*)lParam;
+        SetWindowLongPtr(hwnd, GWLP_USERDATA, (LONG_PTR)cs->lpCreateParams);
+        return 0;
+    }
+    case WM_MOUSEACTIVATE:
+        return MA_ACTIVATE; // Process first click (don't eat it)
+    case WM_SETCURSOR:
+        SetCursor(LoadCursor(NULL, IDC_CROSS));
+        return TRUE;
+    case WM_ERASEBKGND:
+        return 1;
+
+    case WM_PAINT: {
+        if (!s) break;
+        PAINTSTRUCT ps;
+        HDC hdc = BeginPaint(hwnd, &ps);
+        // Draw to back buffer, then flip (eliminates flicker)
+        RCPaintTo(s->hBackDC, s);
+        BitBlt(hdc, 0, 0, s->vsW, s->vsH, s->hBackDC, 0, 0, SRCCOPY);
+        EndPaint(hwnd, &ps);
+        return 0;
+    }
+
+    case WM_LBUTTONDOWN: {
+        if (!s) break;
+        s->selecting = true;
+        s->sx = GET_X_LPARAM(lParam);
+        s->sy = GET_Y_LPARAM(lParam);
+        s->cx = s->sx; s->cy = s->sy;
+        SetCapture(hwnd);
+        return 0;
+    }
+    case WM_MOUSEMOVE: {
+        if (!s) break;
+        int mx = GET_X_LPARAM(lParam), my = GET_Y_LPARAM(lParam);
+        if (s->selecting) {
+            s->cx = mx; s->cy = my;
+            InvalidateRect(hwnd, NULL, FALSE);
+        } else {
+            // Window snapping hover
+            int idx = RCFindWindow(*s, mx, my);
+            if (idx != s->hoverIdx) {
+                s->hoverIdx = idx;
+                InvalidateRect(hwnd, NULL, FALSE);
+            }
+        }
+        return 0;
+    }
+    case WM_LBUTTONUP: {
+        if (!s || !s->selecting) break;
+        s->selecting = false;
+        ReleaseCapture();
+        s->cx = GET_X_LPARAM(lParam); s->cy = GET_Y_LPARAM(lParam);
+        int l, t, w, h;
+        RCNormRect(s->sx, s->sy, s->cx, s->cy, l, t, w, h);
+        if (w > 5 && h > 5) {
+            s->success = true;
+            s->selL = l; s->selT = t; s->selW = w; s->selH = h;
+            DestroyWindow(hwnd);
+        } else if (s->hoverIdx >= 0 && s->hoverIdx < (int)s->winRects.size()) {
+            // Window snap: use hovered window rect
+            const RECT& wr = s->winRects[s->hoverIdx].r;
+            int wl = wr.left - s->vsX, wt = wr.top - s->vsY;
+            int ww = wr.right - wr.left, wh = wr.bottom - wr.top;
+            // Clamp
+            if (wl < 0) { ww += wl; wl = 0; } if (wt < 0) { wh += wt; wt = 0; }
+            if (wl + ww > s->vsW) ww = s->vsW - wl;
+            if (wt + wh > s->vsH) wh = s->vsH - wt;
+            if (ww > 5 && wh > 5) {
+                s->success = true;
+                s->selL = wl; s->selT = wt; s->selW = ww; s->selH = wh;
+                DestroyWindow(hwnd);
+            }
+        } else {
+            InvalidateRect(hwnd, NULL, FALSE);
+        }
+        return 0;
+    }
+    case WM_RBUTTONUP: {
+        if (!s) break;
+        s->success = false;
+        if (s->selecting) { s->selecting = false; ReleaseCapture(); }
+        DestroyWindow(hwnd);
+        return 0;
+    }
+    case WM_KEYDOWN: {
+        if (wParam != VK_ESCAPE) break;
+        if (!s) break;
+        s->success = false;
+        if (s->selecting) { s->selecting = false; ReleaseCapture(); }
+        DestroyWindow(hwnd);
+        return 0;
+    }
+    case WM_DESTROY:
+        PostQuitMessage(0);
+        return 0;
+    }
+    return DefWindowProc(hwnd, msg, wParam, lParam);
+}
+
+static Napi::Value StartRegionCapture(const Napi::CallbackInfo& info) {
+    Napi::Env env = info.Env();
+    if (info.Length() < 1 || !info[0].IsFunction()) {
+        Napi::TypeError::New(env, "Callback function required").ThrowAsJavaScriptException();
+        return env.Undefined();
+    }
+    if (g_rcActive.exchange(true)) {
+        Napi::Error::New(env, "Region capture already in progress").ThrowAsJavaScriptException();
+        return env.Undefined();
+    }
+
+    auto tsfn = Napi::ThreadSafeFunction::New(
+        env, info[0].As<Napi::Function>(),
+        "RegionCaptureCB", 0, 1
+    );
+
+    std::thread([tsfn]() mutable {
+        RCState st = {};
+        st.success = false;
+        st.selecting = false;
+        st.hoverIdx = -1;
+
+        st.vsX = GetSystemMetrics(SM_XVIRTUALSCREEN);
+        st.vsY = GetSystemMetrics(SM_YVIRTUALSCREEN);
+        st.vsW = GetSystemMetrics(SM_CXVIRTUALSCREEN);
+        st.vsH = GetSystemMetrics(SM_CYVIRTUALSCREEN);
+        if (st.vsW <= 0 || st.vsH <= 0) {
+            st.vsX = 0; st.vsY = 0;
+            st.vsW = GetSystemMetrics(SM_CXSCREEN);
+            st.vsH = GetSystemMetrics(SM_CYSCREEN);
+        }
+
+        // Enumerate windows for snapping (before we create our overlay)
+        EnumWindows(RCEnumWinProc, (LPARAM)&st.winRects);
+
+        // Capture virtual screen
+        HDC hScrDC = GetDC(NULL);
+        BITMAPINFOHEADER bi = {};
+        bi.biSize = sizeof(bi);
+        bi.biWidth = st.vsW;
+        bi.biHeight = -st.vsH;
+        bi.biPlanes = 1;
+        bi.biBitCount = 32;
+        bi.biCompression = BI_RGB;
+
+        st.hOrigDC = CreateCompatibleDC(hScrDC);
+        st.hOrigBmp = CreateDIBSection(st.hOrigDC, (BITMAPINFO*)&bi, DIB_RGB_COLORS, &st.pOrigBits, NULL, 0);
+        st.hOldOrig = (HBITMAP)SelectObject(st.hOrigDC, st.hOrigBmp);
+        BitBlt(st.hOrigDC, 0, 0, st.vsW, st.vsH, hScrDC, st.vsX, st.vsY, SRCCOPY);
+
+        // Fix alpha channel: GDI BitBlt leaves alpha=0 (transparent).
+        // Electron's nativeImage.createFromBitmap needs alpha=255 (opaque).
+        size_t pixelCount = (size_t)st.vsW * st.vsH;
+        uint32_t* src32 = (uint32_t*)st.pOrigBits;
+        for (size_t i = 0; i < pixelCount; i++) {
+            src32[i] |= 0xFF000000;  // Set alpha to 255
+        }
+
+        // Create dimmed version (optimized uint32 ops)
+        st.hDimDC = CreateCompatibleDC(hScrDC);
+        st.hDimBmp = CreateDIBSection(st.hDimDC, (BITMAPINFO*)&bi, DIB_RGB_COLORS, &st.pDimBits, NULL, 0);
+        st.hOldDim = (HBITMAP)SelectObject(st.hDimDC, st.hDimBmp);
+
+        uint32_t* dst32 = (uint32_t*)st.pDimBits;
+        for (size_t i = 0; i < pixelCount; i++) {
+            // Halve RGB, keep alpha=0xFF
+            dst32[i] = ((src32[i] >> 1) & 0x007F7F7F) | 0xFF000000;
+        }
+
+        // Create double buffer
+        st.hBackDC = CreateCompatibleDC(hScrDC);
+        st.hBackBmp = CreateCompatibleBitmap(hScrDC, st.vsW, st.vsH);
+        st.hOldBack = (HBITMAP)SelectObject(st.hBackDC, st.hBackBmp);
+
+        ReleaseDC(NULL, hScrDC);
+
+        st.hFont = CreateFontW(16, 0, 0, 0, FW_NORMAL, 0, 0, 0,
+            DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
+            CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_SWISS, L"Segoe UI");
+
+        if (!g_rcClassRegistered) {
+            WNDCLASSEXW wc = {};
+            wc.cbSize = sizeof(wc);
+            wc.lpfnWndProc = RCWndProc;
+            wc.hInstance = GetModuleHandle(NULL);
+            wc.hCursor = LoadCursor(NULL, IDC_CROSS);
+            wc.lpszClassName = RC_CLASS;
+            wc.style = CS_HREDRAW | CS_VREDRAW;
+            RegisterClassExW(&wc);
+            g_rcClassRegistered = true;
+        }
+
+        HWND hwnd = CreateWindowExW(
+            WS_EX_TOPMOST | WS_EX_TOOLWINDOW,
+            RC_CLASS, NULL,
+            WS_POPUP | WS_VISIBLE,
+            st.vsX, st.vsY, st.vsW, st.vsH,
+            NULL, NULL, GetModuleHandle(NULL), &st
+        );
+
+        if (!hwnd) {
+            SelectObject(st.hOrigDC, st.hOldOrig); DeleteObject(st.hOrigBmp); DeleteDC(st.hOrigDC);
+            SelectObject(st.hDimDC, st.hOldDim); DeleteObject(st.hDimBmp); DeleteDC(st.hDimDC);
+            SelectObject(st.hBackDC, st.hOldBack); DeleteObject(st.hBackBmp); DeleteDC(st.hBackDC);
+            DeleteObject(st.hFont);
+            auto* r = new RegionCaptureResult{false, 0,0,0,0, {}, 0,0};
+            tsfn.BlockingCall(r, [](Napi::Env env, Napi::Function cb, RegionCaptureResult* d) {
+                Napi::Object o = Napi::Object::New(env);
+                o.Set("success", false);
+                cb.Call({o});
+                delete d;
+            });
+            tsfn.Release();
+            g_rcActive = false;
+            return;
+        }
+
+        SetForegroundWindow(hwnd);
+        SetFocus(hwnd);
+
+        MSG msg;
+        while (GetMessage(&msg, NULL, 0, 0) > 0) {
+            TranslateMessage(&msg);
+            DispatchMessage(&msg);
+        }
+
+        // Prepare result
+        auto* result = new RegionCaptureResult();
+        result->success = st.success;
+        if (st.success) {
+            result->x = st.selL + st.vsX;
+            result->y = st.selT + st.vsY;
+            result->width = st.selW;
+            result->height = st.selH;
+            result->imageWidth = st.selW;
+            result->imageHeight = st.selH;
+            size_t rBytes = (size_t)st.selW * st.selH * 4;
+            result->pixels.resize(rBytes);
+            uint8_t* orig = (uint8_t*)st.pOrigBits;
+            for (int y = 0; y < st.selH; y++) {
+                memcpy(result->pixels.data() + y * st.selW * 4,
+                       orig + ((st.selT + y) * st.vsW + st.selL) * 4,
+                       st.selW * 4);
+            }
+        }
+
+        // Cleanup GDI
+        SelectObject(st.hOrigDC, st.hOldOrig); DeleteObject(st.hOrigBmp); DeleteDC(st.hOrigDC);
+        SelectObject(st.hDimDC, st.hOldDim); DeleteObject(st.hDimBmp); DeleteDC(st.hDimDC);
+        SelectObject(st.hBackDC, st.hOldBack); DeleteObject(st.hBackBmp); DeleteDC(st.hBackDC);
+        DeleteObject(st.hFont);
+
+        tsfn.BlockingCall(result, [](Napi::Env env, Napi::Function cb, RegionCaptureResult* d) {
+            Napi::Object o = Napi::Object::New(env);
+            o.Set("success", Napi::Boolean::New(env, d->success));
+            if (d->success && !d->pixels.empty()) {
+                o.Set("x", Napi::Number::New(env, d->x));
+                o.Set("y", Napi::Number::New(env, d->y));
+                o.Set("width", Napi::Number::New(env, d->width));
+                o.Set("height", Napi::Number::New(env, d->height));
+                auto buf = Napi::Buffer<uint8_t>::Copy(env, d->pixels.data(), d->pixels.size());
+                o.Set("buffer", buf);
+                o.Set("imageWidth", Napi::Number::New(env, d->imageWidth));
+                o.Set("imageHeight", Napi::Number::New(env, d->imageHeight));
+            }
+            cb.Call({o});
+            delete d;
+        });
+        tsfn.Release();
+        g_rcActive = false;
+    }).detach();
+
+    return env.Undefined();
 }
 
 #endif // _WIN32
@@ -458,6 +910,9 @@ Napi::Object Init(Napi::Env env, Napi::Object exports) {
     exports.Set("captureRegion", Napi::Function::New(env, CaptureRegion));
     exports.Set("getPixelColor", Napi::Function::New(env, GetPixelColor));
     exports.Set("getDisplays", Napi::Function::New(env, GetDisplays));
+#ifdef _WIN32
+    exports.Set("startRegionCapture", Napi::Function::New(env, StartRegionCapture));
+#endif
     return exports;
 }
 

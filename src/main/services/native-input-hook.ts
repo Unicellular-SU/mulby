@@ -3,7 +3,6 @@
  *
  * 替代 uiohook-napi，使用 koffi 直接调用系统原生 API：
  * - Windows: SetWindowsHookEx (WH_KEYBOARD_LL / WH_MOUSE_LL)
- * - macOS:   CGEventTapCreate (TODO: 当前仅 Windows 实现)
  *
  * 优势：
  * - 无预编译二进制依赖，跟随 koffi 版本自动兼容新 Node.js/Electron

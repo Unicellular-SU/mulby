@@ -17,7 +17,11 @@ import { join } from 'path'
 import { execFile } from 'child_process'
 import { tmpdir } from 'os'
 import { readFileSync, unlinkSync, existsSync } from 'fs'
-import { nativeCaptureScreen } from '../services/native-screen-capture'
+import {
+  nativeCaptureScreen,
+  isNativeScreenCaptureAvailable,
+  nativeStartRegionCapture
+} from '../services/native-screen-capture'
 
 interface RegionCaptureWindow {
   window: BrowserWindow
@@ -333,18 +337,48 @@ async function captureRegionWithOverlay(): Promise<string | null> {
 // 公共 API
 // ===========================================================
 
+// 短期缓存：preCapture 与插件自身调用 screenCapture 的去重
+// preCapture 先截图 → 插件拿到 attachment → 插件又调 screenCapture → 直接返回缓存
+let cachedCaptureResult: string | null = null
+let cachedCaptureTime = 0
+const CAPTURE_CACHE_TTL = 3000 // 3 秒内的第二次调用直接返回缓存
+
 /**
  * 开始区域截图（跨平台入口）
  */
 export async function startRegionCapture(): Promise<string | null> {
   console.log('[RegionCapture] 开始区域截图...')
 
+  // 去重：如果刚刚截图过，直接返回缓存结果（一次性使用）
+  const now = Date.now()
+  if (cachedCaptureResult && (now - cachedCaptureTime) < CAPTURE_CACHE_TTL) {
+    console.log('[RegionCapture] 返回缓存结果（去重，距上次截图', now - cachedCaptureTime, 'ms）')
+    const cached = cachedCaptureResult
+    cachedCaptureResult = null // 一次性使用
+    return cached
+  }
+
   if (process.platform === 'darwin') {
     // macOS: 使用系统 screencapture 命令（原生 UI，最佳体验）
     return captureRegionMacOS()
   }
 
-  // Windows/Linux: 预截取 + 覆盖窗口方案
+  if (process.platform === 'win32' && isNativeScreenCaptureAvailable()) {
+    // Windows: 原生 C++ 覆盖窗口方案（解决双任务栏 bug）
+    console.log('[RegionCapture] 使用原生区域截图...')
+    const result = await nativeStartRegionCapture()
+    if (result) {
+      console.log('[RegionCapture] 原生区域截图成功, bounds:', result.bounds)
+      // 缓存结果，防止插件重复调用
+      cachedCaptureResult = result.dataUrl
+      cachedCaptureTime = Date.now()
+      return result.dataUrl
+    }
+    console.log('[RegionCapture] 原生区域截图返回 null（用户取消或失败）')
+    return null
+  }
+
+  // Linux 或原生模块不可用时的 fallback
   return captureRegionWithOverlay()
 }
 

@@ -409,16 +409,21 @@ export class PluginWindowManager {
       if (this.shouldOpenPluginDevTools()) {
         win.webContents.openDevTools({ mode: 'detach' })
       }
-      win.webContents.send('plugin:init', {
-        pluginName: plugin.id,
-        featureCode,
-        input: input?.text || '',
-        attachments: input?.attachments,
-        mode: 'detached',
-        windowType,
-        route,
-        nonce: Date.now()
-      })
+      // Delay plugin:init to ensure React's useEffect has registered onPluginInit.
+      // ready-to-show fires before browser paint → useEffect runs after paint.
+      setTimeout(() => {
+        if (win.isDestroyed()) return
+        win.webContents.send('plugin:init', {
+          pluginName: plugin.id,
+          featureCode,
+          input: input?.text || '',
+          attachments: input?.attachments,
+          mode: 'detached',
+          windowType,
+          route,
+          nonce: Date.now()
+        })
+      }, 100)
       // 发送初始主题
       if (this.themeManager) {
         win.webContents.send('theme:changed', this.themeManager.getActualTheme())

@@ -152,11 +152,24 @@ export function createAppPluginApi(ipcRenderer: IpcRenderer) {
       }
     },
 
-    onPluginInit: (callback: (data: { pluginName: string; featureCode: string; input: string; mode?: string }) => void) => {
-      const listener = (_event: unknown, data: { pluginName: string; featureCode: string; input: string; mode?: string }) => callback(data)
-      ipcRenderer.on('plugin:init', listener)
-      return () => ipcRenderer.removeListener('plugin:init', listener)
-    },
+    onPluginInit: (() => {
+      // Buffer: eagerly listen for plugin:init so late-registering listeners
+      // (e.g. React useEffect) don't miss the event.
+      let bufferedData: any = null
+      ipcRenderer.on('plugin:init', (_event: unknown, data: any) => {
+        bufferedData = data
+      })
+      return (callback: (data: { pluginName: string; featureCode: string; input: string; mode?: string }) => void) => {
+        const listener = (_event: unknown, data: any) => callback(data)
+        ipcRenderer.on('plugin:init', listener)
+        // Replay buffered data for late listeners (fixes race with React useEffect)
+        if (bufferedData) {
+          const data = bufferedData
+          queueMicrotask(() => callback(data))
+        }
+        return () => ipcRenderer.removeListener('plugin:init', listener)
+      }
+    })(),
 
     onPluginAttach: (callback: (data: { pluginName: string; displayName: string; featureCode: string; input: string; uiPath: string; preloadPath: string }) => void) => {
       const listener = (_event: unknown, data: { pluginName: string; displayName: string; featureCode: string; input: string; uiPath: string; preloadPath: string }) => callback(data)

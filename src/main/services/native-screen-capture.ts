@@ -19,6 +19,12 @@ interface NativeScreenCaptureAddon {
   getDisplays(): Array<{ id: number; x: number; y: number; width: number; height: number; scaleFactor: number }>
   // macOS 独有：NSColorSampler 异步取色
   pickColor?(callback: (color: { r: number; g: number; b: number } | null) => void): void
+  // Windows 独有：原生区域截图
+  startRegionCapture?(callback: (result: {
+    success: boolean
+    x?: number; y?: number; width?: number; height?: number
+    buffer?: Buffer; imageWidth?: number; imageHeight?: number
+  }) => void): void
 }
 
 // 缓存加载的原生模块实例
@@ -289,4 +295,54 @@ function dipToDevice(
   const devH = Math.round(height * sf)
 
   return { devX, devY, devW, devH }
+}
+
+/**
+ * Windows 原生区域截图
+ * 使用 C++ 原生窗口（WS_EX_TOPMOST）覆盖全屏，用户拖拽选区后返回裁剪结果。
+ * 不污染剪贴板，不依赖 Electron BrowserWindow。
+ * @returns { dataUrl, bounds } 或 null（用户取消/不可用）
+ */
+export function nativeStartRegionCapture(): Promise<{
+  dataUrl: string
+  bounds: { x: number; y: number; width: number; height: number }
+} | null> {
+  const addon = loadAddon()
+  if (!addon || typeof addon.startRegionCapture !== 'function') {
+    return Promise.resolve(null)
+  }
+
+  return new Promise((resolve) => {
+    try {
+      addon.startRegionCapture!((result) => {
+        if (!result.success || !result.buffer || !result.imageWidth || !result.imageHeight) {
+          resolve(null)
+          return
+        }
+        try {
+          const image = nativeImage.createFromBitmap(result.buffer, {
+            width: result.imageWidth,
+            height: result.imageHeight
+          })
+          const pngBuffer = image.toPNG()
+          const dataUrl = `data:image/png;base64,${pngBuffer.toString('base64')}`
+          resolve({
+            dataUrl,
+            bounds: {
+              x: result.x || 0,
+              y: result.y || 0,
+              width: result.width || result.imageWidth,
+              height: result.height || result.imageHeight
+            }
+          })
+        } catch (err) {
+          console.error('[NativeScreenCapture] startRegionCapture 转换失败:', err)
+          resolve(null)
+        }
+      })
+    } catch (err) {
+      console.error('[NativeScreenCapture] startRegionCapture 调用失败:', err)
+      resolve(null)
+    }
+  })
 }
