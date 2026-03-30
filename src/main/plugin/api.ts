@@ -33,7 +33,7 @@ import type {
 import { commandRunnerService } from '../services/command-runner'
 
 const pluginStorage = new PluginStorage()
-const pluginFilesystem = new PluginFilesystem()
+// PluginFilesystem 实例在 createPluginAPI 内部按插件名创建（实现跨插件数据隔离）
 const pluginHttp = new PluginHttp()
 
 interface CreatePluginApiOptions {
@@ -55,6 +55,8 @@ export function createPluginAPI(
   options?: CreatePluginApiOptions
 ) {
   const runCommandAllowed = options?.runCommandAllowed === true
+  // 为每个插件创建独立的 PluginFilesystem 实例（带插件名 → 启用跨插件数据隔离）
+  const pluginFilesystem = new PluginFilesystem(pluginName)
   return {
     clipboard: {
       readText: () => clipboard.readText(),
@@ -277,7 +279,8 @@ ${item.files.map(p => `    <string>${p}</string>`).join('\n')}
       extname: (path: string) => pluginFilesystem.extname(path),
       join: (...paths: string[]) => pluginFilesystem.join(...paths),
       dirname: (path: string) => pluginFilesystem.dirname(path),
-      basename: (path: string, ext?: string) => pluginFilesystem.basename(path, ext)
+      basename: (path: string, ext?: string) => pluginFilesystem.basename(path, ext),
+      getDataPath: (...subPaths: string[]) => pluginFilesystem.getDataPath(...subPaths)
     },
     http: {
       request: (options: HttpRequestOptions) => pluginHttp.request(options),

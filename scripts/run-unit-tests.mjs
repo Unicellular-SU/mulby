@@ -6,7 +6,8 @@ import process from 'node:process'
 const ROOT_DIR = process.cwd()
 const TEST_DIRS = [
   'src/main/ai/__tests__',
-  'src/main/services/__tests__'
+  'src/main/services/__tests__',
+  'src/main/plugin/__tests__'
 ]
 
 function collectTestFiles(dirPath) {
