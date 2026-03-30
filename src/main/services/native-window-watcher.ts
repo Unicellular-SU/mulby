@@ -1,0 +1,88 @@
+
+import { join } from 'path'
+import { app } from 'electron'
+
+interface WindowWatcherAddon {
+  WindowWatcher: {
+    new (callback: (info: { app: string; bundleId?: string; pid: number }) => void): WindowWatcherInstance
+  }
+}
+
+interface WindowWatcherInstance {
+  start(): void
+  stop(): void
+}
+
+let watcherInstance: WindowWatcherInstance | null = null
+
+export interface NativeWindowChangeEvent {
+  app: string
+  bundleId?: string
+  pid: number
+}
+
+// 事件分发器
+type WatcherCallback = (info: NativeWindowChangeEvent) => void
+const callbacks = new Set<WatcherCallback>()
+
+/**
+ * 启动并注册原生窗口监听回调
+ * @param callback 窗口变更时的回调
+ * @returns 取消订阅的函数
+ */
+export function subscribeNativeWindowChange(callback: WatcherCallback): () => void {
+  callbacks.add(callback)
+
+  if (!watcherInstance && process.platform === 'darwin') {
+    try {
+      // 开发环境：app.getAppPath() 返回项目根目录
+      // 生产环境：app.asar.unpacked 下的 native 目录
+      let addonPath = ''
+      if (app.isPackaged) {
+        addonPath = join(process.resourcesPath, 'app.asar.unpacked', 'native', 'build', 'Release', 'window_watcher.node')
+      } else {
+        addonPath = join(app.getAppPath(), 'native', 'build', 'Release', 'window_watcher.node')
+      }
+      
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const addon = require(addonPath) as WindowWatcherAddon
+      
+      watcherInstance = new addon.WindowWatcher((info) => {
+        // 触发所有回调
+        for (const cb of callbacks) {
+          try {
+            cb(info)
+          } catch (e) {
+            console.error('[WindowWatcher] Callback error:', e)
+          }
+        }
+      })
+      watcherInstance.start()
+    } catch (err) {
+      console.warn('[WindowWatcher] Failed to load native addon:', err)
+      throw err
+    }
+  }
+
+  return () => {
+    callbacks.delete(callback)
+    if (callbacks.size === 0 && watcherInstance) {
+      watcherInstance.stop()
+      watcherInstance = null
+    }
+  }
+}
+
+/**
+ * 暴露给外部用于触发模拟测试或 Windows/Linux 回退触发的机制
+ * (如果使用长轮询或 Koffi hook 也可以从这里触发给所有关注 window-change 的订阅者)
+ */
+export function emitNativeWindowChange(info: NativeWindowChangeEvent): void {
+  for (const cb of callbacks) {
+    try {
+      cb(info)
+    } catch (e) {
+      console.error('[WindowWatcher] Callback emit error:', e)
+    }
+  }
+}

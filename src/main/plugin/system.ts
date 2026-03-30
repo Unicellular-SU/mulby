@@ -4,6 +4,7 @@ import * as crypto from 'crypto'
 import { existsSync, readFileSync } from 'fs'
 import { extname, join } from 'path'
 import { spawnSync } from 'child_process'
+import { onActiveWindowChange, type ActiveWindowInfo } from '../services/active-window'
 
 export interface SystemInfo {
   platform: NodeJS.Platform
@@ -125,6 +126,13 @@ export class PluginSystem {
   getIdleTime(): number {
     const { powerMonitor } = require('electron')
     return powerMonitor.getSystemIdleTime()
+  }
+
+  /**
+   * 监听系统活动窗口改变
+   */
+  onActiveWindowChange(callback: (info: ActiveWindowInfo) => void): () => void {
+    return onActiveWindowChange(callback)
   }
 
   /**

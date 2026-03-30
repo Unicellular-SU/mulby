@@ -351,7 +351,8 @@ ${item.files.map(p => `    <string>${p}</string>`).join('\n')}
       getIdleTime: () => pluginSystem.getIdleTime(),
       isMacOS: () => pluginSystem.isMacOS(),
       isWindows: () => pluginSystem.isWindows(),
-      isLinux: () => pluginSystem.isLinux()
+      isLinux: () => pluginSystem.isLinux(),
+      onActiveWindowChange: (callback: (info: import('../services/active-window').ActiveWindowInfo) => void) => pluginSystem.onActiveWindowChange(callback)
     },
     shortcut: createPluginGlobalShortcut(pluginName),
     security: createPluginSecurity(),

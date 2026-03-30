@@ -44,7 +44,7 @@ import {
   getMainWindowWindowSize
 } from './main-window-frame'
 import { OnboardingWindowManager } from './services/onboarding-window'
-import { refreshActiveWindowCache } from './services/active-window'
+import { refreshActiveWindowCache, onActiveWindowChange } from './services/active-window'
 import { patchConsoleWithTimestamp } from '../shared/utils/console'
 import { createOpenClawNodeService, type OpenClawNodeService } from './openclaw'
 import { registerOpenClawHandlers } from './ipc/openclaw'
@@ -1065,6 +1065,10 @@ app.whenReady().then(async () => {
   // 启动剪贴板监听器
   clipboardWatcher.start()
   console.log(`[ClipboardWatcher] Started - Mode: ${clipboardWatcher.isNativeMode() ? 'Native (zero overhead)' : 'Polling (fallback)'}`)
+
+  // 启动活跃窗口监听器
+  onActiveWindowChange(() => {})
+  console.log('[ActiveWindowWatcher] Started permanently')
 
   // 启动剪贴板历史记录管理器
   clipboardHistoryManager.start()

@@ -271,10 +271,6 @@ ZTools 使用 C++ 原生模块（`WindowMonitor` 类），通过以下系统 API
 @end
 ```
 
-#### 方案 B：使用 @aspect-build/mac-active-win（备选）
-
-如果不想维护 C++ 代码，可引入成熟的 npm 包做桥接。但控制力较弱。
-
 ### 任务步骤
 
 - [ ] **T1A.1** 在 `native/` 下新增 `window-watcher.mm`（macOS）和 `window-watcher.cpp`（Windows）

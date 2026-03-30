@@ -14,13 +14,51 @@ const execFileAsync = promisify(execFile)
 export interface ActiveWindowInfo {
   /** 应用名称 (如 "Safari", "Visual Studio Code") */
   app: string
-  /** 窗口标题 */
+  /** 窗口标题 (macOS 可能为空，按需或延迟获取) */
   title: string
   /** 进程 ID */
   pid?: number
   /** macOS Bundle ID (如 "com.apple.Safari") */
   bundleId?: string
 }
+
+type ActiveWindowChangeCallback = (info: ActiveWindowInfo) => void
+const subscriptions = new Set<ActiveWindowChangeCallback>()
+
+export function onActiveWindowChange(callback: ActiveWindowChangeCallback): () => void {
+  subscriptions.add(callback)
+  
+  if (subscriptions.size === 1) {
+    if (process.platform === 'darwin') {
+      startMacOSNativeWatcher()
+    } else if (process.platform === 'win32') {
+      startWindowsPoller()
+    }
+  }
+
+  return () => {
+    subscriptions.delete(callback)
+    if (subscriptions.size === 0) {
+      if (process.platform === 'darwin') {
+        stopMacOSNativeWatcher()
+      } else if (process.platform === 'win32') {
+        stopWindowsPoller()
+      }
+    }
+  }
+}
+
+function notifySubscribers(info: ActiveWindowInfo) {
+  console.log(`[ActiveWindow] Foreground Changed -> App: ${info.app} | PID: ${info.pid || 'N/A'} | Bundle: ${info.bundleId || 'N/A'} | Title: ${info.title || '<empty>'}`)
+  for (const sub of subscriptions) {
+    try {
+      sub(info)
+    } catch (e) {
+      console.error('[ActiveWindow] Callback error', e)
+    }
+  }
+}
+
 
 // --- 缓存 ---
 let cachedResult: ActiveWindowInfo | null = null
@@ -51,15 +89,15 @@ export async function getActiveWindow(): Promise<ActiveWindowInfo | null> {
 
 /**
  * 异步刷新活跃窗口缓存
- *
- * 在主窗口显示时调用一次，将结果缓存供搜索路径同步读取。
- * 这样搜索时不再需要等待外部进程（osascript/PowerShell）。
+ * 已重构为：如果存在监听器，直接返回缓存；否则主动拉取一次。
  */
 export function refreshActiveWindowCache(): void {
   getActiveWindowPlatform()
     .then((result) => {
-      cachedResult = result
-      cachedAt = Date.now()
+      if (result) {
+        cachedResult = result
+        cachedAt = Date.now()
+      }
     })
     .catch(() => {
       // 刷新失败不影响搜索，保留旧缓存
@@ -97,15 +135,118 @@ async function getActiveWindowPlatform(): Promise<ActiveWindowInfo | null> {
   }
 }
 
+import { subscribeNativeWindowChange } from './native-window-watcher'
+let _macOSWatcherUnsub: (() => void) | null = null
+
 /**
- * macOS: 通过 AppleScript 获取前台应用信息
- *
- * 获取应用名称和 Bundle ID 不需要辅助功能权限。
- * 获取窗口标题需要"辅助功能"权限（System Events），
- * 如果权限不够则 title 为空字符串。
+ * 判断是否为自身进程（Mulby 主窗口弹出后自身会变为前台应用，需要过滤）
+ */
+function isSelfProcess(pid: number | undefined): boolean {
+  if (!pid) return false
+  return pid === process.pid
+}
+
+function startMacOSNativeWatcher() {
+  if (_macOSWatcherUnsub) return
+  
+  try {
+    _macOSWatcherUnsub = subscribeNativeWindowChange((info) => {
+      // 过滤掉自身进程，我们只关心"唤醒前用户正在使用的应用"
+      if (isSelfProcess(info.pid)) return
+
+      // macOS C++ 只能拿到基础信息，此时立即广播一次，避免感知延迟
+      const newCache: ActiveWindowInfo = {
+        app: info.app,
+        bundleId: info.bundleId,
+        pid: info.pid,
+        title: ''
+      }
+      cachedResult = newCache
+      cachedAt = Date.now()
+      notifySubscribers(newCache)
+      
+      // 异步补充 title，如果能获取到则更新 cache
+      getActiveWindowMacOSUsingOsascript().then((fullInfo) => {
+        if (fullInfo && fullInfo.app === newCache.app && !isSelfProcess(fullInfo.pid)) {
+          if (fullInfo.title) {
+            newCache.title = fullInfo.title
+            cachedResult = newCache
+            notifySubscribers(newCache)
+          }
+        }
+      }).catch(() => {})
+    })
+  } catch (err) {
+    console.warn('[ActiveWindow] Falling back to polling due to native addon failure.')
+    startMacOSPoller()
+  }
+}
+
+function stopMacOSNativeWatcher() {
+  if (_macOSWatcherUnsub) {
+    _macOSWatcherUnsub()
+    _macOSWatcherUnsub = null
+  }
+  stopMacOSPoller()
+}
+
+let _macOSPollerInterval: NodeJS.Timeout | null = null
+function startMacOSPoller() {
+  if (_macOSPollerInterval) return
+  _macOSPollerInterval = setInterval(() => {
+    getActiveWindowMacOSUsingOsascript().then((info) => {
+      if (info) {
+        if (!cachedResult || cachedResult.app !== info.app || cachedResult.title !== info.title) {
+          cachedResult = info
+          cachedAt = Date.now()
+          notifySubscribers(info)
+        }
+      }
+    }).catch(() => {})
+  }, 1000) // 1000ms polling for osascript fallback 
+}
+
+function stopMacOSPoller() {
+  if (_macOSPollerInterval) {
+    clearInterval(_macOSPollerInterval)
+    _macOSPollerInterval = null
+  }
+}
+
+let _winPollerInterval: NodeJS.Timeout | null = null
+function startWindowsPoller() {
+  if (_winPollerInterval) return
+  _winPollerInterval = setInterval(() => {
+    const info = getActiveWindowWindows()
+    if (info) {
+      if (!cachedResult || cachedResult.app !== info.app || cachedResult.title !== info.title) {
+        cachedResult = info
+        cachedAt = Date.now()
+        notifySubscribers(info)
+      }
+    }
+  }, 200) // 200ms 回退轮询，依赖 Koffi 高效读取
+}
+function stopWindowsPoller() {
+  if (_winPollerInterval) {
+    clearInterval(_winPollerInterval)
+    _winPollerInterval = null
+  }
+}
+
+/**
+ * macOS: 通过原生扩展或 AppleScript 获取前台应用信息
  */
 async function getActiveWindowMacOS(): Promise<ActiveWindowInfo | null> {
-  // 一次 osascript 调用获取所有信息，用分隔符分割
+  // 由于有了缓存，通常能极速返回
+  // 如果需要显式拉取，执行一遍
+  return getActiveWindowMacOSUsingOsascript()
+}
+
+/**
+ * 仅依赖 AppleScript 抓取全部信息 (title 有效)
+ */
+async function getActiveWindowMacOSUsingOsascript(): Promise<ActiveWindowInfo | null> {
   const script = `
 tell application "System Events"
   set frontApp to first application process whose frontmost is true

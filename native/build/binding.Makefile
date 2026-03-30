@@ -3,4 +3,4 @@
 export builddir_name ?= ./build/.
 .PHONY: all
 all:
-	$(MAKE) clipboard_watcher
+	$(MAKE) window_watcher clipboard_watcher
