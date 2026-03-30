@@ -185,6 +185,8 @@ static Napi::Value GetDisplays(const Napi::CallbackInfo& info) {
     std::vector<DisplayEntry> displays;
     int counter = 0;
 
+    auto enumCtx = std::make_pair(&displays, &counter);
+
     EnumDisplayMonitors(NULL, NULL, [](HMONITOR hMon, HDC, LPRECT, LPARAM data) -> BOOL {
         auto* ctx = reinterpret_cast<std::pair<std::vector<DisplayEntry>*, int*>*>(data);
         MONITORINFO mi = {};
@@ -205,7 +207,7 @@ static Napi::Value GetDisplays(const Napi::CallbackInfo& info) {
             dpiX / 96.0
         });
         return TRUE;
-    }, reinterpret_cast<LPARAM>(&std::make_pair(&displays, &counter)));
+    }, reinterpret_cast<LPARAM>(&enumCtx));
 
     Napi::Array result = Napi::Array::New(env, displays.size());
     for (size_t i = 0; i < displays.size(); i++) {

@@ -2,7 +2,7 @@
   "targets": [
     {
       "target_name": "clipboard_watcher",
-      "sources": ["clipboard-watcher.mm"],
+      "sources": [],
       "include_dirs": [
         "<!@(node -p \"require('node-addon-api').include\")"
       ],
@@ -16,10 +16,11 @@
         [
           "OS=='mac'",
           {
+            "sources": ["clipboard-watcher.mm"],
             "xcode_settings": {
               "GCC_ENABLE_CPP_EXCEPTIONS": "YES",
               "CLANG_CXX_LIBRARY": "libc++",
-              "MACOSX_DEPLOYMENT_TARGET": "10.13",
+              "MACOSX_DEPLOYMENT_TARGET": "12.0",
               "OTHER_CFLAGS": ["-ObjC++"]
             },
             "link_settings": {
@@ -49,7 +50,7 @@
     },
     {
       "target_name": "window_watcher",
-      "sources": ["window-watcher.mm"],
+      "sources": [],
       "include_dirs": [
         "<!@(node -p \"require('node-addon-api').include\")"
       ],
@@ -63,10 +64,11 @@
         [
           "OS=='mac'",
           {
+            "sources": ["window-watcher.mm"],
             "xcode_settings": {
               "GCC_ENABLE_CPP_EXCEPTIONS": "YES",
               "CLANG_CXX_LIBRARY": "libc++",
-              "MACOSX_DEPLOYMENT_TARGET": "10.13",
+              "MACOSX_DEPLOYMENT_TARGET": "12.0",
               "OTHER_CFLAGS": ["-ObjC++"]
             },
             "link_settings": {
@@ -95,7 +97,7 @@
     },
     {
       "target_name": "screen_capture",
-      "sources": ["screen-capture.mm"],
+      "sources": [],
       "include_dirs": [
         "<!@(node -p \"require('node-addon-api').include\")"
       ],
@@ -109,10 +111,11 @@
         [
           "OS=='mac'",
           {
+            "sources": ["screen-capture.mm"],
             "xcode_settings": {
               "GCC_ENABLE_CPP_EXCEPTIONS": "YES",
               "CLANG_CXX_LIBRARY": "libc++",
-              "MACOSX_DEPLOYMENT_TARGET": "10.15",
+              "MACOSX_DEPLOYMENT_TARGET": "12.0",
               "OTHER_CFLAGS": ["-ObjC++"]
             },
             "link_settings": {

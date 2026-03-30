@@ -123,7 +123,12 @@ function signWithIdentity(targetPath, identityHash) {
 }
 
 /**
- * 修复 sharp 在 Electron 28 + asar.unpacked 环境下的 exports subpath 兼容问题。
+ * 修复 sharp 在 Electron + asar.unpacked 环境下的 exports subpath 兼容问题。
+ *
+ * 历史背景：此修复最初为 Electron 28 添加。Electron 41 可能已修复此问题，
+ * 但为安全起见保留此兼容代码。如果验证 Electron 41 的 exports 解析正常，
+ * 可考虑移除此 hack。
+ *
  * sharp.js 调用 require('@img/sharp-darwin-x64/sharp.node')，依赖 package.json exports map
  * 将 ./sharp.node 映射到 ./lib/sharp-darwin-x64.node。
  * 但 Electron 旧版本从 asar.unpacked 加载时无法正确解析 exports subpath，
@@ -184,7 +189,7 @@ module.exports = async function afterPack(context) {
   // 先签 app.asar.unpacked 下的 Mach-O 文件（例如 .node/native helper）
   const unpackedDir = path.join(appPath, 'Contents', 'Resources', 'app.asar.unpacked')
 
-  // 修复 sharp exports subpath 兼容问题（Electron 28 asar.unpacked）
+  // 修复 sharp exports subpath 兼容问题（详见 fixSharpNativeBinaries 注释）
   fixSharpNativeBinaries(unpackedDir)
   let signedNestedCount = 0
   if (existsSync(unpackedDir)) {

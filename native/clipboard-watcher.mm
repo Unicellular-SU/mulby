@@ -204,16 +204,16 @@ void ClipboardWatcher::StartWatching() {
     isWatching = true;
 
     // Create a message-only window
-    WNDCLASS wc = {};
+    WNDCLASSA wc = {};
     wc.lpfnWndProc = WindowProc;
     wc.hInstance = GetModuleHandle(nullptr);
-    wc.lpszClassName = L"ClipboardWatcherWindow";
+    wc.lpszClassName = "ClipboardWatcherWindow";
 
-    RegisterClass(&wc);
+    RegisterClassA(&wc);
 
-    hwnd = CreateWindow(
-        L"ClipboardWatcherWindow",
-        L"",
+    hwnd = CreateWindowA(
+        "ClipboardWatcherWindow",
+        "",
         0, 0, 0, 0, 0,
         HWND_MESSAGE,
         nullptr,

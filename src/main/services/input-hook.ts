@@ -1,7 +1,7 @@
 /**
  * 统一输入钩子服务（键盘 + 鼠标 + 双击修饰键）
  *
- * 作为 uIOhook 的唯一所有者，统一管理 start()/stop() 生命周期。
+ * 作为原生输入钩子的唯一所有者，统一管理 start()/stop() 生命周期。
  *
  * 功能：
  * - 键盘钩子：当 Electron globalShortcut.register() 因占用失败时，
@@ -9,80 +9,27 @@
  * - 鼠标钩子：支持鼠标按钮（中键/侧键）的单击和长按检测。
  * - 双击修饰键检测：检测修饰键的快速双击模式（移植自 ZTools DoubleTapManager）。
  *
- * 注意：uiohook-napi 无法抑制事件传播（JS 事件是 native 事件的拷贝），
- * 其他已注册同一快捷键的应用仍会收到按键事件。
+ * 底层实现：通过 koffi FFI 调用系统原生 API（无 uiohook-napi 依赖）。
+ * Windows: SetWindowsHookEx (WH_KEYBOARD_LL / WH_MOUSE_LL)
+ * macOS:   CGEventTapCreate (TODO)
  */
-import { uIOhook, UiohookKey, type UiohookKeyboardEvent, type UiohookMouseEvent } from 'uiohook-napi'
+import {
+  startNativeInputHook,
+  stopNativeInputHook,
+  ELECTRON_KEY_TO_VK,
+  VK_MODIFIER_MAP,
+  type NativeKeyEvent,
+  type NativeMouseEvent
+} from './native-input-hook'
 
 // ==================== 键盘部分 ====================
 
-// Electron accelerator 中的键名 → uiohook keycode 映射
-const ELECTRON_KEY_TO_UIOHOOK: Record<string, number> = {
-  space: UiohookKey.Space,
-  enter: UiohookKey.Enter,
-  return: UiohookKey.Enter,
-  tab: UiohookKey.Tab,
-  escape: UiohookKey.Escape,
-  esc: UiohookKey.Escape,
-  backspace: UiohookKey.Backspace,
-  delete: UiohookKey.Delete,
-  insert: UiohookKey.Insert,
-  home: UiohookKey.Home,
-  end: UiohookKey.End,
-  pageup: UiohookKey.PageUp,
-  pagedown: UiohookKey.PageDown,
-  up: UiohookKey.ArrowUp,
-  down: UiohookKey.ArrowDown,
-  left: UiohookKey.ArrowLeft,
-  right: UiohookKey.ArrowRight,
-  f1: UiohookKey.F1,
-  f2: UiohookKey.F2,
-  f3: UiohookKey.F3,
-  f4: UiohookKey.F4,
-  f5: UiohookKey.F5,
-  f6: UiohookKey.F6,
-  f7: UiohookKey.F7,
-  f8: UiohookKey.F8,
-  f9: UiohookKey.F9,
-  f10: UiohookKey.F10,
-  f11: UiohookKey.F11,
-  f12: UiohookKey.F12,
-  // 字母键
-  a: UiohookKey.A, b: UiohookKey.B, c: UiohookKey.C, d: UiohookKey.D,
-  e: UiohookKey.E, f: UiohookKey.F, g: UiohookKey.G, h: UiohookKey.H,
-  i: UiohookKey.I, j: UiohookKey.J, k: UiohookKey.K, l: UiohookKey.L,
-  m: UiohookKey.M, n: UiohookKey.N, o: UiohookKey.O, p: UiohookKey.P,
-  q: UiohookKey.Q, r: UiohookKey.R, s: UiohookKey.S, t: UiohookKey.T,
-  u: UiohookKey.U, v: UiohookKey.V, w: UiohookKey.W, x: UiohookKey.X,
-  y: UiohookKey.Y, z: UiohookKey.Z,
-  // 数字键
-  '0': UiohookKey[0], '1': UiohookKey[1], '2': UiohookKey[2],
-  '3': UiohookKey[3], '4': UiohookKey[4], '5': UiohookKey[5],
-  '6': UiohookKey[6], '7': UiohookKey[7], '8': UiohookKey[8],
-  '9': UiohookKey[9],
-  // 符号键
-  '-': UiohookKey.Minus,
-  '=': UiohookKey.Equal,
-  '[': UiohookKey.BracketLeft,
-  ']': UiohookKey.BracketRight,
-  '\\': UiohookKey.Backslash,
-  ';': UiohookKey.Semicolon,
-  '\'': UiohookKey.Quote,
-  '`': UiohookKey.Backquote,
-  ',': UiohookKey.Comma,
-  '.': UiohookKey.Period,
-  '/': UiohookKey.Slash,
-  minus: UiohookKey.Minus,
-  plus: UiohookKey.Equal,
-  equal: UiohookKey.Equal,
-}
-
 /**
- * 解析 Electron accelerator 格式为 { keycode, alt, ctrl, meta, shift }
- * 例如 "Alt+Space" → { keycode: 57, alt: true, ctrl: false, meta: false, shift: false }
+ * 解析 Electron accelerator 格式为 { vkCode, alt, ctrl, meta, shift }
+ * 例如 "Alt+Space" → { vkCode: 0x20, alt: true, ctrl: false, meta: false, shift: false }
  */
 interface ParsedAccelerator {
-  keycode: number
+  vkCode: number
   alt: boolean
   ctrl: boolean
   meta: boolean
@@ -92,7 +39,7 @@ interface ParsedAccelerator {
 function parseAccelerator(accelerator: string): ParsedAccelerator | null {
   const parts = accelerator.split('+').map(p => p.trim().toLowerCase())
   let alt = false, ctrl = false, meta = false, shift = false
-  let keycode = -1
+  let vkCode = -1
 
   for (const part of parts) {
     switch (part) {
@@ -121,9 +68,9 @@ function parseAccelerator(accelerator: string): ParsedAccelerator | null {
         shift = true
         break
       default: {
-        const code = ELECTRON_KEY_TO_UIOHOOK[part]
+        const code = ELECTRON_KEY_TO_VK[part]
         if (code != null) {
-          keycode = code
+          vkCode = code
         } else {
           // 未知键名，无法解析
           console.warn(`[InputHook] 无法解析键名: "${part}"`)
@@ -133,8 +80,8 @@ function parseAccelerator(accelerator: string): ParsedAccelerator | null {
     }
   }
 
-  if (keycode === -1) return null
-  return { keycode, alt, ctrl, meta, shift }
+  if (vkCode === -1) return null
+  return { vkCode, alt, ctrl, meta, shift }
 }
 
 interface HookBinding {
@@ -142,7 +89,7 @@ interface HookBinding {
   callback: () => void
 }
 
-// ==================== 鼠标部分（P2-A） ====================
+// ==================== 鼠标部分 ====================
 
 /** 鼠标按钮名称 */
 export type MouseButton = 'left' | 'right' | 'middle' | 'back' | 'forward'
@@ -165,8 +112,8 @@ interface MouseBinding {
 }
 
 /**
- * uiohook-napi 鼠标按钮编号 → 按钮名称映射
- * 运行时 UiohookMouseEvent.button 是数字（类型标注为 unknown）
+ * NativeMouseEvent.button 编号 → MouseButton 名称映射
+ * 与原 uiohook-napi 的映射保持一致
  */
 const MOUSE_BUTTON_MAP: Record<number, MouseButton> = {
   1: 'left',
@@ -176,28 +123,13 @@ const MOUSE_BUTTON_MAP: Record<number, MouseButton> = {
   5: 'forward',
 }
 
-/** 反向映射：按钮名称 → 数字（用于 matchButton） */
-function matchButton(eventButton: unknown, bindingButton: MouseButton): boolean {
-  const name = MOUSE_BUTTON_MAP[eventButton as number]
+/** 匹配鼠标按钮 */
+function matchButton(eventButton: number, bindingButton: MouseButton): boolean {
+  const name = MOUSE_BUTTON_MAP[eventButton]
   return name === bindingButton
 }
 
-// ==================== 双击修饰键部分（P2-B） ====================
-
-/**
- * uiohook keycode → 修饰键名称映射
- * 左右修饰键统一映射到同一名称
- */
-const MODIFIER_KEYCODES: Record<number, string> = {
-  [UiohookKey.Meta]: 'Command',
-  [UiohookKey.MetaRight]: 'Command',
-  [UiohookKey.Ctrl]: 'Ctrl',
-  [UiohookKey.CtrlRight]: 'Ctrl',
-  [UiohookKey.Alt]: 'Alt',
-  [UiohookKey.AltRight]: 'Alt',
-  [UiohookKey.Shift]: 'Shift',
-  [UiohookKey.ShiftRight]: 'Shift',
-}
+// ==================== 双击修饰键部分 ====================
 
 interface DoubleTapHandler {
   modifier: string
@@ -206,7 +138,7 @@ interface DoubleTapHandler {
 
 /**
  * 双击修饰键检测器（状态机）
- * 移植自 ZTools DoubleTapManager，但不再独立管理 uIOhook 生命周期。
+ * 移植自 ZTools DoubleTapManager。
  * 由 InputHookService 的 keydown/keyup 事件驱动。
  */
 class DoubleTapDetector {
@@ -251,10 +183,10 @@ class DoubleTapDetector {
   }
 
   /** 处理 keydown 事件（由 InputHookService 调用） */
-  handleKeyDown(keycode: number): void {
+  handleKeyDown(vkCode: number): void {
     if (this.handlers.length === 0) return
 
-    const modifier = MODIFIER_KEYCODES[keycode]
+    const modifier = VK_MODIFIER_MAP[vkCode]
     if (modifier) {
       if (this.modifierDownTime === 0) {
         this.modifierDownTime = Date.now()
@@ -267,10 +199,10 @@ class DoubleTapDetector {
   }
 
   /** 处理 keyup 事件（由 InputHookService 调用） */
-  handleKeyUp(keycode: number): void {
+  handleKeyUp(vkCode: number): void {
     if (this.handlers.length === 0) return
 
-    const modifier = MODIFIER_KEYCODES[keycode]
+    const modifier = VK_MODIFIER_MAP[vkCode]
     if (!modifier) {
       // 非修饰键 keyup：不清除任何状态。
       // nonModifierPressed 标记由 handleKeyDown 设置，
@@ -339,17 +271,17 @@ export class InputHookService {
   private longPressFired = new Set<string>()
   // 双击修饰键检测器
   private doubleTap = new DoubleTapDetector()
-  // uIOhook 运行状态
+  // 原生钩子运行状态
   private running = false
 
   // ---- 键盘事件处理 ----
 
-  private onKeyDown = (event: UiohookKeyboardEvent) => {
+  private onKeyDown = (event: NativeKeyEvent) => {
     // 键盘绑定匹配
     for (const [, binding] of this.keyBindings) {
       const { parsed, callback } = binding
       if (
-        event.keycode === parsed.keycode &&
+        event.vkCode === parsed.vkCode &&
         event.altKey === parsed.alt &&
         event.ctrlKey === parsed.ctrl &&
         event.metaKey === parsed.meta &&
@@ -360,17 +292,17 @@ export class InputHookService {
     }
 
     // 驱动双击修饰键状态机
-    this.doubleTap.handleKeyDown(event.keycode)
+    this.doubleTap.handleKeyDown(event.vkCode)
   }
 
-  private onKeyUp = (event: UiohookKeyboardEvent) => {
+  private onKeyUp = (event: NativeKeyEvent) => {
     // 驱动双击修饰键状态机
-    this.doubleTap.handleKeyUp(event.keycode)
+    this.doubleTap.handleKeyUp(event.vkCode)
   }
 
   // ---- 鼠标事件处理 ----
 
-  private onMouseDown = (event: UiohookMouseEvent) => {
+  private onMouseDown = (event: NativeMouseEvent) => {
     for (const [id, binding] of this.mouseBindings) {
       if (!matchButton(event.button, binding.button)) continue
 
@@ -386,7 +318,7 @@ export class InputHookService {
     }
   }
 
-  private onMouseUp = (event: UiohookMouseEvent) => {
+  private onMouseUp = (event: NativeMouseEvent) => {
     for (const [id, binding] of this.mouseBindings) {
       if (!matchButton(event.button, binding.button)) continue
 
@@ -447,7 +379,7 @@ export class InputHookService {
     return this.keyBindings.has(id)
   }
 
-  // ---- 鼠标绑定 API（P2-A） ----
+  // ---- 鼠标绑定 API ----
 
   /**
    * 注册鼠标按钮钩子
@@ -491,7 +423,7 @@ export class InputHookService {
     this.stopIfEmpty()
   }
 
-  // ---- 双击修饰键 API（P2-B） ----
+  // ---- 双击修饰键 API ----
 
   /**
    * 注册双击修饰键回调
@@ -564,37 +496,36 @@ export class InputHookService {
     }
   }
 
-  /** 启动 uIOhook（注册所有事件监听器） */
+  /** 启动原生输入钩子 */
   private startHook(): boolean {
     if (this.running) return true
     try {
-      uIOhook.on('keydown', this.onKeyDown)
-      uIOhook.on('keyup', this.onKeyUp)
-      uIOhook.on('mousedown', this.onMouseDown)
-      uIOhook.on('mouseup', this.onMouseUp)
-      uIOhook.start()
+      const ok = startNativeInputHook({
+        onKeyDown: this.onKeyDown,
+        onKeyUp: this.onKeyUp,
+        onMouseDown: this.onMouseDown,
+        onMouseUp: this.onMouseUp
+      })
+
+      if (!ok) {
+        console.error('[InputHook] 启动原生钩子失败')
+        return false
+      }
+
       this.running = true
-      console.log('[InputHook] 底层输入钩子已启动')
+      console.log('[InputHook] 底层输入钩子已启动 (koffi)')
       return true
     } catch (err) {
       console.error('[InputHook] 启动钩子失败:', err)
-      uIOhook.off('keydown', this.onKeyDown)
-      uIOhook.off('keyup', this.onKeyUp)
-      uIOhook.off('mousedown', this.onMouseDown)
-      uIOhook.off('mouseup', this.onMouseUp)
       return false
     }
   }
 
-  /** 停止 uIOhook（移除所有事件监听器） */
+  /** 停止原生输入钩子 */
   private stopHook(): void {
     if (!this.running) return
     try {
-      uIOhook.off('keydown', this.onKeyDown)
-      uIOhook.off('keyup', this.onKeyUp)
-      uIOhook.off('mousedown', this.onMouseDown)
-      uIOhook.off('mouseup', this.onMouseUp)
-      uIOhook.stop()
+      stopNativeInputHook()
       this.running = false
       this.doubleTap.reset()
       this.clearAllMouseState()

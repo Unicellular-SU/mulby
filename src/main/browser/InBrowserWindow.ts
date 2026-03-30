@@ -370,7 +370,7 @@ export class InBrowserWindow {
                     if (m === 'ctrl') return 'control';
                     if (m === 'cmd' || m === 'command') return 'meta';
                     return m;
-                }) as ('shift' | 'control' | 'alt' | 'meta' | 'isKeypad' | 'isAutoRepeat' | 'leftButtonDown' | 'middleButtonDown' | 'rightButtonDown' | 'capsLock' | 'numLock' | 'left' | 'right' | 'command')[];
+                }) as Electron.InputEvent['modifiers'];
 
                 // Check if key is a single char or special key
                 // For simplicity, we send char event for single chars, and keyDown/Up for others
