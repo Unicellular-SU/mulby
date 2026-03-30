@@ -264,7 +264,10 @@ ${item.files.map(p => `    <string>${p}</string>`).join('\n')}
       set: (key: string, value: unknown) => pluginStorage.set(pluginName, key, value),
       remove: (key: string) => pluginStorage.remove(pluginName, key),
       clear: () => pluginStorage.clear(pluginName),
-      keys: () => pluginStorage.keys(pluginName)
+      keys: () => pluginStorage.keys(pluginName),
+      has: (key: string) => pluginStorage.has(pluginName, key),
+      getAll: () => pluginStorage.getAll(pluginName),
+      bulkSet: (entries: Record<string, unknown>) => pluginStorage.bulkSet(pluginName, entries)
     },
     filesystem: {
       readFile: (path: string, encoding?: 'utf-8' | 'base64') => pluginFilesystem.readFile(path, encoding),

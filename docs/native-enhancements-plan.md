@@ -425,7 +425,7 @@ ZTools 使用 C++ 原生模块（`WindowMonitor` 类），通过以下系统 API
 
 ---
 
-## P1-C — 插件 KV 存储引擎升级
+## P1-C — 插件 KV 存储引擎升级 ✅
 
 ### 问题
 
@@ -434,72 +434,83 @@ ZTools 使用 C++ 原生模块（`WindowMonitor` 类），通过以下系统 API
 - 高频写入场景（如剪贴板监听插件）会造成明显卡顿
 - 没有批量操作和事务支持
 
-### 涉及文件
+### 技术选型：SQLite vs LMDB
 
-- `src/main/plugin/storage.ts` — 需要重构
-- `src/main/db/index.ts` — 可以复用现有 SQLite
-- `src/main/plugin/api.ts` L260-266 — storage API 绑定
+ZTools 使用 LMDB（`ZTools/src/main/core/lmdb/`），但 Mulby 的插件 KV 场景不需要 LMDB：
+- **单进程不存在并发读写**，LMDB 无锁 MVCC 优势无用武之地
+- SQLite prepared statement 单次读 ~1-5µs，单次写 ~10-50µs，远超需求
+- LMDB 引入 **原生打包风险**（x64/arm64 双架构 rebuild）
+- 结论：**复用已有的 better-sqlite3**，零新增依赖
 
-### ZTools 参考
+### 实现方案
 
-> **参考路径**: `ZTools/src/main/core/lmdb/index.ts` L1-226
-> **参考路径**: `ZTools/src/main/core/lmdb/syncApi.ts`
+#### 命名空间隔离
 
-ZTools 使用 LMDB，但引入 LMDB 作为新依赖可能带来打包和原生编译问题。
-我们**复用已有的 better-sqlite3**，它已经在项目中了。
-
-### 设计方案
-
-将 `PluginStorage` 从 JSON 文件改为 SQLite，复用 `src/main/db/index.ts` 中的 `store` 表。
-该表已经有 `(plugin_id, key)` 复合主键，结构天然适合插件隔离存储。
+`store` 表被多方共用（`app-settings` 用 `app`，渲染端 IPC 用 `global`），插件数据统一加 `plugin:` 前缀隔离：
 
 ```typescript
-// 新的 PluginStorage 实现
-import db from '../db'
+const PLUGIN_NS_PREFIX = 'plugin:'
+function nsKey(pluginName: string): string {
+  return `${PLUGIN_NS_PREFIX}${pluginName}`
+}
+```
 
+#### 核心实现
+
+7 条预编译 SQL 语句，模块加载时 prepare，运行时零解析开销：
+
+```typescript
 const getStmt = db.prepare('SELECT value FROM store WHERE plugin_id = ? AND key = ?')
 const setStmt = db.prepare(`
-  INSERT INTO store (plugin_id, key, value, updated_at) 
-  VALUES (?, ?, ?, ?) 
+  INSERT INTO store (plugin_id, key, value, updated_at) VALUES (?, ?, ?, ?)
   ON CONFLICT(plugin_id, key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at
 `)
 const removeStmt = db.prepare('DELETE FROM store WHERE plugin_id = ? AND key = ?')
 const clearStmt = db.prepare('DELETE FROM store WHERE plugin_id = ?')
 const keysStmt = db.prepare('SELECT key FROM store WHERE plugin_id = ?')
-
-export class PluginStorage {
-  get(pluginName: string, key: string): unknown {
-    const row = getStmt.get(pluginName, key) as { value: string } | undefined
-    return row ? JSON.parse(row.value) : undefined
-  }
-
-  set(pluginName: string, key: string, value: unknown): void {
-    setStmt.run(pluginName, key, JSON.stringify(value), Date.now())
-  }
-
-  remove(pluginName: string, key: string): void {
-    removeStmt.run(pluginName, key)
-  }
-
-  clear(pluginName: string): void {
-    clearStmt.run(pluginName)
-  }
-
-  keys(pluginName: string): string[] {
-    return (keysStmt.all(pluginName) as { key: string }[]).map(r => r.key)
-  }
-}
+const hasStmt  = db.prepare('SELECT 1 FROM store WHERE plugin_id = ? AND key = ? LIMIT 1')
+const getAllStmt = db.prepare('SELECT key, value FROM store WHERE plugin_id = ?')
 ```
+
+#### 新增 API
+
+| 方法 | 说明 |
+|------|------|
+| `has(key)` | 判断 key 是否存在（不反序列化 value） |
+| `getAll()` | 返回插件所有 KV 数据 |
+| `bulkSet(entries)` | 批量写入，`db.transaction()` 保证原子性 |
+
+#### 数据迁移策略
+
+首次实例化时自动执行 `migrateFromJson()`：
+
+| JSON 场景 | SQLite 中对应 key | 行为 |
+|-----------|-------------------|------|
+| 有数据 | 不存在 | `INSERT` |
+| 有数据 | **已存在** | `IGNORE`（保留 SQLite 值） |
+| 空文件 | — | 直接归档 |
+| 解析失败 | — | 跳过，保留原始 JSON |
+
+迁移完成后 JSON 文件重命名为 `*.json.migrated`（保留备份）。
+
+### 修改的文件
+
+| 文件 | 变更 |
+|------|------|
+| `src/main/plugin/storage.ts` | 完全重写：JSON → SQLite prepared stmt + `plugin:` 前缀 |
+| `src/main/plugin/api.ts` | 新增 `has`/`getAll`/`bulkSet` 暴露 |
+| `src/shared/types/plugin.ts` | 同步 `PluginAPI.storage` 类型定义 |
+| `packages/mulby-cli/.../react/types.ts` | 同步 CLI 模板 `BackendPluginAPIDirect.storage` |
 
 ### 任务步骤
 
-- [ ] **T1C.1** 重写 `PluginStorage`：基于 SQLite prepared statement 实现
-- [ ] **T1C.2** 数据迁移脚本：将 `plugin-data/*.json` 的数据迁移到 SQLite `store` 表
-- [ ] **T1C.3** 添加 `has()` 和 `getAll()` 方法，扩展 API 能力
-- [ ] **T1C.4** 添加 `bulkSet()` 批量写入方法（使用 SQLite 事务）
-- [ ] **T1C.5** 更新插件 API 暴露的 `storage.*` 接口
-- [ ] **T1C.6** 保留 JSON 文件作为 fallback，首次启动时自动迁移
-- [ ] **T1C.7** 删除旧的 JSON 文件存储逻辑（迁移完成后）
+- [x] **T1C.1** 重写 `PluginStorage`：基于 SQLite prepared statement + `plugin:` 命名空间前缀
+- [x] **T1C.2** 数据迁移：`INSERT OR IGNORE` 合并策略，JSON 数据补充到 SQLite
+- [x] **T1C.3** 添加 `has()` 和 `getAll()` 方法
+- [x] **T1C.4** 添加 `bulkSet()` 批量写入（SQLite 事务）
+- [x] **T1C.5** 更新 `api.ts`、`plugin.ts`、CLI 模板的 `storage.*` 接口
+- [x] **T1C.6** 首次启动自动迁移，JSON 文件归档为 `.migrated`
+- [ ] **T1C.7** 稳定运行后清理 `.migrated` 备份文件
 
 ---
 

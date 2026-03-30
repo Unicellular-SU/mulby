@@ -463,6 +463,9 @@ export interface PluginAPI {
     remove: (key: string) => void
     clear: () => void
     keys: () => string[]
+    has: (key: string) => boolean
+    getAll: () => Record<string, unknown>
+    bulkSet: (entries: Record<string, unknown>) => void
   }
   filesystem: {
     readFile: (path: string, encoding?: 'utf-8' | 'base64') => string | Buffer
