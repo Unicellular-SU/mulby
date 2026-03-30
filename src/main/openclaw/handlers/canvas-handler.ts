@@ -9,7 +9,8 @@
  * 通过依赖注入复用 Mulby 已有的 screen capture 和 BrowserWindow 能力。
  */
 
-import { BrowserWindow, desktopCapturer, screen as electronScreen } from 'electron'
+import { BrowserWindow } from 'electron'
+import { pluginScreen } from '../../../main/plugin/screen'
 import type { CommandHandler } from '../command-registry'
 
 /** Canvas 窗口管理器（简易实现，后续可扩展） */
@@ -34,30 +35,8 @@ export function createCanvasHandlers(_deps: CanvasHandlerDeps): Record<string, {
         const quality = typeof params.quality === 'number' ? params.quality : 90
 
         try {
-          const primaryDisplay = electronScreen.getPrimaryDisplay()
-
-          // 获取屏幕源
-          const sources = await desktopCapturer.getSources({
-            types: ['screen'],
-            thumbnailSize: {
-              width: primaryDisplay.workAreaSize.width,
-              height: primaryDisplay.workAreaSize.height
-            }
-          })
-
-          if (sources.length === 0) {
-            throw new Error('没有可用的屏幕源')
-          }
-
-          // 按 display id 匹配主显示器（格式通常为 "screen:N:0"）
-          const primarySource = sources.find((s) => s.display_id === String(primaryDisplay.id))
-            || sources[0]
-          const thumbnail = primarySource.thumbnail
-
-          // 转换为纯 base64（不带 data:image 前缀）
-          const buffer = format === 'jpeg'
-            ? thumbnail.toJPEG(quality)
-            : thumbnail.toPNG()
+          // 使用 pluginScreen 截图（内置原生模块优先 + desktopCapturer fallback）
+          const buffer = await pluginScreen.captureScreen({ format, quality })
 
           return {
             format,

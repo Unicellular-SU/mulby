@@ -1,5 +1,18 @@
-import { desktopCapturer, screen, nativeImage } from 'electron'
-import { CaptureWindow } from './capture-window'
+/**
+ * screen.ts — 核心截屏模块（已原生化）
+ *
+ * 平台策略:
+ *   - 优先使用原生模块 (CGWindowListCreateImage / GDI+ BitBlt / X11 XGetImage)
+ *   - 原生模块不可用时回退到 Electron desktopCapturer
+ *   - 已移除 CaptureWindow 依赖（消除 contextIsolation:false 安全风险）
+ */
+
+import { desktopCapturer, screen } from 'electron'
+import {
+  nativeCaptureScreen,
+  nativeCaptureRegion,
+  isNativeScreenCaptureAvailable
+} from '../services/native-screen-capture'
 
 export interface DisplayInfo {
   id: number
@@ -136,18 +149,59 @@ export class PluginScreen {
 
   /**
    * 截取屏幕截图
+   *
+   * 优先使用原生模块（< 20ms），失败时回退到 desktopCapturer。
+   * 已移除 CaptureWindow 路径。
    */
   async captureScreen(options: ScreenshotOptions = {}): Promise<Buffer> {
     const format = options.format || 'png'
     const quality = options.quality || 90
 
-    let sourceId = options.sourceId
+    // ===== 策略 1: 原生模块截图 =====
+    if (isNativeScreenCaptureAvailable()) {
+      // 解析 displayIndex
+      const displayIndex = this.resolveDisplayIndex(options.sourceId)
 
-    // 如果没有指定 sourceId，获取主屏幕
+      const buffer = nativeCaptureScreen(displayIndex, format, quality)
+      if (buffer) {
+        return buffer
+      }
+      console.warn('[PluginScreen] 原生截图返回空，回退到 desktopCapturer')
+    }
+
+    // ===== 策略 2: desktopCapturer fallback =====
+    return this.captureScreenFallback(options)
+  }
+
+  /**
+   * 从 sourceId 解析 displayIndex
+   * sourceId 格式: "screen:displayId:0" 或 undefined
+   */
+  private resolveDisplayIndex(sourceId?: string): number {
+    if (!sourceId) return 0
+
+    const parts = sourceId.split(':')
+    if (parts[0] === 'screen' && parts.length >= 2) {
+      const displayId = parseInt(parts[1])
+      const displays = screen.getAllDisplays()
+      const index = displays.findIndex(d => d.id === displayId)
+      return index >= 0 ? index : 0
+    }
+    return 0
+  }
+
+  /**
+   * desktopCapturer 回退方案（保留完整兼容性）
+   */
+  private async captureScreenFallback(options: ScreenshotOptions = {}): Promise<Buffer> {
+    const format = options.format || 'png'
+    const quality = options.quality || 90
+
+    let sourceId = options.sourceId
     if (!sourceId) {
       const sources = await desktopCapturer.getSources({
         types: ['screen'],
-        thumbnailSize: { width: 1, height: 1 } // 只需要 ID
+        thumbnailSize: { width: 1, height: 1 }
       })
       if (sources.length === 0) {
         throw new Error('No screen source available')
@@ -158,58 +212,39 @@ export class PluginScreen {
     // 获取对应屏幕的分辨率
     const displays = this.getAllDisplays()
     let display = displays.find(d => String(d.id) === sourceId)
-    // sourceId 格式通常是 "screen:1:0" 或 "window:123:0"
-    // 对于 screen，可能无法直接匹配 display.id，尝试从 sourceId 解析或默认取主屏
     if (!display) {
-      // 这是一个简化处理，如果 sourceId 包含 displayId 信息最好，否则对于多屏可能有问题
-      // 这里如果 sourceId 是 default screen，通常对应 id 为主屏或 primary
-      // 尝试解析: screen:display_id:0
-      const parts = sourceId.split(':')
+      const parts = sourceId!.split(':')
       if (parts[0] === 'screen' && parts.length >= 2) {
         const displayId = parseInt(parts[1])
         display = displays.find(d => d.id === displayId)
       }
     }
-
     if (!display) {
       display = this.getPrimaryDisplay()
     }
 
-    const width = display.bounds.width * display.scaleFactor
-    const height = display.bounds.height * display.scaleFactor
-
-    // 使用隐藏窗口获取高清截图
-    try {
-      const buffer = await CaptureWindow.getInstance().capture(sourceId, width, height)
-
-      // 如果需要 jpeg，这里 buffer 默认是 png (来自 capture.tsx)
-      if (format === 'jpeg') {
-        const image = nativeImage.createFromBuffer(buffer)
-        return image.toJPEG(quality)
+    const sources = await desktopCapturer.getSources({
+      types: ['screen', 'window'],
+      thumbnailSize: {
+        width: Math.max(1, Math.round(display.bounds.width * display.scaleFactor)),
+        height: Math.max(1, Math.round(display.bounds.height * display.scaleFactor))
       }
+    })
+    const source = sources.find(s => s.id === sourceId)
+    if (!source) throw new Error('Source not found')
 
-      return buffer
-    } catch (e) {
-      console.error('High-res capture failed, falling back to desktopCapturer:', e)
-
-      // Fallback: 如果失败，回退到原来的 desktopCapturer 方案
-      const sources = await desktopCapturer.getSources({
-        types: ['screen', 'window'],
-        thumbnailSize: { width: 1920, height: 1080 }
-      })
-      const source = sources.find(s => s.id === sourceId)
-      if (!source) throw new Error('Source not found')
-
-      const image = source.thumbnail
-      if (format === 'jpeg') {
-        return image.toJPEG(quality)
-      }
-      return image.toPNG()
+    const image = source.thumbnail
+    if (format === 'jpeg') {
+      return image.toJPEG(quality)
     }
+    return image.toPNG()
   }
 
   /**
    * 截取指定区域
+   *
+   * 优先使用原生模块（直接在内存中截取指定矩形，无需全屏再裁剪），
+   * 失败时回退到 desktopCapturer + 裁剪。
    */
   async captureRegion(
     region: { x: number; y: number; width: number; height: number },
@@ -218,9 +253,37 @@ export class PluginScreen {
     const format = options.format || 'png'
     const quality = options.quality || 90
     const normalizedRegion = normalizeCaptureRegion(region)
+
+    // ===== 策略 1: 原生模块区域截图 =====
+    if (isNativeScreenCaptureAvailable()) {
+      const buffer = nativeCaptureRegion(
+        normalizedRegion.x,
+        normalizedRegion.y,
+        normalizedRegion.width,
+        normalizedRegion.height,
+        format,
+        quality
+      )
+      if (buffer) {
+        return buffer
+      }
+      console.warn('[PluginScreen] 原生区域截图返回空，回退到 desktopCapturer')
+    }
+
+    // ===== 策略 2: desktopCapturer + 裁剪 fallback =====
+    return this.captureRegionFallback(normalizedRegion, format, quality)
+  }
+
+  /**
+   * desktopCapturer 区域截图回退方案
+   */
+  private async captureRegionFallback(
+    normalizedRegion: { x: number; y: number; width: number; height: number },
+    format: 'png' | 'jpeg',
+    quality: number
+  ): Promise<Buffer> {
     const display = screen.getDisplayMatching(normalizedRegion)
 
-    // 获取该显示器的截图
     const sources = await desktopCapturer.getSources({
       types: ['screen'],
       thumbnailSize: {
@@ -234,7 +297,6 @@ export class PluginScreen {
       throw new Error('No screen source available')
     }
 
-    // 裁剪区域
     const image = source.thumbnail
     const imageSize = image.getSize()
     if (imageSize.width <= 0 || imageSize.height <= 0) {

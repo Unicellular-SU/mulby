@@ -758,6 +758,29 @@ export class PluginWindowManager {
     this.panelWindow?.show()
   }
 
+  /**
+   * 隐藏主搜索框窗口（preCapture 截图前调用）
+   * 隐藏主窗口 + 面板窗口，确保截图不会包含搜索框
+   */
+  hideMainWindowForCapture(): void {
+    if (this.mainWindow && !this.mainWindow.isDestroyed()) {
+      this.panelWindow?.hide()
+      this.mainWindow.hide()
+    }
+  }
+
+  /**
+   * 恢复主搜索框窗口（preCapture 截图后调用）
+   * 仅在需要时恢复显示（某些截图流程后不需要恢复）
+   */
+  showMainWindowAfterCapture(): void {
+    if (this.mainWindow && !this.mainWindow.isDestroyed()) {
+      this.mainWindow.show()
+      this.mainWindow.focus()
+      this.panelWindow?.show()
+    }
+  }
+
   // 根据窗口实例获取关联的插件
   getPluginByWindow(win: BrowserWindow): Plugin | null {
     if (!win) return null

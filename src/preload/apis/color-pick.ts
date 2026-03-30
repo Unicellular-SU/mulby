@@ -10,5 +10,11 @@ contextBridge.exposeInMainWorld('colorPicker', {
   },
   cancel: () => {
     ipcRenderer.send('color-pick:cancel')
+  },
+  // 接收预截取的全屏快照回调（Windows/Linux 专用）
+  onSnapshot: (callback: (dataUrl: string) => void) => {
+    ipcRenderer.on('color-pick:snapshot', (_event, dataUrl: string) => {
+      callback(dataUrl)
+    })
   }
 })

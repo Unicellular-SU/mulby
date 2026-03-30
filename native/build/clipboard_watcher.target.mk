@@ -7,20 +7,31 @@ DEFS_Debug := \
 	'-DUSING_UV_SHARED=1' \
 	'-DUSING_V8_SHARED=1' \
 	'-DV8_DEPRECATION_WARNINGS=1' \
+	'-DV8_DEPRECATION_WARNINGS' \
+	'-DV8_IMMINENT_DEPRECATION_WARNINGS' \
 	'-D_GLIBCXX_USE_CXX11_ABI=1' \
-	'-D_FILE_OFFSET_BITS=64' \
+	'-DELECTRON_ENSURE_CONFIG_GYPI' \
 	'-D_DARWIN_USE_64_BIT_INODE=1' \
 	'-D_LARGEFILE_SOURCE' \
+	'-D_FILE_OFFSET_BITS=64' \
+	'-DUSING_ELECTRON_CONFIG_GYPI' \
+	'-DV8_COMPRESS_POINTERS' \
+	'-DV8_COMPRESS_POINTERS_IN_SHARED_CAGE' \
+	'-DV8_ENABLE_SANDBOX' \
+	'-DV8_31BIT_SMIS_ON_64BIT_ARCH' \
+	'-DOPENSSL_NO_PINSHARED' \
+	'-DOPENSSL_THREADS' \
+	'-DOPENSSL_NO_ASM' \
 	'-DNAPI_DISABLE_CPP_EXCEPTIONS' \
 	'-DBUILDING_NODE_EXTENSION' \
 	'-DDEBUG' \
-	'-D_DEBUG'
+	'-D_DEBUG' \
+	'-DV8_ENABLE_CHECKS'
 
 # Flags passed to all source files.
 CFLAGS_Debug := \
 	-O0 \
 	-gdwarf-2 \
-	-fno-strict-aliasing \
 	-mmacosx-version-min=10.13 \
 	-arch \
 	x86_64 \
@@ -31,13 +42,15 @@ CFLAGS_Debug := \
 
 # Flags passed to only C files.
 CFLAGS_C_Debug := \
+	-fno-strict-aliasing \
 	-ObjC++
 
 # Flags passed to only C++ files.
 CFLAGS_CC_Debug := \
-	-std=gnu++20 \
+	-std=gnu++17 \
 	-stdlib=libc++ \
 	-fno-rtti \
+	-fno-strict-aliasing \
 	-ObjC++
 
 # Flags passed to only ObjC files.
@@ -47,13 +60,13 @@ CFLAGS_OBJC_Debug :=
 CFLAGS_OBJCC_Debug :=
 
 INCS_Debug := \
-	-I/Users/su/Library/Caches/node-gyp/25.2.1/include/node \
-	-I/Users/su/Library/Caches/node-gyp/25.2.1/src \
-	-I/Users/su/Library/Caches/node-gyp/25.2.1/deps/openssl/config \
-	-I/Users/su/Library/Caches/node-gyp/25.2.1/deps/openssl/openssl/include \
-	-I/Users/su/Library/Caches/node-gyp/25.2.1/deps/uv/include \
-	-I/Users/su/Library/Caches/node-gyp/25.2.1/deps/zlib \
-	-I/Users/su/Library/Caches/node-gyp/25.2.1/deps/v8/include \
+	-I/Users/su/Library/Caches/node-gyp/28.3.3/include/node \
+	-I/Users/su/Library/Caches/node-gyp/28.3.3/src \
+	-I/Users/su/Library/Caches/node-gyp/28.3.3/deps/openssl/config \
+	-I/Users/su/Library/Caches/node-gyp/28.3.3/deps/openssl/openssl/include \
+	-I/Users/su/Library/Caches/node-gyp/28.3.3/deps/uv/include \
+	-I/Users/su/Library/Caches/node-gyp/28.3.3/deps/zlib \
+	-I/Users/su/Library/Caches/node-gyp/28.3.3/deps/v8/include \
 	-I/Users/su/workspace/mulby/node_modules/node-addon-api
 
 DEFS_Release := \
@@ -61,10 +74,21 @@ DEFS_Release := \
 	'-DUSING_UV_SHARED=1' \
 	'-DUSING_V8_SHARED=1' \
 	'-DV8_DEPRECATION_WARNINGS=1' \
+	'-DV8_DEPRECATION_WARNINGS' \
+	'-DV8_IMMINENT_DEPRECATION_WARNINGS' \
 	'-D_GLIBCXX_USE_CXX11_ABI=1' \
-	'-D_FILE_OFFSET_BITS=64' \
+	'-DELECTRON_ENSURE_CONFIG_GYPI' \
 	'-D_DARWIN_USE_64_BIT_INODE=1' \
 	'-D_LARGEFILE_SOURCE' \
+	'-D_FILE_OFFSET_BITS=64' \
+	'-DUSING_ELECTRON_CONFIG_GYPI' \
+	'-DV8_COMPRESS_POINTERS' \
+	'-DV8_COMPRESS_POINTERS_IN_SHARED_CAGE' \
+	'-DV8_ENABLE_SANDBOX' \
+	'-DV8_31BIT_SMIS_ON_64BIT_ARCH' \
+	'-DOPENSSL_NO_PINSHARED' \
+	'-DOPENSSL_THREADS' \
+	'-DOPENSSL_NO_ASM' \
 	'-DNAPI_DISABLE_CPP_EXCEPTIONS' \
 	'-DBUILDING_NODE_EXTENSION'
 
@@ -72,7 +96,6 @@ DEFS_Release := \
 CFLAGS_Release := \
 	-O3 \
 	-gdwarf-2 \
-	-fno-strict-aliasing \
 	-mmacosx-version-min=10.13 \
 	-arch \
 	x86_64 \
@@ -83,13 +106,15 @@ CFLAGS_Release := \
 
 # Flags passed to only C files.
 CFLAGS_C_Release := \
+	-fno-strict-aliasing \
 	-ObjC++
 
 # Flags passed to only C++ files.
 CFLAGS_CC_Release := \
-	-std=gnu++20 \
+	-std=gnu++17 \
 	-stdlib=libc++ \
 	-fno-rtti \
+	-fno-strict-aliasing \
 	-ObjC++
 
 # Flags passed to only ObjC files.
@@ -99,13 +124,13 @@ CFLAGS_OBJC_Release :=
 CFLAGS_OBJCC_Release :=
 
 INCS_Release := \
-	-I/Users/su/Library/Caches/node-gyp/25.2.1/include/node \
-	-I/Users/su/Library/Caches/node-gyp/25.2.1/src \
-	-I/Users/su/Library/Caches/node-gyp/25.2.1/deps/openssl/config \
-	-I/Users/su/Library/Caches/node-gyp/25.2.1/deps/openssl/openssl/include \
-	-I/Users/su/Library/Caches/node-gyp/25.2.1/deps/uv/include \
-	-I/Users/su/Library/Caches/node-gyp/25.2.1/deps/zlib \
-	-I/Users/su/Library/Caches/node-gyp/25.2.1/deps/v8/include \
+	-I/Users/su/Library/Caches/node-gyp/28.3.3/include/node \
+	-I/Users/su/Library/Caches/node-gyp/28.3.3/src \
+	-I/Users/su/Library/Caches/node-gyp/28.3.3/deps/openssl/config \
+	-I/Users/su/Library/Caches/node-gyp/28.3.3/deps/openssl/openssl/include \
+	-I/Users/su/Library/Caches/node-gyp/28.3.3/deps/uv/include \
+	-I/Users/su/Library/Caches/node-gyp/28.3.3/deps/zlib \
+	-I/Users/su/Library/Caches/node-gyp/28.3.3/deps/v8/include \
 	-I/Users/su/workspace/mulby/node_modules/node-addon-api
 
 OBJS := \

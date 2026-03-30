@@ -7,5 +7,11 @@ contextBridge.exposeInMainWorld('regionCapture', {
     },
     cancel: () => {
         ipcRenderer.send('region-capture:cancel')
+    },
+    // 接收预截取的全屏快照回调（Windows/Linux 专用）
+    onSnapshot: (callback: (dataUrl: string) => void) => {
+        ipcRenderer.on('region-capture:snapshot', (_event, dataUrl: string) => {
+            callback(dataUrl)
+        })
     }
 })

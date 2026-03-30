@@ -668,7 +668,15 @@ export class PluginManager {
     }
 
     // preCapture：在启动插件窗口前先执行截图
+    // 必须先隐藏主搜索框，否则截图中会包含搜索框
     if (feature?.preCapture) {
+      // 隐藏主窗口和面板（无论 mainHide 设置如何）
+      if (this.windowManager) {
+        this.windowManager.hideMainWindowForCapture()
+        // 等待窗口从屏幕上完全消失（macOS/Windows 窗口隐藏有动画延迟）
+        await new Promise(resolve => setTimeout(resolve, process.platform === 'darwin' ? 200 : 150))
+      }
+
       try {
         let capturedDataUrl: string | null = null
 
@@ -685,8 +693,11 @@ export class PluginManager {
           capturedDataUrl = `data:image/png;base64,${base64}`
         }
 
-        // 用户取消截图 → 不启动插件
+        // 用户取消截图 → 不启动插件，恢复主窗口
         if (!capturedDataUrl) {
+          if (this.windowManager && !shouldHideMain) {
+            this.windowManager.showMainWindowAfterCapture()
+          }
           return { success: false, error: 'Capture cancelled' }
         }
 
@@ -700,7 +711,10 @@ export class PluginManager {
         }]
       } catch (err) {
         console.error(`[PluginManager] preCapture failed for ${name}:`, err)
-        // preCapture 失败时回退到旧流程（让插件自行截图）
+        // preCapture 失败时恢复主窗口，回退到旧流程（让插件自行截图）
+        if (this.windowManager && !shouldHideMain) {
+          this.windowManager.showMainWindowAfterCapture()
+        }
       }
     }
 

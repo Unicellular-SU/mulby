@@ -336,13 +336,18 @@ ifeq ($(strip $(foreach prefix,$(NO_LOAD),\
 endif
 ifeq ($(strip $(foreach prefix,$(NO_LOAD),\
     $(findstring $(join ^,$(prefix)),\
+                 $(join ^,screen_capture.target.mk)))),)
+  include screen_capture.target.mk
+endif
+ifeq ($(strip $(foreach prefix,$(NO_LOAD),\
+    $(findstring $(join ^,$(prefix)),\
                  $(join ^,window_watcher.target.mk)))),)
   include window_watcher.target.mk
 endif
 
 quiet_cmd_regen_makefile = ACTION Regenerating $@
-cmd_regen_makefile = cd $(srcdir); /Users/su/workspace/mulby/node_modules/node-gyp/gyp/gyp_main.py -fmake --ignore-environment "-Dlibrary=shared_library" "-Dvisibility=default" "-Dnode_root_dir=/Users/su/Library/Caches/node-gyp/25.2.1" "-Dnode_gyp_dir=/Users/su/workspace/mulby/node_modules/node-gyp" "-Dnode_lib_file=/Users/su/Library/Caches/node-gyp/25.2.1/<(target_arch)/node.lib" "-Dmodule_root_dir=/Users/su/workspace/mulby/native" "-Dnode_engine=v8" "--depth=." "-Goutput_dir=." "--generator-output=build" -I/Users/su/workspace/mulby/native/build/config.gypi -I/Users/su/workspace/mulby/node_modules/node-gyp/addon.gypi -I/Users/su/Library/Caches/node-gyp/25.2.1/include/node/common.gypi "--toplevel-dir=." binding.gyp
-Makefile: $(srcdir)/../../../Library/Caches/node-gyp/25.2.1/include/node/common.gypi $(srcdir)/../node_modules/node-addon-api/node_api.gyp $(srcdir)/../node_modules/node-gyp/addon.gypi $(srcdir)/binding.gyp $(srcdir)/build/config.gypi
+cmd_regen_makefile = cd $(srcdir); /Users/su/workspace/mulby/node_modules/node-gyp/gyp/gyp_main.py -fmake --ignore-environment "-Dlibrary=shared_library" "-Dvisibility=default" "-Dnode_root_dir=/Users/su/Library/Caches/node-gyp/28.3.3" "-Dnode_gyp_dir=/Users/su/workspace/mulby/node_modules/node-gyp" "-Dnode_lib_file=/Users/su/Library/Caches/node-gyp/28.3.3/<(target_arch)/node.lib" "-Dmodule_root_dir=/Users/su/workspace/mulby/native" "-Dnode_engine=v8" "--depth=." "-Goutput_dir=." "--generator-output=build" -I/Users/su/workspace/mulby/native/build/config.gypi -I/Users/su/workspace/mulby/node_modules/node-gyp/addon.gypi -I/Users/su/Library/Caches/node-gyp/28.3.3/include/node/common.gypi "--toplevel-dir=." binding.gyp
+Makefile: $(srcdir)/../../../Library/Caches/node-gyp/28.3.3/include/node/common.gypi $(srcdir)/../node_modules/node-addon-api/node_api.gyp $(srcdir)/../node_modules/node-gyp/addon.gypi $(srcdir)/binding.gyp $(srcdir)/build/config.gypi
 	$(call do_cmd,regen_makefile)
 
 # "all" is a concatenation of the "all" targets from all the included
