@@ -1603,6 +1603,7 @@ interface BackendPluginAPIDirect {
     join(...paths: string[]): string
     dirname(path: string): string
     basename(path: string, ext?: string): string
+    getDataPath(...subPaths: string[]): string
   }
   http: MulbyHttp
   screen: {
@@ -1649,6 +1650,7 @@ interface BackendPluginAPIDirect {
     isMacOS(): boolean
     isWindows(): boolean
     isLinux(): boolean
+    onActiveWindowChange(callback: (info: { app: string; title: string; pid?: number; bundleId?: string }) => void): () => void
   }
   shortcut: {
     register(accelerator: string, callback: () => void): boolean

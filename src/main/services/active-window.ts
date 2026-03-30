@@ -296,7 +296,8 @@ interface Win32Api {
   OpenProcess: (access: number, inherit: number, pid: number) => unknown
   QueryFullProcessImageNameW: (hProcess: unknown, flags: number, buf: Buffer, sizeInout: unknown[]) => number
   CloseHandle: (handle: unknown) => number
-  koffi: typeof import('koffi')
+  // koffi 是 Windows 平台可选依赖，macOS/Linux 上不存在
+  koffi: any
 }
 
 let _win32: Win32Api | null = null
@@ -304,8 +305,8 @@ let _win32: Win32Api | null = null
 function getWin32(): Win32Api {
   if (_win32) return _win32
 
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const koffi = require('koffi') as typeof import('koffi')
+  // eslint-disable-next-line @typescript-eslint/no-require-imports, @typescript-eslint/no-var-requires
+  const koffi = require('koffi')
   const user32 = koffi.load('user32.dll')
   const kernel32 = koffi.load('kernel32.dll')
 
