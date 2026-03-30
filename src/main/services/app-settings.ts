@@ -11,6 +11,8 @@ import type {
   CommandCallerSource,
   CommandRunnerSettings,
   CommandRule,
+  DoubleTapSettings,
+  MouseTriggerSettings,
   TraySettings,
   CommandTrustRecord,
   OpenClawSettings
@@ -43,6 +45,16 @@ const DEFAULT_SETTINGS: AppSettings = {
   shortcuts: {
     toggleWindow: 'Alt+Space',
     openSettings: 'CommandOrControl+,'
+  },
+  mouseTrigger: {
+    enabled: false,
+    button: 'middle',
+    action: 'click',
+    longPressMs: 500
+  },
+  doubleTap: {
+    enabled: false,
+    modifier: process.platform === 'darwin' ? 'Command' : 'Ctrl'
   },
   storeSources: [],
   developer: {
@@ -231,6 +243,43 @@ function normalizeTraySettings(input: Partial<TraySettings> | undefined): TraySe
     enabled: current.enabled !== false,
     closeToTray: current.closeToTray !== false,
     clickAction: current.clickAction === 'openMenu' ? 'openMenu' : 'toggleWindow'
+  }
+}
+
+function normalizeMouseTriggerSettings(input: Partial<MouseTriggerSettings> | undefined): MouseTriggerSettings {
+  const current = {
+    ...DEFAULT_SETTINGS.mouseTrigger,
+    ...(input || {})
+  }
+
+  const validButtons = ['middle', 'back', 'forward'] as const
+  const validActions = ['click', 'longpress'] as const
+
+  return {
+    enabled: current.enabled === true,
+    button: validButtons.includes(current.button as typeof validButtons[number])
+      ? current.button as typeof validButtons[number]
+      : DEFAULT_SETTINGS.mouseTrigger.button,
+    action: validActions.includes(current.action as typeof validActions[number])
+      ? current.action as typeof validActions[number]
+      : DEFAULT_SETTINGS.mouseTrigger.action,
+    longPressMs: Math.max(200, Math.min(Number(current.longPressMs || DEFAULT_SETTINGS.mouseTrigger.longPressMs), 3000))
+  }
+}
+
+function normalizeDoubleTapSettings(input: Partial<DoubleTapSettings> | undefined): DoubleTapSettings {
+  const current = {
+    ...DEFAULT_SETTINGS.doubleTap,
+    ...(input || {})
+  }
+
+  const validModifiers = ['Command', 'Ctrl', 'Alt', 'Shift'] as const
+
+  return {
+    enabled: current.enabled === true,
+    modifier: validModifiers.includes(current.modifier as typeof validModifiers[number])
+      ? current.modifier as typeof validModifiers[number]
+      : DEFAULT_SETTINGS.doubleTap.modifier
   }
 }
 
@@ -496,6 +545,14 @@ function mergeSettings(current: AppSettings, next: Partial<AppSettings>): AppSet
       ...current.shortcuts,
       ...(next.shortcuts || {})
     },
+    mouseTrigger: normalizeMouseTriggerSettings({
+      ...current.mouseTrigger,
+      ...(next.mouseTrigger || {})
+    }),
+    doubleTap: normalizeDoubleTapSettings({
+      ...current.doubleTap,
+      ...(next.doubleTap || {})
+    }),
     storeSources: next.storeSources ?? current.storeSources,
     developer: {
       ...current.developer,

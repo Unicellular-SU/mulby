@@ -206,6 +206,25 @@ export interface OpenClawSettings {
 // 日志级别类型
 export type LogLevel = 'debug' | 'info' | 'warn' | 'error'
 
+// 鼠标触发设置（P2-A）
+export type MouseTriggerButton = 'middle' | 'back' | 'forward'
+export type MouseTriggerAction = 'click' | 'longpress'
+
+export interface MouseTriggerSettings {
+  enabled: boolean
+  button: MouseTriggerButton
+  action: MouseTriggerAction
+  longPressMs: number  // 默认 500
+}
+
+// 双击修饰键设置（P2-B）
+export type DoubleTapModifier = 'Command' | 'Ctrl' | 'Alt' | 'Shift'
+
+export interface DoubleTapSettings {
+  enabled: boolean
+  modifier: DoubleTapModifier
+}
+
 // 搜索设置
 export interface SearchSettings {
   enableApps: boolean             // 搜索框是否搜索本机应用
@@ -245,6 +264,8 @@ export interface TraySettings {
 
 export interface AppSettings {
   shortcuts: AppShortcutSettings
+  mouseTrigger: MouseTriggerSettings
+  doubleTap: DoubleTapSettings
   storeSources: StoreSource[]
   developer: DeveloperSettings
   commandRunner: CommandRunnerSettings

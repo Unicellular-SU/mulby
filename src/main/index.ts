@@ -23,7 +23,7 @@ import { setUiDialogThemeResolver } from './services/ui-dialog-service'
 import { isIgnoringBlur, startIgnoringBlur, stopIgnoringBlur, setWindowsProvider } from './services/blur-manager'
 import { appSettingsManager } from './services/app-settings'
 import { AppShortcutManager } from './services/app-shortcuts'
-import { KeyboardHookService } from './services/keyboard-hook'
+import { InputHookService } from './services/input-hook'
 import { AppTrayManager } from './services/app-tray'
 import { TrayMenuWindowManager } from './services/tray-menu-window'
 import { ClipboardWatcher } from './services/clipboard-watcher-v2'
@@ -1077,8 +1077,8 @@ app.whenReady().then(async () => {
   // 设置剪贴板历史管理器到插件管理器
   pluginManager.setClipboardHistoryManager(clipboardHistoryManager)
 
-  // 底层键盘钩子服务（globalShortcut 失败时的兜底）
-  const keyboardHookService = new KeyboardHookService()
+  // 底层输入钩子服务（统一管理键盘/鼠标/双击修饰键）
+  const inputHookService = new InputHookService()
 
   const appShortcutManager = new AppShortcutManager({
     actions: {
@@ -1093,7 +1093,7 @@ app.whenReady().then(async () => {
         }
       }
     },
-    keyboardHook: keyboardHookService
+    inputHook: inputHookService
   })
 
   // macOS: 监听 dock 图标点击事件
@@ -1303,6 +1303,9 @@ app.whenReady().then(async () => {
     pluginManager.setSystemPluginWindowManager(systemPluginWindowManager)
 
     appShortcutManager.apply(appSettingsManager.getSettings().shortcuts)
+    // 应用鼠标触发和双击修饰键的初始设置
+    appShortcutManager.applyMouseTrigger(appSettingsManager.getSettings().mouseTrigger)
+    appShortcutManager.applyDoubleTap(appSettingsManager.getSettings().doubleTap)
 
     // 绑定 plugin tools 变更监听器到注册中心
     pluginManager.setPluginToolsListener((event, pluginId, pluginName, tools) => {

@@ -1,7 +1,13 @@
 import { globalShortcut } from 'electron'
-import type { AppShortcutAction, AppShortcutSettings, ShortcutStatusMap } from '../../shared/types/settings'
+import type {
+  AppShortcutAction,
+  AppShortcutSettings,
+  DoubleTapSettings,
+  MouseTriggerSettings,
+  ShortcutStatusMap
+} from '../../shared/types/settings'
 import { detectSystemReservedShortcut } from './system-reserved-shortcuts'
-import type { KeyboardHookService } from './keyboard-hook'
+import type { InputHookService, MouseButton, MouseAction } from './input-hook'
 
 // 重试间隔（毫秒）
 const RETRY_INTERVAL_MS = 5_000
@@ -15,8 +21,8 @@ export interface AppShortcutManagerOptions {
   actions: Record<AppShortcutAction, () => void>
   /** 快捷键状态发生变化时的回调（用于后台重试成功后通知渲染进程） */
   onStatusChange?: (status: ShortcutStatusMap) => void
-  /** 底层键盘钩子服务（globalShortcut 失败时的兜底） */
-  keyboardHook?: KeyboardHookService
+  /** 底层输入钩子服务（统一管理键盘、鼠标、双击修饰键） */
+  inputHook?: InputHookService
 }
 
 export class AppShortcutManager {
@@ -28,16 +34,20 @@ export class AppShortcutManager {
   private paused = false
   private actions: Record<AppShortcutAction, () => void>
   private onStatusChange?: (status: ShortcutStatusMap) => void
-  private keyboardHook?: KeyboardHookService
+  private inputHook?: InputHookService
 
   // 重试机制：记录需要重试的 action → accelerator 映射
   private retryTargets = new Map<AppShortcutAction, string>()
   private retryTimer: ReturnType<typeof setInterval> | null = null
 
+  // 当前生效的鼠标触发和双击修饰键设置（用于 pause/resume）
+  private currentMouseTrigger: MouseTriggerSettings | null = null
+  private currentDoubleTap: DoubleTapSettings | null = null
+
   constructor(options: AppShortcutManagerOptions) {
     this.actions = options.actions
     this.onStatusChange = options.onStatusChange
-    this.keyboardHook = options.keyboardHook
+    this.inputHook = options.inputHook
   }
 
   private registerAccelerator(
@@ -58,16 +68,16 @@ export class AppShortcutManager {
    * @returns true 表示钩子接管成功
    */
   private activateHook(action: AppShortcutAction, accelerator: string): boolean {
-    if (!this.keyboardHook) return false
-    return this.keyboardHook.register(action, accelerator, this.actions[action])
+    if (!this.inputHook) return false
+    return this.inputHook.register(action, accelerator, this.actions[action])
   }
 
   /**
    * 停用指定 action 的底层钩子
    */
   private deactivateHook(action: AppShortcutAction): void {
-    if (!this.keyboardHook) return
-    this.keyboardHook.unregister(action)
+    if (!this.inputHook) return
+    this.inputHook.unregister(action)
   }
 
   apply(shortcuts: AppShortcutSettings): ShortcutStatusMap {
@@ -77,7 +87,7 @@ export class AppShortcutManager {
 
     // 每次 apply 时清除旧的重试任务和钩子
     this.stopRetry()
-    this.keyboardHook?.unregisterAll()
+    this.inputHook?.unregisterAll()
 
     const nextStatus: ShortcutStatusMap = {
       toggleWindow: { ok: true },
@@ -176,6 +186,65 @@ export class AppShortcutManager {
     return nextStatus
   }
 
+  // ---- 鼠标触发管理（P2-A） ----
+
+  /**
+   * 应用鼠标触发设置
+   * @param settings 鼠标触发配置
+   */
+  applyMouseTrigger(settings: MouseTriggerSettings): void {
+    if (!this.inputHook) return
+    if (this.paused) {
+      // 暂停时仅保存配置，resume 时应用
+      this.currentMouseTrigger = settings
+      return
+    }
+
+    // 先移除旧绑定
+    this.inputHook.unregisterMouse('toggleWindow-mouse')
+
+    if (settings.enabled) {
+      this.inputHook.registerMouse(
+        'toggleWindow-mouse',
+        settings.button as MouseButton,
+        settings.action as MouseAction,
+        () => this.actions.toggleWindow(),
+        settings.longPressMs
+      )
+    }
+
+    this.currentMouseTrigger = settings
+  }
+
+  // ---- 双击修饰键管理（P2-B） ----
+
+  /**
+   * 应用双击修饰键设置
+   * @param settings 双击修饰键配置
+   */
+  applyDoubleTap(settings: DoubleTapSettings): void {
+    if (!this.inputHook) return
+    if (this.paused) {
+      // 暂停时仅保存配置，resume 时应用
+      this.currentDoubleTap = settings
+      return
+    }
+
+    // 先清除所有修饰键绑定
+    for (const mod of ['Command', 'Ctrl', 'Alt', 'Shift']) {
+      this.inputHook.unregisterDoubleTap(mod)
+    }
+
+    if (settings.enabled) {
+      this.inputHook.registerDoubleTap(
+        settings.modifier,
+        () => this.actions.toggleWindow()
+      )
+    }
+
+    this.currentDoubleTap = settings
+  }
+
   getStatus(): ShortcutStatusMap {
     return this.status
   }
@@ -187,7 +256,7 @@ export class AppShortcutManager {
   pause() {
     if (this.paused) return
     this.stopRetry()
-    this.keyboardHook?.unregisterAll()
+    this.inputHook?.unregisterEverything()
     for (const accel of this.registered.values()) {
       globalShortcut.unregister(accel)
     }
@@ -199,12 +268,22 @@ export class AppShortcutManager {
       return this.status
     }
     this.paused = false
-    return this.apply(shortcuts)
+    const result = this.apply(shortcuts)
+
+    // 恢复鼠标触发和双击修饰键
+    if (this.currentMouseTrigger) {
+      this.applyMouseTrigger(this.currentMouseTrigger)
+    }
+    if (this.currentDoubleTap) {
+      this.applyDoubleTap(this.currentDoubleTap)
+    }
+
+    return result
   }
 
   unregisterAll() {
     this.stopRetry()
-    this.keyboardHook?.unregisterAll()
+    this.inputHook?.unregisterEverything()
     for (const accel of this.registered.values()) {
       globalShortcut.unregister(accel)
     }

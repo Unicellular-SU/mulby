@@ -12,8 +12,8 @@
 2. [P1-A — macOS 窗口监听原生化](#p1-a--macos-窗口监听原生化)
 3. [P1-B — 屏幕截图/取色器原生化](#p1-b--屏幕截图取色器原生化)
 4. [P1-C — 插件 KV 存储引擎升级](#p1-c--插件-kv-存储引擎升级)
-5. [P2-A — 全局鼠标钩子](#p2-a--全局鼠标钩子)
-6. [P2-B — 双击修饰键唤醒](#p2-b--双击修饰键唤醒)
+5. [P2-A — 全局鼠标钩子](#p2-a--全局鼠标钩子) ✅
+6. [P2-B — 双击修饰键唤醒](#p2-b--双击修饰键唤醒) ✅
 7. [P3-A — 数据同步 (WebDAV)](#p3-a--数据同步-webdav)
 
 ---
@@ -514,138 +514,151 @@ const getAllStmt = db.prepare('SELECT key, value FROM store WHERE plugin_id = ?'
 
 ---
 
-## P2-A — 全局鼠标钩子
+## P2-A — 全局鼠标钩子 ✅
 
 ### 问题
 
 `uiohook-napi` 已在项目依赖中，但 `KeyboardHookService` 仅使用了 `keydown` 事件，
 鼠标事件（`mousedown`, `mouseup`, `mousemove`, `click`）完全未被利用。
 
-### 涉及文件
+### 实现方案
 
-- `src/main/services/keyboard-hook.ts` — 可扩展为 `input-hook.ts`
+将 `KeyboardHookService` 重构为 `InputHookService`，作为 `uIOhook` 的**唯一所有者**，
+统一管理键盘、鼠标和双击修饰键三类输入事件。
 
-### ZTools 参考
+#### 架构
 
-> **参考路径**: `ZTools/src/main/core/native/index.ts` L432-503 (MouseMonitor)
-> **参考路径**: `ZTools/src/main/core/superPanelManager.ts` L148-164
+```
+InputHookService（uIOhook 唯一所有者）
+├── keyBindings (Map)        — 键盘快捷键检测（原 KeyboardHookService）
+├── mouseBindings (Map)      — 鼠标按钮绑定（P2-A）
+│   ├── 支持 middle / back / forward 三个按钮
+│   ├── click 模式：mouseUp 时触发
+│   └── longpress 模式：setTimeout + mouseUp 清除
+└── doubleTapDetector        — 双击修饰键状态机（P2-B）
+```
 
-ZTools 的 `MouseMonitor` 使用 C++ 原生模块实现了鼠标按钮类型 + 长按阈值 + 事件拦截的组合能力。
-但对于 Mulby，我们可以先用 `uiohook-napi` 的 JS 层实现基础鼠标监听，
-后续再考虑 C++ 原生方案。
-
-### 设计方案
-
-将 `KeyboardHookService` 扩展为 `InputHookService`，同时支持键盘和鼠标事件：
+#### 核心 API
 
 ```typescript
-import { uIOhook, type UiohookMouseEvent } from 'uiohook-napi'
+// 鼠标绑定
+registerMouse(id, button, action, callback, longPressMs?): boolean
+unregisterMouse(id): void
 
-// 鼠标按钮映射
-type MouseButton = 'left' | 'right' | 'middle' | 'back' | 'forward'
+// 通过 AppShortcutManager 对外暴露
+appShortcutManager.applyMouseTrigger(settings: MouseTriggerSettings): void
+```
 
-interface MouseBinding {
-  button: MouseButton
-  action: 'click' | 'longpress'
-  longPressMs?: number  // 长按阈值
-  callback: (event: { x: number; y: number }) => void
-}
+### 涉及文件
 
-export class InputHookService {
-  private keyBindings = new Map<string, HookBinding>()
-  private mouseBindings = new Map<string, MouseBinding>()
-  private mouseDownTimers = new Map<number, NodeJS.Timeout>()
+| 文件 | 变更 |
+|------|------|
+| `src/main/services/input-hook.ts` | **新增** — 统一输入钩子服务 |
+| `src/main/services/keyboard-hook.ts` | **删除** — 已被 input-hook.ts 替代 |
+| `src/shared/types/settings.ts` | 新增 `MouseTriggerSettings` 类型 |
+| `src/main/services/app-settings.ts` | 默认值 + `normalizeMouseTriggerSettings` |
+| `src/main/services/app-shortcuts.ts` | 新增 `applyMouseTrigger()` |
+| `src/main/index.ts` | 导入替换 + 启动时初始化 |
+| `src/main/ipc/settings.ts` | 设置更新时同步应用 |
+| `src/renderer/.../GeneralSection.tsx` | 新增鼠标触发设置卡片 |
+| `src/renderer/.../SettingsView.tsx` | 传递新 props |
 
-  // 注册鼠标钩子
-  registerMouse(
-    id: string,
-    button: MouseButton,
-    action: 'click' | 'longpress',
-    callback: (event: { x: number; y: number }) => void,
-    longPressMs?: number
-  ): boolean {
-    this.mouseBindings.set(id, { button, action, longPressMs, callback })
-    this.ensureStarted()
-    return true
-  }
+### 默认配置
 
-  private onMouseDown = (event: UiohookMouseEvent) => {
-    // 长按检测：设置定时器，到期后触发
-    for (const [id, binding] of this.mouseBindings) {
-      if (binding.action === 'longpress' && matchButton(event.button, binding.button)) {
-        const timer = setTimeout(() => {
-          binding.callback({ x: event.x, y: event.y })
-          this.mouseDownTimers.delete(event.button)
-        }, binding.longPressMs || 500)
-        this.mouseDownTimers.set(event.button, timer)
-      }
-    }
-  }
-
-  private onMouseUp = (event: UiohookMouseEvent) => {
-    // 清除长按定时器
-    const timer = this.mouseDownTimers.get(event.button)
-    if (timer) {
-      clearTimeout(timer)
-      this.mouseDownTimers.delete(event.button)
-    }
-    // 点击检测
-    for (const [id, binding] of this.mouseBindings) {
-      if (binding.action === 'click' && matchButton(event.button, binding.button)) {
-        binding.callback({ x: event.x, y: event.y })
-      }
-    }
-  }
+```typescript
+mouseTrigger: {
+  enabled: false,       // 默认关闭，避免与浏览器冲突
+  button: 'middle',     // 中键
+  action: 'click',      // 单击模式
+  longPressMs: 500      // 长按阈值
 }
 ```
 
 ### 任务步骤
 
-- [ ] **T2A.1** 将 `keyboard-hook.ts` 重命名/重构为 `input-hook.ts`
-- [ ] **T2A.2** 新增 `registerMouse()` / `unregisterMouse()` 方法
-- [ ] **T2A.3** 实现长按检测逻辑（定时器 + mouseUp 清除）
-- [ ] **T2A.4** 注册 `uIOhook.on('mousedown')` 和 `uIOhook.on('mouseup')` 事件
-- [ ] **T2A.5** 在 `app-shortcuts.ts` 中集成：添加鼠标中键唤醒选项
-- [ ] **T2A.6** 更新设置界面，新增鼠标触发配置项
+- [x] **T2A.1** 将 `keyboard-hook.ts` 重构为 `input-hook.ts`
+- [x] **T2A.2** 新增 `registerMouse()` / `unregisterMouse()` 方法
+- [x] **T2A.3** 实现长按检测逻辑（定时器 + mouseUp 清除 + longPressFired 防重复）
+- [x] **T2A.4** 注册 `uIOhook.on('mousedown')` 和 `uIOhook.on('mouseup')` 事件
+- [x] **T2A.5** 在 `app-shortcuts.ts` 中集成：`applyMouseTrigger()` + pause/resume 支持
+- [x] **T2A.6** 更新设置界面：按钮选择（中键/侧键后退/前进）+ 触发方式（单击/长按）
+- [x] **T2A.7** TypeScript 编译验证 — 零错误
 
 ---
 
-## P2-B — 双击修饰键唤醒
+## P2-B — 双击修饰键唤醒 ✅
 
 ### 问题
 
 用户无法通过双击 Command/Ctrl/Alt/Shift 键来快速唤出 Mulby。
 这是 uTools/ZTools/Alfred 等效率工具的标配功能。
 
-### ZTools 参考
+### 实现方案
 
-> **参考路径**: `ZTools/src/main/core/doubleTapManager.ts` L1-172
+**移植** ZTools `DoubleTapManager` 的核心状态机逻辑（~100 行），
+嵌入到 `InputHookService` 的 `DoubleTapDetector` 类中，
+不再独立管理 `uIOhook` 生命周期，由 `InputHookService` 统一驱动 `keydown`/`keyup` 事件。
 
-ZTools 的 `DoubleTapManager` 实现非常精炼（仅 172 行），核心逻辑：
-1. 监听 `keydown` 和 `keyup` 事件
-2. 判断当前按键是否为修饰键（Command/Ctrl/Alt/Shift）
-3. 过滤长按（超过 `MAX_TAP_DURATION=300ms` 的按键不算 tap）
-4. 过滤组合键（期间有非修饰键按下则重置）
-5. 检测两次 keyup 间隔 < `DOUBLE_TAP_INTERVAL=400ms` 则触发回调
+#### 状态机逻辑
 
-### 设计方案
+1. `keydown` — 修饰键按下时记录时间戳；非修饰键按下时设置 `nonModifierPressed` 标记
+2. `keyup` — 非修饰键释放时**不清除任何状态**（防止组合键误触发）
+3. `keyup` — 修饰键释放时依次检查：
+   - 长按过滤（> 300ms → 不算 tap）
+   - 组合键过滤（`nonModifierPressed` 为 true → 不算 tap）
+   - 双击检测（两次 tap 间隔 < 400ms → 触发回调）
+   - 否则记录为第一次 tap
 
-**直接移植** ZTools 的 `DoubleTapManager`，它:
-- 依赖 `uiohook-napi`（已在项目中）
-- 独立无其他依赖
-- 实现完善，边界处理到位
+#### 核心 API
 
-需要调整的点：
-- 集成到 Mulby 的 `app-shortcuts.ts` 快捷键管理模块
-- 与现有的 `globalShortcut.register()` 和 `KeyboardHookService` 协调，避免 `uIOhook` 多次 `start()`/`stop()` 冲突
+```typescript
+// 双击修饰键注册
+registerDoubleTap(modifier: string, callback: () => void): boolean
+unregisterDoubleTap(modifier: string): void
+
+// 通过 AppShortcutManager 对外暴露
+appShortcutManager.applyDoubleTap(settings: DoubleTapSettings): void
+```
+
+### 涉及文件
+
+> 与 P2-A 共享相同的文件变更（`InputHookService` 统一实现），详见 P2-A 文件列表。
+> 新增类型：`DoubleTapSettings`、`DoubleTapModifier`
+
+### 默认配置
+
+```typescript
+doubleTap: {
+  enabled: false,       // 默认关闭
+  modifier: 'Command'   // macOS: Command, Windows: Ctrl
+}
+```
+
+### 已修复的 Review 问题
+
+#### P1 — 组合键误触发
+
+**问题**：`Ctrl+C` 序列中 C 的 keyup 错误清除了 `nonModifierPressed` 标记，
+导致后续 Ctrl 释放被误判为有效 tap。快速再按一次 Ctrl 就会触发唤醒。
+
+**修复**：非修饰键 keyup 时不清除任何状态，`nonModifierPressed` 仅在修饰键 keyup 处理时被检查和重置。
+
+#### P2 — 暂停期间设置丢失
+
+**问题**：快捷键录制暂停时，IPC 中 `isPaused()` 守卫导致配置变更未更新缓存，
+resume 后被旧值覆盖。
+
+**修复**：移除外层 `isPaused()` 守卫。`applyMouseTrigger/applyDoubleTap` 内部已正确处理
+暂停态（缓存新配置 → resume 时自动应用）。
 
 ### 任务步骤
 
-- [ ] **T2B.1** 创建 `src/main/services/double-tap.ts`，移植 ZTools `doubleTapManager.ts` 的逻辑
-- [ ] **T2B.2** 解决 `uIOhook` 单例问题：统一由 `InputHookService` 管理 start/stop
-- [ ] **T2B.3** 在设置界面中新增"双击修饰键唤醒"选项（默认关闭），可选择具体的修饰键
-- [ ] **T2B.4** 在 `app-shortcuts.ts` 中集成 `DoubleTapManager`
-- [ ] **T2B.5** 测试跨平台兼容：macOS (Command/Option), Windows (Ctrl/Alt)
+- [x] **T2B.1** 在 `InputHookService` 中实现 `DoubleTapDetector` 状态机
+- [x] **T2B.2** 解决 `uIOhook` 单例问题：统一由 `InputHookService` 管理 start/stop
+- [x] **T2B.3** 在设置界面中新增"双击修饰键唤醒"选项（默认关闭），可选择具体的修饰键
+- [x] **T2B.4** 在 `app-shortcuts.ts` 中集成 `applyDoubleTap()` + pause/resume
+- [x] **T2B.5** 修复组合键误触发（Review P1）和暂停期间设置丢失（Review P2）
+- [x] **T2B.6** TypeScript 编译验证 — 零错误
 
 ---
 
@@ -736,8 +749,8 @@ Mulby 完全没有数据同步能力。用户在多台设备上使用时：
 |------|------|-----------|------|
 | Sprint 1 | ~~P0 文件系统分级保护~~ | ~~2-3 天~~ | ✅ 已完成 |
 | Sprint 1 | P1-C 存储引擎升级 | 1-2 天 | 无 |
-| Sprint 2 | P2-B 双击修饰键 | 1 天 | 无 |
-| Sprint 2 | P2-A 鼠标钩子 | 1-2 天 | 无 |
+| Sprint 2 | ~~P2-B 双击修饰键~~ | ~~1 天~~ | ✅ 已完成 |
+| Sprint 2 | ~~P2-A 鼠标钩子~~ | ~~1-2 天~~ | ✅ 已完成 |
 | Sprint 3 | P1-A macOS 窗口监听 | 3-5 天 | C++ 编译环境 |
 | Sprint 3 | P1-B 屏幕工具优化 | 2-3 天 | 部分依赖 P1-A |
 | Sprint 4 | P3-A WebDAV 同步 | 5-7 天 | P1-C 完成 |

@@ -47,6 +47,8 @@ export function registerSettingsHandlers(
   ipcMain.handle('settings:update', async (_event, partial: Partial<AppSettings>) => {
     const previous = settingsManager.getSettings()
     const hasShortcuts = Boolean(partial && typeof partial === 'object' && 'shortcuts' in partial)
+    const hasMouseTrigger = Boolean(partial && typeof partial === 'object' && 'mouseTrigger' in partial)
+    const hasDoubleTap = Boolean(partial && typeof partial === 'object' && 'doubleTap' in partial)
     const next = settingsManager.updateSettings(partial || {})
     setLoggerMinLevel(next.developer.logLevel)
 
@@ -63,6 +65,19 @@ export function registerSettingsHandlers(
     const shortcutStatus = hasShortcuts
       ? (shortcutManager.isPaused() ? shortcutManager.getStatus() : shortcutManager.apply(next.shortcuts))
       : shortcutManager.getStatus()
+
+    // 应用鼠标触发设置（P2-A）
+    // applyMouseTrigger 内部已处理暂停态（缓存配置以便 resume 时应用）
+    if (hasMouseTrigger) {
+      shortcutManager.applyMouseTrigger(next.mouseTrigger)
+    }
+
+    // 应用双击修饰键设置（P2-B）
+    // applyDoubleTap 内部已处理暂停态（缓存配置以便 resume 时应用）
+    if (hasDoubleTap) {
+      shortcutManager.applyDoubleTap(next.doubleTap)
+    }
+
     return { settings: next, shortcutStatus }
   })
 
@@ -71,6 +86,9 @@ export function registerSettingsHandlers(
     setLoggerMinLevel(next.developer.logLevel)
     await pluginManager.init()
     const shortcutStatus = shortcutManager.apply(next.shortcuts)
+    // 重置时也重新应用鼠标触发和双击修饰键
+    shortcutManager.applyMouseTrigger(next.mouseTrigger)
+    shortcutManager.applyDoubleTap(next.doubleTap)
     return { settings: next, shortcutStatus }
   })
 

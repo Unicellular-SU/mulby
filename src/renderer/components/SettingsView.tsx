@@ -744,6 +744,24 @@ export default function SettingsView({
                   onShortcutChange={handleShortcutChange}
                   onRecordStart={handleRecordStart}
                   onRecordEnd={handleRecordEnd}
+                  onMouseTriggerChange={async (patch) => {
+                    if (!settings) return
+                    await updateSettings({
+                      mouseTrigger: {
+                        ...settings.mouseTrigger,
+                        ...patch
+                      }
+                    })
+                  }}
+                  onDoubleTapChange={async (patch) => {
+                    if (!settings) return
+                    await updateSettings({
+                      doubleTap: {
+                        ...settings.doubleTap,
+                        ...patch
+                      }
+                    })
+                  }}
                   cardClass={cardClass}
                 />
               )}
