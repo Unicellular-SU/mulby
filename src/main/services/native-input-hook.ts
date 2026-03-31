@@ -10,6 +10,8 @@
  * - 项目已使用 koffi（ActiveWindow 服务），零新增依赖
  */
 
+import * as koffi from 'koffi'
+
 // ==================== 事件接口 ====================
 
 export interface NativeKeyEvent {
@@ -118,8 +120,6 @@ let _win32Api: Win32HookApi | null = null
 function getWin32HookApi(): Win32HookApi {
   if (_win32Api) return _win32Api
 
-  // eslint-disable-next-line @typescript-eslint/no-require-imports, @typescript-eslint/no-var-requires
-  const koffi = require('koffi')
   const user32 = koffi.load('user32.dll')
   const kernel32 = koffi.load('kernel32.dll')
 
@@ -347,6 +347,10 @@ const kCGEventRightMouseUp = 4
 const kCGEventOtherMouseDown = 25
 const kCGEventOtherMouseUp = 26
 
+// CGEventTap 自动禁用事件（系统可能因超时/用户操作禁用 tap）
+const kCGEventTapDisabledByTimeout = 0xFFFFFFFE
+const kCGEventTapDisabledByUserInput = 0xFFFFFFFF
+
 // CGEventField
 const kCGKeyboardEventKeycode = 9
 const kCGMouseEventButtonNumber = 1
@@ -405,6 +409,8 @@ interface DarwinHookApi {
   CFRelease: (obj: unknown) => void
   CFStringCreateWithCString: (alloc: null, str: string, encoding: number) => unknown
   CGEventTapEnable: (tap: unknown, enable: boolean) => void
+  // koffi symbol 引用，需要通过 koffi.decode() 读取实际的 CFStringRef 指针
+  kCFRunLoopCommonModesSymbol: unknown
   koffi: any // eslint-disable-line @typescript-eslint/no-explicit-any
 }
 
@@ -413,8 +419,6 @@ let _darwinApi: DarwinHookApi | null = null
 function getDarwinHookApi(): DarwinHookApi {
   if (_darwinApi) return _darwinApi
 
-  // eslint-disable-next-line @typescript-eslint/no-require-imports, @typescript-eslint/no-var-requires
-  const koffi = require('koffi')
   const cg = koffi.load('/System/Library/Frameworks/CoreGraphics.framework/CoreGraphics')
   const cf = koffi.load('/System/Library/Frameworks/CoreFoundation.framework/CoreFoundation')
 
@@ -436,6 +440,9 @@ function getDarwinHookApi(): DarwinHookApi {
     CFRelease: cf.func('void CFRelease(void *cf)'),
     CFStringCreateWithCString: cf.func('void* CFStringCreateWithCString(void *alloc, str s, uint32_t encoding)'),
     CGEventTapEnable: cg.func('void CGEventTapEnable(void *tap, bool enable)'),
+    // kCFRunLoopCommonModes 是 CoreFoundation 导出的全局 CFStringRef 常量
+    // lib.symbol() 返回符号引用对象（不可直接使用），须在使用时通过 koffi.decode() 读取实际值
+    kCFRunLoopCommonModesSymbol: cf.symbol('kCFRunLoopCommonModes', 'void*'),
     koffi
   }
 
@@ -466,6 +473,28 @@ function darwinMouseButton(eventType: number, buttonNumber: number): { button: n
       return { button: buttonNumber === 2 ? 3 : buttonNumber === 3 ? 4 : buttonNumber === 4 ? 5 : 0, isDown: false }
     default: return null
   }
+}
+
+/** macOS 从 changed flags 推导修饰键 VK (防修饰键硬件 Keycode 0/255 的 Bug) */
+function detectModifierVkCode(changed: number): number | null {
+  // 先精确匹配左/右键特征位 (macOS 下 16 位是设备独立标识)
+  if (changed & 0x08) return 0x5B   // VK_LWIN (Command L)
+  if (changed & 0x10) return 0x5C   // VK_RWIN (Command R)
+  if (changed & 0x00100000) return 0x5B // Command generic
+
+  if (changed & 0x20) return 0xA4   // VK_LMENU (Option L)
+  if (changed & 0x40) return 0xA5   // VK_RMENU (Option R)
+  if (changed & 0x00080000) return 0xA4 // Option generic
+
+  if (changed & 0x01) return 0xA2   // VK_LCONTROL (Control L)
+  if (changed & 0x2000) return 0xA3 // VK_RCONTROL (Control R)
+  if (changed & 0x00040000) return 0xA2 // Control generic
+
+  if (changed & 0x02) return 0xA0   // VK_LSHIFT (Shift L)
+  if (changed & 0x04) return 0xA1   // VK_RSHIFT (Shift R)
+  if (changed & 0x00020000) return 0xA0 // Shift generic
+
+  return null
 }
 
 function createDarwinInputHook(callbacks: NativeInputHookCallbacks): NativeInputHookImpl {
@@ -499,6 +528,16 @@ function createDarwinInputHook(callbacks: NativeInputHookCallbacks): NativeInput
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           (_proxy: any, type: number, event: any, _userInfo: any) => {
             try {
+              // macOS 可能因回调处理超时或系统负载自动禁用 Event Tap，
+              // 收到禁用事件后必须立即重新启用，否则 tap 永久失效
+              if (type === kCGEventTapDisabledByTimeout || type === kCGEventTapDisabledByUserInput) {
+                console.warn(`[NativeInputHook] macOS CGEventTap 被系统禁用 (type=0x${type.toString(16)})，正在重新启用...`)
+                if (tap) {
+                  api.CGEventTapEnable(tap, true)
+                }
+                return event
+              }
+
               const flags = Number(api.CGEventGetFlags(event))
               const modifiers = darwinModifiersFromFlags(flags)
 
@@ -513,13 +552,20 @@ function createDarwinInputHook(callbacks: NativeInputHookCallbacks): NativeInput
                 }
               } else if (type === kCGEventFlagsChanged) {
                 // 修饰键按下/释放：通过比较前后 flags 判断
-                const macKeyCode = Number(api.CGEventGetIntegerValueField(event, kCGKeyboardEventKeycode))
-                const vkCode = MACOS_TO_VK[macKeyCode] ?? macKeyCode
                 const changed = previousFlags ^ flags
                 previousFlags = flags
 
-                // 判断是按下还是释放：如果对应 flag 位从 0→1 则为按下
-                const isDown = (flags & changed) !== 0
+                if (changed === 0) return event // 过滤冗余事件
+
+                const macKeyCode = Number(api.CGEventGetIntegerValueField(event, kCGKeyboardEventKeycode))
+
+                // 从 changed bitmask 中推导修饰键（避免外接键盘/特殊映射时拿到 0 或无意义键码而打断双击逻辑）
+                const synthVkCode = detectModifierVkCode(changed)
+                const vkCode = synthVkCode ?? (MACOS_TO_VK[macKeyCode] ?? macKeyCode)
+
+                // 判断是按下还是释放：如果对于产生改变的位，如果目标 flag 中有一个是 1 的说明是按下
+                const isDown = ((flags & changed) !== 0)
+
                 if (isDown) {
                   callbacks.onKeyDown?.({ vkCode, ...modifiers })
                 } else {
@@ -567,8 +613,9 @@ function createDarwinInputHook(callbacks: NativeInputHookCallbacks): NativeInput
           return false
         }
 
-        // 创建 kCFRunLoopCommonModes 字符串
-        commonModes = api.CFStringCreateWithCString(null, 'kCFRunLoopCommonModes', 0x08000100) // kCFStringEncodingUTF8
+        // 获取苹果真实导出的 kCFRunLoopCommonModes 全局常量指针
+        // lib.symbol() 返回的是引用对象，必须通过 koffi.decode() 解引用才能得到实际的 CFStringRef
+        commonModes = koffi.decode(api.kCFRunLoopCommonModesSymbol, 'void*')
 
         // 添加到主 RunLoop
         source = api.CFMachPortCreateRunLoopSource(null, tap, 0)
@@ -605,10 +652,9 @@ function createDarwinInputHook(callbacks: NativeInputHookCallbacks): NativeInput
         try { api.CFRelease(source) } catch { /* ignore */ }
         source = null
       }
-      if (commonModes) {
-        try { api.CFRelease(commonModes) } catch { /* ignore */ }
-        commonModes = null
-      }
+      // 注意：commonModes 来自 kCFRunLoopCommonModes 全局常量，
+      // 不可 CFRelease，否则会导致内存腐败和后续重启失败
+      commonModes = null
       if (tapCallback) {
         api.koffi.unregister(tapCallback)
         tapCallback = null

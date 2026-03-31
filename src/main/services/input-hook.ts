@@ -187,12 +187,14 @@ class DoubleTapDetector {
     if (this.handlers.length === 0) return
 
     const modifier = VK_MODIFIER_MAP[vkCode]
+
     if (modifier) {
       if (this.modifierDownTime === 0) {
         this.modifierDownTime = Date.now()
       }
     } else {
       // 非修饰键被按下，重置双击检测状态
+
       this.nonModifierPressed = true
       this.lastModifierUp = null
     }
@@ -203,6 +205,8 @@ class DoubleTapDetector {
     if (this.handlers.length === 0) return
 
     const modifier = VK_MODIFIER_MAP[vkCode]
+
+
     if (!modifier) {
       // 非修饰键 keyup：不清除任何状态。
       // nonModifierPressed 标记由 handleKeyDown 设置，
@@ -215,6 +219,7 @@ class DoubleTapDetector {
 
     // 按键时间过长（长按），不算 tap
     if (this.modifierDownTime > 0 && now - this.modifierDownTime > this.MAX_TAP_DURATION) {
+
       this.modifierDownTime = 0
       this.nonModifierPressed = false
       this.lastModifierUp = null
@@ -224,6 +229,7 @@ class DoubleTapDetector {
 
     // 期间有非修饰键按下，不算 tap
     if (this.nonModifierPressed) {
+
       this.nonModifierPressed = false
       this.lastModifierUp = null
       return
@@ -235,12 +241,14 @@ class DoubleTapDetector {
       this.lastModifierUp.modifier === modifier &&
       now - this.lastModifierUp.time < this.DOUBLE_TAP_INTERVAL
     ) {
+
       this.lastModifierUp = null
       this.fireHandlers(modifier)
       return
     }
 
     // 记录为第一次 tap
+
     this.lastModifierUp = { modifier, time: now }
   }
 
