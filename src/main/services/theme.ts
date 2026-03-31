@@ -1,6 +1,8 @@
 import { app, nativeTheme, BrowserWindow } from 'electron'
 import { join } from 'path'
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'fs'
+import { getPluginWebContents } from './webcontents-registry'
+import { notifyTitlebarThemeChange } from '../plugin/titlebar-view'
 
 export type ThemeMode = 'light' | 'dark' | 'system'
 
@@ -81,7 +83,16 @@ export class ThemeManager {
     const theme = this.getActualTheme()
     for (const win of this.windows) {
       if (!win.isDestroyed()) {
+        // 发送到 BrowserWindow 的 webContents（无标题栏时这就是插件本体）
         win.webContents.send('theme:changed', theme)
+
+        // 如果该窗口有注册的插件 WebContentsView，也发送主题
+        const pluginWc = getPluginWebContents(win)
+        if (pluginWc) {
+          pluginWc.send('theme:changed', theme)
+          // 同时更新标题栏
+          notifyTitlebarThemeChange(win, theme)
+        }
       }
     }
   }

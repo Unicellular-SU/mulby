@@ -13,6 +13,7 @@ import {
   getSubInputOwnerId
 } from '../services/subinput-state'
 import { shouldUseWindowsFramelessSurface } from '../services/window-surface'
+import { windowFromWebContents, getPluginWebContents } from '../services/webcontents-registry'
 
 // 重新导出 clearSubInputState 供其他模块使用
 export { clearSubInputState } from '../services/subinput-state'
@@ -43,7 +44,7 @@ export function registerWindowHandlers(
 
     // 检查调用者是否为面板窗口（附着模式）
     const panelWin = pluginWindowManager.getPanelWindow()?.getWindow()
-    const callerWin = BrowserWindow.fromWebContents(event.sender)
+    const callerWin = windowFromWebContents(event.sender)
     if (!panelWin || callerWin !== panelWin) {
       console.warn('[SubInput] Rejected: SubInput is only available in attached mode')
       return false
@@ -181,7 +182,7 @@ export function registerWindowHandlers(
     }
 
     // 判断调用源是附着模式还是独立模式
-    const callerWin = BrowserWindow.fromWebContents(event.sender)
+    const callerWin = windowFromWebContents(event.sender)
     const mainWin = getMainWindow()
     const panelWin = pluginWindowManager.getPanelWindow()?.getWindow()
 
@@ -200,7 +201,7 @@ export function registerWindowHandlers(
 
   // 退出插件
   ipcMain.handle('plugin:out', (event, isKill?: boolean) => {
-    const win = BrowserWindow.fromWebContents(event.sender)
+    const win = windowFromWebContents(event.sender)
     const mainWin = getMainWindow()
 
     if (!win) return false
@@ -232,17 +233,19 @@ export function registerWindowHandlers(
 
   // 向父窗口发送消息
   ipcMain.on('window:sendToParent', (event, channel: string, ...args: unknown[]) => {
-    const win = BrowserWindow.fromWebContents(event.sender)
+    const win = windowFromWebContents(event.sender)
     if (!win) return
 
     // 获取此窗口的直接父窗口 ID
     const parentId = pluginWindowManager.getParentWindowId(win.id)
 
     if (parentId) {
-      // 有明确的父窗口，只发给父窗口
+      // 有明确的父窗口，只发给父窗口的插件内容（而非标题栏）
       const parentWin = BrowserWindow.fromId(parentId)
       if (parentWin && !parentWin.isDestroyed()) {
-        parentWin.webContents.send('window:childMessage', channel, ...args)
+        const parentPluginWc = getPluginWebContents(parentWin)
+        const targetWc = parentPluginWc ?? parentWin.webContents
+        targetWc.send('window:childMessage', channel, ...args)
       }
     } else {
       // 没有父窗口（可能是面板或第一级独立窗口）
@@ -263,7 +266,7 @@ export function registerWindowHandlers(
 
   // 获取窗口类型
   ipcMain.handle('window:getType', (event) => {
-    const win = BrowserWindow.fromWebContents(event.sender)
+    const win = windowFromWebContents(event.sender)
     const mainWin = getMainWindow()
     const panelWin = pluginWindowManager.getPanelWindow()?.getWindow()
 
@@ -340,7 +343,7 @@ export function registerWindowHandlers(
 
   // 设置展开高度（仅调整高度，宽度保持不变）
   ipcMain.on('window:setExpendHeight', (event, height: number, allowResize?: boolean) => {
-    const win = BrowserWindow.fromWebContents(event.sender)
+    const win = windowFromWebContents(event.sender)
     if (win) {
       const mainWin = getMainWindow()
       if (win === mainWin) {
@@ -437,7 +440,7 @@ export function registerWindowHandlers(
   ipcMain.on('window:hide', (event, _isRestorePreWindow?: boolean) => {
     // TODO: isRestorePreWindow 参数目前未使用，后续可实现焦点恢复逻辑
     // 使用发送者窗口而非主窗口，以支持面板和独立窗口模式
-    const win = BrowserWindow.fromWebContents(event.sender)
+    const win = windowFromWebContents(event.sender)
     if (!win) return
 
     // 如果是面板窗口，需要通过管理器隐藏
@@ -451,7 +454,7 @@ export function registerWindowHandlers(
 
   // 显示窗口
   ipcMain.on('window:show', (event) => {
-    const win = BrowserWindow.fromWebContents(event.sender)
+    const win = windowFromWebContents(event.sender)
     if (!win) return
 
     // 如果是面板窗口，通过管理器显示
@@ -467,7 +470,7 @@ export function registerWindowHandlers(
 
   ipcMain.on('window:setSize', (event, width: number, height: number, allowResize?: boolean) => {
     // 使用发送者窗口而非主窗口，以支持面板和独立窗口模式
-    const win = BrowserWindow.fromWebContents(event.sender)
+    const win = windowFromWebContents(event.sender)
     if (win) {
       const mainWin = getMainWindow()
       if (win === mainWin) {
@@ -495,7 +498,7 @@ export function registerWindowHandlers(
   })
 
   ipcMain.on('window:center', (event) => {
-    const win = BrowserWindow.fromWebContents(event.sender)
+    const win = windowFromWebContents(event.sender)
     win?.center()
   })
 
@@ -506,7 +509,7 @@ export function registerWindowHandlers(
 
   // 关闭当前插件
   ipcMain.on('plugin:close', (event) => {
-    const win = BrowserWindow.fromWebContents(event.sender)
+    const win = windowFromWebContents(event.sender)
     if (win) {
       const mainWin = getMainWindow()
       if (win === mainWin) {
@@ -519,13 +522,13 @@ export function registerWindowHandlers(
 
   // 窗口置顶
   ipcMain.on('window:alwaysOnTop', (event, flag: boolean) => {
-    const win = BrowserWindow.fromWebContents(event.sender)
+    const win = windowFromWebContents(event.sender)
     win?.setAlwaysOnTop(flag)
   })
 
   // 设置窗口透明度（0.0 ~ 1.0）
   ipcMain.handle('window:setOpacity', (event, opacity: number) => {
-    const win = BrowserWindow.fromWebContents(event.sender)
+    const win = windowFromWebContents(event.sender)
     if (!win) return
     // 值域校验：夹在 [0.0, 1.0] 范围内
     const clamped = Math.max(0, Math.min(1, opacity))
@@ -534,13 +537,13 @@ export function registerWindowHandlers(
 
   // 获取窗口透明度
   ipcMain.handle('window:getOpacity', (event) => {
-    const win = BrowserWindow.fromWebContents(event.sender)
+    const win = windowFromWebContents(event.sender)
     return win?.getOpacity() ?? 1
   })
 
   // 获取插件模式
   ipcMain.handle('plugin:getMode', (event) => {
-    const win = BrowserWindow.fromWebContents(event.sender)
+    const win = windowFromWebContents(event.sender)
     const mainWin = getMainWindow()
     const panelWin = pluginWindowManager.getPanelWindow()?.getWindow()
     return (win === mainWin || win === panelWin) ? 'attached' : 'detached'
@@ -548,13 +551,13 @@ export function registerWindowHandlers(
 
   // 最小化窗口
   ipcMain.on('window:minimize', (event) => {
-    const win = BrowserWindow.fromWebContents(event.sender)
+    const win = windowFromWebContents(event.sender)
     win?.minimize()
   })
 
   // 最大化/还原窗口
   ipcMain.on('window:maximize', (event) => {
-    const win = BrowserWindow.fromWebContents(event.sender)
+    const win = windowFromWebContents(event.sender)
     if (win) {
       if (win.isMaximized()) {
         win.unmaximize()
@@ -566,7 +569,7 @@ export function registerWindowHandlers(
 
   // 获取窗口状态
   ipcMain.handle('window:getState', (event) => {
-    const win = BrowserWindow.fromWebContents(event.sender)
+    const win = windowFromWebContents(event.sender)
     return {
       isMaximized: win?.isMaximized() ?? false,
       isAlwaysOnTop: win?.isAlwaysOnTop() ?? false,
@@ -583,7 +586,7 @@ export function registerWindowHandlers(
     currentY: number
     baseBounds: { x: number; y: number; width: number; height: number }
   }) => {
-    const win = BrowserWindow.fromWebContents(event.sender)
+    const win = windowFromWebContents(event.sender)
     if (!win || win.isDestroyed() || !win.isResizable()) return
     if (win.isMaximized() || win.isMinimized() || win.isFullScreen()) return
 
@@ -651,13 +654,17 @@ export function registerWindowHandlers(
   })
 
   ipcMain.on('plugin:reload', (event) => {
-    const senderWin = BrowserWindow.fromWebContents(event.sender)
+    const senderWin = windowFromWebContents(event.sender)
     if (senderWin) {
       const mainWin = getMainWindow()
       const useWindowsFramelessSurface = shouldUseWindowsFramelessSurface()
       // 主窗口触发时，重载当前附着的 Panel 插件窗口；其他情况重载发送者窗口。
       const panelWin = pluginWindowManager.getPanelWindow()?.getWindow()
       const win = senderWin === mainWin && panelWin ? panelWin : senderWin
+
+      // 确定要重载的 webContents：优先使用插件视图（WebContentsView），
+      // 否则回退到窗口自身的 webContents（无标题栏或面板模式）
+      const pluginWc = getPluginWebContents(win) ?? win.webContents
 
       // 重载前设置背景色并隐藏窗口内容，避免闪白
       const isDark = themeManager.getActualTheme() === 'dark'
@@ -673,20 +680,22 @@ export function registerWindowHandlers(
           if (useWindowsFramelessSurface) {
             win.setBackgroundColor('#00000000')
           }
-          win.webContents.send('theme:changed', themeManager.getActualTheme())
+          if (!pluginWc.isDestroyed()) {
+            pluginWc.send('theme:changed', themeManager.getActualTheme())
+          }
           win.setOpacity(1)
         }, 50)
-        win.webContents.removeListener('did-finish-load', onFinishLoad)
+        pluginWc.removeListener('did-finish-load', onFinishLoad)
       }
-      win.webContents.on('did-finish-load', onFinishLoad)
+      pluginWc.on('did-finish-load', onFinishLoad)
 
-      win.webContents.reload()
+      pluginWc.reload()
     }
   })
 
   // 创建新窗口
   ipcMain.handle('window:create', async (event, url: string, options) => {
-    const win = BrowserWindow.fromWebContents(event.sender)
+    const win = windowFromWebContents(event.sender)
     if (!win) return null
 
     const plugin = pluginWindowManager.getPluginByWindow(win)

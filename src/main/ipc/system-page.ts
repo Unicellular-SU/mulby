@@ -5,6 +5,7 @@ import {
   type SystemPageId,
   SystemPageWindowManager
 } from '../services/system-page-window-manager'
+import { windowFromWebContents } from '../services/webcontents-registry'
 
 const SYSTEM_PAGE_IDS: SystemPageId[] = [
   'settings',
@@ -74,17 +75,17 @@ export function registerSystemPageHandlers(
   })
 
   ipcMain.handle('systemPage:close', (event) => {
-    const caller = BrowserWindow.fromWebContents(event.sender)
+    const caller = windowFromWebContents(event.sender)
     return manager.closeByCaller(caller)
   })
 
   ipcMain.handle('systemPage:detach', async (event) => {
-    const caller = BrowserWindow.fromWebContents(event.sender)
+    const caller = windowFromWebContents(event.sender)
     return await manager.detachByCaller(caller)
   })
 
   ipcMain.handle('systemPage:reload', (event) => {
-    const caller = BrowserWindow.fromWebContents(event.sender)
+    const caller = windowFromWebContents(event.sender)
     return manager.reloadByCaller(caller)
   })
 
@@ -93,7 +94,7 @@ export function registerSystemPageHandlers(
   })
 
   ipcMain.handle('systemPage:getMode', (event) => {
-    const caller = BrowserWindow.fromWebContents(event.sender)
+    const caller = windowFromWebContents(event.sender)
     return manager.getModeByWindow(caller)
   })
 }

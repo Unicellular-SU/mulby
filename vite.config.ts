@@ -81,6 +81,14 @@ export default defineConfig({
             outDir: 'dist/preload'
           }
         }
+      },
+      {
+        entry: 'src/preload/titlebar.ts',
+        vite: {
+          build: {
+            outDir: 'dist/preload'
+          }
+        }
       }
     ])
   ],

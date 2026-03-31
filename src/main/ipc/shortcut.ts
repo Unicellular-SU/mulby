@@ -1,5 +1,6 @@
-import { ipcMain, BrowserWindow } from 'electron'
+import { ipcMain } from 'electron'
 import { createPluginGlobalShortcut } from '../plugin/shortcut'
+import { windowFromWebContents } from '../services/webcontents-registry'
 
 // 存储每个窗口对应的插件快捷键实例
 const windowShortcuts = new Map<number, ReturnType<typeof createPluginGlobalShortcut>>()
@@ -7,7 +8,7 @@ const windowShortcuts = new Map<number, ReturnType<typeof createPluginGlobalShor
 export function registerGlobalShortcutHandlers() {
   // 注册快捷键
   ipcMain.handle('shortcut:register', (event, accelerator: string) => {
-    const win = BrowserWindow.fromWebContents(event.sender)
+    const win = windowFromWebContents(event.sender)
     if (!win) return false
 
     const pluginName = `window-${win.id}`
@@ -23,7 +24,7 @@ export function registerGlobalShortcutHandlers() {
 
   // 注销快捷键
   ipcMain.handle('shortcut:unregister', (event, accelerator: string) => {
-    const win = BrowserWindow.fromWebContents(event.sender)
+    const win = windowFromWebContents(event.sender)
     if (!win) return
 
     const shortcut = windowShortcuts.get(win.id)
@@ -34,7 +35,7 @@ export function registerGlobalShortcutHandlers() {
 
   // 注销所有快捷键
   ipcMain.handle('shortcut:unregisterAll', (event) => {
-    const win = BrowserWindow.fromWebContents(event.sender)
+    const win = windowFromWebContents(event.sender)
     if (!win) return
 
     const shortcut = windowShortcuts.get(win.id)

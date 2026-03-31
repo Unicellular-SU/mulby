@@ -1,6 +1,7 @@
-import { BrowserWindow, dialog, ipcMain } from 'electron'
+import { dialog, ipcMain } from 'electron'
 import { withDialogMode } from '../services/blur-manager'
 import { showInternalMessageBox, type UiMessageBoxOptions } from '../services/ui-dialog-service'
+import { windowFromWebContents } from '../services/webcontents-registry'
 
 export interface OpenDialogOptions {
   title?: string
@@ -52,7 +53,7 @@ export function registerDialogHandlers() {
 
   // 消息框（不需要隐藏窗口，因为它是模态的）
   ipcMain.handle('dialog:showMessageBox', async (event, options: MessageBoxOptions) => {
-    const parentWindow = BrowserWindow.fromWebContents(event.sender)
+    const parentWindow = windowFromWebContents(event.sender)
     return showInternalMessageBox(options, { parentWindow })
   })
 

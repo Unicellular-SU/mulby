@@ -2,8 +2,9 @@
  * 日志 IPC 处理器
  * 处理渲染进程发送的日志请求
  */
-import { ipcMain, BrowserWindow } from 'electron'
+import { ipcMain } from 'electron'
 import { loggerService, LogEntry } from '../services/logger'
+import { windowFromWebContents } from '../services/webcontents-registry'
 
 /**
  * 从 webContents 获取插件 ID
@@ -21,7 +22,7 @@ function getPluginIdFromSender(sender: Electron.WebContents): string {
     }
 
     // 回退：从窗口标题获取（注意：这可能是 displayName 而非 id）
-    const win = BrowserWindow.fromWebContents(sender)
+    const win = windowFromWebContents(sender)
     if (win) {
         const title = win.getTitle()
         if (title && title !== 'Mulby') {
@@ -64,7 +65,7 @@ export function registerLogIpc() {
 
     // 订阅实时日志（通过窗口 ID）
     ipcMain.handle('log:subscribe', (event) => {
-        const win = BrowserWindow.fromWebContents(event.sender)
+        const win = windowFromWebContents(event.sender)
         if (!win) return { success: false, error: 'Window not found' }
 
         const unsubscribe = loggerService.subscribe((entry) => {
