@@ -515,9 +515,11 @@ function MainApp() {
     } else if (attachmentsManagerOpen && attachments.length > 0) {
       height = SEARCH_BOX_HEIGHT + BORDER_HEIGHT + MANAGER_HEIGHT
     } else if (showSearchPanel) {
-      // Dynamic height based on actual content
-      const panelH = searchPanelHeight > 0 ? searchPanelHeight : SEARCH_PANEL_MAX_HEIGHT_CONST
-      height = SEARCH_BOX_HEIGHT + BORDER_HEIGHT + panelH
+      // 动态高度：基于实际内容，首次测量前保持搜索框高度，避免先撑满再缩小的闪烁
+      if (searchPanelHeight > 0) {
+        height = SEARCH_BOX_HEIGHT + BORDER_HEIGHT + searchPanelHeight
+      }
+      // searchPanelHeight === 0 表示尚未测量，保持 SEARCH_BOX_HEIGHT 等待 ResizeObserver 回调
     }
     window.mulby.window.setExpendHeight(height, allowResize)
 
