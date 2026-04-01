@@ -10,6 +10,7 @@ import { sessionCommand } from './commands/ai-session'
 import { readFileSync } from 'fs'
 import { join } from 'path'
 import { resume } from './commands/resume'
+import { updateTypes } from './commands/update-types'
 import chalk from 'chalk'
 
 // 全局错误处理 - 防止进程意外退出
@@ -76,5 +77,12 @@ program
   .command('resume')
   .description('恢复当前目录的 AI 会话')
   .action(resume)
+
+program
+  .command('update-types')
+  .description('更新插件的 MulbyTypes 类型定义和 useMulby hook 到最新版本')
+  .option('--dry-run', '仅检查差异，不执行写入')
+  .option('-y, --yes', '跳过确认提示，直接更新')
+  .action(updateTypes)
 
 program.parse()
