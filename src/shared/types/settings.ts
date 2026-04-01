@@ -123,20 +123,91 @@ export interface AiToolGitSettings {
   maxDiffBytes: number
 }
 
-export type AiToolWebSearchProvider = 'jina' | 'tavily'
+/** 内置 API Provider ID */
+export type AiToolWebSearchBuiltinApiProvider = 'tavily' | 'jina'
+
+/**
+ * 本地搜索引擎配置
+ *
+ * 通过隐藏 BrowserWindow 加载搜索引擎页面，用 CSS 选择器解析搜索结果。
+ * 无需 API Key，零成本方案。
+ */
+export interface LocalSearchEngineConfig {
+  /** 唯一标识，内置的为 'local-bing' / 'local-google' */
+  id: string
+  /** 显示名称 */
+  name: string
+  /** URL 模板，%s 会被替换为 encodeURIComponent(query) */
+  urlTemplate: string
+  /** 搜索结果容器选择器 */
+  resultSelector: string
+  /** 标题选择器（相对于 resultSelector） */
+  titleSelector: string
+  /** 链接选择器（相对于 resultSelector） */
+  linkSelector: string
+  /** 可选的 URL 解码策略，如 Bing 需要 'bing-redirect' */
+  urlDecoder?: string
+  /** 是否内置（不可删除） */
+  builtin?: boolean
+}
+
+/**
+ * 自定义搜索 API 配置
+ *
+ * 用户可添加任意兼容的搜索 API 接口。
+ */
+export interface CustomSearchApiConfig {
+  /** 唯一标识 */
+  id: string
+  /** 显示名称 */
+  name: string
+  /** API 基础 URL */
+  apiHost: string
+  /** API Key（可选） */
+  apiKey?: string
+  /** HTTP 方法 */
+  method: 'GET' | 'POST'
+  /** GET 时的查询参数名，如 'q' */
+  queryParam?: string
+  /** POST 时的请求体 JSON 模板，%s 会被替换为搜索词 */
+  bodyTemplate?: string
+  /** 响应中结果数组的 JSON path，如 'data' 或 'results' */
+  resultsPath?: string
+  /** 标题字段名，默认 'title' */
+  titleField?: string
+  /** URL 字段名，默认 'url' */
+  urlField?: string
+  /** 内容字段名，默认 'content' */
+  contentField?: string
+}
 
 export interface AiToolWebSearchSettings {
-  /** 搜索后端：jina（免费默认）或 tavily（需要 API Key） */
-  provider: AiToolWebSearchProvider
+  /** 当前激活的 Provider ID（local-bing / local-google / tavily / jina / custom-xxx） */
+  activeProvider: string
   /** 搜索最大结果数 */
   maxResults: number
   /** web_fetch 返回内容最大字符数 */
   maxContentLength: number
   /** 搜索/抓取超时（毫秒） */
   timeoutMs: number
-  /** Jina API Key（可选，免费 tier 有 rate limit） */
+  /** 内置 API Provider 的独立 Key 存储 */
+  providerKeys: {
+    tavily?: string
+    jina?: string
+  }
+  /** Tavily 自定义 Host（可选，默认 https://api.tavily.com） */
+  tavilyApiHost?: string
+  /** 本地搜索引擎列表（内置 + 用户自定义） */
+  localEngines: LocalSearchEngineConfig[]
+  /** 用户自定义 API Provider 列表 */
+  customApis: CustomSearchApiConfig[]
+
+  // ---- 旧字段（仅用于迁移，归一化后丢弃） ----
+  /** @deprecated 使用 activeProvider 替代 */
+  provider?: string
+  /** @deprecated 使用 providerKeys.jina 替代 */
   jinaApiKey?: string
-  /** Tavily API Key（选择 tavily provider 时必填） */
+  /** @deprecated 使用 providerKeys.tavily 替代 */
   tavilyApiKey?: string
 }
 

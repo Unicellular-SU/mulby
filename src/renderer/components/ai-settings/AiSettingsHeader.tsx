@@ -7,6 +7,7 @@ interface AiSettingsHeaderProps {
   onBack: () => void
   onOpenGlobalDefaultModelModal: () => void
   onOpenDefaultParamsModal: () => void
+  onOpenToolSettings?: () => void
   onOpenSkillsSettings?: () => void
   onOpenMcpSettings?: () => void
 }
@@ -15,6 +16,7 @@ export default function AiSettingsHeader({
   onBack,
   onOpenGlobalDefaultModelModal,
   onOpenDefaultParamsModal,
+  onOpenToolSettings,
   onOpenSkillsSettings,
   onOpenMcpSettings
 }: AiSettingsHeaderProps) {
@@ -41,6 +43,16 @@ export default function AiSettingsHeader({
           >
             默认参数
           </button>
+          {onOpenToolSettings && (
+            <button
+              type="button"
+              className={settingsLikeHeaderGhostButtonClass}
+              onClick={onOpenToolSettings}
+              title="配置 Web Search 搜索引擎和 API 密钥"
+            >
+              工具设置
+            </button>
+          )}
           {onOpenSkillsSettings && (
             <button
               type="button"

@@ -25,6 +25,7 @@ import {
   type AiInternalToolName
 } from './internal-tools'
 import { WebSearchService } from './web-search-service'
+import { SearchWindowService } from '../../services/search-window-service'
 
 const PATCH_DRY_RUN_TTL_MS = 10 * 60 * 1000
 
@@ -1027,6 +1028,7 @@ export class AiInternalToolRuntime {
 
     const webSearchSettings = this.deps.getToolingSettings().webSearch
     const service = new WebSearchService(webSearchSettings)
+    service.setLocalExecutor(SearchWindowService.getInstance())
 
     try {
       const response = await service.search({

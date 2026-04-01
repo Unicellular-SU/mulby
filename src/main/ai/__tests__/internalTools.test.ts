@@ -53,10 +53,13 @@ function createTooling(root: string): AiToolingSettings {
       maxDiffBytes: 1024 * 1024
     },
     webSearch: {
-      provider: 'jina',
+      activeProvider: 'local-bing',
       maxResults: 5,
       maxContentLength: 8000,
-      timeoutMs: 30_000
+      timeoutMs: 30_000,
+      providerKeys: {},
+      localEngines: [],
+      customApis: []
     },
     capabilityPolicy: {
       defaultAppCapabilities: [],

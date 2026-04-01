@@ -524,4 +524,10 @@ export interface AiApi {
     ) => AiPromiseLike<{ images: string[]; tokens: AiTokenBreakdown }>
     edit: (input: { imageAttachmentId: string; prompt: string; model: string }) => Promise<{ images: string[]; tokens: AiTokenBreakdown }>
   }
+  tooling: {
+    webSearch: {
+      get: () => Promise<Record<string, unknown>>
+      update: (partial: Record<string, unknown>) => Promise<Record<string, unknown>>
+    }
+  }
 }

@@ -2,6 +2,7 @@ import { ProviderSettingsSection } from './ai-settings/ProviderSettingsSection'
 import AiSettingsHeader from './ai-settings/AiSettingsHeader'
 import AiSettingsStatusPanels from './ai-settings/AiSettingsStatusPanels'
 import AiSettingsModalsHost from './ai-settings/AiSettingsModalsHost'
+import AiToolSettingsModal from './ai-settings/AiToolSettingsModal'
 import { SettingsLikePageShell } from './SettingsLikePageChrome'
 import { useAiSettingsViewModel } from './ai-settings/useAiSettingsViewModel'
 
@@ -16,7 +17,8 @@ export default function AiSettingsView({ onBack, onOpenMcpSettings, onOpenSkills
     headerProps,
     statusProps,
     providerSectionProps,
-    modalsHostProps
+    modalsHostProps,
+    toolSettingsModalProps
   } = useAiSettingsViewModel({
     onBack,
     onOpenMcpSettings,
@@ -38,6 +40,7 @@ export default function AiSettingsView({ onBack, onOpenMcpSettings, onOpenSkills
       </div>
 
       <AiSettingsModalsHost {...modalsHostProps} />
+      <AiToolSettingsModal {...toolSettingsModalProps} />
     </SettingsLikePageShell>
   )
 }

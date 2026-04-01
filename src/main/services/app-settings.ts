@@ -11,7 +11,9 @@ import type {
   CommandCallerSource,
   CommandRunnerSettings,
   CommandRule,
+  CustomSearchApiConfig,
   DoubleTapSettings,
+  LocalSearchEngineConfig,
   MouseTriggerSettings,
   TraySettings,
   CommandTrustRecord,
@@ -39,6 +41,28 @@ const DEFAULT_RUN_COMMAND_MASK_ENV_KEYS = [
   'OPENROUTER_API_KEY',
   'DEEPSEEK_API_KEY',
   'HF_TOKEN'
+]
+
+const DEFAULT_LOCAL_ENGINES: LocalSearchEngineConfig[] = [
+  {
+    id: 'local-bing',
+    name: 'Bing',
+    urlTemplate: 'https://cn.bing.com/search?q=%s&ensearch=1',
+    resultSelector: '#b_results h2',
+    titleSelector: 'a',
+    linkSelector: 'a',
+    urlDecoder: 'bing-redirect',
+    builtin: true
+  },
+  {
+    id: 'local-google',
+    name: 'Google',
+    urlTemplate: 'https://www.google.com/search?q=%s',
+    resultSelector: '#search .MjjYud',
+    titleSelector: 'h3',
+    linkSelector: 'a',
+    builtin: true
+  }
 ]
 
 const DEFAULT_SETTINGS: AppSettings = {
@@ -123,10 +147,13 @@ const DEFAULT_SETTINGS: AppSettings = {
       maxDiffBytes: 1024 * 1024
     },
     webSearch: {
-      provider: 'jina',
+      activeProvider: 'local-bing',
       maxResults: 5,
       maxContentLength: 8000,
-      timeoutMs: 30_000
+      timeoutMs: 30_000,
+      providerKeys: {},
+      localEngines: DEFAULT_LOCAL_ENGINES,
+      customApis: []
     },
     capabilityPolicy: {
       defaultAppCapabilities: [
@@ -416,6 +443,80 @@ function normalizeCapabilityPolicySettings(input: Partial<AiToolCapabilityPolicy
   }
 }
 
+/**
+ * webSearch 归一化 + 旧数据迁移
+ *
+ * 旧格式: { provider: 'jina'|'tavily', jinaApiKey, tavilyApiKey }
+ * 新格式: { activeProvider, providerKeys: { jina, tavily }, localEngines, customApis }
+ */
+function normalizeWebSearchSettings(
+  raw: Partial<import('../../shared/types/settings').AiToolWebSearchSettings> & Record<string, unknown>
+): import('../../shared/types/settings').AiToolWebSearchSettings {
+  const defaults = DEFAULT_SETTINGS.aiTooling.webSearch
+
+  // ---- 迁移旧 providerKeys ----
+  const providerKeys: { tavily?: string; jina?: string } = {}
+  const rawKeys = (raw.providerKeys || {}) as Record<string, unknown>
+  const jinaKey = String(rawKeys.jina || raw.jinaApiKey || '').trim() || undefined
+  const tavilyKey = String(rawKeys.tavily || raw.tavilyApiKey || '').trim() || undefined
+  if (jinaKey) providerKeys.jina = jinaKey
+  if (tavilyKey) providerKeys.tavily = tavilyKey
+
+  // ---- 迁移 activeProvider ----
+  let activeProvider = String(raw.activeProvider || '').trim()
+  if (!activeProvider) {
+    // 旧格式: provider 字段
+    const oldProvider = String(raw.provider || '').trim()
+    if (oldProvider === 'tavily' && tavilyKey) {
+      activeProvider = 'tavily'
+    } else if (oldProvider === 'jina' && jinaKey) {
+      activeProvider = 'jina'
+    } else {
+      // 无 Key 的旧用户 → 回退到免费本地搜索
+      activeProvider = 'local-bing'
+    }
+  }
+
+  // ---- 归一化本地引擎列表 ----
+  const rawEngines = Array.isArray(raw.localEngines) ? raw.localEngines : []
+  // 确保内置引擎始终存在（用户可能删除了）
+  const builtinIds = new Set(DEFAULT_LOCAL_ENGINES.map(e => e.id))
+  const userEngines = rawEngines.filter(
+    (e: any) => e && typeof e === 'object' && e.id && !builtinIds.has(e.id)
+  ) as LocalSearchEngineConfig[]
+  const localEngines = [...DEFAULT_LOCAL_ENGINES, ...userEngines]
+
+  // ---- 归一化自定义 API 列表 ----
+  const customApis = (Array.isArray(raw.customApis) ? raw.customApis : []).filter(
+    (a: any) => a && typeof a === 'object' && a.id && a.name && a.apiHost
+  ) as CustomSearchApiConfig[]
+
+  // ---- 校验 activeProvider 是否有效 ----
+  const allProviderIds = new Set([
+    ...localEngines.map(e => e.id),
+    'tavily',
+    'jina',
+    ...customApis.map(a => `custom-${a.id}`)
+  ])
+  if (!allProviderIds.has(activeProvider)) {
+    activeProvider = 'local-bing'
+  }
+
+  // ---- tavilyApiHost ----
+  const tavilyApiHost = String(raw.tavilyApiHost || '').trim() || undefined
+
+  return {
+    activeProvider,
+    maxResults: Math.max(1, Math.min(Number(raw.maxResults || defaults.maxResults), 20)),
+    maxContentLength: Math.max(500, Math.min(Number(raw.maxContentLength || defaults.maxContentLength), 50_000)),
+    timeoutMs: Math.max(5000, Math.min(Number(raw.timeoutMs || defaults.timeoutMs), 120_000)),
+    providerKeys,
+    tavilyApiHost,
+    localEngines,
+    customApis
+  }
+}
+
 function normalizeAiToolingSettings(input: Partial<AiToolingSettings> | undefined): AiToolingSettings {
   const current = {
     ...DEFAULT_SETTINGS.aiTooling,
@@ -434,10 +535,8 @@ function normalizeAiToolingSettings(input: Partial<AiToolingSettings> | undefine
       .filter((entry): entry is AiToolScriptEntry => !!entry)
     : []
 
-  const validWebSearchProviders = ['jina', 'tavily'] as const
-  const webSearchProvider = validWebSearchProviders.includes(webSearch.provider as typeof validWebSearchProviders[number])
-    ? webSearch.provider as typeof validWebSearchProviders[number]
-    : DEFAULT_SETTINGS.aiTooling.webSearch.provider
+  // ---- webSearch 归一化 + 旧数据迁移 ----
+  const normalizedWebSearch = normalizeWebSearchSettings(webSearch as any)
 
   return {
     enabled: current.enabled !== false,
@@ -469,14 +568,7 @@ function normalizeAiToolingSettings(input: Partial<AiToolingSettings> | undefine
       allowedRepoRoots: normalizePathList(git.allowedRepoRoots, DEFAULT_SETTINGS.aiTooling.git.allowedRepoRoots),
       maxDiffBytes: Math.max(8 * 1024, Math.min(Number(git.maxDiffBytes || DEFAULT_SETTINGS.aiTooling.git.maxDiffBytes), 20 * 1024 * 1024))
     },
-    webSearch: {
-      provider: webSearchProvider,
-      maxResults: Math.max(1, Math.min(Number(webSearch.maxResults || DEFAULT_SETTINGS.aiTooling.webSearch.maxResults), 20)),
-      maxContentLength: Math.max(500, Math.min(Number(webSearch.maxContentLength || DEFAULT_SETTINGS.aiTooling.webSearch.maxContentLength), 50_000)),
-      timeoutMs: Math.max(5000, Math.min(Number(webSearch.timeoutMs || DEFAULT_SETTINGS.aiTooling.webSearch.timeoutMs), 120_000)),
-      jinaApiKey: String(webSearch.jinaApiKey || '').trim() || undefined,
-      tavilyApiKey: String(webSearch.tavilyApiKey || '').trim() || undefined
-    },
+    webSearch: normalizedWebSearch,
     capabilityPolicy
   }
 }

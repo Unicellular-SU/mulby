@@ -55,6 +55,7 @@
     "@types/sharp": "^0.31.1",
     "ai": "^6.0.67",
     "better-sqlite3": "^12.8.0",
+    "cheerio": "^1.2.0",
     "cron-parser": "^5.5.0",
     "electron-get-location": "^1.0.1",
     "electron-log": "^5.0.0",

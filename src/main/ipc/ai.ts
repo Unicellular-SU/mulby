@@ -4,7 +4,9 @@ import { aiMcpService } from '../ai/mcp'
 import { aiSkillService } from '../ai/skills'
 import { getAiSettings, updateAiSettings } from '../ai/config'
 import { resetProviderRegistry } from '../ai/providers'
+import { appSettingsManager } from '../services/app-settings'
 import type { AiOption, AiMessage, AiImageGenerateProgressChunk, AiMcpServer } from '../../shared/types/ai'
+import type { AiToolWebSearchSettings } from '../../shared/types/settings'
 
 export function registerAiHandlers() {
   ipcMain.handle('ai:call', async (_event: IpcMainInvokeEvent, option: AiOption) => {
@@ -236,5 +238,30 @@ export function registerAiHandlers() {
 
   ipcMain.handle('ai:images:edit', async (_event, input) => {
     return await aiService.editImage(input)
+  })
+
+  // ---- AI 工具设置（webSearch）----
+
+  ipcMain.handle('ai:tooling:webSearch:get', async () => {
+    return appSettingsManager.getSettings().aiTooling.webSearch
+  })
+
+  ipcMain.handle('ai:tooling:webSearch:update', async (_event, partial: Partial<AiToolWebSearchSettings>) => {
+    const current = appSettingsManager.getSettings()
+    const merged: AiToolWebSearchSettings = {
+      ...current.aiTooling.webSearch,
+      ...partial,
+      providerKeys: {
+        ...current.aiTooling.webSearch.providerKeys,
+        ...(partial.providerKeys || {})
+      }
+    }
+    const next = appSettingsManager.updateSettings({
+      aiTooling: {
+        ...current.aiTooling,
+        webSearch: merged
+      }
+    })
+    return next.aiTooling.webSearch
   })
 }

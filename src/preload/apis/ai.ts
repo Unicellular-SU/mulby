@@ -263,6 +263,12 @@ export function createAiApi(ipcRenderer: IpcRenderer) {
         generate: (input) => ipcRenderer.invoke('ai:images:generate', input),
         generateStream: generateImageStream,
         edit: (input) => ipcRenderer.invoke('ai:images:edit', input)
+      },
+      tooling: {
+        webSearch: {
+          get: () => ipcRenderer.invoke('ai:tooling:webSearch:get'),
+          update: (partial: Record<string, unknown>) => ipcRenderer.invoke('ai:tooling:webSearch:update', partial)
+        }
       }
     }
     return api
