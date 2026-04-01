@@ -740,8 +740,8 @@ function PluginList({
       .map((item) => ({
         key: `recent:${getPluginKey(item)}`,
         type: 'recent',
-        title: item.displayName,
-        subtitle: item.featureExplain,
+        title: item.featureExplain || item.displayName,
+        subtitle: item.displayName,
         icon: item.icon,
         pluginItem: item
       }))
@@ -752,8 +752,8 @@ function PluginList({
     const bestItems: RenderItem[] = bestPlugins.map((item) => ({
       key: `plugin:${getPluginKey(item)}`,
       type: 'plugin',
-      title: item.displayName,
-      subtitle: item.featureExplain,
+      title: item.featureExplain || item.displayName,
+      subtitle: item.displayName,
       icon: item.icon,
       pluginItem: item
     }))
