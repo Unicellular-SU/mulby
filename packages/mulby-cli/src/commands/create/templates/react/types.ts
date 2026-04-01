@@ -335,6 +335,7 @@ interface MulbyApp {
   onOpenBackgroundPlugins(callback: () => void): Disposable
   onOpenTaskScheduler(callback: () => void): Disposable
   onOpenLogViewer(callback: () => void): Disposable
+  onOpenStorageExplorer(callback: () => void): Disposable
   onOpenCommandShortcuts(callback: (payload?: { cmdLabel?: string }) => void): Disposable
 }
 
@@ -667,6 +668,20 @@ interface MulbyStorage {
   get(key: string, namespace?: string): Promise<unknown>
   set(key: string, value: unknown, namespace?: string): Promise<boolean>
   remove(key: string, namespace?: string): Promise<boolean>
+  getAll(namespace?: string): Promise<unknown>
+  getAllWithMeta(namespace: string): Promise<unknown>
+  listNamespaces(): Promise<unknown>
+  clear(namespace: string): Promise<unknown>
+  // V2 methods
+  list(options?: { prefix?: string; startsAfter?: string; limit?: number; order?: 'asc' | 'desc'; namespace?: string }): Promise<{ items: { key: string; size: number; updatedAt: number; version: number }[]; nextCursor?: string }>
+  getMany(keys: string[], options?: { namespace?: string }): Promise<{ key: string; found: boolean; value?: unknown; version?: number; updatedAt?: number }[]>
+  setMany(items: { key: string; value: unknown; expectedVersion?: number | null }[], options?: { namespace?: string; atomic?: boolean }): Promise<{ success: boolean; results: { key: string; ok: boolean; version?: number; error?: string }[] }>
+  getMeta(key: string, options?: { namespace?: string }): Promise<{ found: boolean; value?: unknown; version?: number; updatedAt?: number }>
+  setWithVersion(key: string, value: unknown, options?: { namespace?: string; expectedVersion?: number | null }): Promise<{ ok: boolean; version?: number; conflict?: { currentVersion: number } }>
+  removeWithVersion(key: string, options?: { namespace?: string; expectedVersion?: number }): Promise<{ ok: boolean; error?: string }>
+  transaction(ops: { op: 'set' | 'remove'; key: string; value?: unknown; expectedVersion?: number | null }[], options?: { namespace?: string }): Promise<{ success: boolean; committed: number }>
+  append(key: string, chunk: unknown, options?: { namespace?: string; maxItems?: number }): Promise<{ ok: boolean; newLength: number; version: number }>
+  watch(options: { namespace?: string; prefix?: string }, callback: (event: { type: 'set' | 'remove' | 'clear'; key: string; namespace: string; version?: number; updatedAt: number }) => void): () => void
 }
 
 interface Task {
@@ -1588,6 +1603,15 @@ interface BackendPluginAPIDirect {
     has(key: string): boolean
     getAll(): Record<string, unknown>
     bulkSet(entries: Record<string, unknown>): void
+    // V2 methods
+    list(options?: { prefix?: string; startsAfter?: string; limit?: number; order?: 'asc' | 'desc' }): { items: { key: string; size: number; updatedAt: number; version: number }[]; nextCursor?: string }
+    getMany(keys: string[]): { key: string; found: boolean; value?: unknown; version?: number; updatedAt?: number }[]
+    setMany(items: { key: string; value: unknown; expectedVersion?: number | null }[], options?: { atomic?: boolean }): { success: boolean; results: { key: string; ok: boolean; version?: number; error?: string }[] }
+    getMeta(key: string): { found: boolean; value?: unknown; version?: number; updatedAt?: number }
+    setWithVersion(key: string, value: unknown, expectedVersion?: number | null): { ok: boolean; version?: number; conflict?: { currentVersion: number } }
+    removeWithVersion(key: string, expectedVersion?: number): { ok: boolean; error?: string }
+    transaction(ops: { op: 'set' | 'remove'; key: string; value?: unknown; expectedVersion?: number | null }[]): { success: boolean; committed: number }
+    append(key: string, chunk: unknown, options?: { maxItems?: number }): { ok: boolean; newLength: number; version: number }
   }
   filesystem: {
     readFile(path: string, encoding?: 'utf-8' | 'base64'): Promise<string | Uint8Array>

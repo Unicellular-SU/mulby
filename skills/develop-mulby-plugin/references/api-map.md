@@ -61,7 +61,7 @@ Use this reference as the navigator for the bundled Mulby API docs under `refere
   - `references/apis/clipboard-history.md`
 - Window behavior and detached UI
   - `references/apis/window.md`
-- Storage
+- Storage (V1 basic + V2 advanced: pagination, CAS, batch, transactions, watch)
   - `references/apis/storage.md`
 - Global shortcuts and input capture
   - `references/apis/shortcut.md`

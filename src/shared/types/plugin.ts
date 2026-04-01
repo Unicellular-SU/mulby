@@ -9,6 +9,20 @@ import type {
   AiTokenBreakdown
 } from './ai'
 import type { CommandAuditItem, CommandRunnerSettings } from './settings'
+import type {
+  StorageListOptions,
+  StorageListResult,
+  StorageGetManyItem,
+  StorageSetManyItem,
+  StorageSetManyResult,
+  StorageMetaResult,
+  StorageSetVersionResult,
+  StorageRemoveVersionResult,
+  StorageTransactionOp,
+  StorageTransactionResult,
+  StorageAppendOptions,
+  StorageAppendResult
+} from './storage-v2'
 
 // 插件类型
 export type PluginType =
@@ -466,6 +480,15 @@ export interface PluginAPI {
     has: (key: string) => boolean
     getAll: () => Record<string, unknown>
     bulkSet: (entries: Record<string, unknown>) => void
+    // V2 扩展方法
+    list: (options?: StorageListOptions) => StorageListResult
+    getMany: (keys: string[]) => StorageGetManyItem[]
+    setMany: (items: StorageSetManyItem[], options?: { atomic?: boolean }) => StorageSetManyResult
+    getMeta: (key: string) => StorageMetaResult
+    setWithVersion: (key: string, value: unknown, expectedVersion?: number | null) => StorageSetVersionResult
+    removeWithVersion: (key: string, expectedVersion?: number) => StorageRemoveVersionResult
+    transaction: (ops: StorageTransactionOp[]) => StorageTransactionResult
+    append: (key: string, chunk: unknown, options?: StorageAppendOptions) => StorageAppendResult
   }
   filesystem: {
     readFile: (path: string, encoding?: 'utf-8' | 'base64') => string | Buffer

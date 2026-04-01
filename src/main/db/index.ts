@@ -43,4 +43,18 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_store_plugin_id ON store(plugin_id);
 `)
 
+// ====== Schema 版本迁移 ======
+const LATEST_SCHEMA_VERSION = 1
+const currentSchemaVersion = (db.pragma('user_version') as { user_version: number }[])[0]?.user_version ?? 0
+
+if (currentSchemaVersion < 1) {
+  // v1: 增加 version 列（CAS 乐观并发控制）+ 前缀查询索引
+  db.exec(`
+    ALTER TABLE store ADD COLUMN version INTEGER DEFAULT 0;
+    CREATE INDEX IF NOT EXISTS idx_store_plugin_key_prefix ON store(plugin_id, key);
+  `)
+  db.pragma(`user_version = ${LATEST_SCHEMA_VERSION}`)
+  console.log('[DB] Schema 迁移完成: v0 → v1 (增加 version 列)')
+}
+
 export default db

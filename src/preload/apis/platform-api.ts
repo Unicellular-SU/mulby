@@ -139,7 +139,36 @@ export function createPlatformApi(ipcRenderer: IpcRenderer) {
       getAll: (namespace?: string) => ipcRenderer.invoke('storage:getAll', namespace),
       getAllWithMeta: (namespace: string) => ipcRenderer.invoke('storage:getAllWithMeta', namespace),
       listNamespaces: () => ipcRenderer.invoke('storage:listNamespaces'),
-      clear: (namespace: string) => ipcRenderer.invoke('storage:clear', namespace)
+      clear: (namespace: string) => ipcRenderer.invoke('storage:clear', namespace),
+      // V2 扩展方法
+      list: (options?: { prefix?: string; startsAfter?: string; limit?: number; order?: 'asc' | 'desc'; namespace?: string }) => {
+        const ns = options?.namespace
+        return ipcRenderer.invoke('storage:list', ns, options)
+      },
+      getMany: (keys: string[], options?: { namespace?: string }) =>
+        ipcRenderer.invoke('storage:getMany', keys, options?.namespace),
+      setMany: (items: { key: string; value: unknown; expectedVersion?: number | null }[], options?: { namespace?: string; atomic?: boolean }) =>
+        ipcRenderer.invoke('storage:setMany', items, options, options?.namespace),
+      getMeta: (key: string, options?: { namespace?: string }) =>
+        ipcRenderer.invoke('storage:getMeta', key, options?.namespace),
+      setWithVersion: (key: string, value: unknown, options?: { namespace?: string; expectedVersion?: number | null }) =>
+        ipcRenderer.invoke('storage:setWithVersion', key, value, options?.expectedVersion, options?.namespace),
+      removeWithVersion: (key: string, options?: { namespace?: string; expectedVersion?: number }) =>
+        ipcRenderer.invoke('storage:removeWithVersion', key, options?.expectedVersion, options?.namespace),
+      transaction: (ops: { op: 'set' | 'remove'; key: string; value?: unknown; expectedVersion?: number | null }[], options?: { namespace?: string }) =>
+        ipcRenderer.invoke('storage:transaction', ops, options?.namespace),
+      append: (key: string, chunk: unknown, options?: { namespace?: string; maxItems?: number }) =>
+        ipcRenderer.invoke('storage:append', key, chunk, options, options?.namespace),
+      watch: (options: { namespace?: string; prefix?: string }, callback: (event: { type: 'set' | 'remove' | 'clear'; key: string; namespace: string; version?: number; updatedAt: number }) => void) => {
+        let watchId: number | null = null
+        ipcRenderer.invoke('storage:watch', options).then((id: number) => { watchId = id })
+        const listener = (_event: unknown, watchEvent: { type: 'set' | 'remove' | 'clear'; key: string; namespace: string; version?: number; updatedAt: number }) => callback(watchEvent)
+        ipcRenderer.on('storage:change', listener)
+        return () => {
+          if (watchId !== null) ipcRenderer.invoke('storage:unwatch', watchId)
+          ipcRenderer.removeListener('storage:change', listener)
+        }
+      }
     },
 
     settings: {

@@ -714,13 +714,27 @@ interface System {
   isLinux(): Promise<boolean>;
 }
 
-// storage (R/B) - Persistent KV Store
+// storage (R/B) - Persistent KV Store (with V2 extensions)
 interface Storage {
+  // V1 基础方法
   get(key: string, namespace?: string): Promise<any>;
   set(key: string, value: any, namespace?: string): Promise<boolean>;
   remove(key: string, namespace?: string): Promise<boolean>;
   clear(): void; // B only
   keys(): string[]; // B only
+  has(key: string): boolean; // B only
+  getAll(): Record<string, unknown>; // B only
+  bulkSet(entries: Record<string, unknown>): void; // B only
+  // V2 扩展方法
+  list(options?: { prefix?: string; startsAfter?: string; limit?: number; order?: 'asc' | 'desc' }): { items: { key: string; size: number; updatedAt: number; version: number }[]; nextCursor?: string };
+  getMany(keys: string[]): { key: string; found: boolean; value?: unknown; version?: number; updatedAt?: number }[];
+  setMany(items: { key: string; value: unknown; expectedVersion?: number | null }[], options?: { atomic?: boolean }): { success: boolean; results: { key: string; ok: boolean; version?: number; error?: string }[] };
+  getMeta(key: string): { found: boolean; value?: unknown; version?: number; updatedAt?: number };
+  setWithVersion(key: string, value: unknown, expectedVersion?: number | null): { ok: boolean; version?: number; conflict?: { currentVersion: number } };
+  removeWithVersion(key: string, expectedVersion?: number): { ok: boolean; error?: string };
+  transaction(ops: { op: 'set' | 'remove'; key: string; value?: unknown; expectedVersion?: number | null }[]): { success: boolean; committed: number };
+  append(key: string, chunk: unknown, options?: { maxItems?: number }): { ok: boolean; newLength: number; version: number };
+  watch(options: { namespace?: string; prefix?: string }, callback: (event: { type: string; key: string; namespace: string; version?: number; updatedAt: number }) => void): () => void; // R only
 }
 
 // messaging (R/B) - Plugin-to-Plugin Communication

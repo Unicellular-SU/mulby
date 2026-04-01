@@ -13,6 +13,26 @@ import type {
   PluginCommandShortcutValidationResult
 } from './plugin'
 import type { AiApi } from './ai'
+import type {
+  StorageListOptions,
+  StorageListResult,
+  StorageGetManyItem,
+  StorageSetManyItem,
+  StorageSetManyOptions,
+  StorageSetManyResult,
+  StorageMetaResult,
+  StorageSetVersionOptions,
+  StorageSetVersionResult,
+  StorageRemoveVersionOptions,
+  StorageRemoveVersionResult,
+  StorageTransactionOp,
+  StorageTransactionOptions,
+  StorageTransactionResult,
+  StorageAppendOptions,
+  StorageAppendResult,
+  StorageWatchOptions,
+  StorageWatchEvent
+} from './storage-v2'
 import type { AppSettings, CommandAuditItem, CommandRunnerSettings, ShortcutStatusMap, OpenClawSettings } from './settings'
 import type { NodeStatusInfo } from './openclaw-protocol'
 import type {
@@ -525,6 +545,16 @@ export interface ElectronAPI {
     getAllWithMeta: (namespace: string) => Promise<{ key: string; value: unknown; rawValue: string; updatedAt: number }[]>
     listNamespaces: () => Promise<{ plugin_id: string; count: number; lastUpdated: number }[]>
     clear: (namespace: string) => Promise<boolean>
+    // V2 扩展方法
+    list: (options?: StorageListOptions) => Promise<StorageListResult>
+    getMany: (keys: string[], options?: { namespace?: string }) => Promise<StorageGetManyItem[]>
+    setMany: (items: StorageSetManyItem[], options?: StorageSetManyOptions) => Promise<StorageSetManyResult>
+    getMeta: (key: string, options?: { namespace?: string }) => Promise<StorageMetaResult>
+    setWithVersion: (key: string, value: unknown, options?: StorageSetVersionOptions) => Promise<StorageSetVersionResult>
+    removeWithVersion: (key: string, options?: StorageRemoveVersionOptions) => Promise<StorageRemoveVersionResult>
+    transaction: (ops: StorageTransactionOp[], options?: StorageTransactionOptions) => Promise<StorageTransactionResult>
+    append: (key: string, chunk: unknown, options?: StorageAppendOptions) => Promise<StorageAppendResult>
+    watch: (options: StorageWatchOptions, callback: (event: StorageWatchEvent) => void) => () => void
   }
   settings: {
     get: () => Promise<{ settings: AppSettings; shortcutStatus: ShortcutStatusMap }>

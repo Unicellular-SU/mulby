@@ -31,6 +31,12 @@ import type {
   AiPromiseLike
 } from '../../shared/types/ai'
 import { commandRunnerService } from '../services/command-runner'
+import type {
+  StorageListOptions,
+  StorageSetManyItem,
+  StorageTransactionOp,
+  StorageAppendOptions
+} from '../../shared/types/storage-v2'
 
 const pluginStorage = new PluginStorage()
 // PluginFilesystem 实例在 createPluginAPI 内部按插件名创建（实现跨插件数据隔离）
@@ -267,7 +273,16 @@ ${item.files.map(p => `    <string>${p}</string>`).join('\n')}
       keys: () => pluginStorage.keys(pluginName),
       has: (key: string) => pluginStorage.has(pluginName, key),
       getAll: () => pluginStorage.getAll(pluginName),
-      bulkSet: (entries: Record<string, unknown>) => pluginStorage.bulkSet(pluginName, entries)
+      bulkSet: (entries: Record<string, unknown>) => pluginStorage.bulkSet(pluginName, entries),
+      // V2 扩展方法
+      list: (options?: StorageListOptions) => pluginStorage.list(pluginName, options),
+      getMany: (keys: string[]) => pluginStorage.getMany(pluginName, keys),
+      setMany: (items: StorageSetManyItem[], options?: { atomic?: boolean }) => pluginStorage.setMany(pluginName, items, options),
+      getMeta: (key: string) => pluginStorage.getMeta(pluginName, key),
+      setWithVersion: (key: string, value: unknown, expectedVersion?: number | null) => pluginStorage.setWithVersion(pluginName, key, value, expectedVersion),
+      removeWithVersion: (key: string, expectedVersion?: number) => pluginStorage.removeWithVersion(pluginName, key, expectedVersion),
+      transaction: (ops: StorageTransactionOp[]) => pluginStorage.transaction(pluginName, ops),
+      append: (key: string, chunk: unknown, options?: StorageAppendOptions) => pluginStorage.append(pluginName, key, chunk, options)
     },
     filesystem: {
       readFile: (path: string, encoding?: 'utf-8' | 'base64') => pluginFilesystem.readFile(path, encoding),

@@ -53,6 +53,9 @@ function collectObjectMethods(objLiteral, prefix = '', out = new Set()) {
       collectObjectMethods(init, prefix + n + '.', out)
     } else if (ts.isIdentifier(init)) {
       out.add(prefix + n)
+    } else if (ts.isCallExpression(init)) {
+      // IIFE 模式: key: (() => { ... })() — 视为函数
+      out.add(prefix + n)
     }
   }
 
