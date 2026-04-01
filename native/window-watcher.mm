@@ -1,4 +1,5 @@
 #include <napi.h>
+#include <string>
 
 #ifdef __APPLE__
 #import <AppKit/AppKit.h>
@@ -33,7 +34,7 @@ private:
     void RegisterAXObserver(pid_t pid);
     void UnregisterAXObserver();
 public:
-    void NotifyJS();
+    void NotifyJS(const char* notificationType = "focus");
 #endif
 };
 
@@ -71,22 +72,27 @@ WindowWatcher::~WindowWatcher() {
 static void AXWindowChangedCallback(AXObserverRef observer, AXUIElementRef element, CFStringRef notification, void *refcon) {
     WindowWatcher* watcher = static_cast<WindowWatcher*>(refcon);
     if (watcher) {
-        watcher->NotifyJS();
+        // 区分通知类型：标题变化 vs 焦点切换
+        bool isTitleChange = CFStringCompare(notification, CFSTR("AXTitleChanged"), 0) == kCFCompareEqualTo;
+        watcher->NotifyJS(isTitleChange ? "title" : "focus");
     }
 }
 
-void WindowWatcher::NotifyJS() {
+void WindowWatcher::NotifyJS(const char* notificationType) {
     if (!currentAppName || !currentBundleId) return;
     
     NSString* appName = [currentAppName copy];
     NSString* bundleId = [currentBundleId copy];
     pid_t pid = currentPid;
+    // 复制一份通知类型字符串，避免生命周期问题
+    std::string typeStr(notificationType);
 
-    auto calljs = [appName, bundleId, pid](Napi::Env env, Napi::Function jsCallback) {
+    auto calljs = [appName, bundleId, pid, typeStr](Napi::Env env, Napi::Function jsCallback) {
         Napi::Object obj = Napi::Object::New(env);
         obj.Set("app", Napi::String::New(env, [appName UTF8String]));
         obj.Set("bundleId", Napi::String::New(env, [bundleId UTF8String]));
         obj.Set("pid", Napi::Number::New(env, pid));
+        obj.Set("type", Napi::String::New(env, typeStr));
         jsCallback.Call({obj});
         
         [appName release];
@@ -111,6 +117,7 @@ void WindowWatcher::RegisterAXObserver(pid_t pid) {
         AXUIElementRef appElem = AXUIElementCreateApplication(pid);
         if (appElem) {
             AXObserverAddNotification(axObserver, appElem, kAXFocusedWindowChangedNotification, this);
+            // 保留标题变化监听，但通过 JS 层节流避免高频刷屏
             AXObserverAddNotification(axObserver, appElem, kAXTitleChangedNotification, this);
             CFRelease(appElem);
 
@@ -143,7 +150,7 @@ void WindowWatcher::StartWatching() {
         self->currentAppName = [frontApp.localizedName ?: @"" copy];
         self->currentBundleId = [frontApp.bundleIdentifier ?: @"" copy];
         self->RegisterAXObserver(frontApp.processIdentifier);
-        self->NotifyJS();
+        self->NotifyJS("activate");
     }
 
     workspaceObserver = [[[NSWorkspace sharedWorkspace] notificationCenter]
@@ -161,7 +168,7 @@ void WindowWatcher::StartWatching() {
             self->currentBundleId = [app.bundleIdentifier ?: @"" copy];
             
             self->RegisterAXObserver(app.processIdentifier);
-            self->NotifyJS();
+            self->NotifyJS("activate");
         }];
 #endif
 }

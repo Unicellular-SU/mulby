@@ -49,7 +49,10 @@ export function onActiveWindowChange(callback: ActiveWindowChangeCallback): () =
 }
 
 function notifySubscribers(info: ActiveWindowInfo) {
-  console.log(`[ActiveWindow] Foreground Changed -> App: ${info.app} | PID: ${info.pid || 'N/A'} | Bundle: ${info.bundleId || 'N/A'} | Title: ${info.title || '<empty>'}`)
+  // 使用 debug 级别避免高频日志刷屏
+  if (process.env.NODE_ENV === 'development') {
+    console.debug(`[ActiveWindow] Foreground Changed -> App: ${info.app} | PID: ${info.pid || 'N/A'} | Bundle: ${info.bundleId || 'N/A'} | Title: ${info.title || '<empty>'}`)
+  }
   for (const sub of subscriptions) {
     try {
       sub(info)
@@ -149,12 +152,41 @@ function isSelfProcess(pid: number | undefined): boolean {
 function startMacOSNativeWatcher() {
   if (_macOSWatcherUnsub) return
   
+  // 标题变化节流状态（仅用于 title 类型事件）
+  let titleThrottleTimer: ReturnType<typeof setTimeout> | null = null
+  const TITLE_THROTTLE_MS = 500
+
   try {
     _macOSWatcherUnsub = subscribeNativeWindowChange((info) => {
       // 过滤掉自身进程，我们只关心"唤醒前用户正在使用的应用"
       if (isSelfProcess(info.pid)) return
 
-      // macOS C++ 只能拿到基础信息，此时立即广播一次，避免感知延迟
+      const now = Date.now()
+      const eventType = info.type || 'focus'
+
+      // --- 标题变化事件：仅节流刷新缓存 ---
+      // IDE 滚动文件列表可能导致高频 title 事件（~15ms/次），需要节流
+      if (eventType === 'title') {
+        if (titleThrottleTimer) return // 已有定时器，跳过
+        titleThrottleTimer = setTimeout(() => {
+          titleThrottleTimer = null
+          // 异步获取最新标题，刷新缓存
+          getActiveWindowMacOSUsingOsascript().then((fullInfo) => {
+            if (fullInfo && !isSelfProcess(fullInfo.pid)) {
+              const oldTitle = cachedResult?.title
+              if (fullInfo.title && fullInfo.title !== oldTitle) {
+                cachedResult = fullInfo
+                cachedAt = Date.now()
+                notifySubscribers(fullInfo)
+              }
+            }
+          }).catch(() => {})
+        }, TITLE_THROTTLE_MS)
+        return
+      }
+
+      // --- 焦点切换 / 应用激活事件：始终立即通过 ---
+      // 同一 app 的不同窗口切换（Cmd+`）会产生 focus 事件，不可丢弃
       const newCache: ActiveWindowInfo = {
         app: info.app,
         bundleId: info.bundleId,
@@ -162,13 +194,13 @@ function startMacOSNativeWatcher() {
         title: ''
       }
       cachedResult = newCache
-      cachedAt = Date.now()
+      cachedAt = now
       notifySubscribers(newCache)
       
-      // 异步补充 title，如果能获取到则更新 cache
+      // 异步补充 title
       getActiveWindowMacOSUsingOsascript().then((fullInfo) => {
         if (fullInfo && fullInfo.app === newCache.app && !isSelfProcess(fullInfo.pid)) {
-          if (fullInfo.title) {
+          if (fullInfo.title && fullInfo.title !== newCache.title) {
             newCache.title = fullInfo.title
             cachedResult = newCache
             notifySubscribers(newCache)

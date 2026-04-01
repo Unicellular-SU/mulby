@@ -4,7 +4,7 @@ import { app } from 'electron'
 
 interface WindowWatcherAddon {
   WindowWatcher: {
-    new (callback: (info: { app: string; bundleId?: string; pid: number }) => void): WindowWatcherInstance
+    new (callback: (info: { app: string; bundleId?: string; pid: number; type?: string }) => void): WindowWatcherInstance
   }
 }
 
@@ -19,6 +19,8 @@ export interface NativeWindowChangeEvent {
   app: string
   bundleId?: string
   pid: number
+  /** 事件类型: "focus" 窗口焦点切换 | "title" 标题变化 | "activate" 应用激活 */
+  type?: 'focus' | 'title' | 'activate'
 }
 
 // 事件分发器
@@ -48,10 +50,17 @@ export function subscribeNativeWindowChange(callback: WatcherCallback): () => vo
       const addon = require(addonPath) as WindowWatcherAddon
       
       watcherInstance = new addon.WindowWatcher((info) => {
+        // 窄化 type 字段
+        const event: NativeWindowChangeEvent = {
+          app: info.app,
+          bundleId: info.bundleId,
+          pid: info.pid,
+          type: (info.type === 'title' || info.type === 'activate') ? info.type : 'focus'
+        }
         // 触发所有回调
         for (const cb of callbacks) {
           try {
-            cb(info)
+            cb(event)
           } catch (e) {
             console.error('[WindowWatcher] Callback error:', e)
           }
