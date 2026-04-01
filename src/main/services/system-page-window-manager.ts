@@ -56,6 +56,7 @@ export type SystemPageId =
   | 'background-plugins'
   | 'task-scheduler'
   | 'log-viewer'
+  | 'storage-explorer'
   | 'ai-settings'
   | 'ai-mcp-settings'
   | 'ai-skills-settings'
@@ -628,6 +629,8 @@ export class SystemPageWindowManager {
         return 'MCP 设置'
       case 'ai-skills-settings':
         return '技能设置'
+      case 'storage-explorer':
+        return '插件数据浏览器'
       default:
         return '系统页面'
     }
@@ -672,6 +675,9 @@ export class SystemPageWindowManager {
         return
       case 'log-viewer':
         target.webContents.send('app:openLogViewer')
+        return
+      case 'storage-explorer':
+        target.webContents.send('app:openStorageExplorer')
         return
       case 'ai-settings':
         target.webContents.send('app:openAiSettings')

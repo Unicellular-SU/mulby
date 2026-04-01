@@ -14,6 +14,7 @@ const SYSTEM_PAGE_IDS: SystemPageId[] = [
   'background-plugins',
   'task-scheduler',
   'log-viewer',
+  'storage-explorer',
   'ai-settings',
   'ai-mcp-settings',
   'ai-skills-settings'

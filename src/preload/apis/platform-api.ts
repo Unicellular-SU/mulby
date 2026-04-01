@@ -135,7 +135,11 @@ export function createPlatformApi(ipcRenderer: IpcRenderer) {
     storage: {
       get: (key: string, namespace?: string) => ipcRenderer.invoke('storage:get', key, namespace),
       set: (key: string, value: unknown, namespace?: string) => ipcRenderer.invoke('storage:set', key, value, namespace),
-      remove: (key: string, namespace?: string) => ipcRenderer.invoke('storage:remove', key, namespace)
+      remove: (key: string, namespace?: string) => ipcRenderer.invoke('storage:remove', key, namespace),
+      getAll: (namespace?: string) => ipcRenderer.invoke('storage:getAll', namespace),
+      getAllWithMeta: (namespace: string) => ipcRenderer.invoke('storage:getAllWithMeta', namespace),
+      listNamespaces: () => ipcRenderer.invoke('storage:listNamespaces'),
+      clear: (namespace: string) => ipcRenderer.invoke('storage:clear', namespace)
     },
 
     settings: {

@@ -69,4 +69,39 @@ export function registerStorageHandlers() {
             return false
         }
     })
+
+    // listNamespaces: 列出所有命名空间及统计信息
+    const stmtListNamespaces = db.prepare(
+        'SELECT plugin_id, COUNT(*) as count, MAX(updated_at) as lastUpdated FROM store GROUP BY plugin_id ORDER BY plugin_id'
+    )
+    ipcMain.handle('storage:listNamespaces', () => {
+        try {
+            return stmtListNamespaces.all() as { plugin_id: string; count: number; lastUpdated: number }[]
+        } catch (error) {
+            console.error('[Storage] ListNamespaces failed:', error)
+            return []
+        }
+    })
+
+    // getAllWithMeta: 获取某命名空间下所有键值对（含 updated_at 元数据）
+    const stmtGetAllWithMeta = db.prepare(
+        'SELECT key, value, updated_at FROM store WHERE plugin_id = ? ORDER BY key'
+    )
+    ipcMain.handle('storage:getAllWithMeta', (_, namespace: string) => {
+        try {
+            const rows = stmtGetAllWithMeta.all(namespace) as { key: string; value: string; updated_at: number }[]
+            return rows.map(row => {
+                let parsed: unknown
+                try {
+                    parsed = JSON.parse(row.value)
+                } catch {
+                    parsed = row.value
+                }
+                return { key: row.key, value: parsed, rawValue: row.value, updatedAt: row.updated_at }
+            })
+        } catch (error) {
+            console.error(`[Storage] GetAllWithMeta failed (${namespace}):`, error)
+            return []
+        }
+    })
 }

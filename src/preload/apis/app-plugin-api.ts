@@ -58,6 +58,11 @@ export function createAppPluginApi(ipcRenderer: IpcRenderer) {
         ipcRenderer.on('app:openLogViewer', listener)
         return () => ipcRenderer.removeListener('app:openLogViewer', listener)
       },
+      onOpenStorageExplorer: (callback: () => void) => {
+        const listener = () => callback()
+        ipcRenderer.on('app:openStorageExplorer', listener)
+        return () => ipcRenderer.removeListener('app:openStorageExplorer', listener)
+      },
       onOpenCommandShortcuts: (callback: (payload?: { cmdLabel?: string }) => void) => {
         const listener = (_event: unknown, payload?: { cmdLabel?: string }) => callback(payload)
         ipcRenderer.on('app:openCommandShortcuts', listener)
@@ -73,7 +78,7 @@ export function createAppPluginApi(ipcRenderer: IpcRenderer) {
 
     systemPage: {
       open: (payload: {
-        page: 'settings' | 'plugin-manager' | 'plugin-store' | 'background-plugins' | 'task-scheduler' | 'log-viewer' | 'ai-settings' | 'ai-mcp-settings' | 'ai-skills-settings'
+        page: 'settings' | 'plugin-manager' | 'plugin-store' | 'background-plugins' | 'task-scheduler' | 'log-viewer' | 'storage-explorer' | 'ai-settings' | 'ai-mcp-settings' | 'ai-skills-settings'
         settingsSection?: 'general' | 'shortcuts' | 'commandQuickLaunch' | 'commandAll' | 'permissions' | 'security' | 'developer' | 'about'
         shortcutCommandHint?: string
       }) => ipcRenderer.invoke('systemPage:open', payload),

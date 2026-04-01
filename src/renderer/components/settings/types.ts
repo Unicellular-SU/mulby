@@ -19,6 +19,7 @@ export interface SettingsViewProps {
   onOpenPluginManager: (section?: 'installed' | 'store') => void
   onOpenBackgroundPluginManager?: () => void
   onOpenTaskScheduler?: () => void
+  onOpenStorageExplorer?: () => void
   onOpenLogViewer?: () => void
   onOpenAiSettings?: () => void
 }

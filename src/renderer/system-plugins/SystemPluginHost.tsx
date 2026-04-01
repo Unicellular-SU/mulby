@@ -11,6 +11,7 @@ interface SystemPluginHostProps {
   onOpenPluginManager: (section?: 'installed' | 'store') => void
   onOpenBackgroundPluginManager?: () => void
   onOpenTaskScheduler?: () => void
+  onOpenStorageExplorer?: () => void
   onOpenLogViewer?: () => void
   onOpenAiSettings?: () => void
 }
@@ -24,6 +25,7 @@ export default function SystemPluginHost({
   onOpenPluginManager,
   onOpenBackgroundPluginManager,
   onOpenTaskScheduler,
+  onOpenStorageExplorer,
   onOpenLogViewer,
   onOpenAiSettings
 }: SystemPluginHostProps) {
@@ -40,6 +42,7 @@ export default function SystemPluginHost({
           onOpenPluginManager={onOpenPluginManager}
           onOpenBackgroundPluginManager={onOpenBackgroundPluginManager}
           onOpenTaskScheduler={onOpenTaskScheduler}
+          onOpenStorageExplorer={onOpenStorageExplorer}
           onOpenLogViewer={onOpenLogViewer}
           onOpenAiSettings={onOpenAiSettings}
         />

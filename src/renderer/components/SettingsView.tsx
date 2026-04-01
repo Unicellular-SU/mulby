@@ -31,6 +31,7 @@ export default function SettingsView({
   onOpenPluginManager,
   onOpenBackgroundPluginManager,
   onOpenTaskScheduler,
+  onOpenStorageExplorer,
   onOpenLogViewer,
   onOpenAiSettings
 }: SettingsViewProps) {
@@ -713,6 +714,7 @@ export default function SettingsView({
                   onOpenPluginManager={onOpenPluginManager}
                   onOpenBackgroundPluginManager={onOpenBackgroundPluginManager}
                   onOpenTaskScheduler={onOpenTaskScheduler}
+                  onOpenStorageExplorer={onOpenStorageExplorer}
                   onNavigateTo={(s) => onSectionChange(s as typeof section)}
                   cardClass={cardClass}
                   primaryPillClass={primaryPillClass}

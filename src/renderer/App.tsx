@@ -29,6 +29,7 @@ const AiSettingsView = lazy(() => import('./components/AiSettingsView'))
 const AiMcpSettingsView = lazy(() => import('./components/AiMcpSettingsView'))
 const AiSkillsSettingsView = lazy(() => import('./components/AiSkillsSettingsView'))
 const LogViewerView = lazy(() => import('./components/LogViewerView'))
+const PluginStorageExplorerView = lazy(() => import('./components/PluginStorageExplorerView'))
 const SystemPluginHost = lazy(() => import('./system-plugins/SystemPluginHost'))
 const OnboardingView = lazy(() => import('./components/OnboardingView'))
 
@@ -109,6 +110,7 @@ type ViewMode =
   | 'ai-settings'
   | 'ai-mcp-settings'
   | 'ai-skills-settings'
+  | 'storage-explorer'
 
 interface SystemWindowBootstrap {
   isSystemWindow: boolean
@@ -189,6 +191,9 @@ function parseSystemWindowBootstrap(): SystemWindowBootstrap {
     case 'ai-skills-settings':
       initialViewMode = 'ai-skills-settings'
       break
+    case 'storage-explorer':
+      initialViewMode = 'storage-explorer'
+      break
     default:
       initialViewMode = 'home'
       break
@@ -247,6 +252,7 @@ function MainApp() {
   const [selectedStoreEntry, setSelectedStoreEntry] = useState<PluginStoreEntry | null>(null)
   const [backgroundPluginManagerReturnTarget, setBackgroundPluginManagerReturnTarget] = useState<'home' | 'settings'>('home')
   const [taskSchedulerReturnTarget, setTaskSchedulerReturnTarget] = useState<'home' | 'settings'>('home')
+  const [storageExplorerReturnTarget, setStorageExplorerReturnTarget] = useState<'home' | 'settings'>('home')
   const [logViewerReturnTarget, setLogViewerReturnTarget] = useState<'home' | 'settings'>('home')
   const [isDragging, setIsDragging] = useState(false)
   const [theme, setTheme] = useState<'light' | 'dark'>('light')
@@ -669,6 +675,20 @@ function MainApp() {
     setViewMode('task-scheduler')
   }, [isSystemWindow, pluginOpen])
 
+  const openStorageExplorer = useCallback((from: 'home' | 'settings' = 'home') => {
+    if (pluginOpen) {
+      window.mulby.window.close()
+      setPluginOpen(false)
+    }
+    setAttachmentsManagerOpen(false)
+    if (!isSystemWindow) {
+      void window.mulby.systemPage.open({ page: 'storage-explorer' })
+      return
+    }
+    setStorageExplorerReturnTarget(from)
+    setViewMode('storage-explorer')
+  }, [isSystemWindow, pluginOpen])
+
   const openLogViewer = useCallback((from: 'home' | 'settings' = 'home') => {
     if (pluginOpen) {
       window.mulby.window.close()
@@ -889,6 +909,13 @@ function MainApp() {
     })
     return cleanup
   }, [openLogViewer])
+
+  useEffect(() => {
+    const cleanup = window.mulby.app.onOpenStorageExplorer(() => {
+      openStorageExplorer('home')
+    })
+    return cleanup
+  }, [openStorageExplorer])
 
   const clearTextInputs = useCallback(() => {
     setQuery('')
@@ -1124,6 +1151,9 @@ function MainApp() {
           onOpenTaskScheduler={() => {
             openTaskScheduler('settings')
           }}
+          onOpenStorageExplorer={() => {
+            openStorageExplorer('settings')
+          }}
           onOpenLogViewer={() => {
             openLogViewer('settings')
           }}
@@ -1282,6 +1312,26 @@ function MainApp() {
         <LogViewerView
           onClose={() => {
             if (logViewerReturnTarget === 'settings') {
+              setViewMode('system-plugin')
+              return
+            }
+            if (isSystemWindow) {
+              void window.mulby.systemPage.close()
+              return
+            }
+            setViewMode('home')
+          }}
+        />
+      </LazyViewFrame>
+    )
+  }
+
+  if (viewMode === 'storage-explorer') {
+    return (
+      <LazyViewFrame isDragging={isDragging}>
+        <PluginStorageExplorerView
+          onBack={() => {
+            if (storageExplorerReturnTarget === 'settings') {
               setViewMode('system-plugin')
               return
             }

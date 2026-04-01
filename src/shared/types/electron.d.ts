@@ -435,6 +435,7 @@ export interface ElectronAPI {
     onOpenBackgroundPlugins: (callback: () => void) => () => void
     onOpenTaskScheduler: (callback: () => void) => () => void
     onOpenLogViewer: (callback: () => void) => () => void
+    onOpenStorageExplorer: (callback: () => void) => () => void
     onOpenCommandShortcuts: (callback: (payload?: { cmdLabel?: string }) => void) => () => void
   }
   systemPlugin: {
@@ -444,7 +445,7 @@ export interface ElectronAPI {
   }
   systemPage: {
     open: (payload: {
-      page: 'settings' | 'plugin-manager' | 'plugin-store' | 'background-plugins' | 'task-scheduler' | 'log-viewer' | 'ai-settings' | 'ai-mcp-settings' | 'ai-skills-settings'
+      page: 'settings' | 'plugin-manager' | 'plugin-store' | 'background-plugins' | 'task-scheduler' | 'log-viewer' | 'ai-settings' | 'ai-mcp-settings' | 'ai-skills-settings' | 'storage-explorer'
       settingsSection?: 'dashboard' | 'general' | 'shortcuts' | 'commandQuickLaunch' | 'commandAll' | 'permissions' | 'security' | 'openclaw' | 'developer' | 'about'
       shortcutCommandHint?: string
     }) => Promise<boolean>
@@ -521,7 +522,9 @@ export interface ElectronAPI {
     set: (key: string, value: unknown, namespace?: string) => Promise<boolean>
     remove: (key: string, namespace?: string) => Promise<boolean>
     getAll?: (namespace?: string) => Promise<Record<string, unknown>>
-    clear?: (namespace?: string) => Promise<boolean>
+    getAllWithMeta: (namespace: string) => Promise<{ key: string; value: unknown; rawValue: string; updatedAt: number }[]>
+    listNamespaces: () => Promise<{ plugin_id: string; count: number; lastUpdated: number }[]>
+    clear: (namespace: string) => Promise<boolean>
   }
   settings: {
     get: () => Promise<{ settings: AppSettings; shortcutStatus: ShortcutStatusMap }>
