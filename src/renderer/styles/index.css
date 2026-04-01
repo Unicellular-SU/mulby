@@ -1669,3 +1669,82 @@ html.platform-win-main .search-box-container.with-bottom-panel {
     box-shadow: var(--glass-shadow);
   }
 }
+
+
+/* ═══════════════════════════════════════════
+   自定义右键菜单
+   ═══════════════════════════════════════════ */
+.ctx-menu {
+  position: fixed;
+  z-index: 9999;
+  min-width: 160px;
+  max-width: 280px;
+  padding: 4px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--glass-bg-strong);
+  backdrop-filter: blur(var(--glass-blur-strong));
+  -webkit-backdrop-filter: blur(var(--glass-blur-strong));
+  box-shadow:
+    0 8px 24px rgba(0, 0, 0, 0.12),
+    0 2px 6px rgba(0, 0, 0, 0.06);
+  animation: ctx-menu-in 120ms ease-out;
+  -webkit-app-region: no-drag;
+}
+
+.dark .ctx-menu {
+  box-shadow:
+    0 8px 24px rgba(0, 0, 0, 0.35),
+    0 2px 6px rgba(0, 0, 0, 0.2);
+}
+
+@keyframes ctx-menu-in {
+  from {
+    opacity: 0;
+    transform: scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.ctx-menu-item {
+  padding: 6px 12px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-primary);
+  border-radius: 6px;
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  transition: background 0.1s ease-out;
+  user-select: none;
+}
+
+.ctx-menu-item:hover {
+  background: var(--bg-selected);
+}
+
+.ctx-menu-item.danger {
+  color: #ef4444;
+}
+
+.dark .ctx-menu-item.danger {
+  color: #f87171;
+}
+
+.ctx-menu-item.danger:hover {
+  background: rgba(239, 68, 68, 0.1);
+}
+
+.dark .ctx-menu-item.danger:hover {
+  background: rgba(248, 113, 113, 0.12);
+}
+
+.ctx-menu-separator {
+  height: 1px;
+  margin: 4px 8px;
+  background: var(--border);
+}

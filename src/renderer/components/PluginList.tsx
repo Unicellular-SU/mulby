@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef, memo, useMemo } from 'react'
+import { useContextMenu, type ContextMenuItem } from './ContextMenu'
 import type {
   DesktopAppSearchResult,
   DesktopFileSearchResult,
@@ -49,7 +50,7 @@ interface ResultCardProps {
   item: RenderItem
   isSelected: boolean
   onRun: (item: RenderItem) => void
-  onShowDetails?: (pluginName: string) => void
+  onContextMenu?: (item: RenderItem, e: React.MouseEvent) => void
 }
 
 const SYSTEM_APP_SEARCH_LIMIT = 12
@@ -267,7 +268,7 @@ const ResultCard = memo(function ResultCard({
   item,
   isSelected,
   onRun,
-  onShowDetails
+  onContextMenu
 }: ResultCardProps) {
   const isSettings = item.pluginItem ? isSettingsItem(item.pluginItem) : false
   const systemClass = item.type === 'system-app' || item.type === 'system-file' ? 'system' : ''
@@ -283,8 +284,7 @@ const ResultCard = memo(function ResultCard({
       }}
       onContextMenu={(e) => {
         e.preventDefault()
-        if (!item.pluginItem || isSettings) return
-        onShowDetails?.(item.pluginItem.pluginName)
+        onContextMenu?.(item, e)
       }}
     >
       <div className="plugin-card-top">
@@ -869,6 +869,80 @@ function PluginList({
     }
   }, [onOpenSettings, promoteRecent])
 
+  // 自定义右键菜单
+  const contextMenu = useContextMenu()
+
+  // 跨平台文案：「在 Finder/资源管理器/文件管理器 中显示」
+  const revealLabel = useMemo(() => {
+    const p = navigator.platform.toLowerCase()
+    if (p.includes('mac')) return '在 Finder 中显示'
+    if (p.includes('win')) return '在资源管理器中显示'
+    return '在文件管理器中显示'
+  }, [])
+
+  // 跨平台文案：「移到废纸篓/回收站」
+  const trashLabel = useMemo(() => {
+    return navigator.platform.toLowerCase().includes('mac') ? '移到废纸篓' : '移到回收站'
+  }, [])
+
+  // 右键菜单：根据结果类型构建不同菜单项
+  const handleItemContextMenu = useCallback(async (item: RenderItem, e: React.MouseEvent) => {
+    const menuItems: ContextMenuItem[] = []
+
+    if (item.type === 'plugin' || item.type === 'recent') {
+      // 插件结果：查看插件详情
+      if (item.pluginItem && !isSettingsItem(item.pluginItem)) {
+        menuItems.push({ id: 'show-details', label: '查看插件详情' })
+      }
+    } else if (item.type === 'system-app') {
+      // 系统应用
+      menuItems.push({ id: 'reveal-in-finder', label: revealLabel })
+      menuItems.push({ id: 'copy-path', label: '复制路径' })
+    } else if (item.type === 'system-file') {
+      // 系统文件
+      menuItems.push({ id: 'reveal-in-finder', label: revealLabel })
+      menuItems.push({ id: 'copy-path', label: '复制路径' })
+      menuItems.push({ id: 'copy-name', label: '复制文件名' })
+      menuItems.push({ id: 'sep', label: '', separator: true })
+      menuItems.push({ id: 'trash', label: trashLabel, danger: true })
+    }
+
+    if (menuItems.length === 0) return
+
+    const selectedId = await contextMenu.show(menuItems, e)
+    if (!selectedId) return
+
+    const path = item.appItem?.path || item.fileItem?.path
+
+    switch (selectedId) {
+      case 'show-details':
+        if (item.pluginItem) {
+          onShowDetails?.(item.pluginItem.pluginName)
+        }
+        break
+      case 'reveal-in-finder':
+        if (path) {
+          void window.mulby.shell.showItemInFolder(path)
+        }
+        break
+      case 'copy-path':
+        if (path) {
+          void window.mulby.clipboard.writeText(path)
+        }
+        break
+      case 'copy-name':
+        if (item.fileItem) {
+          void window.mulby.clipboard.writeText(item.fileItem.name)
+        }
+        break
+      case 'trash':
+        if (path) {
+          void window.mulby.shell.trashItem(path)
+        }
+        break
+    }
+  }, [onShowDetails, contextMenu, revealLabel, trashLabel])
+
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (flatItems.length === 0) return
@@ -955,7 +1029,6 @@ function PluginList({
               <section key="recent" className="result-section result-section-recent" aria-label={section.title}>
                 <div className="recent-bar" role="group" aria-label={section.title}>
                   {section.items.map((item) => {
-                    const isSettings = item.pluginItem ? isSettingsItem(item.pluginItem) : false
                     return (
                       <div
                         key={item.key}
@@ -966,8 +1039,7 @@ function PluginList({
                         onClick={() => { void handleRun(item) }}
                         onContextMenu={(e) => {
                           e.preventDefault()
-                          if (!item.pluginItem || isSettings) return
-                          onShowDetails?.(item.pluginItem.pluginName)
+                          void handleItemContextMenu(item, e)
                         }}
                       >
                         <PluginIcon icon={item.icon} />
@@ -988,7 +1060,7 @@ function PluginList({
                         item={item}
                         isSelected={item.key === selectedKey}
                         onRun={handleRun}
-                        onShowDetails={onShowDetails}
+                        onContextMenu={handleItemContextMenu}
                       />
                     )
                   })}
@@ -998,6 +1070,7 @@ function PluginList({
           ))
         )}
       </div>
+      {contextMenu.menu}
     </div>
   )
 }
