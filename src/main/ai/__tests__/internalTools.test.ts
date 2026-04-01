@@ -52,6 +52,12 @@ function createTooling(root: string): AiToolingSettings {
       allowedRepoRoots: [root],
       maxDiffBytes: 1024 * 1024
     },
+    webSearch: {
+      provider: 'jina',
+      maxResults: 5,
+      maxContentLength: 8000,
+      timeoutMs: 30_000
+    },
     capabilityPolicy: {
       defaultAppCapabilities: [],
       globalGrants: []

@@ -9,6 +9,8 @@ import {
   AI_READ_FILE_TOOL_NAME,
   AI_RUN_SCRIPT_TOOL_NAME,
   AI_SEARCH_TEXT_TOOL_NAME,
+  AI_WEB_SEARCH_TOOL_NAME,
+  AI_WEB_FETCH_TOOL_NAME,
   normalizeAiInternalToolNames
 } from './internal-tools'
 import { AI_RUN_COMMAND_TOOL_NAME } from './run-command-tool'
@@ -21,6 +23,8 @@ export const AI_TOOL_CAPABILITY_NAMES = [
   'fs.search',
   'patch.apply',
   'http.fetch',
+  'web.search',
+  'web.fetch',
   'git.status',
   'git.diff',
   'skill.activate'
@@ -84,6 +88,14 @@ const CAPABILITY_ALIAS_MAP: Record<string, AiToolCapabilityName> = {
   mulbysearchtext: 'fs.search',
   mulbyapplypatch: 'patch.apply',
   mulbyhttpfetch: 'http.fetch',
+  websearch: 'web.search',
+  mulbywebsearch: 'web.search',
+  searchinternet: 'web.search',
+  searchonline: 'web.search',
+  webfetch: 'web.fetch',
+  mulbywebfetch: 'web.fetch',
+  fetchwebpage: 'web.fetch',
+  readwebpage: 'web.fetch',
   mulbygitstatus: 'git.status',
   mulbygitdiff: 'git.diff',
   skillactivate: 'skill.activate',
@@ -140,6 +152,10 @@ function mapInternalToolToCapability(name: AiInternalToolName): AiToolCapability
       return 'patch.apply'
     case AI_HTTP_FETCH_TOOL_NAME:
       return 'http.fetch'
+    case AI_WEB_SEARCH_TOOL_NAME:
+      return 'web.search'
+    case AI_WEB_FETCH_TOOL_NAME:
+      return 'web.fetch'
     case AI_GIT_STATUS_TOOL_NAME:
       return 'git.status'
     case AI_GIT_DIFF_TOOL_NAME:
@@ -180,6 +196,10 @@ function mapCapabilityToInternalTools(capability: AiToolCapabilityName): AiInter
       return [AI_APPLY_PATCH_TOOL_NAME]
     case 'http.fetch':
       return [AI_HTTP_FETCH_TOOL_NAME]
+    case 'web.search':
+      return [AI_WEB_SEARCH_TOOL_NAME]
+    case 'web.fetch':
+      return [AI_WEB_FETCH_TOOL_NAME]
     case 'git.status':
       return [AI_GIT_STATUS_TOOL_NAME]
     case 'git.diff':

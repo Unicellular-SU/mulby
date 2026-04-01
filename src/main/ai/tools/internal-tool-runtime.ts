@@ -20,8 +20,11 @@ import {
   AI_READ_FILE_TOOL_NAME,
   AI_RUN_SCRIPT_TOOL_NAME,
   AI_SEARCH_TEXT_TOOL_NAME,
+  AI_WEB_SEARCH_TOOL_NAME,
+  AI_WEB_FETCH_TOOL_NAME,
   type AiInternalToolName
 } from './internal-tools'
+import { WebSearchService } from './web-search-service'
 
 const PATCH_DRY_RUN_TTL_MS = 10 * 60 * 1000
 
@@ -368,6 +371,10 @@ export class AiInternalToolRuntime {
           return await this.gitDiffTool(input.args, input.context)
         case AI_ACTIVATE_SKILL_TOOL_NAME:
           return await this.activateSkillTool(input.args, input.context)
+        case AI_WEB_SEARCH_TOOL_NAME:
+          return await this.webSearchTool(input.args)
+        case AI_WEB_FETCH_TOOL_NAME:
+          return await this.webFetchTool(input.args)
         default:
           return normalizeToolError(`Unsupported internal tool: ${input.name}`)
       }
@@ -1006,6 +1013,91 @@ export class AiInternalToolRuntime {
         internalTools: record.descriptor.mulbyExtensions?.internalTools || record.descriptor.internalTools || [],
         mcpPolicy: record.descriptor.mulbyExtensions?.mcpPolicy || record.descriptor.mcpPolicy || undefined
       }
+    }
+  }
+
+  // ==================== web_search / web_fetch ====================
+
+  private async webSearchTool(args: unknown): Promise<unknown> {
+    const params = (args && typeof args === 'object' ? args : {}) as Record<string, unknown>
+    const query = String(params.query || '').trim()
+    if (!query) {
+      return normalizeToolError('query is required')
+    }
+
+    const webSearchSettings = this.deps.getToolingSettings().webSearch
+    const service = new WebSearchService(webSearchSettings)
+
+    try {
+      const response = await service.search({
+        query,
+        maxResults: Number(params.maxResults) || undefined,
+        language: String(params.language || '').trim() || undefined
+      })
+
+      // 格式化为 AI 友好的输出
+      const formatted = response.results.map((r, i) => {
+        const parts = [`### ${i + 1}. ${r.title}`, `URL: ${r.url}`]
+        if (r.snippet) parts.push(`> ${r.snippet}`)
+        if (r.content) parts.push(r.content.slice(0, 500))
+        return parts.join('\n')
+      })
+
+      return {
+        success: true,
+        query: response.query,
+        resultCount: response.results.length,
+        content: formatted.join('\n\n---\n\n') || 'No results found'
+      }
+    } catch (error) {
+      return normalizeToolError(error)
+    }
+  }
+
+  private async webFetchTool(args: unknown): Promise<unknown> {
+    const params = (args && typeof args === 'object' ? args : {}) as Record<string, unknown>
+    const url = String(params.url || '').trim()
+    if (!url) {
+      return normalizeToolError('url is required')
+    }
+
+    // 验证 URL 协议
+    try {
+      const parsed = new URL(url)
+      if (!['http:', 'https:'].includes(parsed.protocol)) {
+        return normalizeToolError('Only http and https URLs are supported')
+      }
+    } catch {
+      return normalizeToolError(`Invalid URL: ${url}`)
+    }
+
+    // 复用完整 HTTP deny 策略（denyHosts + denyCidrs + denyUrlPrefixes）
+    const httpSettings = this.deps.getToolingSettings().http
+    try {
+      await assertHttpUrlAllowed(url, httpSettings)
+    } catch (error) {
+      return normalizeToolError(error)
+    }
+
+    const webSearchSettings = this.deps.getToolingSettings().webSearch
+    const service = new WebSearchService(webSearchSettings)
+
+    try {
+      const response = await service.fetch({
+        url,
+        maxLength: Number(params.maxLength) || undefined
+      })
+
+      return {
+        success: true,
+        url: response.url,
+        title: response.title,
+        format: response.format,
+        truncated: response.truncated,
+        content: response.content
+      }
+    } catch (error) {
+      return normalizeToolError(error)
     }
   }
 }

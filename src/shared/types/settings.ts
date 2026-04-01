@@ -123,6 +123,23 @@ export interface AiToolGitSettings {
   maxDiffBytes: number
 }
 
+export type AiToolWebSearchProvider = 'jina' | 'tavily'
+
+export interface AiToolWebSearchSettings {
+  /** 搜索后端：jina（免费默认）或 tavily（需要 API Key） */
+  provider: AiToolWebSearchProvider
+  /** 搜索最大结果数 */
+  maxResults: number
+  /** web_fetch 返回内容最大字符数 */
+  maxContentLength: number
+  /** 搜索/抓取超时（毫秒） */
+  timeoutMs: number
+  /** Jina API Key（可选，免费 tier 有 rate limit） */
+  jinaApiKey?: string
+  /** Tavily API Key（选择 tavily provider 时必填） */
+  tavilyApiKey?: string
+}
+
 export type AiToolCapabilityGrantDecision = 'allow' | 'deny'
 
 export interface AiToolCapabilityGrant {
@@ -149,6 +166,7 @@ export interface AiToolingSettings {
   http: AiToolHttpSettings
   runScript: AiToolRunScriptSettings
   git: AiToolGitSettings
+  webSearch: AiToolWebSearchSettings
   capabilityPolicy: AiToolCapabilityPolicySettings
 }
 

@@ -6,6 +6,8 @@ export const AI_LIST_DIR_TOOL_NAME = 'mulby_list_dir'
 export const AI_SEARCH_TEXT_TOOL_NAME = 'mulby_search_text'
 export const AI_APPLY_PATCH_TOOL_NAME = 'mulby_apply_patch'
 export const AI_HTTP_FETCH_TOOL_NAME = 'mulby_http_fetch'
+export const AI_WEB_SEARCH_TOOL_NAME = 'mulby_web_search'
+export const AI_WEB_FETCH_TOOL_NAME = 'mulby_web_fetch'
 export const AI_RUN_SCRIPT_TOOL_NAME = 'mulby_run_script'
 export const AI_GIT_STATUS_TOOL_NAME = 'mulby_git_status'
 export const AI_GIT_DIFF_TOOL_NAME = 'mulby_git_diff'
@@ -18,6 +20,8 @@ export const AI_INTERNAL_TOOL_NAMES = [
   AI_SEARCH_TEXT_TOOL_NAME,
   AI_APPLY_PATCH_TOOL_NAME,
   AI_HTTP_FETCH_TOOL_NAME,
+  AI_WEB_SEARCH_TOOL_NAME,
+  AI_WEB_FETCH_TOOL_NAME,
   AI_RUN_SCRIPT_TOOL_NAME,
   AI_GIT_STATUS_TOOL_NAME,
   AI_GIT_DIFF_TOOL_NAME,
@@ -202,6 +206,27 @@ export function buildAiInternalTool(name: AiInternalToolName): AiTool {
         required: ['name'],
         properties: {
           name: { type: 'string', description: 'Skill name from the <available_skills> list.' }
+        }
+      })
+    case AI_WEB_SEARCH_TOOL_NAME:
+      return createInternalTool({
+        name,
+        description: 'Search the internet for current information, news, documentation, and real-time data. Returns structured results with titles, URLs, and content snippets in Markdown format.',
+        required: ['query'],
+        properties: {
+          query: { type: 'string', description: 'Search query string.' },
+          maxResults: { type: 'number', description: 'Max number of results. Default 5.' },
+          language: { type: 'string', description: 'Preferred language for results, e.g. zh-CN, en. Optional.' }
+        }
+      })
+    case AI_WEB_FETCH_TOOL_NAME:
+      return createInternalTool({
+        name,
+        description: 'Fetch a web page URL and extract its main content as clean Markdown text. Ideal for reading articles, documentation, and web pages. Strips ads, navigation, and other noise. Always returns Markdown format.',
+        required: ['url'],
+        properties: {
+          url: { type: 'string', description: 'HTTP/HTTPS URL to fetch.' },
+          maxLength: { type: 'number', description: 'Max content length in characters. Default 8000.' }
         }
       })
     default:

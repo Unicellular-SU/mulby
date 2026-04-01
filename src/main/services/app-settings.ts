@@ -122,6 +122,12 @@ const DEFAULT_SETTINGS: AppSettings = {
       allowedRepoRoots: [process.cwd()],
       maxDiffBytes: 1024 * 1024
     },
+    webSearch: {
+      provider: 'jina',
+      maxResults: 5,
+      maxContentLength: 8000,
+      timeoutMs: 30_000
+    },
     capabilityPolicy: {
       defaultAppCapabilities: [
         'shell.exec',
@@ -131,6 +137,8 @@ const DEFAULT_SETTINGS: AppSettings = {
         'fs.search',
         'patch.apply',
         'http.fetch',
+        'web.search',
+        'web.fetch',
         'git.status',
         'git.diff'
       ],
@@ -380,11 +388,30 @@ function normalizeCapabilityPolicySettings(input: Partial<AiToolCapabilityPolicy
       .map((item, index) => normalizeCapabilityGrant(item, index))
       .filter((item): item is AiToolCapabilityGrant => !!item)
     : []
+
+  // 归一化用户已持久化的能力列表
+  const userCapabilities = normalizeStringList(
+    current.defaultAppCapabilities,
+    DEFAULT_SETTINGS.aiTooling.capabilityPolicy.defaultAppCapabilities.length
+  )
+
+  // 设置迁移：只自动追加「此版本真正新增」的能力，不影响用户主动移除过的旧能力。
+  // LEGACY_KNOWN 是在引入 web.search / web.fetch 之前就存在的所有能力名，
+  // 如果用户的列表中缺少这些旧能力，说明是用户主动移除的，不应自动恢复。
+  const LEGACY_KNOWN = new Set([
+    'shell.exec', 'shell.script', 'fs.read', 'fs.list', 'fs.search',
+    'patch.apply', 'http.fetch', 'git.status', 'git.diff', 'skill.activate'
+  ])
+  const userSet = new Set(userCapabilities.map((c) => c.toLowerCase()))
+  const defaults = DEFAULT_SETTINGS.aiTooling.capabilityPolicy.defaultAppCapabilities
+  // 只追加不在 LEGACY_KNOWN 中且用户列表中不存在的能力（即真正的新功能）
+  const newCapabilities = defaults.filter(
+    (c) => !userSet.has(c.toLowerCase()) && !LEGACY_KNOWN.has(c)
+  )
+  const mergedCapabilities = [...userCapabilities, ...newCapabilities]
+
   return {
-    defaultAppCapabilities: normalizeStringList(
-      current.defaultAppCapabilities,
-      DEFAULT_SETTINGS.aiTooling.capabilityPolicy.defaultAppCapabilities.length
-    ),
+    defaultAppCapabilities: mergedCapabilities,
     globalGrants: normalizedGlobalGrants
   }
 }
@@ -399,12 +426,18 @@ function normalizeAiToolingSettings(input: Partial<AiToolingSettings> | undefine
   const http = current.http || DEFAULT_SETTINGS.aiTooling.http
   const runScript = current.runScript || DEFAULT_SETTINGS.aiTooling.runScript
   const git = current.git || DEFAULT_SETTINGS.aiTooling.git
+  const webSearch = current.webSearch || DEFAULT_SETTINGS.aiTooling.webSearch
   const capabilityPolicy = normalizeCapabilityPolicySettings(current.capabilityPolicy)
   const scriptEntries = Array.isArray(runScript.entries)
     ? runScript.entries
       .map((entry, index) => normalizeScriptEntry(entry, index))
       .filter((entry): entry is AiToolScriptEntry => !!entry)
     : []
+
+  const validWebSearchProviders = ['jina', 'tavily'] as const
+  const webSearchProvider = validWebSearchProviders.includes(webSearch.provider as typeof validWebSearchProviders[number])
+    ? webSearch.provider as typeof validWebSearchProviders[number]
+    : DEFAULT_SETTINGS.aiTooling.webSearch.provider
 
   return {
     enabled: current.enabled !== false,
@@ -435,6 +468,14 @@ function normalizeAiToolingSettings(input: Partial<AiToolingSettings> | undefine
     git: {
       allowedRepoRoots: normalizePathList(git.allowedRepoRoots, DEFAULT_SETTINGS.aiTooling.git.allowedRepoRoots),
       maxDiffBytes: Math.max(8 * 1024, Math.min(Number(git.maxDiffBytes || DEFAULT_SETTINGS.aiTooling.git.maxDiffBytes), 20 * 1024 * 1024))
+    },
+    webSearch: {
+      provider: webSearchProvider,
+      maxResults: Math.max(1, Math.min(Number(webSearch.maxResults || DEFAULT_SETTINGS.aiTooling.webSearch.maxResults), 20)),
+      maxContentLength: Math.max(500, Math.min(Number(webSearch.maxContentLength || DEFAULT_SETTINGS.aiTooling.webSearch.maxContentLength), 50_000)),
+      timeoutMs: Math.max(5000, Math.min(Number(webSearch.timeoutMs || DEFAULT_SETTINGS.aiTooling.webSearch.timeoutMs), 120_000)),
+      jinaApiKey: String(webSearch.jinaApiKey || '').trim() || undefined,
+      tavilyApiKey: String(webSearch.tavilyApiKey || '').trim() || undefined
     },
     capabilityPolicy
   }
