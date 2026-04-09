@@ -1,29 +1,26 @@
-# Task Plan: Agent Skills 官方规范一次性达标改造
+# Task Plan: Review current code changes
 
 ## Goal
-使项目 `src/main/ai` 的 Skills 设计与运行链路符合 `agentskills.io` 官方定义与规范，并完成单测与 UI 验收。
+Inspect all staged, unstaged, and untracked changes and return prioritized actionable findings for newly introduced bugs.
 
 ## Phases
-- [x] Phase 1: 规范模型与校验器（严格 frontmatter + 字段约束）
-- [x] Phase 2: Skills 服务链路改造（创建/安装/导入/刷新/解析全入口硬校验）
-- [x] Phase 3: 渐进披露与注入策略（启动仅元数据，激活再加载正文）
-- [x] Phase 4: metadata 命名空间落地（`metadata.mulby.*` 承载扩展能力）
-- [x] Phase 5: IPC/预加载/UI 适配（错误语义、状态展示、创建约束）
-- [x] Phase 6: 测试与文档收口（新增规范测试 + 全量回归）
+- [x] Phase 1: Plan and setup
+- [x] Phase 2: Research/gather information
+- [x] Phase 3: Analyze findings
+- [ ] Phase 4: Review and deliver
 
 ## Key Questions
-1. 不合规 Skill 处理策略？（已定：立即硬校验，直接拒绝）
-2. 交付范围？（已定：全量一次到位，不做迁移工具）
-3. 扩展字段放置策略？（已定：`metadata` 命名空间）
+1. Which files changed, and what logic was introduced?
+2. Do the changes introduce discrete, actionable bugs that the author would want to fix?
+3. Are any issues severe enough to make the patch incorrect?
 
 ## Decisions Made
-- 官方字段严格对齐：`name`、`description`、`license`、`compatibility`、`metadata`、`allowed-tools`。
-- 平台扩展字段迁移到 `metadata.mulby.*`，不再写入顶层。
-- 启动扫描只解析 frontmatter；正文在技能激活时按需读取。
-- 全链路阻断不合规技能，提供可读错误信息。
+- Use git status and diffs to inspect staged, unstaged, and untracked files.
+- Record candidate issues in notes.md before writing the final review output.
+- Keep final findings limited to issues that are clearly introduced and likely fix-worthy.
 
 ## Errors Encountered
-- 暂无
+- None.
 
 ## Status
-**Completed** - 官方规范改造已完成，`test:unit` 与 `typecheck` 均通过。
+**Currently in Phase 4** - Preparing the final prioritized review output.

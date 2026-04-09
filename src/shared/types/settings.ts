@@ -145,6 +145,8 @@ export interface LocalSearchEngineConfig {
   titleSelector: string
   /** 链接选择器（相对于 resultSelector） */
   linkSelector: string
+  /** 摘要/描述选择器（相对于 resultSelector），用于提取搜索引擎给出的结果摘要 */
+  snippetSelector?: string
   /** 可选的 URL 解码策略，如 Bing 需要 'bing-redirect' */
   urlDecoder?: string
   /** 是否内置（不可删除） */
@@ -201,6 +203,12 @@ export interface AiToolWebSearchSettings {
   localEngines: LocalSearchEngineConfig[]
   /** 用户自定义 API Provider 列表 */
   customApis: CustomSearchApiConfig[]
+  /** 本地搜索是否自动获取各结果链接正文（默认 true） */
+  fetchContent?: boolean
+  /** 每条结果正文最大字符数（默认 2000） */
+  maxContentPerResult?: number
+  /** 搜索结果域名黑名单（匹配的 URL 将被过滤，如 ['pinterest.com'] ） */
+  resultDenyHosts?: string[]
 
   // ---- 旧字段（仅用于迁移，归一化后丢弃） ----
   /** @deprecated 使用 activeProvider 替代 */

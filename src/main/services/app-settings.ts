@@ -45,12 +45,24 @@ const DEFAULT_RUN_COMMAND_MASK_ENV_KEYS = [
 
 const DEFAULT_LOCAL_ENGINES: LocalSearchEngineConfig[] = [
   {
+    id: 'local-ddg',
+    name: 'DuckDuckGo',
+    urlTemplate: 'https://html.duckduckgo.com/html/?q=%s',
+    resultSelector: '#links .result',
+    titleSelector: '.result__a',
+    linkSelector: '.result__a',
+    snippetSelector: '.result__snippet',
+    urlDecoder: 'ddg-redirect',
+    builtin: true
+  },
+  {
     id: 'local-bing',
     name: 'Bing',
-    urlTemplate: 'https://cn.bing.com/search?q=%s&ensearch=1',
-    resultSelector: '#b_results h2',
-    titleSelector: 'a',
-    linkSelector: 'a',
+    urlTemplate: 'https://www.bing.com/search?q=%s',
+    resultSelector: '#b_results li.b_algo',
+    titleSelector: 'h2 a',
+    linkSelector: 'h2 a',
+    snippetSelector: '.b_caption p, .b_caption .b_algoSlug',
     urlDecoder: 'bing-redirect',
     builtin: true
   },
@@ -61,6 +73,7 @@ const DEFAULT_LOCAL_ENGINES: LocalSearchEngineConfig[] = [
     resultSelector: '#search .MjjYud',
     titleSelector: 'h3',
     linkSelector: 'a',
+    snippetSelector: '[data-sncf] span, .VwiC3b',
     builtin: true
   }
 ]
@@ -147,13 +160,16 @@ const DEFAULT_SETTINGS: AppSettings = {
       maxDiffBytes: 1024 * 1024
     },
     webSearch: {
-      activeProvider: 'local-bing',
+      activeProvider: 'local-ddg',
       maxResults: 5,
       maxContentLength: 8000,
       timeoutMs: 30_000,
       providerKeys: {},
       localEngines: DEFAULT_LOCAL_ENGINES,
-      customApis: []
+      customApis: [],
+      fetchContent: true,
+      maxContentPerResult: 2000,
+      resultDenyHosts: []
     },
     capabilityPolicy: {
       defaultAppCapabilities: [
@@ -473,7 +489,7 @@ function normalizeWebSearchSettings(
       activeProvider = 'jina'
     } else {
       // 无 Key 的旧用户 → 回退到免费本地搜索
-      activeProvider = 'local-bing'
+      activeProvider = 'local-ddg'
     }
   }
 
@@ -499,7 +515,7 @@ function normalizeWebSearchSettings(
     ...customApis.map(a => `custom-${a.id}`)
   ])
   if (!allProviderIds.has(activeProvider)) {
-    activeProvider = 'local-bing'
+    activeProvider = 'local-ddg'
   }
 
   // ---- tavilyApiHost ----
@@ -513,7 +529,10 @@ function normalizeWebSearchSettings(
     providerKeys,
     tavilyApiHost,
     localEngines,
-    customApis
+    customApis,
+    fetchContent: raw.fetchContent !== false,
+    maxContentPerResult: Math.max(200, Math.min(Number(raw.maxContentPerResult || defaults.maxContentPerResult || 2000), 10_000)),
+    resultDenyHosts: normalizeStringList(raw.resultDenyHosts, 200)
   }
 }
 

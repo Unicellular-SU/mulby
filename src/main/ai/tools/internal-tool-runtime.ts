@@ -24,7 +24,7 @@ import {
   AI_WEB_FETCH_TOOL_NAME,
   type AiInternalToolName
 } from './internal-tools'
-import { WebSearchService } from './web-search-service'
+import { WebSearchService } from './web-search'
 import { SearchWindowService } from '../../services/search-window-service'
 
 const PATCH_DRY_RUN_TTL_MS = 10 * 60 * 1000
@@ -1041,7 +1041,7 @@ export class AiInternalToolRuntime {
       const formatted = response.results.map((r, i) => {
         const parts = [`### ${i + 1}. ${r.title}`, `URL: ${r.url}`]
         if (r.snippet) parts.push(`> ${r.snippet}`)
-        if (r.content) parts.push(r.content.slice(0, 500))
+        if (r.content) parts.push(r.content.slice(0, 2000))
         return parts.join('\n')
       })
 
@@ -1083,6 +1083,7 @@ export class AiInternalToolRuntime {
 
     const webSearchSettings = this.deps.getToolingSettings().webSearch
     const service = new WebSearchService(webSearchSettings)
+    service.setLocalExecutor(SearchWindowService.getInstance())
 
     try {
       const response = await service.fetch({
