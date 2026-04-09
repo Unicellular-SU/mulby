@@ -89,6 +89,22 @@ export default defineConfig({
             outDir: 'dist/preload'
           }
         }
+      },
+      {
+        entry: 'src/preload/web-parser.ts',
+        vite: {
+          build: {
+            outDir: 'dist/preload'
+          }
+        }
+      },
+      {
+        entry: 'src/preload/search-stealth.ts',
+        vite: {
+          build: {
+            outDir: 'dist/preload'
+          }
+        }
       }
     ])
   ],

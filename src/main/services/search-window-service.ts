@@ -1,88 +1,131 @@
 /**
  * 搜索窗口服务 — 管理隐藏 BrowserWindow 实现本地搜索引擎爬取
  *
- * 参考 Cherry Studio 的 SearchService 设计：
- * - 创建不可见的 BrowserWindow 加载搜索引擎页面
- * - 等待页面渲染完成后获取 DOM HTML
- * - 使用 cheerio 在 main 进程中解析搜索结果
+ * 架构设计（参考 Cherry Studio 并改进）：
+ * - 搜索结果解析和正文提取全部委派给 Parser Worker（隐藏 Renderer 进程）
+ * - Parser Worker 通过 @mozilla/readability + turndown 实现高质量正文提取
+ * - 主进程仅负责网络请求和窗口管理，不再进行任何 DOM 解析（零 Cheerio）
+ * - 比 Cherry Studio 更优：Parser Worker 独立于 UI，即使主窗口关闭也能后台搜索
  *
  * 实现 LocalSearchExecutor 接口，注入到 WebSearchService 中。
  */
-import { BrowserWindow, app, net } from 'electron'
-import * as cheerio from 'cheerio'
+import { BrowserWindow, app, ipcMain, net, session } from 'electron'
+import { join } from 'node:path'
 import type { LocalSearchExecutor, WebSearchResult } from '../ai/tools/web-search'
 
-// ==================== URL 解码策略 ====================
+// ==================== Parser Worker 管理 ====================
+
+/** Parser Worker 单例 — 持久化的隐藏 BrowserWindow */
+let parserWorker: BrowserWindow | null = null
+let parserReady = false
+let parserReadyResolve: (() => void) | null = null
+/** 可变的就绪 promise — ensureParserWorker 重建时会同步更新此引用 */
+let parserReadyPromise = new Promise<void>((resolve) => {
+  parserReadyResolve = resolve
+})
+
+/** ipcMain 监听器是否已注册（懒注册，避免非 Electron 环境 import 崩溃） */
+let ipcListenerRegistered = false
 
 /**
- * 解码 Bing 重定向 URL
+ * 懒注册 ipcMain 监听器 — 仅在 Electron 主进程环境首次调用时注册
  *
- * Bing 搜索结果链接格式: https://www.bing.com/ck/a?...&u=a1aHR0cHM6Ly93d3cuZXhhbXBsZS5jb20...
- * 'u' 参数包含 Base64 编码的原始 URL，前缀为 'a1'
+ * 避免在模块顶层执行 ipcMain.on()，因为在 Node 测试环境中 ipcMain 未定义。
  */
-function decodeBingRedirectUrl(bingUrl: string): string {
-  try {
-    const url = new URL(bingUrl)
-    const encodedUrl = url.searchParams.get('u')
-    if (!encodedUrl) return bingUrl
+function ensureIpcListener(): void {
+  if (ipcListenerRegistered) return
+  ipcListenerRegistered = true
 
-    // 移除 'a1' 前缀后解码 Base64
-    const base64Part = encodedUrl.substring(2)
-    const decoded = Buffer.from(base64Part, 'base64').toString('utf8')
-    if (decoded.startsWith('http')) return decoded
-    return bingUrl
-  } catch {
-    return bingUrl
-  }
+  ipcMain.on('web-parser:ready', () => {
+    parserReady = true
+    if (parserReadyResolve) {
+      parserReadyResolve()
+      parserReadyResolve = null
+    }
+    console.debug('[SearchWindow] Parser Worker 已就绪')
+  })
 }
 
 /**
- * 解码 DuckDuckGo 重定向 URL
+ * 初始化 Parser Worker
  *
- * DuckDuckGo HTML 版结果链接格式: //duckduckgo.com/l/?uddg=<encoded-url>&rut=...
- * 'uddg' 参数包含 URL-encoded 的原始 URL
+ * 创建一个极轻量的隐藏 BrowserWindow，加载 web-parser preload 脚本。
+ * 该窗口不加载任何页面，仅作为前端 DOM API 的执行环境。
  */
-function decodeDdgRedirectUrl(ddgUrl: string): string {
-  try {
-    // 直接链接（非重定向）直接返回
-    if (!ddgUrl.includes('duckduckgo.com/l/')) return ddgUrl
-    const url = new URL(ddgUrl, 'https://duckduckgo.com')
-    const target = url.searchParams.get('uddg')
-    if (target && target.startsWith('http')) return target
-    return ddgUrl
-  } catch {
-    return ddgUrl
+function ensureParserWorker(): BrowserWindow {
+  // 懒注册 ipcMain 监听器（确保在 Electron 主进程中才注册）
+  ensureIpcListener()
+
+  if (parserWorker && !parserWorker.isDestroyed()) {
+    return parserWorker
   }
+
+  // 重建时必须同步更新 parserReadyPromise 引用，
+  // 确保 withParserWorker() 等待的是新 promise 而非已废弃的旧 promise
+  parserReady = false
+  parserReadyPromise = new Promise<void>((resolve) => {
+    parserReadyResolve = resolve
+  })
+
+  parserWorker = new BrowserWindow({
+    width: 0,
+    height: 0,
+    show: false,
+    webPreferences: {
+      nodeIntegration: false,
+      contextIsolation: true,
+      preload: join(__dirname, '../preload/web-parser.js'),
+      // 隔离 session，不影响主应用
+      partition: 'persist:web-parser'
+    }
+  })
+
+  // 加载空白页以触发 preload 执行
+  parserWorker.loadURL('about:blank')
+
+  parserWorker.on('closed', () => {
+    parserWorker = null
+    parserReady = false
+  })
+
+  return parserWorker
 }
 
-const URL_DECODERS: Record<string, (url: string) => string> = {
-  'bing-redirect': decodeBingRedirectUrl,
-  'ddg-redirect': decodeDdgRedirectUrl
+/**
+ * 等待 Parser Worker 就绪后执行解析任务
+ */
+async function withParserWorker<T>(fn: (worker: BrowserWindow) => Promise<T>): Promise<T> {
+  const worker = ensureParserWorker()
+
+  // 等待 preload 加载完成（首次约 200ms，后续瞬间）
+  if (!parserReady) {
+    await Promise.race([
+      parserReadyPromise,
+      new Promise<void>((_, reject) =>
+        setTimeout(() => reject(new Error('Parser Worker 启动超时')), 10_000)
+      )
+    ])
+  }
+
+  return fn(worker)
 }
 
-// ==================== 启发式正文提取标签 ====================
+// ==================== 反检测常量 ====================
 
-/** 需要从 HTML 中移除的噪声标签 */
-const NOISE_TAGS = ['script', 'style', 'nav', 'header', 'footer', 'aside', 'iframe', 'noscript', 'svg', 'form']
+/** 伪装的 Edge 版本号（需与 search-stealth.ts 中保持一致） */
+const EDGE_VERSION = '136'
 
-/** 优先提取正文的语义选择器（按优先级排列） */
-const CONTENT_SELECTORS = [
-  'article',
-  'main',
-  '[role="main"]',
-  '.post-content',
-  '.article-content',
-  '.entry-content',
-  '.content',
-  '#content',
-  '.markdown-body',
-  '.post-body'
-]
+const SPOOFED_UA =
+  `Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/${EDGE_VERSION}.0.0.0 Safari/537.36 Edg/${EDGE_VERSION}.0.0.0`
 
 // ==================== 搜索窗口服务 ====================
 
 export class SearchWindowService implements LocalSearchExecutor {
   private static instance: SearchWindowService | null = null
+  /** 已完成 Cookie 预热的 host 集合（按域名隔离，避免 Bing 预热阻塞 Google 等引擎） */
+  private warmedHosts = new Set<string>()
+  /** 搜索 session 的 webRequest 拦截器是否已注册 */
+  private searchSessionConfigured = false
 
   static getInstance(): SearchWindowService {
     if (!SearchWindowService.instance) {
@@ -91,8 +134,99 @@ export class SearchWindowService implements LocalSearchExecutor {
     return SearchWindowService.instance
   }
 
+  constructor() {
+    // 预热 Parser Worker（app ready 后立即创建）
+    if (app.isReady()) {
+      ensureParserWorker()
+    } else {
+      app.once('ready', () => ensureParserWorker())
+    }
+  }
+
   /**
-   * 通过隐藏 BrowserWindow 加载搜索 URL，然后用 cheerio 解析 HTML
+   * 配置搜索专用 session 的请求头拦截器（仅执行一次）
+   *
+   * 使用 webRequest.onBeforeSendHeaders 替代 loadURL extraHeaders，
+   * 确保所有请求（包括页面内 XHR/子资源）的 UA 和 Client Hints 一致。
+   */
+  private configureSearchSession(ses: Electron.Session): void {
+    if (this.searchSessionConfigured) return
+    this.searchSessionConfigured = true
+
+    ses.setUserAgent(SPOOFED_UA)
+
+    ses.webRequest.onBeforeSendHeaders((details, callback) => {
+      const headers = { ...details.requestHeaders }
+      headers['User-Agent'] = SPOOFED_UA
+      headers['Accept-Language'] = 'zh-CN,zh;q=0.9,en;q=0.8,en-US;q=0.7'
+      headers['Sec-Ch-Ua'] = `"Chromium";v="${EDGE_VERSION}", "Microsoft Edge";v="${EDGE_VERSION}", "Not.A/Brand";v="99"`
+      headers['Sec-Ch-Ua-Mobile'] = '?0'
+      headers['Sec-Ch-Ua-Platform'] = '"macOS"'
+      callback({ requestHeaders: headers })
+    })
+
+    console.debug('[SearchWindow] 搜索 session 请求头拦截器已注册')
+  }
+
+  /** Bing 域名集合 — 仅对这些域名执行 Cookie 预热 */
+  private static readonly BING_HOSTS = new Set(['bing.com', 'cn.bing.com', 'www.bing.com'])
+
+  /**
+   * Cookie 预热 — 首次搜索前先访问目标搜索引擎首页获取会话 Cookie
+   *
+   * 全新 session 直接发起搜索请求是典型的机器人行为特征。
+   * 预热后，后续搜索请求会自动携带 Cookie（persist:search partition 持久化）。
+   *
+   * 仅对 Bing 域名执行预热（Bing 对 Cookie 缺失特别敏感），
+   * 其他引擎（Google 等）不需要此步骤。
+   */
+  private async warmSearchSession(ses: Electron.Session, targetUrl: string, timeoutMs: number): Promise<void> {
+    let targetHost: string
+    try {
+      targetHost = new URL(targetUrl).hostname
+    } catch {
+      return // URL 解析失败，跳过预热
+    }
+
+    // 仅对 Bing 域名执行预热
+    if (!SearchWindowService.BING_HOSTS.has(targetHost)) return
+    // 该 host 已预热过，跳过
+    if (this.warmedHosts.has(targetHost)) return
+
+    const warmUrl = `https://${targetHost}/`
+    const win = new BrowserWindow({
+      width: 1280,
+      height: 768,
+      show: false,
+      webPreferences: {
+        nodeIntegration: false,
+        contextIsolation: false,
+        preload: join(__dirname, '../preload/search-stealth.js'),
+        session: ses,
+      }
+    })
+
+    try {
+      await Promise.race([
+        win.loadURL(warmUrl),
+        new Promise<void>((_, reject) =>
+          setTimeout(() => reject(new Error('Session 预热超时')), Math.min(timeoutMs, 10_000))
+        )
+      ])
+      // 等待首页 JS 执行，确保 Cookie 被完整设置
+      await new Promise<void>((r) => setTimeout(r, 1000))
+      console.debug(`[SearchWindow] 搜索 session Cookie 预热完成: ${targetHost}`)
+    } catch (err) {
+      console.warn(`[SearchWindow] Session 预热失败（${targetHost}，不影响后续搜索）:`, err)
+    } finally {
+      // 无论成功/失败都标记为已预热，避免对不可达的 host 反复重试导致每次搜索延 10s
+      this.warmedHosts.add(targetHost)
+      if (!win.isDestroyed()) win.close()
+    }
+  }
+
+  /**
+   * 通过隐藏 BrowserWindow 加载搜索 URL，然后委派 Parser Worker 解析 HTML
    */
   async search(input: {
     urlTemplate: string
@@ -107,11 +241,7 @@ export class SearchWindowService implements LocalSearchExecutor {
     language?: string
   }): Promise<WebSearchResult[]> {
     const query = input.query
-
-    const searchUrl = input.urlTemplate.replace(
-      /%s/g,
-      encodeURIComponent(query)
-    )
+    const searchUrl = input.urlTemplate.replace(/%s/g, encodeURIComponent(query))
     console.debug(`[SearchWindow] 搜索: "${query}" → ${searchUrl}`)
 
     // DuckDuckGo HTML 版不需要 JS 渲染，用轻量 HTTP 请求替代 BrowserWindow
@@ -119,58 +249,30 @@ export class SearchWindowService implements LocalSearchExecutor {
       ? await this.fetchStaticHtml(searchUrl, input.timeoutMs)
       : await this.fetchRenderedHtml(searchUrl, input.timeoutMs)
 
-    // 2. 用 cheerio 解析搜索结果
-    const $ = cheerio.load(html)
-    const urlDecoder = input.urlDecoder ? URL_DECODERS[input.urlDecoder] : undefined
-    const results: WebSearchResult[] = []
-    const seenUrls = new Set<string>()
-
-    $(input.resultSelector).each((_i, el) => {
-      if (results.length >= input.maxResults) return false
-
-      const $el = $(el)
-      const $titleEl = $el.find(input.titleSelector).first()
-      const $linkEl = $el.find(input.linkSelector).first()
-
-      const title = $titleEl.text().trim()
-      let url = $linkEl.attr('href') || ''
-
-      if (!url || !title) return
-
-      // 应用 URL 解码策略
-      if (urlDecoder && url) {
-        url = urlDecoder(url)
-      }
-
-      // 过滤非 HTTP 链接
-      if (!url.startsWith('http')) return
-
-      // URL 去重（基于 origin + pathname）
-      const dedupeKey = this.getDedupeKey(url)
-      if (seenUrls.has(dedupeKey)) return
-      seenUrls.add(dedupeKey)
-
-      // 提取搜索引擎给出的 snippet 摘要
-      let snippet = ''
-      if (input.snippetSelector) {
-        snippet = $el.find(input.snippetSelector).first().text().trim()
-      }
-
-      results.push({
-        title,
-        url,
-        content: '', // 正文由后续 fetchContent 获取
-        snippet: snippet || undefined
-      })
+    // 委派给 Parser Worker 解析搜索结果（前端原生 DOMParser）
+    const parsed = await withParserWorker(async (worker) => {
+      return worker.webContents.executeJavaScript(`
+        window.webParser.parseSearchResults(${JSON.stringify({
+          html,
+          resultSelector: input.resultSelector,
+          titleSelector: input.titleSelector,
+          linkSelector: input.linkSelector,
+          snippetSelector: input.snippetSelector,
+          urlDecoder: input.urlDecoder,
+          maxResults: input.maxResults
+        })})
+      `)
     })
 
+    const results: WebSearchResult[] = (parsed || []).map((item: any) => ({
+      title: String(item.title || ''),
+      url: String(item.url || ''),
+      content: '', // 正文由后续 fetchContent 获取
+      snippet: item.snippet ? String(item.snippet) : undefined
+    }))
+
     if (results.length === 0) {
-      // 0 结果时输出 HTML 片段，帮助诊断选择器是否失效
-      const bodySnippet = $('body').text().trim().slice(0, 300)
-      console.warn(
-        `[SearchWindow] 选择器 "${input.resultSelector}" 未匹配到任何结果。` +
-        `页面前 300 字符: ${bodySnippet}`
-      )
+      console.warn(`[SearchWindow] 选择器 "${input.resultSelector}" 未匹配到任何结果`)
     } else {
       console.debug(`[SearchWindow] 解析完成: ${results.length} 条结果`)
     }
@@ -182,11 +284,7 @@ export class SearchWindowService implements LocalSearchExecutor {
    * 获取单个页面的正文内容
    *
    * 使用 Electron net.fetch 发起轻量 HTTP 请求获取 HTML，
-   * 然后用 cheerio 进行启发式正文提取。
-   *
-   * 注意：不使用 BrowserWindow，因为并发创建多个 BrowserWindow
-   * 会产生多个渲染器进程，可能导致 Electron 进程崩溃。
-   * 仅搜索引擎页面（需要 JS 渲染搜索结果）才使用 BrowserWindow。
+   * 然后委派 Parser Worker 使用 Readability + Turndown 提取并转为 Markdown。
    */
   async fetchContent(input: {
     url: string
@@ -211,80 +309,27 @@ export class SearchWindowService implements LocalSearchExecutor {
       }
 
       const html = await response.text()
-      return this.extractContent(html, input.maxLength)
+
+      // 委派给 Parser Worker 使用 Readability + Turndown 提取正文
+      const result = await withParserWorker(async (worker) => {
+        return worker.webContents.executeJavaScript(`
+          window.webParser.extractContent(${JSON.stringify({
+            html,
+            maxLength: input.maxLength
+          })})
+        `)
+      })
+
+      return {
+        content: result?.content || '',
+        title: result?.title || undefined
+      }
     } catch {
       // 超时、网络错误等，返回空内容（不影响搜索结果）
       return { content: '' }
     } finally {
       clearTimeout(timer)
     }
-  }
-
-  /**
-   * URL 去重 key：origin + pathname + search（保留 query 参数以区分不同页面）
-   *
-   * 仅忽略 fragment（#hash），因为 query 参数可能是页面身份的一部分
-   * （如 YouTube ?v=xxx、Google ?q=xxx 等）。
-   */
-  private getDedupeKey(url: string): string {
-    try {
-      const parsed = new URL(url)
-      // 去掉尾部斜杠统一格式，保留 search 参数
-      const pathname = parsed.pathname.replace(/\/+$/, '') || '/'
-      return `${parsed.origin}${pathname}${parsed.search}`.toLowerCase()
-    } catch {
-      return url.toLowerCase()
-    }
-  }
-
-  /**
-   * 从 HTML 中启发式提取正文内容
-   *
-   * 策略：
-   * 1. 移除 script/style/nav 等噪声标签
-   * 2. 优先取 article/main 等语义区块
-   * 3. 回退到 body 全文
-   * 4. 清理连续空白，截断到 maxLength
-   */
-  private extractContent(html: string, maxLength: number): { content: string; title?: string } {
-    const $ = cheerio.load(html)
-
-    // 提取 title
-    const title = $('title').text().trim() || undefined
-
-    // 移除噪声标签
-    for (const tag of NOISE_TAGS) {
-      $(tag).remove()
-    }
-
-    // 优先从语义容器提取
-    let contentText = ''
-    for (const selector of CONTENT_SELECTORS) {
-      const $container = $(selector).first()
-      if ($container.length > 0) {
-        contentText = $container.text().trim()
-        if (contentText.length > 100) break // 内容足够丰富则停止
-      }
-    }
-
-    // 回退到 body
-    if (contentText.length < 100) {
-      contentText = $('body').text().trim()
-    }
-
-    // 清理连续空白和空行
-    contentText = contentText
-      .replace(/\t/g, ' ')
-      .replace(/ {2,}/g, ' ')
-      .replace(/\n{3,}/g, '\n\n')
-      .trim()
-
-    // 截断到 maxLength
-    if (contentText.length > maxLength) {
-      contentText = contentText.slice(0, maxLength)
-    }
-
-    return { content: contentText, title }
   }
 
   /**
@@ -320,14 +365,20 @@ export class SearchWindowService implements LocalSearchExecutor {
   /**
    * 通过隐藏 BrowserWindow 加载 URL 并返回渲染后的完整 HTML
    *
-   * 使用固定的搜索专用 session，Cookie 在搜索间持久化。
-   * 这是必须的 — Bing 等搜索引擎面对无 Cookie 的「全新浏览器」会返回
-   * 同意页 / CAPTCHA / 首次访问版本，导致选择器匹配不到结果。
+   * 反检测策略：
+   * 1. Preload 脚本（search-stealth.js）— 在页面 JS 之前执行 stealth 补丁
+   * 2. session.webRequest.onBeforeSendHeaders — 统一所有请求的 UA 和 Client Hints
+   * 3. Cookie 持久化（persist:search）+ 首次预热 — 消除"全新浏览器"特征
    */
   private async fetchRenderedHtml(url: string, timeoutMs: number): Promise<string> {
-    const { session } = await import('electron')
     // 使用固定 partition 隔离搜索流量和主应用，同时保持搜索间 Cookie 持久化
     const ses = session.fromPartition('persist:search')
+
+    // 配置 session 级请求头拦截（仅首次）
+    this.configureSearchSession(ses)
+
+    // Cookie 预热 — 仅对 Bing 域名首次搜索前获取 MUID 等会话标识
+    await this.warmSearchSession(ses, url, timeoutMs)
 
     const win = new BrowserWindow({
       width: 1280,
@@ -335,20 +386,28 @@ export class SearchWindowService implements LocalSearchExecutor {
       show: false,
       webPreferences: {
         nodeIntegration: false,
-        contextIsolation: true,
+        // contextIsolation: false 使 preload 运行在页面主世界，
+        // 确保 stealth 补丁在搜索引擎 JS 之前生效。
+        // 安全性：该窗口隐藏且仅加载搜索引擎，nodeIntegration: false，无风险。
+        contextIsolation: false,
+        preload: join(__dirname, '../preload/search-stealth.js'),
         session: ses,
         devTools: !app.isPackaged
       }
     })
 
-    // 伪装浏览器 User-Agent，避免被搜索引擎拦截
-    win.webContents.userAgent =
-      'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36'
-
     try {
-      // loadURL 内部等待 did-finish-load；加超时保护防止页面永久挂起
+      // Sec-Fetch-* 仅用于主导航请求（子资源由 Chromium 自动生成正确值）
+      const extraHeaders = [
+        'Sec-Fetch-Dest: document',
+        'Sec-Fetch-Mode: navigate',
+        'Sec-Fetch-Site: none',
+        'Sec-Fetch-User: ?1',
+        'Upgrade-Insecure-Requests: 1'
+      ].join('\n')
+
       await Promise.race([
-        win.loadURL(url),
+        win.loadURL(url, { extraHeaders: extraHeaders + '\n' }),
         new Promise<void>((_, reject) =>
           setTimeout(() => reject(new Error('本地搜索页面加载超时')), timeoutMs)
         )
@@ -364,7 +423,6 @@ export class SearchWindowService implements LocalSearchExecutor {
 
       return html
     } finally {
-      // 确保窗口释放
       if (!win.isDestroyed()) {
         win.close()
       }

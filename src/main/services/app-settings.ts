@@ -58,7 +58,7 @@ const DEFAULT_LOCAL_ENGINES: LocalSearchEngineConfig[] = [
   {
     id: 'local-bing',
     name: 'Bing',
-    urlTemplate: 'https://www.bing.com/search?q=%s',
+    urlTemplate: 'https://cn.bing.com/search?q=%s',
     resultSelector: '#b_results li.b_algo',
     titleSelector: 'h2 a',
     linkSelector: 'h2 a',
