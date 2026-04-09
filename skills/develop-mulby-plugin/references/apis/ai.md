@@ -1042,7 +1042,6 @@ type AiAttachmentRef = {
 
 > 可用端：
 > - 渲染进程：`window.mulby.ai.tooling.webSearch`
-> - 插件后端：`context.api.ai.tooling.webSearch`
 
 ### tooling.webSearch.get()
 [Renderer]
@@ -1071,7 +1070,7 @@ await ai.tooling.webSearch.update({
 **返回值**: `Record<string, unknown>` - 更新后的完整配置
 
 ### tooling.webSearch.getSettings()
-[Renderer] [Backend]
+[Renderer]
 获取结构化的网络搜索配置，包含当前激活的 provider 和所有可用 provider 列表。
 
 ```javascript
@@ -1099,7 +1098,7 @@ const { activeProvider, providers } = await ai.tooling.webSearch.getSettings();
 ```
 
 ### tooling.webSearch.setActiveProvider(providerId)
-[Renderer] [Backend]
+[Renderer]
 切换当前激活的搜索 provider。会校验 `providerId` 合法性，非法值不会写入。
 
 ```javascript
