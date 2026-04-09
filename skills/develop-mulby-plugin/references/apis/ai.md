@@ -1118,7 +1118,19 @@ const result = await ai.tooling.webSearch.setActiveProvider('local-bing');
 }
 ```
 
-> **注意**：`web.search` / `web.fetch` 能力默认关闭。用户需在设置 → AI 能力策略中手动启用，或在 `ai.call()` 时显式传入 `capabilities: ['web.search', 'web.fetch']`。
+> **注意**：`web.search` / `web.fetch` 能力受宿主默认的安全策略限制（默认拦截）。要在插件侧主动开启此能力，不仅要在调用时声明需求，还必须通过 `toolingPolicy.capabilityAllowList` 进行**会话级越权放行**，否则会被拦截（Blocked by default policy）。
+>
+> 完整传参示例：
+> ```javascript
+> await ai.call({
+>   model: 'openai:gpt-4o',
+>   messages: [{ role: 'user', content: '今天的天气？' }],
+>   capabilities: ['web.search', 'web.fetch'], // 1. 声明本对话需要这些能力
+>   toolingPolicy: {
+>     capabilityAllowList: ['web.search', 'web.fetch'] // 2. 绕过宿主默认策略，强行对本会话放行
+>   }
+> });
+> ```
 
 ---
 
