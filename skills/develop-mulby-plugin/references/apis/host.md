@@ -5,18 +5,6 @@
 
 Host API 允许插件 UI 调用插件后端（UtilityProcess/Host）中的方法。
 
-## ⚠️ invoke 与 call 的区别
-
-> **这是最常见的混淆点**：`host.invoke` 和 `host.call` 目标完全不同。
-
-| | `host.invoke` | `host.call` |
-|---|---|---|
-| 调用目标 | Mulby **内置 API**（主进程） | 插件 **自定义方法**（UtilityProcess） |
-| method 格式 | `namespace.method`（如 `clipboard.readText`） | 纯方法名（如 `processData`） |
-| 使用场景 | 从 UI 直接调用系统 API（不常用） | 从 UI 调用插件后端逻辑（**常用**） |
-
-> **绝大多数情况下你只需要 `host.call`**。`host.invoke` 仅用于从 UI 窗口中直接调用 Mulby 系统 API（如 `clipboard.readText`），通常不需要这样做，因为渲染进程已有 `window.mulby.clipboard` 可用。
-
 ## API 方法
 
 ### host.invoke(pluginName, method, ...args)
@@ -264,4 +252,3 @@ export default function App() {
 4. **错误处理** - 在方法内部捕获错误，返回明确的错误信息
 5. **类型安全** - 使用 TypeScript 定义清晰的参数和返回类型
 6. **异步操作** - 所有方法都应该是 async 函数，即使不需要异步操作
-7. **后端 API 全部异步** - 在后端 `context.api.*` 中，所有方法调用都经过 IPC 代理，**实际返回 `Promise`**。即使类型签名看起来是同步的，也必须用 `await` 调用

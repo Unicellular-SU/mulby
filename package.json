@@ -15,8 +15,9 @@
     "lint": "eslint src",
     "typecheck": "tsc --noEmit",
     "check:api-docs": "node scripts/check-api-docs.mjs",
+    "sync:api-docs": "node scripts/sync-skill-docs.mjs",
     "test:unit": "node scripts/run-unit-tests.mjs",
-    "verify:app": "npm run typecheck && npm run lint && npm run check:api-docs && npm run test:unit && npm run build:smoke",
+    "verify:app": "npm run typecheck && npm run lint && npm run check:api-docs && npm run sync:api-docs && npm run test:unit && npm run build:smoke",
     "verify:cli": "npm run verify --prefix packages/mulby-cli",
     "verify:repo": "npm run verify:app && npm run verify:cli",
     "verify": "npm run verify:app"

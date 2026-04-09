@@ -27,16 +27,6 @@
 [Renderer]
 设置窗口置顶状态。
 
-### setOpacity(opacity)
-[Renderer]
-设置窗口透明度（0.0 完全透明 ~ 1.0 完全不透明）。返回 `Promise<void>`。
-
-> macOS 和 Windows 支持，Linux 不支持。
-
-### getOpacity()
-[Renderer]
-获取当前窗口透明度，返回 `Promise<number>`。
-
 ### detach()
 [Renderer]
 将插件窗口分离为独立窗口。
@@ -59,7 +49,7 @@
 
 ### getState()
 [Renderer]
-获取窗口状态：`{ isMaximized: boolean; isAlwaysOnTop: boolean; opacity: number }`。
+获取窗口状态：`{ isMaximized: boolean; isAlwaysOnTop: boolean }`。
 
 ### minimize()
 [Renderer]
@@ -77,24 +67,6 @@
 [Renderer]
 创建子窗口并返回控制句柄。
 
-**options 参数：**
-
-| 字段 | 类型 | 说明 |
-|------|------|------|
-| width | number | 窗口宽度 |
-| height | number | 窗口高度 |
-| title | string | 窗口标题 |
-| type | string | 窗口类型：`default`（带标题栏）、`borderless`（无边框）、`fullscreen`（全屏） |
-| titleBar | boolean | 是否显示 Mulby 标题栏（覆盖 manifest 设置） |
-| fullscreen | boolean | 是否全屏 |
-| alwaysOnTop | boolean | 是否置顶 |
-| resizable | boolean | 是否可调大小 |
-| x / y | number | 窗口位置 |
-| minWidth / minHeight | number | 最小尺寸 |
-| maxWidth / maxHeight | number | 最大尺寸 |
-| opacity | number | 初始透明度（0.0 ~ 1.0，运行时可通过 `setOpacity` 调整） |
-| transparent | boolean | 窗口背景透明（配合 CSS `background: transparent` 实现穿透效果，仅创建时生效） |
-
 ```typescript
 interface ChildWindowHandle {
   id: number;
@@ -105,49 +77,8 @@ interface ChildWindowHandle {
   setTitle(title: string): Promise<void>;
   setSize(width: number, height: number): Promise<void>;
   setPosition(x: number, y: number): Promise<void>;
-  setOpacity(opacity: number): Promise<void>;
   postMessage(channel: string, ...args: unknown[]): Promise<void>;
 }
-```
-
-**示例：**
-
-```javascript
-// 创建标准子窗口
-const child = await window.mulby.window.create('/editor', { width: 800, height: 600 });
-
-// 创建无边框悬浮窗
-const floater = await window.mulby.window.create('/widget', {
-  type: 'borderless',
-  width: 300,
-  height: 200,
-  alwaysOnTop: true
-});
-
-// 创建全屏画板
-const canvas = await window.mulby.window.create('/canvas', {
-  type: 'fullscreen'
-});
-
-// 创建半透明悬浮窗
-const overlay = await window.mulby.window.create('/overlay', {
-  type: 'borderless',
-  width: 400,
-  height: 300,
-  alwaysOnTop: true,
-  opacity: 0.8,        // 整个窗口半透明
-});
-
-// 创建背景穿透窗口
-const transparent = await window.mulby.window.create('/widget', {
-  type: 'borderless',
-  transparent: true,    // CSS transparent 区域可穿透到桌面
-  width: 200,
-  height: 200,
-});
-
-// 运行时调整子窗口透明度
-overlay.setOpacity(0.5);
 ```
 
 ### sendToParent(channel, ...args)
@@ -169,6 +100,14 @@ overlay.setOpacity(0.5);
 ### startDrag(filePath)
 [Renderer]
 触发系统原生文件拖拽。
+
+### getOpacity()
+[Renderer]
+获取当前窗口透明度（0-1）。
+
+### setOpacity(opacity)
+[Renderer]
+设置窗口透明度（0-1）。
 
 ### onWindowStateChange(callback)
 [Renderer]
@@ -245,10 +184,4 @@ child?.postMessage('ready');
 
 await window.mulby.subInput.set('请输入...', true);
 window.mulby.subInput.onChange(({ text }) => console.log(text));
-
-// 透明度控制
-await window.mulby.window.setOpacity(0.9);
-const opacity = await window.mulby.window.getOpacity();
-const state = await window.mulby.window.getState();
-console.log(state.opacity); // 0.9
 ```

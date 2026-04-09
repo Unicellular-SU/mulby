@@ -824,11 +824,6 @@ type AiSettings = {
   skills?: {
     enabled: boolean;
     activeSkillIds: string[];
-    autoSelect?: {
-      enabled?: boolean;
-      maxSkillsPerCall?: number;
-      minScore?: number;
-    };
     records: AiSkillRecord[];
   };
 };
@@ -845,6 +840,7 @@ type AiMcpSelection = {
 type AiToolContext = {
   pluginName?: string;
   internalTag?: string;
+  requestId?: string;
   mcpScope?: {
     allowedServerIds?: string[];
     allowedToolIds?: string[];
@@ -906,7 +902,7 @@ type AiMcpServerLogEntry = {
 ### AiSkillSelection / AiSkillRecord / AiSkillPreview
 ```typescript
 type AiSkillSelection = {
-  mode?: 'off' | 'manual' | 'auto';
+  mode?: 'off' | 'manual' | 'progressive';
   skillIds?: string[];
   variables?: Record<string, string>;
 };
@@ -932,7 +928,6 @@ type AiSkillRecord = {
     author?: string;
     tags?: string[];
     triggerPhrases?: string[];
-    mode?: 'manual' | 'auto' | 'both';
     promptTemplate?: string;
     mcpPolicy?: {
       serverIds?: string[];
@@ -959,6 +954,7 @@ type AiSkillResolveResult = {
   selectedSkillIds: string[];
   selectedSkillNames: string[];
   selectedSkills?: Array<{ id: string; source: string; trustLevel: string }>;
+  availableSkillsPrompt?: string;
   systemPrompts: string[];
   mergedMcp?: AiMcpSelection;
   toolContextPatch?: AiToolContext['mcpScope'];
@@ -984,7 +980,6 @@ type AiSkillCreateWithAiInput = {
   replaceSkillId?: string;
   enabled?: boolean;
   trustLevel?: 'untrusted' | 'reviewed' | 'trusted';
-  modePreference?: 'manual' | 'auto' | 'both';
 };
 
 type AiSkillCreateWithAiResult = {
@@ -1040,6 +1035,90 @@ type AiAttachmentRef = {
   purpose?: string;
 };
 ```
+
+---
+
+## 网络搜索工具设置 (tooling.webSearch)
+
+> 可用端：
+> - 渲染进程：`window.mulby.ai.tooling.webSearch`
+> - 插件后端：`context.api.ai.tooling.webSearch`
+
+### tooling.webSearch.get()
+[Renderer]
+获取当前网络搜索原始配置。
+
+```javascript
+const config = await ai.tooling.webSearch.get();
+```
+
+**返回值**: `Record<string, unknown>`
+
+### tooling.webSearch.update(partial)
+[Renderer]
+更新网络搜索配置（部分更新）。
+
+```javascript
+await ai.tooling.webSearch.update({
+  activeProvider: 'local-bing',
+  maxResults: 10
+});
+```
+
+**参数**:
+- `partial` (Record<string, unknown>) - 需要更新的字段
+
+**返回值**: `Record<string, unknown>` - 更新后的完整配置
+
+### tooling.webSearch.getSettings()
+[Renderer] [Backend]
+获取结构化的网络搜索配置，包含当前激活的 provider 和所有可用 provider 列表。
+
+```javascript
+const { activeProvider, providers } = await ai.tooling.webSearch.getSettings();
+// activeProvider: 'local-ddg'
+// providers: [
+//   { id: 'local-ddg', name: 'DuckDuckGo', type: 'local' },
+//   { id: 'local-bing', name: 'Bing', type: 'local' },
+//   { id: 'local-google', name: 'Google', type: 'local' },
+//   { id: 'tavily', name: 'Tavily', type: 'api' },
+//   { id: 'jina', name: 'Jina', type: 'api' }
+// ]
+```
+
+**返回值**:
+```typescript
+{
+  activeProvider: string;
+  providers: Array<{
+    id: string;
+    name: string;
+    type: 'local' | 'api' | 'custom';
+  }>;
+}
+```
+
+### tooling.webSearch.setActiveProvider(providerId)
+[Renderer] [Backend]
+切换当前激活的搜索 provider。会校验 `providerId` 合法性，非法值不会写入。
+
+```javascript
+const result = await ai.tooling.webSearch.setActiveProvider('local-bing');
+// { success: true, activeProvider: 'local-bing' }
+```
+
+**参数**:
+- `providerId` (string) - 目标 provider ID（如 `local-ddg`、`tavily`、`custom-xxx`）
+
+**返回值**:
+```typescript
+{
+  success: boolean;
+  activeProvider: string;  // 操作后的实际 activeProvider
+}
+```
+
+> **注意**：`web.search` / `web.fetch` 能力默认关闭。用户需在设置 → AI 能力策略中手动启用，或在 `ai.call()` 时显式传入 `capabilities: ['web.search', 'web.fetch']`。
 
 ---
 

@@ -177,6 +177,33 @@ if (await system.isMacOS()) {
 
 **返回值**: `boolean`
 
+### onActiveWindowChange(callback)
+[Backend]
+监听系统前台活跃窗口变化。当用户切换前台应用时触发回调。
+
+```javascript
+const unsubscribe = system.onActiveWindowChange((info) => {
+  console.log(`前台应用: ${info.app}, 标题: ${info.title}`);
+});
+
+// 取消监听
+unsubscribe();
+```
+
+**参数**:
+- `callback` (function) - 回调函数，参数为 `ActiveWindowInfo`
+
+```typescript
+interface ActiveWindowInfo {
+  app: string;       // 应用名称 (如 "Safari", "Visual Studio Code")
+  title: string;     // 窗口标题
+  pid?: number;      // 进程 ID
+  bundleId?: string; // macOS Bundle ID (如 "com.apple.Safari")
+}
+```
+
+**返回值**: `() => void` - 取消监听函数
+
 ### 完整示例
 
 ```javascript

@@ -49,15 +49,8 @@ type CmdOver = {
   minLength?: number   // 最少字符数
   maxLength?: number   // 最多字符数（默认 10000）
 }
-type CmdWindow = {
-  type: 'window'
-  app?: string        // 应用名匹配："/regex/" 或精确字符串（不区分大小写）
-  title?: string      // 窗口标题匹配：同上
-  bundleId?: string   // macOS Bundle ID 精确匹配
-  label?: string      // 指令名称
-}
 
-type DynamicCmdInput = string | CmdKeyword | CmdRegex | CmdFiles | CmdImg | CmdOver | CmdWindow
+type DynamicCmdInput = string | CmdKeyword | CmdRegex | CmdFiles | CmdImg | CmdOver
 
 interface DynamicFeatureInput {
   code: string
@@ -80,7 +73,7 @@ interface DynamicFeature {
   route?: string
   mainHide?: boolean
   mainPush?: boolean
-  cmds: Array<CmdKeyword | CmdRegex | CmdFiles | CmdImg | CmdOver | CmdWindow>
+  cmds: Array<CmdKeyword | CmdRegex | CmdFiles | CmdImg | CmdOver>
 }
 ```
 
@@ -118,7 +111,7 @@ features.setFeature(feature: DynamicFeatureInput): void
 `cmds` 支持两种写法：
 
 - 字符串：会被视为 `keyword` 指令
-- 对象：使用 Mulby 的 `cmd` 结构（`keyword`/`regex`/`files`/`img`/`over`/`window`）
+- 对象：使用 Mulby 的 `cmd` 结构（`keyword`/`regex`/`files`/`img`/`over`）
 
 ### removeFeature
 [Backend]
@@ -172,31 +165,6 @@ api.features.setFeature({
 for (const code of ['today', 'settings', 'window']) {
   api.features.removeFeature(code)
 }
-```
-
-#### 注册窗口匹配指令（前台应用触发）
-
-```ts
-// 当用户从浏览器呼出 Mulby 时，该功能自动置顶
-api.features.setFeature({
-  code: 'browser-tools',
-  explain: '浏览器开发工具',
-  mode: 'ui',
-  cmds: [
-    { type: 'window', app: '/Chrome|Safari|Firefox/', label: '浏览器工具' },
-    { type: 'keyword', value: 'devtools' }
-  ]
-})
-
-// macOS 指定 Bundle ID 精确匹配
-api.features.setFeature({
-  code: 'vscode-helper',
-  explain: 'VS Code 辅助工具',
-  mode: 'ui',
-  cmds: [
-    { type: 'window', bundleId: 'com.microsoft.VSCode' }
-  ]
-})
 ```
 
 #### redirectHotKeySetting
