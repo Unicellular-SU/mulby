@@ -528,6 +528,13 @@ export interface AiApi {
     webSearch: {
       get: () => Promise<Record<string, unknown>>
       update: (partial: Record<string, unknown>) => Promise<Record<string, unknown>>
+      /** 获取当前网络搜索配置（含可用 provider 列表） */
+      getSettings: () => Promise<{
+        activeProvider: string
+        providers: Array<{ id: string; name: string; type: 'local' | 'api' | 'custom' }>
+      }>
+      /** 修改当前激活的搜索 provider */
+      setActiveProvider: (providerId: string) => Promise<{ success: boolean; activeProvider: string }>
     }
   }
 }

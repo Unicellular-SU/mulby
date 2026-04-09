@@ -31,6 +31,7 @@ import type {
   AiPromiseLike
 } from '../../shared/types/ai'
 import { commandRunnerService } from '../services/command-runner'
+import { appSettingsManager } from '../services/app-settings'
 import type {
   StorageListOptions,
   StorageSetManyItem,
@@ -501,6 +502,47 @@ ${item.files.map(p => `    <string>${p}</string>`).join('\n')}
           })
         },
         edit: async (input: { imageAttachmentId: string; prompt: string; model: string }) => await aiService.editImage(input)
+      },
+      // 网络搜索设置 API
+      tooling: {
+        webSearch: {
+          getSettings: async () => {
+            const settings = appSettingsManager.getSettings().aiTooling.webSearch
+            const providers: Array<{ id: string; name: string; type: 'local' | 'api' | 'custom' }> = []
+            for (const engine of settings.localEngines || []) {
+              providers.push({ id: engine.id, name: engine.name, type: 'local' })
+            }
+            // 内置 API Provider — 无论 key 是否已配置都列出
+            providers.push({ id: 'tavily', name: 'Tavily', type: 'api' })
+            providers.push({ id: 'jina', name: 'Jina', type: 'api' })
+            for (const api of settings.customApis || []) {
+              providers.push({ id: `custom-${api.id}`, name: api.name, type: 'custom' })
+            }
+            return { activeProvider: settings.activeProvider, providers }
+          },
+          setActiveProvider: async (providerId: string) => {
+            const current = appSettingsManager.getSettings()
+            const webSearch = current.aiTooling.webSearch
+            // tavily/jina 始终有效
+            const allProviderIds = new Set([
+              ...(webSearch.localEngines || []).map((e) => e.id),
+              'tavily',
+              'jina',
+              ...(webSearch.customApis || []).map((a) => `custom-${a.id}`)
+            ])
+            const normalizedId = String(providerId || '').trim()
+            if (!normalizedId || !allProviderIds.has(normalizedId)) {
+              return { success: false, activeProvider: webSearch.activeProvider }
+            }
+            const next = appSettingsManager.updateSettings({
+              aiTooling: {
+                ...current.aiTooling,
+                webSearch: { ...webSearch, activeProvider: normalizedId }
+              }
+            })
+            return { success: true, activeProvider: next.aiTooling.webSearch.activeProvider }
+          }
+        }
       }
     },
     // Task Scheduler API

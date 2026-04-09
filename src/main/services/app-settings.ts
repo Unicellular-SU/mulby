@@ -180,10 +180,9 @@ const DEFAULT_SETTINGS: AppSettings = {
         'fs.search',
         'patch.apply',
         'http.fetch',
-        'web.search',
-        'web.fetch',
         'git.status',
         'git.diff'
+        // 注意：web.search / web.fetch 默认关闭，用户需在设置中手动启用
       ],
       globalGrants: []
     }
@@ -433,9 +432,9 @@ function normalizeCapabilityPolicySettings(input: Partial<AiToolCapabilityPolicy
     : []
 
   // 归一化用户已持久化的能力列表
+  // 不限定 maxItems，使用 normalizeStringList 的默认上限（200），避免随默认列表变动而截断
   const userCapabilities = normalizeStringList(
-    current.defaultAppCapabilities,
-    DEFAULT_SETTINGS.aiTooling.capabilityPolicy.defaultAppCapabilities.length
+    current.defaultAppCapabilities
   )
 
   // 设置迁移：只自动追加「此版本真正新增」的能力，不影响用户主动移除过的旧能力。
@@ -443,7 +442,8 @@ function normalizeCapabilityPolicySettings(input: Partial<AiToolCapabilityPolicy
   // 如果用户的列表中缺少这些旧能力，说明是用户主动移除的，不应自动恢复。
   const LEGACY_KNOWN = new Set([
     'shell.exec', 'shell.script', 'fs.read', 'fs.list', 'fs.search',
-    'patch.apply', 'http.fetch', 'git.status', 'git.diff', 'skill.activate'
+    'patch.apply', 'http.fetch', 'git.status', 'git.diff', 'skill.activate',
+    'web.search', 'web.fetch' // 网络搜索默认关闭，不自动追加给已有用户
   ])
   const userSet = new Set(userCapabilities.map((c) => c.toLowerCase()))
   const defaults = DEFAULT_SETTINGS.aiTooling.capabilityPolicy.defaultAppCapabilities

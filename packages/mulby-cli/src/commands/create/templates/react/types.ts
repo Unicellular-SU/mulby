@@ -1263,6 +1263,21 @@ interface MulbyAi {
     abort(callId: string): Promise<boolean>
     getLogs(serverId: string): Promise<AiMcpServerLogEntry[]>
   }
+  tooling: {
+    webSearch: {
+      /** 获取当前网络搜索原始配置 */
+      get(): Promise<Record<string, unknown>>
+      /** 更新网络搜索配置（部分更新） */
+      update(partial: Record<string, unknown>): Promise<Record<string, unknown>>
+      /** 获取当前网络搜索配置（含可用 provider 列表） */
+      getSettings(): Promise<{
+        activeProvider: string
+        providers: Array<{ id: string; name: string; type: 'local' | 'api' | 'custom' }>
+      }>
+      /** 修改当前激活的搜索 provider */
+      setActiveProvider(providerId: string): Promise<{ success: boolean; activeProvider: string }>
+    }
+  }
 }
 
 interface FileStat {
@@ -1580,6 +1595,17 @@ interface BackendMulbyAi {
       onChunk: (chunk: AiImageGenerateProgressChunk) => void
     ): AiPromiseLike<{ images: string[]; tokens: AiTokenBreakdown }>
     edit(input: { imageAttachmentId: string; prompt: string; model: string }): Promise<{ images: string[]; tokens: AiTokenBreakdown }>
+  }
+  tooling: {
+    webSearch: {
+      /** 获取当前网络搜索配置（含可用 provider 列表） */
+      getSettings(): Promise<{
+        activeProvider: string
+        providers: Array<{ id: string; name: string; type: 'local' | 'api' | 'custom' }>
+      }>
+      /** 修改当前激活的搜索 provider */
+      setActiveProvider(providerId: string): Promise<{ success: boolean; activeProvider: string }>
+    }
   }
 }
 

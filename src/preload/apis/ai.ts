@@ -267,7 +267,9 @@ export function createAiApi(ipcRenderer: IpcRenderer) {
       tooling: {
         webSearch: {
           get: () => ipcRenderer.invoke('ai:tooling:webSearch:get'),
-          update: (partial: Record<string, unknown>) => ipcRenderer.invoke('ai:tooling:webSearch:update', partial)
+          update: (partial: Record<string, unknown>) => ipcRenderer.invoke('ai:tooling:webSearch:update', partial),
+          getSettings: () => ipcRenderer.invoke('ai:tooling:webSearch:getSettings'),
+          setActiveProvider: (providerId: string) => ipcRenderer.invoke('ai:tooling:webSearch:setActiveProvider', providerId)
         }
       }
     }

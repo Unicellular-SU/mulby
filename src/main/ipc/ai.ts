@@ -264,4 +264,56 @@ export function registerAiHandlers() {
     })
     return next.aiTooling.webSearch
   })
+
+  // 插件 API：获取结构化的搜索设置（含 provider 列表）
+  ipcMain.handle('ai:tooling:webSearch:getSettings', async () => {
+    const settings = appSettingsManager.getSettings().aiTooling.webSearch
+    const providers: Array<{ id: string; name: string; type: 'local' | 'api' | 'custom' }> = []
+
+    // 本地引擎
+    for (const engine of settings.localEngines || []) {
+      providers.push({ id: engine.id, name: engine.name, type: 'local' })
+    }
+    // 内置 API Provider — 无论 key 是否已配置都列出，用户可先选 provider 再填 key
+    providers.push({ id: 'tavily', name: 'Tavily', type: 'api' })
+    providers.push({ id: 'jina', name: 'Jina', type: 'api' })
+    // 自定义 API
+    for (const api of settings.customApis || []) {
+      providers.push({ id: `custom-${api.id}`, name: api.name, type: 'custom' })
+    }
+
+    return {
+      activeProvider: settings.activeProvider,
+      providers
+    }
+  })
+
+  // 插件 API：切换搜索 provider
+  ipcMain.handle('ai:tooling:webSearch:setActiveProvider', async (_event, providerId: string) => {
+    const current = appSettingsManager.getSettings()
+    const webSearch = current.aiTooling.webSearch
+
+    // 校验 providerId 是否合法 — tavily/jina 始终有效
+    const allProviderIds = new Set([
+      ...(webSearch.localEngines || []).map((e) => e.id),
+      'tavily',
+      'jina',
+      ...(webSearch.customApis || []).map((a) => `custom-${a.id}`)
+    ])
+    const normalizedId = String(providerId || '').trim()
+    if (!normalizedId || !allProviderIds.has(normalizedId)) {
+      return { success: false, activeProvider: webSearch.activeProvider }
+    }
+
+    const next = appSettingsManager.updateSettings({
+      aiTooling: {
+        ...current.aiTooling,
+        webSearch: {
+          ...webSearch,
+          activeProvider: normalizedId
+        }
+      }
+    })
+    return { success: true, activeProvider: next.aiTooling.webSearch.activeProvider }
+  })
 }
