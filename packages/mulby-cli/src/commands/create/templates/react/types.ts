@@ -330,6 +330,7 @@ interface MulbyApp {
   onOpenAiSettings(callback: () => void): Disposable
   onOpenAiMcpSettings(callback: () => void): Disposable
   onOpenAiSkillsSettings(callback: () => void): Disposable
+  onOpenAiToolsSettings(callback: () => void): Disposable
   onOpenPluginStore(callback: () => void): Disposable
   onOpenPluginManager(callback: () => void): Disposable
   onOpenBackgroundPlugins(callback: () => void): Disposable
@@ -1276,6 +1277,12 @@ interface MulbyAi {
       }>
       /** 修改当前激活的搜索 provider */
       setActiveProvider(providerId: string): Promise<{ success: boolean; activeProvider: string }>
+    }
+    pluginTools: {
+      /** 获取当前被禁用的插件工具列表 */
+      getDisabled(): Promise<string[]>
+      /** 设置被禁用的插件工具列表（全量替换） */
+      setDisabled(disabledList: string[]): Promise<string[]>
     }
   }
 }

@@ -1133,6 +1133,40 @@ const result = await ai.tooling.webSearch.setActiveProvider('local-bing');
 
 ---
 
+## 插件工具管理 (tooling.pluginTools)
+
+> 可用端：
+> - 渲染进程：`window.mulby.ai.tooling.pluginTools`
+
+### tooling.pluginTools.getDisabled()
+[Renderer]
+获取当前被禁用的插件工具列表。
+
+```javascript
+const disabled = await ai.tooling.pluginTools.getDisabled();
+// ['my-plugin:toolA', 'my-plugin:toolB']
+```
+
+**返回值**: `Promise<string[]>` - 禁用的插件工具 key 列表，格式为 `"pluginId:toolName"`
+
+### tooling.pluginTools.setDisabled(disabledList)
+[Renderer]
+设置被禁用的插件工具列表（全量替换）。
+
+```javascript
+const saved = await ai.tooling.pluginTools.setDisabled([
+  'my-plugin:toolA',
+  'another-plugin:someAction'
+]);
+```
+
+**参数**:
+- `disabledList` (string[]) - 要禁用的插件工具 key 列表，格式为 `"pluginId:toolName"`
+
+**返回值**: `Promise<string[]>` - 持久化后的禁用列表（归一化后）
+
+---
+
 ## 完整示例（多模态 + 流式）
 
 ```javascript
