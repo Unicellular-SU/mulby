@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import type {
   AppSettings,
-  AiToolCapabilityGrant,
   AppShortcutAction,
   CommandAuditItem,
   CommandRule,
@@ -18,8 +17,7 @@ import SecuritySection from './settings/sections/SecuritySection'
 import DeveloperSection from './settings/sections/DeveloperSection'
 import OpenClawSection from './settings/sections/OpenClawSection'
 import type { SettingsViewProps } from './settings/types'
-import { DEFAULT_APP_CAPABILITIES, PERMISSIONS, SECTION_ITEMS } from './settings/constants'
-import { parseListDraft } from './settings/utils'
+import { PERMISSIONS, SECTION_ITEMS } from './settings/constants'
 
 export default function SettingsView({
   section,
@@ -49,36 +47,12 @@ export default function SettingsView({
     mode: 'exact',
     value: ''
   })
-  const [filesystemRootDraft, setFilesystemRootDraft] = useState('')
-  const [patchRootDraft, setPatchRootDraft] = useState('')
-  const [gitRootDraft, setGitRootDraft] = useState('')
-  const [denyHostDraft, setDenyHostDraft] = useState('')
-  const [denyCidrDraft, setDenyCidrDraft] = useState('')
-  const [denyPrefixDraft, setDenyPrefixDraft] = useState('')
-  const [appCapabilityDraft, setAppCapabilityDraft] = useState('')
-  const [grantDraft, setGrantDraft] = useState<{
-    capability: string
-    decision: 'allow' | 'deny'
-    expiresAt: string
-  }>({
-    capability: 'shell.exec',
-    decision: 'deny',
-    expiresAt: ''
-  })
   const [inlineShortcutCommandHint, setInlineShortcutCommandHint] = useState('')
   const [inlineShortcutCommandTarget, setInlineShortcutCommandTarget] = useState<{
     pluginId: string
     featureCode: string
     cmdId: string
   } | null>(null)
-  const [runScriptDraft, setRunScriptDraft] = useState({
-    id: '',
-    command: '',
-    args: '',
-    cwd: '',
-    timeoutMs: '',
-    allowEnvKeys: ''
-  })
   const [appInfo, setAppInfo] = useState<{ name: string; version: string; userDataPath: string } | null>(null)
   const [openAtLoginState, setOpenAtLoginState] = useState<StartupOpenAtLoginState>({ supported: false, enabled: false })
   const [updateCenterState, setUpdateCenterState] = useState<UpdateCenterState | null>(null)
@@ -152,17 +126,6 @@ export default function SettingsView({
     }
     void loadAudit()
   }, [section, settings?.commandRunner.audit.records.length])
-
-  const visibleCapabilityGrants = useMemo(() => {
-    if (!settings) return []
-    return settings.aiTooling.capabilityPolicy.globalGrants || []
-  }, [settings])
-  const isDefaultAppCapabilitiesAtDefault = useMemo(() => {
-    if (!settings) return true
-    const current = settings.aiTooling.capabilityPolicy.defaultAppCapabilities || []
-    if (current.length !== DEFAULT_APP_CAPABILITIES.length) return false
-    return DEFAULT_APP_CAPABILITIES.every((value, index) => current[index] === value)
-  }, [settings])
 
   const updateSettings = async (partial: Partial<AppSettings>) => {
     const result = await window.mulby.settings.update(partial)
@@ -253,312 +216,6 @@ export default function SettingsView({
         ...settings.commandRunner,
         ...patch
       }
-    })
-  }
-
-  const updateAiTooling = async (patch: Partial<AppSettings['aiTooling']>) => {
-    if (!settings) return
-    await updateSettings({
-      aiTooling: {
-        ...settings.aiTooling,
-        ...patch
-      }
-    })
-  }
-
-  const updateAiFilesystem = async (patch: Partial<AppSettings['aiTooling']['filesystem']>) => {
-    if (!settings) return
-    await updateAiTooling({
-      filesystem: {
-        ...settings.aiTooling.filesystem,
-        ...patch
-      }
-    })
-  }
-
-  const updateAiPatch = async (patch: Partial<AppSettings['aiTooling']['patch']>) => {
-    if (!settings) return
-    await updateAiTooling({
-      patch: {
-        ...settings.aiTooling.patch,
-        ...patch
-      }
-    })
-  }
-
-  const updateAiGit = async (patch: Partial<AppSettings['aiTooling']['git']>) => {
-    if (!settings) return
-    await updateAiTooling({
-      git: {
-        ...settings.aiTooling.git,
-        ...patch
-      }
-    })
-  }
-
-  const updateAiHttp = async (patch: Partial<AppSettings['aiTooling']['http']>) => {
-    if (!settings) return
-    await updateAiTooling({
-      http: {
-        ...settings.aiTooling.http,
-        ...patch
-      }
-    })
-  }
-
-  const updateAiRunScript = async (patch: Partial<AppSettings['aiTooling']['runScript']>) => {
-    if (!settings) return
-    await updateAiTooling({
-      runScript: {
-        ...settings.aiTooling.runScript,
-        ...patch
-      }
-    })
-  }
-
-  const updateAiCapabilityPolicy = async (patch: Partial<AppSettings['aiTooling']['capabilityPolicy']>) => {
-    if (!settings) return
-    const current = settings.aiTooling.capabilityPolicy
-    await updateAiTooling({
-      capabilityPolicy: {
-        defaultAppCapabilities: patch.defaultAppCapabilities ?? current.defaultAppCapabilities,
-        globalGrants: patch.globalGrants ?? current.globalGrants
-      }
-    })
-  }
-
-  const addUniqueListItem = (list: string[], draft: string): string[] => {
-    const parsed = parseListDraft(draft)
-    if (parsed.length === 0) return list
-    const next = [...list]
-    const seen = new Set(list.map((item) => item.toLowerCase()))
-    for (const item of parsed) {
-      const token = item.toLowerCase()
-      if (seen.has(token)) continue
-      seen.add(token)
-      next.push(item)
-    }
-    return next
-  }
-
-  const addFilesystemRoot = async () => {
-    if (!settings) return
-    const next = addUniqueListItem(settings.aiTooling.filesystem.allowedRoots || [], filesystemRootDraft)
-    if (next.length === settings.aiTooling.filesystem.allowedRoots.length) return
-    await updateAiFilesystem({ allowedRoots: next })
-    setFilesystemRootDraft('')
-  }
-
-  const removeFilesystemRoot = async (value: string) => {
-    if (!settings) return
-    const next = (settings.aiTooling.filesystem.allowedRoots || []).filter((item) => item !== value)
-    await updateAiFilesystem({ allowedRoots: next })
-  }
-
-  const addPatchRoot = async () => {
-    if (!settings) return
-    const next = addUniqueListItem(settings.aiTooling.patch.allowedRoots || [], patchRootDraft)
-    if (next.length === settings.aiTooling.patch.allowedRoots.length) return
-    await updateAiPatch({ allowedRoots: next })
-    setPatchRootDraft('')
-  }
-
-  const removePatchRoot = async (value: string) => {
-    if (!settings) return
-    const next = (settings.aiTooling.patch.allowedRoots || []).filter((item) => item !== value)
-    await updateAiPatch({ allowedRoots: next })
-  }
-
-  const addGitRoot = async () => {
-    if (!settings) return
-    const next = addUniqueListItem(settings.aiTooling.git.allowedRepoRoots || [], gitRootDraft)
-    if (next.length === settings.aiTooling.git.allowedRepoRoots.length) return
-    await updateAiGit({ allowedRepoRoots: next })
-    setGitRootDraft('')
-  }
-
-  const removeGitRoot = async (value: string) => {
-    if (!settings) return
-    const next = (settings.aiTooling.git.allowedRepoRoots || []).filter((item) => item !== value)
-    await updateAiGit({ allowedRepoRoots: next })
-  }
-
-  const addHttpDenyHost = async () => {
-    if (!settings) return
-    const next = addUniqueListItem(settings.aiTooling.http.denyHosts || [], denyHostDraft)
-    if (next.length === settings.aiTooling.http.denyHosts.length) return
-    await updateAiHttp({ denyHosts: next })
-    setDenyHostDraft('')
-  }
-
-  const removeHttpDenyHost = async (value: string) => {
-    if (!settings) return
-    const next = (settings.aiTooling.http.denyHosts || []).filter((item) => item !== value)
-    await updateAiHttp({ denyHosts: next })
-  }
-
-  const addHttpDenyCidr = async () => {
-    if (!settings) return
-    const next = addUniqueListItem(settings.aiTooling.http.denyCidrs || [], denyCidrDraft)
-    if (next.length === settings.aiTooling.http.denyCidrs.length) return
-    await updateAiHttp({ denyCidrs: next })
-    setDenyCidrDraft('')
-  }
-
-  const removeHttpDenyCidr = async (value: string) => {
-    if (!settings) return
-    const next = (settings.aiTooling.http.denyCidrs || []).filter((item) => item !== value)
-    await updateAiHttp({ denyCidrs: next })
-  }
-
-  const addHttpDenyPrefix = async () => {
-    if (!settings) return
-    const next = addUniqueListItem(settings.aiTooling.http.denyUrlPrefixes || [], denyPrefixDraft)
-    if (next.length === settings.aiTooling.http.denyUrlPrefixes.length) return
-    await updateAiHttp({ denyUrlPrefixes: next })
-    setDenyPrefixDraft('')
-  }
-
-  const removeHttpDenyPrefix = async (value: string) => {
-    if (!settings) return
-    const next = (settings.aiTooling.http.denyUrlPrefixes || []).filter((item) => item !== value)
-    await updateAiHttp({ denyUrlPrefixes: next })
-  }
-
-  const addCapabilityToPolicyList = async (
-    key: 'defaultAppCapabilities',
-    draft: string,
-    reset: () => void
-  ) => {
-    if (!settings) return
-    const next = addUniqueListItem(settings.aiTooling.capabilityPolicy[key] || [], draft)
-    if (next.length === settings.aiTooling.capabilityPolicy[key].length) return
-    await updateAiCapabilityPolicy({ [key]: next })
-    reset()
-  }
-
-  const removeCapabilityFromPolicyList = async (
-    key: 'defaultAppCapabilities',
-    capability: string
-  ) => {
-    if (!settings) return
-    const next = (settings.aiTooling.capabilityPolicy[key] || []).filter((item) => item !== capability)
-    await updateAiCapabilityPolicy({ [key]: next })
-  }
-
-  const restoreDefaultAppCapabilities = async () => {
-    if (!settings) return
-    await updateAiCapabilityPolicy({
-      defaultAppCapabilities: [...DEFAULT_APP_CAPABILITIES]
-    })
-  }
-
-  const addCapabilityGrant = async () => {
-    if (!settings) return
-    const capability = grantDraft.capability.trim()
-    if (!capability) return
-
-    const exists = (settings.aiTooling.capabilityPolicy.globalGrants || []).some((item) =>
-      item.capability === capability &&
-      item.decision === grantDraft.decision
-    )
-    if (exists) return
-
-    const now = Date.now()
-    const expiresAtMs = grantDraft.expiresAt ? Date.parse(grantDraft.expiresAt) : undefined
-    const expiresAt = Number.isFinite(expiresAtMs || NaN) ? expiresAtMs : undefined
-
-    const nextGrant: AiToolCapabilityGrant = {
-      id: `grant-${now}-${Math.random().toString(36).slice(2, 8)}`,
-      capability,
-      decision: grantDraft.decision,
-      createdAt: now,
-      updatedAt: now,
-      expiresAt
-    }
-
-    await updateAiCapabilityPolicy({
-      globalGrants: [...(settings.aiTooling.capabilityPolicy.globalGrants || []), nextGrant]
-    })
-
-    setGrantDraft((prev) => ({
-      ...prev,
-      expiresAt: ''
-    }))
-  }
-
-  const removeCapabilityGrant = async (grantId: string) => {
-    if (!settings) return
-    const next = (settings.aiTooling.capabilityPolicy.globalGrants || []).filter((item) => item.id !== grantId)
-    await updateAiCapabilityPolicy({ globalGrants: next })
-  }
-
-  const patchCapabilityGrant = async (grantId: string, patch: Partial<AiToolCapabilityGrant>) => {
-    if (!settings) return
-    const now = Date.now()
-    const next = (settings.aiTooling.capabilityPolicy.globalGrants || []).map((item) => (
-      item.id === grantId
-        ? {
-          ...item,
-          ...patch,
-          updatedAt: now
-        }
-        : item
-    ))
-    await updateAiCapabilityPolicy({ globalGrants: next })
-  }
-
-  const updateRunScriptEntry = async (
-    index: number,
-    patch: Partial<AppSettings['aiTooling']['runScript']['entries'][number]>
-  ) => {
-    if (!settings) return
-    const entries = [...(settings.aiTooling.runScript.entries || [])]
-    if (!entries[index]) return
-    entries[index] = {
-      ...entries[index],
-      ...patch
-    }
-    await updateAiRunScript({ entries })
-  }
-
-  const removeRunScriptEntry = async (index: number) => {
-    if (!settings) return
-    const entries = (settings.aiTooling.runScript.entries || []).filter((_, i) => i !== index)
-    await updateAiRunScript({ entries })
-  }
-
-  const addRunScriptEntry = async () => {
-    if (!settings) return
-    const id = runScriptDraft.id.trim()
-    const command = runScriptDraft.command.trim()
-    if (!id || !command) return
-    const exists = (settings.aiTooling.runScript.entries || []).some((item) => item.id === id)
-    if (exists) return
-    const args = parseListDraft(runScriptDraft.args)
-    const allowEnvKeys = parseListDraft(runScriptDraft.allowEnvKeys)
-    const timeoutRaw = Number(runScriptDraft.timeoutMs)
-    const timeoutMs = Number.isFinite(timeoutRaw) && timeoutRaw > 0 ? timeoutRaw : undefined
-
-    const nextEntry: AppSettings['aiTooling']['runScript']['entries'][number] = {
-      id,
-      command,
-      args: args.length > 0 ? args : undefined,
-      cwd: runScriptDraft.cwd.trim() || undefined,
-      timeoutMs,
-      allowEnvKeys: allowEnvKeys.length > 0 ? allowEnvKeys : undefined
-    }
-
-    await updateAiRunScript({
-      entries: [...(settings.aiTooling.runScript.entries || []), nextEntry]
-    })
-    setRunScriptDraft({
-      id: '',
-      command: '',
-      args: '',
-      cwd: '',
-      timeoutMs: '',
-      allowEnvKeys: ''
     })
   }
 
@@ -814,53 +471,8 @@ export default function SettingsView({
                   setAllowRuleDraft={setAllowRuleDraft}
                   denyRuleDraft={denyRuleDraft}
                   setDenyRuleDraft={setDenyRuleDraft}
-                  filesystemRootDraft={filesystemRootDraft}
-                  setFilesystemRootDraft={setFilesystemRootDraft}
-                  patchRootDraft={patchRootDraft}
-                  setPatchRootDraft={setPatchRootDraft}
-                  gitRootDraft={gitRootDraft}
-                  setGitRootDraft={setGitRootDraft}
-                  denyHostDraft={denyHostDraft}
-                  setDenyHostDraft={setDenyHostDraft}
-                  denyCidrDraft={denyCidrDraft}
-                  setDenyCidrDraft={setDenyCidrDraft}
-                  denyPrefixDraft={denyPrefixDraft}
-                  setDenyPrefixDraft={setDenyPrefixDraft}
-                  appCapabilityDraft={appCapabilityDraft}
-                  setAppCapabilityDraft={setAppCapabilityDraft}
-                  grantDraft={grantDraft}
-                  setGrantDraft={setGrantDraft}
-                  runScriptDraft={runScriptDraft}
-                  setRunScriptDraft={setRunScriptDraft}
-                  visibleCapabilityGrants={visibleCapabilityGrants}
-                  isDefaultAppCapabilitiesAtDefault={isDefaultAppCapabilitiesAtDefault}
                   reloadSettings={reloadSettings}
                   updateCommandRunner={updateCommandRunner}
-                  updateAiTooling={updateAiTooling}
-                  updateAiFilesystem={updateAiFilesystem}
-                  updateAiHttp={updateAiHttp}
-                  updateAiRunScript={updateAiRunScript}
-                  restoreDefaultAppCapabilities={restoreDefaultAppCapabilities}
-                  removeCapabilityFromPolicyList={removeCapabilityFromPolicyList}
-                  addCapabilityToPolicyList={addCapabilityToPolicyList}
-                  addCapabilityGrant={addCapabilityGrant}
-                  removeCapabilityGrant={removeCapabilityGrant}
-                  patchCapabilityGrant={patchCapabilityGrant}
-                  addFilesystemRoot={addFilesystemRoot}
-                  removeFilesystemRoot={removeFilesystemRoot}
-                  addPatchRoot={addPatchRoot}
-                  removePatchRoot={removePatchRoot}
-                  addGitRoot={addGitRoot}
-                  removeGitRoot={removeGitRoot}
-                  addHttpDenyHost={addHttpDenyHost}
-                  removeHttpDenyHost={removeHttpDenyHost}
-                  addHttpDenyCidr={addHttpDenyCidr}
-                  removeHttpDenyCidr={removeHttpDenyCidr}
-                  addHttpDenyPrefix={addHttpDenyPrefix}
-                  removeHttpDenyPrefix={removeHttpDenyPrefix}
-                  updateRunScriptEntry={updateRunScriptEntry}
-                  removeRunScriptEntry={removeRunScriptEntry}
-                  addRunScriptEntry={addRunScriptEntry}
                   addCommandRule={addCommandRule}
                   removeCommandRule={removeCommandRule}
                   patchCommandRule={patchCommandRule}

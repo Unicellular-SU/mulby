@@ -7,7 +7,7 @@ export const SECTION_ITEMS: { id: SettingsSection; label: string }[] = [
   { id: 'commandQuickLaunch', label: '快捷启动' },
   { id: 'commandAll', label: '全部指令' },
   { id: 'permissions', label: '权限' },
-  { id: 'security', label: '工具与命令' },
+  { id: 'security', label: '命令安全' },
   { id: 'openclaw', label: 'OpenClaw' },
   { id: 'developer', label: '开发者' },
   { id: 'about', label: '关于' }

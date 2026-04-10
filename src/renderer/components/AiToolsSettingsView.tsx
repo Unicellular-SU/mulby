@@ -1,11 +1,21 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import type { AiToolWebSearchSettings, CustomSearchApiConfig } from '../../shared/types/settings'
+import type {
+  AiToolCapabilityGrant,
+  AiToolWebSearchSettings,
+  AppSettings,
+  CustomSearchApiConfig
+} from '../../shared/types/settings'
 import type { PluginInfo } from '../../shared/types/electron'
 import UnifiedSelect from './UnifiedSelect'
 import {
   SettingsLikePageHeader,
   SettingsLikePageShell
 } from './SettingsLikePageChrome'
+import CapabilityPolicy from './settings/sections/security/CapabilityPolicy'
+import RunScriptRegistry from './settings/sections/security/RunScriptRegistry'
+import { DEFAULT_APP_CAPABILITIES } from './settings/constants'
+import { parseListDraft } from './settings/utils'
+import type { GrantDraft, RunScriptDraft } from './settings/sections/security/types'
 
 // ===================== 常量 =====================
 
@@ -15,7 +25,7 @@ const BUILTIN_API_PROVIDERS = [
   { id: 'jina', label: 'Jina AI', description: '高质量页面抓取 + 搜索', keyPlaceholder: 's_...', docsUrl: 'https://jina.ai/api-dashboard/', docsLabel: 'jina.ai' }
 ] as const
 
-/** 左侧列表工具 ID: web-search 或 plugin:{pluginId} */
+/** 左侧列表 Section ID */
 type ToolSectionId = string
 
 /** 插件工具信息（从 PluginInfo 提取） */
@@ -51,6 +61,18 @@ const inputClass = 'w-full rounded-2xl border border-slate-200 bg-white px-4 py-
 const actionButtonClass = 'rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-700 transition hover:border-slate-300 hover:text-slate-900 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-200 disabled:cursor-not-allowed disabled:opacity-50'
 const primaryPillClass = 'rounded-full border border-slate-900 bg-slate-900 px-3 py-1 text-xs text-white shadow-sm transition dark:border-white dark:bg-white dark:text-slate-900 disabled:cursor-not-allowed disabled:opacity-60'
 const secondaryPillClass = 'rounded-full border border-slate-200 bg-white px-3 py-1 text-xs text-slate-600 shadow-sm transition hover:border-slate-300 hover:text-slate-900 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-300 dark:hover:text-white disabled:cursor-not-allowed disabled:opacity-50'
+const pillClass = 'rounded-full border border-slate-200 bg-white px-3 py-1 text-xs text-slate-600 shadow-sm transition hover:border-slate-300 hover:text-slate-900 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-300 dark:hover:text-white'
+const cardClass = 'rounded-[24px] border border-slate-200/80 bg-white p-6 dark:border-slate-800/80 dark:bg-slate-900'
+
+// ===================== 安全策略侧边栏 Section 定义 =====================
+
+const SECURITY_SECTIONS = [
+  { id: 'ai-general', label: '总开关 / 文件限制', icon: '⚡' },
+  { id: 'ai-paths', label: '路径白名单', icon: '📁' },
+  { id: 'ai-http', label: '网络请求', icon: '🌐' },
+  { id: 'ai-scripts', label: '预置脚本', icon: '🔧' },
+  { id: 'ai-capability', label: '能力授权', icon: '🛡' }
+] as const
 
 // ===================== 小型子组件 =====================
 
@@ -186,6 +208,47 @@ function ProviderCard({
   )
 }
 
+// ===================== 安全策略图标组件 =====================
+
+function SecuritySectionIcon({ id }: { id: string }) {
+  switch (id) {
+    case 'ai-general':
+      return (
+        <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+          <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+      )
+    case 'ai-paths':
+      return (
+        <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+          <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+      )
+    case 'ai-http':
+      return (
+        <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+          <circle cx="12" cy="12" r="10" />
+          <path d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+      )
+    case 'ai-scripts':
+      return (
+        <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+          <polyline points="16 18 22 12 16 6" strokeLinecap="round" strokeLinejoin="round" />
+          <polyline points="8 6 2 12 8 18" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+      )
+    case 'ai-capability':
+      return (
+        <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+          <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+      )
+    default:
+      return null
+  }
+}
+
 // ===================== 主组件 =====================
 
 interface AiToolsSettingsViewProps {
@@ -193,7 +256,11 @@ interface AiToolsSettingsViewProps {
 }
 
 export default function AiToolsSettingsView({ onBack }: AiToolsSettingsViewProps) {
-  const [settings, setSettings] = useState<AiToolWebSearchSettings | null>(null)
+  // ---- Web Search 设置 ----
+  const [wsSettings, setWsSettings] = useState<AiToolWebSearchSettings | null>(null)
+  // ---- 全量 AppSettings（用于 aiTooling 下非 webSearch 的配置） ----
+  const [appSettings, setAppSettings] = useState<AppSettings | null>(null)
+
   const [loading, setLoading] = useState(true)
   const [activeTool, setActiveTool] = useState<ToolSectionId>('web-search')
 
@@ -206,12 +273,34 @@ export default function AiToolsSettingsView({ onBack }: AiToolsSettingsViewProps
   // 用户禁用的插件工具 key 集合（格式 "pluginId:toolName"）
   const [disabledPluginToolKeys, setDisabledPluginToolKeys] = useState<Set<string>>(new Set())
 
-  // 加载设置 + 插件列表 + 禁用列表
+  // ---- AI 安全策略 draft state ----
+  const [filesystemRootDraft, setFilesystemRootDraft] = useState('')
+  const [patchRootDraft, setPatchRootDraft] = useState('')
+  const [gitRootDraft, setGitRootDraft] = useState('')
+  const [denyHostDraft, setDenyHostDraft] = useState('')
+  const [denyCidrDraft, setDenyCidrDraft] = useState('')
+  const [denyPrefixDraft, setDenyPrefixDraft] = useState('')
+  const [appCapabilityDraft, setAppCapabilityDraft] = useState('')
+  const [grantDraft, setGrantDraft] = useState<GrantDraft>({
+    capability: 'shell.exec',
+    decision: 'deny',
+    expiresAt: ''
+  })
+  const [runScriptDraft, setRunScriptDraft] = useState<RunScriptDraft>({
+    id: '',
+    command: '',
+    args: '',
+    cwd: '',
+    timeoutMs: '',
+    allowEnvKeys: ''
+  })
+
+  // 加载设置 + 插件列表 + 禁用列表 + AppSettings
   useEffect(() => {
     setLoading(true)
     const loadWebSearch = window.mulby?.ai?.tooling?.webSearch?.get?.()
       .then((data) => {
-        setSettings(data as unknown as AiToolWebSearchSettings)
+        setWsSettings(data as unknown as AiToolWebSearchSettings)
       })
       .catch((err) => {
         console.error('加载 Web Search 设置失败:', err)
@@ -240,7 +329,15 @@ export default function AiToolsSettingsView({ onBack }: AiToolsSettingsViewProps
         console.error('加载禁用工具列表失败:', err)
       })
 
-    Promise.all([loadWebSearch, loadPlugins, loadDisabled].filter(Boolean)).finally(() => {
+    const loadAppSettings = window.mulby.settings.get()
+      .then(({ settings }) => {
+        setAppSettings(settings)
+      })
+      .catch((err) => {
+        console.error('加载 AppSettings 失败:', err)
+      })
+
+    Promise.all([loadWebSearch, loadPlugins, loadDisabled, loadAppSettings].filter(Boolean)).finally(() => {
       setLoading(false)
     })
   }, [])
@@ -253,6 +350,16 @@ export default function AiToolsSettingsView({ onBack }: AiToolsSettingsViewProps
   }, [activeTool, pluginTools])
 
   // 持久化禁用列表
+  // 从后端刷新 appSettings 快照，确保与独立 IPC 通道的修改保持同步
+  const refreshAppSettings = useCallback(async () => {
+    try {
+      const { settings } = await window.mulby.settings.get()
+      setAppSettings(settings)
+    } catch (err) {
+      console.error('刷新 AppSettings 失败:', err)
+    }
+  }, [])
+
   const persistDisabledKeys = useCallback(async (nextSet: Set<string>) => {
     setDisabledPluginToolKeys(nextSet)
     try {
@@ -260,10 +367,12 @@ export default function AiToolsSettingsView({ onBack }: AiToolsSettingsViewProps
       if (saved) {
         setDisabledPluginToolKeys(new Set(saved))
       }
+      // 刷新 appSettings 快照，防止后续 updateAiTooling 用过时的 disabledPluginTools 覆盖
+      await refreshAppSettings()
     } catch (err) {
       console.error('保存禁用工具列表失败:', err)
     }
-  }, [])
+  }, [refreshAppSettings])
 
   // 切换单个插件工具的启用/禁用状态
   const togglePluginTool = useCallback((toolKey: string) => {
@@ -291,28 +400,325 @@ export default function AiToolsSettingsView({ onBack }: AiToolsSettingsViewProps
     void persistDisabledKeys(next)
   }, [disabledPluginToolKeys, persistDisabledKeys])
 
-  // 保存设置
-  const saveSettings = useCallback(async (patch: Partial<AiToolWebSearchSettings>) => {
-    if (!settings) return
-    const next = { ...settings, ...patch }
-    setSettings(next)
+  // 保存 Web Search 设置
+  const saveWsSettings = useCallback(async (patch: Partial<AiToolWebSearchSettings>) => {
+    if (!wsSettings) return
+    const next = { ...wsSettings, ...patch }
+    setWsSettings(next)
     try {
       const result = await window.mulby?.ai?.tooling?.webSearch?.update?.(patch as unknown as Record<string, unknown>)
       if (result) {
-        setSettings(result as unknown as AiToolWebSearchSettings)
+        setWsSettings(result as unknown as AiToolWebSearchSettings)
       }
+      // 刷新 appSettings 快照，防止后续 updateAiTooling 用过时的 webSearch 覆盖
+      await refreshAppSettings()
     } catch (err) {
       console.error('保存 Web Search 设置失败:', err)
     }
-  }, [settings])
+  }, [wsSettings, refreshAppSettings])
+
+  // ---- AppSettings 更新辅助函数 ----
+
+  const updateAiTooling = useCallback(async (patch: Partial<AppSettings['aiTooling']>) => {
+    // 总是从后端获取最新 settings 再 merge，避免用过时快照覆盖 webSearch/disabledPluginTools
+    const { settings: latest } = await window.mulby.settings.get()
+    const result = await window.mulby.settings.update({
+      aiTooling: {
+        ...latest.aiTooling,
+        ...patch
+      }
+    })
+    setAppSettings(result.settings)
+  }, [])
+
+  const updateAiFilesystem = useCallback(async (patch: Partial<AppSettings['aiTooling']['filesystem']>) => {
+    if (!appSettings) return
+    await updateAiTooling({
+      filesystem: {
+        ...appSettings.aiTooling.filesystem,
+        ...patch
+      }
+    })
+  }, [appSettings, updateAiTooling])
+
+  const updateAiPatch = useCallback(async (patch: Partial<AppSettings['aiTooling']['patch']>) => {
+    if (!appSettings) return
+    await updateAiTooling({
+      patch: {
+        ...appSettings.aiTooling.patch,
+        ...patch
+      }
+    })
+  }, [appSettings, updateAiTooling])
+
+  const updateAiGit = useCallback(async (patch: Partial<AppSettings['aiTooling']['git']>) => {
+    if (!appSettings) return
+    await updateAiTooling({
+      git: {
+        ...appSettings.aiTooling.git,
+        ...patch
+      }
+    })
+  }, [appSettings, updateAiTooling])
+
+  const updateAiHttp = useCallback(async (patch: Partial<AppSettings['aiTooling']['http']>) => {
+    if (!appSettings) return
+    await updateAiTooling({
+      http: {
+        ...appSettings.aiTooling.http,
+        ...patch
+      }
+    })
+  }, [appSettings, updateAiTooling])
+
+  const updateAiRunScript = useCallback(async (patch: Partial<AppSettings['aiTooling']['runScript']>) => {
+    if (!appSettings) return
+    await updateAiTooling({
+      runScript: {
+        ...appSettings.aiTooling.runScript,
+        ...patch
+      }
+    })
+  }, [appSettings, updateAiTooling])
+
+  const updateAiCapabilityPolicy = useCallback(async (patch: Partial<AppSettings['aiTooling']['capabilityPolicy']>) => {
+    if (!appSettings) return
+    const current = appSettings.aiTooling.capabilityPolicy
+    await updateAiTooling({
+      capabilityPolicy: {
+        defaultAppCapabilities: patch.defaultAppCapabilities ?? current.defaultAppCapabilities,
+        globalGrants: patch.globalGrants ?? current.globalGrants
+      }
+    })
+  }, [appSettings, updateAiTooling])
+
+  // ---- 列表操作辅助 ----
+
+  const addUniqueListItem = (list: string[], draft: string): string[] => {
+    const parsed = parseListDraft(draft)
+    if (parsed.length === 0) return list
+    const next = [...list]
+    const seen = new Set(list.map((item) => item.toLowerCase()))
+    for (const item of parsed) {
+      const token = item.toLowerCase()
+      if (seen.has(token)) continue
+      seen.add(token)
+      next.push(item)
+    }
+    return next
+  }
+
+  // ---- 路径白名单操作 ----
+
+  const addFilesystemRoot = async () => {
+    if (!appSettings) return
+    const next = addUniqueListItem(appSettings.aiTooling.filesystem.allowedRoots || [], filesystemRootDraft)
+    if (next.length === appSettings.aiTooling.filesystem.allowedRoots.length) return
+    await updateAiFilesystem({ allowedRoots: next })
+    setFilesystemRootDraft('')
+  }
+  const removeFilesystemRoot = async (value: string) => {
+    if (!appSettings) return
+    const next = (appSettings.aiTooling.filesystem.allowedRoots || []).filter((item) => item !== value)
+    await updateAiFilesystem({ allowedRoots: next })
+  }
+
+  const addPatchRoot = async () => {
+    if (!appSettings) return
+    const next = addUniqueListItem(appSettings.aiTooling.patch.allowedRoots || [], patchRootDraft)
+    if (next.length === appSettings.aiTooling.patch.allowedRoots.length) return
+    await updateAiPatch({ allowedRoots: next })
+    setPatchRootDraft('')
+  }
+  const removePatchRoot = async (value: string) => {
+    if (!appSettings) return
+    const next = (appSettings.aiTooling.patch.allowedRoots || []).filter((item) => item !== value)
+    await updateAiPatch({ allowedRoots: next })
+  }
+
+  const addGitRoot = async () => {
+    if (!appSettings) return
+    const next = addUniqueListItem(appSettings.aiTooling.git.allowedRepoRoots || [], gitRootDraft)
+    if (next.length === appSettings.aiTooling.git.allowedRepoRoots.length) return
+    await updateAiGit({ allowedRepoRoots: next })
+    setGitRootDraft('')
+  }
+  const removeGitRoot = async (value: string) => {
+    if (!appSettings) return
+    const next = (appSettings.aiTooling.git.allowedRepoRoots || []).filter((item) => item !== value)
+    await updateAiGit({ allowedRepoRoots: next })
+  }
+
+  // ---- HTTP 黑名单操作 ----
+
+  const addHttpDenyHost = async () => {
+    if (!appSettings) return
+    const next = addUniqueListItem(appSettings.aiTooling.http.denyHosts || [], denyHostDraft)
+    if (next.length === appSettings.aiTooling.http.denyHosts.length) return
+    await updateAiHttp({ denyHosts: next })
+    setDenyHostDraft('')
+  }
+  const removeHttpDenyHost = async (value: string) => {
+    if (!appSettings) return
+    const next = (appSettings.aiTooling.http.denyHosts || []).filter((item) => item !== value)
+    await updateAiHttp({ denyHosts: next })
+  }
+  const addHttpDenyCidr = async () => {
+    if (!appSettings) return
+    const next = addUniqueListItem(appSettings.aiTooling.http.denyCidrs || [], denyCidrDraft)
+    if (next.length === appSettings.aiTooling.http.denyCidrs.length) return
+    await updateAiHttp({ denyCidrs: next })
+    setDenyCidrDraft('')
+  }
+  const removeHttpDenyCidr = async (value: string) => {
+    if (!appSettings) return
+    const next = (appSettings.aiTooling.http.denyCidrs || []).filter((item) => item !== value)
+    await updateAiHttp({ denyCidrs: next })
+  }
+  const addHttpDenyPrefix = async () => {
+    if (!appSettings) return
+    const next = addUniqueListItem(appSettings.aiTooling.http.denyUrlPrefixes || [], denyPrefixDraft)
+    if (next.length === appSettings.aiTooling.http.denyUrlPrefixes.length) return
+    await updateAiHttp({ denyUrlPrefixes: next })
+    setDenyPrefixDraft('')
+  }
+  const removeHttpDenyPrefix = async (value: string) => {
+    if (!appSettings) return
+    const next = (appSettings.aiTooling.http.denyUrlPrefixes || []).filter((item) => item !== value)
+    await updateAiHttp({ denyUrlPrefixes: next })
+  }
+
+  // ---- 能力策略操作 ----
+
+  const visibleCapabilityGrants = useMemo(() => {
+    if (!appSettings) return []
+    return appSettings.aiTooling.capabilityPolicy.globalGrants || []
+  }, [appSettings])
+
+  const isDefaultAppCapabilitiesAtDefault = useMemo(() => {
+    if (!appSettings) return true
+    const current = appSettings.aiTooling.capabilityPolicy.defaultAppCapabilities || []
+    if (current.length !== DEFAULT_APP_CAPABILITIES.length) return false
+    return DEFAULT_APP_CAPABILITIES.every((value, index) => current[index] === value)
+  }, [appSettings])
+
+  const restoreDefaultAppCapabilities = async () => {
+    if (!appSettings) return
+    await updateAiCapabilityPolicy({ defaultAppCapabilities: [...DEFAULT_APP_CAPABILITIES] })
+  }
+
+  const addCapabilityToPolicyList = async (
+    key: 'defaultAppCapabilities',
+    draft: string,
+    reset: () => void
+  ) => {
+    if (!appSettings) return
+    const next = addUniqueListItem(appSettings.aiTooling.capabilityPolicy[key] || [], draft)
+    if (next.length === appSettings.aiTooling.capabilityPolicy[key].length) return
+    await updateAiCapabilityPolicy({ [key]: next })
+    reset()
+  }
+
+  const removeCapabilityFromPolicyList = async (
+    key: 'defaultAppCapabilities',
+    capability: string
+  ) => {
+    if (!appSettings) return
+    const next = (appSettings.aiTooling.capabilityPolicy[key] || []).filter((item) => item !== capability)
+    await updateAiCapabilityPolicy({ [key]: next })
+  }
+
+  const addCapabilityGrant = async () => {
+    if (!appSettings) return
+    const capability = grantDraft.capability.trim()
+    if (!capability) return
+    const exists = (appSettings.aiTooling.capabilityPolicy.globalGrants || []).some((item) =>
+      item.capability === capability && item.decision === grantDraft.decision
+    )
+    if (exists) return
+    const now = Date.now()
+    const expiresAtMs = grantDraft.expiresAt ? Date.parse(grantDraft.expiresAt) : undefined
+    const expiresAt = Number.isFinite(expiresAtMs || NaN) ? expiresAtMs : undefined
+    const nextGrant: AiToolCapabilityGrant = {
+      id: `grant-${now}-${Math.random().toString(36).slice(2, 8)}`,
+      capability,
+      decision: grantDraft.decision,
+      createdAt: now,
+      updatedAt: now,
+      expiresAt
+    }
+    await updateAiCapabilityPolicy({
+      globalGrants: [...(appSettings.aiTooling.capabilityPolicy.globalGrants || []), nextGrant]
+    })
+    setGrantDraft((prev) => ({ ...prev, expiresAt: '' }))
+  }
+
+  const removeCapabilityGrant = async (grantId: string) => {
+    if (!appSettings) return
+    const next = (appSettings.aiTooling.capabilityPolicy.globalGrants || []).filter((item) => item.id !== grantId)
+    await updateAiCapabilityPolicy({ globalGrants: next })
+  }
+
+  const patchCapabilityGrant = async (grantId: string, patch: Partial<AiToolCapabilityGrant>) => {
+    if (!appSettings) return
+    const now = Date.now()
+    const next = (appSettings.aiTooling.capabilityPolicy.globalGrants || []).map((item) => (
+      item.id === grantId ? { ...item, ...patch, updatedAt: now } : item
+    ))
+    await updateAiCapabilityPolicy({ globalGrants: next })
+  }
+
+  // ---- 预置脚本操作 ----
+
+  const updateRunScriptEntry = async (
+    index: number,
+    patch: Partial<AppSettings['aiTooling']['runScript']['entries'][number]>
+  ) => {
+    if (!appSettings) return
+    const entries = [...(appSettings.aiTooling.runScript.entries || [])]
+    if (!entries[index]) return
+    entries[index] = { ...entries[index], ...patch }
+    await updateAiRunScript({ entries })
+  }
+
+  const removeRunScriptEntry = async (index: number) => {
+    if (!appSettings) return
+    const entries = (appSettings.aiTooling.runScript.entries || []).filter((_, i) => i !== index)
+    await updateAiRunScript({ entries })
+  }
+
+  const addRunScriptEntry = async () => {
+    if (!appSettings) return
+    const id = runScriptDraft.id.trim()
+    const command = runScriptDraft.command.trim()
+    if (!id || !command) return
+    const exists = (appSettings.aiTooling.runScript.entries || []).some((item) => item.id === id)
+    if (exists) return
+    const args = parseListDraft(runScriptDraft.args)
+    const allowEnvKeys = parseListDraft(runScriptDraft.allowEnvKeys)
+    const timeoutRaw = Number(runScriptDraft.timeoutMs)
+    const timeoutMs = Number.isFinite(timeoutRaw) && timeoutRaw > 0 ? timeoutRaw : undefined
+    const nextEntry: AppSettings['aiTooling']['runScript']['entries'][number] = {
+      id,
+      command,
+      args: args.length > 0 ? args : undefined,
+      cwd: runScriptDraft.cwd.trim() || undefined,
+      timeoutMs,
+      allowEnvKeys: allowEnvKeys.length > 0 ? allowEnvKeys : undefined
+    }
+    await updateAiRunScript({
+      entries: [...(appSettings.aiTooling.runScript.entries || []), nextEntry]
+    })
+    setRunScriptDraft({ id: '', command: '', args: '', cwd: '', timeoutMs: '', allowEnvKeys: '' })
+  }
 
   // 构建 Provider 选项列表
   const providerOptions = useMemo<ProviderOption[]>(() => {
     const list: ProviderOption[] = []
 
     // 本地引擎
-    if (settings?.localEngines) {
-      for (const engine of settings.localEngines) {
+    if (wsSettings?.localEngines) {
+      for (const engine of wsSettings.localEngines) {
         list.push({
           id: engine.id,
           label: engine.name,
@@ -332,18 +738,21 @@ export default function AiToolsSettingsView({ onBack }: AiToolsSettingsViewProps
     }
 
     // 自定义 API
-    if (settings?.customApis) {
-      for (const api of settings.customApis) {
+    if (wsSettings?.customApis) {
+      for (const api of wsSettings.customApis) {
         list.push({ id: `custom-${api.id}`, label: api.name, description: api.apiHost, group: 'custom' })
       }
     }
 
     return list
-  }, [settings])
+  }, [wsSettings])
 
-  const activeProvider = settings?.activeProvider || 'local-bing'
+  const activeProvider = wsSettings?.activeProvider || 'local-bing'
   const activeBuiltinApi = BUILTIN_API_PROVIDERS.find((p) => p.id === activeProvider)
   const activeOption = providerOptions.find((p) => p.id === activeProvider)
+
+  // 判断当前 activeTool 类别
+  const isSecuritySection = activeTool.startsWith('ai-')
 
   return (
     <SettingsLikePageShell>
@@ -356,10 +765,10 @@ export default function AiToolsSettingsView({ onBack }: AiToolsSettingsViewProps
       <div className="flex min-h-0 flex-1 no-drag">
         {/* ===================== 左侧工具列表 ===================== */}
         <aside className="flex min-h-0 w-[280px] shrink-0 flex-col border-r border-slate-200/70 bg-white p-4 dark:border-slate-800/80 dark:bg-slate-900">
-          <div className="mb-3 flex items-center justify-between">
-            <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">AI 工具</h3>
-          </div>
           <div className="relative min-h-0 flex-1 overflow-y-auto space-y-1">
+            {/* ---- 工具分组 ---- */}
+            <div className="mb-1 text-[10px] font-medium uppercase tracking-[0.15em] text-slate-400 dark:text-slate-500 px-1">工具</div>
+
             {/* Web Search */}
             <ToolSidebarItem
               active={activeTool === 'web-search'}
@@ -374,10 +783,22 @@ export default function AiToolsSettingsView({ onBack }: AiToolsSettingsViewProps
               )}
             />
 
-            {/* 插件工具分组 */}
+            {/* ---- 安全策略分组 ---- */}
+            <div className="mt-4 mb-1 text-[10px] font-medium uppercase tracking-[0.15em] text-slate-400 dark:text-slate-500 px-1">安全策略</div>
+            {SECURITY_SECTIONS.map((sec) => (
+              <ToolSidebarItem
+                key={sec.id}
+                active={activeTool === sec.id}
+                label={sec.label}
+                onClick={() => setActiveTool(sec.id)}
+                icon={<SecuritySectionIcon id={sec.id} />}
+              />
+            ))}
+
+            {/* ---- 插件工具分组（动态列表，放在最下方） ---- */}
             {pluginTools.length > 0 && (
               <>
-                <div className="mt-3 mb-1 text-[10px] font-medium uppercase tracking-[0.15em] text-slate-400 dark:text-slate-500 px-1">Plugin Tools</div>
+                <div className="mt-4 mb-1 text-[10px] font-medium uppercase tracking-[0.15em] text-slate-400 dark:text-slate-500 px-1">插件工具</div>
                 {pluginTools.map((plugin) => {
                   const allKeys = plugin.tools.map((t) => `${plugin.pluginId}:${t.name}`)
                   const disabledCount = allKeys.filter((k) => disabledPluginToolKeys.has(k)).length
@@ -526,7 +947,251 @@ export default function AiToolsSettingsView({ onBack }: AiToolsSettingsViewProps
                   </div>
                 </section>
               </div>
-            ) : !settings ? (
+            ) : isSecuritySection && appSettings ? (
+              /* ==================== 安全策略面板 ==================== */
+              <div className="space-y-5">
+                {activeTool === 'ai-general' && (
+                  <>
+                    {/* AI 内置工具总开关 */}
+                    <div className={`${cardClass} space-y-4`}>
+                      <div className="text-sm font-medium text-slate-900 dark:text-white">AI 内置工具总开关</div>
+                      <div className="flex items-center justify-between border-b border-slate-200/80 pb-3 dark:border-slate-800/80">
+                        <div>
+                          <div className="text-sm text-slate-900 dark:text-white">启用 aiTooling</div>
+                          <div className="text-xs text-slate-500 dark:text-slate-400">关闭后将拒绝所有内置工具（read/list/search/patch/http/script/git）</div>
+                        </div>
+                        <button
+                          className={`relative w-11 h-6 rounded-full transition-colors ${appSettings.aiTooling.enabled
+                            ? 'bg-blue-500'
+                            : 'bg-gray-300 dark:bg-gray-600'
+                          }`}
+                          onClick={() => void updateAiTooling({ enabled: !appSettings.aiTooling.enabled })}
+                        >
+                          <span
+                            className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${appSettings.aiTooling.enabled ? 'translate-x-5' : ''}`}
+                          />
+                        </button>
+                      </div>
+                      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                        <label className="space-y-1">
+                          <div className="text-xs text-slate-500 dark:text-slate-400">filesystem 最大读取（bytes）</div>
+                          <input
+                            type="number"
+                            min={1024}
+                            className="w-full rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-200"
+                            value={appSettings.aiTooling.filesystem.maxReadBytes}
+                            onChange={(e) => void updateAiFilesystem({ maxReadBytes: Number(e.target.value || 0) })}
+                          />
+                        </label>
+                        <label className="space-y-1">
+                          <div className="text-xs text-slate-500 dark:text-slate-400">filesystem 搜索命中上限</div>
+                          <input
+                            type="number"
+                            min={10}
+                            className="w-full rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-200"
+                            value={appSettings.aiTooling.filesystem.maxSearchHits}
+                            onChange={(e) => void updateAiFilesystem({ maxSearchHits: Number(e.target.value || 0) })}
+                          />
+                        </label>
+                      </div>
+                    </div>
+                  </>
+                )}
+
+                {activeTool === 'ai-paths' && (
+                  <div className={`${cardClass} space-y-4`}>
+                    <div className="text-sm font-medium text-slate-900 dark:text-white">路径白名单（allowedRoots / allowedRepoRoots）</div>
+                    <div className="space-y-4">
+                      {/* filesystem */}
+                      <div className="space-y-2">
+                        <div className="text-xs text-slate-500 dark:text-slate-400">filesystem.allowedRoots（文件读取/检索范围）</div>
+                        <div className="space-y-2">
+                          {(appSettings.aiTooling.filesystem.allowedRoots || []).map((item) => (
+                            <div key={`fs-${item}`} className="flex items-center justify-between gap-2 rounded-xl border border-slate-200/80 bg-white/70 px-3 py-2 text-xs dark:border-slate-800 dark:bg-slate-950/70">
+                              <div className="truncate">{item}</div>
+                              <button className={actionButtonClass} onClick={() => void removeFilesystemRoot(item)}>删除</button>
+                            </div>
+                          ))}
+                        </div>
+                        <div className="grid grid-cols-1 gap-2 sm:grid-cols-[minmax(0,1fr)_100px]">
+                          <input
+                            className="rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm dark:border-slate-800 dark:bg-slate-950"
+                            placeholder="新增路径，支持逗号或换行批量"
+                            value={filesystemRootDraft}
+                            onChange={(e) => setFilesystemRootDraft(e.target.value)}
+                          />
+                          <button className={actionButtonClass} onClick={() => void addFilesystemRoot()}>新增</button>
+                        </div>
+                      </div>
+
+                      {/* patch */}
+                      <div className="space-y-2">
+                        <div className="text-xs text-slate-500 dark:text-slate-400">patch.allowedRoots（补丁应用范围）</div>
+                        <div className="space-y-2">
+                          {(appSettings.aiTooling.patch.allowedRoots || []).map((item) => (
+                            <div key={`patch-${item}`} className="flex items-center justify-between gap-2 rounded-xl border border-slate-200/80 bg-white/70 px-3 py-2 text-xs dark:border-slate-800 dark:bg-slate-950/70">
+                              <div className="truncate">{item}</div>
+                              <button className={actionButtonClass} onClick={() => void removePatchRoot(item)}>删除</button>
+                            </div>
+                          ))}
+                        </div>
+                        <div className="grid grid-cols-1 gap-2 sm:grid-cols-[minmax(0,1fr)_100px]">
+                          <input
+                            className="rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm dark:border-slate-800 dark:bg-slate-950"
+                            placeholder="新增路径，支持逗号或换行批量"
+                            value={patchRootDraft}
+                            onChange={(e) => setPatchRootDraft(e.target.value)}
+                          />
+                          <button className={actionButtonClass} onClick={() => void addPatchRoot()}>新增</button>
+                        </div>
+                      </div>
+
+                      {/* git */}
+                      <div className="space-y-2">
+                        <div className="text-xs text-slate-500 dark:text-slate-400">git.allowedRepoRoots（Git 仓库范围）</div>
+                        <div className="space-y-2">
+                          {(appSettings.aiTooling.git.allowedRepoRoots || []).map((item) => (
+                            <div key={`git-${item}`} className="flex items-center justify-between gap-2 rounded-xl border border-slate-200/80 bg-white/70 px-3 py-2 text-xs dark:border-slate-800 dark:bg-slate-950/70">
+                              <div className="truncate">{item}</div>
+                              <button className={actionButtonClass} onClick={() => void removeGitRoot(item)}>删除</button>
+                            </div>
+                          ))}
+                        </div>
+                        <div className="grid grid-cols-1 gap-2 sm:grid-cols-[minmax(0,1fr)_100px]">
+                          <input
+                            className="rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm dark:border-slate-800 dark:bg-slate-950"
+                            placeholder="新增路径，支持逗号或换行批量"
+                            value={gitRootDraft}
+                            onChange={(e) => setGitRootDraft(e.target.value)}
+                          />
+                          <button className={actionButtonClass} onClick={() => void addGitRoot()}>新增</button>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {activeTool === 'ai-http' && (
+                  <div className={`${cardClass} space-y-4`}>
+                    <div className="text-sm font-medium text-slate-900 dark:text-white">HTTP 黑名单与限制</div>
+                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                      <label className="space-y-1">
+                        <div className="text-xs text-slate-500 dark:text-slate-400">超时（ms）</div>
+                        <input
+                          type="number"
+                          min={1000}
+                          className="w-full rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-200"
+                          value={appSettings.aiTooling.http.timeoutMs}
+                          onChange={(e) => void updateAiHttp({ timeoutMs: Number(e.target.value || 0) })}
+                        />
+                      </label>
+                      <label className="space-y-1">
+                        <div className="text-xs text-slate-500 dark:text-slate-400">响应体上限（bytes）</div>
+                        <input
+                          type="number"
+                          min={1024}
+                          className="w-full rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-200"
+                          value={appSettings.aiTooling.http.maxResponseBytes}
+                          onChange={(e) => void updateAiHttp({ maxResponseBytes: Number(e.target.value || 0) })}
+                        />
+                      </label>
+                    </div>
+
+                    <div className="space-y-2">
+                      <div className="text-xs text-slate-500 dark:text-slate-400">denyHosts（拒绝访问的域名）</div>
+                      {(appSettings.aiTooling.http.denyHosts || []).map((item) => (
+                        <div key={`deny-host-${item}`} className="flex items-center justify-between gap-2 rounded-xl border border-slate-200/80 bg-white/70 px-3 py-2 text-xs dark:border-slate-800 dark:bg-slate-950/70">
+                          <div className="truncate">{item}</div>
+                          <button className={actionButtonClass} onClick={() => void removeHttpDenyHost(item)}>删除</button>
+                        </div>
+                      ))}
+                      <div className="grid grid-cols-1 gap-2 sm:grid-cols-[minmax(0,1fr)_100px]">
+                        <input
+                          className="rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm dark:border-slate-800 dark:bg-slate-950"
+                          placeholder="例如 localhost, example.com"
+                          value={denyHostDraft}
+                          onChange={(e) => setDenyHostDraft(e.target.value)}
+                        />
+                        <button className={actionButtonClass} onClick={() => void addHttpDenyHost()}>新增</button>
+                      </div>
+                    </div>
+
+                    <div className="space-y-2">
+                      <div className="text-xs text-slate-500 dark:text-slate-400">denyCidrs（拒绝访问的网段）</div>
+                      {(appSettings.aiTooling.http.denyCidrs || []).map((item) => (
+                        <div key={`deny-cidr-${item}`} className="flex items-center justify-between gap-2 rounded-xl border border-slate-200/80 bg-white/70 px-3 py-2 text-xs dark:border-slate-800 dark:bg-slate-950/70">
+                          <div className="truncate">{item}</div>
+                          <button className={actionButtonClass} onClick={() => void removeHttpDenyCidr(item)}>删除</button>
+                        </div>
+                      ))}
+                      <div className="grid grid-cols-1 gap-2 sm:grid-cols-[minmax(0,1fr)_100px]">
+                        <input
+                          className="rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm dark:border-slate-800 dark:bg-slate-950"
+                          placeholder="例如 127.0.0.0/8"
+                          value={denyCidrDraft}
+                          onChange={(e) => setDenyCidrDraft(e.target.value)}
+                        />
+                        <button className={actionButtonClass} onClick={() => void addHttpDenyCidr()}>新增</button>
+                      </div>
+                    </div>
+
+                    <div className="space-y-2">
+                      <div className="text-xs text-slate-500 dark:text-slate-400">denyUrlPrefixes（拒绝访问的 URL 前缀）</div>
+                      {(appSettings.aiTooling.http.denyUrlPrefixes || []).map((item) => (
+                        <div key={`deny-prefix-${item}`} className="flex items-center justify-between gap-2 rounded-xl border border-slate-200/80 bg-white/70 px-3 py-2 text-xs dark:border-slate-800 dark:bg-slate-950/70">
+                          <div className="truncate">{item}</div>
+                          <button className={actionButtonClass} onClick={() => void removeHttpDenyPrefix(item)}>删除</button>
+                        </div>
+                      ))}
+                      <div className="grid grid-cols-1 gap-2 sm:grid-cols-[minmax(0,1fr)_100px]">
+                        <input
+                          className="rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm dark:border-slate-800 dark:bg-slate-950"
+                          placeholder="例如 https://internal.example.com/"
+                          value={denyPrefixDraft}
+                          onChange={(e) => setDenyPrefixDraft(e.target.value)}
+                        />
+                        <button className={actionButtonClass} onClick={() => void addHttpDenyPrefix()}>新增</button>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {activeTool === 'ai-scripts' && (
+                  <RunScriptRegistry
+                    settings={appSettings}
+                    runScriptDraft={runScriptDraft}
+                    setRunScriptDraft={setRunScriptDraft}
+                    updateAiRunScript={updateAiRunScript}
+                    updateRunScriptEntry={updateRunScriptEntry}
+                    removeRunScriptEntry={removeRunScriptEntry}
+                    addRunScriptEntry={addRunScriptEntry}
+                    cardClass={cardClass}
+                    actionButtonClass={actionButtonClass}
+                  />
+                )}
+
+                {activeTool === 'ai-capability' && (
+                  <CapabilityPolicy
+                    settings={appSettings}
+                    visibleCapabilityGrants={visibleCapabilityGrants}
+                    isDefaultAppCapabilitiesAtDefault={isDefaultAppCapabilitiesAtDefault}
+                    appCapabilityDraft={appCapabilityDraft}
+                    setAppCapabilityDraft={setAppCapabilityDraft}
+                    grantDraft={grantDraft}
+                    setGrantDraft={setGrantDraft}
+                    restoreDefaultAppCapabilities={restoreDefaultAppCapabilities}
+                    removeCapabilityFromPolicyList={removeCapabilityFromPolicyList}
+                    addCapabilityToPolicyList={addCapabilityToPolicyList}
+                    addCapabilityGrant={addCapabilityGrant}
+                    removeCapabilityGrant={removeCapabilityGrant}
+                    patchCapabilityGrant={patchCapabilityGrant}
+                    cardClass={cardClass}
+                    actionButtonClass={actionButtonClass}
+                    pillClass={pillClass}
+                  />
+                )}
+              </div>
+            ) : !wsSettings ? (
               <div className="flex h-full items-center justify-center">
                 <div className="rounded-2xl border border-dashed border-slate-200 p-6 text-sm text-slate-500 dark:border-slate-700 dark:text-slate-400">
                   设置加载失败，请返回重试
@@ -558,7 +1223,7 @@ export default function AiToolsSettingsView({ onBack }: AiToolsSettingsViewProps
                         key={option.id}
                         option={option}
                         isActive={activeProvider === option.id}
-                        onActivate={() => saveSettings({ activeProvider: option.id })}
+                        onActivate={() => saveWsSettings({ activeProvider: option.id })}
                       />
                     ))}
                   </div>
@@ -597,12 +1262,12 @@ export default function AiToolsSettingsView({ onBack }: AiToolsSettingsViewProps
                           className={inputClass}
                           type="password"
                           placeholder={activeBuiltinApi.keyPlaceholder}
-                          value={settings.providerKeys?.[activeProvider as 'tavily' | 'jina'] || ''}
+                          value={wsSettings.providerKeys?.[activeProvider as 'tavily' | 'jina'] || ''}
                           onChange={(e) => {
                             const key = activeProvider as 'tavily' | 'jina'
-                            saveSettings({
+                            saveWsSettings({
                               providerKeys: {
-                                ...settings.providerKeys,
+                                ...wsSettings.providerKeys,
                                 [key]: e.target.value
                               }
                             })
@@ -629,8 +1294,8 @@ export default function AiToolsSettingsView({ onBack }: AiToolsSettingsViewProps
                           <input
                             className={inputClass}
                             placeholder="https://api.tavily.com（默认）"
-                            value={settings.tavilyApiHost || ''}
-                            onChange={(e) => saveSettings({ tavilyApiHost: e.target.value || undefined })}
+                            value={wsSettings.tavilyApiHost || ''}
+                            onChange={(e) => saveWsSettings({ tavilyApiHost: e.target.value || undefined })}
                           />
                         </div>
                       )}
@@ -652,7 +1317,7 @@ export default function AiToolsSettingsView({ onBack }: AiToolsSettingsViewProps
                   <SectionLabel>API 密钥概览</SectionLabel>
                   <div className="mt-3 rounded-2xl border border-slate-200/80 bg-slate-50/60 p-4 dark:border-slate-800/80 dark:bg-slate-900/40">
                     {BUILTIN_API_PROVIDERS.map((api) => {
-                      const hasKey = !!settings.providerKeys?.[api.id]
+                      const hasKey = !!wsSettings.providerKeys?.[api.id]
                       return (
                         <InfoRow key={api.id} label={api.label}>
                           <span className={`flex items-center gap-1 ${hasKey ? 'text-emerald-600 dark:text-emerald-300' : 'text-slate-400 dark:text-slate-500'}`}>
@@ -682,10 +1347,10 @@ export default function AiToolsSettingsView({ onBack }: AiToolsSettingsViewProps
                         type="number"
                         min={1}
                         max={20}
-                        value={settings.maxResults}
+                        value={wsSettings.maxResults}
                         onChange={(e) => {
                           const v = Math.max(1, Math.min(20, parseInt(e.target.value) || 5))
-                          saveSettings({ maxResults: v })
+                          saveWsSettings({ maxResults: v })
                         }}
                       />
                       <div className="mt-1.5 text-[10px] text-slate-400">1 – 20</div>
@@ -698,10 +1363,10 @@ export default function AiToolsSettingsView({ onBack }: AiToolsSettingsViewProps
                         min={1000}
                         max={50000}
                         step={1000}
-                        value={settings.maxContentLength}
+                        value={wsSettings.maxContentLength}
                         onChange={(e) => {
                           const v = Math.max(1000, Math.min(50000, parseInt(e.target.value) || 8000))
-                          saveSettings({ maxContentLength: v })
+                          saveWsSettings({ maxContentLength: v })
                         }}
                       />
                       <div className="mt-1.5 text-[10px] text-slate-400">1,000 – 50,000 字符</div>
@@ -713,10 +1378,10 @@ export default function AiToolsSettingsView({ onBack }: AiToolsSettingsViewProps
                         type="number"
                         min={5}
                         max={120}
-                        value={Math.round(settings.timeoutMs / 1000)}
+                        value={Math.round(wsSettings.timeoutMs / 1000)}
                         onChange={(e) => {
                           const v = Math.max(5, Math.min(120, parseInt(e.target.value) || 30))
-                          saveSettings({ timeoutMs: v * 1000 })
+                          saveWsSettings({ timeoutMs: v * 1000 })
                         }}
                       />
                       <div className="mt-1.5 text-[10px] text-slate-400">5 – 120 秒</div>
@@ -748,7 +1413,7 @@ export default function AiToolsSettingsView({ onBack }: AiToolsSettingsViewProps
                     </button>
                   </div>
                   <div className="mt-3 space-y-2">
-                    {(settings.customApis || []).length === 0 && !showAddCustomApi && (
+                    {(wsSettings.customApis || []).length === 0 && !showAddCustomApi && (
                       <div className="rounded-2xl border border-dashed border-slate-200/80 bg-slate-50 px-4 py-6 text-center dark:border-slate-800/80 dark:bg-slate-900/40">
                         <svg className="mx-auto h-6 w-6 text-slate-300 dark:text-slate-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
                           <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" strokeLinecap="round" strokeLinejoin="round" />
@@ -759,7 +1424,7 @@ export default function AiToolsSettingsView({ onBack }: AiToolsSettingsViewProps
                         </div>
                       </div>
                     )}
-                    {(settings.customApis || []).map((api) => (
+                    {(wsSettings.customApis || []).map((api) => (
                       <div
                         key={api.id}
                         className="flex items-center justify-between rounded-2xl border border-slate-200/80 bg-slate-50/60 px-4 py-3 dark:border-slate-800/80 dark:bg-slate-900/40"
@@ -776,12 +1441,12 @@ export default function AiToolsSettingsView({ onBack }: AiToolsSettingsViewProps
                         <button
                           className={actionButtonClass}
                           onClick={() => {
-                            const filtered = (settings.customApis || []).filter((a) => a.id !== api.id)
+                            const filtered = (wsSettings.customApis || []).filter((a) => a.id !== api.id)
                             const patch: Partial<AiToolWebSearchSettings> = { customApis: filtered }
                             if (activeProvider === `custom-${api.id}`) {
                               patch.activeProvider = 'local-bing'
                             }
-                            saveSettings(patch)
+                            saveWsSettings(patch)
                           }}
                         >
                           删除
@@ -880,8 +1545,8 @@ export default function AiToolsSettingsView({ onBack }: AiToolsSettingsViewProps
                 disabled={!editingCustomApi.name?.trim() || !editingCustomApi.apiHost?.trim()}
                 onClick={() => {
                   const api = editingCustomApi as CustomSearchApiConfig
-                  const existing = settings?.customApis || []
-                  saveSettings({ customApis: [...existing, api] })
+                  const existing = wsSettings?.customApis || []
+                  saveWsSettings({ customApis: [...existing, api] })
                   setShowAddCustomApi(false)
                   setEditingCustomApi({})
                 }}
