@@ -40,7 +40,7 @@ import { registerDeveloperHandlers } from './developer'
 import { registerLogIpc } from './log'
 import { registerSchedulerHandlers } from './scheduler'
 import { ClipboardHistoryManager } from '../services/clipboard-history'
-import { registerAiHandlers } from './ai'
+import { registerAiHandlers, type AiHandlersHooks } from './ai'
 import { registerSystemPluginHandlers } from './system-plugin'
 import { SystemPluginWindowManager } from '../services/system-plugin-window-manager'
 import { registerSystemPageHandlers } from './system-page'
@@ -61,7 +61,7 @@ export function registerAllHandlers(
   systemPageWindowManager: SystemPageWindowManager,
   onboardingWindowManager: OnboardingWindowManager,
   pluginToolRegistry?: PluginToolRegistry
-): { warmupFeatureIconCache: () => void } {
+): { warmupFeatureIconCache: () => void; setOnDisabledPluginToolsChanged: (fn: () => void) => void } {
   registerClipboardHandlers()
   registerClipboardHistoryHandlers(clipboardHistoryManager)
   registerNotificationHandlers()
@@ -95,7 +95,8 @@ export function registerAllHandlers(
   registerSettingsHandlers(appSettingsManager, appShortcutManager, pluginManager)
   registerDeveloperHandlers(pluginManager)
   registerSchedulerHandlers(pluginManager)
-  registerAiHandlers()
+  const aiHooks: AiHandlersHooks = {}
+  registerAiHandlers(aiHooks)
   registerSystemPluginHandlers(getMainWindow, systemPluginWindowManager)
   registerSystemPageHandlers(getMainWindow, systemPageWindowManager)
 
@@ -105,5 +106,10 @@ export function registerAllHandlers(
   // 注册引导窗口 IPC 处理器
   registerOnboardingHandlers(appSettingsManager, appShortcutManager, themeManager, onboardingWindowManager)
 
-  return pluginHooks
+  return {
+    ...pluginHooks,
+    setOnDisabledPluginToolsChanged: (fn: () => void) => {
+      aiHooks.onDisabledPluginToolsChanged = fn
+    }
+  }
 }

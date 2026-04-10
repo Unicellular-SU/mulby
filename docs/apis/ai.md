@@ -1205,3 +1205,82 @@ module.exports = {
   }
 };
 ```
+
+---
+
+## MCP Server 管理（`ai.mcpServer`）
+
+Mulby 可作为 MCP Server 运行，将插件注册的 AI 工具暴露给 Claude Desktop、Cursor 等外部 AI 工具。
+
+> **注意**：MCP Server 管理 API 是**宿主级**能力，仅在设置页面等系统上下文中使用，**不向插件开放**。
+
+### `ai.mcpServer.getState()`
+
+获取 MCP Server 运行状态。
+
+**返回值**：
+
+```typescript
+{
+  status: 'stopped' | 'starting' | 'running' | 'error'
+  port: number
+  address?: string      // 运行时的完整 URL
+  toolCount: number     // 已注册工具数
+  error?: string        // 错误信息（status 为 error 时）
+  startedAt?: number    // 启动时间戳
+}
+```
+
+### `ai.mcpServer.start()`
+
+启动 MCP Server（需先在设置中启用）。
+
+### `ai.mcpServer.stop()`
+
+停止 MCP Server。
+
+### `ai.mcpServer.restart()`
+
+重启 MCP Server（配置变更后使用）。
+
+### `ai.mcpServer.regenerateToken()`
+
+重新生成认证 Token。
+
+**返回值**：`{ token: string }`
+
+> ⚠️ 重新生成 Token 后，所有已配置的客户端需要更新 Token 才能重新连接。
+
+### `ai.mcpServer.getTools()`
+
+获取当前已注册到 MCP Server 的工具列表。
+
+**返回值**：
+
+```typescript
+Array<{
+  mcpToolName: string   // MCP 协议中的工具名（如 mulby__qrcode__generate）
+  pluginId: string      // 原始插件 ID
+  toolName: string      // 插件内的工具名
+  pluginName: string    // 插件显示名
+}>
+```
+
+### `ai.mcpServer.getClientConfig()`
+
+获取客户端配置示例（供用户复制粘贴到客户端配置文件）。
+
+**返回值**：
+
+```typescript
+{
+  claudeDesktop: object  // Claude Desktop 配置 JSON
+  cursor: object         // Cursor 配置 JSON
+  generic: object        // 通用配置（含 url 和 token）
+}
+```
+
+### `ai.mcpServer.refreshTools()`
+
+手动刷新 MCP Server 的工具列表（通常在插件变更时自动触发）。
+

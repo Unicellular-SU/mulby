@@ -275,6 +275,16 @@ export function createAiApi(ipcRenderer: IpcRenderer) {
           getDisabled: () => ipcRenderer.invoke('ai:tooling:pluginTools:getDisabled') as Promise<string[]>,
           setDisabled: (disabledList: string[]) => ipcRenderer.invoke('ai:tooling:pluginTools:setDisabled', disabledList) as Promise<string[]>
         }
+      },
+      mcpServer: {
+        getState: () => ipcRenderer.invoke('ai:mcpServer:getState'),
+        start: () => ipcRenderer.invoke('ai:mcpServer:start'),
+        stop: () => ipcRenderer.invoke('ai:mcpServer:stop'),
+        restart: () => ipcRenderer.invoke('ai:mcpServer:restart'),
+        regenerateToken: () => ipcRenderer.invoke('ai:mcpServer:regenerateToken'),
+        getTools: () => ipcRenderer.invoke('ai:mcpServer:getTools'),
+        getClientConfig: () => ipcRenderer.invoke('ai:mcpServer:getClientConfig'),
+        refreshTools: () => ipcRenderer.invoke('ai:mcpServer:refreshTools')
       }
     }
     return api

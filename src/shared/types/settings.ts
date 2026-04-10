@@ -251,6 +251,18 @@ export interface AiToolingSettings {
   disabledPluginTools?: string[]
 }
 
+// ==================== MCP Server 设置 ====================
+
+/** MCP Server 配置（将插件工具暴露给外部 AI 工具） */
+export interface McpServerSettings {
+  /** 是否启用 MCP Server（默认 false） */
+  enabled: boolean
+  /** HTTP 监听端口（默认 18790） */
+  port: number
+  /** Bearer Token 认证（首次启用时自动生成） */
+  token: string
+}
+
 // ==================== OpenClaw Node 设置 ====================
 
 /** 命令执行安全模式 */
@@ -374,6 +386,7 @@ export interface AppSettings {
   input: InputSettings
   tray: TraySettings
   onboardingCompleted?: boolean
+  mcpServer: McpServerSettings
   openclaw: OpenClawSettings
 }
 

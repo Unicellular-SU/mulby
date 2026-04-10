@@ -17,6 +17,7 @@ import type {
   MouseTriggerSettings,
   TraySettings,
   CommandTrustRecord,
+  McpServerSettings,
   OpenClawSettings
 } from '../../shared/types/settings'
 
@@ -204,6 +205,11 @@ const DEFAULT_SETTINGS: AppSettings = {
     clickAction: 'toggleWindow'
   },
   onboardingCompleted: false,
+  mcpServer: {
+    enabled: false,
+    port: 18790,
+    token: ''
+  },
   openclaw: {
     enabled: false,
     gateway: {
@@ -224,6 +230,29 @@ const DEFAULT_SETTINGS: AppSettings = {
       exposeClipboard: false,
       exposeSearch: true
     }
+  }
+}
+
+function normalizeMcpServerSettings(input: Partial<McpServerSettings> | undefined): McpServerSettings {
+  const defaults = DEFAULT_SETTINGS.mcpServer
+  const current = {
+    ...defaults,
+    ...(input || {})
+  }
+
+  // 端口范围校验
+  let port = Number(current.port)
+  if (!Number.isFinite(port) || port < 1 || port > 65535) {
+    port = defaults.port
+  }
+
+  // Token 保留用户值（空字符串表示首次启用时自动生成）
+  const token = typeof current.token === 'string' ? current.token : ''
+
+  return {
+    enabled: current.enabled === true,
+    port,
+    token
   }
 }
 
@@ -742,6 +771,10 @@ function mergeSettings(current: AppSettings, next: Partial<AppSettings>): AppSet
       ...(next.tray || {})
     }),
     onboardingCompleted: next.onboardingCompleted ?? current.onboardingCompleted ?? false,
+    mcpServer: normalizeMcpServerSettings({
+      ...current.mcpServer,
+      ...(next.mcpServer || {})
+    }),
     openclaw: normalizeOpenClawSettings({
       ...current.openclaw,
       ...(next.openclaw || {})

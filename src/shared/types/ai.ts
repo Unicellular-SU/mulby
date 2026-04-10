@@ -543,4 +543,39 @@ export interface AiApi {
       setDisabled: (disabledList: string[]) => Promise<string[]>
     }
   }
+  /** MCP Server 管理（将插件工具暴露给外部 AI 工具） */
+  mcpServer: {
+    /** 获取运行状态 */
+    getState: () => Promise<{
+      status: 'stopped' | 'starting' | 'running' | 'error'
+      port: number
+      address?: string
+      toolCount: number
+      error?: string
+      startedAt?: number
+    }>
+    /** 启动 MCP Server */
+    start: () => Promise<unknown>
+    /** 停止 MCP Server */
+    stop: () => Promise<unknown>
+    /** 重启 MCP Server */
+    restart: () => Promise<unknown>
+    /** 重新生成认证 Token */
+    regenerateToken: () => Promise<{ token: string }>
+    /** 获取已注册的工具列表 */
+    getTools: () => Promise<Array<{
+      mcpToolName: string
+      pluginId: string
+      toolName: string
+      pluginName: string
+    }>>
+    /** 获取客户端配置示例 */
+    getClientConfig: () => Promise<{
+      claudeDesktop: object
+      cursor: object
+      generic: object
+    }>
+    /** 刷新工具列表 */
+    refreshTools: () => Promise<unknown>
+  }
 }

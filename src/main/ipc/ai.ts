@@ -8,7 +8,13 @@ import { appSettingsManager } from '../services/app-settings'
 import type { AiOption, AiMessage, AiImageGenerateProgressChunk, AiMcpServer } from '../../shared/types/ai'
 import type { AiToolWebSearchSettings } from '../../shared/types/settings'
 
-export function registerAiHandlers() {
+/** AI IPC handlers 的可选回调钩子 */
+export interface AiHandlersHooks {
+  /** 当 disabledPluginTools 变更时触发（用于 MCP Server 工具列表刷新） */
+  onDisabledPluginToolsChanged?: () => void
+}
+
+export function registerAiHandlers(hooks?: AiHandlersHooks) {
   ipcMain.handle('ai:call', async (_event: IpcMainInvokeEvent, option: AiOption) => {
     return await aiService.call(option)
   })
@@ -331,6 +337,8 @@ export function registerAiHandlers() {
         disabledPluginTools: disabledList
       }
     })
+    // 通知外部（MCP Server 等）工具可见性变更
+    hooks?.onDisabledPluginToolsChanged?.()
     return next.aiTooling.disabledPluginTools || []
   })
 }

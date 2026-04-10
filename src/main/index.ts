@@ -48,6 +48,8 @@ import { refreshActiveWindowCache, onActiveWindowChange } from './services/activ
 import { patchConsoleWithTimestamp } from '../shared/utils/console'
 import { createOpenClawNodeService, type OpenClawNodeService } from './openclaw'
 import { registerOpenClawHandlers } from './ipc/openclaw'
+import { createMcpServerManager, type McpServerManager } from './ai/mcp-server'
+import { registerMcpServerHandlers } from './ipc/mcp-server'
 
 patchConsoleWithTimestamp()
 
@@ -128,6 +130,7 @@ let suppressMainBlurHideUntil = 0
 let lastMainWindowToggleAt = 0
 let mainWindowHasBeenShown = false
 let deferMainShadowShow = false
+let mcpServerManager: McpServerManager | null = null
 const pluginManager = new PluginManager()
 const pluginWindowManager = new PluginWindowManager()
 const themeManager = new ThemeManager()
@@ -402,6 +405,16 @@ async function shutdownMainProcessResources(): Promise<void> {
       await pluginManager.destroy()
     } catch (error) {
       console.error('[Main] Failed to destroy plugin manager:', error)
+    }
+
+    // 清理 MCP Server
+    try {
+      if (mcpServerManager) {
+        await mcpServerManager.cleanup()
+        mcpServerManager = null
+      }
+    } catch (error) {
+      console.error('[Main] Failed to cleanup MCP Server:', error)
     }
 
     try {
@@ -1249,6 +1262,35 @@ app.whenReady().then(async () => {
     console.error('[OpenClaw] Node 服务初始化失败:', err)
   }
 
+  // 创建 MCP Server Manager（将插件工具暴露给外部 AI 工具）
+  try {
+    mcpServerManager = createMcpServerManager({
+      getAppVersion: () => app.getVersion(),
+      pluginToolRegistry,
+      pluginManager,
+      getDisabledPluginTools: () => appSettingsManager.getSettings().aiTooling.disabledPluginTools || [],
+      getMcpServerConfig: () => appSettingsManager.getSettings().mcpServer,
+      updateMcpServerConfig: (partial) => {
+        const current = appSettingsManager.getSettings()
+        const next = appSettingsManager.updateSettings({
+          mcpServer: {
+            ...current.mcpServer,
+            ...partial
+          }
+        })
+        return next.mcpServer
+      }
+    })
+    registerMcpServerHandlers(mcpServerManager)
+    // 当用户在 UI 中切换工具禁用状态时，同步刷新 MCP Server 工具列表
+    ipcHooks.setOnDisabledPluginToolsChanged(() => {
+      mcpServerManager?.refreshTools()
+    })
+    console.log('[MCP-Server] Manager 初始化完成')
+  } catch (err) {
+    console.error('[MCP-Server] Manager 初始化失败:', err)
+  }
+
   // 主窗口创建及相关初始化（抽取为函数，引导模式下延迟调用）
   function initMainWindow() {
     createWindow()
@@ -1332,6 +1374,8 @@ app.whenReady().then(async () => {
       } else {
         pluginToolRegistry.refreshPlugin(pluginId, pluginName, tools)
       }
+      // 通知 MCP Server 刷新工具列表
+      mcpServerManager?.refreshTools()
     })
 
     // 给宿主进程管理器注入「有活跃 UI 窗口」检测回调
@@ -1379,6 +1423,16 @@ app.whenReady().then(async () => {
             void openclawService.connect(s.openclaw)
           }
         }
+        // 自动启动 MCP Server（如果已启用）
+        if (mcpServerManager) {
+          const mcpConfig = appSettingsManager.getSettings().mcpServer
+          if (mcpConfig.enabled) {
+            console.log('[MCP-Server] 插件初始化完成，自动启动...')
+            void mcpServerManager.start().catch((err) => {
+              console.error('[MCP-Server] 自动启动失败:', err)
+            })
+          }
+        }
       })
     })
     void onboardingWindowManager.show()
@@ -1403,6 +1457,17 @@ app.whenReady().then(async () => {
       if (s.openclaw.enabled && s.openclaw.node.autoConnect) {
         console.log('[OpenClaw] 插件初始化完成，自动连接...')
         void openclawService.connect(s.openclaw)
+      }
+    }
+
+    // 自动启动 MCP Server（如果已启用）
+    if (mcpServerManager) {
+      const mcpConfig = appSettingsManager.getSettings().mcpServer
+      if (mcpConfig.enabled) {
+        console.log('[MCP-Server] 插件初始化完成，自动启动...')
+        void mcpServerManager.start().catch((err) => {
+          console.error('[MCP-Server] 自动启动失败:', err)
+        })
       }
     }
   }
