@@ -1284,3 +1284,17 @@ Array<{
 
 手动刷新 MCP Server 的工具列表（通常在插件变更时自动触发）。
 
+### `ai.mcpServer.getConfig()`
+
+获取 MCP Server 配置信息（含 token/port/enabled + stdioBridgePath）。
+
+**返回值**: `Promise<{ enabled: boolean, port: number, token: string, stdioBridgePath: string }>`
+
+### `ai.mcpServer.updatePort(port)`
+
+更新 MCP Server 监听端口（需要重启生效）。
+
+| 参数 | 类型 | 说明 |
+|------|------|------|
+| `port` | `number` | 端口号（1024-65535） |
+

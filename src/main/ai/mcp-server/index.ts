@@ -9,6 +9,7 @@
  */
 
 import { randomUUID } from 'node:crypto'
+import { join } from 'node:path'
 import { MulbyMcpServer, type MulbyMcpServerDeps } from './server'
 import { McpHttpTransport } from './transport'
 
@@ -18,6 +19,7 @@ export type McpServerStatus = 'stopped' | 'starting' | 'running' | 'error'
 /** MCP Server 运行时状态信息 */
 export interface McpServerState {
   status: McpServerStatus
+  /** 实际运行中的端口（运行时）或配置端口（停止时） */
   port: number
   address?: string
   toolCount: number
@@ -38,6 +40,10 @@ export interface McpServerManagerDeps extends MulbyMcpServerDeps {
   getMcpServerConfig: () => McpServerConfig
   /** 更新 MCP Server 配置 */
   updateMcpServerConfig: (partial: Partial<McpServerConfig>) => McpServerConfig
+  /** 是否为打包后的应用（用于定位 extraResources） */
+  isPackaged: boolean
+  /** process.resourcesPath（打包后）或项目根目录（开发时） */
+  resourcesPath: string
 }
 
 export class McpServerManager {
@@ -47,6 +53,8 @@ export class McpServerManager {
   private status: McpServerStatus = 'stopped'
   private lastError: string | undefined
   private startedAt: number | undefined
+  /** 实际正在监听的端口（仅运行中有效） */
+  private runningPort: number | undefined
 
   constructor(deps: McpServerManagerDeps) {
     this.deps = deps
@@ -55,6 +63,8 @@ export class McpServerManager {
 
   /**
    * 启动 MCP Server
+   *
+   * 会自动将 enabled 设为 true 并持久化，确保下次启动时恢复。
    */
   async start(): Promise<void> {
     if (this.status === 'running' || this.status === 'starting') {
@@ -62,12 +72,10 @@ export class McpServerManager {
       return
     }
 
-    const config = this.deps.getMcpServerConfig()
-    if (!config.enabled) {
-      console.info('[MCP-Server] 未启用，跳过启动')
-      return
-    }
+    // 持久化启用标志（解决 [P1]：从 UI 首次启用 MCP Server）
+    this.deps.updateMcpServerConfig({ enabled: true })
 
+    const config = this.deps.getMcpServerConfig()
     this.status = 'starting'
     this.lastError = undefined
 
@@ -94,6 +102,8 @@ export class McpServerManager {
 
       this.status = 'running'
       this.startedAt = Date.now()
+      // 记录实际绑定的端口（解决 [P2]：端口不一致问题）
+      this.runningPort = config.port
 
       console.info('[MCP-Server] 启动完成', {
         port: config.port,
@@ -104,6 +114,7 @@ export class McpServerManager {
       const message = error instanceof Error ? error.message : String(error)
       this.status = 'error'
       this.lastError = message
+      this.runningPort = undefined
       console.error('[MCP-Server] 启动失败:', message)
 
       // 清理
@@ -118,9 +129,14 @@ export class McpServerManager {
 
   /**
    * 停止 MCP Server
+   *
+   * 会自动将 enabled 设为 false 并持久化。
    */
   async stop(): Promise<void> {
     if (this.status === 'stopped') return
+
+    // 持久化禁用标志（解决 [P1]：从 UI 关闭后重启 app 不会自动重启）
+    this.deps.updateMcpServerConfig({ enabled: false })
 
     try {
       if (this.transport) {
@@ -138,6 +154,7 @@ export class McpServerManager {
     this.status = 'stopped'
     this.startedAt = undefined
     this.lastError = undefined
+    this.runningPort = undefined
     console.info('[MCP-Server] 已停止')
   }
 
@@ -145,18 +162,26 @@ export class McpServerManager {
    * 重启 MCP Server
    */
   async restart(): Promise<void> {
+    // stop() 会将 enabled 设为 false，所以要在 start() 前标记
+    const wasRunning = this.status === 'running' || this.status === 'starting'
     await this.stop()
-    await this.start()
+    if (wasRunning) {
+      // start() 会自动设置 enabled: true
+      await this.start()
+    }
   }
 
   /**
    * 获取运行时状态
+   *
+   * 运行中时返回实际绑定的端口，停止时返回配置端口。
    */
   getState(): McpServerState {
     const config = this.deps.getMcpServerConfig()
     return {
       status: this.status,
-      port: config.port,
+      // 解决 [P2]：运行中返回实际端口，避免 updatePort 后 UI 显示未生效的端口
+      port: this.runningPort ?? config.port,
       address: this.transport?.getAddress(),
       toolCount: this.mcpServer.getToolCount(),
       error: this.lastError,
@@ -201,6 +226,8 @@ export class McpServerManager {
 
   /**
    * 获取客户端配置示例
+   *
+   * 运行中时使用实际端口，停止时使用配置端口。
    */
   getClientConfigExample(): {
     claudeDesktop: object
@@ -208,7 +235,9 @@ export class McpServerManager {
     generic: object
   } {
     const config = this.deps.getMcpServerConfig()
-    const url = `http://127.0.0.1:${config.port}/mcp`
+    // 使用实际运行端口，避免端口不一致
+    const port = this.runningPort ?? config.port
+    const url = `http://127.0.0.1:${port}/mcp`
 
     return {
       claudeDesktop: {
@@ -242,6 +271,37 @@ export class McpServerManager {
   }
 
   /**
+   * 获取当前配置（供 UI 展示）
+   */
+  getConfig(): McpServerConfig {
+    return this.deps.getMcpServerConfig()
+  }
+
+  /**
+   * 更新端口号（仅修改配置，需要重启 MCP Server 生效）
+   *
+   * 返回 getState()，让 UI 看到实际运行端口没有变化。
+   */
+  updatePort(port: number): void {
+    this.deps.updateMcpServerConfig({ port })
+  }
+
+  /**
+   * 获取 stdio bridge 脚本路径（供 UI 显示给用户）
+   *
+   * - 开发模式：源码目录下的 .cjs 文件
+   * - 打包模式：extraResources 中的文件
+   */
+  getStdioBridgePath(): string {
+    if (this.deps.isPackaged) {
+      // 打包后：{app.asar}/../resources/mcp/stdio-bridge.cjs
+      return join(this.deps.resourcesPath, 'mcp', 'stdio-bridge.cjs')
+    }
+    // 开发模式：直接使用源码路径
+    return join(__dirname, 'mcp-server', 'stdio-bridge.cjs')
+  }
+
+  /**
    * 应用退出时清理
    */
   async cleanup(): Promise<void> {
@@ -258,3 +318,4 @@ export function createMcpServerManager(deps: McpServerManagerDeps): McpServerMan
 
 // 重新导出类型
 export type { MulbyMcpServerDeps } from './server'
+

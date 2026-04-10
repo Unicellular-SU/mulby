@@ -577,5 +577,14 @@ export interface AiApi {
     }>
     /** 刷新工具列表 */
     refreshTools: () => Promise<unknown>
+    /** 获取配置（含 token/port/enabled + stdioBridgePath） */
+    getConfig: () => Promise<{
+      enabled: boolean
+      port: number
+      token: string
+      stdioBridgePath: string
+    }>
+    /** 更新端口号（需要重启生效） */
+    updatePort: (port: number) => Promise<unknown>
   }
 }

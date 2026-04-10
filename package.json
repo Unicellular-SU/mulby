@@ -141,6 +141,10 @@
       {
         "from": "resources/tray",
         "to": "resources/tray"
+      },
+      {
+        "from": "src/main/ai/mcp-server/stdio-bridge.cjs",
+        "to": "mcp/stdio-bridge.cjs"
       }
     ],
     "win": {

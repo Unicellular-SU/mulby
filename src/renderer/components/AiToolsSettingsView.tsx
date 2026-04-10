@@ -16,6 +16,7 @@ import RunScriptRegistry from './settings/sections/security/RunScriptRegistry'
 import { DEFAULT_APP_CAPABILITIES } from './settings/constants'
 import { parseListDraft } from './settings/utils'
 import type { GrantDraft, RunScriptDraft } from './settings/sections/security/types'
+import McpServerPanel from './ai-tools/McpServerPanel'
 
 // ===================== 常量 =====================
 
@@ -795,6 +796,22 @@ export default function AiToolsSettingsView({ onBack }: AiToolsSettingsViewProps
               />
             ))}
 
+            {/* ---- 服务分组 ---- */}
+            <div className="mt-4 mb-1 text-[10px] font-medium uppercase tracking-[0.15em] text-slate-400 dark:text-slate-500 px-1">服务</div>
+            <ToolSidebarItem
+              active={activeTool === 'mcp-server'}
+              label="MCP Server"
+              onClick={() => setActiveTool('mcp-server')}
+              icon={
+                <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+                  <rect x="2" y="3" width="20" height="6" rx="2" strokeLinecap="round" strokeLinejoin="round" />
+                  <rect x="2" y="15" width="20" height="6" rx="2" strokeLinecap="round" strokeLinejoin="round" />
+                  <circle cx="6" cy="6" r="1" fill="currentColor" />
+                  <circle cx="6" cy="18" r="1" fill="currentColor" />
+                </svg>
+              }
+            />
+
             {/* ---- 插件工具分组（动态列表，放在最下方） ---- */}
             {pluginTools.length > 0 && (
               <>
@@ -947,6 +964,9 @@ export default function AiToolsSettingsView({ onBack }: AiToolsSettingsViewProps
                   </div>
                 </section>
               </div>
+            ) : activeTool === 'mcp-server' ? (
+              /* ==================== MCP Server 面板 ==================== */
+              <McpServerPanel />
             ) : isSecuritySection && appSettings ? (
               /* ==================== 安全策略面板 ==================== */
               <div className="space-y-5">

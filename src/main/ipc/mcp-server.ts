@@ -111,4 +111,24 @@ export function registerMcpServerHandlers(manager: McpServerManager): void {
     manager.refreshTools()
     return manager.getState()
   })
+
+  // 获取 MCP Server 配置（token/port/enabled + stdioBridgePath）
+  ipcMain.handle('ai:mcpServer:getConfig', async (event) => {
+    if (!isSystemWindowCaller(event)) rejectPluginAccess('ai:mcpServer:getConfig')
+    const config = manager.getConfig()
+    return {
+      ...config,
+      stdioBridgePath: manager.getStdioBridgePath()
+    }
+  })
+
+  // 更新端口号（需要重启生效）
+  ipcMain.handle('ai:mcpServer:updatePort', async (event, port: number) => {
+    if (!isSystemWindowCaller(event)) rejectPluginAccess('ai:mcpServer:updatePort')
+    if (!Number.isInteger(port) || port < 1024 || port > 65535) {
+      throw new Error('端口号必须在 1024-65535 之间')
+    }
+    manager.updatePort(port)
+    return manager.getState()
+  })
 }

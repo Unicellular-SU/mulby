@@ -1279,7 +1279,9 @@ app.whenReady().then(async () => {
           }
         })
         return next.mcpServer
-      }
+      },
+      isPackaged: app.isPackaged,
+      resourcesPath: process.resourcesPath
     })
     registerMcpServerHandlers(mcpServerManager)
     // 当用户在 UI 中切换工具禁用状态时，同步刷新 MCP Server 工具列表

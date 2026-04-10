@@ -284,7 +284,9 @@ export function createAiApi(ipcRenderer: IpcRenderer) {
         regenerateToken: () => ipcRenderer.invoke('ai:mcpServer:regenerateToken'),
         getTools: () => ipcRenderer.invoke('ai:mcpServer:getTools'),
         getClientConfig: () => ipcRenderer.invoke('ai:mcpServer:getClientConfig'),
-        refreshTools: () => ipcRenderer.invoke('ai:mcpServer:refreshTools')
+        refreshTools: () => ipcRenderer.invoke('ai:mcpServer:refreshTools'),
+        getConfig: () => ipcRenderer.invoke('ai:mcpServer:getConfig'),
+        updatePort: (port: number) => ipcRenderer.invoke('ai:mcpServer:updatePort', port)
       }
     }
     return api
