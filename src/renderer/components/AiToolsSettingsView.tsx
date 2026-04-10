@@ -68,11 +68,9 @@ const cardClass = 'rounded-[24px] border border-slate-200/80 bg-white p-6 dark:b
 // ===================== 安全策略侧边栏 Section 定义 =====================
 
 const SECURITY_SECTIONS = [
-  { id: 'ai-general', label: '总开关 / 文件限制', icon: '⚡' },
-  { id: 'ai-paths', label: '路径白名单', icon: '📁' },
-  { id: 'ai-http', label: '网络请求', icon: '🌐' },
-  { id: 'ai-scripts', label: '预置脚本', icon: '🔧' },
-  { id: 'ai-capability', label: '能力授权', icon: '🛡' }
+  { id: 'ai-general', label: '基础设置' },
+  { id: 'ai-access', label: '访问控制' },
+  { id: 'ai-capability', label: '能力授权' }
 ] as const
 
 // ===================== 小型子组件 =====================
@@ -219,24 +217,11 @@ function SecuritySectionIcon({ id }: { id: string }) {
           <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" strokeLinecap="round" strokeLinejoin="round" />
         </svg>
       )
-    case 'ai-paths':
+    case 'ai-access':
       return (
         <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
-          <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" strokeLinecap="round" strokeLinejoin="round" />
-        </svg>
-      )
-    case 'ai-http':
-      return (
-        <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
-          <circle cx="12" cy="12" r="10" />
-          <path d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" strokeLinecap="round" strokeLinejoin="round" />
-        </svg>
-      )
-    case 'ai-scripts':
-      return (
-        <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
-          <polyline points="16 18 22 12 16 6" strokeLinecap="round" strokeLinejoin="round" />
-          <polyline points="8 6 2 12 8 18" strokeLinecap="round" strokeLinejoin="round" />
+          <rect x="3" y="11" width="18" height="11" rx="2" strokeLinecap="round" strokeLinejoin="round" />
+          <path d="M7 11V7a5 5 0 0 1 10 0v4" strokeLinecap="round" strokeLinejoin="round" />
         </svg>
       )
     case 'ai-capability':
@@ -1018,176 +1003,177 @@ export default function AiToolsSettingsView({ onBack }: AiToolsSettingsViewProps
                   </>
                 )}
 
-                {activeTool === 'ai-paths' && (
-                  <div className={`${cardClass} space-y-4`}>
-                    <div className="text-sm font-medium text-slate-900 dark:text-white">路径白名单（allowedRoots / allowedRepoRoots）</div>
-                    <div className="space-y-4">
-                      {/* filesystem */}
-                      <div className="space-y-2">
-                        <div className="text-xs text-slate-500 dark:text-slate-400">filesystem.allowedRoots（文件读取/检索范围）</div>
+                {activeTool === 'ai-access' && (
+                  <>
+                    {/* 路径白名单 */}
+                    <div className={`${cardClass} space-y-4`}>
+                      <div className="text-sm font-medium text-slate-900 dark:text-white">路径白名单</div>
+                      <div className="space-y-4">
+                        {/* filesystem */}
                         <div className="space-y-2">
-                          {(appSettings.aiTooling.filesystem.allowedRoots || []).map((item) => (
-                            <div key={`fs-${item}`} className="flex items-center justify-between gap-2 rounded-xl border border-slate-200/80 bg-white/70 px-3 py-2 text-xs dark:border-slate-800 dark:bg-slate-950/70">
-                              <div className="truncate">{item}</div>
-                              <button className={actionButtonClass} onClick={() => void removeFilesystemRoot(item)}>删除</button>
-                            </div>
-                          ))}
+                          <div className="text-xs text-slate-500 dark:text-slate-400">filesystem.allowedRoots（文件读取/检索范围）</div>
+                          <div className="space-y-2">
+                            {(appSettings.aiTooling.filesystem.allowedRoots || []).map((item) => (
+                              <div key={`fs-${item}`} className="flex items-center justify-between gap-2 rounded-xl border border-slate-200/80 bg-white/70 px-3 py-2 text-xs dark:border-slate-800 dark:bg-slate-950/70">
+                                <div className="truncate">{item}</div>
+                                <button className={actionButtonClass} onClick={() => void removeFilesystemRoot(item)}>删除</button>
+                              </div>
+                            ))}
+                          </div>
+                          <div className="grid grid-cols-1 gap-2 sm:grid-cols-[minmax(0,1fr)_100px]">
+                            <input
+                              className="rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm dark:border-slate-800 dark:bg-slate-950"
+                              placeholder="新增路径，支持逗号或换行批量"
+                              value={filesystemRootDraft}
+                              onChange={(e) => setFilesystemRootDraft(e.target.value)}
+                            />
+                            <button className={actionButtonClass} onClick={() => void addFilesystemRoot()}>新增</button>
+                          </div>
                         </div>
+
+                        {/* patch */}
+                        <div className="space-y-2">
+                          <div className="text-xs text-slate-500 dark:text-slate-400">patch.allowedRoots（补丁应用范围）</div>
+                          <div className="space-y-2">
+                            {(appSettings.aiTooling.patch.allowedRoots || []).map((item) => (
+                              <div key={`patch-${item}`} className="flex items-center justify-between gap-2 rounded-xl border border-slate-200/80 bg-white/70 px-3 py-2 text-xs dark:border-slate-800 dark:bg-slate-950/70">
+                                <div className="truncate">{item}</div>
+                                <button className={actionButtonClass} onClick={() => void removePatchRoot(item)}>删除</button>
+                              </div>
+                            ))}
+                          </div>
+                          <div className="grid grid-cols-1 gap-2 sm:grid-cols-[minmax(0,1fr)_100px]">
+                            <input
+                              className="rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm dark:border-slate-800 dark:bg-slate-950"
+                              placeholder="新增路径，支持逗号或换行批量"
+                              value={patchRootDraft}
+                              onChange={(e) => setPatchRootDraft(e.target.value)}
+                            />
+                            <button className={actionButtonClass} onClick={() => void addPatchRoot()}>新增</button>
+                          </div>
+                        </div>
+
+                        {/* git */}
+                        <div className="space-y-2">
+                          <div className="text-xs text-slate-500 dark:text-slate-400">git.allowedRepoRoots（Git 仓库范围）</div>
+                          <div className="space-y-2">
+                            {(appSettings.aiTooling.git.allowedRepoRoots || []).map((item) => (
+                              <div key={`git-${item}`} className="flex items-center justify-between gap-2 rounded-xl border border-slate-200/80 bg-white/70 px-3 py-2 text-xs dark:border-slate-800 dark:bg-slate-950/70">
+                                <div className="truncate">{item}</div>
+                                <button className={actionButtonClass} onClick={() => void removeGitRoot(item)}>删除</button>
+                              </div>
+                            ))}
+                          </div>
+                          <div className="grid grid-cols-1 gap-2 sm:grid-cols-[minmax(0,1fr)_100px]">
+                            <input
+                              className="rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm dark:border-slate-800 dark:bg-slate-950"
+                              placeholder="新增路径，支持逗号或换行批量"
+                              value={gitRootDraft}
+                              onChange={(e) => setGitRootDraft(e.target.value)}
+                            />
+                            <button className={actionButtonClass} onClick={() => void addGitRoot()}>新增</button>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* 网络请求 */}
+                    <div className={`${cardClass} space-y-4`}>
+                      <div className="text-sm font-medium text-slate-900 dark:text-white">HTTP 黑名单与限制</div>
+                      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                        <label className="space-y-1">
+                          <div className="text-xs text-slate-500 dark:text-slate-400">超时（ms）</div>
+                          <input
+                            type="number"
+                            min={1000}
+                            className="w-full rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-200"
+                            value={appSettings.aiTooling.http.timeoutMs}
+                            onChange={(e) => void updateAiHttp({ timeoutMs: Number(e.target.value || 0) })}
+                          />
+                        </label>
+                        <label className="space-y-1">
+                          <div className="text-xs text-slate-500 dark:text-slate-400">响应体上限（bytes）</div>
+                          <input
+                            type="number"
+                            min={1024}
+                            className="w-full rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-200"
+                            value={appSettings.aiTooling.http.maxResponseBytes}
+                            onChange={(e) => void updateAiHttp({ maxResponseBytes: Number(e.target.value || 0) })}
+                          />
+                        </label>
+                      </div>
+
+                      <div className="space-y-2">
+                        <div className="text-xs text-slate-500 dark:text-slate-400">denyHosts（拒绝访问的域名）</div>
+                        {(appSettings.aiTooling.http.denyHosts || []).map((item) => (
+                          <div key={`deny-host-${item}`} className="flex items-center justify-between gap-2 rounded-xl border border-slate-200/80 bg-white/70 px-3 py-2 text-xs dark:border-slate-800 dark:bg-slate-950/70">
+                            <div className="truncate">{item}</div>
+                            <button className={actionButtonClass} onClick={() => void removeHttpDenyHost(item)}>删除</button>
+                          </div>
+                        ))}
                         <div className="grid grid-cols-1 gap-2 sm:grid-cols-[minmax(0,1fr)_100px]">
                           <input
                             className="rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm dark:border-slate-800 dark:bg-slate-950"
-                            placeholder="新增路径，支持逗号或换行批量"
-                            value={filesystemRootDraft}
-                            onChange={(e) => setFilesystemRootDraft(e.target.value)}
+                            placeholder="例如 localhost, example.com"
+                            value={denyHostDraft}
+                            onChange={(e) => setDenyHostDraft(e.target.value)}
                           />
-                          <button className={actionButtonClass} onClick={() => void addFilesystemRoot()}>新增</button>
+                          <button className={actionButtonClass} onClick={() => void addHttpDenyHost()}>新增</button>
                         </div>
                       </div>
 
-                      {/* patch */}
                       <div className="space-y-2">
-                        <div className="text-xs text-slate-500 dark:text-slate-400">patch.allowedRoots（补丁应用范围）</div>
-                        <div className="space-y-2">
-                          {(appSettings.aiTooling.patch.allowedRoots || []).map((item) => (
-                            <div key={`patch-${item}`} className="flex items-center justify-between gap-2 rounded-xl border border-slate-200/80 bg-white/70 px-3 py-2 text-xs dark:border-slate-800 dark:bg-slate-950/70">
-                              <div className="truncate">{item}</div>
-                              <button className={actionButtonClass} onClick={() => void removePatchRoot(item)}>删除</button>
-                            </div>
-                          ))}
-                        </div>
+                        <div className="text-xs text-slate-500 dark:text-slate-400">denyCidrs（拒绝访问的网段）</div>
+                        {(appSettings.aiTooling.http.denyCidrs || []).map((item) => (
+                          <div key={`deny-cidr-${item}`} className="flex items-center justify-between gap-2 rounded-xl border border-slate-200/80 bg-white/70 px-3 py-2 text-xs dark:border-slate-800 dark:bg-slate-950/70">
+                            <div className="truncate">{item}</div>
+                            <button className={actionButtonClass} onClick={() => void removeHttpDenyCidr(item)}>删除</button>
+                          </div>
+                        ))}
                         <div className="grid grid-cols-1 gap-2 sm:grid-cols-[minmax(0,1fr)_100px]">
                           <input
                             className="rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm dark:border-slate-800 dark:bg-slate-950"
-                            placeholder="新增路径，支持逗号或换行批量"
-                            value={patchRootDraft}
-                            onChange={(e) => setPatchRootDraft(e.target.value)}
+                            placeholder="例如 127.0.0.0/8"
+                            value={denyCidrDraft}
+                            onChange={(e) => setDenyCidrDraft(e.target.value)}
                           />
-                          <button className={actionButtonClass} onClick={() => void addPatchRoot()}>新增</button>
+                          <button className={actionButtonClass} onClick={() => void addHttpDenyCidr()}>新增</button>
                         </div>
                       </div>
 
-                      {/* git */}
                       <div className="space-y-2">
-                        <div className="text-xs text-slate-500 dark:text-slate-400">git.allowedRepoRoots（Git 仓库范围）</div>
-                        <div className="space-y-2">
-                          {(appSettings.aiTooling.git.allowedRepoRoots || []).map((item) => (
-                            <div key={`git-${item}`} className="flex items-center justify-between gap-2 rounded-xl border border-slate-200/80 bg-white/70 px-3 py-2 text-xs dark:border-slate-800 dark:bg-slate-950/70">
-                              <div className="truncate">{item}</div>
-                              <button className={actionButtonClass} onClick={() => void removeGitRoot(item)}>删除</button>
-                            </div>
-                          ))}
-                        </div>
+                        <div className="text-xs text-slate-500 dark:text-slate-400">denyUrlPrefixes（拒绝访问的 URL 前缀）</div>
+                        {(appSettings.aiTooling.http.denyUrlPrefixes || []).map((item) => (
+                          <div key={`deny-prefix-${item}`} className="flex items-center justify-between gap-2 rounded-xl border border-slate-200/80 bg-white/70 px-3 py-2 text-xs dark:border-slate-800 dark:bg-slate-950/70">
+                            <div className="truncate">{item}</div>
+                            <button className={actionButtonClass} onClick={() => void removeHttpDenyPrefix(item)}>删除</button>
+                          </div>
+                        ))}
                         <div className="grid grid-cols-1 gap-2 sm:grid-cols-[minmax(0,1fr)_100px]">
                           <input
                             className="rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm dark:border-slate-800 dark:bg-slate-950"
-                            placeholder="新增路径，支持逗号或换行批量"
-                            value={gitRootDraft}
-                            onChange={(e) => setGitRootDraft(e.target.value)}
+                            placeholder="例如 https://internal.example.com/"
+                            value={denyPrefixDraft}
+                            onChange={(e) => setDenyPrefixDraft(e.target.value)}
                           />
-                          <button className={actionButtonClass} onClick={() => void addGitRoot()}>新增</button>
+                          <button className={actionButtonClass} onClick={() => void addHttpDenyPrefix()}>新增</button>
                         </div>
                       </div>
                     </div>
-                  </div>
-                )}
 
-                {activeTool === 'ai-http' && (
-                  <div className={`${cardClass} space-y-4`}>
-                    <div className="text-sm font-medium text-slate-900 dark:text-white">HTTP 黑名单与限制</div>
-                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                      <label className="space-y-1">
-                        <div className="text-xs text-slate-500 dark:text-slate-400">超时（ms）</div>
-                        <input
-                          type="number"
-                          min={1000}
-                          className="w-full rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-200"
-                          value={appSettings.aiTooling.http.timeoutMs}
-                          onChange={(e) => void updateAiHttp({ timeoutMs: Number(e.target.value || 0) })}
-                        />
-                      </label>
-                      <label className="space-y-1">
-                        <div className="text-xs text-slate-500 dark:text-slate-400">响应体上限（bytes）</div>
-                        <input
-                          type="number"
-                          min={1024}
-                          className="w-full rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-200"
-                          value={appSettings.aiTooling.http.maxResponseBytes}
-                          onChange={(e) => void updateAiHttp({ maxResponseBytes: Number(e.target.value || 0) })}
-                        />
-                      </label>
-                    </div>
-
-                    <div className="space-y-2">
-                      <div className="text-xs text-slate-500 dark:text-slate-400">denyHosts（拒绝访问的域名）</div>
-                      {(appSettings.aiTooling.http.denyHosts || []).map((item) => (
-                        <div key={`deny-host-${item}`} className="flex items-center justify-between gap-2 rounded-xl border border-slate-200/80 bg-white/70 px-3 py-2 text-xs dark:border-slate-800 dark:bg-slate-950/70">
-                          <div className="truncate">{item}</div>
-                          <button className={actionButtonClass} onClick={() => void removeHttpDenyHost(item)}>删除</button>
-                        </div>
-                      ))}
-                      <div className="grid grid-cols-1 gap-2 sm:grid-cols-[minmax(0,1fr)_100px]">
-                        <input
-                          className="rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm dark:border-slate-800 dark:bg-slate-950"
-                          placeholder="例如 localhost, example.com"
-                          value={denyHostDraft}
-                          onChange={(e) => setDenyHostDraft(e.target.value)}
-                        />
-                        <button className={actionButtonClass} onClick={() => void addHttpDenyHost()}>新增</button>
-                      </div>
-                    </div>
-
-                    <div className="space-y-2">
-                      <div className="text-xs text-slate-500 dark:text-slate-400">denyCidrs（拒绝访问的网段）</div>
-                      {(appSettings.aiTooling.http.denyCidrs || []).map((item) => (
-                        <div key={`deny-cidr-${item}`} className="flex items-center justify-between gap-2 rounded-xl border border-slate-200/80 bg-white/70 px-3 py-2 text-xs dark:border-slate-800 dark:bg-slate-950/70">
-                          <div className="truncate">{item}</div>
-                          <button className={actionButtonClass} onClick={() => void removeHttpDenyCidr(item)}>删除</button>
-                        </div>
-                      ))}
-                      <div className="grid grid-cols-1 gap-2 sm:grid-cols-[minmax(0,1fr)_100px]">
-                        <input
-                          className="rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm dark:border-slate-800 dark:bg-slate-950"
-                          placeholder="例如 127.0.0.0/8"
-                          value={denyCidrDraft}
-                          onChange={(e) => setDenyCidrDraft(e.target.value)}
-                        />
-                        <button className={actionButtonClass} onClick={() => void addHttpDenyCidr()}>新增</button>
-                      </div>
-                    </div>
-
-                    <div className="space-y-2">
-                      <div className="text-xs text-slate-500 dark:text-slate-400">denyUrlPrefixes（拒绝访问的 URL 前缀）</div>
-                      {(appSettings.aiTooling.http.denyUrlPrefixes || []).map((item) => (
-                        <div key={`deny-prefix-${item}`} className="flex items-center justify-between gap-2 rounded-xl border border-slate-200/80 bg-white/70 px-3 py-2 text-xs dark:border-slate-800 dark:bg-slate-950/70">
-                          <div className="truncate">{item}</div>
-                          <button className={actionButtonClass} onClick={() => void removeHttpDenyPrefix(item)}>删除</button>
-                        </div>
-                      ))}
-                      <div className="grid grid-cols-1 gap-2 sm:grid-cols-[minmax(0,1fr)_100px]">
-                        <input
-                          className="rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm dark:border-slate-800 dark:bg-slate-950"
-                          placeholder="例如 https://internal.example.com/"
-                          value={denyPrefixDraft}
-                          onChange={(e) => setDenyPrefixDraft(e.target.value)}
-                        />
-                        <button className={actionButtonClass} onClick={() => void addHttpDenyPrefix()}>新增</button>
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                {activeTool === 'ai-scripts' && (
-                  <RunScriptRegistry
-                    settings={appSettings}
-                    runScriptDraft={runScriptDraft}
-                    setRunScriptDraft={setRunScriptDraft}
-                    updateAiRunScript={updateAiRunScript}
-                    updateRunScriptEntry={updateRunScriptEntry}
-                    removeRunScriptEntry={removeRunScriptEntry}
-                    addRunScriptEntry={addRunScriptEntry}
-                    cardClass={cardClass}
-                    actionButtonClass={actionButtonClass}
-                  />
+                    {/* 预置脚本 */}
+                    <RunScriptRegistry
+                      settings={appSettings}
+                      runScriptDraft={runScriptDraft}
+                      setRunScriptDraft={setRunScriptDraft}
+                      updateAiRunScript={updateAiRunScript}
+                      updateRunScriptEntry={updateRunScriptEntry}
+                      removeRunScriptEntry={removeRunScriptEntry}
+                      addRunScriptEntry={addRunScriptEntry}
+                      cardClass={cardClass}
+                      actionButtonClass={actionButtonClass}
+                    />
+                  </>
                 )}
 
                 {activeTool === 'ai-capability' && (

@@ -143,9 +143,9 @@ export class McpServerManager {
         await this.transport.stop()
         this.transport = null
       }
-      await this.mcpServer.close()
+      // 工厂模式下无需 close()，每个 per-request Server 自动清理
+      // 只需重建 mcpServer 实例以确保干净状态
       this.mcpServer.destroy()
-      // 重新创建 server 实例（transport 和 server 的连接关系需要重建）
       this.mcpServer = new MulbyMcpServer(this.deps)
     } catch (error) {
       console.warn('[MCP-Server] 停止时出错:', error)
@@ -232,6 +232,7 @@ export class McpServerManager {
   getClientConfigExample(): {
     claudeDesktop: object
     cursor: object
+    cherryStudio: object
     generic: object
   } {
     const config = this.deps.getMcpServerConfig()
@@ -243,7 +244,7 @@ export class McpServerManager {
       claudeDesktop: {
         mcpServers: {
           mulby: {
-            transport: 'streamable-http',
+            type: 'streamable-http',
             url,
             headers: {
               Authorization: `Bearer ${config.token}`
@@ -254,6 +255,7 @@ export class McpServerManager {
       cursor: {
         mcpServers: {
           mulby: {
+            type: 'streamable-http',
             url,
             headers: {
               Authorization: `Bearer ${config.token}`
@@ -261,9 +263,21 @@ export class McpServerManager {
           }
         }
       },
+      cherryStudio: {
+        mcpServers: {
+          mulby: {
+            type: 'streamable-http',
+            url,
+            headers: {
+              Authorization: `Bearer ${config.token}`
+            },
+            isActive: true
+          }
+        }
+      },
       generic: {
         name: 'Mulby',
-        transport: 'streamable-http',
+        type: 'streamable-http',
         url,
         token: config.token
       }

@@ -1,7 +1,7 @@
 /**
  * MCP Server 设置面板
  *
- * 展示  Mulby 作为 MCP Server 的运行状态、认证 Token、
+ * 展示 Mulby 作为 MCP Server 的运行状态、认证 Token、
  * 端口配置、已暴露工具列表、客户端配置示例。
  */
 import { useCallback, useEffect, useState } from 'react'
@@ -25,7 +25,8 @@ interface McpServerConfig {
 }
 
 interface McpToolEntry {
-  name: string
+  mcpToolName: string
+  pluginId: string
   toolName: string
   pluginName: string
 }
@@ -33,16 +34,80 @@ interface McpToolEntry {
 interface ClientConfigExample {
   claudeDesktop: object
   cursor: object
+  cherryStudio: object
   generic: object
 }
 
-type ConfigTab = 'claudeDesktop' | 'cursor' | 'stdio' | 'generic'
+type ConfigTab = 'claudeDesktop' | 'cursor' | 'cherryStudio' | 'stdio' | 'generic'
 
 // ===================== 样式常量 =====================
 
 const cardClass = 'rounded-[24px] border border-slate-200/80 bg-white p-6 dark:border-slate-800/80 dark:bg-slate-900'
-const inputClass = 'w-full rounded-2xl border border-slate-200 bg-white px-4 py-2 text-sm text-slate-700 shadow-sm outline-none transition focus:border-slate-300 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-200'
-const actionButtonClass = 'rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-700 transition hover:border-slate-300 hover:text-slate-900 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-200 disabled:cursor-not-allowed disabled:opacity-50'
+const actionButtonClass = 'shrink-0 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs text-slate-700 transition hover:border-slate-300 hover:text-slate-900 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-200 disabled:cursor-not-allowed disabled:opacity-50'
+
+// ===================== SVG 图标 =====================
+
+/** 复制图标 */
+function IconCopy({ className = 'h-3.5 w-3.5' }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+      <rect x="9" y="9" width="13" height="13" rx="2" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  )
+}
+
+/** 刷新图标 */
+function IconRefresh({ className = 'h-3.5 w-3.5' }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+      <path d="M1 4v6h6" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  )
+}
+
+/** 眼睛图标 */
+function IconEye({ className = 'h-3.5 w-3.5' }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+      <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" strokeLinecap="round" strokeLinejoin="round" />
+      <circle cx="12" cy="12" r="3" />
+    </svg>
+  )
+}
+
+/** 眼睛关闭图标 */
+function IconEyeOff({ className = 'h-3.5 w-3.5' }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+      <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24" strokeLinecap="round" strokeLinejoin="round" />
+      <line x1="1" y1="1" x2="23" y2="23" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  )
+}
+
+/** 警告图标 */
+function IconAlertTriangle({ className = 'h-3.5 w-3.5' }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+      <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" strokeLinecap="round" strokeLinejoin="round" />
+      <line x1="12" y1="9" x2="12" y2="13" strokeLinecap="round" strokeLinejoin="round" />
+      <line x1="12" y1="17" x2="12.01" y2="17" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  )
+}
+
+/** 信息图标 */
+function IconInfo({ className = 'h-3.5 w-3.5' }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+      <circle cx="12" cy="12" r="10" />
+      <line x1="12" y1="16" x2="12" y2="12" strokeLinecap="round" strokeLinejoin="round" />
+      <line x1="12" y1="8" x2="12.01" y2="8" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  )
+}
 
 // ===================== 工具函数 =====================
 
@@ -69,24 +134,41 @@ function statusColor(status: McpServerState['status']) {
   }
 }
 
+/** 复制到剪贴板（兼容 Electron） */
+async function copyToClipboard(text: string): Promise<boolean> {
+  try {
+    // 优先使用 Electron 的剪贴板 API
+    if (window.mulby?.clipboard?.writeText) {
+      await window.mulby.clipboard.writeText(text)
+      return true
+    }
+    // 兜底使用 Web API
+    await navigator.clipboard.writeText(text)
+    return true
+  } catch {
+    return false
+  }
+}
+
 // ===================== 子组件 =====================
 
 function CopyButton({ text, label = '复制' }: { text: string; label?: string }) {
   const [copied, setCopied] = useState(false)
 
   const handleCopy = useCallback(async () => {
-    try {
-      await navigator.clipboard.writeText(text)
+    const ok = await copyToClipboard(text)
+    if (ok) {
       setCopied(true)
       setTimeout(() => setCopied(false), 1500)
-    } catch {
-      // 兜底
     }
   }, [text])
 
   return (
-    <button className={actionButtonClass} onClick={handleCopy}>
-      {copied ? '已复制 ✓' : label}
+    <button className={actionButtonClass} onClick={handleCopy} type="button">
+      <span className="flex items-center gap-1">
+        <IconCopy />
+        {copied ? '已复制' : label}
+      </span>
     </button>
   )
 }
@@ -151,7 +233,6 @@ export default function McpServerPanel() {
       } else {
         await api.start()
       }
-      // 等待一小段时间让服务器状态稳定
       await new Promise(r => setTimeout(r, 500))
       await refresh()
     } catch (err) {
@@ -231,6 +312,7 @@ export default function McpServerPanel() {
   const configTabs: Array<{ id: ConfigTab; label: string }> = [
     { id: 'claudeDesktop', label: 'Claude Desktop' },
     { id: 'cursor', label: 'Cursor' },
+    { id: 'cherryStudio', label: 'Cherry Studio' },
     { id: 'stdio', label: 'Stdio Bridge' },
     { id: 'generic', label: '通用' }
   ]
@@ -240,6 +322,7 @@ export default function McpServerPanel() {
     switch (configTab) {
       case 'claudeDesktop': return JSON.stringify(clientConfig.claudeDesktop, null, 2)
       case 'cursor': return JSON.stringify(clientConfig.cursor, null, 2)
+      case 'cherryStudio': return JSON.stringify(clientConfig.cherryStudio, null, 2)
       case 'stdio': return stdioBridgeConfig
       case 'generic': return JSON.stringify(clientConfig.generic, null, 2)
       default: return '{}'
@@ -316,27 +399,37 @@ export default function McpServerPanel() {
       {config && (
         <section className={cardClass}>
           <div className="mb-3 text-sm font-semibold text-slate-900 dark:text-white">认证 Token</div>
-          <div className="flex items-center gap-2">
-            <div className="flex-1 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2 dark:border-slate-800/80 dark:bg-slate-950">
-              <code className="text-xs text-slate-600 dark:text-slate-300 select-all">
-                {showToken ? config.token : '•'.repeat(Math.min(config.token.length, 36))}
-              </code>
-            </div>
-            <button className={actionButtonClass} onClick={() => setShowToken(!showToken)}>
-              {showToken ? '隐藏' : '显示'}
+          {/* Token 显示区域 */}
+          <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2.5 dark:border-slate-800/80 dark:bg-slate-950">
+            <code className="block min-h-[1.25rem] break-all text-xs leading-relaxed text-slate-600 dark:text-slate-300 select-all">
+              {showToken ? config.token : (config.token ? '•'.repeat(36) : '未生成')}
+            </code>
+          </div>
+          {/* 按钮行 — 与 Token 区域分离，固定尺寸 */}
+          <div className="mt-2.5 flex items-center gap-2">
+            <button className={actionButtonClass} onClick={() => setShowToken(!showToken)} type="button">
+              <span className="flex items-center gap-1">
+                {showToken ? <IconEyeOff /> : <IconEye />}
+                {showToken ? '隐藏' : '显示'}
+              </span>
             </button>
             <CopyButton text={config.token} />
             <button
               className={`${actionButtonClass} text-amber-600 hover:text-amber-700 dark:text-amber-400`}
               disabled={busy}
               onClick={handleRegenerateToken}
+              type="button"
               title="重新生成 Token（所有客户端需要更新配置）"
             >
-              重新生成
+              <span className="flex items-center gap-1">
+                <IconRefresh />
+                重新生成
+              </span>
             </button>
           </div>
-          <div className="mt-2 text-[11px] text-amber-600 dark:text-amber-400">
-            ⚠️ Token 重新生成后，所有已配置的客户端需要同步更新
+          <div className="mt-2 flex items-center gap-1 text-[11px] text-amber-600 dark:text-amber-400">
+            <IconAlertTriangle className="h-3 w-3 shrink-0" />
+            <span>Token 重新生成后，所有已配置的客户端需要同步更新</span>
           </div>
         </section>
       )}
@@ -349,7 +442,7 @@ export default function McpServerPanel() {
             <label className="flex-1 space-y-1">
               <input
                 type="number"
-                className={inputClass}
+                className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-2 text-sm text-slate-700 shadow-sm outline-none transition focus:border-slate-300 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-200"
                 value={portDraft}
                 min={1024}
                 max={65535}
@@ -365,6 +458,7 @@ export default function McpServerPanel() {
                 className={actionButtonClass}
                 disabled={busy}
                 onClick={handleSavePort}
+                type="button"
               >
                 保存
               </button>
@@ -374,6 +468,7 @@ export default function McpServerPanel() {
               <button
                 className={`${actionButtonClass} text-amber-600 hover:text-amber-700 dark:text-amber-400`}
                 disabled={busy}
+                type="button"
                 onClick={async () => {
                   setBusy(true)
                   try {
@@ -395,13 +490,15 @@ export default function McpServerPanel() {
             )}
           </div>
           {portDirty && (
-            <div className="mt-2 text-[11px] text-slate-500 dark:text-slate-400">
-              ℹ️ 修改端口后需要重启 MCP Server 生效
+            <div className="mt-2 flex items-center gap-1 text-[11px] text-slate-500 dark:text-slate-400">
+              <IconInfo className="h-3 w-3 shrink-0" />
+              <span>修改端口后需要重启 MCP Server 生效</span>
             </div>
           )}
           {portMismatch && !portDirty && (
-            <div className="mt-2 text-[11px] text-amber-600 dark:text-amber-400">
-              ⚠️ 端口已修改为 {configPort}，当前仍监听 {runningPort}，点击「重启生效」
+            <div className="mt-2 flex items-center gap-1 text-[11px] text-amber-600 dark:text-amber-400">
+              <IconAlertTriangle className="h-3 w-3 shrink-0" />
+              <span>端口已修改为 {configPort}，当前仍监听 {runningPort}，点击「重启生效」</span>
             </div>
           )}
         </section>
@@ -424,7 +521,7 @@ export default function McpServerPanel() {
         {tools.length > 0 ? (
           <div className="divide-y divide-slate-200/50 dark:divide-slate-800/50 rounded-2xl border border-slate-200/80 dark:border-slate-800/80 overflow-hidden">
             {tools.map((tool) => (
-              <div key={tool.name} className="flex items-center gap-3 px-4 py-2.5 bg-white dark:bg-slate-950">
+              <div key={tool.mcpToolName} className="flex items-center gap-3 px-4 py-2.5 bg-white dark:bg-slate-950">
                 <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-lg bg-violet-100 text-violet-600 dark:bg-violet-900/30 dark:text-violet-300">
                   <svg className="h-3 w-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                     <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z" strokeLinecap="round" strokeLinejoin="round" />
@@ -432,8 +529,11 @@ export default function McpServerPanel() {
                 </span>
                 <div className="min-w-0 flex-1">
                   <code className="rounded bg-slate-100 px-1.5 py-0.5 text-[11px] text-slate-700 dark:bg-slate-800 dark:text-slate-200">
-                    {tool.name}
+                    {tool.mcpToolName}
                   </code>
+                  <div className="mt-0.5 text-[10px] text-slate-400 dark:text-slate-500">
+                    {tool.pluginId}:{tool.toolName}
+                  </div>
                 </div>
                 <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] text-slate-500 dark:bg-slate-800 dark:text-slate-400">
                   {tool.pluginName}
@@ -447,8 +547,9 @@ export default function McpServerPanel() {
           </div>
         )}
 
-        <div className="mt-3 text-[11px] text-slate-400 dark:text-slate-500">
-          💡 在左侧「插件工具」中可以控制哪些工具对 AI 可见
+        <div className="mt-3 flex items-center gap-1 text-[11px] text-slate-400 dark:text-slate-500">
+          <IconInfo className="h-3 w-3 shrink-0" />
+          <span>在左侧「插件工具」中可以控制哪些工具对 AI 可见</span>
         </div>
       </section>
 
@@ -477,9 +578,7 @@ export default function McpServerPanel() {
 
           {/* 代码区域 */}
           <div className="relative rounded-2xl border border-slate-200/80 bg-slate-950 p-4 dark:border-slate-800/80">
-            <pre className="overflow-x-auto text-xs leading-relaxed text-emerald-400 font-mono">
-              {currentConfigJson}
-            </pre>
+            <pre className="overflow-x-auto whitespace-pre text-xs leading-relaxed text-emerald-400 font-mono">{currentConfigJson}</pre>
             <div className="absolute right-3 top-3">
               <CopyButton text={currentConfigJson} label="复制配置" />
             </div>
@@ -496,8 +595,9 @@ export default function McpServerPanel() {
             </div>
           )}
 
-          <div className="mt-3 text-[11px] text-slate-400 dark:text-slate-500">
-            💡 将以上配置粘贴到对应客户端的 MCP 配置文件中即可使用
+          <div className="mt-3 flex items-center gap-1 text-[11px] text-slate-400 dark:text-slate-500">
+            <IconInfo className="h-3 w-3 shrink-0" />
+            <span>将以上配置粘贴到对应客户端的 MCP 配置文件中即可使用</span>
           </div>
         </section>
       )}

@@ -7,7 +7,8 @@
  * 设计要点：
  * - 使用 @modelcontextprotocol/sdk 的底层 Server API（不是 McpServer 高层封装）
  *   因为 McpServer.tool() 仅接受 Zod schema，而插件的 inputSchema 是 JSON Schema
- * - 工具注册/注销与 PluginToolRegistry 动态联动
+ * - 工厂模式：每个请求创建新的 Server + Transport 对，符合 MCP SDK 的无状态模式要求
+ * - 工具注册表（registeredTools）在所有 per-request Server 实例间共享
  * - 工具调用复用现有 PluginManager.hostManager 管道
  * - 工具名称格式：mulby__{sanitizedPluginId}__{toolName}
  */
@@ -68,10 +69,15 @@ export function parseMcpToolName(name: string): { sanitizedPluginId: string; too
   }
 }
 
+/**
+ * Mulby MCP Server
+ *
+ * 管理工具注册表，并为每个 HTTP 请求创建独立的 MCP Server + Transport 对。
+ * 这符合 MCP SDK 的无状态模式要求：每个请求使用全新的 transport 实例。
+ */
 export class MulbyMcpServer {
-  private server: Server | null = null
   private deps: MulbyMcpServerDeps
-  // 已注册的工具追踪表（syncTools 时全量重建）
+  // 已注册的工具追踪表（syncTools 时全量重建，所有 per-request Server 共享）
   private registeredTools = new Map<string, RegisteredToolEntry>()
 
   constructor(deps: MulbyMcpServerDeps) {
@@ -79,59 +85,53 @@ export class MulbyMcpServer {
   }
 
   /**
-   * 获取底层 Server 实例（延迟创建）
+   * 为一个新的 transport 创建并连接一个 MCP Server 实例
    *
-   * 使用底层 Server 而非 McpServer，因为 McpServer.tool() 仅接受 Zod schema，
-   * 而我们的插件工具 inputSchema 原生就是 JSON Schema 格式。
-   * 底层 Server 的 setRequestHandler 可以直接返回 JSON Schema。
+   * 每个请求都应该调用此方法创建独立的 Server + Transport 对，
+   * 这是 MCP SDK 无状态模式的正确用法。
+   *
+   * @returns Server 实例（调用方需在请求结束后调用 server.close()）
    */
-  getServer(): Server {
-    if (!this.server) {
-      this.server = new Server(
-        {
-          name: 'Mulby',
-          version: this.deps.getAppVersion()
-        },
-        {
-          capabilities: {
-            tools: { listChanged: true }
-          }
+  async createConnectedServer(transport: Transport): Promise<Server> {
+    const server = new Server(
+      {
+        name: 'Mulby',
+        version: this.deps.getAppVersion()
+      },
+      {
+        capabilities: {
+          tools: {}
         }
-      )
+      }
+    )
 
-      // 注册 tools/list handler — 直接返回 JSON Schema，无需 Zod
-      this.server.setRequestHandler(ListToolsRequestSchema, async () => {
-        const tools = Array.from(this.registeredTools.values()).map((entry) => ({
-          name: entry.mcpToolName,
-          description: `[Mulby:${entry.pluginName}] ${entry.description}`,
-          inputSchema: entry.inputSchema
-        }))
-        return { tools }
-      })
+    // 注册 tools/list handler — 直接返回 JSON Schema，无需 Zod
+    // 闭包引用 this.registeredTools，确保所有 Server 实例读取同一份工具表
+    server.setRequestHandler(ListToolsRequestSchema, async () => {
+      const tools = Array.from(this.registeredTools.values()).map((entry) => ({
+        name: entry.mcpToolName,
+        description: `[Mulby:${entry.pluginName}] ${entry.description}`,
+        inputSchema: entry.inputSchema
+      }))
+      return { tools }
+    })
 
-      // 注册 tools/call handler
-      this.server.setRequestHandler(CallToolRequestSchema, async (request) => {
-        const toolName = request.params.name
-        const args = (request.params.arguments || {}) as Record<string, unknown>
-        return await this.handleToolCall(toolName, args)
-      })
-    }
-    return this.server
-  }
+    // 注册 tools/call handler
+    server.setRequestHandler(CallToolRequestSchema, async (request) => {
+      const toolName = request.params.name
+      const args = (request.params.arguments || {}) as Record<string, unknown>
+      return await this.handleToolCall(toolName, args)
+    })
 
-  /**
-   * 连接到传输层
-   */
-  async connect(transport: Transport): Promise<void> {
-    const server = this.getServer()
     await server.connect(transport)
+    return server
   }
 
   /**
    * 同步 PluginToolRegistry 中的所有工具到内部注册表
    *
    * 策略：全量重建（简洁可靠）
-   * 因为底层 Server 的 handler 是在 list 时实时读取 registeredTools，
+   * 因为 per-request Server 的 handler 实时读取 registeredTools，
    * 所以只需要更新 Map 即可，无需调用 SDK 的注册 API。
    */
   syncTools(): void {
@@ -182,17 +182,7 @@ export class MulbyMcpServer {
       })
     }
 
-    const oldSize = this.registeredTools.size
     this.registeredTools = newTools
-
-    // 如果工具列表有变化，通知连接中的客户端
-    if (this.server && oldSize !== newTools.size) {
-      try {
-        this.server.sendToolListChanged()
-      } catch {
-        // 未连接时忽略
-      }
-    }
 
     console.info('[MCP-Server] 工具同步完成', {
       registered: this.registeredTools.size
@@ -295,23 +285,9 @@ export class MulbyMcpServer {
   }
 
   /**
-   * 关闭底层 Server 连接
-   */
-  async close(): Promise<void> {
-    if (this.server) {
-      try {
-        await this.server.close()
-      } catch {
-        // 忽略关闭时的异常
-      }
-    }
-  }
-
-  /**
    * 销毁时清理
    */
   destroy(): void {
     this.registeredTools.clear()
-    this.server = null
   }
 }

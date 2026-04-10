@@ -131,6 +131,8 @@ let lastMainWindowToggleAt = 0
 let mainWindowHasBeenShown = false
 let deferMainShadowShow = false
 let mcpServerManager: McpServerManager | null = null
+let _inputHookService: InputHookService | null = null
+let _openclawService: OpenClawNodeService | null = null
 const pluginManager = new PluginManager()
 const pluginWindowManager = new PluginWindowManager()
 const themeManager = new ThemeManager()
@@ -415,6 +417,33 @@ async function shutdownMainProcessResources(): Promise<void> {
       }
     } catch (error) {
       console.error('[Main] Failed to cleanup MCP Server:', error)
+    }
+
+    // 清理 OpenClaw 服务（WebSocket 连接 + 重连定时器）
+    try {
+      if (_openclawService) {
+        _openclawService.destroy()
+        _openclawService = null
+      }
+    } catch (error) {
+      console.error('[Main] Failed to destroy OpenClaw service:', error)
+    }
+
+    // 清理原生输入钩子（CGEventTap / 低级键盘鼠标钩子）
+    try {
+      if (_inputHookService) {
+        _inputHookService.destroy()
+        _inputHookService = null
+      }
+    } catch (error) {
+      console.error('[Main] Failed to destroy input hook service:', error)
+    }
+
+    // 清理插件窗口
+    try {
+      pluginWindowManager.closeAll()
+    } catch (error) {
+      console.error('[Main] Failed to close plugin windows:', error)
     }
 
     try {
@@ -1102,6 +1131,7 @@ app.whenReady().then(async () => {
 
   // 底层输入钩子服务（统一管理键盘/鼠标/双击修饰键）
   const inputHookService = new InputHookService()
+  _inputHookService = inputHookService
 
   const appShortcutManager = new AppShortcutManager({
     actions: {
@@ -1257,6 +1287,8 @@ app.whenReady().then(async () => {
     // 自动连接逻辑推迟到 pluginManager.init() 之后执行（见下方调用处）
     // 确保 pluginToolRegistry 已填充，消除 Gateway 一次性发现工具时的竞争窗口
 
+    // 将引用提升到模块级变量，供 shutdownMainProcessResources 清理
+    _openclawService = openclawService
     console.log('[OpenClaw] Node 服务初始化完成')
   } catch (err) {
     console.error('[OpenClaw] Node 服务初始化失败:', err)

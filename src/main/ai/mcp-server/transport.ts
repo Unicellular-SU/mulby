@@ -4,8 +4,13 @@
  * 使用 Node.js 原生 http 模块实现 Streamable HTTP MCP 传输，
  * 零新增依赖，与项目现有风格保持一致。
  *
- * 功能：
- * - Streamable HTTP 端点 (POST /mcp)
+ * 架构：每请求 Transport + Server 实例（无状态模式）
+ * - HTTP Server 常驻运行
+ * - 每个 /mcp 请求创建新的 StreamableHTTPServerTransport + MCP Server 对
+ * - 请求结束后自动释放，符合 MCP SDK 无状态模式要求
+ * - 支持多客户端并发连接（Cherry Studio + Cursor 同时使用等场景）
+ *
+ * 其他功能：
  * - Bearer Token 认证
  * - CORS 处理
  * - 健康检查端点 (GET /health)
@@ -26,10 +31,13 @@ export interface McpHttpTransportOptions {
 
 /**
  * 基于原生 http 模块的 MCP HTTP 传输服务
+ *
+ * 采用无状态模式：每个请求创建独立的 Transport + Server 对，
+ * 确保多客户端、断线重连等场景下的正确行为。
  */
 export class McpHttpTransport {
   private httpServer: http.Server | null = null
-  private transport: StreamableHTTPServerTransport | null = null
+  private mcpServer: MulbyMcpServer | null = null
   private options: Required<McpHttpTransportOptions>
 
   constructor(options: McpHttpTransportOptions) {
@@ -41,28 +49,21 @@ export class McpHttpTransport {
   }
 
   /**
-   * 启动 HTTP 传输服务并连接到 MulbyMcpServer
+   * 启动 HTTP 传输服务
+   *
+   * HTTP Server 常驻监听，MulbyMcpServer 引用保留用于每请求创建 Server 实例。
    */
   async start(mcpServer: MulbyMcpServer): Promise<void> {
     if (this.httpServer) {
       throw new Error('MCP HTTP Transport 已在运行')
     }
 
-    // 创建 Streamable HTTP Transport
-    // enableJsonResponse 启用后，当客户端 Accept: application/json 时返回纯 JSON
-    // （否则默认返回 text/event-stream，stdio bridge 等简单代理无法解析 SSE）
-    this.transport = new StreamableHTTPServerTransport({
-      sessionIdGenerator: undefined, // 无状态模式
-      enableJsonResponse: true
-    })
+    this.mcpServer = mcpServer
 
-    // 创建 HTTP Server
+    // 创建 HTTP Server（常驻）
     this.httpServer = http.createServer(async (req, res) => {
       await this.handleRequest(req, res)
     })
-
-    // 连接底层 Server 到 Transport
-    await mcpServer.connect(this.transport)
 
     // 启动 HTTP Server
     await new Promise<void>((resolve, reject) => {
@@ -82,15 +83,6 @@ export class McpHttpTransport {
    * 停止 HTTP 传输服务
    */
   async stop(): Promise<void> {
-    if (this.transport) {
-      try {
-        await this.transport.close()
-      } catch (error) {
-        console.warn('[MCP-Server] Transport 关闭失败:', error)
-      }
-      this.transport = null
-    }
-
     if (this.httpServer) {
       await new Promise<void>((resolve) => {
         this.httpServer!.close(() => resolve())
@@ -100,6 +92,7 @@ export class McpHttpTransport {
       this.httpServer = null
     }
 
+    this.mcpServer = null
     console.info('[MCP-Server] HTTP 传输已停止')
   }
 
@@ -157,23 +150,40 @@ export class McpHttpTransport {
         return
       }
 
-      if (!this.transport) {
+      if (!this.mcpServer) {
         this.setCorsHeaders(res)
         res.writeHead(503, { 'Content-Type': 'application/json' })
-        res.end(JSON.stringify({ error: 'MCP transport not available' }))
+        res.end(JSON.stringify({ error: 'MCP server not available' }))
         return
       }
 
-      // 设置 CORS 然后委托给 transport 处理
+      // 设置 CORS 头
       this.setCorsHeaders(res)
+
+      // 每请求创建新的 Transport + Server 对（无状态模式）
+      // 这是 MCP SDK 的推荐做法：确保每个请求获得全新 transport，
+      // 避免会话绑定导致后续客户端无法连接的问题
+      const transport = new StreamableHTTPServerTransport({
+        sessionIdGenerator: undefined // 无状态模式
+      })
+
+      let server: { close(): Promise<void> } | null = null
       try {
-        await this.transport.handleRequest(req, res)
+        server = await this.mcpServer.createConnectedServer(transport)
+        await transport.handleRequest(req, res)
       } catch (error) {
         console.error('[MCP-Server] 请求处理失败:', error)
         if (!res.headersSent) {
           res.writeHead(500, { 'Content-Type': 'application/json' })
           res.end(JSON.stringify({ error: 'Internal server error' }))
         }
+      } finally {
+        // 请求处理完成后，清理 transport 和 server
+        // 注意：对于 SSE 流式响应，res.on('close') 保证在流结束后触发
+        res.on('close', () => {
+          void transport.close().catch(() => {})
+          void server?.close().catch(() => {})
+        })
       }
       return
     }
@@ -188,7 +198,7 @@ export class McpHttpTransport {
    * Bearer Token 认证
    */
   private authenticateRequest(req: http.IncomingMessage): boolean {
-    // 安全兆底：空 token 不应到这里（start 时已自动生成），但仍然拒绝
+    // 安全兜底：空 token 不应到这里（start 时已自动生成），但仍然拒绝
     if (!this.options.token) return false
 
     const auth = req.headers.authorization || ''
@@ -204,7 +214,7 @@ export class McpHttpTransport {
   private setCorsHeaders(res: http.ServerResponse): void {
     res.setHeader('Access-Control-Allow-Origin', '*')
     res.setHeader('Access-Control-Allow-Methods', 'GET, POST, DELETE, OPTIONS')
-    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, Mcp-Session-Id')
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, Mcp-Session-Id, Mcp-Protocol-Version')
     res.setHeader('Access-Control-Expose-Headers', 'Mcp-Session-Id')
   }
 }
