@@ -27,6 +27,7 @@ const BackgroundPluginManagerView = lazy(() => import('./components/BackgroundPl
 const TaskSchedulerView = lazy(() => import('./components/TaskSchedulerView'))
 const AiSettingsView = lazy(() => import('./components/AiSettingsView'))
 const AiMcpSettingsView = lazy(() => import('./components/AiMcpSettingsView'))
+const AiToolsSettingsView = lazy(() => import('./components/AiToolsSettingsView'))
 const AiSkillsSettingsView = lazy(() => import('./components/AiSkillsSettingsView'))
 const LogViewerView = lazy(() => import('./components/LogViewerView'))
 const PluginStorageExplorerView = lazy(() => import('./components/PluginStorageExplorerView'))
@@ -109,6 +110,7 @@ type ViewMode =
   | 'task-scheduler'
   | 'ai-settings'
   | 'ai-mcp-settings'
+  | 'ai-tools-settings'
   | 'ai-skills-settings'
   | 'storage-explorer'
 
@@ -187,6 +189,9 @@ function parseSystemWindowBootstrap(): SystemWindowBootstrap {
       break
     case 'ai-mcp-settings':
       initialViewMode = 'ai-mcp-settings'
+      break
+    case 'ai-tools-settings':
+      initialViewMode = 'ai-tools-settings'
       break
     case 'ai-skills-settings':
       initialViewMode = 'ai-skills-settings'
@@ -729,6 +734,19 @@ function MainApp() {
     setViewMode('ai-mcp-settings')
   }, [isSystemWindow, pluginOpen])
 
+  const openAiToolsSettings = useCallback(() => {
+    if (pluginOpen) {
+      window.mulby.window.close()
+      setPluginOpen(false)
+    }
+    setAttachmentsManagerOpen(false)
+    if (!isSystemWindow) {
+      void window.mulby.systemPage.open({ page: 'ai-tools-settings' })
+      return
+    }
+    setViewMode('ai-tools-settings')
+  }, [isSystemWindow, pluginOpen])
+
   const openAiSkillsSettings = useCallback(() => {
     if (pluginOpen) {
       window.mulby.window.close()
@@ -852,6 +870,13 @@ function MainApp() {
     })
     return cleanup
   }, [openAiMcpSettings])
+
+  useEffect(() => {
+    const cleanup = window.mulby.app.onOpenAiToolsSettings(() => {
+      openAiToolsSettings()
+    })
+    return cleanup
+  }, [openAiToolsSettings])
 
   useEffect(() => {
     const cleanup = window.mulby.app.onOpenAiSkillsSettings(() => {
@@ -1176,6 +1201,7 @@ function MainApp() {
         <AiSettingsView
           onBack={() => setViewMode('system-plugin')}
           onOpenMcpSettings={openAiMcpSettings}
+          onOpenToolsSettings={openAiToolsSettings}
           onOpenSkillsSettings={openAiSkillsSettings}
         />
       </LazyViewFrame>
@@ -1186,6 +1212,16 @@ function MainApp() {
     return (
       <LazyViewFrame isDragging={isDragging}>
         <AiMcpSettingsView
+          onBack={() => setViewMode('ai-settings')}
+        />
+      </LazyViewFrame>
+    )
+  }
+
+  if (viewMode === 'ai-tools-settings') {
+    return (
+      <LazyViewFrame isDragging={isDragging}>
+        <AiToolsSettingsView
           onBack={() => setViewMode('ai-settings')}
         />
       </LazyViewFrame>

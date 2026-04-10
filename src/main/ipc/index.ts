@@ -4,6 +4,7 @@ import { registerClipboardHistoryHandlers } from './clipboard-history'
 import { registerNotificationHandlers } from './notification'
 import { registerWindowHandlers } from './window'
 import { registerPluginHandlers } from './plugin'
+import type { PluginToolRegistry } from '../plugin/plugin-tools'
 import { registerThemeHandlers } from './theme'
 import { registerScreenHandlers } from './screen'
 import { registerShellHandlers } from './shell'
@@ -58,13 +59,14 @@ export function registerAllHandlers(
   clipboardHistoryManager: ClipboardHistoryManager,
   systemPluginWindowManager: SystemPluginWindowManager,
   systemPageWindowManager: SystemPageWindowManager,
-  onboardingWindowManager: OnboardingWindowManager
+  onboardingWindowManager: OnboardingWindowManager,
+  pluginToolRegistry?: PluginToolRegistry
 ): { warmupFeatureIconCache: () => void } {
   registerClipboardHandlers()
   registerClipboardHistoryHandlers(clipboardHistoryManager)
   registerNotificationHandlers()
   registerWindowHandlers(getMainWindow, pluginWindowManager, themeManager, appSettingsManager, pluginManager)
-  const pluginHooks = registerPluginHandlers(pluginManager)
+  const pluginHooks = registerPluginHandlers(pluginManager, pluginToolRegistry)
   registerThemeHandlers(themeManager)
   registerScreenHandlers()
   registerShellHandlers()

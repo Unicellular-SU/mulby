@@ -1,36 +1,35 @@
-import { useState, type ComponentProps } from 'react'
+import { type ComponentProps } from 'react'
 import { ProviderSettingsSection } from './ProviderSettingsSection'
 import AiSettingsHeader from './AiSettingsHeader'
 import AiSettingsStatusPanels from './AiSettingsStatusPanels'
 import AiSettingsModalsHost from './AiSettingsModalsHost'
-import AiToolSettingsModal from './AiToolSettingsModal'
 import { useAiSettingsController } from './useAiSettingsController'
 
 interface UseAiSettingsViewModelArgs {
   onBack: () => void
   onOpenMcpSettings?: () => void
+  onOpenToolsSettings?: () => void
   onOpenSkillsSettings?: () => void
 }
 
 export function useAiSettingsViewModel({
   onBack,
   onOpenMcpSettings,
+  onOpenToolsSettings,
   onOpenSkillsSettings
 }: UseAiSettingsViewModelArgs): {
   headerProps: ComponentProps<typeof AiSettingsHeader>
   statusProps: ComponentProps<typeof AiSettingsStatusPanels>
   providerSectionProps: ComponentProps<typeof ProviderSettingsSection>
   modalsHostProps: ComponentProps<typeof AiSettingsModalsHost>
-  toolSettingsModalProps: ComponentProps<typeof AiToolSettingsModal>
 } {
   const controller = useAiSettingsController()
-  const [showToolSettings, setShowToolSettings] = useState(false)
 
   const headerProps: ComponentProps<typeof AiSettingsHeader> = {
     onBack,
     onOpenGlobalDefaultModelModal: controller.openGlobalDefaultModelModal,
     onOpenDefaultParamsModal: () => controller.setShowDefaultParamsModal(true),
-    onOpenToolSettings: () => setShowToolSettings(true),
+    onOpenToolSettings: onOpenToolsSettings,
     onOpenSkillsSettings,
     onOpenMcpSettings
   }
@@ -155,16 +154,10 @@ export function useAiSettingsViewModel({
     }
   }
 
-  const toolSettingsModalProps: ComponentProps<typeof AiToolSettingsModal> = {
-    show: showToolSettings,
-    onClose: () => setShowToolSettings(false)
-  }
-
   return {
     headerProps,
     statusProps,
     providerSectionProps,
-    modalsHostProps,
-    toolSettingsModalProps
+    modalsHostProps
   }
 }

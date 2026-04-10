@@ -195,6 +195,10 @@ export interface PluginInfo {
     }
   }[]
   enabled: boolean
+  tools?: {
+    name: string
+    description: string
+  }[]
 }
 
 export type ThemeMode = 'light' | 'dark' | 'system'
@@ -449,6 +453,7 @@ export interface ElectronAPI {
     onSystemPluginBeforeAttach: (callback: (payload: SystemPluginBeforeAttachPayload) => void | Promise<void>) => () => void
     onOpenAiSettings: (callback: () => void) => () => void
     onOpenAiMcpSettings: (callback: () => void) => () => void
+    onOpenAiToolsSettings: (callback: () => void) => () => void
     onOpenAiSkillsSettings: (callback: () => void) => () => void
     onOpenPluginStore: (callback: () => void) => () => void
     onOpenPluginManager: (callback: () => void) => () => void
@@ -465,7 +470,7 @@ export interface ElectronAPI {
   }
   systemPage: {
     open: (payload: {
-      page: 'settings' | 'plugin-manager' | 'plugin-store' | 'background-plugins' | 'task-scheduler' | 'log-viewer' | 'ai-settings' | 'ai-mcp-settings' | 'ai-skills-settings' | 'storage-explorer'
+      page: 'settings' | 'plugin-manager' | 'plugin-store' | 'background-plugins' | 'task-scheduler' | 'log-viewer' | 'ai-settings' | 'ai-mcp-settings' | 'ai-tools-settings' | 'ai-skills-settings' | 'storage-explorer'
       settingsSection?: 'dashboard' | 'general' | 'shortcuts' | 'commandQuickLaunch' | 'commandAll' | 'permissions' | 'security' | 'openclaw' | 'developer' | 'about'
       shortcutCommandHint?: string
     }) => Promise<boolean>

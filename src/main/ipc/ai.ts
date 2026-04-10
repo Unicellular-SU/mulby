@@ -316,4 +316,21 @@ export function registerAiHandlers() {
     })
     return { success: true, activeProvider: next.aiTooling.webSearch.activeProvider }
   })
+
+  // ---- 插件工具禁用管理 ----
+
+  ipcMain.handle('ai:tooling:pluginTools:getDisabled', async () => {
+    return appSettingsManager.getSettings().aiTooling.disabledPluginTools || []
+  })
+
+  ipcMain.handle('ai:tooling:pluginTools:setDisabled', async (_event, disabledList: string[]) => {
+    const current = appSettingsManager.getSettings()
+    const next = appSettingsManager.updateSettings({
+      aiTooling: {
+        ...current.aiTooling,
+        disabledPluginTools: disabledList
+      }
+    })
+    return next.aiTooling.disabledPluginTools || []
+  })
 }

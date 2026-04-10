@@ -588,7 +588,10 @@ function normalizeAiToolingSettings(input: Partial<AiToolingSettings> | undefine
       maxDiffBytes: Math.max(8 * 1024, Math.min(Number(git.maxDiffBytes || DEFAULT_SETTINGS.aiTooling.git.maxDiffBytes), 20 * 1024 * 1024))
     },
     webSearch: normalizedWebSearch,
-    capabilityPolicy
+    capabilityPolicy,
+    disabledPluginTools: Array.isArray(current.disabledPluginTools)
+      ? current.disabledPluginTools.filter((k) => typeof k === 'string' && k.includes(':'))
+      : undefined
   }
 }
 

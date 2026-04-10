@@ -247,6 +247,8 @@ export interface AiToolingSettings {
   git: AiToolGitSettings
   webSearch: AiToolWebSearchSettings
   capabilityPolicy: AiToolCapabilityPolicySettings
+  /** 用户禁用的插件工具列表，格式 "pluginId:toolName" */
+  disabledPluginTools?: string[]
 }
 
 // ==================== OpenClaw Node 设置 ====================

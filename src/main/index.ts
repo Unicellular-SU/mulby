@@ -156,7 +156,10 @@ const aiInternalToolRuntime = createAiInternalToolRuntime({
 
 // 创建 Plugin Tools 注册中心并注入到 AI 管道
 const pluginToolRegistry = new PluginToolRegistry()
-setAiPluginToolResolver(() => pluginToolRegistry.resolveToolsForAi())
+setAiPluginToolResolver(() => {
+  const disabledList = appSettingsManager.getSettings().aiTooling.disabledPluginTools || []
+  return pluginToolRegistry.resolveToolsForAi(new Set(disabledList))
+})
 setAiSkillActivationScopeManager({
   create: (requestId) => aiInternalToolRuntime.createActivationScope(requestId),
   cleanup: (requestId) => aiInternalToolRuntime.cleanupActivationScope(requestId)
@@ -309,6 +312,13 @@ setAiToolExecutor(async ({ name, args, context, callId, abortSignal }) => {
 
     // 通过注册中心还原原始 pluginId（sanitizedId → originalPluginId）
     const pluginId = pluginToolRegistry.resolveOriginalPluginId(sanitizedId) || sanitizedId
+
+    // 检查该工具是否被用户禁用
+    const disabledList = appSettingsManager.getSettings().aiTooling.disabledPluginTools || []
+    const toolKey = `${pluginId}:${toolName}`
+    if (disabledList.includes(toolKey)) {
+      throw new Error(`Plugin tool is disabled by user: ${toolKey}`)
+    }
 
     // 确保插件 host 已初始化（懒加载：首次调用时自动启动 host 进程）
     const plugin = pluginManager.get(pluginId)
@@ -1112,7 +1122,8 @@ app.whenReady().then(async () => {
     clipboardHistoryManager,
     systemPluginWindowManager,
     systemPageWindowManager,
-    onboardingWindowManager
+    onboardingWindowManager,
+    pluginToolRegistry
   )
 
   // 创建 OpenClaw Node 服务并注册 IPC
@@ -1190,8 +1201,15 @@ app.whenReady().then(async () => {
       runPlugin: async (pluginId: string, featureCode: string, input?: string) => {
         return pluginManager.run(pluginId, featureCode, input)
       },
-      getAiTools: () => pluginToolRegistry.resolveToolsForAi(),
+      getAiTools: () => {
+        const disabledList = appSettingsManager.getSettings().aiTooling.disabledPluginTools || []
+        return pluginToolRegistry.resolveToolsForAi(new Set(disabledList))
+      },
       resolveOriginalPluginId: (sanitizedId) => pluginToolRegistry.resolveOriginalPluginId(sanitizedId),
+      isToolDisabled: (pluginId, toolName) => {
+        const disabledList = appSettingsManager.getSettings().aiTooling.disabledPluginTools || []
+        return disabledList.includes(`${pluginId}:${toolName}`)
+      },
       canvas: { getMainWindow }
     })
 

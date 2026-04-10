@@ -28,6 +28,11 @@ export function createAppPluginApi(ipcRenderer: IpcRenderer) {
         ipcRenderer.on('app:openAiMcpSettings', listener)
         return () => ipcRenderer.removeListener('app:openAiMcpSettings', listener)
       },
+      onOpenAiToolsSettings: (callback: () => void) => {
+        const listener = () => callback()
+        ipcRenderer.on('app:openAiToolsSettings', listener)
+        return () => ipcRenderer.removeListener('app:openAiToolsSettings', listener)
+      },
       onOpenAiSkillsSettings: (callback: () => void) => {
         const listener = () => callback()
         ipcRenderer.on('app:openAiSkillsSettings', listener)
@@ -78,7 +83,7 @@ export function createAppPluginApi(ipcRenderer: IpcRenderer) {
 
     systemPage: {
       open: (payload: {
-        page: 'settings' | 'plugin-manager' | 'plugin-store' | 'background-plugins' | 'task-scheduler' | 'log-viewer' | 'storage-explorer' | 'ai-settings' | 'ai-mcp-settings' | 'ai-skills-settings'
+        page: 'settings' | 'plugin-manager' | 'plugin-store' | 'background-plugins' | 'task-scheduler' | 'log-viewer' | 'storage-explorer' | 'ai-settings' | 'ai-mcp-settings' | 'ai-tools-settings' | 'ai-skills-settings'
         settingsSection?: 'general' | 'shortcuts' | 'commandQuickLaunch' | 'commandAll' | 'permissions' | 'security' | 'developer' | 'about'
         shortcutCommandHint?: string
       }) => ipcRenderer.invoke('systemPage:open', payload),

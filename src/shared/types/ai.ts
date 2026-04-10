@@ -536,5 +536,11 @@ export interface AiApi {
       /** 修改当前激活的搜索 provider */
       setActiveProvider: (providerId: string) => Promise<{ success: boolean; activeProvider: string }>
     }
+    pluginTools: {
+      /** 获取用户禁用的插件工具列表（格式 "pluginId:toolName"） */
+      getDisabled: () => Promise<string[]>
+      /** 设置用户禁用的插件工具列表 */
+      setDisabled: (disabledList: string[]) => Promise<string[]>
+    }
   }
 }

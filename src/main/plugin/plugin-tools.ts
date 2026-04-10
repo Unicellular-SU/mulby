@@ -237,12 +237,17 @@ export class PluginToolRegistry {
   /**
    * 将所有已注册的 plugin tools 转换为 AiTool[] 格式
    * 供 resolveMergedTools 管道使用
+   * @param disabledKeys 用户禁用的工具集合，格式 "pluginId:toolName"
    */
-  resolveToolsForAi(): AiTool[] {
+  resolveToolsForAi(disabledKeys?: Set<string>): AiTool[] {
     const tools: AiTool[] = []
 
     for (const entries of this.registry.values()) {
       for (const entry of entries) {
+        // 检查是否被用户禁用
+        if (disabledKeys?.has(`${entry.pluginId}:${entry.schema.name}`)) {
+          continue
+        }
         tools.push({
           type: 'function',
           function: {

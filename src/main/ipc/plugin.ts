@@ -1,6 +1,7 @@
 import { ipcMain, app } from 'electron'
 import { resolve } from 'path'
 import { PluginManager } from '../plugin'
+import type { PluginToolRegistry } from '../plugin/plugin-tools'
 import { buildFeatureIconCacheKey } from '../plugin/dev-reload-utils'
 import { resolveIcon } from '../plugin/icon-resolver'
 import type {
@@ -17,7 +18,7 @@ import { PluginStoreService } from '../plugin/store-service'
 
 
 
-export function registerPluginHandlers(manager: PluginManager): { warmupFeatureIconCache: () => void } {
+export function registerPluginHandlers(manager: PluginManager, pluginToolRegistry?: PluginToolRegistry): { warmupFeatureIconCache: () => void } {
   const installer = new PluginInstaller()
   const storeService = new PluginStoreService(manager, installer)
   const userPluginsDir = resolve(app.getPath('userData'), 'plugins')
@@ -113,7 +114,10 @@ export function registerPluginHandlers(manager: PluginManager): { warmupFeatureI
       builtin: isBuiltin(p.path),
       isDev: p.isDev,
       features: manager.getFeatures(p.id),
-      enabled: p.enabled
+      enabled: p.enabled,
+      tools: pluginToolRegistry
+        ? pluginToolRegistry.getPluginTools(p.id).map(e => ({ name: e.schema.name, description: e.schema.description }))
+        : p.manifest.tools?.map(t => ({ name: t.name, description: t.description }))
     }))
   })
 

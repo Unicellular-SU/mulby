@@ -17,6 +17,7 @@ const SYSTEM_PAGE_IDS: SystemPageId[] = [
   'storage-explorer',
   'ai-settings',
   'ai-mcp-settings',
+  'ai-tools-settings',
   'ai-skills-settings'
 ]
 

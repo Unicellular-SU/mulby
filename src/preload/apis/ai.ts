@@ -270,6 +270,10 @@ export function createAiApi(ipcRenderer: IpcRenderer) {
           update: (partial: Record<string, unknown>) => ipcRenderer.invoke('ai:tooling:webSearch:update', partial),
           getSettings: () => ipcRenderer.invoke('ai:tooling:webSearch:getSettings'),
           setActiveProvider: (providerId: string) => ipcRenderer.invoke('ai:tooling:webSearch:setActiveProvider', providerId)
+        },
+        pluginTools: {
+          getDisabled: () => ipcRenderer.invoke('ai:tooling:pluginTools:getDisabled') as Promise<string[]>,
+          setDisabled: (disabledList: string[]) => ipcRenderer.invoke('ai:tooling:pluginTools:setDisabled', disabledList) as Promise<string[]>
         }
       }
     }

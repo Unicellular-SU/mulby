@@ -74,6 +74,9 @@ export interface MulbyHandlerDeps {
 
   /** 将 sanitizedPluginId 还原为原始 pluginId（供 mulby.plugin.invoke 通过 toolId 调用时使用） */
   resolveOriginalPluginId?: (sanitizedId: string) => string | undefined
+
+  /** 检查指定工具是否被用户禁用（格式 "pluginId:toolName"） */
+  isToolDisabled?: (pluginId: string, toolName: string) => boolean
 }
 
 /**
@@ -132,6 +135,12 @@ export function createMulbyHandlers(deps: MulbyHandlerDeps): Record<string, { ha
           }
           pluginId = resolvedId
           method = toolName
+
+          // 检查该工具是否被用户禁用
+          if (deps.isToolDisabled?.(pluginId, method)) {
+            throw new Error(`Plugin tool is disabled by user: ${pluginId}:${method}`)
+          }
+
           // args 兼容 object（AI 通常传 key/value） 和 array 两种格式
           const rawArgs = params.args
           args = Array.isArray(rawArgs) ? rawArgs : (rawArgs && typeof rawArgs === 'object') ? [rawArgs] : []
@@ -142,6 +151,11 @@ export function createMulbyHandlers(deps: MulbyHandlerDeps): Record<string, { ha
 
           method = String(params.method || '').trim()
           if (!method) throw new Error('method is required')
+
+          // 检查该工具是否被用户禁用
+          if (deps.isToolDisabled?.(pluginId, method)) {
+            throw new Error(`Plugin tool is disabled by user: ${pluginId}:${method}`)
+          }
 
           args = Array.isArray(params.args) ? params.args : []
         }

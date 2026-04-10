@@ -59,6 +59,7 @@ export type SystemPageId =
   | 'storage-explorer'
   | 'ai-settings'
   | 'ai-mcp-settings'
+  | 'ai-tools-settings'
   | 'ai-skills-settings'
 
 export type SettingsCenterSection =
@@ -627,6 +628,8 @@ export class SystemPageWindowManager {
         return 'AI 设置'
       case 'ai-mcp-settings':
         return 'MCP 设置'
+      case 'ai-tools-settings':
+        return '工具设置'
       case 'ai-skills-settings':
         return '技能设置'
       case 'storage-explorer':
@@ -685,6 +688,10 @@ export class SystemPageWindowManager {
       case 'ai-mcp-settings':
         target.webContents.send('app:openAiSettings')
         target.webContents.send('app:openAiMcpSettings')
+        return
+      case 'ai-tools-settings':
+        target.webContents.send('app:openAiSettings')
+        target.webContents.send('app:openAiToolsSettings')
         return
       case 'ai-skills-settings':
         target.webContents.send('app:openAiSettings')
