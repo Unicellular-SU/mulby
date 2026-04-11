@@ -473,6 +473,22 @@ export default function SuperPanelSection({
       {/* 以下配置项仅在启用时展示 */}
       {superPanel.enabled && (
         <>
+          <div className={`${cardClass} space-y-4`}>
+            <div className="flex items-center justify-between">
+              <div>
+                <div className="text-sm font-medium text-slate-900 dark:text-white">即时翻译</div>
+                <div className="text-xs text-slate-500 dark:text-slate-400">
+                  选中文本唤起面板时，自动调用 AI 生成翻译并在首部展示
+                </div>
+              </div>
+              <Toggle
+                checked={superPanel.instantTranslation !== false}
+                onChange={(v) => void handleUpdate({ instantTranslation: v })}
+                disabled={!superPanel.enabled}
+              />
+            </div>
+          </div>
+
           <TriggerSection
             superPanel={superPanel}
             onUpdate={handleUpdate}

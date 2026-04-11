@@ -89,7 +89,15 @@ export class SuperPanelWindowManager {
     // 搜索框（match 模式且有 2+ 条结果时显示）
     const searchBarHeight = state.mode === 'match' && state.items.length > 1 ? 36 : 0
     // 翻译卡片预留（有翻译时显示）
-    const translationHeight = state.translation ? 60 : 0
+    let translationHeight = 0
+    if (state.translation) {
+      if (state.translation.expanded && state.translation.expandedHeight) {
+        // 卡片高度 + 顶部 margin 6px
+        translationHeight = state.translation.expandedHeight + 6
+      } else {
+        translationHeight = 60
+      }
+    }
 
     const contentHeight = headerHeight + searchBarHeight + translationHeight + Math.max(listCount, 1) * itemHeight + footerHeight
     return Math.min(contentHeight, PANEL_MAX_HEIGHT)

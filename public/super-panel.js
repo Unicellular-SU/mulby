@@ -18,6 +18,7 @@ const searchBar = document.getElementById('search-bar');
 const searchInput = document.getElementById('search-input');
 const translationCard = document.getElementById('translation-card');
 const translationText = document.getElementById('translation-text');
+const translationCopyBtn = document.getElementById('translation-copy-btn');
 
 let currentItems = [];
 let currentPinnedItems = [];
@@ -209,11 +210,24 @@ function renderTranslation(translation) {
 
   if (translation.loading) {
     translationText.innerHTML = '<span class="sp-translation-loading">翻译中…</span>';
+    translationText.classList.remove('expanded');
+    translationText.classList.add('collapsed');
+    translationCopyBtn.style.display = 'none';
   } else if (translation.error) {
     translationText.innerHTML = `<span class="sp-translation-error">${escapeHtml(translation.error)}</span>`;
+    translationText.classList.remove('expanded');
+    translationText.classList.add('collapsed');
+    translationCopyBtn.style.display = 'none';
   } else if (translation.text) {
     translationText.textContent = translation.text;
-    translationText.classList.add('sp-translation-ready');
+    if (translation.expanded) {
+      translationText.classList.remove('collapsed');
+      translationText.classList.add('expanded');
+    } else {
+      translationText.classList.remove('expanded');
+      translationText.classList.add('collapsed');
+    }
+    translationCopyBtn.style.display = '';
   } else {
     translationCard.style.display = 'none';
   }
@@ -322,14 +336,31 @@ itemListEl.addEventListener('contextmenu', async (event) => {
   }
 });
 
-// ==================== 翻译卡片点击复制 ====================
+// ==================== 翻译卡片展开/折叠与复制 ====================
 
 translationText.addEventListener('click', () => {
+  if (translationText.classList.contains('collapsed')) {
+    translationText.classList.remove('collapsed');
+    translationText.classList.add('expanded');
+    const height = translationCard.offsetHeight;
+    void window.mulby.superPanel.action('translationToggle', { expanded: true, height });
+  } else {
+    translationText.classList.remove('expanded');
+    translationText.classList.add('collapsed');
+    void window.mulby.superPanel.action('translationToggle', { expanded: false });
+  }
+});
+
+translationCopyBtn.addEventListener('click', () => {
   const text = translationText.textContent;
-  if (!text || !translationText.classList.contains('sp-translation-ready')) return;
+  if (!text) return;
   navigator.clipboard.writeText(text).then(() => {
-    translationText.classList.add('sp-translation-copied');
-    setTimeout(() => translationText.classList.remove('sp-translation-copied'), 1200);
+    const originalHTML = translationCopyBtn.innerHTML;
+    // Show check icon
+    translationCopyBtn.innerHTML = `<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="color: #10b981;"><path d="M13.5 4.5L6.5 11.5L2.5 7.5"></path></svg>`;
+    setTimeout(() => {
+      translationCopyBtn.innerHTML = originalHTML;
+    }, 1200);
   }).catch(() => { /* 忽略 */ });
 });
 
@@ -347,6 +378,10 @@ window.addEventListener('keydown', (event) => {
       updateSelection(selectedIndex + 1);
       break;
     case 'Enter':
+      if (document.activeElement && document.activeElement.tagName === 'BUTTON' && document.activeElement.closest('.sp-translation')) {
+        // 放行回车，让浏览器原生触发复制按钮等内联元素的点击
+        break;
+      }
       event.preventDefault();
       void executeItem(selectedIndex);
       break;

@@ -180,9 +180,10 @@ body {
   background: var(--glass-accent-bg);
   border: 1px solid var(--glass-border);
   flex-shrink: 0;
-  max-height: 100px;
+  max-height: 200px;
   overflow-y: auto;
   scrollbar-width: none;
+  transition: max-height 0.2s ease;
 }
 
 .sp-translation::-webkit-scrollbar {
@@ -192,8 +193,14 @@ body {
 .sp-translation-header {
   display: flex;
   align-items: center;
-  gap: 5px;
+  justify-content: space-between;
   margin-bottom: 4px;
+}
+
+.sp-translation-header-left {
+  display: flex;
+  align-items: center;
+  gap: 5px;
 }
 
 .sp-translation-icon {
@@ -210,25 +217,52 @@ body {
   letter-spacing: 0.03em;
 }
 
+.sp-translation-copy-btn {
+  background: transparent;
+  border: none;
+  color: var(--text-tertiary);
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s ease;
+}
+
+.sp-translation-copy-btn:hover {
+  background: var(--glass-bg-strong);
+  color: var(--text-primary);
+}
+
+.sp-translation-copy-btn svg {
+  width: 12px;
+  height: 12px;
+}
+
 .sp-translation-text {
   font-size: 12px;
   line-height: 1.5;
   color: var(--text-primary);
   word-break: break-word;
-  cursor: default;
-}
-
-.sp-translation-ready {
   cursor: pointer;
   transition: opacity 0.15s ease;
 }
 
-.sp-translation-ready:hover {
-  opacity: 0.7;
+.sp-translation-text:hover {
+  opacity: 0.8;
 }
 
-.sp-translation-copied {
-  opacity: 0.5;
+.sp-translation-text.collapsed {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  /* autoprefixer: ignore next */
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.sp-translation-text.expanded {
+  display: block;
 }
 
 .sp-translation-loading {

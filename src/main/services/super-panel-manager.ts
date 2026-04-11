@@ -61,6 +61,8 @@ export interface SuperPanelTranslation {
   text: string
   loading: boolean
   error?: string
+  expanded?: boolean
+  expandedHeight?: number
 }
 
 /** 面板状态（通过 IPC 推送给渲染进程） */
@@ -103,6 +105,8 @@ export class SuperPanelManager {
   private cachedItems: SuperPanelItem[] = []
   // 翻译请求序号（用于丢弃过时结果）
   private translationSeq = 0
+  // 当前的翻译状态
+  private currentTranslation?: SuperPanelTranslation
 
   constructor(
     private readonly inputHookService: InputHookService,
@@ -598,6 +602,17 @@ export class SuperPanelManager {
           return { success: true }
         }
 
+        case 'translationToggle': {
+          if (this.currentTranslation) {
+             this.currentTranslation.expanded = Boolean(payload?.expanded)
+             if (payload?.height && typeof payload.height === 'number') {
+               this.currentTranslation.expandedHeight = payload.height
+             }
+             this.pushTranslation(this.currentTranslation)
+          }
+          return { success: true }
+        }
+
         default:
           return { success: false, error: `未知动作: ${action}` }
       }
@@ -729,6 +744,7 @@ export class SuperPanelManager {
   /** 推送翻译状态到面板 */
   private pushTranslation(translation: SuperPanelTranslation): void {
     if (!this.windowManager) return
+    this.currentTranslation = translation
     this.pushState({
       capturedText: this.capturedText,
       items: this.cachedItems,
