@@ -259,13 +259,20 @@ export class SuperPanelManager {
    * 7. 显示面板 + IPC 推送 (< 50ms)
    * 8. 异步翻译（不阻塞面板显示）
    * 9. 面板关闭时恢复剪贴板并恢复采样
+   *
+   * 剪贴板历史暂停策略：
+   * pause() 从模拟复制前到 restoreClipboard() 完成期间一直生效。
+   * 这样无论 watcher 是原生事件驱动还是 1s 轮询回退，临时内容都不会被记录。
+   * 安全超时 30s 仅作为代码 bug 的最终保护，正常流程中 resume() 一定在面板关闭时被调用。
    */
   private async triggerWorkflow(x: number, y: number): Promise<void> {
     try {
       // 1. 保存旧剪贴板完整快照
       this.savedClipboard = this.snapshotClipboard()
 
-      // 2. 暂停剪贴板历史采样（防止模拟复制的临时内容被记录到历史中）
+      // 2. 暂停剪贴板历史采样
+      //    从这里开始一直到 restoreClipboard() 恢复剪贴板后才 resume，
+      //    保证临时复制内容在整个面板生命周期中都不会被轮询式 watcher 记录
       this.clipboardHistoryManager?.pause()
 
       // 3. 静默复制（零延迟原生调用）
@@ -294,6 +301,9 @@ export class SuperPanelManager {
 
       // 5. 解析文件/图片附件（带 before/after 验证，避免匹配旧的剪贴板文件/图片）
       this.cachedAttachments = this.parseClipboardAttachments(this.savedClipboard)
+
+      // 注意：此处不 resume()！
+      // 临时复制内容仍在剪贴板上，必须保持暂停直到面板关闭后 restoreClipboard() 恢复原始内容
 
       // 6. 判断是否有新内容（文本或附件）
       const oldText = this.savedClipboard?.text || ''
@@ -409,6 +419,8 @@ export class SuperPanelManager {
     // 仅在实际执行过静默取词后才恢复
     if (!this.hasCaptured || !this.savedClipboard) return
     try {
+      // 恢复剪贴板内容时短暂抑制采样（避免恢复操作本身被记录为新的剪贴板事件）
+      this.clipboardHistoryManager?.pause()
       const snap = this.savedClipboard
       // 优先恢复富文本格式
       if (snap.hasImage && snap.image) {
@@ -428,7 +440,7 @@ export class SuperPanelManager {
     } finally {
       this.hasCaptured = false
       this.savedClipboard = null
-      // 恢复剪贴板历史采样（内容已恢复，后续剪贴板变动可正常记录）
+      // 恢复采样（暂停窗口仅 ~5ms，不会触发安全超时）
       this.clipboardHistoryManager?.resume()
     }
   }

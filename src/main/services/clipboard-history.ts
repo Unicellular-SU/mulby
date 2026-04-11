@@ -58,7 +58,9 @@ export class ClipboardHistoryManager {
   // 暂停控制：超级面板等外部模块可以临时暂停采样，防止模拟复制污染历史
   private isPaused: boolean = false
   private pauseTimer: NodeJS.Timeout | null = null
-  private static readonly PAUSE_SAFETY_TIMEOUT_MS = 2000 // 安全兜底：最多暂停 2 秒
+  // 安全兜底超时：面板可能打开较长时间，30 秒足够覆盖绝大多数使用场景
+  // 正常流程中 resume() 一定会在 restoreClipboard() 中被调用，此超时仅作为代码异常的最终保护
+  private static readonly PAUSE_SAFETY_TIMEOUT_MS = 30_000
 
   constructor() {
     this.watcher = new ClipboardWatcher()
@@ -70,7 +72,7 @@ export class ClipboardHistoryManager {
    * 暂停剪贴板历史采样
    *
    * 供超级面板等外部模块在模拟复制前调用，避免临时剪贴板内容被记录。
-   * 内置安全计时器（2 秒后自动恢复），防止异常时永久卡住。
+   * 内置安全计时器（30 秒后自动恢复），仅作为代码异常时的最终保护。
    */
   pause(): void {
     this.isPaused = true
@@ -78,10 +80,10 @@ export class ClipboardHistoryManager {
     if (this.pauseTimer) {
       clearTimeout(this.pauseTimer)
     }
-    // 安全兜底：超时后自动恢复
+    // 安全兜底：超时后自动恢复（正常流程不应触发）
     this.pauseTimer = setTimeout(() => {
       if (this.isPaused) {
-        console.warn('[ClipboardHistory] 暂停超时，自动恢复采样')
+        console.debug('[ClipboardHistory] 暂停安全超时，自动恢复采样')
         this.resume()
       }
     }, ClipboardHistoryManager.PAUSE_SAFETY_TIMEOUT_MS)
