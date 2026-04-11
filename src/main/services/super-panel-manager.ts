@@ -228,10 +228,13 @@ export class SuperPanelManager {
       this.savedClipboard = this.snapshotClipboard()
 
       // 2. 静默复制（零延迟原生调用）
+      // 在模拟复制前设置抑制窗口：macOS CGEventTap 会异步捕获模拟的 Cmd+C 事件，
+      // 其中 C 键 (vk=67) 的 keydown 会在 10-50ms 后到达并污染 DoubleTap 状态。
+      // 抑制窗口确保该合成事件被忽略。
+      this.inputHookService.suppressDoubleTapForSyntheticInput(100)
+
       let copySuccess = nativeSimulateCopy()
       if (!copySuccess) {
-        // 回退到脚本方式
-        console.debug('[SuperPanel] 原生复制失败，使用回退方案')
         copySuccess = await fallbackSimulateCopy()
       }
 
@@ -468,8 +471,8 @@ export class SuperPanelManager {
           }
           this.hidePanel()
           // 将捕获的文本传入插件执行
-          await this.pluginManager.run(pluginId, featureCode, this.capturedText)
-          return { success: true }
+          const result = await this.pluginManager.run(pluginId, featureCode, this.capturedText)
+          return { success: result.success, error: result.error }
         }
 
         case 'close':
@@ -480,6 +483,7 @@ export class SuperPanelManager {
           return { success: false, error: `未知动作: ${action}` }
       }
     } catch (err) {
+      console.error('[SuperPanel] handleAction 异常:', err)
       return {
         success: false,
         error: err instanceof Error ? err.message : String(err)

@@ -182,6 +182,22 @@ class DoubleTapDetector {
     this.modifierDownTime = 0
   }
 
+  /**
+   * 抱制模拟键盘事件对双击检测的干扰。
+   *
+   * macOS CGEventTap 会异步捕获模拟的 Cmd+C 事件，其中 C 键 (vk=67)
+   * 的 keydown 会设置 nonModifierPressed=true。由于 CGEventTap 回调通过
+   * macOS RunLoop 送达，延迟通常 10-50ms，无法用 nextTick/setTimeout 精确重置。
+   * 因此采用时间窗口抱制：在指定时间内忽略非修饰键 keydown。
+   *
+   * @param durationMs 抱制窗口时长（毫秒）
+   */
+  private suppressUntil = 0
+
+  suppressSyntheticInputs(durationMs: number): void {
+    this.suppressUntil = Date.now() + durationMs
+  }
+
   /** 处理 keydown 事件（由 InputHookService 调用） */
   handleKeyDown(vkCode: number): void {
     if (this.handlers.length === 0) return
@@ -193,8 +209,11 @@ class DoubleTapDetector {
         this.modifierDownTime = Date.now()
       }
     } else {
+      // 在抑制窗口内忽略非修饰键 keydown（模拟键盘产生的合成事件）
+      if (Date.now() < this.suppressUntil) {
+        return
+      }
       // 非修饰键被按下，重置双击检测状态
-
       this.nonModifierPressed = true
       this.lastModifierUp = null
     }
@@ -205,7 +224,6 @@ class DoubleTapDetector {
     if (this.handlers.length === 0) return
 
     const modifier = VK_MODIFIER_MAP[vkCode]
-
 
     if (!modifier) {
       // 非修饰键 keyup：不清除任何状态。
@@ -219,7 +237,6 @@ class DoubleTapDetector {
 
     // 按键时间过长（长按），不算 tap
     if (this.modifierDownTime > 0 && now - this.modifierDownTime > this.MAX_TAP_DURATION) {
-
       this.modifierDownTime = 0
       this.nonModifierPressed = false
       this.lastModifierUp = null
@@ -229,7 +246,6 @@ class DoubleTapDetector {
 
     // 期间有非修饰键按下，不算 tap
     if (this.nonModifierPressed) {
-
       this.nonModifierPressed = false
       this.lastModifierUp = null
       return
@@ -241,14 +257,12 @@ class DoubleTapDetector {
       this.lastModifierUp.modifier === modifier &&
       now - this.lastModifierUp.time < this.DOUBLE_TAP_INTERVAL
     ) {
-
       this.lastModifierUp = null
       this.fireHandlers(modifier)
       return
     }
 
     // 记录为第一次 tap
-
     this.lastModifierUp = { modifier, time: now }
   }
 
@@ -455,6 +469,14 @@ export class InputHookService {
     this.doubleTap.unregister(modifier)
     console.log(`[InputHook] 注销双击修饰键: ${modifier}`)
     this.stopIfEmpty()
+  }
+
+  /**
+   * 在模拟键盘操作前调用，抑制合成事件对双击检测的干扰。
+   * @param durationMs 抑制窗口时长（毫秒），默认 100ms
+   */
+  suppressDoubleTapForSyntheticInput(durationMs = 100): void {
+    this.doubleTap.suppressSyntheticInputs(durationMs)
   }
 
   // ---- 通用管理 API ----
