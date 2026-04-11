@@ -36,6 +36,6 @@ export async function create(name: string, options: any) {
   console.log()
   console.log('下一步:')
   console.log(chalk.cyan(`  cd ${name}`))
-  console.log(chalk.cyan('  npm install'))
-  console.log(chalk.cyan('  npm run dev'))
+  console.log(chalk.cyan('  pnpm install'))
+  console.log(chalk.cyan('  pnpm run dev'))
 }

@@ -44,12 +44,13 @@ export function buildReactPackageJson(name: string) {
     name,
     version: '1.0.0',
     type: 'module',
+    packageManager: 'pnpm@9.1.0',
     scripts: {
       dev: 'mulby dev',
-      build: 'npm run build:backend && npm run build:ui',
+      build: 'pnpm run build:backend && pnpm run build:ui',
       'build:backend': 'esbuild src/main.ts --bundle --platform=node --outfile=dist/main.js',
       'build:ui': 'vite build',
-      pack: 'npm run build && mulby pack'
+      pack: 'pnpm run build && mulby pack'
     },
     dependencies: {
       react: '^18.3.1',
@@ -62,6 +63,7 @@ export function buildReactPackageJson(name: string) {
       '@types/react-dom': '^18.3.0',
       '@vitejs/plugin-react': '^4.3.1',
       autoprefixer: '^10.4.19',
+      esbuild: '^0.20.0',
       postcss: '^8.4.38',
       tailwindcss: '^3.4.4',
       typescript: '^5.2.2',

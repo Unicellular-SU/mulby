@@ -21,7 +21,7 @@ npm install -g mulby-cli
 也可以在插件项目里作为开发依赖安装：
 
 ```bash
-npm install -D mulby-cli
+pnpm add -D mulby-cli
 ```
 
 ## 快速开始
@@ -31,15 +31,15 @@ npm install -D mulby-cli
 ```bash
 mulby create my-plugin
 cd my-plugin
-npm install
-npm run dev
+pnpm install
+pnpm run dev
 ```
 
 开发完成后：
 
 ```bash
-npm run build
-npm run pack
+pnpm run build
+pnpm run pack
 ```
 
 打包结果为 `my-plugin-<version>.inplugin`。
@@ -173,19 +173,19 @@ AI 开发时的默认策略：
 开发时：
 
 ```bash
-npm run dev
+pnpm run dev
 ```
 
 生产构建：
 
 ```bash
-npm run build
+pnpm run build
 ```
 
 打包：
 
 ```bash
-npm run pack
+pnpm run pack
 ```
 
 注意：
@@ -214,11 +214,11 @@ README 只保留高频入口。更完整的 Mulby 插件开发知识已经放进
 
 ### `mulby create` 之后还需要做什么？
 
-进入插件目录，安装依赖，然后运行 `npm run dev`。
+进入插件目录，安装依赖，然后运行 `pnpm run dev`。
 
 ### `mulby pack` 会自动构建吗？
 
-不会。请先运行 `mulby build` 或 `npm run build`。
+不会。请先运行 `mulby build` 或 `pnpm run build`。
 
 ### AI 开发为什么不再生成 `PLUGIN_DEVELOP_PROMPT.md`？
 

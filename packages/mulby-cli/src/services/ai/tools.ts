@@ -48,7 +48,7 @@ export const PLUGIN_GENERATION_TOOLS = [
         type: 'function',
         function: {
             name: 'run_command',
-            description: 'Execute a shell command. Use this for installing dependencies (npm install) or other necessary shell operations. Do NOT run long-running processes like "npm run dev".',
+            description: 'Execute a shell command. Use this for installing dependencies (pnpm install) or other necessary shell operations. Do NOT run long-running processes like "pnpm run dev".',
             parameters: {
                 type: 'object',
                 properties: {
@@ -188,13 +188,13 @@ export const PLUGIN_GENERATION_TOOLS = [
         type: 'function',
         function: {
             name: 'validate_plugin',
-            description: 'Validate Mulby plugin integration before finish. Checks manifest.json, feature configuration, entry files, preload conventions, and optionally runs npm run build. You MUST call this and fix all errors before finish.',
+            description: 'Validate Mulby plugin integration before finish. Checks manifest.json, feature configuration, entry files, preload conventions, and optionally runs pnpm run build. You MUST call this and fix all errors before finish.',
             parameters: {
                 type: 'object',
                 properties: {
                     runBuild: {
                         type: 'boolean',
-                        description: 'Whether to run npm run build during validation. Default true.'
+                        description: 'Whether to run pnpm run build during validation. Default true.'
                     }
                 },
                 required: []

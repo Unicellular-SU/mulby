@@ -101,7 +101,7 @@ async function startViteDevServer(cwd: string) {
   console.log()
   console.log(chalk.blue('启动 Vite 开发服务器...'))
   console.log(chalk.gray('  💡 提示: Vite 开发服务器提供 UI 预览，修改 UI 代码后'))
-  console.log(chalk.gray('           在 Mulby 中点击「刷新插件」或执行 npm run build 更新'))
+  console.log(chalk.gray('           在 Mulby 中点击「刷新插件」或执行 pnpm run build 更新'))
   console.log()
 
   viteProcess = spawn('npx', ['vite', '--host'], {

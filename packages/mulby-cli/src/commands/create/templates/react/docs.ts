@@ -23,28 +23,30 @@ export function buildReactReadme(name: string) {
 
 ## 开发
 
+> **💡 提示**: 推荐使用 [pnpm](https://pnpm.io/) 进行依赖管理。若插件放置于基于 pnpm workspace 的父仓库（如 \`plugins/<name>/\` 目录），通常建议直接在**仓库根目录**执行一次 \`pnpm install\`。也可以在当前插件目录单独执行。
+
 ### 安装依赖
 
 \`\`\`bash
-npm install
+pnpm install
 \`\`\`
 
 ### 开发模式
 
 \`\`\`bash
-npm run dev
+pnpm run dev
 \`\`\`
 
 ### 构建
 
 \`\`\`bash
-npm run build
+pnpm run build
 \`\`\`
 
 ### 打包
 
 \`\`\`bash
-npm run pack
+pnpm run pack
 \`\`\`
 
 ## 项目结构

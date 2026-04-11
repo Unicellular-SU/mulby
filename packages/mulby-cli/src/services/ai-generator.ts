@@ -532,10 +532,31 @@ export class AIAgent {
         }
     }
 
+    private async detectPackageManager(): Promise<string> {
+        if (await fs.pathExists(path.join(this.session.targetDir, 'pnpm-lock.yaml'))) return 'pnpm';
+        if (await fs.pathExists(path.join(this.session.targetDir, 'yarn.lock'))) return 'yarn';
+        
+        const packageJsonPath = path.join(this.session.targetDir, 'package.json');
+        if (await fs.pathExists(packageJsonPath)) {
+            try {
+                const pkg = await fs.readJson(packageJsonPath);
+                if (pkg.packageManager) {
+                    if (pkg.packageManager.includes('pnpm')) return 'pnpm';
+                    if (pkg.packageManager.includes('yarn')) return 'yarn';
+                    if (pkg.packageManager.includes('npm')) return 'npm';
+                }
+            } catch (e) {
+                // Ignore parse errors here
+            }
+        }
+        return 'npm';
+    }
+
     private async handleCheckTypes(): Promise<string> {
         tui.log(chalk.cyan(`  🛡️ Checking types...`));
         try {
-            return await this.handleRunCommand('npm run build'); // Commonly runs tsc
+            const pm = await this.detectPackageManager();
+            return await this.handleRunCommand(`${pm} run build`); // Commonly runs tsc
             // Or explicitly: npx tsc --noEmit
         } catch (e: any) {
             return `Type check failed: ${e.message}`;
@@ -701,17 +722,18 @@ export class AIAgent {
         }
 
         if (runBuild) {
+            const pm = await this.detectPackageManager();
             if (!packageJson?.scripts?.build) {
                 errors.push('package.json 缺少 scripts.build，无法执行接入验证构建。');
             } else if (!await fs.pathExists(path.join(this.session.targetDir, 'node_modules'))) {
-                errors.push('缺少 node_modules，无法执行 npm run build。请先安装依赖。');
+                errors.push(`缺少 node_modules，无法执行 ${pm} run build。请先安装依赖。`);
             } else {
-                tui.log(chalk.cyan('  🏗️ Running npm run build for validation...'));
-                const buildResult = await this.runLocalCommand('npm run build');
+                tui.log(chalk.cyan(`  🏗️ Running ${pm} run build for validation...`));
+                const buildResult = await this.runLocalCommand(`${pm} run build`);
                 if (buildResult.code !== 0) {
-                    errors.push(`npm run build 失败:\n${this.truncateOutput(buildResult.stderr || buildResult.stdout)}`);
+                    errors.push(`${pm} run build 失败:\n${this.truncateOutput(buildResult.stderr || buildResult.stdout)}`);
                 } else {
-                    info.push('npm run build 执行成功。');
+                    info.push(`${pm} run build 执行成功。`);
                 }
             }
         } else {
@@ -830,7 +852,7 @@ Now you can start implementing the features by modifying these files.`;
     private async handleRunCommand(command: string): Promise<string> {
         // Security check? whitelist?
         // simple whitelist for now
-        const allowed = ['npm install', 'npm i', 'yarn add', 'pnpm add', 'mkdir', 'touch'];
+        const allowed = ['pnpm install', 'pnpm i', 'npm install', 'npm i', 'yarn add', 'pnpm add', 'mkdir', 'touch'];
         const isAllowed = allowed.some(p => command.startsWith(p));
 
         if (!isAllowed && !this.autoApproveCommands) {

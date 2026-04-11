@@ -22,6 +22,7 @@ export function buildBasicPackageJson(name: string) {
   return {
     name,
     version: '1.0.0',
+    packageManager: 'pnpm@9.1.0',
     scripts: {
       build: 'esbuild src/main.ts --bundle --platform=node --outfile=dist/main.js',
       dev: 'mulby dev',
@@ -95,28 +96,30 @@ Plugin description
 
 ## Development
 
+> **💡 提示**: 推荐使用 [pnpm](https://pnpm.io/) 进行依赖管理。若插件放置于基于 pnpm workspace 的父仓库（如 \`plugins/<name>/\` 目录），通常建议直接在**仓库根目录**执行一次 \`pnpm install\`。也可以在当前插件目录单独执行。
+
 ### Install dependencies
 
 \`\`\`bash
-npm install
+pnpm install
 \`\`\`
 
 ### Start development mode
 
 \`\`\`bash
-npm run dev
+pnpm run dev
 \`\`\`
 
 ### Build
 
 \`\`\`bash
-npm run build
+pnpm run build
 \`\`\`
 
 ### Package
 
 \`\`\`bash
-npm run pack
+pnpm run pack
 \`\`\`
 
 ## Project structure
