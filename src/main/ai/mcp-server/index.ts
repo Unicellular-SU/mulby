@@ -316,10 +316,39 @@ export class McpServerManager {
   }
 
   /**
+   * 内部停止传输层（不修改 enabled 配置）
+   *
+   * 用于应用退出时清理：仅停止运行中的 transport，
+   * 不触碰持久化的 enabled 标志，确保下次启动时能自动恢复。
+   */
+  private async stopTransport(): Promise<void> {
+    if (this.status === 'stopped') return
+
+    try {
+      if (this.transport) {
+        await this.transport.stop()
+        this.transport = null
+      }
+      this.mcpServer.destroy()
+      this.mcpServer = new MulbyMcpServer(this.deps)
+    } catch (error) {
+      console.warn('[MCP-Server] 停止传输时出错:', error)
+    }
+
+    this.status = 'stopped'
+    this.startedAt = undefined
+    this.lastError = undefined
+    this.runningPort = undefined
+  }
+
+  /**
    * 应用退出时清理
+   *
+   * 仅停止传输层，不修改 enabled 配置。
+   * 这样用户启用的 MCP Server 在下次启动时会自动恢复。
    */
   async cleanup(): Promise<void> {
-    await this.stop()
+    await this.stopTransport()
   }
 }
 

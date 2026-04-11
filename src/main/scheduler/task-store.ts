@@ -215,7 +215,7 @@ export class TaskStore {
       task.delay || null,
       task.timezone || null,
       task.callback,
-      task.payload ? JSON.stringify(task.payload) : null,
+      task.payload !== undefined ? JSON.stringify(task.payload) : null,
       task.priority ?? 5,
       task.maxRetries || 0,
       task.retryDelay || 60000,

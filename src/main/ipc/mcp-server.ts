@@ -13,14 +13,43 @@
  * 但 IPC 层会检查 sender 来源并拒绝非系统窗口的调用。
  */
 
-import { BrowserWindow, ipcMain, type IpcMainInvokeEvent } from 'electron'
+import { BrowserWindow, app, ipcMain, type IpcMainInvokeEvent } from 'electron'
+import { join, normalize } from 'path'
+import { fileURLToPath } from 'node:url'
 import type { McpServerManager } from '../ai/mcp-server'
+
+/**
+ * 应用 renderer 目录的绝对路径（归一化）。
+ * 系统窗口加载的 HTML 一定位于此目录下。
+ */
+const APP_RENDERER_DIR = normalize(join(__dirname, '..', 'renderer'))
+
+/**
+ * 用户插件安装目录。
+ * 插件窗口加载的 HTML 位于此目录下，不应被视为系统窗口。
+ */
+const USER_PLUGINS_DIR = normalize(join(app.getPath('userData'), 'plugins'))
+
+/**
+ * 从 file:// URL 中提取本地路径。
+ * 使用 Node.js 内置 fileURLToPath 正确处理跨平台差异：
+ * - Windows: file:///C:/foo → C:\foo（而非 /C:/foo）
+ * - macOS/Linux: file:///home/foo → /home/foo
+ */
+function fileUrlToLocalPath(fileUrl: string): string | null {
+  try {
+    return fileURLToPath(fileUrl)
+  } catch {
+    return null
+  }
+}
 
 /**
  * 检查 IPC 调用方是否来自系统窗口（非插件窗口）
  *
  * 策略：只允许从内置 webview（主窗口 / 系统页面窗口 / onboarding 窗口等）发起调用。
- * 插件窗口的 WebContents 会有 'mulby-plugin-id' 属性标记。
+ * 插件窗口虽然也通过 file:// 加载，但其路径指向 userData/plugins/ 目录，
+ * 而非应用自身的 renderer/ 目录。通过路径前缀匹配来区分。
  */
 function isSystemWindowCaller(event: IpcMainInvokeEvent): boolean {
   const sender = event.sender
@@ -30,21 +59,43 @@ function isSystemWindowCaller(event: IpcMainInvokeEvent): boolean {
   const win = BrowserWindow.fromWebContents(sender)
   if (!win) return false
 
-  // 插件窗口会通过 webPreferences.additionalArguments 或自定义属性标记
-  // 这里使用更可靠的方式：检查窗口的 URL 是否指向我们自己的渲染器页面
   const url = sender.getURL()
 
-  // 系统窗口加载的是本地 file:// 或 localhost dev server
-  // 插件窗口加载的是插件目录下的 HTML 或 data:// URL
-  if (url.startsWith('file://') || url.startsWith('http://localhost:') || url.startsWith('about:')) {
-    return true
-  }
-
-  // 通过 VITE_DEV_SERVER_URL 环境变量加载的开发 URL 也认为是系统窗口
+  // 开发模式：通过 VITE_DEV_SERVER_URL 或 localhost 加载的系统窗口
   if (process.env.VITE_DEV_SERVER_URL && url.startsWith(process.env.VITE_DEV_SERVER_URL)) {
     return true
   }
+  if (url.startsWith('http://localhost:')) {
+    return true
+  }
 
+  // about:blank 等内部页面视为系统窗口
+  if (url.startsWith('about:')) {
+    return true
+  }
+
+  // file:// URL：需要区分系统 renderer 和插件目录
+  if (url.startsWith('file://')) {
+    const localPath = fileUrlToLocalPath(url)
+    if (!localPath) return false
+
+    const normalizedPath = normalize(localPath)
+
+    // 位于插件目录下 → 拒绝
+    if (normalizedPath.startsWith(USER_PLUGINS_DIR)) {
+      return false
+    }
+
+    // 位于应用 renderer 目录下 → 允许
+    if (normalizedPath.startsWith(APP_RENDERER_DIR)) {
+      return true
+    }
+
+    // 其他 file:// 路径（如 data: URL 产生的子窗口）→ 拒绝
+    return false
+  }
+
+  // data:// 等其他协议 → 拒绝
   return false
 }
 

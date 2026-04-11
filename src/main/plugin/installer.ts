@@ -1,5 +1,5 @@
 import { app } from 'electron'
-import { join } from 'path'
+import { join, normalize, basename, sep } from 'path'
 import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'fs'
 import extractZip from 'extract-zip'
 import { tmpdir } from 'os'
@@ -112,7 +112,23 @@ export class PluginInstaller {
         rmSync(existing.path, { recursive: true, force: true })
       }
 
-      const targetDir = existing?.path || join(this.pluginsDir, manifest.name)
+      // 清洗插件名，防止路径穿越攻击（manifest.name 可能含 ../ 等恶意路径组件）
+      const safeName = basename(String(manifest.name)).replace(/[<>:"|?*]/g, '_')
+      if (!safeName || safeName === '.' || safeName === '..') {
+        this.cleanupTemp(tempDir)
+        return { success: false, error: '无效的插件名称' }
+      }
+
+      const targetDir = existing?.path || join(this.pluginsDir, safeName)
+
+      // 二次验证：确保最终路径确实在 pluginsDir 内
+      const normalizedTarget = normalize(targetDir)
+      const normalizedPluginsDir = normalize(this.pluginsDir)
+      // 使用 path.sep 确保跨平台兼容（Windows 用 '\'，macOS/Linux 用 '/'）
+      if (!normalizedTarget.startsWith(normalizedPluginsDir + sep) && normalizedTarget !== normalizedPluginsDir) {
+        this.cleanupTemp(tempDir)
+        return { success: false, error: '插件安装路径不安全' }
+      }
 
       // 解压到插件目录
       await extractZip(filePath, { dir: targetDir })

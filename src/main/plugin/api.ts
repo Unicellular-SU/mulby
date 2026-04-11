@@ -175,8 +175,7 @@ export function createPluginAPI(
         if (!clipboardHistoryManager) {
           throw new Error('Clipboard history not available')
         }
-        const items = clipboardHistoryManager.query({ limit: 1 })
-        return items.find(item => item.id === id) || null
+        return clipboardHistoryManager.getById(id)
       },
       copy: async (id: string) => {
         if (!clipboardHistoryManager) {

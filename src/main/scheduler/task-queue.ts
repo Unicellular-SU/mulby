@@ -69,7 +69,7 @@ export class TaskQueue {
 
     // 可能需要向上或向下调整
     const parentIndex = Math.floor((index - 1) / 2)
-    if (index > 0 && this.heap[index].nextRunTime! < this.heap[parentIndex].nextRunTime!) {
+    if (index > 0 && this.compare(this.heap[index], this.heap[parentIndex]) < 0) {
       this.bubbleUp(index)
     } else {
       this.bubbleDown(index)
@@ -142,18 +142,23 @@ export class TaskQueue {
   }
 
   /**
-   * 比较两个任务的优先级
-   * 返回负数表示 a 优先级更高，正数表示 b 优先级更高
+   * 比较两个任务的调度顺序
+   * 返回负数表示 a 应先调度，正数表示 b 应先调度
+   *
+   * 策略：先按执行时间排序（早到期的先执行），
+   * 到期时间相同时按优先级排序（高优先级先执行）。
+   * 这样避免高优先级远期任务阻塞已到期的低优先级任务。
    */
   private compare(a: Task, b: Task): number {
-    // 先比较优先级（高优先级在前）
-    const priorityA = a.priority ?? 5
-    const priorityB = b.priority ?? 5
-    if (priorityA !== priorityB) {
-      return priorityB - priorityA  // 优先级高的排在前面
+    // 先比较执行时间（早的在前）
+    const timeDiff = (a.nextRunTime ?? 0) - (b.nextRunTime ?? 0)
+    if (timeDiff !== 0) {
+      return timeDiff
     }
 
-    // 优先级相同，比较执行时间（早的在前）
-    return (a.nextRunTime ?? 0) - (b.nextRunTime ?? 0)
+    // 执行时间相同，比较优先级（高优先级在前）
+    const priorityA = a.priority ?? 5
+    const priorityB = b.priority ?? 5
+    return priorityB - priorityA
   }
 }

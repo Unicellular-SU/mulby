@@ -556,6 +556,28 @@ export class ClipboardHistoryManager {
   }
 
   /**
+   * 按 ID 查询单条记录
+   */
+  getById(id: string): ClipboardHistoryItem | null {
+    const stmt = db.prepare('SELECT * FROM clipboard_history WHERE id = ?')
+    const row = stmt.get(id) as ClipboardHistoryRow | undefined
+    if (!row) return null
+
+    return {
+      id: row.id,
+      type: row.type,
+      content: row.content,
+      plainText: row.plain_text ?? undefined,
+      files: row.files ? (JSON.parse(row.files) as string[]) : undefined,
+      filePath: row.file_path ?? undefined,
+      timestamp: row.timestamp,
+      size: row.size,
+      favorite: row.favorite === 1,
+      tags: row.tags ? (JSON.parse(row.tags) as string[]) : undefined
+    }
+  }
+
+  /**
    * 切换收藏状态
    */
   toggleFavorite(id: string) {

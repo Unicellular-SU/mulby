@@ -308,8 +308,17 @@ export class TaskScheduler extends EventEmitter {
     const pluginsToPrestart = new Set<string>()
 
     for (const task of tasks) {
-      // 重新计算下次执行时间
-      task.nextRunTime = this.calculateNextRunTime(task) ?? undefined
+      // 恢复 nextRunTime 策略：
+      // - repeat（cron）任务：重新计算下次执行时间（基于当前时间）
+      // - delay / once 任务：保留持久化的到期时间
+      //   如果已过期，设置为立即执行（now），而非重新延迟
+      if (task.type === 'repeat') {
+        task.nextRunTime = this.calculateNextRunTime(task) ?? undefined
+      } else if (task.nextRunTime && task.nextRunTime <= now) {
+        // 已过期的 delay/once 任务，立即执行
+        task.nextRunTime = now
+      }
+      // 如果 nextRunTime 仍有效（未过期的 delay/once），沿用原值
 
       if (task.nextRunTime) {
         this.queue.push(task)
@@ -725,7 +734,7 @@ export class TaskScheduler extends EventEmitter {
 
         // 计算下次执行时间
         try {
-          const nextTime = this.cronParser.getNextTime(task.cron, new Date(now))
+          const nextTime = this.cronParser.getNextTime(task.cron, new Date(now), task.timezone)
           return nextTime.getTime()
         } catch {
           return null
@@ -772,6 +781,16 @@ export class TaskScheduler extends EventEmitter {
         }
         if (!this.cronParser.validate(input.cron)) {
           throw new Error('invalid cron expression')
+        }
+        // 验证 cron 表达式与时区的组合是否合法
+        // 无效时区（如 'Foo/Bar'）会导致 getNextTime 抛异常，
+        // 在此提前拒绝，避免创建永远不会被调度的僵尸任务
+        if (input.timezone) {
+          try {
+            this.cronParser.getNextTime(input.cron, new Date(), input.timezone)
+          } catch {
+            throw new Error(`invalid timezone: ${input.timezone}`)
+          }
         }
         break
 

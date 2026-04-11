@@ -5,15 +5,27 @@
 
 const { CronExpressionParser } = require('cron-parser')
 
+/**
+ * 获取系统默认时区（如 'Asia/Shanghai'、'America/New_York'）。
+ * 回退到 UTC 以防环境无法解析。
+ */
+function getSystemTimezone(): string {
+  try {
+    return Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC'
+  } catch {
+    return 'UTC'
+  }
+}
+
 export class CronParser {
   /**
    * 验证 cron 表达式是否合法
    * 支持 5 位格式（分 时 日 月 周）和 6 位格式（秒 分 时 日 月 周）
    */
-  validate(expression: string): boolean {
+  validate(expression: string, timezone?: string): boolean {
     try {
       CronExpressionParser.parse(expression, {
-        tz: 'Asia/Shanghai'
+        tz: timezone || getSystemTimezone()
       })
       return true
     } catch {
@@ -25,11 +37,11 @@ export class CronParser {
    * 计算下次执行时间
    * 支持 5 位格式（分 时 日 月 周）和 6 位格式（秒 分 时 日 月 周）
    */
-  getNextTime(expression: string, after?: Date): Date {
+  getNextTime(expression: string, after?: Date, timezone?: string): Date {
     try {
       const interval = CronExpressionParser.parse(expression, {
         currentDate: after || new Date(),
-        tz: 'Asia/Shanghai'
+        tz: timezone || getSystemTimezone()
       })
       return interval.next().toDate()
     } catch {
@@ -41,11 +53,11 @@ export class CronParser {
    * 计算多个下次执行时间
    * 支持 5 位格式（分 时 日 月 周）和 6 位格式（秒 分 时 日 月 周）
    */
-  getNextTimes(expression: string, count: number, after?: Date): Date[] {
+  getNextTimes(expression: string, count: number, after?: Date, timezone?: string): Date[] {
     try {
       const interval = CronExpressionParser.parse(expression, {
         currentDate: after || new Date(),
-        tz: 'Asia/Shanghai'
+        tz: timezone || getSystemTimezone()
       })
       return (interval.take(count) as Array<{ toDate: () => Date }>).map(date => date.toDate())
     } catch {
