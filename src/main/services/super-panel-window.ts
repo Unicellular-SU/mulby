@@ -44,13 +44,7 @@ export class SuperPanelWindowManager {
     const win = await this.ensureWindow()
     this.currentState = state
 
-    // 先计算面板高度（基于条目数量）
-    const itemHeight = 48
-    const headerHeight = 52
-    const contentHeight = headerHeight + Math.max(state.items.length, 1) * itemHeight + 16
-    const panelHeight = Math.min(contentHeight, PANEL_MAX_HEIGHT)
-
-    win.setSize(PANEL_WIDTH, panelHeight)
+    win.setSize(PANEL_WIDTH, this.computePanelHeight(state))
     this.positionWindow(win, x, y)
 
     // 推送状态数据
@@ -62,6 +56,43 @@ export class SuperPanelWindowManager {
     // 确保窗口获焦以接收键盘事件（↑↓/Enter/Esc）和 blur 自动隐藏
     win.focus()
     win.webContents.focus()
+  }
+
+  /** 推送状态更新（不移动窗口位置，但重新计算高度以适配新布局） */
+  pushState(state: SuperPanelState): void {
+    this.currentState = state
+    if (!this.window || this.window.isDestroyed()) return
+
+    // 重新计算高度（翻译卡片等异步内容可能改变布局）
+    const newHeight = this.computePanelHeight(state)
+    const [currentWidth] = this.window.getSize()
+    if (currentWidth !== PANEL_WIDTH || this.window.getSize()[1] !== newHeight) {
+      this.window.setSize(PANEL_WIDTH, newHeight)
+    }
+
+    this.window.webContents.send('super-panel:state', state)
+  }
+
+  /** 根据面板状态计算所需高度 */
+  private computePanelHeight(state: SuperPanelState): number {
+    const itemHeight = 48
+    const headerHeight = 52
+    const footerHeight = 32
+
+    let listCount: number
+    if (state.mode === 'pinned') {
+      listCount = state.pinnedItems?.length || 0
+    } else {
+      listCount = state.items.length
+    }
+
+    // 搜索框（match 模式且有 2+ 条结果时显示）
+    const searchBarHeight = state.mode === 'match' && state.items.length > 1 ? 36 : 0
+    // 翻译卡片预留（有翻译时显示）
+    const translationHeight = state.translation ? 60 : 0
+
+    const contentHeight = headerHeight + searchBarHeight + translationHeight + Math.max(listCount, 1) * itemHeight + footerHeight
+    return Math.min(contentHeight, PANEL_MAX_HEIGHT)
   }
 
   /** 隐藏面板 */

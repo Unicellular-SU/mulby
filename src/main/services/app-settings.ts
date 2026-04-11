@@ -273,7 +273,8 @@ const DEFAULT_SETTINGS: AppSettings = {
       'steam'
     ],
     clipboardPollDelayMs: 80,
-    maxItems: 10
+    maxItems: 10,
+    instantTranslation: true
   }
 }
 
@@ -410,7 +411,8 @@ function normalizeSuperPanelSettings(input: Partial<SuperPanelSettings> | undefi
     trigger: normalizeSuperPanelTrigger(current.trigger),
     blockedApps,
     clipboardPollDelayMs: Math.max(30, Math.min(Number(current.clipboardPollDelayMs || defaults.clipboardPollDelayMs), 500)),
-    maxItems: Math.max(3, Math.min(Number(current.maxItems || defaults.maxItems), 30))
+    maxItems: Math.max(3, Math.min(Number(current.maxItems || defaults.maxItems), 30)),
+    instantTranslation: current.instantTranslation !== false
   }
 }
 

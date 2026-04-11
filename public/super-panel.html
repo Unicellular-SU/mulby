@@ -10,7 +10,7 @@
 
 <body>
   <div class="sp-shell">
-    <!-- 头部：选中内容预览 -->
+    <!-- 头部：选中内容预览 + 搜索框 -->
     <div class="sp-header">
       <div class="sp-captured">
         <svg class="sp-captured-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
@@ -19,6 +19,26 @@
         </svg>
         <span id="captured-text" class="sp-captured-text empty">未选中内容</span>
       </div>
+      <!-- 二次搜索框（有匹配结果时显示） -->
+      <div id="search-bar" class="sp-search" style="display:none">
+        <svg class="sp-search-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="7" cy="7" r="4.5" />
+          <path d="M10.5 10.5L14 14" />
+        </svg>
+        <input id="search-input" class="sp-search-input" type="text" placeholder="筛选结果…" autocomplete="off" spellcheck="false" />
+      </div>
+    </div>
+
+    <!-- 翻译卡片（有选中文本且 AI 返回翻译时显示） -->
+    <div id="translation-card" class="sp-translation" style="display:none">
+      <div class="sp-translation-header">
+        <svg class="sp-translation-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M2 3h6M5 3v8M3 6c0 0 1.5 2 4 5" />
+          <path d="M10 8l2 5 2-5M10.5 11.5h3" />
+        </svg>
+        <span class="sp-translation-label">翻译</span>
+      </div>
+      <div id="translation-text" class="sp-translation-text"></div>
     </div>
 
     <!-- 列表区域 -->

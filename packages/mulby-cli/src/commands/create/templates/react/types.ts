@@ -908,6 +908,49 @@ interface MulbyTrayMenu {
   onState(callback: (state: TrayMenuState) => void): Disposable
 }
 
+interface SuperPanelItem {
+  id: string
+  pluginId: string
+  pluginName: string
+  pluginDisplayName: string
+  pluginIcon?: string
+  featureCode: string
+  featureExplain: string
+  featureIcon?: string
+  matchType: string
+  score: number
+}
+
+interface SuperPanelPinnedItem {
+  pluginId: string
+  featureCode: string
+  displayName: string
+  pluginIcon?: string
+  pinnedAt: number
+}
+
+interface SuperPanelTranslation {
+  text: string
+  loading: boolean
+  error?: string
+}
+
+interface SuperPanelState {
+  capturedText: string
+  items: SuperPanelItem[]
+  visible: boolean
+  mode: 'match' | 'pinned'
+  pinnedItems?: SuperPanelPinnedItem[]
+  translation?: SuperPanelTranslation
+}
+
+interface MulbySuperPanel {
+  getState(): Promise<SuperPanelState>
+  action(action: string, payload?: Record<string, unknown>): Promise<{ success: boolean; error?: string }>
+  close(): Promise<{ success: boolean }>
+  onState(callback: (state: SuperPanelState) => void): Disposable
+}
+
 interface LogEntry {
   timestamp: number
   level: 'debug' | 'info' | 'warn' | 'error' | 'crash'
@@ -1285,6 +1328,39 @@ interface MulbyAi {
       setDisabled(disabledList: string[]): Promise<string[]>
     }
   }
+  mcpServer: {
+    getState(): Promise<{
+      status: 'stopped' | 'starting' | 'running' | 'error'
+      port: number
+      address?: string
+      toolCount: number
+      error?: string
+      startedAt?: number
+    }>
+    start(): Promise<unknown>
+    stop(): Promise<unknown>
+    restart(): Promise<unknown>
+    regenerateToken(): Promise<{ token: string }>
+    getTools(): Promise<Array<{
+      mcpToolName: string
+      pluginId: string
+      toolName: string
+      pluginName: string
+    }>>
+    getClientConfig(): Promise<{
+      claudeDesktop: object
+      cursor: object
+      generic: object
+    }>
+    refreshTools(): Promise<unknown>
+    getConfig(): Promise<{
+      enabled: boolean
+      port: number
+      token: string
+      stdioBridgePath: string
+    }>
+    updatePort(port: number): Promise<unknown>
+  }
 }
 
 interface FileStat {
@@ -1410,6 +1486,7 @@ interface MulbyAPI {
   power: MulbyPower
   tray: MulbyTray
   trayMenu: MulbyTrayMenu
+  superPanel: MulbySuperPanel
   network: MulbyNetwork
   menu: MulbyMenu
   geolocation: MulbyGeolocation

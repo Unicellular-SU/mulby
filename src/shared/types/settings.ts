@@ -407,6 +407,8 @@ export interface SuperPanelSettings {
   clipboardPollDelayMs: number
   /** 面板最大显示条目数，默认 10 */
   maxItems: number
+  /** 即时翻译：是否启用（默认 true，但需 AI 已配置才生效） */
+  instantTranslation: boolean
 }
 
 export interface AppSettings {

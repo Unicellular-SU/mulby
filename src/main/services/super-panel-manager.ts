@@ -21,6 +21,8 @@ import { nativeSimulateCopy, fallbackSimulateCopy } from './native-keyboard-sim'
 import { findBestMatch } from '../../shared/search-matcher'
 import type { Plugin, InputPayload } from '../../shared/types/plugin'
 import { SuperPanelWindowManager } from './super-panel-window'
+import { SuperPanelStore, type SuperPanelPinnedItem } from './super-panel-store'
+import { aiService } from '../ai'
 
 // ==================== 类型定义 ====================
 
@@ -54,6 +56,13 @@ export interface SuperPanelItem {
   score: number
 }
 
+/** 即时翻译状态 */
+export interface SuperPanelTranslation {
+  text: string
+  loading: boolean
+  error?: string
+}
+
 /** 面板状态（通过 IPC 推送给渲染进程） */
 export interface SuperPanelState {
   /** 捕获到的文本预览 */
@@ -62,6 +71,12 @@ export interface SuperPanelState {
   items: SuperPanelItem[]
   /** 面板是否可见 */
   visible: boolean
+  /** 面板模式：'match' 匹配结果 | 'pinned' 固定列表 */
+  mode: 'match' | 'pinned'
+  /** 固定列表数据（mode='pinned' 时有效） */
+  pinnedItems?: SuperPanelPinnedItem[]
+  /** 即时翻译结果（异步推送） */
+  translation?: SuperPanelTranslation
 }
 
 // 钩子注册 ID
@@ -82,6 +97,12 @@ export class SuperPanelManager {
   // 防抖：防止短时间内重复触发
   private lastTriggerTime = 0
   private readonly TRIGGER_DEBOUNCE_MS = 300
+  // 持久化层
+  private readonly store = new SuperPanelStore()
+  // 当前匹配结果缓存（用于二次搜索过滤）
+  private cachedItems: SuperPanelItem[] = []
+  // 翻译请求序号（用于丢弃过时结果）
+  private translationSeq = 0
 
   constructor(
     private readonly inputHookService: InputHookService,
@@ -221,6 +242,7 @@ export class SuperPanelManager {
    * 3. 等待剪贴板更新 + 读取 (50-100ms)
    * 4. 比较差异，执行匹配 (< 5ms)
    * 5. 显示面板 + IPC 推送 (< 50ms)
+   * 6. 异步翻译（不阻塞面板显示）
    */
   private async triggerWorkflow(x: number, y: number): Promise<void> {
     try {
@@ -256,15 +278,40 @@ export class SuperPanelManager {
       this.capturedText = hasNewContent ? newText! : ''
       this.hasCaptured = true
 
-      // 5. 执行匹配
-      const items = this.matchContent(this.capturedText, settings.maxItems)
+      if (this.capturedText.trim().length > 0) {
+        // ===== 有选中文本 → 匹配模式 =====
+        // 递增翻译序号，使之前在途的翻译请求结果被丢弃
+        this.translationSeq++
+        const items = this.matchContent(this.capturedText, settings.maxItems)
+        this.cachedItems = items
 
-      // 6. 显示面板
-      if (items.length > 0 || this.capturedText.length > 0) {
         this.showPanel(x, y, {
           capturedText: this.capturedText,
           items,
-          visible: true
+          visible: true,
+          mode: 'match'
+        })
+
+        // 6. 异步翻译（不阻塞面板显示）
+        if (settings.instantTranslation) {
+          void this.requestTranslation(this.capturedText)
+        }
+      } else {
+        // ===== 无选中文本 → 固定列表模式 =====
+        // 递增翻译序号，确保之前触发的翻译不会污染当前 pinned 面板
+        this.translationSeq++
+        const pinnedItems = this.buildPinnedItems()
+        this.cachedItems = []
+
+        // 无固定项也不显示面板
+        if (pinnedItems.length === 0) return
+
+        this.showPanel(x, y, {
+          capturedText: '',
+          items: [],
+          visible: true,
+          mode: 'pinned',
+          pinnedItems
         })
       }
     } catch (err) {
@@ -348,7 +395,7 @@ export class SuperPanelManager {
 
   // ==================== 匹配引擎 ====================
 
-  /** 使用 search-matcher 对捕获内容执行插件匹配 */
+  /** 使用 search-matcher 对捕获内容执行插件匹配，叠加使用频率和搜索偏好 */
   private matchContent(text: string, maxItems: number): SuperPanelItem[] {
     if (!text || text.trim().length === 0) return []
 
@@ -384,9 +431,31 @@ export class SuperPanelManager {
       }
     }
 
-    // 按分数降序排列，截取前 N 条
+    // 叠加使用频率权重
+    const recentUsage = this.pluginManager.getRecentUsed(50)
+    const usageMap = new Map<string, number>()
+    for (const item of recentUsage) {
+      usageMap.set(`${item.plugin.id}:${item.feature.code}`, item.useCount)
+    }
+
+    // 搜索偏好置顶
+    const preference = this.store.getPreference(text)
+
+    // 综合排序：偏好置顶 > 分数 + 使用频率权重
     return results
-      .sort((a, b) => b.score - a.score)
+      .sort((a, b) => {
+        // 偏好匹配的条目置顶
+        if (preference) {
+          const aIsPreferred = a.pluginId === preference.pluginId && a.featureCode === preference.featureCode
+          const bIsPreferred = b.pluginId === preference.pluginId && b.featureCode === preference.featureCode
+          if (aIsPreferred && !bIsPreferred) return -1
+          if (!aIsPreferred && bIsPreferred) return 1
+        }
+        // 使用频率加权：每次使用增加 0.1 分，上限 2 分
+        const aBoost = Math.min((usageMap.get(a.id) || 0) * 0.1, 2)
+        const bBoost = Math.min((usageMap.get(b.id) || 0) * 0.1, 2)
+        return (b.score + bBoost) - (a.score + aBoost)
+      })
       .slice(0, maxItems)
   }
 
@@ -469,6 +538,12 @@ export class SuperPanelManager {
           if (!pluginId || !featureCode) {
             return { success: false, error: '缺少 pluginId 或 featureCode' }
           }
+
+          // 记录搜索偏好（有选中文本时）
+          if (this.capturedText.trim().length > 0) {
+            this.store.recordPreference(this.capturedText, pluginId, featureCode)
+          }
+
           this.hidePanel()
           // 将捕获的文本传入插件执行
           const result = await this.pluginManager.run(pluginId, featureCode, this.capturedText)
@@ -478,6 +553,50 @@ export class SuperPanelManager {
         case 'close':
           this.hidePanel()
           return { success: true }
+
+        case 'search': {
+          // 二次搜索：在缓存的匹配结果中过滤
+          const query = String(payload?.query || '').trim()
+          const filtered = this.filterItems(query)
+          this.pushState({
+            capturedText: this.capturedText,
+            items: filtered,
+            visible: true,
+            mode: 'match'
+          })
+          return { success: true }
+        }
+
+        case 'pin': {
+          const pluginId = String(payload?.pluginId || '')
+          const featureCode = String(payload?.featureCode || '')
+          const displayName = String(payload?.displayName || featureCode)
+          const pluginIcon = payload?.pluginIcon ? String(payload.pluginIcon) : undefined
+          if (!pluginId || !featureCode) {
+            return { success: false, error: '缺少 pluginId 或 featureCode' }
+          }
+          this.store.pin({ pluginId, featureCode, displayName, pluginIcon })
+          return { success: true }
+        }
+
+        case 'unpin': {
+          const pluginId = String(payload?.pluginId || '')
+          const featureCode = String(payload?.featureCode || '')
+          if (!pluginId || !featureCode) {
+            return { success: false, error: '缺少 pluginId 或 featureCode' }
+          }
+          this.store.unpin(pluginId, featureCode)
+          // 刷新固定列表
+          const pinnedItems = this.buildPinnedItems()
+          this.pushState({
+            capturedText: '',
+            items: [],
+            visible: true,
+            mode: 'pinned',
+            pinnedItems
+          })
+          return { success: true }
+        }
 
         default:
           return { success: false, error: `未知动作: ${action}` }
@@ -489,6 +608,140 @@ export class SuperPanelManager {
         error: err instanceof Error ? err.message : String(err)
       }
     }
+  }
+
+  // ==================== 固定列表 ====================
+
+  /** 构建固定列表（验证插件是否存在且启用） */
+  private buildPinnedItems(): SuperPanelPinnedItem[] {
+    const pinned = this.store.getPinnedItems()
+    const valid: SuperPanelPinnedItem[] = []
+
+    for (const item of pinned) {
+      const plugins = this.pluginManager.getAll()
+      const plugin = plugins.find((p) => p.id === item.pluginId)
+      if (!plugin || !plugin.enabled) continue
+
+      const feature = plugin.manifest.features.find((f) => f.code === item.featureCode)
+      if (!feature) continue
+
+      // 同步显示名称
+      const displayName = feature.explain || feature.code
+      const pluginIcon = this.resolvePluginIcon(plugin)
+      this.store.syncPinnedItemMeta(item.pluginId, item.featureCode, displayName, pluginIcon)
+
+      valid.push({
+        ...item,
+        displayName,
+        pluginIcon
+      })
+    }
+
+    return valid
+  }
+
+  // ==================== 二次搜索 ====================
+
+  /** 在缓存的匹配结果中按关键词过滤 */
+  private filterItems(query: string): SuperPanelItem[] {
+    if (!query) return this.cachedItems
+
+    const lowerQuery = query.toLowerCase()
+    return this.cachedItems.filter((item) => {
+      return (
+        item.featureExplain.toLowerCase().includes(lowerQuery) ||
+        item.pluginDisplayName.toLowerCase().includes(lowerQuery) ||
+        item.pluginName.toLowerCase().includes(lowerQuery) ||
+        item.featureCode.toLowerCase().includes(lowerQuery) ||
+        item.matchType.toLowerCase().includes(lowerQuery)
+      )
+    })
+  }
+
+  // ==================== 即时翻译 ====================
+
+  /**
+   * 异步请求 AI 翻译，结果通过 IPC 增量推送到面板
+   *
+   * 策略：
+   * - 检测输入语言（CJK → 英文，其他 → 中文）
+   * - 限制输入长度 ≤ 500 字符
+   * - 使用序号机制丢弃过时请求
+   */
+  private async requestTranslation(text: string): Promise<void> {
+    const trimmed = text.trim()
+    if (!trimmed || trimmed.length > 500) return
+
+    // 检查 AI 是否已配置
+    try {
+      const { getAiSettings } = await import('../ai/config')
+      const aiSettings = getAiSettings()
+      const hasProvider = aiSettings.providers.some((p) => p.apiKey && p.apiKey.length > 0)
+      if (!hasProvider) return
+    } catch {
+      return
+    }
+
+    const seq = ++this.translationSeq
+
+    // 推送 loading 状态
+    this.pushTranslation({ text: '', loading: true })
+
+    try {
+      // 检测目标语言：包含 CJK 字符 → 翻译为英文，否则翻译为中文
+      const hasCJK = /[\u4e00-\u9fff\u3040-\u30ff\uac00-\ud7af]/.test(trimmed)
+      const targetLang = hasCJK ? '英文 (English)' : '简体中文'
+
+      const response = await aiService.call({
+        messages: [
+          {
+            role: 'system',
+            content: '你是一个翻译助手。直接输出翻译结果，不要包含任何解释、标注或额外文字。'
+          },
+          {
+            role: 'user',
+            content: `将以下文本翻译为${targetLang}：\n\n${trimmed}`
+          }
+        ],
+        params: { maxOutputTokensEnabled: true, maxOutputTokens: 500 }
+      })
+
+      // 丢弃过时结果
+      if (seq !== this.translationSeq) return
+
+      const rawContent = response.content
+      const translated = (typeof rawContent === 'string' ? rawContent : '').trim()
+      if (translated) {
+        this.pushTranslation({ text: translated, loading: false })
+      } else {
+        this.pushTranslation({ text: '', loading: false, error: '翻译结果为空' })
+      }
+    } catch (err) {
+      if (seq !== this.translationSeq) return
+      this.pushTranslation({
+        text: '',
+        loading: false,
+        error: err instanceof Error ? err.message : '翻译失败'
+      })
+    }
+  }
+
+  /** 推送翻译状态到面板 */
+  private pushTranslation(translation: SuperPanelTranslation): void {
+    if (!this.windowManager) return
+    this.pushState({
+      capturedText: this.capturedText,
+      items: this.cachedItems,
+      visible: true,
+      mode: 'match',
+      translation
+    })
+  }
+
+  /** 推送完整状态到面板窗口 */
+  private pushState(state: SuperPanelState): void {
+    if (!this.windowManager) return
+    this.windowManager.pushState(state)
   }
 
   // ==================== 辅助方法 ====================

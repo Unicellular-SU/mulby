@@ -130,6 +130,124 @@ body {
   color: var(--text-tertiary);
 }
 
+/* ==================== 搜索框 ==================== */
+
+.sp-search {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 8px;
+  padding: 5px 8px;
+  border-radius: 6px;
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-border);
+  transition: border-color 0.15s ease;
+}
+
+.sp-search:focus-within {
+  border-color: var(--accent);
+}
+
+.sp-search-icon {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+  color: var(--text-tertiary);
+}
+
+.sp-search-input {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  outline: none;
+  background: transparent;
+  color: var(--text-primary);
+  font-family: inherit;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.sp-search-input::placeholder {
+  color: var(--text-tertiary);
+}
+
+/* ==================== 翻译卡片 ==================== */
+
+.sp-translation {
+  margin: 6px 10px 0;
+  padding: 8px 10px;
+  border-radius: var(--radius-sm);
+  background: var(--glass-accent-bg);
+  border: 1px solid var(--glass-border);
+  flex-shrink: 0;
+  max-height: 100px;
+  overflow-y: auto;
+  scrollbar-width: none;
+}
+
+.sp-translation::-webkit-scrollbar {
+  display: none;
+}
+
+.sp-translation-header {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin-bottom: 4px;
+}
+
+.sp-translation-icon {
+  width: 13px;
+  height: 13px;
+  flex-shrink: 0;
+  color: var(--accent);
+}
+
+.sp-translation-label {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--accent);
+  letter-spacing: 0.03em;
+}
+
+.sp-translation-text {
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text-primary);
+  word-break: break-word;
+  cursor: default;
+}
+
+.sp-translation-ready {
+  cursor: pointer;
+  transition: opacity 0.15s ease;
+}
+
+.sp-translation-ready:hover {
+  opacity: 0.7;
+}
+
+.sp-translation-copied {
+  opacity: 0.5;
+}
+
+.sp-translation-loading {
+  color: var(--text-tertiary);
+  font-style: italic;
+  animation: sp-pulse 1.2s ease-in-out infinite;
+}
+
+@keyframes sp-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+
+.sp-translation-error {
+  color: var(--text-tertiary);
+  font-style: italic;
+  font-size: 11px;
+}
+
 /* ==================== 列表区域 ==================== */
 
 .sp-list {
@@ -149,6 +267,19 @@ body {
   text-align: center;
   color: var(--text-tertiary);
   font-size: 12px;
+}
+
+/* 固定列表空状态 */
+.sp-pinned-empty-icon {
+  font-size: 24px;
+  margin-bottom: 8px;
+}
+
+.sp-pinned-empty-hint {
+  font-size: 10px;
+  color: var(--text-tertiary);
+  margin-top: 4px;
+  opacity: 0.7;
 }
 
 /* ==================== 列表项 ==================== */
@@ -251,6 +382,13 @@ body {
   padding: 1px 5px;
   flex-shrink: 0;
   letter-spacing: 0.02em;
+}
+
+.sp-badge-pinned {
+  background: transparent;
+  border: none;
+  font-size: 12px;
+  padding: 0;
 }
 
 /* ==================== 底部提示 ==================== */

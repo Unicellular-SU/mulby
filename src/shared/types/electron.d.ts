@@ -346,6 +346,29 @@ export interface SuperPanelItem {
   score: number
 }
 
+export interface SuperPanelPinnedItem {
+  pluginId: string
+  featureCode: string
+  displayName: string
+  pluginIcon?: string
+  pinnedAt: number
+}
+
+export interface SuperPanelTranslation {
+  text: string
+  loading: boolean
+  error?: string
+}
+
+export interface SuperPanelState {
+  capturedText: string
+  items: SuperPanelItem[]
+  visible: boolean
+  mode: 'match' | 'pinned'
+  pinnedItems?: SuperPanelPinnedItem[]
+  translation?: SuperPanelTranslation
+}
+
 export interface StartupOpenAtLoginState {
   supported: boolean
   enabled: boolean
@@ -759,10 +782,10 @@ export interface ElectronAPI {
     onState: (callback: (state: TrayMenuState) => void) => () => void
   }
   superPanel: {
-    getState: () => Promise<{ capturedText: string; items: SuperPanelItem[]; visible: boolean }>
+    getState: () => Promise<SuperPanelState>
     action: (action: string, payload?: Record<string, unknown>) => Promise<{ success: boolean; error?: string }>
     close: () => Promise<{ success: boolean }>
-    onState: (callback: (state: { capturedText: string; items: SuperPanelItem[]; visible: boolean }) => void) => () => void
+    onState: (callback: (state: SuperPanelState) => void) => () => void
   }
   network: {
     isOnline: () => Promise<boolean>
