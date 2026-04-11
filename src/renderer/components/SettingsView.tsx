@@ -14,6 +14,7 @@ import GeneralSection from './settings/sections/GeneralSection'
 import PermissionsSection from './settings/sections/PermissionsSection'
 import AboutSection from './settings/sections/AboutSection'
 import SecuritySection from './settings/sections/SecuritySection'
+import SuperPanelSection from './settings/sections/SuperPanelSection'
 import DeveloperSection from './settings/sections/DeveloperSection'
 import OpenClawSection from './settings/sections/OpenClawSection'
 import type { SettingsViewProps } from './settings/types'
@@ -425,7 +426,13 @@ export default function SettingsView({
                 />
               )}
 
-
+              {section === 'superPanel' && settings && (
+                <SuperPanelSection
+                  settings={settings}
+                  updateSettings={updateSettings}
+                  cardClass={cardClass}
+                />
+              )}
 
               {section === 'commandQuickLaunch' && (
                 <CommandShortcutPanel

@@ -65,6 +65,7 @@ export type SystemPageId =
 export type SettingsCenterSection =
   | 'dashboard'
   | 'general'
+  | 'superPanel'
   | 'shortcuts'
   | 'commandQuickLaunch'
   | 'commandAll'

@@ -61,7 +61,7 @@ export function registerAllHandlers(
   systemPageWindowManager: SystemPageWindowManager,
   onboardingWindowManager: OnboardingWindowManager,
   pluginToolRegistry?: PluginToolRegistry
-): { warmupFeatureIconCache: () => void; setOnDisabledPluginToolsChanged: (fn: () => void) => void } {
+): { warmupFeatureIconCache: () => void; setOnDisabledPluginToolsChanged: (fn: () => void) => void; setOnSuperPanelChanged: (fn: (settings: import('../../shared/types/settings').AppSettings) => void) => void } {
   registerClipboardHandlers()
   registerClipboardHistoryHandlers(clipboardHistoryManager)
   registerNotificationHandlers()
@@ -92,7 +92,10 @@ export function registerAllHandlers(
   registerInBrowserHandlers()
   registerSharpHandlers()
   registerFFmpegHandlers()
-  registerSettingsHandlers(appSettingsManager, appShortcutManager, pluginManager)
+  const settingsHooks: { onSuperPanelChanged?: (settings: import('../../shared/types/settings').AppSettings) => void } = {}
+  registerSettingsHandlers(appSettingsManager, appShortcutManager, pluginManager, {
+    onSuperPanelChanged: (settings) => settingsHooks.onSuperPanelChanged?.(settings)
+  })
   registerDeveloperHandlers(pluginManager)
   registerSchedulerHandlers(pluginManager)
   const aiHooks: AiHandlersHooks = {}
@@ -110,6 +113,9 @@ export function registerAllHandlers(
     ...pluginHooks,
     setOnDisabledPluginToolsChanged: (fn: () => void) => {
       aiHooks.onDisabledPluginToolsChanged = fn
+    },
+    setOnSuperPanelChanged: (fn: (settings: import('../../shared/types/settings').AppSettings) => void) => {
+      settingsHooks.onSuperPanelChanged = fn
     }
   }
 }

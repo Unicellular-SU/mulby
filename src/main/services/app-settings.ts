@@ -18,7 +18,9 @@ import type {
   TraySettings,
   CommandTrustRecord,
   McpServerSettings,
-  OpenClawSettings
+  OpenClawSettings,
+  SuperPanelSettings,
+  SuperPanelTriggerSettings
 } from '../../shared/types/settings'
 
 const SETTINGS_NAMESPACE = 'app'
@@ -230,6 +232,48 @@ const DEFAULT_SETTINGS: AppSettings = {
       exposeClipboard: false,
       exposeSearch: true
     }
+  },
+  superPanel: {
+    enabled: false,
+    trigger: {
+      type: 'mouse_click',
+      mouseButton: 'middle',
+      longPressMs: 500
+    },
+    blockedApps: [
+      // JetBrains IDE（中键点击关闭标签页）
+      'com.jetbrains.intellij',
+      'com.jetbrains.WebStorm',
+      'com.jetbrains.pycharm',
+      'com.jetbrains.goland',
+      'com.jetbrains.CLion',
+      'com.jetbrains.rider',
+      'com.jetbrains.PhpStorm',
+      'com.jetbrains.rubymine',
+      'com.jetbrains.datagrip',
+      'idea64',
+      'webstorm64',
+      'pycharm64',
+      'goland64',
+      'clion64',
+      // VS Code（中键点击关闭标签页）
+      'com.microsoft.VSCode',
+      'Code',
+      // 终端模拟器（Linux 中键粘贴）
+      'gnome-terminal',
+      'konsole',
+      'xfce4-terminal',
+      'alacritty',
+      'kitty',
+      'com.apple.Terminal',
+      'com.googlecode.iterm2',
+      'WindowsTerminal',
+      // 游戏
+      'Steam',
+      'steam'
+    ],
+    clipboardPollDelayMs: 80,
+    maxItems: 10
   }
 }
 
@@ -309,6 +353,64 @@ function normalizeOpenClawSettings(input: Partial<OpenClawSettings> | undefined)
     auth,
     node,
     security
+  }
+}
+
+function normalizeSuperPanelTrigger(input: Partial<SuperPanelTriggerSettings> | undefined): SuperPanelTriggerSettings {
+  const defaults = DEFAULT_SETTINGS.superPanel.trigger
+  const current = {
+    ...defaults,
+    ...(input || {})
+  }
+
+  const validTypes = ['mouse_click', 'mouse_longpress', 'keyboard', 'double_tap'] as const
+  const type = validTypes.includes(current.type as typeof validTypes[number])
+    ? current.type as typeof validTypes[number]
+    : defaults.type
+
+  const validButtons = ['middle', 'back', 'forward', 'right'] as const
+  const mouseButton = validButtons.includes(current.mouseButton as typeof validButtons[number])
+    ? current.mouseButton as typeof validButtons[number]
+    : defaults.mouseButton
+
+  const longPressMs = Math.max(200, Math.min(Number(current.longPressMs || defaults.longPressMs), 3000))
+
+  const validModifiers = ['Command', 'Ctrl', 'Alt', 'Shift'] as const
+  const modifier = current.modifier && validModifiers.includes(current.modifier as typeof validModifiers[number])
+    ? current.modifier as typeof validModifiers[number]
+    : defaults.modifier
+
+  const accelerator = typeof current.accelerator === 'string' ? current.accelerator.trim() : undefined
+
+  return {
+    type,
+    mouseButton,
+    longPressMs,
+    accelerator: accelerator || undefined,
+    modifier
+  }
+}
+
+function normalizeSuperPanelSettings(input: Partial<SuperPanelSettings> | undefined): SuperPanelSettings {
+  const defaults = DEFAULT_SETTINGS.superPanel
+  const current = {
+    ...defaults,
+    ...(input || {})
+  }
+
+  // 归一化黑名单列表：直接使用用户配置，不再每次合并默认值
+  // 默认值仅在初始化时生效（通过 DEFAULT_SETTINGS.superPanel.blockedApps 展开）
+  const blockedApps = normalizeStringList(
+    current.blockedApps ?? defaults.blockedApps,
+    500
+  )
+
+  return {
+    enabled: current.enabled === true,
+    trigger: normalizeSuperPanelTrigger(current.trigger),
+    blockedApps,
+    clipboardPollDelayMs: Math.max(30, Math.min(Number(current.clipboardPollDelayMs || defaults.clipboardPollDelayMs), 500)),
+    maxItems: Math.max(3, Math.min(Number(current.maxItems || defaults.maxItems), 30))
   }
 }
 
@@ -778,6 +880,10 @@ function mergeSettings(current: AppSettings, next: Partial<AppSettings>): AppSet
     openclaw: normalizeOpenClawSettings({
       ...current.openclaw,
       ...(next.openclaw || {})
+    }),
+    superPanel: normalizeSuperPanelSettings({
+      ...current.superPanel,
+      ...(next.superPanel || {})
     })
   }
 }

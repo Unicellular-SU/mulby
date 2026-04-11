@@ -33,7 +33,11 @@ function setOpenAtLogin(enabled: boolean): { supported: boolean; enabled: boolea
 export function registerSettingsHandlers(
   settingsManager: AppSettingsManager,
   shortcutManager: AppShortcutManager,
-  pluginManager: PluginManager
+  pluginManager: PluginManager,
+  options?: {
+    /** 超级面板设置变更时回调 */
+    onSuperPanelChanged?: (settings: AppSettings) => void
+  }
 ) {
   setLoggerMinLevel(settingsManager.getSettings().developer.logLevel)
 
@@ -49,6 +53,7 @@ export function registerSettingsHandlers(
     const hasShortcuts = Boolean(partial && typeof partial === 'object' && 'shortcuts' in partial)
     const hasMouseTrigger = Boolean(partial && typeof partial === 'object' && 'mouseTrigger' in partial)
     const hasDoubleTap = Boolean(partial && typeof partial === 'object' && 'doubleTap' in partial)
+    const hasSuperPanel = Boolean(partial && typeof partial === 'object' && 'superPanel' in partial)
     const next = settingsManager.updateSettings(partial || {})
     setLoggerMinLevel(next.developer.logLevel)
 
@@ -78,6 +83,11 @@ export function registerSettingsHandlers(
       shortcutManager.applyDoubleTap(next.doubleTap)
     }
 
+    // 应用超级面板设置变更
+    if (hasSuperPanel) {
+      options?.onSuperPanelChanged?.(next)
+    }
+
     return { settings: next, shortcutStatus }
   })
 
@@ -89,6 +99,7 @@ export function registerSettingsHandlers(
     // 重置时也重新应用鼠标触发和双击修饰键
     shortcutManager.applyMouseTrigger(next.mouseTrigger)
     shortcutManager.applyDoubleTap(next.doubleTap)
+    options?.onSuperPanelChanged?.(next)
     return { settings: next, shortcutStatus }
   })
 

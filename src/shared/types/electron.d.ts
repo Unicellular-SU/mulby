@@ -333,6 +333,19 @@ export interface TrayMenuState {
   recentActions: TrayMenuRecentItem[]
 }
 
+export interface SuperPanelItem {
+  id: string
+  pluginId: string
+  pluginName: string
+  pluginDisplayName: string
+  pluginIcon?: string
+  featureCode: string
+  featureExplain: string
+  featureIcon?: string
+  matchType: string
+  score: number
+}
+
 export interface StartupOpenAtLoginState {
   supported: boolean
   enabled: boolean
@@ -471,7 +484,7 @@ export interface ElectronAPI {
   systemPage: {
     open: (payload: {
       page: 'settings' | 'plugin-manager' | 'plugin-store' | 'background-plugins' | 'task-scheduler' | 'log-viewer' | 'ai-settings' | 'ai-mcp-settings' | 'ai-tools-settings' | 'ai-skills-settings' | 'storage-explorer'
-      settingsSection?: 'dashboard' | 'general' | 'shortcuts' | 'commandQuickLaunch' | 'commandAll' | 'permissions' | 'security' | 'openclaw' | 'developer' | 'about'
+      settingsSection?: 'dashboard' | 'general' | 'superPanel' | 'shortcuts' | 'commandQuickLaunch' | 'commandAll' | 'permissions' | 'security' | 'openclaw' | 'developer' | 'about'
       shortcutCommandHint?: string
     }) => Promise<boolean>
     close: () => Promise<boolean>
@@ -744,6 +757,12 @@ export interface ElectronAPI {
     action: (action: string, payload?: Record<string, unknown>) => Promise<{ success: boolean; state?: TrayMenuState; error?: string }>
     close: () => Promise<{ success: boolean }>
     onState: (callback: (state: TrayMenuState) => void) => () => void
+  }
+  superPanel: {
+    getState: () => Promise<{ capturedText: string; items: SuperPanelItem[]; visible: boolean }>
+    action: (action: string, payload?: Record<string, unknown>) => Promise<{ success: boolean; error?: string }>
+    close: () => Promise<{ success: boolean }>
+    onState: (callback: (state: { capturedText: string; items: SuperPanelItem[]; visible: boolean }) => void) => () => void
   }
   network: {
     isOnline: () => Promise<boolean>

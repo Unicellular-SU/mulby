@@ -373,6 +373,42 @@ export interface TraySettings {
   clickAction: TrayClickAction
 }
 
+// ==================== 超级面板设置 ====================
+
+/** 超级面板触发方式 */
+export type SuperPanelTriggerType = 'mouse_click' | 'mouse_longpress' | 'keyboard' | 'double_tap'
+
+/** 超级面板鼠标按键（扩展支持右键） */
+export type SuperPanelMouseButton = 'middle' | 'back' | 'forward' | 'right'
+
+/** 超级面板触发配置 */
+export interface SuperPanelTriggerSettings {
+  /** 触发类型 */
+  type: SuperPanelTriggerType
+  /** 鼠标按键（mouse_click / mouse_longpress 模式） */
+  mouseButton?: SuperPanelMouseButton
+  /** 长按阈值（毫秒），仅 mouse_longpress 模式生效 */
+  longPressMs?: number
+  /** 键盘快捷键加速器（keyboard 模式），如 'Alt+Q' */
+  accelerator?: string
+  /** 双击修饰键（double_tap 模式） */
+  modifier?: DoubleTapModifier
+}
+
+/** 超级面板设置 */
+export interface SuperPanelSettings {
+  /** 是否启用超级面板（默认 false） */
+  enabled: boolean
+  /** 触发配置 */
+  trigger: SuperPanelTriggerSettings
+  /** 屏蔽的应用列表（macOS: bundleId/app, Win: exe 名, Linux: WM_CLASS） */
+  blockedApps: string[]
+  /** 剪贴板轮询等待时间（毫秒），默认 80 */
+  clipboardPollDelayMs: number
+  /** 面板最大显示条目数，默认 10 */
+  maxItems: number
+}
+
 export interface AppSettings {
   shortcuts: AppShortcutSettings
   mouseTrigger: MouseTriggerSettings
@@ -388,6 +424,7 @@ export interface AppSettings {
   onboardingCompleted?: boolean
   mcpServer: McpServerSettings
   openclaw: OpenClawSettings
+  superPanel: SuperPanelSettings
 }
 
 export interface ShortcutStatus {

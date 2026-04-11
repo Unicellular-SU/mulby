@@ -277,6 +277,17 @@ export function createPlatformApi(ipcRenderer: IpcRenderer) {
       }
     },
 
+    superPanel: {
+      getState: () => ipcRenderer.invoke('super-panel:getState'),
+      action: (action: string, payload?: Record<string, unknown>) => ipcRenderer.invoke('super-panel:action', action, payload),
+      close: () => ipcRenderer.invoke('super-panel:close'),
+      onState: (callback: (state: unknown) => void) => {
+        const listener = (_event: unknown, state: unknown) => callback(state)
+        ipcRenderer.on('super-panel:state', listener)
+        return () => ipcRenderer.removeListener('super-panel:state', listener)
+      }
+    },
+
     http: {
       request: (options: unknown) => ipcRenderer.invoke('http:request', options),
       get: (url: string, headers?: Record<string, string>) => ipcRenderer.invoke('http:get', url, headers),

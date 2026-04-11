@@ -50,6 +50,8 @@ import { createOpenClawNodeService, type OpenClawNodeService } from './openclaw'
 import { registerOpenClawHandlers } from './ipc/openclaw'
 import { createMcpServerManager, type McpServerManager } from './ai/mcp-server'
 import { registerMcpServerHandlers } from './ipc/mcp-server'
+import { SuperPanelManager } from './services/super-panel-manager'
+import { cleanupNativeKeySim } from './services/native-keyboard-sim'
 
 patchConsoleWithTimestamp()
 
@@ -133,6 +135,7 @@ let deferMainShadowShow = false
 let mcpServerManager: McpServerManager | null = null
 let _inputHookService: InputHookService | null = null
 let _openclawService: OpenClawNodeService | null = null
+let _superPanelManager: SuperPanelManager | null = null
 const pluginManager = new PluginManager()
 const pluginWindowManager = new PluginWindowManager()
 const themeManager = new ThemeManager()
@@ -427,6 +430,23 @@ async function shutdownMainProcessResources(): Promise<void> {
       }
     } catch (error) {
       console.error('[Main] Failed to destroy OpenClaw service:', error)
+    }
+
+    // 清理超级面板
+    try {
+      if (_superPanelManager) {
+        _superPanelManager.destroy()
+        _superPanelManager = null
+      }
+    } catch (error) {
+      console.error('[Main] Failed to destroy super panel manager:', error)
+    }
+
+    // 清理原生键盘模拟 FFI 资源
+    try {
+      cleanupNativeKeySim()
+    } catch (error) {
+      console.error('[Main] Failed to cleanup native key sim:', error)
     }
 
     // 清理原生输入钩子（CGEventTap / 低级键盘鼠标钩子）
@@ -1400,6 +1420,22 @@ app.whenReady().then(async () => {
     // 应用鼠标触发和双击修饰键的初始设置
     appShortcutManager.applyMouseTrigger(appSettingsManager.getSettings().mouseTrigger)
     appShortcutManager.applyDoubleTap(appSettingsManager.getSettings().doubleTap)
+
+    // 初始化超级面板管理器
+    const superPanelManager = new SuperPanelManager(
+      inputHookService,
+      pluginManager,
+      appSettingsManager,
+      themeManager
+    )
+    _superPanelManager = superPanelManager
+    superPanelManager.enable()
+    console.log('[SuperPanel] 管理器已初始化')
+
+    // 注册超级面板设置变更回调
+    ipcHooks.setOnSuperPanelChanged(() => {
+      superPanelManager.enable() // enable() 内部会读取最新设置并自动处理启用/禁用
+    })
 
     // 绑定 plugin tools 变更监听器到注册中心
     pluginManager.setPluginToolsListener((event, pluginId, pluginName, tools) => {
