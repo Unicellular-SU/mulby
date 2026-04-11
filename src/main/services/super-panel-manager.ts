@@ -16,13 +16,16 @@ import type { PluginManager } from '../plugin'
 import type { AppSettingsManager } from './app-settings'
 import type { ThemeManager } from './theme'
 import type { SuperPanelSettings } from '../../shared/types/settings'
+import type { ClipboardHistoryManager } from './clipboard-history'
 import { getCachedActiveWindow } from './active-window'
 import { nativeSimulateCopy, fallbackSimulateCopy } from './native-keyboard-sim'
 import { findBestMatch } from '../../shared/search-matcher'
-import type { Plugin, InputPayload } from '../../shared/types/plugin'
+import type { Plugin, InputPayload, InputAttachment } from '../../shared/types/plugin'
 import { SuperPanelWindowManager } from './super-panel-window'
 import { SuperPanelStore, type SuperPanelPinnedItem } from './super-panel-store'
 import { aiService } from '../ai'
+import { basename, extname } from 'path'
+import { getClipboardFormat, readClipboardFiles } from '../utils/clipboard-helper'
 
 // ==================== 类型定义 ====================
 
@@ -35,6 +38,8 @@ interface ClipboardSnapshot {
   hasImage: boolean
   /** 原始 NativeImage（仅在有图片时保存） */
   image: Electron.NativeImage | null
+  /** 复制前剪贴板中的文件列表（用于 before/after 对比） */
+  files: string[]
 }
 
 /** 超级面板中展示的匹配条目 */
@@ -108,11 +113,15 @@ export class SuperPanelManager {
   // 当前的翻译状态
   private currentTranslation?: SuperPanelTranslation
 
+  // 缓存的附件列表（文件/图片），用于传递给插件
+  private cachedAttachments: InputAttachment[] = []
+
   constructor(
     private readonly inputHookService: InputHookService,
     private readonly pluginManager: PluginManager,
     private readonly settingsManager: AppSettingsManager,
-    private readonly themeManager: ThemeManager
+    private readonly themeManager: ThemeManager,
+    private readonly clipboardHistoryManager?: ClipboardHistoryManager
   ) {}
 
   // ==================== 生命周期 ====================
@@ -242,18 +251,24 @@ export class SuperPanelManager {
    *
    * 时序：
    * 1. 保存当前剪贴板内容 (< 1ms)
-   * 2. 原生模拟 Cmd/Ctrl+C (< 5ms)
-   * 3. 等待剪贴板更新 + 读取 (50-100ms)
-   * 4. 比较差异，执行匹配 (< 5ms)
-   * 5. 显示面板 + IPC 推送 (< 50ms)
-   * 6. 异步翻译（不阻塞面板显示）
+   * 2. 暂停剪贴板历史采样（防止污染）
+   * 3. 原生模拟 Cmd/Ctrl+C (< 5ms)
+   * 4. 等待剪贴板更新 + 读取 (50-100ms)
+   * 5. 解析文件/图片附件
+   * 6. 比较差异，执行匹配 (< 5ms)
+   * 7. 显示面板 + IPC 推送 (< 50ms)
+   * 8. 异步翻译（不阻塞面板显示）
+   * 9. 面板关闭时恢复剪贴板并恢复采样
    */
   private async triggerWorkflow(x: number, y: number): Promise<void> {
     try {
       // 1. 保存旧剪贴板完整快照
       this.savedClipboard = this.snapshotClipboard()
 
-      // 2. 静默复制（零延迟原生调用）
+      // 2. 暂停剪贴板历史采样（防止模拟复制的临时内容被记录到历史中）
+      this.clipboardHistoryManager?.pause()
+
+      // 3. 静默复制（零延迟原生调用）
       // 在模拟复制前设置抑制窗口：macOS CGEventTap 会异步捕获模拟的 Cmd+C 事件，
       // 其中 C 键 (vk=67) 的 keydown 会在 10-50ms 后到达并污染 DoubleTap 状态。
       // 抑制窗口确保该合成事件被忽略。
@@ -266,24 +281,30 @@ export class SuperPanelManager {
 
       if (!copySuccess) {
         console.warn('[SuperPanel] 静默复制失败')
+        this.clipboardHistoryManager?.resume()
         return
       }
 
-      // 3. 等待剪贴板更新
+      // 4. 等待剪贴板更新
       const settings = this.getSettings()
       const newText = await this.pollClipboard(
         this.savedClipboard?.text || '',
         settings.clipboardPollDelayMs
       )
 
-      // 4. 判断是否有新内容
+      // 5. 解析文件/图片附件（带 before/after 验证，避免匹配旧的剪贴板文件/图片）
+      this.cachedAttachments = this.parseClipboardAttachments(this.savedClipboard)
+
+      // 6. 判断是否有新内容（文本或附件）
       const oldText = this.savedClipboard?.text || ''
       const hasNewContent = newText !== null && newText !== oldText
       this.capturedText = hasNewContent ? newText! : ''
       this.hasCaptured = true
 
-      if (this.capturedText.trim().length > 0) {
-        // ===== 有选中文本 → 匹配模式 =====
+      const hasNewAttachments = this.cachedAttachments.length > 0
+
+      if (this.capturedText.trim().length > 0 || hasNewAttachments) {
+        // ===== 有选中文本或附件 → 匹配模式 =====
         // 递增翻译序号，使之前在途的翻译请求结果被丢弃
         this.translationSeq++
         const items = this.matchContent(this.capturedText, settings.maxItems)
@@ -296,8 +317,8 @@ export class SuperPanelManager {
           mode: 'match'
         })
 
-        // 6. 异步翻译（不阻塞面板显示）
-        if (settings.instantTranslation) {
+        // 8. 异步翻译（不阻塞面板显示，仅文本模式）
+        if (settings.instantTranslation && this.capturedText.trim().length > 0) {
           void this.requestTranslation(this.capturedText)
         }
       } else {
@@ -308,7 +329,10 @@ export class SuperPanelManager {
         this.cachedItems = []
 
         // 无固定项也不显示面板
-        if (pinnedItems.length === 0) return
+        if (pinnedItems.length === 0) {
+          this.clipboardHistoryManager?.resume()
+          return
+        }
 
         this.showPanel(x, y, {
           capturedText: '',
@@ -320,6 +344,8 @@ export class SuperPanelManager {
       }
     } catch (err) {
       console.error('[SuperPanel] 触发工作流异常:', err)
+      // 确保异常时也恢复剪贴板历史采样
+      this.clipboardHistoryManager?.resume()
     }
   }
 
@@ -360,13 +386,21 @@ export class SuperPanelManager {
     } catch { /* 部分平台不支持 */ }
     const image = clipboard.readImage()
     const hasImage = image && !image.isEmpty()
+    // 快照当前文件列表（用于附件 before/after 对比）
+    let files: string[] = []
+    try {
+      if (getClipboardFormat() === 'files') {
+        files = readClipboardFiles()
+      }
+    } catch { /* 忽略 */ }
     return {
       text,
       html,
       rtf,
       bookmark,
       hasImage: !!hasImage,
-      image: hasImage ? image : null
+      image: hasImage ? image : null,
+      files
     }
   }
 
@@ -394,6 +428,8 @@ export class SuperPanelManager {
     } finally {
       this.hasCaptured = false
       this.savedClipboard = null
+      // 恢复剪贴板历史采样（内容已恢复，后续剪贴板变动可正常记录）
+      this.clipboardHistoryManager?.resume()
     }
   }
 
@@ -401,12 +437,13 @@ export class SuperPanelManager {
 
   /** 使用 search-matcher 对捕获内容执行插件匹配，叠加使用频率和搜索偏好 */
   private matchContent(text: string, maxItems: number): SuperPanelItem[] {
-    if (!text || text.trim().length === 0) return []
+    // 无文本且无附件时不执行匹配
+    if ((!text || text.trim().length === 0) && this.cachedAttachments.length === 0) return []
 
     const activeWindow = getCachedActiveWindow() || undefined
     const input: InputPayload = {
       text,
-      attachments: [],
+      attachments: this.cachedAttachments,
       activeWindow
     }
 
@@ -462,6 +499,75 @@ export class SuperPanelManager {
       })
       .slice(0, maxItems)
   }
+
+  /**
+   * 解析剪贴板中的文件和图片为 InputAttachment 列表
+   *
+   * 通过 before/after 对比避免匹配旧的剪贴板内容：
+   * - 文件：对比模拟复制前后的文件列表
+   * - 图片：对比模拟复制前后是否新增了图片
+   */
+  private parseClipboardAttachments(savedSnapshot: ClipboardSnapshot | null): InputAttachment[] {
+    const attachments: InputAttachment[] = []
+    try {
+      const format = getClipboardFormat()
+
+      if (format === 'files') {
+        const files = readClipboardFiles()
+        // before/after 验证：对比复制前快照中保存的文件列表
+        if (savedSnapshot && savedSnapshot.files.length > 0) {
+          const oldFiles = savedSnapshot.files
+          // 如果复制前后文件列表完全相同，说明没有新选中文件
+          if (files.length === oldFiles.length &&
+              files.every((f, i) => f === oldFiles[i])) {
+            return [] // 文件未变化，是旧剪贴板内容
+          }
+        }
+
+        for (const filePath of files) {
+          // 跨平台：用 path.basename 正确提取文件名（兼容 Windows 反斜杠路径）
+          const name = basename(filePath)
+          const ext = extname(filePath)
+          // 图片扩展名判断
+          const imageExts = ['.png', '.jpg', '.jpeg', '.gif', '.bmp', '.webp', '.svg', '.ico']
+          const isImage = imageExts.some(e => ext.toLowerCase() === e)
+
+          attachments.push({
+            id: `sp_file_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+            name,
+            size: 0, // 统计大小需要同步 IO，这里先留 0，后续可惰性加载
+            kind: isImage ? 'image' : 'file',
+            ext,
+            path: filePath
+          })
+        }
+      } else if (format === 'image') {
+        // before/after 验证：如果模拟复制前剪贴板就有图片，说明不是新选中的
+        if (savedSnapshot?.hasImage) {
+          return [] // 复制前就有图片，是旧剪贴板内容
+        }
+
+        // 纯图片剪贴板内容（截图、复制图片等）
+        const image = clipboard.readImage()
+        if (image && !image.isEmpty()) {
+          const pngBuffer = image.toPNG()
+          const dataUrl = `data:image/png;base64,${pngBuffer.toString('base64')}`
+          attachments.push({
+            id: `sp_img_${Date.now()}`,
+            name: 'clipboard-image.png',
+            size: pngBuffer.length,
+            kind: 'image',
+            ext: '.png',
+            dataUrl
+          })
+        }
+      }
+    } catch (err) {
+      console.error('[SuperPanel] 解析剪贴板附件失败:', err)
+    }
+    return attachments
+  }
+
 
   /** 解析插件图标为 data-url 字符串 */
   private resolvePluginIcon(plugin: Plugin): string | undefined {
@@ -549,8 +655,12 @@ export class SuperPanelManager {
           }
 
           this.hidePanel()
-          // 将捕获的文本传入插件执行
-          const result = await this.pluginManager.run(pluginId, featureCode, this.capturedText)
+          // 将捕获的文本和附件一起传入插件执行
+          const execInput: InputPayload = {
+            text: this.capturedText,
+            attachments: this.cachedAttachments
+          }
+          const result = await this.pluginManager.run(pluginId, featureCode, execInput)
           return { success: result.success, error: result.error }
         }
 

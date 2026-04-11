@@ -2,6 +2,7 @@ import { clipboard, nativeImage } from 'electron'
 import db from '../db'
 import { ClipboardWatcher } from './clipboard-watcher-v2'
 import { readFile } from 'fs/promises'
+import { getClipboardFormat, readClipboardFiles } from '../utils/clipboard-helper'
 
 interface ClipboardHistoryRow {
   id: string
@@ -54,10 +55,49 @@ export class ClipboardHistoryManager {
   private writeTimer: NodeJS.Timeout | null = null
   private writeBatchDelay: number = 100 // 100ms 批量写入
 
+  // 暂停控制：超级面板等外部模块可以临时暂停采样，防止模拟复制污染历史
+  private isPaused: boolean = false
+  private pauseTimer: NodeJS.Timeout | null = null
+  private static readonly PAUSE_SAFETY_TIMEOUT_MS = 2000 // 安全兜底：最多暂停 2 秒
+
   constructor() {
     this.watcher = new ClipboardWatcher()
     this.initDatabase()
     this.setupWatcher()
+  }
+
+  /**
+   * 暂停剪贴板历史采样
+   *
+   * 供超级面板等外部模块在模拟复制前调用，避免临时剪贴板内容被记录。
+   * 内置安全计时器（2 秒后自动恢复），防止异常时永久卡住。
+   */
+  pause(): void {
+    this.isPaused = true
+    // 清理旧的安全计时器
+    if (this.pauseTimer) {
+      clearTimeout(this.pauseTimer)
+    }
+    // 安全兜底：超时后自动恢复
+    this.pauseTimer = setTimeout(() => {
+      if (this.isPaused) {
+        console.warn('[ClipboardHistory] 暂停超时，自动恢复采样')
+        this.resume()
+      }
+    }, ClipboardHistoryManager.PAUSE_SAFETY_TIMEOUT_MS)
+  }
+
+  /**
+   * 恢复剪贴板历史采样
+   *
+   * 在剪贴板内容已恢复后调用。
+   */
+  resume(): void {
+    this.isPaused = false
+    if (this.pauseTimer) {
+      clearTimeout(this.pauseTimer)
+      this.pauseTimer = null
+    }
   }
 
   /**
@@ -104,7 +144,7 @@ export class ClipboardHistoryManager {
    */
   private setupWatcher() {
     this.watcher.on('change', async () => {
-      if (this.enabled) {
+      if (this.enabled && !this.isPaused) {
         await this.captureClipboard()
       }
     })
@@ -172,105 +212,17 @@ export class ClipboardHistoryManager {
   }
 
   /**
-   * 获取剪贴板格式
+   * 获取剪贴板格式（委托给公共工具函数）
    */
   private getClipboardFormat(): 'text' | 'image' | 'files' | 'empty' {
-    const formats = clipboard.availableFormats()
-
-    // macOS: 检查文件格式（优先级最高）
-    if (process.platform === 'darwin') {
-      // 检查是否有文件 URL
-      const fileUrl = clipboard.read('public.file-url')
-      if (fileUrl && fileUrl.startsWith('file://')) {
-        return 'files'
-      }
-
-      // 检查 NSFilenamesPboardType
-      if (formats.includes('NSFilenamesPboardType')) {
-        return 'files'
-      }
-    } else {
-      // Windows/Linux
-      if (formats.includes('text/uri-list') || formats.some(f => f.includes('FileNameW'))) {
-        return 'files'
-      }
-    }
-
-    // 检查图片（第二优先级）
-    if (!clipboard.readImage().isEmpty()) {
-      return 'image'
-    }
-
-    // 检查文本（最后）
-    const text = clipboard.readText()
-    if (text && text.trim()) {
-      return 'text'
-    }
-
-    return 'empty'
+    return getClipboardFormat()
   }
 
   /**
-   * 读取文件列表
+   * 读取文件列表（委托给公共工具函数）
    */
   private readFiles(): string[] {
-    try {
-      // macOS: 通过 file URL 读取
-      if (process.platform === 'darwin') {
-        const rawFiles = clipboard.read('public.file-url')
-        if (rawFiles) {
-          const filePath = decodeURIComponent(rawFiles.replace('file://', ''))
-
-          // macOS 使用 /.file/id= 格式，需要转换为真实路径
-          if (filePath.startsWith('/.file/id=')) {
-            // 尝试从 text/uri-list 获取真实路径
-            const formats = clipboard.availableFormats()
-            if (formats.includes('text/uri-list')) {
-              const uriList = clipboard.read('text/uri-list')
-              if (uriList) {
-                const uris = uriList.split('\n').filter(u => u.trim())
-                const realPaths = uris.map(uri => {
-                  const decoded = decodeURIComponent(uri.replace('file://', ''))
-                  return decoded
-                }).filter(p => p && !p.startsWith('/.file/id='))
-
-                if (realPaths.length > 0) {
-                  return realPaths
-                }
-              }
-            }
-
-            // 如果无法解析，尝试使用 NSFilenamesPboardType
-            try {
-              const nsFiles = clipboard.read('NSFilenamesPboardType')
-              if (nsFiles) {
-                // NSFilenamesPboardType 返回 plist 格式
-                const matches = nsFiles.match(/<string>(.*?)<\/string>/g)
-                if (matches) {
-                  const paths = matches.map(m => m.replace(/<\/?string>/g, ''))
-                  return paths
-                }
-              }
-            } catch {
-              // 忽略错误
-            }
-          }
-
-          return filePath ? [filePath] : []
-        }
-      }
-
-      // Windows/Linux: 通过 buffer 读取
-      const rawFilePaths = clipboard.readBuffer('FileNameW')
-      if (rawFilePaths && rawFilePaths.length > 0) {
-        const paths = rawFilePaths.toString('ucs2').replace(/\0+$/, '').split('\0')
-        return paths.filter(p => p && p.trim())
-      }
-    } catch (err) {
-      console.error('Failed to read files from clipboard:', err)
-    }
-
-    return []
+    return readClipboardFiles()
   }
 
   /**

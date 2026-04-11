@@ -1426,7 +1426,8 @@ app.whenReady().then(async () => {
       inputHookService,
       pluginManager,
       appSettingsManager,
-      themeManager
+      themeManager,
+      clipboardHistoryManager
     )
     _superPanelManager = superPanelManager
     superPanelManager.enable()
