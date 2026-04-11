@@ -274,7 +274,8 @@ const DEFAULT_SETTINGS: AppSettings = {
     ],
     clipboardPollDelayMs: 80,
     maxItems: 10,
-    instantTranslation: true
+    instantTranslation: true,
+    translationMaxLength: 5000
   }
 }
 
@@ -412,7 +413,8 @@ function normalizeSuperPanelSettings(input: Partial<SuperPanelSettings> | undefi
     blockedApps,
     clipboardPollDelayMs: Math.max(30, Math.min(Number(current.clipboardPollDelayMs || defaults.clipboardPollDelayMs), 500)),
     maxItems: Math.max(3, Math.min(Number(current.maxItems || defaults.maxItems), 30)),
-    instantTranslation: current.instantTranslation !== false
+    instantTranslation: current.instantTranslation !== false,
+    translationMaxLength: Math.max(100, Math.min(Number(current.translationMaxLength || defaults.translationMaxLength || 5000), 50000))
   }
 }
 

@@ -354,13 +354,16 @@ translationText.addEventListener('click', () => {
 translationCopyBtn.addEventListener('click', () => {
   const text = translationText.textContent;
   if (!text) return;
-  navigator.clipboard.writeText(text).then(() => {
-    const originalHTML = translationCopyBtn.innerHTML;
-    // Show check icon
-    translationCopyBtn.innerHTML = `<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="color: #10b981;"><path d="M13.5 4.5L6.5 11.5L2.5 7.5"></path></svg>`;
-    setTimeout(() => {
-      translationCopyBtn.innerHTML = originalHTML;
-    }, 1200);
+  // 通过主进程剪贴板 API 复制（避免 panel 窗口 navigator.clipboard 权限问题）
+  window.mulby.superPanel.action('copyTranslation', { text }).then((result) => {
+    if (result && result.success) {
+      const originalHTML = translationCopyBtn.innerHTML;
+      // 显示勾选图标
+      translationCopyBtn.innerHTML = `<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="color: #10b981;"><path d="M13.5 4.5L6.5 11.5L2.5 7.5"></path></svg>`;
+      setTimeout(() => {
+        translationCopyBtn.innerHTML = originalHTML;
+      }, 1200);
+    }
   }).catch(() => { /* 忽略 */ });
 });
 

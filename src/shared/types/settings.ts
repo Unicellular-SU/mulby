@@ -409,6 +409,8 @@ export interface SuperPanelSettings {
   maxItems: number
   /** 即时翻译：是否启用（默认 true，但需 AI 已配置才生效） */
   instantTranslation: boolean
+  /** 即时翻译：最大文本长度（超过此长度不触发翻译），默认 5000 */
+  translationMaxLength?: number
 }
 
 export interface AppSettings {

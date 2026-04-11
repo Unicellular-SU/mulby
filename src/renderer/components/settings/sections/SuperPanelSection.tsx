@@ -487,6 +487,35 @@ export default function SuperPanelSection({
                 disabled={!superPanel.enabled}
               />
             </div>
+
+            {superPanel.instantTranslation !== false && (
+              <div className="flex items-center justify-between">
+                <div>
+                  <div className="text-sm text-slate-700 dark:text-slate-200">最大翻译长度</div>
+                  <div className="text-xs text-slate-400 dark:text-slate-500">
+                    超过此字符数的文本不触发即时翻译
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="number"
+                    min={100}
+                    max={50000}
+                    step={500}
+                    defaultValue={superPanel.translationMaxLength ?? 5000}
+                    onBlur={(e) => {
+                      const val = Number(e.target.value)
+                      if (val >= 100 && val <= 50000) {
+                        void handleUpdate({ translationMaxLength: val })
+                      }
+                    }}
+                    disabled={!superPanel.enabled}
+                    className="w-24 rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-right text-sm text-slate-900 dark:border-slate-700 dark:bg-slate-900 dark:text-white disabled:opacity-60"
+                  />
+                  <span className="text-xs text-slate-500 dark:text-slate-400">字符</span>
+                </div>
+              </div>
+            )}
           </div>
 
           <TriggerSection

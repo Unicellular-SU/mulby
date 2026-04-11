@@ -216,6 +216,26 @@ const result = await window.mulby.host.call('my-plugin', 'runWithTools', {
 });
 ```
 
+### 彻底禁用工具（纯文本翻译/安全限制场景）
+
+当需要确保 AI 仅进行纯文本输出（如：划词翻译功能的背景对话流），并且要求**严格防止 prompt 注入攻击诱导模型执行内部命令**时，必须显式禁用系统内的所有工具注入引擎。简单将 `tools` 置空或设置 `maxToolSteps` 为 0 是**无效的**（默认机制会自动注入并保留插件工具）。
+
+必须传入如下全维度的禁用配方：
+
+```ts
+const response = await ai.call({
+  messages: [...],
+  // 1. 阻止请求任何内部能力（FS读写、Shell执行等）
+  capabilities: [],
+  // 2. 彻底关闭内部工具与当前插件的外部工具挂载
+  toolingPolicy: { enableInternalTools: false },
+  // 3. 关闭动态 MCP 插件挂载能力
+  mcp: { mode: 'off' },
+  // 4. 关闭动态技能触发能力
+  skills: { mode: 'off' }
+});
+```
+
 ---
 
 ## 模型管理

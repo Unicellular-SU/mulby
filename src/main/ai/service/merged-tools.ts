@@ -17,7 +17,10 @@ export async function resolveMergedTools(
   deps: ResolveMergedToolsDeps
 ): Promise<AiTool[] | undefined> {
   const declaredTools = Array.isArray(option.tools) ? option.tools : []
-  const pluginTools = deps.resolvePluginTools?.() || []
+  // 当调用方明确禁用工具（enableInternalTools: false）时，不注入插件工具
+  const pluginTools = option.toolingPolicy?.enableInternalTools === false
+    ? []
+    : (deps.resolvePluginTools?.() || [])
   const mcpMode = option.mcp ? (option.mcp.mode || 'auto') : 'off'
 
   // MCP 关闭时，仍需合并 declared + plugin tools

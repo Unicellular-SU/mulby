@@ -603,13 +603,26 @@ export class SuperPanelManager {
         }
 
         case 'translationToggle': {
-          if (this.currentTranslation) {
-             this.currentTranslation.expanded = Boolean(payload?.expanded)
-             if (payload?.height && typeof payload.height === 'number') {
-               this.currentTranslation.expandedHeight = payload.height
-             }
-             this.pushTranslation(this.currentTranslation)
+           if (this.currentTranslation) {
+              this.currentTranslation.expanded = Boolean(payload?.expanded)
+              if (payload?.height && typeof payload.height === 'number') {
+                this.currentTranslation.expandedHeight = payload.height
+              }
+              this.pushTranslation(this.currentTranslation)
+           }
+           return { success: true }
+        }
+
+        case 'copyTranslation': {
+          // 通过主进程剪贴板 API 完成复制（避免渲染进程 navigator.clipboard 权限问题）
+          const textToCopy = String(payload?.text || '').trim()
+          if (!textToCopy) {
+            return { success: false, error: '无翻译内容可复制' }
           }
+          clipboard.writeText(textToCopy)
+          // 用户显式复制了翻译结果，跳过后续剪贴板恢复（否则 blur/close 会覆盖用户复制的内容）
+          this.hasCaptured = false
+          this.savedClipboard = null
           return { success: true }
         }
 
@@ -680,12 +693,15 @@ export class SuperPanelManager {
    *
    * 策略：
    * - 检测输入语言（CJK → 英文，其他 → 中文）
-   * - 限制输入长度 ≤ 500 字符
+   * - 限制输入长度（可配置，默认 ≤ 5000 字符）
    * - 使用序号机制丢弃过时请求
+   * - 禁用所有工具/技能/MCP，确保纯文本翻译
    */
   private async requestTranslation(text: string): Promise<void> {
     const trimmed = text.trim()
-    if (!trimmed || trimmed.length > 500) return
+    const settings = this.getSettings()
+    const maxLength = settings.translationMaxLength ?? 5000
+    if (!trimmed || trimmed.length > maxLength) return
 
     // 检查 AI 是否已配置
     try {
@@ -707,6 +723,11 @@ export class SuperPanelManager {
       const hasCJK = /[\u4e00-\u9fff\u3040-\u30ff\uac00-\ud7af]/.test(trimmed)
       const targetLang = hasCJK ? '英文 (English)' : '简体中文'
 
+      // 根据输入长度动态计算 maxOutputTokens：
+      // 翻译输出通常不超过输入的 2 倍（跨语言膨胀），每字符约 0.5-1.5 token
+      // 下限 500 token，上限 16000 token
+      const estimatedOutputTokens = Math.max(500, Math.min(Math.ceil(trimmed.length * 2), 16000))
+
       const response = await aiService.call({
         messages: [
           {
@@ -718,7 +739,15 @@ export class SuperPanelManager {
             content: `将以下文本翻译为${targetLang}：\n\n${trimmed}`
           }
         ],
-        params: { maxOutputTokensEnabled: true, maxOutputTokens: 500 }
+        // 纯文本翻译：彻底禁用所有工具、技能和 MCP
+        // - enableInternalTools: false 阻止内部能力注入（shell.exec, fs.read 等）
+        // - capabilities: [] 不请求任何能力
+        // - skills/mcp off 不加载技能和 MCP 工具
+        toolingPolicy: { enableInternalTools: false },
+        capabilities: [],
+        skills: { mode: 'off' },
+        mcp: { mode: 'off' },
+        params: { maxOutputTokensEnabled: true, maxOutputTokens: estimatedOutputTokens }
       })
 
       // 丢弃过时结果
