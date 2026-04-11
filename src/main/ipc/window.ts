@@ -437,8 +437,7 @@ export function registerWindowHandlers(
   // 原有窗口 API（增强版）
   // =========================================
 
-  ipcMain.on('window:hide', (event, _isRestorePreWindow?: boolean) => {
-    // TODO: isRestorePreWindow 参数目前未使用，后续可实现焦点恢复逻辑
+  ipcMain.on('window:hide', (event, isRestorePreWindow?: boolean) => {
     // 使用发送者窗口而非主窗口，以支持面板和独立窗口模式
     const win = windowFromWebContents(event.sender)
     if (!win) return
@@ -450,6 +449,20 @@ export function registerWindowHandlers(
     } else {
       win.hide()
     }
+
+    // 焦点恢复：隐藏窗口后将系统焦点归还给之前的前台应用
+    if (isRestorePreWindow && process.platform === 'darwin') {
+      // app.hide() 会隐藏整个 Electron 应用的所有窗口，
+      // 仅当隐藏当前窗口后没有其他可见窗口时才使用，避免误伤
+      const hasOtherVisible = BrowserWindow.getAllWindows().some(
+        w => !w.isDestroyed() && w.isVisible() && w.id !== win.id
+      )
+      if (!hasOtherVisible) {
+        app.hide()
+      }
+    }
+    // Windows/Linux: 窗口隐藏后系统会自动将焦点转移给下一个可见窗口，
+    // 无需额外操作
   })
 
   // 显示窗口

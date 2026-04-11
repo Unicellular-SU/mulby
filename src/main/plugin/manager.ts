@@ -1,4 +1,4 @@
-import { app } from 'electron'
+import { app, Notification } from 'electron'
 import { join } from 'path'
 import { existsSync, rmSync } from 'fs'
 import { collectDevPluginWatchTargets } from './dev-reload-utils'
@@ -1192,8 +1192,8 @@ export class PluginManager {
       await this.initializePlugin(pluginId)
     }
 
-    // 3. 通知 UI 或其他组件（可选）
-    // TODO: 可以发送事件给前端提示插件已更新
+    // 3. 发送系统通知提示开发者插件后端代码已更新
+    this.notifyDevPluginReloaded(plugin, 'code')
   }
 
   /**
@@ -1262,6 +1262,34 @@ export class PluginManager {
 
     // P2a 修复: 插件元数据热重载后同步搜索 Worker
     void this.syncSearchWorker().catch(() => {})
+
+    // 发送系统通知提示开发者插件元数据已更新
+    this.notifyDevPluginReloaded(nextPlugin, 'metadata')
+  }
+
+  /**
+   * 发送系统通知提示开发者插件已热重载（仅开发插件）
+   * @param plugin 插件实例
+   * @param kind 重载类型：'code' 后端代码 | 'metadata' manifest/icon 等元数据
+   */
+  private notifyDevPluginReloaded(plugin: Plugin, kind: 'code' | 'metadata'): void {
+    if (!plugin.isDev) return
+
+    const displayName = plugin.manifest.displayName || plugin.id
+    const body = kind === 'code'
+      ? `${displayName} 后端代码已热重载`
+      : `${displayName} 元数据已更新`
+
+    try {
+      const notification = new Notification({
+        title: 'Mulby 插件热重载',
+        body,
+        silent: true
+      })
+      notification.show()
+    } catch {
+      // 通知发送失败不影响主流程
+    }
   }
 
   // Decide whether a plugin should keep running after its last window closes.

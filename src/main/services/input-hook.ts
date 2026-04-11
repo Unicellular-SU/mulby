@@ -11,7 +11,7 @@
  *
  * 底层实现：通过 koffi FFI 调用系统原生 API（无 uiohook-napi 依赖）。
  * Windows: SetWindowsHookEx (WH_KEYBOARD_LL / WH_MOUSE_LL)
- * macOS:   CGEventTapCreate (TODO)
+ * macOS:   CGEventTapCreate
  */
 import {
   startNativeInputHook,

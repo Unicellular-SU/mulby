@@ -997,18 +997,16 @@ export class AiInternalToolRuntime {
       content: lines.join('\n'),
       // Expose the skill's declared grants for informational purposes.
       //
-      // KNOWN LIMITATION: These grants are returned but NOT dynamically applied
-      // to the current request's tool set. The tool set is resolved once at
-      // request start (in prepareChatRequest → resolveAiCapabilityPolicy →
-      // buildTools), before any tool calls execute. There is no mid-request
-      // tool injection mechanism yet.
+      // KNOWN LIMITATION (P2): 这些 grants 仅作为信息返回，不会动态应用到
+      // 当前请求的工具集中。工具集在请求启动时一次性解析
+      // (prepareChatRequest → resolveAiCapabilityPolicy → buildTools)，
+      // 目前没有请求中途的工具注入机制。
       //
-      // For skills that need additional MCP servers or non-default internal
-      // tools, use manual mode (explicit skillIds) so their grants are
-      // pre-resolved in the initial tool set.
+      // Workaround: 需要额外 MCP 服务器或非默认内部工具的 skill，
+      // 应使用 manual mode（显式 skillIds），确保 grants 在初始工具集中被预解析。
       //
-      // TODO: Implement dynamic tool injection in the tool loop to fully
-      // support progressive disclosure for skills with custom grants.
+      // 未来方向: 在 tool loop 中实现增量工具注入，支持 skill 的渐进式能力披露。
+      // 这需要修改 AI 服务核心管道（service.ts 的 tool loop + buildTools 动态化）。
       grants: {
         capabilities: record.descriptor.mulbyExtensions?.capabilities || record.descriptor.capabilities || [],
         internalTools: record.descriptor.mulbyExtensions?.internalTools || record.descriptor.internalTools || [],
