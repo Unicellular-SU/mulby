@@ -17,7 +17,7 @@ import type { SuperPanelState } from './super-panel-manager'
 
 // 面板尺寸
 const PANEL_WIDTH = 300
-const PANEL_MAX_HEIGHT = 420
+const PANEL_MAX_HEIGHT = 520
 const PANEL_MARGIN = 8
 
 interface SuperPanelWindowOptions {
@@ -78,10 +78,21 @@ export class SuperPanelWindowManager {
     const itemHeight = 48
     const headerHeight = 52
     const footerHeight = 32
+    const groupHeaderHeight = 28 // 分组标题高度
 
     let listCount: number
+    let groupCount = 0
     if (state.mode === 'pinned') {
-      listCount = state.pinnedItems?.length || 0
+      if (state.pinnedGroups) {
+        listCount = state.pinnedGroups.reduce((sum, g) => sum + g.items.length, 0)
+        // 多分组或有 boundApp 时才显示分组标题
+        const showHeaders = state.pinnedGroups.length > 1 || state.pinnedGroups.some(g => g.boundApp)
+        if (showHeaders) {
+          groupCount = state.pinnedGroups.filter(g => g.items.length > 0 || showHeaders).length
+        }
+      } else {
+        listCount = state.pinnedItems?.length || 0
+      }
     } else {
       listCount = state.items.length
     }
@@ -99,8 +110,33 @@ export class SuperPanelWindowManager {
       }
     }
 
-    const contentHeight = headerHeight + searchBarHeight + translationHeight + Math.max(listCount, 1) * itemHeight + footerHeight
+    const contentHeight = headerHeight + searchBarHeight + translationHeight
+      + groupCount * groupHeaderHeight
+      + Math.max(listCount, 1) * itemHeight + footerHeight
     return Math.min(contentHeight, PANEL_MAX_HEIGHT)
+  }
+
+  /** 前端请求调整窗口高度（动作面板展开/收起时） */
+  adjustHeight(height: number): void {
+    if (!this.window || this.window.isDestroyed()) return
+    const clamped = Math.min(Math.max(height, 100), PANEL_MAX_HEIGHT)
+    const [currentWidth] = this.window.getSize()
+    this.window.setSize(currentWidth, Math.round(clamped))
+
+    // 扩大后可能超出屏幕底部 → 重新定位
+    const bounds = this.window.getBounds()
+    const display = screen.getDisplayNearestPoint({ x: bounds.x, y: bounds.y })
+    const area = display.workArea
+    const maxY = area.y + area.height - bounds.height - PANEL_MARGIN
+    if (bounds.y > maxY) {
+      this.window.setPosition(bounds.x, Math.round(Math.max(area.y + PANEL_MARGIN, maxY)), false)
+    }
+  }
+
+  /** 获取当前面板窗口 ID（用于排除面板窗口） */
+  getWindowId(): number | null {
+    if (!this.window || this.window.isDestroyed()) return null
+    return this.window.id
   }
 
   /** 隐藏面板 */

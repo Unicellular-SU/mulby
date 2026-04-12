@@ -645,11 +645,18 @@ function MainApp() {
     }
     setAttachmentsManagerOpen(false)
     if (!isSystemWindow) {
-      void window.mulby.systemPage.open({ page: 'plugin-manager' })
+      void window.mulby.systemPage.open({ page: 'plugin-manager', detailsPluginId: pluginId })
       return
     }
     setPluginManagerReturnTarget(from)
     setViewMode('plugins')
+    if (pluginId) {
+      setTimeout(() => {
+        setDetailsPluginName(pluginId)
+        setDetailsReturnTarget('plugins')
+        setViewMode('plugin-details')
+      }, 50)
+    }
   }, [isSystemWindow, openPluginStore, pluginOpen])
 
   const openBackgroundPluginManager = useCallback((from: 'home' | 'settings' = 'home') => {
@@ -851,8 +858,8 @@ function MainApp() {
   }, [openPluginStore])
 
   useEffect(() => {
-    const cleanup = window.mulby.app.onOpenPluginManager(() => {
-      openPluginManager('home')
+    const cleanup = window.mulby.app.onOpenPluginManager((pluginId?: string) => {
+      openPluginManager('home', 'installed', pluginId)
     })
     return cleanup
   }, [openPluginManager])

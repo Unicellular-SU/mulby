@@ -46,8 +46,15 @@ function normalizeOpenPayload(input: unknown): OpenSystemPagePayload | null {
   if (typeof rawPage !== 'string') return null
   if (!SYSTEM_PAGE_IDS.includes(rawPage as SystemPageId)) return null
 
-  if (rawPage !== 'settings') {
+  if (rawPage !== 'settings' && rawPage !== 'plugin-manager') {
     return { page: rawPage as SystemPageId }
+  }
+
+  if (rawPage === 'plugin-manager') {
+    return {
+      page: 'plugin-manager',
+      detailsPluginId: typeof payload.detailsPluginId === 'string' ? payload.detailsPluginId : undefined
+    }
   }
 
   const section = payload.settingsSection

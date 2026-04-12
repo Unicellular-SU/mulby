@@ -344,6 +344,8 @@ export interface SuperPanelItem {
   featureIcon?: string
   matchType: string
   score: number
+  /** 上下文加权分（当前应用匹配 window cmd 时 > 0） */
+  contextBoost: number
 }
 
 export interface SuperPanelPinnedItem {
@@ -354,10 +356,20 @@ export interface SuperPanelPinnedItem {
   pinnedAt: number
 }
 
+/** 固定列表分组 */
+export interface SuperPanelGroup {
+  id: string
+  name: string
+  boundApp?: string
+  items: SuperPanelPinnedItem[]
+}
+
 export interface SuperPanelTranslation {
   text: string
   loading: boolean
   error?: string
+  expanded?: boolean
+  expandedHeight?: number
 }
 
 export interface SuperPanelState {
@@ -366,7 +378,11 @@ export interface SuperPanelState {
   visible: boolean
   mode: 'match' | 'pinned'
   pinnedItems?: SuperPanelPinnedItem[]
+  /** 分组化的固定列表（mode='pinned' 时有效） */
+  pinnedGroups?: SuperPanelGroup[]
   translation?: SuperPanelTranslation
+  /** 当前前台应用上下文（用于前端展示上下文标签） */
+  activeApp?: { app: string; bundleId?: string }
 }
 
 export interface StartupOpenAtLoginState {
@@ -492,7 +508,7 @@ export interface ElectronAPI {
     onOpenAiToolsSettings: (callback: () => void) => () => void
     onOpenAiSkillsSettings: (callback: () => void) => () => void
     onOpenPluginStore: (callback: () => void) => () => void
-    onOpenPluginManager: (callback: () => void) => () => void
+    onOpenPluginManager: (callback: (pluginId?: string) => void) => () => void
     onOpenBackgroundPlugins: (callback: () => void) => () => void
     onOpenTaskScheduler: (callback: () => void) => () => void
     onOpenLogViewer: (callback: () => void) => () => void

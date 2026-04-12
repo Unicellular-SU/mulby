@@ -43,8 +43,8 @@ export function createAppPluginApi(ipcRenderer: IpcRenderer) {
         ipcRenderer.on('app:openPluginStore', listener)
         return () => ipcRenderer.removeListener('app:openPluginStore', listener)
       },
-      onOpenPluginManager: (callback: () => void) => {
-        const listener = () => callback()
+      onOpenPluginManager: (callback: (pluginId?: string) => void) => {
+        const listener = (_event: Electron.IpcRendererEvent, pluginId?: string) => callback(pluginId)
         ipcRenderer.on('app:openPluginManager', listener)
         return () => ipcRenderer.removeListener('app:openPluginManager', listener)
       },

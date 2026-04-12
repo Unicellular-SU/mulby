@@ -30,6 +30,8 @@ let unsubscribeTheme = null;
 let originalItemCount = 0;
 // 搜索框是否有活跃查询
 let isSearchActive = false;
+// 当前是否有捕获的文本（用于决定“复制捕获内容”动作是否可用）
+let hasCapturedText = false;
 
 // ==================== 工具函数 ====================
 
@@ -66,6 +68,27 @@ function renderIcon(icon, displayName) {
   return `<span class="sp-icon-letter">${escapeHtml(letter)}</span>`;
 }
 
+/**
+ * 渲染当前应用上下文标签（显示在 header 区域）
+ */
+function renderActiveApp(activeApp) {
+  let el = document.getElementById('active-app-tag');
+  if (!activeApp || !activeApp.app) {
+    if (el) el.style.display = 'none';
+    return;
+  }
+  if (!el) {
+    el = document.createElement('span');
+    el.id = 'active-app-tag';
+    el.className = 'sp-active-app';
+    // 插入到 captured-text 同级
+    const captured = document.querySelector('.sp-captured');
+    if (captured) captured.appendChild(el);
+  }
+  el.textContent = activeApp.app;
+  el.style.display = '';
+}
+
 // ==================== 渲染 ====================
 
 function render(state) {
@@ -73,12 +96,20 @@ function render(state) {
 
   // 更新选中文本预览
   if (state.capturedText && state.capturedText.trim()) {
+    hasCapturedText = true;
     capturedTextEl.textContent = truncate(state.capturedText.trim(), 60);
     capturedTextEl.classList.remove('empty');
   } else {
+    hasCapturedText = false;
     capturedTextEl.textContent = '未选中内容';
     capturedTextEl.classList.add('empty');
   }
+
+  // 显示当前应用上下文标签
+  renderActiveApp(state.activeApp);
+
+  // 重新渲染前重置内联动作面板状态（防止 pushState 重构 DOM 后状态残留）
+  resetActionPanelState();
 
   if (currentMode === 'match') {
     renderMatchMode(state);
@@ -127,49 +158,120 @@ function renderMatchMode(state) {
 }
 
 function renderPinnedMode(state) {
-  currentPinnedItems = Array.isArray(state.pinnedItems) ? state.pinnedItems : [];
   currentItems = [];
 
   // 隐藏搜索框和翻译卡片
   searchBar.style.display = 'none';
   translationCard.style.display = 'none';
 
-  if (currentPinnedItems.length === 0) {
-    itemListEl.innerHTML = `
-      <div class="sp-empty">
-        <div class="sp-pinned-empty-icon">📌</div>
-        <div>还没有固定的功能</div>
-        <div class="sp-pinned-empty-hint">选中文本后，右键匹配结果可固定到此处</div>
-      </div>
-    `;
-    selectedIndex = 0;
-    return;
-  }
+  // 优先使用 pinnedGroups（v2），回退到 pinnedItems（v1 兼容）
+  const groups = Array.isArray(state.pinnedGroups) ? state.pinnedGroups : null;
 
-  selectedIndex = 0;
-  itemListEl.innerHTML = currentPinnedItems.map((item, index) => {
-    const isSelected = index === selectedIndex;
-    const title = escapeHtml(truncate(item.displayName, 40));
-    const icon = renderIcon(item.pluginIcon, item.displayName);
-    return `
-      <button
-        class="sp-item${isSelected ? ' selected' : ''}"
-        type="button"
-        data-index="${index}"
-        data-plugin-id="${escapeHtml(item.pluginId)}"
-        data-feature-code="${escapeHtml(item.featureCode)}"
-        data-pinned="true"
-        tabindex="${isSelected ? '0' : '-1'}"
-      >
-        <div class="sp-item-icon">${icon}</div>
-        <div class="sp-item-content">
-          <div class="sp-item-title">${title}</div>
-          <div class="sp-item-subtitle">${escapeHtml(item.pluginId)}</div>
+  if (groups) {
+    // v2 分组渲染
+    const allItems = groups.flatMap(g => g.items);
+    currentPinnedItems = allItems;
+
+    if (allItems.length === 0) {
+      itemListEl.innerHTML = `
+        <div class="sp-empty">
+          <div class="sp-pinned-empty-icon">📌</div>
+          <div>还没有固定的功能</div>
+          <div class="sp-pinned-empty-hint">选中文本后，右键匹配结果可固定到此处</div>
         </div>
-        <span class="sp-item-badge sp-badge-pinned">📌</span>
-      </button>
-    `;
-  }).join('');
+      `;
+      selectedIndex = 0;
+      return;
+    }
+
+    selectedIndex = 0;
+    let globalIndex = 0;
+    let html = '';
+    const showHeaders = groups.length > 1 || groups.some(g => g.boundApp);
+
+    for (const group of groups) {
+      if (group.items.length === 0 && !showHeaders) continue;
+
+      // 分组标题（仅多分组或有绑定应用时显示）
+      if (showHeaders) {
+        const appLabel = group.boundApp
+          ? `<span class="sp-group-app">${escapeHtml(group.boundApp)}</span>`
+          : '';
+        html += `<div class="sp-group-header">
+          <span class="sp-group-name">${escapeHtml(group.name)}</span>
+          ${appLabel}
+        </div>`;
+      }
+
+      for (const item of group.items) {
+        const isSelected = globalIndex === selectedIndex;
+        const title = escapeHtml(truncate(item.displayName, 40));
+        const icon = renderIcon(item.pluginIcon, item.displayName);
+        html += `
+          <button
+            class="sp-item${isSelected ? ' selected' : ''}"
+            type="button"
+            data-index="${globalIndex}"
+            data-plugin-id="${escapeHtml(item.pluginId)}"
+            data-feature-code="${escapeHtml(item.featureCode)}"
+            data-pinned="true"
+            data-group-id="${escapeHtml(group.id)}"
+            tabindex="${isSelected ? '0' : '-1'}"
+          >
+            <div class="sp-item-icon">${icon}</div>
+            <div class="sp-item-content">
+              <div class="sp-item-title">${title}</div>
+              <div class="sp-item-subtitle">${escapeHtml(item.pluginId)}</div>
+            </div>
+            <span class="sp-item-badge sp-badge-pinned">📌</span>
+          </button>
+        `;
+        globalIndex++;
+      }
+    }
+
+    itemListEl.innerHTML = html;
+  } else {
+    // v1 兼容回退
+    currentPinnedItems = Array.isArray(state.pinnedItems) ? state.pinnedItems : [];
+
+    if (currentPinnedItems.length === 0) {
+      itemListEl.innerHTML = `
+        <div class="sp-empty">
+          <div class="sp-pinned-empty-icon">📌</div>
+          <div>还没有固定的功能</div>
+          <div class="sp-pinned-empty-hint">选中文本后，右键匹配结果可固定到此处</div>
+        </div>
+      `;
+      selectedIndex = 0;
+      return;
+    }
+
+    selectedIndex = 0;
+    itemListEl.innerHTML = currentPinnedItems.map((item, index) => {
+      const isSelected = index === selectedIndex;
+      const title = escapeHtml(truncate(item.displayName, 40));
+      const icon = renderIcon(item.pluginIcon, item.displayName);
+      return `
+        <button
+          class="sp-item${isSelected ? ' selected' : ''}"
+          type="button"
+          data-index="${index}"
+          data-plugin-id="${escapeHtml(item.pluginId)}"
+          data-feature-code="${escapeHtml(item.featureCode)}"
+          data-pinned="true"
+          tabindex="${isSelected ? '0' : '-1'}"
+        >
+          <div class="sp-item-icon">${icon}</div>
+          <div class="sp-item-content">
+            <div class="sp-item-title">${title}</div>
+            <div class="sp-item-subtitle">${escapeHtml(item.pluginId)}</div>
+          </div>
+          <span class="sp-item-badge sp-badge-pinned">📌</span>
+        </button>
+      `;
+    }).join('');
+  }
 }
 
 function renderItemHtml(item, index, _isPinned) {
@@ -178,6 +280,9 @@ function renderItemHtml(item, index, _isPinned) {
   const subtitle = escapeHtml(truncate(item.pluginDisplayName || item.pluginName, 30));
   const badge = escapeHtml(item.matchType || '');
   const icon = renderIcon(item.pluginIcon, item.pluginDisplayName);
+  const contextLabel = item.contextBoost > 0
+    ? '<span class="sp-item-context">为此应用推荐</span>'
+    : '';
 
   return `
     <button
@@ -192,7 +297,7 @@ function renderItemHtml(item, index, _isPinned) {
     >
       <div class="sp-item-icon">${icon}</div>
       <div class="sp-item-content">
-        <div class="sp-item-title">${title}</div>
+        <div class="sp-item-title">${title}${contextLabel}</div>
         <div class="sp-item-subtitle">${subtitle}</div>
       </div>
       ${badge ? `<span class="sp-item-badge">${badge}</span>` : ''}
@@ -302,38 +407,319 @@ function handleSearchInput() {
 
 searchInput.addEventListener('input', handleSearchInput);
 
-// ==================== 右键菜单 ====================
+// ==================== 内联动作面板 (Action Panel) ====================
 
-itemListEl.addEventListener('contextmenu', async (event) => {
+let actionPanelVisible = false;
+let actionSelectedIndex = 0;
+let actionTargetIndex = -1; // 当前动作面板对应的列表项索引
+let currentActions = [];
+
+/** 获取当前选中项的可用动作列表 */
+function getActionsForItem(index) {
+  const isPinned = currentMode === 'pinned';
+  const item = isPinned ? currentPinnedItems[index] : currentItems[index];
+  if (!item) return [];
+
+  const actions = [
+    { id: 'execute', label: '执行', key: '↵', shortcut: 'Enter' }
+  ];
+
+  if (isPinned) {
+    actions.push({ id: 'unpin', label: '取消固定', key: 'P', shortcut: 'p' });
+  } else {
+    actions.push({ id: 'pin', label: '固定到面板', key: 'P', shortcut: 'p' });
+  }
+
+  if (isPinned) {
+    // 固定模式：提供分组管理
+    actions.push(
+      { id: 'separator' },
+      { id: 'moveToGroup', label: '移动到分组…', key: 'G', shortcut: 'g' }
+    );
+    // 仅当有捕获文本时才显示“复制捕获内容”
+    if (hasCapturedText) {
+      actions.push({ id: 'copyInput', label: '复制捕获内容', key: 'C', shortcut: 'c' });
+    }
+    actions.push(
+      { id: 'separator' },
+      { id: 'viewPlugin', label: '查看插件', key: 'I', shortcut: 'i' }
+    );
+  } else {
+    // 匹配模式：提供禁用推荐
+    actions.push({ id: 'separator' });
+    // 仅当有捕获文本时才显示"复制捕获内容"
+    if (hasCapturedText) {
+      actions.push({ id: 'copyInput', label: '复制捕获内容', key: 'C', shortcut: 'c' });
+    }
+    actions.push(
+      { id: 'disableRecommend', label: '禁用此推荐', key: 'D', shortcut: 'd' },
+      { id: 'separator' },
+      { id: 'viewPlugin', label: '查看插件', key: 'I', shortcut: 'i' }
+    );
+  }
+
+  return actions;
+}
+
+/** 显示内联动作面板 */
+function showInlineActions(index) {
+  // 先关闭已有的
+  hideInlineActions();
+
+  const actions = getActionsForItem(index);
+  if (actions.length === 0) return;
+
+  actionTargetIndex = index;
+  currentActions = actions;
+  actionSelectedIndex = 0;
+  actionPanelVisible = true;
+
+  // 找到对应的列表项元素
+  const itemEl = itemListEl.querySelector(`[data-index="${index}"]`);
+  if (!itemEl) return;
+
+  // 构建动作列表 HTML
+  const actionableActions = actions.filter(a => a.id !== 'separator');
+  let html = '<div class="sp-inline-actions">';
+  let actionIdx = 0;
+  for (const action of actions) {
+    if (action.id === 'separator') {
+      html += '<div class="sp-action-separator"></div>';
+    } else {
+      const isSelected = actionIdx === actionSelectedIndex;
+      html += `
+        <button class="sp-action-item${isSelected ? ' action-selected' : ''}"
+                type="button"
+                data-action-id="${action.id}"
+                data-action-index="${actionIdx}">
+          <span class="sp-action-label">${escapeHtml(action.label)}</span>
+          <kbd>${action.key}</kbd>
+        </button>
+      `;
+      actionIdx++;
+    }
+  }
+  html += '</div>';
+
+  // 插入到列表项后面
+  itemEl.insertAdjacentHTML('afterend', html);
+
+  // 等待展开动画结束后再测量高度，避免动画中测到折叠态高度
+  requestAnimationFrame(() => {
+    const actionsEl = itemListEl.querySelector('.sp-inline-actions');
+    if (actionsEl) {
+      actionsEl.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+      // 监听动画结束后再通知主进程调整窗口高度
+      const onAnimEnd = () => {
+        actionsEl.removeEventListener('animationend', onAnimEnd);
+        notifyHeightChange();
+      };
+      actionsEl.addEventListener('animationend', onAnimEnd);
+      // 兜底：动画可能已结束或被跳过（如 prefers-reduced-motion），200ms 后强制测量
+      setTimeout(() => {
+        actionsEl.removeEventListener('animationend', onAnimEnd);
+        notifyHeightChange();
+      }, 200);
+    } else {
+      notifyHeightChange();
+    }
+  });
+}
+
+/** 重置动作面板状态（纯状态，不操作 DOM）— 在 render() 重建 DOM 前调用 */
+function resetActionPanelState() {
+  actionPanelVisible = false;
+  actionTargetIndex = -1;
+  currentActions = [];
+  actionSelectedIndex = 0;
+}
+
+/** 隐藏内联动作面板 */
+function hideInlineActions() {
+  if (!actionPanelVisible) return;
+  const existing = itemListEl.querySelector('.sp-inline-actions');
+  if (existing) existing.remove();
+  resetActionPanelState();
+
+  // 恢复窗口高度
+  requestAnimationFrame(() => notifyHeightChange());
+}
+
+/** 切换动作面板 */
+function toggleInlineActions() {
+  if (actionPanelVisible && actionTargetIndex === selectedIndex) {
+    hideInlineActions();
+  } else {
+    showInlineActions(selectedIndex);
+  }
+}
+
+/** 动作面板内的箭头键导航 */
+function updateActionSelection(newIndex) {
+  const actionableActions = currentActions.filter(a => a.id !== 'separator');
+  if (actionableActions.length === 0) return;
+  const clamped = Math.max(0, Math.min(newIndex, actionableActions.length - 1));
+  if (clamped === actionSelectedIndex) return;
+
+  // 移除旧选中
+  const oldEl = itemListEl.querySelector('.sp-action-item.action-selected');
+  if (oldEl) oldEl.classList.remove('action-selected');
+
+  actionSelectedIndex = clamped;
+  const newEl = itemListEl.querySelector(`[data-action-index="${actionSelectedIndex}"]`);
+  if (newEl) {
+    newEl.classList.add('action-selected');
+    newEl.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+  }
+}
+
+/** 执行动作 */
+async function executeAction(actionId) {
+  const isPinned = currentMode === 'pinned';
+  const item = isPinned ? currentPinnedItems[actionTargetIndex] : currentItems[actionTargetIndex];
+  if (!item) return;
+
+  // 保存目标索引（hideInlineActions 会重置 actionTargetIndex 为 -1）
+  const targetIndex = actionTargetIndex;
+  hideInlineActions();
+
+  switch (actionId) {
+    case 'execute':
+      await executeItem(targetIndex);
+      break;
+
+    case 'pin': {
+      const displayName = item.featureExplain || item.featureCode || item.displayName || '';
+      const pluginIcon = item.pluginIcon || '';
+      await window.mulby.superPanel.action('pin', {
+        pluginId: item.pluginId,
+        featureCode: item.featureCode,
+        displayName,
+        pluginIcon
+      });
+      break;
+    }
+
+    case 'unpin':
+      await window.mulby.superPanel.action('unpin', {
+        pluginId: item.pluginId,
+        featureCode: item.featureCode
+      });
+      break;
+
+    case 'moveToGroup': {
+      // 获取分组列表并显示简易选择菜单
+      const result = await window.mulby.superPanel.action('getGroups', {});
+      if (result && result.success && result.data && result.data.groups) {
+        const groups = result.data.groups;
+        const menuItems = groups.map(g => ({
+          id: g.id,
+          label: g.name + (g.boundApp ? ` (${g.boundApp})` : '') + ` · ${g.itemCount}项`
+        }));
+        menuItems.push({ id: '__new__', label: '+ 新建分组…' });
+        const selected = await window.mulby.menu.showContextMenu(menuItems);
+        if (selected === '__new__') {
+          // 简单提示输入分组名（通过系统原生菜单）
+          // 此处使用一个输入式菜单项作为简化方案
+          const newGroupResult = await window.mulby.superPanel.action('createGroup', { name: '新分组' });
+          if (newGroupResult && newGroupResult.success && newGroupResult.data) {
+            await window.mulby.superPanel.action('moveItemToGroup', {
+              pluginId: item.pluginId,
+              featureCode: item.featureCode,
+              targetGroupId: newGroupResult.data.groupId
+            });
+          }
+        } else if (selected) {
+          await window.mulby.superPanel.action('moveItemToGroup', {
+            pluginId: item.pluginId,
+            featureCode: item.featureCode,
+            targetGroupId: selected
+          });
+        }
+      }
+      break;
+    }
+
+    case 'copyInput':
+      await window.mulby.superPanel.action('copyInput', {});
+      break;
+
+    case 'disableRecommend':
+      await window.mulby.superPanel.action('disableRecommend', {
+        pluginId: item.pluginId,
+        featureCode: item.featureCode
+      });
+      break;
+
+    case 'viewPlugin':
+      await window.mulby.superPanel.action('viewPlugin', {
+        pluginId: item.pluginId
+      });
+      break;
+  }
+}
+
+/** 通知主进程调整窗口高度 */
+function notifyHeightChange() {
+  try {
+    const header = document.querySelector('.sp-header');
+    const translation = document.querySelector('.sp-translation');
+    const footer = document.querySelector('.sp-footer');
+    const list = document.querySelector('.sp-list');
+    let contentHeight = 12; // body padding
+    if (header) contentHeight += header.offsetHeight;
+    if (translation && translation.style.display !== 'none') contentHeight += translation.scrollHeight + 6;
+    // sp-list 是 flex:1 子元素，scrollHeight 会被窗口撑大，需要累加各子元素的实际高度
+    if (list) {
+      let listContentHeight = 12; // list padding (6px top + 6px bottom)
+      for (const child of list.children) {
+        listContentHeight += child.offsetHeight;
+      }
+      contentHeight += listContentHeight;
+    }
+    if (footer) contentHeight += footer.offsetHeight;
+    if (contentHeight > 50) {
+      window.mulby.superPanel.action('adjustHeight', { height: contentHeight });
+    }
+  } catch { /* 忽略 */ }
+}
+
+// 动作面板点击事件委托
+itemListEl.addEventListener('click', (event) => {
+  const target = event.target;
+  if (!(target instanceof HTMLElement)) return;
+
+  // 点击动作项
+  const actionBtn = target.closest('.sp-action-item');
+  if (actionBtn) {
+    event.stopPropagation();
+    const actionId = actionBtn.getAttribute('data-action-id');
+    if (actionId) void executeAction(actionId);
+    return;
+  }
+
+  // 点击列表项（双击执行，单击切换动作面板已在内联处理）
+  const button = target.closest('.sp-item');
+  if (!button) return;
+  const index = parseInt(button.getAttribute('data-index') || '0', 10);
+  // 如果动作面板开着且点击了其他项，先关闭
+  if (actionPanelVisible) {
+    hideInlineActions();
+  }
+  void executeItem(index);
+});
+
+// 右键触发内联动作面板（替代旧的原生菜单）
+itemListEl.addEventListener('contextmenu', (event) => {
   event.preventDefault();
   const target = event.target;
   if (!(target instanceof HTMLElement)) return;
   const button = target.closest('.sp-item');
   if (!button) return;
 
-  const pluginId = button.getAttribute('data-plugin-id') || '';
-  const featureCode = button.getAttribute('data-feature-code') || '';
-  const isPinned = button.getAttribute('data-pinned') === 'true';
-
-  if (!pluginId || !featureCode) return;
-
-  if (isPinned || currentMode === 'pinned') {
-    // 已固定 → 取消固定
-    const items = [{ id: 'unpin', label: '取消固定' }];
-    const selected = await window.mulby.menu.showContextMenu(items);
-    if (selected === 'unpin') {
-      await window.mulby.superPanel.action('unpin', { pluginId, featureCode });
-    }
-  } else {
-    // 未固定 → 固定
-    const displayName = button.getAttribute('data-display-name') || featureCode;
-    const pluginIcon = button.getAttribute('data-plugin-icon') || '';
-    const items = [{ id: 'pin', label: '固定到面板' }];
-    const selected = await window.mulby.menu.showContextMenu(items);
-    if (selected === 'pin') {
-      await window.mulby.superPanel.action('pin', { pluginId, featureCode, displayName, pluginIcon });
-    }
-  }
+  const index = parseInt(button.getAttribute('data-index') || '0', 10);
+  updateSelection(index);
+  showInlineActions(index);
 });
 
 // ==================== 翻译卡片展开/折叠与复制 ====================
@@ -371,6 +757,55 @@ translationCopyBtn.addEventListener('click', () => {
 
 // 键盘导航
 window.addEventListener('keydown', (event) => {
+  // === 动作面板打开时，接管键盘 ===
+  if (actionPanelVisible) {
+    switch (event.key) {
+      case 'ArrowUp':
+        event.preventDefault();
+        updateActionSelection(actionSelectedIndex - 1);
+        return;
+      case 'ArrowDown':
+        event.preventDefault();
+        updateActionSelection(actionSelectedIndex + 1);
+        return;
+      case 'Enter': {
+        event.preventDefault();
+        const actionableActions = currentActions.filter(a => a.id !== 'separator');
+        const action = actionableActions[actionSelectedIndex];
+        if (action) void executeAction(action.id);
+        return;
+      }
+      case 'Escape':
+        event.preventDefault();
+        hideInlineActions();
+        return;
+      default: {
+        // 单字母快捷键
+        if (event.key.length === 1 && !event.ctrlKey && !event.metaKey && !event.altKey) {
+          const actionableActions = currentActions.filter(a => a.id !== 'separator');
+          const match = actionableActions.find(a => a.shortcut === event.key.toLowerCase());
+          if (match) {
+            event.preventDefault();
+            void executeAction(match.id);
+            return;
+          }
+        }
+        break;
+      }
+    }
+    // 动作面板打开时，拦截所有未处理的按键，避免字符漏进搜索框
+    event.preventDefault();
+    return; // 屏蔽其他键盘事件
+  }
+
+  // === Cmd/Ctrl + K → 切换动作面板 ===
+  if ((event.metaKey || event.ctrlKey) && event.key === 'k') {
+    event.preventDefault();
+    toggleInlineActions();
+    return;
+  }
+
+  // === 常规键盘导航 ===
   switch (event.key) {
     case 'ArrowUp':
       event.preventDefault();
@@ -382,7 +817,6 @@ window.addEventListener('keydown', (event) => {
       break;
     case 'Enter':
       if (document.activeElement && document.activeElement.tagName === 'BUTTON' && document.activeElement.closest('.sp-translation')) {
-        // 放行回车，让浏览器原生触发复制按钮等内联元素的点击
         break;
       }
       event.preventDefault();
@@ -397,7 +831,6 @@ window.addEventListener('keydown', (event) => {
       if (searchBar.style.display !== 'none') {
         event.preventDefault();
         if (document.activeElement === searchInput) {
-          // 聚焦到列表
           const firstItem = itemListEl.querySelector('.sp-item.selected') || itemListEl.querySelector('.sp-item');
           if (firstItem) firstItem.focus();
         } else {
@@ -414,26 +847,17 @@ window.addEventListener('keydown', (event) => {
         !event.ctrlKey && !event.metaKey && !event.altKey
       ) {
         searchInput.focus();
-        // 不 preventDefault，让字符正常输入
       }
       break;
   }
-});
-
-// 点击列表项
-itemListEl.addEventListener('click', (event) => {
-  const target = event.target;
-  if (!(target instanceof HTMLElement)) return;
-  const button = target.closest('.sp-item');
-  if (!button) return;
-  const index = parseInt(button.getAttribute('data-index') || '0', 10);
-  void executeItem(index);
 });
 
 // 鼠标悬浮选中
 itemListEl.addEventListener('mouseover', (event) => {
   const target = event.target;
   if (!(target instanceof HTMLElement)) return;
+  // 忽略动作项的悬浮
+  if (target.closest('.sp-inline-actions')) return;
   const button = target.closest('.sp-item');
   if (!button) return;
   const index = parseInt(button.getAttribute('data-index') || '0', 10);

@@ -79,6 +79,7 @@ export interface OpenSystemPagePayload {
   page: SystemPageId
   settingsSection?: SettingsCenterSection
   shortcutCommandHint?: string
+  detailsPluginId?: string
 }
 
 export interface SystemPageState {
@@ -666,7 +667,7 @@ export class SystemPageWindowManager {
         })
         return
       case 'plugin-manager':
-        target.webContents.send('app:openPluginManager')
+        target.webContents.send('app:openPluginManager', route.detailsPluginId)
         return
       case 'plugin-store':
         target.webContents.send('app:openPluginStore')

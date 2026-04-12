@@ -96,7 +96,7 @@ export default function PluginDetails({ pluginName, onBack }: PluginDetailsProps
         try {
             // 获取插件基本信息
             const plugins = await window.mulby.plugin.getAll()
-            const current = plugins.find(p => p.name === pluginName)
+            const current = plugins.find(p => p.name === pluginName || p.id === pluginName)
             setPlugin(current || null)
 
             // 获取 README

@@ -19,10 +19,10 @@ import type { SuperPanelSettings } from '../../shared/types/settings'
 import type { ClipboardHistoryManager } from './clipboard-history'
 import { getCachedActiveWindow } from './active-window'
 import { nativeSimulateCopy, fallbackSimulateCopy } from './native-keyboard-sim'
-import { findBestMatch } from '../../shared/search-matcher'
-import type { Plugin, InputPayload, InputAttachment } from '../../shared/types/plugin'
+import { findBestMatch, matchesWindow } from '../../shared/search-matcher'
+import type { Plugin, InputPayload, InputAttachment, ActiveWindowInfo } from '../../shared/types/plugin'
 import { SuperPanelWindowManager } from './super-panel-window'
-import { SuperPanelStore, type SuperPanelPinnedItem } from './super-panel-store'
+import { SuperPanelStore, type SuperPanelPinnedItem, type SuperPanelGroup } from './super-panel-store'
 import { aiService } from '../ai'
 import { basename, extname } from 'path'
 import { getClipboardFormat, readClipboardFiles } from '../utils/clipboard-helper'
@@ -59,6 +59,8 @@ export interface SuperPanelItem {
   matchType: string
   /** 匹配分数 */
   score: number
+  /** 上下文加权分（当前应用匹配 window cmd 时 > 0） */
+  contextBoost: number
 }
 
 /** 即时翻译状态 */
@@ -80,10 +82,14 @@ export interface SuperPanelState {
   visible: boolean
   /** 面板模式：'match' 匹配结果 | 'pinned' 固定列表 */
   mode: 'match' | 'pinned'
-  /** 固定列表数据（mode='pinned' 时有效） */
+  /** 固定列表数据（mode='pinned' 时有效，已弃用，使用 pinnedGroups） */
   pinnedItems?: SuperPanelPinnedItem[]
+  /** 分组化的固定列表（mode='pinned' 时有效） */
+  pinnedGroups?: SuperPanelGroup[]
   /** 即时翻译结果（异步推送） */
   translation?: SuperPanelTranslation
+  /** 当前前台应用上下文（用于前端展示上下文标签） */
+  activeApp?: { app: string; bundleId?: string }
 }
 
 // 钩子注册 ID
@@ -112,9 +118,12 @@ export class SuperPanelManager {
   private translationSeq = 0
   // 当前的翻译状态
   private currentTranslation?: SuperPanelTranslation
+  private currentQuery?: string // 当前二次过滤词，用于保留禁用项时的过滤状态
 
   // 缓存的附件列表（文件/图片），用于传递给插件
   private cachedAttachments: InputAttachment[] = []
+  // 缓存触发时的前台应用上下文（面板打开期间复用，避免获取到 Mulby 自己）
+  private cachedActiveWindow: ActiveWindowInfo | undefined = undefined
 
   constructor(
     private readonly inputHookService: InputHookService,
@@ -315,16 +324,30 @@ export class SuperPanelManager {
 
       if (this.capturedText.trim().length > 0 || hasNewAttachments) {
         // ===== 有选中文本或附件 → 匹配模式 =====
+        // 清除过滤词和上一次触发的翻译结果
+        this.currentQuery = undefined
+        this.currentTranslation = undefined
         // 递增翻译序号，使之前在途的翻译请求结果被丢弃
         this.translationSeq++
+        // 获取当前前台应用上下文
+        const activeWindowInfo = getCachedActiveWindow()
+        // 缓存触发时的前台应用（面板打开期间复用，避免获取到 Mulby 自己）
+        // 必须在 matchContent() 之前赋值，matchContent 内部读取 this.cachedActiveWindow
+        this.cachedActiveWindow = activeWindowInfo || undefined
+
         const items = this.matchContent(this.capturedText, settings.maxItems)
         this.cachedItems = items
+
+        const activeApp = activeWindowInfo
+          ? { app: activeWindowInfo.app, bundleId: activeWindowInfo.bundleId }
+          : undefined
 
         this.showPanel(x, y, {
           capturedText: this.capturedText,
           items,
           visible: true,
-          mode: 'match'
+          mode: 'match',
+          activeApp
         })
 
         // 8. 异步翻译（不阻塞面板显示，仅文本模式）
@@ -335,21 +358,29 @@ export class SuperPanelManager {
         // ===== 无选中文本 → 固定列表模式 =====
         // 递增翻译序号，确保之前触发的翻译不会污染当前 pinned 面板
         this.translationSeq++
-        const pinnedItems = this.buildPinnedItems()
+        // 缓存触发时前台应用上下文（pinned 模式也需要用于应用绑定分组筛选）
+        const activeWindowInfo = getCachedActiveWindow()
+        this.cachedActiveWindow = activeWindowInfo || undefined
+        const pinnedGroups = this.buildPinnedGroups()
         this.cachedItems = []
 
         // 无固定项也不显示面板
-        if (pinnedItems.length === 0) {
+        const hasAnyItem = pinnedGroups.some((g) => g.items.length > 0)
+        if (!hasAnyItem) {
           this.clipboardHistoryManager?.resume()
           return
         }
+
+        // 构建兼容的扁平列表（供旧逻辑使用）
+        const pinnedItems = pinnedGroups.flatMap((g) => g.items)
 
         this.showPanel(x, y, {
           capturedText: '',
           items: [],
           visible: true,
           mode: 'pinned',
-          pinnedItems
+          pinnedItems,
+          pinnedGroups
         })
       }
     } catch (err) {
@@ -452,7 +483,8 @@ export class SuperPanelManager {
     // 无文本且无附件时不执行匹配
     if ((!text || text.trim().length === 0) && this.cachedAttachments.length === 0) return []
 
-    const activeWindow = getCachedActiveWindow() || undefined
+    // 使用触发时缓存的前台应用上下文，避免面板获焦后 getCachedActiveWindow() 返回 Mulby 自身
+    const activeWindow = this.cachedActiveWindow || undefined
     const input: InputPayload = {
       text,
       attachments: this.cachedAttachments,
@@ -465,9 +497,23 @@ export class SuperPanelManager {
     for (const plugin of plugins) {
       if (!plugin.enabled) continue
 
-      for (const feature of plugin.manifest.features) {
+      // 使用 getFeatures（复用 getCombinedFeatures）自动过滤已禁用的命令
+      const features = this.pluginManager.getFeatures(plugin.id)
+      for (const feature of features) {
+
         const match = findBestMatch(feature, input)
         if (!match) continue
+
+        // 上下文加权：检测 feature 是否有 window cmd 匹配当前前台应用
+        let contextBoost = 0
+        if (activeWindow) {
+          for (const cmd of feature.cmds) {
+            if (cmd.type === 'window' && matchesWindow(cmd, activeWindow)) {
+              contextBoost = 3
+              break
+            }
+          }
+        }
 
         results.push({
           id: `${plugin.id}:${feature.code}`,
@@ -479,7 +525,8 @@ export class SuperPanelManager {
           featureExplain: feature.explain || feature.code,
           featureIcon: undefined,
           matchType: match.matchType,
-          score: match.score
+          score: match.score,
+          contextBoost
         })
       }
     }
@@ -494,7 +541,7 @@ export class SuperPanelManager {
     // 搜索偏好置顶
     const preference = this.store.getPreference(text)
 
-    // 综合排序：偏好置顶 > 分数 + 使用频率权重
+    // 综合排序：偏好置顶 > 分数 + 使用频率 + 上下文加权
     return results
       .sort((a, b) => {
         // 偏好匹配的条目置顶
@@ -507,7 +554,7 @@ export class SuperPanelManager {
         // 使用频率加权：每次使用增加 0.1 分，上限 2 分
         const aBoost = Math.min((usageMap.get(a.id) || 0) * 0.1, 2)
         const bBoost = Math.min((usageMap.get(b.id) || 0) * 0.1, 2)
-        return (b.score + bBoost) - (a.score + aBoost)
+        return (b.score + bBoost + b.contextBoost) - (a.score + aBoost + a.contextBoost)
       })
       .slice(0, maxItems)
   }
@@ -683,6 +730,7 @@ export class SuperPanelManager {
         case 'search': {
           // 二次搜索：在缓存的匹配结果中过滤
           const query = String(payload?.query || '').trim()
+          this.currentQuery = query
           const filtered = this.filterItems(query)
           this.pushState({
             capturedText: this.capturedText,
@@ -712,16 +760,100 @@ export class SuperPanelManager {
             return { success: false, error: '缺少 pluginId 或 featureCode' }
           }
           this.store.unpin(pluginId, featureCode)
-          // 刷新固定列表
-          const pinnedItems = this.buildPinnedItems()
+          // 刷新固定列表（使用分组接口）
+          const pinnedGroups = this.buildPinnedGroups()
+          const pinnedItems = pinnedGroups.flatMap((g) => g.items)
           this.pushState({
             capturedText: '',
             items: [],
             visible: true,
             mode: 'pinned',
-            pinnedItems
+            pinnedItems,
+            pinnedGroups
           })
           return { success: true }
+        }
+
+        // ==================== 分组管理 ====================
+
+        case 'createGroup': {
+          const name = String(payload?.name || '').trim()
+          const boundApp = payload?.boundApp ? String(payload.boundApp) : undefined
+          if (!name) return { success: false, error: '分组名称不能为空' }
+          const groupId = this.store.createGroup(name, boundApp)
+          return { success: true, data: { groupId } } as any
+        }
+
+        case 'deleteGroup': {
+          const groupId = String(payload?.groupId || '')
+          if (!groupId) return { success: false, error: '缺少分组 ID' }
+          const deleted = this.store.deleteGroup(groupId)
+          return { success: deleted, error: deleted ? undefined : '默认分组不可删除' }
+        }
+
+        case 'renameGroup': {
+          const groupId = String(payload?.groupId || '')
+          const name = String(payload?.name || '').trim()
+          if (!groupId || !name) return { success: false, error: '缺少参数' }
+          const renamed = this.store.renameGroup(groupId, name)
+          return { success: renamed, error: renamed ? undefined : '分组不存在' }
+        }
+
+        case 'updateGroupBoundApp': {
+          const groupId = String(payload?.groupId || '')
+          const boundApp = payload?.boundApp ? String(payload.boundApp) : undefined
+          if (!groupId) return { success: false, error: '缺少分组 ID' }
+          const updated = this.store.updateGroupBoundApp(groupId, boundApp)
+          return { success: updated, error: updated ? undefined : '分组不存在' }
+        }
+
+        case 'reorderItem': {
+          const groupId = String(payload?.groupId || '')
+          const fromIndex = Number(payload?.fromIndex ?? -1)
+          const toIndex = Number(payload?.toIndex ?? -1)
+          if (!groupId) return { success: false, error: '缺少分组 ID' }
+          const reordered = this.store.reorderItem(groupId, fromIndex, toIndex)
+          return { success: reordered, error: reordered ? undefined : '分组不存在或索引无效' }
+        }
+
+        case 'reorderGroup': {
+          const fromIndex = Number(payload?.fromIndex ?? -1)
+          const toIndex = Number(payload?.toIndex ?? -1)
+          const reordered = this.store.reorderGroup(fromIndex, toIndex)
+          return { success: reordered, error: reordered ? undefined : '分组索引无效' }
+        }
+
+        case 'moveItemToGroup': {
+          const pluginId = String(payload?.pluginId || '')
+          const featureCode = String(payload?.featureCode || '')
+          const targetGroupId = String(payload?.targetGroupId || '')
+          if (!pluginId || !featureCode || !targetGroupId) {
+            return { success: false, error: '缺少参数' }
+          }
+          const moved = this.store.moveItemToGroup(pluginId, featureCode, targetGroupId)
+          if (!moved) {
+            return { success: false, error: '移动失败，目标分组不存在或项未找到' }
+          }
+          // 重建并推送更新后的固定分组状态
+          const pinnedGroups = this.buildPinnedGroups()
+          const pinnedItems = pinnedGroups.flatMap((g) => g.items)
+          this.pushState({
+            capturedText: '',
+            items: [],
+            visible: true,
+            mode: 'pinned',
+            pinnedItems,
+            pinnedGroups
+          })
+          return { success: true }
+        }
+
+        case 'getGroups': {
+          // 前端获取全部分组列表（用于「移动到分组」子菜单）
+          const groups = this.store.getAllGroups().map((g) => ({
+            id: g.id, name: g.name, boundApp: g.boundApp, itemCount: g.items.length
+          }))
+          return { success: true, data: { groups } } as any
         }
 
         case 'translationToggle': {
@@ -748,6 +880,87 @@ export class SuperPanelManager {
           return { success: true }
         }
 
+        // ==================== Action Panel 动作 ====================
+
+        case 'adjustHeight': {
+          // 前端在展开/收起内联动作面板时通知主进程调整窗口高度
+          const height = Number(payload?.height || 0)
+          if (height > 0 && this.windowManager) {
+            this.windowManager.adjustHeight(height)
+          }
+          return { success: true }
+        }
+
+        case 'copyInput': {
+          // 复制当前捕获的选中文本到用户剪贴板
+          if (this.capturedText) {
+            clipboard.writeText(this.capturedText)
+            // 有实际内容写入时，清除状态跳过 restoreClipboard 的覆写，并手动 resume
+            this.hasCaptured = false
+            this.savedClipboard = null
+            this.clipboardHistoryManager?.resume()
+          }
+          // 无捕获文本时不清除状态，保留 restoreClipboard 能力
+          return { success: true }
+        }
+
+        case 'disableRecommend': {
+          // 使用统一的 PluginCommandDisabledManager 机制禁用 feature 的所有命令
+          // 这样在设置中心 UI 中也能看到禁用状态，且用户可以重新启用
+          const pluginId = String(payload?.pluginId || '')
+          const featureCode = String(payload?.featureCode || '')
+          if (!pluginId || !featureCode) {
+            return { success: false, error: '缺少参数' }
+          }
+          // 获取该 feature 的所有 cmds 并逐条禁用
+          const cmds = this.pluginManager.listCommands(pluginId)
+            .filter((c) => c.featureCode === featureCode)
+          for (const cmd of cmds) {
+            this.pluginManager.setCommandDisabled({
+              pluginId,
+              featureCode,
+              cmdId: cmd.cmdId,
+              cmdSignature: cmd.cmdSignature,
+              disabled: true
+            })
+          }
+          this.store.unpin(pluginId, featureCode) // 同时取消固定
+          console.log(`[SuperPanel] 已禁用推荐: ${pluginId}:${featureCode} (${cmds.length} 条命令)`)
+          // 刷新面板（从当前结果中移除该项）
+          // 有文本或有附件时都需要刷新（附件模式下 capturedText 为空）
+          if (this.capturedText || this.cachedAttachments.length > 0) {
+            this.refreshPanel()
+          }
+          return { success: true }
+        }
+
+        case 'viewPlugin': {
+          // 关闭面板，通过已有的设置中心 IPC 通道打开插件管理页
+          const pluginId = String(payload?.pluginId || '')
+          if (!pluginId) {
+            return { success: false, error: '缺少插件 ID' }
+          }
+          this.hidePanel()
+          try {
+            const { BrowserWindow: BW } = require('electron')
+            // 仅排除面板窗口，兼容 dev server（URL 不含 index.html）
+            const panelWindowId = this.windowManager?.getWindowId()
+            const mainWindow = BW.getAllWindows().find(
+              (w: Electron.BrowserWindow) => !w.isDestroyed() && w.id !== panelWindowId
+            )
+            if (mainWindow) {
+              if (mainWindow.isMinimized()) mainWindow.restore()
+              mainWindow.show()
+              mainWindow.focus()
+              // 打开插件管理页面，让用户查看插件详情
+              mainWindow.webContents.send('app:openPluginManager', pluginId)
+            }
+          } catch (err) {
+            console.warn('[SuperPanel] 跳转插件详情失败:', err)
+          }
+          return { success: true }
+        }
+
         default:
           return { success: false, error: `未知动作: ${action}` }
       }
@@ -760,34 +973,52 @@ export class SuperPanelManager {
     }
   }
 
-  // ==================== 固定列表 ====================
+  // ==================== 固定列表（分组化） ====================
 
-  /** 构建固定列表（验证插件是否存在且启用） */
-  private buildPinnedItems(): SuperPanelPinnedItem[] {
-    const pinned = this.store.getPinnedItems()
-    const valid: SuperPanelPinnedItem[] = []
+  /**
+   * 构建分组化固定列表（验证插件是否存在且启用）
+   *
+   * 基于当前前台应用上下文，筛选全局分组和匹配应用的分组。
+   */
+  private buildPinnedGroups(): SuperPanelGroup[] {
+    // 复用触发时缓存的前台应用上下文，避免获取到 Mulby 自己
+    const app = this.cachedActiveWindow?.app
+    const bundleId = this.cachedActiveWindow?.bundleId
 
-    for (const item of pinned) {
-      const plugins = this.pluginManager.getAll()
-      const plugin = plugins.find((p) => p.id === item.pluginId)
-      if (!plugin || !plugin.enabled) continue
+    const groups = this.store.getGroupsForApp(app, bundleId)
+    const validGroups: SuperPanelGroup[] = []
 
-      const feature = plugin.manifest.features.find((f) => f.code === item.featureCode)
-      if (!feature) continue
+    for (const group of groups) {
+      const validItems: SuperPanelPinnedItem[] = []
 
-      // 同步显示名称
-      const displayName = feature.explain || feature.code
-      const pluginIcon = this.resolvePluginIcon(plugin)
-      this.store.syncPinnedItemMeta(item.pluginId, item.featureCode, displayName, pluginIcon)
+      for (const item of group.items) {
+        const plugin = this.pluginManager.get(item.pluginId)
+        if (!plugin || !plugin.enabled) continue
 
-      valid.push({
-        ...item,
-        displayName,
-        pluginIcon
+        // 使用 getFeatures 包含动态特性，与 matchContent 保持一致
+        const features = this.pluginManager.getFeatures(item.pluginId)
+        const feature = features.find((f) => f.code === item.featureCode)
+        if (!feature) continue
+
+        // 同步显示名称
+        const displayName = feature.explain || feature.code
+        const pluginIcon = this.resolvePluginIcon(plugin)
+        this.store.syncPinnedItemMeta(item.pluginId, item.featureCode, displayName, pluginIcon)
+
+        validItems.push({
+          ...item,
+          displayName,
+          pluginIcon
+        })
+      }
+
+      validGroups.push({
+        ...group,
+        items: validItems
       })
     }
 
-    return valid
+    return validGroups
   }
 
   // ==================== 二次搜索 ====================
@@ -901,7 +1132,10 @@ export class SuperPanelManager {
       items: this.cachedItems,
       visible: true,
       mode: 'match',
-      translation
+      translation,
+      activeApp: this.cachedActiveWindow
+        ? { app: this.cachedActiveWindow.app, bundleId: this.cachedActiveWindow.bundleId }
+        : undefined
     })
   }
 
@@ -909,6 +1143,28 @@ export class SuperPanelManager {
   private pushState(state: SuperPanelState): void {
     if (!this.windowManager) return
     this.windowManager.pushState(state)
+  }
+
+  /** 重新匹配并刷新面板状态（禁用推荐后立即更新列表） */
+  private refreshPanel(): void {
+    // 有文本或有附件时都允许刷新（附件模式下 capturedText 为空）
+    if (!this.windowManager || (!this.capturedText && this.cachedAttachments.length === 0)) return
+    const settings = this.settingsManager.getSettings().superPanel
+    this.cachedItems = this.matchContent(this.capturedText, settings.maxItems ?? 8)
+    
+    // 如果存在活跃搜索词，则重新过滤
+    const itemsToPush = this.currentQuery ? this.filterItems(this.currentQuery) : this.cachedItems
+
+    this.pushState({
+      capturedText: this.capturedText,
+      items: itemsToPush,
+      visible: true,
+      mode: 'match',
+      translation: this.currentTranslation || undefined,
+      activeApp: this.cachedActiveWindow
+        ? { app: this.cachedActiveWindow.app, bundleId: this.cachedActiveWindow.bundleId }
+        : undefined
+    })
   }
 
   // ==================== 辅助方法 ====================

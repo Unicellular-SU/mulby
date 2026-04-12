@@ -455,14 +455,6 @@ export default function SuperPanelSection({
           />
         </div>
 
-        {!superPanel.enabled && (
-          <div className="rounded-2xl border border-slate-200/80 bg-slate-50/70 px-4 py-5 text-center dark:border-slate-800/60 dark:bg-slate-800/30">
-            <div className="text-sm text-slate-500 dark:text-slate-400">
-              开启后，选中文本时可通过鼠标/键盘手势唤起超级面板，快速执行匹配的插件功能。
-            </div>
-          </div>
-        )}
-
         {superPanel.enabled && isMac && superPanel.trigger.type === 'mouse_click' && superPanel.trigger.mouseButton === 'middle' && (
           <div className="rounded-2xl border border-amber-200/80 bg-amber-50/70 px-3 py-2 text-xs text-amber-700 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-300">
             💡 macOS 触控板没有鼠标中键。如果你使用触控板，建议切换到「键盘快捷键」或「双击修饰键」触发方式。
