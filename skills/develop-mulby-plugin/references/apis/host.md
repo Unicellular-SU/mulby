@@ -60,7 +60,32 @@ const ok = await window.mulby.host.restart('translator');
 
 插件可以通过多种方式导出方法供 UI 调用，系统按以下优先级查找：
 
-### 方式1：直接导出函数（最简单）
+### 方式1：导出 rpc 对象（新版核心推荐🌟）
+
+这是 Mulby 最新的标准化推荐写法。**不会有任何隐式参数偏移**，前端传什么参数，后端就接收什么参数。底层 API 可通过注入的全局对象 `mulby` 直接访问。
+
+```typescript
+// main.ts
+export const rpc = {
+  async processData(data: any) {
+    // 随时随地调用底层 API，无需从参数中提取
+    mulby.notification.show('处理数据中...')
+    return { processed: true, result: data }
+  },
+
+  async getTasks(filter?: any) {
+    return await mulby.scheduler.list(filter)
+  }
+}
+```
+
+**UI 调用：**
+```typescript
+const result = await window.mulby.host.call('my-plugin', 'processData', { value: 123 })
+const tasks = await window.mulby.host.call('my-plugin', 'getTasks', { status: 'active' })
+```
+
+### 方式2：直接导出函数（兼容旧规范）
 
 ```typescript
 // main.ts
@@ -77,7 +102,7 @@ const result = await window.mulby.host.call('my-plugin', 'quickAction', 'Hello')
 console.log(result.data.message) // "完成: Hello"
 ```
 
-### 方式2：导出 host 对象（推荐）
+### 方式3：导出 host 对象（兼容旧规范）
 
 ```typescript
 // main.ts
@@ -119,29 +144,48 @@ export const api = {
 const result = await window.mulby.host.call('my-plugin', 'customMethod', { test: 'data' })
 ```
 
-## 方法签名规范
+## 方法签名规范与“参数偏移”说明
 
-所有后端方法的第一个参数必须是 `context`，包含插件 API：
+Mulby 提供了两套方法映射标准：
+
+### 1. 新规范：`rpc` 命名空间（首选）
+凡是在 `export const rpc` 命名空间下的方法，**不会**发生任何隐式参数偏移。前端传入的参数将 1:1 的精准映射到后端的函数入参中。
 
 ```typescript
-async function myMethod(
-  context: PluginContext,  // 第一个参数：context
-  arg1: string,            // 其他参数
-  arg2: number
-) {
-  const { notification, scheduler, clipboard } = context.api
-  // 使用 API
-  return { success: true }
+// 前端：host.call('my-plugin', 'submitData', { id: 1 }, true)
+// 后端：
+export const rpc = {
+  async submitData(data: { id: number }, force: boolean) {
+     // 直接使用全局上下文 mulby 即可
+     mulby.notification.show('收到请求');
+  }
 }
 ```
 
-## 查找优先级
+### 2. 旧规范：`host` 或顶层导出（存在首参偏移）
+>为了保障旧版本社区插件不崩溃，Mulby 维持了这一陈旧规范。
 
-系统按以下顺序查找方法：
+如果你的方法放在 `export const host` 下或采用顶层导出，系统会强行将 `context: PluginContext` 对象注入为**函数的第一个入参**，你在前端传入的实质 `payload` 等参数会被向后挤压偏移一位。常常导致开发者感到“找不齐参数”。
 
-1. **直接导出的函数** - `export function methodName()`
-2. **host 对象** - `export const host = { methodName }`
-3. **其他常见对象** - `export const api/methods/exports/handlers = { methodName }`
+```typescript
+// 前端：host.call('my-plugin', 'submitData', { id: 1 }, true)
+// 后端错误接收示范：
+export const host = {
+  // 此时参数被挤压，第一个参数其实是 context 对象，而不是 { id: 1 }！
+  async submitData(context: PluginContext, data: { id: number }, force: boolean) {
+     context.api.notification.show('依赖首参数提取 API');
+  }
+}
+```
+
+## 模块查找优先级与解析保护
+
+如果遇到方法未被注册的情况，请优先检查是否因为使用了 `export default` 导致被 ESM 默认覆盖。不过 Mulby 底层最新架构已经做了解析融合保障，只要写出了对应的名字都能被系统安全识别。其动态搜寻优先级如下：
+
+1. **rpc 对象** - `export const rpc = { methodName }` （精准签名）
+2. **host 对象** - `export const host = { methodName }` （隐式注入签名）
+3. **直接导出的函数** - `export function methodName()` （隐式注入签名）
+4. **其他常见对象** - `export const api/methods/exports/handlers = { methodName }` （隐式注入签名）
 
 ## 在 React Hook 中使用
 
@@ -179,39 +223,32 @@ Tip: Export methods directly (export function unknownMethod), or in a 'host' obj
 
 ## 完整示例
 
+最佳实践样例，采用最新的 `rpc` 对象并利用全局 `mulby`：
+
 ```typescript
 // main.ts
-interface PluginContext {
-  api: {
-    notification: { show: (msg: string, type?: string) => void }
-    scheduler: any
-    clipboard: any
-  }
-}
+// 使用全局 mulby 声明或自行类型推断
 
-// 直接导出
-export async function quickAction(context: PluginContext, text: string) {
-  context.api.notification.show(`快速操作: ${text}`)
-  return { success: true }
-}
-
-// host 对象（推荐）
-export const host = {
-  async processData(context: PluginContext, data: any) {
-    const { notification } = context.api
-    notification.show('处理中...')
-    // 处理逻辑
+export const rpc = {
+  async processData(data: any) {
+    mulby.notification.show('处理中...')
+    // 直接处理精确映射入参
     return { processed: true, result: data }
   },
 
-  async fetchTasks(context: PluginContext, filter?: any) {
-    const { scheduler } = context.api
-    const tasks = await scheduler.listTasks(filter)
+  async fetchTasks(filter?: any) {
+    const tasks = await mulby.scheduler.list(filter)
     return tasks
+  },
+
+  async quickAction(text: string) {
+    mulby.notification.show(`快速操作: ${text}`)
+    return { success: true }
   }
 }
 
-export default { run, onLoad, host, quickAction }
+// 就算你提供 export default，最新的系统仍能够抓取出你的 rpc 挂载点
+export default { run, onLoad }
 ```
 
 ```typescript
@@ -246,9 +283,8 @@ export default function App() {
 
 ## 最佳实践
 
-1. **推荐使用 host 对象** - 语义清晰，易于组织多个方法
-2. **方法命名** - 使用驼峰命名，避免与生命周期钩子冲突（run, onLoad 等）
-3. **返回值** - 返回可序列化的对象（JSON 兼容），避免返回函数、循环引用等
-4. **错误处理** - 在方法内部捕获错误，返回明确的错误信息
-5. **类型安全** - 使用 TypeScript 定义清晰的参数和返回类型
-6. **异步操作** - 所有方法都应该是 async 函数，即使不需要异步操作
+1. **🌟推荐使用 rpc 对象** - 可以获得 1:1 纯净的参数透传体验，不受系统隐式干预。
+2. **方法命名** - 使用驼峰命名，避免与生命周期钩子冲突（run, onLoad 等）。
+3. **返回值** - 请返回可序列化的对象（JSON 兼容），切勿返回函数、Proxy 或 DOM 实体，否则导致 IPC 序列化崩溃。
+4. **错误处理** - 在方法内部主动使用 try...catch，向前端返回明确的操作状态。
+5. **全局 API 防御** - 请注意，`globalThis.mulby` 会在所有 `rpc` 方法中直接可用，如果开发环境 Typescript 报警不存在，可在顶部增加 `declare const mulby: any` 以暂时规避类型检查。

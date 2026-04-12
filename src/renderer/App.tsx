@@ -634,7 +634,7 @@ function MainApp() {
     setViewMode('plugin-store')
   }, [isSystemWindow, pluginOpen])
 
-  const openPluginManager = useCallback((from: 'home' | 'settings' = 'home', section: 'installed' | 'store' = 'installed') => {
+  const openPluginManager = useCallback((from: 'home' | 'settings' = 'home', section: 'installed' | 'store' = 'installed', pluginId?: string) => {
     if (section === 'store') {
       openPluginStore(from)
       return

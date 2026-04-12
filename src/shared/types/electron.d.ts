@@ -525,6 +525,7 @@ export interface ElectronAPI {
       page: 'settings' | 'plugin-manager' | 'plugin-store' | 'background-plugins' | 'task-scheduler' | 'log-viewer' | 'ai-settings' | 'ai-mcp-settings' | 'ai-tools-settings' | 'ai-skills-settings' | 'storage-explorer'
       settingsSection?: 'dashboard' | 'general' | 'superPanel' | 'shortcuts' | 'commandQuickLaunch' | 'commandAll' | 'permissions' | 'security' | 'openclaw' | 'developer' | 'about'
       shortcutCommandHint?: string
+      detailsPluginId?: string
     }) => Promise<boolean>
     close: () => Promise<boolean>
     detach: () => Promise<boolean>

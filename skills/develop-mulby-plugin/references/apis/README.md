@@ -25,6 +25,7 @@
 - [Menu API (menu)](./menu.md)
 - [通知 API (notification)](./notification.md)
 - [TTS API (tts)](./tts.md)
+- [Super Panel API (superPanel)](./super-panel.md)
 
 ## 输入与快捷
 - [GlobalShortcut API (shortcut)](./shortcut.md)
