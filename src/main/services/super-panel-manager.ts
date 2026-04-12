@@ -4,10 +4,10 @@
  * 调度超级面板的完整生命周期：
  * 1. 鼠标/键盘/双击修饰键手势监听
  * 2. 应用黑名单过滤（通过 ActiveWindow 缓存）
- * 3. 静默取词（原生 Cmd/Ctrl+C + 剪贴板快照比较）
+ * 3. 跨平台原生取词（macOS AX API / Windows UIA / Linux X11 PRIMARY）+ 剪贴板附件采集
  * 4. 匹配引擎查询（复用 search-matcher）
  * 5. 面板窗口管理（委托 SuperPanelWindowManager）
- * 6. 剪贴板隔离与恢复
+ * 6. 即时翻译与插件执行
  */
 
 import { clipboard, screen } from 'electron'
@@ -18,29 +18,14 @@ import type { ThemeManager } from './theme'
 import type { SuperPanelSettings } from '../../shared/types/settings'
 import type { ClipboardHistoryManager } from './clipboard-history'
 import { getCachedActiveWindow } from './active-window'
-import { nativeSimulateCopy, fallbackSimulateCopy } from './native-keyboard-sim'
 import { findBestMatch, matchesWindow } from '../../shared/search-matcher'
 import type { Plugin, InputPayload, InputAttachment, ActiveWindowInfo } from '../../shared/types/plugin'
 import { SuperPanelWindowManager } from './super-panel-window'
 import { SuperPanelStore, type SuperPanelPinnedItem, type SuperPanelGroup } from './super-panel-store'
 import { aiService } from '../ai'
-import { basename, extname } from 'path'
-import { getClipboardFormat, readClipboardFiles } from '../utils/clipboard-helper'
+import { getSelectedTextAsync } from './native-text-selection'
 
 // ==================== 类型定义 ====================
-
-/** 剪贴板完整快照（隔离所有格式） */
-interface ClipboardSnapshot {
-  text: string
-  html: string
-  rtf: string
-  bookmark: { title: string; url: string } | null
-  hasImage: boolean
-  /** 原始 NativeImage（仅在有图片时保存） */
-  image: Electron.NativeImage | null
-  /** 复制前剪贴板中的文件列表（用于 before/after 对比） */
-  files: string[]
-}
 
 /** 超级面板中展示的匹配条目 */
 export interface SuperPanelItem {
@@ -101,10 +86,6 @@ export class SuperPanelManager {
   private windowManager: SuperPanelWindowManager | null = null
   private isActive = false
   private capturedText = ''
-  // 剪贴板隔离：保存触发前的剪贴板快照用于恢复
-  private savedClipboard: ClipboardSnapshot | null = null
-  // 标记是否已执行过一次静默取词（仅取词后才需要恢复剪贴板）
-  private hasCaptured = false
   // 追踪当前注册的 double-tap modifier（用于注销）
   private registeredDoubleTapModifier: string | null = null
   // 防抖：防止短时间内重复触发
@@ -195,6 +176,14 @@ export class SuperPanelManager {
 
     this.isActive = true
     console.log(`[SuperPanel] 已启用，触发方式: ${trigger.type}`)
+    
+    // 空闲时预热窗口（延迟 2 秒，确保主窗口优先加载完成）
+    setTimeout(() => {
+      if (this.isActive) {
+        this.ensureWindowManager()
+        void this.windowManager!.preWarm()
+      }
+    }, 2000)
   }
 
   /** 禁用超级面板 */
@@ -256,86 +245,49 @@ export class SuperPanelManager {
   }
 
   /**
-   * 核心工作流：静默取词 → 匹配 → 显示面板
+   * 核心工作流：原生取词 + 附件采集 → 匹配 → 显示面板
    *
    * 时序：
-   * 1. 保存当前剪贴板内容 (< 1ms)
-   * 2. 暂停剪贴板历史采样（防止污染）
-   * 3. 原生模拟 Cmd/Ctrl+C (< 5ms)
-   * 4. 等待剪贴板更新 + 读取 (50-100ms)
-   * 5. 解析文件/图片附件
-   * 6. 比较差异，执行匹配 (< 5ms)
-   * 7. 显示面板 + IPC 推送 (< 50ms)
-   * 8. 异步翻译（不阻塞面板显示）
-   * 9. 面板关闭时恢复剪贴板并恢复采样
-   *
-   * 剪贴板历史暂停策略：
-   * pause() 从模拟复制前到 restoreClipboard() 完成期间一直生效。
-   * 这样无论 watcher 是原生事件驱动还是 1s 轮询回退，临时内容都不会被记录。
-   * 安全超时 30s 仅作为代码 bug 的最终保护，正常流程中 resume() 一定在面板关闭时被调用。
+   * 1. 跨平台原生取词 (macOS AX API / Windows UIA / Linux X11 PRIMARY, 2~20ms)
+   * 2. 取词失败时自动触发剪贴板模拟回退 (<50ms)
+   * 3. 独立采集剪贴板附件：文件/图片 (同步, <1ms)
+   * 4. 获取焦点应用上下文 (<1ms)
+   * 5. 匹配结果并显示面板
+   * 6. 异步翻译
    */
   private async triggerWorkflow(x: number, y: number): Promise<void> {
     try {
-      // 1. 保存旧剪贴板完整快照
-      this.savedClipboard = this.snapshotClipboard()
+      // 跨平台原生取词
+      // 传入 fallback 选项，在原生 API 完全失败时才会触发安全的模拟复制回退
+      const selectionResult = await getSelectedTextAsync({
+        clipboardHistoryManager: this.clipboardHistoryManager,
+        suppressSyntheticInput: (durationMs) => 
+          this.inputHookService.suppressDoubleTapForSyntheticInput(durationMs),
+        fallbackDelayMs: this.getSettings().clipboardPollDelayMs
+      })
 
-      // 2. 暂停剪贴板历史采样
-      //    从这里开始一直到 restoreClipboard() 恢复剪贴板后才 resume，
-      //    保证临时复制内容在整个面板生命周期中都不会被轮询式 watcher 记录
-      this.clipboardHistoryManager?.pause()
+      // 选中文本
+      const text = selectionResult.text || ''
 
-      // 3. 静默复制（零延迟原生调用）
-      // 在模拟复制前设置抑制窗口：macOS CGEventTap 会异步捕获模拟的 Cmd+C 事件，
-      // 其中 C 键 (vk=67) 的 keydown 会在 10-50ms 后到达并污染 DoubleTap 状态。
-      // 抑制窗口确保该合成事件被忽略。
-      this.inputHookService.suppressDoubleTapForSyntheticInput(100)
+      // 附件由取词层统一采集：
+      // - 原生取词拿到文本 → 无附件（不混入旧剪贴板内容）
+      // - 无文本但剪贴板有文件/图片 → 取词层直接读取
+      // - 回退路径 → 内部快照比较采集
+      this.capturedText = text
+      this.cachedAttachments = selectionResult.attachments
 
-      let copySuccess = nativeSimulateCopy()
-      if (!copySuccess) {
-        copySuccess = await fallbackSimulateCopy()
-      }
+      const hasNewContent = this.capturedText.trim().length > 0 || this.cachedAttachments.length > 0
 
-      if (!copySuccess) {
-        console.warn('[SuperPanel] 静默复制失败')
-        this.clipboardHistoryManager?.resume()
-        return
-      }
-
-      // 4. 等待剪贴板更新
-      const settings = this.getSettings()
-      const newText = await this.pollClipboard(
-        this.savedClipboard?.text || '',
-        settings.clipboardPollDelayMs
-      )
-
-      // 5. 解析文件/图片附件（带 before/after 验证，避免匹配旧的剪贴板文件/图片）
-      this.cachedAttachments = this.parseClipboardAttachments(this.savedClipboard)
-
-      // 注意：此处不 resume()！
-      // 临时复制内容仍在剪贴板上，必须保持暂停直到面板关闭后 restoreClipboard() 恢复原始内容
-
-      // 6. 判断是否有新内容（文本或附件）
-      const oldText = this.savedClipboard?.text || ''
-      const hasNewContent = newText !== null && newText !== oldText
-      this.capturedText = hasNewContent ? newText! : ''
-      this.hasCaptured = true
-
-      const hasNewAttachments = this.cachedAttachments.length > 0
-
-      if (this.capturedText.trim().length > 0 || hasNewAttachments) {
+      if (hasNewContent) {
         // ===== 有选中文本或附件 → 匹配模式 =====
-        // 清除过滤词和上一次触发的翻译结果
         this.currentQuery = undefined
         this.currentTranslation = undefined
-        // 递增翻译序号，使之前在途的翻译请求结果被丢弃
         this.translationSeq++
-        // 获取当前前台应用上下文
+        
         const activeWindowInfo = getCachedActiveWindow()
-        // 缓存触发时的前台应用（面板打开期间复用，避免获取到 Mulby 自己）
-        // 必须在 matchContent() 之前赋值，matchContent 内部读取 this.cachedActiveWindow
         this.cachedActiveWindow = activeWindowInfo || undefined
 
-        const items = this.matchContent(this.capturedText, settings.maxItems)
+        const items = this.matchContent(this.capturedText, this.getSettings().maxItems)
         this.cachedItems = items
 
         const activeApp = activeWindowInfo
@@ -350,28 +302,23 @@ export class SuperPanelManager {
           activeApp
         })
 
-        // 8. 异步翻译（不阻塞面板显示，仅文本模式）
-        if (settings.instantTranslation && this.capturedText.trim().length > 0) {
+        if (this.getSettings().instantTranslation && this.capturedText.length > 0) {
           void this.requestTranslation(this.capturedText)
         }
       } else {
-        // ===== 无选中文本 → 固定列表模式 =====
-        // 递增翻译序号，确保之前触发的翻译不会污染当前 pinned 面板
+        // ===== 无选中文本及附件 → 固定列表模式 =====
         this.translationSeq++
-        // 缓存触发时前台应用上下文（pinned 模式也需要用于应用绑定分组筛选）
         const activeWindowInfo = getCachedActiveWindow()
         this.cachedActiveWindow = activeWindowInfo || undefined
+        
         const pinnedGroups = this.buildPinnedGroups()
         this.cachedItems = []
 
-        // 无固定项也不显示面板
         const hasAnyItem = pinnedGroups.some((g) => g.items.length > 0)
         if (!hasAnyItem) {
-          this.clipboardHistoryManager?.resume()
           return
         }
 
-        // 构建兼容的扁平列表（供旧逻辑使用）
         const pinnedItems = pinnedGroups.flatMap((g) => g.items)
 
         this.showPanel(x, y, {
@@ -385,94 +332,6 @@ export class SuperPanelManager {
       }
     } catch (err) {
       console.error('[SuperPanel] 触发工作流异常:', err)
-      // 确保异常时也恢复剪贴板历史采样
-      this.clipboardHistoryManager?.resume()
-    }
-  }
-
-  // ==================== 剪贴板操作 ====================
-
-  /**
-   * 轮询检测剪贴板变化
-   *
-   * @param oldText 模拟复制前的剪贴板内容
-   * @param maxWaitMs 最大等待时间
-   * @returns 新的剪贴板文本，若超时未变化则返回 null
-   */
-  private async pollClipboard(oldText: string, maxWaitMs: number): Promise<string | null> {
-    const startTime = Date.now()
-    const pollInterval = 10 // 10ms 间隔轮询
-
-    while (Date.now() - startTime < maxWaitMs) {
-      await this.sleep(pollInterval)
-      const current = clipboard.readText() || ''
-      if (current !== oldText) {
-        return current
-      }
-    }
-
-    // 超时：返回当前剪贴板内容（可能未被选中内容覆盖）
-    return clipboard.readText() || null
-  }
-
-  /** 保存剪贴板完整快照 */
-  private snapshotClipboard(): ClipboardSnapshot {
-    const text = clipboard.readText() || ''
-    const html = clipboard.readHTML() || ''
-    const rtf = clipboard.readRTF() || ''
-    let bookmark: { title: string; url: string } | null = null
-    try {
-      const bm = clipboard.readBookmark()
-      if (bm && bm.url) bookmark = bm
-    } catch { /* 部分平台不支持 */ }
-    const image = clipboard.readImage()
-    const hasImage = image && !image.isEmpty()
-    // 快照当前文件列表（用于附件 before/after 对比）
-    let files: string[] = []
-    try {
-      if (getClipboardFormat() === 'files') {
-        files = readClipboardFiles()
-      }
-    } catch { /* 忽略 */ }
-    return {
-      text,
-      html,
-      rtf,
-      bookmark,
-      hasImage: !!hasImage,
-      image: hasImage ? image : null,
-      files
-    }
-  }
-
-  /** 恢复剪贴板（面板关闭时调用） */
-  restoreClipboard(): void {
-    // 仅在实际执行过静默取词后才恢复
-    if (!this.hasCaptured || !this.savedClipboard) return
-    try {
-      // 恢复剪贴板内容时短暂抑制采样（避免恢复操作本身被记录为新的剪贴板事件）
-      this.clipboardHistoryManager?.pause()
-      const snap = this.savedClipboard
-      // 优先恢复富文本格式
-      if (snap.hasImage && snap.image) {
-        clipboard.writeImage(snap.image)
-      } else if (snap.html) {
-        clipboard.write({
-          text: snap.text,
-          html: snap.html,
-          rtf: snap.rtf || undefined,
-          bookmark: snap.bookmark ? `${snap.bookmark.title}\n${snap.bookmark.url}` : undefined
-        })
-      } else {
-        clipboard.writeText(snap.text)
-      }
-    } catch (err) {
-      console.error('[SuperPanel] 恢复剪贴板失败:', err)
-    } finally {
-      this.hasCaptured = false
-      this.savedClipboard = null
-      // 恢复采样（暂停窗口仅 ~5ms，不会触发安全超时）
-      this.clipboardHistoryManager?.resume()
     }
   }
 
@@ -559,75 +418,6 @@ export class SuperPanelManager {
       .slice(0, maxItems)
   }
 
-  /**
-   * 解析剪贴板中的文件和图片为 InputAttachment 列表
-   *
-   * 通过 before/after 对比避免匹配旧的剪贴板内容：
-   * - 文件：对比模拟复制前后的文件列表
-   * - 图片：对比模拟复制前后是否新增了图片
-   */
-  private parseClipboardAttachments(savedSnapshot: ClipboardSnapshot | null): InputAttachment[] {
-    const attachments: InputAttachment[] = []
-    try {
-      const format = getClipboardFormat()
-
-      if (format === 'files') {
-        const files = readClipboardFiles()
-        // before/after 验证：对比复制前快照中保存的文件列表
-        if (savedSnapshot && savedSnapshot.files.length > 0) {
-          const oldFiles = savedSnapshot.files
-          // 如果复制前后文件列表完全相同，说明没有新选中文件
-          if (files.length === oldFiles.length &&
-              files.every((f, i) => f === oldFiles[i])) {
-            return [] // 文件未变化，是旧剪贴板内容
-          }
-        }
-
-        for (const filePath of files) {
-          // 跨平台：用 path.basename 正确提取文件名（兼容 Windows 反斜杠路径）
-          const name = basename(filePath)
-          const ext = extname(filePath)
-          // 图片扩展名判断
-          const imageExts = ['.png', '.jpg', '.jpeg', '.gif', '.bmp', '.webp', '.svg', '.ico']
-          const isImage = imageExts.some(e => ext.toLowerCase() === e)
-
-          attachments.push({
-            id: `sp_file_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
-            name,
-            size: 0, // 统计大小需要同步 IO，这里先留 0，后续可惰性加载
-            kind: isImage ? 'image' : 'file',
-            ext,
-            path: filePath
-          })
-        }
-      } else if (format === 'image') {
-        // before/after 验证：如果模拟复制前剪贴板就有图片，说明不是新选中的
-        if (savedSnapshot?.hasImage) {
-          return [] // 复制前就有图片，是旧剪贴板内容
-        }
-
-        // 纯图片剪贴板内容（截图、复制图片等）
-        const image = clipboard.readImage()
-        if (image && !image.isEmpty()) {
-          const pngBuffer = image.toPNG()
-          const dataUrl = `data:image/png;base64,${pngBuffer.toString('base64')}`
-          attachments.push({
-            id: `sp_img_${Date.now()}`,
-            name: 'clipboard-image.png',
-            size: pngBuffer.length,
-            kind: 'image',
-            ext: '.png',
-            dataUrl
-          })
-        }
-      }
-    } catch (err) {
-      console.error('[SuperPanel] 解析剪贴板附件失败:', err)
-    }
-    return attachments
-  }
-
-
   /** 解析插件图标为 data-url 字符串 */
   private resolvePluginIcon(plugin: Plugin): string | undefined {
     if (!plugin.resolvedIcon) return undefined
@@ -676,8 +466,6 @@ export class SuperPanelManager {
     if (this.windowManager) {
       this.windowManager.hide()
     }
-    // 恢复剪贴板
-    this.restoreClipboard()
   }
 
   /** 确保窗口管理器已初始化 */
@@ -686,7 +474,7 @@ export class SuperPanelManager {
       this.windowManager = new SuperPanelWindowManager({
         themeManager: this.themeManager,
         onAction: (action, payload) => this.handleAction(action, payload),
-        onHide: () => this.restoreClipboard()
+        onHide: () => { /* 面板隐藏时的清理逻辑（按需） */ }
       })
     }
     return this.windowManager
@@ -874,9 +662,6 @@ export class SuperPanelManager {
             return { success: false, error: '无翻译内容可复制' }
           }
           clipboard.writeText(textToCopy)
-          // 用户显式复制了翻译结果，跳过后续剪贴板恢复（否则 blur/close 会覆盖用户复制的内容）
-          this.hasCaptured = false
-          this.savedClipboard = null
           return { success: true }
         }
 
@@ -895,12 +680,7 @@ export class SuperPanelManager {
           // 复制当前捕获的选中文本到用户剪贴板
           if (this.capturedText) {
             clipboard.writeText(this.capturedText)
-            // 有实际内容写入时，清除状态跳过 restoreClipboard 的覆写，并手动 resume
-            this.hasCaptured = false
-            this.savedClipboard = null
-            this.clipboardHistoryManager?.resume()
           }
-          // 无捕获文本时不清除状态，保留 restoreClipboard 能力
           return { success: true }
         }
 
@@ -1181,9 +961,5 @@ export class SuperPanelManager {
       this.inputHookService.unregisterDoubleTap(this.registeredDoubleTapModifier)
       this.registeredDoubleTapModifier = null
     }
-  }
-
-  private sleep(ms: number): Promise<void> {
-    return new Promise(resolve => setTimeout(resolve, ms))
   }
 }

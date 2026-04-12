@@ -195,70 +195,102 @@ export class SuperPanelWindowManager {
 
   // ==================== 窗口管理 ====================
 
+  /**
+   * 预热窗口：提前创建并加载页面，但不显示
+   * 
+   * 消除了由于 Chromium 渲染进程冷启动造成的 200-500ms 首次唤起延迟。
+   * 此操作由 SuperPanelManager 在非阻塞的闲时触发。
+   */
+  async preWarm(): Promise<void> {
+    if (this.window && !this.window.isDestroyed()) return
+    await this.ensureWindow()
+    console.log('[SuperPanel] 窗口预热完成')
+  }
+
+  private windowPromise: Promise<BrowserWindow> | null = null
+
   private async ensureWindow(): Promise<BrowserWindow> {
     if (this.window && !this.window.isDestroyed()) {
       return this.window
     }
-
-    const win = new BrowserWindow({
-      width: PANEL_WIDTH,
-      height: PANEL_MAX_HEIGHT,
-      show: false,
-      frame: false,
-      transparent: true,
-      resizable: false,
-      minimizable: false,
-      maximizable: false,
-      fullscreenable: false,
-      skipTaskbar: true,
-      movable: false,
-      hasShadow: true,
-      // macOS 'panel' 类型不抢焦点，适合浮动面板
-      // Win/Linux 'toolbar' 类似行为
-      type: process.platform === 'darwin' ? 'panel' : 'toolbar',
-      webPreferences: {
-        preload: join(__dirname, '../preload/index.js'),
-        contextIsolation: true,
-        nodeIntegration: false
-      }
-    })
-
-    // 注册主题管理
-    this.options.themeManager.registerWindow(win)
-
-    // macOS: 在所有工作空间和全屏应用上方显示
-    if (process.platform === 'darwin') {
-      win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true })
-      win.setAlwaysOnTop(true, 'pop-up-menu')
-    } else {
-      win.setAlwaysOnTop(true)
+    
+    if (this.windowPromise) {
+      return this.windowPromise
     }
 
-    // 失焦自动隐藏
-    win.on('blur', () => {
-      if (!win.isDestroyed() && win.isVisible()) {
-        win.hide()
-        this.options.onHide()
+    this.windowPromise = (async () => {
+      let win: BrowserWindow | null = null
+      try {
+        win = new BrowserWindow({
+          width: PANEL_WIDTH,
+          height: PANEL_MAX_HEIGHT,
+          show: false,
+          frame: false,
+          transparent: true,
+          resizable: false,
+          minimizable: false,
+          maximizable: false,
+          fullscreenable: false,
+          skipTaskbar: true,
+          movable: false,
+          hasShadow: true,
+          type: process.platform === 'darwin' ? 'panel' : 'toolbar',
+          webPreferences: {
+            preload: join(__dirname, '../preload/index.js'),
+            contextIsolation: true,
+            nodeIntegration: false
+          }
+        })
+
+        // 注册主题管理
+        this.options.themeManager.registerWindow(win)
+
+        // macOS: 在所有工作空间和全屏应用上方显示
+        if (process.platform === 'darwin') {
+          win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true })
+          win.setAlwaysOnTop(true, 'pop-up-menu')
+        } else {
+          win.setAlwaysOnTop(true)
+        }
+
+        // 失焦自动隐藏
+        win.on('blur', () => {
+          if (win && !win.isDestroyed() && win.isVisible()) {
+            win.hide()
+            this.options.onHide()
+          }
+        })
+
+        win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }))
+
+        // 加载页面
+        const devServerUrl = process.env.VITE_DEV_SERVER_URL
+        if (devServerUrl) {
+          const pageUrl = new URL('/super-panel.html', devServerUrl).toString()
+          await win.loadURL(pageUrl)
+        } else {
+          await win.loadFile(join(__dirname, '../renderer/super-panel.html'))
+        }
+
+        win.on('closed', () => {
+          if (this.window === win) {
+            this.window = null
+          }
+        })
+
+        this.window = win
+        return win
+      } catch (err) {
+        if (win && !win.isDestroyed()) {
+          win.destroy()
+        }
+        throw err
+      } finally {
+        this.windowPromise = null
       }
-    })
+    })()
 
-    win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }))
-
-    // 加载页面
-    const devServerUrl = process.env.VITE_DEV_SERVER_URL
-    if (devServerUrl) {
-      const pageUrl = new URL('/super-panel.html', devServerUrl).toString()
-      await win.loadURL(pageUrl)
-    } else {
-      await win.loadFile(join(__dirname, '../renderer/super-panel.html'))
-    }
-
-    win.on('closed', () => {
-      this.window = null
-    })
-
-    this.window = win
-    return win
+    return this.windowPromise
   }
 
   /**

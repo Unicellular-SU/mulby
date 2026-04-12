@@ -21,7 +21,6 @@ export type PermissionType =
     | 'geolocation'
     | 'camera'
     | 'microphone'
-    | 'notifications'
     | 'screen'
     | 'accessibility'
     | 'contacts'
@@ -61,7 +60,6 @@ function mapToMacPermissionType(type: PermissionType): string | null {
         'geolocation': 'location',
         'camera': 'camera',
         'microphone': 'microphone',
-        'notifications': 'notifications',
         'screen': 'screen',
         'accessibility': 'accessibility',
         'contacts': 'contacts',
@@ -174,7 +172,6 @@ export class PermissionManager {
             'media': 'camera', // 需要进一步区分
             'camera': 'camera',
             'microphone': 'microphone',
-            'notifications': 'notifications',
             'mediaKeySystem': 'screen',
             'accessibility-events': 'accessibility',
         }
@@ -330,7 +327,6 @@ export class PermissionManager {
                 'geolocation': 'x-apple.systempreferences:com.apple.preference.security?Privacy_LocationServices',
                 'camera': 'x-apple.systempreferences:com.apple.preference.security?Privacy_Camera',
                 'microphone': 'x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone',
-                'notifications': 'x-apple.systempreferences:com.apple.preference.notification',
                 'screen': 'x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture',
                 'accessibility': 'x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility',
                 'contacts': 'x-apple.systempreferences:com.apple.preference.security?Privacy_Contacts',
@@ -343,9 +339,15 @@ export class PermissionManager {
             }
             return false
         } else if (process.platform === 'win32') {
-            // Windows 设置
+            // Windows 设置页面映射
             const { shell } = require('electron')
-            shell.openExternal('ms-settings:privacy-location')
+            const winUrlMap: Partial<Record<PermissionType, string>> = {
+                'geolocation': 'ms-settings:privacy-location',
+                'camera': 'ms-settings:privacy-webcam',
+                'microphone': 'ms-settings:privacy-microphone',
+            }
+            const url = winUrlMap[type] || 'ms-settings:privacy'
+            shell.openExternal(url)
             return true
         }
         // Linux: 各发行版设置差异较大，暂不处理

@@ -19,13 +19,56 @@ export const SHORTCUTS: { id: AppShortcutAction; label: string; description: str
   { id: 'openSettings', label: '打开设置', description: '直接进入设置面板' }
 ]
 
-export const PERMISSIONS = [
-  { id: 'accessibility', label: '辅助功能' },
-  { id: 'screen', label: '屏幕录制' },
-  { id: 'microphone', label: '麦克风' },
-  { id: 'camera', label: '摄像头' },
-  { id: 'geolocation', label: '定位' }
-] as const
+/**
+ * 权限列表，按平台区分
+ * - platforms: 适用平台，undefined 表示所有平台
+ * - importance: 'required' 必需 | 'recommended' 推荐 | 'optional' 可选
+ * - canRequestProgrammatically: 是否支持程序化请求（非打开设置）
+ */
+export const PERMISSIONS: {
+  id: 'accessibility' | 'screen' | 'microphone' | 'camera' | 'geolocation'
+  label: string
+  description: string
+  platforms?: ('darwin' | 'win32' | 'linux')[]
+  importance: 'required' | 'recommended' | 'optional'
+  canRequestProgrammatically?: boolean
+}[] = [
+  {
+    id: 'accessibility',
+    label: '辅助功能',
+    description: '全局键盘/鼠标监听（超级面板双击修饰键唤起）、原生取词（AX API 读取选中文本）',
+    platforms: ['darwin'],
+    importance: 'required'
+  },
+  {
+    id: 'screen',
+    label: '屏幕录制',
+    description: '截图、区域截取、屏幕取色、AI 视觉分析等功能',
+    platforms: ['darwin'],
+    importance: 'recommended'
+  },
+  {
+    id: 'microphone',
+    label: '麦克风',
+    description: '语音输入、语音对话等功能',
+    importance: 'optional',
+    canRequestProgrammatically: true
+  },
+  {
+    id: 'camera',
+    label: '摄像头',
+    description: '视觉识别、实时画面分析等功能',
+    importance: 'optional',
+    canRequestProgrammatically: true
+  },
+  {
+    id: 'geolocation',
+    label: '定位',
+    description: '天气插件、基于位置的智能推荐等功能',
+    importance: 'optional',
+    canRequestProgrammatically: true
+  },
+]
 
 export const TOOL_CAPABILITY_OPTIONS = [
   { value: 'shell.exec', label: 'shell.exec（执行系统命令）' },

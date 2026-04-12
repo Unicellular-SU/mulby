@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import type {
   AppSettings,
   AppShortcutAction,
@@ -99,17 +99,19 @@ export default function SettingsView({
     })
   }, [activeRecordings, section])
 
+  // 加载所有权限状态
+  const loadPermissions = useCallback(async () => {
+    const next: Record<string, string> = {}
+    for (const item of PERMISSIONS) {
+      next[item.id] = await window.mulby.permission.getStatus(item.id)
+    }
+    setPermissionStatus(next)
+  }, [])
+
   useEffect(() => {
     if (section !== 'permissions') return
-    const load = async () => {
-      const next: Record<string, string> = {}
-      for (const item of PERMISSIONS) {
-        next[item.id] = await window.mulby.permission.getStatus(item.id)
-      }
-      setPermissionStatus(next)
-    }
-    void load()
-  }, [section])
+    void loadPermissions()
+  }, [section, loadPermissions])
 
   useEffect(() => {
     if (section !== 'security') return
@@ -466,6 +468,7 @@ export default function SettingsView({
                   permissionStatus={permissionStatus}
                   cardClassTight={cardClassTight}
                   actionButtonClass={actionButtonClass}
+                  onRefresh={loadPermissions}
                 />
               )}
 

@@ -391,13 +391,13 @@ ${item.files.map(p => `    <string>${p}</string>`).join('\n')}
     },
     input: pluginInput,
     permission: {
-      getStatus: (type: 'geolocation' | 'camera' | 'microphone' | 'notifications' | 'screen' | 'accessibility' | 'contacts' | 'calendar') =>
+      getStatus: (type: 'geolocation' | 'camera' | 'microphone' | 'screen' | 'accessibility' | 'contacts' | 'calendar') =>
         permissionManager.getStatus(type),
-      request: (type: 'geolocation' | 'camera' | 'microphone' | 'notifications' | 'screen' | 'accessibility' | 'contacts' | 'calendar') =>
+      request: (type: 'geolocation' | 'camera' | 'microphone' | 'screen' | 'accessibility' | 'contacts' | 'calendar') =>
         permissionManager.request(type),
-      canRequest: (type: 'geolocation' | 'camera' | 'microphone' | 'notifications' | 'screen' | 'accessibility' | 'contacts' | 'calendar') =>
+      canRequest: (type: 'geolocation' | 'camera' | 'microphone' | 'screen' | 'accessibility' | 'contacts' | 'calendar') =>
         permissionManager.canRequest(type),
-      openSystemSettings: (type: 'geolocation' | 'camera' | 'microphone' | 'notifications' | 'screen' | 'accessibility' | 'contacts' | 'calendar') =>
+      openSystemSettings: (type: 'geolocation' | 'camera' | 'microphone' | 'screen' | 'accessibility' | 'contacts' | 'calendar') =>
         permissionManager.openSystemSettings(type),
       isAccessibilityTrusted: () => permissionManager.isAccessibilityTrusted()
     },
