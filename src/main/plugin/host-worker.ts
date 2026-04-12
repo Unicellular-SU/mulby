@@ -164,6 +164,9 @@ function createProxyAPI(): PluginAPI {
   return new Proxy({}, handler)
 }
 
+// 注入全局 mulby 对象，供后端代码直接调用，无需依赖 context 参数注入
+;(globalThis as any).mulby = createProxyAPI()
+
 // ============ 插件执行 ============
 
 /** 初始化插件 */
@@ -231,23 +234,79 @@ async function loadModule(): Promise<PluginModule> {
   const mainPath = join(pluginState.pluginPath, pluginState.mainFile)
   const code = readFileSync(mainPath, 'utf-8')
 
+  let rawModule: any
+
   // 检测模块格式
   if (isESModule(code)) {
     // ES Module 格式：使用动态 import()
     const cacheBuster = `?t=${Date.now()}`
-    const module = await import(`file://${mainPath}${cacheBuster}`)
-    pluginState.module = module.default || module
+    rawModule = await import(`file://${mainPath}${cacheBuster}`)
   } else {
     // CommonJS 格式：使用 Module._compile() 加载
-    // 相比 require()，_compile() 不受 package.json "type":"module" 限制
-    // 相比 new Function()，_compile() 提供完整的 Node.js 模块语义
-    // （require、__filename、__dirname、node_modules 解析等）
     const Module = require('module') as typeof import('module')
     const m = new (Module as any)(mainPath)
     m.filename = mainPath
     m.paths = (Module as any)._nodeModulePaths(dirname(mainPath))
     m._compile(code, mainPath)
-    pluginState.module = (m.exports.default || m.exports) as PluginModule
+    rawModule = m.exports;
+  }
+
+  // 核心修复：融合解析 (Fallback Merge)
+  // 解决 export default {} 短路覆盖所有顶层命名的重大 Bug，同时务必保留类实例形式的原型链与合法 `this` 引用
+  let mergedModule: any
+  if (rawModule.default && typeof rawModule.default === 'object') {
+    const isPlainObject = Object.getPrototypeOf(rawModule.default) === Object.prototype
+    if (isPlainObject) {
+      mergedModule = { ...rawModule.default, ...rawModule }
+      delete mergedModule.default
+    } else {
+      // 若对象是类实例（如 new Plugin()），强行展平会丢失所有 prototype 函数及破坏私有属性
+      // 故保留其实例身份，仅把外层额外导出的属性混入其中 (以 default 为尊)
+      mergedModule = rawModule.default
+      for (const key in rawModule) {
+        if (key !== 'default' && !(key in mergedModule)) {
+          mergedModule[key] = rawModule[key]
+        }
+      }
+    }
+  } else {
+    mergedModule = { ...rawModule }
+    delete mergedModule.default
+  }
+
+  pluginState.module = mergedModule as PluginModule
+
+  // 获取所有层级的有效暴露函数，包括类实例上的原型方法，用于终端打印
+  const getAllMethods = (obj: any, prefix = ''): string[] => {
+    const methods: string[] = []
+    if (!obj || typeof obj !== 'object') return methods
+
+    let current = obj
+    while (current && current !== Object.prototype) {
+      Object.getOwnPropertyNames(current).forEach(key => {
+        if (key === 'constructor') return
+        try {
+          const val = current[key]
+          if (typeof val === 'function') {
+            const fullKey = prefix ? `${prefix}.${key}` : key
+            if (!['run', 'onLoad', 'onUnload', 'onEnable', 'onDisable', 'onBackground', 'onForeground'].includes(fullKey)) {
+              methods.push(fullKey)
+            }
+          } else if (!prefix && val && typeof val === 'object' && current === obj) {
+            // 只向下深入一层对象域（例如 rpc.xx）
+            methods.push(...getAllMethods(val, key))
+          }
+        } catch (e) {}
+      })
+      current = Object.getPrototypeOf(current)
+    }
+    return methods
+  }
+
+  const registryNames = Array.from(new Set(getAllMethods(mergedModule)))
+  
+  if (registryNames.length > 0) {
+    console.log(`[PluginWorker] Registered host interfaces: [${registryNames.join(', ')}]`)
   }
 
   return pluginState.module!
@@ -379,57 +438,79 @@ async function handleCallHostMethod(request: CallHostMethodRequest): Promise<voi
 
     const module = (await loadModule()) as Record<string, unknown>
 
-    // 方案1：按优先级查找方法
-    let targetMethod: HostMethod | undefined
+    let targetMethod: Function | undefined
+    let isRpcNamespace = false
 
-    // 1. 首先检查是否直接导出了该方法名的函数
-    if (typeof module[method] === 'function') {
-      targetMethod = module[method] as HostMethod
+    // 新标准优先级 1：限制于精确特征签名域 rpc (消除隐式 context 入参)
+    if (module.rpc && typeof module.rpc === 'object' && typeof (module.rpc as Record<string, unknown>)[method] === 'function') {
+      targetMethod = (module.rpc as Record<string, unknown>)[method] as Function
+      isRpcNamespace = true
     }
-    // 2. 检查 host 对象（约定的默认导出对象）
+    // 向后兼容优先级 2：检查 host 对象（隐式携带第一个 context 入参）
     else if (module.host && typeof module.host === 'object' && typeof (module.host as Record<string, unknown>)[method] === 'function') {
-      targetMethod = (module.host as Record<string, unknown>)[method] as HostMethod
+      targetMethod = (module.host as Record<string, unknown>)[method] as Function
     }
-    // 3. 检查其他可能的导出对象（api, methods, exports 等常见名称）
+    // 向后兼容优先级 3：检查顶层直接导出或其他常见对象
     else {
-      const commonNames = ['api', 'methods', 'exports', 'handlers']
-      for (const name of commonNames) {
-        if (module[name] && typeof module[name] === 'object' && typeof (module[name] as Record<string, unknown>)[method] === 'function') {
-          targetMethod = (module[name] as Record<string, unknown>)[method] as HostMethod
-          break
+      if (typeof module[method] === 'function') {
+        targetMethod = module[method] as Function
+      } else {
+        const commonNames = ['api', 'methods', 'exports', 'handlers']
+        for (const name of commonNames) {
+          if (module[name] && typeof module[name] === 'object' && typeof (module[name] as Record<string, unknown>)[method] === 'function') {
+            targetMethod = (module[name] as Record<string, unknown>)[method] as Function
+            break
+          }
         }
       }
     }
 
     // 如果找不到方法，抛出详细的错误信息
     if (!targetMethod) {
-      const availableMethods: string[] = []
-
-      // 收集所有可用的方法名
-      Object.keys(module).forEach(key => {
-        if (typeof module[key] === 'function' && !['run', 'onLoad', 'onUnload', 'onEnable', 'onDisable', 'onBackground', 'onForeground'].includes(key)) {
-          availableMethods.push(key)
-        } else if (module[key] && typeof module[key] === 'object') {
-          const nestedModule = module[key] as Record<string, unknown>
-          Object.keys(nestedModule).forEach(subKey => {
-            if (typeof nestedModule[subKey] === 'function') {
-              availableMethods.push(`${key}.${subKey}`)
-            }
+      const getAllMethods = (obj: any, prefix = ''): string[] => {
+        const methods: string[] = []
+        if (!obj || typeof obj !== 'object') return methods
+        let current = obj
+        while (current && current !== Object.prototype) {
+          Object.getOwnPropertyNames(current).forEach(key => {
+            if (key === 'constructor') return
+            try {
+              const val = current[key]
+              if (typeof val === 'function') {
+                const fullKey = prefix ? `${prefix}.${key}` : key
+                if (!['run', 'onLoad', 'onUnload', 'onEnable', 'onDisable', 'onBackground', 'onForeground'].includes(fullKey)) {
+                  methods.push(fullKey)
+                }
+              } else if (!prefix && val && typeof val === 'object' && current === obj) {
+                methods.push(...getAllMethods(val, key))
+              }
+            } catch (e) {}
           })
+          current = Object.getPrototypeOf(current)
         }
-      })
+        return methods
+      }
+      
+      const availableMethods = Array.from(new Set(getAllMethods(module)))
 
       throw new Error(
         `Host method not found: ${method}\n` +
         `Available methods: ${availableMethods.length > 0 ? availableMethods.join(', ') : 'none'}\n` +
-        `Tip: Export methods directly (export function ${method}), or in a 'host' object (export const host = { ${method} })`
+        `Tip: Export methods in a 'rpc' object (export const rpc = { ${method} })`
       )
     }
 
-    // 调用方法，传入 context 和其他参数
-    const api = createProxyAPI()
-    const context = { api }
-    const result = await targetMethod(context, ...(Array.isArray(args) ? args : []))
+    let result: unknown
+
+    // 若方法存放于 rpc 域内，严格按照前端传递参数调用，且保留该函数的 receiver 以支持 'this' 作用域
+    if (isRpcNamespace) {
+      result = await targetMethod.apply(module.rpc, Array.isArray(args) ? args : [])
+    } else {
+      // 执行老旧兼容逻辑，确保现有市场插件依然正常运转
+      const api = createProxyAPI()
+      const context = { api }
+      result = await targetMethod(context, ...(Array.isArray(args) ? args : []))
+    }
 
     // 序列化结果
     const serializedResult = cloneForMessage(result)
