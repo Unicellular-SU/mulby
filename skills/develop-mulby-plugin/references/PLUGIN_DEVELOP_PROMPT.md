@@ -145,6 +145,7 @@ The final delivery should tell the user to test these points inside Mulby:
   "ui": "ui/index.html",        // UI Entry (required for UI plugins)
   "preload": "preload.cjs",     // Preload path (optional)
   "icon": "icon.png",           // Logo path
+  "platform": "darwin",         // Platform restriction (optional): "darwin"|"win32"|"linux"|["win32","linux"]. Omit for cross-platform.
   "pluginSetting": {
     "single": true,             // Run as singleton (no multi-window)
     "height": 400               // Initial height
@@ -196,9 +197,10 @@ The final delivery should tell the user to test these points inside Mulby:
 }
 ```
 
-### Plugin & Window Settings
+### Plugin, Platform & Window Settings
 | Field | Type | Default | Description |
 |---|---|---|---|
+| `platform` | string\|string[] | *(all)* | Restrict plugin to specific OS. Values: `"darwin"`, `"win32"`, `"linux"`, or an array. Omit for cross-platform. Mulby rejects install and skips loading on incompatible platforms. |
 | `pluginSetting.single` | bool | `true` | Prevent multiple instances |
 | `pluginSetting.height` | number | - | Initial height |
 | `window.type` | string | `"default"` | Window type: `default` (with titlebar), `borderless` (no frame/titlebar), `fullscreen` (fills screen) |

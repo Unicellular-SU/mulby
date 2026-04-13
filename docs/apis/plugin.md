@@ -3,9 +3,41 @@
 
 > 入口：`window.mulby.plugin`
 
+---
+
+## manifest.platform — 插件平台限制
+
+插件可以在 `manifest.json` 的**顶层**声明 `platform` 字段，限制该插件仅在特定操作系统上加载和安装。
+
+```json
+{
+  "name": "my-plugin",
+  "platform": "darwin",
+  "features": []
+}
+```
+
+| 值 | 含义 |
+|----|------|
+| `"darwin"` | 仅 macOS |
+| `"win32"` | 仅 Windows |
+| `"linux"` | 仅 Linux |
+| `["win32", "linux"]` | 数组：同时支持多个平台 |
+| *(不填)* | 全平台兼容（默认） |
+
+**生效时机：**
+
+- **安装时**：`plugin.install()` 读取 manifest，若 `platform` 与当前系统不符，直接返回错误，不写入插件目录。
+- **加载时**：Mulby 启动扫描插件目录时，不符合当前平台的插件被静默跳过，不出现在插件列表中。
+
+> 注意：`manifest.features[].platform` 是**指令级别**的平台过滤（已有能力），与此顶层字段功能不同。顶层 `platform` 控制插件整体的可见性。
+
+---
+
 ### plugin.getAll()
 [Renderer]
 获取全部插件信息。
+
 
 ```javascript
 const plugins = await window.mulby.plugin.getAll();

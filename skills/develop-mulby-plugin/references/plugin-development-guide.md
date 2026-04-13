@@ -133,6 +133,7 @@ Typical top-level fields:
 - `ui`: frontend entry when the plugin has UI, typically `ui/index.html`
 - `preload`: optional preload path, typically `preload.cjs`
 - `icon`: packaged plugin icon, typically `icon.png`
+- `platform`: optional platform restriction. Omit for cross-platform plugins. Set to `"darwin"`, `"win32"`, or `"linux"` (or an array like `["win32","linux"]`) to restrict the plugin to specific operating systems. Mulby rejects installation and skips loading on incompatible platforms.
 - `pluginSetting`
 - `window`
   - `type`: window type (`default` with titlebar, `borderless` without frame, `fullscreen` fills screen)
@@ -142,6 +143,7 @@ Typical top-level fields:
   - `transparent`: enable window background transparency (combine with CSS `background: transparent` for see-through areas, only effective at creation time)
 - `tools`: optional AI tool declarations (see Plugin Tools section below)
 - `features`
+
 
 ### Window Types
 

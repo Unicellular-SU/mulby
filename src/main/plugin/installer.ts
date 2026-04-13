@@ -4,6 +4,7 @@ import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync
 import extractZip from 'extract-zip'
 import { tmpdir } from 'os'
 import { compareVersions } from './version'
+import { isCompatiblePlatform } from './loader'
 
 export type InstallAction = 'installed' | 'updated' | 'already-installed' | 'downgrade-blocked'
 
@@ -69,6 +70,19 @@ export class PluginInstaller {
       if (!manifest.name || !manifest.version || !manifest.main) {
         this.cleanupTemp(tempDir)
         return { success: false, error: '无效的 manifest.json' }
+      }
+
+      // 平台兼容性检查：安装阶段就拒绝不支持当前平台的插件
+      if (!isCompatiblePlatform(manifest.platform)) {
+        this.cleanupTemp(tempDir)
+        const platforms = Array.isArray(manifest.platform)
+          ? manifest.platform.join(', ')
+          : manifest.platform
+        return {
+          success: false,
+          pluginName: manifest.name,
+          error: `该插件仅支持 ${platforms}，无法在当前平台（${process.platform}）安装`
+        }
       }
 
       const pluginId = String(manifest.id || manifest.name)

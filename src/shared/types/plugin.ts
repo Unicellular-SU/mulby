@@ -378,6 +378,12 @@ export interface PluginManifest {
   homepage?: string
   displayName: string
   description: string
+  /**
+   * 平台限制（可选）。未设置表示全平台兼容。
+   * 可设置单个平台（如 "darwin"）或多个平台（如 ["win32", "linux"]）。
+   * 可选值："darwin" | "win32" | "linux"
+   */
+  platform?: string | string[]
   main: string
   ui?: string  // UI 文件路径（可选）
   preload?: string  // 自定义 preload 脚本路径（可选）

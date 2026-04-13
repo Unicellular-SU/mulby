@@ -2,6 +2,19 @@ import { readFileSync, existsSync, readdirSync } from 'fs'
 import { join } from 'path'
 import { PluginManifest, Plugin, PluginIcon, ResolvedIcon } from '../../shared/types/plugin'
 
+/**
+ * 检查插件是否小于当前平台。
+ * @param platform manifest.platform 字段的值（未设置被视为全平台）
+ */
+export function isCompatiblePlatform(platform: string | string[] | undefined): boolean {
+  if (!platform) return true  // 未声明平台 => 全平台兼容
+  const current = process.platform  // 'darwin' | 'win32' | 'linux'
+  if (Array.isArray(platform)) {
+    return platform.includes(current)
+  }
+  return platform === current
+}
+
 export class PluginLoader {
   private pluginsDir: string
 
@@ -44,6 +57,15 @@ export class PluginLoader {
 
       if (!this.validateManifest(manifest)) {
         console.warn(`Invalid manifest in ${pluginPath}`)
+        return null
+      }
+
+      // 平台兼容性检查：不匹配当前平台的插件直接跳过
+      if (!isCompatiblePlatform(manifest.platform)) {
+        const platforms = Array.isArray(manifest.platform)
+          ? manifest.platform.join(', ')
+          : manifest.platform
+        console.log(`[PluginLoader] 跳过插件 "${manifest.name}"：仅支持 ${platforms}，当前平台为 ${process.platform}`)
         return null
       }
 
