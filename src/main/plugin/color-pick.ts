@@ -5,7 +5,10 @@
  *   macOS: NSColorSampler 系统原生取色器（macOS 10.15+）
  *          → 提供原生放大镜 UI、像素级精准、零代码
  *          fallback: 覆盖窗口方案（同 Windows/Linux）
- *   Windows/Linux: 预截取全屏快照 → 覆盖窗口 → 本地裁剪放大（≥ 60fps）
+ *   Linux: xdg-desktop-portal PickColor（X11 + Wayland 通吃）
+ *          → 桌面环境提供原生取色 UI（GNOME/KDE/Hyprland 等）
+ *          fallback: 覆盖窗口方案（同 Windows）
+ *   Windows: 预截取全屏快照 → 覆盖窗口 → 本地裁剪放大（≥ 60fps）
  *          → 从内存中的 bitmap 直接读取像素，零 IPC 往返
  *
  * codex review 修复:
@@ -23,6 +26,7 @@ import {
   extractRegionFromSnapshot,
   nativeCaptureScreenRaw
 } from '../services/native-screen-capture'
+import { portalPickColor, isPortalColorPickAvailable } from '../services/linux-portal-color-pick'
 
 interface ColorPickResult {
   hex: string
@@ -362,8 +366,10 @@ async function colorPickWithOverlay(): Promise<ColorPickResult | null> {
       if (process.platform === 'darwin') {
         win.setSimpleFullScreen(true)
         win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true })
-        win.setAlwaysOnTop(true, 'screen-saver')
       }
+      
+      // 全平台设置为最高层级，确保覆盖 Windows 任务栏
+      win.setAlwaysOnTop(true, 'screen-saver')
 
       const displayInfo = {
         index,
@@ -401,6 +407,47 @@ async function colorPickWithOverlay(): Promise<ColorPickResult | null> {
 }
 
 // ===========================================================
+// Linux: xdg-desktop-portal PickColor + X11 覆盖窗口 fallback
+// ===========================================================
+
+/**
+ * Linux 取色方案（三层回退）
+ *   1. xdg-desktop-portal PickColor（原生体验，X11 + Wayland 通吃）
+ *   2. X11 截图 + Electron 覆盖窗口（兼容无 Portal 的旧系统）
+ *   3. Electron desktopCapturer fallback（内置于覆盖窗口方案中）
+ *
+ * [P2] 区分用户取消 vs Portal 失败：
+ *   - cancelled: 用户主动取消 → 直接返回 null，不走 fallback
+ *   - error: Portal 后端异常/超时 → 回退到覆盖窗口方案
+ *   - color: 成功取色 → 返回颜色结果
+ */
+async function colorPickLinux(): Promise<ColorPickResult | null> {
+  // 策略 1: xdg-desktop-portal 原生取色
+  if (await isPortalColorPickAvailable()) {
+    console.log('[ColorPick] Linux: 使用 xdg-desktop-portal PickColor')
+    const result = await portalPickColor()
+
+    if (result.type === 'color' && result.r !== undefined && result.g !== undefined && result.b !== undefined) {
+      return colorToResult(result.r, result.g, result.b)
+    }
+
+    if (result.type === 'cancelled') {
+      // 用户主动取消，不需要 fallback
+      console.log('[ColorPick] Linux: 用户取消了 Portal 取色')
+      return null
+    }
+
+    // Portal 错误：回退到覆盖窗口方案
+    console.log('[ColorPick] Linux: Portal 取色失败，回退到覆盖窗口方案')
+  } else {
+    console.log('[ColorPick] Linux: Portal 不可用，使用覆盖窗口方案')
+  }
+
+  // 策略 2: 回退到 X11 截图 + 覆盖窗口方案
+  return colorPickWithOverlay()
+}
+
+// ===========================================================
 // 公共 API
 // ===========================================================
 
@@ -414,6 +461,11 @@ export async function startColorPick(): Promise<ColorPickResult | null> {
     return colorPickMacOS()
   }
 
+  if (process.platform === 'linux') {
+    return colorPickLinux()
+  }
+
+  // Windows: 覆盖窗口方案
   return colorPickWithOverlay()
 }
 

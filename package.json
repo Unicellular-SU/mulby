@@ -59,6 +59,7 @@
     "ai": "^6.0.67",
     "better-sqlite3": "^12.8.0",
     "cron-parser": "^5.5.0",
+    "dbus-next": "^0.10.2",
     "electron-get-location": "^1.0.1",
     "electron-log": "^5.0.0",
     "electron-updater": "^6.8.3",
