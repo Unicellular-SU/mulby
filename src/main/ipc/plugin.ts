@@ -164,13 +164,19 @@ export function registerPluginHandlers(manager: PluginManager, pluginToolRegistr
   ipcMain.handle('plugin:getRecentUsed', async (_, limit?: number) => {
     const normalizedLimit = typeof limit === 'number' && limit > 0 ? Math.floor(limit) : 20
     const recentResults = manager.getRecentUsed(normalizedLimit)
-    const formattedResults = await Promise.all(recentResults.map((result) =>
-      formatResultItem(
+    const formattedResults = await Promise.all(recentResults.map(async (result) => {
+      const item = await formatResultItem(
         result.plugin,
         result.feature,
         'keyword'
       )
-    ))
+      // 附加频次元数据，用于前端计算 Frecency Score
+      return {
+        ...item,
+        lastUsedAt: result.lastUsedAt,
+        useCount: result.useCount
+      }
+    }))
     return formattedResults
   })
 

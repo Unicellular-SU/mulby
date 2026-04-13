@@ -101,6 +101,10 @@ export interface SearchResultItem {
     type: 'url' | 'svg' | 'data-url' | 'emoji'
     value: string
   }
+  /** 最后使用时间戳（毫秒），仅 getRecentUsed 返回时有值 */
+  lastUsedAt?: number
+  /** 使用次数，仅 getRecentUsed 返回时有值 */
+  useCount?: number
 }
 
 export interface DesktopFileSearchResult {

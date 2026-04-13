@@ -144,10 +144,55 @@ function getMatchWeight(matchType: SearchResultItem['matchType']): number {
   }
 }
 
+/**
+ * Frecency = 使用频次 × 时间衰减系数
+ * 参考 Mozilla Firefox 书签算法 + Alfred Frecency 模型
+ */
+function computeFrecency(lastUsedAt: number, useCount: number): number {
+  const ageDays = (Date.now() - lastUsedAt) / 86400000
+  let decay: number
+  if (ageDays < 1)        decay = 1.0
+  else if (ageDays < 7)   decay = 0.9
+  else if (ageDays < 14)  decay = 0.7
+  else if (ageDays < 31)  decay = 0.5
+  else if (ageDays < 90)  decay = 0.25
+  else                    decay = 0.1
+  return useCount * decay
+}
+
+/**
+ * 最近使用区的综合评分：frecency 基础分 + 查询相关性加分
+ * 完全不相关时降权（×0.05）而非剔除，避免区域莫名为空
+ */
+function getRecentItemScore(item: SearchResultItem, query: string, frecency: number): number {
+  let score = frecency
+  const normalized = query.trim().toLowerCase()
+  if (!normalized) return score
+
+  const name = item.displayName.toLowerCase()
+  const code = item.featureCode.toLowerCase()
+  const explain = item.featureExplain.toLowerCase()
+  const pluginName = item.pluginName.toLowerCase()
+
+  // 按匹配精度阶梯加分
+  if (name === normalized || code === normalized)                        score += 200
+  else if (name.startsWith(normalized) || code.startsWith(normalized)) score += 120
+  else if (name.includes(normalized) || code.includes(normalized))      score += 60
+
+  if (explain.includes(normalized) || pluginName.includes(normalized))  score += 20
+
+  // 完全不相关时大幅降权，推到列表末尾但不剔除
+  const anyMatch = name.includes(normalized) || code.includes(normalized) ||
+                   explain.includes(normalized) || pluginName.includes(normalized)
+  if (!anyMatch) score *= 0.05
+
+  return score
+}
+
 function getSearchScore(
   item: SearchResultItem,
   query: string,
-  recentOrderMap: Map<string, number>
+  frecencyMap: Map<string, number>
 ): number {
   const normalized = query.trim().toLowerCase()
   let score = getMatchWeight(item.matchType)
@@ -170,23 +215,16 @@ function getSearchScore(
     }
   }
 
-  const recentIndex = recentOrderMap.get(getPluginKey(item))
-  if (recentIndex !== undefined) {
-    score += Math.max(0, 70 - recentIndex)
+  // 频次×时间衰减加权
+  // 上限严格 < 最小 matchType 档位间隔（over→keyword 差 60），
+  // 确保 frecency 只在同档内打破平局，不会让低优先级 matchType 越级超过高优先级。
+  // 例：over(260)+55=315 < keyword(320)；keyword(320)+55=375 < regex(440)
+  const frecency = frecencyMap.get(getPluginKey(item))
+  if (frecency !== undefined) {
+    score += Math.min(frecency * 10, 55)
   }
 
   return score
-}
-
-function isLooseMatch(item: SearchResultItem, query: string): boolean {
-  const normalized = query.trim().toLowerCase()
-  if (!normalized) return true
-  return (
-    item.displayName.toLowerCase().includes(normalized) ||
-    item.featureCode.toLowerCase().includes(normalized) ||
-    item.featureExplain.toLowerCase().includes(normalized) ||
-    item.pluginName.toLowerCase().includes(normalized)
-  )
 }
 
 function trimPath(path: string): string {
@@ -580,15 +618,27 @@ function PluginList({
   const promoteRecent = useCallback((pluginItem: SearchResultItem) => {
     setRecentPlugins((prev) => {
       const key = getPluginKey(pluginItem)
-      const next = [pluginItem, ...prev.filter((item) => getPluginKey(item) !== key)]
+      const existing = prev.find((item) => getPluginKey(item) === key)
+      // 合并已有频次元数据并递增，防止运行后 frecency 因 useCount=1 骤降
+      const promoted: SearchResultItem = {
+        ...pluginItem,
+        lastUsedAt: Date.now(),
+        useCount: (existing?.useCount ?? 0) + 1
+      }
+      const next = [promoted, ...prev.filter((item) => getPluginKey(item) !== key)]
       return next.slice(0, RECENT_LIMIT)
     })
   }, [])
 
-  const recentOrderMap = useMemo(() => {
+  // 构建 Frecency Map：key → 频次×时间衰减得分
+  const frecencyMap = useMemo(() => {
     const map = new Map<string, number>()
-    recentPlugins.forEach((item, index) => {
-      map.set(getPluginKey(item), index)
+    recentPlugins.forEach((item) => {
+      const score = computeFrecency(
+        item.lastUsedAt ?? Date.now(),
+        item.useCount ?? 1
+      )
+      map.set(getPluginKey(item), score)
     })
     return map
   }, [recentPlugins])
@@ -596,24 +646,40 @@ function PluginList({
   const bestPlugins = useMemo(() => {
     const sorted = dedupePluginResults(pluginResults).slice()
     sorted.sort((a, b) => {
-      const scoreDiff = getSearchScore(b, searchPayload.text, recentOrderMap) - getSearchScore(a, searchPayload.text, recentOrderMap)
+      const scoreDiff = getSearchScore(b, searchPayload.text, frecencyMap) - getSearchScore(a, searchPayload.text, frecencyMap)
       if (scoreDiff !== 0) return scoreDiff
       return a.displayName.localeCompare(b.displayName)
     })
     return sorted
-  }, [pluginResults, searchPayload.text, recentOrderMap])
+  }, [pluginResults, searchPayload.text, frecencyMap])
 
   const bestKeys = useMemo(() => {
     return new Set(bestPlugins.map((item) => getPluginKey(item)))
   }, [bestPlugins])
 
   const recentDisplayItems = useMemo(() => {
-    const filtered = searchPayload.text.trim().length > 0
-      ? recentPlugins.filter((item) => isLooseMatch(item, searchPayload.text))
-      : recentPlugins
-    return filtered
-      .filter((item) => !bestKeys.has(getPluginKey(item)))
-  }, [recentPlugins, searchPayload.text, bestKeys])
+    const query = searchPayload.text.trim()
+    const normalized = query.toLowerCase()
+    let items = recentPlugins.filter((item) => !bestKeys.has(getPluginKey(item)))
+
+    // 有查询词时，过滤掉完全无关的条目
+    // 防止不相关 recent chip 因 frecency 高而排首位，被 Enter 误执行
+    if (normalized) {
+      items = items.filter((item) =>
+        item.displayName.toLowerCase().includes(normalized) ||
+        item.featureCode.toLowerCase().includes(normalized) ||
+        item.featureExplain.toLowerCase().includes(normalized) ||
+        item.pluginName.toLowerCase().includes(normalized)
+      )
+    }
+
+    // 按 frecency + 查询相关性综合排序（有关联的高频插件排在前面）
+    return items.sort((a, b) => {
+      const fa = frecencyMap.get(getPluginKey(a)) ?? 0
+      const fb = frecencyMap.get(getPluginKey(b)) ?? 0
+      return getRecentItemScore(b, query, fb) - getRecentItemScore(a, query, fa)
+    })
+  }, [recentPlugins, searchPayload.text, bestKeys, frecencyMap])
 
   const appDisplayItems = useMemo(() => {
     const seen = new Set<string>()
