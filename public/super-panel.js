@@ -710,6 +710,7 @@ itemListEl.addEventListener('click', (event) => {
 });
 
 // 右键触发内联动作面板（替代旧的原生菜单）
+// 已展开时再次右键同一项 → 收起；切换到其他项 → 展开新项
 itemListEl.addEventListener('contextmenu', (event) => {
   event.preventDefault();
   const target = event.target;
@@ -719,7 +720,12 @@ itemListEl.addEventListener('contextmenu', (event) => {
 
   const index = parseInt(button.getAttribute('data-index') || '0', 10);
   updateSelection(index);
-  showInlineActions(index);
+  // 若面板已展开且对应同一列表项，则收起；否则展开
+  if (actionPanelVisible && actionTargetIndex === index) {
+    hideInlineActions();
+  } else {
+    showInlineActions(index);
+  }
 });
 
 // ==================== 翻译卡片展开/折叠与复制 ====================
@@ -759,6 +765,13 @@ translationCopyBtn.addEventListener('click', () => {
 window.addEventListener('keydown', (event) => {
   // === 动作面板打开时，接管键盘 ===
   if (actionPanelVisible) {
+    // ⌘K / Ctrl+K 再次触发时收起动作面板
+    if ((event.metaKey || event.ctrlKey) && event.key === 'k') {
+      event.preventDefault();
+      hideInlineActions();
+      return;
+    }
+
     switch (event.key) {
       case 'ArrowUp':
         event.preventDefault();
