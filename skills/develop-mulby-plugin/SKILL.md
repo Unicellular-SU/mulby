@@ -57,7 +57,6 @@ Use this skill for both new Mulby plugins and existing plugin fixes. The goal is
 - Read [references/cli-workflow.md](references/cli-workflow.md) when you need exact `create`, `build`, or `pack` behavior, or when you need to know what each template generates.
 - Read [references/plugin-development-guide.md](references/plugin-development-guide.md) when you need the full integration checklist, manifest rules, and preload constraints.
 - Read [references/api-map.md](references/api-map.md) when you need a bundled Mulby API navigator and module selection guide.
-- Read [references/PLUGIN_DEVELOP_PROMPT.md](references/PLUGIN_DEVELOP_PROMPT.md) when you need the fuller Mulby plugin development prompt and examples.
 - Read [references/apis/README.md](references/apis/README.md) first when a task depends on specific Mulby APIs, then open the relevant `references/apis/*.md` files for exact module details.
 - Read [references/apis/tools.md](references/apis/tools.md) when the plugin needs to expose tools for AI Agent integration.
 

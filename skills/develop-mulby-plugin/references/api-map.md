@@ -4,8 +4,9 @@ Use this reference as the navigator for the bundled Mulby API docs under `refere
 
 ## First Reads
 
-- Start with `references/PLUGIN_DEVELOP_PROMPT.md` for Mulby-specific plugin architecture, lifecycle, manifest, and preload rules.
-- Start with `references/apis/README.md` when you need the API catalog.
+- Start with `references/plugin-development-guide.md` for Mulby-specific plugin architecture, lifecycle, and preload rules.
+- Read `references/apis/manifest.md` for full `manifest.json` schema, run mode settings, and configuration details.
+- Read `references/apis/README.md` when you need the complete API catalog.
 - Open only the specific module files you need after that.
 
 ## Contexts
@@ -16,6 +17,8 @@ Use this reference as the navigator for the bundled Mulby API docs under `refere
 
 ## High-Value Modules
 
+- `references/apis/manifest.md`
+  - Complete configuration schema and definitions.
 - `references/apis/plugin.md`
   - Plugin discovery, run, install, enable, disable, redirect, command shortcuts, and background plugin management.
 - `references/apis/settings.md`
@@ -48,8 +51,9 @@ Use this reference as the navigator for the bundled Mulby API docs under `refere
   - `references/apis/tools.md`
 - Filesystem access
   - `references/apis/filesystem.md`
-- HTTP requests
+- HTTP requests & Network state
   - `references/apis/http.md`
+  - `references/apis/network.md`
 - Shell and OS integration
   - `references/apis/shell.md`
 - Notifications
@@ -66,18 +70,37 @@ Use this reference as the navigator for the bundled Mulby API docs under `refere
 - Global shortcuts and input capture
   - `references/apis/shortcut.md`
   - `references/apis/input.md`
-- Media, permissions, or system integration
+- Media, Image & Audio capabilities
   - `references/apis/media.md`
+  - `references/apis/ffmpeg.md`
+  - `references/apis/sharp.md`
+  - `references/apis/tts.md`
+- Hardware, permissions, or system integration
+  - `references/apis/geolocation.md`
   - `references/apis/permission.md`
   - `references/apis/system.md`
   - `references/apis/power.md`
   - `references/apis/screen.md`
+- Context menus & Tray
+  - `references/apis/menu.md`
+  - `references/apis/tray.md`
+  - `references/apis/tray-menu.md`
 - AI-related plugin integrations
   - `references/apis/ai.md`
 - Desktop search, in-browser views, or plugin store work
   - `references/apis/desktop.md`
   - `references/apis/inbrowser.md`
   - `references/apis/plugin-store.md`
+- Mulby system events, UI pages, panels & security
+  - `references/apis/app-events.md`
+  - `references/apis/system-page.md`
+  - `references/apis/system-plugin.md`
+  - `references/apis/super-panel.md`
+  - `references/apis/theme.md`
+  - `references/apis/security.md`
+- Developer utilities & Logging
+  - `references/apis/developer.md`
+  - `references/apis/log.md`
 
 ## Reading Strategy
 

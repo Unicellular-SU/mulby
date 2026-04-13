@@ -164,7 +164,6 @@ AI 开发时的默认策略：
 
 这意味着：
 
-- 不再依赖旧的 `PLUGIN_DEVELOP_PROMPT.md`
 - `mulby-cli` 内部 AI 使用 bundled skills 作为主知识来源
 - 维护时只需要持续完善 repo 根目录下的 skill 内容
 
@@ -219,10 +218,6 @@ README 只保留高频入口。更完整的 Mulby 插件开发知识已经放进
 ### `mulby pack` 会自动构建吗？
 
 不会。请先运行 `mulby build` 或 `pnpm run build`。
-
-### AI 开发为什么不再生成 `PLUGIN_DEVELOP_PROMPT.md`？
-
-因为现在 `mulby-cli` 已内置 `develop-mulby-plugin` 和 `generate-electron-icons` 两个 skill，AI 会直接从 bundled skills 读取工作流和参考资料。
 
 ### 还可以查看更完整的命令帮助吗？
 

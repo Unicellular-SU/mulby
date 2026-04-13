@@ -11,12 +11,6 @@ mkdirSync(targetDir, { recursive: true })
 rmSync(bundledSkillsTargetDir, { recursive: true, force: true })
 mkdirSync(bundledSkillsTargetDir, { recursive: true })
 
-// Remove the legacy copied prompt artifact from older builds.
-const legacyPromptArtifactPath = resolve(targetDir, 'PLUGIN_DEVELOP_PROMPT.md')
-if (existsSync(legacyPromptArtifactPath)) {
-  rmSync(legacyPromptArtifactPath)
-}
-
 const assets = [
   { source: resolve(packageRoot, 'src/services/ai/PLUGIN_DEVELOP_AI_APPENDIX.md'), target: resolve(targetDir, 'PLUGIN_DEVELOP_AI_APPENDIX.md') }
 ]

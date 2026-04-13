@@ -4,7 +4,6 @@ This reference is a bundled, portable summary of the Mulby plugin development ru
 
 For full Mulby-specific details, also read:
 
-- `references/PLUGIN_DEVELOP_PROMPT.md`
 - `references/apis/README.md`
 - the specific files under `references/apis/*.md` that match the capability you need
 
@@ -55,6 +54,41 @@ my-plugin/
 |  |- main.ts
 |- assets/
 |  `- icon.svg
+```
+
+## Entry Points & Patterns
+
+**Backend (`src/main.ts`)**:
+```typescript
+interface PluginContext {
+  api: any; // e.g., context.api.notification
+  input?: string;
+  featureCode?: string;
+  attachments?: Array<{ path?: string; name?: string; kind?: 'file' | 'image' }>;
+}
+
+export function onLoad() { /* Plugin Loaded */ }
+export function onUnload() { /* Plugin Unloaded */ }
+export function onEnable() { /* Plugin Enabled */ }
+export function onDisable() { /* Plugin Disabled */ }
+export async function run(context: PluginContext) {
+  // Triggered for active features
+}
+export const host = {
+  // Methods callable via RPC or from renderer
+  async ping(_context: PluginContext) { return { ok: true }; }
+};
+export default { onLoad, onUnload, onEnable, onDisable, run, host };
+```
+
+**Frontend (`src/ui/App.tsx`)**:
+```typescript
+import { useMulby } from './hooks/useMulby';
+
+export default function App() {
+  const { clipboard, notification } = useMulby(); 
+  // ...
+}
 ```
 
 ## Fixed Workflow
@@ -124,6 +158,32 @@ Verify all applicable items:
 ## Manifest Essentials
 
 Typical top-level fields:
+
+Example `manifest.json`:
+```json
+{
+  "name": "my-plugin",
+  "displayName": "My Plugin",
+  "version": "1.0.0",
+  "description": "Plugin description",
+  "main": "dist/main.js",
+  "ui": "ui/index.html",
+  "features": [
+    {
+      "code": "format",
+      "explain": "Format JSON",
+      "cmds": [
+        { "type": "keyword", "value": "json" },
+        { "type": "regex", "match": "^\\{.*\\}$", "minLength": 2 },
+        { "type": "files", "exts": [".json"], "fileType": "file" },
+        { "type": "over", "label": "Format Selection", "minLength": 1 },
+        { "type": "img", "exts": [".png", ".jpg"] },
+        { "type": "window", "app": "/Chrome|Safari|Firefox/", "label": "Browser Tools" }
+      ]
+    }
+  ]
+}
+```
 
 - `name`: plugin id
 - `displayName`: human-readable name
@@ -282,6 +342,15 @@ Rules:
 - the module format must be CommonJS
 - keep business logic out of preload
 - expose the smallest safe surface area needed by the UI
+
+Example `preload.cjs`:
+```javascript
+const fs = require('fs');
+
+window.myPluginApi = {
+  readFile: (path) => fs.readFileSync(path, 'utf8'),
+};
+```
 
 ## Manual Acceptance Checklist
 
