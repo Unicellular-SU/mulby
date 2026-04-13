@@ -8,8 +8,8 @@
  */
 export function buildBackendMain(name: string) {
     return `/// <reference path="./types/mulby.d.ts" />
-// PluginContext 类型由 src/types/mulby.d.ts 提供
-type PluginContext = BackendPluginContext
+// 运行时由 Mulby 宿主注入全局 API 代理（无需从参数中获取）
+declare const mulby: any
 
 export function onLoad() {
   console.log('[${name}] 插件已加载')
@@ -27,22 +27,19 @@ export function onDisable() {
   console.log('[${name}] 插件已禁用')
 }
 
-export async function run(context: PluginContext) {
-  const { notification } = context.api
-  notification.show('插件已启动')
+// run 是插件入口，context 由宿主注入（包含 featureCode / input / attachments / api）
+export async function run(_context: BackendPluginContext) {
+  mulby.notification.show('插件已启动')
 }
 
-// 导出 host 方法供 UI 调用
-// 支持三种导出方式（按优先级）：
-// 1. 直接导出函数: export async function myMethod(context, ...args) {}
-// 2. host 对象（推荐）: export const host = { myMethod(context, ...args) {} }
-// 3. 其他对象: export const api = { myMethod(context, ...args) {} }
+// ─── 供 UI 调用的后端方法 ───────────────────────────────────────────
+// 使用 rpc 命名空间：参数 1:1 精准映射，不再有隐式 context 首参偏移。
+// 前端调用示例：await window.mulby.host.call('${name}', 'processData', data)
 
-export const host = {
+export const rpc = {
   // 示例方法：处理数据
-  async processData(context: PluginContext, data: any) {
-    const { notification } = context.api
-    notification.show('处理数据中...')
+  async processData(data: any) {
+    mulby.notification.show('处理数据中...')
 
     // 处理逻辑
     const result = {
@@ -55,8 +52,8 @@ export const host = {
   },
 
   // 示例方法：获取配置
-  async getConfig(context: PluginContext) {
-    // 可以使用 context.api 中的所有 API
+  async getConfig() {
+    // 直接通过全局 mulby 对象调用任意宿主 API，无需 context 参数
     return {
       version: '1.0.0',
       settings: {}
@@ -68,14 +65,13 @@ export const host = {
 // 如果 manifest.json 中声明了 tools，在 onLoad 中注册 handler：
 //
 // export function onLoad() {
-//   const { tools } = (globalThis as any).__mulby_context__.api
-//   tools.register('my_tool', async (args) => {
+//   mulby.tools.register('my_tool', async (args) => {
 //     // args 对应 manifest.tools[].inputSchema 定义的参数
 //     return { result: '处理结果' }
 //   })
 // }
 
-const plugin = { onLoad, onUnload, onEnable, onDisable, run, host }
+const plugin = { onLoad, onUnload, onEnable, onDisable, run, rpc }
 export default plugin
 `
 }

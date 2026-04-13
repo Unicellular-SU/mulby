@@ -38,8 +38,8 @@ export function buildBasicPackageJson(name: string) {
 
 export function buildBasicMain(name: string) {
   return `/// <reference path="./types/mulby.d.ts" />
-
-type PluginContext = BackendPluginContext
+// 运行时由 Mulby 宿主注入全局 API 代理（无需从参数中获取）
+declare const mulby: any
 
 export function onLoad() {
   console.log('[${name}] plugin loaded')
@@ -57,13 +57,12 @@ export function onDisable() {
   console.log('[${name}] plugin disabled')
 }
 
-export async function run(context: PluginContext) {
-  const { clipboard, notification } = context.api
-  const text = context.input || await clipboard.readText()
+export async function run(context: BackendPluginContext) {
+  const text = context.input || await mulby.clipboard.readText()
   const result = text.toUpperCase()
 
-  await clipboard.writeText(result)
-  await notification.show('Done')
+  await mulby.clipboard.writeText(result)
+  mulby.notification.show('Done')
 }
 
 const plugin = { onLoad, onUnload, onEnable, onDisable, run }
