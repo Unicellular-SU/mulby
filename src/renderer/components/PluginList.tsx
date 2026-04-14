@@ -22,7 +22,6 @@ interface PluginListProps {
   onResultsChange?: (count: number) => void
   onContentHeightChange?: (height: number) => void
   onShowDetails?: (pluginName: string) => void
-  onOpenSettings?: () => void
 }
 
 type ResultSectionKey = 'best' | 'apps' | 'files' | 'recent'
@@ -60,15 +59,6 @@ const SYSTEM_ICON_TARGET_SIZE = 128
 const SYSTEM_ICON_BATCH_CONCURRENCY = 6
 const RECENT_LIMIT = 40
 const MAX_CACHE_SIZE = 80
-
-const SETTINGS_ITEM_ID = '__system_settings__'
-
-const SETTINGS_ICON_SVG = `
-<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-  <circle cx="12" cy="12" r="3" />
-  <path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9c0 .7.4 1.3 1.1 1.6.2.1.4.1.6.1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z" />
-</svg>
-`.trim()
 
 const SYSTEM_APP_ICON_SVG = `
 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
@@ -151,12 +141,12 @@ function getMatchWeight(matchType: SearchResultItem['matchType']): number {
 function computeFrecency(lastUsedAt: number, useCount: number): number {
   const ageDays = (Date.now() - lastUsedAt) / 86400000
   let decay: number
-  if (ageDays < 1)        decay = 1.0
-  else if (ageDays < 7)   decay = 0.9
-  else if (ageDays < 14)  decay = 0.7
-  else if (ageDays < 31)  decay = 0.5
-  else if (ageDays < 90)  decay = 0.25
-  else                    decay = 0.1
+  if (ageDays < 1) decay = 1.0
+  else if (ageDays < 7) decay = 0.9
+  else if (ageDays < 14) decay = 0.7
+  else if (ageDays < 31) decay = 0.5
+  else if (ageDays < 90) decay = 0.25
+  else decay = 0.1
   return useCount * decay
 }
 
@@ -175,15 +165,15 @@ function getRecentItemScore(item: SearchResultItem, query: string, frecency: num
   const pluginName = item.pluginName.toLowerCase()
 
   // 按匹配精度阶梯加分
-  if (name === normalized || code === normalized)                        score += 200
+  if (name === normalized || code === normalized) score += 200
   else if (name.startsWith(normalized) || code.startsWith(normalized)) score += 120
-  else if (name.includes(normalized) || code.includes(normalized))      score += 60
+  else if (name.includes(normalized) || code.includes(normalized)) score += 60
 
-  if (explain.includes(normalized) || pluginName.includes(normalized))  score += 20
+  if (explain.includes(normalized) || pluginName.includes(normalized)) score += 20
 
   // 完全不相关时大幅降权，推到列表末尾但不剔除
   const anyMatch = name.includes(normalized) || code.includes(normalized) ||
-                   explain.includes(normalized) || pluginName.includes(normalized)
+    explain.includes(normalized) || pluginName.includes(normalized)
   if (!anyMatch) score *= 0.05
 
   return score
@@ -230,33 +220,6 @@ function getSearchScore(
 function trimPath(path: string): string {
   if (path.length <= 42) return path
   return `${path.slice(0, 20)}...${path.slice(-18)}`
-}
-
-function isSettingsItem(item: SearchResultItem): boolean {
-  return item.pluginId === SETTINGS_ITEM_ID
-}
-
-function injectSettingsResult(results: SearchResultItem[], queryText: string) {
-  const text = queryText.trim().toLowerCase()
-  if (!text) return results
-
-  const keywordMatch = /(settings|setting|preferences|prefs|设置|偏好)/i.test(text)
-  if (!keywordMatch) return results
-
-  const exists = results.some((item) => item.pluginId === SETTINGS_ITEM_ID)
-  if (exists) return results
-
-  const settingsItem: SearchResultItem = {
-    pluginId: SETTINGS_ITEM_ID,
-    pluginName: SETTINGS_ITEM_ID,
-    displayName: '设置',
-    featureCode: 'settings',
-    featureExplain: '打开设置面板',
-    matchType: 'keyword',
-    icon: { type: 'svg', value: SETTINGS_ICON_SVG }
-  }
-
-  return [settingsItem, ...results]
 }
 
 function setLruCache<T>(cache: Map<string, T>, key: string, value: T, maxSize: number) {
@@ -308,11 +271,10 @@ const ResultCard = memo(function ResultCard({
   onRun,
   onContextMenu
 }: ResultCardProps) {
-  const isSettings = item.pluginItem ? isSettingsItem(item.pluginItem) : false
   const systemClass = item.type === 'system-app' || item.type === 'system-file' ? 'system' : ''
   return (
     <div
-      className={`plugin-card ${systemClass} ${isSettings ? 'settings' : ''} ${isSelected ? 'selected' : ''}`}
+      className={`plugin-card ${systemClass} ${isSelected ? 'selected' : ''}`}
       role="option"
       aria-selected={isSelected}
       data-item-key={item.key}
@@ -346,8 +308,7 @@ function PluginList({
   traceAttachmentCount,
   onResultsChange,
   onContentHeightChange,
-  onShowDetails,
-  onOpenSettings
+  onShowDetails
 }: PluginListProps) {
   const [pluginResults, setPluginResults] = useState<SearchResultItem[]>([])
   const [systemApps, setSystemApps] = useState<DesktopAppSearchResult[]>([])
@@ -489,7 +450,7 @@ function PluginList({
         void window.mulby.plugin.search(currentPayload)
           .then((result) => {
             if (cancelled || currentRequestId !== requestIdRef.current) return
-            const merged = dedupePluginResults(injectSettingsResult(result, currentPayload.text))
+            const merged = dedupePluginResults(result)
             setLruCache(pluginCacheRef.current, payloadHash, merged, MAX_CACHE_SIZE)
             setPluginResults(merged)
 
@@ -902,11 +863,6 @@ function PluginList({
 
   const handleRun = useCallback(async (item: RenderItem) => {
     if (item.pluginItem) {
-      if (isSettingsItem(item.pluginItem)) {
-        onOpenSettings?.()
-        return
-      }
-
       const currentPayload = payloadRef.current
       const result = await window.mulby.plugin.run(item.pluginItem.pluginId, item.pluginItem.featureCode, currentPayload)
       if (result.success) {
@@ -933,7 +889,7 @@ function PluginList({
     } catch (error) {
       console.error('[PluginList] Failed to open system item:', error)
     }
-  }, [onOpenSettings, promoteRecent])
+  }, [promoteRecent])
 
   // 自定义右键菜单
   const contextMenu = useContextMenu()
@@ -957,7 +913,7 @@ function PluginList({
 
     if (item.type === 'plugin' || item.type === 'recent') {
       // 插件结果：查看插件详情
-      if (item.pluginItem && !isSettingsItem(item.pluginItem)) {
+      if (item.pluginItem) {
         menuItems.push({ id: 'show-details', label: '查看插件详情' })
       }
     } else if (item.type === 'system-app') {
@@ -1072,7 +1028,7 @@ function PluginList({
           if (e.metaKey || e.ctrlKey) {
             e.preventDefault()
             const current = flatItems[currentIndex]
-            if (current?.pluginItem && !isSettingsItem(current.pluginItem)) {
+            if (current?.pluginItem) {
               onShowDetails?.(current.pluginItem.pluginName)
             }
           }

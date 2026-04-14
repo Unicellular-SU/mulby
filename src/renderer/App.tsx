@@ -1554,7 +1554,6 @@ function MainApp() {
               setDetailsReturnTarget('home')
               setViewMode('plugin-details')
             }}
-            onOpenSettings={() => openSettings()}
           />
         )}
         {isDragging && <div className="drop-hint">拖放 .inplugin 文件安装插件</div>}
