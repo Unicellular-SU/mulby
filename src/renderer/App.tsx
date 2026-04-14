@@ -300,12 +300,12 @@ function MainApp() {
   }, [])
 
   const managerMetrics = useMemo(() => {
-    const MANAGER_HEADER_HEIGHT = 34
-    const MANAGER_TOOLBAR_HEIGHT = 34
-    const MANAGER_ROW_HEIGHT = 52
-    const MANAGER_ROW_GAP = 6
-    const MANAGER_GAP = 10
-    const MANAGER_PADDING = 26
+    const MANAGER_HEADER_HEIGHT = 40
+    const MANAGER_TOOLBAR_HEIGHT = 40
+    const MANAGER_ROW_HEIGHT = 56
+    const MANAGER_ROW_GAP = 8
+    const MANAGER_GAP = 16
+    const MANAGER_PADDING = 40
     const MANAGER_MAX_ROWS = 6
 
     const rows = Math.min(attachments.length, MANAGER_MAX_ROWS)
@@ -1421,7 +1421,7 @@ function MainApp() {
         </div>
       )}
       <div className={`app app-home ${isDragging ? 'dragging' : ''}`}>
-        <div className={`search-box-container ${hasBottomPanel ? 'with-bottom-panel' : ''}`}>
+        <div className={`search-box-container shrink-0 ${hasBottomPanel ? 'with-bottom-panel' : ''}`}>
           <SearchInput
             ref={searchInputRef}
             value={query}

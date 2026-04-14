@@ -318,31 +318,29 @@ const SearchInput = forwardRef<SearchInputRef, SearchInputProps>(function Search
           autoFocus
         />
         {attachments.length > 0 && (
-          <div className="attachment-summary attachment-summary-inline no-drag">
-            <div className="attachment-summary-info">
-              {ATTACHMENTS_LABEL} {attachments.length} {'\u00b7'} {formatBytes(totalAttachmentSize)}
+          <div className="input-summary-card no-drag" style={{ flex: '0 1 auto', minWidth: 0 }}>
+            <div
+              className="input-summary-body"
+              onClick={handleToggleManager}
+              style={{ cursor: 'pointer' }}
+              title={attachmentsManagerOpen ? COLLAPSE_LABEL : MANAGE_LABEL}
+            >
+              <div className="input-summary-preview">
+                {ATTACHMENTS_LABEL} {attachments.length}
+              </div>
+              <div className="input-summary-meta">{formatBytes(totalAttachmentSize)}</div>
             </div>
-            <div className="attachment-summary-actions">
-              <button
-                type="button"
-                className="attachment-summary-clear"
-                onClick={handleClearAttachments}
-                aria-label={CLEAR_ATTACHMENTS_LABEL}
-                title={CLEAR_ATTACHMENTS_LABEL}
-              >
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <path d="M18 6L6 18M6 6l12 12" />
-                </svg>
-              </button>
-              <button
-                type="button"
-                className="attachment-summary-manage"
-                onClick={handleToggleManager}
-                aria-expanded={attachmentsManagerOpen}
-              >
-                {attachmentsManagerOpen ? COLLAPSE_LABEL : MANAGE_LABEL}
-              </button>
-            </div>
+            <button
+              className="input-summary-clear"
+              type="button"
+              onClick={handleClearAttachments}
+              aria-label={CLEAR_ATTACHMENTS_LABEL}
+              title={CLEAR_ATTACHMENTS_LABEL}
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                <path d="M18 6L6 18M6 6l12 12" />
+              </svg>
+            </button>
           </div>
         )}
       </div>
