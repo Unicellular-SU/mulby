@@ -1381,9 +1381,31 @@ html.platform-win-main .attachment-manager {
 }
 
 .plugin-card-top {
+  position: relative;
   display: flex;
   align-items: center;
   justify-content: center;
+}
+
+.plugin-card-pinned {
+  position: absolute;
+  top: -3px;
+  right: -3px;
+  width: 16px;
+  height: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: var(--accent, #3b82f6);
+  color: #fff;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+  pointer-events: none;
+}
+
+.plugin-card-pinned svg {
+  width: 9px;
+  height: 9px;
 }
 
 .plugin-card .plugin-icon {

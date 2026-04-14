@@ -565,6 +565,31 @@ export class PluginManager {
     return results
   }
 
+  // 搜索偏好：委托 stateManager
+  getSearchPreferences() {
+    return this.stateManager.getSearchPreferences()
+  }
+
+  pinFeature(pluginId: string, featureCode: string) {
+    this.stateManager.pinFeature(pluginId, featureCode)
+  }
+
+  unpinFeature(pluginId: string, featureCode: string) {
+    this.stateManager.unpinFeature(pluginId, featureCode)
+  }
+
+  hideFeature(pluginId: string, featureCode: string) {
+    this.stateManager.hideFeature(pluginId, featureCode)
+  }
+
+  unhideFeature(pluginId: string, featureCode: string) {
+    this.stateManager.unhideFeature(pluginId, featureCode)
+  }
+
+  removeRecentUsage(pluginId: string, featureCode: string) {
+    this.stateManager.removeRecentUsage(pluginId, featureCode)
+  }
+
   // 搜索插件（返回匹配的功能入口，只搜索启用的插件）
   async search(input: string | InputPayload): Promise<SearchResult[]> {
     const enabledPlugins = this.getEnabled()

@@ -8,7 +8,7 @@ import type {
   SystemIconRequest
 } from '../../shared/types/electron'
 import { isSystemSearchQueryEligible } from '../../shared/system-search'
-import type { InputPayload } from '../../shared/types/plugin'
+import type { InputPayload, SearchPreferenceState } from '../../shared/types/plugin'
 import type { SearchSettings } from '../../shared/types/settings'
 
 interface PluginListProps {
@@ -48,7 +48,8 @@ interface ResultSection {
 interface ResultCardProps {
   item: RenderItem
   isSelected: boolean
-  onRun: (item: RenderItem) => void
+  isPinned?: boolean
+  onRun: (item: RenderItem) => Promise<void>
   onContextMenu?: (item: RenderItem, e: React.MouseEvent) => void
 }
 
@@ -182,10 +183,15 @@ function getRecentItemScore(item: SearchResultItem, query: string, frecency: num
 function getSearchScore(
   item: SearchResultItem,
   query: string,
-  frecencyMap: Map<string, number>
+  frecencyMap: Map<string, number>,
+  isPinned?: boolean
 ): number {
   const normalized = query.trim().toLowerCase()
   let score = getMatchWeight(item.matchType)
+
+  if (isPinned && normalized) {
+    score += 10000
+  }
 
   if (normalized) {
     const name = item.displayName.toLowerCase()
@@ -268,6 +274,7 @@ const PluginIcon = memo(function PluginIcon({ icon }: { icon?: SearchResultItem[
 const ResultCard = memo(function ResultCard({
   item,
   isSelected,
+  isPinned,
   onRun,
   onContextMenu
 }: ResultCardProps) {
@@ -289,6 +296,13 @@ const ResultCard = memo(function ResultCard({
     >
       <div className="plugin-card-top">
         <PluginIcon icon={item.icon} />
+        {isPinned && (
+          <div className="plugin-card-pinned">
+            <svg viewBox="0 0 24 24" fill="currentColor" width="12" height="12">
+              <path d="M16,12V4H17V2H7V4H8V12L6,14V16H11.2V22H12.8V16H18V14L16,12Z" />
+            </svg>
+          </div>
+        )}
       </div>
       <div className="plugin-card-info">
         <span className="plugin-card-name">{item.title}</span>
@@ -340,6 +354,8 @@ function PluginList({
   // 搜索设置：控制是否搜索本机应用和文件
   const searchSettingsRef = useRef<SearchSettings>({ enableApps: true, enableFiles: false })
 
+  const [searchPreferences, setSearchPreferences] = useState<SearchPreferenceState>({ pinnedFeatures: [], hiddenFeatures: [] })
+
   // 使用 useLayoutEffect 在 DOM 提交后同步更新 ref：
   // - 比 useEffect 更早执行，在用户的 click/keydown 事件触发前完成，避免 handleRun 读取到旧 payload（附件丢失）
   // - 比渲染阶段赋值更安全，不会因 concurrent rendering 下未提交的渲染泄漏不一致的 payload
@@ -356,6 +372,13 @@ function PluginList({
     }).catch(() => {
       // 获取设置失败，保持默认值
     })
+
+    let active = true
+    void window.mulby.plugin.getSearchPreferences().then(prefs => {
+      if (active) setSearchPreferences(prefs)
+    }).catch(() => {})
+
+    return () => { active = false }
   }, [])
 
   useEffect(() => {
@@ -607,15 +630,27 @@ function PluginList({
     return map
   }, [recentPlugins])
 
+  const hiddenKeys = useMemo(() => {
+    return new Set(searchPreferences.hiddenFeatures.map(item => `${item.pluginId}:${item.featureCode}`))
+  }, [searchPreferences.hiddenFeatures])
+
+  const pinnedKeys = useMemo(() => {
+    return new Set(searchPreferences.pinnedFeatures.map(item => `${item.pluginId}:${item.featureCode}`))
+  }, [searchPreferences.pinnedFeatures])
+
   const bestPlugins = useMemo(() => {
-    const sorted = dedupePluginResults(pluginResults).slice()
+    const sorted = dedupePluginResults(pluginResults)
+      .filter((item) => !hiddenKeys.has(getPluginKey(item)))
+      .slice()
     sorted.sort((a, b) => {
-      const scoreDiff = getSearchScore(b, searchPayload.text, frecencyMap) - getSearchScore(a, searchPayload.text, frecencyMap)
+      const aPinned = pinnedKeys.has(getPluginKey(a))
+      const bPinned = pinnedKeys.has(getPluginKey(b))
+      const scoreDiff = getSearchScore(b, searchPayload.text, frecencyMap, bPinned) - getSearchScore(a, searchPayload.text, frecencyMap, aPinned)
       if (scoreDiff !== 0) return scoreDiff
       return a.displayName.localeCompare(b.displayName)
     })
     return sorted
-  }, [pluginResults, searchPayload.text, frecencyMap])
+  }, [pluginResults, searchPayload.text, frecencyMap, hiddenKeys, pinnedKeys])
 
   const bestKeys = useMemo(() => {
     return new Set(bestPlugins.map((item) => getPluginKey(item)))
@@ -624,7 +659,10 @@ function PluginList({
   const recentDisplayItems = useMemo(() => {
     const query = searchPayload.text.trim()
     const normalized = query.toLowerCase()
-    let items = recentPlugins.filter((item) => !bestKeys.has(getPluginKey(item)))
+    let items = recentPlugins.filter((item) => {
+      const key = getPluginKey(item)
+      return !bestKeys.has(key) && !hiddenKeys.has(key)
+    })
 
     // 有查询词时，过滤掉完全无关的条目
     // 防止不相关 recent chip 因 frecency 高而排首位，被 Enter 误执行
@@ -915,9 +953,38 @@ function PluginList({
     const menuItems: ContextMenuItem[] = []
 
     if (item.type === 'plugin' || item.type === 'recent') {
-      // 插件结果：查看插件详情
+      const isPinned = item.pluginItem ? pinnedKeys.has(getPluginKey(item.pluginItem)) : false
+
+      if (isPinned) {
+        menuItems.push({ id: 'unpin-feature', label: '取消置顶' })
+      } else {
+        menuItems.push({ id: 'pin-feature', label: '置顶此项' })
+      }
+      menuItems.push({ id: 'hide-feature', label: '隐藏此功能' })
+
+      if (item.type === 'recent') {
+        menuItems.push({ id: 'remove-recent', label: '从最近使用中移除' })
+      }
+
+      menuItems.push({ id: 'sep1', label: '', separator: true })
+
       if (item.pluginItem) {
         menuItems.push({ id: 'show-details', label: '查看插件详情' })
+        menuItems.push({ id: 'config-shortcut', label: '配置快捷键' })
+      }
+
+      // 仅非内置插件显示卸载选项
+      if (item.pluginItem) {
+        try {
+          const allPlugins = await window.mulby.plugin.getAll()
+          const pluginInfo = allPlugins.find((p: { id: string }) => p.id === item.pluginItem!.pluginId)
+          if (pluginInfo && !pluginInfo.builtin) {
+            menuItems.push({ id: 'sep2', label: '', separator: true })
+            menuItems.push({ id: 'uninstall', label: '卸载此插件', danger: true })
+          }
+        } catch {
+          // 获取插件列表失败时不显示卸载按钮，安全优先
+        }
       }
     } else if (item.type === 'system-app') {
       // 系统应用
@@ -945,6 +1012,95 @@ function PluginList({
           onShowDetails?.(item.pluginItem.pluginName)
         }
         break
+      case 'pin-feature':
+        if (item.pluginItem) {
+          const { pluginId, featureCode } = item.pluginItem
+          void window.mulby.plugin.pinFeature(pluginId, featureCode).then(() => {
+            setSearchPreferences(prev => ({
+              ...prev,
+              pinnedFeatures: [...prev.pinnedFeatures, { pluginId, featureCode, pinnedAt: Date.now() }]
+            }))
+          })
+        }
+        break
+      case 'unpin-feature':
+        if (item.pluginItem) {
+          const { pluginId, featureCode } = item.pluginItem
+          void window.mulby.plugin.unpinFeature(pluginId, featureCode).then(() => {
+            setSearchPreferences(prev => ({
+              ...prev,
+              pinnedFeatures: prev.pinnedFeatures.filter(p => !(p.pluginId === pluginId && p.featureCode === featureCode))
+            }))
+          })
+        }
+        break
+      case 'hide-feature':
+        if (item.pluginItem) {
+          const { pluginId, featureCode, displayName } = item.pluginItem
+          const confirmResult = await window.mulby.dialog.showMessageBox({
+            type: 'question',
+            title: '确认隐藏',
+            message: `确定要隐藏「${displayName}」吗？`,
+            detail: '隐藏后该功能将不再出现在搜索结果中。\n你可以在「设置 › 插件管理」中重新启用。',
+            buttons: ['取消', '隐藏'],
+            defaultId: 0,
+            cancelId: 0
+          })
+          if (confirmResult.response === 1) {
+            void window.mulby.plugin.hideFeature(pluginId, featureCode).then(() => {
+              setSearchPreferences(prev => ({ ...prev, 
+                hiddenFeatures: [...prev.hiddenFeatures, { pluginId, featureCode, hiddenAt: Date.now() }],
+                pinnedFeatures: prev.pinnedFeatures.filter(p => !(p.pluginId === pluginId && p.featureCode === featureCode))
+              }))
+              setRecentPlugins(curr => curr.filter(i => !(i.pluginId === pluginId && i.featureCode === featureCode)))
+            })
+          }
+        }
+        break
+      case 'remove-recent':
+        if (item.pluginItem) {
+          const { pluginId, featureCode } = item.pluginItem
+          void window.mulby.plugin.removeRecentUsage(pluginId, featureCode).then(() => {
+            setRecentPlugins(curr => curr.filter(i => !(i.pluginId === pluginId && i.featureCode === featureCode)))
+          })
+        }
+        break
+      case 'config-shortcut':
+        if (item.pluginItem) {
+          void window.mulby.systemPage.open({
+            page: 'settings',
+            settingsSection: 'commandQuickLaunch',
+            shortcutCommandHint: item.pluginItem.displayName
+          })
+          window.mulby.window.hide()
+        }
+        break
+      case 'uninstall':
+        if (item.pluginItem) {
+          const { pluginId, pluginName } = item.pluginItem
+          const dialogResult = await window.mulby.dialog.showMessageBox({
+            type: 'warning',
+            title: '确认卸载',
+            message: `确定要卸载插件 "${pluginName}" 吗？`,
+            buttons: ['取消', '卸载'],
+            defaultId: 0,
+            cancelId: 0
+          })
+          if (dialogResult.response === 1) {
+            void window.mulby.plugin.uninstall(pluginId).then(res => {
+              if (res.success) {
+                window.mulby.notification.show(`已卸载插件 "${pluginName}"`)
+                // 清理脏数据：从当前搜索结果、最近使用和缓存中移除该插件
+                setPluginResults(prev => prev.filter(p => p.pluginId !== pluginId))
+                setRecentPlugins(prev => prev.filter(p => p.pluginId !== pluginId))
+                pluginCacheRef.current.clear()
+              } else {
+                window.mulby.notification.show(`卸载失败: ${res.error}`, 'error')
+              }
+            })
+          }
+        }
+        break
       case 'reveal-in-finder':
         if (path) {
           void window.mulby.shell.showItemInFolder(path)
@@ -966,7 +1122,7 @@ function PluginList({
         }
         break
     }
-  }, [onShowDetails, contextMenu, revealLabel, trashLabel])
+  }, [onShowDetails, contextMenu, revealLabel, trashLabel, pinnedKeys])
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -1084,6 +1240,7 @@ function PluginList({
                         key={item.key}
                         item={item}
                         isSelected={item.key === selectedKey}
+                        isPinned={item.pluginItem ? pinnedKeys.has(getPluginKey(item.pluginItem)) : false}
                         onRun={handleRun}
                         onContextMenu={handleItemContextMenu}
                       />

@@ -107,6 +107,13 @@ export function createAppPluginApi(ipcRenderer: IpcRenderer) {
         ipcRenderer.invoke('plugin:run', name, featureCode, input),
       runCommand: (input: unknown) => ipcRenderer.invoke('plugin:runCommand', input),
       getRecentUsed: (limit?: number) => ipcRenderer.invoke('plugin:getRecentUsed', limit),
+      // 搜索偏好管理
+      getSearchPreferences: () => ipcRenderer.invoke('plugin:getSearchPreferences'),
+      pinFeature: (pluginId: string, featureCode: string) => ipcRenderer.invoke('plugin:pinFeature', pluginId, featureCode),
+      unpinFeature: (pluginId: string, featureCode: string) => ipcRenderer.invoke('plugin:unpinFeature', pluginId, featureCode),
+      hideFeature: (pluginId: string, featureCode: string) => ipcRenderer.invoke('plugin:hideFeature', pluginId, featureCode),
+      unhideFeature: (pluginId: string, featureCode: string) => ipcRenderer.invoke('plugin:unhideFeature', pluginId, featureCode),
+      removeRecentUsage: (pluginId: string, featureCode: string) => ipcRenderer.invoke('plugin:removeRecentUsage', pluginId, featureCode),
       install: (filePath: string) => ipcRenderer.invoke('plugin:install', filePath),
       enable: (name: string) => ipcRenderer.invoke('plugin:enable', name),
       disable: (name: string) => ipcRenderer.invoke('plugin:disable', name),

@@ -1,11 +1,12 @@
 import { app } from 'electron'
 import { join } from 'path'
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'fs'
-import { PluginStateConfig, RecentPluginUsageEntry } from '../../shared/types/plugin'
+import { PluginStateConfig, RecentPluginUsageEntry, SearchPreferenceState } from '../../shared/types/plugin'
 
 interface PluginStateFile {
   plugins: PluginStateConfig
   recentUsage: RecentPluginUsageEntry[]
+  searchPreferences?: SearchPreferenceState
 }
 
 const MAX_RECENT_USAGE = 50
@@ -14,6 +15,7 @@ export class PluginStateManager {
   private configPath: string
   private pluginStates: PluginStateConfig = {}
   private recentUsage: RecentPluginUsageEntry[] = []
+  private searchPreferences: SearchPreferenceState = { pinnedFeatures: [], hiddenFeatures: [] }
 
   constructor() {
     const configDir = app.getPath('userData')
@@ -35,23 +37,26 @@ export class PluginStateManager {
         if (parsed && typeof parsed === 'object' && 'plugins' in parsed) {
           this.pluginStates = this.normalizePluginStates(parsed.plugins)
           this.recentUsage = this.normalizeRecentUsage(parsed.recentUsage)
+          this.searchPreferences = this.normalizeSearchPreferences(parsed.searchPreferences)
           return
         }
 
         this.pluginStates = this.normalizePluginStates(parsed as PluginStateConfig)
         this.recentUsage = []
+        this.searchPreferences = { pinnedFeatures: [], hiddenFeatures: [] }
       } catch {
         this.pluginStates = {}
         this.recentUsage = []
+        this.searchPreferences = { pinnedFeatures: [], hiddenFeatures: [] }
       }
     }
   }
 
-  // 保存状态配置
   private save(): void {
     const data: PluginStateFile = {
       plugins: this.pluginStates,
-      recentUsage: this.recentUsage
+      recentUsage: this.recentUsage,
+      searchPreferences: this.searchPreferences
     }
     writeFileSync(this.configPath, JSON.stringify(data, null, 2))
   }
@@ -94,6 +99,8 @@ export class PluginStateManager {
   removePluginState(name: string): void {
     delete this.pluginStates[name]
     this.recentUsage = this.recentUsage.filter((item) => item.pluginId !== name)
+    this.searchPreferences.pinnedFeatures = this.searchPreferences.pinnedFeatures.filter(p => p.pluginId !== name)
+    this.searchPreferences.hiddenFeatures = this.searchPreferences.hiddenFeatures.filter(h => h.pluginId !== name)
     this.save()
   }
 
@@ -170,6 +177,48 @@ export class PluginStateManager {
       .slice(0, limit)
   }
 
+  // 删除某条近使用记录
+  removeRecentUsage(pluginId: string, featureCode: string): void {
+    this.recentUsage = this.recentUsage.filter(item => !(item.pluginId === pluginId && item.featureCode === featureCode))
+    this.save()
+  }
+
+  // 获取搜索偏好
+  getSearchPreferences(): SearchPreferenceState {
+    return {
+      pinnedFeatures: [...this.searchPreferences.pinnedFeatures],
+      hiddenFeatures: [...this.searchPreferences.hiddenFeatures]
+    }
+  }
+
+  pinFeature(pluginId: string, featureCode: string): void {
+    if (this.searchPreferences.pinnedFeatures.some(p => p.pluginId === pluginId && p.featureCode === featureCode)) return
+    this.searchPreferences.pinnedFeatures.push({ pluginId, featureCode, pinnedAt: Date.now() })
+    this.save()
+  }
+
+  unpinFeature(pluginId: string, featureCode: string): void {
+    this.searchPreferences.pinnedFeatures = this.searchPreferences.pinnedFeatures.filter(
+      p => !(p.pluginId === pluginId && p.featureCode === featureCode)
+    )
+    this.save()
+  }
+
+  hideFeature(pluginId: string, featureCode: string): void {
+    if (this.searchPreferences.hiddenFeatures.some(h => h.pluginId === pluginId && h.featureCode === featureCode)) return
+    this.searchPreferences.hiddenFeatures.push({ pluginId, featureCode, hiddenAt: Date.now() })
+    this.unpinFeature(pluginId, featureCode)
+    this.removeRecentUsage(pluginId, featureCode)
+    this.save()
+  }
+
+  unhideFeature(pluginId: string, featureCode: string): void {
+    this.searchPreferences.hiddenFeatures = this.searchPreferences.hiddenFeatures.filter(
+      h => !(h.pluginId === pluginId && h.featureCode === featureCode)
+    )
+    this.save()
+  }
+
   private normalizePluginStates(input: unknown): PluginStateConfig {
     if (!input || typeof input !== 'object') {
       return {}
@@ -214,5 +263,27 @@ export class PluginStateManager {
     }
     items.sort((a, b) => b.lastUsedAt - a.lastUsedAt)
     return items.slice(0, MAX_RECENT_USAGE)
+  }
+
+  private normalizeSearchPreferences(input: unknown): SearchPreferenceState {
+    const defaultPrefs: SearchPreferenceState = { pinnedFeatures: [], hiddenFeatures: [] }
+    if (!input || typeof input !== 'object') return defaultPrefs
+
+    const prefs = input as Partial<SearchPreferenceState>
+    const pinned = Array.isArray(prefs.pinnedFeatures) ? prefs.pinnedFeatures : []
+    const hidden = Array.isArray(prefs.hiddenFeatures) ? prefs.hiddenFeatures : []
+
+    return {
+      pinnedFeatures: pinned.map(p => ({
+        pluginId: String(p.pluginId || ''),
+        featureCode: String(p.featureCode || ''),
+        pinnedAt: typeof p.pinnedAt === 'number' ? p.pinnedAt : Date.now()
+      })).filter(p => p.pluginId && p.featureCode),
+      hiddenFeatures: hidden.map(h => ({
+        pluginId: String(h.pluginId || ''),
+        featureCode: String(h.featureCode || ''),
+        hiddenAt: typeof h.hiddenAt === 'number' ? h.hiddenAt : Date.now()
+      })).filter(h => h.pluginId && h.featureCode)
+    }
   }
 }

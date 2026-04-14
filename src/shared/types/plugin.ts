@@ -585,6 +585,24 @@ export interface PluginStateConfig {
   }
 }
 
+// 搜索偏好配置
+export interface PinnedFeature {
+  pluginId: string
+  featureCode: string
+  pinnedAt: number
+}
+
+export interface HiddenFeature {
+  pluginId: string
+  featureCode: string
+  hiddenAt: number
+}
+
+export interface SearchPreferenceState {
+  pinnedFeatures: PinnedFeature[]
+  hiddenFeatures: HiddenFeature[]
+}
+
 // 最近使用的插件功能
 export interface RecentPluginUsageEntry {
   pluginId: string

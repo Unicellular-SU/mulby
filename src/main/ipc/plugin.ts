@@ -180,6 +180,36 @@ export function registerPluginHandlers(manager: PluginManager, pluginToolRegistr
     return formattedResults
   })
 
+  // 搜索偏好设置
+  ipcMain.handle('plugin:getSearchPreferences', () => {
+    return manager.getSearchPreferences()
+  })
+
+  ipcMain.handle('plugin:pinFeature', (_, pluginId: string, featureCode: string) => {
+    manager.pinFeature(pluginId, featureCode)
+    return { success: true }
+  })
+
+  ipcMain.handle('plugin:unpinFeature', (_, pluginId: string, featureCode: string) => {
+    manager.unpinFeature(pluginId, featureCode)
+    return { success: true }
+  })
+
+  ipcMain.handle('plugin:hideFeature', (_, pluginId: string, featureCode: string) => {
+    manager.hideFeature(pluginId, featureCode)
+    return { success: true }
+  })
+
+  ipcMain.handle('plugin:unhideFeature', (_, pluginId: string, featureCode: string) => {
+    manager.unhideFeature(pluginId, featureCode)
+    return { success: true }
+  })
+
+  ipcMain.handle('plugin:removeRecentUsage', (_, pluginId: string, featureCode: string) => {
+    manager.removeRecentUsage(pluginId, featureCode)
+    return { success: true }
+  })
+
   // 执行插件
   ipcMain.handle('plugin:run', async (_, name: string, featureCode: string, input?: string | InputPayload) => {
     return manager.run(name, featureCode, input)
