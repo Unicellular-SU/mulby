@@ -229,7 +229,8 @@ const SearchInput = forwardRef<SearchInputRef, SearchInputProps>(function Search
       }
     })
     onAttachmentsChange([])
-  }, [attachments, onAttachmentsChange])
+    focusAtEnd()
+  }, [attachments, onAttachmentsChange, focusAtEnd])
 
   const hasSummary = !subInput.enabled && summaryText.length > 0
   const displayValue = subInput.enabled ? subInputValue : value
@@ -237,7 +238,8 @@ const SearchInput = forwardRef<SearchInputRef, SearchInputProps>(function Search
 
   const handleClearSummary = useCallback(() => {
     onSummaryChange('')
-  }, [onSummaryChange])
+    focusAtEnd()
+  }, [onSummaryChange, focusAtEnd])
 
   const handleSummaryMouseDown = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
     if ((e.target as HTMLElement).closest('button')) {
@@ -318,7 +320,7 @@ const SearchInput = forwardRef<SearchInputRef, SearchInputProps>(function Search
           autoFocus
         />
         {attachments.length > 0 && (
-          <div className="input-summary-card no-drag" style={{ flex: '0 1 auto', minWidth: 0 }}>
+          <div className="input-summary-card no-drag" style={{ flex: '0 1 auto', minWidth: 0 }} onMouseDown={handleSummaryMouseDown}>
             <div
               className="input-summary-body"
               onClick={handleToggleManager}

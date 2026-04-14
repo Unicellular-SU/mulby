@@ -828,6 +828,25 @@ function MainApp() {
     return () => window.removeEventListener('keydown', handleKeyDown)
   }, [openSettings])
 
+  // 监听窗口重新获得焦点，确保主界面的搜索框依然有焦点
+  useEffect(() => {
+    let focusTimer: ReturnType<typeof setTimeout> | null = null
+    const handleWindowFocus = () => {
+      if (viewMode === 'home' && !pluginOpen && !systemPageAttached && !attachmentsManagerOpen && !isSystemWindow) {
+        // 确保在主窗口渲染后执行焦点获取
+        if (focusTimer) clearTimeout(focusTimer)
+        focusTimer = setTimeout(() => {
+          searchInputRef.current?.focus()
+        }, 10)
+      }
+    }
+    window.addEventListener('focus', handleWindowFocus)
+    return () => {
+      window.removeEventListener('focus', handleWindowFocus)
+      if (focusTimer) clearTimeout(focusTimer)
+    }
+  }, [viewMode, pluginOpen, systemPageAttached, attachmentsManagerOpen, isSystemWindow])
+
   useEffect(() => {
     const cleanup = window.mulby.app.onOpenSystemPlugin((payload: OpenSystemPluginPayload) => {
       if (!payload || payload.pluginId !== 'settings-center') {
