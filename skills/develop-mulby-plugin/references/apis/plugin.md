@@ -92,6 +92,68 @@ const result = await window.mulby.plugin.runCommand({
 const recent = await window.mulby.plugin.getRecentUsed(20);
 ```
 
+### plugin.getSearchPreferences()
+[Renderer]
+获取搜索偏好设置（置顶与隐藏列表）。
+
+```javascript
+const prefs = await window.mulby.plugin.getSearchPreferences();
+// prefs.pinnedFeatures: Array<{ pluginId, featureCode, pinnedAt }>
+// prefs.hiddenFeatures: Array<{ pluginId, featureCode, hiddenAt }>
+```
+
+返回值：`SearchPreferenceState`
+
+### plugin.pinFeature(pluginId, featureCode)
+[Renderer]
+将插件功能置顶，在搜索结果中优先展示。
+
+```javascript
+await window.mulby.plugin.pinFeature('translator', 'translate');
+```
+
+返回值：`{ success: boolean }`
+
+### plugin.unpinFeature(pluginId, featureCode)
+[Renderer]
+取消插件功能置顶。
+
+```javascript
+await window.mulby.plugin.unpinFeature('translator', 'translate');
+```
+
+返回值：`{ success: boolean }`
+
+### plugin.hideFeature(pluginId, featureCode)
+[Renderer]
+隐藏插件功能，使其不再出现在搜索结果中。
+
+```javascript
+await window.mulby.plugin.hideFeature('translator', 'translate');
+```
+
+返回值：`{ success: boolean }`
+
+### plugin.unhideFeature(pluginId, featureCode)
+[Renderer]
+恢复已隐藏的插件功能。
+
+```javascript
+await window.mulby.plugin.unhideFeature('translator', 'translate');
+```
+
+返回值：`{ success: boolean }`
+
+### plugin.removeRecentUsage(pluginId, featureCode)
+[Renderer]
+从最近使用记录中移除指定的插件功能。
+
+```javascript
+await window.mulby.plugin.removeRecentUsage('translator', 'translate');
+```
+
+返回值：`{ success: boolean }`
+
 ### plugin.install(filePath)
 [Renderer]
 安装插件。

@@ -338,6 +338,7 @@ interface MulbyApp {
   onOpenLogViewer(callback: () => void): Disposable
   onOpenStorageExplorer(callback: () => void): Disposable
   onOpenCommandShortcuts(callback: (payload?: { cmdLabel?: string }) => void): Disposable
+  onSetSearchText(callback: (text: string) => void): Disposable
 }
 
 interface MulbySystemPlugin {
@@ -374,6 +375,12 @@ interface MulbyPlugin {
   run(name: string, featureCode: string, input?: string | InputPayload): Promise<{ success: boolean; hasUI?: boolean; error?: string }>
   runCommand(input: PluginCommandRunInput): Promise<{ success: boolean; hasUI?: boolean; error?: string }>
   getRecentUsed(limit?: number): Promise<PluginSearchResult[]>
+  getSearchPreferences(): Promise<unknown>
+  pinFeature(pluginId: string, featureCode: string): Promise<{ success: boolean }>
+  unpinFeature(pluginId: string, featureCode: string): Promise<{ success: boolean }>
+  hideFeature(pluginId: string, featureCode: string): Promise<{ success: boolean }>
+  unhideFeature(pluginId: string, featureCode: string): Promise<{ success: boolean }>
+  removeRecentUsage(pluginId: string, featureCode: string): Promise<{ success: boolean }>
   install(filePath: string): Promise<{
     success: boolean
     pluginName?: string
