@@ -95,7 +95,6 @@ ${paths.map(p => `    <string>${p}</string>`).join('\n')}
 
   // 读取文件列表
   ipcMain.handle('clipboard:readFiles', () => {
-    // macOS 特有格式 - NSFilenamesPboardType 返回 XML plist
     if (process.platform === 'darwin') {
       const nsFiles = clipboard.read('NSFilenamesPboardType')
       if (nsFiles) {
@@ -108,7 +107,32 @@ ${paths.map(p => `    <string>${p}</string>`).join('\n')}
           if (paths.length > 0) {
             return paths.map(filePath => getFileInfo(filePath))
           }
+        } else {
+          // 尝试作为 JSON 数组读取
+          try {
+            const paths = JSON.parse(nsFiles) as string[]
+            if (Array.isArray(paths) && paths.length > 0) {
+              return paths.map(filePath => getFileInfo(filePath))
+            }
+          } catch {
+            // 如果只有单一路径字符串
+            if (nsFiles.startsWith('/')) {
+              return [getFileInfo(nsFiles)]
+            }
+          }
         }
+      }
+
+      const publicFileUrl = clipboard.read('public.file-url')
+      if (publicFileUrl && publicFileUrl.startsWith('file://')) {
+        const filePath = decodeURIComponent(publicFileUrl.replace('file://', ''))
+        return [getFileInfo(filePath)]
+      }
+
+      const promisedFileUrl = clipboard.read('com.apple.pasteboard.promised-file-url')
+      if (promisedFileUrl && promisedFileUrl.startsWith('file://')) {
+        const filePath = decodeURIComponent(promisedFileUrl.replace('file://', ''))
+        return [getFileInfo(filePath)]
       }
     }
 
@@ -122,6 +146,21 @@ ${paths.map(p => `    <string>${p}</string>`).join('\n')}
         .map(uri => decodeURIComponent(uri.replace('file://', '')))
       if (filePaths.length > 0) {
         return filePaths.map(filePath => getFileInfo(filePath))
+      }
+    }
+
+    // 尝试作为普通文本路径读取（必须存在的文件）
+    const textPlain = clipboard.readText()
+    if (textPlain && (textPlain.startsWith('/') || textPlain.startsWith('file://'))) {
+      const pathStr = textPlain.startsWith('file://')
+        ? decodeURIComponent(textPlain.replace('file://', ''))
+        : textPlain
+      const cleanPath = pathStr.split('\n')[0].trim()
+      try {
+        statSync(cleanPath)
+        return [getFileInfo(cleanPath)]
+      } catch {
+        // failed to stat
       }
     }
 

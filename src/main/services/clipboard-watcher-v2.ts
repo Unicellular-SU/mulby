@@ -62,7 +62,7 @@ export class ClipboardWatcher extends EventEmitter {
   constructor() {
     super()
     this.lastContentHash = this.getClipboardHash()
-    this.lastChangeTime = Date.now()
+    this.lastChangeTime = 0
   }
 
   /**
@@ -73,7 +73,18 @@ export class ClipboardWatcher extends EventEmitter {
       const text = clipboard.readText()
       const shortText = text.substring(0, 100)
       const hasImage = !clipboard.readImage().isEmpty()
-      return `${shortText}|${hasImage}`
+      
+      let filePart = ''
+      if (process.platform === 'darwin') {
+        filePart = (clipboard.read('public.file-url') || clipboard.read('NSFilenamesPboardType')).substring(0, 100)
+      } else {
+        filePart = (
+          clipboard.read('text/uri-list') || 
+          clipboard.readBuffer('FileNameW').toString('hex')
+        ).substring(0, 100)
+      }
+
+      return `${shortText}|${hasImage}|${filePart}`
     } catch {
       return ''
     }
