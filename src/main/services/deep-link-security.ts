@@ -137,3 +137,25 @@ export async function showDeepLinkError(message: string, detail?: string): Promi
     cancelId: 0
   })
 }
+
+/**
+ * 弹出「获取外部商店源」确认对话框，防范 SSRF
+ */
+export async function confirmAdhocSourceFetch(sourceUrl: string): Promise<boolean> {
+  let host = sourceUrl
+  try {
+    host = new URL(sourceUrl).host || sourceUrl
+  } catch {}
+
+  const result = await showInternalMessageBox({
+    type: 'warning',
+    title: 'Mulby — 安全确认',
+    message: '外部应用试图让 Mulby 连接到未配置的插件源地址，是否允许？',
+    detail: `源主机: ${host}\n为保障系统安全，建议您只拉取绝对信任的网络来源。`,
+    buttons: ['取消', '允许并拉取'],
+    defaultId: 0,
+    cancelId: 0
+  })
+
+  return result.response === 1
+}

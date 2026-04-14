@@ -19,7 +19,8 @@ import {
   confirmRunPlugin,
   confirmInstallPlugin,
   showPluginNotFound,
-  showDeepLinkError
+  showDeepLinkError,
+  confirmAdhocSourceFetch
 } from './deep-link-security'
 
 /** 路由回调：打开系统页面（由 index.ts 注入） */
@@ -507,10 +508,37 @@ export class DeepLinkRouter {
 
       // 优先从指定源查找
       if (sourceUrl) {
-        const entry = result.entries.find(e =>
+        let entry = result.entries.find(e =>
           e.plugin.id === pluginId && e.sourceUrl === sourceUrl
         )
         if (entry) return entry
+
+        // 如果在已配置源中未找到，且显式指定了源，我们需要进行网络请求
+        // 出于安全防范 SSRF 或未授权网络读取，对未知源必须显式征求用户同意
+        const confirmed = await confirmAdhocSourceFetch(sourceUrl)
+        if (!confirmed) {
+          return null
+        }
+
+        const adhoc = await this.deps.storeService.fetchAdhocSource(sourceUrl)
+        if (adhoc.success && adhoc.plugins) {
+          const adhocMatch = adhoc.plugins.find(p => p.id === pluginId)
+          if (adhocMatch) {
+            return {
+              plugin: {
+                name: adhocMatch.name,
+                displayName: adhocMatch.displayName,
+                downloadUrl: adhocMatch.downloadUrl,
+                publisher: adhocMatch.publisher,
+                author: adhocMatch.author,
+                sha256: adhocMatch.sha256
+              },
+              sourceId: adhoc.source.id,
+              sourceName: '临时直达源',
+              sourceUrl: sourceUrl
+            }
+          }
+        }
       }
 
       // 从所有源查找

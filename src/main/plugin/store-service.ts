@@ -359,6 +359,15 @@ export class PluginStoreService {
     })
     appSettingsManager.updateSettings({ storeSources: nextSources })
   }
+  async fetchAdhocSource(url: string): Promise<SourceFetchResult> {
+    return this.fetchSingleSource({
+      id: 'adhoc_temp',
+      name: 'Adhoc Source',
+      url,
+      priority: 0,
+      enabled: true
+    })
+  }
 
   private async fetchSingleSource(source: StoreSource): Promise<SourceFetchResult> {
     const lastSyncAt = Date.now()
