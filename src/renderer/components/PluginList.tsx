@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef, memo, useMemo } from 'react'
+import { useState, useEffect, useLayoutEffect, useCallback, useRef, memo, useMemo } from 'react'
 import { useContextMenu, type ContextMenuItem } from './ContextMenu'
 import type {
   DesktopAppSearchResult,
@@ -340,7 +340,10 @@ function PluginList({
   // 搜索设置：控制是否搜索本机应用和文件
   const searchSettingsRef = useRef<SearchSettings>({ enableApps: true, enableFiles: false })
 
-  useEffect(() => {
+  // 使用 useLayoutEffect 在 DOM 提交后同步更新 ref：
+  // - 比 useEffect 更早执行，在用户的 click/keydown 事件触发前完成，避免 handleRun 读取到旧 payload（附件丢失）
+  // - 比渲染阶段赋值更安全，不会因 concurrent rendering 下未提交的渲染泄漏不一致的 payload
+  useLayoutEffect(() => {
     payloadRef.current = runPayload
   }, [runPayload])
 
