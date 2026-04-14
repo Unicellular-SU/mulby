@@ -20,7 +20,7 @@ import { setHotKeySettingRedirectHandler } from './plugin/dynamic-features'
 import { PluginWindowManager } from './plugin/window'
 import { ThemeManager } from './services/theme'
 import { setUiDialogThemeResolver } from './services/ui-dialog-service'
-import { isIgnoringBlur, startIgnoringBlur, stopIgnoringBlur, setWindowsProvider } from './services/blur-manager'
+import { isIgnoringBlur, startIgnoringBlur, stopIgnoringBlur, setWindowsProvider, setHasDetachedWindowsProvider } from './services/blur-manager'
 import { appSettingsManager } from './services/app-settings'
 import { AppShortcutManager } from './services/app-shortcuts'
 import { InputHookService } from './services/input-hook'
@@ -1489,6 +1489,11 @@ app.whenReady().then(async () => {
       const systemPageWin = systemPageWindowManager.getAttachedWindow()
       if (systemPageWin && !systemPageWin.isDestroyed()) windows.push(systemPageWin)
       return windows
+    })
+
+    // 设置全局独立窗口状态检测函数，用于对话框关闭时判断是否恢复隐藏 Dock
+    setHasDetachedWindowsProvider(() => {
+      return pluginWindowManager.getAllDetachedWindows().length > 0 || Boolean(systemPageWindowManager.getDetachedWindow())
     })
 
     // 设置主窗口到插件窗口管理器

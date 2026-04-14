@@ -11,8 +11,8 @@ let ignoringBlur = false
 let ignoreCount = 0 // 支持嵌套调用
 let hiddenWindows: BrowserWindow[] = []
 
-// 全局窗口获取函数，需要在应用初始化时设置
 let getWindowsToHide: (() => BrowserWindow[]) | null = null
+let getHasDetachedWindows: (() => boolean) | null = null
 
 /**
  * 设置获取需要隐藏的窗口的函数
@@ -20,6 +20,20 @@ let getWindowsToHide: (() => BrowserWindow[]) | null = null
  */
 export function setWindowsProvider(provider: () => BrowserWindow[]): void {
     getWindowsToHide = provider
+}
+
+/**
+ * 设置获取是否存在独立窗口的函数
+ */
+export function setHasDetachedWindowsProvider(provider: () => boolean): void {
+    getHasDetachedWindows = provider
+}
+
+/**
+ * 获取是否存在独立窗口
+ */
+export function hasDetachedWindows(): boolean {
+    return getHasDetachedWindows ? getHasDetachedWindows() : false
 }
 
 /**

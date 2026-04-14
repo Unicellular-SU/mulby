@@ -1,5 +1,5 @@
-import { BrowserWindow, ipcMain, nativeTheme, screen } from 'electron'
-import { withIgnoringBlur } from './blur-manager'
+import { app, BrowserWindow, ipcMain, nativeTheme, screen } from 'electron'
+import { withIgnoringBlur, hasDetachedWindows } from './blur-manager'
 
 export interface UiMessageBoxOptions {
   type?: 'none' | 'info' | 'error' | 'question' | 'warning'
@@ -439,6 +439,7 @@ export async function showInternalMessageBox(
       maximizable: false,
       fullscreenable: false,
       alwaysOnTop: true,
+      skipTaskbar: true,
       title: options.title || '提示',
       backgroundColor: theme === 'dark' ? '#0b1220' : '#f8fafc',
       webPreferences: {
@@ -462,6 +463,18 @@ export async function showInternalMessageBox(
         if (!win.isDestroyed()) {
           win.close()
         }
+
+        // 补偿 macOS LaunchServices 被激活唤醒后遗留的 Dock 图标
+        if (process.platform === 'darwin' && app.dock) {
+          setTimeout(() => {
+            // 如果存在其他已分离的窗口（哪怕被最小化或隐藏），都不应当强行隐藏 Dock
+            const hasOtherVisibleDialogs = BrowserWindow.getAllWindows().some(w => !w.isDestroyed() && w.isVisible() && w.id !== win.id)
+            if (!hasDetachedWindows() && !hasOtherVisibleDialogs) {
+              app.dock?.hide()
+            }
+          }, 50)
+        }
+
         resolve({ response, checkboxChecked: false })
       }
 
