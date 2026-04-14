@@ -29,7 +29,7 @@ type OpenSystemPageFn = (page: string, options?: {
 }) => void
 
 /** 路由回调：显示主窗口（由 index.ts 注入） */
-type ShowMainWindowFn = () => void
+type ShowMainWindowFn = (options?: { skipAutoPaste?: boolean }) => void
 
 /** 路由回调：在搜索框填入查询（由 index.ts 注入） */
 type FillSearchFn = (query: string) => void
@@ -157,10 +157,11 @@ export class DeepLinkRouter {
     // 路由匹配
     if (host === 'plugin') {
       const subAction = pathParts[0] // run, install, view
-      if (subAction === 'run' && pathParts.length >= 3) {
+      if (subAction === 'run' && pathParts.length >= 2) {
         const pluginId = safeDecodeURIComponent(pathParts[1])
-        const featureCode = safeDecodeURIComponent(pathParts[2])
-        if (!pluginId || !featureCode) return null
+        const featureCode = pathParts.length > 2 ? safeDecodeURIComponent(pathParts[2]) : undefined
+        if (!pluginId) return null
+        if (featureCode === null) return null // malformed percent encoding
         return {
           action: 'plugin/run',
           pluginId,
@@ -224,9 +225,11 @@ export class DeepLinkRouter {
    * 处理 plugin/run 路由
    */
   private async handlePluginRun(route: DeepLinkRoute): Promise<DeepLinkHandleResult> {
-    const { pluginId, featureCode, params } = route
-    if (!pluginId || !featureCode) {
-      return { success: false, action: 'plugin/run', error: '缺少 pluginId 或 featureCode' }
+    const { pluginId, params } = route
+    let { featureCode } = route
+
+    if (!pluginId) {
+      return { success: false, action: 'plugin/run', error: '缺少 pluginId' }
     }
 
     const plugin = this.deps.pluginManager.get(pluginId)
@@ -245,8 +248,19 @@ export class DeepLinkRouter {
       return { success: false, action: 'plugin/run', error: '插件已禁用' }
     }
 
-    // 检查 featureCode 是否存在
+    // 检查 featureCode 是否存在，如果不存在且只有一个 feature，使用它 (或者是 index)
     const features = this.deps.pluginManager.getFeatures(pluginId)
+    if (!featureCode) {
+      if (features.find(f => f.code === 'index')) {
+        featureCode = 'index'
+      } else if (features.length === 1) {
+        featureCode = features[0].code
+      } else {
+        await showDeepLinkError('运行失败', '链接未指定功能码且插件包含多个功能，调用不明确。')
+        return { success: false, action: 'plugin/run', error: '未指定功能码且调用不明确' }
+      }
+    }
+
     const feature = features.find(f => f.code === featureCode)
     if (!feature) {
       await showDeepLinkError(
@@ -276,7 +290,7 @@ export class DeepLinkRouter {
     if (result.success) {
       // 如果插件有 UI，显示主窗口
       if (result.hasUI) {
-        this.deps.showMainWindow()
+        this.deps.showMainWindow({ skipAutoPaste: true })
       }
       return { success: true, action: 'plugin/run', confirmed: true }
     }
@@ -288,7 +302,7 @@ export class DeepLinkRouter {
    * 处理插件未安装的情况 — 尝试从商店安装并运行
    */
   private async handlePluginNotInstalled(route: DeepLinkRoute): Promise<DeepLinkHandleResult> {
-    const { pluginId, featureCode, params } = route
+    const { pluginId, params } = route
     if (!pluginId) {
       return { success: false, action: route.action, error: '缺少 pluginId' }
     }
@@ -360,13 +374,25 @@ export class DeepLinkRouter {
     }).show()
 
     // 如果是从 plugin/run 过来的，安装后自动运行
-    if (route.action === 'plugin/run' && featureCode) {
-      const input = params['input'] || ''
-      const runResult = await this.deps.pluginManager.run(pluginId, featureCode, input || undefined)
-      if (runResult.success && runResult.hasUI) {
-        this.deps.showMainWindow()
+    if (route.action === 'plugin/run') {
+      let targetFeatureCode = route.featureCode
+      const features = this.deps.pluginManager.getFeatures(pluginId)
+      if (!targetFeatureCode) {
+        if (features.find(f => f.code === 'index')) {
+          targetFeatureCode = 'index'
+        } else if (features.length === 1) {
+          targetFeatureCode = features[0].code
+        }
       }
-      return { success: runResult.success, action: 'plugin/run', confirmed: true }
+      
+      if (targetFeatureCode) {
+        const input = params['input'] || ''
+        const runResult = await this.deps.pluginManager.run(pluginId, targetFeatureCode, input || undefined)
+        if (runResult.success && runResult.hasUI) {
+          this.deps.showMainWindow({ skipAutoPaste: true })
+        }
+        return { success: runResult.success, action: 'plugin/run', confirmed: true }
+      }
     }
 
     return { success: true, action: route.action, confirmed: true }
@@ -402,6 +428,16 @@ export class DeepLinkRouter {
   private handleSettings(route: DeepLinkRoute): DeepLinkHandleResult {
     const section = route.section
 
+    if (section === 'ai' || section === 'ai-settings') {
+      this.deps.openSystemPage('ai-settings')
+      return { success: true, action: 'settings' }
+    }
+    
+    if (section === 'ai-mcp-settings' || section === 'ai-tools-settings' || section === 'ai-skills-settings') {
+      this.deps.openSystemPage(section)
+      return { success: true, action: 'settings' }
+    }
+
     // 映射 URL section 到设置页 section
     const sectionMap: Record<string, string> = {
       'general': 'general',
@@ -411,9 +447,7 @@ export class DeepLinkRouter {
       'permissions': 'permissions',
       'security': 'security',
       'developer': 'developer',
-      'about': 'about',
-      'ai': 'dashboard',
-      'ai-settings': 'dashboard'
+      'about': 'about'
     }
 
     const mappedSection = section ? sectionMap[section] : undefined
@@ -436,7 +470,7 @@ export class DeepLinkRouter {
   private handleSearch(route: DeepLinkRoute): DeepLinkHandleResult {
     const query = route.params['q'] || ''
 
-    this.deps.showMainWindow()
+    this.deps.showMainWindow({ skipAutoPaste: !!query })
 
     if (query && this.deps.fillSearch) {
       this.deps.fillSearch(query)

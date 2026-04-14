@@ -141,6 +141,7 @@ let _openclawService: OpenClawNodeService | null = null
 let _superPanelManager: SuperPanelManager | null = null
 let deepLinkRouter: DeepLinkRouter | null = null
 let pendingDeepLinkUrl: string | null = null
+let lastDeepLinkTime: number = 0
 const pluginManager = new PluginManager()
 const pluginWindowManager = new PluginWindowManager()
 const themeManager = new ThemeManager()
@@ -205,6 +206,7 @@ const handleSecondInstance = (_event: Electron.Event, argv: string[]) => {
   // Windows/Linux: deep link URL 通过命令行参数传入
   const deepLinkUrl = argv.find(arg => arg.startsWith('mulby://'))
   if (deepLinkUrl) {
+    lastDeepLinkTime = Date.now()
     console.log('[DeepLink] 从 second-instance 收到链接:', deepLinkUrl)
     if (deepLinkRouter) {
       void deepLinkRouter.handleUrl(deepLinkUrl)
@@ -535,6 +537,7 @@ console.log('[DeepLink] 已注册 mulby:// 协议')
 // macOS: 通过 open-url 事件接收 deep link（包括首次启动和已运行时）
 app.on('open-url', (event, url) => {
   event.preventDefault()
+  lastDeepLinkTime = Date.now()
   console.log('[DeepLink] macOS open-url 事件:', url)
   if (deepLinkRouter) {
     void deepLinkRouter.handleUrl(url)
@@ -678,11 +681,10 @@ function resolveMainWindowVisibleBounds(currentVisibleBounds: Rectangle): Rectan
 }
 
 function shouldSuppressMainBlurHide(): boolean {
-  return process.platform === 'win32' && Date.now() < suppressMainBlurHideUntil
+  return Date.now() < suppressMainBlurHideUntil
 }
 
 function extendMainBlurHideSuppression(durationMs: number): void {
-  if (process.platform !== 'win32') return
   suppressMainBlurHideUntil = Math.max(suppressMainBlurHideUntil, Date.now() + durationMs)
 }
 
@@ -991,7 +993,7 @@ function createWindow() {
   })
 }
 
-function showMainWindow() {
+function showMainWindow(options?: { skipAutoPaste?: boolean }) {
   if (!mainWindow || mainWindow.isDestroyed()) {
     return
   }
@@ -1063,10 +1065,13 @@ function showMainWindow() {
     systemPageWindowManager.showAttached()
 
     // 智能剪贴板自动粘贴
-    const appSettings = appSettingsManager.getSettings()
-    if (appSettings.input.autoPasteOnShow && clipboardWatcher.isRecentlyChanged(appSettings.input.autoPasteMaxAge)) {
-      // 通知渲染进程尝试自动粘贴
-      mainWindow.webContents.send('clipboard:autoPaste')
+    const skipAutoPaste = options?.skipAutoPaste || (Date.now() - lastDeepLinkTime < 1000)
+    if (!skipAutoPaste) {
+      const appSettings = appSettingsManager.getSettings()
+      if (appSettings.input.autoPasteOnShow && clipboardWatcher.isRecentlyChanged(appSettings.input.autoPasteMaxAge)) {
+        // 通知渲染进程尝试自动粘贴
+        mainWindow.webContents.send('clipboard:autoPaste')
+      }
     }
 
     // 延迟恢复 blur 监听（确保窗口完全获得焦点）
