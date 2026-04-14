@@ -644,7 +644,7 @@ export class SystemPageWindowManager {
   private normalizeRoute(input: OpenSystemPagePayload): OpenSystemPagePayload {
     const page = input.page
     if (page !== 'settings') {
-      return { page }
+      return { page, detailsPluginId: input.detailsPluginId }
     }
     return {
       page: 'settings',

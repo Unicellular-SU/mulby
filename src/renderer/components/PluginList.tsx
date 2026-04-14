@@ -971,6 +971,7 @@ function PluginList({
       if (item.pluginItem) {
         menuItems.push({ id: 'show-details', label: '查看插件详情' })
         menuItems.push({ id: 'config-shortcut', label: '配置快捷键' })
+        menuItems.push({ id: 'copy-launch-link', label: '复制启动链接' })
       }
 
       // 仅非内置插件显示卸载选项
@@ -1073,6 +1074,14 @@ function PluginList({
             shortcutCommandHint: item.pluginItem.displayName
           })
           window.mulby.window.hide()
+        }
+        break
+      case 'copy-launch-link':
+        if (item.pluginItem) {
+          const { pluginId, featureCode } = item.pluginItem
+          const launchUrl = `mulby://plugin/run/${encodeURIComponent(pluginId)}/${encodeURIComponent(featureCode)}`
+          void window.mulby.clipboard.writeText(launchUrl)
+          window.mulby.notification.show('启动链接已复制到剪贴板')
         }
         break
       case 'uninstall':

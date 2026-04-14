@@ -72,6 +72,11 @@ export function createAppPluginApi(ipcRenderer: IpcRenderer) {
         const listener = (_event: unknown, payload?: { cmdLabel?: string }) => callback(payload)
         ipcRenderer.on('app:openCommandShortcuts', listener)
         return () => ipcRenderer.removeListener('app:openCommandShortcuts', listener)
+      },
+      onSetSearchText: (callback: (query: string) => void) => {
+        const listener = (_event: unknown, query: string) => callback(query)
+        ipcRenderer.on('app:setSearchText', listener)
+        return () => ipcRenderer.removeListener('app:setSearchText', listener)
       }
     },
 

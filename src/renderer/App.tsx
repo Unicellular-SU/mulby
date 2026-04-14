@@ -972,7 +972,6 @@ function MainApp() {
     setQuery('')
     setPayloadText('')
   }, [])
-
   const applySearchTextInput = useCallback((value: string) => {
     if (shouldUseSummaryText(value)) {
       setPayloadText(value)
@@ -981,6 +980,16 @@ function MainApp() {
     }
     setQuery(value)
   }, [])
+
+  useEffect(() => {
+    const cleanup = window.mulby.app.onSetSearchText((queryText) => {
+      // 通过 requestAnimationFrame 确保在正确的渲染周期应用
+      requestAnimationFrame(() => {
+        applySearchTextInput(queryText)
+      })
+    })
+    return cleanup
+  }, [applySearchTextInput])
 
   const replaceTextInput = useCallback((value: string) => {
     if (shouldUseSummaryText(value)) {

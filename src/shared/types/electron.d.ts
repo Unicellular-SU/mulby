@@ -518,6 +518,7 @@ export interface ElectronAPI {
     onOpenLogViewer: (callback: () => void) => () => void
     onOpenStorageExplorer: (callback: () => void) => () => void
     onOpenCommandShortcuts: (callback: (payload?: { cmdLabel?: string }) => void) => () => void
+    onSetSearchText: (callback: (query: string) => void) => () => void
   }
   systemPlugin: {
     setActive: (pluginId: string | null) => Promise<boolean>

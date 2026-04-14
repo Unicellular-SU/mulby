@@ -84,6 +84,10 @@
   "build": {
     "appId": "com.mulby.app",
     "productName": "Mulby",
+    "protocols": {
+      "name": "Mulby",
+      "schemes": ["mulby"]
+    },
     "files": [
       "dist/**/*",
       "package.json"
@@ -121,7 +125,11 @@
         "NSLocationWhenInUseUsageDescription": "Mulby 需要访问您的位置以提供位置相关功能（如地图定位、天气查询等）",
         "NSLocationUsageDescription": "Mulby 需要访问您的位置以提供位置相关功能",
         "NSCameraUsageDescription": "插件可能需要访问摄像头以提供拍照、视频等功能",
-        "NSMicrophoneUsageDescription": "插件可能需要访问麦克风以提供录音、语音识别等功能"
+        "NSMicrophoneUsageDescription": "插件可能需要访问麦克风以提供录音、语音识别等功能",
+        "CFBundleURLTypes": [{
+          "CFBundleURLName": "com.mulby.app",
+          "CFBundleURLSchemes": ["mulby"]
+        }]
       }
     },
     "asarUnpack": [
@@ -170,7 +178,8 @@
       "target": [
         "AppImage",
         "deb"
-      ]
+      ],
+      "mimeTypes": ["x-scheme-handler/mulby"]
     }
   }
 }

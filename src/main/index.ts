@@ -52,6 +52,9 @@ import { createMcpServerManager, type McpServerManager } from './ai/mcp-server'
 import { registerMcpServerHandlers } from './ipc/mcp-server'
 import { SuperPanelManager } from './services/super-panel-manager'
 import { cleanupNativeKeySim } from './services/native-keyboard-sim'
+import { DeepLinkRouter } from './services/deep-link'
+import { PluginInstaller } from './plugin/installer'
+import { PluginStoreService } from './plugin/store-service'
 
 patchConsoleWithTimestamp()
 
@@ -136,6 +139,8 @@ let mcpServerManager: McpServerManager | null = null
 let _inputHookService: InputHookService | null = null
 let _openclawService: OpenClawNodeService | null = null
 let _superPanelManager: SuperPanelManager | null = null
+let deepLinkRouter: DeepLinkRouter | null = null
+let pendingDeepLinkUrl: string | null = null
 const pluginManager = new PluginManager()
 const pluginWindowManager = new PluginWindowManager()
 const themeManager = new ThemeManager()
@@ -192,8 +197,20 @@ function isWindowAvailable(win: BrowserWindow | null): win is BrowserWindow {
   }
 }
 
-const handleSecondInstance = () => {
+const handleSecondInstance = (_event: Electron.Event, argv: string[]) => {
   if (isQuitting) {
+    return
+  }
+
+  // Windows/Linux: deep link URL 通过命令行参数传入
+  const deepLinkUrl = argv.find(arg => arg.startsWith('mulby://'))
+  if (deepLinkUrl) {
+    console.log('[DeepLink] 从 second-instance 收到链接:', deepLinkUrl)
+    if (deepLinkRouter) {
+      void deepLinkRouter.handleUrl(deepLinkUrl)
+    } else {
+      pendingDeepLinkUrl = deepLinkUrl
+    }
     return
   }
 
@@ -506,13 +523,43 @@ async function shutdownMainProcessResources(): Promise<void> {
   return shutdownPromise
 }
 
+// 注册 mulby:// 自定义协议（必须在 requestSingleInstanceLock 之前）
+if (!app.isPackaged) {
+  // 开发模式：需要传入可执行文件路径，且必须使用绝对应用路径（防止外部拉起时工作目录错误）
+  app.setAsDefaultProtocolClient('mulby', process.execPath, [app.getAppPath()])
+} else {
+  app.setAsDefaultProtocolClient('mulby')
+}
+console.log('[DeepLink] 已注册 mulby:// 协议')
+
+// macOS: 通过 open-url 事件接收 deep link（包括首次启动和已运行时）
+app.on('open-url', (event, url) => {
+  event.preventDefault()
+  console.log('[DeepLink] macOS open-url 事件:', url)
+  if (deepLinkRouter) {
+    void deepLinkRouter.handleUrl(url)
+  } else {
+    // 路由器尚未就绪，缓存待处理
+    pendingDeepLinkUrl = url
+  }
+})
+
+// Windows/Linux 冷启动: deep link URL 通过 process.argv 传入（首次启动时 second-instance 不触发）
+if (process.platform !== 'darwin') {
+  const coldStartUrl = process.argv.find(arg => arg.startsWith('mulby://'))
+  if (coldStartUrl) {
+    console.log('[DeepLink] 冷启动 process.argv 中发现链接:', coldStartUrl)
+    pendingDeepLinkUrl = coldStartUrl
+  }
+}
+
 // 单实例锁：确保只有一个应用实例运行
 const gotTheLock = app.requestSingleInstanceLock()
 if (!gotTheLock) {
   isQuitting = true
   app.quit()
 } else {
-  // 当第二个实例启动时，聚焦到已有窗口
+  // 当第二个实例启动时，聚焦到已有窗口或处理 deep link
   app.on('second-instance', handleSecondInstance)
 }
 
@@ -1103,6 +1150,45 @@ function openTaskSchedulerView() {
   openSystemPageView({ page: 'task-scheduler' })
 }
 
+/**
+ * 初始化 Deep Link 路由器
+ *
+ * 必须在 pluginManager.init() 完成后调用，
+ * 因为路由器需要访问插件管理器和商店服务。
+ */
+function initDeepLinkRouter() {
+  const installer = new PluginInstaller()
+  const storeService = new PluginStoreService(pluginManager, installer)
+
+  deepLinkRouter = new DeepLinkRouter({
+    pluginManager,
+    storeService,
+    openSystemPage: (page, options) => {
+      openSystemPageView({
+        page: page as import('./services/system-page-window-manager').SystemPageId,
+        settingsSection: options?.settingsSection as SettingsCenterSection,
+        detailsPluginId: options?.detailsPluginId
+      })
+    },
+    showMainWindow,
+    fillSearch: (query) => {
+      const mainWin = getMainWindow()
+      if (mainWin && !mainWin.isDestroyed()) {
+        mainWin.webContents.send('app:setSearchText', query)
+      }
+    }
+  })
+
+  console.log('[DeepLink] 路由器已初始化')
+
+  // 处理在路由器就绪之前缓存的挂起 URL
+  if (pendingDeepLinkUrl) {
+    const url = pendingDeepLinkUrl
+    pendingDeepLinkUrl = null
+    console.log('[DeepLink] 处理挂起的链接:', url)
+    void deepLinkRouter.handleUrl(url)
+  }
+}
 
 
 function resetMainWindowPosition() {
@@ -1508,6 +1594,8 @@ app.whenReady().then(async () => {
             })
           }
         }
+        // 初始化 Deep Link 路由器
+        initDeepLinkRouter()
       })
     })
     void onboardingWindowManager.show()
@@ -1545,6 +1633,9 @@ app.whenReady().then(async () => {
         })
       }
     }
+
+    // 初始化 Deep Link 路由器
+    initDeepLinkRouter()
   }
 })
 
