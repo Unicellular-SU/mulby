@@ -1412,9 +1412,13 @@ app.whenReady().then(async () => {
     // 注册主窗口到主题管理器
     themeManager.registerWindow(mainWindow!)
 
-    // 设置窗口管理器到插件管理器
     pluginManager.setWindowManager(pluginWindowManager)
     pluginManager.setSystemPluginWindowManager(systemPluginWindowManager)
+
+    // 注入系统页面打开回调（供内置系统插件的「打开设置/商店」等命令使用）
+    pluginManager.setSystemPageOpenHandler((page: string) => {
+      openSystemPageView({ page: page as import('../main/services/system-page-window-manager').SystemPageId })
+    })
 
     appShortcutManager.apply(appSettingsManager.getSettings().shortcuts)
     // 应用鼠标触发和双击修饰键的初始设置

@@ -146,6 +146,11 @@
       {
         "from": "src/main/ai/mcp-server/stdio-bridge.cjs",
         "to": "mcp/stdio-bridge.cjs"
+      },
+      {
+        "from": "internal-plugins",
+        "to": "internal-plugins",
+        "filter": ["**/*"]
       }
     ],
     "win": {

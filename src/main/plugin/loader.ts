@@ -1,6 +1,7 @@
 import { readFileSync, existsSync, readdirSync } from 'fs'
 import { join } from 'path'
 import { PluginManifest, Plugin, PluginIcon, ResolvedIcon } from '../../shared/types/plugin'
+import { isSystemPlugin } from './internal-plugins'
 
 /**
  * 检查插件是否小于当前平台。
@@ -69,14 +70,18 @@ export class PluginLoader {
         return null
       }
 
-      const resolvedMain = this.resolveMainEntry(manifest.main, pluginPath)
-      if (!resolvedMain) {
-        console.warn(`Invalid plugin entry in ${pluginPath}: main file not found (${manifest.main})`)
-        return null
-      }
-      if (resolvedMain !== manifest.main) {
-        console.warn(`[PluginLoader] Main entry fallback applied for ${manifest.name}: ${manifest.main} -> ${resolvedMain}`)
-        manifest.main = resolvedMain
+      // 系统插件没有 main 入口，跳过入口文件校验
+      const pluginId = manifest.id || manifest.name
+      if (!isSystemPlugin(pluginId)) {
+        const resolvedMain = this.resolveMainEntry(manifest.main, pluginPath)
+        if (!resolvedMain) {
+          console.warn(`Invalid plugin entry in ${pluginPath}: main file not found (${manifest.main})`)
+          return null
+        }
+        if (resolvedMain !== manifest.main) {
+          console.warn(`[PluginLoader] Main entry fallback applied for ${manifest.name}: ${manifest.main} -> ${resolvedMain}`)
+          manifest.main = resolvedMain
+        }
       }
 
       const resolvedIcon = this.resolveIcon(manifest.icon, pluginPath)
@@ -99,7 +104,12 @@ export class PluginLoader {
 
   // 验证 manifest 格式
   private validateManifest(manifest: PluginManifest): boolean {
-    const required = ['name', 'version', 'displayName', 'main', 'features']
+    // 系统插件不需要 main 字段
+    const pluginId = manifest.id || manifest.name
+    const isSystem = isSystemPlugin(pluginId)
+    const required = isSystem
+      ? ['name', 'version', 'displayName', 'features']
+      : ['name', 'version', 'displayName', 'main', 'features']
     for (const field of required) {
       if (!(field in manifest)) {
         return false

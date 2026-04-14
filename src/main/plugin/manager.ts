@@ -1,6 +1,8 @@
 import { app, Notification } from 'electron'
 import { join } from 'path'
 import { existsSync, rmSync } from 'fs'
+import { getInternalPluginDirs, isSystemPlugin } from './internal-plugins'
+import { SystemCommandExecutor } from './system-command-executor'
 import { collectDevPluginWatchTargets } from './dev-reload-utils'
 import { PluginLoader } from './loader'
 import { PluginRunner } from './runner'
@@ -153,12 +155,15 @@ export class PluginManager {
   private isReloading: boolean = false
   private skipNextWindowClosedHandling: Set<string> = new Set()
   private pluginToolsListener?: (event: 'refresh' | 'remove', pluginId: string, pluginName: string, tools: import('../../shared/types/plugin').PluginToolSchema[]) => void
+  private systemCommandExecutor: SystemCommandExecutor
+  private systemPageOpenHandler?: (page: string) => void
 
   constructor() {
     this.stateManager = new PluginStateManager()
     this.hostManager = new PluginHostManager()
     this.searchWorker = new PluginSearchWorker()
     this.commandDisabledManager = new PluginCommandDisabledManager()
+    this.systemCommandExecutor = new SystemCommandExecutor()
     this.commandShortcutManager = new PluginCommandShortcutManager({
       listCommands: (pluginId?: string) => this.listCommands(pluginId),
       getPlugin: (pluginId: string) => this.plugins.get(pluginId),
@@ -227,6 +232,13 @@ export class PluginManager {
     this.systemPluginWindowManager = manager
   }
 
+  /**
+   * 设置系统页面打开回调（由 index.ts 注入，用于系统插件的「打开设置/插件商店」等命令）
+   */
+  setSystemPageOpenHandler(handler: (page: string) => void) {
+    this.systemPageOpenHandler = handler
+  }
+
   // 设置 plugin tools 变更监听器（用于同步 pluginToolRegistry）
   setPluginToolsListener(listener: (event: 'refresh' | 'remove', pluginId: string, pluginName: string, tools: import('../../shared/types/plugin').PluginToolSchema[]) => void): void {
     this.pluginToolsListener = listener
@@ -281,6 +293,20 @@ export class PluginManager {
       ...(app.isPackaged ? [] : [devPluginsDir]),
       ...customDevDirs
     ])
+
+    // 第一步：加载内置插件（系统插件等）
+    // 内置插件始终启用，不受用户状态管理控制
+    const internalDirs = getInternalPluginDirs()
+    for (const internalDir of internalDirs) {
+      const loader = new PluginLoader(internalDir)
+      // 内置插件目录结构较特殊：直接就是一个插件（非目录的目录扫描）
+      const plugin = loader.loadPlugin(internalDir)
+      if (plugin && !this.plugins.has(plugin.id)) {
+        plugin.enabled = true  // 内置插件始终启用
+        this.plugins.set(plugin.id, plugin)
+        console.log(`[PluginManager] 加载内置插件: ${plugin.manifest.displayName} (${plugin.id})`)
+      }
+    }
 
     for (const dir of dirs) {
       const loader = new PluginLoader(dir)
@@ -636,6 +662,19 @@ export class PluginManager {
     }
     if (!plugin.enabled) {
       return { success: false, error: 'Plugin is disabled' }
+    }
+
+    // 系统插件拦截：直接调用内建处理函数，不走 Host/Worker 流程
+    if (isSystemPlugin(plugin.id)) {
+      const normalizedInput = normalizeInputPayload(input)
+      const result = await this.systemCommandExecutor.execute(featureCode, normalizedInput, {
+        hideMainWindow: () => this.windowManager?.hideMainWindowForCapture(),
+        openSystemPage: (page: string) => this.systemPageOpenHandler?.(page)
+      })
+      if (result.success) {
+        this.stateManager.recordRecentUsage(plugin.id, featureCode)
+      }
+      return result
     }
 
     // 懒加载：首次运行时调用 onLoad 钩子

@@ -1,0 +1,207 @@
+{
+  "id": "__mulby_system",
+  "name": "__mulby_system",
+  "version": "1.0.0",
+  "displayName": "系统命令",
+  "description": "Mulby 内置系统命令集，提供系统控制、屏幕工具、应用管理等快捷指令",
+  "author": "Mulby",
+  "icon": "icon.svg",
+  "features": [
+    {
+      "code": "lock-screen",
+      "explain": "锁定屏幕",
+      "icon": "icons/lock-screen.svg",
+      "cmds": [
+        { "type": "keyword", "value": "锁屏" },
+        { "type": "keyword", "value": "lock" }
+      ]
+    },
+    {
+      "code": "sleep",
+      "explain": "系统睡眠",
+      "icon": "icons/sleep.svg",
+      "cmds": [
+        { "type": "keyword", "value": "睡眠" },
+        { "type": "keyword", "value": "sleep" }
+      ]
+    },
+    {
+      "code": "reboot",
+      "explain": "重启电脑",
+      "icon": "icons/reboot.svg",
+      "cmds": [
+        { "type": "keyword", "value": "重启" },
+        { "type": "keyword", "value": "reboot" },
+        { "type": "keyword", "value": "restart" }
+      ]
+    },
+    {
+      "code": "shutdown",
+      "explain": "关闭电脑",
+      "icon": "icons/shutdown.svg",
+      "cmds": [
+        { "type": "keyword", "value": "关机" },
+        { "type": "keyword", "value": "shutdown" }
+      ]
+    },
+    {
+      "code": "logoff",
+      "explain": "注销当前用户",
+      "icon": "icons/logoff.svg",
+      "cmds": [
+        { "type": "keyword", "value": "注销" },
+        { "type": "keyword", "value": "logoff" },
+        { "type": "keyword", "value": "logout" }
+      ]
+    },
+    {
+      "code": "color-picker",
+      "explain": "屏幕取色器",
+      "icon": "icons/color-picker.svg",
+      "cmds": [
+        { "type": "keyword", "value": "取色" },
+        { "type": "keyword", "value": "color" },
+        { "type": "keyword", "value": "picker" }
+      ]
+    },
+    {
+      "code": "screenshot",
+      "explain": "截图并复制到剪贴板",
+      "icon": "icons/screenshot.svg",
+      "cmds": [
+        { "type": "keyword", "value": "截图" },
+        { "type": "keyword", "value": "screenshot" },
+        { "type": "keyword", "value": "capture" }
+      ]
+    },
+    {
+      "code": "open-url",
+      "explain": "在浏览器中打开网址",
+      "icon": "icons/open-url.svg",
+      "cmds": [
+        {
+          "type": "regex",
+          "match": "^(https?://|www\\.)[^\\s]+",
+          "label": "打开网址",
+          "explain": "输入 URL 在浏览器中打开"
+        }
+      ]
+    },
+    {
+      "code": "open-settings",
+      "explain": "打开 Mulby 设置",
+      "icon": "icons/settings.svg",
+      "cmds": [
+        { "type": "keyword", "value": "设置" },
+        { "type": "keyword", "value": "settings" },
+        { "type": "keyword", "value": "偏好设置" }
+      ]
+    },
+    {
+      "code": "open-plugin-store",
+      "explain": "打开插件商店",
+      "icon": "icons/plugin-store.svg",
+      "cmds": [
+        { "type": "keyword", "value": "插件商店" },
+        { "type": "keyword", "value": "store" },
+        { "type": "keyword", "value": "商店" }
+      ]
+    },
+    {
+      "code": "open-plugin-manager",
+      "explain": "管理已安装插件",
+      "icon": "icons/plugin-manager.svg",
+      "cmds": [
+        { "type": "keyword", "value": "插件管理" },
+        { "type": "keyword", "value": "plugins" }
+      ]
+    },
+    {
+      "code": "open-ai-settings",
+      "explain": "AI 模型与配置",
+      "icon": "icons/ai-settings.svg",
+      "cmds": [
+        { "type": "keyword", "value": "AI设置" },
+        { "type": "keyword", "value": "AI" },
+        { "type": "keyword", "value": "模型" }
+      ]
+    },
+    {
+      "code": "open-background-plugins",
+      "explain": "查看后台运行的插件",
+      "icon": "icons/background-plugins.svg",
+      "cmds": [
+        { "type": "keyword", "value": "后台插件" },
+        { "type": "keyword", "value": "background" },
+        { "type": "keyword", "value": "任务管理" }
+      ]
+    },
+    {
+      "code": "open-task-scheduler",
+      "explain": "定时任务调度器",
+      "icon": "icons/task-scheduler.svg",
+      "cmds": [
+        { "type": "keyword", "value": "定时任务" },
+        { "type": "keyword", "value": "scheduler" },
+        { "type": "keyword", "value": "计划任务" }
+      ]
+    },
+    {
+      "code": "open-user-data-dir",
+      "explain": "打开用户数据目录",
+      "icon": "icons/folder.svg",
+      "cmds": [
+        { "type": "keyword", "value": "用户数据" },
+        { "type": "keyword", "value": "数据目录" },
+        { "type": "keyword", "value": "userdata" }
+      ]
+    },
+    {
+      "code": "open-logs-dir",
+      "explain": "打开日志目录",
+      "icon": "icons/logs.svg",
+      "cmds": [
+        { "type": "keyword", "value": "日志" },
+        { "type": "keyword", "value": "logs" }
+      ]
+    },
+    {
+      "code": "open-plugins-dir",
+      "explain": "打开插件安装目录",
+      "icon": "icons/folder.svg",
+      "cmds": [
+        { "type": "keyword", "value": "插件目录" },
+        { "type": "keyword", "value": "plugins dir" }
+      ]
+    },
+    {
+      "code": "restart-app",
+      "explain": "重启 Mulby",
+      "icon": "icons/restart-app.svg",
+      "cmds": [
+        { "type": "keyword", "value": "重启Mulby" },
+        { "type": "keyword", "value": "重启应用" },
+        { "type": "keyword", "value": "restart app" }
+      ]
+    },
+    {
+      "code": "quit-app",
+      "explain": "退出 Mulby",
+      "icon": "icons/quit-app.svg",
+      "cmds": [
+        { "type": "keyword", "value": "退出" },
+        { "type": "keyword", "value": "quit" },
+        { "type": "keyword", "value": "exit" }
+      ]
+    },
+    {
+      "code": "clear-clipboard",
+      "explain": "清空剪贴板",
+      "icon": "icons/clear-clipboard.svg",
+      "cmds": [
+        { "type": "keyword", "value": "清空剪贴板" },
+        { "type": "keyword", "value": "clear clipboard" }
+      ]
+    }
+  ]
+}
