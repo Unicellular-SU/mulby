@@ -32,26 +32,39 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: 20
-          cache: npm
-          cache-dependency-path: |
-            package-lock.json
-            packages/mulby-cli/package-lock.json
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
 
-      - name: Install app dependencies
-        run: npm ci --no-audit --no-fund
+      - name: Install dependencies
+        run: pnpm install
 
-      - name: Install CLI dependencies
-        run: npm run install:cli-deps
+      - name: Smoke test native modules (ensure electron-rebuild succeeded)
+        shell: bash
+        run: |
+          node -e "
+          const mods = ['better-sqlite3', 'sharp'];
+          let failed = false;
+          for (const m of mods) {
+            try { require(m); console.log('[native-smoke] ' + m + ' OK'); }
+            catch (e) { console.error('[native-smoke] ' + m + ' FAIL: ' + e.message); failed = true; }
+          }
+          if (failed) process.exit(1);
+          "
 
       - name: Verify app
-        run: npm run verify:app
+        run: pnpm run verify:app
 
       - name: Verify CLI
-        run: npm run verify:cli
+        run: pnpm run verify:cli
 
       - name: Workflow Summary
         if: always()

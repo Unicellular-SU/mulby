@@ -341,6 +341,16 @@ export interface PluginSetting {
 
 export interface PluginPermissions {
   runCommand?: boolean
+  /**
+   * 命令执行时允许继承的环境变量名列表
+   *
+   * - 未声明 / 空数组：仅继承内置安全基线（PATH、HOME、LANG 等）
+   * - `['JAVA_HOME', 'GOPATH']`：在安全基线之上额外继承指定变量
+   * - `'*'`：继承主进程全部环境变量（高风险，仅可信插件使用）
+   *
+   * 仅在 `runCommand === true` 时生效。
+   */
+  envKeys?: string[] | '*'
 }
 
 // 插件 AI Tool 声明（在 manifest 中声明，供 AI Agent 发现和调用）

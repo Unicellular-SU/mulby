@@ -27,6 +27,7 @@ import {
   nativeCaptureScreenRaw
 } from '../services/native-screen-capture'
 import { portalPickColor, isPortalColorPickAvailable } from '../services/linux-portal-color-pick'
+import { registerSystemInternalWindow, unregisterSystemInternalWindow } from '../services/ipc-caller-resolver'
 
 interface ColorPickResult {
   hex: string
@@ -393,6 +394,8 @@ async function colorPickWithOverlay(): Promise<ColorPickResult | null> {
         }
       })
 
+      registerSystemInternalWindow(win.id)
+
       pickerWindows.push({
         window: win,
         displayId: display.id,
@@ -400,6 +403,7 @@ async function colorPickWithOverlay(): Promise<ColorPickResult | null> {
       })
 
       win.on('closed', () => {
+        unregisterSystemInternalWindow(win.id)
         pickerWindows = pickerWindows.filter(pw => pw.window !== win)
       })
     })

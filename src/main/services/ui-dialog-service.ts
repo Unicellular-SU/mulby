@@ -1,5 +1,6 @@
 import { app, BrowserWindow, ipcMain, nativeTheme, screen } from 'electron'
 import { withIgnoringBlur, hasDetachedWindows } from './blur-manager'
+import { registerSystemInternalWindow, unregisterSystemInternalWindow } from './ipc-caller-resolver'
 
 export interface UiMessageBoxOptions {
   type?: 'none' | 'info' | 'error' | 'question' | 'warning'
@@ -448,7 +449,8 @@ export async function showInternalMessageBox(
       }
     })
 
-    // Place off-screen for invisible measurement
+    registerSystemInternalWindow(win.id)
+
     win.setPosition(-9999, -9999)
 
     const html = buildMessageBoxHtml({ options, channel, buttons, defaultId, cancelId, theme })
@@ -487,6 +489,7 @@ export async function showInternalMessageBox(
       ipcMain.on(channel, onResponse)
 
       win.on('closed', () => {
+        unregisterSystemInternalWindow(win.id)
         finish(cancelId)
       })
 

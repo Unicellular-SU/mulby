@@ -14,6 +14,7 @@ import { BrowserWindow, ipcMain, screen } from 'electron'
 import { join } from 'path'
 import type { ThemeManager } from './theme'
 import type { SuperPanelState } from './super-panel-manager'
+import { registerAppWindow, unregisterAppWindow } from './ipc-caller-resolver'
 
 // 面板尺寸
 const PANEL_WIDTH = 300
@@ -272,10 +273,16 @@ export class SuperPanelWindowManager {
           await win.loadFile(join(__dirname, '../renderer/super-panel.html'))
         }
 
+        // 先注册到 IPC 调用方来源解析器，避免 closed handler 先于 registerAppWindow 触发
+        // 导致注册表残留 / 漏解绑
+        const winId = win.id
+        registerAppWindow(winId)
+
         win.on('closed', () => {
           if (this.window === win) {
             this.window = null
           }
+          unregisterAppWindow(winId)
         })
 
         this.window = win

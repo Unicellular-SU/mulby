@@ -12,6 +12,7 @@ function createSettings(): CommandRunnerSettings {
     maxTimeoutMs: 300_000,
     maxOutputBytes: 1024 * 1024,
     maxConcurrent: 2,
+    maxQueueSize: 20,
     denyEnvKeys: [],
     maskEnvKeysInAudit: [],
     allowList: [],

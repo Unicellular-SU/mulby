@@ -12,6 +12,7 @@
 import { BrowserWindow, app, ipcMain, net, session } from 'electron'
 import { join } from 'node:path'
 import type { LocalSearchExecutor, WebSearchResult } from '../ai/tools/web-search'
+import { registerSystemInternalWindow, unregisterSystemInternalWindow } from './ipc-caller-resolver'
 
 // ==================== Parser Worker 管理 ====================
 
@@ -80,10 +81,11 @@ function ensureParserWorker(): BrowserWindow {
     }
   })
 
-  // 加载空白页以触发 preload 执行
+  registerSystemInternalWindow(parserWorker.id)
   parserWorker.loadURL('about:blank')
 
   parserWorker.on('closed', () => {
+    if (parserWorker) unregisterSystemInternalWindow(parserWorker.id)
     parserWorker = null
     parserReady = false
   })
@@ -205,6 +207,8 @@ export class SearchWindowService implements LocalSearchExecutor {
         session: ses,
       }
     })
+    registerSystemInternalWindow(win.id)
+    win.on('closed', () => unregisterSystemInternalWindow(win.id))
 
     try {
       await Promise.race([
@@ -395,6 +399,8 @@ export class SearchWindowService implements LocalSearchExecutor {
         devTools: !app.isPackaged
       }
     })
+    registerSystemInternalWindow(win.id)
+    win.on('closed', () => unregisterSystemInternalWindow(win.id))
 
     try {
       // Sec-Fetch-* 仅用于主导航请求（子资源由 Chromium 自动生成正确值）

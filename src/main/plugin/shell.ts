@@ -27,11 +27,19 @@ export class PluginShell {
    */
   async openExternal(url: string): Promise<void> {
     // 验证 URL 格式
+    let parsedUrl: URL
     try {
-      new URL(url)
+      parsedUrl = new URL(url)
     } catch {
       throw new Error(`Invalid URL: ${url}`)
     }
+
+    // 协议白名单限制，防止通过 smb: / file: / mk: 等危险协议执行恶意操作
+    const allowedProtocols = new Set(['http:', 'https:', 'mailto:', 'tel:'])
+    if (!allowedProtocols.has(parsedUrl.protocol.toLowerCase())) {
+      throw new Error(`Unsupported protocol: ${parsedUrl.protocol}`)
+    }
+
     await shell.openExternal(url)
   }
 

@@ -7,7 +7,7 @@ import { registerPluginHandlers } from './plugin'
 import type { PluginToolRegistry } from '../plugin/plugin-tools'
 import { registerThemeHandlers } from './theme'
 import { registerScreenHandlers } from './screen'
-import { registerShellHandlers } from './shell'
+import { registerShellHandlers, setShellPluginLookup } from './shell'
 import { registerDialogHandlers } from './dialog'
 import { registerSystemHandlers } from './system'
 import { registerDesktopHandlers } from './desktop'
@@ -70,6 +70,8 @@ export function registerAllHandlers(
   registerThemeHandlers(themeManager)
   registerScreenHandlers()
   registerShellHandlers()
+  // 注入插件查找函数，供 shell:runCommand 来源识别时检查 manifest 权限
+  setShellPluginLookup((pluginId) => pluginManager.get(pluginId))
   registerDialogHandlers()
   registerSystemHandlers()
   registerDesktopHandlers()

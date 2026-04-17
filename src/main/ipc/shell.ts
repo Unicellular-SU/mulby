@@ -1,6 +1,28 @@
 import { ipcMain } from 'electron'
 import { pluginShell } from '../plugin/shell'
 import { commandRunnerService } from '../services/command-runner'
+import { resolveIpcCallerSource } from '../services/ipc-caller-resolver'
+
+/**
+ * 插件管理器查找函数（延迟注入，避免循环依赖）
+ * 由 registerShellHandlers 的调用者通过 setPluginLookup 注入
+ */
+interface PluginLookupResult {
+  manifest: {
+    permissions?: {
+      runCommand?: boolean
+      envKeys?: string[] | '*'
+    }
+  }
+}
+
+let pluginLookup: ((pluginId: string) => PluginLookupResult | undefined) | null = null
+
+export function setShellPluginLookup(
+  lookup: (pluginId: string) => PluginLookupResult | undefined
+): void {
+  pluginLookup = lookup
+}
 
 export function registerShellHandlers() {
   // 打开文件
@@ -33,29 +55,72 @@ export function registerShellHandlers() {
     pluginShell.beep()
   })
 
-  ipcMain.handle('shell:runCommand', async (_event, input) => {
-    return await commandRunnerService.runCommand(input, {
-      source: 'app'
-    })
+  // 命令执行 — 根据调用方来源自动分发权限
+  ipcMain.handle('shell:runCommand', async (event, input) => {
+    const caller = resolveIpcCallerSource(event.sender)
+
+    if (caller.source === 'plugin' && caller.pluginId) {
+      // 插件来源：检查 manifest permissions
+      const plugin = pluginLookup?.(caller.pluginId)
+      const allowed = plugin?.manifest.permissions?.runCommand === true
+      const envKeys = plugin?.manifest.permissions?.envKeys
+      return await commandRunnerService.runCommand(input, {
+        source: 'plugin',
+        pluginId: caller.pluginId,
+        runCommandAllowed: allowed,
+        envKeys
+      })
+    }
+
+    if (caller.source === 'app') {
+      // 主应用来源
+      return await commandRunnerService.runCommand(input, {
+        source: 'app'
+      })
+    }
+
+    throw new Error(`拒绝 IPC 越权调用，拦截未知发送方 (${caller.source}) 执行高风险系统命令`)
   })
 
-  ipcMain.handle('shell:getRunCommandPolicy', () => {
+  ipcMain.handle('shell:getRunCommandPolicy', (event) => {
+    // 策略查询：仅主应用可访问
+    const caller = resolveIpcCallerSource(event.sender)
+    if (caller.source !== 'app') {
+      throw new Error('仅主应用可查询命令执行策略')
+    }
     return commandRunnerService.getPolicy()
   })
 
-  ipcMain.handle('shell:updateRunCommandPolicy', (_event, patch) => {
+  ipcMain.handle('shell:updateRunCommandPolicy', (event, patch) => {
+    // 策略修改：仅主应用可修改
+    const caller = resolveIpcCallerSource(event.sender)
+    if (caller.source !== 'app') {
+      throw new Error('仅主应用可修改命令执行策略')
+    }
     return commandRunnerService.updatePolicy(patch || {})
   })
 
-  ipcMain.handle('shell:listRunCommandAudit', (_event, limit?: number) => {
+  ipcMain.handle('shell:listRunCommandAudit', (event, limit?: number) => {
+    const caller = resolveIpcCallerSource(event.sender)
+    if (caller.source !== 'app') {
+      throw new Error('仅主应用可查看命令执行审计日志')
+    }
     return commandRunnerService.listAudit(limit)
   })
 
-  ipcMain.handle('shell:clearRunCommandAudit', () => {
+  ipcMain.handle('shell:clearRunCommandAudit', (event) => {
+    const caller = resolveIpcCallerSource(event.sender)
+    if (caller.source !== 'app') {
+      throw new Error('仅主应用可清除命令执行审计日志')
+    }
     return commandRunnerService.clearAudit()
   })
 
-  ipcMain.handle('shell:clearRunCommandTrusted', () => {
+  ipcMain.handle('shell:clearRunCommandTrusted', (event) => {
+    const caller = resolveIpcCallerSource(event.sender)
+    if (caller.source !== 'app') {
+      throw new Error('仅主应用可清除命令信任记录')
+    }
     return commandRunnerService.clearTrustedFingerprints()
   })
 }

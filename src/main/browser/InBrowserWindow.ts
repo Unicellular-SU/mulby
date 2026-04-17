@@ -1,5 +1,6 @@
 import { BrowserWindow, Session } from 'electron';
 import { InBrowserOp, InBrowserOptions } from '../../shared/types/inbrowser';
+import { registerSystemInternalWindow, unregisterSystemInternalWindow } from '../services/ipc-caller-resolver';
 
 export class InBrowserWindow {
     public window: BrowserWindow;
@@ -23,6 +24,11 @@ export class InBrowserWindow {
         this.id = this.window.id;
         this.cleanupSessionOnClose = cleanupSessionOnClose;
         this.ownedSession = this.window.webContents.session;
+
+        registerSystemInternalWindow(this.id);
+        this.window.once('closed', () => {
+            unregisterSystemInternalWindow(this.id);
+        });
 
         if (this.cleanupSessionOnClose) {
             this.window.once('closed', () => {

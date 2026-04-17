@@ -7,7 +7,7 @@
  */
 
 import { app, shell, clipboard, Notification } from 'electron'
-import { exec } from 'child_process'
+import { exec, spawn } from 'child_process'
 import { join } from 'path'
 import type { InputPayload } from '../../shared/types/plugin'
 
@@ -282,10 +282,25 @@ export class SystemCommandExecutor {
    * 执行系统命令（fire-and-forget，不阻塞）
    */
   private execCommand(cmd: string): void {
-    exec(cmd, (error) => {
-      if (error) {
-        console.error(`[SystemCommand] 命令执行失败: ${cmd}`, error)
+    // 对不含管道/重定向/引号的简单命令，使用 spawn 免 shell 避免注入风险
+    if (!cmd.includes('|') && !cmd.includes('&&') && !cmd.includes('>') && !cmd.includes("'") && !cmd.includes('"')) {
+      const parts = cmd.split(/\s+/)
+      const executable = parts[0]
+      const args = parts.slice(1)
+      if (executable) {
+        const child = spawn(executable, args, { detached: true, stdio: 'ignore' })
+        child.on('error', (err) => {
+          console.error(`[SystemCommand] 命令启动失败: ${cmd}`, err)
+        })
+        child.unref()
       }
-    })
+    } else {
+      // 仍需 shell 的复合命令使用 exec
+      exec(cmd, (error) => {
+        if (error) {
+          console.error(`[SystemCommand] 命令执行失败: ${cmd}`, error)
+        }
+      })
+    }
   }
 }

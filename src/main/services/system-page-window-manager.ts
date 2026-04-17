@@ -15,6 +15,7 @@ import {
   getWindowsFramelessSurfaceWindowBounds,
   shouldUseWindowsFramelessSurface
 } from './window-surface'
+import { registerAppWindow, unregisterAppWindow } from './ipc-caller-resolver'
 
 const ATTACHED_SYSTEM_SHADOW_MARGIN = 12
 const WINDOWS_ATTACHED_SHOW_OPACITY_GUARD_MS = 50
@@ -259,6 +260,7 @@ export class SystemPageWindowManager {
     attachShortcutRecordingGuard(win)
 
     this.attachedWindow = win
+    registerAppWindow(win.id)
     this.setupPositionSync()
 
     win.once('ready-to-show', async () => {
@@ -300,6 +302,7 @@ export class SystemPageWindowManager {
 
     win.on('closed', () => {
       if (this.attachedWindow && this.attachedWindow.id === win.id) {
+        unregisterAppWindow(win.id)
         this.cleanupAttached()
         if (!this.getDetachedWindow()) {
           this.currentRoute = null
@@ -396,6 +399,7 @@ export class SystemPageWindowManager {
     attachShortcutRecordingGuard(detachedWindow)
 
     this.detachedWindow = detachedWindow
+    registerAppWindow(detachedWindow.id)
 
     detachedWindow.once('ready-to-show', async () => {
       const activeDetached = this.getDetachedWindow()
@@ -416,6 +420,7 @@ export class SystemPageWindowManager {
 
     detachedWindow.on('closed', () => {
       if (this.detachedWindow && this.detachedWindow.id === detachedWindow.id) {
+        unregisterAppWindow(detachedWindow.id)
         this.detachedWindow = null
         if (!this.getAttachedWindow()) {
           this.currentRoute = null

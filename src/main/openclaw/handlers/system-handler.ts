@@ -25,7 +25,6 @@ export interface SystemHandlerDeps {
     source: 'app' | 'plugin'
     pluginId?: string
     runCommandAllowed?: boolean
-    allowShellOverride?: boolean
   }) => Promise<unknown>
 }
 
@@ -43,7 +42,7 @@ export function createSystemHandlers(deps: SystemHandlerDeps): Record<string, { 
         if (!command) throw new Error('command is required')
         const args = Array.isArray(params.args) ? params.args.map(String) : undefined
         const cwd = params.cwd ? String(params.cwd) : undefined
-        const shell = params.shell !== false
+        const shell = params.shell !== false // 默认 true，与 API 文档契约一致（描述为执行 shell 命令）
         const timeoutMs = typeof params.timeoutMs === 'number' ? params.timeoutMs : 30_000
 
         const result = await deps.runCommand(
@@ -56,7 +55,7 @@ export function createSystemHandlers(deps: SystemHandlerDeps): Record<string, { 
             shell,
             timeoutMs
           },
-          { source: 'app', runCommandAllowed: true, allowShellOverride: true }
+          { source: 'app', runCommandAllowed: true }
         ) as { exitCode?: number | null; timedOut?: boolean; success?: boolean; stdout?: string; stderr?: string }
 
         // 返回 Gateway 期望的标准格式

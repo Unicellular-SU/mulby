@@ -70,6 +70,7 @@ export interface CommandRunnerSettings {
   maxTimeoutMs: number
   maxOutputBytes: number
   maxConcurrent: number
+  maxQueueSize: number
   denyEnvKeys: string[]
   maskEnvKeysInAudit: string[]
   allowList: CommandRule[]

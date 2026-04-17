@@ -15,7 +15,7 @@
     "check:template-api-sync": "node scripts/check-template-api-sync.mjs",
     "dev": "tsc -w",
     "typecheck": "tsc --noEmit",
-    "verify": "npm run typecheck && npm run check:template-api-sync && npm run build"
+    "verify": "pnpm run typecheck && pnpm run check:template-api-sync && pnpm run build"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.71.2",

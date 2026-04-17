@@ -12,6 +12,7 @@
 import { BrowserWindow } from 'electron'
 import { pluginScreen } from '../../../main/plugin/screen'
 import type { CommandHandler } from '../command-registry'
+import { registerSystemInternalWindow, unregisterSystemInternalWindow } from '../../services/ipc-caller-resolver'
 
 /** Canvas 窗口管理器（简易实现，后续可扩展） */
 const canvasWindows = new Map<string, BrowserWindow>()
@@ -78,8 +79,12 @@ export function createCanvasHandlers(_deps: CanvasHandlerDeps): Record<string, {
           }
         })
 
+        registerSystemInternalWindow(win.id)
         canvasWindows.set(windowId, win)
-        win.on('closed', () => canvasWindows.delete(windowId))
+        win.on('closed', () => {
+          unregisterSystemInternalWindow(win.id)
+          canvasWindows.delete(windowId)
+        })
 
         await win.loadURL(url)
 

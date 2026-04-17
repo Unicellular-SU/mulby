@@ -1,6 +1,16 @@
 import type { IpcRenderer } from 'electron'
 
-export function createPlatformApi(ipcRenderer: IpcRenderer) {
+/**
+ * 创建平台 API
+ *
+ * @param ipcRenderer Electron IPC 渲染进程端
+ * @param options.restricted 受限模式（插件窗口），不暴露 runCommand 和策略管理 API
+ */
+export function createPlatformApi(ipcRenderer: IpcRenderer, options?: { restricted?: boolean }) {
+  const restricted = options?.restricted ?? false
+
+
+
   return {
     screen: {
       getAllDisplays: () => ipcRenderer.invoke('screen:getAllDisplays'),
@@ -31,12 +41,13 @@ export function createPlatformApi(ipcRenderer: IpcRenderer) {
       openFolder: (path: string) => ipcRenderer.invoke('shell:openFolder', path),
       trashItem: (path: string) => ipcRenderer.invoke('shell:trashItem', path),
       beep: () => ipcRenderer.invoke('shell:beep'),
+      
       runCommand: (input: unknown) => ipcRenderer.invoke('shell:runCommand', input),
-      getRunCommandPolicy: () => ipcRenderer.invoke('shell:getRunCommandPolicy'),
-      updateRunCommandPolicy: (patch: unknown) => ipcRenderer.invoke('shell:updateRunCommandPolicy', patch),
-      listRunCommandAudit: (limit?: number) => ipcRenderer.invoke('shell:listRunCommandAudit', limit),
-      clearRunCommandAudit: () => ipcRenderer.invoke('shell:clearRunCommandAudit'),
-      clearRunCommandTrusted: () => ipcRenderer.invoke('shell:clearRunCommandTrusted')
+      getRunCommandPolicy: () => restricted ? Promise.reject(new Error('API restricted')) : ipcRenderer.invoke('shell:getRunCommandPolicy'),
+      updateRunCommandPolicy: (patch: unknown) => restricted ? Promise.reject(new Error('API restricted')) : ipcRenderer.invoke('shell:updateRunCommandPolicy', patch),
+      listRunCommandAudit: (limit?: number) => restricted ? Promise.reject(new Error('API restricted')) : ipcRenderer.invoke('shell:listRunCommandAudit', limit),
+      clearRunCommandAudit: () => restricted ? Promise.reject(new Error('API restricted')) : ipcRenderer.invoke('shell:clearRunCommandAudit'),
+      clearRunCommandTrusted: () => restricted ? Promise.reject(new Error('API restricted')) : ipcRenderer.invoke('shell:clearRunCommandTrusted')
     },
 
     desktop: {

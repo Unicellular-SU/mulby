@@ -55,6 +55,7 @@ import { cleanupNativeKeySim } from './services/native-keyboard-sim'
 import { DeepLinkRouter } from './services/deep-link'
 import { PluginInstaller } from './plugin/installer'
 import { PluginStoreService } from './plugin/store-service'
+import { registerAppWindow } from './services/ipc-caller-resolver'
 
 patchConsoleWithTimestamp()
 
@@ -163,7 +164,7 @@ const aiInternalToolRuntime = createAiInternalToolRuntime({
       source,
       pluginId: pluginName || undefined,
       runCommandAllowed: plugin ? plugin.manifest.permissions?.runCommand === true : undefined,
-      allowShellOverride: source === 'app'
+      envKeys: plugin?.manifest.permissions?.envKeys,
     }
   }
 })
@@ -299,7 +300,7 @@ setAiToolExecutor(async ({ name, args, context, callId, abortSignal }) => {
         source,
         pluginId: pluginName || undefined,
         runCommandAllowed: plugin ? plugin.manifest.permissions?.runCommand === true : undefined,
-        allowShellOverride: source === 'app',
+        envKeys: plugin?.manifest.permissions?.envKeys,
         abortSignal
       })
     } catch (error) {
@@ -565,6 +566,7 @@ if (!gotTheLock) {
   // 当第二个实例启动时，聚焦到已有窗口或处理 deep link
   app.on('second-instance', handleSecondInstance)
 }
+
 
 function getMainWindow() {
   return mainWindow
@@ -856,6 +858,9 @@ function createWindow() {
       webviewTag: true
     }
   })
+
+  // 显式注册主窗口为可信 App 窗口（IPC 来源校验）
+  registerAppWindow(mainWindow.id)
 
   // macOS: 设置窗口在所有工作区可见，并使用 floating 级别置顶
   if (process.platform === 'darwin') {

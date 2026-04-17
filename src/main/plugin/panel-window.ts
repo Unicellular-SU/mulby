@@ -19,6 +19,7 @@ import {
 } from '../services/window-surface'
 import { getMainWindowVisibleBounds } from '../main-window-frame'
 import { registerView } from '../services/webcontents-registry'
+import { registerPanelWindow, unregisterPanelWindow, registerPluginWindow, unregisterPluginWindow } from '../services/ipc-caller-resolver'
 import {
     DETACHED_TITLEBAR_HEIGHT,
     setupTitlebarIPC,
@@ -199,6 +200,7 @@ export class PluginPanelWindow {
             roundedCorners: true,
             webPreferences: {
                 preload: preloadPath,
+                additionalArguments: ['--mulby-plugin-window'],
                 contextIsolation: !hasCustomPreload,
                 nodeIntegration: hasCustomPreload,
                 sandbox: !hasCustomPreload // 如果有自定义 preload，禁用沙箱以允许 Node.js 访问
@@ -211,6 +213,9 @@ export class PluginPanelWindow {
         } else {
             void this.panelWindow.loadFile(uiPath)
         }
+
+        // 注册面板窗口到 IPC 调用方来源解析器
+        registerPanelWindow(this.panelWindow.id, plugin.id)
 
         // 设置位置同步监听器
         this.setupPositionSync()
@@ -600,10 +605,14 @@ export class PluginPanelWindow {
                 sandbox: true
             } : {
                 preload: preloadPath,
+                additionalArguments: ['--mulby-plugin-window'],
                 contextIsolation: !hasCustomPreload,
                 nodeIntegration: hasCustomPreload
             }
         })
+
+        // 注册插件分离独立窗口（必须注册以保证安全的 IPC）
+        registerPluginWindow(independentWindow.id, plugin.id)
 
         // 创建插件 WebContentsView（仅在需要标题栏时）
         let pluginView: WebContentsView | null = null
@@ -624,6 +633,7 @@ export class PluginPanelWindow {
             pluginView = new WebContentsView({
                 webPreferences: {
                     preload: preloadPath,
+                    additionalArguments: ['--mulby-plugin-window'],
                     contextIsolation: !hasCustomPreload,
                     nodeIntegration: hasCustomPreload,
                     sandbox: !hasCustomPreload
@@ -730,6 +740,7 @@ export class PluginPanelWindow {
 
         // 窗口关闭时清理 WebContentsView
         independentWindow.once('closed', () => {
+            unregisterPluginWindow(independentWindow.id)
             if (pluginView && !pluginView.webContents.isDestroyed()) {
                 pluginView.webContents.close()
             }
@@ -761,6 +772,11 @@ export class PluginPanelWindow {
         this.clearOpacityRestoreTimer(false)
         this.removePositionSync()
         this.closeShadowWindow()
+        // 注销面板窗口注册（先缓存 ID，因为窗口可能已被销毁）
+        if (this.panelWindow) {
+            const panelId = this.panelWindow.id
+            unregisterPanelWindow(panelId)
+        }
         this.panelWindow = null
         this.currentPlugin = null
         this.currentFeatureCode = ''

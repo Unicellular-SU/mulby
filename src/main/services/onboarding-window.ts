@@ -8,6 +8,7 @@ import {
   shouldUseWindowsFramelessSurface,
   applyWindowsFramelessSurface
 } from './window-surface'
+import { registerAppWindow, unregisterAppWindow } from './ipc-caller-resolver'
 
 const ONBOARDING_WIDTH = 720
 const ONBOARDING_HEIGHT = 520
@@ -106,6 +107,7 @@ export class OnboardingWindowManager {
       }
     })
 
+    registerAppWindow(this.window.id)
     attachShortcutRecordingGuard(this.window)
 
     this.window.once('ready-to-show', async () => {
@@ -119,6 +121,7 @@ export class OnboardingWindowManager {
     })
 
     this.window.on('closed', () => {
+      if (this.window) unregisterAppWindow(this.window.id)
       this.window = null
       if (this.completed) {
         this.onCompleteCallback?.()

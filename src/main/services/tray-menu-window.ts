@@ -4,6 +4,7 @@ import type { PluginManager } from '../plugin'
 import type { AppSettingsManager } from './app-settings'
 import type { ThemeManager } from './theme'
 import { loggerService } from './logger'
+import { registerAppWindow, unregisterAppWindow } from './ipc-caller-resolver'
 
 interface TrayMenuWindowOptions {
   pluginManager: PluginManager
@@ -195,10 +196,12 @@ export class TrayMenuWindowManager {
     }
 
     win.on('closed', () => {
+      if (this.window) unregisterAppWindow(this.window.id)
       this.window = null
     })
 
     this.window = win
+    registerAppWindow(win.id)
     return win
   }
 

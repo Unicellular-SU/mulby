@@ -17,12 +17,16 @@ const isContextIsolated = process.contextIsolated
 
 patchConsoleWithTimestamp()
 
+// 检测是否为插件窗口（通过 webPreferences.additionalArguments 注入）
+// 插件窗口启用受限模式，不暴露 runCommand 和策略管理 API
+const isPluginWindow = process.argv.includes('--mulby-plugin-window')
+
 // 定义 mulby API 对象
 const mulbyApi = {
   ...createCoreApi(ipcRenderer),
   ai: createAiApi(ipcRenderer),
   ...createAppPluginApi(ipcRenderer),
-  ...createPlatformApi(ipcRenderer),
+  ...createPlatformApi(ipcRenderer, { restricted: isPluginWindow }),
   inbrowser,
   sharp: createSharpApi(ipcRenderer),
   getSharpVersion: () => ipcRenderer.invoke('sharp:version'),

@@ -15,6 +15,7 @@ import {
   shouldUseWindowsFramelessSurface
 } from '../services/window-surface'
 import { registerView } from '../services/webcontents-registry'
+import { registerPluginWindow, unregisterPluginWindow } from '../services/ipc-caller-resolver'
 import {
   DETACHED_TITLEBAR_HEIGHT,
   setupTitlebarIPC,
@@ -403,6 +404,7 @@ export class PluginWindowManager {
       } : {
         // 无标题栏时，BrowserWindow 直接加载插件
         preload: preloadPath,
+        additionalArguments: ['--mulby-plugin-window'],
         contextIsolation: !hasCustomPreload,
         nodeIntegration: hasCustomPreload,
         sandbox: !hasCustomPreload
@@ -429,6 +431,7 @@ export class PluginWindowManager {
       pluginView = new WebContentsView({
         webPreferences: {
           preload: preloadPath,
+          additionalArguments: ['--mulby-plugin-window'],
           contextIsolation: !hasCustomPreload,
           nodeIntegration: hasCustomPreload,
           sandbox: !hasCustomPreload
@@ -541,6 +544,9 @@ export class PluginWindowManager {
       startedAt: Date.now()
     })
 
+    // 注册到 IPC 调用方来源解析器
+    registerPluginWindow(windowId, plugin.id)
+
     // 显示 Dock 图标
     void this.updateDockVisibility()
 
@@ -561,6 +567,7 @@ export class PluginWindowManager {
 
     win.on('closed', () => {
       this.detachedWindows.delete(windowId)
+      unregisterPluginWindow(windowId)
       // 当窗口关闭时，销毁插件 WebContentsView
       if (pluginView && !pluginView.webContents.isDestroyed()) {
         pluginView.webContents.close()
@@ -650,6 +657,7 @@ export class PluginWindowManager {
         sandbox: true
       } : {
         preload: preloadPath,
+        additionalArguments: ['--mulby-plugin-window'],
         contextIsolation: !hasCustomPreload,
         nodeIntegration: hasCustomPreload,
         sandbox: !hasCustomPreload
@@ -678,6 +686,7 @@ export class PluginWindowManager {
       pluginView = new WebContentsView({
         webPreferences: {
           preload: preloadPath,
+          additionalArguments: ['--mulby-plugin-window'],
           contextIsolation: !hasCustomPreload,
           nodeIntegration: hasCustomPreload,
           sandbox: !hasCustomPreload
@@ -773,6 +782,9 @@ export class PluginWindowManager {
       creatorId  // 记录创建者
     })
 
+    // 注册到 IPC 调用方来源解析器
+    registerPluginWindow(windowId, plugin.id)
+
     this.updateDockVisibility()
 
     // 安装 console 输出捕获（主进程侧捕获插件 console 输出）
@@ -780,6 +792,7 @@ export class PluginWindowManager {
 
     win.on('closed', () => {
       this.detachedWindows.delete(windowId)
+      unregisterPluginWindow(windowId)
       // 销毁插件 WebContentsView
       if (pluginView && !pluginView.webContents.isDestroyed()) {
         pluginView.webContents.close()
@@ -794,16 +807,22 @@ export class PluginWindowManager {
   // 关闭指定独立窗口
   closeDetached(windowId: number): void {
     const info = this.detachedWindows.get(windowId)
-    if (info && !info.window.isDestroyed()) {
-      info.window.close()
+    if (info) {
+      unregisterPluginWindow(windowId)
+      if (!info.window.isDestroyed()) {
+        info.window.close()
+      }
     }
   }
 
   // 关闭指定插件的所有独立窗口
   closeDetachedWindowsByPlugin(pluginId: string): void {
-    for (const info of this.detachedWindows.values()) {
-      if (info.plugin.id === pluginId && !info.window.isDestroyed()) {
-        info.window.close()
+    for (const [windowId, info] of this.detachedWindows.entries()) {
+      if (info.plugin.id === pluginId) {
+        unregisterPluginWindow(windowId)
+        if (!info.window.isDestroyed()) {
+          info.window.close()
+        }
       }
     }
   }
@@ -856,7 +875,10 @@ export class PluginWindowManager {
   // 关闭所有窗口
   closeAll(): void {
     this.closeAttached()
-    for (const info of this.detachedWindows.values()) {
+    for (const [windowId, info] of this.detachedWindows.entries()) {
+      // 防御性显式注销：即便 closed 事件因进程提前退出未触发，
+      // ipcCallerResolver 注册表也不会残留旧条目
+      unregisterPluginWindow(windowId)
       if (!info.window.isDestroyed()) {
         info.window.close()
       }

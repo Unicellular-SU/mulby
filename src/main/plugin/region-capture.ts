@@ -22,6 +22,7 @@ import {
   isNativeScreenCaptureAvailable,
   nativeStartRegionCapture
 } from '../services/native-screen-capture'
+import { registerSystemInternalWindow, unregisterSystemInternalWindow } from '../services/ipc-caller-resolver'
 
 interface RegionCaptureWindow {
   window: BrowserWindow
@@ -320,6 +321,8 @@ async function captureRegionWithOverlay(): Promise<string | null> {
         }
       })
 
+      registerSystemInternalWindow(win.id)
+
       captureWindows.push({
         window: win,
         displayId: display.id,
@@ -327,6 +330,7 @@ async function captureRegionWithOverlay(): Promise<string | null> {
       })
 
       win.on('closed', () => {
+        unregisterSystemInternalWindow(win.id)
         captureWindows = captureWindows.filter(cw => cw.window !== win)
       })
     })
