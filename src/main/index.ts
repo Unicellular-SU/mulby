@@ -1005,6 +1005,24 @@ function showMainWindow(options?: { skipAutoPaste?: boolean }) {
   clearMainWindowBlurHideTimer()
   trayMenuWindowManager?.hide()
 
+  // macOS: 关键修复 —— 确保应用未残留在 app.hide() 隐藏态
+  //
+  // 背景：插件通过 utools.hideMainWindow(true) / utools.hideMainWindowPasteXxx 等
+  // API 触发 app.hide() 后，如果未及时配对调用 app.show()（插件异常、未显式
+  // 恢复、sendPasteShortcut 失败等），Mulby 会被 LaunchServices 标记为已隐藏。
+  //
+  // 主窗口是 type: 'panel'（NSPanel），只有应用处于 active 状态才能成为 key
+  // window 接收键盘事件。若应用仍处于隐藏态，mainWindow.show() 只能让窗口
+  // 可见但无法激活 NSApp，焦点无法到达 textarea —— 表现为搜索框卡死、
+  // 点击设置按钮却能正常打开（因为系统页是独立窗口）。
+  if (process.platform === 'darwin') {
+    try {
+      app.show()
+    } catch (error) {
+      console.warn('[Main] app.show() before showMainWindow failed:', error)
+    }
+  }
+
   // 每次显示前都强制重置关键属性，确保窗口行为正确
   if (process.platform === 'darwin') {
     try {
@@ -1050,6 +1068,17 @@ function showMainWindow(options?: { skipAutoPaste?: boolean }) {
     mainWindow.show()
     mainWindow.focus()
     mainWindowHasBeenShown = true
+
+    // macOS: NSPanel 类窗口必须配合 app.focus({ steal: true }) 才能稳定成为
+    // key window，单纯的 win.focus() 在应用被 hide 后再次 show 的场景下不可靠。
+    // 这一步是 app.show() 的补充，保证即使上游 state 异常也能抢回焦点。
+    if (process.platform === 'darwin') {
+      try {
+        app.focus({ steal: true })
+      } catch (error) {
+        console.warn('[Main] app.focus({ steal: true }) failed:', error)
+      }
+    }
 
     // 刷新活跃窗口缓存，供搜索路径同步读取（异步执行，不阻塞窗口显示）
     refreshActiveWindowCache()

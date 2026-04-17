@@ -456,8 +456,21 @@ $mouse::mouse_event(${upFlag}, 0, 0, 0, 0)
 async function withHiddenWindow(action: () => Promise<void>): Promise<void> {
   hideAllAppWindows()
   await sleep(FOCUS_DELAY_MS)
-  await action()
-  // 不自动恢复窗口，让插件决定何时恢复
+  try {
+    await action()
+  } catch (error) {
+    // 关键修复：action 抛错时必须恢复，否则 macOS 下 app.hide() 不被配对的
+    // app.show() 平衡，应用将长期处于隐藏态，主窗口再次唤起后 NSPanel 无法
+    // 成为 key window，搜索框输入框无法获取焦点（用户感知为"搜索框卡死"）。
+    try {
+      restoreHiddenWindows()
+    } catch (restoreError) {
+      console.error('[Input] Failed to restore windows after action error:', restoreError)
+    }
+    throw error
+  }
+  // 成功路径仍然沿用旧语义：不自动恢复窗口，让插件显式调用 restoreWindows()
+  // 控制节奏（例如先执行多次粘贴再统一恢复）。
 }
 
 export const pluginInput = {
