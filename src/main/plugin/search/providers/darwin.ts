@@ -2,13 +2,13 @@ import { app } from 'electron'
 import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'fs'
 import { basename, dirname, join } from 'path'
 import type {
-import log from 'electron-log'
   AppSearchResult,
   DesktopSearchProvider,
   FileSearchResult,
   SearchExecutionContext,
   SearchRankingContext
 } from '../types'
+import log from 'electron-log'
 
 const SEARCH_KEY_FILES = 'darwin-files'
 

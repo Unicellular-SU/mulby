@@ -5,12 +5,12 @@ import { DarwinSearchProvider } from './providers/darwin'
 import { WindowsSearchProvider } from './providers/win'
 import { LinuxSearchProvider } from './providers/linux'
 import type {
-import log from 'electron-log'
   AppSearchResult,
   DesktopSearchProvider,
   FileSearchResult,
   SearchExecutionContext
 } from './types'
+import log from 'electron-log'
 
 /**
  * Windows cmd.exe 参数引用（CreateProcess 前的一层包装）

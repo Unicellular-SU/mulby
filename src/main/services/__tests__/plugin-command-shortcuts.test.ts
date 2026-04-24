@@ -3,6 +3,7 @@ import { mkdtemp, rm, writeFile } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 import { describe, it } from 'node:test'
+import log from 'electron-log'
 import { PluginCommandShortcutManager } from '../../plugin/command-shortcuts'
 import type {
   InputPayload,
@@ -674,13 +675,13 @@ describe('plugin command shortcut manager', () => {
     })
     let mode: 'fail' | 'reject' = 'fail'
 
-    const originalWarn = console.warn
+    const originalWarn = log.warn
     const warnings: unknown[][] = []
-    console.warn = (...args: unknown[]) => {
+    log.warn = (...args: unknown[]) => {
       warnings.push(args)
     }
     t.after(() => {
-      console.warn = originalWarn
+      log.warn = originalWarn
     })
 
     const manager = new PluginCommandShortcutManager(

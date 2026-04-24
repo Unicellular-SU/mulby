@@ -13,7 +13,6 @@ import { PluginCommandShortcutManager } from './command-shortcuts'
 import { PluginCommandDisabledManager } from './command-disabled'
 import { pluginFeatureStore } from './dynamic-features'
 import {
-import log from 'electron-log'
   InputPayload,
   Plugin,
   PluginCmd,
@@ -44,6 +43,7 @@ import type { MatchType } from '../../shared/search-matcher'
 import { BackgroundPluginManager } from './background-manager'
 import { TaskScheduler } from '../scheduler'
 import type { ClipboardHistoryManager } from '../services/clipboard-history'
+import log from 'electron-log'
 
 // 搜索结果项
 interface SearchResult {

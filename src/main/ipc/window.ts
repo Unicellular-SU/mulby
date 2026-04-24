@@ -7,7 +7,6 @@ import { AppSettingsManager } from '../services/app-settings'
 import { getMainWindowVisibleBounds, getMainWindowWindowSize } from '../main-window-frame'
 import { InputPayload, Plugin, PluginFeature } from '../../shared/types/plugin'
 import {
-import log from 'electron-log'
   setSubInputState,
   clearSubInputState,
   isSubInputEnabled,
@@ -15,6 +14,7 @@ import log from 'electron-log'
 } from '../services/subinput-state'
 import { shouldUseWindowsFramelessSurface } from '../services/window-surface'
 import { windowFromWebContents, getPluginWebContents } from '../services/webcontents-registry'
+import log from 'electron-log'
 
 // 重新导出 clearSubInputState 供其他模块使用
 export { clearSubInputState } from '../services/subinput-state'

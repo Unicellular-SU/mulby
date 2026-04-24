@@ -1,13 +1,13 @@
 import { ipcMain } from 'electron'
 import { spawn, ChildProcess } from 'child_process'
 import {
-import log from 'electron-log'
     isFFmpegInstalled,
     getFFmpegVersion,
     getFFmpegPath,
     downloadFFmpeg,
     DownloadProgressCallback,
 } from '../services/ffmpeg-downloader'
+import log from 'electron-log'
 
 /**
  * FFmpeg IPC 处理器

@@ -9,7 +9,6 @@ import { isIgnoringBlur } from './blur-manager'
 import { ATTACHED_PANEL_HEIGHT, ATTACHED_PANEL_MIN_OVERFLOW_HEIGHT } from '../constants/panel-window'
 import { getMainWindowVisibleBounds } from '../main-window-frame'
 import {
-import log from 'electron-log'
   applyWindowsFramelessSurface,
   getWindowsFramelessSurfaceInsets,
   getWindowsFramelessSurfaceVisibleBounds,
@@ -18,6 +17,7 @@ import log from 'electron-log'
 } from './window-surface'
 import { registerAppWindow, unregisterAppWindow } from './ipc-caller-resolver'
 import { registerProtectedWindow, unregisterProtectedWindow } from '../plugin/input'
+import log from 'electron-log'
 
 const ATTACHED_SYSTEM_SHADOW_MARGIN = 12
 const WINDOWS_ATTACHED_SHOW_OPACITY_GUARD_MS = 50

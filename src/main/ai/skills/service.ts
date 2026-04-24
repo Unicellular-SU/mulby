@@ -6,7 +6,6 @@ import os from 'node:os'
 import path from 'node:path'
 import extractZip from 'extract-zip'
 import type {
-import log from 'electron-log'
   AiMcpSelection,
   AiMessage,
   AiOption,
@@ -40,6 +39,7 @@ import {
   validateSkillMarkdown
 } from './spec-validator'
 import type { RunCommandInput, RunCommandResult } from '../../services/command-runner-core'
+import log from 'electron-log'
 
 const SKILL_MD_VARIANTS = ['SKILL.md']
 const SKILL_APP_ROOT_NAME = 'app'

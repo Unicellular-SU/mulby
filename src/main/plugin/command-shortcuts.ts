@@ -2,7 +2,6 @@ import { app as electronApp, globalShortcut as electronGlobalShortcut } from 'el
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'fs'
 import { join } from 'path'
 import type {
-import log from 'electron-log'
   InputPayload,
   Plugin,
   PluginCommandItem,
@@ -17,6 +16,7 @@ import {
   detectSystemReservedShortcut,
   type SystemReservedShortcutReason
 } from '../services/system-reserved-shortcuts'
+import log from 'electron-log'
 
 interface PluginCommandShortcutManagerOptions {
   listCommands: (pluginId?: string) => PluginCommandItem[]

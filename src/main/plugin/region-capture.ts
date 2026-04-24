@@ -18,12 +18,12 @@ import { execFile } from 'child_process'
 import { tmpdir } from 'os'
 import { readFileSync, unlinkSync, existsSync } from 'fs'
 import {
-import log from 'electron-log'
   nativeCaptureScreen,
   isNativeScreenCaptureAvailable,
   nativeStartRegionCapture
 } from '../services/native-screen-capture'
 import { registerSystemInternalWindow, unregisterSystemInternalWindow } from '../services/ipc-caller-resolver'
+import log from 'electron-log'
 
 interface RegionCaptureWindow {
   window: BrowserWindow

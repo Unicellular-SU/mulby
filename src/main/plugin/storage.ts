@@ -3,7 +3,6 @@ import { join } from 'path'
 import { existsSync, readdirSync, readFileSync, renameSync } from 'fs'
 import db from '../db'
 import type {
-import log from 'electron-log'
   StorageListOptions,
   StorageListResult,
   StorageListItem,
@@ -20,6 +19,7 @@ import log from 'electron-log'
   StorageAppendResult,
   StorageErrorCode
 } from '../../shared/types/storage-v2'
+import log from 'electron-log'
 
 // ====== 命名空间前缀：隔离插件数据，避免与 app / global 等系统 namespace 冲突 ======
 const PLUGIN_NS_PREFIX = 'plugin:'

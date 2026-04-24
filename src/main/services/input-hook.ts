@@ -14,7 +14,6 @@
  * macOS:   CGEventTapCreate
  */
 import {
-import log from 'electron-log'
   startNativeInputHook,
   stopNativeInputHook,
   ELECTRON_KEY_TO_VK,
@@ -22,6 +21,7 @@ import log from 'electron-log'
   type NativeKeyEvent,
   type NativeMouseEvent
 } from './native-input-hook'
+import log from 'electron-log'
 
 // ==================== 键盘部分 ====================
 

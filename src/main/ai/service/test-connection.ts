@@ -1,6 +1,5 @@
 import { generateText, streamText } from 'ai'
 import type {
-import log from 'electron-log'
   AiModel,
   AiModelParameters,
   AiOption,
@@ -16,6 +15,7 @@ import { createProviderRuntime, resolveLanguageModelKey } from '../providerRunti
 import { buildEndpointRoutedProviderConfig, resolveEndpointRoutedProviderType } from '../../../shared/ai/providerEndpointRouting'
 import { splitThinkTaggedText } from '../thinkTagParser'
 import { aggregateSdkStreamResult } from './reply-aggregation'
+import log from 'electron-log'
 
 export type TestConnectionInput = {
   model?: string

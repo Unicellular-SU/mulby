@@ -8,7 +8,6 @@ import { join } from 'path'
 import { existsSync } from 'fs'
 import { EventEmitter } from 'events'
 import type {
-import log from 'electron-log'
   HostRequest,
   HostResponse,
   ApiResult
@@ -22,6 +21,7 @@ import { resolveResourceLimits, applyResourceLimitsToWatchdog } from './resource
 import { PluginMessageBus } from './message-bus'
 import type { TaskScheduler } from '../scheduler'
 import type { ClipboardHistoryManager } from '../services/clipboard-history'
+import log from 'electron-log'
 
 // ============ 类型定义 ============
 

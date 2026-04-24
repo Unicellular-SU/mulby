@@ -1,6 +1,5 @@
 import { jsonSchema, tool } from '@ai-sdk/provider-utils'
 import type {
-import log from 'electron-log'
   AiCapabilityDebugInfo,
   AiPolicyDebugInfo,
   AiTool,
@@ -16,6 +15,7 @@ import {
   createRuntimeCapabilityIntrospectionSnapshot,
   isRuntimeCapabilityIntrospectionToolName
 } from '../tools/runtime-capability-introspection-tool'
+import log from 'electron-log'
 
 export interface BuildToolsInput {
   tools?: AiTool[]

@@ -2,7 +2,6 @@ import { generateImage } from 'ai'
 import type { AiImageGenerateProgressChunk, AiProviderConfig } from '../../../shared/types/ai'
 import { classifyAiImageError } from '../../../shared/ai/imageDiagnostics'
 import {
-import log from 'electron-log'
   extractImageResponsePayload,
   extractOpenAIImageStreamPayload,
   formatAsyncTaskStatus,
@@ -30,6 +29,7 @@ import {
   type ImageStrategyCapabilityState,
   type ImageCompatTransportContext
 } from './image-helpers'
+import log from 'electron-log'
 
 interface ImagePipelineContext {
   imageStrategyCapabilities: Map<string, ImageStrategyCapabilityState>

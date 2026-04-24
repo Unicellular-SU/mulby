@@ -9,7 +9,6 @@ import { Notification } from 'electron'
 import type { PluginManager } from '../plugin'
 import type { PluginStoreService } from '../plugin/store-service'
 import {
-import log from 'electron-log'
   MAX_DEEP_LINK_URL_LENGTH,
   type DeepLinkHandleResult,
   type DeepLinkRoute
@@ -23,6 +22,7 @@ import {
   showDeepLinkError,
   confirmAdhocSourceFetch
 } from './deep-link-security'
+import log from 'electron-log'
 
 /** 路由回调：打开系统页面（由 index.ts 注入） */
 type OpenSystemPageFn = (page: string, options?: {

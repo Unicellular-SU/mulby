@@ -1,5 +1,4 @@
 import type {
-import log from 'electron-log'
   AiCapabilityDebugInfo,
   AiAttachmentRef,
   AiImageGenerateProgressChunk,
@@ -90,6 +89,7 @@ import {
   type InjectedInternalToolResult
 } from './service/capability-injection'
 import { resolveMergedTools as resolveMergedToolsHelper } from './service/merged-tools'
+import log from 'electron-log'
 
 interface StreamCallbacks {
   onChunk?: (chunk: AiMessage) => void

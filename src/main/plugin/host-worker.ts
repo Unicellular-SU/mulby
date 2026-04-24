@@ -11,7 +11,6 @@
 import { join, dirname } from 'path'
 import { readFileSync } from 'fs'
 import type {
-import log from 'electron-log'
   HostRequest,
   HostResponse,
   ApiResult,
@@ -21,6 +20,7 @@ import log from 'electron-log'
   CallTaskCallbackRequest,
   CallHostMethodRequest
 } from './host-protocol'
+import log from 'electron-log'
 
 // ============ 状态 ============
 

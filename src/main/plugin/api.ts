@@ -25,7 +25,6 @@ import type { TaskScheduler } from '../scheduler'
 import type { TaskInput, TaskFilter } from '../scheduler/types'
 import type { ClipboardHistoryManager } from '../services/clipboard-history'
 import type {
-import log from 'electron-log'
   AiOption,
   AiMessage,
   AiImageGenerateProgressChunk,
@@ -38,6 +37,7 @@ import type {
   StorageTransactionOp,
   StorageAppendOptions
 } from '../../shared/types/storage-v2'
+import log from 'electron-log'
 
 const pluginStorage = new PluginStorage()
 // PluginFilesystem 实例在 createPluginAPI 内部按插件名创建（实现跨插件数据隔离）

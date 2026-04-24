@@ -10,7 +10,6 @@ import { PluginPanelWindow } from './panel-window'
 import { clearSubInputState } from '../services/subinput-state'
 import { getPluginPreloadPath } from './plugin-preload-wrapper'
 import {
-import log from 'electron-log'
   applyWindowsFramelessSurface,
   getWindowsFramelessSurfaceInsets,
   shouldUseWindowsFramelessSurface
@@ -25,6 +24,7 @@ import {
   notifyTitlebarThemeChange,
   layoutPluginView
 } from './titlebar-view'
+import log from 'electron-log'
 
 interface AttachedPlugin {
   plugin: Plugin

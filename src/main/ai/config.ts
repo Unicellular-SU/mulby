@@ -2,7 +2,6 @@ import { app } from 'electron'
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'fs'
 import { join } from 'path'
 import type {
-import log from 'electron-log'
   AiSettings,
   AiProviderConfig,
   AiProviderId,
@@ -17,6 +16,7 @@ import { inferProviderType } from './providerCatalog'
 import { resolveProviderBaseURL } from '../../shared/ai/providerDefaults'
 import { getSystemDefaultProviderById, getSystemDefaultProviders, mergeWithSystemDefaultProviders } from '../../shared/ai/systemProviders'
 import { getSystemDefaultModels, mergeWithSystemDefaultModels } from '../../shared/ai/systemModels'
+import log from 'electron-log'
 
 const DEFAULT_MCP_SETTINGS: AiMcpSettings = {
   servers: [],

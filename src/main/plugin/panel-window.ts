@@ -11,7 +11,6 @@ import { isIgnoringBlur } from '../services/blur-manager'
 import { getPluginPreloadPath } from './plugin-preload-wrapper'
 import { ATTACHED_PANEL_HEIGHT, ATTACHED_PANEL_MIN_OVERFLOW_HEIGHT } from '../constants/panel-window'
 import {
-import log from 'electron-log'
     applyWindowsFramelessSurface,
     getWindowsFramelessSurfaceInsets,
     getWindowsFramelessSurfaceVisibleBounds,
@@ -28,6 +27,7 @@ import {
     notifyTitlebarThemeChange,
     layoutPluginView
 } from './titlebar-view'
+import log from 'electron-log'
 
 const ATTACHED_PANEL_SHADOW_MARGIN = 12
 const WINDOWS_PANEL_SHOW_OPACITY_GUARD_MS = 50

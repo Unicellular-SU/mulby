@@ -9,11 +9,11 @@
 
 import { desktopCapturer, screen } from 'electron'
 import {
-import log from 'electron-log'
   nativeCaptureScreen,
   nativeCaptureRegion,
   isNativeScreenCaptureAvailable
 } from '../services/native-screen-capture'
+import log from 'electron-log'
 
 export interface DisplayInfo {
   id: number

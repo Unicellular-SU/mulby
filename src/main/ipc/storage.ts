@@ -2,7 +2,6 @@ import { ipcMain, webContents } from 'electron'
 import db from '../db'
 import { PluginStorage } from '../plugin/storage'
 import type {
-import log from 'electron-log'
     StorageListOptions,
     StorageSetManyItem,
     StorageSetManyOptions,
@@ -18,6 +17,7 @@ import {
     IpcPolicyError
 } from './_shared/caller-middleware'
 import type { IpcCallerInfo } from '../services/ipc-caller-resolver'
+import log from 'electron-log'
 
 // 复用全局 PluginStorage 实例（V2 方法直接调用）
 const pluginStorageForIpc = new PluginStorage()

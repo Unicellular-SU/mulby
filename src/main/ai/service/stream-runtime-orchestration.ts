@@ -1,7 +1,6 @@
 import type { AiMessage, AiTokenBreakdown } from '../../../shared/types/ai'
 import { classifyAiStreamError } from '../../../shared/ai/streamDiagnostics'
 import {
-import log from 'electron-log'
   createAiStreamMetrics,
   finishAiStreamMetricsError,
   finishAiStreamMetricsSuccess,
@@ -11,6 +10,7 @@ import log from 'electron-log'
 } from '../streamMetrics'
 import { emitErrorChunk as emitErrorChunkHelper } from './stream-helpers'
 import { resolveMaxToolSteps } from './utils'
+import log from 'electron-log'
 
 export interface StreamRuntimeState {
   metrics: AiStreamMetrics

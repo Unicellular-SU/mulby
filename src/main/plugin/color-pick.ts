@@ -20,7 +20,6 @@
 import { BrowserWindow, ipcMain, nativeImage, screen, desktopCapturer } from 'electron'
 import { join } from 'path'
 import {
-import log from 'electron-log'
   nativePickColor,
   nativeCaptureScreen,
   nativeGetPixelColor,
@@ -29,6 +28,7 @@ import log from 'electron-log'
 } from '../services/native-screen-capture'
 import { portalPickColor, isPortalColorPickAvailable } from '../services/linux-portal-color-pick'
 import { registerSystemInternalWindow, unregisterSystemInternalWindow } from '../services/ipc-caller-resolver'
+import log from 'electron-log'
 
 interface ColorPickResult {
   hex: string

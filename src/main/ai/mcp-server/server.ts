@@ -15,13 +15,13 @@
 
 import { Server } from '@modelcontextprotocol/sdk/server/index.js'
 import {
-import log from 'electron-log'
   ListToolsRequestSchema,
   CallToolRequestSchema
 } from '@modelcontextprotocol/sdk/types.js'
 import type { PluginToolRegistry } from '../../plugin/plugin-tools'
 import type { PluginManager } from '../../plugin'
 import type { Transport } from '@modelcontextprotocol/sdk/shared/transport.js'
+import log from 'electron-log'
 
 // MCP Tool ID 前缀（外部可见的命名空间）
 const MCP_TOOL_PREFIX = 'mulby__'

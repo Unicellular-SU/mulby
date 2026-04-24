@@ -1,5 +1,4 @@
 import type {
-import log from 'electron-log'
   AiCapabilityDebugInfo,
   AiMessage,
   AiModelParameters,
@@ -30,6 +29,7 @@ import {
 } from '../tools/runtime-capability-introspection-tool'
 import { resolveCompatToolCallName } from '../tool-name-matching'
 import { isMcpToolName } from '../mcp'
+import log from 'electron-log'
 
 /**
  * 将 reader.read() 与 AbortSignal 竞争：

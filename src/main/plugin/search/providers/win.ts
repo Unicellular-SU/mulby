@@ -2,13 +2,13 @@ import { existsSync, readdirSync, readFileSync, statSync } from 'fs'
 import { basename, dirname, extname, join } from 'path'
 import { isSystemSearchQueryEligible } from '../../../../shared/system-search'
 import type {
-import log from 'electron-log'
   AppSearchResult,
   DesktopSearchProvider,
   FileSearchResult,
   SearchExecutionContext,
   SearchRankingContext
 } from '../types'
+import log from 'electron-log'
 
 const SEARCH_KEY_FILES = 'win-files'
 const SEARCH_KEY_FILES_FALLBACK = 'win-files-fallback'

@@ -1,6 +1,5 @@
 import { generateText, stepCountIs } from 'ai'
 import type {
-import log from 'electron-log'
   AiCapabilityDebugInfo,
   AiMessage,
   AiModelParameters,
@@ -15,6 +14,7 @@ import { supportsReasoning } from '../modelCapabilities'
 import { splitThinkTaggedText } from '../thinkTagParser'
 import { countTokensForText, countTokensFromMessages } from '../tokens'
 import { extractUsage, normalizeUsage, resolveMaxToolSteps } from './utils'
+import log from 'electron-log'
 
 export interface ProviderCallOrchestrationDeps {
   toAnthropicMessages: (

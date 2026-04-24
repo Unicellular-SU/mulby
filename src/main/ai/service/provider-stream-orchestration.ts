@@ -1,6 +1,5 @@
 import { streamText, stepCountIs } from 'ai'
 import type {
-import log from 'electron-log'
   AiCapabilityDebugInfo,
   AiMessage,
   AiModelParameters,
@@ -17,6 +16,7 @@ import { isOpenAICompatibleProvider, shouldUseChatCompletions } from '../provide
 import { countTokensForText, countTokensFromMessages } from '../tokens'
 import { aggregateSdkStreamResult } from './reply-aggregation'
 import { extractUsage, normalizeUsage, resolveMaxToolSteps } from './utils'
+import log from 'electron-log'
 
 type StreamRoute = 'anthropic-native' | 'openai-compat-chat' | 'openai-compat-tool-loop' | 'ai-sdk-stream'
 
