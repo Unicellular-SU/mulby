@@ -256,6 +256,7 @@ export class PluginStorage {
   constructor() {
     // 首次实例化时执行数据迁移
     this.migrateFromJson()
+    this.migrateUnprefixedNamespaces()
   }
 
   // 获取数据
@@ -657,6 +658,59 @@ export class PluginStorage {
 
     if (migratedCount > 0) {
       log.info(`[PluginStorage] 数据迁移完成: ${migratedCount} 个插件`)
+    }
+  }
+
+  /**
+   * Migrate storage records from unprefixed namespaces (e.g. "mulby-ai-chat")
+   * to the canonical prefixed form ("plugin:mulby-ai-chat").
+   *
+   * This fixes a data split caused by the caller-middleware change which
+   * switched storage writes from raw plugin names to "plugin:" prefixed IDs.
+   * Old (unprefixed) records are merged into the canonical namespace using
+   * INSERT OR IGNORE so newer writes in the prefixed namespace take priority.
+   */
+  private migrateUnprefixedNamespaces(): void {
+    try {
+      const allNs = db.prepare(
+        'SELECT DISTINCT plugin_id FROM store WHERE plugin_id NOT LIKE ? AND plugin_id != ?'
+      ).all(`${PLUGIN_NS_PREFIX}%`, 'global') as { plugin_id: string }[]
+
+      const reserved = new Set(['app', 'global', 'system'])
+      let migratedCount = 0
+
+      for (const { plugin_id: oldNs } of allNs) {
+        if (reserved.has(oldNs)) continue
+
+        const newNs = `${PLUGIN_NS_PREFIX}${oldNs}`
+
+        const rows = db.prepare(
+          'SELECT key, value, updated_at, version FROM store WHERE plugin_id = ?'
+        ).all(oldNs) as { key: string; value: string; updated_at: number; version: number }[]
+
+        if (rows.length === 0) continue
+
+        const mergeAndClean = db.transaction(() => {
+          const now = Date.now()
+          for (const row of rows) {
+            // INSERT OR IGNORE: keep newer data in prefixed namespace, only fill gaps
+            db.prepare(
+              'INSERT OR IGNORE INTO store (plugin_id, key, value, updated_at, version) VALUES (?, ?, ?, ?, ?)'
+            ).run(newNs, row.key, row.value, row.updated_at ?? now, row.version ?? 1)
+          }
+          db.prepare('DELETE FROM store WHERE plugin_id = ?').run(oldNs)
+        })
+
+        mergeAndClean()
+        migratedCount++
+        log.info(`[PluginStorage] 命名空间迁移: "${oldNs}" → "${newNs}" (${rows.length} keys merged)`)
+      }
+
+      if (migratedCount > 0) {
+        log.info(`[PluginStorage] 命名空间前缀迁移完成: ${migratedCount} 个插件`)
+      }
+    } catch (err) {
+      log.error('[PluginStorage] 命名空间迁移失败:', err)
     }
   }
 }
