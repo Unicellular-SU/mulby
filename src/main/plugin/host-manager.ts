@@ -82,6 +82,11 @@ function isValidUtf8(chunk: Buffer): boolean {
   }
 }
 
+interface PooledProcess {
+  process: UtilityProcess
+  readyAt: number
+}
+
 export class PluginHostManager extends EventEmitter {
   private hosts: Map<string, PluginHost> = new Map()
   private hostCreationPromises: Map<string, Promise<boolean>> = new Map()
@@ -92,6 +97,13 @@ export class PluginHostManager extends EventEmitter {
   private clipboardHistoryManager?: ClipboardHistoryManager
   /** 注入此回调以检查插件是否有活跃 UI 窗口（有则不销毁宿主进程） */
   hasActiveWindow?: (pluginId: string) => boolean
+
+  // ==================== Host 进程池 ====================
+  private static readonly MAX_POOL_SIZE = 1
+  private pooledProcesses: PooledProcess[] = []
+  private poolFilling = false
+  private poolDestroyed = false
+  private poolFillingChild: UtilityProcess | null = null
 
   constructor() {
     super()
@@ -143,6 +155,78 @@ export class PluginHostManager extends EventEmitter {
     this.clipboardHistoryManager = manager
   }
 
+  // ==================== Host 进程池方法 ====================
+
+  async fillPool(): Promise<void> {
+    if (this.poolDestroyed || this.poolFilling || this.pooledProcesses.length >= PluginHostManager.MAX_POOL_SIZE) return
+    this.poolFilling = true
+    try {
+      const child = utilityProcess.fork(this.workerPath, [], {
+        serviceName: 'plugin-host-pool',
+        stdio: 'pipe'
+      })
+      this.poolFillingChild = child
+
+      child.on('exit', () => {
+        if (this.poolFillingChild === child) this.poolFillingChild = null
+        this.pooledProcesses = this.pooledProcesses.filter(p => p.process !== child)
+      })
+
+      const ready = await new Promise<boolean>((resolve) => {
+        const timer = setTimeout(() => {
+          try { child.kill() } catch { /* ignore */ }
+          resolve(false)
+        }, PLUGIN_READY_TIMEOUT_MS)
+
+        const onMessage = (message: HostResponse) => {
+          if (message?.type === 'ready') {
+            clearTimeout(timer)
+            child.removeListener('message', onMessage)
+            resolve(true)
+          }
+        }
+        child.on('message', onMessage)
+      })
+
+      this.poolFillingChild = null
+
+      if (this.poolDestroyed) {
+        try { child.kill() } catch { /* ignore */ }
+        return
+      }
+
+      if (ready) {
+        this.pooledProcesses.push({ process: child, readyAt: Date.now() })
+        log.info(`[HostPool] idle process ready | pool size=${this.pooledProcesses.length}`)
+      }
+    } catch (err) {
+      log.error('[HostPool] Failed to fill pool:', err)
+    } finally {
+      this.poolFilling = false
+      this.poolFillingChild = null
+    }
+  }
+
+  private acquirePooledProcess(): UtilityProcess | null {
+    const entry = this.pooledProcesses.shift()
+    if (!entry) return null
+    log.info(`[HostPool] acquired pooled process | pool size=${this.pooledProcesses.length}`)
+    void this.fillPool()
+    return entry.process
+  }
+
+  destroyPool(): void {
+    this.poolDestroyed = true
+    for (const entry of this.pooledProcesses) {
+      try { entry.process.kill() } catch { /* ignore */ }
+    }
+    this.pooledProcesses = []
+    if (this.poolFillingChild) {
+      try { this.poolFillingChild.kill() } catch { /* ignore */ }
+      this.poolFillingChild = null
+    }
+  }
+
   /**
    * 设置 Watchdog 事件监听
    */
@@ -191,15 +275,24 @@ export class PluginHostManager extends EventEmitter {
     }
 
     try {
-      log.info(`[HostTrace] spawn start | plugin=${pluginName} | +${Date.now() - hostStart}ms`)
-      const child = utilityProcess.fork(this.workerPath, [], {
-        serviceName: `plugin-host-${pluginName}`,
-        stdio: 'pipe'
-      })
-      log.info(`[HostTrace] spawn done | plugin=${pluginName} | +${Date.now() - hostStart}ms`)
+      const pooled = this.acquirePooledProcess()
+      let child: UtilityProcess
+      let isPooled = false
+
+      if (pooled) {
+        child = pooled
+        isPooled = true
+        log.info(`[HostTrace] acquired from pool | plugin=${pluginName} | +${Date.now() - hostStart}ms`)
+      } else {
+        log.info(`[HostTrace] spawn start | plugin=${pluginName} | +${Date.now() - hostStart}ms`)
+        child = utilityProcess.fork(this.workerPath, [], {
+          serviceName: `plugin-host-${pluginName}`,
+          stdio: 'pipe'
+        })
+        log.info(`[HostTrace] spawn done | plugin=${pluginName} | +${Date.now() - hostStart}ms`)
+      }
 
       // 解析空闲超时配置
-      // 优先级：background: true → 永不销毁 > idleTimeoutMs: 'never'/0 → 永不销毁 > 自定义 ms > 默认 5 分钟
       const isBackgroundPlugin = plugin.manifest.pluginSetting?.background === true
       const idleTimeoutCfg = plugin.manifest.pluginSetting?.idleTimeoutMs
       const idleTimeoutMs = isBackgroundPlugin || idleTimeoutCfg === 'never' || idleTimeoutCfg === 0
@@ -212,7 +305,7 @@ export class PluginHostManager extends EventEmitter {
         process: child,
         pluginName,
         runCommandAllowed: plugin.manifest.permissions?.runCommand === true,
-        ready: false,
+        ready: isPooled,
         activeRequests: 0,
         startedAt: Date.now(),
         idleTimer: null,
@@ -223,7 +316,6 @@ export class PluginHostManager extends EventEmitter {
       this.hosts.set(pluginName, host)
       this.setupHostListeners(host, plugin)
 
-      // Phase 4: 解析插件的资源限制配置
       const resourceLimitsConfig = plugin.manifest.pluginSetting?.resourceLimits
       const resolvedLimits = resolveResourceLimits(resourceLimitsConfig, 'medium')
       const customWatchdogConfig = applyResourceLimitsToWatchdog(resolvedLimits, {
@@ -237,14 +329,18 @@ export class PluginHostManager extends EventEmitter {
         memoryHistorySize: 12
       })
 
-      // 立即注册到 Watchdog，持续监控（使用插件特定的资源限制）
       this.watchdog.registerHost(pluginName, customWatchdogConfig)
 
-      // 等待 ready 信号
-      log.info(`[HostTrace] waitForReady start | plugin=${pluginName} | +${Date.now() - hostStart}ms`)
-      const ready = await this.waitForReady(pluginName)
-      log.info(`[HostTrace] waitForReady done | plugin=${pluginName} | ready=${ready} | +${Date.now() - hostStart}ms`)
-      return ready
+      if (isPooled) {
+        log.info(`[HostTrace] pooled host ready | plugin=${pluginName} | +${Date.now() - hostStart}ms`)
+        this.emit('host:ready', pluginName)
+      } else {
+        log.info(`[HostTrace] waitForReady start | plugin=${pluginName} | +${Date.now() - hostStart}ms`)
+        const ready = await this.waitForReady(pluginName)
+        log.info(`[HostTrace] waitForReady done | plugin=${pluginName} | ready=${ready} | +${Date.now() - hostStart}ms`)
+        if (!ready) return false
+      }
+      return true
     } catch (err) {
       log.error(`Failed to create host for ${pluginName}:`, err)
       return false

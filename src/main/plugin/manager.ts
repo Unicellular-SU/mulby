@@ -165,6 +165,7 @@ export class PluginManager {
     promise: Promise<boolean>
     ttlTimer: NodeJS.Timeout
   } | null = null
+  private poolWarmupTimer: NodeJS.Timeout | null = null
 
   constructor() {
     this.stateManager = new PluginStateManager()
@@ -266,7 +267,12 @@ export class PluginManager {
       return this.initPromise
     }
 
-    this.initPromise = this.loadPlugins().finally(() => {
+    this.initPromise = this.loadPlugins().then(() => {
+      this.poolWarmupTimer = setTimeout(() => {
+        this.poolWarmupTimer = null
+        void this.hostManager.fillPool()
+      }, 2000)
+    }).finally(() => {
       this.initPromise = null
     })
 
@@ -1213,7 +1219,14 @@ export class PluginManager {
       // 关闭任务调度器
       await this.taskScheduler.shutdown()
 
-      // 销毁所有 Host 进程
+      // 取消待发的池填充定时器
+      if (this.poolWarmupTimer) {
+        clearTimeout(this.poolWarmupTimer)
+        this.poolWarmupTimer = null
+      }
+
+      // 销毁所有 Host 进程和进程池
+      this.hostManager.destroyPool()
       await this.hostManager.destroyAll()
 
       // 停止搜索 Worker
