@@ -1,4 +1,4 @@
-import { systemPreferences, session, app } from 'electron'
+import { systemPreferences, session, app, dialog, BrowserWindow } from 'electron'
 import log from 'electron-log'
 
 type MacPermissionsModule = {
@@ -72,6 +72,7 @@ export class PermissionManager {
     private static instance: PermissionManager
     private sessionHandlerSetup = false
     private geolocationStatusOverride: PermissionStatus | null = null
+    private nonMacDecisions = new Map<string, boolean>()
 
     private constructor() {
         log.info('[PermissionManager] Initializing...')
@@ -115,23 +116,34 @@ export class PermissionManager {
                 const permType = this.mapElectronPermission(permission)
 
                 if (permType) {
-                    // 对于 macOS，检查系统权限状态
                     if (process.platform === 'darwin') {
                         const status = this.getStatus(permType)
                         log.info(`[PermissionManager] macOS status for ${permType}: ${status}`)
                         if (permType === 'geolocation') {
-                            // geolocation 在 not-determined 时必须允许请求，才能触发系统授权弹窗
                             callback(status !== 'denied' && status !== 'restricted')
                             return
                         }
                         callback(status === 'granted')
                     } else {
-                        // Windows/Linux: 默认允许（可以在这里添加自定义 UI）
-                        log.info(`[PermissionManager] Allowing ${permission} on ${process.platform}`)
-                        callback(true)
+                        const origin = details.requestingUrl
+                            ? new URL(details.requestingUrl).origin
+                            : 'unknown'
+                        const cacheKey = `${origin}:${permType}`
+
+                        const cached = this.nonMacDecisions.get(cacheKey)
+                        if (cached !== undefined) {
+                            callback(cached)
+                            return
+                        }
+
+                        this.showPermissionDialog(permType, origin)
+                            .then(granted => {
+                                this.nonMacDecisions.set(cacheKey, granted)
+                                callback(granted)
+                            })
+                            .catch(() => callback(false))
                     }
                 } else {
-                    // 未知权限类型，拒绝
                     log.warn(`[PermissionManager] Unknown permission type: ${permission}`)
                     callback(false)
                 }
@@ -226,9 +238,13 @@ export class PermissionManager {
             return 'unknown'
         }
 
-        // Windows/Linux 默认返回 granted
-        log.info(`[PermissionManager] ${process.platform} defaulting to granted for ${type}`)
-        return 'granted'
+        log.info(`[PermissionManager] ${process.platform} checking cached decision for ${type}`)
+        for (const [key, granted] of this.nonMacDecisions) {
+            if (key.endsWith(`:${type}`) && granted) {
+                return 'granted'
+            }
+        }
+        return 'not-determined'
     }
 
     /**
@@ -298,6 +314,41 @@ export class PermissionManager {
         // 大多数权限在 Windows/Linux 上是自动授权的
         // 返回当前状态
         return this.getStatus(type)
+    }
+
+    private async showPermissionDialog(
+        type: PermissionType,
+        origin: string,
+    ): Promise<boolean> {
+        const labels: Record<PermissionType, string> = {
+            geolocation: '位置信息',
+            camera: '摄像头',
+            microphone: '麦克风',
+            screen: '屏幕录制',
+            accessibility: '辅助功能',
+            contacts: '通讯录',
+            calendar: '日历',
+        }
+        const label = labels[type] || type
+
+        const parentWindow = BrowserWindow.getFocusedWindow()
+        const opts: Electron.MessageBoxOptions = {
+            type: 'question',
+            buttons: ['允许', '拒绝'],
+            defaultId: 1,
+            cancelId: 1,
+            title: '权限请求',
+            message: `"${origin}" 请求访问${label}`,
+            detail: '你可以选择允许或拒绝此请求。本次选择在应用重启前持续有效。',
+        }
+
+        const result = parentWindow
+            ? await dialog.showMessageBox(parentWindow, opts)
+            : await dialog.showMessageBox(opts)
+
+        const granted = result.response === 0
+        log.info(`[PermissionManager] User ${granted ? 'allowed' : 'denied'} ${type} for ${origin}`)
+        return granted
     }
 
     /**

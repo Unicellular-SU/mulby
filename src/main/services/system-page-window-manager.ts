@@ -16,6 +16,7 @@ import {
   shouldUseWindowsFramelessSurface
 } from './window-surface'
 import { registerAppWindow, unregisterAppWindow } from './ipc-caller-resolver'
+import { registerProtectedWindow, unregisterProtectedWindow } from '../plugin/input'
 
 const ATTACHED_SYSTEM_SHADOW_MARGIN = 12
 const WINDOWS_ATTACHED_SHOW_OPACITY_GUARD_MS = 50
@@ -400,6 +401,7 @@ export class SystemPageWindowManager {
 
     this.detachedWindow = detachedWindow
     registerAppWindow(detachedWindow.id)
+    registerProtectedWindow(detachedWindow.id)
 
     detachedWindow.once('ready-to-show', async () => {
       const activeDetached = this.getDetachedWindow()
@@ -421,6 +423,7 @@ export class SystemPageWindowManager {
     detachedWindow.on('closed', () => {
       if (this.detachedWindow && this.detachedWindow.id === detachedWindow.id) {
         unregisterAppWindow(detachedWindow.id)
+        unregisterProtectedWindow(detachedWindow.id)
         this.detachedWindow = null
         if (!this.getAttachedWindow()) {
           this.currentRoute = null

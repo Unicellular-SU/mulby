@@ -16,6 +16,7 @@ import {
 } from '../services/window-surface'
 import { registerView } from '../services/webcontents-registry'
 import { registerPluginWindow, unregisterPluginWindow } from '../services/ipc-caller-resolver'
+import { registerProtectedWindow, unregisterProtectedWindow } from './input'
 import {
   DETACHED_TITLEBAR_HEIGHT,
   setupTitlebarIPC,
@@ -275,7 +276,6 @@ export class PluginWindowManager {
     if (this.panelWindow?.isOpen()) {
       const win = this.panelWindow.promoteToWindow()
       if (win) {
-        // 注册到 detachedWindows
         const windowId = win.id
         this.detachedWindows.set(windowId, {
           window: win,
@@ -285,10 +285,12 @@ export class PluginWindowManager {
           attachments,
           startedAt
         })
+        registerProtectedWindow(windowId)
         this.updateDockVisibility()
 
         win.on('closed', () => {
           this.detachedWindows.delete(windowId)
+          unregisterProtectedWindow(windowId)
           this.updateDockVisibility()
           this.notifyPluginWindowClosed(plugin.id)
         })
@@ -544,18 +546,14 @@ export class PluginWindowManager {
       startedAt: Date.now()
     })
 
-    // 注册到 IPC 调用方来源解析器
     registerPluginWindow(windowId, plugin.id)
+    registerProtectedWindow(windowId)
 
-    // 显示 Dock 图标
     void this.updateDockVisibility()
 
-    // 安装 console 输出捕获（主进程侧捕获插件 console 输出）
     installConsoleCapture(win, plugin.id)
 
-    // 监听渲染进程崩溃
     pluginWebContents.on('render-process-gone', (_event, details) => {
-      // 记录崩溃日志到持久化存储
       loggerService.crash({
         pluginId: plugin.id,
         reason: details.reason,
@@ -568,13 +566,11 @@ export class PluginWindowManager {
     win.on('closed', () => {
       this.detachedWindows.delete(windowId)
       unregisterPluginWindow(windowId)
-      // 当窗口关闭时，销毁插件 WebContentsView
+      unregisterProtectedWindow(windowId)
       if (pluginView && !pluginView.webContents.isDestroyed()) {
         pluginView.webContents.close()
       }
-      // 检查是否需要隐藏 Dock 图标
       this.updateDockVisibility()
-      // 触发窗口关闭回调（用于处理后台运行）
       this.notifyPluginWindowClosed(plugin.id)
     })
 
@@ -779,21 +775,20 @@ export class PluginWindowManager {
       input: '',
       attachments: [],
       startedAt: Date.now(),
-      creatorId  // 记录创建者
+      creatorId
     })
 
-    // 注册到 IPC 调用方来源解析器
     registerPluginWindow(windowId, plugin.id)
+    registerProtectedWindow(windowId)
 
     this.updateDockVisibility()
 
-    // 安装 console 输出捕获（主进程侧捕获插件 console 输出）
     installConsoleCapture(win, plugin.id)
 
     win.on('closed', () => {
       this.detachedWindows.delete(windowId)
       unregisterPluginWindow(windowId)
-      // 销毁插件 WebContentsView
+      unregisterProtectedWindow(windowId)
       if (pluginView && !pluginView.webContents.isDestroyed()) {
         pluginView.webContents.close()
       }
@@ -872,13 +867,11 @@ export class PluginWindowManager {
     return Array.from(byPlugin.values())
   }
 
-  // 关闭所有窗口
   closeAll(): void {
     this.closeAttached()
     for (const [windowId, info] of this.detachedWindows.entries()) {
-      // 防御性显式注销：即便 closed 事件因进程提前退出未触发，
-      // ipcCallerResolver 注册表也不会残留旧条目
       unregisterPluginWindow(windowId)
+      unregisterProtectedWindow(windowId)
       if (!info.window.isDestroyed()) {
         info.window.close()
       }

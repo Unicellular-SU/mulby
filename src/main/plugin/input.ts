@@ -8,6 +8,17 @@ const FOCUS_DELAY_MS = 160
 // 记录隐藏前可见的窗口
 const hiddenWindows: Set<number> = new Set()
 
+// 独立窗口注册表 —— 这些窗口不会被 hideAllAppWindows 隐藏
+const protectedWindowIds: Set<number> = new Set()
+
+export function registerProtectedWindow(windowId: number): void {
+  protectedWindowIds.add(windowId)
+}
+
+export function unregisterProtectedWindow(windowId: number): void {
+  protectedWindowIds.delete(windowId)
+}
+
 // macOS 键码映射 (key code)
 const MAC_KEY_CODES: Record<string, number> = {
   // 功能键
@@ -160,18 +171,15 @@ function sleep(ms: number): Promise<void> {
 }
 
 function hideAllAppWindows(): void {
-  // 清空之前的记录
   hiddenWindows.clear()
 
-  // 隐藏所有窗口，并记录哪些窗口在隐藏前是可见的
   for (const win of BrowserWindow.getAllWindows()) {
-    if (!win.isDestroyed() && win.isVisible()) {
+    if (!win.isDestroyed() && win.isVisible() && !protectedWindowIds.has(win.id)) {
       hiddenWindows.add(win.id)
       win.hide()
     }
   }
 
-  // macOS: 必须调用 app.hide() 才能让焦点真正回到用户之前的窗口
   if (process.platform === 'darwin') {
     app.hide()
   }
