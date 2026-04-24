@@ -8,6 +8,7 @@ import type { Plugin, BackgroundPluginInfo } from '../../shared/types/plugin'
 import type { PluginHostManager } from './host-manager'
 import type { PluginHostWatchdog } from './watchdog'
 import type { PluginStateManager } from './state'
+import { BG_BATCH_DELAY_MS, BG_FORCE_STOP_TIMEOUT_MS } from '../constants/timing'
 import log from 'electron-log'
 
 // ============ 类型定义 ============
@@ -376,7 +377,7 @@ export class BackgroundPluginManager extends EventEmitter {
 
         // 批次之间延迟 500ms，避免资源峰值
         if (i + batchSize < pluginsToRestore.length) {
-          await new Promise(resolve => setTimeout(resolve, 500))
+          await new Promise(resolve => setTimeout(resolve, BG_BATCH_DELAY_MS))
         }
       }
 
@@ -473,7 +474,7 @@ export class BackgroundPluginManager extends EventEmitter {
     const startTime = Date.now()
     await Promise.race([
       this.stopAll(),
-      new Promise(resolve => setTimeout(resolve, 3000))
+      new Promise(resolve => setTimeout(resolve, BG_FORCE_STOP_TIMEOUT_MS))
     ])
 
     const duration = Date.now() - startTime

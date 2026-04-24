@@ -12,6 +12,7 @@
 import { BrowserWindow } from 'electron'
 import { pluginScreen } from '../../../main/plugin/screen'
 import type { CommandHandler } from '../command-registry'
+import { DEFAULT_BROWSER_WIDTH, DEFAULT_BROWSER_HEIGHT } from '../../constants/window-defaults'
 import { registerSystemInternalWindow, unregisterSystemInternalWindow } from '../../services/ipc-caller-resolver'
 
 /** Canvas 窗口管理器（简易实现，后续可扩展） */
@@ -56,8 +57,8 @@ export function createCanvasHandlers(_deps: CanvasHandlerDeps): Record<string, {
         const url = String(params.url || '').trim()
         if (!url) throw new Error('url is required')
 
-        const width = typeof params.width === 'number' ? params.width : 800
-        const height = typeof params.height === 'number' ? params.height : 600
+        const width = typeof params.width === 'number' ? params.width : DEFAULT_BROWSER_WIDTH
+        const height = typeof params.height === 'number' ? params.height : DEFAULT_BROWSER_HEIGHT
         const title = String(params.title || 'OpenClaw Canvas')
         const windowId = String(params.windowId || `canvas-${Date.now()}`)
 

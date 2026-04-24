@@ -1,5 +1,6 @@
 import db from '../db'
 import path from 'node:path'
+import { APP_SETTINGS_DEFAULT_WINDOW_WIDTH } from '../constants/window-defaults'
 import type {
   AiToolCapabilityGrant,
   AiToolCapabilityPolicySettings,
@@ -192,7 +193,7 @@ const DEFAULT_SETTINGS: AppSettings = {
     }
   },
   window: {
-    width: 800
+    width: APP_SETTINGS_DEFAULT_WINDOW_WIDTH
   },
   search: {
     enableApps: true,
@@ -863,7 +864,7 @@ function mergeSettings(current: AppSettings, next: Partial<AppSettings>): AppSet
       }
     }),
     window: {
-      ...(current.window || { width: 800 }),
+      ...(current.window || { width: APP_SETTINGS_DEFAULT_WINDOW_WIDTH }),
       ...(next.window || {})
     },
     search: {

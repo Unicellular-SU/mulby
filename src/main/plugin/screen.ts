@@ -13,6 +13,7 @@ import {
   nativeCaptureRegion,
   isNativeScreenCaptureAvailable
 } from '../services/native-screen-capture'
+import { SCREEN_CAPTURE_THUMBNAIL_SIZE } from '../constants/window-defaults'
 import log from 'electron-log'
 
 export interface DisplayInfo {
@@ -131,7 +132,7 @@ export class PluginScreen {
    */
   async getSources(options: CaptureOptions = {}): Promise<CaptureSource[]> {
     const types = options.types || ['screen', 'window']
-    const thumbnailSize = options.thumbnailSize || { width: 150, height: 150 }
+    const thumbnailSize = options.thumbnailSize || { width: SCREEN_CAPTURE_THUMBNAIL_SIZE, height: SCREEN_CAPTURE_THUMBNAIL_SIZE }
 
     const sources = await desktopCapturer.getSources({
       types,

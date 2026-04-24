@@ -19,6 +19,7 @@ import type {
   AiToolContext
 } from '../../../shared/types/ai'
 import { getAiSettings, updateAiSettings } from '../config'
+import { MCP_PING_TIMEOUT_MS } from '../../constants/timing'
 
 const TOOL_ID_PREFIX = 'mcp__'
 const TOOL_LIST_CACHE_TTL_MS = 5 * 60 * 1000
@@ -575,7 +576,7 @@ export class AiMcpService {
     const existing = this.clients.get(serverId)
     if (existing) {
       try {
-        await existing.ping({ timeout: 1000 })
+        await existing.ping({ timeout: MCP_PING_TIMEOUT_MS })
         return existing
       } catch {
         await this.closeClient(serverId)

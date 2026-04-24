@@ -1,5 +1,6 @@
 import { app, BrowserWindow, ipcMain, nativeTheme, screen } from 'electron'
 import { withIgnoringBlur, hasDetachedWindows } from './blur-manager'
+import { DIALOG_WIDTH, DIALOG_MEASURE_HEIGHT, DIALOG_MIN_HEIGHT, DIALOG_CONTENT_FALLBACK_HEIGHT, DIALOG_VERTICAL_MARGIN } from '../constants/window-defaults'
 import { registerSystemInternalWindow, unregisterSystemInternalWindow } from './ipc-caller-resolver'
 
 export interface UiMessageBoxOptions {
@@ -123,9 +124,9 @@ async function measureNaturalHeight(win: BrowserWindow): Promise<number> {
       true
     )
     const value = Number(height)
-    return Number.isFinite(value) && value > 0 ? value : 200
+    return Number.isFinite(value) && value > 0 ? value : DIALOG_CONTENT_FALLBACK_HEIGHT
   } catch {
-    return 200
+    return DIALOG_CONTENT_FALLBACK_HEIGHT
   }
 }
 
@@ -421,14 +422,14 @@ export async function showInternalMessageBox(
   const buttons = normalizeButtons(options.buttons)
   const defaultId = clampIndex(options.defaultId, buttons.length, 0)
   const cancelId = clampIndex(options.cancelId, buttons.length, 0)
-  const width = 480
-  const measureHeight = 800
+  const width = DIALOG_WIDTH
+  const measureHeight = DIALOG_MEASURE_HEIGHT
 
   return await withIgnoringBlur(async () => {
     const channel = `ui-dialog:message-box:${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
     const parent = pickDefaultParent(input?.parentWindow)
     const display = pickDisplay(parent)
-    const maxHeight = Math.max(200, display.workArea.height - 48)
+    const maxHeight = Math.max(DIALOG_CONTENT_FALLBACK_HEIGHT, display.workArea.height - DIALOG_VERTICAL_MARGIN)
     const win = new BrowserWindow({
       width,
       height: measureHeight,
@@ -498,7 +499,7 @@ export async function showInternalMessageBox(
           if (win.isDestroyed()) return
           // Measure natural content height (HTML has no height constraints)
           const naturalHeight = await measureNaturalHeight(win)
-          const finalHeight = clamp(naturalHeight, 120, maxHeight)
+          const finalHeight = clamp(naturalHeight, DIALOG_MIN_HEIGHT, maxHeight)
 
           if (win.isDestroyed()) return
           // Apply constrained layout so .body scrolls when content exceeds window

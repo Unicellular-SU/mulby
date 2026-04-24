@@ -8,6 +8,7 @@ import type {
   SearchExecutionContext,
   SearchRankingContext
 } from '../types'
+import { DARWIN_PREHEAT_DELAY_MS } from '../../../constants/timing'
 import log from 'electron-log'
 
 const SEARCH_KEY_FILES = 'darwin-files'
@@ -61,7 +62,7 @@ export class DarwinSearchProvider implements DesktopSearchProvider {
         this.hydrateDarwinDisplayNames(paths)
 
         // displayName hydrate 是异步的，延迟预热拼音索引以等待部分 displayName 就绪
-        setTimeout(() => this.preheatCatalogKeywordIndexes(paths), 2000)
+        setTimeout(() => this.preheatCatalogKeywordIndexes(paths), DARWIN_PREHEAT_DELAY_MS)
       })
       .catch(() => {
         // ignore warmup errors

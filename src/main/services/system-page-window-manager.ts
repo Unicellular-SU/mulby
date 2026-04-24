@@ -7,6 +7,7 @@ import { attachShortcutRecordingGuard } from './shortcut-recording-guard'
 import { injectCustomTitleBar } from '../plugin/titlebar'
 import { isIgnoringBlur } from './blur-manager'
 import { ATTACHED_PANEL_HEIGHT, ATTACHED_PANEL_MIN_OVERFLOW_HEIGHT } from '../constants/panel-window'
+import { SYSTEM_PAGE_FALLBACK_WIDTH } from '../constants/window-defaults'
 import { getMainWindowVisibleBounds } from '../main-window-frame'
 import {
   applyWindowsFramelessSurface,
@@ -726,7 +727,7 @@ export class SystemPageWindowManager {
   private calculateAttachedBounds(): { x: number; y: number; width: number } {
     const main = this.mainWindow
     if (!main || main.isDestroyed()) {
-      return { x: 0, y: 0, width: 900 }
+      return { x: 0, y: 0, width: SYSTEM_PAGE_FALLBACK_WIDTH }
     }
 
     const bounds = getMainWindowVisibleBounds(main.getBounds())

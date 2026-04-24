@@ -10,6 +10,7 @@ import { TaskStore } from './task-store'
 import { CronParser } from './cron-parser'
 import type { Task, TaskInput, TaskExecution, TaskFilter } from './types'
 import type { Plugin } from '../../shared/types/plugin'
+import { SCHEDULER_IDLE_CHECK_MS } from '../constants/timing'
 import log from 'electron-log'
 
 interface SchedulerHostManagerLike {
@@ -423,7 +424,7 @@ export class TaskScheduler extends EventEmitter {
 
     if (!nextTask || !nextTask.nextRunTime) {
       // 没有待执行任务，1分钟后再检查
-      this.timer = setTimeout(() => this.scheduleNext(), 60000)
+      this.timer = setTimeout(() => this.scheduleNext(), SCHEDULER_IDLE_CHECK_MS)
       return
     }
 

@@ -12,6 +12,8 @@
 import { BrowserWindow, app, ipcMain, net, session } from 'electron'
 import { join } from 'node:path'
 import type { LocalSearchExecutor, WebSearchResult } from '../ai/tools/web-search'
+import { SEARCH_WINDOW_WIDTH, SEARCH_WINDOW_HEIGHT } from '../constants/window-defaults'
+import { PARSER_WORKER_STARTUP_TIMEOUT_MS, SESSION_WARMUP_DELAY_MS, SESSION_WARMUP_TIMEOUT_MS, DYNAMIC_JS_SETTLE_MS } from '../constants/timing'
 import { registerSystemInternalWindow, unregisterSystemInternalWindow } from './ipc-caller-resolver'
 import log from 'electron-log'
 
@@ -105,7 +107,7 @@ async function withParserWorker<T>(fn: (worker: BrowserWindow) => Promise<T>): P
     await Promise.race([
       parserReadyPromise,
       new Promise<void>((_, reject) =>
-        setTimeout(() => reject(new Error('Parser Worker 启动超时')), 10_000)
+        setTimeout(() => reject(new Error('Parser Worker 启动超时')), PARSER_WORKER_STARTUP_TIMEOUT_MS)
       )
     ])
   }
@@ -198,8 +200,8 @@ export class SearchWindowService implements LocalSearchExecutor {
 
     const warmUrl = `https://${targetHost}/`
     const win = new BrowserWindow({
-      width: 1280,
-      height: 768,
+      width: SEARCH_WINDOW_WIDTH,
+      height: SEARCH_WINDOW_HEIGHT,
       show: false,
       webPreferences: {
         nodeIntegration: false,
@@ -215,11 +217,10 @@ export class SearchWindowService implements LocalSearchExecutor {
       await Promise.race([
         win.loadURL(warmUrl),
         new Promise<void>((_, reject) =>
-          setTimeout(() => reject(new Error('Session 预热超时')), Math.min(timeoutMs, 10_000))
+          setTimeout(() => reject(new Error('Session 预热超时')), Math.min(timeoutMs, SESSION_WARMUP_TIMEOUT_MS))
         )
       ])
-      // 等待首页 JS 执行，确保 Cookie 被完整设置
-      await new Promise<void>((r) => setTimeout(r, 1000))
+      await new Promise<void>((r) => setTimeout(r, SESSION_WARMUP_DELAY_MS))
       console.debug(`[SearchWindow] 搜索 session Cookie 预热完成: ${targetHost}`)
     } catch (err) {
       log.warn(`[SearchWindow] Session 预热失败（${targetHost}，不影响后续搜索）:`, err)
@@ -386,8 +387,8 @@ export class SearchWindowService implements LocalSearchExecutor {
     await this.warmSearchSession(ses, url, timeoutMs)
 
     const win = new BrowserWindow({
-      width: 1280,
-      height: 768,
+      width: SEARCH_WINDOW_WIDTH,
+      height: SEARCH_WINDOW_HEIGHT,
       show: false,
       webPreferences: {
         nodeIntegration: false,
@@ -421,7 +422,7 @@ export class SearchWindowService implements LocalSearchExecutor {
       ])
 
       // 短暂延迟确保动态 JS 执行完毕
-      await new Promise<void>((resolve) => setTimeout(resolve, 800))
+      await new Promise<void>((resolve) => setTimeout(resolve, DYNAMIC_JS_SETTLE_MS))
 
       // 获取渲染后的 HTML
       const html: string = await win.webContents.executeJavaScript(

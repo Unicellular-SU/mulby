@@ -8,6 +8,7 @@
 import { execFile } from 'child_process'
 import { promisify } from 'util'
 import log from 'electron-log'
+import { OS_COMMAND_TIMEOUT_MS } from '../constants/timing'
 
 const execFileAsync = promisify(execFile)
 
@@ -295,7 +296,7 @@ tell application "System Events"
 end tell`
 
   const { stdout } = await execFileAsync('osascript', ['-e', script], {
-    timeout: 2000,
+    timeout: OS_COMMAND_TIMEOUT_MS,
     encoding: 'utf8'
   })
 
@@ -419,7 +420,7 @@ async function getActiveWindowLinux(): Promise<ActiveWindowInfo | null> {
   try {
     // 获取活跃窗口 ID
     const { stdout: windowId } = await execFileAsync('xdotool', ['getactivewindow'], {
-      timeout: 2000,
+      timeout: OS_COMMAND_TIMEOUT_MS,
       encoding: 'utf8'
     })
     const wid = windowId.trim()
@@ -427,19 +428,19 @@ async function getActiveWindowLinux(): Promise<ActiveWindowInfo | null> {
 
     // 获取窗口标题
     const { stdout: titleOut } = await execFileAsync('xdotool', ['getactivewindow', 'getwindowname'], {
-      timeout: 2000,
+      timeout: OS_COMMAND_TIMEOUT_MS,
       encoding: 'utf8'
     })
 
     // 获取窗口 PID
     const { stdout: pidOut } = await execFileAsync('xdotool', ['getactivewindow', 'getwindowpid'], {
-      timeout: 2000,
+      timeout: OS_COMMAND_TIMEOUT_MS,
       encoding: 'utf8'
     })
 
     // 获取 WM_CLASS（应用名称）
     const { stdout: classOut } = await execFileAsync('xprop', ['-id', wid, 'WM_CLASS'], {
-      timeout: 2000,
+      timeout: OS_COMMAND_TIMEOUT_MS,
       encoding: 'utf8'
     })
 

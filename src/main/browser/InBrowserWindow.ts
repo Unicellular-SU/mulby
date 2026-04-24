@@ -1,6 +1,7 @@
 import { BrowserWindow, Session } from 'electron';
 import { InBrowserOp, InBrowserOptions } from '../../shared/types/inbrowser';
 import { registerSystemInternalWindow, unregisterSystemInternalWindow } from '../services/ipc-caller-resolver';
+import { IN_BROWSER_POLL_INTERVAL_MS } from '../constants/timing';
 import log from 'electron-log'
 
 export class InBrowserWindow {
@@ -199,7 +200,7 @@ export class InBrowserWindow {
                             })()
                         `);
                             if (exists) return;
-                            await new Promise(r => setTimeout(r, 100));
+                            await new Promise(r => setTimeout(r, IN_BROWSER_POLL_INTERVAL_MS));
                         }
                         throw new Error(`Timeout waiting for element: ${msOrSelector}`);
                     }
@@ -218,7 +219,7 @@ export class InBrowserWindow {
                             })()
                         `);
                             if (exists) return;
-                            await new Promise(r => setTimeout(r, 100));
+                            await new Promise(r => setTimeout(r, IN_BROWSER_POLL_INTERVAL_MS));
                         }
                         throw new Error(`Timeout waiting for element: ${whenSelector}`);
                     }
@@ -246,7 +247,7 @@ export class InBrowserWindow {
                             const executionResult = await contents.executeJavaScript(code);
                             if (executionResult && executionResult.result) return; // Truthy result means done
                             if (executionResult && executionResult.error) throw new Error(`Wait/When check failed: ${executionResult.error}`);
-                            await new Promise(r => setTimeout(r, 100));
+                            await new Promise(r => setTimeout(r, IN_BROWSER_POLL_INTERVAL_MS));
                         }
                         throw new Error(`Timeout waiting for condition in ${op.type}`);
                     } else {

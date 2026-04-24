@@ -1,5 +1,6 @@
 import { Tray, nativeImage } from 'electron'
 import log from 'electron-log'
+import { TRAY_ICON_SIZE } from '../constants/window-defaults'
 
 // 存储插件的托盘实例
 const pluginTrays = new Map<string, Tray>()
@@ -44,7 +45,7 @@ export class PluginTray {
 
       // 调整图标大小（托盘图标通常为 16x16 或 22x22）
       if (!image.isEmpty()) {
-        image = image.resize({ width: 16, height: 16 })
+        image = image.resize({ width: TRAY_ICON_SIZE, height: TRAY_ICON_SIZE })
       }
 
       const tray = new Tray(image)
@@ -91,7 +92,7 @@ export class PluginTray {
     }
 
     if (!image.isEmpty()) {
-      image = image.resize({ width: 16, height: 16 })
+      image = image.resize({ width: TRAY_ICON_SIZE, height: TRAY_ICON_SIZE })
       tray.setImage(image)
     }
   }

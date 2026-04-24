@@ -18,6 +18,7 @@ import { PluginHostWatchdog } from './watchdog'
 import type { InputAttachment, Plugin } from '../../shared/types/plugin'
 import { loggerService } from '../services/logger'
 import { resolveResourceLimits, applyResourceLimitsToWatchdog } from './resource-limits'
+import { PLUGIN_READY_TIMEOUT_MS, PROCESS_GRACEFUL_EXIT_MS } from '../constants/timing'
 import { PluginMessageBus } from './message-bus'
 import type { TaskScheduler } from '../scheduler'
 import type { ClipboardHistoryManager } from '../services/clipboard-history'
@@ -428,7 +429,7 @@ export class PluginHostManager extends EventEmitter {
   /**
    * 等待 Host 就绪
    */
-  private waitForReady(pluginName: string, timeout = 10000): Promise<boolean> {
+  private waitForReady(pluginName: string, timeout = PLUGIN_READY_TIMEOUT_MS): Promise<boolean> {
     return new Promise((resolve) => {
       const host = this.hosts.get(pluginName)
       if (!host) {
@@ -656,7 +657,7 @@ export class PluginHostManager extends EventEmitter {
       })
 
       // 等待一小段时间让进程优雅退出
-      await new Promise(resolve => setTimeout(resolve, 100))
+      await new Promise(resolve => setTimeout(resolve, PROCESS_GRACEFUL_EXIT_MS))
 
       // 强制终止
       if (host.process.pid) {

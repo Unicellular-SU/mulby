@@ -1,5 +1,10 @@
 import { BrowserWindow } from 'electron'
 
+const TITLEBAR_HEIGHT = 36
+const TITLEBAR_BTN_WIDTH = 40
+const TITLEBAR_ICON_SIZE = 16
+const TITLEBAR_FONT_SIZE = 13
+
 /**
  * 获取标题栏 CSS 样式
  */
@@ -11,7 +16,7 @@ function getTitleBarCSS(): string {
   top: 0 !important;
   left: 0 !important;
   right: 0 !important;
-  height: 36px !important;
+  height: ${TITLEBAR_HEIGHT}px !important;
   display: flex !important;
   align-items: center !important;
   background: #1e293b !important;
@@ -44,7 +49,7 @@ function getTitleBarCSS(): string {
 .it-pb-title {
   flex: 1 !important;
   text-align: center !important;
-  font-size: 13px !important;
+  font-size: ${TITLEBAR_FONT_SIZE}px !important;
   font-weight: 500 !important;
   color: #f1f5f9 !important;
   pointer-events: none !important;
@@ -54,7 +59,7 @@ function getTitleBarCSS(): string {
   padding: 0 100px !important;
   z-index: 2 !important;
   margin: 0 !important;
-  line-height: 36px !important;
+  line-height: ${TITLEBAR_HEIGHT}px !important;
 }
 
 /* 按钮容器 */
@@ -71,10 +76,10 @@ function getTitleBarCSS(): string {
 
 /* 按钮基础样式 */
 .it-pb-btn {
-  width: 40px !important;
+  width: ${TITLEBAR_BTN_WIDTH}px !important;
   height: 100% !important;
-  min-width: 40px !important;
-  min-height: 36px !important;
+  min-width: ${TITLEBAR_BTN_WIDTH}px !important;
+  min-height: ${TITLEBAR_HEIGHT}px !important;
   display: flex !important;
   align-items: center !important;
   justify-content: center !important;
@@ -93,10 +98,10 @@ function getTitleBarCSS(): string {
 
 /* 确保 SVG 尺寸正确 */
 .it-pb-btn svg {
-  width: 16px !important;
-  height: 16px !important;
-  min-width: 16px !important;
-  min-height: 16px !important;
+  width: ${TITLEBAR_ICON_SIZE}px !important;
+  height: ${TITLEBAR_ICON_SIZE}px !important;
+  min-width: ${TITLEBAR_ICON_SIZE}px !important;
+  min-height: ${TITLEBAR_ICON_SIZE}px !important;
   /* display: block !important; CAUSES ISSUES WITH TOGGLING */
   fill: currentColor !important;
 }
@@ -165,7 +170,7 @@ function getTitleBarCSS(): string {
 
 /* 内容区域偏移 */
 body {
-  padding-top: 36px !important;
+  padding-top: ${TITLEBAR_HEIGHT}px !important;
   box-sizing: border-box !important;
 }
 `

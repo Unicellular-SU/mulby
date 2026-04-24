@@ -1,4 +1,5 @@
 import { net } from 'electron'
+import { HTTP_DEFAULT_TIMEOUT_MS } from '../constants/timing'
 
 export interface HttpRequestOptions {
   url: string
@@ -17,7 +18,7 @@ export interface HttpResponse {
 
 export class PluginHttp {
   async request(options: HttpRequestOptions): Promise<HttpResponse> {
-    const { url, method = 'GET', headers = {}, body, timeout = 30000 } = options
+    const { url, method = 'GET', headers = {}, body, timeout = HTTP_DEFAULT_TIMEOUT_MS } = options
 
     return new Promise((resolve, reject) => {
       const request = net.request({

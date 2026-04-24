@@ -3,6 +3,7 @@ import db from '../db'
 import { ClipboardWatcher } from './clipboard-watcher-v2'
 import { readFile } from 'fs/promises'
 import { getClipboardFormat, readClipboardFiles } from '../utils/clipboard-helper'
+import { CLIPBOARD_THUMBNAIL_SIZE } from '../constants/window-defaults'
 import log from 'electron-log'
 
 interface ClipboardHistoryRow {
@@ -194,7 +195,7 @@ export class ClipboardHistoryManager {
 
             if (!image.isEmpty()) {
               // 生成小缩略图（100x100）用于列表显示
-              const thumbnail = image.resize({ width: 100, height: 100 })
+              const thumbnail = image.resize({ width: CLIPBOARD_THUMBNAIL_SIZE, height: CLIPBOARD_THUMBNAIL_SIZE })
               const thumbnailBuffer = thumbnail.toPNG()
 
               log.info('[ClipboardHistory] Generated thumbnail for image file')

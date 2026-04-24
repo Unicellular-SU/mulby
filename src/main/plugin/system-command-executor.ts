@@ -10,6 +10,7 @@ import { app, shell, clipboard, Notification } from 'electron'
 import { exec, spawn } from 'child_process'
 import { join } from 'path'
 import type { InputPayload } from '../../shared/types/plugin'
+import { WINDOW_HIDE_SETTLE_MS } from '../constants/timing'
 import log from 'electron-log'
 
 interface ExecuteContext {
@@ -162,7 +163,7 @@ export class SystemCommandExecutor {
     // 隐藏主窗口，避免取色时遮挡
     ctx?.hideMainWindow?.()
     // 等待窗口隐藏动画完成
-    await new Promise(resolve => setTimeout(resolve, 200))
+    await new Promise(resolve => setTimeout(resolve, WINDOW_HIDE_SETTLE_MS))
 
     const { startColorPick } = await import('./color-pick')
     const result = await startColorPick()
@@ -185,7 +186,7 @@ export class SystemCommandExecutor {
   private async screenshot(ctx?: ExecuteContext): Promise<CommandResult> {
     // 隐藏主窗口，避免截图时遮挡
     ctx?.hideMainWindow?.()
-    await new Promise(resolve => setTimeout(resolve, 200))
+    await new Promise(resolve => setTimeout(resolve, WINDOW_HIDE_SETTLE_MS))
 
     const { startRegionCapture } = await import('./region-capture')
     const dataUrl = await startRegionCapture()

@@ -1,6 +1,7 @@
 import { session, Session } from 'electron';
 import { InBrowserWindow } from './InBrowserWindow';
 import { InBrowserRunPayload, InBrowserOptions, InBrowserInstance } from '../../shared/types/inbrowser';
+import { DEFAULT_BROWSER_WIDTH, DEFAULT_BROWSER_HEIGHT } from '../constants/window-defaults';
 
 export class InBrowserManager {
     private static instance: InBrowserManager;
@@ -25,8 +26,8 @@ export class InBrowserManager {
     private buildWindowOptions(options?: InBrowserOptions): { options: InBrowserOptions; cleanupSessionOnClose: boolean } {
         const defaultOptions: InBrowserOptions = {
             show: false,
-            width: 800,
-            height: 600
+            width: DEFAULT_BROWSER_WIDTH,
+            height: DEFAULT_BROWSER_HEIGHT
         };
 
         const merged: InBrowserOptions = {

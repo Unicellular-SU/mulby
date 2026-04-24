@@ -1,6 +1,7 @@
 import log from 'electron-log'
 import { net, BrowserWindow, WebContents } from 'electron'
 import { permissionManager, type PermissionStatus } from './permission-manager'
+import { GEOLOCATION_NATIVE_TIMEOUT_MS } from '../constants/timing'
 
 export interface GeolocationPosition {
   latitude: number
@@ -151,7 +152,7 @@ export class PluginGeolocation {
   async getCurrentPosition(webContents?: WebContents): Promise<GeolocationPosition> {
     if (process.platform === 'darwin') {
       try {
-        const nativePosition = await this.getNativePosition(webContents, 10000)
+        const nativePosition = await this.getNativePosition(webContents, GEOLOCATION_NATIVE_TIMEOUT_MS)
         this.setNativeAccessStatus('granted')
         return nativePosition
       } catch (error) {

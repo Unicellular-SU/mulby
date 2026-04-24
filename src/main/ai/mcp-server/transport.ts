@@ -19,6 +19,7 @@
 import http from 'node:http'
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js'
 import type { MulbyMcpServer } from './server'
+import { MCP_TRANSPORT_CLOSE_TIMEOUT_MS } from '../../constants/timing'
 import log from 'electron-log'
 
 export interface McpHttpTransportOptions {
@@ -88,7 +89,7 @@ export class McpHttpTransport {
       await new Promise<void>((resolve) => {
         this.httpServer!.close(() => resolve())
         // 强制关闭超时
-        setTimeout(() => resolve(), 3000)
+        setTimeout(() => resolve(), MCP_TRANSPORT_CLOSE_TIMEOUT_MS)
       })
       this.httpServer = null
     }
