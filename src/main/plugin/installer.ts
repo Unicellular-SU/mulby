@@ -1,11 +1,15 @@
 import { app } from 'electron'
 import { join, normalize, basename, sep } from 'path'
-import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'fs'
+import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync, renameSync, cpSync } from 'fs'
 import extractZip from 'extract-zip'
 import { tmpdir } from 'os'
 import { compareVersions } from './version'
 import { isCompatiblePlatform } from './loader'
 import log from 'electron-log'
+
+const MAX_ZIP_ENTRIES = 5_000
+const MAX_ZIP_TOTAL_BYTES = 500 * 1024 * 1024 // 500 MB
+const MAX_ZIP_SINGLE_ENTRY_BYTES = 100 * 1024 * 1024 // 100 MB
 
 export type InstallAction = 'installed' | 'updated' | 'already-installed' | 'downgrade-blocked'
 
@@ -57,8 +61,25 @@ export class PluginInstaller {
     const tempDir = join(tmpdir(), `mulby-${Date.now()}`)
 
     try {
-      // 解压到临时目录验证
-      await extractZip(filePath, { dir: tempDir })
+      // H5: 解压到临时目录，同时做条目数/大小预算检查
+      let entryCount = 0
+      let totalBytes = 0
+      await extractZip(filePath, {
+        dir: tempDir,
+        onEntry(entry) {
+          entryCount++
+          if (entryCount > MAX_ZIP_ENTRIES) {
+            throw new Error(`插件包条目数超限（上限 ${MAX_ZIP_ENTRIES}）`)
+          }
+          if (entry.uncompressedSize > MAX_ZIP_SINGLE_ENTRY_BYTES) {
+            throw new Error(`插件包单文件过大：${entry.fileName}（${(entry.uncompressedSize / 1024 / 1024).toFixed(1)} MB，上限 ${MAX_ZIP_SINGLE_ENTRY_BYTES / 1024 / 1024} MB）`)
+          }
+          totalBytes += entry.uncompressedSize
+          if (totalBytes > MAX_ZIP_TOTAL_BYTES) {
+            throw new Error(`插件包解压总大小超限（上限 ${MAX_ZIP_TOTAL_BYTES / 1024 / 1024} MB）`)
+          }
+        }
+      })
 
       // 读取并验证 manifest
       const manifestPath = join(tempDir, 'manifest.json')
@@ -127,8 +148,13 @@ export class PluginInstaller {
         rmSync(existing.path, { recursive: true, force: true })
       }
 
-      // 清洗插件名，防止路径穿越攻击（manifest.name 可能含 ../ 等恶意路径组件）
-      const safeName = basename(String(manifest.name)).replace(/[<>:"|?*]/g, '_')
+      // M7: NUL 字节防御 + 清洗插件名
+      const rawName = String(manifest.name)
+      if (rawName.includes('\0')) {
+        this.cleanupTemp(tempDir)
+        return { success: false, error: '无效的插件名称：包含非法字符' }
+      }
+      const safeName = basename(rawName).replace(/[<>:"|?*]/g, '_')
       if (!safeName || safeName === '.' || safeName === '..') {
         this.cleanupTemp(tempDir)
         return { success: false, error: '无效的插件名称' }
@@ -139,14 +165,19 @@ export class PluginInstaller {
       // 二次验证：确保最终路径确实在 pluginsDir 内
       const normalizedTarget = normalize(targetDir)
       const normalizedPluginsDir = normalize(this.pluginsDir)
-      // 使用 path.sep 确保跨平台兼容（Windows 用 '\'，macOS/Linux 用 '/'）
       if (!normalizedTarget.startsWith(normalizedPluginsDir + sep) && normalizedTarget !== normalizedPluginsDir) {
         this.cleanupTemp(tempDir)
         return { success: false, error: '插件安装路径不安全' }
       }
 
-      // 解压到插件目录
-      await extractZip(filePath, { dir: targetDir })
+      // M7: 复用 tempDir 而非二次解压，减少一半 I/O
+      try {
+        renameSync(tempDir, targetDir)
+      } catch {
+        cpSync(tempDir, targetDir, { recursive: true })
+        this.cleanupTemp(tempDir)
+      }
+
       if (sourceMetadata) {
         this.writeInstallMetadata(targetDir, {
           pluginId,
@@ -155,7 +186,6 @@ export class PluginInstaller {
           ...sourceMetadata
         })
       }
-      this.cleanupTemp(tempDir)
 
       return {
         success: true,

@@ -10,7 +10,7 @@
  * 6. 即时翻译与插件执行
  */
 
-import { clipboard, screen } from 'electron'
+import { BrowserWindow, clipboard, screen } from 'electron'
 import type { InputHookService, MouseEventData } from './input-hook'
 import type { PluginManager } from '../plugin'
 import type { AppSettingsManager } from './app-settings'
@@ -107,13 +107,18 @@ export class SuperPanelManager {
   // 缓存触发时的前台应用上下文（面板打开期间复用，避免获取到 Mulby 自己）
   private cachedActiveWindow: ActiveWindowInfo | undefined = undefined
 
+  private readonly getMainWindow: () => BrowserWindow | null
+
   constructor(
     private readonly inputHookService: InputHookService,
     private readonly pluginManager: PluginManager,
     private readonly settingsManager: AppSettingsManager,
     private readonly themeManager: ThemeManager,
-    private readonly clipboardHistoryManager?: ClipboardHistoryManager
-  ) {}
+    private readonly clipboardHistoryManager?: ClipboardHistoryManager,
+    options?: { getMainWindow?: () => BrowserWindow | null }
+  ) {
+    this.getMainWindow = options?.getMainWindow ?? (() => null)
+  }
 
   // ==================== 生命周期 ====================
 
@@ -723,17 +728,11 @@ export class SuperPanelManager {
           }
           this.hidePanel()
           try {
-            const { BrowserWindow: BW } = require('electron')
-            // 仅排除面板窗口，兼容 dev server（URL 不含 index.html）
-            const panelWindowId = this.windowManager?.getWindowId()
-            const mainWindow = BW.getAllWindows().find(
-              (w: Electron.BrowserWindow) => !w.isDestroyed() && w.id !== panelWindowId
-            )
-            if (mainWindow) {
+            const mainWindow = this.getMainWindow()
+            if (mainWindow && !mainWindow.isDestroyed()) {
               if (mainWindow.isMinimized()) mainWindow.restore()
               mainWindow.show()
               mainWindow.focus()
-              // 打开插件管理页面，让用户查看插件详情
               mainWindow.webContents.send('app:openPluginManager', pluginId)
             }
           } catch (err) {

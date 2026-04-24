@@ -819,7 +819,8 @@ app.whenReady().then(async () => {
       pluginManager,
       appSettingsManager,
       themeManager,
-      clipboardHistoryManager
+      clipboardHistoryManager,
+      { getMainWindow: () => mainWindowManager.getWindow() }
     )
     _superPanelManager = superPanelManager
     superPanelManager.enable()
