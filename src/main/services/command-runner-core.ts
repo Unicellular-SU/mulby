@@ -312,10 +312,17 @@ function buildSafeEnv(
     }
   }
 
-  return {
-    ...baseEnv,
-    ...(userEnv || {})
+  // Filter plugin-supplied env vars against the allowlist to prevent
+  // injection of dangerous keys (LD_PRELOAD, DYLD_INSERT_LIBRARIES, etc.)
+  if (userEnv) {
+    for (const [key, value] of Object.entries(userEnv)) {
+      if (allowedKeys.has(key)) {
+        baseEnv[key] = value
+      }
+    }
   }
+
+  return baseEnv
 }
 
 function createAbortError(): Error {

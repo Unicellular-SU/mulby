@@ -109,10 +109,9 @@ export class PermissionManager {
 
         // 权限请求处理器
         session.defaultSession.setPermissionRequestHandler(
-            (_webContents, permission, callback, details) => {
+            (webContents, permission, callback, details) => {
                 log.info(`[PermissionManager] Permission request: ${permission}`, details)
 
-                // 映射 Electron 权限到我们的类型
                 const permType = this.mapElectronPermission(permission)
 
                 if (permType) {
@@ -125,10 +124,11 @@ export class PermissionManager {
                         }
                         callback(status === 'granted')
                     } else {
-                        const origin = details.requestingUrl
-                            ? new URL(details.requestingUrl).origin
-                            : 'unknown'
-                        const cacheKey = `${origin}:${permType}`
+                        // Use webContents.id as the primary cache scope so that
+                        // file:// pages (whose URL origin is "null") don't share
+                        // a single grant across all local windows.
+                        const wcId = webContents?.id ?? 0
+                        const cacheKey = `wc:${wcId}:${permType}`
 
                         const cached = this.nonMacDecisions.get(cacheKey)
                         if (cached !== undefined) {
@@ -136,7 +136,11 @@ export class PermissionManager {
                             return
                         }
 
-                        this.showPermissionDialog(permType, origin)
+                        const displayOrigin = details.requestingUrl
+                            ? new URL(details.requestingUrl).origin
+                            : 'unknown'
+
+                        this.showPermissionDialog(permType, displayOrigin)
                             .then(granted => {
                                 this.nonMacDecisions.set(cacheKey, granted)
                                 callback(granted)
@@ -152,8 +156,7 @@ export class PermissionManager {
 
         // 权限检查处理器
         session.defaultSession.setPermissionCheckHandler(
-            (_webContents, permission, requestingOrigin, details) => {
-                // `background-sync` 会被页面周期性轮询，保留日志会造成主日志噪声
+            (webContents, permission, requestingOrigin, details) => {
                 if ((permission as string) === 'background-sync') {
                     return false
                 }
@@ -162,12 +165,21 @@ export class PermissionManager {
 
                 const permType = this.mapElectronPermission(permission)
                 if (permType) {
-                    const status = this.getStatus(permType)
-                    if (permType === 'geolocation') {
-                        // geolocation 允许 unknown/not-determined 继续请求，避免首次请求被拦截
-                        return status !== 'denied' && status !== 'restricted'
+                    if (process.platform === 'darwin') {
+                        const status = this.getStatus(permType)
+                        if (permType === 'geolocation') {
+                            return status !== 'denied' && status !== 'restricted'
+                        }
+                        return status === 'granted'
                     }
-                    return status === 'granted'
+                    // Windows/Linux: check per-webContents cache
+                    const wcId = webContents?.id ?? 0
+                    const cacheKey = `wc:${wcId}:${permType}`
+                    const cached = this.nonMacDecisions.get(cacheKey)
+                    if (permType === 'geolocation') {
+                        return cached !== false
+                    }
+                    return cached === true
                 }
 
                 return false
@@ -238,12 +250,9 @@ export class PermissionManager {
             return 'unknown'
         }
 
-        log.info(`[PermissionManager] ${process.platform} checking cached decision for ${type}`)
-        for (const [key, granted] of this.nonMacDecisions) {
-            if (key.endsWith(`:${type}`) && granted) {
-                return 'granted'
-            }
-        }
+        // Windows/Linux: getStatus() without webContents context
+        // cannot determine per-window grants, so return 'not-determined'
+        // to let the permission request handler prompt the user.
         return 'not-determined'
     }
 
