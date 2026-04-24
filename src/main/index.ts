@@ -98,6 +98,10 @@ const pluginWindowManager = new PluginWindowManager()
 const themeManager = new ThemeManager()
 const mainWindowManager = new MainWindowManager()
 setUiDialogThemeResolver(() => themeManager.getActualTheme())
+
+// 注入插件对话框的窗口解析器，使插件调用 dialog API 时能找到正确的 parent window
+import { setPluginDialogWindowResolver } from './plugin/dialog'
+setPluginDialogWindowResolver((pluginId) => pluginWindowManager.getPluginWindow(pluginId))
 setLoggerMinLevel(appSettingsManager.getSettings().developer.logLevel)
 const clipboardWatcher = new ClipboardWatcher()
 const clipboardHistoryManager = new ClipboardHistoryManager()

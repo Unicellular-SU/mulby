@@ -962,6 +962,24 @@ export class PluginWindowManager {
     })
   }
 
+  /**
+   * 获取插件当前最合适的 BrowserWindow，用于作为系统对话框的 parent。
+   * 查找顺序：detached window → panel window → main window
+   */
+  getPluginWindow(pluginId: string): BrowserWindow | null {
+    for (const info of this.detachedWindows.values()) {
+      if (info.plugin.id === pluginId && !info.window.isDestroyed()) {
+        return info.window
+      }
+    }
+    if (this.attachedPlugin?.plugin.id === pluginId && this.panelWindow?.isOpen()) {
+      const panelWin = this.panelWindow.getWindow()
+      if (panelWin && !panelWin.isDestroyed()) return panelWin
+    }
+    if (this.mainWindow && !this.mainWindow.isDestroyed()) return this.mainWindow
+    return null
+  }
+
   hasOpenWindowsForPlugin(pluginId: string): boolean {
     if (this.attachedPlugin?.plugin.id === pluginId && this.panelWindow?.isOpen()) {
       return true

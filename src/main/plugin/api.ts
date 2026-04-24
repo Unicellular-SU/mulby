@@ -6,7 +6,7 @@ import { PluginFilesystem } from './filesystem'
 import { PluginHttp, HttpRequestOptions } from './http'
 import { pluginScreen, CaptureOptions, ScreenshotOptions, RecordingOptions } from './screen'
 import { pluginShell } from './shell'
-import { pluginDialog, OpenDialogOptions, SaveDialogOptions, MessageBoxOptions } from './dialog'
+import { PluginDialog, OpenDialogOptions, SaveDialogOptions, MessageBoxOptions } from './dialog'
 import { pluginSystem } from './system'
 import { createPluginGlobalShortcut } from './shortcut'
 import { createPluginSecurity } from './security'
@@ -355,12 +355,15 @@ ${item.files.map(p => `    <string>${p}</string>`).join('\n')}
         return commandRunnerService.listAudit(limit, pluginName)
       }
     },
-    dialog: {
-      showOpenDialog: (options?: OpenDialogOptions) => pluginDialog.showOpenDialog(options),
-      showSaveDialog: (options?: SaveDialogOptions) => pluginDialog.showSaveDialog(options),
-      showMessageBox: (options: MessageBoxOptions) => pluginDialog.showMessageBox(options),
-      showErrorBox: (title: string, content: string) => pluginDialog.showErrorBox(title, content)
-    },
+    dialog: (() => {
+      const dlg = new PluginDialog(pluginName)
+      return {
+        showOpenDialog: (options?: OpenDialogOptions) => dlg.showOpenDialog(options),
+        showSaveDialog: (options?: SaveDialogOptions) => dlg.showSaveDialog(options),
+        showMessageBox: (options: MessageBoxOptions) => dlg.showMessageBox(options),
+        showErrorBox: (title: string, content: string) => dlg.showErrorBox(title, content)
+      }
+    })(),
     system: {
       getSystemInfo: () => pluginSystem.getSystemInfo(),
       getAppInfo: () => pluginSystem.getAppInfo(),

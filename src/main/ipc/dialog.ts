@@ -1,5 +1,5 @@
 import { dialog, ipcMain } from 'electron'
-import { withDialogMode } from '../services/blur-manager'
+import { withIgnoringBlur } from '../services/blur-manager'
 import { showInternalMessageBox, type UiMessageBoxOptions } from '../services/ui-dialog-service'
 import { windowFromWebContents } from '../services/webcontents-registry'
 
@@ -25,28 +25,38 @@ export type MessageBoxOptions = UiMessageBoxOptions
  */
 export function registerDialogHandlers() {
   // 打开文件对话框
-  ipcMain.handle('dialog:showOpenDialog', async (_, options: OpenDialogOptions = {}) => {
-    return withDialogMode(async () => {
-      const result = await dialog.showOpenDialog({
+  // Pass the parent window so the dialog appears on top of it (as a sheet on
+  // macOS or a child window on Windows/Linux) without hiding the app windows.
+  ipcMain.handle('dialog:showOpenDialog', async (event, options: OpenDialogOptions = {}) => {
+    return withIgnoringBlur(async () => {
+      const parentWindow = windowFromWebContents(event.sender) ?? undefined
+      const dialogOpts: Electron.OpenDialogOptions = {
         title: options.title,
         defaultPath: options.defaultPath,
         buttonLabel: options.buttonLabel,
         filters: options.filters,
         properties: options.properties || ['openFile']
-      })
+      }
+      const result = parentWindow
+        ? await dialog.showOpenDialog(parentWindow, dialogOpts)
+        : await dialog.showOpenDialog(dialogOpts)
       return result.canceled ? [] : result.filePaths
     })
   })
 
   // 保存文件对话框
-  ipcMain.handle('dialog:showSaveDialog', async (_, options: SaveDialogOptions = {}) => {
-    return withDialogMode(async () => {
-      const result = await dialog.showSaveDialog({
+  ipcMain.handle('dialog:showSaveDialog', async (event, options: SaveDialogOptions = {}) => {
+    return withIgnoringBlur(async () => {
+      const parentWindow = windowFromWebContents(event.sender) ?? undefined
+      const dialogOpts: Electron.SaveDialogOptions = {
         title: options.title,
         defaultPath: options.defaultPath,
         buttonLabel: options.buttonLabel,
         filters: options.filters
-      })
+      }
+      const result = parentWindow
+        ? await dialog.showSaveDialog(parentWindow, dialogOpts)
+        : await dialog.showSaveDialog(dialogOpts)
       return result.canceled ? null : result.filePath || null
     })
   })
