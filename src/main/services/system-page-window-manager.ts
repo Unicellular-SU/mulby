@@ -257,6 +257,8 @@ export class SystemPageWindowManager {
         contextIsolation: true,
         nodeIntegration: false,
         webviewTag: true,
+        // Attached system pages share the same translucent host-window behavior
+        // as the search panel, so keep Chromium from background-throttling them.
         backgroundThrottling: false
       }
     })

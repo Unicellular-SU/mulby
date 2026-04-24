@@ -205,6 +205,9 @@ export class PluginPanelWindow {
                 contextIsolation: !hasCustomPreload,
                 nodeIntegration: hasCustomPreload,
                 sandbox: !hasCustomPreload, // 如果有自定义 preload，禁用沙箱以允许 Node.js 访问
+                // Match the parent launcher window: attached translucent panels on
+                // macOS can be throttled as if they were backgrounded, which in
+                // turn stalls repainting in the search UI after query changes.
                 backgroundThrottling: false
             }
         })

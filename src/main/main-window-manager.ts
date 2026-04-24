@@ -333,7 +333,9 @@ export class MainWindowManager {
         contextIsolation: true,
         nodeIntegration: false,
         webviewTag: true,
-        // macOS 透明 panel 偶发被 Chromium 误判为 occluded，导致 rAF / paint 被节流
+        // Keep throttling disabled for the translucent macOS launcher window.
+        // Chromium can misclassify this panel as occluded/backgrounded, which
+        // makes search updates keep running in JS while the UI stops repainting.
         backgroundThrottling: false
       }
     })

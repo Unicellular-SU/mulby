@@ -527,7 +527,6 @@ function MainApp() {
     const BORDER_HEIGHT = 1
     const SYSTEM_PAGE_HEIGHT = 800
     const MANAGER_HEIGHT = managerMetrics.managerHeight
-    const MAC_STABLE_SEARCH_PANEL_HEIGHT = 271
 
     let height = SEARCH_BOX_HEIGHT
     let allowResize = false
@@ -549,10 +548,7 @@ function MainApp() {
     } else if (attachmentsManagerOpen && attachments.length > 0) {
       height = SEARCH_BOX_HEIGHT + BORDER_HEIGHT + MANAGER_HEIGHT
     } else if (showSearchPanel) {
-      if (isMacMain) {
-        // macOS 透明 NSPanel 在连续 resize 下会偶发停止重绘，结果区改为稳定高度，内部自行滚动
-        height = SEARCH_BOX_HEIGHT + BORDER_HEIGHT + MAC_STABLE_SEARCH_PANEL_HEIGHT
-      } else if (searchPanelHeight > 0) {
+      if (searchPanelHeight > 0) {
         // 动态高度：基于实际内容，首次测量前保持搜索框高度，避免先撑满再缩小的闪烁
         height = SEARCH_BOX_HEIGHT + BORDER_HEIGHT + searchPanelHeight
       }
@@ -571,7 +567,7 @@ function MainApp() {
     }
   // perfTrace 不影响高度计算，不纳入依赖：避免每次搜索都触发多余的
   // setExpendHeight IPC（透明窗口频繁 resize 会破坏合成器）
-  }, [isMacMain, isSystemWindow, hasTextInput, pluginOpen, systemPageAttached, detailsPluginName, attachments.length, attachmentsManagerOpen, managerMetrics.managerHeight, viewMode, searchPanelHeight])
+  }, [isSystemWindow, hasTextInput, pluginOpen, systemPageAttached, detailsPluginName, attachments.length, attachmentsManagerOpen, managerMetrics.managerHeight, viewMode, searchPanelHeight])
 
 
   // 监听插件附着事件
