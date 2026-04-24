@@ -252,27 +252,46 @@ export async function streamOpenAICompatChat(
       baseURL: input.baseURL
     })
   )
-  const res = await fetch(url, {
-    method: 'POST',
-    signal: abortSignal,
-    headers: {
-      'Content-Type': 'application/json',
-      ...(requestApiKey ? { Authorization: `Bearer ${requestApiKey}` } : {})
-    },
-    body: JSON.stringify({
-      model: input.model,
-      stream: true,
-      messages: input.messages,
-      tools: input.tools,
-      temperature: input.params.temperature,
-      top_p: input.params.topP,
-      max_tokens: input.params.maxOutputTokens,
-      presence_penalty: input.params.presencePenalty,
-      frequency_penalty: input.params.frequencyPenalty,
-      stop: input.params.stopSequences,
-      seed: input.params.seed
-    })
+  const requestBody = JSON.stringify({
+    model: input.model,
+    stream: true,
+    messages: input.messages,
+    tools: input.tools,
+    temperature: input.params.temperature,
+    top_p: input.params.topP,
+    max_tokens: input.params.maxOutputTokens,
+    presence_penalty: input.params.presencePenalty,
+    frequency_penalty: input.params.frequencyPenalty,
+    stop: input.params.stopSequences,
+    seed: input.params.seed
   })
+  const requestHeaders = {
+    'Content-Type': 'application/json',
+    ...(requestApiKey ? { Authorization: `Bearer ${requestApiKey}` } : {})
+  }
+
+  let res: Response
+  for (let attempt = 0; ; attempt++) {
+    try {
+      res = await fetch(url, {
+        method: 'POST',
+        signal: abortSignal,
+        headers: requestHeaders,
+        body: requestBody
+      })
+      break
+    } catch (fetchError) {
+      if (abortSignal?.aborted || attempt >= 1) {
+        throw fetchError
+      }
+      await new Promise<void>((resolve) => {
+        const timer = setTimeout(resolve, 2000)
+        if (abortSignal) {
+          abortSignal.addEventListener('abort', () => { clearTimeout(timer); resolve() }, { once: true })
+        }
+      })
+    }
+  }
 
   if (!res.ok || !res.body) {
     const body = await res.text().catch(() => '')
@@ -594,31 +613,50 @@ export async function streamOpenAICompatToolStep(
     }
   }
 
+  const requestBody = JSON.stringify({
+    model: input.model,
+    stream: true,
+    stream_options: { include_usage: true },
+    messages: input.messages,
+    tools: input.tools,
+    tool_choice: 'auto',
+    temperature: input.params.temperature,
+    top_p: input.params.topP,
+    max_tokens: input.params.maxOutputTokens,
+    presence_penalty: input.params.presencePenalty,
+    frequency_penalty: input.params.frequencyPenalty,
+    stop: input.params.stopSequences,
+    seed: input.params.seed
+  })
+  const requestHeaders = {
+    'Content-Type': 'application/json',
+    ...(requestApiKey ? { Authorization: `Bearer ${requestApiKey}` } : {})
+  }
+
   let res: Response
+  const maxNetworkRetries = 1
   try {
-    res = await fetch(url, {
-      method: 'POST',
-      signal: timeoutController.signal,
-      headers: {
-        'Content-Type': 'application/json',
-        ...(requestApiKey ? { Authorization: `Bearer ${requestApiKey}` } : {})
-      },
-      body: JSON.stringify({
-        model: input.model,
-        stream: true,
-        stream_options: { include_usage: true },
-        messages: input.messages,
-        tools: input.tools,
-        tool_choice: 'auto',
-        temperature: input.params.temperature,
-        top_p: input.params.topP,
-        max_tokens: input.params.maxOutputTokens,
-        presence_penalty: input.params.presencePenalty,
-        frequency_penalty: input.params.frequencyPenalty,
-        stop: input.params.stopSequences,
-        seed: input.params.seed
-      })
-    })
+    for (let attempt = 0; ; attempt++) {
+      try {
+        res = await fetch(url, {
+          method: 'POST',
+          signal: timeoutController.signal,
+          headers: requestHeaders,
+          body: requestBody
+        })
+        break
+      } catch (fetchError) {
+        if (abortSignal?.aborted || timeoutController.signal.aborted || attempt >= maxNetworkRetries) {
+          throw fetchError
+        }
+        await new Promise<void>((resolve) => {
+          const timer = setTimeout(resolve, 2000)
+          const onAbort = () => { clearTimeout(timer); resolve() }
+          timeoutController.signal.addEventListener('abort', onAbort, { once: true })
+          if (abortSignal) abortSignal.addEventListener('abort', onAbort, { once: true })
+        })
+      }
+    }
   } catch (error) {
     const abortedByCaller = !!abortSignal?.aborted
     const abortedByTimeout = timeoutController.signal.aborted && !abortedByCaller

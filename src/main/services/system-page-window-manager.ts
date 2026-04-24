@@ -664,7 +664,7 @@ export class SystemPageWindowManager {
   }
 
   private dispatchRoute(target: BrowserWindow, route: OpenSystemPagePayload): void {
-    if (target.isDestroyed()) return
+    if (target.isDestroyed() || target.webContents.isDestroyed()) return
 
     switch (route.page) {
       case 'settings':
@@ -716,11 +716,11 @@ export class SystemPageWindowManager {
 
   private emitState(): void {
     const main = this.mainWindow
-    if (!main || main.isDestroyed()) return
+    if (!main || main.isDestroyed() || main.webContents.isDestroyed()) return
     try {
       main.webContents.send('systemPage:state', this.getState())
     } catch {
-      // ignore
+      // Render frame may have been disposed (e.g. after render process crash)
     }
   }
 

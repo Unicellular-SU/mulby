@@ -244,10 +244,14 @@ export class PluginWindowManager {
       clearSubInputState()
 
       // 通知渲染进程禁用 SubInput（重置搜索框状态）
-      this.mainWindow?.webContents.send('subInput:disabled')
-
-      // 通知渲染进程插件已分离
-      this.mainWindow?.webContents.send('plugin:detached')
+      if (this.mainWindow && !this.mainWindow.isDestroyed() && !this.mainWindow.webContents.isDestroyed()) {
+        try {
+          this.mainWindow.webContents.send('subInput:disabled')
+          this.mainWindow.webContents.send('plugin:detached')
+        } catch {
+          // Render frame may have been disposed (e.g. after render process crash)
+        }
+      }
 
       // 关闭插件后聚焦主窗口，使搜索框获得焦点
       this.mainWindow?.focus()

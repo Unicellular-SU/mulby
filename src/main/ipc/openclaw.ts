@@ -22,8 +22,12 @@ export interface OpenClawHandlerDeps {
  */
 function broadcastToAllWindows(channel: string, ...args: unknown[]): void {
   for (const win of BrowserWindow.getAllWindows()) {
-    if (!win.isDestroyed()) {
-      win.webContents.send(channel, ...args)
+    if (!win.isDestroyed() && !win.webContents.isDestroyed()) {
+      try {
+        win.webContents.send(channel, ...args)
+      } catch {
+        // Render frame may have been disposed between the check and send
+      }
     }
   }
 }

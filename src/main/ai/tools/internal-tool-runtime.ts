@@ -1035,13 +1035,29 @@ export class AiInternalToolRuntime {
         language: String(params.language || '').trim() || undefined
       })
 
-      // 格式化为 AI 友好的输出
-      const formatted = response.results.map((r, i) => {
+      // Caps to keep the tool_result payload within LLM-friendly limits.
+      // Per-result respects user config but caps at 4000 chars (~1K tokens);
+      // total budget fixed at 16K chars (~4K tokens) — aligned with industry
+      // norms (Perplexity defaults to ~10K tokens total) but tuned for
+      // external LLMs where the result becomes direct input tokens.
+      const perResultLimit = Math.min(webSearchSettings.maxContentPerResult || 2000, 4000)
+      const totalBudget = 16_000
+      const formatted: string[] = []
+      let totalChars = 0
+
+      for (let i = 0; i < response.results.length; i++) {
+        const r = response.results[i]
         const parts = [`### ${i + 1}. ${r.title}`, `URL: ${r.url}`]
         if (r.snippet) parts.push(`> ${r.snippet}`)
-        if (r.content) parts.push(r.content.slice(0, 2000))
-        return parts.join('\n')
-      })
+        if (r.content) {
+          const remaining = Math.max(200, totalBudget - totalChars)
+          parts.push(r.content.slice(0, Math.min(perResultLimit, remaining)))
+        }
+        const block = parts.join('\n')
+        totalChars += block.length
+        formatted.push(block)
+        if (totalChars >= totalBudget) break
+      }
 
       return {
         success: true,
