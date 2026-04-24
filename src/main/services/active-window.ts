@@ -7,6 +7,7 @@
  */
 import { execFile } from 'child_process'
 import { promisify } from 'util'
+import log from 'electron-log'
 
 const execFileAsync = promisify(execFile)
 
@@ -57,7 +58,7 @@ function notifySubscribers(info: ActiveWindowInfo) {
     try {
       sub(info)
     } catch (e) {
-      console.error('[ActiveWindow] Callback error', e)
+      log.error('[ActiveWindow] Callback error', e)
     }
   }
 }
@@ -85,7 +86,7 @@ export async function getActiveWindow(): Promise<ActiveWindowInfo | null> {
     cachedAt = now
     return result
   } catch (error) {
-    console.warn('[ActiveWindow] 获取前台窗口失败:', error)
+    log.warn('[ActiveWindow] 获取前台窗口失败:', error)
     return null
   }
 }
@@ -209,7 +210,7 @@ function startMacOSNativeWatcher() {
       }).catch(() => {})
     })
   } catch (err) {
-    console.warn('[ActiveWindow] Falling back to polling due to native addon failure.')
+    log.warn('[ActiveWindow] Falling back to polling due to native addon failure.')
     startMacOSPoller()
   }
 }

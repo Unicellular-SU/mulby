@@ -1,6 +1,7 @@
 
 import { join } from 'path'
 import { app } from 'electron'
+import log from 'electron-log'
 
 interface WindowWatcherAddon {
   WindowWatcher: {
@@ -62,13 +63,13 @@ export function subscribeNativeWindowChange(callback: WatcherCallback): () => vo
           try {
             cb(event)
           } catch (e) {
-            console.error('[WindowWatcher] Callback error:', e)
+            log.error('[WindowWatcher] Callback error:', e)
           }
         }
       })
       watcherInstance.start()
     } catch (err) {
-      console.warn('[WindowWatcher] Failed to load native addon:', err)
+      log.warn('[WindowWatcher] Failed to load native addon:', err)
       throw err
     }
   }
@@ -91,7 +92,7 @@ export function emitNativeWindowChange(info: NativeWindowChangeEvent): void {
     try {
       cb(info)
     } catch (e) {
-      console.error('[WindowWatcher] Callback emit error:', e)
+      log.error('[WindowWatcher] Callback emit error:', e)
     }
   }
 }

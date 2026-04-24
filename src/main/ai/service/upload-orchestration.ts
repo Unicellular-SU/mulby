@@ -1,4 +1,5 @@
 import type { AiAttachmentRef, AiProviderConfig } from '../../../shared/types/ai'
+import log from 'electron-log'
 
 interface ResolveUploadProviderConfigInput {
   model?: string
@@ -19,7 +20,7 @@ export function resolveUploadProviderConfig(input: ResolveUploadProviderConfigIn
     ? input.resolveExecutionProviderContext({ modelId: input.model }).providerConfig
     : input.resolveProviderById(input.providerId)
   if (!providerConfig) {
-    console.error('[AI] uploadAttachmentToProvider:provider_not_found', {
+    log.error('[AI] uploadAttachmentToProvider:provider_not_found', {
       model: input.model,
       providerId: input.providerId
     })
@@ -33,7 +34,7 @@ export function resolveUploadAttachmentMeta(
 ): { filename: string; mimeType: string } {
   const attachment = input.getAttachment(input.attachmentId)
   if (!attachment) {
-    console.error('[AI] uploadAttachmentToProvider:attachment_not_found', {
+    log.error('[AI] uploadAttachmentToProvider:attachment_not_found', {
       attachmentId: input.attachmentId
     })
     throw new Error(`Attachment not found: ${input.attachmentId}`)
@@ -66,7 +67,7 @@ export async function executeUploadAttachmentOrchestration(input: {
       input.providerConfig
     )
     if (!remote?.fileId) {
-      console.error('[AI] uploadAttachmentToProvider:missing_file_id', {
+      log.error('[AI] uploadAttachmentToProvider:missing_file_id', {
         providerId: input.providerConfig.id,
         attachmentId: input.attachmentId
       })
@@ -79,7 +80,7 @@ export async function executeUploadAttachmentOrchestration(input: {
     }
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err)
-    console.error('[AI] uploadAttachmentToProvider:fail', {
+    log.error('[AI] uploadAttachmentToProvider:fail', {
       providerId: input.providerConfig.id,
       attachmentId: input.attachmentId,
       baseURL: input.providerConfig.baseURL,

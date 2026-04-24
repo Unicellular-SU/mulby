@@ -10,6 +10,7 @@ import { app, shell, clipboard, Notification } from 'electron'
 import { exec, spawn } from 'child_process'
 import { join } from 'path'
 import type { InputPayload } from '../../shared/types/plugin'
+import log from 'electron-log'
 
 interface ExecuteContext {
   /** 隐藏主窗口（取色/截图等需要先隐藏搜索框） */
@@ -93,7 +94,7 @@ export class SystemCommandExecutor {
       }
     } catch (err) {
       const error = err instanceof Error ? err.message : String(err)
-      console.error(`[SystemCommand] 执行 ${featureCode} 失败:`, error)
+      log.error(`[SystemCommand] 执行 ${featureCode} 失败:`, error)
       return { success: false, error }
     }
   }
@@ -227,7 +228,7 @@ export class SystemCommandExecutor {
     if (ctx?.openSystemPage) {
       ctx.openSystemPage(page)
     } else {
-      console.warn(`[SystemCommand] openSystemPage 回调未注入，无法打开: ${page}`)
+      log.warn(`[SystemCommand] openSystemPage 回调未注入，无法打开: ${page}`)
     }
     // 标记为 UI 运行，阻止 PluginList 在成功后隐藏主窗口
     return { success: true, hasUI: true }
@@ -290,7 +291,7 @@ export class SystemCommandExecutor {
       if (executable) {
         const child = spawn(executable, args, { detached: true, stdio: 'ignore' })
         child.on('error', (err) => {
-          console.error(`[SystemCommand] 命令启动失败: ${cmd}`, err)
+          log.error(`[SystemCommand] 命令启动失败: ${cmd}`, err)
         })
         child.unref()
       }
@@ -298,7 +299,7 @@ export class SystemCommandExecutor {
       // 仍需 shell 的复合命令使用 exec
       exec(cmd, (error) => {
         if (error) {
-          console.error(`[SystemCommand] 命令执行失败: ${cmd}`, error)
+          log.error(`[SystemCommand] 命令执行失败: ${cmd}`, error)
         }
       })
     }

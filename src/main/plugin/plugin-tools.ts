@@ -1,5 +1,6 @@
 import type { AiTool } from '../../shared/types/ai'
 import type { PluginToolSchema } from '../../shared/types/plugin'
+import log from 'electron-log'
 
 // Plugin Tool ID 前缀，与 MCP 的 'mcp__' 保持风格一致
 const PLUGIN_TOOL_ID_PREFIX = 'plugin_tool__'
@@ -160,13 +161,13 @@ export class PluginToolRegistry {
     for (const schema of tools) {
       const error = validateToolSchema(schema, pluginId)
       if (error) {
-        console.warn('[PluginTools] 跳过无效的 tool 声明:', error)
+        log.warn('[PluginTools] 跳过无效的 tool 声明:', error)
         continue
       }
 
       const name = String(schema.name).trim()
       if (seenNames.has(name)) {
-        console.warn(`[PluginTools] 插件 ${pluginId}: tool "${name}" 重复声明，跳过`)
+        log.warn(`[PluginTools] 插件 ${pluginId}: tool "${name}" 重复声明，跳过`)
         continue
       }
       seenNames.add(name)

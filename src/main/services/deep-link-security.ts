@@ -7,6 +7,7 @@
 
 import { showInternalMessageBox } from './ui-dialog-service'
 import { RATE_LIMIT_INTERVAL_MS, SAFE_ACTIONS, type DeepLinkAction } from '../../shared/types/deep-link'
+import log from 'electron-log'
 
 /** 速率限制记录：key → 上次触发时间 */
 const rateLimitMap = new Map<string, number>()
@@ -19,7 +20,7 @@ export function isRateLimited(key: string): boolean {
   const now = Date.now()
   const lastTime = rateLimitMap.get(key)
   if (lastTime && now - lastTime < RATE_LIMIT_INTERVAL_MS) {
-    console.log(`[DeepLink] 速率限制生效，跳过: ${key}`)
+    log.info(`[DeepLink] 速率限制生效，跳过: ${key}`)
     return true
   }
   rateLimitMap.set(key, now)

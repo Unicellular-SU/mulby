@@ -1,4 +1,5 @@
 import type { AiOption, AiTool } from '../../../shared/types/ai'
+import log from 'electron-log'
 
 interface ResolveMergedToolsDeps {
   resolveMcpTools: (input: {
@@ -49,7 +50,7 @@ export async function resolveMergedTools(
     declaredToolCount: declaredTools.length
   })
   if (mcpTools.length === 0) {
-    console.warn('[AI] resolveMergedTools:mcp returned 0 tools', {
+    log.warn('[AI] resolveMergedTools:mcp returned 0 tools', {
       mode: mcpMode,
       requestedServerIds: option.mcp?.serverIds || [],
       requestedAllowedToolIds: option.mcp?.allowedToolIds || [],

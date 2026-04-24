@@ -49,6 +49,24 @@ import { OnboardingWindowManager } from '../services/onboarding-window'
 import { registerOnboardingHandlers } from './onboarding'
 
 
+/**
+ * IPC Channel Naming Convention (L4)
+ *
+ * All channels follow the pattern: `domain:action` (camelCase)
+ *
+ * Domains: clipboard, clipboardHistory, storage, filesystem, shell,
+ *   plugin, settings, screen, dialog, system, desktop, shortcut,
+ *   security, media, power, tray, network, http, menu, geolocation,
+ *   input, permission, host, inbrowser, sharp, ffmpeg, log, scheduler,
+ *   ai, systemPlugin, systemPage, onboarding, window, subInput,
+ *   ai:mcpServer (nested domain for MCP Server specific ops)
+ *
+ * Actions: get, set, remove, list, clear, open, close, search, ...
+ *
+ * Examples:
+ *   storage:get, filesystem:readFile, shell:openPath,
+ *   plugin:search, settings:update, ai:mcpServer:start
+ */
 export function registerAllHandlers(
   getMainWindow: () => BrowserWindow | null,
   pluginManager: PluginManager,

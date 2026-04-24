@@ -3,6 +3,7 @@ import { join } from 'path'
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'fs'
 import { getPluginWebContents } from './webcontents-registry'
 import { notifyTitlebarThemeChange } from '../plugin/titlebar-view'
+import log from 'electron-log'
 
 export type ThemeMode = 'light' | 'dark' | 'system'
 
@@ -46,7 +47,7 @@ export class ThemeManager {
     try {
       writeFileSync(this.configPath, JSON.stringify(this.config, null, 2))
     } catch (err) {
-      console.error('Failed to save theme config:', err)
+      log.error('Failed to save theme config:', err)
     }
   }
 

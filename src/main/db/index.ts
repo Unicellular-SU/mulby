@@ -2,6 +2,7 @@ import Database from 'better-sqlite3'
 import { app } from 'electron'
 import { join } from 'path'
 import { mkdirSync, existsSync } from 'fs'
+import log from 'electron-log'
 
 function resolveUserDataPath(): string {
   try {
@@ -54,7 +55,7 @@ if (currentSchemaVersion < 1) {
     CREATE INDEX IF NOT EXISTS idx_store_plugin_key_prefix ON store(plugin_id, key);
   `)
   db.pragma(`user_version = ${LATEST_SCHEMA_VERSION}`)
-  console.log('[DB] Schema 迁移完成: v0 → v1 (增加 version 列)')
+  log.info('[DB] Schema 迁移完成: v0 → v1 (增加 version 列)')
 }
 
 export default db

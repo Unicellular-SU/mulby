@@ -4,6 +4,7 @@ import { attachmentStore } from '../attachments'
 import { FileServiceManager } from '../fileServices/FileServiceManager'
 import { getProviderType } from '../providers'
 import { buildApiKeyScope } from './utils'
+import log from 'electron-log'
 
 export function getUploadPurpose(modelId?: string): string | undefined {
   if (!modelId) return undefined
@@ -20,7 +21,7 @@ export async function uploadAttachmentToProviderInternal(
 ): Promise<{ fileId: string; uri?: string } | null> {
   if (!providerConfig) return null
   if (!hasApiKey(providerConfig.apiKey) || !providerConfig.baseURL) {
-    console.warn('[AI] uploadAttachmentToProvider:missing_credentials', {
+    log.warn('[AI] uploadAttachmentToProvider:missing_credentials', {
       providerId: providerConfig.id,
       hasApiKey: hasApiKey(providerConfig.apiKey),
       hasBaseURL: Boolean(providerConfig.baseURL)
@@ -70,7 +71,7 @@ export async function uploadAttachmentToProviderInternal(
     }
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err)
-    console.warn('[AI] uploadAttachmentToProvider:service_fail', {
+    log.warn('[AI] uploadAttachmentToProvider:service_fail', {
       providerId: providerConfig.id,
       attachmentId: input.attachmentId,
       error: message

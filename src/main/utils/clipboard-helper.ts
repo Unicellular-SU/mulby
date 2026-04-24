@@ -7,6 +7,7 @@
  */
 
 import { clipboard } from 'electron'
+import log from 'electron-log'
 
 /**
  * 检测剪贴板当前内容的数据格式
@@ -129,7 +130,7 @@ export function readClipboardFiles(): string[] {
       }
     }
   } catch (err) {
-    console.error('[ClipboardHelper] 读取剪贴板文件失败:', err)
+    log.error('[ClipboardHelper] 读取剪贴板文件失败:', err)
   }
 
   return []

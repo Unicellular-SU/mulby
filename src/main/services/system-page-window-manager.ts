@@ -9,6 +9,7 @@ import { isIgnoringBlur } from './blur-manager'
 import { ATTACHED_PANEL_HEIGHT, ATTACHED_PANEL_MIN_OVERFLOW_HEIGHT } from '../constants/panel-window'
 import { getMainWindowVisibleBounds } from '../main-window-frame'
 import {
+import log from 'electron-log'
   applyWindowsFramelessSurface,
   getWindowsFramelessSurfaceInsets,
   getWindowsFramelessSurfaceVisibleBounds,
@@ -327,7 +328,7 @@ export class SystemPageWindowManager {
       await win.loadURL(loadTarget)
       return true
     } catch (error) {
-      console.error('[SystemPageWindowManager] Failed to load attached window:', error)
+      log.error('[SystemPageWindowManager] Failed to load attached window:', error)
       if (this.attachedWindow && !this.attachedWindow.isDestroyed()) {
         this.attachedWindow.close()
       }
@@ -413,7 +414,7 @@ export class SystemPageWindowManager {
           if (activeDetached.isDestroyed()) return
         }
       } catch (error) {
-        console.error('[SystemPageWindowManager] Failed to inject custom titlebar:', error)
+        log.error('[SystemPageWindowManager] Failed to inject custom titlebar:', error)
       }
       activeDetached.show()
       this.dispatchRoute(activeDetached, route)
@@ -455,7 +456,7 @@ export class SystemPageWindowManager {
           await applyWindowsFramelessSurface(activeDetached, { includeTitleBar: true, resizeMode: 'all' })
         }
       } catch (error) {
-        console.error('[SystemPageWindowManager] Failed to re-inject titlebar:', error)
+        log.error('[SystemPageWindowManager] Failed to re-inject titlebar:', error)
       }
     })
 
@@ -469,7 +470,7 @@ export class SystemPageWindowManager {
       this.emitState()
       return detachedWindow
     } catch (error) {
-      console.error('[SystemPageWindowManager] Failed to load detached window:', error)
+      log.error('[SystemPageWindowManager] Failed to load detached window:', error)
       if (!detachedWindow.isDestroyed()) {
         detachedWindow.close()
       }

@@ -7,6 +7,7 @@ import { AppSettingsManager } from '../services/app-settings'
 import { getMainWindowVisibleBounds, getMainWindowWindowSize } from '../main-window-frame'
 import { InputPayload, Plugin, PluginFeature } from '../../shared/types/plugin'
 import {
+import log from 'electron-log'
   setSubInputState,
   clearSubInputState,
   isSubInputEnabled,
@@ -46,7 +47,7 @@ export function registerWindowHandlers(
     const panelWin = pluginWindowManager.getPanelWindow()?.getWindow()
     const callerWin = windowFromWebContents(event.sender)
     if (!panelWin || callerWin !== panelWin) {
-      console.warn('[SubInput] Rejected: SubInput is only available in attached mode')
+      log.warn('[SubInput] Rejected: SubInput is only available in attached mode')
       return false
     }
 
@@ -174,10 +175,10 @@ export function registerWindowHandlers(
         const hostManager = pluginManager.getHostManager()
         const hostReady = await hostManager.initPlugin(plugin)
         if (!hostReady) {
-          console.warn(`[redirect] Failed to init host for plugin ${pluginName}, continuing anyway`)
+          log.warn(`[redirect] Failed to init host for plugin ${pluginName}, continuing anyway`)
         }
       } catch (err) {
-        console.error(`[redirect] Error initializing host for plugin ${pluginName}:`, err)
+        log.error(`[redirect] Error initializing host for plugin ${pluginName}:`, err)
       }
     }
 
@@ -336,7 +337,7 @@ export function registerWindowHandlers(
         childWin.webContents.send('window:childMessage', String(args[0] ?? ''), ...args.slice(1))
         break
       default:
-        console.warn(`Unknown child action: ${action}`)
+        log.warn(`Unknown child action: ${action}`)
     }
     return true
   })
@@ -401,7 +402,7 @@ export function registerWindowHandlers(
     if (paths.length === 0) return
     const targetPath = paths[0]
     if (!existsSync(targetPath)) {
-      console.warn(`[window:startDrag] File not found: ${targetPath}`)
+      log.warn(`[window:startDrag] File not found: ${targetPath}`)
       return
     }
     const fallbackIcon = nativeImage.createFromBuffer(

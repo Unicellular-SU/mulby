@@ -25,6 +25,7 @@ import type { TaskScheduler } from '../scheduler'
 import type { TaskInput, TaskFilter } from '../scheduler/types'
 import type { ClipboardHistoryManager } from '../services/clipboard-history'
 import type {
+import log from 'electron-log'
   AiOption,
   AiMessage,
   AiImageGenerateProgressChunk,
@@ -576,10 +577,10 @@ ${item.files.map(p => `    <string>${p}</string>`).join('\n')}
       register: (_name: string, _handler: (args: unknown) => unknown | Promise<unknown>) => {
         // 主进程备用执行器中 tools.register 为空操作
         // 实际的 handler 注册在 UtilityProcess (host-worker) 内完成
-        console.warn('[PluginAPI] tools.register is only effective in UtilityProcess host-worker')
+        log.warn('[PluginAPI] tools.register is only effective in UtilityProcess host-worker')
       },
       unregister: (_name: string) => {
-        console.warn('[PluginAPI] tools.unregister is only effective in UtilityProcess host-worker')
+        log.warn('[PluginAPI] tools.unregister is only effective in UtilityProcess host-worker')
       }
     }
   }

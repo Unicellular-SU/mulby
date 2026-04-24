@@ -11,6 +11,7 @@
  */
 
 import * as koffi from 'koffi'
+import log from 'electron-log'
 
 // ==================== 事件接口 ====================
 
@@ -50,7 +51,7 @@ export function startNativeInputHook(callbacks: NativeInputHookCallbacks): boole
   } else if (process.platform === 'linux') {
     _impl = createLinuxInputHook(callbacks)
   } else {
-    console.warn('[NativeInputHook] 不支持的平台:', process.platform)
+    log.warn('[NativeInputHook] 不支持的平台:', process.platform)
     return false
   }
 
@@ -242,7 +243,7 @@ function createWin32InputHook(callbacks: NativeInputHookCallbacks): NativeInputH
                   })
                 }
               } catch (err) {
-                console.error('[NativeInputHook] Keyboard callback error:', err)
+                log.error('[NativeInputHook] Keyboard callback error:', err)
               }
             }
             return api.CallNextHookEx(kbHook, nCode, wParam, lParam)
@@ -252,7 +253,7 @@ function createWin32InputHook(callbacks: NativeInputHookCallbacks): NativeInputH
 
         kbHook = api.SetWindowsHookExW(WH_KEYBOARD_LL, kbCallback, hModule, 0)
         if (!kbHook) {
-          console.error('[NativeInputHook] SetWindowsHookEx(WH_KEYBOARD_LL) 失败')
+          log.error('[NativeInputHook] SetWindowsHookEx(WH_KEYBOARD_LL) 失败')
           this.stop()
           return false
         }
@@ -284,7 +285,7 @@ function createWin32InputHook(callbacks: NativeInputHookCallbacks): NativeInputH
                   }
                 }
               } catch (err) {
-                console.error('[NativeInputHook] Mouse callback error:', err)
+                log.error('[NativeInputHook] Mouse callback error:', err)
               }
             }
             return api.CallNextHookEx(mouseHook, nCode, wParam, lParam)
@@ -294,15 +295,15 @@ function createWin32InputHook(callbacks: NativeInputHookCallbacks): NativeInputH
 
         mouseHook = api.SetWindowsHookExW(WH_MOUSE_LL, mouseCallback, hModule, 0)
         if (!mouseHook) {
-          console.error('[NativeInputHook] SetWindowsHookEx(WH_MOUSE_LL) 失败')
+          log.error('[NativeInputHook] SetWindowsHookEx(WH_MOUSE_LL) 失败')
           this.stop()
           return false
         }
 
-        console.log('[NativeInputHook] Win32 低级输入钩子已安装 (keyboard + mouse)')
+        log.info('[NativeInputHook] Win32 低级输入钩子已安装 (keyboard + mouse)')
         return true
       } catch (err) {
-        console.error('[NativeInputHook] 启动失败:', err)
+        log.error('[NativeInputHook] 启动失败:', err)
         this.stop()
         return false
       }
@@ -329,7 +330,7 @@ function createWin32InputHook(callbacks: NativeInputHookCallbacks): NativeInputH
         mouseCallback = null
       }
 
-      console.log('[NativeInputHook] Win32 低级输入钩子已卸载')
+      log.info('[NativeInputHook] Win32 低级输入钩子已卸载')
     }
   }
 }
@@ -531,7 +532,7 @@ function createDarwinInputHook(callbacks: NativeInputHookCallbacks): NativeInput
               // macOS 可能因回调处理超时或系统负载自动禁用 Event Tap，
               // 收到禁用事件后必须立即重新启用，否则 tap 永久失效
               if (type === kCGEventTapDisabledByTimeout || type === kCGEventTapDisabledByUserInput) {
-                console.warn(`[NativeInputHook] macOS CGEventTap 被系统禁用 (type=0x${type.toString(16)})，正在重新启用...`)
+                log.warn(`[NativeInputHook] macOS CGEventTap 被系统禁用 (type=0x${type.toString(16)})，正在重新启用...`)
                 if (tap) {
                   api.CGEventTapEnable(tap, true)
                 }
@@ -590,7 +591,7 @@ function createDarwinInputHook(callbacks: NativeInputHookCallbacks): NativeInput
                 }
               }
             } catch (err) {
-              console.error('[NativeInputHook] macOS callback error:', err)
+              log.error('[NativeInputHook] macOS callback error:', err)
             }
             return event // listen-only: 返回原 event
           },
@@ -608,7 +609,7 @@ function createDarwinInputHook(callbacks: NativeInputHookCallbacks): NativeInput
         )
 
         if (!tap) {
-          console.error('[NativeInputHook] CGEventTapCreate 失败（需要辅助功能权限）')
+          log.error('[NativeInputHook] CGEventTapCreate 失败（需要辅助功能权限）')
           this.stop()
           return false
         }
@@ -624,10 +625,10 @@ function createDarwinInputHook(callbacks: NativeInputHookCallbacks): NativeInput
         api.CGEventTapEnable(tap, true)
 
         previousFlags = 0
-        console.log('[NativeInputHook] macOS CGEventTap 已安装 (keyboard + mouse)')
+        log.info('[NativeInputHook] macOS CGEventTap 已安装 (keyboard + mouse)')
         return true
       } catch (err) {
-        console.error('[NativeInputHook] macOS 启动失败:', err)
+        log.error('[NativeInputHook] macOS 启动失败:', err)
         this.stop()
         return false
       }
@@ -660,7 +661,7 @@ function createDarwinInputHook(callbacks: NativeInputHookCallbacks): NativeInput
         tapCallback = null
       }
 
-      console.log('[NativeInputHook] macOS CGEventTap 已卸载')
+      log.info('[NativeInputHook] macOS CGEventTap 已卸载')
     }
   }
 }
@@ -731,7 +732,7 @@ function findLinuxInputDevices(): { keyboards: string[]; mice: string[] } {
       if (handlers.includes('mouse')) mice.push(eventPath)
     }
   } catch (err) {
-    console.warn('[NativeInputHook] 无法读取 /proc/bus/input/devices:', (err as Error).message)
+    log.warn('[NativeInputHook] 无法读取 /proc/bus/input/devices:', (err as Error).message)
   }
 
   return { keyboards, mice }
@@ -813,7 +814,7 @@ function createLinuxInputHook(callbacks: NativeInputHookCallbacks): NativeInputH
         const allDevices = [...new Set([...keyboards, ...mice])]
 
         if (allDevices.length === 0) {
-          console.warn('[NativeInputHook] Linux 未找到输入设备')
+          log.warn('[NativeInputHook] Linux 未找到输入设备')
           return false
         }
 
@@ -841,7 +842,7 @@ function createLinuxInputHook(callbacks: NativeInputHookCallbacks): NativeInputH
             stream.on('error', (err) => {
               // EACCES 是权限问题，提示用户
               if ((err as NodeJS.ErrnoException).code === 'EACCES') {
-                console.warn(`[NativeInputHook] 权限不足: ${devicePath} (需要 input 组权限)`)
+                log.warn(`[NativeInputHook] 权限不足: ${devicePath} (需要 input 组权限)`)
               }
             })
 
@@ -853,14 +854,14 @@ function createLinuxInputHook(callbacks: NativeInputHookCallbacks): NativeInputH
         }
 
         if (openedCount === 0) {
-          console.error('[NativeInputHook] Linux 无法打开任何输入设备（需要 input 组权限）')
+          log.error('[NativeInputHook] Linux 无法打开任何输入设备（需要 input 组权限）')
           return false
         }
 
-        console.log(`[NativeInputHook] Linux evdev 已启动，监听 ${openedCount} 个设备`)
+        log.info(`[NativeInputHook] Linux evdev 已启动，监听 ${openedCount} 个设备`)
         return true
       } catch (err) {
-        console.error('[NativeInputHook] Linux 启动失败:', err)
+        log.error('[NativeInputHook] Linux 启动失败:', err)
         this.stop()
         return false
       }
@@ -871,7 +872,7 @@ function createLinuxInputHook(callbacks: NativeInputHookCallbacks): NativeInputH
         try { stream.destroy() } catch { /* ignore */ }
       }
       streams.length = 0
-      console.log('[NativeInputHook] Linux evdev 已停止')
+      log.info('[NativeInputHook] Linux evdev 已停止')
     }
   }
 }

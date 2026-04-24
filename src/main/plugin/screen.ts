@@ -9,6 +9,7 @@
 
 import { desktopCapturer, screen } from 'electron'
 import {
+import log from 'electron-log'
   nativeCaptureScreen,
   nativeCaptureRegion,
   isNativeScreenCaptureAvailable
@@ -166,7 +167,7 @@ export class PluginScreen {
       if (buffer) {
         return buffer
       }
-      console.warn('[PluginScreen] 原生截图返回空，回退到 desktopCapturer')
+      log.warn('[PluginScreen] 原生截图返回空，回退到 desktopCapturer')
     }
 
     // ===== 策略 2: desktopCapturer fallback =====
@@ -267,7 +268,7 @@ export class PluginScreen {
       if (buffer) {
         return buffer
       }
-      console.warn('[PluginScreen] 原生区域截图返回空，回退到 desktopCapturer')
+      log.warn('[PluginScreen] 原生区域截图返回空，回退到 desktopCapturer')
     }
 
     // ===== 策略 2: desktopCapturer + 裁剪 fallback =====

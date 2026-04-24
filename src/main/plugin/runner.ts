@@ -2,6 +2,7 @@ import { join, dirname } from 'path'
 import { readFileSync } from 'fs'
 import { InputAttachment, Plugin, PluginModule } from '../../shared/types/plugin'
 import { createPluginAPI } from './api'
+import log from 'electron-log'
 
 /** 检测代码是否使用 ES Module 语法 */
 function isESModule(code: string): boolean {
@@ -79,7 +80,7 @@ export class PluginRunner {
         await pluginModule.run(context)
       }
     } catch (err) {
-      console.error('Plugin execution error:', err)
+      log.error('Plugin execution error:', err)
       throw err
     }
   }
@@ -95,7 +96,7 @@ export class PluginRunner {
         await hook()
       }
     } catch (err) {
-      console.error(`Plugin hook ${hookName} error:`, err)
+      log.error(`Plugin hook ${hookName} error:`, err)
     }
   }
 }

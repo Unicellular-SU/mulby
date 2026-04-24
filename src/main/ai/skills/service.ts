@@ -6,6 +6,7 @@ import os from 'node:os'
 import path from 'node:path'
 import extractZip from 'extract-zip'
 import type {
+import log from 'electron-log'
   AiMcpSelection,
   AiMessage,
   AiOption,
@@ -719,7 +720,7 @@ export class AiSkillService {
         includeBody: false
       })
     } catch (error) {
-      console.warn('[AI][Skills] skip invalid skill during catalog refresh', {
+      log.warn('[AI][Skills] skip invalid skill during catalog refresh', {
         dirPath: input.dirPath,
         error: error instanceof Error ? error.message : String(error)
       })

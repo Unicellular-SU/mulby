@@ -2,6 +2,7 @@ import { app as electronApp, globalShortcut as electronGlobalShortcut } from 'el
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'fs'
 import { join } from 'path'
 import type {
+import log from 'electron-log'
   InputPayload,
   Plugin,
   PluginCommandItem,
@@ -426,14 +427,14 @@ export class PluginCommandShortcutManager {
           )
           .then((result) => {
             if (!result.success) {
-              console.warn(
+              log.warn(
                 `[CommandShortcut] Failed to run ${binding.pluginId}:${binding.featureCode} via "${binding.accelerator}"`,
                 result.error
               )
             }
           })
           .catch((error) => {
-            console.warn(
+            log.warn(
               `[CommandShortcut] Failed to run ${binding.pluginId}:${binding.featureCode} via "${binding.accelerator}"`,
               error
             )

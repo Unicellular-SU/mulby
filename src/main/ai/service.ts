@@ -1,4 +1,5 @@
 import type {
+import log from 'electron-log'
   AiCapabilityDebugInfo,
   AiAttachmentRef,
   AiImageGenerateProgressChunk,
@@ -231,7 +232,7 @@ export class AiService {
         resolveLanguageModel: (modelId) => this.resolveLanguageModel(modelId),
         applyContextWindow: (messages, limit) => this.applyContextWindow(messages, limit)
       })
-      console.log('[AI] call 开始', {
+      log.info('[AI] call 开始', {
         model: prepared.effectiveOption.model,
         messageCount: prepared.effectiveOption.messages.length,
         hasTools: !!prepared.effectiveOption.tools && prepared.effectiveOption.tools.length > 0,
@@ -241,7 +242,7 @@ export class AiService {
       })
 
       if (onChunk) {
-        console.log('[AI] call: 使用流式模式')
+        log.info('[AI] call: 使用流式模式')
         return await this.stream(option, { onChunk }, requestId)
       }
 
@@ -391,7 +392,7 @@ export class AiService {
       controller.abort()
       this.controllers.delete(requestId)
     } else {
-      console.warn('[AI] abort:no-controller', { requestId, knownIds: [...this.controllers.keys()] })
+      log.warn('[AI] abort:no-controller', { requestId, knownIds: [...this.controllers.keys()] })
     }
     const trackedCount = this.requestMcpCallIds.get(requestId)?.size || 0
     if (trackedCount > 0) {

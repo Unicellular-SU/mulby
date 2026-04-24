@@ -15,6 +15,7 @@ import { join } from 'path'
 import type { ThemeManager } from './theme'
 import type { SuperPanelState } from './super-panel-manager'
 import { registerAppWindow, unregisterAppWindow } from './ipc-caller-resolver'
+import log from 'electron-log'
 
 // 面板尺寸
 const PANEL_WIDTH = 300
@@ -146,7 +147,7 @@ export class SuperPanelWindowManager {
     try {
       this.window.hide()
     } catch (err) {
-      console.warn('[SuperPanel] 隐藏窗口失败:', err)
+      log.warn('[SuperPanel] 隐藏窗口失败:', err)
       this.window = null
     }
   }
@@ -160,7 +161,7 @@ export class SuperPanelWindowManager {
       try {
         win.destroy()
       } catch (err) {
-        console.warn('[SuperPanel] 销毁窗口失败:', err)
+        log.warn('[SuperPanel] 销毁窗口失败:', err)
       }
     }
   }
@@ -205,7 +206,7 @@ export class SuperPanelWindowManager {
   async preWarm(): Promise<void> {
     if (this.window && !this.window.isDestroyed()) return
     await this.ensureWindow()
-    console.log('[SuperPanel] 窗口预热完成')
+    log.info('[SuperPanel] 窗口预热完成')
   }
 
   private windowPromise: Promise<BrowserWindow> | null = null

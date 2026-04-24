@@ -10,6 +10,7 @@
 
 import { join } from 'path'
 import { app, nativeImage, screen } from 'electron'
+import log from 'electron-log'
 
 // 原生模块导出的 API 类型
 interface NativeScreenCaptureAddon {
@@ -47,10 +48,10 @@ function loadAddon(): NativeScreenCaptureAddon | null {
 
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     cachedAddon = require(addonPath) as NativeScreenCaptureAddon
-    console.log('[NativeScreenCapture] 原生模块加载成功')
+    log.info('[NativeScreenCapture] 原生模块加载成功')
     return cachedAddon
   } catch (err) {
-    console.warn('[NativeScreenCapture] 原生模块加载失败，将使用 fallback:', err)
+    log.warn('[NativeScreenCapture] 原生模块加载失败，将使用 fallback:', err)
     cachedAddon = null
     return null
   }
@@ -108,7 +109,7 @@ export function nativeCaptureScreen(
     }
     return format === 'jpeg' ? bitmapToJPEG(bitmap, quality) : bitmapToPNG(bitmap)
   } catch (err) {
-    console.error('[NativeScreenCapture] captureScreen 失败:', err)
+    log.error('[NativeScreenCapture] captureScreen 失败:', err)
     return null
   }
 }
@@ -140,7 +141,7 @@ export function nativeCaptureRegion(
     }
     return format === 'jpeg' ? bitmapToJPEG(bitmap, quality) : bitmapToPNG(bitmap)
   } catch (err) {
-    console.error('[NativeScreenCapture] captureRegion 失败:', err)
+    log.error('[NativeScreenCapture] captureRegion 失败:', err)
     return null
   }
 }
@@ -162,7 +163,7 @@ export function nativeCaptureScreenRaw(
     }
     return bitmap
   } catch (err) {
-    console.error('[NativeScreenCapture] captureScreenRaw 失败:', err)
+    log.error('[NativeScreenCapture] captureScreenRaw 失败:', err)
     return null
   }
 }
@@ -182,7 +183,7 @@ export function nativeGetPixelColor(
     const { devX, devY } = dipToDevice(x, y, 1, 1)
     return addon.getPixelColor(devX, devY)
   } catch (err) {
-    console.error('[NativeScreenCapture] getPixelColor 失败:', err)
+    log.error('[NativeScreenCapture] getPixelColor 失败:', err)
     return null
   }
 }
@@ -205,7 +206,7 @@ export function nativePickColor(): Promise<{ r: number; g: number; b: number } |
         resolve(color)
       })
     } catch (err) {
-      console.error('[NativeScreenCapture] pickColor 失败:', err)
+      log.error('[NativeScreenCapture] pickColor 失败:', err)
       resolve(null)
     }
   })
@@ -336,12 +337,12 @@ export function nativeStartRegionCapture(): Promise<{
             }
           })
         } catch (err) {
-          console.error('[NativeScreenCapture] startRegionCapture 转换失败:', err)
+          log.error('[NativeScreenCapture] startRegionCapture 转换失败:', err)
           resolve(null)
         }
       })
     } catch (err) {
-      console.error('[NativeScreenCapture] startRegionCapture 调用失败:', err)
+      log.error('[NativeScreenCapture] startRegionCapture 调用失败:', err)
       resolve(null)
     }
   })

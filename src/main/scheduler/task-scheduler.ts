@@ -10,6 +10,7 @@ import { TaskStore } from './task-store'
 import { CronParser } from './cron-parser'
 import type { Task, TaskInput, TaskExecution, TaskFilter } from './types'
 import type { Plugin } from '../../shared/types/plugin'
+import log from 'electron-log'
 
 interface SchedulerHostManagerLike {
   isHostReady(pluginId: string): boolean
@@ -78,7 +79,7 @@ export class TaskScheduler extends EventEmitter {
    * 停止调度器
    */
   stop(): void {
-    console.log('[TaskScheduler] Stopping...')
+    log.info('[TaskScheduler] Stopping...')
     this.running = false
 
     if (this.timer) {
@@ -92,7 +93,7 @@ export class TaskScheduler extends EventEmitter {
     }
     this.pluginCleanupTimers.clear()
 
-    console.log('[TaskScheduler] Stopped')
+    log.info('[TaskScheduler] Stopped')
   }
 
   /**
@@ -242,7 +243,7 @@ export class TaskScheduler extends EventEmitter {
         deletedCount++
         deletedTaskIds.push(taskId)
       } catch (err) {
-        console.error(`[TaskScheduler] Failed to delete task ${taskId}:`, err)
+        log.error(`[TaskScheduler] Failed to delete task ${taskId}:`, err)
       }
     }
     if (deletedCount > 0) {
@@ -348,7 +349,7 @@ export class TaskScheduler extends EventEmitter {
     if (this.pluginManager && pluginsToStart.size > 0) {
       const backgroundManager = this.pluginManager.getBackgroundManager?.()
       if (!backgroundManager) {
-        console.warn('[TaskScheduler] Background manager unavailable, skip auto-starting background plugins')
+        log.warn('[TaskScheduler] Background manager unavailable, skip auto-starting background plugins')
       }
 
       if (backgroundManager) {
@@ -365,10 +366,10 @@ export class TaskScheduler extends EventEmitter {
 
           // 启动后台插件
           try {
-            console.log(`[TaskScheduler] Auto-starting background plugin: ${pluginId}`)
+            log.info(`[TaskScheduler] Auto-starting background plugin: ${pluginId}`)
             await backgroundManager.start(plugin, true)
           } catch (err) {
-            console.error(`[TaskScheduler] Error auto-starting plugin ${pluginId}:`, err)
+            log.error(`[TaskScheduler] Error auto-starting plugin ${pluginId}:`, err)
           }
         }
       }
@@ -391,15 +392,15 @@ export class TaskScheduler extends EventEmitter {
 
         // 预初始化插件
         try {
-          console.log(`[TaskScheduler] Pre-initializing plugin for upcoming task: ${pluginId}`)
+          log.info(`[TaskScheduler] Pre-initializing plugin for upcoming task: ${pluginId}`)
           await hostManager.initPlugin(plugin)
         } catch (err) {
-          console.error(`[TaskScheduler] Error pre-initializing plugin ${pluginId}:`, err)
+          log.error(`[TaskScheduler] Error pre-initializing plugin ${pluginId}:`, err)
         }
       }
     }
 
-    console.log(`[TaskScheduler] Restored ${tasks.length} tasks, started ${pluginsToStart.size} background plugins, pre-initialized ${pluginsToPrestart.size} plugins`)
+    log.info(`[TaskScheduler] Restored ${tasks.length} tasks, started ${pluginsToStart.size} background plugins, pre-initialized ${pluginsToPrestart.size} plugins`)
   }
 
   /**
@@ -460,7 +461,7 @@ export class TaskScheduler extends EventEmitter {
 
       // 异步执行任务（不等待）
       this.executeTask(nextTask).catch(err => {
-        console.error(`[TaskScheduler] Unhandled error in task ${nextTask.id}:`, err)
+        log.error(`[TaskScheduler] Unhandled error in task ${nextTask.id}:`, err)
       })
     }
   }
@@ -532,7 +533,7 @@ export class TaskScheduler extends EventEmitter {
         this.queue.push(task)
       } else {
         task.status = 'failed'
-        console.error(`[TaskScheduler] Task failed: ${task.id}`, error)
+        log.error(`[TaskScheduler] Task failed: ${task.id}`, error)
       }
 
       this.emit('task:failed', task, error)
@@ -543,7 +544,7 @@ export class TaskScheduler extends EventEmitter {
         await this.store.saveExecution(execution)
         await this.store.saveTask(task)
       } catch (saveError) {
-        console.error(`[TaskScheduler] Failed to save task/execution: ${task.id}`, saveError)
+        log.error(`[TaskScheduler] Failed to save task/execution: ${task.id}`, saveError)
       }
 
       // 移除运行标记
@@ -698,7 +699,7 @@ export class TaskScheduler extends EventEmitter {
 
     const hostManager = this.pluginManager.getHostManager()
     if (hostManager.isHostReady(pluginId)) {
-      console.log(`[TaskScheduler] Cleaning up plugin: ${pluginId}`)
+      log.info(`[TaskScheduler] Cleaning up plugin: ${pluginId}`)
       await hostManager.destroyHost(pluginId)
     }
   }

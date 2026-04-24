@@ -10,6 +10,7 @@
  */
 
 import { windowFromWebContents } from './webcontents-registry'
+import log from 'electron-log'
 
 /** IPC 调用方信息 */
 export interface IpcCallerInfo {
@@ -199,5 +200,5 @@ function warnUntrusted(windowId: number | null, detail: Electron.WebContents | s
     desc = '(unavailable)'
   }
   // 使用 console.warn 而非 loggerService 避免循环依赖
-  console.warn(`[ipc-caller-resolver] 拦截到未登记窗口 (windowId=${windowId ?? 'n/a'}) 的 IPC 调用 — ${desc}`)
+  log.warn(`[ipc-caller-resolver] 拦截到未登记窗口 (windowId=${windowId ?? 'n/a'}) 的 IPC 调用 — ${desc}`)
 }

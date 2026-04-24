@@ -1,7 +1,4 @@
-import { app, BrowserWindow, globalShortcut, screen, crashReporter, type Rectangle } from 'electron'
-import http from 'http'
-import https from 'https'
-import { join } from 'path'
+import { app, BrowserWindow, globalShortcut, crashReporter } from 'electron'
 import { registerAllHandlers } from './ipc'
 import { setAiCapabilityPolicyResolver, setAiToolExecutor, setAiPluginToolResolver, setAiSkillActivationScopeManager } from './ai'
 import { aiMcpService, isMcpToolName } from './ai/mcp'
@@ -20,7 +17,7 @@ import { setHotKeySettingRedirectHandler } from './plugin/dynamic-features'
 import { PluginWindowManager } from './plugin/window'
 import { ThemeManager } from './services/theme'
 import { setUiDialogThemeResolver } from './services/ui-dialog-service'
-import { isIgnoringBlur, startIgnoringBlur, stopIgnoringBlur, setWindowsProvider, setHasDetachedWindowsProvider } from './services/blur-manager'
+import { setWindowsProvider, setHasDetachedWindowsProvider } from './services/blur-manager'
 import { appSettingsManager } from './services/app-settings'
 import { AppShortcutManager } from './services/app-shortcuts'
 import { InputHookService } from './services/input-hook'
@@ -31,68 +28,31 @@ import { ClipboardHistoryManager } from './services/clipboard-history'
 import { commandRunnerService } from './services/command-runner'
 import { initAutoUpdater } from './services/update-center'
 import { setLoggerMinLevel } from './services/logger'
-import { attachShortcutRecordingGuard } from './services/shortcut-recording-guard'
 import { SystemPluginWindowManager } from './services/system-plugin-window-manager'
 import {
   SystemPageWindowManager,
   type OpenSystemPagePayload as OpenSystemPageWindowPayload,
   type SettingsCenterSection
 } from './services/system-page-window-manager'
-import {
-  getMainWindowVisibleBounds,
-  getMainWindowWindowBounds,
-  getMainWindowWindowSize
-} from './main-window-frame'
 import { OnboardingWindowManager } from './services/onboarding-window'
-import { refreshActiveWindowCache, onActiveWindowChange } from './services/active-window'
+import { onActiveWindowChange } from './services/active-window'
 import { patchConsoleWithTimestamp } from '../shared/utils/console'
 import { createOpenClawNodeService, type OpenClawNodeService } from './openclaw'
 import { registerOpenClawHandlers } from './ipc/openclaw'
 import { createMcpServerManager, type McpServerManager } from './ai/mcp-server'
 import { registerMcpServerHandlers } from './ipc/mcp-server'
 import { SuperPanelManager } from './services/super-panel-manager'
-import { cleanupNativeKeySim } from './services/native-keyboard-sim'
 import { DeepLinkRouter } from './services/deep-link'
 import { PluginInstaller } from './plugin/installer'
 import { PluginStoreService } from './plugin/store-service'
-import { registerAppWindow } from './services/ipc-caller-resolver'
+import { MainWindowManager, isWindowAvailable } from './main-window-manager'
+import { shutdownMainProcessResources, isShutdownComplete, type ShutdownResources } from './app-shutdown'
+import log from 'electron-log'
 
 patchConsoleWithTimestamp()
 
 const APP_DISPLAY_NAME = 'Mulby'
 const WINDOWS_APP_USER_MODEL_ID = 'com.mulby.app'
-const MAIN_WINDOW_SHADOW_MARGIN = 12
-const MAIN_WINDOW_TOGGLE_DEBOUNCE_MS = 180
-const WINDOWS_SHOW_BLUR_GUARD_MS = 260
-const MAIN_WINDOW_STATE_SAVE_DEBOUNCE_MS = 500
-const MAIN_WINDOW_SHADOW_HTML = `<!doctype html>
-<html>
-<head>
-  <meta charset="utf-8" />
-  <style>
-    html, body {
-      margin: 0;
-      width: 100%;
-      height: 100%;
-      background: transparent;
-      overflow: hidden;
-      pointer-events: none;
-    }
-    .shadow {
-      position: absolute;
-      inset: ${MAIN_WINDOW_SHADOW_MARGIN}px;
-      border-radius: 12px;
-      box-shadow:
-        0 2px 10px rgba(15, 23, 42, 0.12),
-        0 1px 2px rgba(15, 23, 42, 0.08);
-    }
-  </style>
-</head>
-<body>
-  <div class="shadow"></div>
-</body>
-</html>`
-const MAIN_WINDOW_SHADOW_URL = `data:text/html;charset=UTF-8,${encodeURIComponent(MAIN_WINDOW_SHADOW_HTML)}`
 
 app.setName(APP_DISPLAY_NAME)
 if (process.platform === 'win32') {
@@ -119,23 +79,13 @@ crashReporter.start({
   uploadToServer: false,
   ignoreSystemCrashHandler: false
 })
-console.log('[CrashReporter] 崩溃报告器已启动，dump 目录:', app.getPath('crashDumps'))
+log.info('[CrashReporter] 崩溃报告器已启动，dump 目录:', app.getPath('crashDumps'))
 
-let mainWindow: BrowserWindow | null = null
-let mainShadowWindow: BrowserWindow | null = null
 let appTrayManager: AppTrayManager | null = null
 let trayMenuWindowManager: TrayMenuWindowManager | null = null
 let isQuitting = false
 let shouldRestartAfterQuit = false
 let shutdownFinalizeScheduled = false
-let hasShutdownCompleted = false
-let shutdownPromise: Promise<void> | null = null
-let mainWindowBlurHideTimer: NodeJS.Timeout | null = null
-let mainWindowStateSaveTimer: NodeJS.Timeout | null = null
-let suppressMainBlurHideUntil = 0
-let lastMainWindowToggleAt = 0
-let mainWindowHasBeenShown = false
-let deferMainShadowShow = false
 let mcpServerManager: McpServerManager | null = null
 let _inputHookService: InputHookService | null = null
 let _openclawService: OpenClawNodeService | null = null
@@ -146,6 +96,7 @@ let lastDeepLinkTime: number = 0
 const pluginManager = new PluginManager()
 const pluginWindowManager = new PluginWindowManager()
 const themeManager = new ThemeManager()
+const mainWindowManager = new MainWindowManager()
 setUiDialogThemeResolver(() => themeManager.getActualTheme())
 setLoggerMinLevel(appSettingsManager.getSettings().developer.logLevel)
 const clipboardWatcher = new ClipboardWatcher()
@@ -190,25 +141,13 @@ function isAbortLikeError(error: unknown): boolean {
   return message.includes('abort') || message.includes('cancelled') || message.includes('canceled')
 }
 
-function isWindowAvailable(win: BrowserWindow | null): win is BrowserWindow {
-  if (!win) return false
-  try {
-    return !win.isDestroyed()
-  } catch {
-    return false
-  }
-}
-
 const handleSecondInstance = (_event: Electron.Event, argv: string[]) => {
-  if (isQuitting) {
-    return
-  }
+  if (isQuitting) return
 
-  // Windows/Linux: deep link URL 通过命令行参数传入
   const deepLinkUrl = argv.find(arg => arg.startsWith('mulby://'))
   if (deepLinkUrl) {
     lastDeepLinkTime = Date.now()
-    console.log('[DeepLink] 从 second-instance 收到链接:', deepLinkUrl)
+    log.info('[DeepLink] 从 second-instance 收到链接:', deepLinkUrl)
     if (deepLinkRouter) {
       void deepLinkRouter.handleUrl(deepLinkUrl)
     } else {
@@ -217,76 +156,60 @@ const handleSecondInstance = (_event: Electron.Event, argv: string[]) => {
     return
   }
 
+  const mainWindow = mainWindowManager.getWindow()
   if (!isWindowAvailable(mainWindow)) {
-    mainWindow = null
     if (app.isReady()) {
-      showMainWindow()
+      mainWindowManager.show()
     } else {
-      void app.whenReady().then(() => {
-        if (!isQuitting) {
-          showMainWindow()
-        }
-      })
+      void app.whenReady().then(() => { if (!isQuitting) mainWindowManager.show() })
     }
     return
   }
   try {
     if (!mainWindow.isVisible()) {
-      toggleWindow()
+      mainWindowManager.toggle()
     } else {
       mainWindow.focus()
     }
   } catch (error) {
-    console.warn('[Main] Failed to focus existing window on second-instance:', error)
-    mainWindow = null
+    log.warn('[Main] Failed to focus existing window on second-instance:', error)
   }
 }
 
 const handleAppActivate = () => {
   if (isQuitting) return
-
-  try {
-    app.show()
-  } catch (error) {
-    console.warn('[Main] Failed to restore app state on activate:', error)
+  try { app.show() } catch (error) {
+    log.warn('[Main] Failed to restore app state on activate:', error)
   }
 
   const detachedWindows = pluginWindowManager.getAllDetachedWindows()
   if (detachedWindows.length > 0) {
-    detachedWindows.forEach(win => {
-      if (!isWindowAvailable(win)) return
+    for (const win of detachedWindows) {
+      if (!isWindowAvailable(win)) continue
       try {
-        if (!win.isVisible()) {
-          win.show()
-        }
-        if (win.isMinimized()) {
-          win.restore()
-        }
+        if (!win.isVisible()) win.show()
+        if (win.isMinimized()) win.restore()
         win.focus()
       } catch (error) {
-        console.warn('[Main] Failed to restore detached window on activate:', error)
+        log.warn('[Main] Failed to restore detached window on activate:', error)
       }
-    })
+    }
     return
   }
 
   const systemDetached = systemPageWindowManager.getDetachedWindow()
   if (systemDetached && isWindowAvailable(systemDetached)) {
     try {
-      if (!systemDetached.isVisible()) {
-        systemDetached.show()
-      }
-      if (systemDetached.isMinimized()) {
-        systemDetached.restore()
-      }
+      if (!systemDetached.isVisible()) systemDetached.show()
+      if (systemDetached.isMinimized()) systemDetached.restore()
       systemDetached.focus()
       return
     } catch (error) {
-      console.warn('[Main] Failed to restore detached system page window on activate:', error)
+      log.warn('[Main] Failed to restore system page window on activate:', error)
     }
   }
 
-  showMainWindow()
+  mainWindowManager.show()
 }
 
 setAiToolExecutor(async ({ name, args, context, callId, abortSignal }) => {
@@ -405,125 +328,20 @@ setAiCapabilityPolicyResolver(({ option, requestedCapabilities, selectedSkills }
   })
 })
 
-async function shutdownMainProcessResources(): Promise<void> {
-  if (hasShutdownCompleted) {
-    return
+function getShutdownResources(): ShutdownResources {
+  return {
+    clipboardHistoryManager,
+    clipboardWatcher,
+    pluginManager,
+    mcpServerManager: mcpServerManager ?? undefined,
+    openclawService: _openclawService ?? undefined,
+    superPanelManager: _superPanelManager ?? undefined,
+    inputHookService: _inputHookService ?? undefined,
+    pluginWindowManager,
+    systemPageWindowManager,
+    appTrayManager: appTrayManager ?? undefined,
+    trayMenuWindowManager: trayMenuWindowManager ?? undefined
   }
-  if (shutdownPromise) {
-    return shutdownPromise
-  }
-
-  shutdownPromise = (async () => {
-    try {
-      clipboardHistoryManager.stop()
-    } catch (error) {
-      console.error('[Main] Failed to stop clipboard history manager:', error)
-    }
-
-    try {
-      clipboardWatcher.stop()
-    } catch (error) {
-      console.error('[Main] Failed to stop clipboard watcher:', error)
-    }
-
-    try {
-      await pluginManager.destroy()
-    } catch (error) {
-      console.error('[Main] Failed to destroy plugin manager:', error)
-    }
-
-    // 清理 MCP Server
-    try {
-      if (mcpServerManager) {
-        await mcpServerManager.cleanup()
-        mcpServerManager = null
-      }
-    } catch (error) {
-      console.error('[Main] Failed to cleanup MCP Server:', error)
-    }
-
-    // 清理 OpenClaw 服务（WebSocket 连接 + 重连定时器）
-    try {
-      if (_openclawService) {
-        _openclawService.destroy()
-        _openclawService = null
-      }
-    } catch (error) {
-      console.error('[Main] Failed to destroy OpenClaw service:', error)
-    }
-
-    // 清理超级面板
-    try {
-      if (_superPanelManager) {
-        _superPanelManager.destroy()
-        _superPanelManager = null
-      }
-    } catch (error) {
-      console.error('[Main] Failed to destroy super panel manager:', error)
-    }
-
-    // 清理原生键盘模拟 FFI 资源
-    try {
-      cleanupNativeKeySim()
-    } catch (error) {
-      console.error('[Main] Failed to cleanup native key sim:', error)
-    }
-
-    // 清理原生输入钩子（CGEventTap / 低级键盘鼠标钩子）
-    try {
-      if (_inputHookService) {
-        _inputHookService.destroy()
-        _inputHookService = null
-      }
-    } catch (error) {
-      console.error('[Main] Failed to destroy input hook service:', error)
-    }
-
-    // 清理插件窗口
-    try {
-      pluginWindowManager.closeAll()
-    } catch (error) {
-      console.error('[Main] Failed to close plugin windows:', error)
-    }
-
-    try {
-      systemPageWindowManager.closeAll()
-    } catch (error) {
-      console.error('[Main] Failed to close system page windows:', error)
-    }
-
-    try {
-      appTrayManager?.destroy()
-      appTrayManager = null
-    } catch (error) {
-      console.error('[Main] Failed to destroy app tray manager:', error)
-    }
-
-    try {
-      trayMenuWindowManager?.destroy()
-      trayMenuWindowManager = null
-    } catch (error) {
-      console.error('[Main] Failed to destroy tray menu window manager:', error)
-    }
-
-    try {
-      globalShortcut.unregisterAll()
-    } catch (error) {
-      console.error('[Main] Failed to unregister global shortcuts:', error)
-    }
-
-    // 清理 OpenClaw Node 服务（通过弱引用避免循环依赖）
-    try {
-      // openclawService 在闭包内可能不可用，通过全局事件清理
-      console.log('[Main] OpenClaw service cleanup delegated to process exit')
-    } catch (error) {
-      console.error('[Main] Failed to destroy OpenClaw service:', error)
-    }
-  })().finally(() => {
-    hasShutdownCompleted = true
-  })
-
-  return shutdownPromise
 }
 
 // 注册 mulby:// 自定义协议（必须在 requestSingleInstanceLock 之前）
@@ -533,13 +351,13 @@ if (!app.isPackaged) {
 } else {
   app.setAsDefaultProtocolClient('mulby')
 }
-console.log('[DeepLink] 已注册 mulby:// 协议')
+log.info('[DeepLink] 已注册 mulby:// 协议')
 
 // macOS: 通过 open-url 事件接收 deep link（包括首次启动和已运行时）
 app.on('open-url', (event, url) => {
   event.preventDefault()
   lastDeepLinkTime = Date.now()
-  console.log('[DeepLink] macOS open-url 事件:', url)
+  log.info('[DeepLink] macOS open-url 事件:', url)
   if (deepLinkRouter) {
     void deepLinkRouter.handleUrl(url)
   } else {
@@ -552,7 +370,7 @@ app.on('open-url', (event, url) => {
 if (process.platform !== 'darwin') {
   const coldStartUrl = process.argv.find(arg => arg.startsWith('mulby://'))
   if (coldStartUrl) {
-    console.log('[DeepLink] 冷启动 process.argv 中发现链接:', coldStartUrl)
+    log.info('[DeepLink] 冷启动 process.argv 中发现链接:', coldStartUrl)
     pendingDeepLinkUrl = coldStartUrl
   }
 }
@@ -569,582 +387,17 @@ if (!gotTheLock) {
 
 
 function getMainWindow() {
-  return mainWindow
-}
-
-const WINDOWS_WM_INITMENU = 0x0116
-
-function suppressSystemContextMenu(win: BrowserWindow): void {
-  if (process.platform !== 'win32') return
-  win.on('system-context-menu', (event) => {
-    event.preventDefault()
-  })
-  try {
-    if (!win.isWindowMessageHooked(WINDOWS_WM_INITMENU)) {
-      win.hookWindowMessage(WINDOWS_WM_INITMENU, () => {
-        if (!win.isDestroyed()) {
-          win.setEnabled(false)
-          win.setEnabled(true)
-        }
-      })
-    }
-  } catch (error) {
-    console.warn('[Main] Failed to hook WM_INITMENU on main window:', error)
-  }
-  win.once('closed', () => {
-    try {
-      if (!win.isDestroyed() && win.isWindowMessageHooked(WINDOWS_WM_INITMENU)) {
-        win.unhookWindowMessage(WINDOWS_WM_INITMENU)
-      }
-    } catch {
-      // ignore
-    }
-  })
-}
-
-function clearMainWindowBlurHideTimer(): void {
-  if (!mainWindowBlurHideTimer) return
-  clearTimeout(mainWindowBlurHideTimer)
-  mainWindowBlurHideTimer = null
-}
-
-function clearMainWindowStateSaveTimer(): void {
-  if (!mainWindowStateSaveTimer) return
-  clearTimeout(mainWindowStateSaveTimer)
-  mainWindowStateSaveTimer = null
-}
-
-function persistMainWindowState(): void {
-  if (!isWindowAvailable(mainWindow)) {
-    return
-  }
-
-  const bounds = getMainWindowVisibleBounds(mainWindow.getBounds())
-  if (bounds.height > 100) {
-    appSettingsManager.updateSettings({
-      window: {
-        width: bounds.width,
-        height: bounds.height,
-        x: bounds.x,
-        y: bounds.y
-      }
-    })
-    return
-  }
-
-  appSettingsManager.updateSettings({
-    window: {
-      width: bounds.width,
-      x: bounds.x,
-      y: bounds.y
-    }
-  })
-}
-
-function scheduleMainWindowStateSave(): void {
-  clearMainWindowStateSaveTimer()
-  mainWindowStateSaveTimer = setTimeout(() => {
-    mainWindowStateSaveTimer = null
-    persistMainWindowState()
-  }, MAIN_WINDOW_STATE_SAVE_DEBOUNCE_MS)
-}
-
-function flushMainWindowStateSave(): void {
-  clearMainWindowStateSaveTimer()
-  persistMainWindowState()
-}
-
-function getDefaultMainWindowVisiblePosition(visibleBounds: Rectangle): { x: number; y: number } {
-  const cursorPoint = screen.getCursorScreenPoint()
-  const display = screen.getDisplayNearestPoint(cursorPoint)
-  const { width: screenWidth, height: screenHeight } = display.workAreaSize
-  const { x: screenX, y: screenY } = display.workArea
-
-  return {
-    x: screenX + Math.round((screenWidth - visibleBounds.width) / 2),
-    y: screenY + Math.round(screenHeight / 5)
-  }
-}
-
-function resolveMainWindowVisibleBounds(currentVisibleBounds: Rectangle): Rectangle {
-  const settings = appSettingsManager.getSettings()
-  if (settings.window?.x !== undefined && settings.window?.y !== undefined) {
-    return {
-      ...currentVisibleBounds,
-      x: settings.window.x,
-      y: settings.window.y
-    }
-  }
-
-  return {
-    ...currentVisibleBounds,
-    ...getDefaultMainWindowVisiblePosition(currentVisibleBounds)
-  }
-}
-
-function shouldSuppressMainBlurHide(): boolean {
-  return Date.now() < suppressMainBlurHideUntil
-}
-
-function extendMainBlurHideSuppression(durationMs: number): void {
-  suppressMainBlurHideUntil = Math.max(suppressMainBlurHideUntil, Date.now() + durationMs)
-}
-
-function shouldUseMainShadowWindow(): boolean {
-  // Windows already renders the search surface shadow in the renderer.
-  // A second transparent owner window causes severe DWM flicker while dragging.
-  return process.platform !== 'win32'
-}
-
-function hideMainWindow() {
-  if (!isWindowAvailable(mainWindow)) {
-    clearMainWindowBlurHideTimer()
-    closeMainShadowWindow()
-    mainWindow = null
-    return
-  }
-
-  clearMainWindowBlurHideTimer()
-  trayMenuWindowManager?.hide()
-  pluginWindowManager.hidePanelWindow()
-  systemPageWindowManager.hideAttached()
-  mainWindow.hide()
-  mainShadowWindow?.hide()
-
-  // macOS: 如果有独立窗口，确保 dock 图标保持显示
-  if (process.platform === 'darwin' && app.dock) {
-    const hasDetachedWindows = pluginWindowManager.getAllDetachedWindows().length > 0
-      || Boolean(systemPageWindowManager.getDetachedWindow())
-    if (hasDetachedWindows) {
-      void app.dock.show()
-    }
-  }
-}
-
-function createMainShadowWindow() {
-  if (!shouldUseMainShadowWindow()) return
-  if (!isWindowAvailable(mainWindow)) return
-  if (isWindowAvailable(mainShadowWindow)) return
-
-  const shadow = new BrowserWindow({
-    width: 1,
-    height: 1,
-    x: 0,
-    y: 0,
-    frame: false,
-    show: false,
-    transparent: true,
-    hasShadow: false,
-    resizable: false,
-    movable: false,
-    minimizable: false,
-    maximizable: false,
-    fullscreenable: false,
-    focusable: false,
-    parent: mainWindow,
-    modal: false,
-    skipTaskbar: true,
-    backgroundColor: '#00000000',
-    webPreferences: {
-      contextIsolation: true,
-      nodeIntegration: false,
-      sandbox: true
-    }
-  })
-
-  shadow.setIgnoreMouseEvents(true, { forward: true })
-  void shadow.loadURL(MAIN_WINDOW_SHADOW_URL)
-  shadow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true })
-
-  shadow.on('closed', () => {
-    if (mainShadowWindow && mainShadowWindow.id === shadow.id) {
-      mainShadowWindow = null
-    }
-  })
-
-  mainShadowWindow = shadow
-}
-
-function syncMainShadowBounds() {
-  if (!shouldUseMainShadowWindow()) return
-  if (!isWindowAvailable(mainWindow) || !isWindowAvailable(mainShadowWindow)) return
-  const bounds = mainWindow.getBounds()
-  const margin = MAIN_WINDOW_SHADOW_MARGIN
-  mainShadowWindow.setBounds({
-    x: bounds.x - margin,
-    y: bounds.y - margin,
-    width: Math.max(1, bounds.width + margin * 2),
-    height: Math.max(1, bounds.height + margin * 2)
-  })
-}
-
-function showMainShadowWindow() {
-  if (!shouldUseMainShadowWindow()) return
-  if (deferMainShadowShow) return
-  if (!isWindowAvailable(mainWindow)) return
-  if (!isWindowAvailable(mainShadowWindow)) {
-    createMainShadowWindow()
-  }
-  if (!isWindowAvailable(mainShadowWindow)) return
-  syncMainShadowBounds()
-  mainShadowWindow.showInactive()
-}
-
-function closeMainShadowWindow() {
-  if (isWindowAvailable(mainShadowWindow)) {
-    mainShadowWindow.close()
-  }
-  mainShadowWindow = null
-}
-
-function canReachUrl(url: string, timeoutMs = 800): Promise<boolean> {
-  return new Promise((resolve) => {
-    try {
-      const parsed = new URL(url)
-      const requester = parsed.protocol === 'https:' ? https : http
-      const req = requester.request(
-        {
-          method: 'GET',
-          hostname: parsed.hostname,
-          port: parsed.port,
-          path: parsed.pathname || '/',
-          timeout: timeoutMs
-        },
-        () => resolve(true)
-      )
-      req.on('error', () => resolve(false))
-      req.on('timeout', () => {
-        req.destroy()
-        resolve(false)
-      })
-      req.end()
-    } catch {
-      resolve(false)
-    }
-  })
-}
-
-function createWindow() {
-  const settings = appSettingsManager.getSettings()
-  const visibleWidth = settings.window?.width || 800
-  const initialVisibleBounds = resolveMainWindowVisibleBounds({
-    x: 0,
-    y: 0,
-    width: visibleWidth,
-    height: 62
-  })
-  const initialWindowBounds = getMainWindowWindowBounds(initialVisibleBounds)
-  const minCollapsedSize = getMainWindowWindowSize(400, 62)
-
-  mainWindow = new BrowserWindow({
-    width: initialWindowBounds.width,
-    height: initialWindowBounds.height,
-    x: initialWindowBounds.x,
-    y: initialWindowBounds.y,
-    show: false,
-    frame: false,
-    resizable: true, // 允许用户调整大小
-    minHeight: minCollapsedSize.height,   // 锁定初始高度
-    maxHeight: minCollapsedSize.height,
-    minWidth: minCollapsedSize.width,   // 设置最小宽度
-    skipTaskbar: true,
-    transparent: true,
-    hasShadow: false, // 透明无边框窗口使用自定义阴影，避免原生阴影黑边
-    type: 'panel', // macOS 上 panel 类型有助于浮动在全屏应用之上
-    webPreferences: {
-      preload: join(__dirname, '../preload/index.js'),
-      contextIsolation: true,
-      nodeIntegration: false,
-      webviewTag: true
-    }
-  })
-
-  // 显式注册主窗口为可信 App 窗口（IPC 来源校验）
-  registerAppWindow(mainWindow.id)
-
-  // macOS: 设置窗口在所有工作区可见，并使用 floating 级别置顶
-  if (process.platform === 'darwin') {
-    // 禁止全屏，防止与 Spaces 行为冲突
-    mainWindow.setFullScreenable(false)
-    mainWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true })
-    mainWindow.setAlwaysOnTop(true, 'floating')
-  } else {
-    mainWindow.setAlwaysOnTop(true)
-  }
-  if (shouldUseMainShadowWindow()) {
-    createMainShadowWindow()
-  }
-
-  mainWindow.once('ready-to-show', () => {
-    // console.log('[Main] Window ready-to-show event fired')
-  })
-
-  suppressSystemContextMenu(mainWindow)
-  attachShortcutRecordingGuard(mainWindow)
-
-  mainWindow.on('closed', () => {
-    clearMainWindowBlurHideTimer()
-    clearMainWindowStateSaveTimer()
-    closeMainShadowWindow()
-    systemPluginWindowManager.setMainWindow(null)
-    systemPageWindowManager.setMainWindow(null)
-    mainWindow = null
-  })
-
-  // 默认关闭行为：隐藏到托盘（显式退出时除外）
-  mainWindow.on('close', (event) => {
-    flushMainWindowStateSave()
-    const closeToTray = appSettingsManager.getSettings().tray.closeToTray
-    if (isQuitting || !closeToTray) {
-      return
-    }
-    event.preventDefault()
-    hideMainWindow()
-  })
-
-  // 失焦隐藏（类似 uTools 的交互）
-  mainWindow.on('blur', () => {
-    if (isIgnoringBlur() || shouldSuppressMainBlurHide()) return
-
-    clearMainWindowBlurHideTimer()
-
-    // 延迟检查，让焦点转移完成
-    mainWindowBlurHideTimer = setTimeout(() => {
-      mainWindowBlurHideTimer = null
-      if (isIgnoringBlur() || shouldSuppressMainBlurHide()) return
-      // 如果焦点转移到了面板窗口，不隐藏
-      const panelWin = pluginWindowManager.getPanelWindow()?.getWindow()
-      if (panelWin && panelWin.isFocused()) {
-        return
-      }
-      // 如果焦点转移到了系统页面附着窗口，不隐藏
-      const systemPageAttached = systemPageWindowManager.getAttachedWindow()
-      if (systemPageAttached && systemPageAttached.isFocused()) {
-        return
-      }
-      // 焦点转移到其他地方，隐藏主窗口和面板
-      hideMainWindow()
-    }, 50)
-  })
-
-  // 状态保存防抖
-  let saveTimer: NodeJS.Timeout | null = null
-  const saveState = () => {
-    if (saveTimer) clearTimeout(saveTimer)
-    saveTimer = setTimeout(() => {
-      if (!mainWindow || mainWindow.isDestroyed()) return
-      const bounds = getMainWindowVisibleBounds(mainWindow.getBounds())
-      // 只保存系统页面模式的高度（高度 > 100 说明是展开状态）
-      // 搜索框模式只保存宽度和位置
-      if (bounds.height > 100) {
-        appSettingsManager.updateSettings({
-          window: {
-            width: bounds.width,
-            height: bounds.height,
-            x: bounds.x,
-            y: bounds.y
-          }
-        })
-      } else {
-        appSettingsManager.updateSettings({
-          window: {
-            width: bounds.width,
-            x: bounds.x,
-            y: bounds.y
-          }
-        })
-      }
-    }, MAIN_WINDOW_STATE_SAVE_DEBOUNCE_MS)
-  }
-
-  // 监听窗口调整和移动
-  mainWindow.on('resize', saveState)
-  mainWindow.on('move', scheduleMainWindowStateSave)
-  mainWindow.on('resize', syncMainShadowBounds)
-  mainWindow.on('show', showMainShadowWindow)
-  mainWindow.on('hide', () => {
-    flushMainWindowStateSave()
-    if (isWindowAvailable(mainShadowWindow)) {
-      mainShadowWindow.hide()
-    }
-  })
-
-  const loadApp = async () => {
-    if (process.env.VITE_DEV_SERVER_URL) {
-      const devUrl = process.env.VITE_DEV_SERVER_URL
-      const reachable = await canReachUrl(devUrl)
-      if (reachable) {
-        await mainWindow?.loadURL(devUrl)
-        return
-      }
-      console.warn(`[Main] Dev server not reachable at ${devUrl}, falling back to local file.`)
-    }
-
-    const isDevEnv = !app.isPackaged || process.env.NODE_ENV === 'development' || !process.env.NODE_ENV
-    if (isDevEnv) {
-      const devUrl = 'http://localhost:5173'
-      const reachable = await canReachUrl(devUrl)
-      if (reachable) {
-        await mainWindow?.loadURL(devUrl)
-        return
-      }
-    }
-
-    await mainWindow?.loadFile(join(__dirname, '../renderer/index.html'))
-  }
-
-  void loadApp().catch((e) => {
-    console.error('[Main] Failed to load app:', e)
-  })
+  return mainWindowManager.getWindow()
 }
 
 function showMainWindow(options?: { skipAutoPaste?: boolean }) {
-  if (!mainWindow || mainWindow.isDestroyed()) {
-    return
-  }
-  clearMainWindowBlurHideTimer()
-  trayMenuWindowManager?.hide()
-
-  // macOS: 关键修复 —— 确保应用未残留在 app.hide() 隐藏态
-  //
-  // 背景：插件通过 utools.hideMainWindow(true) / utools.hideMainWindowPasteXxx 等
-  // API 触发 app.hide() 后，如果未及时配对调用 app.show()（插件异常、未显式
-  // 恢复、sendPasteShortcut 失败等），Mulby 会被 LaunchServices 标记为已隐藏。
-  //
-  // 主窗口是 type: 'panel'（NSPanel），只有应用处于 active 状态才能成为 key
-  // window 接收键盘事件。若应用仍处于隐藏态，mainWindow.show() 只能让窗口
-  // 可见但无法激活 NSApp，焦点无法到达 textarea —— 表现为搜索框卡死、
-  // 点击设置按钮却能正常打开（因为系统页是独立窗口）。
-  if (process.platform === 'darwin') {
-    try {
-      app.show()
-    } catch (error) {
-      console.warn('[Main] app.show() before showMainWindow failed:', error)
-    }
-  }
-
-  // 每次显示前都强制重置关键属性，确保窗口行为正确
-  if (process.platform === 'darwin') {
-    try {
-      mainWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true })
-      mainWindow.setAlwaysOnTop(true, 'floating')
-
-      // 如果有独立窗口，在显示主窗口之前先确保 dock 图标显示
-      // 并且设置一个短暂的延迟，确保 dock 状态稳定
-      const hasDetachedWindows = pluginWindowManager.getAllDetachedWindows().length > 0
-        || Boolean(systemPageWindowManager.getDetachedWindow())
-      if (hasDetachedWindows && app.dock) {
-        void app.dock.show()
-      }
-    } catch (e) {
-      console.error('Error setting window properties:', e)
-    }
-  } else {
-    mainWindow.setAlwaysOnTop(true)
-  }
-
-  try {
-    const visibleBounds = getMainWindowVisibleBounds(mainWindow.getBounds())
-    const targetVisibleBounds = resolveMainWindowVisibleBounds(visibleBounds)
-    const windowBounds = getMainWindowWindowBounds(targetVisibleBounds)
-    mainWindow.setPosition(windowBounds.x, windowBounds.y)
-
-    // 临时忽略 blur 事件，防止 show/focus 过程中误触发
-    startIgnoringBlur()
-    extendMainBlurHideSuppression(WINDOWS_SHOW_BLUR_GUARD_MS)
-
-    // Windows transparent window anti-flicker:
-    // When a transparent window is re-shown after hide(), DWM briefly composites
-    // a stale cached frame before the Chromium renderer produces a fresh one,
-    // causing a visible show→blank→show flicker. Setting opacity to 0 before
-    // show() makes the stale frame invisible; we restore opacity once the
-    // compositor has had time to produce a fresh frame.
-    const needsOpacityGuard = process.platform === 'win32' && mainWindowHasBeenShown
-    if (needsOpacityGuard) {
-      deferMainShadowShow = true
-      mainWindow.setOpacity(0)
-    }
-
-    mainWindow.show()
-    mainWindow.focus()
-    mainWindowHasBeenShown = true
-
-    // macOS: NSPanel 类窗口必须配合 app.focus({ steal: true }) 才能稳定成为
-    // key window，单纯的 win.focus() 在应用被 hide 后再次 show 的场景下不可靠。
-    // 这一步是 app.show() 的补充，保证即使上游 state 异常也能抢回焦点。
-    if (process.platform === 'darwin') {
-      try {
-        app.focus({ steal: true })
-      } catch (error) {
-        console.warn('[Main] app.focus({ steal: true }) failed:', error)
-      }
-    }
-
-    // 刷新活跃窗口缓存，供搜索路径同步读取（异步执行，不阻塞窗口显示）
-    refreshActiveWindowCache()
-
-    if (needsOpacityGuard) {
-      mainWindow.webContents.invalidate()
-      setTimeout(() => {
-        deferMainShadowShow = false
-        if (mainWindow && !mainWindow.isDestroyed() && mainWindow.isVisible()) {
-          mainWindow.setOpacity(1)
-          showMainShadowWindow()
-        }
-      }, 50)
-    }
-
-    // 恢复之前隐藏的面板
-    pluginWindowManager.showPanelWindow()
-    systemPageWindowManager.showAttached()
-
-    // 智能剪贴板自动粘贴
-    const skipAutoPaste = options?.skipAutoPaste || (Date.now() - lastDeepLinkTime < 1000)
-    if (!skipAutoPaste) {
-      const appSettings = appSettingsManager.getSettings()
-      if (appSettings.input.autoPasteOnShow && clipboardWatcher.isRecentlyChanged(appSettings.input.autoPasteMaxAge)) {
-        // 通知渲染进程尝试自动粘贴
-        mainWindow.webContents.send('clipboard:autoPaste')
-      }
-    }
-
-    // 延迟恢复 blur 监听（确保窗口完全获得焦点）
-    stopIgnoringBlur()
-
-    // macOS: 再次确保 dock 图标状态正确（在 show 之后）
-    if (process.platform === 'darwin' && app.dock) {
-      const hasDetachedWindows = pluginWindowManager.getAllDetachedWindows().length > 0
-        || Boolean(systemPageWindowManager.getDetachedWindow())
-      if (hasDetachedWindows) {
-        // 使用 setImmediate 确保在下一个事件循环中执行
-        setImmediate(() => {
-          if (app.dock) {
-            void app.dock.show()
-          }
-        })
-      }
-    }
-  } catch (e) {
-    stopIgnoringBlur()
-    console.error('Error in show sequence:', e)
-  }
+  mainWindowManager.show(options)
 }
 
 function toggleWindow() {
-  if (!mainWindow || mainWindow.isDestroyed()) {
-    return
-  }
-  const now = Date.now()
-  if (now - lastMainWindowToggleAt < MAIN_WINDOW_TOGGLE_DEBOUNCE_MS) {
-    return
-  }
-  lastMainWindowToggleAt = now
-  if (mainWindow.isVisible()) {
-    hideMainWindow()
-  } else {
-    showMainWindow()
-  }
+  mainWindowManager.toggle()
 }
+
 
 function openSystemPageView(payload: OpenSystemPageWindowPayload) {
   const detached = systemPageWindowManager.getDetachedWindow()
@@ -1218,27 +471,20 @@ function initDeepLinkRouter() {
     }
   })
 
-  console.log('[DeepLink] 路由器已初始化')
+  log.info('[DeepLink] 路由器已初始化')
 
   // 处理在路由器就绪之前缓存的挂起 URL
   if (pendingDeepLinkUrl) {
     const url = pendingDeepLinkUrl
     pendingDeepLinkUrl = null
-    console.log('[DeepLink] 处理挂起的链接:', url)
+    log.info('[DeepLink] 处理挂起的链接:', url)
     void deepLinkRouter.handleUrl(url)
   }
 }
 
 
 function resetMainWindowPosition() {
-  const settings = appSettingsManager.getSettings()
-  appSettingsManager.updateSettings({
-    window: {
-      ...(settings.window || { width: 800 }),
-      x: undefined,
-      y: undefined
-    }
-  })
+  mainWindowManager.resetPosition()
 }
 
 function restartMainProcess() {
@@ -1261,15 +507,15 @@ app.whenReady().then(async () => {
 
   // 启动剪贴板监听器
   clipboardWatcher.start()
-  console.log(`[ClipboardWatcher] Started - Mode: ${clipboardWatcher.isNativeMode() ? 'Native (zero overhead)' : 'Polling (fallback)'}`)
+  log.info(`[ClipboardWatcher] Started - Mode: ${clipboardWatcher.isNativeMode() ? 'Native (zero overhead)' : 'Polling (fallback)'}`)
 
   // 启动活跃窗口监听器
   onActiveWindowChange(() => {})
-  console.log('[ActiveWindowWatcher] Started permanently')
+  log.info('[ActiveWindowWatcher] Started permanently')
 
   // 启动剪贴板历史记录管理器
   clipboardHistoryManager.start()
-  console.log('[ClipboardHistory] Started')
+  log.info('[ClipboardHistory] Started')
 
   // 设置剪贴板历史管理器到插件管理器
   pluginManager.setClipboardHistoryManager(clipboardHistoryManager)
@@ -1408,7 +654,7 @@ app.whenReady().then(async () => {
 
     // 注册 deviceToken 持久化回调：将 Gateway 返回的 token 保存到 AppSettings
     openclawService.setSaveDeviceTokenCallback((token: string) => {
-      console.log('[OpenClaw] 保存 device token')
+      log.info('[OpenClaw] 保存 device token')
       const currentSettings = appSettingsManager.getSettings()
       void appSettingsManager.updateSettings({
         openclaw: {
@@ -1434,9 +680,9 @@ app.whenReady().then(async () => {
 
     // 将引用提升到模块级变量，供 shutdownMainProcessResources 清理
     _openclawService = openclawService
-    console.log('[OpenClaw] Node 服务初始化完成')
+    log.info('[OpenClaw] Node 服务初始化完成')
   } catch (err) {
-    console.error('[OpenClaw] Node 服务初始化失败:', err)
+    log.error('[OpenClaw] Node 服务初始化失败:', err)
   }
 
   // 创建 MCP Server Manager（将插件工具暴露给外部 AI 工具）
@@ -1465,14 +711,26 @@ app.whenReady().then(async () => {
     ipcHooks.setOnDisabledPluginToolsChanged(() => {
       mcpServerManager?.refreshTools()
     })
-    console.log('[MCP-Server] Manager 初始化完成')
+    log.info('[MCP-Server] Manager 初始化完成')
   } catch (err) {
-    console.error('[MCP-Server] Manager 初始化失败:', err)
+    log.error('[MCP-Server] Manager 初始化失败:', err)
   }
 
-  // 主窗口创建及相关初始化（抽取为函数，引导模式下延迟调用）
   function initMainWindow() {
-    createWindow()
+    mainWindowManager.setDeps({
+      pluginWindowManager,
+      systemPageWindowManager,
+      getTrayMenuManager: () => trayMenuWindowManager,
+      clipboardWatcher,
+      getLastDeepLinkTime: () => lastDeepLinkTime
+    })
+    mainWindowManager.create()
+    const mainWindow = mainWindowManager.getWindow()!
+
+    mainWindow.on('closed', () => {
+      systemPluginWindowManager.setMainWindow(null)
+      systemPageWindowManager.setMainWindow(null)
+    })
 
     setHotKeySettingRedirectHandler((cmdLabel?: string) => {
       openCommandShortcutSettingsView(cmdLabel)
@@ -1511,7 +769,7 @@ app.whenReady().then(async () => {
     )
     const trayCreated = appTrayManager.create()
     if (!trayCreated) {
-      console.warn('[AppTray] Tray unavailable, fallback to global shortcuts.')
+      log.warn('[AppTray] Tray unavailable, fallback to global shortcuts.')
     }
 
     // 设置全局窗口提供者，用于系统对话框打开时临时隐藏窗口
@@ -1565,7 +823,7 @@ app.whenReady().then(async () => {
     )
     _superPanelManager = superPanelManager
     superPanelManager.enable()
-    console.log('[SuperPanel] 管理器已初始化')
+    log.info('[SuperPanel] 管理器已初始化')
 
     // 注册超级面板设置变更回调
     ipcHooks.setOnSuperPanelChanged(() => {
@@ -1606,10 +864,10 @@ app.whenReady().then(async () => {
   // 检查是否需要显示引导窗口
   const needsOnboarding = !appSettingsManager.getSettings().onboardingCompleted
   if (needsOnboarding) {
-    console.log('[Onboarding] 首次启动，显示引导窗口')
+    log.info('[Onboarding] 首次启动，显示引导窗口')
     onboardingWindowManager.setThemeManager(themeManager)
     onboardingWindowManager.onComplete(() => {
-      console.log('[Onboarding] 引导完成，初始化并展示主窗口')
+      log.info('[Onboarding] 引导完成，初始化并展示主窗口')
       initMainWindow()
       showMainWindow()
       // 初始化插件管理器
@@ -1624,17 +882,18 @@ app.whenReady().then(async () => {
         if (openclawService) {
           const s = appSettingsManager.getSettings()
           if (s.openclaw.enabled && s.openclaw.node.autoConnect) {
-            console.log('[OpenClaw] 插件初始化完成，自动连接...')
-            void openclawService.connect(s.openclaw)
+            log.info('[OpenClaw] 插件初始化完成，自动连接...')
+            void openclawService.connect(s.openclaw).catch((err: unknown) => {
+              log.error('[OpenClaw] 自动连接失败:', err)
+            })
           }
         }
-        // 自动启动 MCP Server（如果已启用）
         if (mcpServerManager) {
           const mcpConfig = appSettingsManager.getSettings().mcpServer
           if (mcpConfig.enabled) {
-            console.log('[MCP-Server] 插件初始化完成，自动启动...')
-            void mcpServerManager.start().catch((err) => {
-              console.error('[MCP-Server] 自动启动失败:', err)
+            log.info('[MCP-Server] 插件初始化完成，自动启动...')
+            void mcpServerManager.start().catch((err: unknown) => {
+              log.error('[MCP-Server] 自动启动失败:', err)
             })
           }
         }
@@ -1662,18 +921,19 @@ app.whenReady().then(async () => {
     if (openclawService) {
       const s = appSettingsManager.getSettings()
       if (s.openclaw.enabled && s.openclaw.node.autoConnect) {
-        console.log('[OpenClaw] 插件初始化完成，自动连接...')
-        void openclawService.connect(s.openclaw)
+        log.info('[OpenClaw] 插件初始化完成，自动连接...')
+        void openclawService.connect(s.openclaw).catch((err: unknown) => {
+          log.error('[OpenClaw] 自动连接失败:', err)
+        })
       }
     }
 
-    // 自动启动 MCP Server（如果已启用）
     if (mcpServerManager) {
       const mcpConfig = appSettingsManager.getSettings().mcpServer
       if (mcpConfig.enabled) {
-        console.log('[MCP-Server] 插件初始化完成，自动启动...')
-        void mcpServerManager.start().catch((err) => {
-          console.error('[MCP-Server] 自动启动失败:', err)
+        log.info('[MCP-Server] 插件初始化完成，自动启动...')
+        void mcpServerManager.start().catch((err: unknown) => {
+          log.error('[MCP-Server] 自动启动失败:', err)
         })
       }
     }
@@ -1694,31 +954,25 @@ app.on('window-all-closed', () => {
 
 app.on('before-quit', (event) => {
   isQuitting = true
-  flushMainWindowStateSave()
+  mainWindowManager.flushStateSave()
   app.removeListener('second-instance', handleSecondInstance)
   if (process.platform === 'darwin') {
     app.removeListener('activate', handleAppActivate)
   }
 
-  if (hasShutdownCompleted) {
-    return
-  }
+  if (isShutdownComplete()) return
 
   event.preventDefault()
 
-  if (shutdownFinalizeScheduled) {
-    return
-  }
+  if (shutdownFinalizeScheduled) return
   shutdownFinalizeScheduled = true
 
-  void shutdownMainProcessResources()
+  void shutdownMainProcessResources(getShutdownResources())
     .catch((error) => {
-      console.error('[Main] Shutdown cleanup failed:', error)
+      log.error('[Main] Shutdown cleanup failed:', error)
     })
     .finally(() => {
-      if (shouldRestartAfterQuit) {
-        app.relaunch()
-      }
+      if (shouldRestartAfterQuit) app.relaunch()
       app.quit()
     })
 })
@@ -1729,25 +983,15 @@ app.on('will-quit', () => {
     app.removeListener('activate', handleAppActivate)
   }
 
-  try {
-    appTrayManager?.destroy()
-  } catch (error) {
-    console.error('[Main] Failed to destroy app tray manager on will-quit:', error)
-  } finally {
-    appTrayManager = null
-  }
+  try { appTrayManager?.destroy() } catch (error) {
+    log.error('[Main] Failed to destroy tray on will-quit:', error)
+  } finally { appTrayManager = null }
 
-  try {
-    trayMenuWindowManager?.destroy()
-  } catch (error) {
-    console.error('[Main] Failed to destroy tray menu window manager on will-quit:', error)
-  } finally {
-    trayMenuWindowManager = null
-  }
+  try { trayMenuWindowManager?.destroy() } catch (error) {
+    log.error('[Main] Failed to destroy tray menu on will-quit:', error)
+  } finally { trayMenuWindowManager = null }
 
-  try {
-    globalShortcut.unregisterAll()
-  } catch (error) {
-    console.error('[Main] Failed to unregister global shortcuts on will-quit:', error)
+  try { globalShortcut.unregisterAll() } catch (error) {
+    log.error('[Main] Failed to unregister shortcuts on will-quit:', error)
   }
 })

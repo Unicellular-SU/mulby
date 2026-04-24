@@ -1,6 +1,7 @@
 import { ipcMain } from 'electron'
 import { spawn, ChildProcess } from 'child_process'
 import {
+import log from 'electron-log'
     isFFmpegInstalled,
     getFFmpegVersion,
     getFFmpegPath,
@@ -171,7 +172,7 @@ export function registerFFmpegHandlers() {
         const webContents = event.sender
 
         return new Promise<void>((resolve, reject) => {
-            console.log('[FFmpeg] 执行命令:', ffmpegPath, args.join(' '))
+            log.info('[FFmpeg] 执行命令:', ffmpegPath, args.join(' '))
 
             const ffmpegProcess = spawn(ffmpegPath, args, {
                 stdio: ['pipe', 'pipe', 'pipe'],
@@ -205,7 +206,7 @@ export function registerFFmpegHandlers() {
             // 监听退出
             ffmpegProcess.on('close', (code) => {
                 activeProcesses.delete(taskId)
-                console.log('[FFmpeg] 进程退出, code:', code)
+                log.info('[FFmpeg] 进程退出, code:', code)
 
                 // code 0: 正常完成
                 // code 255: 被信号终止（如 SIGINT/quit），也视为正常退出
@@ -241,7 +242,7 @@ export function registerFFmpegHandlers() {
     ipcMain.handle('ffmpeg:quit', async (_, taskId: string) => {
         const ffmpegProc = activeProcesses.get(taskId)
         if (ffmpegProc) {
-            console.log('[FFmpeg] 停止任务:', taskId)
+            log.info('[FFmpeg] 停止任务:', taskId)
 
             // 方式 1: 发送 'q' 命令 (Windows/Mac 通用，但依赖 stdin 连接)
             if (ffmpegProc.stdin && !ffmpegProc.stdin.destroyed) {

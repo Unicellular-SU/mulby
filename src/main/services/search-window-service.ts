@@ -13,6 +13,7 @@ import { BrowserWindow, app, ipcMain, net, session } from 'electron'
 import { join } from 'node:path'
 import type { LocalSearchExecutor, WebSearchResult } from '../ai/tools/web-search'
 import { registerSystemInternalWindow, unregisterSystemInternalWindow } from './ipc-caller-resolver'
+import log from 'electron-log'
 
 // ==================== Parser Worker 管理 ====================
 
@@ -221,7 +222,7 @@ export class SearchWindowService implements LocalSearchExecutor {
       await new Promise<void>((r) => setTimeout(r, 1000))
       console.debug(`[SearchWindow] 搜索 session Cookie 预热完成: ${targetHost}`)
     } catch (err) {
-      console.warn(`[SearchWindow] Session 预热失败（${targetHost}，不影响后续搜索）:`, err)
+      log.warn(`[SearchWindow] Session 预热失败（${targetHost}，不影响后续搜索）:`, err)
     } finally {
       // 无论成功/失败都标记为已预热，避免对不可达的 host 反复重试导致每次搜索延 10s
       this.warmedHosts.add(targetHost)
@@ -276,7 +277,7 @@ export class SearchWindowService implements LocalSearchExecutor {
     }))
 
     if (results.length === 0) {
-      console.warn(`[SearchWindow] 选择器 "${input.resultSelector}" 未匹配到任何结果`)
+      log.warn(`[SearchWindow] 选择器 "${input.resultSelector}" 未匹配到任何结果`)
     } else {
       console.debug(`[SearchWindow] 解析完成: ${results.length} 条结果`)
     }

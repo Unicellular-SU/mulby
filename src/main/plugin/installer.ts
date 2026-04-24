@@ -5,6 +5,7 @@ import extractZip from 'extract-zip'
 import { tmpdir } from 'os'
 import { compareVersions } from './version'
 import { isCompatiblePlatform } from './loader'
+import log from 'electron-log'
 
 export type InstallAction = 'installed' | 'updated' | 'already-installed' | 'downgrade-blocked'
 
@@ -230,7 +231,7 @@ export class PluginInstaller {
         'utf-8'
       )
     } catch (error) {
-      console.warn('[PluginInstaller] Failed to write install metadata:', error)
+      log.warn('[PluginInstaller] Failed to write install metadata:', error)
     }
   }
 }

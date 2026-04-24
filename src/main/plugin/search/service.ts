@@ -5,6 +5,7 @@ import { DarwinSearchProvider } from './providers/darwin'
 import { WindowsSearchProvider } from './providers/win'
 import { LinuxSearchProvider } from './providers/linux'
 import type {
+import log from 'electron-log'
   AppSearchResult,
   DesktopSearchProvider,
   FileSearchResult,
@@ -101,7 +102,7 @@ export class DesktopSearchService implements SearchExecutionContext {
       if (this.isKilledProcessError(error)) {
         return []
       }
-      console.error('desktop file search failed:', error)
+      log.error('desktop file search failed:', error)
       return []
     }
   }
@@ -116,7 +117,7 @@ export class DesktopSearchService implements SearchExecutionContext {
       if (this.isKilledProcessError(error)) {
         return []
       }
-      console.error('desktop app search failed:', error)
+      log.error('desktop app search failed:', error)
       return []
     }
   }

@@ -1,6 +1,7 @@
 import { ipcMain } from 'electron';
 import { InBrowserManager } from '../browser/InBrowserManager';
 import { InBrowserRunPayload } from '../../shared/types/inbrowser';
+import log from 'electron-log'
 
 export function registerInBrowserHandlers() {
     const cleanupBoundSenders = new Set<number>();
@@ -14,7 +15,7 @@ export function registerInBrowserHandlers() {
                 cleanupBoundSenders.add(senderId);
                 event.sender.once('destroyed', () => {
                     void manager.destroyByOwner(senderId).catch((error) => {
-                        console.warn(`[InBrowser] Failed to cleanup windows for sender ${senderId}:`, error);
+                        log.warn(`[InBrowser] Failed to cleanup windows for sender ${senderId}:`, error);
                     });
                     cleanupBoundSenders.delete(senderId);
                 });
@@ -23,7 +24,7 @@ export function registerInBrowserHandlers() {
             const result = await manager.run(payload, senderId);
             return result;
         } catch (error: unknown) {
-            console.error('InBrowser IPC Error:', error);
+            log.error('InBrowser IPC Error:', error);
             throw error; // Re-throw to renderer
         }
     });

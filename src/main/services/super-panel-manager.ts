@@ -24,6 +24,7 @@ import { SuperPanelWindowManager } from './super-panel-window'
 import { SuperPanelStore, type SuperPanelPinnedItem, type SuperPanelGroup } from './super-panel-store'
 import { aiService } from '../ai'
 import { getSelectedTextAsync } from './native-text-selection'
+import log from 'electron-log'
 
 // ==================== 类型定义 ====================
 
@@ -175,7 +176,7 @@ export class SuperPanelManager {
     }
 
     this.isActive = true
-    console.log(`[SuperPanel] 已启用，触发方式: ${trigger.type}`)
+    log.info(`[SuperPanel] 已启用，触发方式: ${trigger.type}`)
     
     // 空闲时预热窗口（延迟 2 秒，确保主窗口优先加载完成）
     setTimeout(() => {
@@ -194,7 +195,7 @@ export class SuperPanelManager {
       this.windowManager.hide()
     }
     this.isActive = false
-    console.log('[SuperPanel] 已禁用')
+    log.info('[SuperPanel] 已禁用')
   }
 
   /** 销毁服务，释放全部资源 */
@@ -331,7 +332,7 @@ export class SuperPanelManager {
         })
       }
     } catch (err) {
-      console.error('[SuperPanel] 触发工作流异常:', err)
+      log.error('[SuperPanel] 触发工作流异常:', err)
     }
   }
 
@@ -705,7 +706,7 @@ export class SuperPanelManager {
             })
           }
           this.store.unpin(pluginId, featureCode) // 同时取消固定
-          console.log(`[SuperPanel] 已禁用推荐: ${pluginId}:${featureCode} (${cmds.length} 条命令)`)
+          log.info(`[SuperPanel] 已禁用推荐: ${pluginId}:${featureCode} (${cmds.length} 条命令)`)
           // 刷新面板（从当前结果中移除该项）
           // 有文本或有附件时都需要刷新（附件模式下 capturedText 为空）
           if (this.capturedText || this.cachedAttachments.length > 0) {
@@ -736,7 +737,7 @@ export class SuperPanelManager {
               mainWindow.webContents.send('app:openPluginManager', pluginId)
             }
           } catch (err) {
-            console.warn('[SuperPanel] 跳转插件详情失败:', err)
+            log.warn('[SuperPanel] 跳转插件详情失败:', err)
           }
           return { success: true }
         }
@@ -745,7 +746,7 @@ export class SuperPanelManager {
           return { success: false, error: `未知动作: ${action}` }
       }
     } catch (err) {
-      console.error('[SuperPanel] handleAction 异常:', err)
+      log.error('[SuperPanel] handleAction 异常:', err)
       return {
         success: false,
         error: err instanceof Error ? err.message : String(err)

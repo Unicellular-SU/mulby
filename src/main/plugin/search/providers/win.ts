@@ -2,6 +2,7 @@ import { existsSync, readdirSync, readFileSync, statSync } from 'fs'
 import { basename, dirname, extname, join } from 'path'
 import { isSystemSearchQueryEligible } from '../../../../shared/system-search'
 import type {
+import log from 'electron-log'
   AppSearchResult,
   DesktopSearchProvider,
   FileSearchResult,
@@ -65,7 +66,7 @@ export class WindowsSearchProvider implements DesktopSearchProvider {
         if (this.execution.isKilledProcessError(fallbackError)) {
           return []
         }
-        console.error('windows file fallback failed:', fallbackError)
+        log.error('windows file fallback failed:', fallbackError)
         return []
       }
     }

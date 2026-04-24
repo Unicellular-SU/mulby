@@ -1,5 +1,6 @@
 import { jsonSchema, tool } from '@ai-sdk/provider-utils'
 import type {
+import log from 'electron-log'
   AiCapabilityDebugInfo,
   AiPolicyDebugInfo,
   AiTool,
@@ -46,7 +47,7 @@ function warnCapabilityKeywordMismatch(modelId: string, tools: AiTool[]): void {
   if (requiresRerank && !supportsRerank(modelId)) warnings.push('rerank')
   if (warnings.length > 0) {
     // Tool name keyword may come from MCP/custom tools; keep function-calling available and avoid hard block.
-    console.warn('[AI] buildTools: capability keyword mismatch (allowing custom tool execution)', {
+    log.warn('[AI] buildTools: capability keyword mismatch (allowing custom tool execution)', {
       modelId,
       warnings,
       toolNames
@@ -59,7 +60,7 @@ function assertExternalToolExecutor(tools: AiTool[], toolExecutor?: BuildToolsIn
     (item) => !isRuntimeCapabilityIntrospectionToolName(String(item.function?.name || ''))
   )
   if (!toolExecutor && requiresExternalExecutor) {
-    console.error('[AI] buildTools: toolExecutor 未配置')
+    log.error('[AI] buildTools: toolExecutor 未配置')
     throw new Error('AI tool executor is not configured')
   }
 }
@@ -68,7 +69,7 @@ export function buildTools(input: BuildToolsInput) {
   const { tools, context, modelId, capabilityDebug, policyDebug, abortSignal, toolExecutor } = input
   if (!tools || tools.length === 0) return undefined
   if (modelId && !supportsFunctionCalling(modelId)) {
-    console.log('[AI] buildTools: 模型不支持 function calling', { modelId })
+    log.info('[AI] buildTools: 模型不支持 function calling', { modelId })
     return undefined
   }
   if (modelId) {
@@ -76,7 +77,7 @@ export function buildTools(input: BuildToolsInput) {
   }
   assertExternalToolExecutor(tools, toolExecutor)
 
-  console.log('[AI] buildTools: 构建工具', {
+  log.info('[AI] buildTools: 构建工具', {
     toolCount: tools.length,
     toolNames: tools.map((item) => item.function?.name),
     hasExecutor: !!toolExecutor,
@@ -97,7 +98,7 @@ export function buildTools(input: BuildToolsInput) {
           description: fn.description,
           inputSchema: jsonSchema(schema as unknown as Parameters<typeof jsonSchema>[0]),
           execute: async (toolInput: unknown) => {
-            console.log('[AI] 工具执行开始', { toolName: fn.name, input: toolInput, context })
+            log.info('[AI] 工具执行开始', { toolName: fn.name, input: toolInput, context })
             let result: unknown
             if (isRuntimeCapabilityIntrospectionToolName(fn.name)) {
               result = createRuntimeCapabilityIntrospectionSnapshot({
@@ -122,7 +123,7 @@ export function buildTools(input: BuildToolsInput) {
                   throw new Error('AI stream aborted by user')
                 }
                 const message = error instanceof Error ? error.message : String(error)
-                console.warn('[AI] 工具执行失败（返回错误结果给模型）', { toolName: fn.name, error: message })
+                log.warn('[AI] 工具执行失败（返回错误结果给模型）', { toolName: fn.name, error: message })
                 result = {
                   success: false,
                   error: message,
@@ -130,7 +131,7 @@ export function buildTools(input: BuildToolsInput) {
                 }
               }
             }
-            console.log('[AI] 工具执行完成', { toolName: fn.name, result })
+            log.info('[AI] 工具执行完成', { toolName: fn.name, result })
             return result
           }
         })

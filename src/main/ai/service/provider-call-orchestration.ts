@@ -1,5 +1,6 @@
 import { generateText, stepCountIs } from 'ai'
 import type {
+import log from 'electron-log'
   AiCapabilityDebugInfo,
   AiMessage,
   AiModelParameters,
@@ -86,7 +87,7 @@ export async function executeProviderCallOrchestration(
     hasMultimodalContent: input.hasMultimodalContent,
     shouldUseCompatToolLoop: input.shouldUseCompatToolLoop,
     executeAnthropicCall: async () => {
-      console.log('[AI] call: 使用 Anthropic 原生 API')
+      log.info('[AI] call: 使用 Anthropic 原生 API')
       const anthropicPayload = await input.deps.toAnthropicMessages(
         input.trimmedMessages,
         input.effectiveOption.model,
@@ -113,7 +114,7 @@ export async function executeProviderCallOrchestration(
       }
     },
     executeCompatToolLoopCall: async () => {
-      console.log('[AI] call: 使用 OpenAI 兼容工具调用分支（DeepSeek reasoning 兼容）', {
+      log.info('[AI] call: 使用 OpenAI 兼容工具调用分支（DeepSeek reasoning 兼容）', {
         model: input.effectiveOption.model,
         maxToolSteps: resolveMaxToolSteps(input.effectiveOption.maxToolSteps)
       })
@@ -150,7 +151,7 @@ export async function executeProviderCallOrchestration(
       }
     },
     executeSdkCall: async () => {
-      console.log('[AI] call: 使用 Vercel AI SDK generateText', { hasTools: input.hasTools })
+      log.info('[AI] call: 使用 Vercel AI SDK generateText', { hasTools: input.hasTools })
       const messages = await input.deps.toSdkMessages(input.trimmedMessages, input.effectiveOption.model)
       const maxSteps = resolveMaxToolSteps(input.effectiveOption.maxToolSteps)
       const result = await generateText({
@@ -163,7 +164,7 @@ export async function executeProviderCallOrchestration(
       } as Parameters<typeof generateText>[0])
       const resultMeta = result as { toolCalls?: unknown[]; steps?: unknown[]; reasoning?: unknown }
 
-      console.log('[AI] call: generateText 完成', {
+      log.info('[AI] call: generateText 完成', {
         text: result.text?.substring(0, 100),
         hasToolCalls: !!resultMeta.toolCalls,
         toolCallsCount: resultMeta.toolCalls?.length,

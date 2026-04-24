@@ -1,6 +1,7 @@
 import { spawn } from 'node:child_process'
 import treeKill from 'tree-kill'
 import type {
+import log from 'electron-log'
   CommandAuditItem,
   CommandRule,
   CommandRunnerSettings,
@@ -355,7 +356,7 @@ function sanitizeEnvKeysForAudit(keys: string[], settings: CommandRunnerSettings
 
 /**
  * 构建信任前缀：仅保留可执行文件名（标准化后），用于前缀匹配。
- * 例如 command="node", args=["-e", "console.log(1)"] => prefix="node"
+ * 例如 command="node", args=["-e", "log.info(1)"] => prefix="node"
  */
 function buildTrustPrefix(command: string): string {
   return normalizeCommandToken(command)

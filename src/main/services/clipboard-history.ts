@@ -3,6 +3,7 @@ import db from '../db'
 import { ClipboardWatcher } from './clipboard-watcher-v2'
 import { readFile } from 'fs/promises'
 import { getClipboardFormat, readClipboardFiles } from '../utils/clipboard-helper'
+import log from 'electron-log'
 
 interface ClipboardHistoryRow {
   id: string
@@ -129,7 +130,7 @@ export class ClipboardHistoryManager {
     } catch (err: unknown) {
       // 列已存在，忽略错误
       if (!(err instanceof Error) || !err.message.includes('duplicate column name')) {
-        console.error('[ClipboardHistory] Migration error:', err)
+        log.error('[ClipboardHistory] Migration error:', err)
       }
     }
 
@@ -158,7 +159,7 @@ export class ClipboardHistoryManager {
   private async captureClipboard() {
     try {
       const format = this.getClipboardFormat()
-      console.log('[ClipboardHistory] Detected format:', format)
+      log.info('[ClipboardHistory] Detected format:', format)
 
       if (format === 'text') {
         const text = clipboard.readText()
@@ -175,7 +176,7 @@ export class ClipboardHistoryManager {
         await this.addImageItem(buffer)
       } else if (format === 'files') {
         const files = this.readFiles()
-        console.log('[ClipboardHistory] Read files:', files)
+        log.info('[ClipboardHistory] Read files:', files)
         if (files.length === 0) return
 
         // 检查是否为图片文件
@@ -187,7 +188,7 @@ export class ClipboardHistoryManager {
         if (isImageFile) {
           // 如果是图片文件，异步生成缩略图并保存文件路径
           try {
-            console.log('[ClipboardHistory] Reading image from file:', files[0])
+            log.info('[ClipboardHistory] Reading image from file:', files[0])
             const imageBuffer = await readFile(files[0])
             const image = nativeImage.createFromBuffer(imageBuffer)
 
@@ -196,12 +197,12 @@ export class ClipboardHistoryManager {
               const thumbnail = image.resize({ width: 100, height: 100 })
               const thumbnailBuffer = thumbnail.toPNG()
 
-              console.log('[ClipboardHistory] Generated thumbnail for image file')
+              log.info('[ClipboardHistory] Generated thumbnail for image file')
               await this.addImageItemWithPath(thumbnailBuffer, files[0], imageBuffer.length)
               return
             }
           } catch (err) {
-            console.error('[ClipboardHistory] Failed to read image from file:', err)
+            log.error('[ClipboardHistory] Failed to read image from file:', err)
           }
         }
 
@@ -209,7 +210,7 @@ export class ClipboardHistoryManager {
         await this.addFilesItem(files)
       }
     } catch (err) {
-      console.error('Failed to capture clipboard:', err)
+      log.error('Failed to capture clipboard:', err)
     }
   }
 
@@ -423,7 +424,7 @@ export class ClipboardHistoryManager {
       // 批量写入后执行一次清理
       this.cleanupOldItems()
     } catch (err) {
-      console.error('[ClipboardHistory] Batch write failed:', err)
+      log.error('[ClipboardHistory] Batch write failed:', err)
     }
   }
 

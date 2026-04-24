@@ -1,4 +1,5 @@
 import { Tray, nativeImage } from 'electron'
+import log from 'electron-log'
 
 // 存储插件的托盘实例
 const pluginTrays = new Map<string, Tray>()
@@ -59,7 +60,7 @@ export class PluginTray {
       pluginTrays.set(this.pluginName, tray)
       return true
     } catch (error) {
-      console.error('Failed to create tray:', error)
+      log.error('Failed to create tray:', error)
       return false
     }
   }

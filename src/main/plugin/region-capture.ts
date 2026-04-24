@@ -18,6 +18,7 @@ import { execFile } from 'child_process'
 import { tmpdir } from 'os'
 import { readFileSync, unlinkSync, existsSync } from 'fs'
 import {
+import log from 'electron-log'
   nativeCaptureScreen,
   isNativeScreenCaptureAvailable,
   nativeStartRegionCapture
@@ -63,7 +64,7 @@ async function captureRegionMacOS(): Promise<string | null> {
         const base64 = buffer.toString('base64')
         resolve(`data:image/png;base64,${base64}`)
       } catch (err) {
-        console.error('[RegionCapture] macOS: 读取截图文件失败:', err)
+        log.error('[RegionCapture] macOS: 读取截图文件失败:', err)
         resolve(null)
       }
     })
@@ -216,7 +217,7 @@ async function captureSnapshotForDisplay(display: Electron.Display, displayIndex
   }
 
   // 策略 2: desktopCapturer fallback
-  console.warn(`[RegionCapture] 显示器 ${display.id} 原生截图不可用，使用 desktopCapturer fallback`)
+  log.warn(`[RegionCapture] 显示器 ${display.id} 原生截图不可用，使用 desktopCapturer fallback`)
   try {
     const sources = await desktopCapturer.getSources({
       types: ['screen'],
@@ -230,7 +231,7 @@ async function captureSnapshotForDisplay(display: Electron.Display, displayIndex
       return source.thumbnail.toDataURL()
     }
   } catch (err) {
-    console.error(`[RegionCapture] 显示器 ${display.id} desktopCapturer 也失败:`, err)
+    log.error(`[RegionCapture] 显示器 ${display.id} desktopCapturer 也失败:`, err)
   }
   return null
 }
@@ -239,14 +240,14 @@ async function captureSnapshotForDisplay(display: Electron.Display, displayIndex
  * Windows/Linux: 逐屏预截取 → 显示覆盖窗口 → 用户选区 → 从快照裁剪
  */
 async function captureRegionWithOverlay(): Promise<string | null> {
-  console.log('[RegionCapture] 开始预截取 + 覆盖窗口方案...')
+  log.info('[RegionCapture] 开始预截取 + 覆盖窗口方案...')
 
   // 如果已有截图窗口，先关闭
   closeAllCaptureWindows()
   displaySnapshots.clear()
 
   const displays = screen.getAllDisplays()
-  console.log(`[RegionCapture] 发现 ${displays.length} 个显示器`)
+  log.info(`[RegionCapture] 发现 ${displays.length} 个显示器`)
 
   // 第 1 步：逐屏预截取静态快照（在创建覆盖窗口之前！）
   for (let i = 0; i < displays.length; i++) {
@@ -258,7 +259,7 @@ async function captureRegionWithOverlay(): Promise<string | null> {
   }
 
   if (displaySnapshots.size === 0) {
-    console.error('[RegionCapture] 所有显示器截图均失败')
+    log.error('[RegionCapture] 所有显示器截图均失败')
     return null
   }
 
@@ -351,12 +352,12 @@ const CAPTURE_CACHE_TTL = 3000 // 3 秒内的第二次调用直接返回缓存
  * 开始区域截图（跨平台入口）
  */
 export async function startRegionCapture(): Promise<string | null> {
-  console.log('[RegionCapture] 开始区域截图...')
+  log.info('[RegionCapture] 开始区域截图...')
 
   // 去重：如果刚刚截图过，直接返回缓存结果（一次性使用）
   const now = Date.now()
   if (cachedCaptureResult && (now - cachedCaptureTime) < CAPTURE_CACHE_TTL) {
-    console.log('[RegionCapture] 返回缓存结果（去重，距上次截图', now - cachedCaptureTime, 'ms）')
+    log.info('[RegionCapture] 返回缓存结果（去重，距上次截图', now - cachedCaptureTime, 'ms）')
     const cached = cachedCaptureResult
     cachedCaptureResult = null // 一次性使用
     return cached
@@ -369,16 +370,16 @@ export async function startRegionCapture(): Promise<string | null> {
 
   if (process.platform === 'win32' && isNativeScreenCaptureAvailable()) {
     // Windows: 原生 C++ 覆盖窗口方案（解决双任务栏 bug）
-    console.log('[RegionCapture] 使用原生区域截图...')
+    log.info('[RegionCapture] 使用原生区域截图...')
     const result = await nativeStartRegionCapture()
     if (result) {
-      console.log('[RegionCapture] 原生区域截图成功, bounds:', result.bounds)
+      log.info('[RegionCapture] 原生区域截图成功, bounds:', result.bounds)
       // 缓存结果，防止插件重复调用
       cachedCaptureResult = result.dataUrl
       cachedCaptureTime = Date.now()
       return result.dataUrl
     }
-    console.log('[RegionCapture] 原生区域截图返回 null（用户取消或失败）')
+    log.info('[RegionCapture] 原生区域截图返回 null（用户取消或失败）')
     return null
   }
 
@@ -457,7 +458,7 @@ export async function completeRegionCapture(region: {
       captureResolve = null
     }
   } catch (error) {
-    console.error('[RegionCapture] 区域截图失败:', error)
+    log.error('[RegionCapture] 区域截图失败:', error)
     if (captureResolve) {
       captureResolve(null)
       captureResolve = null
@@ -497,17 +498,17 @@ function closeAllCaptureWindows(): void {
  */
 export function registerRegionCaptureHandlers(): void {
   ipcMain.handle('screen:startRegionCapture', async () => {
-    console.log('[RegionCapture] IPC: screen:startRegionCapture received')
+    log.info('[RegionCapture] IPC: screen:startRegionCapture received')
     return startRegionCapture()
   })
 
   ipcMain.on('region-capture:complete', async (_event, region) => {
-    console.log('[RegionCapture] IPC: region-capture:complete received', region)
+    log.info('[RegionCapture] IPC: region-capture:complete received', region)
     await completeRegionCapture(region)
   })
 
   ipcMain.on('region-capture:cancel', () => {
-    console.log('[RegionCapture] IPC: region-capture:cancel received')
+    log.info('[RegionCapture] IPC: region-capture:cancel received')
     cancelRegionCapture()
   })
 }

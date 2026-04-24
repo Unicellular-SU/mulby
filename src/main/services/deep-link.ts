@@ -9,6 +9,7 @@ import { Notification } from 'electron'
 import type { PluginManager } from '../plugin'
 import type { PluginStoreService } from '../plugin/store-service'
 import {
+import log from 'electron-log'
   MAX_DEEP_LINK_URL_LENGTH,
   type DeepLinkHandleResult,
   type DeepLinkRoute
@@ -72,7 +73,7 @@ export class DeepLinkRouter {
    * 处理传入的 deep link URL
    */
   async handleUrl(url: string): Promise<DeepLinkHandleResult> {
-    console.log(`[DeepLink] 收到链接: ${url}`)
+    log.info(`[DeepLink] 收到链接: ${url}`)
 
     // 基本校验
     if (!url || typeof url !== 'string') {
@@ -80,14 +81,14 @@ export class DeepLinkRouter {
     }
 
     if (url.length > MAX_DEEP_LINK_URL_LENGTH) {
-      console.warn(`[DeepLink] URL 超长 (${url.length}), 已拒绝`)
+      log.warn(`[DeepLink] URL 超长 (${url.length}), 已拒绝`)
       return { success: false, action: 'unknown', error: 'URL 超过最大允许长度' }
     }
 
     // 解析路由
     const route = this.parseUrl(url)
     if (!route) {
-      console.warn(`[DeepLink] 无法解析 URL: ${url}`)
+      log.warn(`[DeepLink] 无法解析 URL: ${url}`)
       return { success: false, action: 'unknown', error: '无法解析 URL 格式' }
     }
 
@@ -117,7 +118,7 @@ export class DeepLinkRouter {
       }
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
-      console.error(`[DeepLink] 处理失败:`, error)
+      log.error(`[DeepLink] 处理失败:`, error)
       return { success: false, action: route.action, error: message }
     }
   }
@@ -237,7 +238,7 @@ export class DeepLinkRouter {
 
     if (!plugin) {
       // 插件未安装 → 尝试通过商店安装
-      console.log(`[DeepLink] 插件 ${pluginId} 未安装，尝试从商店查找`)
+      log.info(`[DeepLink] 插件 ${pluginId} 未安装，尝试从商店查找`)
       return await this.handlePluginNotInstalled(route)
     }
 
@@ -545,7 +546,7 @@ export class DeepLinkRouter {
       const entry = result.entries.find(e => e.plugin.id === pluginId)
       return entry || null
     } catch (error) {
-      console.warn(`[DeepLink] 查找商店插件失败:`, error)
+      log.warn(`[DeepLink] 查找商店插件失败:`, error)
       return null
     }
   }

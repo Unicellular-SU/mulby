@@ -2,6 +2,7 @@ import { ipcMain, webContents } from 'electron'
 import db from '../db'
 import { PluginStorage } from '../plugin/storage'
 import type {
+import log from 'electron-log'
     StorageListOptions,
     StorageSetManyItem,
     StorageSetManyOptions,
@@ -51,7 +52,7 @@ export function registerStorageHandlers() {
             const row = stmtGet.get(ns, key) as { value: string } | undefined
             return row ? JSON.parse(row.value) : undefined
         } catch (error) {
-            console.error(`[Storage] Get failed (${ns}:${key}):`, error)
+            log.error(`[Storage] Get failed (${ns}:${key}):`, error)
             return undefined
         }
     }))
@@ -73,7 +74,7 @@ export function registerStorageHandlers() {
             broadcastStorageChange({ type: 'set', key, namespace: ns, updatedAt: Date.now() })
             return true
         } catch (error) {
-            console.error(`[Storage] Set failed (${ns}:${key}):`, error)
+            log.error(`[Storage] Set failed (${ns}:${key}):`, error)
             return false
         }
     }))
@@ -87,7 +88,7 @@ export function registerStorageHandlers() {
             broadcastStorageChange({ type: 'remove', key, namespace: ns, updatedAt: Date.now() })
             return true
         } catch (error) {
-            console.error(`[Storage] Remove failed (${ns}:${key}):`, error)
+            log.error(`[Storage] Remove failed (${ns}:${key}):`, error)
             return false
         }
     }))
@@ -104,7 +105,7 @@ export function registerStorageHandlers() {
             }
             return result
         } catch (error) {
-            console.error(`[Storage] GetAll failed (${ns}):`, error)
+            log.error(`[Storage] GetAll failed (${ns}):`, error)
             return {}
         }
     }))
@@ -121,7 +122,7 @@ export function registerStorageHandlers() {
             broadcastStorageChange({ type: 'clear', key: '*', namespace: ns, updatedAt: Date.now() })
             return true
         } catch (error) {
-            console.error(`[Storage] Clear failed (${ns}):`, error)
+            log.error(`[Storage] Clear failed (${ns}):`, error)
             return false
         }
     }))
@@ -134,7 +135,7 @@ export function registerStorageHandlers() {
         try {
             return stmtListNamespaces.all() as { plugin_id: string; count: number; lastUpdated: number }[]
         } catch (error) {
-            console.error('[Storage] ListNamespaces failed:', error)
+            log.error('[Storage] ListNamespaces failed:', error)
             return []
         }
     }))
@@ -160,7 +161,7 @@ export function registerStorageHandlers() {
                 return { key: row.key, value: parsed, rawValue: row.value, updatedAt: row.updated_at }
             })
         } catch (error) {
-            console.error(`[Storage] GetAllWithMeta failed (${namespace}):`, error)
+            log.error(`[Storage] GetAllWithMeta failed (${namespace}):`, error)
             return []
         }
     }))
@@ -173,7 +174,7 @@ export function registerStorageHandlers() {
         try {
             return pluginStorageForIpc.listRaw(ns, options)
         } catch (error) {
-            console.error(`[Storage] List failed (${ns}):`, error)
+            log.error(`[Storage] List failed (${ns}):`, error)
             return { items: [], nextCursor: undefined }
         }
     }))
@@ -184,7 +185,7 @@ export function registerStorageHandlers() {
         try {
             return pluginStorageForIpc.getManyRaw(ns, keys)
         } catch (error) {
-            console.error(`[Storage] GetMany failed (${ns}):`, error)
+            log.error(`[Storage] GetMany failed (${ns}):`, error)
             return keys.map(key => ({ key, found: false }))
         }
     }))
@@ -201,7 +202,7 @@ export function registerStorageHandlers() {
             }
             return result
         } catch (error) {
-            console.error(`[Storage] SetMany failed (${ns}):`, error)
+            log.error(`[Storage] SetMany failed (${ns}):`, error)
             return { success: false, results: [] }
         }
     }))
@@ -212,7 +213,7 @@ export function registerStorageHandlers() {
         try {
             return pluginStorageForIpc.getMetaRaw(ns, key)
         } catch (error) {
-            console.error(`[Storage] GetMeta failed (${ns}:${key}):`, error)
+            log.error(`[Storage] GetMeta failed (${ns}:${key}):`, error)
             return { found: false }
         }
     }))
@@ -227,7 +228,7 @@ export function registerStorageHandlers() {
             }
             return result
         } catch (error) {
-            console.error(`[Storage] SetWithVersion failed (${ns}:${key}):`, error)
+            log.error(`[Storage] SetWithVersion failed (${ns}:${key}):`, error)
             return { ok: false }
         }
     }))
@@ -242,7 +243,7 @@ export function registerStorageHandlers() {
             }
             return result
         } catch (error) {
-            console.error(`[Storage] RemoveWithVersion failed (${ns}:${key}):`, error)
+            log.error(`[Storage] RemoveWithVersion failed (${ns}:${key}):`, error)
             return { ok: false, error: 'E_INVALID_VALUE' }
         }
     }))
@@ -264,7 +265,7 @@ export function registerStorageHandlers() {
             }
             return result
         } catch (error) {
-            console.error(`[Storage] Transaction failed (${ns}):`, error)
+            log.error(`[Storage] Transaction failed (${ns}):`, error)
             const err = error as Error & { result?: unknown }
             if (err.result) return err.result
             return { success: false, committed: 0 }
@@ -281,7 +282,7 @@ export function registerStorageHandlers() {
             }
             return result
         } catch (error) {
-            console.error(`[Storage] Append failed (${ns}:${key}):`, error)
+            log.error(`[Storage] Append failed (${ns}:${key}):`, error)
             return { ok: false, newLength: 0, version: 0 }
         }
     }))
@@ -314,7 +315,7 @@ export function registerStorageHandlers() {
         const entry = watchRegistry.get(watchId)
         if (!entry) return true
         if (entry.wcId !== event.sender.id) {
-            console.warn('[Storage] unwatch 拒绝：watchId 不属于当前 webContents')
+            log.warn('[Storage] unwatch 拒绝：watchId 不属于当前 webContents')
             return false
         }
         watchRegistry.delete(watchId)

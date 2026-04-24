@@ -1,5 +1,6 @@
 import { ipcMain } from 'electron'
 import sharp, { Sharp, SharpOptions } from 'sharp'
+import log from 'electron-log'
 
 /**
  * Sharp 图像处理 IPC 处理器
@@ -31,10 +32,10 @@ const TERMINAL_METHOD_SET = new Set<string>(TERMINAL_METHODS as readonly string[
 export function registerSharpHandlers() {
   // 执行 Sharp 操作链
   ipcMain.handle('sharp:execute', async (_event, payload: SharpExecutePayload) => {
-    console.log('[Sharp] ========== 收到请求 ==========')
-    console.log('[Sharp] payload input type:', typeof payload.input)
-    console.log('[Sharp] payload input value:', typeof payload.input === 'string' ? payload.input : '[非字符串]')
-    console.log('[Sharp] operations:', payload.operations.map(op => op.method).join(' -> '))
+    log.info('[Sharp] ========== 收到请求 ==========')
+    log.info('[Sharp] payload input type:', typeof payload.input)
+    log.info('[Sharp] payload input value:', typeof payload.input === 'string' ? payload.input : '[非字符串]')
+    log.info('[Sharp] operations:', payload.operations.map(op => op.method).join(' -> '))
 
     try {
       const { input, options, operations } = payload
@@ -44,25 +45,25 @@ export function registerSharpHandlers() {
       if (input === undefined || input === null) {
         throw new Error('Sharp 需要输入：请传入图片文件路径、Buffer 或 ArrayBuffer，例如 mulby.sharp(文件路径) 或 mulby.sharp(图片Buffer)')
       } else if (typeof input === 'string') {
-        console.log('[Sharp] 创建: 文件路径 =', input)
+        log.info('[Sharp] 创建: 文件路径 =', input)
         instance = sharp(input, options)
       } else if (Buffer.isBuffer(input)) {
-        console.log('[Sharp] 创建: Buffer')
+        log.info('[Sharp] 创建: Buffer')
         instance = sharp(input, options)
       } else if (input instanceof ArrayBuffer) {
-        console.log('[Sharp] 创建: ArrayBuffer')
+        log.info('[Sharp] 创建: ArrayBuffer')
         instance = sharp(Buffer.from(input), options)
       } else if (ArrayBuffer.isView(input)) {
-        console.log('[Sharp] 创建: ArrayBufferView')
+        log.info('[Sharp] 创建: ArrayBufferView')
         instance = sharp(
           Buffer.from(input.buffer, input.byteOffset, input.byteLength),
           options
         )
       } else if (Array.isArray(input)) {
-        console.log('[Sharp] 创建: 数组')
+        log.info('[Sharp] 创建: 数组')
         instance = sharp(input as unknown as Buffer, options)
       } else if (typeof input === 'object') {
-        console.log('[Sharp] 创建: 对象 keys =', Object.keys(input))
+        log.info('[Sharp] 创建: 对象 keys =', Object.keys(input))
         instance = sharp(input as unknown as Parameters<typeof sharp>[0], options)
       } else {
         throw new Error('不支持的输入类型')
@@ -74,7 +75,7 @@ export function registerSharpHandlers() {
 
       // 执行操作链
       for (const { method, args } of operations) {
-        console.log('[Sharp] 执行:', method)
+        log.info('[Sharp] 执行:', method)
 
         const methodMap = instance as unknown as Record<string, (...methodArgs: unknown[]) => unknown>
         const methodFn = methodMap[method]
@@ -95,59 +96,59 @@ export function registerSharpHandlers() {
 
         // 终结方法返回 Promise
         if (TERMINAL_METHOD_SET.has(method)) {
-          console.log('[Sharp] 终结方法:', method)
+          log.info('[Sharp] 终结方法:', method)
           const finalResult = await result
 
-          console.log('[Sharp] 结果 typeof:', typeof finalResult)
-          console.log('[Sharp] 结果 isBuffer:', Buffer.isBuffer(finalResult))
-          console.log('[Sharp] 结果 constructor:', (finalResult as { constructor?: { name?: string } })?.constructor?.name)
+          log.info('[Sharp] 结果 typeof:', typeof finalResult)
+          log.info('[Sharp] 结果 isBuffer:', Buffer.isBuffer(finalResult))
+          log.info('[Sharp] 结果 constructor:', (finalResult as { constructor?: { name?: string } })?.constructor?.name)
 
           // 处理 Buffer 类型，转换为 ArrayBuffer 以便 IPC 序列化
           if (Buffer.isBuffer(finalResult)) {
-            console.log('[Sharp] 转换 Buffer, 长度:', finalResult.length)
+            log.info('[Sharp] 转换 Buffer, 长度:', finalResult.length)
             // 使用 slice 创建新的 ArrayBuffer，避免共享内存问题
             const arrayBuffer = finalResult.buffer.slice(
               finalResult.byteOffset,
               finalResult.byteOffset + finalResult.byteLength
             )
-            console.log('[Sharp] ArrayBuffer 字节长度:', arrayBuffer.byteLength)
+            log.info('[Sharp] ArrayBuffer 字节长度:', arrayBuffer.byteLength)
             return arrayBuffer
           }
 
           // 处理 metadata 返回的对象，其中可能包含 Buffer 字段
           if (method === 'metadata' && finalResult && typeof finalResult === 'object') {
-            console.log('[Sharp] 处理 metadata')
+            log.info('[Sharp] 处理 metadata')
             const serializable: Record<string, unknown> = {}
             for (const [key, value] of Object.entries(finalResult as Record<string, unknown>)) {
               if (Buffer.isBuffer(value)) {
-                console.log('[Sharp] metadata Buffer 字段:', key)
+                log.info('[Sharp] metadata Buffer 字段:', key)
                 serializable[key] = value.toString('base64')
               } else {
                 serializable[key] = value
               }
             }
-            console.log('[Sharp] metadata keys:', Object.keys(serializable))
+            log.info('[Sharp] metadata keys:', Object.keys(serializable))
             return serializable
           }
 
           // 处理 toFile 返回的 info 对象
           if (method === 'toFile' && finalResult && typeof finalResult === 'object') {
-            console.log('[Sharp] toFile info:', finalResult)
+            log.info('[Sharp] toFile info:', finalResult)
             return JSON.parse(JSON.stringify(finalResult))
           }
 
-          console.log('[Sharp] 返回原始结果')
+          log.info('[Sharp] 返回原始结果')
           return finalResult
         }
       }
 
-      console.log('[Sharp] 警告: 没有终结方法')
+      log.info('[Sharp] 警告: 没有终结方法')
       return undefined
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
       const stack = error instanceof Error ? error.stack : undefined
-      console.error('[Sharp] 错误:', message)
-      console.error('[Sharp] 堆栈:', stack)
+      log.error('[Sharp] 错误:', message)
+      log.error('[Sharp] 堆栈:', stack)
       throw new Error(`Sharp 操作失败: ${message}`)
     }
   })

@@ -11,6 +11,7 @@ import { isIgnoringBlur } from '../services/blur-manager'
 import { getPluginPreloadPath } from './plugin-preload-wrapper'
 import { ATTACHED_PANEL_HEIGHT, ATTACHED_PANEL_MIN_OVERFLOW_HEIGHT } from '../constants/panel-window'
 import {
+import log from 'electron-log'
     applyWindowsFramelessSurface,
     getWindowsFramelessSurfaceInsets,
     getWindowsFramelessSurfaceVisibleBounds,
@@ -314,7 +315,7 @@ export class PluginPanelWindow {
                 windowId: this.panelWindow?.id
             })
 
-            console.error('[PanelWindow] Render process gone:', details.reason)
+            log.error('[PanelWindow] Render process gone:', details.reason)
             this.close()
         })
 

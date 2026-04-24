@@ -10,6 +10,7 @@
 import { app } from 'electron'
 import { join } from 'path'
 import { existsSync } from 'fs'
+import log from 'electron-log'
 
 /** 系统插件保留名称（双下划线前缀避免与用户插件冲突） */
 export const SYSTEM_PLUGIN_NAME = '__mulby_system'
@@ -45,7 +46,7 @@ export function getInternalPluginDirs(): string[] {
   if (existsSync(systemDir)) {
     dirs.push(systemDir)
   } else {
-    console.warn(`[InternalPlugins] 系统插件目录不存在: ${systemDir}`)
+    log.warn(`[InternalPlugins] 系统插件目录不存在: ${systemDir}`)
   }
 
   return dirs

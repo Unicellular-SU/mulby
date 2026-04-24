@@ -6,6 +6,7 @@
  */
 
 import { EventEmitter } from 'events'
+import log from 'electron-log'
 
 // ============ 类型定义 ============
 
@@ -38,7 +39,7 @@ export class PluginMessageBus extends EventEmitter {
     handlers.push({ pluginId, handler })
     this.handlers.set(pluginId, handlers)
 
-    console.log(`[MessageBus] Plugin ${pluginId} subscribed to messages`)
+    log.info(`[MessageBus] Plugin ${pluginId} subscribed to messages`)
   }
 
   /**
@@ -48,7 +49,7 @@ export class PluginMessageBus extends EventEmitter {
     if (!handler) {
       // 移除该插件的所有处理器
       this.handlers.delete(pluginId)
-      console.log(`[MessageBus] Plugin ${pluginId} unsubscribed from all messages`)
+      log.info(`[MessageBus] Plugin ${pluginId} unsubscribed from all messages`)
       return
     }
 
@@ -63,7 +64,7 @@ export class PluginMessageBus extends EventEmitter {
       } else {
         this.handlers.set(pluginId, handlers)
       }
-      console.log(`[MessageBus] Plugin ${pluginId} unsubscribed from specific handler`)
+      log.info(`[MessageBus] Plugin ${pluginId} unsubscribed from specific handler`)
     }
   }
 
@@ -125,7 +126,7 @@ export class PluginMessageBus extends EventEmitter {
   private async deliverMessage(message: PluginMessage, targetPluginId: string): Promise<void> {
     const handlers = this.handlers.get(targetPluginId)
     if (!handlers || handlers.length === 0) {
-      console.warn(`[MessageBus] No handlers for plugin ${targetPluginId}`)
+      log.warn(`[MessageBus] No handlers for plugin ${targetPluginId}`)
       return
     }
 
@@ -134,7 +135,7 @@ export class PluginMessageBus extends EventEmitter {
       try {
         await handler(message)
       } catch (err) {
-        console.error(`[MessageBus] Error in message handler for plugin ${targetPluginId}:`, err)
+        log.error(`[MessageBus] Error in message handler for plugin ${targetPluginId}:`, err)
         this.emit('message:error', { message, targetPluginId, error: err })
       }
     })
@@ -179,7 +180,7 @@ export class PluginMessageBus extends EventEmitter {
     // 清理历史记录中的相关消息（可选，避免内存泄漏）
     // 注意：这里不清理历史消息，因为其他插件可能需要查看
 
-    console.log(`[MessageBus] Cleaned up plugin ${pluginId}`)
+    log.info(`[MessageBus] Cleaned up plugin ${pluginId}`)
   }
 
   /**

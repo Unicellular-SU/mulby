@@ -1,6 +1,7 @@
 import type { AiMessage, AiTokenBreakdown } from '../../../shared/types/ai'
 import { classifyAiStreamError } from '../../../shared/ai/streamDiagnostics'
 import {
+import log from 'electron-log'
   createAiStreamMetrics,
   finishAiStreamMetricsError,
   finishAiStreamMetricsSuccess,
@@ -99,7 +100,7 @@ export function handleStreamRuntimeError(input: HandleStreamRuntimeErrorInput): 
 
   if (input.runtime) {
     const finalizedMetrics = finishAiStreamMetricsError(input.runtime.metrics, classification)
-    console.error('[AI] stream:error', {
+    log.error('[AI] stream:error', {
       requestId: input.requestId,
       providerType: input.runtime.metrics.providerType,
       model: input.model,
@@ -113,7 +114,7 @@ export function handleStreamRuntimeError(input: HandleStreamRuntimeErrorInput): 
     return error
   }
 
-  console.error('[AI] stream:error', {
+  log.error('[AI] stream:error', {
     requestId: input.requestId,
     providerType: input.providerType,
     model: input.model,

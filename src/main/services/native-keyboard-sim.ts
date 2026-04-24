@@ -13,6 +13,7 @@
 import * as koffi from 'koffi'
 import { execFile } from 'child_process'
 import { promisify } from 'util'
+import log from 'electron-log'
 
 const execFileAsync = promisify(execFile)
 
@@ -39,10 +40,10 @@ export function nativeSimulateKeyCombination(
     if (process.platform === 'linux') {
       return linuxSimulateKeyCombination(modifiers, key)
     }
-    console.warn('[NativeKeySim] 不支持的平台:', process.platform)
+    log.warn('[NativeKeySim] 不支持的平台:', process.platform)
     return false
   } catch (err) {
-    console.error('[NativeKeySim] 模拟按键失败:', err)
+    log.error('[NativeKeySim] 模拟按键失败:', err)
     return false
   }
 }
@@ -81,7 +82,7 @@ export async function fallbackSimulateCopy(): Promise<boolean> {
     await execFileAsync('xdotool', ['key', '--clearmodifiers', 'ctrl+c'])
     return true
   } catch (err) {
-    console.error('[NativeKeySim] 回退模拟复制失败:', err)
+    log.error('[NativeKeySim] 回退模拟复制失败:', err)
     return false
   }
 }
@@ -140,7 +141,7 @@ function getDarwinSimApi(): DarwinSimApi {
 function darwinSimulateKeyCombination(modifiers: string[], key: string): boolean {
   const keyCode = DARWIN_KEY_CODES[key.toLowerCase()]
   if (keyCode === undefined) {
-    console.warn(`[NativeKeySim] macOS 未知键名: "${key}"`)
+    log.warn(`[NativeKeySim] macOS 未知键名: "${key}"`)
     return false
   }
 
@@ -239,7 +240,7 @@ function getWin32SimApi(): Win32SimApi & { inputType: unknown } {
 function win32SimulateKeyCombination(modifiers: string[], key: string): boolean {
   const vk = WIN32_VK_MAP[key.toLowerCase()]
   if (vk === undefined) {
-    console.warn(`[NativeKeySim] Win32 未知键名: "${key}"`)
+    log.warn(`[NativeKeySim] Win32 未知键名: "${key}"`)
     return false
   }
 
@@ -322,7 +323,7 @@ function getLinuxXdoApi(): (LinuxXdoApi & { handle: unknown }) | null {
 
     if (!lib) {
       _linuxXdoFailed = true
-      console.warn('[NativeKeySim] Linux libxdo 加载失败，将回退到 xdotool 子进程')
+      log.warn('[NativeKeySim] Linux libxdo 加载失败，将回退到 xdotool 子进程')
       return null
     }
 
@@ -335,14 +336,14 @@ function getLinuxXdoApi(): (LinuxXdoApi & { handle: unknown }) | null {
     _linuxXdoHandle = _linuxXdoApi.xdo_new(null)
     if (!_linuxXdoHandle) {
       _linuxXdoFailed = true
-      console.warn('[NativeKeySim] Linux xdo_new() 失败')
+      log.warn('[NativeKeySim] Linux xdo_new() 失败')
       return null
     }
 
     return { ..._linuxXdoApi, handle: _linuxXdoHandle }
   } catch (err) {
     _linuxXdoFailed = true
-    console.warn('[NativeKeySim] Linux libxdo 初始化失败:', err)
+    log.warn('[NativeKeySim] Linux libxdo 初始化失败:', err)
     return null
   }
 }

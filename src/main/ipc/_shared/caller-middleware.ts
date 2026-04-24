@@ -24,6 +24,7 @@
 
 import type { IpcMainInvokeEvent, IpcMainEvent } from 'electron'
 import { resolveIpcCallerSource, type IpcCallerInfo } from '../../services/ipc-caller-resolver'
+import log from 'electron-log'
 
 /** IPC 策略校验失败 */
 export class IpcPolicyError extends Error {
@@ -67,7 +68,7 @@ export function appOnlyOn<Args extends unknown[]>(
   return (event, ...args) => {
     const caller = resolveIpcCallerSource(event.sender)
     if (caller.source !== 'app') {
-      console.warn(`[IPC] 丢弃非主应用来源的 on 消息（source=${caller.source}）`)
+      log.warn(`[IPC] 丢弃非主应用来源的 on 消息（source=${caller.source}）`)
       return
     }
     fn(event, ...args)
@@ -108,7 +109,7 @@ export function pluginAwareOn<Args extends unknown[]>(
   return (event, ...args) => {
     const caller = resolveIpcCallerSource(event.sender)
     if (caller.source === 'untrusted') {
-      console.warn('[IPC] 丢弃未登记窗口的 on 消息')
+      log.warn('[IPC] 丢弃未登记窗口的 on 消息')
       return
     }
     fn(caller, event, ...args)

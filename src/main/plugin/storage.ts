@@ -3,6 +3,7 @@ import { join } from 'path'
 import { existsSync, readdirSync, readFileSync, renameSync } from 'fs'
 import db from '../db'
 import type {
+import log from 'electron-log'
   StorageListOptions,
   StorageListResult,
   StorageListItem,
@@ -647,15 +648,15 @@ export class PluginStorage {
         renameSync(filePath, filePath + '.migrated')
         migratedCount++
 
-        console.log(`[PluginStorage] 已迁移插件数据: ${pluginName} (${Object.keys(data).length} keys)`)
+        log.info(`[PluginStorage] 已迁移插件数据: ${pluginName} (${Object.keys(data).length} keys)`)
       } catch (err) {
         // 迁移失败不影响启动，保留原始 JSON 文件
-        console.error(`[PluginStorage] 迁移失败: ${file}`, err)
+        log.error(`[PluginStorage] 迁移失败: ${file}`, err)
       }
     }
 
     if (migratedCount > 0) {
-      console.log(`[PluginStorage] 数据迁移完成: ${migratedCount} 个插件`)
+      log.info(`[PluginStorage] 数据迁移完成: ${migratedCount} 个插件`)
     }
   }
 }

@@ -7,6 +7,7 @@ import Database from 'better-sqlite3'
 import { app } from 'electron'
 import { join } from 'path'
 import type { Task, TaskExecution, TaskFilter } from './types'
+import log from 'electron-log'
 
 type TaskColumnInfo = { name?: string }
 
@@ -72,9 +73,9 @@ export class TaskStore {
     const hasPriority = columns.some(col => col.name === 'priority')
 
     if (!hasPriority) {
-      console.log('[TaskStore] Migrating database: adding priority column')
+      log.info('[TaskStore] Migrating database: adding priority column')
       this.db.exec(`ALTER TABLE tasks ADD COLUMN priority INTEGER DEFAULT 5;`)
-      console.log('[TaskStore] Database migration completed')
+      log.info('[TaskStore] Database migration completed')
     }
 
     // 创建 priority 索引（无论是否迁移都要确保索引存在）

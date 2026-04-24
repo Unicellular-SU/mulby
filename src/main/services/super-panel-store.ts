@@ -15,6 +15,7 @@
 import { app } from 'electron'
 import { join } from 'path'
 import { existsSync, readFileSync, writeFileSync } from 'fs'
+import log from 'electron-log'
 
 /** 固定到超级面板的插件功能条目 */
 export interface SuperPanelPinnedItem {
@@ -348,7 +349,7 @@ export class SuperPanelStore {
 
     // v1 → v2：将旧 pinnedItems 放入默认分组
     const oldItems = this.normalizePinnedItems(data.pinnedItems)
-    console.log(`[SuperPanelStore] v1→v2 数据迁移：${oldItems.length} 个固定项`)
+    log.info(`[SuperPanelStore] v1→v2 数据迁移：${oldItems.length} 个固定项`)
     const layout: SuperPanelLayout = {
       version: 2,
       groups: [{
@@ -375,7 +376,7 @@ export class SuperPanelStore {
     try {
       writeFileSync(this.filePath, JSON.stringify(data, null, 2), 'utf-8')
     } catch (err) {
-      console.error('[SuperPanelStore] 保存失败:', err)
+      log.error('[SuperPanelStore] 保存失败:', err)
     }
   }
 

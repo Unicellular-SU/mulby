@@ -1,4 +1,5 @@
 import type {
+import log from 'electron-log'
   AiCapabilityDebugInfo,
   AiMessage,
   AiModelParameters,
@@ -464,7 +465,7 @@ export async function runOpenAICompatToolLoop(
             .map((item) => item.function?.name)
             .filter((name): name is string => !!name)
         }
-        console.warn('[AI] 工具执行跳过：工具名未匹配', {
+        log.warn('[AI] 工具执行跳过：工具名未匹配', {
           rawToolName,
           availableTools: fallbackResult.availableTools
         })
@@ -482,13 +483,13 @@ export async function runOpenAICompatToolLoop(
       }
 
       if (rawToolName && rawToolName !== toolName) {
-        console.warn('[AI] 工具名自动纠正', {
+        log.warn('[AI] 工具名自动纠正', {
           rawToolName,
           resolvedToolName: toolName
         })
       }
 
-      console.log('[AI] 工具执行开始', { toolName, input: parsedArgs, context: input.toolContext })
+      log.info('[AI] 工具执行开始', { toolName, input: parsedArgs, context: input.toolContext })
       let result: unknown
       if (isRuntimeCapabilityIntrospectionToolName(toolName)) {
         result = createRuntimeCapabilityIntrospectionSnapshot({
@@ -518,7 +519,7 @@ export async function runOpenAICompatToolLoop(
             throw new Error('AI stream aborted by user')
           }
           const message = error instanceof Error ? error.message : String(error)
-          console.warn('[AI] 工具执行失败（返回错误结果给模型）', { toolName, error: message })
+          log.warn('[AI] 工具执行失败（返回错误结果给模型）', { toolName, error: message })
           result = {
             success: false,
             error: message,
@@ -528,7 +529,7 @@ export async function runOpenAICompatToolLoop(
           context.untrackMcpCall(input.requestId, mcpExecutionCallId)
         }
       }
-      console.log('[AI] 工具执行完成', { toolName, result })
+      log.info('[AI] 工具执行完成', { toolName, result })
 
       context.emitToolResultChunk(onChunk, {
         id: call.id,

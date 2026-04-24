@@ -5,6 +5,7 @@ import type { AppSettingsManager } from './app-settings'
 import type { ThemeManager } from './theme'
 import { loggerService } from './logger'
 import { registerAppWindow, unregisterAppWindow } from './ipc-caller-resolver'
+import log from 'electron-log'
 
 interface TrayMenuWindowOptions {
   pluginManager: PluginManager
@@ -126,7 +127,7 @@ export class TrayMenuWindowManager {
     try {
       this.window.hide()
     } catch (error) {
-      console.warn('[TrayMenu] Failed to hide tray menu window:', error)
+      log.warn('[TrayMenu] Failed to hide tray menu window:', error)
       this.window = null
     }
   }
@@ -141,7 +142,7 @@ export class TrayMenuWindowManager {
       try {
         win.destroy()
       } catch (error) {
-        console.warn('[TrayMenu] Failed to destroy tray menu window:', error)
+        log.warn('[TrayMenu] Failed to destroy tray menu window:', error)
       }
     }
   }

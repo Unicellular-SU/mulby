@@ -11,6 +11,7 @@
 import { writeFileSync, mkdirSync, existsSync } from 'fs'
 import { join } from 'path'
 import { app } from 'electron'
+import log from 'electron-log'
 
 // 缓存生成的 preload 文件路径
 const preloadCache = new Map<string, string>()
@@ -63,7 +64,7 @@ export function generateWrappedPreload(
     try {
         require(${JSON.stringify(pluginPreloadPath)});
     } catch (error) {
-        console.error('[Mulby] 插件 preload 加载失败:', error);
+        log.error('[Mulby] 插件 preload 加载失败:', error);
     }
 })();
 `
@@ -76,7 +77,7 @@ export function generateWrappedPreload(
     writeFileSync(wrapperPath, wrapperCode, 'utf-8')
     preloadCache.set(cacheKey, wrapperPath)
 
-    console.log(`[Mulby] 生成插件 preload 包装: ${wrapperPath}`)
+    log.info(`[Mulby] 生成插件 preload 包装: ${wrapperPath}`)
     return wrapperPath
 }
 
@@ -108,7 +109,7 @@ export function getPluginPreloadPath(
 
     // 检查文件是否存在
     if (!existsSync(pluginPreloadPath)) {
-        console.warn(`[Mulby] 插件 preload 文件不存在: ${pluginPreloadPath}`)
+        log.warn(`[Mulby] 插件 preload 文件不存在: ${pluginPreloadPath}`)
         return basePreloadPath
     }
 

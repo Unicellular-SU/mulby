@@ -13,6 +13,7 @@ import { PluginCommandShortcutManager } from './command-shortcuts'
 import { PluginCommandDisabledManager } from './command-disabled'
 import { pluginFeatureStore } from './dynamic-features'
 import {
+import log from 'electron-log'
   InputPayload,
   Plugin,
   PluginCmd,
@@ -304,7 +305,7 @@ export class PluginManager {
       if (plugin && !this.plugins.has(plugin.id)) {
         plugin.enabled = true  // 内置插件始终启用
         this.plugins.set(plugin.id, plugin)
-        console.log(`[PluginManager] 加载内置插件: ${plugin.manifest.displayName} (${plugin.id})`)
+        log.info(`[PluginManager] 加载内置插件: ${plugin.manifest.displayName} (${plugin.id})`)
       }
     }
 
@@ -315,7 +316,7 @@ export class PluginManager {
         // 检测 ID 冲突
         if (this.plugins.has(plugin.id)) {
           const existing = this.plugins.get(plugin.id)!
-          console.warn(
+          log.warn(
             `[PluginManager] ID conflict detected: "${plugin.id}"\n` +
             `  - Existing: ${existing.path}\n` +
             `  - Skipped:  ${plugin.path}\n` +
@@ -348,7 +349,7 @@ export class PluginManager {
       }
     }
 
-    console.log(`Loaded ${this.plugins.size} plugins from: ${dirs.join(', ')}`)
+    log.info(`Loaded ${this.plugins.size} plugins from: ${dirs.join(', ')}`)
 
     // 启动任务调度器
     await this.taskScheduler.start()
@@ -361,7 +362,7 @@ export class PluginManager {
 
     // 预热搜索 worker 并同步插件数据（不阻塞启动流程）
     void this.syncSearchWorker().catch((error) => {
-      console.warn('[PluginManager] Search worker sync failed', error)
+      log.warn('[PluginManager] Search worker sync failed', error)
     })
   }
 
@@ -661,7 +662,7 @@ export class PluginManager {
       if (error instanceof Error && error.message === 'Search request superseded') {
         return []
       }
-      console.warn('[PluginManager] Search worker failed, falling back to main process search', error)
+      log.warn('[PluginManager] Search worker failed, falling back to main process search', error)
       const results: SearchResult[] = []
       for (const plugin of enabledPlugins) {
         for (const feature of this.getCombinedFeatures(plugin)) {
@@ -774,7 +775,7 @@ export class PluginManager {
           dataUrl: capturedDataUrl
         }]
       } catch (err) {
-        console.error(`[PluginManager] preCapture failed for ${name}:`, err)
+        log.error(`[PluginManager] preCapture failed for ${name}:`, err)
         // preCapture 失败时恢复主窗口，回退到旧流程（让插件自行截图）
         if (this.windowManager && !shouldHideMain) {
           this.windowManager.showMainWindowAfterCapture()
@@ -793,10 +794,10 @@ export class PluginManager {
         try {
           const hostReady = await this.hostManager.initPlugin(plugin)
           if (!hostReady) {
-            console.warn(`[PluginManager] Failed to init host for UI plugin ${name}, continuing anyway`)
+            log.warn(`[PluginManager] Failed to init host for UI plugin ${name}, continuing anyway`)
           }
         } catch (err) {
-          console.error(`[PluginManager] Error initializing host for UI plugin ${name}:`, err)
+          log.error(`[PluginManager] Error initializing host for UI plugin ${name}:`, err)
         }
       }
 
@@ -833,13 +834,13 @@ export class PluginManager {
         try {
           await this.callPluginHook(plugin, 'onBackground')
         } catch (err) {
-          console.error(`[PluginManager] Failed to call onBackground for ${name}:`, err)
+          log.error(`[PluginManager] Failed to call onBackground for ${name}:`, err)
         }
 
         // 启动后台运行（不再调用 onBackground，因为已经调用过了）
         const bgSuccess = await this.backgroundManager.start(plugin, false)
         if (bgSuccess) {
-          console.log(`[PluginManager] Plugin ${name} started in background after execution`)
+          log.info(`[PluginManager] Plugin ${name} started in background after execution`)
         }
       }
 
@@ -871,7 +872,7 @@ export class PluginManager {
         await runner.callHook(hookName)
       }
     } catch (err) {
-      console.error(`Failed to call ${hookName} for plugin ${plugin.id}:`, err)
+      log.error(`Failed to call ${hookName} for plugin ${plugin.id}:`, err)
     }
   }
 
@@ -1035,7 +1036,7 @@ export class PluginManager {
       try {
         return require('fs').readFileSync(readmePath, 'utf-8')
       } catch (err) {
-        console.error(`Failed to read README for plugin ${name}:`, err)
+        log.error(`Failed to read README for plugin ${name}:`, err)
         return null
       }
     }
@@ -1159,7 +1160,7 @@ export class PluginManager {
 
       if (!existsSync(watchDir)) return
 
-      // console.log(`[PluginManager] Watching ${plugin.id} -> ${watchDir} for ${filename}`)
+      // log.info(`[PluginManager] Watching ${plugin.id} -> ${watchDir} for ${filename}`)
 
       // 监听目录以支持原子写入（esbuild 构建通常是先写临时文件再 rename）
       const watcher = require('fs').watch(watchDir, (_eventType: string, triggerFilename: string | null) => {
@@ -1175,7 +1176,7 @@ export class PluginManager {
         this.watchers.set(plugin.id, pluginWatchers)
       }
     } catch (err) {
-      console.warn(`[PluginManager] Failed to watch plugin ${plugin.id}:`, err)
+      log.warn(`[PluginManager] Failed to watch plugin ${plugin.id}:`, err)
     }
   }
 
@@ -1233,7 +1234,7 @@ export class PluginManager {
   }
 
   private async reloadBackend(pluginId: string) {
-    console.log(`[PluginManager] Hot reloading plugin: ${pluginId}`)
+    log.info(`[PluginManager] Hot reloading plugin: ${pluginId}`)
     const plugin = this.plugins.get(pluginId)
     if (!plugin) return
 
@@ -1266,19 +1267,19 @@ export class PluginManager {
    */
   // Reload manifest/icon updates without tearing down the whole app.
   private async reloadPluginMetadata(pluginId: string) {
-    console.log(`[PluginManager] Reloading plugin metadata: ${pluginId}`)
+    log.info(`[PluginManager] Reloading plugin metadata: ${pluginId}`)
     const currentPlugin = this.plugins.get(pluginId)
     if (!currentPlugin) return
 
     const loader = new PluginLoader(currentPlugin.path)
     const nextPlugin = loader.loadPlugin(currentPlugin.path)
     if (!nextPlugin) {
-      console.warn(`[PluginManager] Skipped metadata reload for ${pluginId}: plugin manifest is temporarily invalid`)
+      log.warn(`[PluginManager] Skipped metadata reload for ${pluginId}: plugin manifest is temporarily invalid`)
       return
     }
 
     if (nextPlugin.id !== currentPlugin.id) {
-      console.warn(`[PluginManager] Plugin identity changed during metadata reload (${currentPlugin.id} -> ${nextPlugin.id}), reloading all plugins`)
+      log.warn(`[PluginManager] Plugin identity changed during metadata reload (${currentPlugin.id} -> ${nextPlugin.id}), reloading all plugins`)
       await this.init()
       return
     }
@@ -1393,15 +1394,15 @@ export class PluginManager {
       try {
         await this.callPluginHook(plugin, 'onBackground')
       } catch (err) {
-        console.error(`[PluginManager] Failed to call onBackground for ${pluginId}:`, err)
+        log.error(`[PluginManager] Failed to call onBackground for ${pluginId}:`, err)
       }
 
       // 启动后台运行（不再调用 onBackground，因为已经调用过了）
       const success = await this.backgroundManager.start(plugin, false)
       if (success) {
-        console.log(`[PluginManager] Plugin ${pluginId} started in background after window closed`)
+        log.info(`[PluginManager] Plugin ${pluginId} started in background after window closed`)
       } else {
-        console.warn(`[PluginManager] Failed to start plugin ${pluginId} in background`)
+        log.warn(`[PluginManager] Failed to start plugin ${pluginId} in background`)
         // 如果启动后台失败，销毁 Host 进程
         if (this.useUtilityProcess && this.hostManager.isHostReady(pluginId)) {
           await this.hostManager.destroyHost(pluginId)
@@ -1410,7 +1411,7 @@ export class PluginManager {
     } else {
       // 不支持后台运行，销毁 Host 进程
       if (this.useUtilityProcess && this.hostManager.isHostReady(pluginId)) {
-        console.log(`[PluginManager] Plugin ${pluginId} does not support background, destroying host`)
+        log.info(`[PluginManager] Plugin ${pluginId} does not support background, destroying host`)
         await this.hostManager.destroyHost(pluginId)
       }
     }

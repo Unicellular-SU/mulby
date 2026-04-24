@@ -2,6 +2,7 @@ import { app, Menu, Tray, nativeImage } from 'electron'
 import { existsSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import type { AppSettings } from '../../shared/types/settings'
+import log from 'electron-log'
 
 const MAIN_TRAY_GUID = 'bfec5f16-92a2-4b89-b5a0-65f1678d0b9c'
 const FALLBACK_ICON_DATA_URL =
@@ -51,7 +52,7 @@ export class AppTrayManager {
 
       return true
     } catch (error) {
-      console.error('[AppTray] Failed to create tray:', error)
+      log.error('[AppTray] Failed to create tray:', error)
       this.destroy()
       return false
     }
@@ -66,13 +67,13 @@ export class AppTrayManager {
       tray.removeListener('click', this.handleTrayActivation)
       tray.removeListener('right-click', this.handleTrayContextMenu)
     } catch (error) {
-      console.warn('[AppTray] Failed to remove tray listeners during destroy:', error)
+      log.warn('[AppTray] Failed to remove tray listeners during destroy:', error)
     }
 
     try {
       tray.destroy()
     } catch (error) {
-      console.warn('[AppTray] Failed to destroy tray:', error)
+      log.warn('[AppTray] Failed to destroy tray:', error)
     }
   }
 

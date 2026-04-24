@@ -14,6 +14,7 @@
  * macOS:   CGEventTapCreate
  */
 import {
+import log from 'electron-log'
   startNativeInputHook,
   stopNativeInputHook,
   ELECTRON_KEY_TO_VK,
@@ -73,7 +74,7 @@ function parseAccelerator(accelerator: string): ParsedAccelerator | null {
           vkCode = code
         } else {
           // 未知键名，无法解析
-          console.warn(`[InputHook] 无法解析键名: "${part}"`)
+          log.warn(`[InputHook] 无法解析键名: "${part}"`)
           return null
         }
       }
@@ -273,7 +274,7 @@ class DoubleTapDetector {
         try {
           handler.callback()
         } catch (error) {
-          console.error(`[InputHook] 双击修饰键回调执行失败 (${modifier}):`, error)
+          log.error(`[InputHook] 双击修饰键回调执行失败 (${modifier}):`, error)
         }
       }
     }
@@ -373,7 +374,7 @@ export class InputHookService {
   register(id: string, accelerator: string, callback: () => void): boolean {
     const parsed = parseAccelerator(accelerator)
     if (!parsed) {
-      console.warn(`[InputHook] 无法解析 accelerator: "${accelerator}"`)
+      log.warn(`[InputHook] 无法解析 accelerator: "${accelerator}"`)
       return false
     }
 
@@ -384,14 +385,14 @@ export class InputHookService {
       return false
     }
 
-    console.log(`[InputHook] 注册键盘钩子: ${id} → ${accelerator}`)
+    log.info(`[InputHook] 注册键盘钩子: ${id} → ${accelerator}`)
     return true
   }
 
   /** 注销指定 id 的键盘钩子 */
   unregister(id: string): void {
     if (this.keyBindings.delete(id)) {
-      console.log(`[InputHook] 注销键盘钩子: ${id}`)
+      log.info(`[InputHook] 注销键盘钩子: ${id}`)
     }
     this.stopIfEmpty()
   }
@@ -426,7 +427,7 @@ export class InputHookService {
       return false
     }
 
-    console.log(`[InputHook] 注册鼠标钩子: ${id} → ${button} (${action})`)
+    log.info(`[InputHook] 注册鼠标钩子: ${id} → ${button} (${action})`)
     return true
   }
 
@@ -440,7 +441,7 @@ export class InputHookService {
         this.mouseDownTimers.delete(id)
       }
       this.longPressFired.delete(id)
-      console.log(`[InputHook] 注销鼠标钩子: ${id}`)
+      log.info(`[InputHook] 注销鼠标钩子: ${id}`)
     }
     this.stopIfEmpty()
   }
@@ -460,14 +461,14 @@ export class InputHookService {
       return false
     }
 
-    console.log(`[InputHook] 注册双击修饰键: ${modifier}`)
+    log.info(`[InputHook] 注册双击修饰键: ${modifier}`)
     return true
   }
 
   /** 注销指定修饰键的双击回调 */
   unregisterDoubleTap(modifier: string): void {
     this.doubleTap.unregister(modifier)
-    console.log(`[InputHook] 注销双击修饰键: ${modifier}`)
+    log.info(`[InputHook] 注销双击修饰键: ${modifier}`)
     this.stopIfEmpty()
   }
 
@@ -538,15 +539,15 @@ export class InputHookService {
       })
 
       if (!ok) {
-        console.error('[InputHook] 启动原生钩子失败')
+        log.error('[InputHook] 启动原生钩子失败')
         return false
       }
 
       this.running = true
-      console.log('[InputHook] 底层输入钩子已启动 (koffi)')
+      log.info('[InputHook] 底层输入钩子已启动 (koffi)')
       return true
     } catch (err) {
-      console.error('[InputHook] 启动钩子失败:', err)
+      log.error('[InputHook] 启动钩子失败:', err)
       return false
     }
   }
@@ -559,9 +560,9 @@ export class InputHookService {
       this.running = false
       this.doubleTap.reset()
       this.clearAllMouseState()
-      console.log('[InputHook] 底层输入钩子已停止')
+      log.info('[InputHook] 底层输入钩子已停止')
     } catch (err) {
-      console.error('[InputHook] 停止钩子失败:', err)
+      log.error('[InputHook] 停止钩子失败:', err)
     }
   }
 }

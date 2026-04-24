@@ -2,6 +2,7 @@ import { generateImage } from 'ai'
 import type { AiImageGenerateProgressChunk, AiProviderConfig } from '../../../shared/types/ai'
 import { classifyAiImageError } from '../../../shared/ai/imageDiagnostics'
 import {
+import log from 'electron-log'
   extractImageResponsePayload,
   extractOpenAIImageStreamPayload,
   formatAsyncTaskStatus,
@@ -57,7 +58,7 @@ export async function executeImageWithRetry<T>(
       const finalAttempt = attempt >= maxAttempts
       if (!classified.retryable || finalAttempt) {
         if (classified.retryable && finalAttempt) {
-          console.warn('[AI] image:retry:exhausted', {
+          log.warn('[AI] image:retry:exhausted', {
             stage,
             attempt,
             maxAttempts,
@@ -71,7 +72,7 @@ export async function executeImageWithRetry<T>(
       }
 
       const delayMs = attempt * 800
-      console.warn('[AI] image:retry', {
+      log.warn('[AI] image:retry', {
         stage,
         attempt,
         maxAttempts,
@@ -227,14 +228,14 @@ export async function generateImageWithProgress(input: ImagePipelineContext & {
         throw error
       }
       lastError = error
-      console.warn('[AI] image:strategy:failed', {
+      log.warn('[AI] image:strategy:failed', {
         strategy,
         message: getErrorMessageForLog(error),
         size: input.size,
         count: input.n
       })
       if (strategy === 'stream-sse') {
-        console.warn('[AI] image:stream:unavailable', {
+        log.warn('[AI] image:stream:unavailable', {
           message: getErrorMessageForLog(error),
           size: input.size,
           count: input.n
@@ -268,7 +269,7 @@ export async function generateImageWithDecodeFallback(input: {
     })
     return { images }
   } catch (error) {
-    console.warn('[AI] image:direct:failed', {
+    log.warn('[AI] image:direct:failed', {
       message: getErrorMessageForLog(error),
       size: input.size,
       count: input.n
@@ -295,7 +296,7 @@ export async function generateImageWithDecodeFallback(input: {
       if (!isImageBase64DecodeError(sdkError)) {
         throw sdkError
       }
-      console.warn('[AI] image:decode:fallback', {
+      log.warn('[AI] image:decode:fallback', {
         message: getErrorMessageForLog(sdkError),
         size: input.size,
         count: input.n

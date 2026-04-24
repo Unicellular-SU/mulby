@@ -2,6 +2,7 @@ import { app } from 'electron'
 import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'fs'
 import { basename, dirname, join } from 'path'
 import type {
+import log from 'electron-log'
   AppSearchResult,
   DesktopSearchProvider,
   FileSearchResult,
@@ -103,7 +104,7 @@ export class DarwinSearchProvider implements DesktopSearchProvider {
       if (this.execution.isKilledProcessError(error)) {
         return []
       }
-      console.error('darwin file search failed:', error)
+      log.error('darwin file search failed:', error)
       return []
     }
 

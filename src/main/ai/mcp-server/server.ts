@@ -15,6 +15,7 @@
 
 import { Server } from '@modelcontextprotocol/sdk/server/index.js'
 import {
+import log from 'electron-log'
   ListToolsRequestSchema,
   CallToolRequestSchema
 } from '@modelcontextprotocol/sdk/types.js'
@@ -252,7 +253,7 @@ export class MulbyMcpServer {
       }
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
-      console.error('[MCP-Server] 工具调用失败:', mcpName, message)
+      log.error('[MCP-Server] 工具调用失败:', mcpName, message)
       return {
         content: [{ type: 'text', text: JSON.stringify({ error: message }) }],
         isError: true

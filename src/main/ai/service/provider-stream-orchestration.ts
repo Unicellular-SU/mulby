@@ -1,5 +1,6 @@
 import { streamText, stepCountIs } from 'ai'
 import type {
+import log from 'electron-log'
   AiCapabilityDebugInfo,
   AiMessage,
   AiModelParameters,
@@ -210,7 +211,7 @@ export async function executeProviderStreamOrchestration(
     },
     executeCompatToolLoopStream: async () => {
       input.markRoute('openai-compat-tool-loop')
-      console.log('[AI] stream: 使用 OpenAI 兼容工具调用分支（DeepSeek reasoning 兼容）', {
+      log.info('[AI] stream: 使用 OpenAI 兼容工具调用分支（DeepSeek reasoning 兼容）', {
         model: input.effectiveOption.model,
         maxToolSteps: resolveMaxToolSteps(input.effectiveOption.maxToolSteps)
       })
@@ -253,7 +254,7 @@ export async function executeProviderStreamOrchestration(
         input.tools) {
         // 兼容 chat/completions 流式分支当前仅解析文本，不处理 tool_calls。
         // 启用工具时回退到 AI SDK 的 streamText，以支持工具执行与多步调用。
-        console.log('[AI] stream: 检测到工具调用，使用 AI SDK streamText 分支', {
+        log.info('[AI] stream: 检测到工具调用，使用 AI SDK streamText 分支', {
           model: input.effectiveOption.model,
           maxToolSteps: resolveMaxToolSteps(input.effectiveOption.maxToolSteps)
         })
@@ -277,16 +278,16 @@ export async function executeProviderStreamOrchestration(
         abortSignal: input.controllerSignal,
         assertNotAborted: input.deps.assertNotAborted,
         onPart: (_part) => {
-          // console.log('[AI] stream part:', _part?.type, _part)
+          // log.info('[AI] stream part:', _part?.type, _part)
         },
         onText: (text) => input.deps.emitTextChunk(input.trackedOnChunk, text),
         onReasoning: (text) => input.deps.emitReasoningChunk(input.trackedOnChunk, text),
         onToolCall: (toolCall) => {
-          console.log('[AI] tool-call detected:', toolCall)
+          log.info('[AI] tool-call detected:', toolCall)
           input.deps.emitToolCallChunk(input.trackedOnChunk, toolCall)
         },
         onToolResult: (toolResult) => {
-          console.log('[AI] tool-result detected:', toolResult)
+          log.info('[AI] tool-result detected:', toolResult)
           input.deps.emitToolResultChunk(input.trackedOnChunk, toolResult)
         }
       })

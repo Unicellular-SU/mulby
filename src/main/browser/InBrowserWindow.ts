@@ -1,6 +1,7 @@
 import { BrowserWindow, Session } from 'electron';
 import { InBrowserOp, InBrowserOptions } from '../../shared/types/inbrowser';
 import { registerSystemInternalWindow, unregisterSystemInternalWindow } from '../services/ipc-caller-resolver';
+import log from 'electron-log'
 
 export class InBrowserWindow {
     public window: BrowserWindow;
@@ -44,7 +45,7 @@ export class InBrowserWindow {
             try {
                 await this.executeOp(op, results);
             } catch (error) {
-                console.error(`InBrowser Op Failed: ${op.type}`, error);
+                log.error(`InBrowser Op Failed: ${op.type}`, error);
                 // Depending on design, we might want to stop or continue.
                 // uTools documentation suggests it returns Promise, so rejection might be expected or we return partial results.
                 // For now, let's throw to indicate failure of the chain.
@@ -223,7 +224,7 @@ export class InBrowserWindow {
                     }
 
                     // If we get here, it's a function evaluation (evaluate, wait(func), when(func))
-                    console.log(`[InBrowser] Evaluating script (${op.type}):`, eFuncString, eParams);
+                    log.info(`[InBrowser] Evaluating script (${op.type}):`, eFuncString, eParams);
 
                     const code = `
                     (async () => {
@@ -407,7 +408,7 @@ export class InBrowserWindow {
                         deviceWidth = d.width;
                         deviceHeight = d.height;
                     } else {
-                        console.warn(`Unknown device: ${deviceOption}`);
+                        log.warn(`Unknown device: ${deviceOption}`);
                     }
                 } else {
                     deviceUA = deviceOption.userAgent;
@@ -497,7 +498,7 @@ export class InBrowserWindow {
                         throw new Error(`File input not found: ${fileSelector}`);
                     }
                 } catch (err) {
-                    console.error('File Upload Error:', err);
+                    log.error('File Upload Error:', err);
                     throw err;
                 } finally {
                     if (contents.debugger.isAttached()) contents.debugger.detach();
@@ -777,7 +778,7 @@ export class InBrowserWindow {
                     });
 
                 } catch (err) {
-                    console.error('Drop Op Failed:', err);
+                    log.error('Drop Op Failed:', err);
                     throw err;
                 } finally {
                     if (contents.debugger.isAttached()) contents.debugger.detach();
@@ -786,7 +787,7 @@ export class InBrowserWindow {
             }
 
             default:
-                console.warn(`Unknown InBrowser Op: ${op.type}`);
+                log.warn(`Unknown InBrowser Op: ${op.type}`);
         }
     }
 
@@ -814,7 +815,7 @@ export class InBrowserWindow {
                     ]
                 });
             } catch (error) {
-                console.warn('[InBrowserWindow] Failed to cleanup session data:', error);
+                log.warn('[InBrowserWindow] Failed to cleanup session data:', error);
             }
         })();
 

@@ -7,6 +7,7 @@ import { createWriteStream } from 'fs'
 import { pipeline } from 'stream/promises'
 import { exec } from 'child_process'
 import { promisify } from 'util'
+import log from 'electron-log'
 
 const execPromise = promisify(exec)
 
@@ -145,7 +146,7 @@ async function downloadFile(
                         if (location) {
                             // 处理相对 URL（使用当前 URL 作为 base）
                             const redirectUrl = new URL(location, currentUrl).href
-                            console.log('[FFmpeg] 重定向到:', redirectUrl)
+                            log.info('[FFmpeg] 重定向到:', redirectUrl)
                             request(redirectUrl)
                             return
                         }
@@ -214,7 +215,7 @@ export async function downloadFFmpeg(
 ): Promise<boolean> {
     const info = getDownloadInfo()
     if (!info) {
-        console.error('[FFmpeg] 不支持当前平台:', process.platform, process.arch)
+        log.error('[FFmpeg] 不支持当前平台:', process.platform, process.arch)
         return false
     }
 
@@ -226,12 +227,12 @@ export async function downloadFFmpeg(
         // 创建目录
         await fs.promises.mkdir(tempDir, { recursive: true })
 
-        console.log('[FFmpeg] 开始下载:', info.url)
+        log.info('[FFmpeg] 开始下载:', info.url)
 
         // 下载文件
         await downloadFile(info.url, downloadPath, onProgress)
 
-        console.log('[FFmpeg] 下载完成，开始解压')
+        log.info('[FFmpeg] 下载完成，开始解压')
         onProgress?.({ phase: 'extracting', percent: 0 })
 
         // 解压
@@ -256,7 +257,7 @@ export async function downloadFFmpeg(
 
             if (await fs.promises.access(extractedBinary).then(() => true).catch(() => false)) {
                 await fs.promises.rename(extractedBinary, destBinary)
-                console.log('[FFmpeg] 移动二进制文件:', extractedBinary, '->', destBinary)
+                log.info('[FFmpeg] 移动二进制文件:', extractedBinary, '->', destBinary)
             } else {
                 throw new Error(`找不到 FFmpeg 二进制文件: ${extractedBinary}`)
             }
@@ -301,10 +302,10 @@ export async function downloadFFmpeg(
 
         onProgress?.({ phase: 'done', percent: 100 })
 
-        console.log('[FFmpeg] 安装完成')
+        log.info('[FFmpeg] 安装完成')
         return true
     } catch (error) {
-        console.error('[FFmpeg] 安装失败:', error)
+        log.error('[FFmpeg] 安装失败:', error)
         // 清理临时文件
         await fs.promises.rm(tempDir, { recursive: true, force: true }).catch(() => { })
         throw error

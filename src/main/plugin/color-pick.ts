@@ -20,6 +20,7 @@
 import { BrowserWindow, ipcMain, nativeImage, screen, desktopCapturer } from 'electron'
 import { join } from 'path'
 import {
+import log from 'electron-log'
   nativePickColor,
   nativeCaptureScreen,
   nativeGetPixelColor,
@@ -281,7 +282,7 @@ async function captureSnapshotForDisplay(display: Electron.Display, displayIndex
   }
 
   // 策略 2: desktopCapturer fallback
-  console.warn(`[ColorPick] 显示器 ${display.id} 原生截图不可用，使用 desktopCapturer fallback`)
+  log.warn(`[ColorPick] 显示器 ${display.id} 原生截图不可用，使用 desktopCapturer fallback`)
   try {
     const sources = await desktopCapturer.getSources({
       types: ['screen'],
@@ -304,7 +305,7 @@ async function captureSnapshotForDisplay(display: Electron.Display, displayIndex
       }
     }
   } catch (err) {
-    console.error(`[ColorPick] 显示器 ${display.id} desktopCapturer 也失败:`, err)
+    log.error(`[ColorPick] 显示器 ${display.id} desktopCapturer 也失败:`, err)
   }
 
   return result
@@ -333,7 +334,7 @@ async function colorPickWithOverlay(): Promise<ColorPickResult | null> {
   }
 
   if (displaySnapshots.size === 0) {
-    console.error('[ColorPick] 所有显示器截图均失败')
+    log.error('[ColorPick] 所有显示器截图均失败')
     return null
   }
 
@@ -428,7 +429,7 @@ async function colorPickWithOverlay(): Promise<ColorPickResult | null> {
 async function colorPickLinux(): Promise<ColorPickResult | null> {
   // 策略 1: xdg-desktop-portal 原生取色
   if (await isPortalColorPickAvailable()) {
-    console.log('[ColorPick] Linux: 使用 xdg-desktop-portal PickColor')
+    log.info('[ColorPick] Linux: 使用 xdg-desktop-portal PickColor')
     const result = await portalPickColor()
 
     if (result.type === 'color' && result.r !== undefined && result.g !== undefined && result.b !== undefined) {
@@ -437,14 +438,14 @@ async function colorPickLinux(): Promise<ColorPickResult | null> {
 
     if (result.type === 'cancelled') {
       // 用户主动取消，不需要 fallback
-      console.log('[ColorPick] Linux: 用户取消了 Portal 取色')
+      log.info('[ColorPick] Linux: 用户取消了 Portal 取色')
       return null
     }
 
     // Portal 错误：回退到覆盖窗口方案
-    console.log('[ColorPick] Linux: Portal 取色失败，回退到覆盖窗口方案')
+    log.info('[ColorPick] Linux: Portal 取色失败，回退到覆盖窗口方案')
   } else {
-    console.log('[ColorPick] Linux: Portal 不可用，使用覆盖窗口方案')
+    log.info('[ColorPick] Linux: Portal 不可用，使用覆盖窗口方案')
   }
 
   // 策略 2: 回退到 X11 截图 + 覆盖窗口方案
@@ -459,7 +460,7 @@ async function colorPickLinux(): Promise<ColorPickResult | null> {
  * 开始取色（跨平台入口）
  */
 export async function startColorPick(): Promise<ColorPickResult | null> {
-  console.log('[ColorPick] 开始取色...')
+  log.info('[ColorPick] 开始取色...')
 
   if (process.platform === 'darwin') {
     return colorPickMacOS()
@@ -554,14 +555,14 @@ async function completeColorPick(point: { x: number; y: number; displayId?: numb
         pickResolve = null
       }
     } else {
-      console.error('[ColorPick] 所有取色策略均失败')
+      log.error('[ColorPick] 所有取色策略均失败')
       if (pickResolve) {
         pickResolve(null)
         pickResolve = null
       }
     }
   } catch (error) {
-    console.error('[ColorPick] 取色失败:', error)
+    log.error('[ColorPick] 取色失败:', error)
     if (pickResolve) {
       pickResolve(null)
       pickResolve = null
@@ -629,7 +630,7 @@ export function registerColorPickHandlers(): void {
       const buffer = await pluginScreen.captureRegion(region, { format: 'png' })
       return `data:image/png;base64,${buffer.toString('base64')}`
     } catch (error) {
-      console.error('[ColorPick] 预览失败:', error)
+      log.error('[ColorPick] 预览失败:', error)
       return null
     }
   })

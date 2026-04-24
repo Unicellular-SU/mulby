@@ -12,6 +12,7 @@ import { randomUUID } from 'node:crypto'
 import { join } from 'node:path'
 import { MulbyMcpServer, type MulbyMcpServerDeps } from './server'
 import { McpHttpTransport } from './transport'
+import log from 'electron-log'
 
 /** MCP Server 运行状态 */
 export type McpServerStatus = 'stopped' | 'starting' | 'running' | 'error'
@@ -68,7 +69,7 @@ export class McpServerManager {
    */
   async start(): Promise<void> {
     if (this.status === 'running' || this.status === 'starting') {
-      console.warn('[MCP-Server] 已在运行或正在启动中')
+      log.warn('[MCP-Server] 已在运行或正在启动中')
       return
     }
 
@@ -115,7 +116,7 @@ export class McpServerManager {
       this.status = 'error'
       this.lastError = message
       this.runningPort = undefined
-      console.error('[MCP-Server] 启动失败:', message)
+      log.error('[MCP-Server] 启动失败:', message)
 
       // 清理
       if (this.transport) {
@@ -148,7 +149,7 @@ export class McpServerManager {
       this.mcpServer.destroy()
       this.mcpServer = new MulbyMcpServer(this.deps)
     } catch (error) {
-      console.warn('[MCP-Server] 停止时出错:', error)
+      log.warn('[MCP-Server] 停止时出错:', error)
     }
 
     this.status = 'stopped'
@@ -332,7 +333,7 @@ export class McpServerManager {
       this.mcpServer.destroy()
       this.mcpServer = new MulbyMcpServer(this.deps)
     } catch (error) {
-      console.warn('[MCP-Server] 停止传输时出错:', error)
+      log.warn('[MCP-Server] 停止传输时出错:', error)
     }
 
     this.status = 'stopped'

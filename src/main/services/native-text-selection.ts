@@ -21,6 +21,7 @@ import { basename, extname } from 'path'
 import { nativeSimulateCopy, fallbackSimulateCopy } from './native-keyboard-sim'
 import { getClipboardFormat, readClipboardFiles } from '../utils/clipboard-helper'
 import type { InputAttachment } from '../../shared/types/plugin'
+import log from 'electron-log'
 
 // ==================== 公共接口 ====================
 
@@ -66,7 +67,7 @@ export async function getSelectedTextAsync(options?: {
   const nativeResult = await getNativeSelectedText()
   if (nativeResult !== null && nativeResult.trim().length > 0) {
     const durationMs = Math.round(performance.now() - start)
-    console.log(`[NativeTextSelection] 原生取词成功 (${durationMs}ms, ${nativeResult.length}字符, source=${getSourceName()})`)
+    log.info(`[NativeTextSelection] 原生取词成功 (${durationMs}ms, ${nativeResult.length}字符, source=${getSourceName()})`)
     // 原生取词只会有文本，不提取附件避免污染
     return { text: nativeResult, attachments: [], source: getSourceName(), durationMs }
   }
@@ -76,7 +77,7 @@ export async function getSelectedTextAsync(options?: {
   const durationMs = Math.round(performance.now() - start)
 
   if (fallbackResult.text || fallbackResult.attachments.length > 0) {
-    console.log(`[NativeTextSelection] 剪贴板回退取词 (${durationMs}ms, ${(fallbackResult.text || '').length}字符, attachments=${fallbackResult.attachments.length})`)
+    log.info(`[NativeTextSelection] 剪贴板回退取词 (${durationMs}ms, ${(fallbackResult.text || '').length}字符, attachments=${fallbackResult.attachments.length})`)
     return { text: fallbackResult.text, attachments: fallbackResult.attachments, source: 'clipboard', durationMs }
   }
 
@@ -84,11 +85,11 @@ export async function getSelectedTextAsync(options?: {
   // 放在回退之后，确保不会因剪贴板中有旧附件而跳过对选中文本的捕获
   const existingAttachments = captureClipboardContent()
   if (existingAttachments.length > 0) {
-    console.log(`[NativeTextSelection] 剪贴板附件直接读取 (${durationMs}ms, attachments=${existingAttachments.length})`)
+    log.info(`[NativeTextSelection] 剪贴板附件直接读取 (${durationMs}ms, attachments=${existingAttachments.length})`)
     return { text: null, attachments: existingAttachments, source: getSourceName(), durationMs }
   }
 
-  console.log(`[NativeTextSelection] 取词无结果 (${durationMs}ms)`)
+  log.info(`[NativeTextSelection] 取词无结果 (${durationMs}ms)`)
   return { text: null, attachments: [], source: 'clipboard', durationMs }
 }
 
@@ -141,7 +142,7 @@ export function captureClipboardContent(): InputAttachment[] {
       }
     }
   } catch (err) {
-    console.error('[NativeTextSelection] 读取剪贴板附件失败:', err)
+    log.error('[NativeTextSelection] 读取剪贴板附件失败:', err)
   }
   return attachments
 }
@@ -175,11 +176,11 @@ async function getNativeSelectedText(): Promise<string | null> {
         break
     }
     const elapsed = Math.round(performance.now() - t0)
-    console.log(`[NativeTextSelection][Native] platform=${process.platform}, result=${result !== null ? `${result.length}字符` : 'null'}, elapsed=${elapsed}ms`)
+    log.info(`[NativeTextSelection][Native] platform=${process.platform}, result=${result !== null ? `${result.length}字符` : 'null'}, elapsed=${elapsed}ms`)
     return result
   } catch (err) {
     const elapsed = Math.round(performance.now() - t0)
-    console.warn(`[NativeTextSelection][Native] 原生取词异常 (${elapsed}ms)，将使用剪贴板回退:`, err)
+    log.warn(`[NativeTextSelection][Native] 原生取词异常 (${elapsed}ms)，将使用剪贴板回退:`, err)
     return null
   }
 }
@@ -240,7 +241,7 @@ function getDarwinAxApi(): DarwinAxApi {
   }
 
   const t3 = performance.now()
-  console.log(`[NativeTextSelection][AX-Init] koffi 加载: ApplicationServices=${Math.round(t1 - t0)}ms, CoreFoundation=${Math.round(t2 - t1)}ms, FFI绑定=${Math.round(t3 - t2)}ms, AXIsProcessTrusted=${isTrusted}, 总计=${Math.round(t3 - t0)}ms`)
+  log.info(`[NativeTextSelection][AX-Init] koffi 加载: ApplicationServices=${Math.round(t1 - t0)}ms, CoreFoundation=${Math.round(t2 - t1)}ms, FFI绑定=${Math.round(t3 - t2)}ms, AXIsProcessTrusted=${isTrusted}, 总计=${Math.round(t3 - t0)}ms`)
 
   return _darwinAxApi
 }
@@ -289,7 +290,7 @@ function darwinGetFrontmostPid(): number | undefined {
     const pid = api.objc_msgSend_int(frontApp, selPid)
     return pid > 0 ? pid : undefined
   } catch (err) {
-    console.warn('[NativeTextSelection] darwinGetFrontmostPid 失败:', err)
+    log.warn('[NativeTextSelection] darwinGetFrontmostPid 失败:', err)
     return undefined
   }
 }
@@ -324,7 +325,7 @@ function darwinGetSelectedText(appPid?: number): string | null {
     source = 'systemWide'
   }
   if (!axElement) {
-    console.log(`[NativeTextSelection][AX] Create${source} 返回 null (${Math.round(performance.now() - t0)}ms)`)
+    log.info(`[NativeTextSelection][AX] Create${source} 返回 null (${Math.round(performance.now() - t0)}ms)`)
     return null
   }
 
@@ -339,7 +340,7 @@ function darwinGetSelectedText(appPid?: number): string | null {
     )
     const tFocused = performance.now()
     if (err1 !== 0 || !focusedElOut[0]) {
-      console.log(`[NativeTextSelection][AX] GetFocusedElement 失败: source=${source}, AXError=${err1}, init=${Math.round(tInit - t0)}ms, focused=${Math.round(tFocused - tInit)}ms`)
+      log.info(`[NativeTextSelection][AX] GetFocusedElement 失败: source=${source}, AXError=${err1}, init=${Math.round(tInit - t0)}ms, focused=${Math.round(tFocused - tInit)}ms`)
       return null
     }
 
@@ -355,7 +356,7 @@ function darwinGetSelectedText(appPid?: number): string | null {
       )
       const tText = performance.now()
       if (err2 !== 0 || !textRefOut[0]) {
-        console.log(`[NativeTextSelection][AX] GetSelectedText 失败: source=${source}, AXError=${err2}, hasRef=${!!textRefOut[0]}, focused=${Math.round(tFocused - tInit)}ms, text=${Math.round(tText - tFocused)}ms`)
+        log.info(`[NativeTextSelection][AX] GetSelectedText 失败: source=${source}, AXError=${err2}, hasRef=${!!textRefOut[0]}, focused=${Math.round(tFocused - tInit)}ms, text=${Math.round(tText - tFocused)}ms`)
         return null
       }
 
@@ -364,7 +365,7 @@ function darwinGetSelectedText(appPid?: number): string | null {
         // 4. CFStringRef → JS string
         const result = cfStringToJs(api, textRef)
         const tDone = performance.now()
-        console.log(`[NativeTextSelection][AX] 成功: source=${source}, focused=${Math.round(tFocused - tInit)}ms, text=${Math.round(tText - tFocused)}ms, convert=${Math.round(tDone - tText)}ms, 总计=${Math.round(tDone - t0)}ms`)
+        log.info(`[NativeTextSelection][AX] 成功: source=${source}, focused=${Math.round(tFocused - tInit)}ms, text=${Math.round(tText - tFocused)}ms, convert=${Math.round(tDone - tText)}ms, 总计=${Math.round(tDone - t0)}ms`)
         return result
       } finally {
         api.CFRelease(textRef)
@@ -436,7 +437,7 @@ function win32GetSelectedText(): string | null {
       }
     } catch (err) {
       _win32TsApiFailed = true
-      console.warn('[NativeTextSelection] Windows UIA DLL 加载失败，将始终使用剪贴板回退。', err)
+      log.warn('[NativeTextSelection] Windows UIA DLL 加载失败，将始终使用剪贴板回退。', err)
       return null
     }
   }
@@ -523,7 +524,7 @@ function restoreClipboard(snap: ClipboardSnapshot): void {
       clipboard.writeText(snap.text)
     }
   } catch (err) {
-    console.error('[NativeTextSelection] 恢复剪贴板失败:', err)
+    log.error('[NativeTextSelection] 恢复剪贴板失败:', err)
   }
 }
 
@@ -577,7 +578,7 @@ function parseClipboardAttachments(savedSnapshot: ClipboardSnapshot): InputAttac
       }
     }
   } catch (err) {
-    console.error('[NativeTextSelection] 解析剪贴板附件失败:', err)
+    log.error('[NativeTextSelection] 解析剪贴板附件失败:', err)
   }
   return attachments
 }
@@ -597,12 +598,12 @@ async function fallbackGetSelectedText(options?: {
 }): Promise<{ text: string | null; attachments: InputAttachment[] }> {
   const t0 = performance.now()
   const delayMs = options?.fallbackDelayMs ?? 50
-  console.log(`[NativeTextSelection][Fallback] 开始, delayMs=${delayMs}`)
+  log.info(`[NativeTextSelection][Fallback] 开始, delayMs=${delayMs}`)
 
   // 1. 保存当前剪贴板状态快照
   const snap = snapshotClipboard()
   const tSnap = performance.now()
-  console.log(`[NativeTextSelection][Fallback] 快照完成 (${Math.round(tSnap - t0)}ms), snap.text=${snap.text.length}字符, files=${snap.files.length}, hasImage=${snap.hasImage}`)
+  log.info(`[NativeTextSelection][Fallback] 快照完成 (${Math.round(tSnap - t0)}ms), snap.text=${snap.text.length}字符, files=${snap.files.length}, hasImage=${snap.hasImage}`)
 
   // 2. 暂停剪贴板历史
   options?.clipboardHistoryManager?.pause()
@@ -618,12 +619,12 @@ async function fallbackGetSelectedText(options?: {
     const tCopyStart = performance.now()
     let copySuccess = nativeSimulateCopy()
     const tNativeCopy = performance.now()
-    console.log(`[NativeTextSelection][Fallback] nativeSimulateCopy: ${copySuccess ? '成功' : '失败'} (${Math.round(tNativeCopy - tCopyStart)}ms)`)
+    log.info(`[NativeTextSelection][Fallback] nativeSimulateCopy: ${copySuccess ? '成功' : '失败'} (${Math.round(tNativeCopy - tCopyStart)}ms)`)
 
     if (!copySuccess) {
       copySuccess = await fallbackSimulateCopy()
       const tFallbackCopy = performance.now()
-      console.log(`[NativeTextSelection][Fallback] fallbackSimulateCopy: ${copySuccess ? '成功' : '失败'} (${Math.round(tFallbackCopy - tNativeCopy)}ms)`)
+      log.info(`[NativeTextSelection][Fallback] fallbackSimulateCopy: ${copySuccess ? '成功' : '失败'} (${Math.round(tFallbackCopy - tNativeCopy)}ms)`)
     }
     
     if (copySuccess) {
@@ -640,19 +641,19 @@ async function fallbackGetSelectedText(options?: {
         }
       }
       const tPoll = performance.now()
-      console.log(`[NativeTextSelection][Fallback] 轮询完成: ${pollCount}次, elapsed=${Math.round(tPoll - tNativeCopy)}ms`)
+      log.info(`[NativeTextSelection][Fallback] 轮询完成: ${pollCount}次, elapsed=${Math.round(tPoll - tNativeCopy)}ms`)
       
       const newText = clipboard.readText() || ''
       const hasNew = newText !== snap.text && newText.trim().length > 0
       if (hasNew) {
         text = newText
       }
-      console.log(`[NativeTextSelection][Fallback] 剪贴板变化: ${hasNew}, newLen=${newText.length}, oldLen=${snap.text.length}`)
+      log.info(`[NativeTextSelection][Fallback] 剪贴板变化: ${hasNew}, newLen=${newText.length}, oldLen=${snap.text.length}`)
       
       attachments = parseClipboardAttachments(snap)
     }
     const tDone = performance.now()
-    console.log(`[NativeTextSelection][Fallback] 完成: text=${text !== null ? `${text.length}字符` : 'null'}, attachments=${attachments.length}, 总计=${Math.round(tDone - t0)}ms`)
+    log.info(`[NativeTextSelection][Fallback] 完成: text=${text !== null ? `${text.length}字符` : 'null'}, attachments=${attachments.length}, 总计=${Math.round(tDone - t0)}ms`)
     return { text, attachments }
   } finally {
     // 6. 等待可能的延迟 copy 写入沉淀后，再恢复原始剪贴板内容（防止迟到的 copy 覆盖用户原始剪贴板），

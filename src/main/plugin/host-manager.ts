@@ -8,6 +8,7 @@ import { join } from 'path'
 import { existsSync } from 'fs'
 import { EventEmitter } from 'events'
 import type {
+import log from 'electron-log'
   HostRequest,
   HostResponse,
   ApiResult
@@ -117,13 +118,13 @@ export class PluginHostManager extends EventEmitter {
 
     const found = candidates.find((candidate) => existsSync(candidate))
     if (found) {
-      console.log(`[HostManager] Worker resolved: ${found}`)
+      log.info(`[HostManager] Worker resolved: ${found}`)
       return found
     }
 
     // asar 虚拟路径在部分场景 existsSync 可能返回 false，回退到 app.getAppPath 路径
     const fallback = join(app.getAppPath(), 'dist', 'worker', fileName)
-    console.warn(`[HostManager] Worker path fallback: ${fallback}`)
+    log.warn(`[HostManager] Worker path fallback: ${fallback}`)
     return fallback
   }
 
@@ -146,16 +147,16 @@ export class PluginHostManager extends EventEmitter {
    */
   private setupWatchdogListeners(): void {
     this.watchdog.on('host:unresponsive', (pluginName: string) => {
-      console.warn(`[HostManager] Host unresponsive: ${pluginName}`)
+      log.warn(`[HostManager] Host unresponsive: ${pluginName}`)
       this.emit('host:error', pluginName, new Error('Host unresponsive'))
     })
 
     this.watchdog.on('host:memory-exceeded', (pluginName: string, memoryMB: number) => {
-      console.warn(`[HostManager] Host memory exceeded: ${pluginName} (${memoryMB.toFixed(2)} MB)`)
+      log.warn(`[HostManager] Host memory exceeded: ${pluginName} (${memoryMB.toFixed(2)} MB)`)
     })
 
     this.watchdog.on('host:rate-limited', (pluginName: string, count: number) => {
-      console.warn(`[HostManager] Host rate limited: ${pluginName} (${count} requests)`)
+      log.warn(`[HostManager] Host rate limited: ${pluginName} (${count} requests)`)
     })
   }
 
@@ -238,7 +239,7 @@ export class PluginHostManager extends EventEmitter {
       // 等待 ready 信号
       return await this.waitForReady(pluginName)
     } catch (err) {
-      console.error(`Failed to create host for ${pluginName}:`, err)
+      log.error(`Failed to create host for ${pluginName}:`, err)
       return false
     }
   }
@@ -262,7 +263,7 @@ export class PluginHostManager extends EventEmitter {
     if (!host.ready) {
       const ready = await this.waitForReady(pluginName)
       if (!ready) {
-        console.error(`Host ready timeout: ${pluginName}`)
+        log.error(`Host ready timeout: ${pluginName}`)
         return false
       }
     }
@@ -283,7 +284,7 @@ export class PluginHostManager extends EventEmitter {
 
     // 监听退出
     child.on('exit', (code) => {
-      console.log(`Plugin host ${pluginName} exited with code ${code}`)
+      log.info(`Plugin host ${pluginName} exited with code ${code}`)
       this.cleanupHost(pluginName)
       this.emit('host:exit', pluginName, code ?? 0)
     })
@@ -292,7 +293,7 @@ export class PluginHostManager extends EventEmitter {
     child.stdout?.on('data', (data: Buffer) => {
       const text = decodeHostOutput(data).trim()
       if (text) {
-        console.log(`[${pluginName}] stdout:`, text)
+        log.info(`[${pluginName}] stdout:`, text)
         loggerService.write('info', pluginName, text)
       }
     })
@@ -301,7 +302,7 @@ export class PluginHostManager extends EventEmitter {
     child.stderr?.on('data', (data: Buffer) => {
       const text = decodeHostOutput(data).trim()
       if (text) {
-        console.error(`[${pluginName}] stderr:`, text)
+        log.error(`[${pluginName}] stderr:`, text)
         loggerService.write('error', pluginName, text)
       }
     })
@@ -567,7 +568,7 @@ export class PluginHostManager extends EventEmitter {
       })
       return true
     } catch (err) {
-      console.error(`Failed to init plugin ${pluginName}:`, err)
+      log.error(`Failed to init plugin ${pluginName}:`, err)
       return false
     }
   }
@@ -662,7 +663,7 @@ export class PluginHostManager extends EventEmitter {
         host.process.kill()
       }
     } catch (err) {
-      console.error(`Error destroying host ${pluginName}:`, err)
+      log.error(`Error destroying host ${pluginName}:`, err)
     }
 
     this.cleanupHost(pluginName)

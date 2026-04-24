@@ -1,3 +1,4 @@
+import log from 'electron-log'
 /**
  * linux-portal-color-pick.ts — Linux xdg-desktop-portal 原生取色服务
  *
@@ -100,7 +101,7 @@ function loadDBus(): DBusModule | null {
     dbusModule = require('dbus-next') as DBusModule
     return dbusModule
   } catch (err) {
-    console.warn('[PortalColorPick] dbus-next 加载失败:', err)
+    log.warn('[PortalColorPick] dbus-next 加载失败:', err)
     dbusModule = null
     return null
   }
@@ -120,7 +121,7 @@ function createSafeSessionBus(dbus: DBusModule): Promise<DBusMessageBus> {
 
       // 挂载 error listener 防止未捕获错误崩溃主进程
       bus.on('error', (err: unknown) => {
-        console.warn('[PortalColorPick] D-Bus 连接错误:', err)
+        log.warn('[PortalColorPick] D-Bus 连接错误:', err)
         reject(err)
       })
 
@@ -179,10 +180,10 @@ export async function isPortalColorPickAvailable(): Promise<boolean> {
     // 尝试获取 Screenshot 接口，如果不存在会抛异常
     portal.getInterface('org.freedesktop.portal.Screenshot')
     portalAvailable = true
-    console.log('[PortalColorPick] xdg-desktop-portal Screenshot 接口可用')
+    log.info('[PortalColorPick] xdg-desktop-portal Screenshot 接口可用')
   } catch (err) {
     portalAvailable = false
-    console.warn('[PortalColorPick] xdg-desktop-portal 不可用:', err)
+    log.warn('[PortalColorPick] xdg-desktop-portal 不可用:', err)
   } finally {
     if (bus) {
       try { bus.disconnect() } catch { /* 忽略断开错误 */ }
@@ -238,7 +239,7 @@ export async function portalPickColor(): Promise<PortalPickResult> {
     // 获取底层连接，用于监听原始 D-Bus 消息
     const conn = getConnection(bus)
     if (!conn) {
-      console.error('[PortalColorPick] 无法获取 D-Bus 底层连接')
+      log.error('[PortalColorPick] 无法获取 D-Bus 底层连接')
       bus.disconnect()
       return { type: 'error' }
     }
@@ -271,7 +272,7 @@ export async function portalPickColor(): Promise<PortalPickResult> {
     dbusIface = dbusObj.getInterface('org.freedesktop.DBus')
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     await (dbusIface as any).AddMatch(matchRule)
-    console.log(`[PortalColorPick] 已注册信号匹配规则: ${predictedRequestPath}`)
+    log.info(`[PortalColorPick] 已注册信号匹配规则: ${predictedRequestPath}`)
 
     // 步骤 2: 在底层连接上监听原始消息
     const resultPromise = new Promise<PortalPickResult>((resolve) => {
@@ -281,7 +282,7 @@ export async function portalPickColor(): Promise<PortalPickResult> {
       const timeout = setTimeout(() => {
         if (resolved) return
         resolved = true
-        console.warn('[PortalColorPick] 取色超时（30s）')
+        log.warn('[PortalColorPick] 取色超时（30s）')
         cleanup()
         resolve({ type: 'error' })
       }, 30000)
@@ -319,14 +320,14 @@ export async function portalPickColor(): Promise<PortalPickResult> {
 
         if (responseCode === 1) {
           // Portal 定义 1 = 用户主动取消
-          console.log('[PortalColorPick] 用户取消取色')
+          log.info('[PortalColorPick] 用户取消取色')
           resolve({ type: 'cancelled' })
           return
         }
 
         if (responseCode !== 0) {
           // 其他非零值 = Portal 后端错误/拒绝
-          console.log(`[PortalColorPick] Portal 返回错误，code=${responseCode}`)
+          log.info(`[PortalColorPick] Portal 返回错误，code=${responseCode}`)
           resolve({ type: 'error' })
           return
         }
@@ -335,14 +336,14 @@ export async function portalPickColor(): Promise<PortalPickResult> {
           // results.color 是 (ddd) 类型，值域 [0, 1]
           const colorVariant = results?.color
           if (!colorVariant) {
-            console.error('[PortalColorPick] 响应中缺少 color 字段')
+            log.error('[PortalColorPick] 响应中缺少 color 字段')
             resolve({ type: 'error' })
             return
           }
 
           const colorValue = colorVariant.value as number[]
           if (!Array.isArray(colorValue) || colorValue.length < 3) {
-            console.error('[PortalColorPick] color 数据格式异常:', colorValue)
+            log.error('[PortalColorPick] color 数据格式异常:', colorValue)
             resolve({ type: 'error' })
             return
           }
@@ -352,10 +353,10 @@ export async function portalPickColor(): Promise<PortalPickResult> {
           const g = Math.round(Math.min(1, Math.max(0, colorValue[1])) * 255)
           const b = Math.round(Math.min(1, Math.max(0, colorValue[2])) * 255)
 
-          console.log(`[PortalColorPick] 取色成功: rgb(${r}, ${g}, ${b})`)
+          log.info(`[PortalColorPick] 取色成功: rgb(${r}, ${g}, ${b})`)
           resolve({ type: 'color', r, g, b })
         } catch (err) {
-          console.error('[PortalColorPick] 解析颜色数据失败:', err)
+          log.error('[PortalColorPick] 解析颜色数据失败:', err)
           resolve({ type: 'error' })
         }
       }
@@ -368,11 +369,11 @@ export async function portalPickColor(): Promise<PortalPickResult> {
       handle_token: new dbus.Variant('s', handleToken)
     }
     await screenshot.PickColor!('', options)
-    console.log('[PortalColorPick] PickColor 已调用，等待用户取色...')
+    log.info('[PortalColorPick] PickColor 已调用，等待用户取色...')
 
     return await resultPromise
   } catch (err) {
-    console.error('[PortalColorPick] Portal 取色失败:', err)
+    log.error('[PortalColorPick] Portal 取色失败:', err)
     // Portal 调用失败，标记为不可用以便后续直接走 fallback
     portalAvailable = false
     if (bus) {

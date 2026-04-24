@@ -1,6 +1,7 @@
 import { app, BrowserWindow, clipboard, nativeImage } from 'electron'
 import { execFile } from 'child_process'
 import { promisify } from 'util'
+import log from 'electron-log'
 
 const execFileAsync = promisify(execFile)
 const FOCUS_DELAY_MS = 160
@@ -222,7 +223,7 @@ function writeImageToClipboard(image: string | Buffer | ArrayBuffer): boolean {
     clipboard.writeImage(nativeImg)
     return true
   } catch (error) {
-    console.error('[Input] Failed to write image to clipboard:', error)
+    log.error('[Input] Failed to write image to clipboard:', error)
     return false
   }
 }
@@ -473,7 +474,7 @@ async function withHiddenWindow(action: () => Promise<void>): Promise<void> {
     try {
       restoreHiddenWindows()
     } catch (restoreError) {
-      console.error('[Input] Failed to restore windows after action error:', restoreError)
+      log.error('[Input] Failed to restore windows after action error:', restoreError)
     }
     throw error
   }
@@ -488,7 +489,7 @@ export const pluginInput = {
       await withHiddenWindow(() => sendPasteShortcut())
       return true
     } catch (error) {
-      console.error('[Input] Failed to paste text:', error)
+      log.error('[Input] Failed to paste text:', error)
       return false
     }
   },
@@ -499,7 +500,7 @@ export const pluginInput = {
       await withHiddenWindow(() => sendPasteShortcut())
       return true
     } catch (error) {
-      console.error('[Input] Failed to paste image:', error)
+      log.error('[Input] Failed to paste image:', error)
       return false
     }
   },
@@ -510,7 +511,7 @@ export const pluginInput = {
       await withHiddenWindow(() => sendPasteShortcut())
       return true
     } catch (error) {
-      console.error('[Input] Failed to paste file:', error)
+      log.error('[Input] Failed to paste file:', error)
       return false
     }
   },
@@ -519,7 +520,7 @@ export const pluginInput = {
       await withHiddenWindow(() => sendTypeString(text))
       return true
     } catch (error) {
-      console.error('[Input] Failed to type string:', error)
+      log.error('[Input] Failed to type string:', error)
       return false
     }
   },
@@ -533,7 +534,7 @@ export const pluginInput = {
       restoreHiddenWindows()
       return true
     } catch (error) {
-      console.error('[Input] Failed to restore windows:', error)
+      log.error('[Input] Failed to restore windows:', error)
       return false
     }
   },
@@ -548,7 +549,7 @@ export const pluginInput = {
       await withHiddenWindow(() => simulateKeyboardTapInternal(key, modifiers))
       return true
     } catch (error) {
-      console.error('[Input] Failed to simulate keyboard tap:', error)
+      log.error('[Input] Failed to simulate keyboard tap:', error)
       return false
     }
   },
@@ -563,7 +564,7 @@ export const pluginInput = {
       await withHiddenWindow(() => simulateMouseMoveInternal(x, y))
       return true
     } catch (error) {
-      console.error('[Input] Failed to simulate mouse move:', error)
+      log.error('[Input] Failed to simulate mouse move:', error)
       return false
     }
   },
@@ -578,7 +579,7 @@ export const pluginInput = {
       await withHiddenWindow(() => simulateMouseClickInternal(x, y, 'left', 1))
       return true
     } catch (error) {
-      console.error('[Input] Failed to simulate mouse click:', error)
+      log.error('[Input] Failed to simulate mouse click:', error)
       return false
     }
   },
@@ -593,7 +594,7 @@ export const pluginInput = {
       await withHiddenWindow(() => simulateMouseClickInternal(x, y, 'left', 2))
       return true
     } catch (error) {
-      console.error('[Input] Failed to simulate mouse double click:', error)
+      log.error('[Input] Failed to simulate mouse double click:', error)
       return false
     }
   },
@@ -608,7 +609,7 @@ export const pluginInput = {
       await withHiddenWindow(() => simulateMouseClickInternal(x, y, 'right', 1))
       return true
     } catch (error) {
-      console.error('[Input] Failed to simulate mouse right click:', error)
+      log.error('[Input] Failed to simulate mouse right click:', error)
       return false
     }
   }

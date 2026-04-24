@@ -11,6 +11,7 @@
 import { join, dirname } from 'path'
 import { readFileSync } from 'fs'
 import type {
+import log from 'electron-log'
   HostRequest,
   HostResponse,
   ApiResult,
@@ -306,7 +307,7 @@ async function loadModule(): Promise<PluginModule> {
   const registryNames = Array.from(new Set(getAllMethods(mergedModule)))
   
   if (registryNames.length > 0) {
-    console.log(`[PluginWorker] Registered host interfaces: [${registryNames.join(', ')}]`)
+    log.info(`[PluginWorker] Registered host interfaces: [${registryNames.join(', ')}]`)
   }
 
   return pluginState.module!

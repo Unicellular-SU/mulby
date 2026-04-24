@@ -6,6 +6,7 @@ import { ipcMain } from 'electron'
 import type { PluginManager } from '../plugin/manager'
 import type { TaskSchedulerEvent } from '../../shared/types/task'
 import type { TaskInput, TaskFilter } from '../scheduler/types'
+import log from 'electron-log'
 
 interface SchedulerSubscriptionEntry {
   sender: Electron.WebContents
@@ -112,7 +113,7 @@ export function registerSchedulerHandlers(pluginManager: PluginManager) {
       const scheduler = getScheduler()
       return await scheduler.listTasks(filter)
     } catch (err) {
-      console.error('Failed to list tasks:', err)
+      log.error('Failed to list tasks:', err)
       throw err
     }
   })
@@ -123,7 +124,7 @@ export function registerSchedulerHandlers(pluginManager: PluginManager) {
       const scheduler = getScheduler()
       return await scheduler.getTaskCount(filter)
     } catch (err) {
-      console.error('Failed to get task count:', err)
+      log.error('Failed to get task count:', err)
       throw err
     }
   })
@@ -135,7 +136,7 @@ export function registerSchedulerHandlers(pluginManager: PluginManager) {
       const deletedCount = await scheduler.deleteTasks(taskIds)
       return { success: true, deletedCount }
     } catch (err) {
-      console.error('Failed to delete tasks:', err)
+      log.error('Failed to delete tasks:', err)
       throw err
     }
   })
@@ -147,7 +148,7 @@ export function registerSchedulerHandlers(pluginManager: PluginManager) {
       const deletedCount = await scheduler.cleanupTasks(olderThan)
       return { success: true, deletedCount }
     } catch (err) {
-      console.error('Failed to cleanup tasks:', err)
+      log.error('Failed to cleanup tasks:', err)
       throw err
     }
   })
@@ -158,7 +159,7 @@ export function registerSchedulerHandlers(pluginManager: PluginManager) {
       const scheduler = getScheduler()
       return await scheduler.getTask(taskId)
     } catch (err) {
-      console.error('Failed to get task:', err)
+      log.error('Failed to get task:', err)
       throw err
     }
   })
@@ -169,7 +170,7 @@ export function registerSchedulerHandlers(pluginManager: PluginManager) {
       const scheduler = getScheduler()
       return await scheduler.createTask(task)
     } catch (err) {
-      console.error('Failed to schedule task:', err)
+      log.error('Failed to schedule task:', err)
       throw err
     }
   })
@@ -181,7 +182,7 @@ export function registerSchedulerHandlers(pluginManager: PluginManager) {
       await scheduler.cancelTask(taskId)
       return { success: true }
     } catch (err) {
-      console.error('Failed to cancel task:', err)
+      log.error('Failed to cancel task:', err)
       throw err
     }
   })
@@ -193,7 +194,7 @@ export function registerSchedulerHandlers(pluginManager: PluginManager) {
       await scheduler.pauseTask(taskId)
       return { success: true }
     } catch (err) {
-      console.error('Failed to pause task:', err)
+      log.error('Failed to pause task:', err)
       throw err
     }
   })
@@ -205,7 +206,7 @@ export function registerSchedulerHandlers(pluginManager: PluginManager) {
       await scheduler.resumeTask(taskId)
       return { success: true }
     } catch (err) {
-      console.error('Failed to resume task:', err)
+      log.error('Failed to resume task:', err)
       throw err
     }
   })
@@ -216,7 +217,7 @@ export function registerSchedulerHandlers(pluginManager: PluginManager) {
       const scheduler = getScheduler()
       return await scheduler.getExecutions(taskId, limit)
     } catch (err) {
-      console.error('Failed to get executions:', err)
+      log.error('Failed to get executions:', err)
       throw err
     }
   })
@@ -227,7 +228,7 @@ export function registerSchedulerHandlers(pluginManager: PluginManager) {
       const scheduler = getScheduler()
       return scheduler.validateCron(expression)
     } catch (err) {
-      console.error('Failed to validate cron:', err)
+      log.error('Failed to validate cron:', err)
       throw err
     }
   })
@@ -238,7 +239,7 @@ export function registerSchedulerHandlers(pluginManager: PluginManager) {
       const scheduler = getScheduler()
       return scheduler.getNextCronTime(expression, after)
     } catch (err) {
-      console.error('Failed to get next cron time:', err)
+      log.error('Failed to get next cron time:', err)
       throw err
     }
   })
@@ -249,7 +250,7 @@ export function registerSchedulerHandlers(pluginManager: PluginManager) {
       const scheduler = getScheduler()
       return scheduler.describeCron(expression)
     } catch (err) {
-      console.error('Failed to describe cron:', err)
+      log.error('Failed to describe cron:', err)
       throw err
     }
   })
@@ -260,7 +261,7 @@ export function registerSchedulerHandlers(pluginManager: PluginManager) {
       subscribeSchedulerEvents(event.sender)
       return { success: true }
     } catch (err) {
-      console.error('Failed to subscribe scheduler events:', err)
+      log.error('Failed to subscribe scheduler events:', err)
       return { success: false, error: err instanceof Error ? err.message : String(err) }
     }
   })
@@ -271,7 +272,7 @@ export function registerSchedulerHandlers(pluginManager: PluginManager) {
       clearSchedulerSubscription(event.sender.id)
       return { success: true }
     } catch (err) {
-      console.error('Failed to unsubscribe scheduler events:', err)
+      log.error('Failed to unsubscribe scheduler events:', err)
       return { success: false, error: err instanceof Error ? err.message : String(err) }
     }
   })

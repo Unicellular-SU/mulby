@@ -19,6 +19,7 @@
 import http from 'node:http'
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js'
 import type { MulbyMcpServer } from './server'
+import log from 'electron-log'
 
 export interface McpHttpTransportOptions {
   /** 监听端口 */
@@ -69,7 +70,7 @@ export class McpHttpTransport {
     await new Promise<void>((resolve, reject) => {
       const server = this.httpServer!
       server.once('error', (error) => {
-        console.error('[MCP-Server] HTTP 启动失败:', error)
+        log.error('[MCP-Server] HTTP 启动失败:', error)
         reject(error)
       })
       server.listen(this.options.port, this.options.host, () => {
@@ -172,7 +173,7 @@ export class McpHttpTransport {
         server = await this.mcpServer.createConnectedServer(transport)
         await transport.handleRequest(req, res)
       } catch (error) {
-        console.error('[MCP-Server] 请求处理失败:', error)
+        log.error('[MCP-Server] 请求处理失败:', error)
         if (!res.headersSent) {
           res.writeHead(500, { 'Content-Type': 'application/json' })
           res.end(JSON.stringify({ error: 'Internal server error' }))

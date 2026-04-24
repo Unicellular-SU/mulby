@@ -2,6 +2,7 @@ import { readFileSync, existsSync, readdirSync } from 'fs'
 import { join } from 'path'
 import { PluginManifest, Plugin, PluginIcon, ResolvedIcon } from '../../shared/types/plugin'
 import { isSystemPlugin } from './internal-plugins'
+import log from 'electron-log'
 
 /**
  * 检查插件是否小于当前平台。
@@ -48,7 +49,7 @@ export class PluginLoader {
     const manifestPath = join(pluginPath, 'manifest.json')
 
     if (!existsSync(manifestPath)) {
-      console.warn(`No manifest.json found in ${pluginPath}`)
+      log.warn(`No manifest.json found in ${pluginPath}`)
       return null
     }
 
@@ -57,7 +58,7 @@ export class PluginLoader {
       const manifest = JSON.parse(content) as PluginManifest
 
       if (!this.validateManifest(manifest)) {
-        console.warn(`Invalid manifest in ${pluginPath}`)
+        log.warn(`Invalid manifest in ${pluginPath}`)
         return null
       }
 
@@ -66,7 +67,7 @@ export class PluginLoader {
         const platforms = Array.isArray(manifest.platform)
           ? manifest.platform.join(', ')
           : manifest.platform
-        console.log(`[PluginLoader] 跳过插件 "${manifest.name}"：仅支持 ${platforms}，当前平台为 ${process.platform}`)
+        log.info(`[PluginLoader] 跳过插件 "${manifest.name}"：仅支持 ${platforms}，当前平台为 ${process.platform}`)
         return null
       }
 
@@ -75,11 +76,11 @@ export class PluginLoader {
       if (!isSystemPlugin(pluginId)) {
         const resolvedMain = this.resolveMainEntry(manifest.main, pluginPath)
         if (!resolvedMain) {
-          console.warn(`Invalid plugin entry in ${pluginPath}: main file not found (${manifest.main})`)
+          log.warn(`Invalid plugin entry in ${pluginPath}: main file not found (${manifest.main})`)
           return null
         }
         if (resolvedMain !== manifest.main) {
-          console.warn(`[PluginLoader] Main entry fallback applied for ${manifest.name}: ${manifest.main} -> ${resolvedMain}`)
+          log.warn(`[PluginLoader] Main entry fallback applied for ${manifest.name}: ${manifest.main} -> ${resolvedMain}`)
           manifest.main = resolvedMain
         }
       }
@@ -97,7 +98,7 @@ export class PluginLoader {
         resolvedIcon
       }
     } catch (err) {
-      console.error(`Failed to load plugin from ${pluginPath}:`, err)
+      log.error(`Failed to load plugin from ${pluginPath}:`, err)
       return null
     }
   }
@@ -127,7 +128,7 @@ export class PluginLoader {
           const raw = cmd as unknown as Record<string, unknown>
           // 常见错误：将 keyword 的 "value" 字段误用于 regex（regex 应使用 "match"）
           if (!raw.match && typeof raw.value === 'string') {
-            console.warn(
+            log.warn(
               `[PluginLoader] 插件 "${manifest.name}" 的 regex 命令使用了 "value" 字段，` +
               `应为 "match"。已自动纠正，请修改 manifest.json。`
             )
@@ -135,7 +136,7 @@ export class PluginLoader {
             delete raw.value
           }
           if (!raw.match) {
-            console.warn(
+            log.warn(
               `[PluginLoader] 插件 "${manifest.name}" 的 regex 命令缺少 "match" 字段，该命令将不会匹配任何输入。`
             )
           }

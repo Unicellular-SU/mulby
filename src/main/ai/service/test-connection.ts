@@ -1,5 +1,6 @@
 import { generateText, streamText } from 'ai'
 import type {
+import log from 'electron-log'
   AiModel,
   AiModelParameters,
   AiOption,
@@ -165,7 +166,7 @@ export async function executeTestConnection(
     return { success: true, message: parsed ? (parsed.content || 'ok') : (result.text || 'ok') }
   } catch (err) {
     const message = err instanceof Error ? err.message : 'AI connection failed'
-    console.error('[AI] testConnection:fail', {
+    log.error('[AI] testConnection:fail', {
       providerId: input?.providerId,
       model: input?.model,
       baseURL: input?.baseURL,
@@ -273,7 +274,7 @@ export async function executeTestConnectionStream(
     return { success: true, message: fullText || 'ok', reasoning: allowReasoning ? reasoning : '' }
   } catch (err) {
     const message = err instanceof Error ? err.message : 'AI connection failed'
-    console.error('[AI] testConnectionStream:fail', {
+    log.error('[AI] testConnectionStream:fail', {
       providerId: input?.providerId,
       model: input?.model,
       baseURL: input?.baseURL,

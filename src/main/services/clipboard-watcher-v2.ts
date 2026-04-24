@@ -2,6 +2,7 @@ import { clipboard } from 'electron'
 import { EventEmitter } from 'events'
 import path from 'path'
 import { app } from 'electron'
+import log from 'electron-log'
 
 /**
  * 基于系统 API 的剪贴板监听器
@@ -41,10 +42,10 @@ try {
   }
 
   nativeClipboard = require(addonPath) as NativeClipboardAddon
-  console.log('✅ [ClipboardWatcher] Native addon loaded successfully from:', addonPath)
+  log.info('✅ [ClipboardWatcher] Native addon loaded successfully from:', addonPath)
 } catch (err) {
-  console.warn('⚠️ [ClipboardWatcher] Native addon not available, falling back to polling')
-  console.warn('   Error:', (err as Error).message)
+  log.warn('⚠️ [ClipboardWatcher] Native addon not available, falling back to polling')
+  log.warn('   Error:', (err as Error).message)
 }
 
 export class ClipboardWatcher extends EventEmitter {
@@ -123,9 +124,9 @@ export class ClipboardWatcher extends EventEmitter {
 
       this.nativeWatcher.start()
 
-      console.log('✅ [ClipboardWatcher] Using native clipboard monitoring (zero overhead)')
+      log.info('✅ [ClipboardWatcher] Using native clipboard monitoring (zero overhead)')
     } catch (err) {
-      console.error('❌ [ClipboardWatcher] Native watching failed, falling back to polling:', err)
+      log.error('❌ [ClipboardWatcher] Native watching failed, falling back to polling:', err)
       this.nativeWatcher = null
       this.startPolling()
     }
@@ -135,7 +136,7 @@ export class ClipboardWatcher extends EventEmitter {
    * 使用轮询方式（fallback）
    */
   private startPolling() {
-    console.log('⚠️ [ClipboardWatcher] Using polling mode (1s interval)')
+    log.info('⚠️ [ClipboardWatcher] Using polling mode (1s interval)')
 
     this.pollTimer = setInterval(() => {
       const currentHash = this.getClipboardHash()
@@ -161,7 +162,7 @@ export class ClipboardWatcher extends EventEmitter {
         this.nativeWatcher.stop()
         this.nativeWatcher = null
       } catch (err) {
-        console.error('[ClipboardWatcher] Failed to stop native watcher:', err)
+        log.error('[ClipboardWatcher] Failed to stop native watcher:', err)
       }
     }
 

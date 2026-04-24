@@ -7,6 +7,7 @@ import { getProviderProtocolCapabilityRule } from '../../../shared/ai/providerCa
 import { getSystemDefaultModels } from '../../../shared/ai/systemModels'
 import { getRotatedApiKey } from '../../../shared/ai/apiKeyPool'
 import { buildApiKeyScope } from './utils'
+import log from 'electron-log'
 
 export type FetchModelsInput = { providerId: string; baseURL?: string; apiKey?: string }
 
@@ -95,7 +96,7 @@ export async function executeFetchModels(
         })
         if (!res.ok) {
           const body = await res.text().catch(() => '')
-          console.warn('[AI] fetchModels:fail', { status: res.status, statusText: res.statusText, body })
+          log.warn('[AI] fetchModels:fail', { status: res.status, statusText: res.statusText, body })
           return { models: [], message: `拉取失败：${res.status} ${res.statusText}${body ? ` - ${body}` : ''}` }
         }
         const payload = await res.json()
@@ -110,7 +111,7 @@ export async function executeFetchModels(
         return { models }
       } catch (err) {
         const message = err instanceof Error ? err.message : '拉取模型失败'
-        console.error('[AI] fetchModels:error', { error: message })
+        log.error('[AI] fetchModels:error', { error: message })
         return { models: [], message }
       }
     }

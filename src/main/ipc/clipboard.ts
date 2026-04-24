@@ -1,6 +1,7 @@
 import { ipcMain, clipboard, nativeImage } from 'electron'
 import { statSync } from 'fs'
 import { basename, extname } from 'path'
+import log from 'electron-log'
 
 export function registerClipboardHandlers() {
   // 读取文本
@@ -47,7 +48,7 @@ export function registerClipboardHandlers() {
       }
       return false
     } catch (e) {
-      console.error('Failed to write image to clipboard:', e)
+      log.error('Failed to write image to clipboard:', e)
       return false
     }
   })

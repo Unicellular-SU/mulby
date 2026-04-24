@@ -4,6 +4,7 @@
  */
 
 import { EventEmitter } from 'events'
+import log from 'electron-log'
 
 // ============ 类型定义 ============
 
@@ -82,7 +83,7 @@ export class PluginHostWatchdog extends EventEmitter {
       this.checkAllHosts()
     }, this.config.heartbeatInterval)
 
-    console.log('[Watchdog] Started with config:', this.config)
+    log.info('[Watchdog] Started with config:', this.config)
   }
 
   /**
@@ -97,7 +98,7 @@ export class PluginHostWatchdog extends EventEmitter {
       this.checkInterval = null
     }
 
-    console.log('[Watchdog] Stopped')
+    log.info('[Watchdog] Stopped')
   }
 
   /**

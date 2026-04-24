@@ -10,6 +10,7 @@ import type { AppSettingsManager } from '../services/app-settings'
 import type { OpenClawSettings } from '../../shared/types/settings'
 import { openclawLogger } from '../openclaw/logger'
 import type { NodeStatusInfo } from '../../shared/types/openclaw-protocol'
+import log from 'electron-log'
 
 export interface OpenClawHandlerDeps {
   openclawService: OpenClawNodeService
@@ -81,7 +82,9 @@ export function registerOpenClawHandlers(deps: OpenClawHandlerDeps): void {
       // 需要断开重连以更新 Gateway 元数据
       openclawService.disconnect()
       if (updated.openclaw.enabled) {
-        void openclawService.connect(updated.openclaw)
+        void openclawService.connect(updated.openclaw).catch((err: unknown) => {
+          log.error('[OpenClaw] Reconnect failed:', err)
+        })
       }
     } else {
       // 安全策略/enabled 等变更 → 热更新到活跃会话（enabled=false 时内部会主动断连）

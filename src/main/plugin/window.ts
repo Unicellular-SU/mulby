@@ -10,6 +10,7 @@ import { PluginPanelWindow } from './panel-window'
 import { clearSubInputState } from '../services/subinput-state'
 import { getPluginPreloadPath } from './plugin-preload-wrapper'
 import {
+import log from 'electron-log'
   applyWindowsFramelessSurface,
   getWindowsFramelessSurfaceInsets,
   shouldUseWindowsFramelessSurface
@@ -156,7 +157,7 @@ export class PluginWindowManager {
 
     const uiPath = join(plugin.path, plugin.manifest.ui)
     if (!existsSync(uiPath)) {
-      console.error(`Plugin UI not found: ${uiPath}`)
+      log.error(`Plugin UI not found: ${uiPath}`)
       return false
     }
 
@@ -204,13 +205,13 @@ export class PluginWindowManager {
 
     // 使用 Panel 模式（独立窗口跟随）
     if (!this.panelWindow) {
-      console.error('[PluginWindowManager] Panel window not initialized')
+      log.error('[PluginWindowManager] Panel window not initialized')
       return false
     }
 
     const panelWin = this.panelWindow.createPanel(plugin, featureCode, input, route)
     if (!panelWin) {
-      console.error('[PluginWindowManager] Failed to create panel window')
+      log.error('[PluginWindowManager] Failed to create panel window')
       this.attachedPlugin = null
       return false
     }
@@ -560,7 +561,7 @@ export class PluginWindowManager {
         exitCode: details.exitCode,
         windowId: win.id
       })
-      console.error('[PluginWindowManager] Render process gone:', plugin.id, details.reason)
+      log.error('[PluginWindowManager] Render process gone:', plugin.id, details.reason)
     })
 
     win.on('closed', () => {
@@ -953,7 +954,7 @@ export class PluginWindowManager {
     if (this.hasOpenWindowsForPlugin(pluginId)) return
 
     this.onWindowClosedCallback(pluginId).catch(err => {
-      console.error('[PluginWindowManager] Error in window closed callback:', err)
+      log.error('[PluginWindowManager] Error in window closed callback:', err)
     })
   }
 

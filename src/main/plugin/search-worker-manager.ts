@@ -3,6 +3,7 @@ import { join } from 'path'
 import { existsSync } from 'fs'
 import type { InputPayload } from '../../shared/types/plugin'
 import type { SearchPluginData, SearchRequest, SearchResponse, SearchResultRef, SyncRequest } from './search-protocol'
+import log from 'electron-log'
 
 interface PendingRequest {
   resolve: (value: unknown) => void
@@ -176,7 +177,7 @@ export class PluginSearchWorker {
     } catch {
       // ignore
     }
-    console.warn(`[SearchWorker] Restarted due to ${reason}`)
+    log.warn(`[SearchWorker] Restarted due to ${reason}`)
     // Worker 重启后标记未同步，下次搜索时会自动重新同步
     this.synced = false
   }
@@ -199,10 +200,10 @@ export class PluginSearchWorker {
     }, WORKER_READY_HARD_TIMEOUT)
 
     this.worker.stdout?.on('data', (chunk) => {
-      console.log('[SearchWorker]', chunk.toString())
+      log.info('[SearchWorker]', chunk.toString())
     })
     this.worker.stderr?.on('data', (chunk) => {
-      console.error('[SearchWorker]', chunk.toString())
+      log.error('[SearchWorker]', chunk.toString())
     })
     this.worker.on('message', (message: unknown) => {
       const payload = (
@@ -265,12 +266,12 @@ export class PluginSearchWorker {
 
     const found = candidates.find((candidate) => existsSync(candidate))
     if (found) {
-      console.log(`[SearchWorker] Worker resolved: ${found}`)
+      log.info(`[SearchWorker] Worker resolved: ${found}`)
       return found
     }
 
     const fallback = join(app.getAppPath(), 'dist', 'worker', fileName)
-    console.warn(`[SearchWorker] Worker path fallback: ${fallback}`)
+    log.warn(`[SearchWorker] Worker path fallback: ${fallback}`)
     return fallback
   }
 }

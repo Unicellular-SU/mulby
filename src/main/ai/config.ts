@@ -2,6 +2,7 @@ import { app } from 'electron'
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'fs'
 import { join } from 'path'
 import type {
+import log from 'electron-log'
   AiSettings,
   AiProviderConfig,
   AiProviderId,
@@ -317,7 +318,7 @@ export function loadAiSettings(): AiSettings {
     settingsCache.value = next
     return settingsCache.value
   } catch (err) {
-    console.error('[AI] Failed to load settings:', err)
+    log.error('[AI] Failed to load settings:', err)
     settingsCache.value = { ...DEFAULT_SETTINGS }
     return settingsCache.value
   }
@@ -329,7 +330,7 @@ export function saveAiSettings(next: AiSettings): void {
   try {
     writeFileSync(path, JSON.stringify(next, null, 2), 'utf-8')
   } catch (err) {
-    console.error('[AI] Failed to save settings:', err)
+    log.error('[AI] Failed to save settings:', err)
   }
 }
 

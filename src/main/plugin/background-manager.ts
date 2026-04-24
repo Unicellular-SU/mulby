@@ -8,6 +8,7 @@ import type { Plugin, BackgroundPluginInfo } from '../../shared/types/plugin'
 import type { PluginHostManager } from './host-manager'
 import type { PluginHostWatchdog } from './watchdog'
 import type { PluginStateManager } from './state'
+import log from 'electron-log'
 
 // ============ 类型定义 ============
 
@@ -60,21 +61,21 @@ export class BackgroundPluginManager extends EventEmitter {
   private setupWatchdogListeners(): void {
     const onUnresponsive = (pluginId: string) => {
       if (this.isRunning(pluginId)) {
-        console.warn(`[BackgroundManager] Plugin ${pluginId} unresponsive, stopping`)
+        log.warn(`[BackgroundManager] Plugin ${pluginId} unresponsive, stopping`)
         this.stop(pluginId, 'unresponsive')
       }
     }
 
     const onMemoryExceeded = (pluginId: string, memoryMB: number) => {
       if (this.isRunning(pluginId)) {
-        console.warn(`[BackgroundManager] Plugin ${pluginId} memory exceeded: ${memoryMB}MB, stopping`)
+        log.warn(`[BackgroundManager] Plugin ${pluginId} memory exceeded: ${memoryMB}MB, stopping`)
         this.stop(pluginId, 'memory-exceeded')
       }
     }
 
     const onErrorThreshold = (pluginId: string, errorCount: number) => {
       if (this.isRunning(pluginId)) {
-        console.warn(`[BackgroundManager] Plugin ${pluginId} error threshold: ${errorCount}, stopping`)
+        log.warn(`[BackgroundManager] Plugin ${pluginId} error threshold: ${errorCount}, stopping`)
         this.stop(pluginId, 'error-threshold')
       }
     }
@@ -82,7 +83,7 @@ export class BackgroundPluginManager extends EventEmitter {
     // Phase 4: 内存泄漏警告
     const onMemoryLeak = (pluginId: string, growthRate: number) => {
       if (this.isRunning(pluginId)) {
-        console.warn(`[BackgroundManager] Plugin ${pluginId} memory leak detected: ${growthRate.toFixed(2)}MB/min`)
+        log.warn(`[BackgroundManager] Plugin ${pluginId} memory leak detected: ${growthRate.toFixed(2)}MB/min`)
         // 记录警告但不立即停止，让用户决定是否停止
       }
     }
@@ -116,38 +117,38 @@ export class BackgroundPluginManager extends EventEmitter {
   async start(plugin: Plugin, callOnBackground: boolean = true): Promise<boolean> {
     const pluginId = plugin.id
 
-    console.log(`[BackgroundManager] Attempting to start plugin ${pluginId}`)
+    log.info(`[BackgroundManager] Attempting to start plugin ${pluginId}`)
 
     // 检查是否允许后台运行
     if (!plugin.manifest.pluginSetting?.background) {
-      console.warn(`[BackgroundManager] Plugin ${pluginId} does not support background mode`)
+      log.warn(`[BackgroundManager] Plugin ${pluginId} does not support background mode`)
       return false
     }
 
     // 检查是否已在运行
     if (this.isRunning(pluginId)) {
-      console.warn(`[BackgroundManager] Plugin ${pluginId} is already running in background`)
+      log.warn(`[BackgroundManager] Plugin ${pluginId} is already running in background`)
       return true
     }
 
     try {
       // 确保 Host 已创建并初始化
       const hostReady = this.hostManager.isHostReady(pluginId)
-      console.log(`[BackgroundManager] Host ready status for ${pluginId}: ${hostReady}`)
+      log.info(`[BackgroundManager] Host ready status for ${pluginId}: ${hostReady}`)
 
       if (!hostReady) {
-        console.log(`[BackgroundManager] Creating host for ${pluginId}`)
+        log.info(`[BackgroundManager] Creating host for ${pluginId}`)
         const created = await this.hostManager.createHost(plugin)
         if (!created) {
           throw new Error('Failed to create host')
         }
-        console.log(`[BackgroundManager] Initializing plugin ${pluginId}`)
+        log.info(`[BackgroundManager] Initializing plugin ${pluginId}`)
         await this.hostManager.initPlugin(plugin)
       }
 
       // 调用 onBackground 钩子（如果需要）
       if (callOnBackground) {
-        console.log(`[BackgroundManager] Calling onBackground hook for ${pluginId}`)
+        log.info(`[BackgroundManager] Calling onBackground hook for ${pluginId}`)
         await this.hostManager.callHook(plugin, 'onBackground')
       }
 
@@ -161,14 +162,14 @@ export class BackgroundPluginManager extends EventEmitter {
 
       // 注册到 Watchdog（后台插件始终监控）
       this.watchdog.registerHost(pluginId)
-      console.log(`[BackgroundManager] Registered ${pluginId} to Watchdog`)
+      log.info(`[BackgroundManager] Registered ${pluginId} to Watchdog`)
 
       // 设置运行时间限制
       const maxRuntime = plugin.manifest.pluginSetting?.maxRuntime || 0
       if (maxRuntime > 0) {
-        console.log(`[BackgroundManager] Setting maxRuntime for ${pluginId}: ${maxRuntime}ms`)
+        log.info(`[BackgroundManager] Setting maxRuntime for ${pluginId}: ${maxRuntime}ms`)
         backgroundPlugin.runtimeTimer = setTimeout(() => {
-          console.log(`[BackgroundManager] Plugin ${pluginId} reached maxRuntime, stopping`)
+          log.info(`[BackgroundManager] Plugin ${pluginId} reached maxRuntime, stopping`)
           this.stop(pluginId, 'max-runtime')
         }, maxRuntime)
       }
@@ -179,10 +180,10 @@ export class BackgroundPluginManager extends EventEmitter {
       // 触发事件
       this.emit('background:started', pluginId)
 
-      console.log(`[BackgroundManager] Plugin ${pluginId} started in background successfully`)
+      log.info(`[BackgroundManager] Plugin ${pluginId} started in background successfully`)
       return true
     } catch (err) {
-      console.error(`[BackgroundManager] Failed to start plugin ${pluginId}:`, err)
+      log.error(`[BackgroundManager] Failed to start plugin ${pluginId}:`, err)
       return false
     }
   }
@@ -217,9 +218,9 @@ export class BackgroundPluginManager extends EventEmitter {
       // 触发事件
       this.emit('background:stopped', pluginId, reason)
 
-      console.log(`[BackgroundManager] Plugin ${pluginId} stopped (reason: ${reason})`)
+      log.info(`[BackgroundManager] Plugin ${pluginId} stopped (reason: ${reason})`)
     } catch (err) {
-      console.error(`[BackgroundManager] Error stopping plugin ${pluginId}:`, err)
+      log.error(`[BackgroundManager] Error stopping plugin ${pluginId}:`, err)
     }
   }
 
@@ -312,17 +313,17 @@ export class BackgroundPluginManager extends EventEmitter {
     })
 
     if (pluginsToRestore.length === 0) {
-      console.log('[BackgroundManager] No persistent plugins to restore')
+      log.info('[BackgroundManager] No persistent plugins to restore')
       return
     }
 
-    console.log(`[BackgroundManager] Found ${pluginsToRestore.length} persistent plugins to restore:`,
+    log.info(`[BackgroundManager] Found ${pluginsToRestore.length} persistent plugins to restore:`,
       pluginsToRestore.map(p => p.id))
 
     // 延迟 2 秒启动，避免影响应用启动速度
     this.restoreTimer = setTimeout(async () => {
       this.restoreTimer = null
-      console.log('[BackgroundManager] Starting to restore persistent plugins...')
+      log.info('[BackgroundManager] Starting to restore persistent plugins...')
       const startTime = Date.now()
 
       // 批量限制：同时最多恢复 3 个插件
@@ -336,24 +337,24 @@ export class BackgroundPluginManager extends EventEmitter {
         const batchNum = Math.floor(i / batchSize) + 1
         const totalBatches = Math.ceil(pluginsToRestore.length / batchSize)
 
-        console.log(`[BackgroundManager] Processing batch ${batchNum}/${totalBatches}:`, batch.map(p => p.id))
+        log.info(`[BackgroundManager] Processing batch ${batchNum}/${totalBatches}:`, batch.map(p => p.id))
 
         const results = await Promise.allSettled(
           batch.map(async plugin => {
             try {
-              console.log(`[BackgroundManager] Restoring plugin: ${plugin.id}`)
+              log.info(`[BackgroundManager] Restoring plugin: ${plugin.id}`)
               const success = await this.start(plugin, true)
 
               if (success) {
-                console.log(`[BackgroundManager] ✓ Successfully restored plugin: ${plugin.id}`)
+                log.info(`[BackgroundManager] ✓ Successfully restored plugin: ${plugin.id}`)
                 return { success: true, pluginId: plugin.id, plugin }
               } else {
-                console.warn(`[BackgroundManager] ✗ Failed to restore plugin: ${plugin.id}`)
+                log.warn(`[BackgroundManager] ✗ Failed to restore plugin: ${plugin.id}`)
                 return { success: false, pluginId: plugin.id, plugin, error: 'Start returned false' }
               }
             } catch (err) {
               const errorMsg = err instanceof Error ? err.message : 'Unknown error'
-              console.error(`[BackgroundManager] ✗ Error restoring plugin ${plugin.id}:`, errorMsg)
+              log.error(`[BackgroundManager] ✗ Error restoring plugin ${plugin.id}:`, errorMsg)
               return { success: false, pluginId: plugin.id, plugin, error: errorMsg }
             }
           })
@@ -380,11 +381,11 @@ export class BackgroundPluginManager extends EventEmitter {
       }
 
       const duration = Date.now() - startTime
-      console.log(`[BackgroundManager] Restore completed in ${duration}ms: ${successCount} succeeded, ${failCount} failed`)
+      log.info(`[BackgroundManager] Restore completed in ${duration}ms: ${successCount} succeeded, ${failCount} failed`)
 
       // 对失败的插件进行重试（最多重试 2 次）
       if (failedPlugins.length > 0) {
-        console.log(`[BackgroundManager] Retrying ${failedPlugins.length} failed plugins...`)
+        log.info(`[BackgroundManager] Retrying ${failedPlugins.length} failed plugins...`)
         await this.retryFailedPlugins(failedPlugins)
       }
 
@@ -402,12 +403,12 @@ export class BackgroundPluginManager extends EventEmitter {
       const attempts = (state.backgroundRestartCount || 0) + 1
 
       if (attempts > MAX_RESTORE_ATTEMPTS) {
-        console.warn(`[BackgroundManager] Plugin ${plugin.id} exceeded max restore attempts (${MAX_RESTORE_ATTEMPTS}), giving up`)
+        log.warn(`[BackgroundManager] Plugin ${plugin.id} exceeded max restore attempts (${MAX_RESTORE_ATTEMPTS}), giving up`)
         this.stateManager.setBackgroundRunning(plugin.id, false)
         continue
       }
 
-      console.log(`[BackgroundManager] Retry attempt ${attempts}/${MAX_RESTORE_ATTEMPTS} for plugin: ${plugin.id}`)
+      log.info(`[BackgroundManager] Retry attempt ${attempts}/${MAX_RESTORE_ATTEMPTS} for plugin: ${plugin.id}`)
 
       // 延迟重试，避免立即失败
       await new Promise(resolve => setTimeout(resolve, 2000 * attempts))
@@ -415,16 +416,16 @@ export class BackgroundPluginManager extends EventEmitter {
       try {
         const success = await this.start(plugin, true)
         if (success) {
-          console.log(`[BackgroundManager] ✓ Successfully restored plugin on retry: ${plugin.id}`)
+          log.info(`[BackgroundManager] ✓ Successfully restored plugin on retry: ${plugin.id}`)
           // 重置重试计数
           this.stateManager.resetBackgroundRestartCount(plugin.id)
         } else {
-          console.warn(`[BackgroundManager] ✗ Failed to restore plugin on retry: ${plugin.id}`)
+          log.warn(`[BackgroundManager] ✗ Failed to restore plugin on retry: ${plugin.id}`)
           // 更新重试计数
           this.updateRestartCount(plugin.id, attempts)
         }
       } catch (err) {
-        console.error(`[BackgroundManager] ✗ Error on retry for plugin ${plugin.id}:`, err)
+        log.error(`[BackgroundManager] ✗ Error on retry for plugin ${plugin.id}:`, err)
         this.updateRestartCount(plugin.id, attempts)
       }
     }
@@ -456,15 +457,15 @@ export class BackgroundPluginManager extends EventEmitter {
     const plugins = this.list()
 
     if (plugins.length === 0) {
-      console.log('[BackgroundManager] No background plugins to shutdown')
+      log.info('[BackgroundManager] No background plugins to shutdown')
       return
     }
 
-    console.log(`[BackgroundManager] Shutting down ${plugins.length} background plugins...`)
+    log.info(`[BackgroundManager] Shutting down ${plugins.length} background plugins...`)
 
     // 保存状态
     for (const info of plugins) {
-      console.log(`[BackgroundManager] Saving state for plugin: ${info.pluginId}`)
+      log.info(`[BackgroundManager] Saving state for plugin: ${info.pluginId}`)
       this.stateManager.setBackgroundRunning(info.pluginId, true)
     }
 
@@ -476,7 +477,7 @@ export class BackgroundPluginManager extends EventEmitter {
     ])
 
     const duration = Date.now() - startTime
-    console.log(`[BackgroundManager] Shutdown completed in ${duration}ms`)
+    log.info(`[BackgroundManager] Shutdown completed in ${duration}ms`)
   }
 
   private cancelRestoreTimer(): void {
