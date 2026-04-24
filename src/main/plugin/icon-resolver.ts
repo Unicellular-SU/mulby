@@ -3,7 +3,23 @@ import { join } from 'path'
 import type { PluginIcon, ResolvedIcon } from '../../shared/types/plugin'
 
 /**
- * 解析图标为可渲染的格式
+ * 同步解析图标为可渲染的格式
+ * 支持 URL、SVG、emoji、本地文件路径
+ */
+export function resolveIconSync(icon: PluginIcon | undefined, pluginPath: string): ResolvedIcon | undefined {
+    if (!icon) return undefined
+    if (typeof icon === 'string') return resolveIconString(icon, pluginPath)
+    switch (icon.type) {
+        case 'url': return { type: 'url', value: icon.value }
+        case 'svg': return { type: 'svg', value: icon.value }
+        case 'emoji': return { type: 'emoji', value: icon.value }
+        case 'file': return loadIconFile(join(pluginPath, icon.value || 'icon.png'))
+        default: return undefined
+    }
+}
+
+/**
+ * 解析图标为可渲染的格式（异步版本，兼容旧调用方）
  * 支持 URL、SVG、本地文件路径
  */
 export async function resolveIcon(icon: PluginIcon | undefined, pluginPath: string): Promise<ResolvedIcon | undefined> {

@@ -313,13 +313,15 @@ function PluginDetailsPanel({ pluginName, onClose, onUninstall }: { pluginName: 
                   <div className="flex items-start justify-between gap-3">
                     <div>
                       <div className="flex items-center gap-2">
-                        {feature.icon && (
+                        {feature.icon && feature.icon.type && feature.icon.value && (
                           <div className="flex h-5 w-5 items-center justify-center rounded-md bg-slate-100 dark:bg-slate-800">
                             {feature.icon.type === 'svg' ? (
                               <div
                                 className="h-3 w-3 [&>svg]:h-3 [&>svg]:w-3"
                                 dangerouslySetInnerHTML={{ __html: feature.icon.value }}
                               />
+                            ) : feature.icon.type === 'emoji' ? (
+                              <span className="text-xs leading-none">{feature.icon.value}</span>
                             ) : (
                               <img src={feature.icon.value} alt="" className="h-3 w-3 object-contain" />
                             )}

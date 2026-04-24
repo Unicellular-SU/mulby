@@ -275,13 +275,15 @@ export default function PluginDetails({ pluginName, onBack }: PluginDetailsProps
                                         <div className="flex flex-wrap items-start justify-between gap-3">
                                             <div>
                                                 <div className="flex items-center gap-2">
-                                                    {feature.icon && (
+                                                    {feature.icon && feature.icon.type && feature.icon.value && (
                                                         <div className="flex h-6 w-6 items-center justify-center rounded-md bg-slate-100 dark:bg-slate-800">
                                                             {feature.icon.type === 'svg' ? (
                                                                 <div
                                                                     className="h-4 w-4 [&>svg]:h-4 [&>svg]:w-4"
                                                                     dangerouslySetInnerHTML={{ __html: feature.icon.value }}
                                                                 />
+                                                            ) : feature.icon.type === 'emoji' ? (
+                                                                <span className="text-sm leading-none">{feature.icon.value}</span>
                                                             ) : (
                                                                 <img src={feature.icon.value} alt="" className="h-4 w-4 object-contain" />
                                                             )}

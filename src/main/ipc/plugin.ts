@@ -3,7 +3,7 @@ import { resolve } from 'path'
 import { PluginManager } from '../plugin'
 import type { PluginToolRegistry } from '../plugin/plugin-tools'
 import { buildFeatureIconCacheKey } from '../plugin/dev-reload-utils'
-import { resolveIcon } from '../plugin/icon-resolver'
+import { resolveIcon, resolveIconSync } from '../plugin/icon-resolver'
 import type {
   BackgroundPluginInfo,
   InputPayload,
@@ -98,27 +98,33 @@ export function registerPluginHandlers(manager: PluginManager, pluginToolRegistr
 
   // 获取所有插件
   ipcMain.handle('plugin:getAll', () => {
-    return manager.getAll().map(p => ({
-      id: p.id,
-      name: p.manifest.name,
-      displayName: p.manifest.displayName,
-      description: p.manifest.description,
-      version: p.manifest.version,
-      author: p.manifest.author,
-      homepage: p.manifest.homepage,
-      main: p.manifest.main,
-      ui: p.manifest.ui,
-      window: p.manifest.window,
-      icon: p.resolvedIcon,
-      path: p.path,
-      builtin: isBuiltin(p.path),
-      isDev: p.isDev,
-      features: manager.getFeatures(p.id),
-      enabled: p.enabled,
-      tools: pluginToolRegistry
-        ? pluginToolRegistry.getPluginTools(p.id).map(e => ({ name: e.schema.name, description: e.schema.description }))
-        : p.manifest.tools?.map(t => ({ name: t.name, description: t.description }))
-    }))
+    return manager.getAll().map(p => {
+      const features = manager.getFeatures(p.id).map(f => ({
+        ...f,
+        icon: f.icon ? resolveIconSync(f.icon, p.path) : undefined
+      }))
+      return {
+        id: p.id,
+        name: p.manifest.name,
+        displayName: p.manifest.displayName,
+        description: p.manifest.description,
+        version: p.manifest.version,
+        author: p.manifest.author,
+        homepage: p.manifest.homepage,
+        main: p.manifest.main,
+        ui: p.manifest.ui,
+        window: p.manifest.window,
+        icon: p.resolvedIcon,
+        path: p.path,
+        builtin: isBuiltin(p.path),
+        isDev: p.isDev,
+        features,
+        enabled: p.enabled,
+        tools: pluginToolRegistry
+          ? pluginToolRegistry.getPluginTools(p.id).map(e => ({ name: e.schema.name, description: e.schema.description }))
+          : p.manifest.tools?.map(t => ({ name: t.name, description: t.description }))
+      }
+    })
   })
 
   // 获取命令清单（功能指令 + 匹配指令）
