@@ -8,6 +8,7 @@ export function createCoreApi(ipcRenderer: IpcRenderer) {
       setSize: (width: number, height: number) =>
         ipcRenderer.send('window:setSize', width, height),
       setExpendHeight: (height: number, allowResize?: boolean) => ipcRenderer.send('window:setExpendHeight', height, allowResize),
+      invalidate: () => ipcRenderer.send('window:invalidate'),
       center: () => ipcRenderer.send('window:center'),
       detach: () => ipcRenderer.send('plugin:detach'),
       close: () => ipcRenderer.send('plugin:close'),

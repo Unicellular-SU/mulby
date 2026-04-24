@@ -283,7 +283,11 @@ function MainApp() {
   const resizeAnimationFrameRef = useRef<number | null>(null)
   const searchPanelContentHeightRef = useRef(0)
   const shrinkTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const macRepaintTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [searchPanelHeight, setSearchPanelHeight] = useState(0)
+  const systemPageAttached = !isSystemWindow && systemPageState.open && systemPageState.mode === 'attached'
+  const hasTextInput = query.length > 0 || payloadText.length > 0
+  const isMacMain = !isSystemWindow && navigator.platform.toLowerCase().includes('mac')
 
   const beginPerfTrace = useCallback((source: SearchPerfTraceSource, textLength: number, attachmentCount: number) => {
     const nextId = perfTraceSeqRef.current + 1
@@ -320,9 +324,6 @@ function MainApp() {
     return { managerHeight, listHeight }
   }, [attachments.length])
 
-  const systemPageAttached = !isSystemWindow && systemPageState.open && systemPageState.mode === 'attached'
-  const hasTextInput = query.length > 0 || payloadText.length > 0
-
   // 初始化主题
   useEffect(() => {
     window.mulby.theme.getActual().then(setTheme)
@@ -334,6 +335,13 @@ function MainApp() {
   useEffect(() => {
     document.documentElement.classList.toggle('dark', theme === 'dark')
   }, [theme])
+
+  useEffect(() => {
+    document.documentElement.classList.toggle('platform-mac-main', isMacMain)
+    return () => {
+      document.documentElement.classList.remove('platform-mac-main')
+    }
+  }, [isMacMain])
 
   useEffect(() => {
     let mounted = true
@@ -462,6 +470,23 @@ function MainApp() {
   const SEARCH_PANEL_MAX_HEIGHT_CONST = 737 // 800 - 62 - 1
   const SHRINK_DELAY_MS = 280
 
+  const cancelPendingShrinkTimer = useCallback((_reason: string) => {
+    if (!shrinkTimerRef.current) return
+    clearTimeout(shrinkTimerRef.current)
+    shrinkTimerRef.current = null
+  }, [])
+
+  const scheduleMacInvalidate = useCallback(() => {
+    if (!isMacMain) return
+    if (macRepaintTimerRef.current) {
+      clearTimeout(macRepaintTimerRef.current)
+    }
+    macRepaintTimerRef.current = setTimeout(() => {
+      macRepaintTimerRef.current = null
+      window.mulby.window.invalidate()
+    }, 32)
+  }, [isMacMain])
+
   const handleContentHeightChange = useCallback((contentHeight: number) => {
     const clamped = Math.min(Math.max(contentHeight, SEARCH_PANEL_MIN_HEIGHT), SEARCH_PANEL_MAX_HEIGHT_CONST)
 
@@ -469,32 +494,29 @@ function MainApp() {
     searchPanelContentHeightRef.current = contentHeight
 
     if (clamped >= prev || prev === 0) {
-      // Growing or first measurement: apply immediately
-      if (shrinkTimerRef.current) {
-        clearTimeout(shrinkTimerRef.current)
-        shrinkTimerRef.current = null
-      }
+      cancelPendingShrinkTimer('grow')
       setSearchPanelHeight(clamped)
+      scheduleMacInvalidate()
     } else {
-      // Shrinking: delay to avoid flicker during fast typing
-      if (shrinkTimerRef.current) {
-        clearTimeout(shrinkTimerRef.current)
-      }
+      cancelPendingShrinkTimer('reschedule shrink')
       shrinkTimerRef.current = setTimeout(() => {
         shrinkTimerRef.current = null
         setSearchPanelHeight(clamped)
+        scheduleMacInvalidate()
       }, SHRINK_DELAY_MS)
     }
-  }, [])
+  }, [cancelPendingShrinkTimer, scheduleMacInvalidate])
 
   // Clean up shrink timer
   useEffect(() => {
     return () => {
-      if (shrinkTimerRef.current) {
-        clearTimeout(shrinkTimerRef.current)
+      cancelPendingShrinkTimer('unmount')
+      if (macRepaintTimerRef.current) {
+        clearTimeout(macRepaintTimerRef.current)
+        macRepaintTimerRef.current = null
       }
     }
-  }, [])
+  }, [cancelPendingShrinkTimer])
 
   // 调整窗口高度
   useEffect(() => {
@@ -505,6 +527,7 @@ function MainApp() {
     const BORDER_HEIGHT = 1
     const SYSTEM_PAGE_HEIGHT = 800
     const MANAGER_HEIGHT = managerMetrics.managerHeight
+    const MAC_STABLE_SEARCH_PANEL_HEIGHT = 271
 
     let height = SEARCH_BOX_HEIGHT
     let allowResize = false
@@ -526,8 +549,11 @@ function MainApp() {
     } else if (attachmentsManagerOpen && attachments.length > 0) {
       height = SEARCH_BOX_HEIGHT + BORDER_HEIGHT + MANAGER_HEIGHT
     } else if (showSearchPanel) {
-      // 动态高度：基于实际内容，首次测量前保持搜索框高度，避免先撑满再缩小的闪烁
-      if (searchPanelHeight > 0) {
+      if (isMacMain) {
+        // macOS 透明 NSPanel 在连续 resize 下会偶发停止重绘，结果区改为稳定高度，内部自行滚动
+        height = SEARCH_BOX_HEIGHT + BORDER_HEIGHT + MAC_STABLE_SEARCH_PANEL_HEIGHT
+      } else if (searchPanelHeight > 0) {
+        // 动态高度：基于实际内容，首次测量前保持搜索框高度，避免先撑满再缩小的闪烁
         height = SEARCH_BOX_HEIGHT + BORDER_HEIGHT + searchPanelHeight
       }
       // searchPanelHeight === 0 表示尚未测量，保持 SEARCH_BOX_HEIGHT 等待 ResizeObserver 回调
@@ -543,12 +569,16 @@ function MainApp() {
       searchPanelContentHeightRef.current = 0
       setSearchPanelHeight(0)
     }
-  }, [isSystemWindow, hasTextInput, pluginOpen, systemPageAttached, detailsPluginName, attachments.length, attachmentsManagerOpen, managerMetrics.managerHeight, viewMode, perfTrace.id, perfTrace.startedAt, searchPanelHeight])
+  // perfTrace 不影响高度计算，不纳入依赖：避免每次搜索都触发多余的
+  // setExpendHeight IPC（透明窗口频繁 resize 会破坏合成器）
+  }, [isMacMain, isSystemWindow, hasTextInput, pluginOpen, systemPageAttached, detailsPluginName, attachments.length, attachmentsManagerOpen, managerMetrics.managerHeight, viewMode, searchPanelHeight])
 
 
   // 监听插件附着事件
   useEffect(() => {
     const cleanupAttach = window.mulby.onPluginAttach((_data: PluginInfo) => {
+      cancelPendingShrinkTimer('plugin attach')
+      scheduleMacInvalidate()
       if (systemPageAttached) {
         void window.mulby.systemPage.close()
       }
@@ -556,10 +586,12 @@ function MainApp() {
     })
 
     const cleanupDetached = window.mulby.onPluginDetached(() => {
+      cancelPendingShrinkTimer('plugin detached')
+      scheduleMacInvalidate()
       setPluginOpen(false)
-      // 插件关闭后，让搜索框重新获取焦点
       setTimeout(() => {
         searchInputRef.current?.focus()
+        scheduleMacInvalidate()
       }, 100)
     })
 
@@ -567,7 +599,7 @@ function MainApp() {
       cleanupAttach()
       cleanupDetached()
     }
-  }, [systemPageAttached])
+  }, [cancelPendingShrinkTimer, scheduleMacInvalidate, systemPageAttached])
 
   useEffect(() => {
     if (attachments.length === 0 && attachmentsManagerOpen) {
@@ -1085,8 +1117,9 @@ function MainApp() {
   }, [attachments.length, beginPerfTrace, clearAttachments, clearTextInputs, pluginOpen, replaceTextInput, systemPageAttached])
 
   const handleQueryChange = (value: string) => {
-    // 如果有附着的插件，先关闭它
     if (pluginOpen) {
+      cancelPendingShrinkTimer('queryChange close plugin')
+      scheduleMacInvalidate()
       window.mulby.window.close()
       setPluginOpen(false)
     }
@@ -1098,6 +1131,7 @@ function MainApp() {
     }
     beginPerfTrace('text', value.length, attachments.length)
     applySearchTextInput(value)
+    scheduleMacInvalidate()
     if (value.length === 0 && payloadText.length === 0 && attachments.length === 0) {
       setResultCount(0)
       setDetailsPluginName(null)

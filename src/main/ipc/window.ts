@@ -343,43 +343,98 @@ export function registerWindowHandlers(
   })
 
   // 设置展开高度（仅调整高度，宽度保持不变）
+  // 合并短时间内的连续调用，防止透明 NSPanel 窗口因高频 resize 导致合成器异常
+  let pendingExpendHeight: { win: BrowserWindow; height: number; allowResize: boolean } | null = null
+  let expendHeightTimer: ReturnType<typeof setTimeout> | null = null
+  const EXPEND_HEIGHT_DEBOUNCE_MS = 16
+  let lastAppliedHeight = -1
+  let lastAppliedAllowResize = false
+
+  function invalidateAfterResize(win: BrowserWindow, beforeBounds: { width: number; height: number }): void {
+    if (win.isDestroyed() || win.webContents.isDestroyed() || !win.isVisible()) return
+
+    const afterBounds = win.getBounds()
+    if (afterBounds.width === beforeBounds.width && afterBounds.height === beforeBounds.height) {
+      return
+    }
+
+    setImmediate(() => {
+      if (win.isDestroyed() || win.webContents.isDestroyed() || !win.isVisible()) return
+      win.webContents.invalidate()
+    })
+  }
+
+  function applyExpendHeight(win: BrowserWindow, height: number, allowResize: boolean): void {
+    if (win.isDestroyed()) return
+
+    if (height === lastAppliedHeight && allowResize === lastAppliedAllowResize) {
+      return
+    }
+
+    lastAppliedHeight = height
+    lastAppliedAllowResize = allowResize
+
+    const mainWin = getMainWindow()
+    const beforeBounds = win.getBounds()
+    if (win === mainWin) {
+      if (allowResize) {
+        const settings = appSettingsManager.getSettings()
+        const savedWidth = settings.window?.width || 800
+        const savedHeight = settings.window?.height && settings.window.height >= 500
+          ? settings.window.height
+          : height
+        const minSize = toMainWindowWindowSize(800, 500)
+        const maxSize = toMainWindowWindowSize(9999, 9999)
+        const nextSize = toMainWindowWindowSize(savedWidth, savedHeight)
+
+        win.setMinimumSize(minSize.width, minSize.height)
+        win.setMaximumSize(maxSize.width, maxSize.height)
+        win.setSize(nextSize.width, nextSize.height)
+        invalidateAfterResize(win, beforeBounds)
+      } else {
+        const visibleBounds = getMainWindowVisibleBounds(win.getBounds())
+        const minSize = toMainWindowWindowSize(400, height)
+        const maxSize = toMainWindowWindowSize(9999, height)
+        const nextSize = toMainWindowWindowSize(visibleBounds.width, height)
+
+        win.setMinimumSize(minSize.width, minSize.height)
+        win.setMaximumSize(maxSize.width, maxSize.height)
+        win.setSize(nextSize.width, nextSize.height)
+        invalidateAfterResize(win, beforeBounds)
+      }
+    } else {
+      const [width] = win.getSize()
+      win.setSize(width, height)
+    }
+  }
+
   ipcMain.on('window:setExpendHeight', (event, height: number, allowResize?: boolean) => {
     const win = windowFromWebContents(event.sender)
-    if (win) {
-      const mainWin = getMainWindow()
-      if (win === mainWin) {
-        if (allowResize) {
-          // 允许自由调整大小（用于系统页面）
-          // 使用保存的尺寸，如果没有则使用默认值
-          const settings = appSettingsManager.getSettings()
-          const savedWidth = settings.window?.width || 800
-          const savedHeight = settings.window?.height && settings.window.height >= 500
-            ? settings.window.height
-            : height
-          const minSize = toMainWindowWindowSize(800, 500)
-          const maxSize = toMainWindowWindowSize(9999, 9999)
-          const nextSize = toMainWindowWindowSize(savedWidth, savedHeight)
+    if (!win) return
 
-          win.setMinimumSize(minSize.width, minSize.height)
-          win.setMaximumSize(maxSize.width, maxSize.height)
-          win.setSize(nextSize.width, nextSize.height)
-        } else {
-          // 更新最小/最大高度限制，锁定高度但允许宽度调整
-          const visibleBounds = getMainWindowVisibleBounds(win.getBounds())
-          const minSize = toMainWindowWindowSize(400, height)
-          const maxSize = toMainWindowWindowSize(9999, height)
-          const nextSize = toMainWindowWindowSize(visibleBounds.width, height)
-
-          win.setMinimumSize(minSize.width, minSize.height)
-          win.setMaximumSize(maxSize.width, maxSize.height)
-          win.setSize(nextSize.width, nextSize.height)
+    pendingExpendHeight = { win, height, allowResize: allowResize === true }
+    if (!expendHeightTimer) {
+      expendHeightTimer = setTimeout(() => {
+        expendHeightTimer = null
+        if (pendingExpendHeight) {
+          const { win: w, height: h, allowResize: ar } = pendingExpendHeight
+          pendingExpendHeight = null
+          applyExpendHeight(w, h, ar)
         }
-      } else {
-        const [width] = win.getSize()
-        win.setSize(width, height)
-      }
+      }, EXPEND_HEIGHT_DEBOUNCE_MS)
     }
   })
+
+  ipcMain.on('window:invalidate', (event) => {
+    const win = windowFromWebContents(event.sender)
+    if (!win || win.isDestroyed() || win.webContents.isDestroyed()) return
+
+    setImmediate(() => {
+      if (win.isDestroyed() || win.webContents.isDestroyed() || !win.isVisible()) return
+      win.webContents.invalidate()
+    })
+  })
+
 
   // 页面内查找
   ipcMain.handle('webContents:findInPage', (event, text: string, options?: {

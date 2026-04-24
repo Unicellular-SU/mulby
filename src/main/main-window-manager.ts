@@ -332,7 +332,9 @@ export class MainWindowManager {
         preload: join(__dirname, '../preload/index.js'),
         contextIsolation: true,
         nodeIntegration: false,
-        webviewTag: true
+        webviewTag: true,
+        // macOS 透明 panel 偶发被 Chromium 误判为 occluded，导致 rAF / paint 被节流
+        backgroundThrottling: false
       }
     })
 
@@ -373,12 +375,17 @@ export class MainWindowManager {
       this.blurHideTimer = setTimeout(() => {
         this.blurHideTimer = null
         if (isIgnoringBlur() || this.shouldSuppressBlurHide()) return
+        if (this.window && !this.window.isDestroyed() && this.window.isFocused()) return
         const panelWin = this.deps?.pluginWindowManager.getPanelWindow()?.getWindow()
         if (panelWin && panelWin.isFocused()) return
         const systemPageAttached = this.deps?.systemPageWindowManager.getAttachedWindow()
         if (systemPageAttached && systemPageAttached.isFocused()) return
         this.hide()
       }, MW_BLUR_HIDE_DELAY_MS)
+    })
+
+    win.on('focus', () => {
+      this.clearBlurHideTimer()
     })
 
     // State save on resize/move (L2: unified timer)

@@ -479,6 +479,7 @@ export interface ElectronAPI {
     hide: () => void
     setSize: (width: number, height: number) => void
     setExpendHeight: (height: number, allowResize?: boolean) => void
+    invalidate: () => void
     center: () => void
     detach: () => void
     close: () => void

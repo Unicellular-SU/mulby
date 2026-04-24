@@ -235,28 +235,23 @@ export class PluginWindowManager {
       const pluginId = this.attachedPlugin?.plugin.id
       this.attachedPlugin = null
 
-      // 关闭 Panel 窗口
       if (this.panelWindow?.isOpen()) {
         this.panelWindow.close()
       }
 
-      // 清理主进程中的 SubInput 状态
       clearSubInputState()
 
-      // 通知渲染进程禁用 SubInput（重置搜索框状态）
       if (this.mainWindow && !this.mainWindow.isDestroyed() && !this.mainWindow.webContents.isDestroyed()) {
         try {
           this.mainWindow.webContents.send('subInput:disabled')
           this.mainWindow.webContents.send('plugin:detached')
         } catch {
-          // Render frame may have been disposed (e.g. after render process crash)
+          // Render frame may have been disposed
         }
       }
 
-      // 关闭插件后聚焦主窗口，使搜索框获得焦点
       this.mainWindow?.focus()
 
-      // 触发窗口关闭回调（用于处理后台运行或销毁 Host）
       if (pluginId) {
         this.notifyPluginWindowClosed(pluginId)
       }

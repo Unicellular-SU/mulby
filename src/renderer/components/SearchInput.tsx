@@ -286,6 +286,8 @@ const SearchInput = forwardRef<SearchInputRef, SearchInputProps>(function Search
           value={displayValue}
           onChange={handleInputChange}
           onKeyDown={(e) => {
+            if (e.nativeEvent.isComposing) return
+
             if (e.key === 'Enter' && !e.shiftKey) {
               e.preventDefault()
               return

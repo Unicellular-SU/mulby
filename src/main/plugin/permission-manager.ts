@@ -11,7 +11,7 @@ let permissions: MacPermissionsModule | null = null
 if (process.platform === 'darwin') {
     try {
         permissions = require('node-mac-permissions') as MacPermissionsModule
-        log.info('[PermissionManager] Loaded node-mac-permissions')
+        log.debug('[PermissionManager] Loaded node-mac-permissions')
     } catch (error) {
         log.warn('[PermissionManager] Failed to load node-mac-permissions:', error)
     }
@@ -75,9 +75,9 @@ export class PermissionManager {
     private nonMacDecisions = new Map<string, boolean>()
 
     private constructor() {
-        log.info('[PermissionManager] Initializing...')
-        log.info(`[PermissionManager] Platform: ${process.platform}`)
-        log.info(`[PermissionManager] node-mac-permissions loaded: ${permissions !== null}`)
+        log.debug('[PermissionManager] Initializing...')
+        log.debug(`[PermissionManager] Platform: ${process.platform}`)
+        log.debug(`[PermissionManager] node-mac-permissions loaded: ${permissions !== null}`)
 
         // 延迟设置 Electron 权限处理器，直到 app ready
         if (app.isReady()) {
@@ -105,19 +105,19 @@ export class PermissionManager {
             return
         }
         this.sessionHandlerSetup = true
-        log.info('[PermissionManager] Setting up Electron permission handlers')
+        log.debug('[PermissionManager] Setting up Electron permission handlers')
 
         // 权限请求处理器
         session.defaultSession.setPermissionRequestHandler(
             (webContents, permission, callback, details) => {
-                log.info(`[PermissionManager] Permission request: ${permission}`, details)
+                log.debug(`[PermissionManager] Permission request: ${permission}`, details)
 
                 const permType = this.mapElectronPermission(permission)
 
                 if (permType) {
                     if (process.platform === 'darwin') {
                         const status = this.getStatus(permType)
-                        log.info(`[PermissionManager] macOS status for ${permType}: ${status}`)
+                        log.debug(`[PermissionManager] macOS status for ${permType}: ${status}`)
                         if (permType === 'geolocation') {
                             callback(status !== 'denied' && status !== 'restricted')
                             return
@@ -206,7 +206,7 @@ export class PermissionManager {
      * 获取权限状态
      */
     getStatus(type: PermissionType): PermissionStatus {
-        log.info(`[PermissionManager] Getting status for: ${type}`)
+        log.debug(`[PermissionManager] Getting status for: ${type}`)
 
         if (type === 'geolocation' && this.geolocationStatusOverride) {
             return this.geolocationStatusOverride
@@ -217,7 +217,7 @@ export class PermissionManager {
             if (macType) {
                 try {
                     const status = permissions.getAuthStatus(macType)
-                    log.info(`[PermissionManager] macOS ${type} status: ${status}`)
+                    log.debug(`[PermissionManager] macOS ${type} status: ${status}`)
                     const normalized = normalizeStatus(status)
 
                     if (type === 'geolocation') {
@@ -244,7 +244,7 @@ export class PermissionManager {
             // 尝试使用 systemPreferences（对于媒体类型）
             if (type === 'camera' || type === 'microphone') {
                 const status = systemPreferences.getMediaAccessStatus(type)
-                log.info(`[PermissionManager] systemPreferences ${type} status: ${status}`)
+                log.debug(`[PermissionManager] systemPreferences ${type} status: ${status}`)
                 return normalizeStatus(status)
             }
             return 'unknown'
@@ -260,7 +260,7 @@ export class PermissionManager {
      * 请求权限
      */
     async request(type: PermissionType): Promise<PermissionStatus> {
-        log.info(`[PermissionManager] Requesting permission: ${type}`)
+        log.debug(`[PermissionManager] Requesting permission: ${type}`)
 
         if (process.platform === 'darwin') {
             return this.requestMacOS(type)
@@ -274,13 +274,13 @@ export class PermissionManager {
      * macOS 权限请求
      */
     private async requestMacOS(type: PermissionType): Promise<PermissionStatus> {
-        log.info(`[PermissionManager] macOS requesting: ${type}`)
+        log.debug(`[PermissionManager] macOS requesting: ${type}`)
 
         // 对于相机和麦克风，使用 systemPreferences
         if (type === 'camera' || type === 'microphone') {
             try {
                 const granted = await systemPreferences.askForMediaAccess(type)
-                log.info(`[PermissionManager] askForMediaAccess(${type}) result: ${granted}`)
+                log.debug(`[PermissionManager] askForMediaAccess(${type}) result: ${granted}`)
                 return granted ? 'granted' : 'denied'
             } catch (error) {
                 log.error(`[PermissionManager] askForMediaAccess error:`, error)
@@ -298,7 +298,7 @@ export class PermissionManager {
                     const askFn = permissions[askMethod]
                     if (typeof askFn === 'function') {
                         const result = await askFn()
-                        log.info(`[PermissionManager] ${askMethod} result:`, result)
+                        log.debug(`[PermissionManager] ${askMethod} result:`, result)
                         return normalizeStatus(result)
                     } else {
                         log.warn(`[PermissionManager] No ask method for ${macType}`)
@@ -318,7 +318,7 @@ export class PermissionManager {
      * Windows/Linux 权限请求
      */
     private async requestWindowsLinux(type: PermissionType): Promise<PermissionStatus> {
-        log.info(`[PermissionManager] Windows/Linux requesting: ${type}`)
+        log.debug(`[PermissionManager] Windows/Linux requesting: ${type}`)
 
         // 大多数权限在 Windows/Linux 上是自动授权的
         // 返回当前状态
@@ -356,7 +356,7 @@ export class PermissionManager {
             : await dialog.showMessageBox(opts)
 
         const granted = result.response === 0
-        log.info(`[PermissionManager] User ${granted ? 'allowed' : 'denied'} ${type} for ${origin}`)
+        log.debug(`[PermissionManager] User ${granted ? 'allowed' : 'denied'} ${type} for ${origin}`)
         return granted
     }
 
@@ -378,7 +378,7 @@ export class PermissionManager {
      * 当权限被拒绝时，引导用户手动开启
      */
     openSystemSettings(type: PermissionType): boolean {
-        log.info(`[PermissionManager] Opening system settings for: ${type}`)
+        log.debug(`[PermissionManager] Opening system settings for: ${type}`)
 
         if (process.platform === 'darwin') {
             const { shell } = require('electron')

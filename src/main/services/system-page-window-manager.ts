@@ -256,7 +256,8 @@ export class SystemPageWindowManager {
         preload: join(__dirname, '../preload/index.js'),
         contextIsolation: true,
         nodeIntegration: false,
-        webviewTag: true
+        webviewTag: true,
+        backgroundThrottling: false
       }
     })
     this.suppressSystemContextMenu(win)

@@ -204,7 +204,8 @@ export class PluginPanelWindow {
                 additionalArguments: ['--mulby-plugin-window'],
                 contextIsolation: !hasCustomPreload,
                 nodeIntegration: hasCustomPreload,
-                sandbox: !hasCustomPreload // 如果有自定义 preload，禁用沙箱以允许 Node.js 访问
+                sandbox: !hasCustomPreload, // 如果有自定义 preload，禁用沙箱以允许 Node.js 访问
+                backgroundThrottling: false
             }
         })
 
@@ -282,21 +283,16 @@ export class PluginPanelWindow {
             this.preferredPanelHeight = Math.max(ATTACHED_PANEL_MIN_OVERFLOW_HEIGHT, nextHeight)
         })
 
-        // 面板失焦时检查焦点去向
         this.panelWindow.on('blur', () => {
-            // 如果正在使用系统对话框，忽略 blur 事件
             if (isIgnoringBlur()) return
 
             setTimeout(() => {
-                // 如果焦点回到了主窗口，不隐藏
                 if (this.mainWindow.isFocused()) {
                     return
                 }
-                // 如果面板仍然有焦点（误触发），不隐藏
                 if (this.panelWindow && !this.panelWindow.isDestroyed() && this.panelWindow.isFocused()) {
                     return
                 }
-                // 焦点转移到其他地方，隐藏所有
                 this.hide()
                 this.mainWindow.hide()
             }, 50)
