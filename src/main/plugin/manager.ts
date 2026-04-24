@@ -680,7 +680,8 @@ export class PluginManager {
   async run(
     name: string,
     featureCode: string,
-    input?: string | InputPayload
+    input?: string | InputPayload,
+    launchStart?: number
   ): Promise<{ success: boolean; hasUI?: boolean; error?: string }> {
     const plugin = this.resolve(name)
     if (!plugin) {
@@ -703,29 +704,39 @@ export class PluginManager {
       return result
     }
 
-    // 懒加载：首次运行时调用 onLoad 钩子
-    // 同时检查 workerOnloadedPlugins：若 Worker 进程被重建（空闲销毁后重启），
-    // 需要重新执行 onLoad 以重建 Worker 内的状态（如 AI tool handler 注册）
-    if (!this.initializedPlugins.has(name) || !this.workerOnloadedPlugins.has(name)) {
-      await this.callPluginHook(plugin, 'onLoad')
-      this.initializedPlugins.add(name)
-      this.workerOnloadedPlugins.add(name)
-    }
-
-    const feature = this.getCombinedFeatures(plugin).find(item => item.code === featureCode)
     const normalizedInput = normalizeInputPayload(input)
-    const matched = feature ? findBestMatch(feature, normalizedInput) : null
-    const filteredAttachments = filterAttachmentsByCmd(normalizedInput.attachments, matched?.cmd)
-    const resolvedInput: InputPayload = {
+    let feature = this.getCombinedFeatures(plugin).find(item => item.code === featureCode)
+    let matched = feature ? findBestMatch(feature, normalizedInput) : null
+    let filteredAttachments = filterAttachmentsByCmd(normalizedInput.attachments, matched?.cmd)
+    let resolvedInput: InputPayload = {
       text: normalizedInput.text,
       attachments: filteredAttachments
     }
-    const useUI = Boolean(plugin.manifest.ui) && feature?.mode !== 'silent'
-    // 判断是否使用独立窗口：优先使用 feature.mode，其次使用 pluginSetting.defaultDetached
-    const useDetached = feature?.mode === 'detached' ||
-                        (feature?.mode !== 'ui' && plugin.manifest.pluginSetting?.defaultDetached === true)
-    const route = feature?.route
-    const shouldHideMain = feature?.mainHide === true
+    let useUI = Boolean(plugin.manifest.ui) && feature?.mode !== 'silent'
+    let useDetached = feature?.mode === 'detached' ||
+                      (feature?.mode !== 'ui' && plugin.manifest.pluginSetting?.defaultDetached === true)
+    let route = feature?.route
+    let shouldHideMain = feature?.mainHide === true
+    const isAttachedUI = useUI && !useDetached
+
+    // 懒加载：附着模式延迟到 UI 分支并行执行，其余路径串行等待
+    const loadPromise = this.ensurePluginLoaded(plugin, name, launchStart)
+    let onLoadJustCalled = false
+    if (!isAttachedUI) {
+      onLoadJustCalled = await loadPromise
+      // onLoad 可能通过 api.features.setFeature() 修改了动态特性，重新解析
+      if (onLoadJustCalled) {
+        feature = this.getCombinedFeatures(plugin).find(item => item.code === featureCode)
+        matched = feature ? findBestMatch(feature, normalizedInput) : null
+        filteredAttachments = filterAttachmentsByCmd(normalizedInput.attachments, matched?.cmd)
+        resolvedInput = { text: normalizedInput.text, attachments: filteredAttachments }
+        useUI = Boolean(plugin.manifest.ui) && feature?.mode !== 'silent'
+        useDetached = feature?.mode === 'detached' ||
+                      (feature?.mode !== 'ui' && plugin.manifest.pluginSetting?.defaultDetached === true)
+        route = feature?.route
+        shouldHideMain = feature?.mainHide === true
+      }
+    }
 
     // 如果 mainHide 为 true，隐藏主窗口
     if (shouldHideMain && this.windowManager) {
@@ -789,8 +800,27 @@ export class PluginManager {
         return { success: false, error: 'Window manager not initialized' }
       }
 
-      // 初始化 Host 进程（确保插件出现在任务管理器中）
-      if (this.useUtilityProcess) {
+      if (isAttachedUI) {
+        // Optimization 1: onLoad 与窗口创建并行（loadPromise 已在上方启动）
+        if (this.systemPluginWindowManager) {
+          if (launchStart) log.info(`[LaunchTrace] prepareForAttachedPluginLaunch start | +${Date.now() - launchStart}ms`)
+          await this.systemPluginWindowManager.prepareForAttachedPluginLaunch()
+          if (launchStart) log.info(`[LaunchTrace] prepareForAttachedPluginLaunch done | +${Date.now() - launchStart}ms`)
+        }
+        if (launchStart) log.info(`[LaunchTrace] attachPlugin start | +${Date.now() - launchStart}ms`)
+        const success = this.windowManager.attachPlugin(plugin, featureCode, resolvedInput, route, launchStart, loadPromise)
+        if (launchStart) log.info(`[LaunchTrace] attachPlugin returned success=${success} | +${Date.now() - launchStart}ms`)
+        await loadPromise
+        if (launchStart) log.info(`[LaunchTrace] parallel pipeline done | +${Date.now() - launchStart}ms`)
+        if (success) {
+          this.stateManager.recordRecentUsage(plugin.id, featureCode)
+        }
+        return { success, hasUI: true }
+      }
+
+      // Optimization 3: onLoad 内部已调用 initPlugin，跳过冗余 hostInit
+      if (this.useUtilityProcess && !onLoadJustCalled) {
+        if (launchStart) log.info(`[LaunchTrace] Host init start | +${Date.now() - launchStart}ms`)
         try {
           const hostReady = await this.hostManager.initPlugin(plugin)
           if (!hostReady) {
@@ -799,24 +829,15 @@ export class PluginManager {
         } catch (err) {
           log.error(`[PluginManager] Error initializing host for UI plugin ${name}:`, err)
         }
+        if (launchStart) log.info(`[LaunchTrace] Host init done | +${Date.now() - launchStart}ms`)
       }
 
-      if (useDetached) {
-        const win = this.windowManager.createDetachedWindow(plugin, featureCode, resolvedInput, route)
-        const success = Boolean(win)
-        if (success) {
-          this.stateManager.recordRecentUsage(plugin.id, featureCode)
-        }
-        return { success, hasUI: true }
-      }
-      if (this.systemPluginWindowManager) {
-        await this.systemPluginWindowManager.prepareForAttachedPluginLaunch()
-      }
-      const success = this.windowManager.attachPlugin(plugin, featureCode, resolvedInput, route)
-      if (success) {
+      const win = this.windowManager.createDetachedWindow(plugin, featureCode, resolvedInput, route)
+      const detachedSuccess = Boolean(win)
+      if (detachedSuccess) {
         this.stateManager.recordRecentUsage(plugin.id, featureCode)
       }
-      return { success, hasUI: true }
+      return { success: detachedSuccess, hasUI: true }
     }
 
     // 无 UI 插件，使用 UtilityProcess 或 VM2 执行
@@ -874,6 +895,22 @@ export class PluginManager {
     } catch (err) {
       log.error(`Failed to call ${hookName} for plugin ${plugin.id}:`, err)
     }
+  }
+
+  /**
+   * 确保插件已加载（触发 onLoad + host init）。
+   * 返回 true 表示本次调用触发了 onLoad（callHook 内部已完成 initPlugin）。
+   */
+  private async ensurePluginLoaded(plugin: Plugin, name: string, launchStart?: number): Promise<boolean> {
+    if (!this.initializedPlugins.has(name) || !this.workerOnloadedPlugins.has(name)) {
+      if (launchStart) log.info(`[LaunchTrace] onLoad hook start | +${Date.now() - launchStart}ms`)
+      await this.callPluginHook(plugin, 'onLoad')
+      this.initializedPlugins.add(name)
+      this.workerOnloadedPlugins.add(name)
+      if (launchStart) log.info(`[LaunchTrace] onLoad hook done | +${Date.now() - launchStart}ms`)
+      return true
+    }
+    return false
   }
 
   // 启用插件

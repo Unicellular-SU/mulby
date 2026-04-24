@@ -152,7 +152,7 @@ export class PluginWindowManager {
   }
 
   // 附着插件（使用 Panel 模式）
-  attachPlugin(plugin: Plugin, featureCode: string, input?: InputPayload, route?: string): boolean {
+  attachPlugin(plugin: Plugin, featureCode: string, input?: InputPayload, route?: string, launchStart?: number, onLoadReady?: Promise<unknown>): boolean {
     if (!plugin.manifest.ui) return false
 
     const uiPath = join(plugin.path, plugin.manifest.ui)
@@ -160,6 +160,8 @@ export class PluginWindowManager {
       log.error(`Plugin UI not found: ${uiPath}`)
       return false
     }
+
+    if (launchStart) log.info(`[LaunchTrace] attachPlugin entered | +${Date.now() - launchStart}ms`)
 
     // 单例模式检查：如果 pluginSetting.single 为 true（默认），检查是否已有该插件的独立窗口
     const isSingleMode = plugin.manifest.pluginSetting?.single !== false
@@ -193,7 +195,9 @@ export class PluginWindowManager {
     }
 
     // 关闭之前附着的插件
+    if (launchStart) log.info(`[LaunchTrace] closeAttached (prev plugin) start | +${Date.now() - launchStart}ms`)
     this.closeAttached()
+    if (launchStart) log.info(`[LaunchTrace] closeAttached done | +${Date.now() - launchStart}ms`)
 
     this.attachedPlugin = {
       plugin,
@@ -209,12 +213,14 @@ export class PluginWindowManager {
       return false
     }
 
-    const panelWin = this.panelWindow.createPanel(plugin, featureCode, input, route)
+    if (launchStart) log.info(`[LaunchTrace] createPanel start | +${Date.now() - launchStart}ms`)
+    const panelWin = this.panelWindow.createPanel(plugin, featureCode, input, route, launchStart, onLoadReady)
     if (!panelWin) {
       log.error('[PluginWindowManager] Failed to create panel window')
       this.attachedPlugin = null
       return false
     }
+    if (launchStart) log.info(`[LaunchTrace] createPanel done | +${Date.now() - launchStart}ms`)
 
     // 通知渲染进程插件已打开（用于隐藏列表和调整窗口高度）
     this.mainWindow?.webContents.send('plugin:attach', {
@@ -225,6 +231,7 @@ export class PluginWindowManager {
       attachments: input?.attachments,
       mode: 'panel'
     })
+    if (launchStart) log.info(`[LaunchTrace] plugin:attach sent to renderer | +${Date.now() - launchStart}ms`)
 
     return true
   }

@@ -108,8 +108,8 @@ export function createAppPluginApi(ipcRenderer: IpcRenderer) {
       getAll: () => ipcRenderer.invoke('plugin:getAll'),
       listCommands: (pluginId?: string) => ipcRenderer.invoke('plugin:listCommands', pluginId),
       search: (query: string | InputPayload) => ipcRenderer.invoke('plugin:search', query),
-      run: (name: string, featureCode: string, input?: string | InputPayload) =>
-        ipcRenderer.invoke('plugin:run', name, featureCode, input),
+      run: (name: string, featureCode: string, input?: string | InputPayload, launchStart?: number) =>
+        ipcRenderer.invoke('plugin:run', name, featureCode, input, launchStart),
       runCommand: (input: unknown) => ipcRenderer.invoke('plugin:runCommand', input),
       getRecentUsed: (limit?: number) => ipcRenderer.invoke('plugin:getRecentUsed', limit),
       // 搜索偏好管理
@@ -178,16 +178,25 @@ export function createAppPluginApi(ipcRenderer: IpcRenderer) {
       // Buffer: eagerly listen for plugin:init so late-registering listeners
       // (e.g. React useEffect) don't miss the event.
       let bufferedData: any = null
+      const preloadTs = Date.now()
+      console.log(`[ReloadTrace:Preload] onPluginInit buffer initialized | ts=${preloadTs}`)
       ipcRenderer.on('plugin:init', (_event: unknown, data: any) => {
+        console.log(`[ReloadTrace:Preload] plugin:init received | nonce=${data?.nonce} | plugin=${data?.pluginName} | feature=${data?.featureCode} | +${Date.now() - preloadTs}ms`)
         bufferedData = data
       })
       return (callback: (data: { pluginName: string; featureCode: string; input: string; mode?: string }) => void) => {
-        const listener = (_event: unknown, data: any) => callback(data)
+        const listener = (_event: unknown, data: any) => {
+          console.log(`[ReloadTrace:Preload] plugin:init listener callback | nonce=${data?.nonce} | +${Date.now() - preloadTs}ms`)
+          callback(data)
+        }
         ipcRenderer.on('plugin:init', listener)
         // Replay buffered data for late listeners (fixes race with React useEffect)
         if (bufferedData) {
           const data = bufferedData
+          console.log(`[ReloadTrace:Preload] replaying buffered plugin:init | nonce=${data?.nonce} | +${Date.now() - preloadTs}ms`)
           queueMicrotask(() => callback(data))
+        } else {
+          console.log(`[ReloadTrace:Preload] no buffered data to replay | +${Date.now() - preloadTs}ms`)
         }
         return () => ipcRenderer.removeListener('plugin:init', listener)
       }

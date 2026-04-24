@@ -573,6 +573,7 @@ function MainApp() {
   // 监听插件附着事件
   useEffect(() => {
     const cleanupAttach = window.mulby.onPluginAttach((_data: PluginInfo) => {
+      console.log(`[LaunchTrace] plugin:attach received in renderer at ${Date.now()}`)
       cancelPendingShrinkTimer('plugin attach')
       scheduleMacInvalidate()
       if (systemPageAttached) {

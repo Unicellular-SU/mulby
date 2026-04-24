@@ -139,11 +139,15 @@ export class PluginPanelWindow {
         plugin: Plugin,
         featureCode: string,
         input?: InputPayload,
-        route?: string
+        route?: string,
+        launchStart?: number,
+        onLoadReady?: Promise<unknown>
     ): BrowserWindow | null {
         if (!plugin.manifest.ui) return null
 
         const uiPath = join(plugin.path, plugin.manifest.ui)
+
+        if (launchStart) log.info(`[LaunchTrace] createPanel entered | +${Date.now() - launchStart}ms`)
 
         // 关闭现有面板
         this.close()
@@ -175,9 +179,7 @@ export class PluginPanelWindow {
         const hasCustomPreload = !!plugin.manifest.preload
 
         this.preferredPanelHeight = ATTACHED_PANEL_HEIGHT
-        if (this.shouldUseShadowWindow()) {
-            this.createShadowWindow()
-        }
+        if (launchStart) log.info(`[LaunchTrace] new BrowserWindow() start | +${Date.now() - launchStart}ms`)
         this.panelWindow = new BrowserWindow({
             width: initialBounds.width,
             height: initialBounds.height,
@@ -212,7 +214,10 @@ export class PluginPanelWindow {
             }
         })
 
+        if (launchStart) log.info(`[LaunchTrace] new BrowserWindow() done | +${Date.now() - launchStart}ms`)
+
         // 加载插件 UI
+        if (launchStart) log.info(`[LaunchTrace] loadFile start | +${Date.now() - launchStart}ms`)
         if (route) {
             void this.panelWindow.loadFile(uiPath, { hash: route })
         } else {
@@ -225,53 +230,78 @@ export class PluginPanelWindow {
         // 设置位置同步监听器
         this.setupPositionSync()
 
+        // 闭包捕获窗口实例和输入，防止 onLoadReady 等待期间新的 createPanel 覆盖状态
+        const capturedWin = this.panelWindow
+        const capturedInput = input?.text || ''
+        const capturedAttachments = input?.attachments || []
+
+        const initPayload = {
+            pluginName: plugin.id,
+            featureCode,
+            input: capturedInput,
+            attachments: capturedAttachments,
+            mode: 'panel' as const,
+            route
+        }
+
+        let readyToShowInitSent = false
+
         // 面板加载完成后处理
-        this.panelWindow.once('ready-to-show', async () => {
-            if (!this.panelWindow) return
+        capturedWin.once('ready-to-show', async () => {
+            if (launchStart) log.info(`[LaunchTrace] ready-to-show fired | +${Date.now() - launchStart}ms`)
+            if (capturedWin.isDestroyed() || this.panelWindow !== capturedWin) return
 
             if (useWindowsFramelessSurface) {
-                await applyWindowsFramelessSurface(this.panelWindow, { resizeMode: 'bottom' })
-                if (!this.panelWindow || this.panelWindow.isDestroyed()) return
+                await applyWindowsFramelessSurface(capturedWin, { resizeMode: 'bottom' })
+                if (capturedWin.isDestroyed() || this.panelWindow !== capturedWin) return
             }
 
-            // 同步位置确保正确
             this.syncPosition()
 
-            // 确保主窗口是显示的
             if (!this.mainWindow.isVisible()) {
                 this.mainWindow.show()
             }
 
-            this.showShadow()
-            // 显示窗口 (使用 show() 抢夺焦点，确保显示)
-            this.panelWindow.show()
+            capturedWin.show()
             this.panelWindowHasBeenShown = true
+            if (launchStart) log.info(`[LaunchTrace] panelWindow.show() called | +${Date.now() - launchStart}ms`)
+            this.showShadow()
 
-            // 发送初始化数据
-            this.panelWindow.webContents.send('plugin:init', {
-                pluginName: plugin.id,
-                featureCode,
-                input: this.currentInput,
-                attachments: this.currentAttachments,
-                mode: 'panel',
-                route,
-                nonce: Date.now()
-            })
+            if (onLoadReady) {
+                await onLoadReady
+                if (capturedWin.isDestroyed() || this.panelWindow !== capturedWin) return
+                if (launchStart) log.info(`[LaunchTrace] onLoadReady resolved | +${Date.now() - launchStart}ms`)
+            }
 
-            // 发送主题
+            capturedWin.webContents.send('plugin:init', { ...initPayload, nonce: Date.now() })
+            readyToShowInitSent = true
+            if (launchStart) log.info(`[LaunchTrace] plugin:init sent | +${Date.now() - launchStart}ms`)
+
             if (this.themeManager) {
-                this.panelWindow.webContents.send('theme:changed', this.themeManager.getActualTheme())
+                capturedWin.webContents.send('theme:changed', this.themeManager.getActualTheme())
             }
         })
 
-        // 监听焦点变化 - 点击面板时获取焦点
-        this.panelWindow.webContents.on('did-finish-load', async () => {
-            if (!this.panelWindow || this.panelWindow.isDestroyed()) return
-            if (useWindowsFramelessSurface) {
-                await applyWindowsFramelessSurface(this.panelWindow, { resizeMode: 'bottom' })
+        let panelDidFinishLoadCount = 0
+        capturedWin.webContents.on('did-finish-load', async () => {
+            panelDidFinishLoadCount++
+            const loadNum = panelDidFinishLoadCount
+            log.info(`[ReloadTrace:Panel] did-finish-load #${loadNum} | readyToShowInitSent=${readyToShowInitSent} | wcId=${capturedWin.webContents.id} | isDestroyed=${capturedWin.isDestroyed()} | isCurrent=${this.panelWindow === capturedWin}`)
+            if (launchStart) log.info(`[LaunchTrace] ✅ did-finish-load (plugin UI rendered) | +${Date.now() - launchStart}ms | TOTAL=${Date.now() - launchStart}ms`)
+            if (capturedWin.isDestroyed() || this.panelWindow !== capturedWin) {
+                log.info(`[ReloadTrace:Panel] did-finish-load #${loadNum} SKIPPED (destroyed or replaced)`)
+                return
             }
-            if (this.themeManager && !this.panelWindow.isDestroyed()) {
-                this.panelWindow.webContents.send('theme:changed', this.themeManager.getActualTheme())
+            if (useWindowsFramelessSurface) {
+                await applyWindowsFramelessSurface(capturedWin, { resizeMode: 'bottom' })
+            }
+            if (this.themeManager && !capturedWin.isDestroyed()) {
+                capturedWin.webContents.send('theme:changed', this.themeManager.getActualTheme())
+            }
+            // 重载时重新发送 plugin:init（首次加载由 ready-to-show 负责）
+            if (readyToShowInitSent && !capturedWin.isDestroyed() && this.panelWindow === capturedWin) {
+                capturedWin.webContents.send('plugin:init', { ...initPayload, nonce: Date.now() })
+                log.info(`[ReloadTrace:Panel] did-finish-load #${loadNum} plugin:init re-sent for reload`)
             }
         })
 
@@ -332,6 +362,7 @@ export class PluginPanelWindow {
             this.themeManager.registerWindow(this.panelWindow)
         }
 
+        if (launchStart) log.info(`[LaunchTrace] createPanel returned (async events pending) | +${Date.now() - launchStart}ms`)
         return this.panelWindow
     }
 
@@ -413,6 +444,13 @@ export class PluginPanelWindow {
 
     private showShadow() {
         if (!this.shouldUseShadowWindow()) return
+        if (!this.shadowWindow || this.shadowWindow.isDestroyed()) {
+            this.createShadowWindow()
+            if (this.panelWindow && !this.panelWindow.isDestroyed()) {
+                const bounds = getWindowsFramelessSurfaceVisibleBounds(this.panelWindow.getBounds())
+                this.setShadowBounds(bounds.x, bounds.y, bounds.width, bounds.height)
+            }
+        }
         if (this.shadowWindow && !this.shadowWindow.isDestroyed()) {
             this.shadowWindow.showInactive()
         }
@@ -825,10 +863,7 @@ export class PluginPanelWindow {
      */
     show() {
         if (this.panelWindow && !this.panelWindow.isDestroyed()) {
-            if (this.shouldUseShadowWindow()) {
-                this.createShadowWindow()
-            }
-            this.syncPosition() // 确保位置正确
+            this.syncPosition()
             const needsOpacityGuard = process.platform === 'win32'
                 && this.panelWindowHasBeenShown
                 && !this.panelWindow.isVisible()

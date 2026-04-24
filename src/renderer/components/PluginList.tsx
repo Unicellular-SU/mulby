@@ -905,7 +905,9 @@ function PluginList({
   const handleRun = useCallback(async (item: RenderItem) => {
     if (item.pluginItem) {
       const currentPayload = payloadRef.current
-      const result = await window.mulby.plugin.run(item.pluginItem.pluginId, item.pluginItem.featureCode, currentPayload)
+      const launchStart = Date.now()
+      console.log(`[LaunchTrace] 🚀 User clicked plugin "${item.pluginItem.displayName}" (${item.pluginItem.pluginId}/${item.pluginItem.featureCode}) at ${launchStart}`)
+      const result = await window.mulby.plugin.run(item.pluginItem.pluginId, item.pluginItem.featureCode, currentPayload, launchStart)
       if (result.success) {
         promoteRecent(item.pluginItem)
         if (!result.hasUI) {
