@@ -183,6 +183,7 @@ export class PluginHostManager extends EventEmitter {
 
   private async createHostInternal(plugin: Plugin): Promise<boolean> {
     const pluginName = plugin.id
+    const hostStart = Date.now()
 
     // 如果已存在，先销毁
     if (this.hosts.has(pluginName)) {
@@ -190,10 +191,12 @@ export class PluginHostManager extends EventEmitter {
     }
 
     try {
+      log.info(`[HostTrace] spawn start | plugin=${pluginName} | +${Date.now() - hostStart}ms`)
       const child = utilityProcess.fork(this.workerPath, [], {
         serviceName: `plugin-host-${pluginName}`,
         stdio: 'pipe'
       })
+      log.info(`[HostTrace] spawn done | plugin=${pluginName} | +${Date.now() - hostStart}ms`)
 
       // 解析空闲超时配置
       // 优先级：background: true → 永不销毁 > idleTimeoutMs: 'never'/0 → 永不销毁 > 自定义 ms > 默认 5 分钟
@@ -238,7 +241,10 @@ export class PluginHostManager extends EventEmitter {
       this.watchdog.registerHost(pluginName, customWatchdogConfig)
 
       // 等待 ready 信号
-      return await this.waitForReady(pluginName)
+      log.info(`[HostTrace] waitForReady start | plugin=${pluginName} | +${Date.now() - hostStart}ms`)
+      const ready = await this.waitForReady(pluginName)
+      log.info(`[HostTrace] waitForReady done | plugin=${pluginName} | ready=${ready} | +${Date.now() - hostStart}ms`)
+      return ready
     } catch (err) {
       log.error(`Failed to create host for ${pluginName}:`, err)
       return false
@@ -553,9 +559,12 @@ export class PluginHostManager extends EventEmitter {
    */
   async initPlugin(plugin: Plugin): Promise<boolean> {
     const pluginName = plugin.id
+    const initStart = Date.now()
+    log.info(`[HostTrace] initPlugin start | plugin=${pluginName}`)
 
     const hostReady = await this.ensureHostReady(plugin)
     if (!hostReady) return false
+    log.info(`[HostTrace] ensureHostReady done | plugin=${pluginName} | +${Date.now() - initStart}ms`)
 
     try {
       await this.sendRequest(pluginName, {
@@ -567,6 +576,7 @@ export class PluginHostManager extends EventEmitter {
           mainFile: plugin.manifest.main
         }
       })
+      log.info(`[HostTrace] initPlugin done (main.js loaded) | plugin=${pluginName} | +${Date.now() - initStart}ms`)
       return true
     } catch (err) {
       log.error(`Failed to init plugin ${pluginName}:`, err)
@@ -605,17 +615,21 @@ export class PluginHostManager extends EventEmitter {
     hookName: 'onLoad' | 'onUnload' | 'onEnable' | 'onDisable' | 'onBackground' | 'onForeground'
   ): Promise<void> {
     const pluginName = plugin.id
+    const hookStart = Date.now()
+    log.info(`[HostTrace] callHook(${hookName}) start | plugin=${pluginName}`)
 
     const inited = await this.initPlugin(plugin)
     if (!inited) {
       throw new Error(`Failed to init plugin: ${pluginName}`)
     }
+    log.info(`[HostTrace] callHook(${hookName}) initPlugin done | plugin=${pluginName} | +${Date.now() - hookStart}ms`)
 
     await this.sendRequest(pluginName, {
       id: generateRequestId(),
       type: 'callHook',
       payload: { hookName }
     })
+    log.info(`[HostTrace] callHook(${hookName}) done | plugin=${pluginName} | +${Date.now() - hookStart}ms`)
   }
 
   /**

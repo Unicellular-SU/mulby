@@ -110,6 +110,7 @@ export function createAppPluginApi(ipcRenderer: IpcRenderer) {
       search: (query: string | InputPayload) => ipcRenderer.invoke('plugin:search', query),
       run: (name: string, featureCode: string, input?: string | InputPayload, launchStart?: number) =>
         ipcRenderer.invoke('plugin:run', name, featureCode, input, launchStart),
+      prewarm: (pluginId: string) => ipcRenderer.invoke('plugin:prewarm', pluginId),
       runCommand: (input: unknown) => ipcRenderer.invoke('plugin:runCommand', input),
       getRecentUsed: (limit?: number) => ipcRenderer.invoke('plugin:getRecentUsed', limit),
       // 搜索偏好管理

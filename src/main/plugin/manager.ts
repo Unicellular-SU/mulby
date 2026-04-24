@@ -159,6 +159,13 @@ export class PluginManager {
   private systemCommandExecutor: SystemCommandExecutor
   private systemPageOpenHandler?: (page: string) => void
 
+  // 搜索预热
+  private prewarmState: {
+    pluginId: string
+    promise: Promise<boolean>
+    ttlTimer: NodeJS.Timeout
+  } | null = null
+
   constructor() {
     this.stateManager = new PluginStateManager()
     this.hostManager = new PluginHostManager()
@@ -911,6 +918,78 @@ export class PluginManager {
       return true
     }
     return false
+  }
+
+  // ==================== 搜索预热 ====================
+
+  private static readonly PREWARM_TTL_MS = 20_000
+
+  /**
+   * 预热指定插件的 Host 进程和 onLoad。
+   * 搜索结果 Top 1 稳定后由渲染进程触发，使用户回车时 Host 已就绪。
+   * 与 run() 中的 ensurePluginLoaded 共享 Promise，不会重复启动。
+   */
+  async prewarm(pluginId: string): Promise<void> {
+    if (this.prewarmState?.pluginId === pluginId) return
+
+    this.cancelPrewarm()
+
+    const plugin = this.resolve(pluginId)
+    if (!plugin?.enabled || !plugin.manifest.main) return
+
+    if (this.initializedPlugins.has(pluginId) && this.workerOnloadedPlugins.has(pluginId)) {
+      return
+    }
+
+    log.info(`[Prewarm] start | plugin=${pluginId}`)
+    const prewarmStart = Date.now()
+
+    const promise = this.ensurePluginLoaded(plugin, pluginId).then((loaded) => {
+      log.info(`[Prewarm] done | plugin=${pluginId} | loaded=${loaded} | ${Date.now() - prewarmStart}ms`)
+      return loaded
+    })
+
+    const ttlTimer = setTimeout(() => {
+      if (this.prewarmState?.pluginId !== pluginId) return
+      this.prewarmState = null
+
+      if (this.initializedPlugins.has(pluginId)
+          && this.workerOnloadedPlugins.has(pluginId)
+          && !this.hostManager.isHostReady(pluginId)) {
+        return
+      }
+
+      // 如果插件没有 UI 窗口打开且不在后台运行，销毁 Host
+      const hasWindow = this.windowManager?.hasOpenWindowsForPlugin(pluginId)
+      const isBackground = this.backgroundManager.isRunning(pluginId)
+      if (!hasWindow && !isBackground) {
+        log.info(`[Prewarm] TTL expired, destroying host | plugin=${pluginId}`)
+        void this.hostManager.destroyHost(pluginId).then(() => {
+          this.workerOnloadedPlugins.delete(pluginId)
+        })
+      }
+    }, PluginManager.PREWARM_TTL_MS)
+    ttlTimer.unref()
+
+    this.prewarmState = { pluginId, promise, ttlTimer }
+  }
+
+  cancelPrewarm(runningPluginId?: string): void {
+    if (!this.prewarmState) return
+    clearTimeout(this.prewarmState.ttlTimer)
+    const prewarmedId = this.prewarmState.pluginId
+    this.prewarmState = null
+
+    if (runningPluginId && runningPluginId === prewarmedId) return
+
+    const hasWindow = this.windowManager?.hasOpenWindowsForPlugin(prewarmedId)
+    const isBackground = this.backgroundManager.isRunning(prewarmedId)
+    if (!hasWindow && !isBackground) {
+      log.info(`[Prewarm] cleaning up unused host | plugin=${prewarmedId}`)
+      void this.hostManager.destroyHost(prewarmedId).then(() => {
+        this.workerOnloadedPlugins.delete(prewarmedId)
+      })
+    }
   }
 
   // 启用插件

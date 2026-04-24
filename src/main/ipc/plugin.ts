@@ -217,11 +217,17 @@ export function registerPluginHandlers(manager: PluginManager, pluginToolRegistr
     return { success: true }
   })
 
+  // 搜索预热：Top 1 结果稳定后提前初始化 Host
+  ipcMain.handle('plugin:prewarm', (_, pluginId: string) => {
+    void manager.prewarm(pluginId)
+  })
+
   // 执行插件
   ipcMain.handle('plugin:run', async (_, name: string, featureCode: string, input?: string | InputPayload, launchStart?: number) => {
     if (launchStart) {
       log.info(`[LaunchTrace] IPC plugin:run received | +${Date.now() - launchStart}ms | plugin=${name} feature=${featureCode}`)
     }
+    manager.cancelPrewarm(name)
     return manager.run(name, featureCode, input, launchStart)
   })
 

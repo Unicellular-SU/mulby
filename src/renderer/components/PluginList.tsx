@@ -866,6 +866,37 @@ function PluginList({
   const isSystemLoading = isSystemAppsLoading || isSystemFilesLoading
   const isSearching = isPluginLoading || isSystemLoading
 
+  // 搜索预热：Top 1 插件结果稳定 120ms 后提前初始化 Host
+  const prewarmTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const lastPrewarmedRef = useRef<string>('')
+  useEffect(() => {
+    if (prewarmTimerRef.current) {
+      clearTimeout(prewarmTimerRef.current)
+      prewarmTimerRef.current = null
+    }
+    const query = searchPayload.text.trim()
+    if (query.length < 2) return
+
+    const topPlugin = flatItems.find(item => item.type === 'plugin' || item.type === 'recent')
+    if (!topPlugin?.pluginItem) return
+
+    const pluginId = topPlugin.pluginItem.pluginId
+    if (pluginId === lastPrewarmedRef.current) return
+
+    prewarmTimerRef.current = setTimeout(() => {
+      prewarmTimerRef.current = null
+      lastPrewarmedRef.current = pluginId
+      void window.mulby.plugin.prewarm(pluginId)
+    }, 120)
+
+    return () => {
+      if (prewarmTimerRef.current) {
+        clearTimeout(prewarmTimerRef.current)
+        prewarmTimerRef.current = null
+      }
+    }
+  }, [flatItems, searchPayload.text])
+
   useEffect(() => {
     onResultsChange?.(flatItems.length)
   }, [flatItems.length, onResultsChange])
