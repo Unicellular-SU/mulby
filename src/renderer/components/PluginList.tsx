@@ -866,36 +866,52 @@ function PluginList({
   const isSystemLoading = isSystemAppsLoading || isSystemFilesLoading
   const isSearching = isPluginLoading || isSystemLoading
 
-  // 搜索预热：Top 1 插件结果稳定 120ms 后提前初始化 Host
+  // 搜索预热：选中项变化或鼠标悬停时提前初始化 Host
   const prewarmTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const lastPrewarmedRef = useRef<string>('')
-  useEffect(() => {
-    if (prewarmTimerRef.current) {
-      clearTimeout(prewarmTimerRef.current)
-      prewarmTimerRef.current = null
-    }
-    const query = searchPayload.text.trim()
-    if (query.length < 2) return
 
-    const topPlugin = flatItems.find(item => item.type === 'plugin' || item.type === 'recent')
-    if (!topPlugin?.pluginItem) return
-
-    const pluginId = topPlugin.pluginItem.pluginId
+  const triggerPrewarm = useCallback((pluginId: string, debounceMs = 120) => {
     if (pluginId === lastPrewarmedRef.current) return
-
+    if (prewarmTimerRef.current) clearTimeout(prewarmTimerRef.current)
     prewarmTimerRef.current = setTimeout(() => {
       prewarmTimerRef.current = null
       lastPrewarmedRef.current = pluginId
       void window.mulby.plugin.prewarm(pluginId)
-    }, 120)
+    }, debounceMs)
+  }, [])
 
-    return () => {
-      if (prewarmTimerRef.current) {
-        clearTimeout(prewarmTimerRef.current)
-        prewarmTimerRef.current = null
-      }
+  // 键盘选中项 / 搜索结果自动选中 → 预热
+  useEffect(() => {
+    if (searchPayload.text.trim().length < 2) return
+    const selectedItem = flatItems.find(item => item.key === selectedKey)
+    if (!selectedItem?.pluginItem) return
+    triggerPrewarm(selectedItem.pluginItem.pluginId)
+  }, [selectedKey, flatItems, searchPayload.text, triggerPrewarm])
+
+  // 鼠标悬停 → 预热（事件委托，不增加组件 re-render）
+  const lastHoveredKeyRef = useRef('')
+  useEffect(() => {
+    const container = scrollContainerRef.current
+    if (!container) return
+    const handleMouseOver = (e: MouseEvent) => {
+      const card = (e.target as HTMLElement).closest('[data-item-key]')
+      if (!card) return
+      const key = card.getAttribute('data-item-key')
+      if (!key || key === lastHoveredKeyRef.current) return
+      lastHoveredKeyRef.current = key
+      const item = flatItems.find(i => i.key === key)
+      if (!item?.pluginItem) return
+      triggerPrewarm(item.pluginItem.pluginId, 200)
     }
-  }, [flatItems, searchPayload.text])
+    container.addEventListener('mouseover', handleMouseOver, { passive: true })
+    return () => container.removeEventListener('mouseover', handleMouseOver)
+  }, [flatItems, triggerPrewarm])
+
+  useEffect(() => {
+    return () => {
+      if (prewarmTimerRef.current) clearTimeout(prewarmTimerRef.current)
+    }
+  }, [])
 
   useEffect(() => {
     onResultsChange?.(flatItems.length)

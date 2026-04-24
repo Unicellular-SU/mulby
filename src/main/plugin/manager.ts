@@ -891,7 +891,7 @@ export class PluginManager {
   }
 
   // 调用插件生命周期钩子
-  private async callPluginHook(plugin: Plugin, hookName: 'onLoad' | 'onUnload' | 'onEnable' | 'onDisable' | 'onBackground' | 'onForeground'): Promise<void> {
+  private async callPluginHook(plugin: Plugin, hookName: 'onLoad' | 'onIdleLoad' | 'onUnload' | 'onEnable' | 'onDisable' | 'onBackground' | 'onForeground'): Promise<void> {
     try {
       if (this.useUtilityProcess) {
         await this.hostManager.callHook(plugin, hookName)
@@ -915,9 +915,20 @@ export class PluginManager {
       this.initializedPlugins.add(name)
       this.workerOnloadedPlugins.add(name)
       if (launchStart) log.info(`[LaunchTrace] onLoad hook done | +${Date.now() - launchStart}ms`)
+      this.scheduleIdleLoad(plugin, name)
       return true
     }
     return false
+  }
+
+  private scheduleIdleLoad(plugin: Plugin, name: string): void {
+    if (!plugin.manifest.main) return
+    setTimeout(() => {
+      if (!this.initializedPlugins.has(name) || !this.workerOnloadedPlugins.has(name)) return
+      void this.callPluginHook(plugin, 'onIdleLoad').catch(err => {
+        log.warn(`[PluginManager] onIdleLoad failed for ${name}:`, err)
+      })
+    }, 100)
   }
 
   // ==================== 搜索预热 ====================
@@ -1186,6 +1197,7 @@ export class PluginManager {
     await this.callPluginHook(plugin, 'onLoad')
     this.initializedPlugins.add(plugin.id)
     this.workerOnloadedPlugins.add(plugin.id)
+    this.scheduleIdleLoad(plugin, plugin.id)
   }
 
   // 销毁所有资源

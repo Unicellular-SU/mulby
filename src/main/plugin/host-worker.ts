@@ -34,6 +34,7 @@ interface PluginState {
 interface PluginModule {
   run?: (context: PluginContext) => void | Promise<void>
   onLoad?: (context?: HookContext) => void | Promise<void>
+  onIdleLoad?: (context?: HookContext) => void | Promise<void>
   onUnload?: (context?: HookContext) => void | Promise<void>
   onEnable?: (context?: HookContext) => void | Promise<void>
   onDisable?: (context?: HookContext) => void | Promise<void>
@@ -290,7 +291,7 @@ async function loadModule(): Promise<PluginModule> {
           const val = current[key]
           if (typeof val === 'function') {
             const fullKey = prefix ? `${prefix}.${key}` : key
-            if (!['run', 'onLoad', 'onUnload', 'onEnable', 'onDisable', 'onBackground', 'onForeground'].includes(fullKey)) {
+              if (!['run', 'onLoad', 'onIdleLoad', 'onUnload', 'onEnable', 'onDisable', 'onBackground', 'onForeground'].includes(fullKey)) {
               methods.push(fullKey)
             }
           } else if (!prefix && val && typeof val === 'object' && current === obj) {
@@ -479,7 +480,7 @@ async function handleCallHostMethod(request: CallHostMethodRequest): Promise<voi
               const val = current[key]
               if (typeof val === 'function') {
                 const fullKey = prefix ? `${prefix}.${key}` : key
-                if (!['run', 'onLoad', 'onUnload', 'onEnable', 'onDisable', 'onBackground', 'onForeground'].includes(fullKey)) {
+                if (!['run', 'onLoad', 'onIdleLoad', 'onUnload', 'onEnable', 'onDisable', 'onBackground', 'onForeground'].includes(fullKey)) {
                   methods.push(fullKey)
                 }
               } else if (!prefix && val && typeof val === 'object' && current === obj) {

@@ -446,6 +446,7 @@ export interface PluginHookContext {
 
 export interface PluginLifecycleHooks {
   onLoad?: (context?: PluginHookContext) => void | Promise<void>
+  onIdleLoad?: (context?: PluginHookContext) => void | Promise<void>
   onUnload?: (context?: PluginHookContext) => void | Promise<void>
   onEnable?: (context?: PluginHookContext) => void | Promise<void>
   onDisable?: (context?: PluginHookContext) => void | Promise<void>

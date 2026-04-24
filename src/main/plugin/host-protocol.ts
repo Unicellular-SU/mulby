@@ -56,7 +56,7 @@ export interface RunRequest extends HostRequestBase {
 export interface CallHookRequest extends HostRequestBase {
   type: 'callHook'
   payload: {
-    hookName: 'onLoad' | 'onUnload' | 'onEnable' | 'onDisable' | 'onBackground' | 'onForeground'
+    hookName: 'onLoad' | 'onUnload' | 'onEnable' | 'onDisable' | 'onBackground' | 'onForeground' | 'onIdleLoad'
   }
 }
 

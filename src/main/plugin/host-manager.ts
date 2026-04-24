@@ -612,7 +612,7 @@ export class PluginHostManager extends EventEmitter {
    */
   async callHook(
     plugin: Plugin,
-    hookName: 'onLoad' | 'onUnload' | 'onEnable' | 'onDisable' | 'onBackground' | 'onForeground'
+    hookName: 'onLoad' | 'onIdleLoad' | 'onUnload' | 'onEnable' | 'onDisable' | 'onBackground' | 'onForeground'
   ): Promise<void> {
     const pluginName = plugin.id
     const hookStart = Date.now()
