@@ -170,7 +170,10 @@ class PluginFeatureStore {
       explain: feature.explain,
       cmds: feature.cmds,
       mode: feature.mode,
-      route: feature.route
+      route: feature.route,
+      icon: feature.icon,
+      mainHide: feature.mainHide,
+      mainPush: feature.mainPush
     }))
   }
 

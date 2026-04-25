@@ -60,6 +60,7 @@ const SYSTEM_ICON_TARGET_SIZE = 128
 const SYSTEM_ICON_BATCH_CONCURRENCY = 6
 const RECENT_LIMIT = 40
 const MAX_CACHE_SIZE = 80
+const PREWARM_DEDUPE_MS = 20_000
 
 const SYSTEM_APP_ICON_SVG = `
 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
@@ -868,17 +869,27 @@ function PluginList({
 
   // 搜索预热：选中项变化或鼠标悬停时提前初始化 Host
   const prewarmTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const lastPrewarmedRef = useRef<string>('')
+  const lastPrewarmedRef = useRef<{ pluginId: string; expiresAt: number }>({ pluginId: '', expiresAt: 0 })
 
   const triggerPrewarm = useCallback((pluginId: string, debounceMs = 120) => {
-    if (pluginId === lastPrewarmedRef.current) return
+    const now = Date.now()
+    const lastPrewarmed = lastPrewarmedRef.current
+    if (pluginId === lastPrewarmed.pluginId && now < lastPrewarmed.expiresAt) return
     if (prewarmTimerRef.current) clearTimeout(prewarmTimerRef.current)
     prewarmTimerRef.current = setTimeout(() => {
       prewarmTimerRef.current = null
-      lastPrewarmedRef.current = pluginId
+      lastPrewarmedRef.current = {
+        pluginId,
+        expiresAt: Date.now() + PREWARM_DEDUPE_MS
+      }
       void window.mulby.plugin.prewarm(pluginId)
     }, debounceMs)
   }, [])
+
+  // Reset across searches; within a search, the dedupe expires with the main-process prewarm TTL.
+  useEffect(() => {
+    lastPrewarmedRef.current = { pluginId: '', expiresAt: 0 }
+  }, [searchPayload.text])
 
   // 键盘选中项 / 搜索结果自动选中 → 预热
   useEffect(() => {

@@ -731,25 +731,24 @@ export class PluginManager {
                       (feature?.mode !== 'ui' && plugin.manifest.pluginSetting?.defaultDetached === true)
     let route = feature?.route
     let shouldHideMain = feature?.mainHide === true
-    const isAttachedUI = useUI && !useDetached
+    let isAttachedUI = useUI && !useDetached
 
-    // 懒加载：附着模式延迟到 UI 分支并行执行，其余路径串行等待
+    // 懒加载：先完成 onLoad，再基于最终动态特性创建 UI。
+    // attached panel 的 route/mainHide/mode 必须在窗口创建前确定，否则会加载旧 hash 或打开错误窗口形态。
     const loadPromise = this.ensurePluginLoaded(plugin, name, launchStart)
-    let onLoadJustCalled = false
-    if (!isAttachedUI) {
-      onLoadJustCalled = await loadPromise
-      // onLoad 可能通过 api.features.setFeature() 修改了动态特性，重新解析
-      if (onLoadJustCalled) {
-        feature = this.getCombinedFeatures(plugin).find(item => item.code === featureCode)
-        matched = feature ? findBestMatch(feature, normalizedInput) : null
-        filteredAttachments = filterAttachmentsByCmd(normalizedInput.attachments, matched?.cmd)
-        resolvedInput = { text: normalizedInput.text, attachments: filteredAttachments }
-        useUI = Boolean(plugin.manifest.ui) && feature?.mode !== 'silent'
-        useDetached = feature?.mode === 'detached' ||
-                      (feature?.mode !== 'ui' && plugin.manifest.pluginSetting?.defaultDetached === true)
-        route = feature?.route
-        shouldHideMain = feature?.mainHide === true
-      }
+    const onLoadJustCalled = await loadPromise
+    // onLoad 可能通过 api.features.setFeature() 修改了动态特性，重新解析
+    if (onLoadJustCalled) {
+      feature = this.getCombinedFeatures(plugin).find(item => item.code === featureCode)
+      matched = feature ? findBestMatch(feature, normalizedInput) : null
+      filteredAttachments = filterAttachmentsByCmd(normalizedInput.attachments, matched?.cmd)
+      resolvedInput = { text: normalizedInput.text, attachments: filteredAttachments }
+      useUI = Boolean(plugin.manifest.ui) && feature?.mode !== 'silent'
+      useDetached = feature?.mode === 'detached' ||
+                    (feature?.mode !== 'ui' && plugin.manifest.pluginSetting?.defaultDetached === true)
+      route = feature?.route
+      shouldHideMain = feature?.mainHide === true
+      isAttachedUI = useUI && !useDetached
     }
 
     // 如果 mainHide 为 true，隐藏主窗口
@@ -815,24 +814,15 @@ export class PluginManager {
       }
 
       if (isAttachedUI) {
-        // Optimization 1: onLoad 与窗口创建并行（loadPromise 已在上方启动）
+        // onLoad 已完成，使用最终 feature metadata 创建 panel，避免旧 route/mainHide/mode 竞态。
         if (this.systemPluginWindowManager) {
           if (launchStart) log.info(`[LaunchTrace] prepareForAttachedPluginLaunch start | +${Date.now() - launchStart}ms`)
           await this.systemPluginWindowManager.prepareForAttachedPluginLaunch()
           if (launchStart) log.info(`[LaunchTrace] prepareForAttachedPluginLaunch done | +${Date.now() - launchStart}ms`)
         }
         if (launchStart) log.info(`[LaunchTrace] attachPlugin start | +${Date.now() - launchStart}ms`)
-        const success = this.windowManager.attachPlugin(plugin, featureCode, resolvedInput, route, launchStart, loadPromise)
+        const success = this.windowManager.attachPlugin(plugin, featureCode, resolvedInput, route, launchStart)
         if (launchStart) log.info(`[LaunchTrace] attachPlugin returned success=${success} | +${Date.now() - launchStart}ms`)
-        const attachedOnLoadCalled = await loadPromise
-        if (launchStart) log.info(`[LaunchTrace] parallel pipeline done | +${Date.now() - launchStart}ms`)
-        if (attachedOnLoadCalled) {
-          feature = this.getCombinedFeatures(plugin).find(item => item.code === featureCode)
-          if (feature) {
-            route = feature.route
-            shouldHideMain = feature.mainHide === true
-          }
-        }
         if (success) {
           this.stateManager.recordRecentUsage(plugin.id, featureCode)
         }
@@ -961,9 +951,12 @@ export class PluginManager {
   private static readonly PREWARM_TTL_MS = 20_000
 
   /**
-   * 预热指定插件的 Host 进程和 onLoad。
+   * 预热指定插件的 Host 进程（不执行 onLoad）。
    * 搜索结果 Top 1 稳定后由渲染进程触发，使用户回车时 Host 已就绪。
-   * 与 run() 中的 ensurePluginLoaded 共享 Promise，不会重复启动。
+   *
+   * 安全考量：只创建 Host 进程并登记插件入口，不加载插件模块，也不调用 onLoad 钩子。
+   * onLoad 可访问剪贴板、文件系统、HTTP 等特权 API，在用户仅浏览
+   * 搜索结果（尚未明确启动）时不应执行，避免第三方插件产生副作用。
    */
   async prewarm(pluginId: string): Promise<void> {
     if (this.prewarmState?.pluginId === pluginId) return
@@ -980,9 +973,12 @@ export class PluginManager {
     log.info(`[Prewarm] start | plugin=${pluginId}`)
     const prewarmStart = Date.now()
 
-    const promise = this.ensurePluginLoaded(plugin, pluginId).then((loaded) => {
-      log.info(`[Prewarm] done | plugin=${pluginId} | loaded=${loaded} | ${Date.now() - prewarmStart}ms`)
-      return loaded
+    const promise = (this.useUtilityProcess
+      ? this.hostManager.initPlugin(plugin)
+      : Promise.resolve(false)
+    ).then((ready) => {
+      log.info(`[Prewarm] host ready=${ready} | plugin=${pluginId} | ${Date.now() - prewarmStart}ms`)
+      return ready
     })
 
     const ttlTimer = setTimeout(() => {

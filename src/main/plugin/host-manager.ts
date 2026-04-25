@@ -672,7 +672,7 @@ export class PluginHostManager extends EventEmitter {
           mainFile: plugin.manifest.main
         }
       })
-      log.info(`[HostTrace] initPlugin done (main.js loaded) | plugin=${pluginName} | +${Date.now() - initStart}ms`)
+      log.info(`[HostTrace] initPlugin done (entry registered) | plugin=${pluginName} | +${Date.now() - initStart}ms`)
       return true
     } catch (err) {
       log.error(`Failed to init plugin ${pluginName}:`, err)

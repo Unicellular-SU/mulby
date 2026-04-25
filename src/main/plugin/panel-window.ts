@@ -31,6 +31,7 @@ import log from 'electron-log'
 
 const ATTACHED_PANEL_SHADOW_MARGIN = 12
 const WINDOWS_PANEL_SHOW_OPACITY_GUARD_MS = 50
+const ATTACHED_PANEL_SHADOW_SHOW_DELAY_MS = 600
 const ATTACHED_PANEL_SHADOW_HTML = `<!doctype html>
 <html>
 <head>
@@ -245,6 +246,31 @@ export class PluginPanelWindow {
         }
 
         let readyToShowInitSent = false
+        let initialInitSent = false
+
+        const sendPluginInit = (reason: string): boolean => {
+            if (capturedWin.isDestroyed() || this.panelWindow !== capturedWin) return false
+            capturedWin.webContents.send('plugin:init', { ...initPayload, nonce: Date.now() })
+            readyToShowInitSent = true
+            if (launchStart) log.info(`[LaunchTrace] plugin:init sent (${reason}) | +${Date.now() - launchStart}ms`)
+            return true
+        }
+
+        const sendInitialPluginInit = (reason: string): void => {
+            if (initialInitSent) return
+            if (sendPluginInit(reason)) {
+                initialInitSent = true
+            }
+        }
+
+        capturedWin.webContents.once('dom-ready', () => {
+            if (launchStart) log.info(`[LaunchTrace] dom-ready fired | +${Date.now() - launchStart}ms`)
+            if (capturedWin.isDestroyed() || this.panelWindow !== capturedWin) return
+            sendInitialPluginInit('dom-ready')
+            if (this.themeManager && !capturedWin.isDestroyed()) {
+                capturedWin.webContents.send('theme:changed', this.themeManager.getActualTheme())
+            }
+        })
 
         // 面板加载完成后处理
         capturedWin.once('ready-to-show', async () => {
@@ -265,7 +291,6 @@ export class PluginPanelWindow {
             capturedWin.show()
             this.panelWindowHasBeenShown = true
             if (launchStart) log.info(`[LaunchTrace] panelWindow.show() called | +${Date.now() - launchStart}ms`)
-            this.showShadow()
 
             if (onLoadReady) {
                 await onLoadReady
@@ -273,13 +298,12 @@ export class PluginPanelWindow {
                 if (launchStart) log.info(`[LaunchTrace] onLoadReady resolved | +${Date.now() - launchStart}ms`)
             }
 
-            capturedWin.webContents.send('plugin:init', { ...initPayload, nonce: Date.now() })
-            readyToShowInitSent = true
-            if (launchStart) log.info(`[LaunchTrace] plugin:init sent | +${Date.now() - launchStart}ms`)
+            sendInitialPluginInit('ready-to-show')
 
             if (this.themeManager) {
                 capturedWin.webContents.send('theme:changed', this.themeManager.getActualTheme())
             }
+            this.scheduleShadowShow(capturedWin, launchStart)
         })
 
         let panelDidFinishLoadCount = 0
@@ -295,12 +319,15 @@ export class PluginPanelWindow {
             if (useWindowsFramelessSurface) {
                 await applyWindowsFramelessSurface(capturedWin, { resizeMode: 'bottom' })
             }
+            if (loadNum === 1) {
+                sendInitialPluginInit('did-finish-load')
+            }
             if (this.themeManager && !capturedWin.isDestroyed()) {
                 capturedWin.webContents.send('theme:changed', this.themeManager.getActualTheme())
             }
-            // 重载时重新发送 plugin:init（首次加载由 ready-to-show 负责）
-            if (readyToShowInitSent && !capturedWin.isDestroyed() && this.panelWindow === capturedWin) {
-                capturedWin.webContents.send('plugin:init', { ...initPayload, nonce: Date.now() })
+            // 重载时重新发送 plugin:init；首次加载已由 dom-ready/did-finish-load/ready-to-show 先到者发送。
+            if (loadNum > 1 && readyToShowInitSent && !capturedWin.isDestroyed() && this.panelWindow === capturedWin) {
+                sendPluginInit(`reload #${loadNum}`)
                 log.info(`[ReloadTrace:Panel] did-finish-load #${loadNum} plugin:init re-sent for reload`)
             }
         })
@@ -430,6 +457,28 @@ export class PluginPanelWindow {
         this.shadowWindow = shadowWindow
     }
 
+    private prepareShadowWindow() {
+        if (!this.shouldUseShadowWindow()) return
+        if (!this.shadowWindow || this.shadowWindow.isDestroyed()) {
+            this.createShadowWindow()
+        }
+        if (this.panelWindow && !this.panelWindow.isDestroyed()) {
+            const bounds = getWindowsFramelessSurfaceVisibleBounds(this.panelWindow.getBounds())
+            this.setShadowBounds(bounds.x, bounds.y, bounds.width, bounds.height)
+        }
+    }
+
+    private scheduleShadowShow(panelWin: BrowserWindow, launchStart?: number) {
+        if (!this.shouldUseShadowWindow()) return
+        const timer = setTimeout(() => {
+            if (panelWin.isDestroyed() || this.panelWindow !== panelWin) return
+            if (launchStart) log.info(`[LaunchTrace] shadow show start | +${Date.now() - launchStart}ms`)
+            this.showShadow()
+            if (launchStart) log.info(`[LaunchTrace] shadow show done | +${Date.now() - launchStart}ms`)
+        }, ATTACHED_PANEL_SHADOW_SHOW_DELAY_MS)
+        timer.unref?.()
+    }
+
     private setShadowBounds(x: number, y: number, width: number, height: number) {
         if (!this.shouldUseShadowWindow()) return
         if (!this.shadowWindow || this.shadowWindow.isDestroyed()) return
@@ -444,13 +493,7 @@ export class PluginPanelWindow {
 
     private showShadow() {
         if (!this.shouldUseShadowWindow()) return
-        if (!this.shadowWindow || this.shadowWindow.isDestroyed()) {
-            this.createShadowWindow()
-            if (this.panelWindow && !this.panelWindow.isDestroyed()) {
-                const bounds = getWindowsFramelessSurfaceVisibleBounds(this.panelWindow.getBounds())
-                this.setShadowBounds(bounds.x, bounds.y, bounds.width, bounds.height)
-            }
-        }
+        this.prepareShadowWindow()
         if (this.shadowWindow && !this.shadowWindow.isDestroyed()) {
             this.shadowWindow.showInactive()
         }
