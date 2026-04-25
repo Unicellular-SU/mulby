@@ -177,8 +177,7 @@ function darwinSimulateKeyCombination(modifiers: string[], key: string): boolean
 
 // ==================== Windows 实现 ====================
 
-// SendInput 相关常量
-const INPUT_KEYBOARD = 1
+// keybd_event 相关常量
 const KEYEVENTF_KEYUP = 0x0002
 
 // Windows Virtual Key Codes

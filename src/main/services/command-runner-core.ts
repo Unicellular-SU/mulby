@@ -164,10 +164,10 @@ function extractShellTokens(commandLine: string, depth = 0): string[] {
   const segments = commandLine.split(/[|;&]+/).map(s => s.trim()).filter(Boolean)
 
   for (const segment of segments) {
-    // 提取首 token（去除引号）
-    const match = segment.match(/^["']?([^\s"']+)/)
+    // 提取首 token（支持双引号或单引号包裹的带空格路径）
+    const match = segment.match(/^(?:"([^"]+)"|'([^']+)'|([^\s"']+))/)
     if (!match) continue
-    const firstToken = normalizeCommandToken(match[1])
+    const firstToken = normalizeCommandToken(match[1] ?? match[2] ?? match[3] ?? '')
     tokens.push(firstToken)
 
     // 检测 shell wrapper 模式：提取 -c / /c 后面的内层实际命令

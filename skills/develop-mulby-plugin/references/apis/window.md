@@ -173,6 +173,10 @@ interface ChildWindowHandle {
 [Renderer]
 主窗口侧监听 `clipboard:autoPaste` 事件。
 
+### invalidate()
+[Renderer]
+重绘窗口，可用于解决 Windows 下的一些显示伪影问题。
+
 ### 完整示例
 
 ```javascript

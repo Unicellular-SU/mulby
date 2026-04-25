@@ -443,15 +443,15 @@ describe('command runner service', () => {
         allowShell: true,
         allowList: [
           { id: 'r1', enabled: true, mode: 'prefix', value: 'sh' },
-          { id: 'r2', enabled: true, mode: 'prefix', value: process.execPath.toLowerCase() }
+          { id: 'r2', enabled: true, mode: 'prefix', value: 'node' }
         ]
       }
     })
-    // 内层就是 node 自身，且基线 allowList 含 process.execPath
+    // 内层就是 node 自身，且基线 allowList 含 node
     const result = await service.runCommand(
       {
         command: 'sh',
-        args: ['-c', `${process.execPath} -e "process.stdout.write('inner-ok')"`],
+        args: ['-c', `node -e "process.stdout.write('inner-ok')"`],
         shell: true
       },
       { source: 'app', assumeUserApproved: true }

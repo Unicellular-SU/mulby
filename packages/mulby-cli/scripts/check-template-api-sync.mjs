@@ -237,6 +237,9 @@ function buildBackendMethods() {
   const traySf = parseSource('src/main/plugin/tray.ts')
   const trayMethods = collectClassPublicMethods(findClassDeclaration(traySf, 'PluginTray'))
 
+  const dialogSf = parseSource('src/main/plugin/dialog.ts')
+  const dialogMethods = collectClassPublicMethods(findClassDeclaration(dialogSf, 'PluginDialog'))
+
   const inputSf = parseSource('src/main/plugin/input.ts')
   const inputObj = findVariableObject(inputSf, 'pluginInput')
   const inputMethods = inputObj ? collectObjectMethods(inputObj) : new Set()
@@ -282,6 +285,8 @@ function buildBackendMethods() {
           for (const method of securityMethods) out.add(prefix + name + '.' + method)
         } else if (callee === 'createPluginTray') {
           for (const method of trayMethods) out.add(prefix + name + '.' + method)
+        } else if (callee === 'createPluginDialog') {
+          for (const method of dialogMethods) out.add(prefix + name + '.' + method)
         }
       }
     }
