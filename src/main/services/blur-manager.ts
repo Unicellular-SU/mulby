@@ -11,6 +11,11 @@ let ignoringBlur = false
 let ignoreCount = 0 // 支持嵌套调用
 let hiddenWindows: BrowserWindow[] = []
 
+// Track whether the app was hidden via app.hide() on macOS.
+// MainWindowManager.show() uses this to decide if app.show() is needed
+// (calling app.show() unconditionally triggers Stage Manager window rearrangement).
+let appExplicitlyHidden = false
+
 let getWindowsToHide: (() => BrowserWindow[]) | null = null
 let getHasDetachedWindows: (() => boolean) | null = null
 
@@ -129,6 +134,18 @@ export async function withDialogMode<T>(
         restoreHiddenWindows()
         stopIgnoringBlur()
     }
+}
+
+export function markAppHidden(): void {
+    appExplicitlyHidden = true
+}
+
+export function markAppVisible(): void {
+    appExplicitlyHidden = false
+}
+
+export function isAppExplicitlyHidden(): boolean {
+    return appExplicitlyHidden
 }
 
 /**

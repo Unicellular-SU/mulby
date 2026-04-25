@@ -14,6 +14,7 @@ import {
 } from '../services/subinput-state'
 import { shouldUseWindowsFramelessSurface } from '../services/window-surface'
 import { windowFromWebContents, getPluginWebContents } from '../services/webcontents-registry'
+import { markAppHidden } from '../services/blur-manager'
 import log from 'electron-log'
 
 // 重新导出 clearSubInputState 供其他模块使用
@@ -515,6 +516,7 @@ export function registerWindowHandlers(
       )
       if (!hasOtherVisible) {
         app.hide()
+        markAppHidden()
       }
     }
     // Windows/Linux: 窗口隐藏后系统会自动将焦点转移给下一个可见窗口，

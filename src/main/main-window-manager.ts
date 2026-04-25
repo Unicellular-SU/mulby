@@ -4,7 +4,7 @@ import https from 'https'
 import { join } from 'path'
 import log from 'electron-log'
 import { appSettingsManager } from './services/app-settings'
-import { isIgnoringBlur, startIgnoringBlur, stopIgnoringBlur } from './services/blur-manager'
+import { isIgnoringBlur, startIgnoringBlur, stopIgnoringBlur, isAppExplicitlyHidden, markAppVisible } from './services/blur-manager'
 import { attachShortcutRecordingGuard } from './services/shortcut-recording-guard'
 import { refreshActiveWindowCache } from './services/active-window'
 import { registerAppWindow } from './services/ipc-caller-resolver'
@@ -430,10 +430,16 @@ export class MainWindowManager {
     this.clearBlurHideTimer()
     this.deps?.getTrayMenuManager()?.hide()
 
-    if (process.platform === 'darwin') {
+    // Only activate the app when it was explicitly hidden (via app.hide()).
+    // Unconditional app.show() / app.focus({ steal: true }) triggers macOS
+    // Stage Manager to minimize the previously focused app's windows.
+    const needsAppReactivation = process.platform === 'darwin' && isAppExplicitlyHidden()
+
+    if (needsAppReactivation) {
       try { app.show() } catch (error) {
         log.warn('[MainWindow] app.show() failed:', error)
       }
+      markAppVisible()
     }
 
     if (process.platform === 'darwin') {
@@ -471,9 +477,9 @@ export class MainWindowManager {
       this.window.focus()
       this.hasBeenShown = true
 
-      if (process.platform === 'darwin') {
+      if (needsAppReactivation) {
         try { app.focus({ steal: true }) } catch (error) {
-          log.warn('[MainWindow] app.focus({ steal: true }) failed:', error)
+          log.warn('[MainWindow] app.focus() failed:', error)
         }
       }
 
