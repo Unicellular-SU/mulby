@@ -202,39 +202,23 @@ const WIN32_MOD_VK: Record<string, number> = {
 }
 
 interface Win32SimApi {
-  SendInput: (nInputs: number, pInputs: unknown, cbSize: number) => number
+  keybd_event: (bVk: number, bScan: number, dwFlags: number, dwExtraInfo: number) => void
 }
 
 let _win32SimApi: Win32SimApi | null = null
-let _win32InputType: unknown = null
 
-function getWin32SimApi(): Win32SimApi & { inputType: unknown } {
-  if (_win32SimApi && _win32InputType) return { ..._win32SimApi, inputType: _win32InputType }
+function getWin32SimApi(): Win32SimApi {
+  if (_win32SimApi) return _win32SimApi
 
   const user32 = koffi.load('user32.dll')
 
-  // 定义 KEYBDINPUT 结构体
-  koffi.struct('KEYBDINPUT', {
-    wVk: 'uint16',
-    wScan: 'uint16',
-    dwFlags: 'uint32',
-    time: 'uint32',
-    dwExtraInfo: 'uintptr_t'
-  })
-
-  // 定义 INPUT 结构体（使用 union 模拟，仅用 keyboard）
-  _win32InputType = koffi.struct('INPUT_KB', {
-    type: 'uint32',
-    ki: 'KEYBDINPUT',
-    // union 的 padding（保证 sizeof(INPUT) = 40 on x64）
-    _pad: koffi.array('uint8', 8)
-  })
-
+  // keybd_event 比 SendInput 更简单：纯标量参数，无结构体序列化问题
+  // void __stdcall keybd_event(BYTE bVk, BYTE bScan, DWORD dwFlags, ULONG_PTR dwExtraInfo)
   _win32SimApi = {
-    SendInput: user32.func('uint32_t __stdcall SendInput(uint32_t nInputs, INPUT_KB *pInputs, int cbSize)')
+    keybd_event: user32.func('void __stdcall keybd_event(uint8_t bVk, uint8_t bScan, uint32_t dwFlags, uintptr_t dwExtraInfo)')
   }
 
-  return { ..._win32SimApi, inputType: _win32InputType }
+  return _win32SimApi
 }
 
 function win32SimulateKeyCombination(modifiers: string[], key: string): boolean {
@@ -245,8 +229,6 @@ function win32SimulateKeyCombination(modifiers: string[], key: string): boolean 
   }
 
   const api = getWin32SimApi()
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const inputSize = (koffi as any).sizeof?.('INPUT_KB') ?? 40
 
   // 收集修饰键 VK
   const modVks: number[] = []
@@ -255,41 +237,24 @@ function win32SimulateKeyCombination(modifiers: string[], key: string): boolean 
     if (mvk !== undefined) modVks.push(mvk)
   }
 
-  // 构建 INPUT 数组：修饰键按下 → 主键按下 → 主键释放 → 修饰键释放
-  const totalInputs = (modVks.length + 1) * 2
-  const inputs: unknown[] = []
-
-  // 修饰键按下
-  for (const mvk of modVks) {
-    inputs.push({
-      type: INPUT_KEYBOARD,
-      ki: { wVk: mvk, wScan: 0, dwFlags: 0, time: 0, dwExtraInfo: 0 },
-      _pad: new Array(8).fill(0)
-    })
+  try {
+    // 修饰键按下
+    for (const mvk of modVks) {
+      api.keybd_event(mvk, 0, 0, 0)
+    }
+    // 主键按下
+    api.keybd_event(vk, 0, 0, 0)
+    // 主键释放
+    api.keybd_event(vk, 0, KEYEVENTF_KEYUP, 0)
+    // 修饰键释放（反序）
+    for (let i = modVks.length - 1; i >= 0; i--) {
+      api.keybd_event(modVks[i], 0, KEYEVENTF_KEYUP, 0)
+    }
+    return true
+  } catch (err) {
+    log.error('[NativeKeySim] Win32 keybd_event 调用失败:', err)
+    return false
   }
-  // 主键按下
-  inputs.push({
-    type: INPUT_KEYBOARD,
-    ki: { wVk: vk, wScan: 0, dwFlags: 0, time: 0, dwExtraInfo: 0 },
-    _pad: new Array(8).fill(0)
-  })
-  // 主键释放
-  inputs.push({
-    type: INPUT_KEYBOARD,
-    ki: { wVk: vk, wScan: 0, dwFlags: KEYEVENTF_KEYUP, time: 0, dwExtraInfo: 0 },
-    _pad: new Array(8).fill(0)
-  })
-  // 修饰键释放（反序）
-  for (let i = modVks.length - 1; i >= 0; i--) {
-    inputs.push({
-      type: INPUT_KEYBOARD,
-      ki: { wVk: modVks[i], wScan: 0, dwFlags: KEYEVENTF_KEYUP, time: 0, dwExtraInfo: 0 },
-      _pad: new Array(8).fill(0)
-    })
-  }
-
-  const sent = api.SendInput(totalInputs, inputs, inputSize)
-  return sent === totalInputs
 }
 
 // ==================== Linux 实现 ====================

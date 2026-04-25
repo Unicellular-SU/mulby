@@ -173,6 +173,11 @@
         "to": "mcp/stdio-bridge.cjs"
       },
       {
+        "from": "native/win32-text-selection/build/Release/text_selection.dll",
+        "to": "native/win32-text-selection/text_selection.dll",
+        "filter": ["**/*"]
+      },
+      {
         "from": "internal-plugins",
         "to": "internal-plugins",
         "filter": [
