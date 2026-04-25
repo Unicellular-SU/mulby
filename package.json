@@ -10,7 +10,7 @@
     "electron:dev": "vite",
     "electron:build": "vite build && electron-builder",
     "electron:publish": "vite build && electron-builder --publish always",
-    "postinstall": "electron-rebuild --force --types prod,optional --which-module better-sqlite3,sharp,koffi,usocket,node-mac-permissions",
+    "postinstall": "node scripts/postinstall.mjs",
     "lint": "eslint src",
     "typecheck": "tsc --noEmit",
     "check:api-docs": "node scripts/check-api-docs.mjs",
