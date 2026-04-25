@@ -146,6 +146,7 @@ export class PluginManager {
    * 需要重新触发 onLoad，但不能影响 initializedPlugins 的生命周期语义。
    */
   private workerOnloadedPlugins: Set<string> = new Set()
+  private loadingPromises: Map<string, Promise<boolean>> = new Map()
   private searchWorker: PluginSearchWorker
   private commandShortcutManager: PluginCommandShortcutManager
   private commandDisabledManager: PluginCommandDisabledManager
@@ -823,8 +824,15 @@ export class PluginManager {
         if (launchStart) log.info(`[LaunchTrace] attachPlugin start | +${Date.now() - launchStart}ms`)
         const success = this.windowManager.attachPlugin(plugin, featureCode, resolvedInput, route, launchStart, loadPromise)
         if (launchStart) log.info(`[LaunchTrace] attachPlugin returned success=${success} | +${Date.now() - launchStart}ms`)
-        await loadPromise
+        const attachedOnLoadCalled = await loadPromise
         if (launchStart) log.info(`[LaunchTrace] parallel pipeline done | +${Date.now() - launchStart}ms`)
+        if (attachedOnLoadCalled) {
+          feature = this.getCombinedFeatures(plugin).find(item => item.code === featureCode)
+          if (feature) {
+            route = feature.route
+            shouldHideMain = feature.mainHide === true
+          }
+        }
         if (success) {
           this.stateManager.recordRecentUsage(plugin.id, featureCode)
         }
@@ -914,8 +922,15 @@ export class PluginManager {
    * 确保插件已加载（触发 onLoad + host init）。
    * 返回 true 表示本次调用触发了 onLoad（callHook 内部已完成 initPlugin）。
    */
-  private async ensurePluginLoaded(plugin: Plugin, name: string, launchStart?: number): Promise<boolean> {
-    if (!this.initializedPlugins.has(name) || !this.workerOnloadedPlugins.has(name)) {
+  private ensurePluginLoaded(plugin: Plugin, name: string, launchStart?: number): Promise<boolean> {
+    if (this.initializedPlugins.has(name) && this.workerOnloadedPlugins.has(name)) {
+      return Promise.resolve(false)
+    }
+
+    const inflight = this.loadingPromises.get(name)
+    if (inflight) return inflight
+
+    const promise = (async () => {
       if (launchStart) log.info(`[LaunchTrace] onLoad hook start | +${Date.now() - launchStart}ms`)
       await this.callPluginHook(plugin, 'onLoad')
       this.initializedPlugins.add(name)
@@ -923,8 +938,12 @@ export class PluginManager {
       if (launchStart) log.info(`[LaunchTrace] onLoad hook done | +${Date.now() - launchStart}ms`)
       this.scheduleIdleLoad(plugin, name)
       return true
-    }
-    return false
+    })().finally(() => {
+      this.loadingPromises.delete(name)
+    })
+
+    this.loadingPromises.set(name, promise)
+    return promise
   }
 
   private scheduleIdleLoad(plugin: Plugin, name: string): void {
