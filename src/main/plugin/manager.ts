@@ -12,6 +12,7 @@ import { PluginHostManager } from './host-manager'
 import { PluginCommandShortcutManager } from './command-shortcuts'
 import { PluginCommandDisabledManager } from './command-disabled'
 import { pluginFeatureStore } from './dynamic-features'
+import { preparePluginPreload } from './plugin-preload-wrapper'
 import {
   InputPayload,
   Plugin,
@@ -156,6 +157,7 @@ export class PluginManager {
   private initPromise: Promise<void> | null = null
   private isReloading: boolean = false
   private skipNextWindowClosedHandling: Set<string> = new Set()
+  private idleLoadTimers: Map<string, NodeJS.Timeout> = new Map()
   private pluginToolsListener?: (event: 'refresh' | 'remove', pluginId: string, pluginName: string, tools: import('../../shared/types/plugin').PluginToolSchema[]) => void
   private systemCommandExecutor: SystemCommandExecutor
   private systemPageOpenHandler?: (page: string) => void
@@ -167,6 +169,11 @@ export class PluginManager {
     ttlTimer: NodeJS.Timeout
   } | null = null
   private poolWarmupTimer: NodeJS.Timeout | null = null
+  private preloadWarmupTimer: NodeJS.Timeout | null = null
+
+  private static readonly DEFAULT_IDLE_LOAD_DELAY_MS = 100
+  private static readonly UI_IDLE_LOAD_DELAY_MS = 1_500
+  private static readonly PRELOAD_WARMUP_DELAY_MS = 3_000
 
   constructor() {
     this.stateManager = new PluginStateManager()
@@ -215,6 +222,11 @@ export class PluginManager {
         return
       }
       this.workerOnloadedPlugins.delete(pluginId)
+      const idleTimer = this.idleLoadTimers.get(pluginId)
+      if (idleTimer) {
+        clearTimeout(idleTimer)
+        this.idleLoadTimers.delete(pluginId)
+      }
     })
   }
 
@@ -273,6 +285,7 @@ export class PluginManager {
         this.poolWarmupTimer = null
         void this.hostManager.fillPool()
       }, 2000)
+      this.schedulePreloadWarmup()
     }).finally(() => {
       this.initPromise = null
     })
@@ -393,11 +406,49 @@ export class PluginManager {
     await this.searchWorker.syncPlugins(pluginData)
   }
 
+  private schedulePreloadWarmup(): void {
+    if (this.preloadWarmupTimer) {
+      clearTimeout(this.preloadWarmupTimer)
+    }
+
+    this.preloadWarmupTimer = setTimeout(() => {
+      this.preloadWarmupTimer = null
+      this.prepareEnabledPluginPreloads()
+    }, PluginManager.PRELOAD_WARMUP_DELAY_MS)
+    this.preloadWarmupTimer.unref()
+  }
+
+  private prepareEnabledPluginPreloads(): void {
+    for (const plugin of this.getEnabled()) {
+      this.preparePluginPreload(plugin)
+    }
+  }
+
+  private preparePluginPreload(plugin: Plugin): void {
+    if (!plugin.manifest.ui || !plugin.manifest.preload) return
+    try {
+      const basePreloadPath = join(__dirname, '../preload/index.js')
+      preparePluginPreload(basePreloadPath, plugin)
+    } catch (err) {
+      log.warn(`[PluginManager] Failed to prepare preload wrapper for ${plugin.id}:`, err)
+    }
+  }
+
   private async resetRuntimeForInit(): Promise<void> {
     this.isReloading = true
     try {
       // 清理旧监听，避免重复注册和内存泄漏
       this.clearWatchers()
+
+      if (this.preloadWarmupTimer) {
+        clearTimeout(this.preloadWarmupTimer)
+        this.preloadWarmupTimer = null
+      }
+
+      for (const timer of this.idleLoadTimers.values()) {
+        clearTimeout(timer)
+      }
+      this.idleLoadTimers.clear()
 
       // 关闭所有插件窗口，防止窗口持有旧运行时
       if (this.windowManager) {
@@ -417,6 +468,7 @@ export class PluginManager {
       this.plugins.clear()
       this.runners.clear()
       this.initializedPlugins.clear()
+      this.workerOnloadedPlugins.clear()
     } finally {
       this.isReloading = false
     }
@@ -704,16 +756,17 @@ export class PluginManager {
     if (!plugin.enabled) {
       return { success: false, error: 'Plugin is disabled' }
     }
+    const pluginId = plugin.id
 
     // 系统插件拦截：直接调用内建处理函数，不走 Host/Worker 流程
-    if (isSystemPlugin(plugin.id)) {
+    if (isSystemPlugin(pluginId)) {
       const normalizedInput = normalizeInputPayload(input)
       const result = await this.systemCommandExecutor.execute(featureCode, normalizedInput, {
         hideMainWindow: () => this.windowManager?.hideMainWindowForCapture(),
         openSystemPage: (page: string) => this.systemPageOpenHandler?.(page)
       })
       if (result.success) {
-        this.stateManager.recordRecentUsage(plugin.id, featureCode)
+        this.stateManager.recordRecentUsage(pluginId, featureCode)
       }
       return result
     }
@@ -735,7 +788,7 @@ export class PluginManager {
 
     // 懒加载：先完成 onLoad，再基于最终动态特性创建 UI。
     // attached panel 的 route/mainHide/mode 必须在窗口创建前确定，否则会加载旧 hash 或打开错误窗口形态。
-    const loadPromise = this.ensurePluginLoaded(plugin, name, launchStart)
+    const loadPromise = this.ensurePluginLoaded(plugin, pluginId, launchStart)
     const onLoadJustCalled = await loadPromise
     // onLoad 可能通过 api.features.setFeature() 修改了动态特性，重新解析
     if (onLoadJustCalled) {
@@ -749,6 +802,17 @@ export class PluginManager {
       route = feature?.route
       shouldHideMain = feature?.mainHide === true
       isAttachedUI = useUI && !useDetached
+    }
+
+    let idleLoadScheduled = false
+    const schedulePostOnLoadIdle = (delayMs: number) => {
+      if (!onLoadJustCalled || idleLoadScheduled) return
+      idleLoadScheduled = true
+      this.scheduleIdleLoad(plugin, pluginId, delayMs, launchStart)
+    }
+
+    if (!useUI) {
+      schedulePostOnLoadIdle(PluginManager.DEFAULT_IDLE_LOAD_DELAY_MS)
     }
 
     // 如果 mainHide 为 true，隐藏主窗口
@@ -784,6 +848,7 @@ export class PluginManager {
 
         // 用户取消截图 → 不启动插件，恢复主窗口
         if (!capturedDataUrl) {
+          schedulePostOnLoadIdle(PluginManager.DEFAULT_IDLE_LOAD_DELAY_MS)
           if (this.windowManager && !shouldHideMain) {
             this.windowManager.showMainWindowAfterCapture()
           }
@@ -799,7 +864,7 @@ export class PluginManager {
           dataUrl: capturedDataUrl
         }]
       } catch (err) {
-        log.error(`[PluginManager] preCapture failed for ${name}:`, err)
+        log.error(`[PluginManager] preCapture failed for ${pluginId}:`, err)
         // preCapture 失败时恢复主窗口，回退到旧流程（让插件自行截图）
         if (this.windowManager && !shouldHideMain) {
           this.windowManager.showMainWindowAfterCapture()
@@ -810,6 +875,7 @@ export class PluginManager {
     // 如果插件有 UI 且非静默指令，打开 UI 窗口
     if (useUI) {
       if (!this.windowManager) {
+        schedulePostOnLoadIdle(PluginManager.DEFAULT_IDLE_LOAD_DELAY_MS)
         return { success: false, error: 'Window manager not initialized' }
       }
 
@@ -825,6 +891,9 @@ export class PluginManager {
         if (launchStart) log.info(`[LaunchTrace] attachPlugin returned success=${success} | +${Date.now() - launchStart}ms`)
         if (success) {
           this.stateManager.recordRecentUsage(plugin.id, featureCode)
+          schedulePostOnLoadIdle(PluginManager.UI_IDLE_LOAD_DELAY_MS)
+        } else {
+          schedulePostOnLoadIdle(PluginManager.DEFAULT_IDLE_LOAD_DELAY_MS)
         }
         return { success, hasUI: true }
       }
@@ -835,10 +904,10 @@ export class PluginManager {
         try {
           const hostReady = await this.hostManager.initPlugin(plugin)
           if (!hostReady) {
-            log.warn(`[PluginManager] Failed to init host for UI plugin ${name}, continuing anyway`)
+            log.warn(`[PluginManager] Failed to init host for UI plugin ${pluginId}, continuing anyway`)
           }
         } catch (err) {
-          log.error(`[PluginManager] Error initializing host for UI plugin ${name}:`, err)
+          log.error(`[PluginManager] Error initializing host for UI plugin ${pluginId}:`, err)
         }
         if (launchStart) log.info(`[LaunchTrace] Host init done | +${Date.now() - launchStart}ms`)
       }
@@ -847,6 +916,9 @@ export class PluginManager {
       const detachedSuccess = Boolean(win)
       if (detachedSuccess) {
         this.stateManager.recordRecentUsage(plugin.id, featureCode)
+        schedulePostOnLoadIdle(PluginManager.UI_IDLE_LOAD_DELAY_MS)
+      } else {
+        schedulePostOnLoadIdle(PluginManager.DEFAULT_IDLE_LOAD_DELAY_MS)
       }
       return { success: detachedSuccess, hasUI: true }
     }
@@ -861,18 +933,18 @@ export class PluginManager {
       }
 
       // 无 UI 插件执行完成后，如果支持后台运行，则启动后台运行
-      if (plugin.manifest.pluginSetting?.background && !this.backgroundManager.isRunning(name)) {
+      if (plugin.manifest.pluginSetting?.background && !this.backgroundManager.isRunning(pluginId)) {
         // 调用 onBackground 钩子
         try {
           await this.callPluginHook(plugin, 'onBackground')
         } catch (err) {
-          log.error(`[PluginManager] Failed to call onBackground for ${name}:`, err)
+          log.error(`[PluginManager] Failed to call onBackground for ${pluginId}:`, err)
         }
 
         // 启动后台运行（不再调用 onBackground，因为已经调用过了）
         const bgSuccess = await this.backgroundManager.start(plugin, false)
         if (bgSuccess) {
-          log.info(`[PluginManager] Plugin ${name} started in background after execution`)
+          log.info(`[PluginManager] Plugin ${pluginId} started in background after execution`)
         }
       }
 
@@ -926,7 +998,6 @@ export class PluginManager {
       this.initializedPlugins.add(name)
       this.workerOnloadedPlugins.add(name)
       if (launchStart) log.info(`[LaunchTrace] onLoad hook done | +${Date.now() - launchStart}ms`)
-      this.scheduleIdleLoad(plugin, name)
       return true
     })().finally(() => {
       this.loadingPromises.delete(name)
@@ -936,14 +1007,32 @@ export class PluginManager {
     return promise
   }
 
-  private scheduleIdleLoad(plugin: Plugin, name: string): void {
+  private scheduleIdleLoad(
+    plugin: Plugin,
+    name: string,
+    delayMs = PluginManager.DEFAULT_IDLE_LOAD_DELAY_MS,
+    launchStart?: number
+  ): void {
     if (!plugin.manifest.main) return
-    setTimeout(() => {
+
+    const existingTimer = this.idleLoadTimers.get(name)
+    if (existingTimer) {
+      clearTimeout(existingTimer)
+    }
+
+    if (launchStart) {
+      log.info(`[LaunchTrace] onIdleLoad scheduled | delay=${delayMs}ms | +${Date.now() - launchStart}ms`)
+    }
+
+    const timer = setTimeout(() => {
+      this.idleLoadTimers.delete(name)
       if (!this.initializedPlugins.has(name) || !this.workerOnloadedPlugins.has(name)) return
       void this.callPluginHook(plugin, 'onIdleLoad').catch(err => {
         log.warn(`[PluginManager] onIdleLoad failed for ${name}:`, err)
       })
-    }, 100)
+    }, delayMs)
+    timer.unref()
+    this.idleLoadTimers.set(name, timer)
   }
 
   // ==================== 搜索预热 ====================
@@ -965,6 +1054,8 @@ export class PluginManager {
 
     const plugin = this.resolve(pluginId)
     if (!plugin?.enabled || !plugin.manifest.main) return
+
+    this.preparePluginPreload(plugin)
 
     if (this.initializedPlugins.has(pluginId) && this.workerOnloadedPlugins.has(pluginId)) {
       return
@@ -1038,6 +1129,7 @@ export class PluginManager {
 
     plugin.enabled = true
     this.stateManager.setEnabled(pluginId, true)
+    this.preparePluginPreload(plugin)
 
     // 如果是开发插件且开启了自动热重载，启用监听
     if (plugin.isDev && await this.shouldAutoReloadDevPlugins()) {
@@ -1239,6 +1331,14 @@ export class PluginManager {
         clearTimeout(this.poolWarmupTimer)
         this.poolWarmupTimer = null
       }
+      if (this.preloadWarmupTimer) {
+        clearTimeout(this.preloadWarmupTimer)
+        this.preloadWarmupTimer = null
+      }
+      for (const timer of this.idleLoadTimers.values()) {
+        clearTimeout(timer)
+      }
+      this.idleLoadTimers.clear()
 
       // 销毁所有 Host 进程和进程池
       this.hostManager.destroyPool()
@@ -1459,6 +1559,10 @@ export class PluginManager {
     this.initializedPlugins.delete(pluginId)
     this.workerOnloadedPlugins.delete(pluginId)
     this.plugins.set(pluginId, nextPlugin)
+
+    if (nextPlugin.enabled) {
+      this.preparePluginPreload(nextPlugin)
+    }
 
     if (nextPlugin.isDev && nextPlugin.enabled && await this.shouldAutoReloadDevPlugins()) {
       this.setupPluginWatcher(nextPlugin)

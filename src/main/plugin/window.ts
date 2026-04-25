@@ -9,6 +9,7 @@ import { appSettingsManager } from '../services/app-settings'
 import { PluginPanelWindow } from './panel-window'
 import { clearSubInputState } from '../services/subinput-state'
 import { getPluginPreloadPath } from './plugin-preload-wrapper'
+import { PLUGIN_RENDERER_V8_CACHE_OPTIONS } from './plugin-web-preferences'
 import {
   applyWindowsFramelessSurface,
   getWindowsFramelessSurfaceInsets,
@@ -409,14 +410,16 @@ export class PluginWindowManager {
         preload: titlebarPreloadPath,
         contextIsolation: true,
         nodeIntegration: false,
-        sandbox: true
+        sandbox: true,
+        v8CacheOptions: PLUGIN_RENDERER_V8_CACHE_OPTIONS
       } : {
         // 无标题栏时，BrowserWindow 直接加载插件
         preload: preloadPath,
         additionalArguments: ['--mulby-plugin-window'],
         contextIsolation: !hasCustomPreload,
         nodeIntegration: hasCustomPreload,
-        sandbox: !hasCustomPreload
+        sandbox: !hasCustomPreload,
+        v8CacheOptions: PLUGIN_RENDERER_V8_CACHE_OPTIONS
       }
     })
 
@@ -443,7 +446,8 @@ export class PluginWindowManager {
           additionalArguments: ['--mulby-plugin-window'],
           contextIsolation: !hasCustomPreload,
           nodeIntegration: hasCustomPreload,
-          sandbox: !hasCustomPreload
+          sandbox: !hasCustomPreload,
+          v8CacheOptions: PLUGIN_RENDERER_V8_CACHE_OPTIONS
         }
       })
 
@@ -657,13 +661,15 @@ export class PluginWindowManager {
         preload: titlebarPreloadPath,
         contextIsolation: true,
         nodeIntegration: false,
-        sandbox: true
+        sandbox: true,
+        v8CacheOptions: PLUGIN_RENDERER_V8_CACHE_OPTIONS
       } : {
         preload: preloadPath,
         additionalArguments: ['--mulby-plugin-window'],
         contextIsolation: !hasCustomPreload,
         nodeIntegration: hasCustomPreload,
-        sandbox: !hasCustomPreload
+        sandbox: !hasCustomPreload,
+        v8CacheOptions: PLUGIN_RENDERER_V8_CACHE_OPTIONS
       }
     })
 
@@ -692,7 +698,8 @@ export class PluginWindowManager {
           additionalArguments: ['--mulby-plugin-window'],
           contextIsolation: !hasCustomPreload,
           nodeIntegration: hasCustomPreload,
-          sandbox: !hasCustomPreload
+          sandbox: !hasCustomPreload,
+          v8CacheOptions: PLUGIN_RENDERER_V8_CACHE_OPTIONS
         }
       })
 

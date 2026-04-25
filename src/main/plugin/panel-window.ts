@@ -9,6 +9,7 @@ import { loggerService } from '../services/logger'
 import { installConsoleCapture } from './console-capture'
 import { isIgnoringBlur } from '../services/blur-manager'
 import { getPluginPreloadPath } from './plugin-preload-wrapper'
+import { PLUGIN_RENDERER_V8_CACHE_OPTIONS } from './plugin-web-preferences'
 import { ATTACHED_PANEL_HEIGHT, ATTACHED_PANEL_MIN_OVERFLOW_HEIGHT } from '../constants/panel-window'
 import {
     applyWindowsFramelessSurface,
@@ -211,7 +212,8 @@ export class PluginPanelWindow {
                 // Match the parent launcher window: attached translucent panels on
                 // macOS can be throttled as if they were backgrounded, which in
                 // turn stalls repainting in the search UI after query changes.
-                backgroundThrottling: false
+                backgroundThrottling: false,
+                v8CacheOptions: PLUGIN_RENDERER_V8_CACHE_OPTIONS
             }
         })
 
@@ -441,7 +443,8 @@ export class PluginPanelWindow {
             webPreferences: {
                 contextIsolation: true,
                 nodeIntegration: false,
-                sandbox: true
+                sandbox: true,
+                v8CacheOptions: PLUGIN_RENDERER_V8_CACHE_OPTIONS
             }
         })
 
@@ -683,12 +686,14 @@ export class PluginPanelWindow {
                 preload: titlebarPreloadPath,
                 contextIsolation: true,
                 nodeIntegration: false,
-                sandbox: true
+                sandbox: true,
+                v8CacheOptions: PLUGIN_RENDERER_V8_CACHE_OPTIONS
             } : {
                 preload: preloadPath,
                 additionalArguments: ['--mulby-plugin-window'],
                 contextIsolation: !hasCustomPreload,
-                nodeIntegration: hasCustomPreload
+                nodeIntegration: hasCustomPreload,
+                v8CacheOptions: PLUGIN_RENDERER_V8_CACHE_OPTIONS
             }
         })
 
@@ -717,7 +722,8 @@ export class PluginPanelWindow {
                     additionalArguments: ['--mulby-plugin-window'],
                     contextIsolation: !hasCustomPreload,
                     nodeIntegration: hasCustomPreload,
-                    sandbox: !hasCustomPreload
+                    sandbox: !hasCustomPreload,
+                    v8CacheOptions: PLUGIN_RENDERER_V8_CACHE_OPTIONS
                 }
             })
 

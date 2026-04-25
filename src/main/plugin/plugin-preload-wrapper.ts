@@ -116,3 +116,17 @@ export function getPluginPreloadPath(
     // 生成包装 preload
     return generateWrappedPreload(basePreloadPath, pluginPreloadPath, plugin.id)
 }
+
+/**
+ * 提前生成插件 preload 包装脚本。
+ *
+ * 不执行插件 preload，只把 Electron 启动时需要的单入口包装文件写入缓存，
+ * 避免首次打开插件窗口时在 launch 路径上做同步文件创建。
+ */
+export function preparePluginPreload(
+    basePreloadPath: string,
+    plugin: { id: string; path: string; manifest: { preload?: string } }
+): void {
+    if (!plugin.manifest.preload) return
+    getPluginPreloadPath(basePreloadPath, plugin)
+}
