@@ -4,6 +4,16 @@
 import { httpGet, httpPost } from '../http'
 import type { WebSearchResponse, WebSearchResult, CustomSearchApiConfig } from '../types'
 
+type JsonObject = Record<string, unknown>
+
+function isJsonObject(value: unknown): value is JsonObject {
+  return !!value && typeof value === 'object' && !Array.isArray(value)
+}
+
+function readStringField(value: unknown, field: string): string {
+  return isJsonObject(value) ? String(value[field] || '').trim() : ''
+}
+
 /**
  * 对任意自定义搜索 API 发起请求并解析结果
  */
@@ -51,7 +61,7 @@ export async function customApiSearch(input: {
   }
 
   // 解析响应
-  let parsed: any
+  let parsed: unknown
   try {
     parsed = JSON.parse(responseBody)
   } catch {
@@ -62,20 +72,20 @@ export async function customApiSearch(input: {
   const resultsPath = config.resultsPath || 'results'
   let rawResults = parsed
   for (const key of resultsPath.split('.')) {
-    rawResults = rawResults?.[key]
+    rawResults = isJsonObject(rawResults) ? rawResults[key] : undefined
   }
-  if (!Array.isArray(rawResults)) rawResults = []
+  const resultItems = Array.isArray(rawResults) ? rawResults : []
 
   const titleField = config.titleField || 'title'
   const urlField = config.urlField || 'url'
   const contentField = config.contentField || 'content'
 
-  const results: WebSearchResult[] = rawResults
+  const results: WebSearchResult[] = resultItems
     .slice(0, input.maxResults)
-    .map((item: any) => ({
-      title: String(item[titleField] || '').trim() || 'Untitled',
-      url: String(item[urlField] || '').trim(),
-      content: String(item[contentField] || '').trim()
+    .map((item: unknown) => ({
+      title: readStringField(item, titleField) || 'Untitled',
+      url: readStringField(item, urlField),
+      content: readStringField(item, contentField)
     }))
     .filter((item: WebSearchResult) => item.url)
 

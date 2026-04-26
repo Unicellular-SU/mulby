@@ -47,7 +47,6 @@ export function subscribeNativeWindowChange(callback: WatcherCallback): () => vo
         addonPath = join(app.getAppPath(), 'native', 'build', 'Release', 'window_watcher.node')
       }
       
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
       const addon = require(addonPath) as WindowWatcherAddon
       
       watcherInstance = new addon.WindowWatcher((info) => {

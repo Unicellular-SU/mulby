@@ -35,7 +35,7 @@ let captureWindows: RegionCaptureWindow[] = []
 let captureResolve: ((result: string | null) => void) | null = null
 
 // 每个显示器独立的快照（displayId → dataUrl）
-let displaySnapshots = new Map<number, string>()
+const displaySnapshots = new Map<number, string>()
 
 // ===========================================================
 // macOS: 系统 screencapture 命令

@@ -17,6 +17,16 @@ import { PARSER_WORKER_STARTUP_TIMEOUT_MS, SESSION_WARMUP_DELAY_MS, SESSION_WARM
 import { registerSystemInternalWindow, unregisterSystemInternalWindow } from './ipc-caller-resolver'
 import log from 'electron-log'
 
+interface ParsedSearchResult {
+  title?: unknown
+  url?: unknown
+  snippet?: unknown
+}
+
+function isParsedSearchResult(value: unknown): value is ParsedSearchResult {
+  return !!value && typeof value === 'object'
+}
+
 // ==================== Parser Worker 管理 ====================
 
 /** Parser Worker 单例 — 持久化的隐藏 BrowserWindow */
@@ -270,7 +280,8 @@ export class SearchWindowService implements LocalSearchExecutor {
       `)
     })
 
-    const results: WebSearchResult[] = (parsed || []).map((item: any) => ({
+    const parsedResults = Array.isArray(parsed) ? parsed.filter(isParsedSearchResult) : []
+    const results: WebSearchResult[] = parsedResults.map((item) => ({
       title: String(item.title || ''),
       url: String(item.url || ''),
       content: '', // 正文由后续 fetchContent 获取

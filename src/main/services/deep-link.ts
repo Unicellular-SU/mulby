@@ -509,7 +509,7 @@ export class DeepLinkRouter {
 
       // 优先从指定源查找
       if (sourceUrl) {
-        let entry = result.entries.find(e =>
+        const entry = result.entries.find(e =>
           e.plugin.id === pluginId && e.sourceUrl === sourceUrl
         )
         if (entry) return entry

@@ -179,15 +179,22 @@ export function createAppPluginApi(ipcRenderer: IpcRenderer) {
     onPluginInit: (() => {
       // Buffer: eagerly listen for plugin:init so late-registering listeners
       // (e.g. React useEffect) don't miss the event.
-      let bufferedData: any = null
+      type PluginInitData = {
+        pluginName: string
+        featureCode: string
+        input: string
+        mode?: string
+        nonce?: string
+      }
+      let bufferedData: PluginInitData | null = null
       const preloadTs = Date.now()
       console.log(`[ReloadTrace:Preload] onPluginInit buffer initialized | ts=${preloadTs}`)
-      ipcRenderer.on('plugin:init', (_event: unknown, data: any) => {
+      ipcRenderer.on('plugin:init', (_event: unknown, data: PluginInitData) => {
         console.log(`[ReloadTrace:Preload] plugin:init received | nonce=${data?.nonce} | plugin=${data?.pluginName} | feature=${data?.featureCode} | +${Date.now() - preloadTs}ms`)
         bufferedData = data
       })
       return (callback: (data: { pluginName: string; featureCode: string; input: string; mode?: string }) => void) => {
-        const listener = (_event: unknown, data: any) => {
+        const listener = (_event: unknown, data: PluginInitData) => {
           console.log(`[ReloadTrace:Preload] plugin:init listener callback | nonce=${data?.nonce} | +${Date.now() - preloadTs}ms`)
           callback(data)
         }

@@ -369,7 +369,11 @@ export default function PluginStorageExplorerView({ onBack }: PluginStorageExplo
   const toggleExpand = useCallback((key: string) => {
     setExpandedKeys(prev => {
       const next = new Set(prev)
-      next.has(key) ? next.delete(key) : next.add(key)
+      if (next.has(key)) {
+        next.delete(key)
+      } else {
+        next.add(key)
+      }
       return next
     })
   }, [])
@@ -377,7 +381,11 @@ export default function PluginStorageExplorerView({ onBack }: PluginStorageExplo
   const toggleReveal = useCallback((key: string) => {
     setRevealedKeys(prev => {
       const next = new Set(prev)
-      next.has(key) ? next.delete(key) : next.add(key)
+      if (next.has(key)) {
+        next.delete(key)
+      } else {
+        next.add(key)
+      }
       return next
     })
   }, [])

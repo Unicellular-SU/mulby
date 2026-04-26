@@ -6,6 +6,7 @@ import type {
   AiToolCapabilityPolicySettings,
   AiToolingSettings,
   AiToolScriptEntry,
+  AiToolWebSearchSettings,
   AppSettings,
   CommandAuditItem,
   CommandAuditStatus,
@@ -602,9 +603,21 @@ function normalizeCapabilityPolicySettings(input: Partial<AiToolCapabilityPolicy
  * 旧格式: { provider: 'jina'|'tavily', jinaApiKey, tavilyApiKey }
  * 新格式: { activeProvider, providerKeys: { jina, tavily }, localEngines, customApis }
  */
+function isObjectWithStringId(value: unknown): value is { id: string } & Record<string, unknown> {
+  return !!value && typeof value === 'object' && typeof (value as Record<string, unknown>).id === 'string'
+}
+
+function isCustomSearchApiLike(value: unknown): value is CustomSearchApiConfig {
+  if (!value || typeof value !== 'object') return false
+  const api = value as Record<string, unknown>
+  return typeof api.id === 'string' &&
+    typeof api.name === 'string' &&
+    typeof api.apiHost === 'string'
+}
+
 function normalizeWebSearchSettings(
-  raw: Partial<import('../../shared/types/settings').AiToolWebSearchSettings> & Record<string, unknown>
-): import('../../shared/types/settings').AiToolWebSearchSettings {
+  raw: Partial<AiToolWebSearchSettings> & Record<string, unknown>
+): AiToolWebSearchSettings {
   const defaults = DEFAULT_SETTINGS.aiTooling.webSearch
 
   // ---- 迁移旧 providerKeys ----
@@ -635,13 +648,13 @@ function normalizeWebSearchSettings(
   // 确保内置引擎始终存在（用户可能删除了）
   const builtinIds = new Set(DEFAULT_LOCAL_ENGINES.map(e => e.id))
   const userEngines = rawEngines.filter(
-    (e: any) => e && typeof e === 'object' && e.id && !builtinIds.has(e.id)
+    (e: unknown) => isObjectWithStringId(e) && !builtinIds.has(e.id)
   ) as LocalSearchEngineConfig[]
   const localEngines = [...DEFAULT_LOCAL_ENGINES, ...userEngines]
 
   // ---- 归一化自定义 API 列表 ----
   const customApis = (Array.isArray(raw.customApis) ? raw.customApis : []).filter(
-    (a: any) => a && typeof a === 'object' && a.id && a.name && a.apiHost
+    (a: unknown) => isCustomSearchApiLike(a)
   ) as CustomSearchApiConfig[]
 
   // ---- 校验 activeProvider 是否有效 ----
@@ -692,7 +705,7 @@ function normalizeAiToolingSettings(input: Partial<AiToolingSettings> | undefine
     : []
 
   // ---- webSearch 归一化 + 旧数据迁移 ----
-  const normalizedWebSearch = normalizeWebSearchSettings(webSearch as any)
+  const normalizedWebSearch = normalizeWebSearchSettings(webSearch as Partial<AiToolWebSearchSettings> & Record<string, unknown>)
 
   return {
     enabled: current.enabled !== false,

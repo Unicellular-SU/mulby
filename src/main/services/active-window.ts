@@ -210,7 +210,7 @@ function startMacOSNativeWatcher() {
         }
       }).catch(() => {})
     })
-  } catch (err) {
+  } catch {
     log.warn('[ActiveWindow] Falling back to polling due to native addon failure.')
     startMacOSPoller()
   }
@@ -331,7 +331,16 @@ interface Win32Api {
   QueryFullProcessImageNameW: (hProcess: unknown, flags: number, buf: Buffer, sizeInout: unknown[]) => number
   CloseHandle: (handle: unknown) => number
   // koffi 是 Windows 平台可选依赖，macOS/Linux 上不存在
-  koffi: any
+  koffi: KoffiApi
+}
+
+interface KoffiLibrary {
+  func<T extends (...args: never[]) => unknown>(signature: string): T
+}
+
+interface KoffiApi {
+  load(name: string): KoffiLibrary
+  decode(buffer: Buffer, type: string, length: number): unknown
 }
 
 let _win32: Win32Api | null = null
@@ -339,21 +348,20 @@ let _win32: Win32Api | null = null
 function getWin32(): Win32Api {
   if (_win32) return _win32
 
-  // eslint-disable-next-line @typescript-eslint/no-require-imports, @typescript-eslint/no-var-requires
-  const koffi = require('koffi')
+  const koffi = require('koffi') as KoffiApi
   const user32 = koffi.load('user32.dll')
   const kernel32 = koffi.load('kernel32.dll')
 
   _win32 = {
     // user32.dll
-    GetForegroundWindow: user32.func('void* __stdcall GetForegroundWindow()'),
-    GetWindowTextW: user32.func('int __stdcall GetWindowTextW(void *hWnd, _Out_ uint8_t *lpString, int nMaxCount)'),
-    GetWindowThreadProcessId: user32.func('uint32_t __stdcall GetWindowThreadProcessId(void *hWnd, _Out_ uint32_t *lpdwProcessId)'),
+    GetForegroundWindow: user32.func<Win32Api['GetForegroundWindow']>('void* __stdcall GetForegroundWindow()'),
+    GetWindowTextW: user32.func<Win32Api['GetWindowTextW']>('int __stdcall GetWindowTextW(void *hWnd, _Out_ uint8_t *lpString, int nMaxCount)'),
+    GetWindowThreadProcessId: user32.func<Win32Api['GetWindowThreadProcessId']>('uint32_t __stdcall GetWindowThreadProcessId(void *hWnd, _Out_ uint32_t *lpdwProcessId)'),
 
     // kernel32.dll — 用于获取进程可执行文件路径（替代 tasklist/Get-Process）
-    OpenProcess: kernel32.func('void* __stdcall OpenProcess(uint32_t dwDesiredAccess, int bInheritHandle, uint32_t dwProcessId)'),
-    QueryFullProcessImageNameW: kernel32.func('int __stdcall QueryFullProcessImageNameW(void *hProcess, uint32_t dwFlags, _Out_ uint8_t *lpExeName, _Inout_ uint32_t *lpdwSize)'),
-    CloseHandle: kernel32.func('int __stdcall CloseHandle(void *hObject)'),
+    OpenProcess: kernel32.func<Win32Api['OpenProcess']>('void* __stdcall OpenProcess(uint32_t dwDesiredAccess, int bInheritHandle, uint32_t dwProcessId)'),
+    QueryFullProcessImageNameW: kernel32.func<Win32Api['QueryFullProcessImageNameW']>('int __stdcall QueryFullProcessImageNameW(void *hProcess, uint32_t dwFlags, _Out_ uint8_t *lpExeName, _Inout_ uint32_t *lpdwSize)'),
+    CloseHandle: kernel32.func<Win32Api['CloseHandle']>('int __stdcall CloseHandle(void *hObject)'),
 
     koffi
   }

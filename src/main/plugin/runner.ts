@@ -4,6 +4,18 @@ import { InputAttachment, Plugin, PluginModule } from '../../shared/types/plugin
 import { createPluginAPI } from './api'
 import log from 'electron-log'
 
+interface NodeModuleInstance {
+  filename: string
+  paths: string[]
+  exports: Record<string, unknown>
+  _compile(code: string, filename: string): void
+}
+
+interface NodeModuleConstructor {
+  new (id: string): NodeModuleInstance
+  _nodeModulePaths(from: string): string[]
+}
+
 /** 检测代码是否使用 ES Module 语法 */
 function isESModule(code: string): boolean {
   const lines = code.split('\n')
@@ -57,9 +69,10 @@ export class PluginRunner {
     } else {
       // CommonJS 格式：使用 Module._compile() 加载
       const Module = require('module') as typeof import('module')
-      const m = new (Module as any)(mainPath)
+      const ModuleConstructor = Module as unknown as NodeModuleConstructor
+      const m = new ModuleConstructor(mainPath)
       m.filename = mainPath
-      m.paths = (Module as any)._nodeModulePaths(dirname(mainPath))
+      m.paths = ModuleConstructor._nodeModulePaths(dirname(mainPath))
       m._compile(code, mainPath)
       this.pluginModule = (m.exports.default || m.exports) as PluginModule
     }

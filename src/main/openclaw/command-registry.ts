@@ -42,7 +42,7 @@ export class CommandRegistry {
   /** 根据安全配置生成 connect 握手所需的 commands 列表 */
   getConnectCommands(security: OpenClawSecurityConfig): string[] {
     const result: string[] = []
-    for (const [name, _meta] of this.commands) {
+    for (const name of this.commands.keys()) {
       // 根据安全配置过滤 Mulby 自定义命令
       if (name.startsWith('mulby.plugin.') && !security.exposePlugins) continue
       if (name.startsWith('mulby.clipboard.') && !security.exposeClipboard) continue

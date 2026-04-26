@@ -8,7 +8,7 @@ import { useAiModelController } from './useAiModelController'
 import { useAiModalController } from './useAiModalController'
 
 export function useAiSettingsController() {
-  const [_aiSettings, setAiSettings] = useState<AiSettings | null>(null)
+  const [, setAiSettings] = useState<AiSettings | null>(null)
   const [aiDraft, setAiDraft] = useState<AiSettings | null>(null)
   const [aiReasoning, setAiReasoning] = useState<string | null>(null)
   const notice = useInAppNotice()

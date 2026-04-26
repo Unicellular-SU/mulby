@@ -492,7 +492,7 @@ export class SuperPanelManager {
   async handleAction(
     action: string,
     payload?: Record<string, unknown>
-  ): Promise<{ success: boolean; error?: string }> {
+  ): Promise<{ success: boolean; error?: string; data?: unknown }> {
     try {
       switch (action) {
         case 'execute': {
@@ -575,7 +575,7 @@ export class SuperPanelManager {
           const boundApp = payload?.boundApp ? String(payload.boundApp) : undefined
           if (!name) return { success: false, error: '分组名称不能为空' }
           const groupId = this.store.createGroup(name, boundApp)
-          return { success: true, data: { groupId } } as any
+          return { success: true, data: { groupId } }
         }
 
         case 'deleteGroup': {
@@ -647,7 +647,7 @@ export class SuperPanelManager {
           const groups = this.store.getAllGroups().map((g) => ({
             id: g.id, name: g.name, boundApp: g.boundApp, itemCount: g.items.length
           }))
-          return { success: true, data: { groups } } as any
+          return { success: true, data: { groups } }
         }
 
         case 'translationToggle': {

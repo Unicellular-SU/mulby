@@ -33,8 +33,14 @@ Object.defineProperty(navigator, 'plugins', {
 })
 
 // 3. 补充 window.chrome 对象（Chrome/Edge 浏览器特有）
-const win = window as any
-if (!win.chrome) win.chrome = {}
+type ChromeLikeWindow = Window & {
+  chrome?: {
+    runtime?: Record<string, unknown>
+  }
+}
+
+const win = window as ChromeLikeWindow
+win.chrome = win.chrome || {}
 win.chrome.runtime = win.chrome.runtime || {}
 
 // 4. 覆盖 navigator.userAgentData（消除真实 Chromium 版本泄露）
