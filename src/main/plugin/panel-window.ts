@@ -16,7 +16,11 @@ import {
     getWindowsFramelessSurfaceWindowBounds,
     shouldUseWindowsFramelessSurface
 } from '../services/window-surface'
-import { getMainWindowVisibleBounds } from '../main-window-frame'
+import {
+    MAIN_WINDOW_COLLAPSED_VISIBLE_HEIGHT,
+    getMainWindowVisibleBounds,
+    getMainWindowWindowSize
+} from '../main-window-frame'
 import { registerView, unregisterView } from '../services/webcontents-registry'
 import { registerPanelWindow, unregisterPanelWindow, registerPluginWindow, unregisterPluginWindow } from '../services/ipc-caller-resolver'
 import {
@@ -177,6 +181,26 @@ export class PluginPanelWindow {
             y: 0,
             width: Math.max(1, contentWidth),
             height: Math.max(1, contentHeight)
+        })
+    }
+
+    private collapseMainWindowForAttachedPanel() {
+        if (this.mainWindow.isDestroyed()) return
+
+        const visibleBounds = getMainWindowVisibleBounds(this.mainWindow.getBounds())
+        if (visibleBounds.height === MAIN_WINDOW_COLLAPSED_VISIBLE_HEIGHT) return
+
+        const minSize = getMainWindowWindowSize(400, MAIN_WINDOW_COLLAPSED_VISIBLE_HEIGHT)
+        const maxSize = getMainWindowWindowSize(9999, MAIN_WINDOW_COLLAPSED_VISIBLE_HEIGHT)
+        const nextSize = getMainWindowWindowSize(visibleBounds.width, MAIN_WINDOW_COLLAPSED_VISIBLE_HEIGHT)
+
+        this.mainWindow.setMinimumSize(minSize.width, minSize.height)
+        this.mainWindow.setMaximumSize(maxSize.width, maxSize.height)
+        this.mainWindow.setSize(nextSize.width, nextSize.height)
+
+        setImmediate(() => {
+            if (this.mainWindow.isDestroyed() || this.mainWindow.webContents.isDestroyed() || !this.mainWindow.isVisible()) return
+            this.mainWindow.webContents.invalidate()
         })
     }
 
@@ -357,6 +381,7 @@ export class PluginPanelWindow {
         const uiPath = join(plugin.path, plugin.manifest.ui)
 
         if (launchStart) log.info(`[LaunchTrace] createPanel entered | +${Date.now() - launchStart}ms`)
+        this.collapseMainWindowForAttachedPanel()
 
         // 清理现有插件 view，但保留可复用 shell BrowserWindow。
         this.clearCurrentPluginSession()
@@ -466,6 +491,7 @@ export class PluginPanelWindow {
                 if (capturedWin.isDestroyed() || this.panelWindow !== capturedWin || this.pluginView !== capturedView) return
             }
 
+            this.collapseMainWindowForAttachedPanel()
             this.syncPosition()
             this.layoutAttachedPluginView()
 
@@ -998,6 +1024,7 @@ export class PluginPanelWindow {
         if (!pluginWebContents) {
             return false
         }
+        this.collapseMainWindowForAttachedPanel()
         this.currentFeatureCode = featureCode
         this.currentInput = input?.text || ''
         this.currentAttachments = input?.attachments || []
@@ -1156,6 +1183,7 @@ export class PluginPanelWindow {
     show(options: { activate?: boolean } = {}) {
         if (this.suspendedForResident || !this.currentPlugin) return
         if (this.panelWindow && !this.panelWindow.isDestroyed()) {
+            this.collapseMainWindowForAttachedPanel()
             this.syncPosition()
             this.layoutAttachedPluginView()
             if (!this.mainWindow.isDestroyed()) {

@@ -20,6 +20,7 @@ export const MAIN_WINDOW_WINDOWS_FRAME_INSETS: Readonly<WindowFrameInsets> = {
   bottom: 24,
   left: 16
 }
+export const MAIN_WINDOW_COLLAPSED_VISIBLE_HEIGHT = 62
 
 function getMainWindowFrameInsets(): WindowFrameInsets {
   return process.platform === 'win32' ? MAIN_WINDOW_WINDOWS_FRAME_INSETS : ZERO_INSETS

@@ -9,6 +9,7 @@ import { attachShortcutRecordingGuard } from './services/shortcut-recording-guar
 import { refreshActiveWindowCache } from './services/active-window'
 import { registerAppWindow } from './services/ipc-caller-resolver'
 import {
+  MAIN_WINDOW_COLLAPSED_VISIBLE_HEIGHT,
   getMainWindowVisibleBounds,
   getMainWindowWindowBounds,
   getMainWindowWindowSize
@@ -21,7 +22,7 @@ export const MW_SHOW_BLUR_GUARD_MS = 260
 export const MW_STATE_SAVE_DEBOUNCE_MS = 500
 export const MW_BLUR_HIDE_DELAY_MS = 50
 export const MW_MIN_COLLAPSED_WIDTH = 400
-export const MW_MIN_COLLAPSED_HEIGHT = 62
+export const MW_MIN_COLLAPSED_HEIGHT = MAIN_WINDOW_COLLAPSED_VISIBLE_HEIGHT
 export const MW_DEFAULT_WIDTH = 800
 export const MW_EXPANDED_HEIGHT_THRESHOLD = 100
 export const MW_DEFAULT_Y_RATIO = 1 / 5
