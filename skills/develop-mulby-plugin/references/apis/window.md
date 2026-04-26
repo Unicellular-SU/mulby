@@ -35,6 +35,14 @@
 [Renderer]
 关闭当前插件窗口。
 
+### terminatePlugin()
+[Renderer]
+终止当前插件进程（与「关闭窗口」不同，用于强制结束插件）。返回是否成功及可选错误信息。
+
+### showPluginMenu(point?)
+[Renderer]
+在屏幕坐标 `point`（通常为 `{ x, y }`）处显示当前附加插件的菜单（例如标题栏按钮场景）。未传 `point` 时使用默认位置。返回是否已展示菜单。
+
 ### reload()
 [Renderer]
 重新加载当前插件窗口。

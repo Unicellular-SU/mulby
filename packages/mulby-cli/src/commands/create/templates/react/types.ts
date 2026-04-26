@@ -102,6 +102,8 @@ interface MulbyWindow {
     transparent?: boolean;
   }): Promise<BrowserWindowProxy | null>
   close(): void
+  terminatePlugin(): Promise<{ success: boolean; error?: string }>
+  showPluginMenu(point?: { x: number; y: number }): Promise<boolean>
   detach(): void
   setAlwaysOnTop(flag: boolean): void
   setOpacity(opacity: number): Promise<void>
@@ -364,6 +366,7 @@ interface MulbySystemPage {
   close(): Promise<boolean>
   detach(): Promise<boolean>
   reload(): Promise<boolean>
+  showMenu(point?: { x: number; y: number }): Promise<boolean>
   getMode(): Promise<'none' | 'attached' | 'detached'>
   getState(): Promise<MulbySystemPageState>
   onStateChange(callback: (state: MulbySystemPageState) => void): Disposable
@@ -559,9 +562,36 @@ interface AppInfo {
   userDataPath: string
 }
 
+interface AppResourceProcessUsage {
+  pid: number
+  type: string
+  name?: string
+  cpuPercent: number
+  workingSetBytes: number
+}
+
+interface AppResourceDiskUsage {
+  userDataPath: string
+  userDataBytes: number
+  fileCount: number
+  directoryCount: number
+  truncated: boolean
+  scannedAt: number
+}
+
+interface AppResourceUsage {
+  sampledAt: number
+  cpuPercent: number
+  memoryBytes: number
+  processCount: number
+  disk: AppResourceDiskUsage
+  processes: AppResourceProcessUsage[]
+}
+
 interface MulbySystem {
   getSystemInfo(): Promise<SystemInfo>
   getAppInfo(): Promise<AppInfo>
+  getAppResourceUsage(): Promise<AppResourceUsage>
   getPath(name: 'home' | 'appData' | 'userData' | 'temp' | 'exe' | 'desktop' | 'documents' | 'downloads' | 'music' | 'pictures' | 'videos' | 'logs'): Promise<string>
   getEnv(name: string): Promise<string | undefined>
   getIdleTime(): Promise<number>
