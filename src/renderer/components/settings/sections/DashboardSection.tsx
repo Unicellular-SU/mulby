@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import type { PluginInfo, UpdateCenterState, AppInfo } from '../../../../shared/types/electron'
+import type { PluginInfo, UpdateCenterState, AppInfo, AppResourceUsage } from '../../../../shared/types/electron'
 import type { BackgroundPluginInfo } from '../../../../shared/types/plugin'
 import type { NodeStatusInfo } from '../../../../shared/types/openclaw-protocol'
 
@@ -110,6 +110,7 @@ export default function DashboardSection({
     updatablePlugins: 0
   })
   const [appInfo, setAppInfo] = useState<AppInfo | null>(null)
+  const [resourceUsage, setResourceUsage] = useState<AppResourceUsage | null>(null)
   const [updateState, setUpdateState] = useState<UpdateCenterState | null>(null)
   const [openclawStatus, setOpenclawStatus] = useState<NodeStatusInfo | null>(null)
   const [loading, setLoading] = useState(true)
@@ -164,7 +165,21 @@ export default function DashboardSection({
       }
     }
 
+    const loadResourceUsage = async () => {
+      try {
+        const resourceUsageResult = await window.mulby.system.getAppResourceUsage()
+        if (mounted) setResourceUsage(resourceUsageResult)
+      } catch {
+        if (mounted) setResourceUsage(null)
+      }
+    }
+
     void loadDashboardData()
+    void loadResourceUsage()
+
+    const resourceUsageTimer = window.setInterval(() => {
+      void loadResourceUsage()
+    }, 5000)
 
     // 监听 OpenClaw 状态变化
     const unsubOpenClaw = window.mulby.openclaw.onStatusChanged((s: unknown) => {
@@ -173,6 +188,7 @@ export default function DashboardSection({
 
     return () => {
       mounted = false
+      window.clearInterval(resourceUsageTimer)
       unsubOpenClaw()
     }
   }, [])
@@ -208,6 +224,29 @@ export default function DashboardSection({
     if (lower === 'win32' || lower.startsWith('win')) return 'Windows'
     if (lower === 'linux' || lower.startsWith('linux')) return 'Linux'
     return platform
+  }
+
+  const formatBytes = (bytes?: number): string => {
+    if (typeof bytes !== 'number' || !Number.isFinite(bytes) || bytes < 0) return '-'
+    const units = ['B', 'KB', 'MB', 'GB', 'TB']
+    let value = bytes
+    let unitIndex = 0
+    while (value >= 1024 && unitIndex < units.length - 1) {
+      value /= 1024
+      unitIndex += 1
+    }
+    const precision = unitIndex === 0 || value >= 100 ? 0 : 1
+    return `${value.toFixed(precision)} ${units[unitIndex]}`
+  }
+
+  const formatCpuPercent = (value?: number): string => {
+    if (typeof value !== 'number' || !Number.isFinite(value) || value < 0) return '-'
+    return `${value.toFixed(value >= 10 ? 0 : 1)}%`
+  }
+
+  const formatSampleTime = (timestamp?: number): string => {
+    if (!timestamp) return '采集中'
+    return `刷新于 ${new Date(timestamp).toLocaleTimeString('zh-CN', { hour12: false })}`
   }
 
   // 骨架屏
@@ -315,7 +354,87 @@ export default function DashboardSection({
         </div>
       </div>
 
-      {/* 区域 2.5：OpenClaw 连接状态 */}
+      {/* 区域 2.5：当前应用资源占用 */}
+      <div>
+        <div className="mb-3 flex items-center justify-between">
+          <span className="text-sm font-medium text-slate-500 dark:text-slate-400">资源占用</span>
+          <span className="text-[11px] text-slate-400 dark:text-slate-500">
+            {formatSampleTime(resourceUsage?.sampledAt)}
+          </span>
+        </div>
+        <div className="grid grid-cols-3 gap-3" aria-live="polite">
+          <div className={`${cardClass} overflow-hidden p-4`}>
+            <div className="flex items-center justify-between">
+              <div className="text-xs text-slate-500 dark:text-slate-400">CPU</div>
+              <div className="rounded-full bg-amber-500/10 p-1.5 text-amber-600 dark:text-amber-400">
+                <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M9 3v3m6-3v3M9 18v3m6-3v3M3 9h3m-3 6h3m12-6h3m-3 6h3M8.25 6h7.5A2.25 2.25 0 0 1 18 8.25v7.5A2.25 2.25 0 0 1 15.75 18h-7.5A2.25 2.25 0 0 1 6 15.75v-7.5A2.25 2.25 0 0 1 8.25 6Zm1.5 3.75h4.5v4.5h-4.5v-4.5Z" />
+                </svg>
+              </div>
+            </div>
+            {resourceUsage ? (
+              <>
+                <div className="mt-3 text-2xl font-semibold text-slate-900 dark:text-white">
+                  {formatCpuPercent(resourceUsage.cpuPercent)}
+                </div>
+                <div className="mt-1 text-[11px] text-slate-400 dark:text-slate-500">
+                  {resourceUsage.processCount} 个进程汇总
+                </div>
+              </>
+            ) : (
+              <Skeleton className="mt-4 h-8 w-20" />
+            )}
+          </div>
+
+          <div className={`${cardClass} overflow-hidden p-4`}>
+            <div className="flex items-center justify-between">
+              <div className="text-xs text-slate-500 dark:text-slate-400">内存</div>
+              <div className="rounded-full bg-blue-500/10 p-1.5 text-blue-600 dark:text-blue-400">
+                <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M7.5 4.5h9A3 3 0 0 1 19.5 7.5v9a3 3 0 0 1-3 3h-9a3 3 0 0 1-3-3v-9a3 3 0 0 1 3-3ZM9 9h6v6H9V9Zm-6 1.5h1.5m-1.5 3h1.5m15-3H21m-1.5 3H21M10.5 3v1.5m3-1.5v1.5m-3 15V21m3-1.5V21" />
+                </svg>
+              </div>
+            </div>
+            {resourceUsage ? (
+              <>
+                <div className="mt-3 text-2xl font-semibold text-slate-900 dark:text-white">
+                  {formatBytes(resourceUsage.memoryBytes)}
+                </div>
+                <div className="mt-1 text-[11px] text-slate-400 dark:text-slate-500">
+                  工作集内存
+                </div>
+              </>
+            ) : (
+              <Skeleton className="mt-4 h-8 w-24" />
+            )}
+          </div>
+
+          <div className={`${cardClass} overflow-hidden p-4`}>
+            <div className="flex items-center justify-between">
+              <div className="text-xs text-slate-500 dark:text-slate-400">硬盘</div>
+              <div className="rounded-full bg-emerald-500/10 p-1.5 text-emerald-600 dark:text-emerald-400">
+                <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M21 12c0 2.486-4.03 4.5-9 4.5S3 14.486 3 12m18 0c0-2.486-4.03-4.5-9-4.5S3 9.514 3 12m18 0v4.5c0 2.486-4.03 4.5-9 4.5s-9-2.014-9-4.5V12m18 4.5c0 2.486-4.03 4.5-9 4.5s-9-2.014-9-4.5" />
+                </svg>
+              </div>
+            </div>
+            {resourceUsage ? (
+              <>
+                <div className="mt-3 text-2xl font-semibold text-slate-900 dark:text-white">
+                  {formatBytes(resourceUsage.disk.userDataBytes)}
+                </div>
+                <div className="mt-1 truncate text-[11px] text-slate-400 dark:text-slate-500" title={resourceUsage.disk.userDataPath}>
+                  应用数据目录
+                </div>
+              </>
+            ) : (
+              <Skeleton className="mt-4 h-8 w-24" />
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* 区域 2.6：OpenClaw 连接状态 */}
       {openclawStatus && openclawStatus.status !== 'disconnected' && (
         <div>
           <div className="mb-3 text-sm font-medium text-slate-500 dark:text-slate-400">OpenClaw</div>

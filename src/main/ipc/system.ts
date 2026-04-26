@@ -18,6 +18,11 @@ export function registerSystemHandlers() {
     return pluginSystem.getAppInfo()
   })
 
+  // 获取当前应用资源占用
+  ipcMain.handle('system:getAppResourceUsage', () => {
+    return pluginSystem.getAppResourceUsage()
+  })
+
   // 获取特定路径
   ipcMain.handle('system:getPath', (_, name: PathName) => {
     return pluginSystem.getPath(name)

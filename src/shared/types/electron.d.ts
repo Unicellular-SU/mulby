@@ -464,6 +464,32 @@ export interface AppInfo {
   userDataPath: string
 }
 
+export interface AppResourceProcessUsage {
+  pid: number
+  type: string
+  name?: string
+  cpuPercent: number
+  workingSetBytes: number
+}
+
+export interface AppResourceDiskUsage {
+  userDataPath: string
+  userDataBytes: number
+  fileCount: number
+  directoryCount: number
+  truncated: boolean
+  scannedAt: number
+}
+
+export interface AppResourceUsage {
+  sampledAt: number
+  cpuPercent: number
+  memoryBytes: number
+  processCount: number
+  disk: AppResourceDiskUsage
+  processes: AppResourceProcessUsage[]
+}
+
 export interface OpenSystemPluginPayload {
   pluginId: string
   params?: Record<string, unknown>
@@ -749,6 +775,7 @@ export interface ElectronAPI {
   system: {
     getSystemInfo: () => Promise<SystemInfo>
     getAppInfo: () => Promise<AppInfo>
+    getAppResourceUsage: () => Promise<AppResourceUsage>
     getPath: (name: 'home' | 'appData' | 'userData' | 'temp' | 'exe' | 'desktop' | 'documents' | 'downloads' | 'music' | 'pictures' | 'videos' | 'logs') => Promise<string>
     getEnv: (name: string) => Promise<string | undefined>
     getIdleTime: () => Promise<number>
