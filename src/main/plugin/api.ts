@@ -6,7 +6,7 @@ import { PluginFilesystem } from './filesystem'
 import { PluginHttp, HttpRequestOptions } from './http'
 import { pluginScreen, CaptureOptions, ScreenshotOptions, RecordingOptions } from './screen'
 import { pluginShell } from './shell'
-import { PluginDialog, OpenDialogOptions, SaveDialogOptions, MessageBoxOptions } from './dialog'
+import { createPluginDialog, OpenDialogOptions, SaveDialogOptions, MessageBoxOptions } from './dialog'
 import { pluginSystem } from './system'
 import { createPluginGlobalShortcut } from './shortcut'
 import { createPluginSecurity } from './security'
@@ -355,15 +355,7 @@ ${item.files.map(p => `    <string>${p}</string>`).join('\n')}
         return commandRunnerService.listAudit(limit, pluginName)
       }
     },
-    dialog: (() => {
-      const dlg = new PluginDialog(pluginName)
-      return {
-        showOpenDialog: (options?: OpenDialogOptions) => dlg.showOpenDialog(options),
-        showSaveDialog: (options?: SaveDialogOptions) => dlg.showSaveDialog(options),
-        showMessageBox: (options: MessageBoxOptions) => dlg.showMessageBox(options),
-        showErrorBox: (title: string, content: string) => dlg.showErrorBox(title, content)
-      }
-    })(),
+    dialog: createPluginDialog(pluginName),
     system: {
       getSystemInfo: () => pluginSystem.getSystemInfo(),
       getAppInfo: () => pluginSystem.getAppInfo(),

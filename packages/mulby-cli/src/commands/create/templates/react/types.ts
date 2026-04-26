@@ -82,6 +82,7 @@ interface BrowserWindowProxy {
 }
 
 interface MulbyWindow {
+  invalidate(): void
   hide(isRestorePreWindow?: boolean): void
   show(): void
   setSize(width: number, height: number): void
@@ -369,6 +370,7 @@ interface MulbySystemPage {
 }
 
 interface MulbyPlugin {
+  prewarm(pluginId: string): Promise<void>
   getAll(): Promise<PluginInfo[]>
   listCommands(pluginId?: string): Promise<PluginCommandItem[]>
   search(query: string | InputPayload): Promise<PluginSearchResult[]>

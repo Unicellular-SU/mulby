@@ -96,3 +96,13 @@ export class PluginDialog {
     dialog.showErrorBox(title, content)
   }
 }
+
+export function createPluginDialog(pluginId?: string) {
+  const dlg = new PluginDialog(pluginId)
+  return {
+    showOpenDialog: (options?: OpenDialogOptions) => dlg.showOpenDialog(options),
+    showSaveDialog: (options?: SaveDialogOptions) => dlg.showSaveDialog(options),
+    showMessageBox: (options: MessageBoxOptions) => dlg.showMessageBox(options),
+    showErrorBox: (title: string, content: string) => dlg.showErrorBox(title, content)
+  }
+}

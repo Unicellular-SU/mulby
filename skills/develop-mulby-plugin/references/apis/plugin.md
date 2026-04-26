@@ -282,6 +282,14 @@ const result = await window.mulby.plugin.stopPlugin('my-plugin');
 
 返回值：`{ success: boolean; error?: string }`
 
+### plugin.prewarm(pluginId)
+[Renderer]
+预热插件的运行环境。当用户在插件列表中选中某个插件时，预先启动插件的 Host 进程，以提升后续实际运行时的启动速度。如果一段时间内未实际启动该插件，预热的进程会被自动销毁。
+
+```javascript
+await window.mulby.plugin.prewarm('my-plugin');
+```
+
 ### 完整示例
 
 ```javascript
