@@ -99,6 +99,7 @@ export function createPlatformApi(ipcRenderer: IpcRenderer, options?: { restrict
     system: {
       getSystemInfo: () => ipcRenderer.invoke('system:getSystemInfo'),
       getAppInfo: () => ipcRenderer.invoke('system:getAppInfo'),
+      getAppResourceUsage: () => ipcRenderer.invoke('system:getAppResourceUsage'),
       getPath: (name: string) => ipcRenderer.invoke('system:getPath', name),
       getEnv: (name: string) => ipcRenderer.invoke('system:getEnv', name),
       getIdleTime: () => ipcRenderer.invoke('system:getIdleTime'),

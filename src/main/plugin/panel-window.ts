@@ -1,12 +1,10 @@
 import { BrowserWindow, screen, WebContentsView } from 'electron'
-import http from 'http'
-import https from 'https'
 import { join } from 'path'
 import { existsSync } from 'fs'
 import { InputAttachment, InputPayload, Plugin, WindowOptions } from '../../shared/types/plugin'
 import { ThemeManager } from '../services/theme'
 import { loggerService } from '../services/logger'
-import { installConsoleCapture } from './console-capture'
+import { installConsoleCaptureForWebContents } from './console-capture'
 import { isIgnoringBlur } from '../services/blur-manager'
 import { getPluginPreloadPath } from './plugin-preload-wrapper'
 import { PLUGIN_RENDERER_V8_CACHE_OPTIONS } from './plugin-web-preferences'
@@ -19,7 +17,7 @@ import {
     shouldUseWindowsFramelessSurface
 } from '../services/window-surface'
 import { getMainWindowVisibleBounds } from '../main-window-frame'
-import { registerView } from '../services/webcontents-registry'
+import { registerView, unregisterView } from '../services/webcontents-registry'
 import { registerPanelWindow, unregisterPanelWindow, registerPluginWindow, unregisterPluginWindow } from '../services/ipc-caller-resolver'
 import {
     DETACHED_TITLEBAR_HEIGHT,
@@ -33,6 +31,23 @@ import log from 'electron-log'
 const ATTACHED_PANEL_SHADOW_MARGIN = 12
 const WINDOWS_PANEL_SHOW_OPACITY_GUARD_MS = 50
 const ATTACHED_PANEL_SHADOW_SHOW_DELAY_MS = 600
+const ATTACHED_PANEL_SHELL_HTML = `<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <style>
+    html, body {
+      margin: 0;
+      width: 100%;
+      height: 100%;
+      background: transparent;
+      overflow: hidden;
+    }
+  </style>
+</head>
+<body></body>
+</html>`
+const ATTACHED_PANEL_SHELL_URL = `data:text/html;charset=UTF-8,${encodeURIComponent(ATTACHED_PANEL_SHELL_HTML)}`
 const ATTACHED_PANEL_SHADOW_HTML = `<!doctype html>
 <html>
 <head>
@@ -62,33 +77,6 @@ const ATTACHED_PANEL_SHADOW_HTML = `<!doctype html>
 </html>`
 const ATTACHED_PANEL_SHADOW_URL = `data:text/html;charset=UTF-8,${encodeURIComponent(ATTACHED_PANEL_SHADOW_HTML)}`
 
-function canReachUrl(url: string, timeoutMs = 800): Promise<boolean> {
-    return new Promise((resolve) => {
-        try {
-            const parsed = new URL(url)
-            const requester = parsed.protocol === 'https:' ? https : http
-            const req = requester.request(
-                {
-                    method: 'GET',
-                    hostname: parsed.hostname,
-                    port: parsed.port,
-                    path: parsed.pathname || '/',
-                    timeout: timeoutMs
-                },
-                () => resolve(true)
-            )
-            req.on('error', () => resolve(false))
-            req.on('timeout', () => {
-                req.destroy()
-                resolve(false)
-            })
-            req.end()
-        } catch {
-            resolve(false)
-        }
-    })
-}
-
 function areBoundsEqual(
     left: { x: number; y: number; width: number; height: number },
     right: { x: number; y: number; width: number; height: number }
@@ -99,12 +87,18 @@ function areBoundsEqual(
         && left.height === right.height
 }
 
+export interface PromotedPanelWindow {
+    window: BrowserWindow
+    pluginView?: WebContentsView
+}
+
 /**
  * 插件面板窗口管理器
  * 负责创建和管理跟随主窗口的面板式插件窗口
  */
 export class PluginPanelWindow {
     private panelWindow: BrowserWindow | null = null
+    private pluginView: WebContentsView | null = null
     private shadowWindow: BrowserWindow | null = null
     private mainWindow: BrowserWindow
     private themeManager: ThemeManager | null = null
@@ -112,6 +106,7 @@ export class PluginPanelWindow {
     private currentFeatureCode: string = ''
     private currentInput: string = ''
     private currentAttachments: InputAttachment[] = []
+    private currentRoute: string | undefined
 
     // 位置同步相关
     private moveHandler: (() => void) | null = null
@@ -135,6 +130,204 @@ export class PluginPanelWindow {
         this.themeManager = manager
     }
 
+    prewarmShell() {
+        if (this.mainWindow.isDestroyed()) return
+        if (this.panelWindow && !this.panelWindow.isDestroyed()) return
+
+        const { x, y, width } = this.calculatePanelBounds()
+        const useWindowsFramelessSurface = shouldUseWindowsFramelessSurface()
+        const initialBounds = getWindowsFramelessSurfaceWindowBounds({
+            x,
+            y,
+            width,
+            height: ATTACHED_PANEL_HEIGHT
+        })
+        const currentTheme = this.themeManager?.getActualTheme() || 'dark'
+        const backgroundColor = useWindowsFramelessSurface ? '#00000000' : (currentTheme === 'dark' ? '#1e293b' : '#ffffff')
+
+        this.ensurePanelShell(initialBounds, backgroundColor, useWindowsFramelessSurface)
+        log.info('[PanelShell] prewarm ready')
+    }
+
+    private getPluginWebContents(): Electron.WebContents | null {
+        if (!this.pluginView || this.pluginView.webContents.isDestroyed()) return null
+        return this.pluginView.webContents
+    }
+
+    private layoutAttachedPluginView() {
+        if (!this.panelWindow || this.panelWindow.isDestroyed()) return
+        if (!this.pluginView || this.pluginView.webContents.isDestroyed()) return
+
+        const [contentWidth, contentHeight] = this.panelWindow.getContentSize()
+        this.pluginView.setBounds({
+            x: 0,
+            y: 0,
+            width: Math.max(1, contentWidth),
+            height: Math.max(1, contentHeight)
+        })
+    }
+
+    private destroyPluginView() {
+        const view = this.pluginView
+        if (!view) return
+
+        this.pluginView = null
+        unregisterView(view)
+
+        if (this.panelWindow && !this.panelWindow.isDestroyed()) {
+            try {
+                this.panelWindow.contentView.removeChildView(view)
+            } catch {
+                // The view may already have been detached by Electron during teardown.
+            }
+        }
+
+        if (!view.webContents.isDestroyed()) {
+            view.webContents.close()
+        }
+    }
+
+    private detachPluginViewForPromotion(): WebContentsView | null {
+        const view = this.pluginView
+        if (!view || view.webContents.isDestroyed()) return null
+
+        this.pluginView = null
+        unregisterView(view)
+
+        if (this.panelWindow) {
+            unregisterPanelWindow(this.panelWindow.id)
+        }
+
+        if (this.panelWindow && !this.panelWindow.isDestroyed()) {
+            try {
+                this.panelWindow.contentView.removeChildView(view)
+            } catch {
+                // The view may already be detached if Electron is tearing down the shell.
+            }
+            this.panelWindow.hide()
+        }
+
+        this.clearOpacityRestoreTimer(false)
+        this.removePositionSync()
+        this.closeShadowWindow()
+        this.suspendedForResident = false
+        return view
+    }
+
+    private resetCurrentPluginState() {
+        this.currentPlugin = null
+        this.currentFeatureCode = ''
+        this.currentInput = ''
+        this.currentAttachments = []
+        this.currentRoute = undefined
+        this.suspendedForResident = false
+        this.syncScheduled = false
+        this.preferredPanelHeight = ATTACHED_PANEL_HEIGHT
+        this.syncingBounds = false
+        this.panelWindowHasBeenShown = false
+    }
+
+    private clearCurrentPluginSession(resetPluginState = true) {
+        this.clearOpacityRestoreTimer(false)
+        this.destroyPluginView()
+
+        if (this.panelWindow) {
+            unregisterPanelWindow(this.panelWindow.id)
+        }
+
+        if (this.panelWindow && !this.panelWindow.isDestroyed()) {
+            this.panelWindow.hide()
+        }
+
+        this.removePositionSync()
+        this.closeShadowWindow()
+        if (resetPluginState) {
+            this.resetCurrentPluginState()
+        }
+    }
+
+    private ensurePanelShell(
+        initialBounds: { x: number; y: number; width: number; height: number },
+        backgroundColor: string,
+        useWindowsFramelessSurface: boolean
+    ): BrowserWindow {
+        if (this.panelWindow && !this.panelWindow.isDestroyed()) {
+            this.panelWindow.setBounds(initialBounds)
+            return this.panelWindow
+        }
+
+        const panelWindow = new BrowserWindow({
+            width: initialBounds.width,
+            height: initialBounds.height,
+            x: initialBounds.x,
+            y: initialBounds.y,
+            frame: false,
+            thickFrame: !useWindowsFramelessSurface,
+            show: false,
+            resizable: true,
+            movable: false,
+            minimizable: false,
+            maximizable: false,
+            fullscreenable: false,
+            parent: this.mainWindow,
+            modal: false,
+            alwaysOnTop: true,
+            skipTaskbar: true,
+            backgroundColor,
+            transparent: useWindowsFramelessSurface,
+            hasShadow: false,
+            roundedCorners: true,
+            webPreferences: {
+                contextIsolation: true,
+                nodeIntegration: false,
+                sandbox: true,
+                backgroundThrottling: false,
+                v8CacheOptions: PLUGIN_RENDERER_V8_CACHE_OPTIONS
+            }
+        })
+
+        void panelWindow.loadURL(ATTACHED_PANEL_SHELL_URL)
+
+        panelWindow.on('focus', () => {
+            // 面板获得焦点是正常的
+        })
+
+        panelWindow.on('resize', () => {
+            if (this.syncingBounds || !this.panelWindow || this.panelWindow.isDestroyed()) return
+            const nextHeight = getWindowsFramelessSurfaceVisibleBounds(this.panelWindow.getBounds()).height
+            this.preferredPanelHeight = Math.max(ATTACHED_PANEL_MIN_OVERFLOW_HEIGHT, nextHeight)
+            this.layoutAttachedPluginView()
+        })
+
+        panelWindow.on('blur', () => {
+            if (isIgnoringBlur()) return
+
+            setTimeout(() => {
+                if (this.mainWindow.isFocused()) {
+                    return
+                }
+                if (this.panelWindow && !this.panelWindow.isDestroyed() && this.panelWindow.isFocused()) {
+                    return
+                }
+                this.hide()
+                this.mainWindow.hide()
+            }, 50)
+        })
+
+        panelWindow.on('closed', () => {
+            if (this.panelWindow === panelWindow) {
+                this.cleanup()
+            }
+        })
+
+        if (this.themeManager) {
+            this.themeManager.registerWindow(panelWindow)
+        }
+
+        this.panelWindow = panelWindow
+        return panelWindow
+    }
+
     /**
      * 创建跟随搜索框的面板窗口
      */
@@ -152,8 +345,8 @@ export class PluginPanelWindow {
 
         if (launchStart) log.info(`[LaunchTrace] createPanel entered | +${Date.now() - launchStart}ms`)
 
-        // 关闭现有面板
-        this.close()
+        // 清理现有插件 view，但保留可复用 shell BrowserWindow。
+        this.clearCurrentPluginSession()
         this.suspendedForResident = false
 
         // 存储当前插件信息
@@ -161,6 +354,7 @@ export class PluginPanelWindow {
         this.currentFeatureCode = featureCode
         this.currentInput = input?.text || ''
         this.currentAttachments = input?.attachments || []
+        this.currentRoute = route
 
         // 计算初始位置
         const { x, y, width } = this.calculatePanelBounds()
@@ -183,78 +377,59 @@ export class PluginPanelWindow {
         const hasCustomPreload = !!plugin.manifest.preload
 
         this.preferredPanelHeight = ATTACHED_PANEL_HEIGHT
-        if (launchStart) log.info(`[LaunchTrace] new BrowserWindow() start | +${Date.now() - launchStart}ms`)
-        this.panelWindow = new BrowserWindow({
-            width: initialBounds.width,
-            height: initialBounds.height,
-            x: initialBounds.x,
-            y: initialBounds.y,
-            frame: false,
-            thickFrame: !useWindowsFramelessSurface,
-            show: false,
-            resizable: true,
-            movable: false, // 禁止直接拖动，跟随父窗口
-            minimizable: false,
-            maximizable: false,
-            fullscreenable: false,
-            parent: this.mainWindow, // 关键：设置父窗口（macOS 自动跟随）
-            modal: false,
-            alwaysOnTop: true,
-            skipTaskbar: true,
-            backgroundColor,
-            transparent: useWindowsFramelessSurface,
-            hasShadow: false, // 使用自定义阴影层，避免原生阴影黑边
-            roundedCorners: true,
+        const needsNewShell = !this.panelWindow || this.panelWindow.isDestroyed()
+        if (launchStart) {
+            log.info(`[LaunchTrace] ${needsNewShell ? 'new BrowserWindow()' : 'reuse panel shell'} start | +${Date.now() - launchStart}ms`)
+        }
+        const panelWindow = this.ensurePanelShell(initialBounds, backgroundColor, useWindowsFramelessSurface)
+        if (launchStart) {
+            log.info(`[LaunchTrace] ${needsNewShell ? 'new BrowserWindow()' : 'reuse panel shell'} done | +${Date.now() - launchStart}ms`)
+        }
+
+        const pluginView = new WebContentsView({
             webPreferences: {
                 preload: preloadPath,
                 additionalArguments: ['--mulby-plugin-window'],
                 contextIsolation: !hasCustomPreload,
                 nodeIntegration: hasCustomPreload,
-                sandbox: !hasCustomPreload, // 如果有自定义 preload，禁用沙箱以允许 Node.js 访问
-                // Match the parent launcher window: attached translucent panels on
-                // macOS can be throttled as if they were backgrounded, which in
-                // turn stalls repainting in the search UI after query changes.
+                sandbox: !hasCustomPreload,
                 backgroundThrottling: false,
                 v8CacheOptions: PLUGIN_RENDERER_V8_CACHE_OPTIONS
             }
         })
 
-        if (launchStart) log.info(`[LaunchTrace] new BrowserWindow() done | +${Date.now() - launchStart}ms`)
-
-        // 加载插件 UI
-        if (launchStart) log.info(`[LaunchTrace] loadFile start | +${Date.now() - launchStart}ms`)
-        if (route) {
-            void this.panelWindow.loadFile(uiPath, { hash: route })
-        } else {
-            void this.panelWindow.loadFile(uiPath)
-        }
+        this.pluginView = pluginView
+        panelWindow.contentView.addChildView(pluginView)
+        this.layoutAttachedPluginView()
 
         // 注册面板窗口到 IPC 调用方来源解析器
-        registerPanelWindow(this.panelWindow.id, plugin.id)
+        registerPanelWindow(panelWindow.id, plugin.id)
+        registerView(pluginView, panelWindow)
 
         // 设置位置同步监听器
         this.setupPositionSync()
 
         // 闭包捕获窗口实例和输入，防止 onLoadReady 等待期间新的 createPanel 覆盖状态
-        const capturedWin = this.panelWindow
-        const capturedInput = input?.text || ''
-        const capturedAttachments = input?.attachments || []
-
-        const initPayload = {
+        const capturedWin = panelWindow
+        const capturedView = pluginView
+        const capturedWebContents = pluginView.webContents
+        const buildInitPayload = () => ({
             pluginName: plugin.id,
-            featureCode,
-            input: capturedInput,
-            attachments: capturedAttachments,
+            featureCode: this.currentFeatureCode,
+            input: this.currentInput,
+            attachments: this.currentAttachments,
             mode: 'panel' as const,
-            route
-        }
+            route: this.currentRoute
+        })
 
         let readyToShowInitSent = false
         let initialInitSent = false
+        let panelShown = false
 
         const sendPluginInit = (reason: string): boolean => {
-            if (capturedWin.isDestroyed() || this.panelWindow !== capturedWin) return false
-            capturedWin.webContents.send('plugin:init', { ...initPayload, nonce: Date.now() })
+            if (capturedWin.isDestroyed() || capturedWebContents.isDestroyed()) return false
+            if (this.panelWindow !== capturedWin || this.pluginView !== capturedView) return false
+            capturedWebContents.send('plugin:init', { ...buildInitPayload(), nonce: Date.now() })
             readyToShowInitSent = true
             if (launchStart) log.info(`[LaunchTrace] plugin:init sent (${reason}) | +${Date.now() - launchStart}ms`)
             return true
@@ -267,26 +442,19 @@ export class PluginPanelWindow {
             }
         }
 
-        capturedWin.webContents.once('dom-ready', () => {
-            if (launchStart) log.info(`[LaunchTrace] dom-ready fired | +${Date.now() - launchStart}ms`)
-            if (capturedWin.isDestroyed() || this.panelWindow !== capturedWin) return
-            sendInitialPluginInit('dom-ready')
-            if (this.themeManager && !capturedWin.isDestroyed()) {
-                capturedWin.webContents.send('theme:changed', this.themeManager.getActualTheme())
-            }
-        })
-
-        // 面板加载完成后处理
-        capturedWin.once('ready-to-show', async () => {
-            if (launchStart) log.info(`[LaunchTrace] ready-to-show fired | +${Date.now() - launchStart}ms`)
-            if (capturedWin.isDestroyed() || this.panelWindow !== capturedWin) return
+        const showPanel = async (reason: string) => {
+            if (panelShown) return
+            panelShown = true
+            if (capturedWin.isDestroyed() || capturedWebContents.isDestroyed()) return
+            if (this.panelWindow !== capturedWin || this.pluginView !== capturedView) return
 
             if (useWindowsFramelessSurface) {
                 await applyWindowsFramelessSurface(capturedWin, { resizeMode: 'bottom' })
-                if (capturedWin.isDestroyed() || this.panelWindow !== capturedWin) return
+                if (capturedWin.isDestroyed() || this.panelWindow !== capturedWin || this.pluginView !== capturedView) return
             }
 
             this.syncPosition()
+            this.layoutAttachedPluginView()
 
             if (!this.mainWindow.isVisible()) {
                 this.mainWindow.show()
@@ -294,29 +462,40 @@ export class PluginPanelWindow {
 
             capturedWin.show()
             this.panelWindowHasBeenShown = true
-            if (launchStart) log.info(`[LaunchTrace] panelWindow.show() called | +${Date.now() - launchStart}ms`)
+            if (launchStart) log.info(`[LaunchTrace] panelWindow.show() called (${reason}) | +${Date.now() - launchStart}ms`)
 
             if (onLoadReady) {
                 await onLoadReady
-                if (capturedWin.isDestroyed() || this.panelWindow !== capturedWin) return
+                if (capturedWin.isDestroyed() || capturedWebContents.isDestroyed()) return
+                if (this.panelWindow !== capturedWin || this.pluginView !== capturedView) return
                 if (launchStart) log.info(`[LaunchTrace] onLoadReady resolved | +${Date.now() - launchStart}ms`)
             }
 
-            sendInitialPluginInit('ready-to-show')
+            sendInitialPluginInit(reason)
 
-            if (this.themeManager) {
-                capturedWin.webContents.send('theme:changed', this.themeManager.getActualTheme())
+            if (this.themeManager && !capturedWebContents.isDestroyed()) {
+                capturedWebContents.send('theme:changed', this.themeManager.getActualTheme())
             }
             this.scheduleShadowShow(capturedWin, launchStart)
+        }
+
+        capturedWebContents.once('dom-ready', () => {
+            if (launchStart) log.info(`[LaunchTrace] dom-ready fired | +${Date.now() - launchStart}ms`)
+            if (capturedWin.isDestroyed() || capturedWebContents.isDestroyed()) return
+            if (this.panelWindow !== capturedWin || this.pluginView !== capturedView) return
+            sendInitialPluginInit('dom-ready')
+            if (this.themeManager && !capturedWebContents.isDestroyed()) {
+                capturedWebContents.send('theme:changed', this.themeManager.getActualTheme())
+            }
         })
 
         let panelDidFinishLoadCount = 0
-        capturedWin.webContents.on('did-finish-load', async () => {
+        capturedWebContents.on('did-finish-load', async () => {
             panelDidFinishLoadCount++
             const loadNum = panelDidFinishLoadCount
-            log.info(`[ReloadTrace:Panel] did-finish-load #${loadNum} | readyToShowInitSent=${readyToShowInitSent} | wcId=${capturedWin.webContents.id} | isDestroyed=${capturedWin.isDestroyed()} | isCurrent=${this.panelWindow === capturedWin}`)
+            log.info(`[ReloadTrace:Panel] did-finish-load #${loadNum} | readyToShowInitSent=${readyToShowInitSent} | wcId=${capturedWebContents.id} | isDestroyed=${capturedWebContents.isDestroyed()} | isCurrent=${this.panelWindow === capturedWin && this.pluginView === capturedView}`)
             if (launchStart) log.info(`[LaunchTrace] ✅ did-finish-load (plugin UI rendered) | +${Date.now() - launchStart}ms | TOTAL=${Date.now() - launchStart}ms`)
-            if (capturedWin.isDestroyed() || this.panelWindow !== capturedWin) {
+            if (capturedWin.isDestroyed() || capturedWebContents.isDestroyed() || this.panelWindow !== capturedWin || this.pluginView !== capturedView) {
                 log.info(`[ReloadTrace:Panel] did-finish-load #${loadNum} SKIPPED (destroyed or replaced)`)
                 return
             }
@@ -326,75 +505,44 @@ export class PluginPanelWindow {
             if (loadNum === 1) {
                 sendInitialPluginInit('did-finish-load')
             }
-            if (this.themeManager && !capturedWin.isDestroyed()) {
-                capturedWin.webContents.send('theme:changed', this.themeManager.getActualTheme())
+            if (this.themeManager && !capturedWebContents.isDestroyed()) {
+                capturedWebContents.send('theme:changed', this.themeManager.getActualTheme())
             }
             // 重载时重新发送 plugin:init；首次加载已由 dom-ready/did-finish-load/ready-to-show 先到者发送。
-            if (loadNum > 1 && readyToShowInitSent && !capturedWin.isDestroyed() && this.panelWindow === capturedWin) {
+            if (loadNum > 1 && readyToShowInitSent && !capturedWebContents.isDestroyed() && this.panelWindow === capturedWin && this.pluginView === capturedView) {
                 sendPluginInit(`reload #${loadNum}`)
                 log.info(`[ReloadTrace:Panel] did-finish-load #${loadNum} plugin:init re-sent for reload`)
             }
-        })
-
-        this.panelWindow.on('focus', () => {
-            // 面板获得焦点是正常的
-        })
-
-        // 仅在手动调整面板高度时更新目标高度，避免移动过程中累积漂移
-        this.panelWindow.on('resize', () => {
-            if (this.syncingBounds || !this.panelWindow || this.panelWindow.isDestroyed()) return
-            const nextHeight = getWindowsFramelessSurfaceVisibleBounds(this.panelWindow.getBounds()).height
-            this.preferredPanelHeight = Math.max(ATTACHED_PANEL_MIN_OVERFLOW_HEIGHT, nextHeight)
-        })
-
-        this.panelWindow.on('blur', () => {
-            if (isIgnoringBlur()) return
-
-            setTimeout(() => {
-                if (this.mainWindow.isFocused()) {
-                    return
-                }
-                if (this.panelWindow && !this.panelWindow.isDestroyed() && this.panelWindow.isFocused()) {
-                    return
-                }
-                this.hide()
-                this.mainWindow.hide()
-            }, 50)
+            void showPanel('did-finish-load')
         })
 
         // 安装 console 输出捕获（主进程侧捕获插件 console 输出）
-        installConsoleCapture(this.panelWindow, plugin.id)
+        installConsoleCaptureForWebContents(capturedWebContents, plugin.id)
 
         // 监听渲染进程崩溃
-        this.panelWindow.webContents.on('render-process-gone', (_event, details) => {
+        capturedWebContents.on('render-process-gone', (_event, details) => {
             // 记录崩溃日志到持久化存储
             loggerService.crash({
                 pluginId: this.currentPlugin?.id || 'unknown',
                 reason: details.reason,
                 exitCode: details.exitCode,
-                windowId: this.panelWindow?.id
+                windowId: capturedWin.id
             })
 
             log.error('[PanelWindow] Render process gone:', details.reason)
             this.close()
         })
 
-        // 监听窗口关闭
-        // 关键修复：使用闭包捕获当前窗口实例，防止旧窗口关闭事件清理了新窗口的引用
-        const currentWin = this.panelWindow
-        this.panelWindow.on('closed', () => {
-            if (this.panelWindow === currentWin) {
-                this.cleanup()
-            }
-        })
-
-        // 注册到主题管理器
-        if (this.themeManager) {
-            this.themeManager.registerWindow(this.panelWindow)
+        // 加载插件 UI
+        if (launchStart) log.info(`[LaunchTrace] loadFile start | +${Date.now() - launchStart}ms`)
+        if (route) {
+            void capturedWebContents.loadFile(uiPath, { hash: route })
+        } else {
+            void capturedWebContents.loadFile(uiPath)
         }
 
         if (launchStart) log.info(`[LaunchTrace] createPanel returned (async events pending) | +${Date.now() - launchStart}ms`)
-        return this.panelWindow
+        return panelWindow
     }
 
     /**
@@ -592,6 +740,7 @@ export class PluginPanelWindow {
             if (!areBoundsEqual(this.panelWindow.getBounds(), nextBounds)) {
                 this.panelWindow.setBounds(nextBounds)
             }
+            this.layoutAttachedPluginView()
             this.setShadowBounds(x, adjustedY, width, adjustedHeight)
         } finally {
             this.syncingBounds = false
@@ -619,24 +768,19 @@ export class PluginPanelWindow {
      * 将面板升级为独立窗口
      * 用户点击"弹出"按钮时调用
      */
-    promoteToWindow(): BrowserWindow | null {
+    promoteToWindow(): PromotedPanelWindow | null {
         if (!this.panelWindow || this.panelWindow.isDestroyed()) return null
         if (!this.currentPlugin) return null
+        const promotedPluginView = this.detachPluginViewForPromotion()
+        if (!promotedPluginView) return null
 
         // 保存当前状态
         const bounds = getWindowsFramelessSurfaceVisibleBounds(this.panelWindow.getBounds())
-        const url = this.panelWindow.webContents.getURL()
         const plugin = this.currentPlugin
-        const uiPath = join(plugin.path, plugin.manifest.ui!)
         const featureCode = this.currentFeatureCode
         const input = this.currentInput
         const attachments = this.currentAttachments
-
-        // 关闭面板（但不清理插件信息，因为我们要转移到新窗口）
-        this.panelWindow.close()
-        this.panelWindow = null
-        this.removePositionSync()
-        this.closeShadowWindow()
+        const route = this.currentRoute
 
         // 创建独立窗口
         const currentTheme = this.themeManager?.getActualTheme() || 'dark'
@@ -650,11 +794,6 @@ export class PluginPanelWindow {
         // 从 manifest.window 读取窗口配置
         const windowConfig = plugin.manifest.window || {}
         const showTitleBar = shouldShowTitleBarForPanel(windowConfig)
-
-        // 获取插件 preload 路径（支持自定义 preload）
-        const basePreloadPath = join(__dirname, '../preload/index.js')
-        const preloadPath = getPluginPreloadPath(basePreloadPath, plugin)
-        const hasCustomPreload = !!plugin.manifest.preload
 
         // 标题栏 preload 路径
         const titlebarPreloadPath = join(__dirname, '../preload/titlebar.js')
@@ -691,10 +830,9 @@ export class PluginPanelWindow {
                 sandbox: true,
                 v8CacheOptions: PLUGIN_RENDERER_V8_CACHE_OPTIONS
             } : {
-                preload: preloadPath,
-                additionalArguments: ['--mulby-plugin-window'],
-                contextIsolation: !hasCustomPreload,
-                nodeIntegration: hasCustomPreload,
+                contextIsolation: true,
+                nodeIntegration: false,
+                sandbox: true,
                 v8CacheOptions: PLUGIN_RENDERER_V8_CACHE_OPTIONS
             }
         })
@@ -702,8 +840,7 @@ export class PluginPanelWindow {
         // 注册插件分离独立窗口（必须注册以保证安全的 IPC）
         registerPluginWindow(independentWindow.id, plugin.id)
 
-        // 创建插件 WebContentsView（仅在需要标题栏时）
-        let pluginView: WebContentsView | null = null
+        const pluginView = promotedPluginView
 
         if (showTitleBar) {
             // BrowserWindow 加载标题栏页面
@@ -717,69 +854,57 @@ export class PluginPanelWindow {
                 }
             }
 
-            // 创建插件内容 WebContentsView
-            pluginView = new WebContentsView({
-                webPreferences: {
-                    preload: preloadPath,
-                    additionalArguments: ['--mulby-plugin-window'],
-                    contextIsolation: !hasCustomPreload,
-                    nodeIntegration: hasCustomPreload,
-                    sandbox: !hasCustomPreload,
-                    v8CacheOptions: PLUGIN_RENDERER_V8_CACHE_OPTIONS
-                }
-            })
-
-            independentWindow.contentView.addChildView(pluginView)
-            layoutPluginView(independentWindow, pluginView, true)
-            registerView(pluginView, independentWindow)
-
-            // 加载插件 UI（保持原来的 URL）
-            if (url.startsWith('http://') || url.startsWith('https://')) {
-                void canReachUrl(url).then((reachable) => {
-                    if (reachable) {
-                        void pluginView!.webContents.loadURL(url)
-                    } else {
-                        void pluginView!.webContents.loadFile(uiPath)
-                    }
-                })
-            } else {
-                void pluginView.webContents.loadURL(url)
-            }
-
             // 设置标题栏 IPC
             setupTitlebarIPC(independentWindow, pluginView, this.themeManager)
-
-            // 窗口 resize 时更新插件视图布局
-            independentWindow.on('resize', () => {
-                if (!independentWindow.isDestroyed() && pluginView && !pluginView.webContents.isDestroyed()) {
-                    layoutPluginView(independentWindow, pluginView, true)
-                }
-            })
         } else {
-            // 无标题栏：BrowserWindow 直接加载插件
-            if (url.startsWith('http://') || url.startsWith('https://')) {
-                void canReachUrl(url).then((reachable) => {
-                    if (reachable) {
-                        void independentWindow.loadURL(url)
-                    } else {
-                        void independentWindow.loadFile(uiPath)
-                    }
-                })
-            } else {
-                void independentWindow.loadURL(url)
-            }
+            // 无标题栏独立窗口也使用安全 shell 承载插件 view，避免 reload 当前 Renderer。
+            void independentWindow.loadURL(ATTACHED_PANEL_SHELL_URL)
 
             // 窗口状态事件
             independentWindow.on('maximize', () => {
-                independentWindow.webContents.send('window:stateChanged', { isMaximized: true })
+                if (!pluginView.webContents.isDestroyed()) {
+                    pluginView.webContents.send('window:stateChanged', { isMaximized: true })
+                }
             })
             independentWindow.on('unmaximize', () => {
-                independentWindow.webContents.send('window:stateChanged', { isMaximized: false })
+                if (!pluginView.webContents.isDestroyed()) {
+                    pluginView.webContents.send('window:stateChanged', { isMaximized: false })
+                }
             })
         }
 
+        independentWindow.contentView.addChildView(pluginView)
+        layoutPluginView(independentWindow, pluginView, showTitleBar)
+        registerView(pluginView, independentWindow)
+
+        // 窗口 resize 时更新插件视图布局
+        independentWindow.on('resize', () => {
+            if (!independentWindow.isDestroyed() && !pluginView.webContents.isDestroyed()) {
+                layoutPluginView(independentWindow, pluginView, showTitleBar)
+            }
+        })
+
         // 目标 webContents（插件内容）
-        const pluginWebContents = pluginView?.webContents ?? independentWindow.webContents
+        const pluginWebContents = pluginView.webContents
+        const sendDetachedInit = () => {
+            if (independentWindow.isDestroyed() || pluginWebContents.isDestroyed()) return
+            pluginWebContents.send('plugin:init', {
+                pluginName: plugin.id,
+                featureCode,
+                input,
+                attachments,
+                mode: 'detached',
+                windowType: windowConfig.type || 'default',
+                route,
+                nonce: Date.now()
+            })
+            if (this.themeManager) {
+                pluginWebContents.send('theme:changed', this.themeManager.getActualTheme())
+                if (showTitleBar) {
+                    notifyTitlebarThemeChange(independentWindow, this.themeManager.getActualTheme())
+                }
+            }
+        }
 
         independentWindow.once('ready-to-show', async () => {
             if (showTitleBar) {
@@ -789,7 +914,9 @@ export class PluginPanelWindow {
                 await applyWindowsFramelessSurface(independentWindow, { includeTitleBar: false, resizeMode: 'all' })
                 if (independentWindow.isDestroyed()) return
             }
+            layoutPluginView(independentWindow, pluginView, showTitleBar)
             independentWindow.show()
+            sendDetachedInit()
         })
 
         // 等待插件内容加载完成后再发送初始化数据和主题
@@ -800,22 +927,7 @@ export class PluginPanelWindow {
             }
             // 延迟确保 React useEffect 已注册 IPC 回调
             setTimeout(() => {
-                if (independentWindow.isDestroyed() || pluginWebContents.isDestroyed()) return
-                pluginWebContents.send('plugin:init', {
-                    pluginName: plugin.id,
-                    featureCode,
-                    input,
-                    attachments,
-                    mode: 'detached',
-                    windowType: windowConfig.type || 'default',
-                    nonce: Date.now()
-                })
-                if (this.themeManager) {
-                    pluginWebContents.send('theme:changed', this.themeManager.getActualTheme())
-                    if (showTitleBar) {
-                        notifyTitlebarThemeChange(independentWindow, this.themeManager.getActualTheme())
-                    }
-                }
+                sendDetachedInit()
             }, 100)
         })
 
@@ -825,12 +937,13 @@ export class PluginPanelWindow {
         }
 
         // 安装 console 输出捕获（主进程侧捕获插件 console 输出）
-        installConsoleCapture(independentWindow, plugin.id)
+        installConsoleCaptureForWebContents(pluginWebContents, plugin.id)
 
         // 窗口关闭时清理 WebContentsView
         independentWindow.once('closed', () => {
             unregisterPluginWindow(independentWindow.id)
             if (pluginView && !pluginView.webContents.isDestroyed()) {
+                unregisterView(pluginView)
                 pluginView.webContents.close()
             }
         })
@@ -840,8 +953,9 @@ export class PluginPanelWindow {
         this.currentFeatureCode = ''
         this.currentInput = ''
         this.currentAttachments = []
+        this.currentRoute = undefined
 
-        return independentWindow
+        return { window: independentWindow, pluginView }
     }
 
     /**
@@ -866,28 +980,63 @@ export class PluginPanelWindow {
         if (!this.panelWindow || this.panelWindow.isDestroyed() || !this.currentPlugin) {
             return false
         }
+        const pluginWebContents = this.getPluginWebContents()
+        if (!pluginWebContents) {
+            return false
+        }
         this.currentFeatureCode = featureCode
         this.currentInput = input?.text || ''
         this.currentAttachments = input?.attachments || []
+        this.currentRoute = route
 
         this.suspendedForResident = false
-        this.show()
+        const restoredPlugin = this.currentPlugin
+        const restoredView = this.pluginView
+        const sendRestoreInit = () => {
+            if (!this.panelWindow || this.panelWindow.isDestroyed() || pluginWebContents.isDestroyed()) return
+            if (this.currentPlugin !== restoredPlugin || this.pluginView !== restoredView) return
+            pluginWebContents.send('plugin:init', {
+                pluginName: restoredPlugin.id,
+                featureCode,
+                input: this.currentInput,
+                attachments: this.currentAttachments,
+                mode: 'panel' as const,
+                route: this.currentRoute,
+                nonce: Date.now()
+            })
 
-        this.panelWindow.webContents.send('plugin:init', {
-            pluginName: this.currentPlugin.id,
-            featureCode,
-            input: this.currentInput,
-            attachments: this.currentAttachments,
-            mode: 'panel' as const,
-            route,
-            nonce: Date.now()
-        })
-
-        if (this.themeManager && !this.panelWindow.isDestroyed()) {
-            this.panelWindow.webContents.send('theme:changed', this.themeManager.getActualTheme())
+            if (this.themeManager && !pluginWebContents.isDestroyed()) {
+                pluginWebContents.send('theme:changed', this.themeManager.getActualTheme())
+            }
         }
 
-        log.info(`[ResidentUI] restore | plugin=${this.currentPlugin.id}`)
+        const currentRoute = (() => {
+            try {
+                return new URL(pluginWebContents.getURL()).hash.replace(/^#/, '')
+            } catch {
+                return ''
+            }
+        })()
+        const nextRoute = route || ''
+
+        if (currentRoute !== nextRoute && restoredPlugin.manifest.ui) {
+            this.hide()
+            pluginWebContents.once('did-finish-load', () => {
+                this.show()
+                sendRestoreInit()
+            })
+            const uiPath = join(restoredPlugin.path, restoredPlugin.manifest.ui)
+            if (route) {
+                void pluginWebContents.loadFile(uiPath, { hash: route })
+            } else {
+                void pluginWebContents.loadFile(uiPath)
+            }
+        } else {
+            this.show()
+            sendRestoreInit()
+        }
+
+        log.info(`[ResidentUI] restore | plugin=${restoredPlugin.id}`)
         return true
     }
 
@@ -895,7 +1044,7 @@ export class PluginPanelWindow {
      * 获取当前缓存的插件 ID（用于 resident session 匹配）
      */
     getCachedPluginId(): string | null {
-        if (!this.panelWindow || this.panelWindow.isDestroyed() || !this.currentPlugin) {
+        if (!this.panelWindow || this.panelWindow.isDestroyed() || !this.currentPlugin || !this.getPluginWebContents()) {
             return null
         }
         return this.currentPlugin.id
@@ -909,47 +1058,34 @@ export class PluginPanelWindow {
      * 关闭面板窗口
      */
     close() {
-        if (this.panelWindow && !this.panelWindow.isDestroyed()) {
-            this.panelWindow.close()
-        }
-        this.cleanup()
+        this.clearCurrentPluginSession()
     }
 
     /**
      * 清理资源
      */
     private cleanup() {
-        this.clearOpacityRestoreTimer(false)
-        this.removePositionSync()
-        this.closeShadowWindow()
-        // 注销面板窗口注册（先缓存 ID，因为窗口可能已被销毁）
-        if (this.panelWindow) {
-            const panelId = this.panelWindow.id
-            unregisterPanelWindow(panelId)
-        }
+        this.clearCurrentPluginSession()
         this.panelWindow = null
-        this.currentPlugin = null
-        this.currentFeatureCode = ''
-        this.currentInput = ''
-        this.currentAttachments = []
-        this.suspendedForResident = false
-        this.syncScheduled = false
-        this.preferredPanelHeight = ATTACHED_PANEL_HEIGHT
-        this.syncingBounds = false
-        this.panelWindowHasBeenShown = false
     }
 
     /**
      * 检查面板是否打开
      */
     isOpen(): boolean {
-        return this.panelWindow !== null && !this.panelWindow.isDestroyed()
+        return Boolean(
+            this.currentPlugin
+            && this.panelWindow
+            && !this.panelWindow.isDestroyed()
+            && this.getPluginWebContents()
+        )
     }
 
     /**
      * 获取当前面板窗口
      */
     getWindow(): BrowserWindow | null {
+        if (!this.panelWindow || this.panelWindow.isDestroyed()) return null
         return this.panelWindow
     }
 
@@ -976,9 +1112,10 @@ export class PluginPanelWindow {
      * 显示面板
      */
     show() {
-        if (this.suspendedForResident) return
+        if (this.suspendedForResident || !this.currentPlugin) return
         if (this.panelWindow && !this.panelWindow.isDestroyed()) {
             this.syncPosition()
+            this.layoutAttachedPluginView()
             const needsOpacityGuard = process.platform === 'win32'
                 && this.panelWindowHasBeenShown
                 && !this.panelWindow.isVisible()
@@ -992,7 +1129,7 @@ export class PluginPanelWindow {
             this.panelWindow.showInactive()
             this.panelWindowHasBeenShown = true
             if (needsOpacityGuard) {
-                this.panelWindow.webContents.invalidate()
+                this.getPluginWebContents()?.invalidate()
                 this.opacityRestoreTimer = setTimeout(() => {
                     this.opacityRestoreTimer = null
                     if (!this.panelWindow || this.panelWindow.isDestroyed() || !this.panelWindow.isVisible()) {
@@ -1017,11 +1154,12 @@ export class PluginPanelWindow {
     }
 
     /**
-     * 发送消息到面板窗口
+     * 发送消息到面板插件 view
      */
     send(channel: string, ...args: unknown[]) {
-        if (this.panelWindow && !this.panelWindow.isDestroyed()) {
-            this.panelWindow.webContents.send(channel, ...args)
+        const pluginWebContents = this.getPluginWebContents()
+        if (pluginWebContents && !pluginWebContents.isDestroyed()) {
+            pluginWebContents.send(channel, ...args)
         }
     }
 }

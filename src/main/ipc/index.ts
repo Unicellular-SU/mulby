@@ -46,6 +46,7 @@ import { SystemPluginWindowManager } from '../services/system-plugin-window-mana
 import { registerSystemPageHandlers } from './system-page'
 import { SystemPageWindowManager } from '../services/system-page-window-manager'
 import { OnboardingWindowManager } from '../services/onboarding-window'
+import { ActionMenuWindowManager } from '../services/action-menu-window-manager'
 import { registerOnboardingHandlers } from './onboarding'
 
 
@@ -78,12 +79,13 @@ export function registerAllHandlers(
   systemPluginWindowManager: SystemPluginWindowManager,
   systemPageWindowManager: SystemPageWindowManager,
   onboardingWindowManager: OnboardingWindowManager,
+  actionMenuWindowManager: ActionMenuWindowManager,
   pluginToolRegistry?: PluginToolRegistry
 ): { warmupFeatureIconCache: () => void; setOnDisabledPluginToolsChanged: (fn: () => void) => void; setOnSuperPanelChanged: (fn: (settings: import('../../shared/types/settings').AppSettings) => void) => void } {
   registerClipboardHandlers()
   registerClipboardHistoryHandlers(clipboardHistoryManager)
   registerNotificationHandlers()
-  registerWindowHandlers(getMainWindow, pluginWindowManager, themeManager, appSettingsManager, pluginManager)
+  registerWindowHandlers(getMainWindow, pluginWindowManager, themeManager, appSettingsManager, pluginManager, actionMenuWindowManager)
   const pluginHooks = registerPluginHandlers(pluginManager, pluginToolRegistry)
   registerThemeHandlers(themeManager)
   registerScreenHandlers()
@@ -121,7 +123,7 @@ export function registerAllHandlers(
   const aiHooks: AiHandlersHooks = {}
   registerAiHandlers(aiHooks)
   registerSystemPluginHandlers(getMainWindow, systemPluginWindowManager)
-  registerSystemPageHandlers(getMainWindow, systemPageWindowManager)
+  registerSystemPageHandlers(getMainWindow, systemPageWindowManager, actionMenuWindowManager)
 
   // 注册日志 IPC 处理器
   registerLogIpc()

@@ -6,6 +6,7 @@ import {
   SystemPageWindowManager
 } from '../services/system-page-window-manager'
 import { windowFromWebContents } from '../services/webcontents-registry'
+import { ActionMenuWindowManager } from '../services/action-menu-window-manager'
 
 const SYSTEM_PAGE_IDS: SystemPageId[] = [
   'settings',
@@ -74,7 +75,8 @@ function normalizeOpenPayload(input: unknown): OpenSystemPagePayload | null {
 
 export function registerSystemPageHandlers(
   getMainWindow: () => BrowserWindow | null,
-  manager: SystemPageWindowManager
+  manager: SystemPageWindowManager,
+  actionMenuWindowManager: ActionMenuWindowManager
 ) {
   ipcMain.handle('systemPage:open', async (event, payload: unknown) => {
     if (!isMainWindowCaller(event, getMainWindow)) return false
@@ -96,6 +98,24 @@ export function registerSystemPageHandlers(
   ipcMain.handle('systemPage:reload', (event) => {
     const caller = windowFromWebContents(event.sender)
     return manager.reloadByCaller(caller)
+  })
+
+  ipcMain.handle('systemPage:showMenu', (event, point?: { x?: unknown; y?: unknown }) => {
+    const caller = windowFromWebContents(event.sender)
+    if (!caller || caller.isDestroyed()) return false
+
+    return actionMenuWindowManager.show({
+      ownerWindow: caller,
+      anchor: point,
+      items: [
+        { id: 'reload', label: '重新加载页面' }
+      ],
+      onSelect: (id) => {
+        if (id === 'reload') {
+          manager.reloadByCaller(caller)
+        }
+      }
+    })
   })
 
   ipcMain.handle('systemPage:getState', () => {

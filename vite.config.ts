@@ -91,6 +91,14 @@ export default defineConfig({
         }
       },
       {
+        entry: 'src/preload/action-menu.ts',
+        vite: {
+          build: {
+            outDir: 'dist/preload'
+          }
+        }
+      },
+      {
         entry: 'src/preload/web-parser.ts',
         vite: {
           build: {

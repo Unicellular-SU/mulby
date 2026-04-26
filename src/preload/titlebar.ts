@@ -3,6 +3,7 @@
  *
  * 仅暴露标题栏所需的最小 API：
  * - 窗口控制动作 (minimize / maximize / close / toggle-pin / reload)
+ * - 插件操作菜单
  * - 窗口状态查询
  * - 主题变化监听
  * - 初始化数据接收
@@ -13,6 +14,11 @@ const api = {
   /** 发送标题栏动作 */
   action: (name: string) => {
     ipcRenderer.send('titlebar:action', name)
+  },
+
+  /** 显示插件更多操作菜单 */
+  showPluginMenu: (point?: { x: number; y: number }): Promise<boolean> => {
+    return ipcRenderer.invoke('titlebar:showPluginMenu', point)
   },
 
   /** 获取窗口状态 */

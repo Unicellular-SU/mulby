@@ -12,6 +12,8 @@ export function createCoreApi(ipcRenderer: IpcRenderer) {
       center: () => ipcRenderer.send('window:center'),
       detach: () => ipcRenderer.send('plugin:detach'),
       close: () => ipcRenderer.send('plugin:close'),
+      terminatePlugin: () => ipcRenderer.invoke('plugin:terminateCurrent'),
+      showPluginMenu: (point?: { x: number; y: number }) => ipcRenderer.invoke('plugin:showAttachedMenu', point),
       setAlwaysOnTop: (flag: boolean) => ipcRenderer.send('window:alwaysOnTop', flag),
       setOpacity: (opacity: number) => ipcRenderer.invoke('window:setOpacity', opacity),
       getOpacity: () => ipcRenderer.invoke('window:getOpacity'),

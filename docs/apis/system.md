@@ -58,6 +58,45 @@ interface AppInfo {
 }
 ```
 
+### getAppResourceUsage()
+[Renderer]
+获取 Mulby 应用自身的资源占用快照。CPU 与内存来自 Electron 进程指标；磁盘占用仅统计用户数据目录，避免全盘扫描。
+
+```javascript
+const usage = await system.getAppResourceUsage();
+console.log(usage.cpuPercent, usage.memoryBytes, usage.disk.userDataBytes);
+```
+
+**返回值**: `AppResourceUsage`
+
+```typescript
+interface AppResourceProcessUsage {
+  pid: number
+  type: string
+  name?: string
+  cpuPercent: number
+  workingSetBytes: number
+}
+
+interface AppResourceDiskUsage {
+  userDataPath: string
+  userDataBytes: number
+  fileCount: number
+  directoryCount: number
+  truncated: boolean
+  scannedAt: number
+}
+
+interface AppResourceUsage {
+  sampledAt: number
+  cpuPercent: number
+  memoryBytes: number
+  processCount: number
+  disk: AppResourceDiskUsage
+  processes: AppResourceProcessUsage[]
+}
+```
+
 ### getPath(name)
 [Renderer] [Backend]
 获取系统特定路径。

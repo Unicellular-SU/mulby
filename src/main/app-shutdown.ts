@@ -16,6 +16,7 @@ export interface ShutdownResources {
   inputHookService?: { destroy(): void }
   pluginWindowManager?: { closeAll(): void }
   systemPageWindowManager?: { closeAll(): void }
+  actionMenuWindowManager?: { destroy(): void }
   appTrayManager?: { destroy(): void }
   trayMenuWindowManager?: { destroy(): void }
 }
@@ -50,6 +51,7 @@ export async function shutdownMainProcessResources(
     await safely('inputHookService', () => resources.inputHookService?.destroy())
     await safely('pluginWindowManager', () => resources.pluginWindowManager?.closeAll())
     await safely('systemPageWindowManager', () => resources.systemPageWindowManager?.closeAll())
+    await safely('actionMenuWindowManager', () => resources.actionMenuWindowManager?.destroy())
     await safely('appTrayManager', () => resources.appTrayManager?.destroy())
     await safely('trayMenuWindowManager', () => resources.trayMenuWindowManager?.destroy())
     await safely('globalShortcut', () => globalShortcut.unregisterAll())

@@ -464,6 +464,32 @@ export interface AppInfo {
   userDataPath: string
 }
 
+export interface AppResourceProcessUsage {
+  pid: number
+  type: string
+  name?: string
+  cpuPercent: number
+  workingSetBytes: number
+}
+
+export interface AppResourceDiskUsage {
+  userDataPath: string
+  userDataBytes: number
+  fileCount: number
+  directoryCount: number
+  truncated: boolean
+  scannedAt: number
+}
+
+export interface AppResourceUsage {
+  sampledAt: number
+  cpuPercent: number
+  memoryBytes: number
+  processCount: number
+  disk: AppResourceDiskUsage
+  processes: AppResourceProcessUsage[]
+}
+
 export interface OpenSystemPluginPayload {
   pluginId: string
   params?: Record<string, unknown>
@@ -483,6 +509,8 @@ export interface ElectronAPI {
     center: () => void
     detach: () => void
     close: () => void
+    terminatePlugin: () => Promise<{ success: boolean; error?: string }>
+    showPluginMenu: (point?: { x: number; y: number }) => Promise<boolean>
     reload: () => void
     setAlwaysOnTop: (flag: boolean) => void
     setOpacity: (opacity: number) => Promise<void>
@@ -536,6 +564,7 @@ export interface ElectronAPI {
     close: () => Promise<boolean>
     detach: () => Promise<boolean>
     reload: () => Promise<boolean>
+    showMenu: (point?: { x: number; y: number }) => Promise<boolean>
     getMode: () => Promise<'none' | 'attached' | 'detached'>
     getState: () => Promise<{ open: boolean; mode: 'none' | 'attached' | 'detached'; page: string | null; title: string }>
     onStateChange: (callback: (state: { open: boolean; mode: 'none' | 'attached' | 'detached'; page: string | null; title: string }) => void) => () => void
@@ -746,6 +775,7 @@ export interface ElectronAPI {
   system: {
     getSystemInfo: () => Promise<SystemInfo>
     getAppInfo: () => Promise<AppInfo>
+    getAppResourceUsage: () => Promise<AppResourceUsage>
     getPath: (name: 'home' | 'appData' | 'userData' | 'temp' | 'exe' | 'desktop' | 'documents' | 'downloads' | 'music' | 'pictures' | 'videos' | 'logs') => Promise<string>
     getEnv: (name: string) => Promise<string | undefined>
     getIdleTime: () => Promise<number>

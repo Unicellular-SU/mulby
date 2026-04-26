@@ -2,6 +2,7 @@ import { app, nativeImage, NativeImage, shell } from 'electron'
 import * as os from 'os'
 import * as crypto from 'crypto'
 import { existsSync, readFileSync } from 'fs'
+import { lstat, readdir } from 'fs/promises'
 import { extname, join } from 'path'
 import { spawnSync } from 'child_process'
 import { onActiveWindowChange, type ActiveWindowInfo } from '../services/active-window'
@@ -27,6 +28,32 @@ export interface AppInfo {
   locale: string
   isPackaged: boolean
   userDataPath: string
+}
+
+export interface AppResourceProcessUsage {
+  pid: number
+  type: string
+  name?: string
+  cpuPercent: number
+  workingSetBytes: number
+}
+
+export interface AppResourceDiskUsage {
+  userDataPath: string
+  userDataBytes: number
+  fileCount: number
+  directoryCount: number
+  truncated: boolean
+  scannedAt: number
+}
+
+export interface AppResourceUsage {
+  sampledAt: number
+  cpuPercent: number
+  memoryBytes: number
+  processCount: number
+  disk: AppResourceDiskUsage
+  processes: AppResourceProcessUsage[]
 }
 
 // 路径类型定义
@@ -64,6 +91,8 @@ export interface SystemIconBatchOptions {
 export class PluginSystem {
   private _nativeId: string | null = null
   private fileIconCache: Map<string, string> = new Map()
+  private appResourceDiskCache: AppResourceDiskUsage | null = null
+  private appResourceDiskScan: Promise<AppResourceDiskUsage> | null = null
   private static readonly MAX_FILE_ICON_CACHE = 1500
 
   private static readonly DEFAULT_ICON_SIZE = 128
@@ -71,6 +100,9 @@ export class PluginSystem {
   private static readonly MAX_ICON_SIZE = 256
   private static readonly DEFAULT_BATCH_CONCURRENCY = 6
   private static readonly MAX_BATCH_CONCURRENCY = 12
+  private static readonly APP_DISK_CACHE_TTL_MS = 30_000
+  private static readonly APP_DISK_SCAN_MAX_ENTRIES = 8_000
+  private static readonly APP_DISK_SCAN_MAX_MS = 300
 
   /**
    * 获取系统信息
@@ -106,6 +138,39 @@ export class PluginSystem {
   }
 
   /**
+   * 获取当前应用自身资源占用。
+   * CPU/内存来自 Electron 进程树，硬盘占用只统计用户数据目录，避免扫描整块磁盘。
+   */
+  async getAppResourceUsage(): Promise<AppResourceUsage> {
+    const metrics = app.getAppMetrics()
+    const processes = metrics.map((metric) => {
+      const workingSetBytes = Math.max(0, metric.memory.workingSetSize || 0) * 1024
+      return {
+        pid: metric.pid,
+        type: metric.type || 'Unknown',
+        name: metric.name,
+        cpuPercent: this.roundResourceNumber(metric.cpu.percentCPUUsage || 0),
+        workingSetBytes
+      }
+    })
+
+    const cpuPercent = this.roundResourceNumber(
+      processes.reduce((total, processUsage) => total + processUsage.cpuPercent, 0)
+    )
+    const memoryBytes = processes.reduce((total, processUsage) => total + processUsage.workingSetBytes, 0)
+    const disk = await this.getAppDiskUsage()
+
+    return {
+      sampledAt: Date.now(),
+      cpuPercent,
+      memoryBytes,
+      processCount: processes.length,
+      disk,
+      processes
+    }
+  }
+
+  /**
    * 获取特定路径
    * 扩展支持 'exe' 和 'logs' 类型
    */
@@ -126,6 +191,99 @@ export class PluginSystem {
   getIdleTime(): number {
     const { powerMonitor } = require('electron')
     return powerMonitor.getSystemIdleTime()
+  }
+
+  private async getAppDiskUsage(): Promise<AppResourceDiskUsage> {
+    const now = Date.now()
+    if (
+      this.appResourceDiskCache &&
+      now - this.appResourceDiskCache.scannedAt < PluginSystem.APP_DISK_CACHE_TTL_MS
+    ) {
+      return this.appResourceDiskCache
+    }
+
+    if (this.appResourceDiskScan) {
+      return this.appResourceDiskScan
+    }
+
+    this.appResourceDiskScan = this.scanDirectoryUsage(app.getPath('userData'))
+      .then((usage) => {
+        this.appResourceDiskCache = usage
+        return usage
+      })
+      .finally(() => {
+        this.appResourceDiskScan = null
+      })
+
+    return this.appResourceDiskScan
+  }
+
+  private async scanDirectoryUsage(root: string): Promise<AppResourceDiskUsage> {
+    const startedAt = Date.now()
+    const stack = [root]
+    let userDataBytes = 0
+    let fileCount = 0
+    let directoryCount = 0
+    let visitedEntries = 0
+    let truncated = false
+
+    while (stack.length > 0) {
+      if (
+        visitedEntries >= PluginSystem.APP_DISK_SCAN_MAX_ENTRIES ||
+        Date.now() - startedAt >= PluginSystem.APP_DISK_SCAN_MAX_MS
+      ) {
+        truncated = true
+        break
+      }
+
+      const current = stack.pop()
+      if (!current) break
+
+      let stat
+      try {
+        stat = await lstat(current)
+      } catch {
+        continue
+      }
+
+      visitedEntries += 1
+
+      if (stat.isSymbolicLink()) {
+        continue
+      }
+
+      if (stat.isDirectory()) {
+        directoryCount += 1
+        try {
+          const children = await readdir(current, { withFileTypes: true })
+          for (const child of children) {
+            stack.push(join(current, child.name))
+          }
+        } catch {
+          // 忽略无权限或已被删除的目录，资源卡片只用于展示近似占用。
+        }
+        continue
+      }
+
+      if (stat.isFile()) {
+        fileCount += 1
+        userDataBytes += stat.size
+      }
+    }
+
+    return {
+      userDataPath: root,
+      userDataBytes,
+      fileCount,
+      directoryCount,
+      truncated,
+      scannedAt: Date.now()
+    }
+  }
+
+  private roundResourceNumber(value: number): number {
+    if (!Number.isFinite(value)) return 0
+    return Math.round(value * 10) / 10
   }
 
   /**

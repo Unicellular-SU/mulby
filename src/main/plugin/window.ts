@@ -92,6 +92,19 @@ export class PluginWindowManager {
     return developer.enabled && developer.showDevTools === true
   }
 
+  private getDetachedTitlebarPath(): string | null {
+    const candidates = app.isPackaged
+      ? [join(__dirname, '../renderer/detached-titlebar.html')]
+      : [
+          // 开发态优先读源文件，避免 dist/renderer 中的旧 HTML 掩盖标题栏改动。
+          join(process.cwd(), 'public/detached-titlebar.html'),
+          join(__dirname, '../../public/detached-titlebar.html'),
+          join(__dirname, '../renderer/detached-titlebar.html')
+        ]
+
+    return candidates.find((candidate) => existsSync(candidate)) ?? null
+  }
+
   // 更新 macOS Dock 图标显示状态
   private async updateDockVisibility(): Promise<void> {
     if (process.platform !== 'darwin' || !app.dock) return
@@ -141,6 +154,13 @@ export class PluginWindowManager {
     this.themeManager = manager
     // 同时设置到面板窗口管理器
     this.panelWindow?.setThemeManager(manager)
+  }
+
+  prewarmAttachedShell(delayMs = 300): void {
+    const timer = setTimeout(() => {
+      this.panelWindow?.prewarmShell()
+    }, delayMs)
+    timer.unref?.()
   }
 
   // 设置窗口关闭回调（用于处理后台运行）
@@ -391,11 +411,13 @@ export class PluginWindowManager {
 
     // 使用 promoteToWindow 将面板升级为独立窗口
     if (this.panelWindow?.isOpen()) {
-      const win = this.panelWindow.promoteToWindow()
-      if (win) {
+      const promoted = this.panelWindow.promoteToWindow()
+      if (promoted) {
+        const win = promoted.window
         const windowId = win.id
         this.detachedWindows.set(windowId, {
           window: win,
+          pluginView: promoted.pluginView,
           plugin,
           featureCode,
           input,
@@ -537,15 +559,9 @@ export class PluginWindowManager {
 
     if (showTitleBar) {
       // BrowserWindow 加载标题栏页面
-      const titlebarPath = join(__dirname, '../renderer/detached-titlebar.html')
-      if (existsSync(titlebarPath)) {
+      const titlebarPath = this.getDetachedTitlebarPath()
+      if (titlebarPath) {
         win.loadFile(titlebarPath)
-      } else {
-        // 开发模式：从 public 目录加载
-        const devTitlebarPath = join(__dirname, '../../public/detached-titlebar.html')
-        if (existsSync(devTitlebarPath)) {
-          win.loadFile(devTitlebarPath)
-        }
       }
 
       // 创建插件内容 WebContentsView
@@ -790,14 +806,9 @@ export class PluginWindowManager {
 
     if (showTitleBar) {
       // BrowserWindow 加载标题栏页面
-      const titlebarPath = join(__dirname, '../renderer/detached-titlebar.html')
-      if (existsSync(titlebarPath)) {
+      const titlebarPath = this.getDetachedTitlebarPath()
+      if (titlebarPath) {
         win.loadFile(titlebarPath)
-      } else {
-        const devTitlebarPath = join(__dirname, '../../public/detached-titlebar.html')
-        if (existsSync(devTitlebarPath)) {
-          win.loadFile(devTitlebarPath)
-        }
       }
 
       // 创建插件内容 WebContentsView
