@@ -386,6 +386,7 @@ interface MulbyPlugin {
   hideFeature(pluginId: string, featureCode: string): Promise<{ success: boolean }>
   unhideFeature(pluginId: string, featureCode: string): Promise<{ success: boolean }>
   removeRecentUsage(pluginId: string, featureCode: string): Promise<{ success: boolean }>
+  resolveDroppedFilePaths(files: File[]): string[]
   install(filePath: string): Promise<{
     success: boolean
     pluginName?: string

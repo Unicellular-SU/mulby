@@ -159,8 +159,21 @@ await window.mulby.plugin.removeRecentUsage('translator', 'translate');
 安装插件。
 
 ```javascript
-const result = await window.mulby.plugin.install('/path/to/plugin.zip');
+const result = await window.mulby.plugin.install('/path/to/plugin.inplugin');
 ```
+
+### plugin.resolveDroppedFilePaths(files)
+[Renderer]
+解析拖拽得到的 `File` 对象对应的本地文件路径。用于安装从系统文件管理器拖入的 `.inplugin` 插件包。
+
+```javascript
+const [filePath] = window.mulby.plugin.resolveDroppedFilePaths(Array.from(event.dataTransfer.files));
+if (filePath?.endsWith('.inplugin')) {
+  await window.mulby.plugin.install(filePath);
+}
+```
+
+返回值：`string[]`。无法解析路径的文件会返回空字符串。
 
 ### plugin.enable(name) / plugin.disable(name) / plugin.uninstall(name)
 [Renderer]
