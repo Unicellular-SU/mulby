@@ -687,6 +687,7 @@ export interface ElectronAPI {
     unpinFeature: (pluginId: string, featureCode: string) => Promise<{ success: boolean }>
     hideFeature: (pluginId: string, featureCode: string) => Promise<{ success: boolean }>
     unhideFeature: (pluginId: string, featureCode: string) => Promise<{ success: boolean }>
+    resolveDroppedFilePaths: (files: File[]) => string[]
     install: (filePath: string) => Promise<{ success: boolean; pluginName?: string; pluginId?: string; action?: 'installed' | 'updated' | 'already-installed' | 'downgrade-blocked'; isUpdate?: boolean; oldVersion?: string; newVersion?: string; error?: string }>
     enable: (name: string) => Promise<{ success: boolean; error?: string }>
     disable: (name: string) => Promise<{ success: boolean; error?: string }>

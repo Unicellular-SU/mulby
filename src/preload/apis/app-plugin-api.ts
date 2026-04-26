@@ -1,4 +1,4 @@
-import type { IpcRenderer } from 'electron'
+import { webUtils, type IpcRenderer } from 'electron'
 import type { InputPayload } from '../../shared/types/plugin'
 import type { OpenSystemPluginPayload, SystemPluginBeforeAttachPayload } from '../../shared/types/electron'
 import type { TaskSchedulerEvent } from '../../shared/types/task'
@@ -121,6 +121,13 @@ export function createAppPluginApi(ipcRenderer: IpcRenderer) {
       hideFeature: (pluginId: string, featureCode: string) => ipcRenderer.invoke('plugin:hideFeature', pluginId, featureCode),
       unhideFeature: (pluginId: string, featureCode: string) => ipcRenderer.invoke('plugin:unhideFeature', pluginId, featureCode),
       removeRecentUsage: (pluginId: string, featureCode: string) => ipcRenderer.invoke('plugin:removeRecentUsage', pluginId, featureCode),
+      resolveDroppedFilePaths: (files: File[]) => files.map((file) => {
+        try {
+          return webUtils.getPathForFile(file)
+        } catch {
+          return ''
+        }
+      }),
       install: (filePath: string) => ipcRenderer.invoke('plugin:install', filePath),
       enable: (name: string) => ipcRenderer.invoke('plugin:enable', name),
       disable: (name: string) => ipcRenderer.invoke('plugin:disable', name),

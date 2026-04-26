@@ -62,6 +62,15 @@ function isInpluginFile(file: DroppedFile): boolean {
   return normalizedName.endsWith('.inplugin') || normalizedPath.endsWith('.inplugin')
 }
 
+function getLegacyDroppedFilePath(file: DroppedFile): string {
+  return typeof file.path === 'string' ? file.path : ''
+}
+
+async function resolveDroppedFilePath(file: DroppedFile): Promise<string> {
+  const [resolvedPath] = window.mulby.plugin.resolveDroppedFilePaths([file])
+  return resolvedPath || getLegacyDroppedFilePath(file)
+}
+
 const SETTINGS_SECTION_SET = new Set<SettingsSection>([
   'dashboard',
   'general',
@@ -1193,13 +1202,14 @@ function MainApp() {
     const pluginFile = files.find(isInpluginFile)
     if (!pluginFile) return
 
-    if (!pluginFile.path) {
+    const pluginPath = await resolveDroppedFilePath(pluginFile)
+    if (!pluginPath) {
       window.mulby.notification.show('无法读取插件包路径，请从本地文件管理器拖放 .inplugin 文件', 'error')
       return
     }
 
     try {
-      const result = await window.mulby.plugin.install(pluginFile.path)
+      const result = await window.mulby.plugin.install(pluginPath)
       if (result.success) {
         if (result.action === 'already-installed') {
           window.mulby.notification.show(`插件 ${result.pluginName} 已是当前版本`)
