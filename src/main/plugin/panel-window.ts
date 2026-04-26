@@ -374,14 +374,14 @@ export class PluginPanelWindow {
         input?: InputPayload,
         route?: string,
         launchStart?: number,
-        onLoadReady?: Promise<unknown>
+        onLoadReady?: Promise<unknown>,
+        onPanelShown?: () => void
     ): BrowserWindow | null {
         if (!plugin.manifest.ui) return null
 
         const uiPath = join(plugin.path, plugin.manifest.ui)
 
         if (launchStart) log.info(`[LaunchTrace] createPanel entered | +${Date.now() - launchStart}ms`)
-        this.collapseMainWindowForAttachedPanel()
 
         // 清理现有插件 view，但保留可复用 shell BrowserWindow。
         this.clearCurrentPluginSession()
@@ -502,6 +502,7 @@ export class PluginPanelWindow {
             capturedWin.show()
             this.panelWindowHasBeenShown = true
             if (launchStart) log.info(`[LaunchTrace] panelWindow.show() called (${reason}) | +${Date.now() - launchStart}ms`)
+            onPanelShown?.()
 
             if (onLoadReady) {
                 await onLoadReady
@@ -1024,7 +1025,6 @@ export class PluginPanelWindow {
         if (!pluginWebContents) {
             return false
         }
-        this.collapseMainWindowForAttachedPanel()
         this.currentFeatureCode = featureCode
         this.currentInput = input?.text || ''
         this.currentAttachments = input?.attachments || []

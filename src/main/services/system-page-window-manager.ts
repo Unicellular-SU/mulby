@@ -8,7 +8,11 @@ import { injectCustomTitleBar } from '../plugin/titlebar'
 import { isIgnoringBlur } from './blur-manager'
 import { ATTACHED_PANEL_HEIGHT, ATTACHED_PANEL_MIN_OVERFLOW_HEIGHT } from '../constants/panel-window'
 import { SYSTEM_PAGE_FALLBACK_WIDTH } from '../constants/window-defaults'
-import { getMainWindowVisibleBounds } from '../main-window-frame'
+import {
+  MAIN_WINDOW_COLLAPSED_VISIBLE_HEIGHT,
+  getMainWindowVisibleBounds,
+  getMainWindowWindowSize
+} from '../main-window-frame'
 import {
   applyWindowsFramelessSurface,
   getWindowsFramelessSurfaceInsets,
@@ -275,6 +279,7 @@ export class SystemPageWindowManager {
         await applyWindowsFramelessSurface(this.attachedWindow, { resizeMode: 'bottom' })
         if (!this.attachedWindow || this.attachedWindow.isDestroyed()) return
       }
+      this.collapseMainWindowForAttachedPage()
       this.syncPosition()
       if (!mainWindow.isVisible()) {
         mainWindow.show()
@@ -585,6 +590,7 @@ export class SystemPageWindowManager {
     if (main && !main.isDestroyed() && this.shouldUseAttachedShadowWindow()) {
       this.createAttachedShadowWindow(main)
     }
+    this.collapseMainWindowForAttachedPage()
     this.syncPosition()
     const needsOpacityGuard = process.platform === 'win32'
       && this.attachedWindowHasBeenShown
@@ -806,6 +812,27 @@ export class SystemPageWindowManager {
     if (this.attachedShadowWindow && !this.attachedShadowWindow.isDestroyed()) {
       this.attachedShadowWindow.showInactive()
     }
+  }
+
+  private collapseMainWindowForAttachedPage(): void {
+    const main = this.mainWindow
+    if (!main || main.isDestroyed()) return
+
+    const visibleBounds = getMainWindowVisibleBounds(main.getBounds())
+    if (visibleBounds.height === MAIN_WINDOW_COLLAPSED_VISIBLE_HEIGHT) return
+
+    const minSize = getMainWindowWindowSize(400, MAIN_WINDOW_COLLAPSED_VISIBLE_HEIGHT)
+    const maxSize = getMainWindowWindowSize(9999, MAIN_WINDOW_COLLAPSED_VISIBLE_HEIGHT)
+    const nextSize = getMainWindowWindowSize(visibleBounds.width, MAIN_WINDOW_COLLAPSED_VISIBLE_HEIGHT)
+
+    main.setMinimumSize(minSize.width, minSize.height)
+    main.setMaximumSize(maxSize.width, maxSize.height)
+    main.setSize(nextSize.width, nextSize.height)
+
+    setImmediate(() => {
+      if (main.isDestroyed() || main.webContents.isDestroyed() || !main.isVisible()) return
+      main.webContents.invalidate()
+    })
   }
 
   private hideAttachedShadow(): void {

@@ -246,25 +246,27 @@ export class PluginWindowManager {
       return false
     }
 
+    const notifyRendererAttached = () => {
+      if (!this.mainWindow || this.mainWindow.isDestroyed() || this.mainWindow.webContents.isDestroyed()) return
+      this.mainWindow.webContents.send('plugin:attach', {
+        pluginName: plugin.id,
+        displayName: plugin.manifest.displayName,
+        featureCode,
+        input: input?.text || '',
+        attachments: input?.attachments,
+        mode: 'panel'
+      })
+      if (launchStart) log.info(`[LaunchTrace] plugin:attach sent to renderer | +${Date.now() - launchStart}ms`)
+    }
+
     if (launchStart) log.info(`[LaunchTrace] createPanel start | +${Date.now() - launchStart}ms`)
-    const panelWin = this.panelWindow.createPanel(plugin, featureCode, input, route, launchStart, onLoadReady)
+    const panelWin = this.panelWindow.createPanel(plugin, featureCode, input, route, launchStart, onLoadReady, notifyRendererAttached)
     if (!panelWin) {
       log.error('[PluginWindowManager] Failed to create panel window')
       this.attachedPlugin = null
       return false
     }
     if (launchStart) log.info(`[LaunchTrace] createPanel done | +${Date.now() - launchStart}ms`)
-
-    // 通知渲染进程插件已打开（用于隐藏列表和调整窗口高度）
-    this.mainWindow?.webContents.send('plugin:attach', {
-      pluginName: plugin.id,
-      displayName: plugin.manifest.displayName,
-      featureCode,
-      input: input?.text || '',
-      attachments: input?.attachments,
-      mode: 'panel'
-    })
-    if (launchStart) log.info(`[LaunchTrace] plugin:attach sent to renderer | +${Date.now() - launchStart}ms`)
 
     return true
   }
