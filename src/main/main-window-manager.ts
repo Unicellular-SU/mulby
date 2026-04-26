@@ -1,4 +1,4 @@
-import { BrowserWindow, app, screen, type Rectangle } from 'electron'
+import { BrowserWindow, app, screen, type Display, type Rectangle } from 'electron'
 import http from 'http'
 import https from 'https'
 import { join } from 'path'
@@ -199,23 +199,60 @@ export class MainWindowManager {
 
   // ── Position helpers ───────────────────────────────────────────
 
-  private getDefaultVisiblePosition(visibleBounds: Rectangle): { x: number; y: number } {
-    const cursorPoint = screen.getCursorScreenPoint()
-    const display = screen.getDisplayNearestPoint(cursorPoint)
-    const { width: screenWidth, height: screenHeight } = display.workAreaSize
-    const { x: screenX, y: screenY } = display.workArea
+  private getDefaultVisiblePosition(visibleBounds: Rectangle, display: Display): { x: number; y: number } {
+    const { x: screenX, y: screenY, width: screenWidth, height: screenHeight } = display.workArea
     return {
       x: screenX + Math.round((screenWidth - visibleBounds.width) / 2),
       y: screenY + Math.round(screenHeight * MW_DEFAULT_Y_RATIO)
     }
   }
 
+  private getCursorDisplay(): Display {
+    const cursorPoint = screen.getCursorScreenPoint()
+    return screen.getDisplayNearestPoint(cursorPoint)
+  }
+
+  private boundsIntersectWorkArea(bounds: Rectangle, workArea: Rectangle): boolean {
+    return bounds.x < workArea.x + workArea.width
+      && bounds.x + bounds.width > workArea.x
+      && bounds.y < workArea.y + workArea.height
+      && bounds.y + bounds.height > workArea.y
+  }
+
+  private clampVisibleBoundsToWorkArea(bounds: Rectangle, workArea: Rectangle): Rectangle {
+    const maxX = Math.max(workArea.x, workArea.x + workArea.width - bounds.width)
+    const maxY = Math.max(workArea.y, workArea.y + workArea.height - bounds.height)
+    return {
+      ...bounds,
+      x: Math.min(Math.max(bounds.x, workArea.x), maxX),
+      y: Math.min(Math.max(bounds.y, workArea.y), maxY)
+    }
+  }
+
   private resolveVisibleBounds(currentVisibleBounds: Rectangle): Rectangle {
     const settings = appSettingsManager.getSettings()
-    if (settings.window?.x !== undefined && settings.window?.y !== undefined) {
-      return { ...currentVisibleBounds, x: settings.window.x, y: settings.window.y }
+    const cursorDisplay = this.getCursorDisplay()
+    const defaultVisibleBounds = {
+      ...currentVisibleBounds,
+      ...this.getDefaultVisiblePosition(currentVisibleBounds, cursorDisplay)
     }
-    return { ...currentVisibleBounds, ...this.getDefaultVisiblePosition(currentVisibleBounds) }
+
+    if (settings.window?.x !== undefined && settings.window?.y !== undefined) {
+      const savedVisibleBounds = {
+        ...currentVisibleBounds,
+        x: settings.window.x,
+        y: settings.window.y
+      }
+      const savedDisplay = screen.getDisplayMatching(savedVisibleBounds)
+      if (
+        savedDisplay.id === cursorDisplay.id
+        && this.boundsIntersectWorkArea(savedVisibleBounds, cursorDisplay.workArea)
+      ) {
+        return this.clampVisibleBoundsToWorkArea(savedVisibleBounds, cursorDisplay.workArea)
+      }
+    }
+
+    return defaultVisibleBounds
   }
 
   // ── Shadow window ──────────────────────────────────────────────
