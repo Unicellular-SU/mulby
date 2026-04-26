@@ -26,7 +26,17 @@ interface NativeScreenCaptureAddon {
     x?: number; y?: number; width?: number; height?: number
     buffer?: Buffer; imageWidth?: number; imageHeight?: number
   }) => void): void
+  // Windows 独有：原生实时取色器
+  startColorPick?(callback: (result: {
+    success: boolean
+    r?: number; g?: number; b?: number
+  }) => void): void
 }
+
+type NativeColorPickOutcome =
+  | { type: 'color'; r: number; g: number; b: number }
+  | { type: 'cancelled' }
+  | { type: 'unavailable' }
 
 // 缓存加载的原生模块实例
 let cachedAddon: NativeScreenCaptureAddon | null | undefined = undefined
@@ -46,7 +56,6 @@ function loadAddon(): NativeScreenCaptureAddon | null {
       addonPath = join(app.getAppPath(), 'native', 'build', 'Release', 'screen_capture.node')
     }
 
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
     cachedAddon = require(addonPath) as NativeScreenCaptureAddon
     log.info('[NativeScreenCapture] 原生模块加载成功')
     return cachedAddon
@@ -208,6 +217,41 @@ export function nativePickColor(): Promise<{ r: number; g: number; b: number } |
     } catch (err) {
       log.error('[NativeScreenCapture] pickColor 失败:', err)
       resolve(null)
+    }
+  })
+}
+
+/**
+ * Windows 原生实时取色器
+ *
+ * 使用 Win32 低级鼠标/键盘 hook + GetPixel 实时读取当前屏幕像素。
+ * 不预截全屏、不创建 Electron 覆盖窗口，因此不会把任务栏或覆盖层截入背景。
+ */
+export function nativeStartColorPick(): Promise<NativeColorPickOutcome> {
+  const addon = loadAddon()
+
+  if (!addon || typeof addon.startColorPick !== 'function') {
+    return Promise.resolve({ type: 'unavailable' })
+  }
+
+  return new Promise((resolve) => {
+    try {
+      addon.startColorPick!((result) => {
+        if (
+          result.success &&
+          typeof result.r === 'number' &&
+          typeof result.g === 'number' &&
+          typeof result.b === 'number'
+        ) {
+          resolve({ type: 'color', r: result.r, g: result.g, b: result.b })
+          return
+        }
+
+        resolve({ type: 'cancelled' })
+      })
+    } catch (err) {
+      log.error('[NativeScreenCapture] startColorPick 调用失败:', err)
+      resolve({ type: 'unavailable' })
     }
   })
 }

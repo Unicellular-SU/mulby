@@ -4,12 +4,12 @@
  * 平台策略:
  *   macOS: NSColorSampler 系统原生取色器（macOS 10.15+）
  *          → 提供原生放大镜 UI、像素级精准、零代码
- *          fallback: 覆盖窗口方案（同 Windows/Linux）
+ *          fallback: 覆盖窗口方案
  *   Linux: xdg-desktop-portal PickColor（X11 + Wayland 通吃）
  *          → 桌面环境提供原生取色 UI（GNOME/KDE/Hyprland 等）
- *          fallback: 覆盖窗口方案（同 Windows）
- *   Windows: 预截取全屏快照 → 覆盖窗口 → 本地裁剪放大（≥ 60fps）
- *          → 从内存中的 bitmap 直接读取像素，零 IPC 往返
+ *          fallback: 覆盖窗口方案
+ *   Windows: 原生实时取色器（低级鼠标 hook + GetPixel + 原生悬浮放大镜）
+ *          → 不预截全屏，不创建 Electron 覆盖层，避免任务栏叠影
  *
  * codex review 修复:
  *   - [P1] completeColorPick 原生模块不可用时回退到从快照 dataUrl 解析像素
@@ -24,7 +24,8 @@ import {
   nativeCaptureScreen,
   nativeGetPixelColor,
   extractRegionFromSnapshot,
-  nativeCaptureScreenRaw
+  nativeCaptureScreenRaw,
+  nativeStartColorPick
 } from '../services/native-screen-capture'
 import { portalPickColor, isPortalColorPickAvailable } from '../services/linux-portal-color-pick'
 import { registerSystemInternalWindow, unregisterSystemInternalWindow } from '../services/ipc-caller-resolver'
@@ -52,7 +53,7 @@ interface DisplaySnapshot {
   raw: { buffer: Buffer; width: number; height: number } | null
   dataUrl: string | null
 }
-let displaySnapshots = new Map<number, DisplaySnapshot>()
+const displaySnapshots = new Map<number, DisplaySnapshot>()
 
 function formatHex(r: number, g: number, b: number): string {
   const toHex = (value: number) => value.toString(16).padStart(2, '0')
@@ -453,6 +454,35 @@ async function colorPickLinux(): Promise<ColorPickResult | null> {
 }
 
 // ===========================================================
+// Windows: Win32 原生实时取色
+// ===========================================================
+
+/**
+ * Windows 原生实时取色方案
+ *
+ * 优先使用 C++ N-API 实现：
+ *   - WH_MOUSE_LL/WH_KEYBOARD_LL 监听点击与 ESC
+ *   - GetPixel 实时读取当前屏幕合成像素
+ *   - 小型原生悬浮窗显示放大镜和颜色值
+ *
+ * 原生模块缺失时才回退到旧覆盖窗口方案，保证开发环境仍可用。
+ */
+async function colorPickWindows(): Promise<ColorPickResult | null> {
+  const result = await nativeStartColorPick()
+
+  if (result.type === 'color') {
+    return colorToResult(result.r, result.g, result.b)
+  }
+
+  if (result.type === 'unavailable') {
+    log.warn('[ColorPick] Windows 原生实时取色不可用，回退到覆盖窗口方案')
+    return colorPickWithOverlay()
+  }
+
+  return null
+}
+
+// ===========================================================
 // 公共 API
 // ===========================================================
 
@@ -470,8 +500,8 @@ export async function startColorPick(): Promise<ColorPickResult | null> {
     return colorPickLinux()
   }
 
-  // Windows: 覆盖窗口方案
-  return colorPickWithOverlay()
+  // Windows: 原生实时取色方案
+  return colorPickWindows()
 }
 
 /**

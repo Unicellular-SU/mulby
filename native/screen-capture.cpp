@@ -21,6 +21,7 @@
 #include <thread>
 #include <atomic>
 #include <vector>
+#include <cwchar>
 
 /**
  * 截取指定区域的屏幕内容
@@ -677,6 +678,478 @@ static Napi::Value StartRegionCapture(const Napi::CallbackInfo& info) {
     return env.Undefined();
 }
 
+// ============================================================
+// Windows: Native Realtime Color Picker
+// ============================================================
+
+struct ColorPickResult {
+    bool success;
+    int r, g, b;
+};
+
+static const wchar_t* CP_CLASS = L"MulbyRealtimeColorPick";
+static bool g_cpClassRegistered = false;
+static std::atomic<bool> g_cpActive{false};
+
+struct CPState {
+    HWND hwnd;
+    HHOOK mouseHook;
+    HHOOK keyboardHook;
+    bool success;
+    bool finished;
+    bool initialButtonsReleased;
+    bool hasSample;
+    int x, y;
+    int r, g, b;
+    int vsX, vsY, vsW, vsH;
+    int sampleSize;
+    HDC hSampleDC;
+    HBITMAP hSampleBmp;
+    HBITMAP hOldSample;
+    void* pSampleBits;
+    HFONT hFont;
+};
+
+static CPState* g_cpState = nullptr;
+static const UINT_PTR CP_TIMER_ID = 1;
+static const UINT CP_TIMER_INTERVAL_MS = 16;
+
+static int CPClampInt(int value, int minValue, int maxValue) {
+    if (maxValue < minValue) return minValue;
+    if (value < minValue) return minValue;
+    if (value > maxValue) return maxValue;
+    return value;
+}
+
+static void CPPlaceWindow(CPState* s) {
+    if (!s || !s->hwnd) return;
+
+    const int winW = 220;
+    const int winH = 176;
+    const int offset = 28;
+    const int vsRight = s->vsX + s->vsW;
+    const int vsBottom = s->vsY + s->vsH;
+
+    int wx = s->x + offset;
+    int wy = s->y + offset;
+
+    if (wx + winW > vsRight) {
+        wx = s->x - offset - winW;
+    }
+    if (wy + winH > vsBottom) {
+        wy = s->y - offset - winH;
+    }
+
+    wx = CPClampInt(wx, s->vsX, vsRight - winW);
+    wy = CPClampInt(wy, s->vsY, vsBottom - winH);
+
+    SetWindowPos(
+        s->hwnd,
+        HWND_TOPMOST,
+        wx,
+        wy,
+        winW,
+        winH,
+        SWP_NOACTIVATE | SWP_SHOWWINDOW
+    );
+}
+
+static void CPUpdateSample(CPState* s, int x, int y) {
+    if (!s || s->finished) return;
+
+    s->x = x;
+    s->y = y;
+
+    // Move the preview away before sampling, so the picker never reads itself.
+    CPPlaceWindow(s);
+
+    HDC hdc = GetDC(NULL);
+    if (!hdc) return;
+
+    COLORREF color = GetPixel(hdc, x, y);
+    if (color != CLR_INVALID) {
+        s->r = GetRValue(color);
+        s->g = GetGValue(color);
+        s->b = GetBValue(color);
+    }
+
+    if (s->hSampleDC && s->pSampleBits) {
+        int half = s->sampleSize / 2;
+        BitBlt(
+            s->hSampleDC,
+            0,
+            0,
+            s->sampleSize,
+            s->sampleSize,
+            hdc,
+            x - half,
+            y - half,
+            SRCCOPY
+        );
+    }
+
+    ReleaseDC(NULL, hdc);
+
+    if (s->hwnd) {
+        InvalidateRect(s->hwnd, NULL, FALSE);
+    }
+}
+
+static void CPFinish(CPState* s, bool success) {
+    if (!s || s->finished) return;
+    s->success = success;
+    s->finished = true;
+    if (s->hwnd) {
+        PostMessageW(s->hwnd, WM_CLOSE, 0, 0);
+    } else {
+        PostQuitMessage(0);
+    }
+}
+
+static bool CPIsKeyDown(int vk) {
+    return (GetAsyncKeyState(vk) & 0x8000) != 0;
+}
+
+static LRESULT CALLBACK CPClickHookProc(int nCode, WPARAM wParam, LPARAM lParam) {
+    if (nCode >= 0 && g_cpState && g_cpState->initialButtonsReleased && !g_cpState->finished) {
+        MSLLHOOKSTRUCT* mouse = reinterpret_cast<MSLLHOOKSTRUCT*>(lParam);
+        if (mouse) {
+            switch (wParam) {
+            case WM_LBUTTONDOWN:
+                CPUpdateSample(g_cpState, mouse->pt.x, mouse->pt.y);
+                CPFinish(g_cpState, true);
+                return 1;
+            case WM_RBUTTONDOWN:
+            case WM_MBUTTONDOWN:
+                CPFinish(g_cpState, false);
+                return 1;
+            default:
+                break;
+            }
+        }
+    }
+
+    return CallNextHookEx(g_cpState ? g_cpState->mouseHook : NULL, nCode, wParam, lParam);
+}
+
+static LRESULT CALLBACK CPKeyboardHookProc(int nCode, WPARAM wParam, LPARAM lParam) {
+    if (nCode >= 0 && g_cpState && !g_cpState->finished && (wParam == WM_KEYDOWN || wParam == WM_SYSKEYDOWN)) {
+        KBDLLHOOKSTRUCT* key = reinterpret_cast<KBDLLHOOKSTRUCT*>(lParam);
+        if (key && key->vkCode == VK_ESCAPE) {
+            CPFinish(g_cpState, false);
+            return 1;
+        }
+    }
+
+    return CallNextHookEx(g_cpState ? g_cpState->keyboardHook : NULL, nCode, wParam, lParam);
+}
+
+static void CPTick(CPState* s) {
+    if (!s || s->finished) return;
+
+    const bool leftDown = CPIsKeyDown(VK_LBUTTON);
+    const bool rightDown = CPIsKeyDown(VK_RBUTTON);
+    const bool middleDown = CPIsKeyDown(VK_MBUTTON);
+    const bool escapeDown = CPIsKeyDown(VK_ESCAPE);
+
+    if (!s->initialButtonsReleased) {
+        s->initialButtonsReleased = !leftDown && !rightDown && !middleDown && !escapeDown;
+    } else {
+        if ((escapeDown && !s->keyboardHook) || ((rightDown || middleDown) && !s->mouseHook)) {
+            CPFinish(s, false);
+            return;
+        }
+
+        // If hook installation fails, keep polling as a fallback. In that case
+        // the underlying app may still receive the click, but picking remains usable.
+        if (leftDown && !s->mouseHook) {
+            POINT pt;
+            if (GetCursorPos(&pt)) {
+                CPUpdateSample(s, pt.x, pt.y);
+            }
+            CPFinish(s, true);
+            return;
+        }
+    }
+
+    POINT pt;
+    if (!GetCursorPos(&pt)) return;
+    if (!s->hasSample || pt.x != s->x || pt.y != s->y) {
+        s->hasSample = true;
+        CPUpdateSample(s, pt.x, pt.y);
+    }
+}
+
+static void CPPaintTo(HDC hdc, CPState* s) {
+    if (!s) return;
+
+    RECT client;
+    GetClientRect(s->hwnd, &client);
+
+    HBRUSH bg = CreateSolidBrush(RGB(18, 18, 22));
+    FillRect(hdc, &client, bg);
+    DeleteObject(bg);
+
+    HPEN borderPen = CreatePen(PS_SOLID, 1, RGB(70, 70, 78));
+    HPEN oldPen = (HPEN)SelectObject(hdc, borderPen);
+    HBRUSH oldBrush = (HBRUSH)SelectObject(hdc, GetStockObject(NULL_BRUSH));
+    Rectangle(hdc, client.left, client.top, client.right, client.bottom);
+    SelectObject(hdc, oldPen);
+    SelectObject(hdc, oldBrush);
+    DeleteObject(borderPen);
+
+    const int zoomX = 12;
+    const int zoomY = 12;
+    const int cell = 8;
+    const int zoomSize = s->sampleSize * cell;
+
+    if (s->hSampleDC && s->pSampleBits) {
+        int oldStretchMode = SetStretchBltMode(hdc, COLORONCOLOR);
+        StretchBlt(
+            hdc,
+            zoomX,
+            zoomY,
+            zoomSize,
+            zoomSize,
+            s->hSampleDC,
+            0,
+            0,
+            s->sampleSize,
+            s->sampleSize,
+            SRCCOPY
+        );
+        SetStretchBltMode(hdc, oldStretchMode);
+    }
+
+    HPEN gridPen = CreatePen(PS_SOLID, 1, RGB(40, 40, 48));
+    oldPen = (HPEN)SelectObject(hdc, gridPen);
+    for (int i = 0; i <= s->sampleSize; i++) {
+        int p = zoomX + i * cell;
+        MoveToEx(hdc, p, zoomY, NULL);
+        LineTo(hdc, p, zoomY + zoomSize);
+        p = zoomY + i * cell;
+        MoveToEx(hdc, zoomX, p, NULL);
+        LineTo(hdc, zoomX + zoomSize, p);
+    }
+    SelectObject(hdc, oldPen);
+    DeleteObject(gridPen);
+
+    int center = s->sampleSize / 2;
+    HPEN centerPen = CreatePen(PS_SOLID, 2, RGB(255, 255, 255));
+    oldPen = (HPEN)SelectObject(hdc, centerPen);
+    oldBrush = (HBRUSH)SelectObject(hdc, GetStockObject(NULL_BRUSH));
+    Rectangle(
+        hdc,
+        zoomX + center * cell,
+        zoomY + center * cell,
+        zoomX + (center + 1) * cell,
+        zoomY + (center + 1) * cell
+    );
+    SelectObject(hdc, oldPen);
+    SelectObject(hdc, oldBrush);
+    DeleteObject(centerPen);
+
+    RECT swatch = {150, 16, 204, 70};
+    HBRUSH swatchBrush = CreateSolidBrush(RGB(s->r, s->g, s->b));
+    FillRect(hdc, &swatch, swatchBrush);
+    DeleteObject(swatchBrush);
+    HPEN swatchPen = CreatePen(PS_SOLID, 1, RGB(220, 220, 220));
+    oldPen = (HPEN)SelectObject(hdc, swatchPen);
+    oldBrush = (HBRUSH)SelectObject(hdc, GetStockObject(NULL_BRUSH));
+    Rectangle(hdc, swatch.left, swatch.top, swatch.right, swatch.bottom);
+    SelectObject(hdc, oldPen);
+    SelectObject(hdc, oldBrush);
+    DeleteObject(swatchPen);
+
+    wchar_t hexText[16];
+    swprintf_s(hexText, L"#%02X%02X%02X", s->r, s->g, s->b);
+    wchar_t rgbText[64];
+    swprintf_s(rgbText, L"rgb(%d, %d, %d)", s->r, s->g, s->b);
+    wchar_t tipText[] = L"Click to pick, ESC/right click to cancel";
+
+    HFONT oldFont = (HFONT)SelectObject(hdc, s->hFont);
+    SetBkMode(hdc, TRANSPARENT);
+    SetTextColor(hdc, RGB(255, 255, 255));
+    TextOutW(hdc, 150, 82, hexText, (int)wcslen(hexText));
+    SetTextColor(hdc, RGB(205, 205, 212));
+    TextOutW(hdc, 150, 108, rgbText, (int)wcslen(rgbText));
+    SetTextColor(hdc, RGB(150, 150, 160));
+    TextOutW(hdc, 12, 148, tipText, (int)wcslen(tipText));
+    SelectObject(hdc, oldFont);
+}
+
+static LRESULT CALLBACK CPWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
+    CPState* s = (CPState*)GetWindowLongPtr(hwnd, GWLP_USERDATA);
+
+    switch (msg) {
+    case WM_CREATE: {
+        CREATESTRUCT* cs = (CREATESTRUCT*)lParam;
+        SetWindowLongPtr(hwnd, GWLP_USERDATA, (LONG_PTR)cs->lpCreateParams);
+        return 0;
+    }
+    case WM_TIMER:
+        if (wParam == CP_TIMER_ID) CPTick(s);
+        return 0;
+    case WM_MOUSEACTIVATE:
+        return MA_NOACTIVATE;
+    case WM_ERASEBKGND:
+        return 1;
+    case WM_PAINT: {
+        if (!s) break;
+        PAINTSTRUCT ps;
+        HDC hdc = BeginPaint(hwnd, &ps);
+        CPPaintTo(hdc, s);
+        EndPaint(hwnd, &ps);
+        return 0;
+    }
+    case WM_CLOSE:
+        DestroyWindow(hwnd);
+        return 0;
+    case WM_DESTROY:
+        KillTimer(hwnd, CP_TIMER_ID);
+        if (s) s->hwnd = NULL;
+        PostQuitMessage(0);
+        return 0;
+    }
+
+    return DefWindowProc(hwnd, msg, wParam, lParam);
+}
+
+static Napi::Value StartColorPick(const Napi::CallbackInfo& info) {
+    Napi::Env env = info.Env();
+    if (info.Length() < 1 || !info[0].IsFunction()) {
+        Napi::TypeError::New(env, "Callback function required").ThrowAsJavaScriptException();
+        return env.Undefined();
+    }
+    if (g_cpActive.exchange(true)) {
+        Napi::Error::New(env, "Color pick already in progress").ThrowAsJavaScriptException();
+        return env.Undefined();
+    }
+
+    auto tsfn = Napi::ThreadSafeFunction::New(
+        env, info[0].As<Napi::Function>(),
+        "ColorPickCB", 0, 1
+    );
+
+    std::thread([tsfn]() mutable {
+        CPState st = {};
+        st.success = false;
+        st.finished = false;
+        st.initialButtonsReleased = false;
+        st.hasSample = false;
+        st.sampleSize = 15;
+        st.r = 0; st.g = 0; st.b = 0;
+        st.vsX = GetSystemMetrics(SM_XVIRTUALSCREEN);
+        st.vsY = GetSystemMetrics(SM_YVIRTUALSCREEN);
+        st.vsW = GetSystemMetrics(SM_CXVIRTUALSCREEN);
+        st.vsH = GetSystemMetrics(SM_CYVIRTUALSCREEN);
+        if (st.vsW <= 0 || st.vsH <= 0) {
+            st.vsX = 0; st.vsY = 0;
+            st.vsW = GetSystemMetrics(SM_CXSCREEN);
+            st.vsH = GetSystemMetrics(SM_CYSCREEN);
+        }
+
+        HDC hdc = GetDC(NULL);
+        BITMAPINFOHEADER bi = {};
+        bi.biSize = sizeof(bi);
+        bi.biWidth = st.sampleSize;
+        bi.biHeight = -st.sampleSize;
+        bi.biPlanes = 1;
+        bi.biBitCount = 32;
+        bi.biCompression = BI_RGB;
+
+        st.hSampleDC = CreateCompatibleDC(hdc);
+        st.hSampleBmp = CreateDIBSection(st.hSampleDC, (BITMAPINFO*)&bi, DIB_RGB_COLORS, &st.pSampleBits, NULL, 0);
+        st.hOldSample = (HBITMAP)SelectObject(st.hSampleDC, st.hSampleBmp);
+        ReleaseDC(NULL, hdc);
+
+        st.hFont = CreateFontW(15, 0, 0, 0, FW_NORMAL, 0, 0, 0,
+            DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
+            CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_SWISS, L"Segoe UI");
+
+        if (!g_cpClassRegistered) {
+            WNDCLASSEXW wc = {};
+            wc.cbSize = sizeof(wc);
+            wc.lpfnWndProc = CPWndProc;
+            wc.hInstance = GetModuleHandle(NULL);
+            wc.hCursor = LoadCursor(NULL, IDC_CROSS);
+            wc.lpszClassName = CP_CLASS;
+            wc.style = CS_HREDRAW | CS_VREDRAW;
+            RegisterClassExW(&wc);
+            g_cpClassRegistered = true;
+        }
+
+        st.hwnd = CreateWindowExW(
+            WS_EX_TOPMOST | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE,
+            CP_CLASS, NULL,
+            WS_POPUP,
+            st.vsX, st.vsY, 220, 176,
+            NULL, NULL, GetModuleHandle(NULL), &st
+        );
+
+        if (!st.hwnd || !st.hSampleDC || !st.hSampleBmp) {
+            auto* r = new ColorPickResult{false, 0, 0, 0};
+            tsfn.BlockingCall(r, [](Napi::Env env, Napi::Function cb, ColorPickResult* d) {
+                Napi::Object o = Napi::Object::New(env);
+                o.Set("success", false);
+                cb.Call({o});
+                delete d;
+            });
+            if (st.hwnd) DestroyWindow(st.hwnd);
+            if (st.hSampleDC && st.hOldSample) SelectObject(st.hSampleDC, st.hOldSample);
+            if (st.hSampleBmp) DeleteObject(st.hSampleBmp);
+            if (st.hSampleDC) DeleteDC(st.hSampleDC);
+            if (st.hFont) DeleteObject(st.hFont);
+            tsfn.Release();
+            g_cpActive = false;
+            return;
+        }
+
+        g_cpState = &st;
+        st.mouseHook = SetWindowsHookExW(WH_MOUSE_LL, CPClickHookProc, GetModuleHandle(NULL), 0);
+        st.keyboardHook = SetWindowsHookExW(WH_KEYBOARD_LL, CPKeyboardHookProc, GetModuleHandle(NULL), 0);
+
+        POINT pt;
+        GetCursorPos(&pt);
+        CPUpdateSample(&st, pt.x, pt.y);
+        st.hasSample = true;
+        SetTimer(st.hwnd, CP_TIMER_ID, CP_TIMER_INTERVAL_MS, NULL);
+
+        MSG msg;
+        while (GetMessage(&msg, NULL, 0, 0) > 0) {
+            TranslateMessage(&msg);
+            DispatchMessage(&msg);
+        }
+
+        if (st.mouseHook) UnhookWindowsHookEx(st.mouseHook);
+        if (st.keyboardHook) UnhookWindowsHookEx(st.keyboardHook);
+        g_cpState = nullptr;
+
+        auto* result = new ColorPickResult{st.success, st.r, st.g, st.b};
+
+        if (st.hSampleDC && st.hOldSample) SelectObject(st.hSampleDC, st.hOldSample);
+        if (st.hSampleBmp) DeleteObject(st.hSampleBmp);
+        if (st.hSampleDC) DeleteDC(st.hSampleDC);
+        if (st.hFont) DeleteObject(st.hFont);
+
+        tsfn.BlockingCall(result, [](Napi::Env env, Napi::Function cb, ColorPickResult* d) {
+            Napi::Object o = Napi::Object::New(env);
+            o.Set("success", Napi::Boolean::New(env, d->success));
+            if (d->success) {
+                o.Set("r", Napi::Number::New(env, d->r));
+                o.Set("g", Napi::Number::New(env, d->g));
+                o.Set("b", Napi::Number::New(env, d->b));
+            }
+            cb.Call({o});
+            delete d;
+        });
+        tsfn.Release();
+        g_cpActive = false;
+    }).detach();
+
+    return env.Undefined();
+}
+
 #endif // _WIN32
 
 // ============================================================
@@ -912,6 +1385,7 @@ Napi::Object Init(Napi::Env env, Napi::Object exports) {
     exports.Set("getDisplays", Napi::Function::New(env, GetDisplays));
 #ifdef _WIN32
     exports.Set("startRegionCapture", Napi::Function::New(env, StartRegionCapture));
+    exports.Set("startColorPick", Napi::Function::New(env, StartColorPick));
 #endif
     return exports;
 }
