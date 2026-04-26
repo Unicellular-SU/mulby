@@ -87,6 +87,19 @@ function areBoundsEqual(
         && left.height === right.height
 }
 
+function normalizePanelRoute(route?: string | null): string {
+    return (route || '')
+        .trim()
+        .replace(/^#/, '')
+        .replace(/^\/+/, '')
+        .replace(/\/+$/, '')
+}
+
+function getPanelRouteHash(route?: string): string | undefined {
+    const normalized = normalizePanelRoute(route)
+    return normalized ? `/${normalized}` : undefined
+}
+
 export interface PromotedPanelWindow {
     window: BrowserWindow
     pluginView?: WebContentsView
@@ -535,8 +548,9 @@ export class PluginPanelWindow {
 
         // 加载插件 UI
         if (launchStart) log.info(`[LaunchTrace] loadFile start | +${Date.now() - launchStart}ms`)
-        if (route) {
-            void capturedWebContents.loadFile(uiPath, { hash: route })
+        const routeHash = getPanelRouteHash(route)
+        if (routeHash) {
+            void capturedWebContents.loadFile(uiPath, { hash: routeHash })
         } else {
             void capturedWebContents.loadFile(uiPath)
         }
@@ -992,9 +1006,10 @@ export class PluginPanelWindow {
         this.suspendedForResident = false
         const restoredPlugin = this.currentPlugin
         const restoredView = this.pluginView
-        const sendRestoreInit = () => {
+        const sendRestoreInit = (reason: string) => {
             if (!this.panelWindow || this.panelWindow.isDestroyed() || pluginWebContents.isDestroyed()) return
             if (this.currentPlugin !== restoredPlugin || this.pluginView !== restoredView) return
+            const nonce = Date.now()
             pluginWebContents.send('plugin:init', {
                 pluginName: restoredPlugin.id,
                 featureCode,
@@ -1002,8 +1017,9 @@ export class PluginPanelWindow {
                 attachments: this.currentAttachments,
                 mode: 'panel' as const,
                 route: this.currentRoute,
-                nonce: Date.now()
+                nonce
             })
+            log.info(`[ResidentUI] plugin:init sent | plugin=${restoredPlugin.id} | feature=${featureCode} | route=${this.currentRoute || ''} | reason=${reason} | nonce=${nonce}`)
 
             if (this.themeManager && !pluginWebContents.isDestroyed()) {
                 pluginWebContents.send('theme:changed', this.themeManager.getActualTheme())
@@ -1012,28 +1028,54 @@ export class PluginPanelWindow {
 
         const currentRoute = (() => {
             try {
-                return new URL(pluginWebContents.getURL()).hash.replace(/^#/, '')
+                return normalizePanelRoute(new URL(pluginWebContents.getURL()).hash)
             } catch {
                 return ''
             }
         })()
-        const nextRoute = route || ''
+        const nextRoute = normalizePanelRoute(route)
 
         if (currentRoute !== nextRoute && restoredPlugin.manifest.ui) {
             this.hide()
-            pluginWebContents.once('did-finish-load', () => {
-                this.show()
-                sendRestoreInit()
-            })
+            let completed = false
+            let fallbackTimer: NodeJS.Timeout | null = null
+            const completeRestore = (reason: string) => {
+                if (completed) return
+                completed = true
+                pluginWebContents.removeListener('did-finish-load', onFinishLoad)
+                pluginWebContents.removeListener('did-fail-load', onFailLoad)
+                if (fallbackTimer) {
+                    clearTimeout(fallbackTimer)
+                    fallbackTimer = null
+                }
+                this.show({ activate: true })
+                sendRestoreInit(reason)
+            }
+            const onFinishLoad = () => completeRestore('did-finish-load')
+            const onFailLoad = () => completeRestore('did-fail-load')
+            pluginWebContents.once('did-finish-load', onFinishLoad)
+            pluginWebContents.once('did-fail-load', onFailLoad)
+            fallbackTimer = setTimeout(() => {
+                log.warn(`[ResidentUI] restore load fallback | plugin=${restoredPlugin.id} | currentRoute=${currentRoute} | nextRoute=${nextRoute}`)
+                completeRestore('load-fallback')
+            }, 150)
+            fallbackTimer.unref?.()
             const uiPath = join(restoredPlugin.path, restoredPlugin.manifest.ui)
-            if (route) {
-                void pluginWebContents.loadFile(uiPath, { hash: route })
+            const routeHash = getPanelRouteHash(route)
+            if (routeHash) {
+                void pluginWebContents.loadFile(uiPath, { hash: routeHash }).catch((err) => {
+                    log.warn(`[ResidentUI] restore load failed | plugin=${restoredPlugin.id}:`, err)
+                    completeRestore('load-error')
+                })
             } else {
-                void pluginWebContents.loadFile(uiPath)
+                void pluginWebContents.loadFile(uiPath).catch((err) => {
+                    log.warn(`[ResidentUI] restore load failed | plugin=${restoredPlugin.id}:`, err)
+                    completeRestore('load-error')
+                })
             }
         } else {
-            this.show()
-            sendRestoreInit()
+            this.show({ activate: true })
+            sendRestoreInit('same-route')
         }
 
         log.info(`[ResidentUI] restore | plugin=${restoredPlugin.id}`)
@@ -1111,11 +1153,19 @@ export class PluginPanelWindow {
     /**
      * 显示面板
      */
-    show() {
+    show(options: { activate?: boolean } = {}) {
         if (this.suspendedForResident || !this.currentPlugin) return
         if (this.panelWindow && !this.panelWindow.isDestroyed()) {
             this.syncPosition()
             this.layoutAttachedPluginView()
+            if (!this.mainWindow.isDestroyed()) {
+                if (this.mainWindow.isMinimized()) {
+                    this.mainWindow.restore()
+                }
+                if (!this.mainWindow.isVisible()) {
+                    this.mainWindow.show()
+                }
+            }
             const needsOpacityGuard = process.platform === 'win32'
                 && this.panelWindowHasBeenShown
                 && !this.panelWindow.isVisible()
@@ -1126,7 +1176,11 @@ export class PluginPanelWindow {
                 this.panelWindow.setOpacity(1)
             }
             this.showShadow()
-            this.panelWindow.showInactive()
+            if (options.activate) {
+                this.panelWindow.show()
+            } else {
+                this.panelWindow.showInactive()
+            }
             this.panelWindowHasBeenShown = true
             if (needsOpacityGuard) {
                 this.getPluginWebContents()?.invalidate()
