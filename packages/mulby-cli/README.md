@@ -219,6 +219,10 @@ README 只保留高频入口。更完整的 Mulby 插件开发知识已经放进
 
 不会。请先运行 `mulby build` 或 `pnpm run build`。
 
+### `mulby pack` 会打包后端依赖吗？
+
+会。`mulby pack` 会分析 `dist/main.js` 和 `preload.cjs` 的运行时依赖，并把需要的 `node_modules` 文件一起写入 `.inplugin`。这包括 `sharp` 这类 native addon 依赖的 `.node` 和平台库文件。
+
 ### 还可以查看更完整的命令帮助吗？
 
 可以：
