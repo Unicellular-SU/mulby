@@ -13,6 +13,7 @@ import { PluginCommandShortcutManager } from './command-shortcuts'
 import { PluginCommandDisabledManager } from './command-disabled'
 import { pluginFeatureStore } from './dynamic-features'
 import { preparePluginPreload } from './plugin-preload-wrapper'
+import { materializeDataUrlImageAttachments } from './input-attachments'
 import {
   InputPayload,
   Plugin,
@@ -244,6 +245,19 @@ export class PluginManager {
         this.idleLoadTimers.delete(pluginId)
       }
     })
+  }
+
+  private async normalizeRunInput(input?: string | InputPayload): Promise<InputPayload> {
+    const normalizedInput = normalizeInputPayload(input)
+    try {
+      return await materializeDataUrlImageAttachments(
+        normalizedInput,
+        join(app.getPath('temp'), 'mulby-input-attachments')
+      )
+    } catch (error) {
+      log.warn('[PluginManager] Failed to materialize input attachments, falling back to original payload', error)
+      return normalizedInput
+    }
   }
 
   /**
@@ -786,7 +800,7 @@ export class PluginManager {
 
     // 系统插件拦截：直接调用内建处理函数，不走 Host/Worker 流程
     if (isSystemPlugin(pluginId)) {
-      const normalizedInput = normalizeInputPayload(input)
+      const normalizedInput = await this.normalizeRunInput(input)
       const result = await this.systemCommandExecutor.execute(featureCode, normalizedInput, {
         hideMainWindow: () => this.windowManager?.hideMainWindowForCapture(),
         openSystemPage: (page: string) => this.systemPageOpenHandler?.(page)
@@ -797,7 +811,7 @@ export class PluginManager {
       return result
     }
 
-    const normalizedInput = normalizeInputPayload(input)
+    const normalizedInput = await this.normalizeRunInput(input)
     let feature = this.getCombinedFeatures(plugin).find(item => item.code === featureCode)
     let matched = feature ? findBestMatch(feature, normalizedInput) : null
     let filteredAttachments = filterAttachmentsByCmd(normalizedInput.attachments, matched?.cmd)
