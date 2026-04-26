@@ -98,6 +98,8 @@ export class PluginHostManager extends EventEmitter {
   /** 注入此回调以检查插件是否有活跃 UI 窗口（有则不销毁宿主进程） */
   hasActiveWindow?: (pluginId: string) => boolean
 
+  private residentPins: Set<string> = new Set()
+
   // ==================== Host 进程池 ====================
   private static readonly MAX_POOL_SIZE = 1
   private pooledProcesses: PooledProcess[] = []
@@ -153,6 +155,20 @@ export class PluginHostManager extends EventEmitter {
    */
   setClipboardHistoryManager(manager: ClipboardHistoryManager): void {
     this.clipboardHistoryManager = manager
+  }
+
+  // ==================== Resident UI Pin ====================
+
+  setResidentPin(pluginId: string, pinned: boolean): void {
+    if (pinned) {
+      this.residentPins.add(pluginId)
+    } else {
+      this.residentPins.delete(pluginId)
+    }
+  }
+
+  isResidentPinned(pluginId: string): boolean {
+    return this.residentPins.has(pluginId)
   }
 
   // ==================== Host 进程池方法 ====================
@@ -637,6 +653,12 @@ export class PluginHostManager extends EventEmitter {
         return
       }
 
+      // Resident UI 保护：隐藏的 UI 缓存仍需保留 Host
+      if (this.residentPins.has(pluginName)) {
+        this.scheduleIdleCleanup(pluginName)
+        return
+      }
+
       console.info(`[HostManager] Idle timeout → destroying host: ${pluginName}`)
       await this.destroyHost(pluginName)
     }, host.idleTimeoutMs).unref()
@@ -786,6 +808,8 @@ export class PluginHostManager extends EventEmitter {
   private cleanupHost(pluginName: string): void {
     const host = this.hosts.get(pluginName)
     if (!host) return
+
+    this.residentPins.delete(pluginName)
 
     // 清理 idle timer（防止 host 销毁后 timer 仍悬挂触发）
     if (host.idleTimer) {

@@ -215,8 +215,8 @@ export function registerWindowHandlers(
     }
 
     if (win === mainWin || win === pluginWindowManager.getPanelWindow()?.getWindow()) {
-      // 附着模式，关闭插件
-      pluginWindowManager.closeAttached()
+      // 附着模式，关闭插件；显式 kill 时必须跳过 resident 缓存。
+      pluginWindowManager.closeAttached(Boolean(isKill))
     } else {
       // 独立窗口模式
       if (isKill) {

@@ -132,6 +132,17 @@ function formatMatchRuleExplain(cmd: PluginCmd): string | undefined {
 }
 
 
+// ==================== Resident UI Session ====================
+
+interface ResidentUiSession {
+  pluginId: string
+  featureCode: string
+  route?: string
+  cachedAt: number
+  lastUsedAt: number
+  ttlTimer: NodeJS.Timeout
+}
+
 export class PluginManager {
   private plugins: Map<string, Plugin> = new Map()
   private runners: Map<string, PluginRunner> = new Map()
@@ -161,6 +172,10 @@ export class PluginManager {
   private pluginToolsListener?: (event: 'refresh' | 'remove', pluginId: string, pluginName: string, tools: import('../../shared/types/plugin').PluginToolSchema[]) => void
   private systemCommandExecutor: SystemCommandExecutor
   private systemPageOpenHandler?: (page: string) => void
+
+  // Resident UI：MRU=1 的 attached panel 缓存
+  private residentSession: ResidentUiSession | null = null
+  private static readonly RESIDENT_TTL_MS = 60_000
 
   // 搜索预热
   private prewarmState: {
@@ -247,6 +262,10 @@ export class PluginManager {
     // 设置窗口关闭回调，处理后台运行
     windowManager.setOnWindowClosedCallback(async (pluginId: string) => {
       await this.handleWindowClosed(pluginId)
+    })
+    // 注入挂起决策回调：closeAttached 调用前先问 PluginManager
+    windowManager.setShouldSuspendOnCloseCallback((pluginId: string, featureCode: string, route?: string) => {
+      return this.shouldSuspendToResident(pluginId, featureCode, route)
     })
   }
 
@@ -437,6 +456,12 @@ export class PluginManager {
   private async resetRuntimeForInit(): Promise<void> {
     this.isReloading = true
     try {
+      // 清理 resident-ui session
+      if (this.residentSession) {
+        clearTimeout(this.residentSession.ttlTimer)
+        this.residentSession = null
+      }
+
       // 清理旧监听，避免重复注册和内存泄漏
       this.clearWatchers()
 
@@ -880,6 +905,25 @@ export class PluginManager {
       }
 
       if (isAttachedUI) {
+        const hasDetachedForSinglePlugin =
+          plugin.manifest.pluginSetting?.single !== false && this.hasDetachedWindowForPlugin(pluginId)
+        if (hasDetachedForSinglePlugin && this.residentSession?.pluginId === pluginId) {
+          this.evictResidentSession('single-detached-window-active')
+        }
+
+        // 尝试从 resident-ui 恢复（热启动）
+        if (!hasDetachedForSinglePlugin && this.tryRestoreResident(pluginId, featureCode, resolvedInput, route)) {
+          if (launchStart) log.info(`[LaunchTrace] resident-ui resume hit | +${Date.now() - launchStart}ms`)
+          this.stateManager.recordRecentUsage(plugin.id, featureCode)
+          schedulePostOnLoadIdle(PluginManager.UI_IDLE_LOAD_DELAY_MS)
+          return { success: true, hasUI: true }
+        }
+
+        // 驱逐不匹配的旧 resident session（如果有）
+        if (this.residentSession) {
+          this.evictResidentSession(`replaced-by-plugin=${pluginId}`)
+        }
+
         // onLoad 已完成，使用最终 feature metadata 创建 panel，避免旧 route/mainHide/mode 竞态。
         if (this.systemPluginWindowManager) {
           if (launchStart) log.info(`[LaunchTrace] prepareForAttachedPluginLaunch start | +${Date.now() - launchStart}ms`)
@@ -912,9 +956,14 @@ export class PluginManager {
         if (launchStart) log.info(`[LaunchTrace] Host init done | +${Date.now() - launchStart}ms`)
       }
 
+      const shouldEvictResidentForDetached =
+        plugin.manifest.pluginSetting?.single !== false && this.residentSession?.pluginId === pluginId
       const win = this.windowManager.createDetachedWindow(plugin, featureCode, resolvedInput, route)
       const detachedSuccess = Boolean(win)
       if (detachedSuccess) {
+        if (shouldEvictResidentForDetached) {
+          this.evictResidentSession('single-detached-launch')
+        }
         this.stateManager.recordRecentUsage(plugin.id, featureCode)
         schedulePostOnLoadIdle(PluginManager.UI_IDLE_LOAD_DELAY_MS)
       } else {
@@ -1085,7 +1134,8 @@ export class PluginManager {
       // 如果插件没有 UI 窗口打开且不在后台运行，销毁 Host
       const hasWindow = this.windowManager?.hasOpenWindowsForPlugin(pluginId)
       const isBackground = this.backgroundManager.isRunning(pluginId)
-      if (!hasWindow && !isBackground) {
+      const isResident = this.hostManager.isResidentPinned(pluginId)
+      if (!hasWindow && !isBackground && !isResident) {
         log.info(`[Prewarm] TTL expired, destroying host | plugin=${pluginId}`)
         void this.hostManager.destroyHost(pluginId).then(() => {
           this.workerOnloadedPlugins.delete(pluginId)
@@ -1107,12 +1157,150 @@ export class PluginManager {
 
     const hasWindow = this.windowManager?.hasOpenWindowsForPlugin(prewarmedId)
     const isBackground = this.backgroundManager.isRunning(prewarmedId)
-    if (!hasWindow && !isBackground) {
+    const isResident = this.hostManager.isResidentPinned(prewarmedId)
+    if (!hasWindow && !isBackground && !isResident) {
       log.info(`[Prewarm] cleaning up unused host | plugin=${prewarmedId}`)
       void this.hostManager.destroyHost(prewarmedId).then(() => {
         this.workerOnloadedPlugins.delete(prewarmedId)
       })
     }
+  }
+
+  // ==================== Resident UI Session ====================
+
+  /**
+   * 统一驱逐入口：销毁 resident-ui 缓存并释放 Host pin。
+   * 所有淘汰场景（TTL / 替换 / 手动结束 / disable / uninstall / reload / crash）
+   * 都必须走此方法，保证状态一致性。
+   */
+  private evictResidentSession(reason: string, options?: { preserveHost?: boolean }): void {
+    if (!this.residentSession) return
+
+    const { pluginId } = this.residentSession
+    clearTimeout(this.residentSession.ttlTimer)
+    this.residentSession = null
+
+    log.info(`[ResidentUI] evict | plugin=${pluginId} | reason=${reason}`)
+
+    // 释放 Host resident pin
+    this.hostManager.setResidentPin(pluginId, false)
+
+    // 真正销毁面板窗口
+    this.windowManager?.evictResident()
+
+    // 如果不是后台插件且没有其他窗口，销毁 Host
+    const hasWindow = this.windowManager?.hasOpenWindowsForPlugin(pluginId)
+    const isBackground = this.backgroundManager.isRunning(pluginId)
+    if (!options?.preserveHost && !hasWindow && !isBackground && this.useUtilityProcess && this.hostManager.isHostReady(pluginId)) {
+      void this.hostManager.destroyHost(pluginId)
+    }
+  }
+
+  /**
+   * 决策函数：attached panel 关闭时是否应挂起为 resident-ui。
+   * 由 PluginWindowManager.closeAttached() 通过回调同步调用。
+   * 返回 true 表示已挂起（closeAttached 将跳过 close 路径）。
+   */
+  private shouldSuspendToResident(pluginId: string, featureCode: string, route?: string): boolean {
+    if (this.isReloading) return false
+
+    const plugin = this.plugins.get(pluginId)
+    if (!plugin || !plugin.enabled) return false
+
+    // background 插件走正常的 background-host 路径，不走 resident-ui
+    if (plugin.manifest.pluginSetting?.background) return false
+
+    // 只对有 UI 的 attached panel 插件生效
+    if (!plugin.manifest.ui) return false
+
+    this.suspendToResident(pluginId, featureCode, route)
+    return true
+  }
+
+  /**
+   * 将当前 attached panel 挂起为 resident-ui。
+   */
+  private suspendToResident(pluginId: string, featureCode: string, route?: string): void {
+    if (!this.windowManager) return
+
+    // 先驱逐已有的 resident session（MRU=1，只保留最后一个）
+    if (this.residentSession) {
+      this.evictResidentSession(`replaced-by-plugin=${pluginId}`)
+    }
+
+    const suspendedId = this.windowManager.suspendAttached()
+    if (!suspendedId) return
+
+    // Pin Host 防止 idle cleanup 销毁
+    this.hostManager.setResidentPin(pluginId, true)
+
+    const now = Date.now()
+    const ttlTimer = setTimeout(() => {
+      if (this.residentSession?.pluginId === pluginId) {
+        this.evictResidentSession('ttl-expired')
+      }
+    }, PluginManager.RESIDENT_TTL_MS)
+    ttlTimer.unref()
+
+    this.residentSession = {
+      pluginId,
+      featureCode,
+      route: this.normalizeResidentRoute(route),
+      cachedAt: now,
+      lastUsedAt: now,
+      ttlTimer
+    }
+
+    log.info(`[ResidentUI] create | plugin=${pluginId} | ttl=${PluginManager.RESIDENT_TTL_MS}ms`)
+  }
+
+  /**
+   * 尝试从 resident-ui 恢复面板。命中返回 true。
+   */
+  private tryRestoreResident(
+    pluginId: string,
+    featureCode: string,
+    input?: InputPayload,
+    route?: string
+  ): boolean {
+    if (!this.residentSession || this.residentSession.pluginId !== pluginId) {
+      return false
+    }
+    if (!this.windowManager) return false
+
+    const cachedRoute = this.normalizeResidentRoute(this.residentSession.route)
+    const requestedRoute = this.normalizeResidentRoute(route)
+    if (this.residentSession.featureCode !== featureCode || cachedRoute !== requestedRoute) {
+      this.evictResidentSession('route-or-feature-mismatch', { preserveHost: true })
+      return false
+    }
+
+    const restored = this.windowManager.restoreAttachedIfResident(pluginId, featureCode, input, route)
+    if (!restored) {
+      this.evictResidentSession('restore-failed', { preserveHost: true })
+      return false
+    }
+
+    // 恢复成功：插件回到 foreground-ui，清除 resident session 和 Host pin。
+    // foreground 状态有 hasActiveWindow 保护，不需要额外 pin。
+    // 下次关闭时 shouldSuspendToResident 会创建新的 session。
+    clearTimeout(this.residentSession.ttlTimer)
+    this.residentSession = null
+    this.hostManager.setResidentPin(pluginId, false)
+
+    log.info(`[ResidentUI] resume | plugin=${pluginId}`)
+    return true
+  }
+
+  private hasDetachedWindowForPlugin(pluginId: string): boolean {
+    if (!this.windowManager) return false
+    return this.windowManager.getAllDetachedWindows().some((win) =>
+      this.windowManager?.getPluginByWindow(win)?.id === pluginId
+    )
+  }
+
+  private normalizeResidentRoute(route?: string): string | undefined {
+    return route || undefined
   }
 
   // 启用插件
@@ -1170,6 +1358,11 @@ export class PluginManager {
 
     const pluginId = plugin.id
 
+    // 驱逐 resident-ui 缓存
+    if (this.residentSession?.pluginId === pluginId) {
+      this.evictResidentSession('disabled')
+    }
+
     // 停止后台运行（如果正在后台运行）
     if (this.backgroundManager.isRunning(pluginId)) {
       await this.backgroundManager.stop(pluginId, 'disabled')
@@ -1218,6 +1411,11 @@ export class PluginManager {
     const pluginId = plugin.id
 
     try {
+      // 驱逐 resident-ui 缓存
+      if (this.residentSession?.pluginId === pluginId) {
+        this.evictResidentSession('uninstalled')
+      }
+
       // 关闭插件窗口，并抑制窗口关闭回调触发自动后台化
       this.closePluginWindows(pluginId, true)
 
@@ -1317,6 +1515,12 @@ export class PluginManager {
   async destroy(): Promise<void> {
     this.isReloading = true
     try {
+      // 清理 resident-ui session
+      if (this.residentSession) {
+        clearTimeout(this.residentSession.ttlTimer)
+        this.residentSession = null
+      }
+
       // 停止所有监听
       this.clearWatchers()
 
@@ -1494,6 +1698,11 @@ export class PluginManager {
     const plugin = this.plugins.get(pluginId)
     if (!plugin) return
 
+    // 驱逐 resident-ui 缓存（代码已变，Renderer 上下文无效）
+    if (this.residentSession?.pluginId === pluginId) {
+      this.evictResidentSession('code-reload')
+    }
+
     // 1. 如果有运行中的 Host，销毁它（强制下次运行重新加载代码）
     if (this.hostManager.isHostReady(pluginId)) {
       await this.hostManager.destroyHost(pluginId)
@@ -1542,6 +1751,11 @@ export class PluginManager {
 
     nextPlugin.enabled = currentPlugin.enabled
     nextPlugin.isDev = currentPlugin.isDev
+
+    // 驱逐 resident-ui 缓存
+    if (this.residentSession?.pluginId === pluginId) {
+      this.evictResidentSession('metadata-reload')
+    }
 
     const wasInitialized = this.initializedPlugins.has(pluginId)
     const wasBackgroundRunning = this.backgroundManager.isRunning(pluginId)
@@ -1670,6 +1884,8 @@ export class PluginManager {
       }
     } else {
       // 不支持后台运行，销毁 Host 进程
+      // 注：resident-ui 挂起已在 closeAttached() 的 shouldSuspendOnClose 回调中拦截，
+      // 若走到此处说明不是 attached panel（如 detached window）或已被 evict。
       if (this.useUtilityProcess && this.hostManager.isHostReady(pluginId)) {
         log.info(`[PluginManager] Plugin ${pluginId} does not support background, destroying host`)
         await this.hostManager.destroyHost(pluginId)
@@ -1736,6 +1952,11 @@ export class PluginManager {
     }
 
     try {
+      // 0. 驱逐 resident-ui 缓存
+      if (this.residentSession?.pluginId === pluginId) {
+        this.evictResidentSession('manual-stop')
+      }
+
       // 1. 关闭插件窗口（如果有）
       this.closePluginWindows(pluginId, !keepBackground)
 
@@ -1781,10 +2002,10 @@ export class PluginManager {
     // 关闭所有该插件的独立窗口
     this.windowManager.closeDetachedWindowsByPlugin(pluginId)
 
-    // 如果当前附着的插件是该插件，关闭附着模式
+    // 如果当前附着的插件是该插件，强制关闭附着模式（跳过 resident 挂起）
     const currentPlugin = this.windowManager.getPanelWindow()?.getCurrentPlugin()
     if (currentPlugin?.id === pluginId) {
-      this.windowManager.closeAttached()
+      this.windowManager.closeAttached(true)
     }
 
     // 没有窗口关闭回调触发时，主动清理抑制标记

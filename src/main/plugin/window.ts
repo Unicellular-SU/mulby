@@ -30,6 +30,7 @@ import log from 'electron-log'
 interface AttachedPlugin {
   plugin: Plugin
   featureCode: string
+  route?: string
   input: string
   attachments?: InputAttachment[]
   startedAt: number
@@ -77,6 +78,11 @@ export class PluginWindowManager {
   private detachedWindows: Map<number, DetachedWindowInfo> = new Map()
   private dockVisible = false
   private onWindowClosedCallback?: (pluginId: string) => Promise<void>
+  /**
+   * 回调：attached panel 即将关闭时，由 PluginManager 决定是否挂起为 resident-ui。
+   * 返回 true 表示已挂起（不走 close 路径），返回 false 表示正常关闭。
+   */
+  private shouldSuspendOnCloseCallback?: (pluginId: string, featureCode: string, route?: string) => boolean
 
   // 面板窗口管理器（跟随搜索框的插件窗口）
   private panelWindow: PluginPanelWindow | null = null
@@ -142,6 +148,11 @@ export class PluginWindowManager {
     this.onWindowClosedCallback = callback
   }
 
+  // 设置挂起决策回调（PluginManager 注入）
+  setShouldSuspendOnCloseCallback(callback: (pluginId: string, featureCode: string, route?: string) => boolean) {
+    this.shouldSuspendOnCloseCallback = callback
+  }
+
   // 获取附着的插件信息
   getAttachedPlugin(): AttachedPlugin | null {
     return this.attachedPlugin
@@ -149,7 +160,7 @@ export class PluginWindowManager {
 
   // 是否有附着的插件
   hasAttachedPlugin(): boolean {
-    return this.panelWindow?.isOpen() ?? false
+    return Boolean(this.panelWindow?.isOpen() && !this.panelWindow.isSuspendedForResident())
   }
 
   // 附着插件（使用 Panel 模式）
@@ -195,14 +206,15 @@ export class PluginWindowManager {
       }
     }
 
-    // 关闭之前附着的插件
+    // 关闭之前附着的插件（强制关闭，不走 resident 挂起；PluginManager.run() 已单独处理 resident）
     if (launchStart) log.info(`[LaunchTrace] closeAttached (prev plugin) start | +${Date.now() - launchStart}ms`)
-    this.closeAttached()
+    this.closeAttached(true)
     if (launchStart) log.info(`[LaunchTrace] closeAttached done | +${Date.now() - launchStart}ms`)
 
     this.attachedPlugin = {
       plugin,
       featureCode,
+      route,
       input: input?.text || '',
       attachments: input?.attachments,
       startedAt: Date.now()
@@ -237,10 +249,107 @@ export class PluginWindowManager {
     return true
   }
 
-  // 关闭附着的插件
-  closeAttached(): void {
+  /**
+   * 挂起附着的插件面板（进入 resident-ui 状态）。
+   * 隐藏窗口但保留 Renderer 上下文，不触发 handleWindowClosed 回调。
+   * 返回被挂起的 pluginId，null 表示无可挂起的面板。
+   */
+  suspendAttached(): string | null {
+    if (!this.attachedPlugin || !this.panelWindow?.isOpen()) {
+      return null
+    }
+
+    const pluginId = this.attachedPlugin.plugin.id
+    // Match the old closeAttached() focus handoff before hiding the focused
+    // panel. Otherwise PluginPanelWindow's blur guard can hide the main window.
+    if (this.mainWindow && !this.mainWindow.isDestroyed()) {
+      this.mainWindow.focus()
+    }
+    const suspended = this.panelWindow.suspend()
+    if (!suspended) return null
+
+    // 保留 attachedPlugin 元数据供 restore 使用
+    // 清理主窗口 UI 状态（列表恢复、SubInput 关闭），但不触发 notifyPluginWindowClosed
+    clearSubInputState()
+
+    if (this.mainWindow && !this.mainWindow.isDestroyed() && !this.mainWindow.webContents.isDestroyed()) {
+      try {
+        this.mainWindow.webContents.send('subInput:disabled')
+        this.mainWindow.webContents.send('plugin:detached')
+      } catch {
+        // Render frame may have been disposed
+      }
+    }
+
+    return pluginId
+  }
+
+  /**
+   * 尝试恢复 resident-ui 状态的面板。
+   * 如果缓存的面板匹配 pluginId，直接 restore 并返回 true。
+   */
+  restoreAttachedIfResident(
+    pluginId: string,
+    featureCode: string,
+    input?: InputPayload,
+    route?: string
+  ): boolean {
+    const cachedId = this.panelWindow?.getCachedPluginId()
+    if (!cachedId || cachedId !== pluginId) return false
+
+    const restored = this.panelWindow!.restore(featureCode, input, route)
+    if (!restored) return false
+
+    // 重新通知渲染进程插件已附着
+    const plugin = this.attachedPlugin?.plugin
+    if (plugin && this.mainWindow && !this.mainWindow.isDestroyed()) {
+      this.mainWindow.webContents.send('plugin:attach', {
+        pluginName: plugin.id,
+        displayName: plugin.manifest.displayName,
+        featureCode,
+        input: input?.text || '',
+        attachments: input?.attachments,
+        mode: 'panel'
+      })
+    }
+
+    return true
+  }
+
+  /**
+   * 强制驱逐 resident-ui 缓存（真正销毁面板窗口和上下文）。
+   * 返回被驱逐的 pluginId，null 表示无缓存可驱逐。
+   */
+  evictResident(): string | null {
+    const cachedId = this.panelWindow?.getCachedPluginId()
+    if (!cachedId) return null
+
+    log.info(`[ResidentUI] evict | plugin=${cachedId}`)
+    this.attachedPlugin = null
+    if (this.panelWindow?.isOpen()) {
+      this.panelWindow.close()
+    }
+    clearSubInputState()
+    return cachedId
+  }
+
+  /**
+   * 关闭附着的插件。
+   * @param force 强制关闭，跳过 resident-ui 挂起检查。
+   *              由 disable/uninstall/reload/closePluginWindows 调用时传 true。
+   */
+  closeAttached(force = false): void {
     if (this.attachedPlugin || this.panelWindow?.isOpen()) {
       const pluginId = this.attachedPlugin?.plugin.id
+      const featureCode = this.attachedPlugin?.featureCode || ''
+      const route = this.attachedPlugin?.route
+
+      // 拦截点：非强制关闭时，询问 PluginManager 是否应挂起为 resident-ui
+      if (!force && pluginId && this.shouldSuspendOnCloseCallback?.(pluginId, featureCode, route)) {
+        // 已由回调执行 suspendAttached()，不走 close 路径
+        return
+      }
+
       this.attachedPlugin = null
 
       if (this.panelWindow?.isOpen()) {
@@ -853,7 +962,7 @@ export class PluginWindowManager {
   getActiveWindowPlugins(): Array<{ pluginId: string; pluginName: string; displayName: string; startedAt: number }> {
     const byPlugin = new Map<string, { pluginId: string; pluginName: string; displayName: string; startedAt: number }>()
 
-    if (this.attachedPlugin && this.panelWindow?.isOpen()) {
+    if (this.attachedPlugin && this.panelWindow?.isOpen() && !this.panelWindow.isSuspendedForResident()) {
       const current = this.attachedPlugin
       byPlugin.set(current.plugin.id, {
         pluginId: current.plugin.id,
@@ -882,7 +991,7 @@ export class PluginWindowManager {
   }
 
   closeAll(): void {
-    this.closeAttached()
+    this.closeAttached(true)
     for (const [windowId, info] of this.detachedWindows.entries()) {
       unregisterPluginWindow(windowId)
       unregisterProtectedWindow(windowId)
@@ -935,7 +1044,9 @@ export class PluginWindowManager {
     if (this.mainWindow && !this.mainWindow.isDestroyed()) {
       this.mainWindow.show()
       this.mainWindow.focus()
-      this.panelWindow?.show()
+      if (!this.panelWindow?.isSuspendedForResident()) {
+        this.panelWindow?.show()
+      }
     }
   }
 
@@ -950,6 +1061,7 @@ export class PluginWindowManager {
     // 检查是否为面板窗口
     const panelWin = this.panelWindow?.getWindow()
     if (panelWin && panelWin.id === win.id) {
+      if (this.panelWindow?.isSuspendedForResident()) return null
       return this.attachedPlugin?.plugin || null
     }
 
@@ -981,7 +1093,9 @@ export class PluginWindowManager {
         return info.window
       }
     }
-    if (this.attachedPlugin?.plugin.id === pluginId && this.panelWindow?.isOpen()) {
+    if (this.attachedPlugin?.plugin.id === pluginId
+        && this.panelWindow?.isOpen()
+        && !this.panelWindow.isSuspendedForResident()) {
       const panelWin = this.panelWindow.getWindow()
       if (panelWin && !panelWin.isDestroyed()) return panelWin
     }
@@ -990,7 +1104,9 @@ export class PluginWindowManager {
   }
 
   hasOpenWindowsForPlugin(pluginId: string): boolean {
-    if (this.attachedPlugin?.plugin.id === pluginId && this.panelWindow?.isOpen()) {
+    if (this.attachedPlugin?.plugin.id === pluginId
+        && this.panelWindow?.isOpen()
+        && !this.panelWindow.isSuspendedForResident()) {
       return true
     }
 

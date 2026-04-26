@@ -121,6 +121,7 @@ export class PluginPanelWindow {
     private syncingBounds = false
     private panelWindowHasBeenShown = false
     private opacityRestoreTimer: NodeJS.Timeout | null = null
+    private suspendedForResident = false
 
     constructor(mainWindow: BrowserWindow) {
         this.mainWindow = mainWindow
@@ -153,6 +154,7 @@ export class PluginPanelWindow {
 
         // 关闭现有面板
         this.close()
+        this.suspendedForResident = false
 
         // 存储当前插件信息
         this.currentPlugin = plugin
@@ -843,6 +845,67 @@ export class PluginPanelWindow {
     }
 
     /**
+     * 挂起面板：隐藏窗口但保留 Renderer 上下文和插件信息。
+     * 返回 true 表示成功挂起，false 表示无可挂起的面板。
+     */
+    suspend(): boolean {
+        if (!this.panelWindow || this.panelWindow.isDestroyed() || !this.currentPlugin) {
+            return false
+        }
+        this.hide()
+        this.suspendedForResident = true
+        log.info(`[ResidentUI] suspend | plugin=${this.currentPlugin.id}`)
+        return true
+    }
+
+    /**
+     * 恢复挂起的面板：显示已缓存的窗口并补发 plugin:init。
+     * 返回 true 表示成功恢复。
+     */
+    restore(featureCode: string, input?: InputPayload, route?: string): boolean {
+        if (!this.panelWindow || this.panelWindow.isDestroyed() || !this.currentPlugin) {
+            return false
+        }
+        this.currentFeatureCode = featureCode
+        this.currentInput = input?.text || ''
+        this.currentAttachments = input?.attachments || []
+
+        this.suspendedForResident = false
+        this.show()
+
+        this.panelWindow.webContents.send('plugin:init', {
+            pluginName: this.currentPlugin.id,
+            featureCode,
+            input: this.currentInput,
+            attachments: this.currentAttachments,
+            mode: 'panel' as const,
+            route,
+            nonce: Date.now()
+        })
+
+        if (this.themeManager && !this.panelWindow.isDestroyed()) {
+            this.panelWindow.webContents.send('theme:changed', this.themeManager.getActualTheme())
+        }
+
+        log.info(`[ResidentUI] restore | plugin=${this.currentPlugin.id}`)
+        return true
+    }
+
+    /**
+     * 获取当前缓存的插件 ID（用于 resident session 匹配）
+     */
+    getCachedPluginId(): string | null {
+        if (!this.panelWindow || this.panelWindow.isDestroyed() || !this.currentPlugin) {
+            return null
+        }
+        return this.currentPlugin.id
+    }
+
+    isSuspendedForResident(): boolean {
+        return this.suspendedForResident
+    }
+
+    /**
      * 关闭面板窗口
      */
     close() {
@@ -869,6 +932,7 @@ export class PluginPanelWindow {
         this.currentFeatureCode = ''
         this.currentInput = ''
         this.currentAttachments = []
+        this.suspendedForResident = false
         this.syncScheduled = false
         this.preferredPanelHeight = ATTACHED_PANEL_HEIGHT
         this.syncingBounds = false
@@ -893,6 +957,7 @@ export class PluginPanelWindow {
      * 获取当前加载的插件
      */
     getCurrentPlugin(): Plugin | null {
+        if (this.suspendedForResident) return null
         return this.currentPlugin
     }
 
@@ -911,6 +976,7 @@ export class PluginPanelWindow {
      * 显示面板
      */
     show() {
+        if (this.suspendedForResident) return
         if (this.panelWindow && !this.panelWindow.isDestroyed()) {
             this.syncPosition()
             const needsOpacityGuard = process.platform === 'win32'
