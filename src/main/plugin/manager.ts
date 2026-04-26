@@ -159,6 +159,7 @@ export class PluginManager {
    */
   private workerOnloadedPlugins: Set<string> = new Set()
   private loadingPromises: Map<string, Promise<boolean>> = new Map()
+  private residentHostTeardownPromises: Map<string, Promise<void>> = new Map()
   private searchWorker: PluginSearchWorker
   private commandShortcutManager: PluginCommandShortcutManager
   private commandDisabledManager: PluginCommandDisabledManager
@@ -1034,6 +1035,11 @@ export class PluginManager {
    * 返回 true 表示本次调用触发了 onLoad（callHook 内部已完成 initPlugin）。
    */
   private ensurePluginLoaded(plugin: Plugin, name: string, launchStart?: number): Promise<boolean> {
+    const residentTeardown = this.residentHostTeardownPromises.get(name)
+    if (residentTeardown) {
+      return residentTeardown.then(() => this.ensurePluginLoaded(plugin, name, launchStart))
+    }
+
     if (this.initializedPlugins.has(name) && this.workerOnloadedPlugins.has(name)) {
       return Promise.resolve(false)
     }
@@ -1169,7 +1175,7 @@ export class PluginManager {
   // ==================== Resident UI Session ====================
 
   /**
-   * 统一驱逐入口：销毁 resident-ui 缓存并释放 Host pin。
+   * 统一驱逐入口：销毁 resident-ui 缓存。
    * 所有淘汰场景（TTL / 替换 / 手动结束 / disable / uninstall / reload / crash）
    * 都必须走此方法，保证状态一致性。
    */
@@ -1182,7 +1188,7 @@ export class PluginManager {
 
     log.info(`[ResidentUI] evict | plugin=${pluginId} | reason=${reason}`)
 
-    // 释放 Host resident pin
+    // 兼容旧状态：确保没有遗留 Host resident pin。
     this.hostManager.setResidentPin(pluginId, false)
 
     // 真正销毁面板窗口
@@ -1231,9 +1237,6 @@ export class PluginManager {
     const suspendedId = this.windowManager.suspendAttached()
     if (!suspendedId) return
 
-    // Pin Host 防止 idle cleanup 销毁
-    this.hostManager.setResidentPin(pluginId, true)
-
     const now = Date.now()
     const ttlTimer = setTimeout(() => {
       if (this.residentSession?.pluginId === pluginId) {
@@ -1252,6 +1255,42 @@ export class PluginManager {
     }
 
     log.info(`[ResidentUI] create | plugin=${pluginId} | ttl=${PluginManager.RESIDENT_TTL_MS}ms`)
+
+    this.teardownResidentHost(pluginId)
+  }
+
+  private teardownResidentHost(pluginId: string): void {
+    if (!this.useUtilityProcess) return
+
+    const plugin = this.plugins.get(pluginId)
+    if (plugin?.manifest.pluginSetting?.background) return
+    if (this.backgroundManager.isRunning(pluginId)) return
+    if (!this.hostManager.isHostReady(pluginId)) return
+
+    const idleTimer = this.idleLoadTimers.get(pluginId)
+    if (idleTimer) {
+      clearTimeout(idleTimer)
+      this.idleLoadTimers.delete(pluginId)
+    }
+
+    this.hostManager.setResidentPin(pluginId, false)
+    this.workerOnloadedPlugins.delete(pluginId)
+
+    const teardown = this.hostManager.destroyHost(pluginId)
+      .then(() => {
+        log.info(`[ResidentUI] host destroyed | plugin=${pluginId}`)
+      })
+      .catch((err) => {
+        log.warn(`[ResidentUI] failed to destroy host | plugin=${pluginId}:`, err)
+      })
+      .finally(() => {
+        if (this.residentHostTeardownPromises.get(pluginId) === teardown) {
+          this.residentHostTeardownPromises.delete(pluginId)
+        }
+      })
+
+    this.residentHostTeardownPromises.set(pluginId, teardown)
+    log.info(`[ResidentUI] host teardown scheduled | plugin=${pluginId}`)
   }
 
   /**

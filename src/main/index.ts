@@ -803,6 +803,7 @@ app.whenReady().then(async () => {
 
     // 设置主题管理器到插件窗口管理器
     pluginWindowManager.setThemeManager(themeManager)
+    pluginWindowManager.prewarmAttachedShell()
     systemPageWindowManager.setThemeManager(themeManager)
 
     // 注册主窗口到主题管理器

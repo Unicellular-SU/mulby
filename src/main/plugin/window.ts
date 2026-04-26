@@ -156,6 +156,13 @@ export class PluginWindowManager {
     this.panelWindow?.setThemeManager(manager)
   }
 
+  prewarmAttachedShell(delayMs = 300): void {
+    const timer = setTimeout(() => {
+      this.panelWindow?.prewarmShell()
+    }, delayMs)
+    timer.unref?.()
+  }
+
   // 设置窗口关闭回调（用于处理后台运行）
   setOnWindowClosedCallback(callback: (pluginId: string) => Promise<void>) {
     this.onWindowClosedCallback = callback
@@ -404,11 +411,13 @@ export class PluginWindowManager {
 
     // 使用 promoteToWindow 将面板升级为独立窗口
     if (this.panelWindow?.isOpen()) {
-      const win = this.panelWindow.promoteToWindow()
-      if (win) {
+      const promoted = this.panelWindow.promoteToWindow()
+      if (promoted) {
+        const win = promoted.window
         const windowId = win.id
         this.detachedWindows.set(windowId, {
           window: win,
+          pluginView: promoted.pluginView,
           plugin,
           featureCode,
           input,

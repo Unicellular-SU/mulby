@@ -438,7 +438,9 @@ export function registerWindowHandlers(
       const panelPlugin = pluginWindowManager.getPanelWindow()?.getCurrentPlugin()
 
       if (panelWin && plugin && panelPlugin?.id === plugin.id && win.id !== panelWin.id) {
-        panelWin.webContents.send('window:childMessage', channel, ...args)
+        const panelPluginWc = getPluginWebContents(panelWin)
+        const targetWc = panelPluginWc ?? panelWin.webContents
+        targetWc.send('window:childMessage', channel, ...args)
       }
     }
   })
