@@ -6,6 +6,7 @@ import {
   useMemo,
   useCallback,
   useRef,
+  type MouseEvent as ReactMouseEvent,
   type PointerEvent as ReactPointerEvent,
   type ReactNode
 } from 'react'
@@ -288,6 +289,26 @@ function MainApp() {
   const systemPageAttached = !isSystemWindow && systemPageState.open && systemPageState.mode === 'attached'
   const hasTextInput = query.length > 0 || payloadText.length > 0
   const isMacMain = !isSystemWindow && navigator.platform.toLowerCase().includes('mac')
+
+  const focusSearchAfterPluginAction = useCallback(() => {
+    setTimeout(() => {
+      searchInputRef.current?.focus()
+    }, 100)
+  }, [])
+
+  const handlePluginActionMenu = useCallback((event: ReactMouseEvent<HTMLButtonElement>) => {
+    event.preventDefault()
+    event.stopPropagation()
+    const rect = event.currentTarget.getBoundingClientRect()
+    void window.mulby.window.showPluginMenu({ x: rect.left, y: rect.bottom })
+  }, [])
+
+  const handleSystemPageActionMenu = useCallback((event: ReactMouseEvent<HTMLButtonElement>) => {
+    event.preventDefault()
+    event.stopPropagation()
+    const rect = event.currentTarget.getBoundingClientRect()
+    void window.mulby.systemPage.showMenu({ x: rect.left, y: rect.bottom })
+  }, [])
 
   const beginPerfTrace = useCallback((source: SearchPerfTraceSource, textLength: number, attachmentCount: number) => {
     const nextId = perfTraceSeqRef.current + 1
@@ -1507,23 +1528,24 @@ function MainApp() {
           {pluginOpen && (
             <div className="plugin-controls">
               <button
-                className="plugin-control-btn plugin-reload-btn"
-                onClick={() => {
-                  window.mulby.window.reload()
-                }}
-                title="重载插件"
+                className="plugin-control-btn plugin-more-btn"
+                onClick={handlePluginActionMenu}
+                title="更多插件操作"
               >
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <path d="M21 12a9 9 0 1 1-2.64-6.36" />
-                  <path d="M21 3v6h-6" />
+                  <circle cx="12" cy="12" r="1" />
+                  <circle cx="19" cy="12" r="1" />
+                  <circle cx="5" cy="12" r="1" />
                 </svg>
               </button>
               <button
                 className="plugin-control-btn plugin-detach-btn"
                 onClick={() => {
                   window.mulby.window.detach()
+                  setPluginOpen(false)
+                  focusSearchAfterPluginAction()
                 }}
-                title="转为独立窗口"
+                title="转为独立窗口运行"
               >
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                   <path d="M21 9V3h-6M3 15v6h6M21 3l-7 7M3 21l7-7" />
@@ -1534,10 +1556,7 @@ function MainApp() {
                 onClick={() => {
                   window.mulby.window.close()
                   setPluginOpen(false)
-                  // 关闭插件后，让搜索框重新获取焦点
-                  setTimeout(() => {
-                    searchInputRef.current?.focus()
-                  }, 100)
+                  focusSearchAfterPluginAction()
                 }}
                 title="关闭插件"
               >
@@ -1550,23 +1569,23 @@ function MainApp() {
           {systemPageAttached && (
             <div className="plugin-controls">
               <button
-                className="plugin-control-btn plugin-reload-btn"
-                onClick={() => {
-                  void window.mulby.systemPage.reload()
-                }}
-                title="重载系统页面"
+                className="plugin-control-btn plugin-more-btn"
+                onClick={handleSystemPageActionMenu}
+                title="更多页面操作"
               >
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <path d="M21 12a9 9 0 1 1-2.64-6.36" />
-                  <path d="M21 3v6h-6" />
+                  <circle cx="12" cy="12" r="1" />
+                  <circle cx="19" cy="12" r="1" />
+                  <circle cx="5" cy="12" r="1" />
                 </svg>
               </button>
               <button
                 className="plugin-control-btn plugin-detach-btn"
                 onClick={() => {
                   void window.mulby.systemPage.detach()
+                  focusSearchAfterPluginAction()
                 }}
-                title="转为独立窗口"
+                title="转为独立窗口运行"
               >
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                   <path d="M21 9V3h-6M3 15v6h6M21 3l-7 7M3 21l7-7" />
@@ -1576,9 +1595,7 @@ function MainApp() {
                 className="plugin-control-btn plugin-close-btn"
                 onClick={() => {
                   void window.mulby.systemPage.close()
-                  setTimeout(() => {
-                    searchInputRef.current?.focus()
-                  }, 100)
+                  focusSearchAfterPluginAction()
                 }}
                 title="关闭系统页面"
               >

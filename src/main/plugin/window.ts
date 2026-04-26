@@ -92,6 +92,19 @@ export class PluginWindowManager {
     return developer.enabled && developer.showDevTools === true
   }
 
+  private getDetachedTitlebarPath(): string | null {
+    const candidates = app.isPackaged
+      ? [join(__dirname, '../renderer/detached-titlebar.html')]
+      : [
+          // 开发态优先读源文件，避免 dist/renderer 中的旧 HTML 掩盖标题栏改动。
+          join(process.cwd(), 'public/detached-titlebar.html'),
+          join(__dirname, '../../public/detached-titlebar.html'),
+          join(__dirname, '../renderer/detached-titlebar.html')
+        ]
+
+    return candidates.find((candidate) => existsSync(candidate)) ?? null
+  }
+
   // 更新 macOS Dock 图标显示状态
   private async updateDockVisibility(): Promise<void> {
     if (process.platform !== 'darwin' || !app.dock) return
@@ -537,15 +550,9 @@ export class PluginWindowManager {
 
     if (showTitleBar) {
       // BrowserWindow 加载标题栏页面
-      const titlebarPath = join(__dirname, '../renderer/detached-titlebar.html')
-      if (existsSync(titlebarPath)) {
+      const titlebarPath = this.getDetachedTitlebarPath()
+      if (titlebarPath) {
         win.loadFile(titlebarPath)
-      } else {
-        // 开发模式：从 public 目录加载
-        const devTitlebarPath = join(__dirname, '../../public/detached-titlebar.html')
-        if (existsSync(devTitlebarPath)) {
-          win.loadFile(devTitlebarPath)
-        }
       }
 
       // 创建插件内容 WebContentsView
@@ -790,14 +797,9 @@ export class PluginWindowManager {
 
     if (showTitleBar) {
       // BrowserWindow 加载标题栏页面
-      const titlebarPath = join(__dirname, '../renderer/detached-titlebar.html')
-      if (existsSync(titlebarPath)) {
+      const titlebarPath = this.getDetachedTitlebarPath()
+      if (titlebarPath) {
         win.loadFile(titlebarPath)
-      } else {
-        const devTitlebarPath = join(__dirname, '../../public/detached-titlebar.html')
-        if (existsSync(devTitlebarPath)) {
-          win.loadFile(devTitlebarPath)
-        }
       }
 
       // 创建插件内容 WebContentsView

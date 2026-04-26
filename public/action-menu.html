@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Action Menu</title>
+  <style>
+    * {
+      box-sizing: border-box;
+    }
+
+    html,
+    body {
+      width: 100%;
+      height: 100%;
+      margin: 0;
+      overflow: hidden;
+      background: var(--menu-bg);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      -webkit-font-smoothing: antialiased;
+      user-select: none;
+    }
+
+    :root {
+      --menu-bg: #ffffff;
+      --menu-border: rgba(148, 163, 184, 0.32);
+      --menu-text: #1e293b;
+      --menu-muted: #64748b;
+      --menu-hover: rgba(59, 130, 246, 0.10);
+      --menu-hover-text: #1d4ed8;
+      --menu-danger: #dc2626;
+      --menu-danger-hover: rgba(220, 38, 38, 0.10);
+      --menu-separator: rgba(148, 163, 184, 0.25);
+    }
+
+    :root.dark {
+      --menu-bg: #0f172a;
+      --menu-border: rgba(148, 163, 184, 0.24);
+      --menu-text: #f8fafc;
+      --menu-muted: #94a3b8;
+      --menu-hover: rgba(96, 165, 250, 0.14);
+      --menu-hover-text: #bfdbfe;
+      --menu-danger: #f87171;
+      --menu-danger-hover: rgba(248, 113, 113, 0.14);
+      --menu-separator: rgba(148, 163, 184, 0.22);
+    }
+
+    .menu-shell {
+      width: 100%;
+      height: 100%;
+      padding: 0;
+    }
+
+    .menu {
+      width: 100%;
+      height: 100%;
+      padding: 8px;
+      border: 1px solid var(--menu-border);
+      border-radius: 0;
+      background: var(--menu-bg);
+      transform: translateY(-2px) scale(0.98);
+      opacity: 0;
+      transition: opacity 90ms ease-out, transform 110ms ease-out;
+    }
+
+    body.ready .menu {
+      transform: translateY(0) scale(1);
+      opacity: 1;
+    }
+
+    .item {
+      width: 100%;
+      height: 36px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 0 10px;
+      border: 0;
+      border-radius: 9px;
+      background: var(--menu-bg);
+      color: var(--menu-text);
+      font: inherit;
+      font-size: 13px;
+      font-weight: 500;
+      text-align: left;
+      cursor: default;
+    }
+
+    .item:hover,
+    .item.active {
+      color: var(--menu-hover-text);
+      background: var(--menu-hover);
+    }
+
+    .item.danger {
+      color: var(--menu-danger);
+    }
+
+    .item.danger:hover,
+    .item.danger.active {
+      color: var(--menu-danger);
+      background: var(--menu-danger-hover);
+    }
+
+    .item:disabled {
+      color: var(--menu-muted);
+      opacity: 0.45;
+    }
+
+    .separator {
+      height: 9px;
+      display: flex;
+      align-items: center;
+      padding: 0 8px;
+    }
+
+    .separator::before {
+      content: "";
+      width: 100%;
+      height: 1px;
+      background: var(--menu-separator);
+    }
+  </style>
+</head>
+<body>
+  <div class="menu-shell">
+    <div class="menu" id="menu" role="menu"></div>
+  </div>
+
+  <script>
+    (function() {
+      const api = window.actionMenu
+      const menu = document.getElementById('menu')
+      let actionableItems = []
+      let activeIndex = -1
+
+      if (!api || !menu) {
+        return
+      }
+
+      api.onShow(function(payload) {
+        document.documentElement.classList.toggle('dark', payload.theme === 'dark')
+        document.documentElement.classList.toggle('light', payload.theme !== 'dark')
+        render(payload.items || [])
+        document.body.classList.remove('ready')
+        requestAnimationFrame(function() {
+          document.body.classList.add('ready')
+        })
+      })
+
+      document.addEventListener('keydown', function(event) {
+        if (event.key === 'Escape') {
+          event.preventDefault()
+          api.close()
+          return
+        }
+        if (event.key === 'ArrowDown') {
+          event.preventDefault()
+          moveActive(1)
+          return
+        }
+        if (event.key === 'ArrowUp') {
+          event.preventDefault()
+          moveActive(-1)
+          return
+        }
+        if (event.key === 'Enter' && activeIndex >= 0) {
+          event.preventDefault()
+          const item = actionableItems[activeIndex]
+          if (item) api.select(item.dataset.id)
+        }
+      })
+
+      function render(items) {
+        menu.innerHTML = ''
+        actionableItems = []
+        activeIndex = -1
+
+        items.forEach(function(item) {
+          if (item.separator) {
+            const separator = document.createElement('div')
+            separator.className = 'separator'
+            separator.setAttribute('role', 'separator')
+            menu.appendChild(separator)
+            return
+          }
+
+          const button = document.createElement('button')
+          button.type = 'button'
+          button.className = 'item' + (item.danger ? ' danger' : '')
+          button.textContent = item.label
+          button.dataset.id = item.id
+          button.disabled = item.disabled === true
+          button.setAttribute('role', 'menuitem')
+          button.addEventListener('mouseenter', function() {
+            setActive(actionableItems.indexOf(button))
+          })
+          button.addEventListener('click', function() {
+            if (!button.disabled) {
+              api.select(item.id)
+            }
+          })
+          menu.appendChild(button)
+          if (!button.disabled) {
+            actionableItems.push(button)
+          }
+        })
+      }
+
+      function moveActive(direction) {
+        if (actionableItems.length === 0) return
+        const next = activeIndex < 0
+          ? (direction > 0 ? 0 : actionableItems.length - 1)
+          : (activeIndex + direction + actionableItems.length) % actionableItems.length
+        setActive(next)
+      }
+
+      function setActive(index) {
+        actionableItems.forEach(function(item) {
+          item.classList.remove('active')
+        })
+        activeIndex = index
+        if (activeIndex >= 0 && actionableItems[activeIndex]) {
+          actionableItems[activeIndex].classList.add('active')
+        }
+      }
+    })()
+  </script>
+</body>
+</html>

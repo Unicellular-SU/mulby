@@ -23,6 +23,7 @@ import { AppShortcutManager } from './services/app-shortcuts'
 import { InputHookService } from './services/input-hook'
 import { AppTrayManager } from './services/app-tray'
 import { TrayMenuWindowManager } from './services/tray-menu-window'
+import { ActionMenuWindowManager } from './services/action-menu-window-manager'
 import { ClipboardWatcher } from './services/clipboard-watcher-v2'
 import { ClipboardHistoryManager } from './services/clipboard-history'
 import { commandRunnerService } from './services/command-runner'
@@ -108,6 +109,7 @@ const clipboardHistoryManager = new ClipboardHistoryManager()
 const systemPluginWindowManager = new SystemPluginWindowManager()
 const systemPageWindowManager = new SystemPageWindowManager()
 const onboardingWindowManager = new OnboardingWindowManager()
+const actionMenuWindowManager = new ActionMenuWindowManager(themeManager)
 const aiInternalToolRuntime = createAiInternalToolRuntime({
   getToolingSettings: () => appSettingsManager.getSettings().aiTooling,
   runCommand: (input, context) => commandRunnerService.runCommand(input, context),
@@ -343,6 +345,7 @@ function getShutdownResources(): ShutdownResources {
     inputHookService: _inputHookService ?? undefined,
     pluginWindowManager,
     systemPageWindowManager,
+    actionMenuWindowManager,
     appTrayManager: appTrayManager ?? undefined,
     trayMenuWindowManager: trayMenuWindowManager ?? undefined
   }
@@ -561,6 +564,7 @@ app.whenReady().then(async () => {
     systemPluginWindowManager,
     systemPageWindowManager,
     onboardingWindowManager,
+    actionMenuWindowManager,
     pluginToolRegistry
   )
 

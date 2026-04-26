@@ -95,6 +95,7 @@ export function createAppPluginApi(ipcRenderer: IpcRenderer) {
       close: () => ipcRenderer.invoke('systemPage:close'),
       detach: () => ipcRenderer.invoke('systemPage:detach'),
       reload: () => ipcRenderer.invoke('systemPage:reload'),
+      showMenu: (point?: { x: number; y: number }) => ipcRenderer.invoke('systemPage:showMenu', point),
       getMode: () => ipcRenderer.invoke('systemPage:getMode'),
       getState: () => ipcRenderer.invoke('systemPage:getState'),
       onStateChange: (callback: (state: { open: boolean; mode: 'none' | 'attached' | 'detached'; page: string | null; title: string }) => void) => {

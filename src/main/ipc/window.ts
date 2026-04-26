@@ -15,6 +15,7 @@ import {
 import { shouldUseWindowsFramelessSurface } from '../services/window-surface'
 import { windowFromWebContents, getPluginWebContents } from '../services/webcontents-registry'
 import { markAppHidden } from '../services/blur-manager'
+import { ActionMenuWindowManager } from '../services/action-menu-window-manager'
 import log from 'electron-log'
 
 // 重新导出 clearSubInputState 供其他模块使用
@@ -31,9 +32,52 @@ export function registerWindowHandlers(
   pluginWindowManager: PluginWindowManager,
   themeManager: ThemeManager,
   appSettingsManager: AppSettingsManager,
-  pluginManager?: PluginManager
+  pluginManager: PluginManager | undefined,
+  actionMenuWindowManager: ActionMenuWindowManager
 ) {
   const toMainWindowWindowSize = (width: number, height: number) => getMainWindowWindowSize(width, height)
+
+  const resolveCurrentPlugin = (win: BrowserWindow | null): Plugin | null => {
+    if (!win) return null
+
+    const mainWin = getMainWindow()
+    const panelWin = pluginWindowManager.getPanelWindow()?.getWindow()
+    if (win === mainWin || win === panelWin) {
+      return pluginWindowManager.getPanelWindow()?.getCurrentPlugin()
+        ?? pluginWindowManager.getAttachedPlugin()?.plugin
+        ?? null
+    }
+
+    return pluginWindowManager.getPluginByWindow(win)
+  }
+
+  const terminatePluginForWindow = async (win: BrowserWindow | null): Promise<{ success: boolean; error?: string }> => {
+    if (!pluginManager) {
+      return { success: false, error: '插件管理器未初始化' }
+    }
+
+    const plugin = resolveCurrentPlugin(win)
+    if (!plugin) {
+      return { success: false, error: '没有正在运行的插件' }
+    }
+
+    return pluginManager.stopPlugin(plugin.id, false)
+  }
+
+  const reloadPluginWindow = (senderWin: BrowserWindow): boolean => {
+    if (senderWin.isDestroyed()) return false
+
+    const mainWin = getMainWindow()
+    const panelWin = pluginWindowManager.getPanelWindow()?.getWindow()
+    const targetWin = senderWin === mainWin && panelWin ? panelWin : senderWin
+    if (!targetWin || targetWin.isDestroyed()) return false
+
+    const pluginWc = getPluginWebContents(targetWin) ?? targetWin.webContents
+    if (pluginWc.isDestroyed()) return false
+
+    pluginWc.reload()
+    return true
+  }
 
   // =========================================
   // SubInput 子输入框 API
@@ -202,7 +246,7 @@ export function registerWindowHandlers(
   })
 
   // 退出插件
-  ipcMain.handle('plugin:out', (event, isKill?: boolean) => {
+  ipcMain.handle('plugin:out', async (event, isKill?: boolean) => {
     const win = windowFromWebContents(event.sender)
     const mainWin = getMainWindow()
 
@@ -214,19 +258,86 @@ export function registerWindowHandlers(
       mainWin?.webContents.send('subInput:disabled')
     }
 
-    if (win === mainWin || win === pluginWindowManager.getPanelWindow()?.getWindow()) {
-      // 附着模式，关闭插件；显式 kill 时必须跳过 resident 缓存。
-      pluginWindowManager.closeAttached(Boolean(isKill))
-    } else {
-      // 独立窗口模式
-      if (isKill) {
-        win.destroy()
+    if (isKill) {
+      const result = await terminatePluginForWindow(win)
+      if (result.success) return true
+
+      log.warn(`[plugin:out] terminate fallback: ${result.error || 'unknown error'}`)
+      if (win === mainWin || win === pluginWindowManager.getPanelWindow()?.getWindow()) {
+        pluginWindowManager.closeAttached(true)
       } else {
-        win.hide()
+        win.destroy()
       }
+    } else if (win === mainWin || win === pluginWindowManager.getPanelWindow()?.getWindow()) {
+      // 附着模式，普通关闭允许 PluginWindowManager 决定是否进入 resident-ui。
+      pluginWindowManager.closeAttached(false)
+    } else {
+      // 独立窗口普通退出必须走 close 路径，避免留下隐藏且不可管理的插件窗口。
+      win.close()
     }
 
     return true
+  })
+
+  ipcMain.handle('plugin:terminateCurrent', async (event) => {
+    const win = windowFromWebContents(event.sender)
+    return terminatePluginForWindow(win)
+  })
+
+  ipcMain.handle('plugin:showAttachedMenu', async (event, point?: { x?: unknown; y?: unknown }) => {
+    const win = windowFromWebContents(event.sender)
+    if (!win || win.isDestroyed()) return false
+
+    const plugin = resolveCurrentPlugin(win)
+    return actionMenuWindowManager.show({
+      ownerWindow: win,
+      anchor: point,
+      items: [
+        { id: 'reload', label: '重新加载界面', disabled: !plugin },
+        { id: 'separator-main', label: '', separator: true },
+        { id: 'terminate', label: '结束运行', danger: true, disabled: !(plugin && pluginManager) }
+      ],
+      onSelect: async (id) => {
+        if (id === 'reload') {
+          reloadPluginWindow(win)
+          return
+        }
+        if (id === 'terminate') {
+          const result = await terminatePluginForWindow(win)
+          if (!result.success) {
+            log.warn(`[plugin-menu] terminate failed: ${result.error || 'unknown error'}`)
+          }
+        }
+      }
+    })
+  })
+
+  ipcMain.handle('titlebar:showPluginMenu', async (event, point?: { x?: unknown; y?: unknown }) => {
+    const win = windowFromWebContents(event.sender)
+    if (!win || win.isDestroyed()) return false
+
+    const plugin = resolveCurrentPlugin(win)
+    return actionMenuWindowManager.show({
+      ownerWindow: win,
+      anchor: point,
+      items: [
+        { id: 'reload', label: '重新加载界面', disabled: !plugin },
+        { id: 'separator-titlebar', label: '', separator: true },
+        { id: 'terminate', label: '结束运行', danger: true, disabled: !(plugin && pluginManager) }
+      ],
+      onSelect: async (id) => {
+        if (id === 'reload') {
+          reloadPluginWindow(win)
+          return
+        }
+        if (id === 'terminate') {
+          const result = await terminatePluginForWindow(win)
+          if (!result.success) {
+            log.warn(`[titlebar] terminate failed: ${result.error || 'unknown error'}`)
+          }
+        }
+      }
+    })
   })
 
   // =========================================

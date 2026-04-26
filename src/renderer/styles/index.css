@@ -1711,6 +1711,15 @@ html.platform-win-main .attachment-manager {
   transform: scale(0.95);
 }
 
+.plugin-more-btn:hover {
+  background: rgba(100, 116, 139, 0.15);
+  color: var(--text-primary);
+}
+
+.plugin-more-btn:active {
+  background: rgba(100, 116, 139, 0.25);
+}
+
 .plugin-reload-btn:hover {
   background: rgba(59, 130, 246, 0.15);
   color: #3b82f6;

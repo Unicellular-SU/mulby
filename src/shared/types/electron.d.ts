@@ -483,6 +483,8 @@ export interface ElectronAPI {
     center: () => void
     detach: () => void
     close: () => void
+    terminatePlugin: () => Promise<{ success: boolean; error?: string }>
+    showPluginMenu: (point?: { x: number; y: number }) => Promise<boolean>
     reload: () => void
     setAlwaysOnTop: (flag: boolean) => void
     setOpacity: (opacity: number) => Promise<void>
@@ -536,6 +538,7 @@ export interface ElectronAPI {
     close: () => Promise<boolean>
     detach: () => Promise<boolean>
     reload: () => Promise<boolean>
+    showMenu: (point?: { x: number; y: number }) => Promise<boolean>
     getMode: () => Promise<'none' | 'attached' | 'detached'>
     getState: () => Promise<{ open: boolean; mode: 'none' | 'attached' | 'detached'; page: string | null; title: string }>
     onStateChange: (callback: (state: { open: boolean; mode: 'none' | 'attached' | 'detached'; page: string | null; title: string }) => void) => () => void
