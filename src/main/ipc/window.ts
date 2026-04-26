@@ -64,9 +64,13 @@ export function registerWindowHandlers(
     return pluginManager.stopPlugin(plugin.id, false)
   }
 
-  const reloadPluginWindow = (senderWin: BrowserWindow): boolean => {
+  const reloadPluginWindow = (
+    senderWin: BrowserWindow,
+    source: 'menu' | 'ipc' = 'menu'
+  ): boolean => {
     if (senderWin.isDestroyed()) return false
 
+    const reloadStart = Date.now()
     const mainWin = getMainWindow()
     const panelWin = pluginWindowManager.getPanelWindow()?.getWindow()
     const targetWin = senderWin === mainWin && panelWin ? panelWin : senderWin
@@ -75,7 +79,73 @@ export function registerWindowHandlers(
     const pluginWc = getPluginWebContents(targetWin) ?? targetWin.webContents
     if (pluginWc.isDestroyed()) return false
 
+    const useWindowsFramelessSurface = shouldUseWindowsFramelessSurface()
+    log.info(
+      `[ReloadTrace] reload requested | source=${source} | senderWin=${senderWin.id} | targetWin=${targetWin.id} | isPanel=${targetWin === panelWin} | wcId=${pluginWc.id}`
+    )
+    log.info(
+      `[ReloadTrace] pluginWc state | isLoading=${pluginWc.isLoading()} | url=${pluginWc.getURL().slice(0, 80)}`
+    )
+
+    // 附着面板是透明无边框窗口。直接 reload 偶发会让 Chromium 留下一层未重绘的白板，
+    // 直到下一次用户交互才刷新，所以所有入口都必须走统一的重绘保护逻辑。
+    const isDark = themeManager.getActualTheme() === 'dark'
+    targetWin.setBackgroundColor(isDark ? '#1e293b' : '#ffffff')
+    targetWin.setOpacity(0)
+    log.info(`[ReloadTrace] opacity set to 0 | +${Date.now() - reloadStart}ms`)
+
+    const finishListenerCount = pluginWc.listenerCount('did-finish-load')
+    log.info(`[ReloadTrace] did-finish-load listeners BEFORE adding: ${finishListenerCount}`)
+
+    const cleanup = () => {
+      pluginWc.removeListener('did-finish-load', onFinishLoad)
+      pluginWc.removeListener('did-fail-load', onFailLoad)
+    }
+
+    const restoreSurface = (reason: 'did-finish-load' | 'did-fail-load') => {
+      setTimeout(() => {
+        if (targetWin.isDestroyed()) return
+        if (useWindowsFramelessSurface) {
+          targetWin.setBackgroundColor('#00000000')
+        }
+        if (!pluginWc.isDestroyed()) {
+          pluginWc.send('theme:changed', themeManager.getActualTheme())
+          pluginWc.invalidate()
+        }
+        if (!targetWin.webContents.isDestroyed()) {
+          targetWin.webContents.invalidate()
+        }
+        targetWin.setOpacity(1)
+        // macOS 的透明窗口在快速 opacity 切换后偶发保留旧合成层；
+        // hide()+showInactive() 可以强制整窗重新合成。
+        if (process.platform === 'darwin' && !targetWin.isDestroyed()) {
+          targetWin.hide()
+          targetWin.showInactive()
+        }
+        log.info(`[ReloadTrace] surface restored after ${reason} | +${Date.now() - reloadStart}ms`)
+      }, 50)
+    }
+
+    const onFinishLoad = () => {
+      log.info(`[ReloadTrace] onFinishLoad fired | +${Date.now() - reloadStart}ms`)
+      cleanup()
+      restoreSurface('did-finish-load')
+    }
+
+    const onFailLoad = () => {
+      log.warn(`[ReloadTrace] onFailLoad fired | +${Date.now() - reloadStart}ms`)
+      cleanup()
+      restoreSurface('did-fail-load')
+    }
+
+    pluginWc.on('did-finish-load', onFinishLoad)
+    pluginWc.on('did-fail-load', onFailLoad)
+
+    log.info(
+      `[ReloadTrace] calling pluginWc.reload() | +${Date.now() - reloadStart}ms | listeners AFTER adding: ${pluginWc.listenerCount('did-finish-load')}`
+    )
     pluginWc.reload()
+    log.info(`[ReloadTrace] pluginWc.reload() returned | +${Date.now() - reloadStart}ms`)
     return true
   }
 
@@ -836,59 +906,10 @@ export function registerWindowHandlers(
   })
 
   ipcMain.on('plugin:reload', (event) => {
-    const reloadStart = Date.now()
     const senderWin = windowFromWebContents(event.sender)
     log.info(`[ReloadTrace] plugin:reload IPC received | senderWin=${senderWin?.id ?? 'null'}`)
     if (senderWin) {
-      const mainWin = getMainWindow()
-      const useWindowsFramelessSurface = shouldUseWindowsFramelessSurface()
-      // 主窗口触发时，重载当前附着的 Panel 插件窗口；其他情况重载发送者窗口。
-      const panelWin = pluginWindowManager.getPanelWindow()?.getWindow()
-      const win = senderWin === mainWin && panelWin ? panelWin : senderWin
-      log.info(`[ReloadTrace] target win=${win.id} | isPanel=${win === panelWin} | wcId=${win.webContents.id}`)
-
-      // 确定要重载的 webContents：优先使用插件视图（WebContentsView），
-      // 否则回退到窗口自身的 webContents（无标题栏或面板模式）
-      const pluginWc = getPluginWebContents(win) ?? win.webContents
-      log.info(`[ReloadTrace] pluginWc.id=${pluginWc.id} | isLoading=${pluginWc.isLoading()} | url=${pluginWc.getURL().slice(0, 80)}`)
-
-      // 重载前设置背景色并隐藏窗口内容，避免闪白
-      const isDark = themeManager.getActualTheme() === 'dark'
-      const bgColor = isDark ? '#1e293b' : '#ffffff'
-      win.setBackgroundColor(bgColor)
-      win.setOpacity(0)
-      log.info(`[ReloadTrace] opacity set to 0 | +${Date.now() - reloadStart}ms`)
-
-      const listenerCount = pluginWc.listenerCount('did-finish-load')
-      log.info(`[ReloadTrace] did-finish-load listeners BEFORE adding: ${listenerCount}`)
-
-      // 监听加载完成事件
-      const onFinishLoad = () => {
-        log.info(`[ReloadTrace] onFinishLoad fired | +${Date.now() - reloadStart}ms`)
-        setTimeout(() => {
-          if (win.isDestroyed()) return
-          if (useWindowsFramelessSurface) {
-            win.setBackgroundColor('#00000000')
-          }
-          if (!pluginWc.isDestroyed()) {
-            pluginWc.send('theme:changed', themeManager.getActualTheme())
-          }
-          win.setOpacity(1)
-          // macOS: rapid setOpacity(0→1) cycling can leave the compositor with a stale
-          // surface. hide()+showInactive() forces a full recomposite of the window layer.
-          if (process.platform === 'darwin' && !win.isDestroyed()) {
-            win.hide()
-            win.showInactive()
-          }
-          log.info(`[ReloadTrace] opacity restored | +${Date.now() - reloadStart}ms`)
-        }, 50)
-        pluginWc.removeListener('did-finish-load', onFinishLoad)
-      }
-      pluginWc.on('did-finish-load', onFinishLoad)
-
-      log.info(`[ReloadTrace] calling pluginWc.reload() | +${Date.now() - reloadStart}ms | listeners AFTER adding: ${pluginWc.listenerCount('did-finish-load')}`)
-      pluginWc.reload()
-      log.info(`[ReloadTrace] pluginWc.reload() returned | +${Date.now() - reloadStart}ms`)
+      reloadPluginWindow(senderWin, 'ipc')
     }
   })
 
