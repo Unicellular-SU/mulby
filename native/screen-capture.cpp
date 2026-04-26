@@ -697,9 +697,9 @@ struct CPState {
     HHOOK keyboardHook;
     bool success;
     bool finished;
-    bool updatePending;
+    bool initialButtonsReleased;
+    bool hasSample;
     int x, y;
-    int pendingX, pendingY;
     int r, g, b;
     int vsX, vsY, vsW, vsH;
     int sampleSize;
@@ -711,7 +711,8 @@ struct CPState {
 };
 
 static CPState* g_cpState = nullptr;
-static const UINT CP_WM_UPDATE_SAMPLE = WM_APP + 0x4D;
+static const UINT_PTR CP_TIMER_ID = 1;
+static const UINT CP_TIMER_INTERVAL_MS = 16;
 
 static int CPClampInt(int value, int minValue, int maxValue) {
     if (maxValue < minValue) return minValue;
@@ -794,18 +795,6 @@ static void CPUpdateSample(CPState* s, int x, int y) {
     }
 }
 
-static void CPScheduleUpdate(CPState* s, int x, int y) {
-    if (!s || s->finished || !s->hwnd) return;
-
-    s->pendingX = x;
-    s->pendingY = y;
-
-    if (!s->updatePending) {
-        s->updatePending = true;
-        PostMessageW(s->hwnd, CP_WM_UPDATE_SAMPLE, 0, 0);
-    }
-}
-
 static void CPFinish(CPState* s, bool success) {
     if (!s || s->finished) return;
     s->success = success;
@@ -817,14 +806,15 @@ static void CPFinish(CPState* s, bool success) {
     }
 }
 
-static LRESULT CALLBACK CPMouseHookProc(int nCode, WPARAM wParam, LPARAM lParam) {
-    if (nCode >= 0 && g_cpState) {
+static bool CPIsKeyDown(int vk) {
+    return (GetAsyncKeyState(vk) & 0x8000) != 0;
+}
+
+static LRESULT CALLBACK CPClickHookProc(int nCode, WPARAM wParam, LPARAM lParam) {
+    if (nCode >= 0 && g_cpState && g_cpState->initialButtonsReleased && !g_cpState->finished) {
         MSLLHOOKSTRUCT* mouse = reinterpret_cast<MSLLHOOKSTRUCT*>(lParam);
         if (mouse) {
             switch (wParam) {
-            case WM_MOUSEMOVE:
-                CPScheduleUpdate(g_cpState, mouse->pt.x, mouse->pt.y);
-                break;
             case WM_LBUTTONDOWN:
                 CPUpdateSample(g_cpState, mouse->pt.x, mouse->pt.y);
                 CPFinish(g_cpState, true);
@@ -843,7 +833,7 @@ static LRESULT CALLBACK CPMouseHookProc(int nCode, WPARAM wParam, LPARAM lParam)
 }
 
 static LRESULT CALLBACK CPKeyboardHookProc(int nCode, WPARAM wParam, LPARAM lParam) {
-    if (nCode >= 0 && g_cpState && (wParam == WM_KEYDOWN || wParam == WM_SYSKEYDOWN)) {
+    if (nCode >= 0 && g_cpState && !g_cpState->finished && (wParam == WM_KEYDOWN || wParam == WM_SYSKEYDOWN)) {
         KBDLLHOOKSTRUCT* key = reinterpret_cast<KBDLLHOOKSTRUCT*>(lParam);
         if (key && key->vkCode == VK_ESCAPE) {
             CPFinish(g_cpState, false);
@@ -852,6 +842,42 @@ static LRESULT CALLBACK CPKeyboardHookProc(int nCode, WPARAM wParam, LPARAM lPar
     }
 
     return CallNextHookEx(g_cpState ? g_cpState->keyboardHook : NULL, nCode, wParam, lParam);
+}
+
+static void CPTick(CPState* s) {
+    if (!s || s->finished) return;
+
+    const bool leftDown = CPIsKeyDown(VK_LBUTTON);
+    const bool rightDown = CPIsKeyDown(VK_RBUTTON);
+    const bool middleDown = CPIsKeyDown(VK_MBUTTON);
+    const bool escapeDown = CPIsKeyDown(VK_ESCAPE);
+
+    if (!s->initialButtonsReleased) {
+        s->initialButtonsReleased = !leftDown && !rightDown && !middleDown && !escapeDown;
+    } else {
+        if ((escapeDown && !s->keyboardHook) || ((rightDown || middleDown) && !s->mouseHook)) {
+            CPFinish(s, false);
+            return;
+        }
+
+        // If hook installation fails, keep polling as a fallback. In that case
+        // the underlying app may still receive the click, but picking remains usable.
+        if (leftDown && !s->mouseHook) {
+            POINT pt;
+            if (GetCursorPos(&pt)) {
+                CPUpdateSample(s, pt.x, pt.y);
+            }
+            CPFinish(s, true);
+            return;
+        }
+    }
+
+    POINT pt;
+    if (!GetCursorPos(&pt)) return;
+    if (!s->hasSample || pt.x != s->x || pt.y != s->y) {
+        s->hasSample = true;
+        CPUpdateSample(s, pt.x, pt.y);
+    }
 }
 
 static void CPPaintTo(HDC hdc, CPState* s) {
@@ -961,11 +987,8 @@ static LRESULT CALLBACK CPWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPa
         SetWindowLongPtr(hwnd, GWLP_USERDATA, (LONG_PTR)cs->lpCreateParams);
         return 0;
     }
-    case CP_WM_UPDATE_SAMPLE:
-        if (s && !s->finished) {
-            s->updatePending = false;
-            CPUpdateSample(s, s->pendingX, s->pendingY);
-        }
+    case WM_TIMER:
+        if (wParam == CP_TIMER_ID) CPTick(s);
         return 0;
     case WM_MOUSEACTIVATE:
         return MA_NOACTIVATE;
@@ -983,6 +1006,7 @@ static LRESULT CALLBACK CPWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPa
         DestroyWindow(hwnd);
         return 0;
     case WM_DESTROY:
+        KillTimer(hwnd, CP_TIMER_ID);
         if (s) s->hwnd = NULL;
         PostQuitMessage(0);
         return 0;
@@ -1011,7 +1035,8 @@ static Napi::Value StartColorPick(const Napi::CallbackInfo& info) {
         CPState st = {};
         st.success = false;
         st.finished = false;
-        st.updatePending = false;
+        st.initialButtonsReleased = false;
+        st.hasSample = false;
         st.sampleSize = 15;
         st.r = 0; st.g = 0; st.b = 0;
         st.vsX = GetSystemMetrics(SM_XVIRTUALSCREEN);
@@ -1081,17 +1106,14 @@ static Napi::Value StartColorPick(const Napi::CallbackInfo& info) {
         }
 
         g_cpState = &st;
-
-        st.mouseHook = SetWindowsHookExW(WH_MOUSE_LL, CPMouseHookProc, GetModuleHandle(NULL), 0);
+        st.mouseHook = SetWindowsHookExW(WH_MOUSE_LL, CPClickHookProc, GetModuleHandle(NULL), 0);
         st.keyboardHook = SetWindowsHookExW(WH_KEYBOARD_LL, CPKeyboardHookProc, GetModuleHandle(NULL), 0);
-
-        if (!st.mouseHook) {
-            CPFinish(&st, false);
-        }
 
         POINT pt;
         GetCursorPos(&pt);
         CPUpdateSample(&st, pt.x, pt.y);
+        st.hasSample = true;
+        SetTimer(st.hwnd, CP_TIMER_ID, CP_TIMER_INTERVAL_MS, NULL);
 
         MSG msg;
         while (GetMessage(&msg, NULL, 0, 0) > 0) {
