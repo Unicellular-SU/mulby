@@ -269,12 +269,38 @@ export class SuperPanelWindowManager {
         }
 
         // 失焦自动隐藏
-        win.on('blur', () => {
+        const hideOnBlur = () => {
           if (win && !win.isDestroyed() && win.isVisible()) {
             win.hide()
             this.options.onHide()
           }
-        })
+        }
+        win.on('blur', hideOnBlur)
+
+        // Windows: transparent+frameless+toolbar 窗口可能不触发 blur，
+        // 用焦点轮询兜底确保点击外部时隐藏
+        if (process.platform === 'win32') {
+          let focusPollTimer: ReturnType<typeof setInterval> | null = null
+          const startFocusPoll = () => {
+            if (focusPollTimer) return
+            focusPollTimer = setInterval(() => {
+              if (!win || win.isDestroyed()) {
+                if (focusPollTimer) { clearInterval(focusPollTimer); focusPollTimer = null }
+                return
+              }
+              if (win.isVisible() && !win.isFocused()) {
+                hideOnBlur()
+                if (focusPollTimer) { clearInterval(focusPollTimer); focusPollTimer = null }
+              }
+            }, 100)
+          }
+          const stopFocusPoll = () => {
+            if (focusPollTimer) { clearInterval(focusPollTimer); focusPollTimer = null }
+          }
+          win.on('show', startFocusPoll)
+          win.on('hide', stopFocusPoll)
+          win.on('closed', stopFocusPoll)
+        }
 
         win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }))
 
