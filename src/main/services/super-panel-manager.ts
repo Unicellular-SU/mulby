@@ -11,7 +11,7 @@
  */
 
 import { BrowserWindow, clipboard, screen } from 'electron'
-import type { InputHookService, MouseEventData } from './input-hook'
+import type { InputHookService, MouseButton, MouseEventData } from './input-hook'
 import type { PluginManager } from '../plugin'
 import type { AppSettingsManager } from './app-settings'
 import type { ThemeManager } from './theme'
@@ -82,6 +82,8 @@ export interface SuperPanelState {
 
 // 钩子注册 ID
 const HOOK_ID = 'super-panel'
+const DISMISS_HOOK_PREFIX = 'super-panel-dismiss'
+const DISMISS_BUTTONS: MouseButton[] = ['left', 'right', 'middle', 'back', 'forward']
 
 // ==================== SuperPanelManager ====================
 
@@ -103,6 +105,7 @@ export class SuperPanelManager {
   // 当前的翻译状态
   private currentTranslation?: SuperPanelTranslation
   private currentQuery?: string // 当前二次过滤词，用于保留禁用项时的过滤状态
+  private pendingTriggerReleaseDismiss: { button: MouseButton; expiresAt: number } | null = null
 
   // 当前捕获内容的语义类型
   private selectionKind: SelectionKind = 'text'
@@ -138,6 +141,8 @@ export class SuperPanelManager {
     this.unregisterHooks()
 
     const { trigger } = settings
+    const triggerClickButton = trigger.type === 'mouse_click' ? trigger.mouseButton : undefined
+    this.registerDismissHooks(triggerClickButton)
 
     switch (trigger.type) {
       case 'mouse_click':
@@ -220,14 +225,20 @@ export class SuperPanelManager {
 
   /** 鼠标触发入口 */
   private async onTrigger(event: MouseEventData): Promise<void> {
+    if (!this.isActive) return
+    if (this.shouldDismissVisiblePanel(event)) {
+      this.hidePanel()
+      return
+    }
+
     // 防抖
     const now = Date.now()
     if (now - this.lastTriggerTime < this.TRIGGER_DEBOUNCE_MS) return
-    if (!this.isActive) return
     this.lastTriggerTime = now
 
     // 黑名单检查
     if (this.isBlockedApp()) return
+    this.armTriggerReleaseDismissSuppressor(event)
 
     // 获取鼠标坐标（Linux evdev 可能不提供坐标）
     let x = event.x
@@ -267,13 +278,17 @@ export class SuperPanelManager {
    */
   private async triggerWorkflow(x: number, y: number): Promise<void> {
     try {
+      const activeWindowInfo = getCachedActiveWindow()
+      this.cachedActiveWindow = activeWindowInfo || undefined
+
       // 跨平台原生取词
       // 传入 fallback 选项，在原生 API 完全失败时才会触发安全的模拟复制回退
       const selectionResult = await getSelectedTextAsync({
         clipboardHistoryManager: this.clipboardHistoryManager,
         suppressSyntheticInput: (durationMs) => 
           this.inputHookService.suppressDoubleTapForSyntheticInput(durationMs),
-        fallbackDelayMs: this.getSettings().clipboardPollDelayMs
+        fallbackDelayMs: this.getSettings().clipboardPollDelayMs,
+        activeWindow: activeWindowInfo || undefined
       })
 
       // 选中文本
@@ -294,9 +309,6 @@ export class SuperPanelManager {
         this.currentQuery = undefined
         this.currentTranslation = undefined
         this.translationSeq++
-        
-        const activeWindowInfo = getCachedActiveWindow()
-        this.cachedActiveWindow = activeWindowInfo || undefined
 
         const items = this.matchContent(this.capturedText, this.getSettings().maxItems)
         this.cachedItems = items
@@ -304,6 +316,13 @@ export class SuperPanelManager {
         const activeApp = activeWindowInfo
           ? { app: activeWindowInfo.app, bundleId: activeWindowInfo.bundleId }
           : undefined
+
+        const shouldTranslate = this.selectionKind === 'text'
+          && await this.shouldRequestTranslation(this.capturedText)
+
+        if (shouldTranslate) {
+          this.currentTranslation = { text: '', loading: true }
+        }
 
         // 文件/图片选中时，header 用描述性文本替代原始路径
         const displayText = this.getDisplayText()
@@ -314,19 +333,18 @@ export class SuperPanelManager {
           items,
           visible: true,
           mode: 'match',
+          translation: shouldTranslate ? this.currentTranslation : undefined,
           activeApp
         })
 
         // 文件/图片选中时不触发即时翻译
-        if (this.selectionKind === 'text' && this.getSettings().instantTranslation && this.capturedText.length > 0) {
-          void this.requestTranslation(this.capturedText)
+        if (shouldTranslate) {
+          void this.requestTranslation(this.capturedText, { skipLoadingPush: true })
         }
       } else {
         // ===== 无选中文本及附件 → 固定列表模式 =====
         this.translationSeq++
-        const activeWindowInfo = getCachedActiveWindow()
-        this.cachedActiveWindow = activeWindowInfo || undefined
-        
+
         const pinnedGroups = this.buildPinnedGroups()
         this.cachedItems = []
 
@@ -494,6 +512,66 @@ export class SuperPanelManager {
       })
     }
     return this.windowManager
+  }
+
+  private registerDismissHooks(excludeButton?: MouseButton): void {
+    for (const button of DISMISS_BUTTONS) {
+      if (button === excludeButton) continue
+      this.inputHookService.registerMouse(
+        `${DISMISS_HOOK_PREFIX}:${button}`,
+        button,
+        'click',
+        (event) => this.onDismissMouse(event)
+      )
+    }
+  }
+
+  private onDismissMouse(event: MouseEventData): void {
+    if (this.consumeTriggerReleaseDismiss(event)) {
+      return
+    }
+    if (this.shouldDismissVisiblePanel(event)) {
+      this.hidePanel()
+    }
+  }
+
+  private armTriggerReleaseDismissSuppressor(event: MouseEventData): void {
+    const trigger = this.getSettings().trigger
+    if (trigger.type !== 'mouse_longpress' || event.button !== trigger.mouseButton) return
+
+    // 长按触发发生在 mouseDown 定时器内，随后同一个按钮的 mouseUp 会被 click 钩子看到。
+    // 这次释放属于唤醒手势本身，不能当作“点击面板外部”来关闭面板。
+    this.pendingTriggerReleaseDismiss = {
+      button: event.button,
+      expiresAt: Date.now() + 15_000
+    }
+  }
+
+  private consumeTriggerReleaseDismiss(event: MouseEventData): boolean {
+    const pending = this.pendingTriggerReleaseDismiss
+    if (!pending) return false
+
+    if (Date.now() > pending.expiresAt) {
+      this.pendingTriggerReleaseDismiss = null
+      return false
+    }
+
+    if (event.button !== pending.button) return false
+    this.pendingTriggerReleaseDismiss = null
+    return true
+  }
+
+  private shouldDismissVisiblePanel(event: MouseEventData): boolean {
+    if (!this.windowManager?.isVisible()) return false
+    const point = this.resolveMousePoint(event)
+    return !this.windowManager.containsPoint(point.x, point.y)
+  }
+
+  private resolveMousePoint(event: MouseEventData): { x: number; y: number } {
+    if (event.x === 0 && event.y === 0 && process.platform === 'linux') {
+      return screen.getCursorScreenPoint()
+    }
+    return { x: event.x, y: event.y }
   }
 
   // ==================== IPC 动作处理 ====================
@@ -858,26 +936,33 @@ export class SuperPanelManager {
    * - 使用序号机制丢弃过时请求
    * - 禁用所有工具/技能/MCP，确保纯文本翻译
    */
-  private async requestTranslation(text: string): Promise<void> {
+  private async shouldRequestTranslation(text: string): Promise<boolean> {
     const trimmed = text.trim()
     const settings = this.getSettings()
     const maxLength = settings.translationMaxLength ?? 5000
-    if (!trimmed || trimmed.length > maxLength) return
+    if (!settings.instantTranslation || !trimmed || trimmed.length > maxLength) return false
 
     // 检查 AI 是否已配置
     try {
       const { getAiSettings } = await import('../ai/config')
       const aiSettings = getAiSettings()
       const hasProvider = aiSettings.providers.some((p) => p.apiKey && p.apiKey.length > 0)
-      if (!hasProvider) return
+      return hasProvider
     } catch {
-      return
+      return false
     }
+  }
+
+  private async requestTranslation(text: string, options?: { skipLoadingPush?: boolean }): Promise<void> {
+    const trimmed = text.trim()
+    if (!(await this.shouldRequestTranslation(trimmed))) return
 
     const seq = ++this.translationSeq
 
     // 推送 loading 状态
-    this.pushTranslation({ text: '', loading: true })
+    if (!options?.skipLoadingPush) {
+      this.pushTranslation({ text: '', loading: true })
+    }
 
     try {
       // 检测目标语言：包含 CJK 字符 → 翻译为英文，否则翻译为中文
@@ -998,6 +1083,9 @@ export class SuperPanelManager {
 
   private unregisterHooks(): void {
     this.inputHookService.unregisterMouse(HOOK_ID)
+    for (const button of DISMISS_BUTTONS) {
+      this.inputHookService.unregisterMouse(`${DISMISS_HOOK_PREFIX}:${button}`)
+    }
     this.inputHookService.unregister(HOOK_ID)
     // 使用追踪的 modifier 注销（而非从当前设置读取，因为设置可能已变更）
     if (this.registeredDoubleTapModifier) {

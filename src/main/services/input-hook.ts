@@ -197,11 +197,17 @@ class DoubleTapDetector {
 
   suppressSyntheticInputs(durationMs: number): void {
     this.suppressUntil = Date.now() + durationMs
+    this.reset()
+  }
+
+  private isSuppressed(): boolean {
+    return Date.now() < this.suppressUntil
   }
 
   /** 处理 keydown 事件（由 InputHookService 调用） */
   handleKeyDown(vkCode: number): void {
     if (this.handlers.length === 0) return
+    if (this.isSuppressed()) return
 
     const modifier = VK_MODIFIER_MAP[vkCode]
 
@@ -210,10 +216,6 @@ class DoubleTapDetector {
         this.modifierDownTime = Date.now()
       }
     } else {
-      // 在抑制窗口内忽略非修饰键 keydown（模拟键盘产生的合成事件）
-      if (Date.now() < this.suppressUntil) {
-        return
-      }
       // 非修饰键被按下，重置双击检测状态
       this.nonModifierPressed = true
       this.lastModifierUp = null
@@ -223,6 +225,7 @@ class DoubleTapDetector {
   /** 处理 keyup 事件（由 InputHookService 调用） */
   handleKeyUp(vkCode: number): void {
     if (this.handlers.length === 0) return
+    if (this.isSuppressed()) return
 
     const modifier = VK_MODIFIER_MAP[vkCode]
 

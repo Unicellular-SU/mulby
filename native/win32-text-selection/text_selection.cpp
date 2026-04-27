@@ -17,6 +17,8 @@
 
 #include <windows.h>
 #include <oleauto.h>
+#include <exdisp.h>
+#include <shldisp.h>
 #include <wchar.h>
 
 // 手动前向声明和 IID/CLSID，绕过 uiautomation.h 的头文件冲突
@@ -165,6 +167,132 @@ static int TryGetSelection(IUIAutomationTextPattern* textPat, wchar_t* buffer, i
     return copyLen;
 }
 
+static int AppendStringLine(wchar_t* buffer, int bufferSize, int offset, const wchar_t* value) {
+    if (!buffer || bufferSize <= 0 || !value) return offset;
+
+    int len = (int)wcslen(value);
+    if (len <= 0) return offset;
+
+    int available = bufferSize - 1 - offset;
+    if (available <= 0) return offset;
+
+    if (offset > 0 && available > 0) {
+        buffer[offset++] = L'\n';
+        available--;
+    }
+
+    int copyLen = (len < available) ? len : available;
+    if (copyLen > 0) {
+        wmemcpy(buffer + offset, value, copyLen);
+        offset += copyLen;
+    }
+    buffer[offset] = L'\0';
+    return offset;
+}
+
+static int CollectSelectedItemsFromShellView(
+    IShellFolderViewDual* view,
+    wchar_t* buffer,
+    int bufferSize,
+    int offset
+) {
+    if (!view) return offset;
+
+    FolderItems* items = nullptr;
+    HRESULT hr = view->SelectedItems(&items);
+    if (FAILED(hr) || !items) return offset;
+
+    long count = 0;
+    items->get_Count(&count);
+
+    for (long i = 0; i < count; i++) {
+        VARIANT index;
+        VariantInit(&index);
+        index.vt = VT_I4;
+        index.lVal = i;
+
+        FolderItem* item = nullptr;
+        hr = items->Item(index, &item);
+        VariantClear(&index);
+        if (FAILED(hr) || !item) continue;
+
+        BSTR path = nullptr;
+        hr = item->get_Path(&path);
+        if (SUCCEEDED(hr) && path && SysStringLen(path) > 0) {
+            offset = AppendStringLine(buffer, bufferSize, offset, path);
+        }
+        if (path) SysFreeString(path);
+        item->Release();
+
+        if (offset >= bufferSize - 1) break;
+    }
+
+    items->Release();
+    return offset;
+}
+
+static int TryGetExplorerSelectedFiles(bool foregroundOnly, wchar_t* buffer, int bufferSize) {
+    if (!buffer || bufferSize <= 0) return 0;
+
+    HWND foreground = GetForegroundWindow();
+    IShellWindows* shellWindows = nullptr;
+    HRESULT hr = CoCreateInstance(
+        CLSID_ShellWindows,
+        nullptr,
+        CLSCTX_ALL,
+        IID_IShellWindows,
+        (void**)&shellWindows
+    );
+    if (FAILED(hr) || !shellWindows) return 0;
+
+    long count = 0;
+    shellWindows->get_Count(&count);
+
+    int offset = 0;
+    for (long i = 0; i < count; i++) {
+        VARIANT index;
+        VariantInit(&index);
+        index.vt = VT_I4;
+        index.lVal = i;
+
+        IDispatch* dispatch = nullptr;
+        hr = shellWindows->Item(index, &dispatch);
+        VariantClear(&index);
+        if (FAILED(hr) || !dispatch) continue;
+
+        IWebBrowserApp* browser = nullptr;
+        hr = dispatch->QueryInterface(IID_IWebBrowserApp, (void**)&browser);
+        dispatch->Release();
+        if (FAILED(hr) || !browser) continue;
+
+        SHANDLE_PTR hwndValue = 0;
+        browser->get_HWND(&hwndValue);
+        HWND hwnd = (HWND)hwndValue;
+        if (foregroundOnly && hwnd != foreground) {
+            browser->Release();
+            continue;
+        }
+
+        IDispatch* documentDispatch = nullptr;
+        hr = browser->get_Document(&documentDispatch);
+        browser->Release();
+        if (FAILED(hr) || !documentDispatch) continue;
+
+        IShellFolderViewDual* view = nullptr;
+        hr = documentDispatch->QueryInterface(IID_IShellFolderViewDual, (void**)&view);
+        documentDispatch->Release();
+        if (FAILED(hr) || !view) continue;
+
+        offset = CollectSelectedItemsFromShellView(view, buffer, bufferSize, offset);
+        view->Release();
+
+        if (offset > 0 || offset >= bufferSize - 1) break;
+    }
+
+    shellWindows->Release();
+    return offset;
+}
+
 extern "C" {
 
 /**
@@ -242,6 +370,29 @@ cleanup:
     if (focused) focused->Release();
     if (uia) uia->Release();
     // 仅当我们成功初始化了 COM 时才 Uninitialize
+    if (hrInit == S_OK) CoUninitialize();
+    return returnValue;
+}
+
+/**
+ * 获取 Windows Explorer 当前选中的文件路径。
+ *
+ * 输出为换行分隔的绝对路径。优先读取前台 Explorer 窗口；如果前台句柄匹配失败，
+ * 回退到第一个存在选中项的 Explorer 窗口，避免某些 Windows 版本下前台句柄不是
+ * ShellWindows 暴露的顶层句柄时完全读不到。
+ */
+DLL_API int GetExplorerSelectedFilesW(wchar_t* buffer, int bufferSize) {
+    if (!buffer || bufferSize <= 0) return -1;
+    buffer[0] = L'\0';
+
+    HRESULT hrInit = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
+    if (FAILED(hrInit) && hrInit != RPC_E_CHANGED_MODE && hrInit != S_FALSE) return -1;
+
+    int returnValue = TryGetExplorerSelectedFiles(true, buffer, bufferSize);
+    if (returnValue <= 0) {
+        returnValue = TryGetExplorerSelectedFiles(false, buffer, bufferSize);
+    }
+
     if (hrInit == S_OK) CoUninitialize();
     return returnValue;
 }

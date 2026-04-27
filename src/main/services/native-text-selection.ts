@@ -20,7 +20,7 @@ import { app } from 'electron'
 import { basename, extname } from 'path'
 import { nativeSimulateCopy, fallbackSimulateCopy } from './native-keyboard-sim'
 import { getClipboardFormat, readClipboardFiles } from '../utils/clipboard-helper'
-import type { InputAttachment } from '../../shared/types/plugin'
+import type { ActiveWindowInfo, InputAttachment } from '../../shared/types/plugin'
 import log from 'electron-log'
 
 // ==================== 公共接口 ====================
@@ -65,15 +65,48 @@ export async function getSelectedTextAsync(options?: {
   suppressSyntheticInput?: (durationMs: number) => void
   /** 回退模式等待剪贴板更新的时间（毫秒） */
   fallbackDelayMs?: number
+  /** 触发时的前台窗口，用于判断文件管理器中“文件名文本”是否需要二次验证 */
+  activeWindow?: ActiveWindowInfo
 }): Promise<TextSelectionResult> {
   const start = performance.now()
 
   // 1. 尝试原生 API
   const nativeResult = await getNativeSelectedText()
   if (nativeResult !== null && nativeResult.trim().length > 0) {
+    if (shouldProbeFileSelection(options?.activeWindow)) {
+      const explorerAttachments = getWin32ExplorerSelectionAttachments()
+      if (explorerAttachments.length > 0) {
+        const text = null
+        const kind = inferSelectionKind(text, explorerAttachments)
+        const durationMs = Math.round(performance.now() - start)
+        log.info(`[NativeTextSelection] Explorer 选中文件读取成功 (${durationMs}ms, nativeText=${nativeResult.length}字符, attachments=${explorerAttachments.length}, kind=${kind})`)
+        return { text, attachments: explorerAttachments, kind, source: 'clipboard', durationMs }
+      }
+
+      const fallbackResult = await fallbackGetSelectedText(options)
+      if (fallbackResult.attachments.length > 0) {
+        const text = null
+        const kind = inferSelectionKind(text, fallbackResult.attachments)
+        const durationMs = Math.round(performance.now() - start)
+        log.info(`[NativeTextSelection] 文件管理器附件验证成功 (${durationMs}ms, nativeText=${nativeResult.length}字符, attachments=${fallbackResult.attachments.length}, kind=${kind})`)
+        return { text, attachments: fallbackResult.attachments, kind, source: 'clipboard', durationMs }
+      }
+    }
+
     const durationMs = Math.round(performance.now() - start)
     log.info(`[NativeTextSelection] 原生取词成功 (${durationMs}ms, ${nativeResult.length}字符, source=${getSourceName()})`)
     return { text: nativeResult, attachments: [], kind: 'text', source: getSourceName(), durationMs }
+  }
+
+  // Windows Explorer 的文件选区不一定能被 UIA 文本接口或 Ctrl+C 回退可靠捕获。
+  if (shouldProbeFileSelection(options?.activeWindow)) {
+    const explorerAttachments = getWin32ExplorerSelectionAttachments()
+    if (explorerAttachments.length > 0) {
+      const durationMs = Math.round(performance.now() - start)
+      const kind = inferSelectionKind(null, explorerAttachments)
+      log.info(`[NativeTextSelection] Explorer 选中文件读取成功 (${durationMs}ms, attachments=${explorerAttachments.length}, kind=${kind})`)
+      return { text: null, attachments: explorerAttachments, kind, source: 'clipboard', durationMs }
+    }
   }
 
   // 2. 回退到剪贴板模拟（原生 API 未获取到文本，可能是无选中或 API 不可用）
@@ -156,6 +189,73 @@ export function captureClipboardContent(): InputAttachment[] {
 
 function getSourceName(): 'accessibility' | 'primary-selection' {
   return process.platform === 'linux' ? 'primary-selection' : 'accessibility'
+}
+
+function shouldProbeFileSelection(activeWindow?: ActiveWindowInfo): boolean {
+  if (!activeWindow) return false
+
+  const appName = (activeWindow.app || '').toLowerCase()
+  const title = (activeWindow.title || '').toLowerCase()
+  const bundleId = (activeWindow.bundleId || '').toLowerCase()
+  const haystack = `${appName} ${title} ${bundleId}`
+
+  if (process.platform === 'darwin') {
+    return bundleId === 'com.apple.finder' || appName.includes('finder') || haystack.includes('访达')
+  }
+
+  if (process.platform === 'win32') {
+    return (
+      appName.includes('explorer') ||
+      appName.includes('file explorer') ||
+      title.includes('file explorer') ||
+      haystack.includes('资源管理器') ||
+      haystack.includes('文件资源管理器')
+    )
+  }
+
+  if (process.platform === 'linux') {
+    return [
+      'nautilus',
+      'dolphin',
+      'thunar',
+      'nemo',
+      'pcmanfm',
+      'caja',
+      'files',
+      '文件'
+    ].some((name) => haystack.includes(name))
+  }
+
+  return false
+}
+
+function getWin32ExplorerSelectionAttachments(): InputAttachment[] {
+  if (process.platform !== 'win32') return []
+
+  const t0 = performance.now()
+  const selectedPaths = win32GetExplorerSelectedFiles()
+  if (selectedPaths.length === 0) {
+    log.info(`[NativeTextSelection][ExplorerSelection] 无选中文件 (${Math.round(performance.now() - t0)}ms)`)
+    return []
+  }
+  log.info(`[NativeTextSelection][ExplorerSelection] 读取到 ${selectedPaths.length} 个文件 (${Math.round(performance.now() - t0)}ms)`)
+  return selectedPaths.map(filePathToAttachment)
+}
+
+function filePathToAttachment(filePath: string): InputAttachment {
+  const name = basename(filePath)
+  const ext = extname(filePath)
+  const imageExts = ['.png', '.jpg', '.jpeg', '.gif', '.bmp', '.webp', '.svg', '.ico']
+  const isImage = imageExts.some(e => ext.toLowerCase() === e)
+
+  return {
+    id: `sp_file_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+    name,
+    size: 0,
+    kind: isImage ? 'image' : 'file',
+    ext,
+    path: filePath
+  }
 }
 
 async function getNativeSelectedText(): Promise<string | null> {
@@ -404,6 +504,7 @@ function cfStringToJs(api: DarwinAxApi, cfStr: unknown): string | null {
 
 interface Win32TextSelectionApi {
   GetSelectedTextW: (buffer: Buffer, bufferSize: number) => number
+  GetExplorerSelectedFilesW: (buffer: Buffer, bufferSize: number) => number
 }
 
 let _win32TsApi: Win32TextSelectionApi | null = null
@@ -438,7 +539,8 @@ function win32GetSelectedText(): string | null {
 
       const dll = koffi.load(dllPath)
       _win32TsApi = {
-        GetSelectedTextW: dll.func('int GetSelectedTextW(_Out_ uint8_t*, int)')
+        GetSelectedTextW: dll.func('int GetSelectedTextW(_Out_ uint8_t*, int)'),
+        GetExplorerSelectedFilesW: dll.func('int GetExplorerSelectedFilesW(_Out_ uint8_t*, int)')
       }
     } catch (err) {
       _win32TsApiFailed = true
@@ -452,6 +554,29 @@ function win32GetSelectedText(): string | null {
   if (len <= 0) return null
 
   return koffi.decode(buffer, 'char16_t', len) as string
+}
+
+function win32GetExplorerSelectedFiles(): string[] {
+  if (_win32TsApiFailed) return []
+  if (!_win32TsApi) {
+    win32GetSelectedText()
+  }
+  if (!_win32TsApi) return []
+
+  try {
+    const buffer = Buffer.alloc(65536)
+    const len = _win32TsApi.GetExplorerSelectedFilesW(buffer, 32768)
+    if (len <= 0) return []
+
+    const raw = koffi.decode(buffer, 'char16_t', len) as string
+    return raw
+      .split('\n')
+      .map((item) => item.trim())
+      .filter(Boolean)
+  } catch (err) {
+    log.warn('[NativeTextSelection] Explorer 文件选区读取失败:', err)
+    return []
+  }
 }
 
 // ==================== Linux: X11 PRIMARY Selection ====================
@@ -694,9 +819,26 @@ function inferSelectionKind(text: string | null, attachments: InputAttachment[])
 
   const fileAttachments = attachments.filter(a => a.kind === 'file')
   const imageAttachments = attachments.filter(a => a.kind === 'image')
+  const textIsAttachmentLabel = hasText && attachmentTextMatches(text, attachments)
 
-  if (fileAttachments.length > 0 && !hasText) return 'files'
-  if (imageAttachments.length > 0 && fileAttachments.length === 0 && !hasText) return 'image'
+  if (fileAttachments.length > 0 && (!hasText || textIsAttachmentLabel)) return 'files'
+  if (imageAttachments.length > 0 && fileAttachments.length === 0 && (!hasText || textIsAttachmentLabel)) return 'image'
 
   return 'text'
+}
+
+function attachmentTextMatches(text: string | null, attachments: InputAttachment[]): boolean {
+  const value = (text || '').trim()
+  if (!value) return false
+
+  return attachments.some((attachment) => {
+    if (!attachment.path && !attachment.name) return false
+    if (attachment.path && attachment.path === value) return true
+    if (attachment.name && attachment.name === value) return true
+    if (value.includes('/') || value.includes('\\')) return false
+    return Boolean(
+      attachment.path &&
+      (attachment.path.endsWith(`/${value}`) || attachment.path.endsWith(`\\${value}`))
+    )
+  })
 }

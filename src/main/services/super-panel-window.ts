@@ -37,6 +37,7 @@ export class SuperPanelWindowManager {
   private currentState: SuperPanelState | null = null
   private _ignoreBlur = false
   private _ignoreBlurTimer: ReturnType<typeof setTimeout> | null = null
+  private revealTimer: ReturnType<typeof setTimeout> | null = null
 
   constructor(private readonly options: SuperPanelWindowOptions) {
     // 注册 IPC
@@ -47,12 +48,29 @@ export class SuperPanelWindowManager {
   async showAt(x: number, y: number, state: SuperPanelState): Promise<void> {
     const win = await this.ensureWindow()
     this.currentState = state
+    const wasVisible = win.isVisible()
+    const gateReveal = !wasVisible
 
-    win.setSize(PANEL_WIDTH, this.computePanelHeight(state))
+    if (gateReveal) {
+      this.setOpacitySafely(win, 0)
+    }
+
+    let height = this.computePanelHeight(state)
+    win.setSize(PANEL_WIDTH, height)
     this.positionWindow(win, x, y)
 
-    // 推送状态数据
-    win.webContents.send('super-panel:state', state)
+    if (!wasVisible) {
+      const preparedHeight = await this.prepareRendererForShow(win, state)
+      if (preparedHeight && preparedHeight > 0) {
+        height = Math.min(Math.max(Math.round(preparedHeight), 100), PANEL_MAX_HEIGHT)
+        win.setSize(PANEL_WIDTH, height)
+        this.positionWindow(win, x, y)
+      } else {
+        win.webContents.send('super-panel:state', state)
+      }
+    } else {
+      win.webContents.send('super-panel:state', state)
+    }
 
     if (!win.isVisible()) {
       win.show()
@@ -60,20 +78,25 @@ export class SuperPanelWindowManager {
     // 确保窗口获焦以接收键盘事件（↑↓/Enter/Esc）和 blur 自动隐藏
     win.focus()
     win.webContents.focus()
+
+    if (gateReveal) {
+      this.revealAfterNextFrame(win)
+    }
   }
 
-  /** 推送状态更新（不移动窗口位置，但重新计算高度以适配新布局） */
+  /** 推送状态更新（可见窗口由前端渲染后回报真实高度，避免粗略估算造成二次跳动） */
   pushState(state: SuperPanelState): void {
     this.currentState = state
     if (!this.window || this.window.isDestroyed()) return
 
-    const newHeight = this.computePanelHeight(state)
-    const [currentWidth, currentHeight] = this.window.getSize()
-    if (currentWidth !== PANEL_WIDTH || currentHeight !== newHeight) {
-      this.window.setSize(PANEL_WIDTH, newHeight)
-      // 高度增大时可能超出屏幕底部，重新定位
-      if (newHeight > currentHeight) {
-        this.repositionIfOverflow()
+    if (!this.window.isVisible()) {
+      const newHeight = this.computePanelHeight(state)
+      const [currentWidth, currentHeight] = this.window.getSize()
+      if (currentWidth !== PANEL_WIDTH || currentHeight !== newHeight) {
+        this.window.setSize(PANEL_WIDTH, newHeight)
+        if (newHeight > currentHeight) {
+          this.repositionIfOverflow()
+        }
       }
     }
 
@@ -140,17 +163,69 @@ export class SuperPanelWindowManager {
     }
   }
 
+  private async prepareRendererForShow(win: BrowserWindow, state: SuperPanelState): Promise<number | null> {
+    try {
+      const stateJson = JSON.stringify(state)
+      const result = await win.webContents.executeJavaScript(
+        `typeof window.__superPanelPrepareForShow === 'function' ? window.__superPanelPrepareForShow(${stateJson}) : null`,
+        true
+      )
+      const height = Number(result)
+      return Number.isFinite(height) ? height : null
+    } catch (err) {
+      log.warn('[SuperPanel] 预渲染面板状态失败，将回退到 IPC 推送:', err)
+      return null
+    }
+  }
+
+  private revealAfterNextFrame(win: BrowserWindow): void {
+    this.clearRevealTimer()
+    this.revealTimer = setTimeout(() => {
+      this.revealTimer = null
+      if (!win.isDestroyed() && win.isVisible()) {
+        this.setOpacitySafely(win, 1)
+      }
+    }, 16)
+  }
+
+  private clearRevealTimer(): void {
+    if (this.revealTimer) {
+      clearTimeout(this.revealTimer)
+      this.revealTimer = null
+    }
+  }
+
+  private setOpacitySafely(win: BrowserWindow, opacity: number): void {
+    try {
+      win.setOpacity(opacity)
+    } catch {
+      // setOpacity is best-effort; showing a stale frame is less harmful than failing to open.
+    }
+  }
+
   /** 获取当前面板窗口 ID（用于排除面板窗口） */
   getWindowId(): number | null {
     if (!this.window || this.window.isDestroyed()) return null
     return this.window.id
   }
 
+  isVisible(): boolean {
+    return Boolean(this.window && !this.window.isDestroyed() && this.window.isVisible())
+  }
+
+  containsPoint(x: number, y: number): boolean {
+    if (!this.window || this.window.isDestroyed() || !this.window.isVisible()) return false
+    const bounds = this.window.getBounds()
+    return x >= bounds.x && x <= bounds.x + bounds.width && y >= bounds.y && y <= bounds.y + bounds.height
+  }
+
   /** 隐藏面板 */
   hide(): void {
     if (!this.window || this.window.isDestroyed() || !this.window.isVisible()) return
     try {
+      this.clearRevealTimer()
       this.window.hide()
+      this.setOpacitySafely(this.window, 1)
       this.options.onHide()
     } catch (err) {
       log.warn('[SuperPanel] 隐藏窗口失败:', err)
@@ -161,6 +236,7 @@ export class SuperPanelWindowManager {
   /** 销毁窗口和 IPC */
   destroy(): void {
     this.unregisterIpc()
+    this.clearRevealTimer()
     const win = this.window
     this.window = null
     if (win && !win.isDestroyed()) {
@@ -278,7 +354,8 @@ export class SuperPanelWindowManager {
           win.setAlwaysOnTop(true)
         }
 
-        // 失焦自动隐藏（弹出原生菜单等操作期间通过 _ignoreBlur 暂停）
+        // 失焦自动隐藏（弹出原生菜单等操作期间通过 _ignoreBlur 暂停）。
+        // Windows 的透明 toolbar 窗口焦点状态不稳定，点击外部关闭由 SuperPanelManager 的全局鼠标钩子处理。
         const hideOnBlur = () => {
           if (this._ignoreBlur) return
           if (win && !win.isDestroyed() && win.isVisible()) {
@@ -286,31 +363,9 @@ export class SuperPanelWindowManager {
             this.options.onHide()
           }
         }
-        win.on('blur', hideOnBlur)
 
-        // Windows: transparent+frameless+toolbar 窗口可能不触发 blur，
-        // 用焦点轮询兜底确保点击外部时隐藏
-        if (process.platform === 'win32') {
-          let focusPollTimer: ReturnType<typeof setInterval> | null = null
-          const startFocusPoll = () => {
-            if (focusPollTimer) return
-            focusPollTimer = setInterval(() => {
-              if (!win || win.isDestroyed()) {
-                if (focusPollTimer) { clearInterval(focusPollTimer); focusPollTimer = null }
-                return
-              }
-              if (win.isVisible() && !win.isFocused()) {
-                hideOnBlur()
-                if (focusPollTimer) { clearInterval(focusPollTimer); focusPollTimer = null }
-              }
-            }, 100)
-          }
-          const stopFocusPoll = () => {
-            if (focusPollTimer) { clearInterval(focusPollTimer); focusPollTimer = null }
-          }
-          win.on('show', startFocusPoll)
-          win.on('hide', stopFocusPoll)
-          win.on('closed', stopFocusPoll)
+        if (process.platform !== 'win32') {
+          win.on('blur', hideOnBlur)
         }
 
         win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }))

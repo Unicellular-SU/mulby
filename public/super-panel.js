@@ -91,7 +91,7 @@ function renderActiveApp(activeApp) {
 
 // ==================== 渲染 ====================
 
-function render(state) {
+function render(state, options = {}) {
   currentMode = state.mode || 'match';
 
   // 更新选中文本预览（区分文件/图片/文本）
@@ -118,8 +118,20 @@ function render(state) {
   }
 
   // 等 DOM 布局完成后，将实际高度同步给主进程以校正窗口尺寸
-  requestAnimationFrame(() => notifyHeightChange());
+  if (!options.skipHeightNotify) {
+    requestAnimationFrame(() => notifyHeightChange());
+  }
 }
+
+window.__superPanelPrepareForShow = (state) => {
+  lastNotifiedHeight = 0;
+  render(state, { skipHeightNotify: true });
+  const height = measureContentHeight();
+  if (height > 50) {
+    lastNotifiedHeight = height;
+  }
+  return height;
+};
 
 /** 根据 selectionKind 更新 header 图标和文本 */
 function updateCapturedHeader(text, kind) {
@@ -694,6 +706,16 @@ let lastNotifiedHeight = 0;
 
 function notifyHeightChange() {
   try {
+    const contentHeight = measureContentHeight();
+    // Only send IPC when height actually changed (>2px tolerance)
+    if (contentHeight > 50 && Math.abs(contentHeight - lastNotifiedHeight) > 2) {
+      lastNotifiedHeight = contentHeight;
+      window.mulby.superPanel.action('adjustHeight', { height: contentHeight });
+    }
+  } catch { /* 忽略 */ }
+}
+
+function measureContentHeight() {
     const header = document.querySelector('.sp-header');
     const translation = document.querySelector('.sp-translation');
     const footer = document.querySelector('.sp-footer');
@@ -710,12 +732,7 @@ function notifyHeightChange() {
       contentHeight += listContentHeight;
     }
     if (footer) contentHeight += footer.offsetHeight;
-    // Only send IPC when height actually changed (>2px tolerance)
-    if (contentHeight > 50 && Math.abs(contentHeight - lastNotifiedHeight) > 2) {
-      lastNotifiedHeight = contentHeight;
-      window.mulby.superPanel.action('adjustHeight', { height: contentHeight });
-    }
-  } catch { /* 忽略 */ }
+    return contentHeight;
 }
 
 // 动作面板点击事件委托
