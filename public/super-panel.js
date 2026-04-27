@@ -483,7 +483,7 @@ function showInlineActions(index) {
 
   // 构建动作列表 HTML
   const actionableActions = actions.filter(a => a.id !== 'separator');
-  let html = '<div class="sp-inline-actions">';
+  let html = '<div class="sp-inline-actions"><div class="sp-actions-inner">';
   let actionIdx = 0;
   for (const action of actions) {
     if (action.id === 'separator') {
@@ -502,7 +502,7 @@ function showInlineActions(index) {
       actionIdx++;
     }
   }
-  html += '</div>';
+  html += '</div></div>';
 
   // 插入到列表项后面
   itemEl.insertAdjacentHTML('afterend', html);
