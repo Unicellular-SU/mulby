@@ -226,8 +226,12 @@ export class SuperPanelManager {
   /** 鼠标触发入口 */
   private async onTrigger(event: MouseEventData): Promise<void> {
     if (!this.isActive) return
-    if (this.shouldDismissVisiblePanel(event)) {
+    const visiblePanelHit = this.getVisiblePanelHit(event)
+    if (visiblePanelHit === 'outside') {
       this.hidePanel()
+      return
+    }
+    if (visiblePanelHit === 'inside') {
       return
     }
 
@@ -240,14 +244,7 @@ export class SuperPanelManager {
     if (this.isBlockedApp()) return
     this.armTriggerReleaseDismissSuppressor(event)
 
-    // 获取鼠标坐标（Linux evdev 可能不提供坐标）
-    let x = event.x
-    let y = event.y
-    if (x === 0 && y === 0 && process.platform === 'linux') {
-      const cursor = screen.getCursorScreenPoint()
-      x = cursor.x
-      y = cursor.y
-    }
+    const { x, y } = this.resolveMousePoint(event)
 
     await this.triggerWorkflow(x, y)
   }
@@ -562,16 +559,28 @@ export class SuperPanelManager {
   }
 
   private shouldDismissVisiblePanel(event: MouseEventData): boolean {
-    if (!this.windowManager?.isVisible()) return false
+    return this.getVisiblePanelHit(event) === 'outside'
+  }
+
+  private getVisiblePanelHit(event: MouseEventData): 'inside' | 'outside' | null {
+    if (!this.windowManager?.isVisible()) return null
     const point = this.resolveMousePoint(event)
-    return !this.windowManager.containsPoint(point.x, point.y)
+    return this.windowManager.containsPoint(point.x, point.y) ? 'inside' : 'outside'
   }
 
   private resolveMousePoint(event: MouseEventData): { x: number; y: number } {
     if (event.x === 0 && event.y === 0 && process.platform === 'linux') {
       return screen.getCursorScreenPoint()
     }
-    return { x: event.x, y: event.y }
+    const point = { x: event.x, y: event.y }
+    if (process.platform === 'win32') {
+      try {
+        return screen.screenToDipPoint(point)
+      } catch {
+        return point
+      }
+    }
+    return point
   }
 
   // ==================== IPC 动作处理 ====================
