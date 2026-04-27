@@ -157,9 +157,10 @@ export class SuperPanelWindowManager {
 
   /** 隐藏面板 */
   hide(): void {
-    if (!this.window || this.window.isDestroyed()) return
+    if (!this.window || this.window.isDestroyed() || !this.window.isVisible()) return
     try {
       this.window.hide()
+      this.options.onHide()
     } catch (err) {
       log.warn('[SuperPanel] 隐藏窗口失败:', err)
       this.window = null

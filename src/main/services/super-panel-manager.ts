@@ -300,7 +300,7 @@ export class SuperPanelManager {
           ? { app: activeWindowInfo.app, bundleId: activeWindowInfo.bundleId }
           : undefined
 
-        this.showPanel(x, y, {
+        await this.showPanel(x, y, {
           capturedText: this.capturedText,
           items,
           visible: true,
@@ -327,7 +327,7 @@ export class SuperPanelManager {
 
         const pinnedItems = pinnedGroups.flatMap((g) => g.items)
 
-        this.showPanel(x, y, {
+        await this.showPanel(x, y, {
           capturedText: '',
           items: [],
           visible: true,
@@ -461,10 +461,10 @@ export class SuperPanelManager {
 
   // ==================== 面板窗口 ====================
 
-  /** 显示面板 */
-  private showPanel(x: number, y: number, state: SuperPanelState): void {
+  /** 显示面板（确保窗口就绪后再推送状态，避免翻译等后续 pushState 因窗口未创建而丢失） */
+  private async showPanel(x: number, y: number, state: SuperPanelState): Promise<void> {
     const manager = this.ensureWindowManager()
-    manager.showAt(x, y, state)
+    await manager.showAt(x, y, state)
   }
 
   /** 隐藏面板 */
