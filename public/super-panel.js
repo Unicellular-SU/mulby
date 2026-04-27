@@ -94,16 +94,9 @@ function renderActiveApp(activeApp) {
 function render(state) {
   currentMode = state.mode || 'match';
 
-  // 更新选中文本预览
-  if (state.capturedText && state.capturedText.trim()) {
-    hasCapturedText = true;
-    capturedTextEl.textContent = truncate(state.capturedText.trim(), 60);
-    capturedTextEl.classList.remove('empty');
-  } else {
-    hasCapturedText = false;
-    capturedTextEl.textContent = '未选中内容';
-    capturedTextEl.classList.add('empty');
-  }
+  // 更新选中文本预览（区分文件/图片/文本）
+  const selectionKind = state.selectionKind || 'text';
+  updateCapturedHeader(state.capturedText, selectionKind);
 
   // 显示当前应用上下文标签
   renderActiveApp(state.activeApp);
@@ -117,11 +110,41 @@ function render(state) {
     renderPinnedMode(state);
   }
 
-  // 翻译卡片
-  renderTranslation(state.translation);
+  // 翻译卡片（文件/图片选中时不显示）
+  if (selectionKind === 'text') {
+    renderTranslation(state.translation);
+  } else {
+    renderTranslation(null);
+  }
 
   // 等 DOM 布局完成后，将实际高度同步给主进程以校正窗口尺寸
   requestAnimationFrame(() => notifyHeightChange());
+}
+
+/** 根据 selectionKind 更新 header 图标和文本 */
+function updateCapturedHeader(text, kind) {
+  const iconEl = document.querySelector('.sp-captured-icon');
+
+  if (text && text.trim()) {
+    hasCapturedText = true;
+    capturedTextEl.textContent = truncate(text.trim(), 60);
+    capturedTextEl.classList.remove('empty');
+
+    if (kind === 'files' && iconEl) {
+      iconEl.innerHTML = '<rect x="3" y="1" width="10" height="14" rx="1.5" /><path d="M6 1v4h4" /><path d="M5 9h6M5 11.5h4" />';
+    } else if (kind === 'image' && iconEl) {
+      iconEl.innerHTML = '<rect x="2" y="2" width="12" height="12" rx="2" /><circle cx="5.5" cy="5.5" r="1" /><path d="M2 11l3-3 2 2 3-4 4 5" />';
+    } else if (iconEl) {
+      iconEl.innerHTML = '<rect x="2" y="2" width="12" height="12" rx="2" /><path d="M6 6h4M6 8.5h2.5" />';
+    }
+  } else {
+    hasCapturedText = false;
+    capturedTextEl.textContent = '未选中内容';
+    capturedTextEl.classList.add('empty');
+    if (iconEl) {
+      iconEl.innerHTML = '<rect x="2" y="2" width="12" height="12" rx="2" /><path d="M6 6h4M6 8.5h2.5" />';
+    }
+  }
 }
 
 function renderMatchMode(state) {

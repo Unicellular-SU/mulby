@@ -25,12 +25,17 @@ import log from 'electron-log'
 
 // ==================== 公共接口 ====================
 
+/** 捕获内容的语义类型 */
+export type SelectionKind = 'text' | 'files' | 'image'
+
 /** 取词结果 */
 export interface TextSelectionResult {
   /** 获取到的选中文本（null 表示无选中或获取失败） */
   text: string | null
   /** 连带捕获的附件（仅在剪贴板回退或有新选中文件时存在） */
   attachments: InputAttachment[]
+  /** 捕获内容的语义类型：text=文本、files=文件选中、image=图片 */
+  kind: SelectionKind
   /** 取词来源 */
   source: 'accessibility' | 'clipboard' | 'primary-selection'
   /** 取词耗时（毫秒） */
@@ -68,8 +73,7 @@ export async function getSelectedTextAsync(options?: {
   if (nativeResult !== null && nativeResult.trim().length > 0) {
     const durationMs = Math.round(performance.now() - start)
     log.info(`[NativeTextSelection] 原生取词成功 (${durationMs}ms, ${nativeResult.length}字符, source=${getSourceName()})`)
-    // 原生取词只会有文本，不提取附件避免污染
-    return { text: nativeResult, attachments: [], source: getSourceName(), durationMs }
+    return { text: nativeResult, attachments: [], kind: 'text', source: getSourceName(), durationMs }
   }
 
   // 2. 回退到剪贴板模拟（原生 API 未获取到文本，可能是无选中或 API 不可用）
@@ -77,20 +81,21 @@ export async function getSelectedTextAsync(options?: {
   const durationMs = Math.round(performance.now() - start)
 
   if (fallbackResult.text || fallbackResult.attachments.length > 0) {
-    log.info(`[NativeTextSelection] 剪贴板回退取词 (${durationMs}ms, ${(fallbackResult.text || '').length}字符, attachments=${fallbackResult.attachments.length})`)
-    return { text: fallbackResult.text, attachments: fallbackResult.attachments, source: 'clipboard', durationMs }
+    const kind = inferSelectionKind(fallbackResult.text, fallbackResult.attachments)
+    log.info(`[NativeTextSelection] 剪贴板回退取词 (${durationMs}ms, ${(fallbackResult.text || '').length}字符, attachments=${fallbackResult.attachments.length}, kind=${kind})`)
+    return { text: fallbackResult.text, attachments: fallbackResult.attachments, kind, source: 'clipboard', durationMs }
   }
 
   // 3. 回退也无结果 → 检查剪贴板是否已有文件/图片（用户之前复制的文件/截图）
-  // 放在回退之后，确保不会因剪贴板中有旧附件而跳过对选中文本的捕获
   const existingAttachments = captureClipboardContent()
   if (existingAttachments.length > 0) {
-    log.info(`[NativeTextSelection] 剪贴板附件直接读取 (${durationMs}ms, attachments=${existingAttachments.length})`)
-    return { text: null, attachments: existingAttachments, source: getSourceName(), durationMs }
+    const kind = inferSelectionKind(null, existingAttachments)
+    log.info(`[NativeTextSelection] 剪贴板附件直接读取 (${durationMs}ms, attachments=${existingAttachments.length}, kind=${kind})`)
+    return { text: null, attachments: existingAttachments, kind, source: getSourceName(), durationMs }
   }
 
   log.info(`[NativeTextSelection] 取词无结果 (${durationMs}ms)`)
-  return { text: null, attachments: [], source: 'clipboard', durationMs }
+  return { text: null, attachments: [], kind: 'text', source: 'clipboard', durationMs }
 }
 
 // ==================== 独立附件采集 ====================
@@ -673,4 +678,25 @@ async function fallbackGetSelectedText(options?: {
 /** Promise 化的延迟 */
 function sleep(ms: number): Promise<void> {
   return new Promise(resolve => setTimeout(resolve, ms))
+}
+
+/**
+ * 根据取词结果推断语义类型。
+ *
+ * 规则：
+ * - 有文件附件（kind=file）且无有效文本 → 'files'
+ * - 仅有图片附件且无有效文本 → 'image'
+ * - 其他 → 'text'
+ */
+function inferSelectionKind(text: string | null, attachments: InputAttachment[]): SelectionKind {
+  const hasText = text !== null && text.trim().length > 0
+  if (attachments.length === 0) return 'text'
+
+  const fileAttachments = attachments.filter(a => a.kind === 'file')
+  const imageAttachments = attachments.filter(a => a.kind === 'image')
+
+  if (fileAttachments.length > 0 && !hasText) return 'files'
+  if (imageAttachments.length > 0 && fileAttachments.length === 0 && !hasText) return 'image'
+
+  return 'text'
 }

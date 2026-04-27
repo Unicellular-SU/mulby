@@ -23,7 +23,7 @@ import type { Plugin, InputPayload, InputAttachment, ActiveWindowInfo } from '..
 import { SuperPanelWindowManager } from './super-panel-window'
 import { SuperPanelStore, type SuperPanelPinnedItem, type SuperPanelGroup } from './super-panel-store'
 import { aiService } from '../ai'
-import { getSelectedTextAsync } from './native-text-selection'
+import { getSelectedTextAsync, type SelectionKind } from './native-text-selection'
 import log from 'electron-log'
 
 // ==================== 类型定义 ====================
@@ -62,6 +62,8 @@ export interface SuperPanelTranslation {
 export interface SuperPanelState {
   /** 捕获到的文本预览 */
   capturedText: string
+  /** 捕获内容的语义类型：text=文本、files=文件选中、image=图片 */
+  selectionKind?: SelectionKind
   /** 匹配结果列表 */
   items: SuperPanelItem[]
   /** 面板是否可见 */
@@ -102,6 +104,8 @@ export class SuperPanelManager {
   private currentTranslation?: SuperPanelTranslation
   private currentQuery?: string // 当前二次过滤词，用于保留禁用项时的过滤状态
 
+  // 当前捕获内容的语义类型
+  private selectionKind: SelectionKind = 'text'
   // 缓存的附件列表（文件/图片），用于传递给插件
   private cachedAttachments: InputAttachment[] = []
   // 缓存触发时的前台应用上下文（面板打开期间复用，避免获取到 Mulby 自己）
@@ -281,6 +285,7 @@ export class SuperPanelManager {
       // - 回退路径 → 内部快照比较采集
       this.capturedText = text
       this.cachedAttachments = selectionResult.attachments
+      this.selectionKind = selectionResult.kind
 
       const hasNewContent = this.capturedText.trim().length > 0 || this.cachedAttachments.length > 0
 
@@ -300,15 +305,20 @@ export class SuperPanelManager {
           ? { app: activeWindowInfo.app, bundleId: activeWindowInfo.bundleId }
           : undefined
 
+        // 文件/图片选中时，header 用描述性文本替代原始路径
+        const displayText = this.getDisplayText()
+
         await this.showPanel(x, y, {
-          capturedText: this.capturedText,
+          capturedText: displayText,
+          selectionKind: this.selectionKind,
           items,
           visible: true,
           mode: 'match',
           activeApp
         })
 
-        if (this.getSettings().instantTranslation && this.capturedText.length > 0) {
+        // 文件/图片选中时不触发即时翻译
+        if (this.selectionKind === 'text' && this.getSettings().instantTranslation && this.capturedText.length > 0) {
           void this.requestTranslation(this.capturedText)
         }
       } else {
@@ -544,7 +554,8 @@ export class SuperPanelManager {
           this.currentQuery = query
           const filtered = this.filterItems(query)
           this.pushState({
-            capturedText: this.capturedText,
+            capturedText: this.getDisplayText(),
+            selectionKind: this.selectionKind,
             items: filtered,
             visible: true,
             mode: 'match'
@@ -925,7 +936,8 @@ export class SuperPanelManager {
     if (!this.windowManager) return
     this.currentTranslation = translation
     this.pushState({
-      capturedText: this.capturedText,
+      capturedText: this.getDisplayText(),
+      selectionKind: this.selectionKind,
       items: this.cachedItems,
       visible: true,
       mode: 'match',
@@ -942,6 +954,19 @@ export class SuperPanelManager {
     this.windowManager.pushState(state)
   }
 
+  /** 根据 selectionKind 生成面板 header 显示文本 */
+  private getDisplayText(): string {
+    if (this.selectionKind === 'files') {
+      const count = this.cachedAttachments.filter(a => a.kind === 'file').length
+      if (count > 0) return `已选择 ${count} 个文件`
+      return this.capturedText || '已选择文件'
+    }
+    if (this.selectionKind === 'image') {
+      return '已选择图片'
+    }
+    return this.capturedText
+  }
+
   /** 重新匹配并刷新面板状态（禁用推荐后立即更新列表） */
   private refreshPanel(): void {
     // 有文本或有附件时都允许刷新（附件模式下 capturedText 为空）
@@ -953,7 +978,8 @@ export class SuperPanelManager {
     const itemsToPush = this.currentQuery ? this.filterItems(this.currentQuery) : this.cachedItems
 
     this.pushState({
-      capturedText: this.capturedText,
+      capturedText: this.getDisplayText(),
+      selectionKind: this.selectionKind,
       items: itemsToPush,
       visible: true,
       mode: 'match',
