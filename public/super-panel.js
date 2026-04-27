@@ -620,10 +620,14 @@ async function executeAction(actionId) {
           label: g.name + (g.boundApp ? ` (${g.boundApp})` : '') + ` · ${g.itemCount}项`
         }));
         menuItems.push({ id: '__new__', label: '+ 新建分组…' });
-        const selected = await window.mulby.menu.showContextMenu(menuItems);
+        await window.mulby.superPanel.setIgnoreBlur(true);
+        let selected;
+        try {
+          selected = await window.mulby.menu.showContextMenu(menuItems);
+        } finally {
+          await window.mulby.superPanel.setIgnoreBlur(false);
+        }
         if (selected === '__new__') {
-          // 简单提示输入分组名（通过系统原生菜单）
-          // 此处使用一个输入式菜单项作为简化方案
           const newGroupResult = await window.mulby.superPanel.action('createGroup', { name: '新分组' });
           if (newGroupResult && newGroupResult.success && newGroupResult.data) {
             await window.mulby.superPanel.action('moveItemToGroup', {

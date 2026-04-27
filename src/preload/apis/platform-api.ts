@@ -293,6 +293,7 @@ export function createPlatformApi(ipcRenderer: IpcRenderer, options?: { restrict
       getState: () => ipcRenderer.invoke('super-panel:getState'),
       action: (action: string, payload?: Record<string, unknown>) => ipcRenderer.invoke('super-panel:action', action, payload),
       close: () => ipcRenderer.invoke('super-panel:close'),
+      setIgnoreBlur: (ignore: boolean) => ipcRenderer.invoke('super-panel:setIgnoreBlur', ignore),
       onState: (callback: (state: unknown) => void) => {
         const listener = (_event: unknown, state: unknown) => callback(state)
         ipcRenderer.on('super-panel:state', listener)

@@ -35,6 +35,7 @@ function clamp(value: number, min: number, max: number): number {
 export class SuperPanelWindowManager {
   private window: BrowserWindow | null = null
   private currentState: SuperPanelState | null = null
+  private _ignoreBlur = false
 
   constructor(private readonly options: SuperPanelWindowOptions) {
     // 注册 IPC
@@ -186,6 +187,7 @@ export class SuperPanelWindowManager {
     try { ipcMain.removeHandler('super-panel:getState') } catch { /* 忽略 */ }
     try { ipcMain.removeHandler('super-panel:action') } catch { /* 忽略 */ }
     try { ipcMain.removeHandler('super-panel:close') } catch { /* 忽略 */ }
+    try { ipcMain.removeHandler('super-panel:setIgnoreBlur') } catch { /* 忽略 */ }
 
     ipcMain.handle('super-panel:getState', () => {
       return this.currentState || { capturedText: '', items: [], visible: false }
@@ -200,12 +202,17 @@ export class SuperPanelWindowManager {
       this.options.onHide()
       return { success: true }
     })
+
+    ipcMain.handle('super-panel:setIgnoreBlur', (_event, ignore: boolean) => {
+      this._ignoreBlur = Boolean(ignore)
+    })
   }
 
   private unregisterIpc(): void {
     try { ipcMain.removeHandler('super-panel:getState') } catch { /* 忽略 */ }
     try { ipcMain.removeHandler('super-panel:action') } catch { /* 忽略 */ }
     try { ipcMain.removeHandler('super-panel:close') } catch { /* 忽略 */ }
+    try { ipcMain.removeHandler('super-panel:setIgnoreBlur') } catch { /* 忽略 */ }
   }
 
   // ==================== 窗口管理 ====================
@@ -268,8 +275,9 @@ export class SuperPanelWindowManager {
           win.setAlwaysOnTop(true)
         }
 
-        // 失焦自动隐藏
+        // 失焦自动隐藏（弹出原生菜单等操作期间通过 _ignoreBlur 暂停）
         const hideOnBlur = () => {
+          if (this._ignoreBlur) return
           if (win && !win.isDestroyed() && win.isVisible()) {
             win.hide()
             this.options.onHide()
