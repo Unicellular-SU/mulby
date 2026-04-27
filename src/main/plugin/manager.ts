@@ -45,6 +45,7 @@ import type { MatchType } from '../../shared/search-matcher'
 import { BackgroundPluginManager } from './background-manager'
 import { TaskScheduler } from '../scheduler'
 import type { ClipboardHistoryManager } from '../services/clipboard-history'
+import { formatPayloadTrace } from '../../shared/attachment-trace'
 import log from 'electron-log'
 
 // 搜索结果项
@@ -828,7 +829,7 @@ export class PluginManager {
 
     // 懒加载：先完成 onLoad，再基于最终动态特性创建 UI。
     // attached panel 的 route/mainHide/mode 必须在窗口创建前确定，否则会加载旧 hash 或打开错误窗口形态。
-    const loadPromise = this.ensurePluginLoaded(plugin, pluginId, launchStart)
+    const loadPromise = this.ensurePluginLoaded(plugin, pluginId)
     const onLoadJustCalled = await loadPromise
     // onLoad 可能通过 api.features.setFeature() 修改了动态特性，重新解析
     if (onLoadJustCalled) {
@@ -848,7 +849,7 @@ export class PluginManager {
     const schedulePostOnLoadIdle = (delayMs: number) => {
       if (!onLoadJustCalled || idleLoadScheduled) return
       idleLoadScheduled = true
-      this.scheduleIdleLoad(plugin, pluginId, delayMs, launchStart)
+      this.scheduleIdleLoad(plugin, pluginId, delayMs)
     }
 
     if (!useUI) {
@@ -920,6 +921,7 @@ export class PluginManager {
       }
 
       if (isAttachedUI) {
+        log.info(`[AttachmentTrace][Main] attached plugin run | plugin=${pluginId} | feature=${featureCode} | route=${route || ''} | residentCached=${this.residentSession?.pluginId === pluginId} | ${formatPayloadTrace(resolvedInput)}${launchStart ? ` | +${Date.now() - launchStart}ms` : ''}`)
         const hasDetachedForSinglePlugin =
           plugin.manifest.pluginSetting?.single !== false && this.hasDetachedWindowForPlugin(pluginId)
         if (hasDetachedForSinglePlugin && this.residentSession?.pluginId === pluginId) {
@@ -928,7 +930,6 @@ export class PluginManager {
 
         // 尝试从 resident-ui 恢复（热启动）
         if (!hasDetachedForSinglePlugin && this.tryRestoreResident(pluginId, featureCode, resolvedInput, route)) {
-          if (launchStart) log.info(`[LaunchTrace] resident-ui resume hit | +${Date.now() - launchStart}ms`)
           this.stateManager.recordRecentUsage(plugin.id, featureCode)
           schedulePostOnLoadIdle(PluginManager.UI_IDLE_LOAD_DELAY_MS)
           return { success: true, hasUI: true }
@@ -941,13 +942,9 @@ export class PluginManager {
 
         // onLoad 已完成，使用最终 feature metadata 创建 panel，避免旧 route/mainHide/mode 竞态。
         if (this.systemPluginWindowManager) {
-          if (launchStart) log.info(`[LaunchTrace] prepareForAttachedPluginLaunch start | +${Date.now() - launchStart}ms`)
           await this.systemPluginWindowManager.prepareForAttachedPluginLaunch()
-          if (launchStart) log.info(`[LaunchTrace] prepareForAttachedPluginLaunch done | +${Date.now() - launchStart}ms`)
         }
-        if (launchStart) log.info(`[LaunchTrace] attachPlugin start | +${Date.now() - launchStart}ms`)
         const success = this.windowManager.attachPlugin(plugin, featureCode, resolvedInput, route, launchStart)
-        if (launchStart) log.info(`[LaunchTrace] attachPlugin returned success=${success} | +${Date.now() - launchStart}ms`)
         if (success) {
           this.stateManager.recordRecentUsage(plugin.id, featureCode)
           schedulePostOnLoadIdle(PluginManager.UI_IDLE_LOAD_DELAY_MS)
@@ -959,7 +956,6 @@ export class PluginManager {
 
       // Optimization 3: onLoad 内部已调用 initPlugin，跳过冗余 hostInit
       if (this.useUtilityProcess && !onLoadJustCalled) {
-        if (launchStart) log.info(`[LaunchTrace] Host init start | +${Date.now() - launchStart}ms`)
         try {
           const hostReady = await this.hostManager.initPlugin(plugin)
           if (!hostReady) {
@@ -968,7 +964,6 @@ export class PluginManager {
         } catch (err) {
           log.error(`[PluginManager] Error initializing host for UI plugin ${pluginId}:`, err)
         }
-        if (launchStart) log.info(`[LaunchTrace] Host init done | +${Date.now() - launchStart}ms`)
       }
 
       const shouldEvictResidentForDetached =
@@ -1048,10 +1043,10 @@ export class PluginManager {
    * 确保插件已加载（触发 onLoad + host init）。
    * 返回 true 表示本次调用触发了 onLoad（callHook 内部已完成 initPlugin）。
    */
-  private ensurePluginLoaded(plugin: Plugin, name: string, launchStart?: number): Promise<boolean> {
+  private ensurePluginLoaded(plugin: Plugin, name: string): Promise<boolean> {
     const residentTeardown = this.residentHostTeardownPromises.get(name)
     if (residentTeardown) {
-      return residentTeardown.then(() => this.ensurePluginLoaded(plugin, name, launchStart))
+      return residentTeardown.then(() => this.ensurePluginLoaded(plugin, name))
     }
 
     if (this.initializedPlugins.has(name) && this.workerOnloadedPlugins.has(name)) {
@@ -1062,11 +1057,9 @@ export class PluginManager {
     if (inflight) return inflight
 
     const promise = (async () => {
-      if (launchStart) log.info(`[LaunchTrace] onLoad hook start | +${Date.now() - launchStart}ms`)
       await this.callPluginHook(plugin, 'onLoad')
       this.initializedPlugins.add(name)
       this.workerOnloadedPlugins.add(name)
-      if (launchStart) log.info(`[LaunchTrace] onLoad hook done | +${Date.now() - launchStart}ms`)
       return true
     })().finally(() => {
       this.loadingPromises.delete(name)
@@ -1079,18 +1072,13 @@ export class PluginManager {
   private scheduleIdleLoad(
     plugin: Plugin,
     name: string,
-    delayMs = PluginManager.DEFAULT_IDLE_LOAD_DELAY_MS,
-    launchStart?: number
+    delayMs = PluginManager.DEFAULT_IDLE_LOAD_DELAY_MS
   ): void {
     if (!plugin.manifest.main) return
 
     const existingTimer = this.idleLoadTimers.get(name)
     if (existingTimer) {
       clearTimeout(existingTimer)
-    }
-
-    if (launchStart) {
-      log.info(`[LaunchTrace] onIdleLoad scheduled | delay=${delayMs}ms | +${Date.now() - launchStart}ms`)
     }
 
     const timer = setTimeout(() => {
@@ -1130,16 +1118,10 @@ export class PluginManager {
       return
     }
 
-    log.info(`[Prewarm] start | plugin=${pluginId}`)
-    const prewarmStart = Date.now()
-
     const promise = (this.useUtilityProcess
       ? this.hostManager.initPlugin(plugin)
       : Promise.resolve(false)
-    ).then((ready) => {
-      log.info(`[Prewarm] host ready=${ready} | plugin=${pluginId} | ${Date.now() - prewarmStart}ms`)
-      return ready
-    })
+    )
 
     const ttlTimer = setTimeout(() => {
       if (this.prewarmState?.pluginId !== pluginId) return
@@ -1156,7 +1138,6 @@ export class PluginManager {
       const isBackground = this.backgroundManager.isRunning(pluginId)
       const isResident = this.hostManager.isResidentPinned(pluginId)
       if (!hasWindow && !isBackground && !isResident) {
-        log.info(`[Prewarm] TTL expired, destroying host | plugin=${pluginId}`)
         void this.hostManager.destroyHost(pluginId).then(() => {
           this.workerOnloadedPlugins.delete(pluginId)
         })
@@ -1179,7 +1160,6 @@ export class PluginManager {
     const isBackground = this.backgroundManager.isRunning(prewarmedId)
     const isResident = this.hostManager.isResidentPinned(prewarmedId)
     if (!hasWindow && !isBackground && !isResident) {
-      log.info(`[Prewarm] cleaning up unused host | plugin=${prewarmedId}`)
       void this.hostManager.destroyHost(prewarmedId).then(() => {
         this.workerOnloadedPlugins.delete(prewarmedId)
       })
@@ -1341,7 +1321,7 @@ export class PluginManager {
     this.residentSession = null
     this.hostManager.setResidentPin(pluginId, false)
 
-    log.info(`[ResidentUI] resume | plugin=${pluginId}`)
+    log.info(`[ResidentUI] resume | plugin=${pluginId} | feature=${featureCode} | route=${route || ''} | ${formatPayloadTrace(input)}`)
     return true
   }
 

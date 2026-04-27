@@ -51,15 +51,11 @@ export function onActiveWindowChange(callback: ActiveWindowChangeCallback): () =
 }
 
 function notifySubscribers(info: ActiveWindowInfo) {
-  // 使用 debug 级别避免高频日志刷屏
-  if (process.env.NODE_ENV === 'development') {
-    console.debug(`[ActiveWindow] Foreground Changed -> App: ${info.app} | PID: ${info.pid || 'N/A'} | Bundle: ${info.bundleId || 'N/A'} | Title: ${info.title || '<empty>'}`)
-  }
   for (const sub of subscriptions) {
     try {
       sub(info)
     } catch (e) {
-      log.error('[ActiveWindow] Callback error', e)
+      log.error('Foreground window subscriber callback failed', e)
     }
   }
 }
@@ -86,8 +82,7 @@ export async function getActiveWindow(): Promise<ActiveWindowInfo | null> {
     cachedResult = result
     cachedAt = now
     return result
-  } catch (error) {
-    log.warn('[ActiveWindow] 获取前台窗口失败:', error)
+  } catch {
     return null
   }
 }
@@ -211,7 +206,6 @@ function startMacOSNativeWatcher() {
       }).catch(() => {})
     })
   } catch {
-    log.warn('[ActiveWindow] Falling back to polling due to native addon failure.')
     startMacOSPoller()
   }
 }

@@ -25,6 +25,7 @@ import {
   notifyTitlebarThemeChange,
   layoutPluginView
 } from './titlebar-view'
+import { formatPayloadTrace } from '../../shared/attachment-trace'
 import log from 'electron-log'
 
 interface AttachedPlugin {
@@ -193,8 +194,6 @@ export class PluginWindowManager {
       return false
     }
 
-    if (launchStart) log.info(`[LaunchTrace] attachPlugin entered | +${Date.now() - launchStart}ms`)
-
     // 单例模式检查：如果 pluginSetting.single 为 true（默认），检查是否已有该插件的独立窗口
     const isSingleMode = plugin.manifest.pluginSetting?.single !== false
     if (isSingleMode) {
@@ -227,9 +226,7 @@ export class PluginWindowManager {
     }
 
     // 关闭之前附着的插件（强制关闭，不走 resident 挂起；PluginManager.run() 已单独处理 resident）
-    if (launchStart) log.info(`[LaunchTrace] closeAttached (prev plugin) start | +${Date.now() - launchStart}ms`)
     this.closeAttached(true)
-    if (launchStart) log.info(`[LaunchTrace] closeAttached done | +${Date.now() - launchStart}ms`)
 
     this.attachedPlugin = {
       plugin,
@@ -256,17 +253,15 @@ export class PluginWindowManager {
         attachments: input?.attachments,
         mode: 'panel'
       })
-      if (launchStart) log.info(`[LaunchTrace] plugin:attach sent to renderer | +${Date.now() - launchStart}ms`)
+      log.info(`[AttachmentTrace][Main] plugin:attach sent | plugin=${plugin.id} | feature=${featureCode} | ${formatPayloadTrace({ text: input?.text || '', attachments: input?.attachments || [] })}${launchStart ? ` | +${Date.now() - launchStart}ms` : ''}`)
     }
 
-    if (launchStart) log.info(`[LaunchTrace] createPanel start | +${Date.now() - launchStart}ms`)
     const panelWin = this.panelWindow.createPanel(plugin, featureCode, input, route, launchStart, onLoadReady, notifyRendererAttached)
     if (!panelWin) {
       log.error('[PluginWindowManager] Failed to create panel window')
       this.attachedPlugin = null
       return false
     }
-    if (launchStart) log.info(`[LaunchTrace] createPanel done | +${Date.now() - launchStart}ms`)
 
     return true
   }
@@ -333,6 +328,7 @@ export class PluginWindowManager {
         attachments: input?.attachments,
         mode: 'panel'
       })
+      log.info(`[AttachmentTrace][Main] resident plugin:attach sent | plugin=${plugin.id} | feature=${featureCode} | ${formatPayloadTrace({ text: input?.text || '', attachments: input?.attachments || [] })}`)
     }
 
     return true

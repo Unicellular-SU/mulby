@@ -15,7 +15,6 @@ import type {
 } from '../../shared/types/plugin'
 import { PluginInstaller } from '../plugin/installer'
 import { PluginStoreService } from '../plugin/store-service'
-import log from 'electron-log'
 
 
 
@@ -224,9 +223,6 @@ export function registerPluginHandlers(manager: PluginManager, pluginToolRegistr
 
   // 执行插件
   ipcMain.handle('plugin:run', async (_, name: string, featureCode: string, input?: string | InputPayload, launchStart?: number) => {
-    if (launchStart) {
-      log.info(`[LaunchTrace] IPC plugin:run received | +${Date.now() - launchStart}ms | plugin=${name} feature=${featureCode}`)
-    }
     manager.cancelPrewarm(name)
     return manager.run(name, featureCode, input, launchStart)
   })

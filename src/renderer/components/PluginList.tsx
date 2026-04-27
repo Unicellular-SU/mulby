@@ -1,5 +1,6 @@
 import { useState, useEffect, useLayoutEffect, useCallback, useRef, memo, useMemo } from 'react'
 import { useContextMenu, type ContextMenuItem } from './ContextMenu'
+import { formatPayloadTrace, getAttachmentTraceKey } from '../../shared/attachment-trace'
 import type {
   DesktopAppSearchResult,
   DesktopFileSearchResult,
@@ -341,6 +342,7 @@ function PluginList({
   const [systemIconVersion, setSystemIconVersion] = useState(0)
 
   const payloadRef = useRef(runPayload)
+  const payloadAttachmentKeyRef = useRef(getAttachmentTraceKey(runPayload.attachments))
   const requestIdRef = useRef(0)
   const searchStartedAtRef = useRef(0)
   const searchStartedPayloadHashRef = useRef('')
@@ -361,6 +363,11 @@ function PluginList({
   // - 比 useEffect 更早执行，在用户的 click/keydown 事件触发前完成，避免 handleRun 读取到旧 payload（附件丢失）
   // - 比渲染阶段赋值更安全，不会因 concurrent rendering 下未提交的渲染泄漏不一致的 payload
   useLayoutEffect(() => {
+    const nextAttachmentKey = getAttachmentTraceKey(runPayload.attachments)
+    if (payloadAttachmentKeyRef.current !== nextAttachmentKey) {
+      payloadAttachmentKeyRef.current = nextAttachmentKey
+      console.log(`[AttachmentTrace][Renderer] runPayload synced | ${formatPayloadTrace(runPayload)}`)
+    }
     payloadRef.current = runPayload
   }, [runPayload])
 
@@ -964,7 +971,7 @@ function PluginList({
     if (item.pluginItem) {
       const currentPayload = payloadRef.current
       const launchStart = Date.now()
-      console.log(`[LaunchTrace] 🚀 User clicked plugin "${item.pluginItem.displayName}" (${item.pluginItem.pluginId}/${item.pluginItem.featureCode}) at ${launchStart}`)
+      console.log(`[AttachmentTrace][Renderer] plugin run click | plugin=${item.pluginItem.pluginId} | feature=${item.pluginItem.featureCode} | startedAt=${launchStart} | ${formatPayloadTrace(currentPayload)}`)
       const result = await window.mulby.plugin.run(item.pluginItem.pluginId, item.pluginItem.featureCode, currentPayload, launchStart)
       if (result.success) {
         promoteRecent(item.pluginItem)

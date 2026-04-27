@@ -16,6 +16,7 @@ import AttachmentManager from './components/AttachmentManager'
 import { shouldUseSummaryText } from './utils/summary-text'
 import type { SettingsSection } from './components/SettingsView'
 import { DEFAULT_SYSTEM_PLUGIN_ROUTE, type SystemPluginRoute } from './system-plugins/types'
+import { formatAttachmentTrace } from '../shared/attachment-trace'
 import type { InputAttachment, InputPayload } from '../shared/types/plugin'
 import type { OpenSystemPluginPayload, SystemPluginBeforeAttachPayload } from '../shared/types/electron'
 import type { PluginStoreEntry } from '../shared/types/plugin-store'
@@ -41,6 +42,7 @@ interface PluginInfo {
   displayName: string
   featureCode: string
   input: string
+  attachments?: InputAttachment[]
   mode: 'panel'
 }
 
@@ -602,8 +604,8 @@ function MainApp() {
 
   // 监听插件附着事件
   useEffect(() => {
-    const cleanupAttach = window.mulby.onPluginAttach((_data: PluginInfo) => {
-      console.log(`[LaunchTrace] plugin:attach received in renderer at ${Date.now()}`)
+    const cleanupAttach = window.mulby.onPluginAttach((data: PluginInfo) => {
+      console.log(`[AttachmentTrace][Renderer] plugin:attach received | plugin=${data.pluginName} | feature=${data.featureCode} | ${formatAttachmentTrace(data.attachments || [])}`)
       cancelPendingShrinkTimer('plugin attach')
       scheduleMacInvalidate()
       if (systemPageAttached) {
@@ -613,6 +615,7 @@ function MainApp() {
     })
 
     const cleanupDetached = window.mulby.onPluginDetached(() => {
+      console.log('[AttachmentTrace][Renderer] plugin:detached received')
       cancelPendingShrinkTimer('plugin detached')
       scheduleMacInvalidate()
       setPluginOpen(false)
@@ -827,6 +830,7 @@ function MainApp() {
   }, [isSystemWindow, pluginOpen])
 
   const clearAttachments = useCallback(() => {
+    console.log(`[AttachmentTrace][Renderer] summary attachments cleared | prev=${formatAttachmentTrace(attachments)}`)
     attachments.forEach((attachment) => {
       if (attachment.previewUrl?.startsWith('blob:')) {
         URL.revokeObjectURL(attachment.previewUrl)
@@ -1109,6 +1113,7 @@ function MainApp() {
               dataUrl,
               previewUrl
             }
+            console.log(`[AttachmentTrace][Renderer] auto-paste image replace | prev=${formatAttachmentTrace(attachments)} | next=${formatAttachmentTrace([attachment])}`)
             setAttachments([attachment])
             // 清空搜索框，让用户专注于附件
             clearTextInputs()
@@ -1129,6 +1134,7 @@ function MainApp() {
               mime: file.type,
               path: file.path
             }))
+            console.log(`[AttachmentTrace][Renderer] auto-paste files replace | prev=${formatAttachmentTrace(attachments)} | next=${formatAttachmentTrace(newAttachments)}`)
             setAttachments(newAttachments)
             // 清空搜索框，让用户专注于附件
             clearTextInputs()
@@ -1183,6 +1189,7 @@ function MainApp() {
     if (systemPageAttached) {
       void window.mulby.systemPage.close()
     }
+    console.log(`[AttachmentTrace][Renderer] summary attachments changed | prev=${formatAttachmentTrace(attachments)} | next=${formatAttachmentTrace(next)}`)
     beginPerfTrace('attachments', searchText.length, next.length)
     setAttachments(next)
     if (next.length === 0 && !hasTextInput) {

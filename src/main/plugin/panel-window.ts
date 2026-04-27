@@ -30,6 +30,7 @@ import {
     notifyTitlebarThemeChange,
     layoutPluginView
 } from './titlebar-view'
+import { formatPayloadTrace } from '../../shared/attachment-trace'
 import log from 'electron-log'
 
 const ATTACHED_PANEL_SHADOW_MARGIN = 12
@@ -381,8 +382,6 @@ export class PluginPanelWindow {
 
         const uiPath = join(plugin.path, plugin.manifest.ui)
 
-        if (launchStart) log.info(`[LaunchTrace] createPanel entered | +${Date.now() - launchStart}ms`)
-
         // 清理现有插件 view，但保留可复用 shell BrowserWindow。
         this.clearCurrentPluginSession()
         this.suspendedForResident = false
@@ -415,14 +414,7 @@ export class PluginPanelWindow {
         const hasCustomPreload = !!plugin.manifest.preload
 
         this.preferredPanelHeight = ATTACHED_PANEL_HEIGHT
-        const needsNewShell = !this.panelWindow || this.panelWindow.isDestroyed()
-        if (launchStart) {
-            log.info(`[LaunchTrace] ${needsNewShell ? 'new BrowserWindow()' : 'reuse panel shell'} start | +${Date.now() - launchStart}ms`)
-        }
         const panelWindow = this.ensurePanelShell(initialBounds, backgroundColor, useWindowsFramelessSurface)
-        if (launchStart) {
-            log.info(`[LaunchTrace] ${needsNewShell ? 'new BrowserWindow()' : 'reuse panel shell'} done | +${Date.now() - launchStart}ms`)
-        }
 
         const pluginView = new WebContentsView({
             webPreferences: {
@@ -469,7 +461,7 @@ export class PluginPanelWindow {
             if (this.panelWindow !== capturedWin || this.pluginView !== capturedView) return false
             capturedWebContents.send('plugin:init', { ...buildInitPayload(), nonce: Date.now() })
             readyToShowInitSent = true
-            if (launchStart) log.info(`[LaunchTrace] plugin:init sent (${reason}) | +${Date.now() - launchStart}ms`)
+            log.info(`[AttachmentTrace][Main] panel plugin:init sent | plugin=${plugin.id} | feature=${this.currentFeatureCode || ''} | route=${this.currentRoute || ''} | reason=${reason} | ${formatPayloadTrace({ text: this.currentInput, attachments: this.currentAttachments })}${launchStart ? ` | +${Date.now() - launchStart}ms` : ''}`)
             return true
         }
 
@@ -501,14 +493,12 @@ export class PluginPanelWindow {
 
             capturedWin.show()
             this.panelWindowHasBeenShown = true
-            if (launchStart) log.info(`[LaunchTrace] panelWindow.show() called (${reason}) | +${Date.now() - launchStart}ms`)
             onPanelShown?.()
 
             if (onLoadReady) {
                 await onLoadReady
                 if (capturedWin.isDestroyed() || capturedWebContents.isDestroyed()) return
                 if (this.panelWindow !== capturedWin || this.pluginView !== capturedView) return
-                if (launchStart) log.info(`[LaunchTrace] onLoadReady resolved | +${Date.now() - launchStart}ms`)
             }
 
             sendInitialPluginInit(reason)
@@ -516,11 +506,10 @@ export class PluginPanelWindow {
             if (this.themeManager && !capturedWebContents.isDestroyed()) {
                 capturedWebContents.send('theme:changed', this.themeManager.getActualTheme())
             }
-            this.scheduleShadowShow(capturedWin, launchStart)
+            this.scheduleShadowShow(capturedWin)
         }
 
         capturedWebContents.once('dom-ready', () => {
-            if (launchStart) log.info(`[LaunchTrace] dom-ready fired | +${Date.now() - launchStart}ms`)
             if (capturedWin.isDestroyed() || capturedWebContents.isDestroyed()) return
             if (this.panelWindow !== capturedWin || this.pluginView !== capturedView) return
             sendInitialPluginInit('dom-ready')
@@ -533,10 +522,7 @@ export class PluginPanelWindow {
         capturedWebContents.on('did-finish-load', async () => {
             panelDidFinishLoadCount++
             const loadNum = panelDidFinishLoadCount
-            log.info(`[ReloadTrace:Panel] did-finish-load #${loadNum} | readyToShowInitSent=${readyToShowInitSent} | wcId=${capturedWebContents.id} | isDestroyed=${capturedWebContents.isDestroyed()} | isCurrent=${this.panelWindow === capturedWin && this.pluginView === capturedView}`)
-            if (launchStart) log.info(`[LaunchTrace] ✅ did-finish-load (plugin UI rendered) | +${Date.now() - launchStart}ms | TOTAL=${Date.now() - launchStart}ms`)
             if (capturedWin.isDestroyed() || capturedWebContents.isDestroyed() || this.panelWindow !== capturedWin || this.pluginView !== capturedView) {
-                log.info(`[ReloadTrace:Panel] did-finish-load #${loadNum} SKIPPED (destroyed or replaced)`)
                 return
             }
             if (useWindowsFramelessSurface) {
@@ -551,7 +537,6 @@ export class PluginPanelWindow {
             // 重载时重新发送 plugin:init；首次加载已由 dom-ready/did-finish-load/ready-to-show 先到者发送。
             if (loadNum > 1 && readyToShowInitSent && !capturedWebContents.isDestroyed() && this.panelWindow === capturedWin && this.pluginView === capturedView) {
                 sendPluginInit(`reload #${loadNum}`)
-                log.info(`[ReloadTrace:Panel] did-finish-load #${loadNum} plugin:init re-sent for reload`)
             }
             void showPanel('did-finish-load')
         })
@@ -574,15 +559,12 @@ export class PluginPanelWindow {
         })
 
         // 加载插件 UI
-        if (launchStart) log.info(`[LaunchTrace] loadFile start | +${Date.now() - launchStart}ms`)
         const routeHash = getPanelRouteHash(route)
         if (routeHash) {
             void capturedWebContents.loadFile(uiPath, { hash: routeHash })
         } else {
             void capturedWebContents.loadFile(uiPath)
         }
-
-        if (launchStart) log.info(`[LaunchTrace] createPanel returned (async events pending) | +${Date.now() - launchStart}ms`)
         return panelWindow
     }
 
@@ -662,13 +644,11 @@ export class PluginPanelWindow {
         }
     }
 
-    private scheduleShadowShow(panelWin: BrowserWindow, launchStart?: number) {
+    private scheduleShadowShow(panelWin: BrowserWindow) {
         if (!this.shouldUseShadowWindow()) return
         const timer = setTimeout(() => {
             if (panelWin.isDestroyed() || this.panelWindow !== panelWin) return
-            if (launchStart) log.info(`[LaunchTrace] shadow show start | +${Date.now() - launchStart}ms`)
             this.showShadow()
-            if (launchStart) log.info(`[LaunchTrace] shadow show done | +${Date.now() - launchStart}ms`)
         }, ATTACHED_PANEL_SHADOW_SHOW_DELAY_MS)
         timer.unref?.()
     }
@@ -1046,7 +1026,7 @@ export class PluginPanelWindow {
                 route: this.currentRoute,
                 nonce
             })
-            log.info(`[ResidentUI] plugin:init sent | plugin=${restoredPlugin.id} | feature=${featureCode} | route=${this.currentRoute || ''} | reason=${reason} | nonce=${nonce}`)
+            log.info(`[AttachmentTrace][Main] resident plugin:init sent | plugin=${restoredPlugin.id} | feature=${featureCode} | route=${this.currentRoute || ''} | reason=${reason} | nonce=${nonce} | ${formatPayloadTrace({ text: this.currentInput, attachments: this.currentAttachments })}`)
 
             if (this.themeManager && !pluginWebContents.isDestroyed()) {
                 pluginWebContents.send('theme:changed', this.themeManager.getActualTheme())

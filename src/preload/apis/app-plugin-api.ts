@@ -1,4 +1,5 @@
 import { webUtils, type IpcRenderer } from 'electron'
+import { formatPayloadTrace } from '../../shared/attachment-trace'
 import type { InputPayload } from '../../shared/types/plugin'
 import type { OpenSystemPluginPayload, SystemPluginBeforeAttachPayload } from '../../shared/types/electron'
 import type { TaskSchedulerEvent } from '../../shared/types/task'
@@ -190,29 +191,26 @@ export function createAppPluginApi(ipcRenderer: IpcRenderer) {
         pluginName: string
         featureCode: string
         input: string
+        attachments?: InputPayload['attachments']
         mode?: string
-        nonce?: string
+        nonce?: number
       }
       let bufferedData: PluginInitData | null = null
-      const preloadTs = Date.now()
-      console.log(`[ReloadTrace:Preload] onPluginInit buffer initialized | ts=${preloadTs}`)
       ipcRenderer.on('plugin:init', (_event: unknown, data: PluginInitData) => {
-        console.log(`[ReloadTrace:Preload] plugin:init received | nonce=${data?.nonce} | plugin=${data?.pluginName} | feature=${data?.featureCode} | +${Date.now() - preloadTs}ms`)
+        console.log(`[AttachmentTrace][Preload] plugin:init received | plugin=${data?.pluginName} | feature=${data?.featureCode} | nonce=${data?.nonce ?? 'none'} | ${formatPayloadTrace({ text: data?.input || '', attachments: data?.attachments || [] })}`)
         bufferedData = data
       })
-      return (callback: (data: { pluginName: string; featureCode: string; input: string; mode?: string }) => void) => {
+      return (callback: (data: { pluginName: string; featureCode: string; input: string; attachments?: InputPayload['attachments']; mode?: string }) => void) => {
         const listener = (_event: unknown, data: PluginInitData) => {
-          console.log(`[ReloadTrace:Preload] plugin:init listener callback | nonce=${data?.nonce} | +${Date.now() - preloadTs}ms`)
+          console.log(`[AttachmentTrace][Preload] plugin:init callback | plugin=${data?.pluginName} | feature=${data?.featureCode} | nonce=${data?.nonce ?? 'none'} | ${formatPayloadTrace({ text: data?.input || '', attachments: data?.attachments || [] })}`)
           callback(data)
         }
         ipcRenderer.on('plugin:init', listener)
         // Replay buffered data for late listeners (fixes race with React useEffect)
         if (bufferedData) {
           const data = bufferedData
-          console.log(`[ReloadTrace:Preload] replaying buffered plugin:init | nonce=${data?.nonce} | +${Date.now() - preloadTs}ms`)
+          console.log(`[AttachmentTrace][Preload] replay buffered plugin:init | plugin=${data?.pluginName} | feature=${data?.featureCode} | nonce=${data?.nonce ?? 'none'} | ${formatPayloadTrace({ text: data?.input || '', attachments: data?.attachments || [] })}`)
           queueMicrotask(() => callback(data))
-        } else {
-          console.log(`[ReloadTrace:Preload] no buffered data to replay | +${Date.now() - preloadTs}ms`)
         }
         return () => ipcRenderer.removeListener('plugin:init', listener)
       }
