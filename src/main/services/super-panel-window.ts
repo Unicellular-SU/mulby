@@ -36,6 +36,7 @@ export class SuperPanelWindowManager {
   private window: BrowserWindow | null = null
   private currentState: SuperPanelState | null = null
   private _ignoreBlur = false
+  private _ignoreBlurTimer: ReturnType<typeof setTimeout> | null = null
 
   constructor(private readonly options: SuperPanelWindowOptions) {
     // 注册 IPC
@@ -79,47 +80,37 @@ export class SuperPanelWindowManager {
     this.window.webContents.send('super-panel:state', state)
   }
 
-  /** 根据面板状态计算所需高度 */
+  /**
+   * 粗略估算面板初始高度（前端渲染完成后会通过 adjustHeight 校正为精确值）。
+   *
+   * 只做简单的条目计数 × 大致行高，不再硬编码 CSS 具体像素值，
+   * 避免 CSS 改动后后端常量失同步。
+   */
   private computePanelHeight(state: SuperPanelState): number {
-    // 固定值来自 super-panel.css 实测（box-sizing: border-box）
-    const itemHeight = 48
-    const headerHeight = 48        // .sp-header: padding 12+10, min-content 24, border-bottom 1
-    const footerHeight = 32        // .sp-footer: border-top 1, padding 6+8, content ~16
-    const groupHeaderHeight = 28
-    const outerChrome = 14         // body padding 6×2 + .sp-shell border 1×2
-    const listPadding = 12         // .sp-list padding 6×2
+    const CHROME = 110   // header + footer + padding + border 的粗略合计
+    const ITEM = 48
+    const GROUP_HDR = 28
 
-    let listCount: number
-    let groupCount = 0
+    let items = 0
+    let groups = 0
     if (state.mode === 'pinned') {
       if (state.pinnedGroups) {
-        listCount = state.pinnedGroups.reduce((sum, g) => sum + g.items.length, 0)
-        const showHeaders = state.pinnedGroups.length > 1 || state.pinnedGroups.some(g => g.boundApp)
-        if (showHeaders) {
-          groupCount = state.pinnedGroups.filter(g => g.items.length > 0 || showHeaders).length
+        items = state.pinnedGroups.reduce((s, g) => s + g.items.length, 0)
+        if (state.pinnedGroups.length > 1 || state.pinnedGroups.some(g => g.boundApp)) {
+          groups = state.pinnedGroups.length
         }
       } else {
-        listCount = state.pinnedItems?.length || 0
+        items = state.pinnedItems?.length || 0
       }
     } else {
-      listCount = state.items.length
+      items = state.items.length
     }
 
-    const searchBarHeight = state.mode === 'match' && state.items.length > 1 ? 38 : 0
-    let translationHeight = 0
-    if (state.translation) {
-      if (state.translation.expanded && state.translation.expandedHeight) {
-        translationHeight = state.translation.expandedHeight + 6
-      } else {
-        // 折叠态实测：margin-top 6 + padding 8×2 + header ~20 + 2-line text ~36 + border 2 ≈ 80
-        translationHeight = 80
-      }
-    }
+    let height = CHROME + Math.max(items, 1) * ITEM + groups * GROUP_HDR
+    if (state.mode === 'match' && state.items.length > 1) height += 40
+    if (state.translation) height += state.translation.expanded ? 120 : 80
 
-    const contentHeight = outerChrome + headerHeight + searchBarHeight + translationHeight
-      + groupCount * groupHeaderHeight + listPadding
-      + Math.max(listCount, 1) * itemHeight + footerHeight
-    return Math.min(contentHeight, PANEL_MAX_HEIGHT)
+    return Math.min(height, PANEL_MAX_HEIGHT)
   }
 
   /** 前端请求调整窗口高度（动作面板展开/收起或渲染后校正） */
@@ -206,6 +197,17 @@ export class SuperPanelWindowManager {
 
     ipcMain.handle('super-panel:setIgnoreBlur', (_event, ignore: boolean) => {
       this._ignoreBlur = Boolean(ignore)
+      if (this._ignoreBlurTimer) {
+        clearTimeout(this._ignoreBlurTimer)
+        this._ignoreBlurTimer = null
+      }
+      if (this._ignoreBlur) {
+        this._ignoreBlurTimer = setTimeout(() => {
+          log.warn('[SuperPanel] _ignoreBlur safety timeout — auto-resetting to false')
+          this._ignoreBlur = false
+          this._ignoreBlurTimer = null
+        }, 10_000)
+      }
     })
   }
 

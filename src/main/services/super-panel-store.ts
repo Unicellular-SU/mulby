@@ -14,7 +14,7 @@
 
 import { app } from 'electron'
 import { join } from 'path'
-import { existsSync, readFileSync, writeFileSync } from 'fs'
+import { existsSync, readFileSync, writeFile } from 'fs'
 import log from 'electron-log'
 
 /** 固定到超级面板的插件功能条目 */
@@ -75,6 +75,8 @@ export class SuperPanelStore {
   private filePath: string
   private layout: SuperPanelLayout = { version: 2, groups: [] }
   private preferences: Record<string, PreferenceEntry> = {}
+  private _saveTimer: ReturnType<typeof setTimeout> | null = null
+  private _dirty = false
 
   constructor() {
     this.filePath = join(app.getPath('userData'), 'super-panel-store.json')
@@ -360,21 +362,34 @@ export class SuperPanelStore {
       }]
     }
 
-    // 迁移后立即保存（清除旧字段）
+    // 迁移后立即保存（清除旧字段），绕过防抖直接落盘
     this.layout = layout
     this.preferences = this.normalizePreferences(data.preferences)
-    this.save()
+    this.flush()
 
     return layout
   }
 
   private save(): void {
+    this._dirty = true
+    if (this._saveTimer) return
+    this._saveTimer = setTimeout(() => {
+      this._saveTimer = null
+      if (!this._dirty) return
+      this._dirty = false
+      this.flush()
+    }, 300)
+  }
+
+  private flush(): void {
     const data: SuperPanelStoreData = {
       layout: this.layout,
       preferences: this.preferences
     }
     try {
-      writeFileSync(this.filePath, JSON.stringify(data, null, 2), 'utf-8')
+      writeFile(this.filePath, JSON.stringify(data, null, 2), 'utf-8', (err) => {
+        if (err) log.error('[SuperPanelStore] 异步保存失败:', err)
+      })
     } catch (err) {
       log.error('[SuperPanelStore] 保存失败:', err)
     }
