@@ -119,6 +119,9 @@ function render(state) {
 
   // 翻译卡片
   renderTranslation(state.translation);
+
+  // 等 DOM 布局完成后，将实际高度同步给主进程以校正窗口尺寸
+  requestAnimationFrame(() => notifyHeightChange());
 }
 
 function renderMatchMode(state) {
@@ -659,26 +662,30 @@ async function executeAction(actionId) {
   }
 }
 
-/** 通知主进程调整窗口高度 */
+/** 通知主进程调整窗口高度（渲染后及动作面板切换时调用） */
+let lastNotifiedHeight = 0;
+
 function notifyHeightChange() {
   try {
     const header = document.querySelector('.sp-header');
     const translation = document.querySelector('.sp-translation');
     const footer = document.querySelector('.sp-footer');
     const list = document.querySelector('.sp-list');
-    let contentHeight = 12; // body padding
+    // body padding 6×2 = 12, .sp-shell border 1×2 = 2 → 14
+    let contentHeight = 14;
     if (header) contentHeight += header.offsetHeight;
     if (translation && translation.style.display !== 'none') contentHeight += translation.scrollHeight + 6;
-    // sp-list 是 flex:1 子元素，scrollHeight 会被窗口撑大，需要累加各子元素的实际高度
     if (list) {
-      let listContentHeight = 12; // list padding (6px top + 6px bottom)
+      let listContentHeight = 12; // .sp-list padding 6×2
       for (const child of list.children) {
         listContentHeight += child.offsetHeight;
       }
       contentHeight += listContentHeight;
     }
     if (footer) contentHeight += footer.offsetHeight;
-    if (contentHeight > 50) {
+    // Only send IPC when height actually changed (>2px tolerance)
+    if (contentHeight > 50 && Math.abs(contentHeight - lastNotifiedHeight) > 2) {
+      lastNotifiedHeight = contentHeight;
       window.mulby.superPanel.action('adjustHeight', { height: contentHeight });
     }
   } catch { /* 忽略 */ }
@@ -900,6 +907,7 @@ async function initTheme() {
 
 // 接收主进程推送的面板状态
 unsubscribeState = window.mulby.superPanel.onState((state) => {
+  lastNotifiedHeight = 0; // 新状态到达时重置，确保下次渲染必定校正高度
   render(state);
 });
 

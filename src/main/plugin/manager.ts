@@ -820,6 +820,7 @@ export class PluginManager {
       text: normalizedInput.text,
       attachments: filteredAttachments
     }
+    log.info(`[PluginManager][Run] plugin=${name} feature=${featureCode} matchType=${matched?.matchType || 'none'} text="${normalizedInput.text.slice(0, 100)}" normalizedAttachments=${normalizedInput.attachments.length} filteredAttachments=${filteredAttachments.length} paths=${JSON.stringify(filteredAttachments.map(a => a.path))}`)
     let useUI = Boolean(plugin.manifest.ui) && feature?.mode !== 'silent'
     let useDetached = feature?.mode === 'detached' ||
                       (feature?.mode !== 'ui' && plugin.manifest.pluginSetting?.defaultDetached === true)

@@ -5,7 +5,7 @@ import { InputAttachment, InputPayload, Plugin, WindowOptions } from '../../shar
 import { ThemeManager } from '../services/theme'
 import { loggerService } from '../services/logger'
 import { installConsoleCaptureForWebContents } from './console-capture'
-import { isIgnoringBlur } from '../services/blur-manager'
+import { isIgnoringBlur, startIgnoringBlur, stopIgnoringBlur } from '../services/blur-manager'
 import { getPluginPreloadPath } from './plugin-preload-wrapper'
 import { PLUGIN_RENDERER_V8_CACHE_OPTIONS } from './plugin-web-preferences'
 import { ATTACHED_PANEL_HEIGHT, ATTACHED_PANEL_MIN_OVERFLOW_HEIGHT } from '../constants/panel-window'
@@ -483,6 +483,11 @@ export class PluginPanelWindow {
                 if (capturedWin.isDestroyed() || this.panelWindow !== capturedWin || this.pluginView !== capturedView) return
             }
 
+            // Suppress blur-hide while showing main + panel together;
+            // without this guard the main window's blur handler can race
+            // and hide everything before the panel receives focus.
+            startIgnoringBlur()
+
             this.collapseMainWindowForAttachedPanel()
             this.syncPosition()
             this.layoutAttachedPluginView()
@@ -494,6 +499,8 @@ export class PluginPanelWindow {
             capturedWin.show()
             this.panelWindowHasBeenShown = true
             onPanelShown?.()
+
+            stopIgnoringBlur()
 
             if (onLoadReady) {
                 await onLoadReady
@@ -1163,6 +1170,7 @@ export class PluginPanelWindow {
     show(options: { activate?: boolean } = {}) {
         if (this.suspendedForResident || !this.currentPlugin) return
         if (this.panelWindow && !this.panelWindow.isDestroyed()) {
+            startIgnoringBlur()
             this.collapseMainWindowForAttachedPanel()
             this.syncPosition()
             this.layoutAttachedPluginView()
@@ -1190,6 +1198,7 @@ export class PluginPanelWindow {
                 this.panelWindow.showInactive()
             }
             this.panelWindowHasBeenShown = true
+            stopIgnoringBlur()
             if (needsOpacityGuard) {
                 this.getPluginWebContents()?.invalidate()
                 this.opacityRestoreTimer = setTimeout(() => {

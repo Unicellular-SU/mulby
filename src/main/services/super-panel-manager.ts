@@ -508,11 +508,28 @@ export class SuperPanelManager {
           }
 
           this.hidePanel()
-          // 将捕获的文本和附件一起传入插件执行
+
+          // 去除 text 中与附件路径重复的部分，避免插件误将同一文件计为两份
+          let execText = this.capturedText
+          if (execText.trim() && this.cachedAttachments.length > 0) {
+            const t = execText.trim()
+            const matchesAttachment = this.cachedAttachments.some(a => {
+              if (!a.path) return false
+              if (a.path === t) return true
+              if (a.name === t) return true
+              if (t.includes('/') || t.includes('\\')) return false
+              return a.path.endsWith('/' + t) || a.path.endsWith('\\' + t)
+            })
+            if (matchesAttachment) {
+              execText = ''
+            }
+          }
+
           const execInput: InputPayload = {
-            text: this.capturedText,
+            text: execText,
             attachments: this.cachedAttachments
           }
+          log.info(`[SuperPanel][Execute] plugin=${pluginId} feature=${featureCode} text="${execText}" attachments=${JSON.stringify(this.cachedAttachments.map(a => ({ path: a.path, name: a.name })))}`)
           const result = await this.pluginManager.run(pluginId, featureCode, execInput)
           return { success: result.success, error: result.error }
         }

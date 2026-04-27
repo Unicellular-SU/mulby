@@ -19,7 +19,7 @@ import log from 'electron-log'
 
 // 面板尺寸
 const PANEL_WIDTH = 300
-const PANEL_MAX_HEIGHT = 520
+const PANEL_MAX_HEIGHT = 580
 const PANEL_MARGIN = 8
 
 interface SuperPanelWindowOptions {
@@ -65,11 +65,14 @@ export class SuperPanelWindowManager {
     this.currentState = state
     if (!this.window || this.window.isDestroyed()) return
 
-    // 重新计算高度（翻译卡片等异步内容可能改变布局）
     const newHeight = this.computePanelHeight(state)
-    const [currentWidth] = this.window.getSize()
-    if (currentWidth !== PANEL_WIDTH || this.window.getSize()[1] !== newHeight) {
+    const [currentWidth, currentHeight] = this.window.getSize()
+    if (currentWidth !== PANEL_WIDTH || currentHeight !== newHeight) {
       this.window.setSize(PANEL_WIDTH, newHeight)
+      // 高度增大时可能超出屏幕底部，重新定位
+      if (newHeight > currentHeight) {
+        this.repositionIfOverflow()
+      }
     }
 
     this.window.webContents.send('super-panel:state', state)
@@ -77,17 +80,19 @@ export class SuperPanelWindowManager {
 
   /** 根据面板状态计算所需高度 */
   private computePanelHeight(state: SuperPanelState): number {
+    // 固定值来自 super-panel.css 实测（box-sizing: border-box）
     const itemHeight = 48
-    const headerHeight = 52
-    const footerHeight = 32
-    const groupHeaderHeight = 28 // 分组标题高度
+    const headerHeight = 48        // .sp-header: padding 12+10, min-content 24, border-bottom 1
+    const footerHeight = 32        // .sp-footer: border-top 1, padding 6+8, content ~16
+    const groupHeaderHeight = 28
+    const outerChrome = 14         // body padding 6×2 + .sp-shell border 1×2
+    const listPadding = 12         // .sp-list padding 6×2
 
     let listCount: number
     let groupCount = 0
     if (state.mode === 'pinned') {
       if (state.pinnedGroups) {
         listCount = state.pinnedGroups.reduce((sum, g) => sum + g.items.length, 0)
-        // 多分组或有 boundApp 时才显示分组标题
         const showHeaders = state.pinnedGroups.length > 1 || state.pinnedGroups.some(g => g.boundApp)
         if (showHeaders) {
           groupCount = state.pinnedGroups.filter(g => g.items.length > 0 || showHeaders).length
@@ -99,39 +104,47 @@ export class SuperPanelWindowManager {
       listCount = state.items.length
     }
 
-    // 搜索框（match 模式且有 2+ 条结果时显示）
-    const searchBarHeight = state.mode === 'match' && state.items.length > 1 ? 36 : 0
-    // 翻译卡片预留（有翻译时显示）
+    const searchBarHeight = state.mode === 'match' && state.items.length > 1 ? 38 : 0
     let translationHeight = 0
     if (state.translation) {
       if (state.translation.expanded && state.translation.expandedHeight) {
-        // 卡片高度 + 顶部 margin 6px
         translationHeight = state.translation.expandedHeight + 6
       } else {
-        translationHeight = 60
+        // 折叠态实测：margin-top 6 + padding 8×2 + header ~20 + 2-line text ~36 + border 2 ≈ 80
+        translationHeight = 80
       }
     }
 
-    const contentHeight = headerHeight + searchBarHeight + translationHeight
-      + groupCount * groupHeaderHeight
+    const contentHeight = outerChrome + headerHeight + searchBarHeight + translationHeight
+      + groupCount * groupHeaderHeight + listPadding
       + Math.max(listCount, 1) * itemHeight + footerHeight
     return Math.min(contentHeight, PANEL_MAX_HEIGHT)
   }
 
-  /** 前端请求调整窗口高度（动作面板展开/收起时） */
+  /** 前端请求调整窗口高度（动作面板展开/收起或渲染后校正） */
   adjustHeight(height: number): void {
     if (!this.window || this.window.isDestroyed()) return
     const clamped = Math.min(Math.max(height, 100), PANEL_MAX_HEIGHT)
     const [currentWidth] = this.window.getSize()
     this.window.setSize(currentWidth, Math.round(clamped))
+    this.repositionIfOverflow()
+  }
 
-    // 扩大后可能超出屏幕底部 → 重新定位
+  /** 窗口高度变化后，确保不超出屏幕工作区域 */
+  private repositionIfOverflow(): void {
+    if (!this.window || this.window.isDestroyed()) return
     const bounds = this.window.getBounds()
     const display = screen.getDisplayNearestPoint({ x: bounds.x, y: bounds.y })
     const area = display.workArea
+
+    let { x, y } = bounds
+    const maxX = area.x + area.width - bounds.width - PANEL_MARGIN
     const maxY = area.y + area.height - bounds.height - PANEL_MARGIN
-    if (bounds.y > maxY) {
-      this.window.setPosition(bounds.x, Math.round(Math.max(area.y + PANEL_MARGIN, maxY)), false)
+    if (x > maxX) x = Math.max(area.x + PANEL_MARGIN, maxX)
+    if (y > maxY) y = Math.max(area.y + PANEL_MARGIN, maxY)
+
+    if (x !== bounds.x || y !== bounds.y) {
+      this.window.setPosition(Math.round(x), Math.round(y), false)
     }
   }
 
