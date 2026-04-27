@@ -628,15 +628,20 @@ async function fallbackGetSelectedText(options?: {
     }
     
     if (copySuccess) {
-      // 5. 轮询等待剪贴板更新
+      // 5. 轮询等待剪贴板更新（检测文本变化或文件格式变化）
       const startTime = Date.now()
       const pollInterval = 10
       let pollCount = 0
+      const snapFormat = getClipboardFormat()
       while (Date.now() - startTime < delayMs) {
         await sleep(pollInterval)
         pollCount++
         const currentText = clipboard.readText() || ''
         if (currentText !== snap.text) {
+          break
+        }
+        // Windows: 文件复制不改变 readText()，额外检测格式从非 files 变为 files
+        if (snapFormat !== 'files' && getClipboardFormat() === 'files') {
           break
         }
       }

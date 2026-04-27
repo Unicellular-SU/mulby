@@ -52,7 +52,7 @@ export function getClipboardFormat(): 'text' | 'image' | 'files' | 'empty' {
  *
  * 跨平台适配：
  * - macOS: 通过 public.file-url / NSFilenamesPboardType 读取
- * - Windows: 通过 FileNameW buffer 读取
+ * - Windows: text/uri-list → FileNameW buffer（双路径兜底）
  * - Linux: 通过 text/uri-list 读取
  */
 export function readClipboardFiles(): string[] {
@@ -102,8 +102,10 @@ export function readClipboardFiles(): string[] {
       }
     }
 
-    // Linux: 通过 text/uri-list 读取（文件管理器复制文件时使用此格式）
-    if (process.platform === 'linux') {
+    // Windows / Linux: 通过 text/uri-list 读取
+    // Windows Explorer 复制文件使用 CF_HDROP，Electron 可将其暴露为 text/uri-list；
+    // Linux 文件管理器原生使用 text/uri-list。
+    if (process.platform === 'win32' || process.platform === 'linux') {
       const formats = clipboard.availableFormats()
       if (formats.includes('text/uri-list')) {
         const uriList = clipboard.read('text/uri-list')
@@ -121,12 +123,15 @@ export function readClipboardFiles(): string[] {
       }
     }
 
-    // Windows: 通过 FileNameW buffer 读取
+    // Windows 兜底: FileNameW buffer（单文件格式，部分应用使用）
     if (process.platform === 'win32') {
       const rawFilePaths = clipboard.readBuffer('FileNameW')
       if (rawFilePaths && rawFilePaths.length > 0) {
         const paths = rawFilePaths.toString('ucs2').replace(/\0+$/, '').split('\0')
-        return paths.filter(p => p && p.trim())
+        const validPaths = paths.filter(p => p && p.trim())
+        if (validPaths.length > 0) {
+          return validPaths
+        }
       }
     }
   } catch (err) {
