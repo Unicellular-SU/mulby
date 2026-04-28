@@ -1,7 +1,11 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
 import type { CommandRunnerSettings } from '../../../shared/types/settings'
-import { CommandRunnerService } from '../command-runner-core'
+import {
+  CommandRunnerService,
+  type CommandConsentDecision,
+  type CommandConsentRequest
+} from '../command-runner-core'
 
 function createBaseSettings(): CommandRunnerSettings {
   return {
@@ -27,7 +31,7 @@ function createBaseSettings(): CommandRunnerSettings {
 
 function createInMemoryRunner(input?: {
   settings?: Partial<CommandRunnerSettings>
-  consent?: () => Promise<'deny' | 'allow-once' | 'trust'>
+  consent?: (request: CommandConsentRequest) => Promise<CommandConsentDecision>
 }) {
   let nowCounter = 1_700_000_000_000
   let idCounter = 1
@@ -170,6 +174,44 @@ describe('command runner service', () => {
     assert.equal(getSettings().audit.records.length, 3)
     assert.equal(getSettings().audit.records[1].status, 'allowed')
     assert.equal(getSettings().audit.records[2].status, 'allowed')
+  })
+
+  it('derives trust prefix from the executable when command contains a full command line', async () => {
+    let consentCount = 0
+    let firstDetail = ''
+    const { service, getSettings } = createInMemoryRunner({
+      settings: {
+        requireConsent: true
+      },
+      consent: async (request) => {
+        consentCount += 1
+        if (consentCount === 1) firstDetail = request.detail
+        return 'trust'
+      }
+    })
+
+    await assert.rejects(
+      service.runCommand(
+        {
+          command: 'cmd /c dir C:\\Users\\73221\\.agents\\skills\\'
+        },
+        { source: 'app' }
+      )
+    )
+
+    await assert.rejects(
+      service.runCommand(
+        {
+          command: 'cmd /c echo second'
+        },
+        { source: 'app' }
+      )
+    )
+
+    assert.match(firstDetail, /信任前缀: cmd（信任后，以此开头的命令将自动允许）/)
+    assert.equal(consentCount, 1)
+    assert.equal(getSettings().trustedFingerprints.length, 1)
+    assert.equal(getSettings().trustedFingerprints[0].prefix, 'cmd')
   })
 
   it('isolates trust by pluginId', async () => {

@@ -93,6 +93,27 @@ function normalizeCommandToken(value: string): string {
   return String(value || '').trim().toLowerCase()
 }
 
+function extractExecutableIdentity(command: string): string {
+  const normalized = normalizeCommandToken(command)
+  if (!normalized) return ''
+
+  const quoted = normalized.match(/^"([^"]+)"(?:\s+|$)|^'([^']+)'(?:\s+|$)/)
+  if (quoted) {
+    return normalizeCommandToken(quoted[1] ?? quoted[2] ?? '')
+  }
+
+  const firstToken = normalized.match(/^\S+/)?.[0] || normalized
+  if (firstToken === normalized) return normalized
+
+  // If the first token looks like a path fragment, keep the full value so an
+  // unquoted executable path with spaces is not silently widened.
+  if (/[\\/]/.test(firstToken) || /^[a-z]:/.test(firstToken)) {
+    return normalized
+  }
+
+  return firstToken
+}
+
 function normalizeCommandLine(command: string, args: string[]): string {
   return [command, ...args].join(' ').trim().toLowerCase()
 }
@@ -365,7 +386,7 @@ function sanitizeEnvKeysForAudit(keys: string[], settings: CommandRunnerSettings
  * 例如 command="node", args=["-e", "console.log(1)"] => prefix="node"
  */
 function buildTrustPrefix(command: string): string {
-  return normalizeCommandToken(command)
+  return extractExecutableIdentity(command)
 }
 
 export class CommandRunnerService {
@@ -582,7 +603,7 @@ export class CommandRunnerService {
       throw new CommandPolicyError('当前策略禁止 shell=true 执行')
     }
 
-    const executable = normalizeCommandToken(command)
+    const executable = extractExecutableIdentity(command)
     const commandLine = normalizeCommandLine(command, args)
 
     // 对 shell:true 命令做增强的 denyList 匹配：
