@@ -62,6 +62,8 @@ interface RecentUsedResult {
   useCount: number
 }
 
+type PluginLaunchEndReason = 'finished' | 'failed' | 'cancelled' | 'skipped'
+
 function formatMatchRuleExplain(cmd: PluginCmd): string | undefined {
   if (cmd.type === 'keyword') {
     return undefined
@@ -259,6 +261,47 @@ export class PluginManager {
       log.warn('[PluginManager] Failed to materialize input attachments, falling back to original payload', error)
       return normalizedInput
     }
+  }
+
+  private createLaunchRequestId(pluginId: string, featureCode: string): string {
+    return `${pluginId}:${featureCode}:${Date.now()}:${Math.random().toString(36).slice(2, 8)}`
+  }
+
+  private shouldShowAttachedLaunchStatus(plugin: Plugin, feature: PluginFeature | undefined): boolean {
+    if (!this.windowManager || !plugin.manifest.ui || !feature) return false
+    if (feature.mode === 'silent' || feature.mode === 'detached') return false
+    if (feature.mainHide === true || feature.preCapture) return false
+    if (feature.mode !== 'ui' && plugin.manifest.pluginSetting?.defaultDetached === true) return false
+    if (plugin.manifest.pluginSetting?.single !== false && this.hasDetachedWindowForPlugin(plugin.id)) return false
+    return true
+  }
+
+  private beginAttachedLaunchStatus(plugin: Plugin, featureCode: string): string | null {
+    if (!this.windowManager) return null
+    const requestId = this.createLaunchRequestId(plugin.id, featureCode)
+    this.windowManager.notifyPluginLaunchStart({
+      requestId,
+      pluginName: plugin.id,
+      displayName: plugin.manifest.displayName,
+      featureCode,
+      startedAt: Date.now()
+    })
+    return requestId
+  }
+
+  private endAttachedLaunchStatus(
+    requestId: string | null,
+    plugin: Plugin,
+    featureCode: string,
+    reason: PluginLaunchEndReason
+  ): void {
+    if (!requestId || !this.windowManager) return
+    this.windowManager.notifyPluginLaunchEnd({
+      requestId,
+      pluginName: plugin.id,
+      featureCode,
+      reason
+    })
   }
 
   /**
@@ -827,6 +870,9 @@ export class PluginManager {
     let route = feature?.route
     let shouldHideMain = feature?.mainHide === true
     let isAttachedUI = useUI && !useDetached
+    let launchRequestId: string | null = this.shouldShowAttachedLaunchStatus(plugin, feature)
+      ? this.beginAttachedLaunchStatus(plugin, featureCode)
+      : null
 
     // 懒加载：先完成 onLoad，再基于最终动态特性创建 UI。
     // attached panel 的 route/mainHide/mode 必须在窗口创建前确定，否则会加载旧 hash 或打开错误窗口形态。
@@ -844,6 +890,10 @@ export class PluginManager {
       route = feature?.route
       shouldHideMain = feature?.mainHide === true
       isAttachedUI = useUI && !useDetached
+      if (launchRequestId && !this.shouldShowAttachedLaunchStatus(plugin, feature)) {
+        this.endAttachedLaunchStatus(launchRequestId, plugin, featureCode, 'skipped')
+        launchRequestId = null
+      }
     }
 
     let idleLoadScheduled = false
@@ -894,6 +944,8 @@ export class PluginManager {
           if (this.windowManager && !shouldHideMain) {
             this.windowManager.showMainWindowAfterCapture()
           }
+          this.endAttachedLaunchStatus(launchRequestId, plugin, featureCode, 'cancelled')
+          launchRequestId = null
           return { success: false, error: 'Capture cancelled' }
         }
 
@@ -918,6 +970,8 @@ export class PluginManager {
     if (useUI) {
       if (!this.windowManager) {
         schedulePostOnLoadIdle(PluginManager.DEFAULT_IDLE_LOAD_DELAY_MS)
+        this.endAttachedLaunchStatus(launchRequestId, plugin, featureCode, 'failed')
+        launchRequestId = null
         return { success: false, error: 'Window manager not initialized' }
       }
 
@@ -928,9 +982,15 @@ export class PluginManager {
         if (hasDetachedForSinglePlugin && this.residentSession?.pluginId === pluginId) {
           this.evictResidentSession('single-detached-window-active')
         }
+        if (hasDetachedForSinglePlugin && launchRequestId) {
+          this.endAttachedLaunchStatus(launchRequestId, plugin, featureCode, 'skipped')
+          launchRequestId = null
+        }
 
         // 尝试从 resident-ui 恢复（热启动）
         if (!hasDetachedForSinglePlugin && this.tryRestoreResident(pluginId, featureCode, resolvedInput, route)) {
+          this.endAttachedLaunchStatus(launchRequestId, plugin, featureCode, 'finished')
+          launchRequestId = null
           this.stateManager.recordRecentUsage(plugin.id, featureCode)
           schedulePostOnLoadIdle(PluginManager.UI_IDLE_LOAD_DELAY_MS)
           return { success: true, hasUI: true }
@@ -945,11 +1005,13 @@ export class PluginManager {
         if (this.systemPluginWindowManager) {
           await this.systemPluginWindowManager.prepareForAttachedPluginLaunch()
         }
-        const success = this.windowManager.attachPlugin(plugin, featureCode, resolvedInput, route, launchStart)
+        const success = this.windowManager.attachPlugin(plugin, featureCode, resolvedInput, route, launchStart, undefined, launchRequestId || undefined)
         if (success) {
           this.stateManager.recordRecentUsage(plugin.id, featureCode)
           schedulePostOnLoadIdle(PluginManager.UI_IDLE_LOAD_DELAY_MS)
         } else {
+          this.endAttachedLaunchStatus(launchRequestId, plugin, featureCode, 'failed')
+          launchRequestId = null
           schedulePostOnLoadIdle(PluginManager.DEFAULT_IDLE_LOAD_DELAY_MS)
         }
         return { success, hasUI: true }

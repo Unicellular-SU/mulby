@@ -1,7 +1,12 @@
 import { webUtils, type IpcRenderer } from 'electron'
 import { formatPayloadTrace } from '../../shared/attachment-trace'
 import type { InputPayload } from '../../shared/types/plugin'
-import type { OpenSystemPluginPayload, SystemPluginBeforeAttachPayload } from '../../shared/types/electron'
+import type {
+  OpenSystemPluginPayload,
+  PluginLaunchEndEvent,
+  PluginLaunchStartEvent,
+  SystemPluginBeforeAttachPayload
+} from '../../shared/types/electron'
 import type { TaskSchedulerEvent } from '../../shared/types/task'
 
 export function createAppPluginApi(ipcRenderer: IpcRenderer) {
@@ -216,8 +221,8 @@ export function createAppPluginApi(ipcRenderer: IpcRenderer) {
       }
     })(),
 
-    onPluginAttach: (callback: (data: { pluginName: string; displayName: string; featureCode: string; input: string; uiPath: string; preloadPath: string }) => void) => {
-      const listener = (_event: unknown, data: { pluginName: string; displayName: string; featureCode: string; input: string; uiPath: string; preloadPath: string }) => callback(data)
+    onPluginAttach: (callback: (data: { pluginName: string; displayName: string; featureCode: string; input: string; attachments?: InputPayload['attachments']; mode: 'panel'; launchRequestId?: string }) => void) => {
+      const listener = (_event: unknown, data: { pluginName: string; displayName: string; featureCode: string; input: string; attachments?: InputPayload['attachments']; mode: 'panel'; launchRequestId?: string }) => callback(data)
       ipcRenderer.on('plugin:attach', listener)
       return () => ipcRenderer.removeListener('plugin:attach', listener)
     },
@@ -226,6 +231,18 @@ export function createAppPluginApi(ipcRenderer: IpcRenderer) {
       const listener = () => callback()
       ipcRenderer.on('plugin:detached', listener)
       return () => ipcRenderer.removeListener('plugin:detached', listener)
+    },
+
+    onPluginLaunchStart: (callback: (data: PluginLaunchStartEvent) => void) => {
+      const listener = (_event: unknown, data: PluginLaunchStartEvent) => callback(data)
+      ipcRenderer.on('plugin:launch-start', listener)
+      return () => ipcRenderer.removeListener('plugin:launch-start', listener)
+    },
+
+    onPluginLaunchEnd: (callback: (data: PluginLaunchEndEvent) => void) => {
+      const listener = (_event: unknown, data: PluginLaunchEndEvent) => callback(data)
+      ipcRenderer.on('plugin:launch-end', listener)
+      return () => ipcRenderer.removeListener('plugin:launch-end', listener)
     },
 
     host: {

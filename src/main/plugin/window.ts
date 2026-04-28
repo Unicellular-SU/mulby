@@ -93,6 +93,11 @@ export class PluginWindowManager {
     return developer.enabled && developer.showDevTools === true
   }
 
+  private sendToMainWindow(channel: string, payload?: unknown): void {
+    if (!this.mainWindow || this.mainWindow.isDestroyed() || this.mainWindow.webContents.isDestroyed()) return
+    this.mainWindow.webContents.send(channel, payload)
+  }
+
   private getDetachedTitlebarPath(): string | null {
     const candidates = app.isPackaged
       ? [join(__dirname, '../renderer/detached-titlebar.html')]
@@ -164,6 +169,25 @@ export class PluginWindowManager {
     timer.unref?.()
   }
 
+  notifyPluginLaunchStart(payload: {
+    requestId: string
+    pluginName: string
+    displayName: string
+    featureCode: string
+    startedAt: number
+  }): void {
+    this.sendToMainWindow('plugin:launch-start', payload)
+  }
+
+  notifyPluginLaunchEnd(payload: {
+    requestId: string
+    pluginName: string
+    featureCode: string
+    reason: 'finished' | 'failed' | 'cancelled' | 'skipped'
+  }): void {
+    this.sendToMainWindow('plugin:launch-end', payload)
+  }
+
   // 设置窗口关闭回调（用于处理后台运行）
   setOnWindowClosedCallback(callback: (pluginId: string) => Promise<void>) {
     this.onWindowClosedCallback = callback
@@ -185,7 +209,15 @@ export class PluginWindowManager {
   }
 
   // 附着插件（使用 Panel 模式）
-  attachPlugin(plugin: Plugin, featureCode: string, input?: InputPayload, route?: string, launchStart?: number, onLoadReady?: Promise<unknown>): boolean {
+  attachPlugin(
+    plugin: Plugin,
+    featureCode: string,
+    input?: InputPayload,
+    route?: string,
+    launchStart?: number,
+    onLoadReady?: Promise<unknown>,
+    launchRequestId?: string
+  ): boolean {
     if (!plugin.manifest.ui) return false
 
     const uiPath = join(plugin.path, plugin.manifest.ui)
@@ -251,7 +283,8 @@ export class PluginWindowManager {
         featureCode,
         input: input?.text || '',
         attachments: input?.attachments,
-        mode: 'panel'
+        mode: 'panel',
+        launchRequestId
       })
       log.info(`[AttachmentTrace][Main] plugin:attach sent | plugin=${plugin.id} | feature=${featureCode} | ${formatPayloadTrace({ text: input?.text || '', attachments: input?.attachments || [] })}${launchStart ? ` | +${Date.now() - launchStart}ms` : ''}`)
     }

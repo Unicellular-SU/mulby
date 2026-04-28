@@ -18,7 +18,12 @@ import type { SettingsSection } from './components/SettingsView'
 import { DEFAULT_SYSTEM_PLUGIN_ROUTE, type SystemPluginRoute } from './system-plugins/types'
 import { formatAttachmentTrace } from '../shared/attachment-trace'
 import type { InputAttachment, InputPayload } from '../shared/types/plugin'
-import type { OpenSystemPluginPayload, SystemPluginBeforeAttachPayload } from '../shared/types/electron'
+import type {
+  OpenSystemPluginPayload,
+  PluginLaunchEndEvent,
+  PluginLaunchStartEvent,
+  SystemPluginBeforeAttachPayload
+} from '../shared/types/electron'
 import type { PluginStoreEntry } from '../shared/types/plugin-store'
 
 const PluginDetails = lazy(() => import('./components/PluginDetails'))
@@ -44,6 +49,11 @@ interface PluginInfo {
   input: string
   attachments?: InputAttachment[]
   mode: 'panel'
+  launchRequestId?: string
+}
+
+interface PluginLaunchInfo extends PluginLaunchStartEvent {
+  visible: boolean
 }
 
 type SearchPerfTraceSource = 'text' | 'attachments'
@@ -160,6 +170,9 @@ const MAIN_WINDOW_RESIZE_EDGES: WindowResizeEdge[] = [
   'bottom-left'
 ]
 
+const PLUGIN_LAUNCH_VISIBLE_DELAY_MS = 160
+const PLUGIN_LAUNCH_TIMEOUT_MS = 30_000
+
 function parseSystemWindowBootstrap(): SystemWindowBootstrap {
   const params = new URLSearchParams(window.location.search)
   const isSystemWindow = params.get('mulbySystemWindow') === '1'
@@ -260,6 +273,7 @@ function MainApp() {
     title: ''
   })
   const [pluginOpen, setPluginOpen] = useState(false) // 仅用于跟踪插件是否打开
+  const [pluginLaunch, setPluginLaunch] = useState<PluginLaunchInfo | null>(null)
   const [detailsPluginName, setDetailsPluginName] = useState<string | null>(null)
   const [detailsReturnTarget, setDetailsReturnTarget] = useState<'home' | 'settings' | 'plugins'>('home')
   const [viewMode, setViewMode] = useState<ViewMode>(systemWindowBootstrap.initialViewMode)
@@ -296,10 +310,14 @@ function MainApp() {
   const searchPanelContentHeightRef = useRef(0)
   const shrinkTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const macRepaintTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const pluginLaunchVisibleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const pluginLaunchTimeoutTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const pluginLaunchRequestIdRef = useRef<string | null>(null)
   const [searchPanelHeight, setSearchPanelHeight] = useState(0)
   const systemPageAttached = !isSystemWindow && systemPageState.open && systemPageState.mode === 'attached'
   const hasTextInput = query.length > 0 || payloadText.length > 0
   const isMacMain = !isSystemWindow && navigator.platform.toLowerCase().includes('mac')
+  const visiblePluginLaunch = pluginLaunch?.visible ? pluginLaunch : null
 
   const focusSearchAfterPluginAction = useCallback(() => {
     setTimeout(() => {
@@ -320,6 +338,30 @@ function MainApp() {
     const rect = event.currentTarget.getBoundingClientRect()
     void window.mulby.systemPage.showMenu({ x: rect.left, y: rect.bottom })
   }, [])
+
+  const clearPluginLaunchTimers = useCallback(() => {
+    if (pluginLaunchVisibleTimerRef.current) {
+      clearTimeout(pluginLaunchVisibleTimerRef.current)
+      pluginLaunchVisibleTimerRef.current = null
+    }
+    if (pluginLaunchTimeoutTimerRef.current) {
+      clearTimeout(pluginLaunchTimeoutTimerRef.current)
+      pluginLaunchTimeoutTimerRef.current = null
+    }
+  }, [])
+
+  const clearPluginLaunch = useCallback((requestId?: string) => {
+    if (requestId && pluginLaunchRequestIdRef.current && pluginLaunchRequestIdRef.current !== requestId) {
+      return
+    }
+    pluginLaunchRequestIdRef.current = null
+    clearPluginLaunchTimers()
+    setPluginLaunch((current) => {
+      if (!current) return null
+      if (requestId && current.requestId !== requestId) return current
+      return null
+    })
+  }, [clearPluginLaunchTimers])
 
   const beginPerfTrace = useCallback((source: SearchPerfTraceSource, textLength: number, attachmentCount: number) => {
     const nextId = perfTraceSeqRef.current + 1
@@ -519,6 +561,33 @@ function MainApp() {
     }, 32)
   }, [isMacMain])
 
+  const beginPluginLaunch = useCallback((data: PluginLaunchStartEvent) => {
+    clearPluginLaunchTimers()
+    cancelPendingShrinkTimer('plugin launch start')
+    pluginLaunchRequestIdRef.current = data.requestId
+    setPluginLaunch({ ...data, visible: false })
+
+    pluginLaunchVisibleTimerRef.current = setTimeout(() => {
+      pluginLaunchVisibleTimerRef.current = null
+      setPluginLaunch((current) => {
+        if (!current || current.requestId !== data.requestId) return current
+        return { ...current, visible: true }
+      })
+      scheduleMacInvalidate()
+    }, PLUGIN_LAUNCH_VISIBLE_DELAY_MS)
+
+    pluginLaunchTimeoutTimerRef.current = setTimeout(() => {
+      pluginLaunchTimeoutTimerRef.current = null
+      if (pluginLaunchRequestIdRef.current !== data.requestId) return
+      pluginLaunchRequestIdRef.current = null
+      setPluginLaunch((current) => {
+        if (!current || current.requestId !== data.requestId) return current
+        return null
+      })
+      scheduleMacInvalidate()
+    }, PLUGIN_LAUNCH_TIMEOUT_MS)
+  }, [cancelPendingShrinkTimer, clearPluginLaunchTimers, scheduleMacInvalidate])
+
   const handleContentHeightChange = useCallback((contentHeight: number) => {
     const clamped = Math.min(Math.max(contentHeight, SEARCH_PANEL_MIN_HEIGHT), SEARCH_PANEL_MAX_HEIGHT_CONST)
 
@@ -543,12 +612,13 @@ function MainApp() {
   useEffect(() => {
     return () => {
       cancelPendingShrinkTimer('unmount')
+      clearPluginLaunchTimers()
       if (macRepaintTimerRef.current) {
         clearTimeout(macRepaintTimerRef.current)
         macRepaintTimerRef.current = null
       }
     }
-  }, [cancelPendingShrinkTimer])
+  }, [cancelPendingShrinkTimer, clearPluginLaunchTimers])
 
   // 调整窗口高度
   useEffect(() => {
@@ -564,6 +634,7 @@ function MainApp() {
     let allowResize = false
     const showSearchPanel = (hasTextInput || attachments.length > 0)
       && !pluginOpen
+      && !visiblePluginLaunch
       && !systemPageAttached
       && !attachmentsManagerOpen
 
@@ -599,14 +670,26 @@ function MainApp() {
     }
   // perfTrace 不影响高度计算，不纳入依赖：避免每次搜索都触发多余的
   // setExpendHeight IPC（透明窗口频繁 resize 会破坏合成器）
-  }, [isSystemWindow, hasTextInput, pluginOpen, systemPageAttached, detailsPluginName, attachments.length, attachmentsManagerOpen, managerMetrics.managerHeight, viewMode, searchPanelHeight])
+  }, [isSystemWindow, hasTextInput, pluginOpen, visiblePluginLaunch, systemPageAttached, detailsPluginName, attachments.length, attachmentsManagerOpen, managerMetrics.managerHeight, viewMode, searchPanelHeight])
 
 
   // 监听插件附着事件
   useEffect(() => {
+    const cleanupLaunchStart = window.mulby.onPluginLaunchStart((data: PluginLaunchStartEvent) => {
+      console.log(`[AttachmentTrace][Renderer] plugin:launch-start received | plugin=${data.pluginName} | feature=${data.featureCode} | request=${data.requestId}`)
+      beginPluginLaunch(data)
+    })
+
+    const cleanupLaunchEnd = window.mulby.onPluginLaunchEnd((data: PluginLaunchEndEvent) => {
+      console.log(`[AttachmentTrace][Renderer] plugin:launch-end received | plugin=${data.pluginName} | feature=${data.featureCode} | request=${data.requestId} | reason=${data.reason}`)
+      clearPluginLaunch(data.requestId)
+      scheduleMacInvalidate()
+    })
+
     const cleanupAttach = window.mulby.onPluginAttach((data: PluginInfo) => {
       console.log(`[AttachmentTrace][Renderer] plugin:attach received | plugin=${data.pluginName} | feature=${data.featureCode} | ${formatAttachmentTrace(data.attachments || [])}`)
       cancelPendingShrinkTimer('plugin attach')
+      clearPluginLaunch(data.launchRequestId)
       scheduleMacInvalidate()
       if (systemPageAttached) {
         void window.mulby.systemPage.close()
@@ -626,10 +709,12 @@ function MainApp() {
     })
 
     return () => {
+      cleanupLaunchStart()
+      cleanupLaunchEnd()
       cleanupAttach()
       cleanupDetached()
     }
-  }, [cancelPendingShrinkTimer, scheduleMacInvalidate, systemPageAttached])
+  }, [beginPluginLaunch, cancelPendingShrinkTimer, clearPluginLaunch, scheduleMacInvalidate, systemPageAttached])
 
   useEffect(() => {
     if (attachments.length === 0 && attachmentsManagerOpen) {
@@ -679,6 +764,7 @@ function MainApp() {
     payloadText.trim().length === 0 &&
     attachments.length === 0 &&
     !pluginOpen &&
+    !visiblePluginLaunch &&
     !systemPageAttached
 
   const openPluginStore = useCallback((from: 'home' | 'settings' | 'plugins' = 'home') => {
@@ -1487,7 +1573,7 @@ function MainApp() {
   }
 
   const showAttachmentManager = attachmentsManagerOpen && attachments.length > 0
-  const showPluginList = (hasTextInput || attachments.length > 0) && !pluginOpen && !systemPageAttached && !showAttachmentManager
+  const showPluginList = (hasTextInput || attachments.length > 0) && !pluginOpen && !visiblePluginLaunch && !systemPageAttached && !showAttachmentManager
   const hasBottomPanel = showAttachmentManager || showPluginList
 
   return (
@@ -1527,6 +1613,7 @@ function MainApp() {
             onSummaryChange={handlePayloadTextChange}
             onOpenSettings={openSettings}
             showSettingsButton={showSearchSettingsButton}
+            launchingPlugin={visiblePluginLaunch}
             attachments={attachments}
             onAttachmentsChange={handleAttachmentsChange}
             attachmentsManagerOpen={attachmentsManagerOpen}

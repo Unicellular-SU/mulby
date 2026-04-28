@@ -416,6 +416,21 @@ export interface UpdateCenterState {
   }
 }
 
+export interface PluginLaunchStartEvent {
+  requestId: string
+  pluginName: string
+  displayName: string
+  featureCode: string
+  startedAt: number
+}
+
+export interface PluginLaunchEndEvent {
+  requestId: string
+  pluginName: string
+  featureCode: string
+  reason: 'finished' | 'failed' | 'cancelled' | 'skipped'
+}
+
 export interface RunCommandInput {
   command: string
   args?: string[]
@@ -731,8 +746,10 @@ export interface ElectronAPI {
     onEvent: (callback: (event: TaskSchedulerEvent) => void) => () => void
   }
   onPluginInit: (callback: (data: { pluginName: string; featureCode: string; input: string; attachments?: InputAttachment[]; mode?: string }) => void) => () => void
-  onPluginAttach: (callback: (data: { pluginName: string; displayName: string; featureCode: string; input: string; attachments?: InputAttachment[]; mode: 'panel' }) => void) => () => void
+  onPluginAttach: (callback: (data: { pluginName: string; displayName: string; featureCode: string; input: string; attachments?: InputAttachment[]; mode: 'panel'; launchRequestId?: string }) => void) => () => void
   onPluginDetached: (callback: () => void) => () => void
+  onPluginLaunchStart: (callback: (data: PluginLaunchStartEvent) => void) => () => void
+  onPluginLaunchEnd: (callback: (data: PluginLaunchEndEvent) => void) => () => void
   screen: {
     getAllDisplays: () => Promise<DisplayInfo[]>
     getPrimaryDisplay: () => Promise<DisplayInfo>

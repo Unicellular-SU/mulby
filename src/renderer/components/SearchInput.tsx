@@ -8,6 +8,10 @@ interface SearchInputProps {
   onSummaryChange: (value: string) => void
   onOpenSettings: () => void
   showSettingsButton: boolean
+  launchingPlugin?: {
+    pluginName: string
+    displayName: string
+  } | null
   attachments: UiAttachment[]
   onAttachmentsChange: (attachments: UiAttachment[]) => void
   attachmentsManagerOpen: boolean
@@ -76,6 +80,7 @@ const SearchInput = forwardRef<SearchInputRef, SearchInputProps>(function Search
   onSummaryChange,
   onOpenSettings,
   showSettingsButton,
+  launchingPlugin,
   attachments,
   onAttachmentsChange,
   attachmentsManagerOpen,
@@ -85,6 +90,7 @@ const SearchInput = forwardRef<SearchInputRef, SearchInputProps>(function Search
   const inputRef = useRef<HTMLTextAreaElement>(null)
   const [subInput, setSubInput] = useState<SubInputState>({ enabled: false, placeholder: '' })
   const [subInputValue, setSubInputValue] = useState('')
+  const isPluginLaunching = Boolean(launchingPlugin)
 
   const setCaretToEnd = useCallback((input: HTMLTextAreaElement) => {
     const end = input.value.length
@@ -254,13 +260,25 @@ const SearchInput = forwardRef<SearchInputRef, SearchInputProps>(function Search
   }, [onOpenSettings])
 
   return (
-    <div className={`search-box ${attachments.length > 0 ? 'has-attachments' : ''}`}>
-      <svg className="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-        <circle cx="11" cy="11" r="8" />
-        <path d="m21 21-4.35-4.35" />
-      </svg>
+    <div
+      className={`search-box ${attachments.length > 0 ? 'has-attachments' : ''} ${isPluginLaunching ? 'is-plugin-launching' : ''}`}
+      aria-busy={isPluginLaunching}
+    >
+      {isPluginLaunching ? (
+        <span className="plugin-launch-spinner" aria-hidden="true" />
+      ) : (
+        <svg className="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+          <circle cx="11" cy="11" r="8" />
+          <path d="m21 21-4.35-4.35" />
+        </svg>
+      )}
       <div className={`search-input-wrap ${hasSummary ? 'has-summary' : ''}`}>
-        {hasSummary && summary && (
+        {isPluginLaunching ? (
+          <div className="plugin-launch-status no-drag" role="status" aria-live="polite">
+            <span className="plugin-launch-name">{launchingPlugin?.displayName || launchingPlugin?.pluginName}</span>
+            <span className="plugin-launch-text">正在打开</span>
+          </div>
+        ) : hasSummary && summary && (
           <div className="input-summary-card no-drag" onMouseDown={handleSummaryMouseDown}>
             <div className="input-summary-body">
               <div className="input-summary-preview">{summary.preview}</div>
@@ -278,50 +296,52 @@ const SearchInput = forwardRef<SearchInputRef, SearchInputProps>(function Search
             </button>
           </div>
         )}
-        <textarea
-          ref={inputRef}
-          rows={1}
-          className="search-input"
-          placeholder={subInput.enabled ? subInput.placeholder : SEARCH_PLACEHOLDER}
-          value={displayValue}
-          onChange={handleInputChange}
-          onKeyDown={(e) => {
-            if (e.nativeEvent.isComposing) return
+        {!isPluginLaunching && (
+          <textarea
+            ref={inputRef}
+            rows={1}
+            className="search-input"
+            placeholder={subInput.enabled ? subInput.placeholder : SEARCH_PLACEHOLDER}
+            value={displayValue}
+            onChange={handleInputChange}
+            onKeyDown={(e) => {
+              if (e.nativeEvent.isComposing) return
 
-            if (e.key === 'Enter' && !e.shiftKey) {
-              e.preventDefault()
-              return
-            }
-
-            if (e.key === 'Backspace') {
-              if (!subInput.enabled && value === '' && summaryText) {
+              if (e.key === 'Enter' && !e.shiftKey) {
                 e.preventDefault()
-                onSummaryChange('')
                 return
               }
 
-              const currentValue = subInput.enabled ? subInputValue : value
-              if (currentValue === '' && attachments.length > 0) {
-                e.preventDefault()
-                const lastAttachment = attachments[attachments.length - 1]
-                if (lastAttachment.previewUrl?.startsWith('blob:')) {
-                  URL.revokeObjectURL(lastAttachment.previewUrl)
+              if (e.key === 'Backspace') {
+                if (!subInput.enabled && value === '' && summaryText) {
+                  e.preventDefault()
+                  onSummaryChange('')
+                  return
                 }
-                onAttachmentsChange(attachments.slice(0, -1))
-              }
-            }
 
-            if (e.key === 'Delete' && !subInput.enabled && value === '' && summaryText) {
-              e.preventDefault()
-              onSummaryChange('')
-            }
-          }}
-          onPaste={handlePaste}
-          onDragOver={(e) => e.preventDefault()}
-          onDrop={handleDrop}
-          autoFocus
-        />
-        {attachments.length > 0 && (
+                const currentValue = subInput.enabled ? subInputValue : value
+                if (currentValue === '' && attachments.length > 0) {
+                  e.preventDefault()
+                  const lastAttachment = attachments[attachments.length - 1]
+                  if (lastAttachment.previewUrl?.startsWith('blob:')) {
+                    URL.revokeObjectURL(lastAttachment.previewUrl)
+                  }
+                  onAttachmentsChange(attachments.slice(0, -1))
+                }
+              }
+
+              if (e.key === 'Delete' && !subInput.enabled && value === '' && summaryText) {
+                e.preventDefault()
+                onSummaryChange('')
+              }
+            }}
+            onPaste={handlePaste}
+            onDragOver={(e) => e.preventDefault()}
+            onDrop={handleDrop}
+            autoFocus
+          />
+        )}
+        {!isPluginLaunching && attachments.length > 0 && (
           <div className="input-summary-card no-drag" style={{ flex: '0 1 auto', minWidth: 0 }} onMouseDown={handleSummaryMouseDown}>
             <div
               className="input-summary-body"
@@ -348,7 +368,7 @@ const SearchInput = forwardRef<SearchInputRef, SearchInputProps>(function Search
           </div>
         )}
       </div>
-      {(showSettingsButton || subInput.enabled) && (
+      {!isPluginLaunching && (showSettingsButton || subInput.enabled) && (
         <div className="search-box-actions no-drag">
           {showSettingsButton && (
             <button
