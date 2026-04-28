@@ -288,8 +288,9 @@ export class SuperPanelManager {
         activeWindow: activeWindowInfo || undefined
       })
 
-      // 选中文本
-      const text = selectionResult.text || ''
+      // 文件/图片选择通过 attachments 表达。部分系统在复制文件时会同时写入路径文本，
+      // 超级面板匹配阶段不应把这类副产物当作普通选中文本。
+      const text = selectionResult.kind === 'text' ? (selectionResult.text || '') : ''
 
       // 附件由取词层统一采集：
       // - 原生取词拿到文本 → 无附件（不混入旧剪贴板内容）

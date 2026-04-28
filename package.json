@@ -103,6 +103,7 @@
     },
     "files": [
       "dist/**/*",
+      "native/build/Release/*.node",
       "package.json"
     ],
     "directories": {
@@ -156,7 +157,8 @@
       "node_modules/sharp/**/*",
       "node_modules/@img/sharp-*/**/*",
       "node_modules/@img/sharp-libvips-*/**/*",
-      "node_modules/koffi/**/*"
+      "node_modules/koffi/**/*",
+      "native/build/Release/*.node"
     ],
     "afterPack": "scripts/electron-builder-after-pack.cjs",
     "extraResources": [

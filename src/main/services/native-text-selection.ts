@@ -20,6 +20,7 @@ import { app } from 'electron'
 import { basename, extname } from 'path'
 import { nativeSimulateCopy, fallbackSimulateCopy } from './native-keyboard-sim'
 import { getClipboardFormat, readClipboardFiles } from '../utils/clipboard-helper'
+import { getDarwinFinderSelectedPaths } from './native-finder-selection'
 import type { ActiveWindowInfo, InputAttachment } from '../../shared/types/plugin'
 import log from 'electron-log'
 
@@ -74,13 +75,13 @@ export async function getSelectedTextAsync(options?: {
   const nativeResult = await getNativeSelectedText()
   if (nativeResult !== null && nativeResult.trim().length > 0) {
     if (shouldProbeFileSelection(options?.activeWindow)) {
-      const explorerAttachments = getWin32ExplorerSelectionAttachments()
-      if (explorerAttachments.length > 0) {
+      const fileSelectionAttachments = getNativeFileSelectionAttachments()
+      if (fileSelectionAttachments.length > 0) {
         const text = null
-        const kind = inferSelectionKind(text, explorerAttachments)
+        const kind = inferSelectionKind(text, fileSelectionAttachments)
         const durationMs = Math.round(performance.now() - start)
-        log.info(`[NativeTextSelection] Explorer 选中文件读取成功 (${durationMs}ms, nativeText=${nativeResult.length}字符, attachments=${explorerAttachments.length}, kind=${kind})`)
-        return { text, attachments: explorerAttachments, kind, source: 'clipboard', durationMs }
+        log.info(`[NativeTextSelection] 原生文件选区读取成功 (${durationMs}ms, nativeText=${nativeResult.length}字符, attachments=${fileSelectionAttachments.length}, kind=${kind})`)
+        return { text, attachments: fileSelectionAttachments, kind, source: 'accessibility', durationMs }
       }
 
       const fallbackResult = await fallbackGetSelectedText(options)
@@ -100,12 +101,12 @@ export async function getSelectedTextAsync(options?: {
 
   // Windows Explorer 的文件选区不一定能被 UIA 文本接口或 Ctrl+C 回退可靠捕获。
   if (shouldProbeFileSelection(options?.activeWindow)) {
-    const explorerAttachments = getWin32ExplorerSelectionAttachments()
-    if (explorerAttachments.length > 0) {
+    const fileSelectionAttachments = getNativeFileSelectionAttachments()
+    if (fileSelectionAttachments.length > 0) {
       const durationMs = Math.round(performance.now() - start)
-      const kind = inferSelectionKind(null, explorerAttachments)
-      log.info(`[NativeTextSelection] Explorer 选中文件读取成功 (${durationMs}ms, attachments=${explorerAttachments.length}, kind=${kind})`)
-      return { text: null, attachments: explorerAttachments, kind, source: 'clipboard', durationMs }
+      const kind = inferSelectionKind(null, fileSelectionAttachments)
+      log.info(`[NativeTextSelection] 原生文件选区读取成功 (${durationMs}ms, attachments=${fileSelectionAttachments.length}, kind=${kind})`)
+      return { text: null, attachments: fileSelectionAttachments, kind, source: 'accessibility', durationMs }
     }
   }
 
@@ -240,6 +241,25 @@ function getWin32ExplorerSelectionAttachments(): InputAttachment[] {
   }
   log.info(`[NativeTextSelection][ExplorerSelection] 读取到 ${selectedPaths.length} 个文件 (${Math.round(performance.now() - t0)}ms)`)
   return selectedPaths.map(filePathToAttachment)
+}
+
+function getDarwinFinderSelectionAttachments(): InputAttachment[] {
+  if (process.platform !== 'darwin') return []
+
+  const t0 = performance.now()
+  const selectedPaths = getDarwinFinderSelectedPaths()
+  if (selectedPaths.length === 0) {
+    log.info(`[NativeTextSelection][FinderSelection] 无选中文件 (${Math.round(performance.now() - t0)}ms)`)
+    return []
+  }
+  log.info(`[NativeTextSelection][FinderSelection] 读取到 ${selectedPaths.length} 个文件 (${Math.round(performance.now() - t0)}ms)`)
+  return selectedPaths.map(filePathToAttachment)
+}
+
+function getNativeFileSelectionAttachments(): InputAttachment[] {
+  if (process.platform === 'darwin') return getDarwinFinderSelectionAttachments()
+  if (process.platform === 'win32') return getWin32ExplorerSelectionAttachments()
+  return []
 }
 
 function filePathToAttachment(filePath: string): InputAttachment {
@@ -786,6 +806,9 @@ async function fallbackGetSelectedText(options?: {
       log.info(`[NativeTextSelection][Fallback] 剪贴板变化: ${hasNew}, newLen=${newText.length}, oldLen=${snap.text.length}`)
       
       attachments = parseClipboardAttachments(snap)
+      if (attachments.length > 0 && attachmentTextMatches(text, attachments)) {
+        text = null
+      }
     }
     const tDone = performance.now()
     log.info(`[NativeTextSelection][Fallback] 完成: text=${text !== null ? `${text.length}字符` : 'null'}, attachments=${attachments.length}, 总计=${Math.round(tDone - t0)}ms`)
@@ -831,14 +854,25 @@ function attachmentTextMatches(text: string | null, attachments: InputAttachment
   const value = (text || '').trim()
   if (!value) return false
 
-  return attachments.some((attachment) => {
-    if (!attachment.path && !attachment.name) return false
-    if (attachment.path && attachment.path === value) return true
-    if (attachment.name && attachment.name === value) return true
-    if (value.includes('/') || value.includes('\\')) return false
-    return Boolean(
-      attachment.path &&
-      (attachment.path.endsWith(`/${value}`) || attachment.path.endsWith(`\\${value}`))
-    )
-  })
+  const lines = value
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+
+  if (lines.length > 1) {
+    return lines.every((line) => attachments.some((attachment) => attachmentTextLineMatches(line, attachment)))
+  }
+
+  return attachments.some((attachment) => attachmentTextLineMatches(value, attachment))
+}
+
+function attachmentTextLineMatches(value: string, attachment: InputAttachment): boolean {
+  if (!attachment.path && !attachment.name) return false
+  if (attachment.path && attachment.path === value) return true
+  if (attachment.name && attachment.name === value) return true
+  if (value.includes('/') || value.includes('\\')) return false
+  return Boolean(
+    attachment.path &&
+    (attachment.path.endsWith(`/${value}`) || attachment.path.endsWith(`\\${value}`))
+  )
 }

@@ -46,6 +46,39 @@
       ]
     },
     {
+      "target_name": "finder_selection",
+      "sources": [],
+      "include_dirs": [
+        "<!@(node -p \"require('node-addon-api').include\")"
+      ],
+      "cflags!": ["-fno-exceptions"],
+      "cflags_cc!": ["-fno-exceptions"],
+      "defines": ["NAPI_DISABLE_CPP_EXCEPTIONS"],
+      "conditions": [
+        [
+          "OS=='mac'",
+          {
+            "sources": ["finder-selection.mm"],
+            "xcode_settings": {
+              "GCC_ENABLE_CPP_EXCEPTIONS": "YES",
+              "CLANG_CXX_LIBRARY": "libc++",
+              "MACOSX_DEPLOYMENT_TARGET": "12.0",
+              "OTHER_CFLAGS": ["-ObjC++"]
+            },
+            "link_settings": {
+              "libraries": ["-framework AppKit", "-framework ApplicationServices", "-framework Foundation"]
+            }
+          }
+        ],
+        [
+          "OS!='mac'",
+          {
+            "sources": ["finder-selection.cpp"]
+          }
+        ]
+      ]
+    },
+    {
       "target_name": "window_watcher",
       "sources": [],
       "include_dirs": [
