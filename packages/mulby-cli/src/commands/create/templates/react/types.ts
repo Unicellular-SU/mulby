@@ -988,6 +988,7 @@ interface MulbySuperPanel {
   getState(): Promise<SuperPanelState>
   action(action: string, payload?: Record<string, unknown>): Promise<{ success: boolean; error?: string }>
   close(): Promise<{ success: boolean }>
+  setIgnoreBlur(ignore: boolean): Promise<unknown>
   onState(callback: (state: SuperPanelState) => void): Disposable
 }
 
@@ -1475,6 +1476,21 @@ interface PluginInitData {
   attachments?: Attachment[]
 }
 
+interface PluginLaunchStartEvent {
+  requestId: string
+  pluginName: string
+  displayName: string
+  featureCode: string
+  startedAt: number
+}
+
+interface PluginLaunchEndEvent {
+  requestId: string
+  pluginName: string
+  featureCode: string
+  reason: 'finished' | 'failed' | 'cancelled' | 'skipped'
+}
+
 interface MulbyOnboarding {
   getSettings(): Promise<unknown>
   updateShortcut(action: string, accelerator: string): Promise<unknown>
@@ -1547,6 +1563,8 @@ interface MulbyAPI {
     mode: 'panel'
   }) => void): Disposable
   onPluginDetached(callback: () => void): Disposable
+  onPluginLaunchStart(callback: (data: PluginLaunchStartEvent) => void): Disposable
+  onPluginLaunchEnd(callback: (data: PluginLaunchEndEvent) => void): Disposable
   onThemeChange(callback: (theme: 'light' | 'dark') => void): Disposable
   onWindowStateChange(callback: (state: { isMaximized: boolean }) => void): Disposable
   inbrowser: {
@@ -1770,6 +1788,13 @@ interface BackendPluginAPIDirect {
     getDataPath(...subPaths: string[]): string
   }
   http: MulbyHttp
+  sharp: {
+    execute(payload: {
+      input?: string | ArrayBuffer | Uint8Array | object | any[]
+      options?: object
+      operations: Array<{ method: string; args: unknown[] }>
+    }): Promise<unknown>
+  }
   screen: {
     getAllDisplays(): Promise<any[]>
     getPrimaryDisplay(): Promise<any>

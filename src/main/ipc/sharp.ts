@@ -12,22 +12,132 @@ import log from 'electron-log'
  * 3. 主进程重建 Sharp 实例并执行操作
  */
 
-interface SharpOperation {
+export interface SharpOperation {
   method: string
   args: unknown[]
 }
 
 type SharpInputObject = Record<string, unknown>
 
-interface SharpExecutePayload {
+export interface SharpExecutePayload {
   input?: string | Buffer | ArrayBuffer | ArrayBufferView | SharpInputObject | unknown[]
   options?: SharpOptions
   operations: SharpOperation[]
 }
 
 // 终结方法（返回 Promise）
-const TERMINAL_METHODS = ['toBuffer', 'toFile', 'metadata', 'stats', 'raw', 'clone'] as const
+const TERMINAL_METHODS = ['toBuffer', 'toFile', 'metadata', 'stats'] as const
 const TERMINAL_METHOD_SET = new Set<string>(TERMINAL_METHODS as readonly string[])
+
+function normalizeSharpValue(value: unknown): unknown {
+  if (Buffer.isBuffer(value)) return value
+  if (value instanceof ArrayBuffer) return Buffer.from(value)
+  if (ArrayBuffer.isView(value)) {
+    return Buffer.from(value.buffer, value.byteOffset, value.byteLength)
+  }
+  if (Array.isArray(value)) return value.map(normalizeSharpValue)
+  if (value && typeof value === 'object') {
+    const normalized: Record<string, unknown> = {}
+    for (const [key, nestedValue] of Object.entries(value as Record<string, unknown>)) {
+      normalized[key] = normalizeSharpValue(nestedValue)
+    }
+    return normalized
+  }
+  return value
+}
+
+function serializeSharpResult(value: unknown): unknown {
+  if (Buffer.isBuffer(value)) {
+    return value.buffer.slice(value.byteOffset, value.byteOffset + value.byteLength)
+  }
+  if (value instanceof ArrayBuffer) return value
+  if (ArrayBuffer.isView(value)) {
+    return value.buffer.slice(value.byteOffset, value.byteOffset + value.byteLength)
+  }
+  if (Array.isArray(value)) return value.map(serializeSharpResult)
+  if (value && typeof value === 'object') {
+    const serialized: Record<string, unknown> = {}
+    for (const [key, nestedValue] of Object.entries(value as Record<string, unknown>)) {
+      serialized[key] = serializeSharpResult(nestedValue)
+    }
+    return serialized
+  }
+  return value
+}
+
+export async function executeSharpOperations(payload: SharpExecutePayload): Promise<unknown> {
+  const { input, options, operations } = payload
+
+  // 创建 Sharp 实例（Sharp 必须要有输入：路径、Buffer 或 ArrayBuffer）
+  let instance: Sharp
+  if (input === undefined || input === null) {
+    throw new Error('Sharp 需要输入：请传入图片文件路径、Buffer 或 ArrayBuffer，例如 mulby.sharp(文件路径) 或 mulby.sharp(图片Buffer)')
+  } else if (typeof input === 'string') {
+    log.info('[Sharp] 创建: 文件路径 =', input)
+    instance = sharp(input, options)
+  } else if (Buffer.isBuffer(input)) {
+    log.info('[Sharp] 创建: Buffer')
+    instance = sharp(input, options)
+  } else if (input instanceof ArrayBuffer) {
+    log.info('[Sharp] 创建: ArrayBuffer')
+    instance = sharp(Buffer.from(input), options)
+  } else if (ArrayBuffer.isView(input)) {
+    log.info('[Sharp] 创建: ArrayBufferView')
+    instance = sharp(
+      Buffer.from(input.buffer, input.byteOffset, input.byteLength),
+      options
+    )
+  } else if (Array.isArray(input)) {
+    log.info('[Sharp] 创建: 数组')
+    instance = sharp(normalizeSharpValue(input) as unknown as Buffer, options)
+  } else if (typeof input === 'object') {
+    log.info('[Sharp] 创建: 对象 keys =', Object.keys(input))
+    instance = sharp(normalizeSharpValue(input) as unknown as Parameters<typeof sharp>[0], options)
+  } else {
+    throw new Error('不支持的输入类型')
+  }
+
+  if (instance == null || typeof (instance as unknown as Record<string, unknown>)[operations[0]?.method ?? ''] !== 'function') {
+    throw new Error('Sharp 实例创建异常或输入数据无效，请确保已传入有效的图片（路径、Buffer 或 ArrayBuffer）')
+  }
+
+  // 执行操作链
+  for (const { method, args } of operations) {
+    log.info('[Sharp] 执行:', method)
+
+    const methodMap = instance as unknown as Record<string, (...methodArgs: unknown[]) => unknown>
+    const methodFn = methodMap[method]
+    if (typeof methodFn !== 'function') {
+      throw new Error(`Sharp 不存在方法: ${method}`)
+    }
+
+    // 必须用 instance 作为 this 调用，否则 Sharp 内部 this.options 为 undefined
+    const result = methodFn.call(instance, ...args.map(normalizeSharpValue))
+
+    // 链式方法必须返回新的 Sharp 实例
+    if (!TERMINAL_METHOD_SET.has(method)) {
+      if (result == null) {
+        throw new Error(`Sharp 链式方法 ${method}() 返回了空值，当前输入或上一步结果可能无效`)
+      }
+      instance = result as Sharp
+    }
+
+    // 终结方法返回 Promise
+    if (TERMINAL_METHOD_SET.has(method)) {
+      log.info('[Sharp] 终结方法:', method)
+      const finalResult = await result
+
+      log.info('[Sharp] 结果 typeof:', typeof finalResult)
+      log.info('[Sharp] 结果 isBuffer:', Buffer.isBuffer(finalResult))
+      log.info('[Sharp] 结果 constructor:', (finalResult as { constructor?: { name?: string } })?.constructor?.name)
+
+      return serializeSharpResult(finalResult)
+    }
+  }
+
+  log.info('[Sharp] 警告: 没有终结方法')
+  return undefined
+}
 
 export function registerSharpHandlers() {
   // 执行 Sharp 操作链
@@ -38,112 +148,7 @@ export function registerSharpHandlers() {
     log.info('[Sharp] operations:', payload.operations.map(op => op.method).join(' -> '))
 
     try {
-      const { input, options, operations } = payload
-
-      // 创建 Sharp 实例（Sharp 必须要有输入：路径、Buffer 或 ArrayBuffer）
-      let instance: Sharp
-      if (input === undefined || input === null) {
-        throw new Error('Sharp 需要输入：请传入图片文件路径、Buffer 或 ArrayBuffer，例如 mulby.sharp(文件路径) 或 mulby.sharp(图片Buffer)')
-      } else if (typeof input === 'string') {
-        log.info('[Sharp] 创建: 文件路径 =', input)
-        instance = sharp(input, options)
-      } else if (Buffer.isBuffer(input)) {
-        log.info('[Sharp] 创建: Buffer')
-        instance = sharp(input, options)
-      } else if (input instanceof ArrayBuffer) {
-        log.info('[Sharp] 创建: ArrayBuffer')
-        instance = sharp(Buffer.from(input), options)
-      } else if (ArrayBuffer.isView(input)) {
-        log.info('[Sharp] 创建: ArrayBufferView')
-        instance = sharp(
-          Buffer.from(input.buffer, input.byteOffset, input.byteLength),
-          options
-        )
-      } else if (Array.isArray(input)) {
-        log.info('[Sharp] 创建: 数组')
-        instance = sharp(input as unknown as Buffer, options)
-      } else if (typeof input === 'object') {
-        log.info('[Sharp] 创建: 对象 keys =', Object.keys(input))
-        instance = sharp(input as unknown as Parameters<typeof sharp>[0], options)
-      } else {
-        throw new Error('不支持的输入类型')
-      }
-
-      if (instance == null || typeof (instance as unknown as Record<string, unknown>)[operations[0]?.method ?? ''] !== 'function') {
-        throw new Error('Sharp 实例创建异常或输入数据无效，请确保已传入有效的图片（路径、Buffer 或 ArrayBuffer）')
-      }
-
-      // 执行操作链
-      for (const { method, args } of operations) {
-        log.info('[Sharp] 执行:', method)
-
-        const methodMap = instance as unknown as Record<string, (...methodArgs: unknown[]) => unknown>
-        const methodFn = methodMap[method]
-        if (typeof methodFn !== 'function') {
-          throw new Error(`Sharp 不存在方法: ${method}`)
-        }
-
-        // 必须用 instance 作为 this 调用，否则 Sharp 内部 this.options 为 undefined
-        const result = methodFn.call(instance, ...args)
-
-        // 链式方法必须返回新的 Sharp 实例
-        if (!TERMINAL_METHOD_SET.has(method)) {
-          if (result == null) {
-            throw new Error(`Sharp 链式方法 ${method}() 返回了空值，当前输入或上一步结果可能无效`)
-          }
-          instance = result as Sharp
-        }
-
-        // 终结方法返回 Promise
-        if (TERMINAL_METHOD_SET.has(method)) {
-          log.info('[Sharp] 终结方法:', method)
-          const finalResult = await result
-
-          log.info('[Sharp] 结果 typeof:', typeof finalResult)
-          log.info('[Sharp] 结果 isBuffer:', Buffer.isBuffer(finalResult))
-          log.info('[Sharp] 结果 constructor:', (finalResult as { constructor?: { name?: string } })?.constructor?.name)
-
-          // 处理 Buffer 类型，转换为 ArrayBuffer 以便 IPC 序列化
-          if (Buffer.isBuffer(finalResult)) {
-            log.info('[Sharp] 转换 Buffer, 长度:', finalResult.length)
-            // 使用 slice 创建新的 ArrayBuffer，避免共享内存问题
-            const arrayBuffer = finalResult.buffer.slice(
-              finalResult.byteOffset,
-              finalResult.byteOffset + finalResult.byteLength
-            )
-            log.info('[Sharp] ArrayBuffer 字节长度:', arrayBuffer.byteLength)
-            return arrayBuffer
-          }
-
-          // 处理 metadata 返回的对象，其中可能包含 Buffer 字段
-          if (method === 'metadata' && finalResult && typeof finalResult === 'object') {
-            log.info('[Sharp] 处理 metadata')
-            const serializable: Record<string, unknown> = {}
-            for (const [key, value] of Object.entries(finalResult as Record<string, unknown>)) {
-              if (Buffer.isBuffer(value)) {
-                log.info('[Sharp] metadata Buffer 字段:', key)
-                serializable[key] = value.toString('base64')
-              } else {
-                serializable[key] = value
-              }
-            }
-            log.info('[Sharp] metadata keys:', Object.keys(serializable))
-            return serializable
-          }
-
-          // 处理 toFile 返回的 info 对象
-          if (method === 'toFile' && finalResult && typeof finalResult === 'object') {
-            log.info('[Sharp] toFile info:', finalResult)
-            return JSON.parse(JSON.stringify(finalResult))
-          }
-
-          log.info('[Sharp] 返回原始结果')
-          return finalResult
-        }
-      }
-
-      log.info('[Sharp] 警告: 没有终结方法')
-      return undefined
+      return await executeSharpOperations(payload)
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
       const stack = error instanceof Error ? error.stack : undefined

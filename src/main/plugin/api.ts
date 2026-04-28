@@ -31,6 +31,7 @@ import type {
   AiPromiseLike
 } from '../../shared/types/ai'
 import { commandRunnerService } from '../services/command-runner'
+import { executeSharpOperations } from '../ipc/sharp'
 import type {
   StorageListOptions,
   StorageSetManyItem,
@@ -306,6 +307,9 @@ ${item.files.map(p => `    <string>${p}</string>`).join('\n')}
       post: (url: string, body?: string | object, headers?: Record<string, string>) => pluginHttp.post(url, body, headers),
       put: (url: string, body?: string | object, headers?: Record<string, string>) => pluginHttp.put(url, body, headers),
       delete: (url: string, headers?: Record<string, string>) => pluginHttp.delete(url, headers)
+    },
+    sharp: {
+      execute: (payload: Parameters<typeof executeSharpOperations>[0]) => executeSharpOperations(payload)
     },
     screen: {
       getAllDisplays: () => pluginScreen.getAllDisplays(),

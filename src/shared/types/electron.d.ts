@@ -863,6 +863,7 @@ export interface ElectronAPI {
     getState: () => Promise<SuperPanelState>
     action: (action: string, payload?: Record<string, unknown>) => Promise<{ success: boolean; error?: string }>
     close: () => Promise<{ success: boolean }>
+    setIgnoreBlur: (ignore: boolean) => Promise<unknown>
     onState: (callback: (state: SuperPanelState) => void) => () => void
   }
   network: {

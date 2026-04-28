@@ -304,8 +304,18 @@ const DOC_CHECKS = {
   },
   'docs/apis/plugin.md': {
     prefixes: ['plugin'],
-    allowTop: ['onPluginInit', 'onPluginAttach', 'onPluginDetached'],
-    scope: ['plugin', 'onPluginInit', 'onPluginAttach', 'onPluginDetached']
+    allowTop: ['onPluginInit', 'onPluginAttach', 'onPluginDetached', 'onPluginLaunchStart', 'onPluginLaunchEnd'],
+    scope: ['plugin', 'onPluginInit', 'onPluginAttach', 'onPluginDetached', 'onPluginLaunchStart', 'onPluginLaunchEnd']
+  },
+  'docs/apis/super-panel.md': {
+    prefixes: ['superPanel'],
+    allowTop: [],
+    scope: ['superPanel']
+  },
+  'docs/apis/sharp.md': {
+    prefixes: ['sharp'],
+    allowTop: ['getSharpVersion'],
+    scope: ['sharp', 'getSharpVersion']
   },
   'docs/apis/window.md': {
     prefixes: ['window', 'subInput', 'mulbyMain.subInput', 'mulbyMain.clipboard'],

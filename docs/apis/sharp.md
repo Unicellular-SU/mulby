@@ -1,9 +1,12 @@
 # Sharp 图像处理 API
 本文档描述 Sharp 图像处理 API 的使用方法与接口。
 
-> 入口：`window.mulby.sharp`
+> 前端入口：`window.mulby.sharp`
+> 后端插件入口：`context.api.sharp.execute`
 
 Sharp API 提供高性能的图像处理功能，包括缩放、裁剪、旋转、格式转换等。基于 [sharp](https://sharp.pixelplumbing.com/) 库实现。
+
+插件后端应调用宿主应用提供的 Sharp API，不需要、也不应该在插件包内打包 native `sharp` 依赖。这样同一个插件包可以在 macOS、Windows、Linux 上复用，由宿主应用负责加载对应平台的 Sharp 运行时。
 
 ### 基本用法
 
@@ -39,6 +42,42 @@ await mulby.sharp('/path/to/input.png')
   - `{ text: { text, width?, height? } }` - 创建文本图像
 - `options` - Sharp 选项（可选）
 
+### execute(payload)
+[Backend]
+
+在插件后端执行序列化的 Sharp 操作链。该接口用于没有渲染进程的后台任务、批处理、文件处理流水线等场景。
+
+```javascript
+const result = await context.api.sharp.execute({
+  input: '/path/to/input.jpg',
+  operations: [
+    { method: 'resize', args: [300, 300, { fit: 'cover' }] },
+    { method: 'webp', args: [{ quality: 82 }] },
+    { method: 'toBuffer', args: [] }
+  ]
+})
+
+const buffer = Buffer.from(new Uint8Array(result))
+```
+
+**参数**:
+- `input` - 图片输入，支持文件路径、`ArrayBuffer`、`Uint8Array`、Buffer-like 对象，以及 Sharp 的对象输入（如 `{ create: ... }`）。
+- `options` - Sharp 构造选项（可选）。
+- `operations` - 操作链数组，每项格式为 `{ method, args }`。
+
+**返回值**:
+- `toBuffer()` 返回 `ArrayBuffer`。
+- `toBuffer({ resolveWithObject: true })` 返回对象，其中 `data` 会被序列化为 `ArrayBuffer`。
+- `toFile()`、`metadata()`、`stats()` 返回可序列化对象。
+
+**终结方法**:
+- `toBuffer`
+- `toFile`
+- `metadata`
+- `stats`
+
+其他 Sharp 方法会按链式方法处理，例如 `raw().toBuffer()` 中的 `raw` 是链式方法，`toBuffer` 才是终结方法。
+
 ### 尺寸调整方法
 
 ### resize(width?, height?, options?)
@@ -68,6 +107,15 @@ await mulby.sharp('/path/to/input.png')
 
 ```javascript
 .extract({ left: 10, top: 10, width: 100, height: 100 })
+```
+
+### extend(options)
+[Renderer]
+
+扩展图像画布。
+
+```javascript
+.extend({ top: 10, bottom: 10, left: 20, right: 20, background: '#fff' })
 ```
 
 ### trim(options?)
@@ -101,7 +149,25 @@ await mulby.sharp('/path/to/input.png')
 .flop()  // 水平翻转
 ```
 
+### affine(matrix, options?)
+[Renderer]
+
+应用仿射变换。
+
+```javascript
+.affine([[1, 0.2], [0.1, 1]], { background: '#fff' })
+```
+
 ### 图像处理方法
+
+### median(size?)
+[Renderer]
+
+应用中值滤波。
+
+```javascript
+.median(3)
+```
 
 ### blur(sigma?)
 [Renderer]
@@ -120,6 +186,15 @@ await mulby.sharp('/path/to/input.png')
 ```javascript
 .sharpen()
 .sharpen({ sigma: 2 })
+```
+
+### flatten(options?)
+[Renderer]
+
+移除 alpha 通道并合成到背景色。
+
+```javascript
+.flatten({ background: '#fff' })
 ```
 
 ### grayscale() / greyscale()
@@ -149,6 +224,34 @@ await mulby.sharp('/path/to/input.png')
 .gamma(2.2)
 ```
 
+### normalise(options?) / normalize(options?)
+[Renderer]
+
+增强图像对比度。
+
+```javascript
+.normalise()
+.normalize({ lower: 1, upper: 99 })
+```
+
+### clahe(options)
+[Renderer]
+
+应用自适应直方图均衡。
+
+```javascript
+.clahe({ width: 32, height: 32 })
+```
+
+### convolve(kernel)
+[Renderer]
+
+应用卷积核。
+
+```javascript
+.convolve({ width: 3, height: 3, kernel: [-1, -1, -1, -1, 8, -1, -1, -1, -1] })
+```
+
 ### threshold(threshold?, options?)
 [Renderer]
 
@@ -171,6 +274,16 @@ await mulby.sharp('/path/to/input.png')
 })
 ```
 
+### linear(a?, b?) / recomb(matrix)
+[Renderer]
+
+调整通道线性参数或应用通道重组矩阵。
+
+```javascript
+.linear(1.1, -10)
+.recomb([[1, 0, 0], [0, 1, 0], [0, 0, 1]])
+```
+
 ### tint(color)
 [Renderer]
 
@@ -179,6 +292,45 @@ await mulby.sharp('/path/to/input.png')
 ```javascript
 .tint({ r: 255, g: 0, b: 0 })
 .tint('#ff0000')
+```
+
+### pipelineColorspace(colorspace?) / toColorspace(colorspace?)
+[Renderer]
+
+设置流水线或输出颜色空间。
+
+```javascript
+.pipelineColorspace('rgb16')
+.toColorspace('srgb')
+```
+
+### removeAlpha() / ensureAlpha(alpha?)
+[Renderer]
+
+移除或确保 alpha 通道。
+
+```javascript
+.removeAlpha()
+.ensureAlpha(1)
+```
+
+### extractChannel(channel) / joinChannel(input, options?)
+[Renderer]
+
+提取或追加图像通道。
+
+```javascript
+.extractChannel('red')
+.joinChannel(alphaBuffer, { raw: { width, height, channels: 1 } })
+```
+
+### bandbool(boolOp)
+[Renderer]
+
+对通道应用布尔运算。
+
+```javascript
+.bandbool('and')
 ```
 
 ### 合成方法
@@ -198,7 +350,7 @@ await mulby.sharp('/path/to/input.png')
 
 ### 输出格式方法
 
-### png(options?) / jpeg(options?) / webp(options?) / gif(options?) / tiff(options?) / avif(options?)
+### png(options?) / jpeg(options?) / webp(options?) / gif(options?) / tiff(options?) / avif(options?) / heif(options?) / raw(options?)
 [Renderer]
 
 设置输出格式。
@@ -207,6 +359,50 @@ await mulby.sharp('/path/to/input.png')
 .png({ compressionLevel: 9 })
 .jpeg({ quality: 80, progressive: true })
 .webp({ quality: 75, lossless: false })
+.heif({ quality: 80 })
+.raw()
+```
+
+### withMetadata(options?) / keepExif() / withExif(exif) / keepIccProfile() / withIccProfile(icc)
+[Renderer]
+
+控制输出元数据、EXIF 和 ICC profile。
+
+```javascript
+.withMetadata()
+.keepExif()
+.withExif({ IFD0: { Copyright: 'Mulby' } })
+.keepIccProfile()
+.withIccProfile('p3')
+```
+
+### timeout(options)
+[Renderer]
+
+设置 Sharp 操作超时。
+
+```javascript
+.timeout({ seconds: 10 })
+```
+
+### tile(options?)
+[Renderer]
+
+输出深度缩放图像瓦片。
+
+```javascript
+.tile({ size: 256 })
+```
+
+### clone()
+[Renderer]
+
+复制当前操作链构建器。
+
+```javascript
+const base = mulby.sharp('/path/to/image.jpg').resize(300)
+const png = await base.clone().png().toBuffer()
+const webp = await base.clone().webp().toBuffer()
 ```
 
 ### 终结方法
@@ -280,7 +476,10 @@ const buffer = await mulby.sharp({
 }).png().toBuffer()
 ```
 
-### 获取 Sharp 版本信息
+### getSharpVersion()
+[Renderer]
+
+获取 Sharp 版本信息。
 
 ```javascript
 const version = await mulby.getSharpVersion()

@@ -249,6 +249,14 @@ await window.mulby.plugin.outPlugin(true);
 [Renderer]
 主窗口插件分离事件。
 
+### onPluginLaunchStart(callback)
+[Renderer]
+插件启动开始事件。用于全局监听插件功能启动，回调数据包含 `requestId`、`pluginName`、`displayName`、`featureCode`、`startedAt`。
+
+### onPluginLaunchEnd(callback)
+[Renderer]
+插件启动结束事件。用于全局监听插件功能结束状态，回调数据包含 `requestId`、`pluginName`、`featureCode`、`reason`。
+
 ### plugin.listBackground()
 [Renderer]
 获取后台运行插件与活跃 host 信息。
