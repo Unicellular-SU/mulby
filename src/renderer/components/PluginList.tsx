@@ -61,6 +61,7 @@ const SYSTEM_ICON_TARGET_SIZE = 128
 const SYSTEM_ICON_BATCH_CONCURRENCY = 6
 const RECENT_LIMIT = 40
 const MAX_CACHE_SIZE = 80
+const PREWARM_TOP_N = 3
 const PREWARM_DEDUPE_MS = 20_000
 
 const SYSTEM_APP_ICON_SVG = `
@@ -874,37 +875,58 @@ function PluginList({
   const isSystemLoading = isSystemAppsLoading || isSystemFilesLoading
   const isSearching = isPluginLoading || isSystemLoading
 
-  // 搜索预热：选中项变化或鼠标悬停时提前初始化 Host
-  const prewarmTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const lastPrewarmedRef = useRef<{ pluginId: string; expiresAt: number }>({ pluginId: '', expiresAt: 0 })
+  // 搜索预热：Top N 结果、选中项变化或鼠标悬停时提前初始化 Host
+  const prewarmTimersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map())
+  const lastPrewarmedRef = useRef<Map<string, number>>(new Map())
 
   const triggerPrewarm = useCallback((pluginId: string, debounceMs = 120) => {
     const now = Date.now()
-    const lastPrewarmed = lastPrewarmedRef.current
-    if (pluginId === lastPrewarmed.pluginId && now < lastPrewarmed.expiresAt) return
-    if (prewarmTimerRef.current) clearTimeout(prewarmTimerRef.current)
-    prewarmTimerRef.current = setTimeout(() => {
-      prewarmTimerRef.current = null
-      lastPrewarmedRef.current = {
-        pluginId,
-        expiresAt: Date.now() + PREWARM_DEDUPE_MS
-      }
+    const expiresAt = lastPrewarmedRef.current.get(pluginId) ?? 0
+    if (now < expiresAt) return
+
+    const existingTimer = prewarmTimersRef.current.get(pluginId)
+    if (existingTimer) clearTimeout(existingTimer)
+
+    const timer = setTimeout(() => {
+      prewarmTimersRef.current.delete(pluginId)
+      lastPrewarmedRef.current.set(pluginId, Date.now() + PREWARM_DEDUPE_MS)
       void window.mulby.plugin.prewarm(pluginId)
     }, debounceMs)
+    prewarmTimersRef.current.set(pluginId, timer)
   }, [])
+
+  const triggerPrewarmMany = useCallback((pluginIds: string[], debounceMs = 120) => {
+    const seen = new Set<string>()
+    for (const pluginId of pluginIds) {
+      if (seen.has(pluginId)) continue
+      seen.add(pluginId)
+      triggerPrewarm(pluginId, debounceMs)
+      if (seen.size >= PREWARM_TOP_N) break
+    }
+  }, [triggerPrewarm])
 
   // Reset across searches; within a search, the dedupe expires with the main-process prewarm TTL.
   useEffect(() => {
-    lastPrewarmedRef.current = { pluginId: '', expiresAt: 0 }
+    for (const timer of prewarmTimersRef.current.values()) {
+      clearTimeout(timer)
+    }
+    prewarmTimersRef.current.clear()
+    lastPrewarmedRef.current.clear()
   }, [searchPayload.text])
 
-  // 键盘选中项 / 搜索结果自动选中 → 预热
+  // 键盘选中项 / 搜索结果自动选中 → 预热选中项开始的 Top N 插件结果
   useEffect(() => {
     if (searchPayload.text.trim().length < 2) return
-    const selectedItem = flatItems.find(item => item.key === selectedKey)
-    if (!selectedItem?.pluginItem) return
-    triggerPrewarm(selectedItem.pluginItem.pluginId)
-  }, [selectedKey, flatItems, searchPayload.text, triggerPrewarm])
+    const pluginItems = flatItems.filter((item) => item.pluginItem)
+    if (pluginItems.length === 0) return
+
+    const selectedIndex = pluginItems.findIndex((item) => item.key === selectedKey)
+    const startIndex = selectedIndex >= 0 ? selectedIndex : 0
+    const candidates = pluginItems
+      .slice(startIndex, startIndex + PREWARM_TOP_N)
+      .map((item) => item.pluginItem!.pluginId)
+    triggerPrewarmMany(candidates)
+  }, [selectedKey, flatItems, searchPayload.text, triggerPrewarmMany])
 
   // 鼠标悬停 → 预热（事件委托，不增加组件 re-render）
   const lastHoveredKeyRef = useRef('')
@@ -927,7 +949,10 @@ function PluginList({
 
   useEffect(() => {
     return () => {
-      if (prewarmTimerRef.current) clearTimeout(prewarmTimerRef.current)
+      for (const timer of prewarmTimersRef.current.values()) {
+        clearTimeout(timer)
+      }
+      prewarmTimersRef.current.clear()
     }
   }, [])
 

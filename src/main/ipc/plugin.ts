@@ -216,7 +216,7 @@ export function registerPluginHandlers(manager: PluginManager, pluginToolRegistr
     return { success: true }
   })
 
-  // 搜索预热：Top 1 结果稳定后提前初始化 Host
+  // 搜索预热：Top N 结果稳定后提前初始化 Host
   ipcMain.handle('plugin:prewarm', (_, pluginId: string) => {
     void manager.prewarm(pluginId)
   })

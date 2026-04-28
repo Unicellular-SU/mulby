@@ -48,6 +48,11 @@ interface DetachedWindowInfo {
   creatorId?: number  // 创建此窗口的父窗口 ID
 }
 
+interface ResidentPanelInfo {
+  panelWindow: PluginPanelWindow
+  attachedPlugin: AttachedPlugin
+}
+
 // 子窗口创建选项
 interface AuxiliaryWindowOptions {
   width?: number
@@ -87,6 +92,7 @@ export class PluginWindowManager {
 
   // 面板窗口管理器（跟随搜索框的插件窗口）
   private panelWindow: PluginPanelWindow | null = null
+  private residentPanels: Map<string, ResidentPanelInfo> = new Map()
 
   private shouldOpenPluginDevTools(): boolean {
     const developer = appSettingsManager.getSettings().developer
@@ -153,13 +159,42 @@ export class PluginWindowManager {
   setMainWindow(win: BrowserWindow) {
     this.mainWindow = win
     // 初始化面板窗口管理器
-    this.panelWindow = new PluginPanelWindow(win)
+    this.panelWindow = this.createPanelWindow()
   }
 
   setThemeManager(manager: ThemeManager) {
     this.themeManager = manager
     // 同时设置到面板窗口管理器
     this.panelWindow?.setThemeManager(manager)
+    for (const info of this.residentPanels.values()) {
+      info.panelWindow.setThemeManager(manager)
+    }
+  }
+
+  private createPanelWindow(): PluginPanelWindow {
+    if (!this.mainWindow) {
+      throw new Error('Main window is not initialized')
+    }
+    const panelWindow = new PluginPanelWindow(this.mainWindow)
+    if (this.themeManager) {
+      panelWindow.setThemeManager(this.themeManager)
+    }
+    return panelWindow
+  }
+
+  private ensurePanelWindow(): PluginPanelWindow | null {
+    if (this.panelWindow) return this.panelWindow
+    if (!this.mainWindow || this.mainWindow.isDestroyed()) return null
+    this.panelWindow = this.createPanelWindow()
+    return this.panelWindow
+  }
+
+  private destroyPanelWindow(panelWindow: PluginPanelWindow): void {
+    panelWindow.close()
+    const win = panelWindow.getWindow()
+    if (win && !win.isDestroyed()) {
+      win.close()
+    }
   }
 
   prewarmAttachedShell(delayMs = 300): void {
@@ -270,7 +305,8 @@ export class PluginWindowManager {
     }
 
     // 使用 Panel 模式（独立窗口跟随）
-    if (!this.panelWindow) {
+    const activePanelWindow = this.ensurePanelWindow()
+    if (!activePanelWindow) {
       log.error('[PluginWindowManager] Panel window not initialized')
       return false
     }
@@ -289,7 +325,7 @@ export class PluginWindowManager {
       log.info(`[AttachmentTrace][Main] plugin:attach sent | plugin=${plugin.id} | feature=${featureCode} | ${formatPayloadTrace({ text: input?.text || '', attachments: input?.attachments || [] })}${launchStart ? ` | +${Date.now() - launchStart}ms` : ''}`)
     }
 
-    const panelWin = this.panelWindow.createPanel(plugin, featureCode, input, route, launchStart, onLoadReady, notifyRendererAttached)
+    const panelWin = activePanelWindow.createPanel(plugin, featureCode, input, route, launchStart, onLoadReady, notifyRendererAttached)
     if (!panelWin) {
       log.error('[PluginWindowManager] Failed to create panel window')
       this.attachedPlugin = null
@@ -310,13 +346,19 @@ export class PluginWindowManager {
     }
 
     const pluginId = this.attachedPlugin.plugin.id
+    const panelWindow = this.panelWindow
+    const attachedPlugin = this.attachedPlugin
     // Match the old closeAttached() focus handoff before hiding the focused
     // panel. Otherwise PluginPanelWindow's blur guard can hide the main window.
     if (this.mainWindow && !this.mainWindow.isDestroyed()) {
       this.mainWindow.focus()
     }
-    const suspended = this.panelWindow.suspend()
+    const suspended = panelWindow.suspend()
     if (!suspended) return null
+
+    this.residentPanels.set(pluginId, { panelWindow, attachedPlugin })
+    this.attachedPlugin = null
+    this.panelWindow = this.createPanelWindow()
 
     // 保留 attachedPlugin 元数据供 restore 使用
     // 清理主窗口 UI 状态（列表恢复、SubInput 关闭），但不触发 notifyPluginWindowClosed
@@ -344,14 +386,37 @@ export class PluginWindowManager {
     input?: InputPayload,
     route?: string
   ): boolean {
-    const cachedId = this.panelWindow?.getCachedPluginId()
-    if (!cachedId || cachedId !== pluginId) return false
+    const cached = this.residentPanels.get(pluginId)
+    if (!cached) return false
 
-    const restored = this.panelWindow!.restore(featureCode, input, route)
-    if (!restored) return false
+    const activePanelWindow = this.panelWindow
+    if (this.attachedPlugin || activePanelWindow?.isOpen()) {
+      this.closeAttached(true)
+    } else if (activePanelWindow && activePanelWindow !== cached.panelWindow) {
+      this.destroyPanelWindow(activePanelWindow)
+    }
+
+    this.residentPanels.delete(pluginId)
+    this.panelWindow = cached.panelWindow
+    this.attachedPlugin = {
+      ...cached.attachedPlugin,
+      featureCode,
+      route,
+      input: input?.text || '',
+      attachments: input?.attachments,
+      startedAt: Date.now()
+    }
+
+    const restored = this.panelWindow.restore(featureCode, input, route)
+    if (!restored) {
+      this.destroyPanelWindow(cached.panelWindow)
+      this.attachedPlugin = null
+      this.panelWindow = this.createPanelWindow()
+      return false
+    }
 
     // 重新通知渲染进程插件已附着
-    const plugin = this.attachedPlugin?.plugin
+    const plugin = this.attachedPlugin.plugin
     if (plugin && this.mainWindow && !this.mainWindow.isDestroyed()) {
       this.mainWindow.webContents.send('plugin:attach', {
         pluginName: plugin.id,
@@ -371,17 +436,28 @@ export class PluginWindowManager {
    * 强制驱逐 resident-ui 缓存（真正销毁面板窗口和上下文）。
    * 返回被驱逐的 pluginId，null 表示无缓存可驱逐。
    */
-  evictResident(): string | null {
-    const cachedId = this.panelWindow?.getCachedPluginId()
-    if (!cachedId) return null
+  evictResident(pluginId?: string): string | null {
+    const firstResident = this.residentPanels.keys().next()
+    const targetId = pluginId ?? (firstResident.done ? undefined : firstResident.value)
+    if (!targetId) return null
 
-    log.info(`[ResidentUI] evict | plugin=${cachedId}`)
-    this.attachedPlugin = null
-    if (this.panelWindow?.isOpen()) {
-      this.panelWindow.close()
-    }
+    const cached = this.residentPanels.get(targetId)
+    if (!cached) return null
+
+    log.info(`[ResidentUI] evict | plugin=${targetId}`)
+    this.residentPanels.delete(targetId)
+    this.destroyPanelWindow(cached.panelWindow)
     clearSubInputState()
-    return cachedId
+    return targetId
+  }
+
+  evictAllResidents(): string[] {
+    const evicted: string[] = []
+    for (const pluginId of Array.from(this.residentPanels.keys())) {
+      const removed = this.evictResident(pluginId)
+      if (removed) evicted.push(removed)
+    }
+    return evicted
   }
 
   /**
@@ -1034,6 +1110,7 @@ export class PluginWindowManager {
 
   closeAll(): void {
     this.closeAttached(true)
+    this.evictAllResidents()
     for (const [windowId, info] of this.detachedWindows.entries()) {
       unregisterPluginWindow(windowId)
       unregisterProtectedWindow(windowId)

@@ -147,6 +147,13 @@ interface ResidentUiSession {
   ttlTimer: NodeJS.Timeout
 }
 
+interface PrewarmState {
+  pluginId: string
+  promise: Promise<boolean>
+  ttlTimer: NodeJS.Timeout
+  lastUsedAt: number
+}
+
 export class PluginManager {
   private plugins: Map<string, Plugin> = new Map()
   private runners: Map<string, PluginRunner> = new Map()
@@ -178,16 +185,16 @@ export class PluginManager {
   private systemCommandExecutor: SystemCommandExecutor
   private systemPageOpenHandler?: (page: string) => void
 
-  // Resident UI：MRU=1 的 attached panel 缓存
-  private residentSession: ResidentUiSession | null = null
-  private static readonly RESIDENT_TTL_MS = 60_000
+  // Resident UI：缓存最近关闭的 attached panel，加速热启动。
+  private residentSessions: Map<string, ResidentUiSession> = new Map()
+  private residentHostKeepaliveTimers: Map<string, NodeJS.Timeout> = new Map()
+  private static readonly RESIDENT_UI_CACHE_LIMIT = 3
+  private static readonly RESIDENT_TTL_MS = 3 * 60_000
+  private static readonly RESIDENT_HOST_KEEPALIVE_MS = 60_000
 
-  // 搜索预热
-  private prewarmState: {
-    pluginId: string
-    promise: Promise<boolean>
-    ttlTimer: NodeJS.Timeout
-  } | null = null
+  // 搜索预热：缓存少量最可能启动的 Host，仍不执行 onLoad。
+  private prewarmState: Map<string, PrewarmState> = new Map()
+  private static readonly PREWARM_CACHE_LIMIT = 3
   private poolWarmupTimer: NodeJS.Timeout | null = null
   private preloadWarmupTimer: NodeJS.Timeout | null = null
 
@@ -515,11 +522,10 @@ export class PluginManager {
   private async resetRuntimeForInit(): Promise<void> {
     this.isReloading = true
     try {
-      // 清理 resident-ui session
-      if (this.residentSession) {
-        clearTimeout(this.residentSession.ttlTimer)
-        this.residentSession = null
-      }
+      // 清理 resident-ui / prewarm 缓存
+      this.evictAllResidentSessions('runtime-reset')
+      this.clearAllResidentHostKeepalives()
+      this.cancelPrewarm()
 
       // 清理旧监听，避免重复注册和内存泄漏
       this.clearWatchers()
@@ -976,11 +982,11 @@ export class PluginManager {
       }
 
       if (isAttachedUI) {
-        log.info(`[AttachmentTrace][Main] attached plugin run | plugin=${pluginId} | feature=${featureCode} | route=${route || ''} | residentCached=${this.residentSession?.pluginId === pluginId} | ${formatPayloadTrace(resolvedInput)}${launchStart ? ` | +${Date.now() - launchStart}ms` : ''}`)
+        log.info(`[AttachmentTrace][Main] attached plugin run | plugin=${pluginId} | feature=${featureCode} | route=${route || ''} | residentCached=${this.residentSessions.has(pluginId)} | ${formatPayloadTrace(resolvedInput)}${launchStart ? ` | +${Date.now() - launchStart}ms` : ''}`)
         const hasDetachedForSinglePlugin =
           plugin.manifest.pluginSetting?.single !== false && this.hasDetachedWindowForPlugin(pluginId)
-        if (hasDetachedForSinglePlugin && this.residentSession?.pluginId === pluginId) {
-          this.evictResidentSession('single-detached-window-active')
+        if (hasDetachedForSinglePlugin && this.residentSessions.has(pluginId)) {
+          this.evictResidentSession(pluginId, 'single-detached-window-active')
         }
         if (hasDetachedForSinglePlugin && launchRequestId) {
           this.endAttachedLaunchStatus(launchRequestId, plugin, featureCode, 'skipped')
@@ -994,11 +1000,6 @@ export class PluginManager {
           this.stateManager.recordRecentUsage(plugin.id, featureCode)
           schedulePostOnLoadIdle(PluginManager.UI_IDLE_LOAD_DELAY_MS)
           return { success: true, hasUI: true }
-        }
-
-        // 驱逐不匹配的旧 resident session（如果有）
-        if (this.residentSession) {
-          this.evictResidentSession(`replaced-by-plugin=${pluginId}`)
         }
 
         // onLoad 已完成，使用最终 feature metadata 创建 panel，避免旧 route/mainHide/mode 竞态。
@@ -1030,12 +1031,12 @@ export class PluginManager {
       }
 
       const shouldEvictResidentForDetached =
-        plugin.manifest.pluginSetting?.single !== false && this.residentSession?.pluginId === pluginId
+        plugin.manifest.pluginSetting?.single !== false && this.residentSessions.has(pluginId)
       const win = this.windowManager.createDetachedWindow(plugin, featureCode, resolvedInput, route)
       const detachedSuccess = Boolean(win)
       if (detachedSuccess) {
         if (shouldEvictResidentForDetached) {
-          this.evictResidentSession('single-detached-launch')
+          this.evictResidentSession(pluginId, 'single-detached-launch')
         }
         this.stateManager.recordRecentUsage(plugin.id, featureCode)
         schedulePostOnLoadIdle(PluginManager.UI_IDLE_LOAD_DELAY_MS)
@@ -1161,16 +1162,18 @@ export class PluginManager {
 
   /**
    * 预热指定插件的 Host 进程（不执行 onLoad）。
-   * 搜索结果 Top 1 稳定后由渲染进程触发，使用户回车时 Host 已就绪。
+   * 搜索结果 Top N 稳定后由渲染进程触发，使用户回车时 Host 已就绪。
    *
    * 安全考量：只创建 Host 进程并登记插件入口，不加载插件模块，也不调用 onLoad 钩子。
    * onLoad 可访问剪贴板、文件系统、HTTP 等特权 API，在用户仅浏览
    * 搜索结果（尚未明确启动）时不应执行，避免第三方插件产生副作用。
    */
   async prewarm(pluginId: string): Promise<void> {
-    if (this.prewarmState?.pluginId === pluginId) return
-
-    this.cancelPrewarm()
+    const existing = this.prewarmState.get(pluginId)
+    if (existing) {
+      existing.lastUsedAt = Date.now()
+      return
+    }
 
     const plugin = this.resolve(pluginId)
     if (!plugin?.enabled || !plugin.manifest.main) return
@@ -1184,49 +1187,73 @@ export class PluginManager {
     const promise = (this.useUtilityProcess
       ? this.hostManager.initPlugin(plugin)
       : Promise.resolve(false)
-    )
+    ).catch((err) => {
+      log.warn(`[PluginManager] Failed to prewarm plugin ${pluginId}:`, err)
+      return false
+    })
 
     const ttlTimer = setTimeout(() => {
-      if (this.prewarmState?.pluginId !== pluginId) return
-      this.prewarmState = null
-
-      if (this.initializedPlugins.has(pluginId)
-          && this.workerOnloadedPlugins.has(pluginId)
-          && !this.hostManager.isHostReady(pluginId)) {
-        return
-      }
-
-      // 如果插件没有 UI 窗口打开且不在后台运行，销毁 Host
-      const hasWindow = this.windowManager?.hasOpenWindowsForPlugin(pluginId)
-      const isBackground = this.backgroundManager.isRunning(pluginId)
-      const isResident = this.hostManager.isResidentPinned(pluginId)
-      if (!hasWindow && !isBackground && !isResident) {
-        void this.hostManager.destroyHost(pluginId).then(() => {
-          this.workerOnloadedPlugins.delete(pluginId)
-        })
-      }
+      this.cancelPrewarmEntry(pluginId)
     }, PluginManager.PREWARM_TTL_MS)
     ttlTimer.unref()
 
-    this.prewarmState = { pluginId, promise, ttlTimer }
+    this.prewarmState.set(pluginId, {
+      pluginId,
+      promise,
+      ttlTimer,
+      lastUsedAt: Date.now()
+    })
+    this.enforcePrewarmLimit()
   }
 
   cancelPrewarm(runningPluginId?: string): void {
-    if (!this.prewarmState) return
-    clearTimeout(this.prewarmState.ttlTimer)
-    const prewarmedId = this.prewarmState.pluginId
-    this.prewarmState = null
-
-    if (runningPluginId && runningPluginId === prewarmedId) return
-
-    const hasWindow = this.windowManager?.hasOpenWindowsForPlugin(prewarmedId)
-    const isBackground = this.backgroundManager.isRunning(prewarmedId)
-    const isResident = this.hostManager.isResidentPinned(prewarmedId)
-    if (!hasWindow && !isBackground && !isResident) {
-      void this.hostManager.destroyHost(prewarmedId).then(() => {
-        this.workerOnloadedPlugins.delete(prewarmedId)
-      })
+    if (runningPluginId) {
+      this.cancelPrewarmEntry(runningPluginId, { preserveHost: true })
+      return
     }
+
+    for (const pluginId of Array.from(this.prewarmState.keys())) {
+      this.cancelPrewarmEntry(pluginId)
+    }
+  }
+
+  private enforcePrewarmLimit(): void {
+    while (this.prewarmState.size > PluginManager.PREWARM_CACHE_LIMIT) {
+      let oldestId: string | null = null
+      let oldestUsedAt = Number.POSITIVE_INFINITY
+      for (const state of this.prewarmState.values()) {
+        if (state.lastUsedAt < oldestUsedAt) {
+          oldestUsedAt = state.lastUsedAt
+          oldestId = state.pluginId
+        }
+      }
+      if (!oldestId) return
+      this.cancelPrewarmEntry(oldestId)
+    }
+  }
+
+  private cancelPrewarmEntry(pluginId: string, options?: { preserveHost?: boolean }): void {
+    const state = this.prewarmState.get(pluginId)
+    if (!state) return
+
+    clearTimeout(state.ttlTimer)
+    this.prewarmState.delete(pluginId)
+
+    if (options?.preserveHost) return
+
+    void state.promise.finally(() => {
+      if (this.prewarmState.has(pluginId)) return
+      this.destroyUnusedPrewarmHost(pluginId)
+    })
+  }
+
+  private destroyUnusedPrewarmHost(pluginId: string): void {
+    if (!this.useUtilityProcess || !this.hostManager.isHostReady(pluginId)) return
+    if (this.hasPluginRuntimeDemand(pluginId)) return
+
+    void this.hostManager.destroyHost(pluginId).then(() => {
+      this.workerOnloadedPlugins.delete(pluginId)
+    })
   }
 
   // ==================== Resident UI Session ====================
@@ -1236,26 +1263,48 @@ export class PluginManager {
    * 所有淘汰场景（TTL / 替换 / 手动结束 / disable / uninstall / reload / crash）
    * 都必须走此方法，保证状态一致性。
    */
-  private evictResidentSession(reason: string, options?: { preserveHost?: boolean }): void {
-    if (!this.residentSession) return
+  private evictResidentSession(pluginId: string, reason: string, options?: { preserveHost?: boolean }): void {
+    const session = this.residentSessions.get(pluginId)
+    if (!session) return
 
-    const { pluginId } = this.residentSession
-    clearTimeout(this.residentSession.ttlTimer)
-    this.residentSession = null
+    clearTimeout(session.ttlTimer)
+    this.residentSessions.delete(pluginId)
 
     log.info(`[ResidentUI] evict | plugin=${pluginId} | reason=${reason}`)
 
-    // 兼容旧状态：确保没有遗留 Host resident pin。
-    this.hostManager.setResidentPin(pluginId, false)
+    if (!options?.preserveHost) {
+      this.clearResidentHostKeepalive(pluginId)
+    }
 
     // 真正销毁面板窗口
-    this.windowManager?.evictResident()
+    this.windowManager?.evictResident(pluginId)
 
     // 如果不是后台插件且没有其他窗口，销毁 Host
-    const hasWindow = this.windowManager?.hasOpenWindowsForPlugin(pluginId)
-    const isBackground = this.backgroundManager.isRunning(pluginId)
-    if (!options?.preserveHost && !hasWindow && !isBackground && this.useUtilityProcess && this.hostManager.isHostReady(pluginId)) {
-      void this.hostManager.destroyHost(pluginId)
+    if (!options?.preserveHost && !this.hasPluginRuntimeDemand(pluginId) && this.useUtilityProcess && this.hostManager.isHostReady(pluginId)) {
+      void this.hostManager.destroyHost(pluginId).then(() => {
+        this.workerOnloadedPlugins.delete(pluginId)
+      })
+    }
+  }
+
+  private evictAllResidentSessions(reason: string, options?: { preserveHost?: boolean }): void {
+    for (const pluginId of Array.from(this.residentSessions.keys())) {
+      this.evictResidentSession(pluginId, reason, options)
+    }
+  }
+
+  private enforceResidentLimit(): void {
+    while (this.residentSessions.size > PluginManager.RESIDENT_UI_CACHE_LIMIT) {
+      let oldestId: string | null = null
+      let oldestUsedAt = Number.POSITIVE_INFINITY
+      for (const session of this.residentSessions.values()) {
+        if (session.lastUsedAt < oldestUsedAt) {
+          oldestUsedAt = session.lastUsedAt
+          oldestId = session.pluginId
+        }
+      }
+      if (!oldestId) return
+      this.evictResidentSession(oldestId, 'lru-limit')
     }
   }
 
@@ -1286,37 +1335,42 @@ export class PluginManager {
   private suspendToResident(pluginId: string, featureCode: string, route?: string): void {
     if (!this.windowManager) return
 
-    // 先驱逐已有的 resident session（MRU=1，只保留最后一个）
-    if (this.residentSession) {
-      this.evictResidentSession(`replaced-by-plugin=${pluginId}`)
+    if (this.residentSessions.has(pluginId)) {
+      this.evictResidentSession(pluginId, 'replaced-by-same-plugin', { preserveHost: true })
     }
 
     const suspendedId = this.windowManager.suspendAttached()
     if (!suspendedId) return
+    if (suspendedId !== pluginId) {
+      log.warn(`[ResidentUI] suspended unexpected plugin | expected=${pluginId} | actual=${suspendedId}`)
+    }
 
     const now = Date.now()
     const ttlTimer = setTimeout(() => {
-      if (this.residentSession?.pluginId === pluginId) {
-        this.evictResidentSession('ttl-expired')
+      const current = this.residentSessions.get(suspendedId)
+      if (current?.ttlTimer === ttlTimer) {
+        this.evictResidentSession(suspendedId, 'ttl-expired')
       }
     }, PluginManager.RESIDENT_TTL_MS)
     ttlTimer.unref()
 
-    this.residentSession = {
-      pluginId,
+    this.residentSessions.set(suspendedId, {
+      pluginId: suspendedId,
       featureCode,
       route: this.normalizeResidentRoute(route),
       cachedAt: now,
       lastUsedAt: now,
       ttlTimer
-    }
+    })
 
-    log.info(`[ResidentUI] create | plugin=${pluginId} | ttl=${PluginManager.RESIDENT_TTL_MS}ms`)
+    this.enforceResidentLimit()
 
-    this.teardownResidentHost(pluginId)
+    log.info(`[ResidentUI] create | plugin=${suspendedId} | ttl=${PluginManager.RESIDENT_TTL_MS}ms | limit=${PluginManager.RESIDENT_UI_CACHE_LIMIT}`)
+
+    this.keepResidentHostWarm(suspendedId)
   }
 
-  private teardownResidentHost(pluginId: string): void {
+  private keepResidentHostWarm(pluginId: string): void {
     if (!this.useUtilityProcess) return
 
     const plugin = this.plugins.get(pluginId)
@@ -1330,24 +1384,61 @@ export class PluginManager {
       this.idleLoadTimers.delete(pluginId)
     }
 
+    const existingTimer = this.residentHostKeepaliveTimers.get(pluginId)
+    if (existingTimer) {
+      clearTimeout(existingTimer)
+    }
+
+    this.hostManager.setResidentPin(pluginId, true)
+
+    const keepaliveTimer = setTimeout(() => {
+      this.residentHostKeepaliveTimers.delete(pluginId)
+      this.hostManager.setResidentPin(pluginId, false)
+
+      if (!this.residentSessions.has(pluginId)) return
+      const hasWindow = this.windowManager?.hasOpenWindowsForPlugin(pluginId) === true
+      const isBackground = this.backgroundManager.isRunning(pluginId)
+      const isLoading = this.loadingPromises.has(pluginId)
+      if (hasWindow || isBackground || isLoading) return
+      if (!this.hostManager.isHostReady(pluginId)) return
+
+      this.workerOnloadedPlugins.delete(pluginId)
+
+      const teardown = this.hostManager.destroyHost(pluginId)
+        .then(() => {
+          log.info(`[ResidentUI] host destroyed after keepalive | plugin=${pluginId}`)
+        })
+        .catch((err) => {
+          log.warn(`[ResidentUI] failed to destroy host after keepalive | plugin=${pluginId}:`, err)
+        })
+        .finally(() => {
+          if (this.residentHostTeardownPromises.get(pluginId) === teardown) {
+            this.residentHostTeardownPromises.delete(pluginId)
+          }
+        })
+
+      this.residentHostTeardownPromises.set(pluginId, teardown)
+      log.info(`[ResidentUI] host teardown scheduled | plugin=${pluginId}`)
+    }, PluginManager.RESIDENT_HOST_KEEPALIVE_MS)
+    keepaliveTimer.unref()
+    this.residentHostKeepaliveTimers.set(pluginId, keepaliveTimer)
+
+    log.info(`[ResidentUI] host keepalive | plugin=${pluginId} | ttl=${PluginManager.RESIDENT_HOST_KEEPALIVE_MS}ms`)
+  }
+
+  private clearResidentHostKeepalive(pluginId: string): void {
+    const timer = this.residentHostKeepaliveTimers.get(pluginId)
+    if (timer) {
+      clearTimeout(timer)
+      this.residentHostKeepaliveTimers.delete(pluginId)
+    }
     this.hostManager.setResidentPin(pluginId, false)
-    this.workerOnloadedPlugins.delete(pluginId)
+  }
 
-    const teardown = this.hostManager.destroyHost(pluginId)
-      .then(() => {
-        log.info(`[ResidentUI] host destroyed | plugin=${pluginId}`)
-      })
-      .catch((err) => {
-        log.warn(`[ResidentUI] failed to destroy host | plugin=${pluginId}:`, err)
-      })
-      .finally(() => {
-        if (this.residentHostTeardownPromises.get(pluginId) === teardown) {
-          this.residentHostTeardownPromises.delete(pluginId)
-        }
-      })
-
-    this.residentHostTeardownPromises.set(pluginId, teardown)
-    log.info(`[ResidentUI] host teardown scheduled | plugin=${pluginId}`)
+  private clearAllResidentHostKeepalives(): void {
+    for (const pluginId of Array.from(this.residentHostKeepaliveTimers.keys())) {
+      this.clearResidentHostKeepalive(pluginId)
+    }
   }
 
   /**
@@ -1359,33 +1450,41 @@ export class PluginManager {
     input?: InputPayload,
     route?: string
   ): boolean {
-    if (!this.residentSession || this.residentSession.pluginId !== pluginId) {
-      return false
-    }
+    const session = this.residentSessions.get(pluginId)
+    if (!session) return false
     if (!this.windowManager) return false
 
-    const cachedRoute = this.normalizeResidentRoute(this.residentSession.route)
+    const cachedRoute = this.normalizeResidentRoute(session.route)
     const requestedRoute = this.normalizeResidentRoute(route)
-    if (this.residentSession.featureCode !== featureCode || cachedRoute !== requestedRoute) {
-      this.evictResidentSession('route-or-feature-mismatch', { preserveHost: true })
+    if (session.featureCode !== featureCode || cachedRoute !== requestedRoute) {
+      this.evictResidentSession(pluginId, 'route-or-feature-mismatch', { preserveHost: true })
       return false
     }
 
     const restored = this.windowManager.restoreAttachedIfResident(pluginId, featureCode, input, route)
     if (!restored) {
-      this.evictResidentSession('restore-failed', { preserveHost: true })
+      this.evictResidentSession(pluginId, 'restore-failed', { preserveHost: true })
       return false
     }
 
     // 恢复成功：插件回到 foreground-ui，清除 resident session 和 Host pin。
     // foreground 状态有 hasActiveWindow 保护，不需要额外 pin。
     // 下次关闭时 shouldSuspendToResident 会创建新的 session。
-    clearTimeout(this.residentSession.ttlTimer)
-    this.residentSession = null
-    this.hostManager.setResidentPin(pluginId, false)
+    clearTimeout(session.ttlTimer)
+    this.residentSessions.delete(pluginId)
+    this.clearResidentHostKeepalive(pluginId)
 
     log.info(`[ResidentUI] resume | plugin=${pluginId} | feature=${featureCode} | route=${route || ''} | ${formatPayloadTrace(input)}`)
     return true
+  }
+
+  private hasPluginRuntimeDemand(pluginId: string): boolean {
+    const hasWindow = this.windowManager?.hasOpenWindowsForPlugin(pluginId) === true
+    const isBackground = this.backgroundManager.isRunning(pluginId)
+    const isResident = this.residentSessions.has(pluginId) || this.hostManager.isResidentPinned(pluginId)
+    const isLoading = this.loadingPromises.has(pluginId)
+    const isPrewarming = this.prewarmState.has(pluginId)
+    return hasWindow || isBackground || isResident || isLoading || isPrewarming
   }
 
   private hasDetachedWindowForPlugin(pluginId: string): boolean {
@@ -1455,9 +1554,10 @@ export class PluginManager {
     const pluginId = plugin.id
 
     // 驱逐 resident-ui 缓存
-    if (this.residentSession?.pluginId === pluginId) {
-      this.evictResidentSession('disabled')
+    if (this.residentSessions.has(pluginId)) {
+      this.evictResidentSession(pluginId, 'disabled')
     }
+    this.cancelPrewarmEntry(pluginId)
 
     // 停止后台运行（如果正在后台运行）
     if (this.backgroundManager.isRunning(pluginId)) {
@@ -1508,9 +1608,10 @@ export class PluginManager {
 
     try {
       // 驱逐 resident-ui 缓存
-      if (this.residentSession?.pluginId === pluginId) {
-        this.evictResidentSession('uninstalled')
+      if (this.residentSessions.has(pluginId)) {
+        this.evictResidentSession(pluginId, 'uninstalled')
       }
+      this.cancelPrewarmEntry(pluginId)
 
       // 关闭插件窗口，并抑制窗口关闭回调触发自动后台化
       this.closePluginWindows(pluginId, true)
@@ -1611,11 +1712,10 @@ export class PluginManager {
   async destroy(): Promise<void> {
     this.isReloading = true
     try {
-      // 清理 resident-ui session
-      if (this.residentSession) {
-        clearTimeout(this.residentSession.ttlTimer)
-        this.residentSession = null
-      }
+      // 清理 resident-ui / prewarm 缓存
+      this.evictAllResidentSessions('destroy')
+      this.clearAllResidentHostKeepalives()
+      this.cancelPrewarm()
 
       // 停止所有监听
       this.clearWatchers()
@@ -1795,9 +1895,10 @@ export class PluginManager {
     if (!plugin) return
 
     // 驱逐 resident-ui 缓存（代码已变，Renderer 上下文无效）
-    if (this.residentSession?.pluginId === pluginId) {
-      this.evictResidentSession('code-reload')
+    if (this.residentSessions.has(pluginId)) {
+      this.evictResidentSession(pluginId, 'code-reload')
     }
+    this.cancelPrewarmEntry(pluginId)
 
     // 1. 如果有运行中的 Host，销毁它（强制下次运行重新加载代码）
     if (this.hostManager.isHostReady(pluginId)) {
@@ -1849,9 +1950,10 @@ export class PluginManager {
     nextPlugin.isDev = currentPlugin.isDev
 
     // 驱逐 resident-ui 缓存
-    if (this.residentSession?.pluginId === pluginId) {
-      this.evictResidentSession('metadata-reload')
+    if (this.residentSessions.has(pluginId)) {
+      this.evictResidentSession(pluginId, 'metadata-reload')
     }
+    this.cancelPrewarmEntry(pluginId)
 
     const wasInitialized = this.initializedPlugins.has(pluginId)
     const wasBackgroundRunning = this.backgroundManager.isRunning(pluginId)
@@ -2049,9 +2151,10 @@ export class PluginManager {
 
     try {
       // 0. 驱逐 resident-ui 缓存
-      if (this.residentSession?.pluginId === pluginId) {
-        this.evictResidentSession('manual-stop')
+      if (this.residentSessions.has(pluginId)) {
+        this.evictResidentSession(pluginId, 'manual-stop')
       }
+      this.cancelPrewarmEntry(pluginId)
 
       // 1. 关闭插件窗口（如果有）
       this.closePluginWindows(pluginId, !keepBackground)
