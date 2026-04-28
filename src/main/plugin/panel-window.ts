@@ -11,6 +11,7 @@ import { PLUGIN_RENDERER_V8_CACHE_OPTIONS } from './plugin-web-preferences'
 import { ATTACHED_PANEL_HEIGHT, ATTACHED_PANEL_MIN_OVERFLOW_HEIGHT } from '../constants/panel-window'
 import {
     applyWindowsFramelessSurface,
+    applyWindowsFramelessSurfaceToWebContents,
     getWindowsFramelessSurfaceInsets,
     getWindowsFramelessSurfaceVisibleBounds,
     getWindowsFramelessSurfaceWindowBounds,
@@ -427,6 +428,7 @@ export class PluginPanelWindow {
                 v8CacheOptions: PLUGIN_RENDERER_V8_CACHE_OPTIONS
             }
         })
+        pluginView.setBackgroundColor('#00000000')
 
         this.pluginView = pluginView
         panelWindow.contentView.addChildView(pluginView)
@@ -472,6 +474,16 @@ export class PluginPanelWindow {
             }
         }
 
+        const applyAttachedPanelSurface = async () => {
+            if (!useWindowsFramelessSurface) return
+            if (capturedWin.isDestroyed() || capturedWebContents.isDestroyed()) return
+            if (this.panelWindow !== capturedWin || this.pluginView !== capturedView) return
+            await applyWindowsFramelessSurface(capturedWin, { resizeMode: 'bottom', contentBackground: 'transparent' })
+            if (capturedWin.isDestroyed() || capturedWebContents.isDestroyed()) return
+            if (this.panelWindow !== capturedWin || this.pluginView !== capturedView) return
+            await applyWindowsFramelessSurfaceToWebContents(capturedWebContents, { resizeMode: 'bottom' })
+        }
+
         const showPanel = async (reason: string) => {
             if (panelShown) return
             panelShown = true
@@ -479,7 +491,7 @@ export class PluginPanelWindow {
             if (this.panelWindow !== capturedWin || this.pluginView !== capturedView) return
 
             if (useWindowsFramelessSurface) {
-                await applyWindowsFramelessSurface(capturedWin, { resizeMode: 'bottom' })
+                await applyAttachedPanelSurface()
                 if (capturedWin.isDestroyed() || this.panelWindow !== capturedWin || this.pluginView !== capturedView) return
             }
 
@@ -533,7 +545,7 @@ export class PluginPanelWindow {
                 return
             }
             if (useWindowsFramelessSurface) {
-                await applyWindowsFramelessSurface(capturedWin, { resizeMode: 'bottom' })
+                await applyAttachedPanelSurface()
             }
             if (loadNum === 1) {
                 sendInitialPluginInit('did-finish-load')

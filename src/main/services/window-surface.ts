@@ -1,4 +1,4 @@
-import type { BrowserWindow, Rectangle } from 'electron'
+import type { BrowserWindow, Rectangle, WebContents } from 'electron'
 
 export interface WindowSurfaceInsets {
   top: number
@@ -43,6 +43,7 @@ const WINDOW_SURFACE_SHADOW_DARK = [
 export interface ApplyWindowSurfaceOptions {
   includeTitleBar?: boolean
   resizeMode?: 'none' | 'bottom' | 'all'
+  contentBackground?: 'theme' | 'transparent'
 }
 
 interface ResizeHandleLayout {
@@ -87,12 +88,18 @@ export function getWindowsFramelessSurfaceWindowSize(width: number, height: numb
   }
 }
 
-function buildWindowSurfaceCss(includeTitleBar: boolean): string {
+function buildWindowSurfaceCss(includeTitleBar: boolean, contentBackground: 'theme' | 'transparent'): string {
   const { top, right, bottom, left } = WINDOWS_FRAMELESS_SURFACE_INSETS
   const contentTopPadding = top + (includeTitleBar ? WINDOW_SURFACE_TITLEBAR_HEIGHT_PX : 0)
   const contentRadius = includeTitleBar
     ? `0 0 ${WINDOW_SURFACE_RADIUS_PX}px ${WINDOW_SURFACE_RADIUS_PX}px`
     : `${WINDOW_SURFACE_RADIUS_PX}px`
+  const contentBackgroundLight = contentBackground === 'transparent'
+    ? 'transparent'
+    : WINDOW_SURFACE_BACKGROUND_LIGHT
+  const contentBackgroundDark = contentBackground === 'transparent'
+    ? 'transparent'
+    : WINDOW_SURFACE_BACKGROUND_DARK
   // body already uses border-box + padding to reserve top/bottom insets, so host should
   // fill the body content box directly instead of subtracting those insets again.
   const hostHeight = '100%'
@@ -139,13 +146,13 @@ body {
   overflow: hidden !important;
   border-radius: ${contentRadius} !important;
   z-index: 1 !important;
-  background: ${WINDOW_SURFACE_BACKGROUND_LIGHT} !important;
+  background: ${contentBackgroundLight} !important;
 }
 
 .dark #mulby-window-content-host,
 .light.dark #mulby-window-content-host,
 :root.dark #mulby-window-content-host {
-  background: ${WINDOW_SURFACE_BACKGROUND_DARK} !important;
+  background: ${contentBackgroundDark} !important;
 }
 
 ${includeTitleBar ? `
@@ -416,9 +423,20 @@ export async function applyWindowsFramelessSurface(
   if (!shouldUseWindowsFramelessSurface()) return
   if (win.isDestroyed()) return
 
+  await applyWindowsFramelessSurfaceToWebContents(win.webContents, options)
+}
+
+export async function applyWindowsFramelessSurfaceToWebContents(
+  webContents: WebContents,
+  options: ApplyWindowSurfaceOptions = {}
+): Promise<void> {
+  if (!shouldUseWindowsFramelessSurface()) return
+  if (webContents.isDestroyed()) return
+
   const includeTitleBar = options.includeTitleBar === true
   const resizeMode = options.resizeMode ?? 'all'
-  await win.webContents.insertCSS(buildWindowSurfaceCss(includeTitleBar))
-  await win.webContents.insertCSS(buildWindowResizeCss(resizeMode))
-  await win.webContents.executeJavaScript(buildWindowSurfaceScript(includeTitleBar, resizeMode))
+  const contentBackground = options.contentBackground ?? 'theme'
+  await webContents.insertCSS(buildWindowSurfaceCss(includeTitleBar, contentBackground))
+  await webContents.insertCSS(buildWindowResizeCss(resizeMode))
+  await webContents.executeJavaScript(buildWindowSurfaceScript(includeTitleBar, resizeMode))
 }
