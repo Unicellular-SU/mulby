@@ -91,11 +91,11 @@ export default function SettingsView({
   }, [])
 
   useEffect(() => {
-    if (section === 'general') return
+    if (section === 'general' || section === 'superPanel') return
     if (activeRecordings <= 0) return
     setActiveRecordings(0)
     void window.mulby.settings.resumeShortcuts().then(setShortcutStatus).catch(() => {
-      // 离开通用设置页时恢复快捷键
+      // 离开可录制快捷键的设置页时恢复快捷键
     })
   }, [activeRecordings, section])
 
@@ -433,6 +433,8 @@ export default function SettingsView({
                   settings={settings}
                   updateSettings={updateSettings}
                   cardClass={cardClass}
+                  onRecordStart={handleRecordStart}
+                  onRecordEnd={handleRecordEnd}
                 />
               )}
 

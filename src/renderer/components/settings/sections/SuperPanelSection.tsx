@@ -6,11 +6,14 @@ import type {
   SuperPanelMouseButton,
   DoubleTapModifier
 } from '../../../../shared/types/settings'
+import ShortcutInput from '../ShortcutInput'
 
 interface SuperPanelSectionProps {
   settings: AppSettings
   updateSettings: (partial: Partial<AppSettings>) => Promise<void>
   cardClass: string
+  onRecordStart: () => Promise<void> | void
+  onRecordEnd: () => Promise<void> | void
 }
 
 // ==================== 内联通用组件 ====================
@@ -94,14 +97,17 @@ const MODIFIER_OPTIONS: { value: DoubleTapModifier; label: string }[] = [
 function TriggerSection({
   superPanel,
   onUpdate,
-  cardClass
+  cardClass,
+  onRecordStart,
+  onRecordEnd
 }: {
   superPanel: SuperPanelSettings
   onUpdate: (patch: Partial<SuperPanelSettings>) => void
   cardClass: string
+  onRecordStart: () => Promise<void> | void
+  onRecordEnd: () => Promise<void> | void
 }) {
   const [longPressInput, setLongPressInput] = useState('')
-  const [acceleratorInput, setAcceleratorInput] = useState('')
   const { trigger } = superPanel
 
   return (
@@ -162,36 +168,15 @@ function TriggerSection({
       {/* 快捷键 - keyboard */}
       {trigger.type === 'keyboard' && (
         <div className="space-y-2">
-          <div className="text-xs text-slate-500 dark:text-slate-400">快捷键组合</div>
-          <div className="flex items-center gap-2">
-            <input
-              type="text"
-              placeholder="例如: Alt+Q"
-              value={acceleratorInput || trigger.accelerator || ''}
-              onChange={(e) => setAcceleratorInput(e.target.value)}
-              onBlur={() => {
-                const val = acceleratorInput.trim()
-                if (val) {
-                  onUpdate({ trigger: { ...trigger, accelerator: val } })
-                }
-                setAcceleratorInput('')
-              }}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') {
-                  const val = acceleratorInput.trim()
-                  if (val) {
-                    onUpdate({ trigger: { ...trigger, accelerator: val } })
-                  }
-                  setAcceleratorInput('')
-                }
-              }}
-              disabled={!superPanel.enabled}
-              className="w-48 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm text-slate-900 dark:border-slate-700 dark:bg-slate-900 dark:text-white disabled:opacity-60"
-            />
-          </div>
-          <div className="text-xs text-slate-400 dark:text-slate-500">
-            使用 Electron Accelerator 格式，如 Alt+Q、CommandOrControl+Shift+Space
-          </div>
+          <ShortcutInput
+            variant="inline"
+            label="快捷键组合"
+            description="点击录制后按下快捷键组合，按 Esc 取消。"
+            value={trigger.accelerator || ''}
+            onChange={(accelerator) => onUpdate({ trigger: { ...trigger, accelerator } })}
+            onRecordStart={onRecordStart}
+            onRecordEnd={onRecordEnd}
+          />
         </div>
       )}
 
@@ -420,7 +405,9 @@ function AdvancedSection({
 export default function SuperPanelSection({
   settings,
   updateSettings,
-  cardClass
+  cardClass,
+  onRecordStart,
+  onRecordEnd
 }: SuperPanelSectionProps) {
   const superPanel = settings.superPanel
   const [isMac, setIsMac] = useState(false)
@@ -514,6 +501,8 @@ export default function SuperPanelSection({
             superPanel={superPanel}
             onUpdate={handleUpdate}
             cardClass={cardClass}
+            onRecordStart={onRecordStart}
+            onRecordEnd={onRecordEnd}
           />
 
           <BlockedAppsSection
