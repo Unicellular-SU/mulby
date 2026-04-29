@@ -748,7 +748,10 @@ export class PluginWindowManager {
       }
       if (useWindowsFramelessSurface) {
         // 标题栏已独立，不需要 surface 注入 padding-top
-        await applyWindowsFramelessSurface(win, { includeTitleBar: false })
+        await applyWindowsFramelessSurface(win, {
+          includeTitleBar: false,
+          contentBackground: windowConfig.transparent ? 'transparent' : 'theme'
+        })
         if (win.isDestroyed()) return
       }
       // 应用 manifest.window.opacity 初始透明度
@@ -764,7 +767,10 @@ export class PluginWindowManager {
     // 等待插件内容加载完成后，发送 plugin:init 和 theme 信息
     pluginWebContents.on('did-finish-load', async () => {
       if (useWindowsFramelessSurface && !win.isDestroyed()) {
-        await applyWindowsFramelessSurface(win, { includeTitleBar: false })
+        await applyWindowsFramelessSurface(win, {
+          includeTitleBar: false,
+          contentBackground: windowConfig.transparent ? 'transparent' : 'theme'
+        })
       }
       // 延迟确保 React useEffect 已注册 IPC 回调
       setTimeout(() => {

@@ -11,6 +11,7 @@
 import { join } from 'path'
 import { app, nativeImage, screen } from 'electron'
 import log from 'electron-log'
+import { nativePhysicalRegionToDip, type RegionBounds } from './screen-coordinate-utils'
 
 // 原生模块导出的 API 类型
 interface NativeScreenCaptureAddon {
@@ -370,15 +371,25 @@ export function nativeStartRegionCapture(): Promise<{
             height: result.imageHeight
           })
           const pngBuffer = image.toPNG()
+          const rawBounds: RegionBounds = {
+            x: result.x || 0,
+            y: result.y || 0,
+            width: result.width || result.imageWidth,
+            height: result.height || result.imageHeight
+          }
+          const nativeDisplays = typeof addon.getDisplays === 'function' ? addon.getDisplays() : []
+          const electronDisplays = screen.getAllDisplays().map(display => ({
+            id: display.id,
+            bounds: display.bounds,
+            scaleFactor: display.scaleFactor
+          }))
+          const bounds = process.platform === 'win32'
+            ? nativePhysicalRegionToDip(rawBounds, nativeDisplays, electronDisplays)
+            : rawBounds
           const dataUrl = `data:image/png;base64,${pngBuffer.toString('base64')}`
           resolve({
             dataUrl,
-            bounds: {
-              x: result.x || 0,
-              y: result.y || 0,
-              width: result.width || result.imageWidth,
-              height: result.height || result.imageHeight
-            }
+            bounds
           })
         } catch (err) {
           log.error('[NativeScreenCapture] startRegionCapture 转换失败:', err)
