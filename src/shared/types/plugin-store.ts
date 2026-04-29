@@ -19,6 +19,7 @@ export interface PluginStorePlugin {
   publisher?: string
   description: string
   downloadUrl: string
+  type?: string
   icon?: PluginStoreIcon
   banner?: string
   screenshots?: PluginStoreScreenshot[]

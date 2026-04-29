@@ -468,6 +468,7 @@ export class PluginStoreService {
 
       const author = String(candidate.author || '').trim()
       const publisher = String(candidate.publisher || '').trim()
+      const type = this.resolveOptionalText(candidate.type)
       const lastPackageTime = String(candidate.lastPackageTime || '').trim()
       const icon = this.resolveStoreIcon(candidate.icon ?? candidate.iconUrl, sourceUrl)
       const banner = this.resolveOptionalUrl(candidate.banner ?? candidate.bannerUrl, sourceUrl)
@@ -491,6 +492,7 @@ export class PluginStoreService {
         version: pluginVersion,
         description: summary,
         downloadUrl,
+        type,
         author: author || undefined,
         publisher: publisher || undefined,
         icon,
