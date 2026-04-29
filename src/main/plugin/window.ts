@@ -610,6 +610,10 @@ export class PluginWindowManager {
     const windowType = windowConfig.type || 'default'
     const showTitleBar = shouldShowTitleBar(windowConfig)
     const isFullscreen = windowType === 'fullscreen'
+    const captureRegion = input?.attachments?.find(attachment => attachment.kind === 'image' && attachment.capture?.region)?.capture?.region
+    const shouldPositionAtCaptureRegion = windowConfig.position === 'capture-region' && captureRegion
+    const shouldFitCaptureRegion = (windowConfig.fit === 'capture-region' || windowConfig.fit === 'capture-region-with-toolbar') && captureRegion
+    const captureToolbarHeight = Math.max(0, windowConfig.captureToolbarHeight ?? 56)
 
     // 获取插件 preload 路径（支持自定义 preload）
     const basePreloadPath = join(__dirname, '../preload/index.js')
@@ -623,22 +627,33 @@ export class PluginWindowManager {
     const titlebarPreloadPath = join(__dirname, '../preload/titlebar.js')
 
     // ===== WebContentsView 架构：BrowserWindow 加载标题栏，插件作为子视图 =====
-    const windowWidth = isFullscreen ? fullscreenBounds!.width : toWindowWidth(windowConfig.width ?? 500)!
-    const windowHeight = isFullscreen ? fullscreenBounds!.height : toWindowHeight((windowConfig.height ?? 400) + (showTitleBar ? DETACHED_TITLEBAR_HEIGHT : 0))!
+    const contentWidth = shouldFitCaptureRegion ? captureRegion.width : (windowConfig.width ?? 500)
+    const contentHeight = shouldFitCaptureRegion
+      ? captureRegion.height + (windowConfig.fit === 'capture-region-with-toolbar' ? captureToolbarHeight : 0)
+      : (windowConfig.height ?? 400)
+    const windowWidth = isFullscreen ? fullscreenBounds!.width : toWindowWidth(contentWidth)!
+    const windowHeight = isFullscreen ? fullscreenBounds!.height : toWindowHeight(contentHeight + (showTitleBar ? DETACHED_TITLEBAR_HEIGHT : 0))!
+    const windowX = isFullscreen ? fullscreenBounds!.x : (shouldPositionAtCaptureRegion ? captureRegion.x : undefined)
+    const windowY = isFullscreen ? fullscreenBounds!.y : (shouldPositionAtCaptureRegion ? captureRegion.y : undefined)
+    const minContentWidth = shouldFitCaptureRegion ? Math.max(1, Math.min(contentWidth, windowConfig.minWidth ?? contentWidth)) : (windowConfig.minWidth ?? 300)
+    const minContentHeight = shouldFitCaptureRegion ? Math.max(1, Math.min(contentHeight, windowConfig.minHeight ?? contentHeight)) : (windowConfig.minHeight ?? 200)
+    const maxContentWidth = shouldFitCaptureRegion && windowConfig.maxWidth != null ? Math.max(contentWidth, windowConfig.maxWidth) : windowConfig.maxWidth
+    const maxContentHeight = shouldFitCaptureRegion && windowConfig.maxHeight != null ? Math.max(contentHeight, windowConfig.maxHeight) : windowConfig.maxHeight
 
     const win = new BrowserWindow({
       width: windowWidth,
       height: windowHeight,
-      x: isFullscreen ? fullscreenBounds!.x : undefined,
-      y: isFullscreen ? fullscreenBounds!.y : undefined,
-      minWidth: isFullscreen ? undefined : toWindowWidth(windowConfig.minWidth ?? 300)!,
-      minHeight: isFullscreen ? undefined : toWindowHeight((windowConfig.minHeight ?? 200) + (showTitleBar ? DETACHED_TITLEBAR_HEIGHT : 0))!,
-      maxWidth: isFullscreen ? undefined : toWindowWidth(windowConfig.maxWidth),
-      maxHeight: isFullscreen ? undefined : toWindowHeight(windowConfig.maxHeight != null ? windowConfig.maxHeight + (showTitleBar ? DETACHED_TITLEBAR_HEIGHT : 0) : undefined),
+      x: windowX,
+      y: windowY,
+      minWidth: isFullscreen ? undefined : toWindowWidth(minContentWidth)!,
+      minHeight: isFullscreen ? undefined : toWindowHeight(minContentHeight + (showTitleBar ? DETACHED_TITLEBAR_HEIGHT : 0))!,
+      maxWidth: isFullscreen ? undefined : toWindowWidth(maxContentWidth),
+      maxHeight: isFullscreen ? undefined : toWindowHeight(maxContentHeight != null ? maxContentHeight + (showTitleBar ? DETACHED_TITLEBAR_HEIGHT : 0) : undefined),
       show: false,
       frame: false,
       fullscreen: isFullscreen,
       fullscreenable: isFullscreen,
+      alwaysOnTop: windowConfig.alwaysOnTop,
       thickFrame: !useWindowsFramelessSurface,
       backgroundColor: (windowConfig.transparent || useWindowsFramelessSurface) ? '#00000000' : backgroundColor,
       transparent: windowConfig.transparent || useWindowsFramelessSurface,

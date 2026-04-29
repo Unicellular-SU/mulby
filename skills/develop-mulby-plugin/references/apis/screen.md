@@ -216,6 +216,37 @@ if (dataUrl) {
 
 **返回值**: `string | null`
 
+### preCapture 元数据
+[Renderer]
+当插件功能在 `manifest.json` 中声明 `preCapture: 'region' | 'fullscreen'` 时，宿主会在打开插件窗口前完成截图，并把截图作为 `attachments[0]` 注入 `window.mulby.onPluginInit()`。
+
+```typescript
+interface InputAttachment {
+  kind: 'image'
+  dataUrl: string
+  capture?: {
+    type: 'region' | 'fullscreen'
+    region?: {
+      x: number
+      y: number
+      width: number
+      height: number
+      displayId?: number
+      scaleFactor?: number
+    }
+    display?: {
+      id: number
+      bounds: { x: number; y: number; width: number; height: number }
+      workArea: { x: number; y: number; width: number; height: number }
+      scaleFactor: number
+      isPrimary: boolean
+    }
+  }
+}
+```
+
+`region` 使用屏幕逻辑坐标，可直接配合 `window.setBounds()` 或 manifest `window.position: 'capture-region'` 使用。macOS 区域截图会优先使用系统 `screencapture` 原生 UI，因此当前可能只返回图片而没有区域坐标；插件必须对 `capture.region` 缺失做居中或手动定位回退，避免平台截图能力降级时无法打开编辑器。
+
 ### colorPick()
 [Renderer]
 屏幕取色，返回颜色信息。

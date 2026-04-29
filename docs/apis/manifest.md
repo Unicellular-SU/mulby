@@ -136,8 +136,37 @@
 | `maxWidth` / `maxHeight` | `number` | 窗口可被放大的最大尺寸范围。 |
 | `type` | `string` | 窗口结构类型。可选：`default` (常规标题栏), `borderless` (无边框的定制), `fullscreen` (全屏沉浸应用)。 |
 | `titleBar` | `boolean` | 显式强制决定是否展示带有 Mulby 原生风格标题栏。 |
+| `alwaysOnTop` | `boolean` | detached 窗口初始是否置顶。适合截图标注工具条、浮动控制面板等短时窗口。 |
 | `opacity` | `number` | 初始时窗口的整体透明度占比。支持范围 `0.0` - `1.0`。 |
 | `transparent` | `boolean` | 创建时就开启窗口层穿透方案，用以实现类似异形悬浮窗的设计（需要搭配 CSS 背景 `transparent` 运作）。 |
+| `position` | `'default' \| 'capture-region'` | 当功能使用 `preCapture: 'region'` 时，可将 detached 窗口左上角定位到截图区域左上角。无法获取截图区域坐标的平台会回退到默认定位。 |
+| `fit` | `'default' \| 'capture-region' \| 'capture-region-with-toolbar'` | 当功能使用 `preCapture: 'region'` 时，可将 detached 窗口尺寸适配到截图区域；`capture-region-with-toolbar` 会额外增加工具条高度。 |
+| `captureToolbarHeight` | `number` | `fit: 'capture-region-with-toolbar'` 时追加的工具条高度，默认 `56`。 |
+
+截图标注类插件的典型配置：
+
+```json
+{
+  "features": [
+    {
+      "code": "annotate",
+      "explain": "截图标注",
+      "mode": "detached",
+      "preCapture": "region",
+      "cmds": [{ "type": "keyword", "value": "截图标注" }]
+    }
+  ],
+  "window": {
+    "type": "borderless",
+    "titleBar": false,
+    "transparent": true,
+    "alwaysOnTop": true,
+    "position": "capture-region",
+    "fit": "capture-region-with-toolbar",
+    "captureToolbarHeight": 56
+  }
+}
+```
 
 ---
 

@@ -71,6 +71,29 @@ export interface ResolvedIcon {
 // 输入附件
 export type InputAttachmentKind = 'file' | 'image'
 
+export interface CaptureRegionInfo {
+  x: number
+  y: number
+  width: number
+  height: number
+  displayId?: number
+  scaleFactor?: number
+}
+
+export interface CaptureDisplayInfo {
+  id: number
+  bounds: { x: number; y: number; width: number; height: number }
+  workArea: { x: number; y: number; width: number; height: number }
+  scaleFactor: number
+  isPrimary: boolean
+}
+
+export interface InputAttachmentCaptureInfo {
+  type: 'region' | 'fullscreen'
+  region?: CaptureRegionInfo
+  display?: CaptureDisplayInfo
+}
+
 export interface InputAttachment {
   id: string
   name: string
@@ -80,6 +103,7 @@ export interface InputAttachment {
   ext?: string
   path?: string
   dataUrl?: string
+  capture?: InputAttachmentCaptureInfo
 }
 
 /** 系统前台窗口信息 */
@@ -307,8 +331,12 @@ export interface WindowOptions {
   maxHeight?: number   // 最大高度
   type?: WindowType    // 窗口类型：default(带标题栏)、borderless(无边框)、fullscreen(全屏)
   titleBar?: boolean   // 是否显示 Mulby 标题栏（default 类型默认 true，其他类型默认 false）
+  alwaysOnTop?: boolean // detached 窗口初始置顶状态
   opacity?: number     // 窗口透明度（0.0 完全透明 ~ 1.0 完全不透明，运行时可调）
   transparent?: boolean // 窗口背景透明（配合 CSS background: transparent 实现穿透效果，仅创建时生效）
+  position?: 'default' | 'capture-region' // preCapture 区域截图后，按截图区域定位窗口
+  fit?: 'default' | 'capture-region' | 'capture-region-with-toolbar' // preCapture 区域截图后，按截图区域调整窗口大小
+  captureToolbarHeight?: number // fit 为 capture-region-with-toolbar 时追加的工具条高度
 }
 
 // Phase 4: 资源限制配置

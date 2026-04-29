@@ -21,6 +21,10 @@ export function buildReactReadme(name: string) {
 
 - \`${name}\` - 主功能
 
+## 窗口与截图
+
+React 模板适合可视化插件。需要独立窗口时，将功能配置为 \`mode: "detached"\`；需要截图后打开标注界面时，可组合 \`preCapture: "region"\` 和窗口配置 \`type: "borderless"\`、\`transparent: true\`、\`position: "capture-region"\`、\`fit: "capture-region-with-toolbar"\`。
+
 ## 开发
 
 > **💡 提示**: 推荐使用 [pnpm](https://pnpm.io/) 进行依赖管理。若插件放置于基于 pnpm workspace 的父仓库（如 \`plugins/<name>/\` 目录），通常建议直接在**仓库根目录**执行一次 \`pnpm install\`。也可以在当前插件目录单独执行。

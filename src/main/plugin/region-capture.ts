@@ -31,8 +31,20 @@ interface RegionCaptureWindow {
   bounds: { x: number; y: number; width: number; height: number }
 }
 
+export interface RegionCaptureResult {
+  dataUrl: string
+  region?: { x: number; y: number; width: number; height: number; displayId?: number; scaleFactor?: number }
+  display?: {
+    id: number
+    bounds: { x: number; y: number; width: number; height: number }
+    workArea: { x: number; y: number; width: number; height: number }
+    scaleFactor: number
+    isPrimary: boolean
+  }
+}
+
 let captureWindows: RegionCaptureWindow[] = []
-let captureResolve: ((result: string | null) => void) | null = null
+let captureResolve: ((result: RegionCaptureResult | null) => void) | null = null
 
 // 每个显示器独立的快照（displayId → dataUrl）
 const displaySnapshots = new Map<number, string>()
@@ -239,7 +251,7 @@ async function captureSnapshotForDisplay(display: Electron.Display, displayIndex
 /**
  * Windows/Linux: 逐屏预截取 → 显示覆盖窗口 → 用户选区 → 从快照裁剪
  */
-async function captureRegionWithOverlay(): Promise<string | null> {
+async function captureRegionWithOverlay(): Promise<RegionCaptureResult | null> {
   log.info('[RegionCapture] 开始预截取 + 覆盖窗口方案...')
 
   // 如果已有截图窗口，先关闭
@@ -344,9 +356,19 @@ async function captureRegionWithOverlay(): Promise<string | null> {
 
 // 短期缓存：preCapture 与插件自身调用 screenCapture 的去重
 // preCapture 先截图 → 插件拿到 attachment → 插件又调 screenCapture → 直接返回缓存
-let cachedCaptureResult: string | null = null
+let cachedCaptureResult: RegionCaptureResult | null = null
 let cachedCaptureTime = 0
 const CAPTURE_CACHE_TTL = 3000 // 3 秒内的第二次调用直接返回缓存
+
+function toCaptureDisplayInfo(display: Electron.Display): RegionCaptureResult['display'] {
+  return {
+    id: display.id,
+    bounds: display.bounds,
+    workArea: display.workArea,
+    scaleFactor: display.scaleFactor,
+    isPrimary: display.id === screen.getPrimaryDisplay().id
+  }
+}
 
 /**
  * 开始区域截图（跨平台入口）
@@ -360,12 +382,36 @@ export async function startRegionCapture(): Promise<string | null> {
     log.info('[RegionCapture] 返回缓存结果（去重，距上次截图', now - cachedCaptureTime, 'ms）')
     const cached = cachedCaptureResult
     cachedCaptureResult = null // 一次性使用
-    return cached
+    return cached.dataUrl
   }
 
   if (process.platform === 'darwin') {
     // macOS: 使用系统 screencapture 命令（原生 UI，最佳体验）
     return captureRegionMacOS()
+  }
+
+  const result = await startRegionCaptureDetailed()
+  return result?.dataUrl ?? null
+}
+
+/**
+ * 开始区域截图，返回截图图片和可用的屏幕坐标元数据。
+ */
+export async function startRegionCaptureDetailed(): Promise<RegionCaptureResult | null> {
+  log.info('[RegionCapture] 开始区域截图（含元数据）...')
+
+  const now = Date.now()
+  if (cachedCaptureResult && (now - cachedCaptureTime) < CAPTURE_CACHE_TTL) {
+    log.info('[RegionCapture] 返回缓存详细结果（距上次截图', now - cachedCaptureTime, 'ms）')
+    const cached = cachedCaptureResult
+    cachedCaptureResult = null
+    return cached
+  }
+
+  if (process.platform === 'darwin') {
+    // macOS: 保持系统原生截图体验；screencapture 不返回选区坐标，所以这里仅返回图片。
+    const dataUrl = await captureRegionMacOS()
+    return dataUrl ? { dataUrl } : null
   }
 
   if (process.platform === 'win32' && isNativeScreenCaptureAvailable()) {
@@ -374,10 +420,20 @@ export async function startRegionCapture(): Promise<string | null> {
     const result = await nativeStartRegionCapture()
     if (result) {
       log.info('[RegionCapture] 原生区域截图成功, bounds:', result.bounds)
+      const display = screen.getDisplayMatching(result.bounds)
+      const detailed: RegionCaptureResult = {
+        dataUrl: result.dataUrl,
+        region: {
+          ...result.bounds,
+          displayId: display.id,
+          scaleFactor: display.scaleFactor
+        },
+        display: toCaptureDisplayInfo(display)
+      }
       // 缓存结果，防止插件重复调用
-      cachedCaptureResult = result.dataUrl
+      cachedCaptureResult = detailed
       cachedCaptureTime = Date.now()
-      return result.dataUrl
+      return detailed
     }
     log.info('[RegionCapture] 原生区域截图返回 null（用户取消或失败）')
     return null
@@ -439,7 +495,18 @@ export async function completeRegionCapture(region: {
         const dataUrl = `data:image/png;base64,${resultBase64}`
 
         if (captureResolve) {
-          captureResolve(dataUrl)
+          captureResolve({
+            dataUrl,
+            region: {
+              x: region.x,
+              y: region.y,
+              width: region.width,
+              height: region.height,
+              displayId: targetDisplay.id,
+              scaleFactor: targetDisplay.scaleFactor
+            },
+            display: toCaptureDisplayInfo(targetDisplay)
+          })
           captureResolve = null
         }
         displaySnapshots.clear()
@@ -454,7 +521,19 @@ export async function completeRegionCapture(region: {
     const dataUrl = `data:image/png;base64,${base64}`
 
     if (captureResolve) {
-      captureResolve(dataUrl)
+      const targetDisplay = screen.getDisplayMatching(region)
+      captureResolve({
+        dataUrl,
+        region: {
+          x: region.x,
+          y: region.y,
+          width: region.width,
+          height: region.height,
+          displayId: targetDisplay.id,
+          scaleFactor: targetDisplay.scaleFactor
+        },
+        display: toCaptureDisplayInfo(targetDisplay)
+      })
       captureResolve = null
     }
   } catch (error) {

@@ -930,10 +930,19 @@ export class PluginManager {
 
       try {
         let capturedDataUrl: string | null = null
+        let captureInfo: InputPayload['attachments'][number]['capture'] | undefined
 
         if (feature.preCapture === 'region') {
-          const { startRegionCapture } = await import('./region-capture')
-          capturedDataUrl = await startRegionCapture()
+          const { startRegionCaptureDetailed } = await import('./region-capture')
+          const result = await startRegionCaptureDetailed()
+          capturedDataUrl = result?.dataUrl ?? null
+          if (result) {
+            captureInfo = {
+              type: 'region',
+              region: result.region,
+              display: result.display
+            }
+          }
         } else if (feature.preCapture === 'fullscreen') {
           const { pluginScreen } = await import('./screen')
           const primaryDisplay = pluginScreen.getPrimaryDisplay()
@@ -942,6 +951,21 @@ export class PluginManager {
           const buffer = await pluginScreen.captureScreen({ sourceId: match?.id, format: 'png' })
           const base64 = buffer.toString('base64')
           capturedDataUrl = `data:image/png;base64,${base64}`
+          captureInfo = {
+            type: 'fullscreen',
+            region: {
+              ...primaryDisplay.bounds,
+              displayId: primaryDisplay.id,
+              scaleFactor: primaryDisplay.scaleFactor
+            },
+            display: {
+              id: primaryDisplay.id,
+              bounds: primaryDisplay.bounds,
+              workArea: primaryDisplay.workArea,
+              scaleFactor: primaryDisplay.scaleFactor,
+              isPrimary: primaryDisplay.isPrimary
+            }
+          }
         }
 
         // 用户取消截图 → 不启动插件，恢复主窗口
@@ -961,7 +985,8 @@ export class PluginManager {
           name: feature.preCapture === 'region' ? 'region-shot.png' : 'fullscreen-shot.png',
           size: capturedDataUrl.length,
           kind: 'image' as const,
-          dataUrl: capturedDataUrl
+          dataUrl: capturedDataUrl,
+          capture: captureInfo
         }]
       } catch (err) {
         log.error(`[PluginManager] preCapture failed for ${pluginId}:`, err)

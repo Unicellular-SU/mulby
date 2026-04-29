@@ -7,6 +7,11 @@ export function createCoreApi(ipcRenderer: IpcRenderer) {
       show: () => ipcRenderer.send('window:show'),
       setSize: (width: number, height: number) =>
         ipcRenderer.send('window:setSize', width, height),
+      setPosition: (x: number, y: number) =>
+        ipcRenderer.send('window:setPosition', x, y),
+      setBounds: (bounds: { x?: number; y?: number; width?: number; height?: number }) =>
+        ipcRenderer.invoke('window:setBounds', bounds),
+      getBounds: () => ipcRenderer.invoke('window:getBounds'),
       setExpendHeight: (height: number, allowResize?: boolean) => ipcRenderer.send('window:setExpendHeight', height, allowResize),
       invalidate: () => ipcRenderer.send('window:invalidate'),
       center: () => ipcRenderer.send('window:center'),
@@ -55,6 +60,7 @@ export function createCoreApi(ipcRenderer: IpcRenderer) {
           setTitle: (title: string) => ipcRenderer.invoke('window:child:action', id, 'setTitle', title),
           setSize: (width: number, height: number) => ipcRenderer.invoke('window:child:action', id, 'setSize', width, height),
           setPosition: (x: number, y: number) => ipcRenderer.invoke('window:child:action', id, 'setPosition', x, y),
+          setBounds: (bounds: { x?: number; y?: number; width?: number; height?: number }) => ipcRenderer.invoke('window:child:action', id, 'setBounds', bounds),
           setOpacity: (opacity: number) => ipcRenderer.invoke('window:child:action', id, 'setOpacity', opacity),
           postMessage: (channel: string, ...args: unknown[]) => ipcRenderer.invoke('window:child:action', id, 'postMessage', channel, ...args)
         }

@@ -24,7 +24,14 @@ export function buildReactManifest(name: string) {
       minWidth: 400,    // 最小宽度
       minHeight: 300,   // 最小高度
       maxWidth: 1200,   // 最大宽度
-      maxHeight: 900    // 最大高度
+      maxHeight: 900,   // 最大高度
+      type: 'default'   // 可选：default / borderless / fullscreen
+      // 截图标注类 detached 插件可额外使用：
+      // transparent: true,
+      // alwaysOnTop: true,
+      // position: 'capture-region',
+      // fit: 'capture-region-with-toolbar',
+      // captureToolbarHeight: 56
     },
     features: [
       {

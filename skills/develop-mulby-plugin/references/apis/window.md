@@ -15,6 +15,18 @@
 [Renderer]
 设置窗口大小。
 
+### setPosition(x, y)
+[Renderer]
+设置当前窗口左上角屏幕坐标。
+
+### setBounds(bounds)
+[Renderer]
+设置当前窗口边界。`bounds` 可只传部分字段：`{ x?, y?, width?, height? }`。
+
+### getBounds()
+[Renderer]
+获取当前窗口边界，返回 `{ x, y, width, height }`，无法解析窗口时返回 `null`。
+
 ### setExpendHeight(height, allowResize?)
 [Renderer]
 仅调整窗口高度。
@@ -85,6 +97,7 @@ interface ChildWindowHandle {
   setTitle(title: string): Promise<void>;
   setSize(width: number, height: number): Promise<void>;
   setPosition(x: number, y: number): Promise<void>;
+  setBounds(bounds: { x?: number; y?: number; width?: number; height?: number }): Promise<boolean>;
   postMessage(channel: string, ...args: unknown[]): Promise<void>;
 }
 ```
@@ -193,6 +206,7 @@ window.mulby.window.center();
 
 const child = await window.mulby.window.create('https://example.com', { width: 800, height: 600 });
 child?.postMessage('ready');
+await window.mulby.window.setBounds({ x: 100, y: 100, width: 640, height: 420 });
 
 await window.mulby.subInput.set('请输入...', true);
 window.mulby.subInput.onChange(({ text }) => console.log(text));

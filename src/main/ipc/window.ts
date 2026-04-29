@@ -511,6 +511,18 @@ export function registerWindowHandlers(
           childWin.setPosition(args[0], args[1])
         }
         break
+      case 'setBounds':
+        if (args[0] && typeof args[0] === 'object') {
+          const bounds = args[0] as { x?: number; y?: number; width?: number; height?: number }
+          const current = childWin.getBounds()
+          childWin.setBounds({
+            x: Number.isFinite(bounds.x) ? Math.round(bounds.x!) : current.x,
+            y: Number.isFinite(bounds.y) ? Math.round(bounds.y!) : current.y,
+            width: Number.isFinite(bounds.width) ? Math.max(1, Math.round(bounds.width!)) : current.width,
+            height: Number.isFinite(bounds.height) ? Math.max(1, Math.round(bounds.height!)) : current.height
+          })
+        }
+        break
       case 'setOpacity':
         if (typeof args[0] === 'number') {
           childWin.setOpacity(Math.max(0, Math.min(1, args[0])))
@@ -778,6 +790,31 @@ export function registerWindowHandlers(
   ipcMain.on('window:alwaysOnTop', (event, flag: boolean) => {
     const win = windowFromWebContents(event.sender)
     win?.setAlwaysOnTop(flag)
+  })
+
+  ipcMain.on('window:setPosition', (event, x: number, y: number) => {
+    const win = windowFromWebContents(event.sender)
+    if (!win || !Number.isFinite(x) || !Number.isFinite(y)) return
+    win.setPosition(Math.round(x), Math.round(y))
+  })
+
+  ipcMain.handle('window:setBounds', (event, bounds: { x?: number; y?: number; width?: number; height?: number }) => {
+    const win = windowFromWebContents(event.sender)
+    if (!win || !bounds || typeof bounds !== 'object') return false
+
+    const current = win.getBounds()
+    win.setBounds({
+      x: Number.isFinite(bounds.x) ? Math.round(bounds.x!) : current.x,
+      y: Number.isFinite(bounds.y) ? Math.round(bounds.y!) : current.y,
+      width: Number.isFinite(bounds.width) ? Math.max(1, Math.round(bounds.width!)) : current.width,
+      height: Number.isFinite(bounds.height) ? Math.max(1, Math.round(bounds.height!)) : current.height
+    })
+    return true
+  })
+
+  ipcMain.handle('window:getBounds', (event) => {
+    const win = windowFromWebContents(event.sender)
+    return win?.getBounds() ?? null
   })
 
   // 设置窗口透明度（0.0 ~ 1.0）

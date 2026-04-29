@@ -18,6 +18,29 @@ interface ResolvedIcon {
 
 type InputAttachmentKind = 'file' | 'image'
 
+interface CaptureRegionInfo {
+  x: number
+  y: number
+  width: number
+  height: number
+  displayId?: number
+  scaleFactor?: number
+}
+
+interface CaptureDisplayInfo {
+  id: number
+  bounds: { x: number; y: number; width: number; height: number }
+  workArea: { x: number; y: number; width: number; height: number }
+  scaleFactor: number
+  isPrimary: boolean
+}
+
+interface InputAttachmentCaptureInfo {
+  type: 'region' | 'fullscreen'
+  region?: CaptureRegionInfo
+  display?: CaptureDisplayInfo
+}
+
 interface InputAttachment {
   id: string
   name: string
@@ -27,6 +50,7 @@ interface InputAttachment {
   ext?: string
   path?: string
   dataUrl?: string
+  capture?: InputAttachmentCaptureInfo
 }
 
 interface InputPayload {
@@ -77,6 +101,7 @@ interface BrowserWindowProxy {
   setTitle(title: string): Promise<void>
   setSize(width: number, height: number): Promise<void>
   setPosition(x: number, y: number): Promise<void>
+  setBounds(bounds: { x?: number; y?: number; width?: number; height?: number }): Promise<boolean>
   setOpacity(opacity: number): Promise<void>
   postMessage(channel: string, ...args: unknown[]): Promise<void>
 }
@@ -86,6 +111,9 @@ interface MulbyWindow {
   hide(isRestorePreWindow?: boolean): void
   show(): void
   setSize(width: number, height: number): void
+  setPosition(x: number, y: number): void
+  setBounds(bounds: { x?: number; y?: number; width?: number; height?: number }): Promise<boolean>
+  getBounds(): Promise<{ x: number; y: number; width: number; height: number } | null>
   setExpendHeight(height: number, allowResize?: boolean): void
   center(): void
   create(url: string, options?: {
@@ -100,6 +128,9 @@ interface MulbyWindow {
     maxWidth?: number; maxHeight?: number;
     opacity?: number;
     transparent?: boolean;
+    position?: 'default' | 'capture-region';
+    fit?: 'default' | 'capture-region' | 'capture-region-with-toolbar';
+    captureToolbarHeight?: number;
   }): Promise<BrowserWindowProxy | null>
   close(): void
   terminatePlugin(): Promise<{ success: boolean; error?: string }>
@@ -272,8 +303,12 @@ interface PluginInfo {
     minHeight?: number
     maxWidth?: number
     maxHeight?: number
+    alwaysOnTop?: boolean
     opacity?: number
     transparent?: boolean
+    position?: 'default' | 'capture-region'
+    fit?: 'default' | 'capture-region' | 'capture-region-with-toolbar'
+    captureToolbarHeight?: number
   }
   icon?: ResolvedIcon
   path?: string

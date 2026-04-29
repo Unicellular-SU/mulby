@@ -519,6 +519,9 @@ export interface ElectronAPI {
   window: {
     hide: () => void
     setSize: (width: number, height: number) => void
+    setPosition: (x: number, y: number) => void
+    setBounds: (bounds: { x?: number; y?: number; width?: number; height?: number }) => Promise<boolean>
+    getBounds: () => Promise<{ x: number; y: number; width: number; height: number } | null>
     setExpendHeight: (height: number, allowResize?: boolean) => void
     invalidate: () => void
     center: () => void
