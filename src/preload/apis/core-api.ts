@@ -167,6 +167,21 @@ export function createCoreApi(ipcRenderer: IpcRenderer) {
         enabled: boolean
         priority: number
       }[]) => ipcRenderer.invoke('onboarding:updateStoreSources', sources),
+      updateSuperPanel: (superPanel: {
+        enabled: boolean
+        trigger: {
+          type: 'mouse_click' | 'mouse_longpress' | 'keyboard' | 'double_tap'
+          mouseButton?: 'middle' | 'back' | 'forward' | 'right'
+          longPressMs?: number
+          accelerator?: string
+          modifier?: 'Command' | 'Ctrl' | 'Alt' | 'Shift'
+        }
+        blockedApps: string[]
+        clipboardPollDelayMs: number
+        maxItems: number
+        instantTranslation: boolean
+        translationMaxLength?: number
+      }) => ipcRenderer.invoke('onboarding:updateSuperPanel', superPanel),
       complete: () => ipcRenderer.invoke('onboarding:complete'),
       onClose: (callback: () => void) => {
         const listener = () => callback()

@@ -20,6 +20,7 @@ export function registerOnboardingHandlers(
     return {
       shortcuts: appSettings.shortcuts,
       storeSources: appSettings.storeSources,
+      superPanel: appSettings.superPanel,
       theme: themeManager.getMode(),
       aiProviders: aiSettings.providers || [],
       onboardingCompleted: appSettings.onboardingCompleted ?? false
@@ -63,6 +64,13 @@ export function registerOnboardingHandlers(
   ipcMain.handle('onboarding:updateStoreSources', (_event, sources: AppSettings['storeSources']) => {
     if (!Array.isArray(sources)) return false
     settingsManager.updateSettings({ storeSources: sources })
+    return true
+  })
+
+  // 保存超级面板设置
+  ipcMain.handle('onboarding:updateSuperPanel', (_event, superPanel: AppSettings['superPanel']) => {
+    if (!superPanel || typeof superPanel !== 'object') return false
+    settingsManager.updateSettings({ superPanel })
     return true
   })
 

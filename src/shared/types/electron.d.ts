@@ -33,7 +33,7 @@ import type {
   StorageWatchOptions,
   StorageWatchEvent
 } from './storage-v2'
-import type { AppSettings, CommandAuditItem, CommandRunnerSettings, ShortcutStatusMap, OpenClawSettings } from './settings'
+import type { AppSettings, CommandAuditItem, CommandRunnerSettings, ShortcutStatusMap, OpenClawSettings, SuperPanelSettings } from './settings'
 import type { NodeStatusInfo } from './openclaw-protocol'
 import type {
   InstalledPluginUpdateResult,
@@ -624,6 +624,7 @@ export interface ElectronAPI {
     getSettings: () => Promise<{
       shortcuts: { toggleWindow: string; openSettings: string }
       storeSources: { id: string; name: string; url: string; enabled: boolean; priority: number }[]
+      superPanel: SuperPanelSettings
       theme: string
       aiProviders: { id: string; type?: string; label?: string; enabled: boolean; apiKey?: string; baseURL?: string }[]
       onboardingCompleted: boolean
@@ -645,6 +646,7 @@ export interface ElectronAPI {
       enabled: boolean
       priority: number
     }[]) => Promise<boolean>
+    updateSuperPanel: (superPanel: SuperPanelSettings) => Promise<boolean>
     complete: () => Promise<boolean>
     onClose: (callback: () => void) => () => void
   }

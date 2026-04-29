@@ -4,6 +4,18 @@ import { getSystemDefaultProviders } from '../../shared/ai/systemProviders'
 import { getSystemDefaultModels } from '../../shared/ai/systemModels'
 import type { AiProviderConfig } from '../../shared/types/ai'
 import type { PluginStoreEntry } from '../../shared/types/plugin-store'
+import type {
+  DoubleTapModifier,
+  SuperPanelSettings,
+  SuperPanelTriggerType
+} from '../../shared/types/settings'
+import {
+  ONBOARDING_SUPER_PANEL_MODIFIER_OPTIONS,
+  ONBOARDING_SUPER_PANEL_MOUSE_OPTIONS,
+  ONBOARDING_SUPER_PANEL_TRIGGER_OPTIONS,
+  ONBOARDING_USAGE_STEPS,
+  createDefaultOnboardingSuperPanel
+} from './onboarding-content'
 import '../styles/onboarding.css'
 
 // Mulby v1 图标 SVG 内联
@@ -70,40 +82,11 @@ function findProvider(providerId: string): AiProviderConfig | undefined {
   return SYSTEM_PROVIDERS.find(p => p.id === providerId)
 }
 
-// 功能卡片数据
-const FEATURES = [
-  {
-    Icon: IconSearch,
-    name: '插件搜索',
-    desc: '快速搜索和启动已安装的插件功能',
-    bg: 'linear-gradient(135deg, #ede9fe, #dbeafe)',
-    color: '#7c3aed'
-  },
-  {
-    Icon: IconAi,
-    name: 'AI 工具',
-    desc: '强大的 AI 工具集，支持多种模型',
-    bg: 'linear-gradient(135deg, #fce7f3, #ede9fe)',
-    color: '#d946ef'
-  },
-  {
-    Icon: IconClipboard,
-    name: '剪贴板监控',
-    desc: '智能剪贴板历史管理与自动匹配',
-    bg: 'linear-gradient(135deg, #d1fae5, #dbeafe)',
-    color: '#059669'
-  },
-  {
-    Icon: IconClock,
-    name: '任务调度',
-    desc: '定时运行插件任务，自动化工作流',
-    bg: 'linear-gradient(135deg, #fef3c7, #fce7f3)',
-    color: '#d97706'
-  }
-]
+const USAGE_STEP_ICONS = [IconSearch, IconAi, IconClipboard, IconClock]
 
 // 步骤 ID 枚举（渲染顺序固定）
-type StepId = 'welcome' | 'shortcuts' | 'theme' | 'store-source' | 'plugin-install' | 'ai-config' | 'ai-test' | 'features' | 'done'
+type StepId = 'welcome' | 'shortcuts' | 'super-panel' | 'theme' | 'store-source' | 'plugin-install' | 'ai-config' | 'ai-test' | 'features' | 'done'
+type ShortcutRecordingAction = 'toggleWindow' | 'openSettings' | 'superPanel'
 
 
 interface OnboardingState {
@@ -119,6 +102,7 @@ interface OnboardingState {
     baseURL: string
     model: string
   }
+  superPanel: SuperPanelSettings
   storeSource: {
     name: string
     url: string
@@ -129,11 +113,11 @@ interface OnboardingState {
 function useShortcutRecorder(
   onCapture: (accelerator: string) => void
 ) {
-  const [recording, setRecording] = useState<string | null>(null)
+  const [recording, setRecording] = useState<ShortcutRecordingAction | null>(null)
   const [preview, setPreview] = useState<string | null>(null)
   const finishedRef = useRef(false)
 
-  const startRecording = useCallback((action: string) => {
+  const startRecording = useCallback((action: ShortcutRecordingAction) => {
     setRecording(action)
     setPreview(null)
     finishedRef.current = false
@@ -219,6 +203,7 @@ export default function OnboardingView() {
       baseURL: '',
       model: ''
     },
+    superPanel: createDefaultOnboardingSuperPanel(),
     storeSource: {
       name: '',
       url: ''
@@ -239,11 +224,11 @@ export default function OnboardingView() {
   // 现有的商店源快照（初始化时读取，用于合并而非覆盖）
   const existingSourcesRef = useRef<Array<{ id: string; name: string; url: string; enabled: boolean; priority: number }>>([])
 
-  const recordingActionRef = useRef<string | null>(null)
+  const recordingActionRef = useRef<ShortcutRecordingAction | null>(null)
 
   // ---- 动态步骤序列（用于导航和进度条，不影响渲染） ----
   const activeSteps = useMemo<StepId[]>(() => {
-    const steps: StepId[] = ['welcome', 'shortcuts', 'theme', 'store-source']
+    const steps: StepId[] = ['welcome', 'shortcuts', 'super-panel', 'theme', 'store-source']
     if (state.storeSource.url.trim()) {
       steps.push('plugin-install')
     }
@@ -262,16 +247,65 @@ export default function OnboardingView() {
   const isSkippableStep = currentStepId === 'store-source' || currentStepId === 'ai-config'
     || currentStepId === 'plugin-install' || currentStepId === 'ai-test'
 
+  const updateSuperPanelState = useCallback((updater: (current: SuperPanelSettings) => SuperPanelSettings) => {
+    setState(prev => {
+      const nextSuperPanel = updater(prev.superPanel)
+      const shouldPersist = nextSuperPanel.enabled || nextSuperPanel.enabled !== prev.superPanel.enabled
+      if (shouldPersist) {
+        window.mulby.onboarding.updateSuperPanel(nextSuperPanel).catch(() => {})
+      }
+      return { ...prev, superPanel: nextSuperPanel }
+    })
+  }, [])
+
+  const updateSuperPanelTrigger = useCallback((patch: Partial<SuperPanelSettings['trigger']>) => {
+    updateSuperPanelState(current => ({
+      ...current,
+      trigger: {
+        ...current.trigger,
+        ...patch
+      } as SuperPanelSettings['trigger']
+    }))
+  }, [updateSuperPanelState])
+
+  const buildTriggerForType = useCallback((
+    type: SuperPanelTriggerType,
+    current: SuperPanelSettings['trigger']
+  ): SuperPanelSettings['trigger'] => {
+    if (type === 'keyboard') {
+      return { type, accelerator: current.accelerator || 'Alt+Q' }
+    }
+    if (type === 'mouse_click') {
+      return {
+        type,
+        mouseButton: current.mouseButton || 'middle',
+        longPressMs: current.longPressMs || 500
+      }
+    }
+    if (type === 'mouse_longpress') {
+      return {
+        type,
+        mouseButton: current.mouseButton || 'middle',
+        longPressMs: current.longPressMs || 500
+      }
+    }
+    return { type, modifier: current.modifier || 'Ctrl' }
+  }, [])
+
   // 快捷键录制
   const handleShortcutCapture = useCallback((accelerator: string) => {
     const action = recordingActionRef.current
     if (!action) return
+    if (action === 'superPanel') {
+      updateSuperPanelTrigger({ accelerator })
+      return
+    }
     setState(prev => {
       const newShortcuts = { ...prev.shortcuts, [action]: accelerator }
       window.mulby.onboarding.updateShortcut(action, accelerator).catch(() => {})
       return { ...prev, shortcuts: newShortcuts }
     })
-  }, [])
+  }, [updateSuperPanelTrigger])
 
   const shortcutRecorder = useShortcutRecorder(handleShortcutCapture)
   const { recording, preview, startRecording } = shortcutRecorder
@@ -286,13 +320,15 @@ export default function OnboardingView() {
       shortcuts: { toggleWindow: string; openSettings: string }
       theme: string
       storeSources: Array<{ id: string; name: string; url: string; enabled: boolean; priority: number }>
+      superPanel?: SuperPanelSettings
     }) => {
       // 保存现有商店源快照，后续合并时使用
       existingSourcesRef.current = settings.storeSources || []
       setState(prev => ({
         ...prev,
         shortcuts: settings.shortcuts || prev.shortcuts,
-        theme: (settings.theme as 'light' | 'dark' | 'system') || 'system'
+        theme: (settings.theme as 'light' | 'dark' | 'system') || 'system',
+        superPanel: createDefaultOnboardingSuperPanel(settings.superPanel)
       }))
     }).catch(() => {})
   }, [])
@@ -506,6 +542,9 @@ export default function OnboardingView() {
           baseURL: state.aiProvider.baseURL.trim() || provider?.baseURL || undefined
         })
       }
+      if (state.superPanel.enabled) {
+        await window.mulby.onboarding.updateSuperPanel(state.superPanel)
+      }
       await window.mulby.onboarding.complete()
     } catch (error) {
       console.error('[Onboarding] 完成引导失败:', error)
@@ -553,6 +592,151 @@ export default function OnboardingView() {
             {isRecording ? '取消' : '录制'}
           </button>
         </div>
+      </div>
+    )
+  }
+
+  const getSuperPanelTriggerHint = () => {
+    const { trigger } = state.superPanel
+    if (trigger.type === 'keyboard') {
+      return '选中文本后按下快捷键即可唤起。推荐用于首次上手，冲突少，也容易记住。'
+    }
+    if (trigger.type === 'mouse_click') {
+      return '选中文本后点击指定鼠标按键即可唤起。请避开浏览器或 IDE 已经占用的按键。'
+    }
+    if (trigger.type === 'mouse_longpress') {
+      return '选中文本后长按指定鼠标按键即可唤起，适合减少误触。'
+    }
+    return '选中文本后快速双击修饰键即可唤起，长按或组合键不会触发。'
+  }
+
+  const renderSuperPanelTriggerControls = () => {
+    const { trigger } = state.superPanel
+    const isSuperPanelRecording = recording === 'superPanel'
+    const acceleratorLabel = isSuperPanelRecording
+      ? (preview || '按下快捷键…')
+      : (trigger.accelerator || '未设置')
+
+    return (
+      <div className="onboarding-super-panel-config">
+        <div className="onboarding-super-panel-toggle-row">
+          <div>
+            <div className="onboarding-super-panel-toggle-title">启用超级面板</div>
+            <div className="onboarding-super-panel-toggle-desc">开启后，完成引导时会注册你选择的触发方式。</div>
+          </div>
+          <button
+            className={`onboarding-switch ${state.superPanel.enabled ? 'checked' : ''}`}
+            onClick={() => updateSuperPanelState(current => ({ ...current, enabled: !current.enabled }))}
+            aria-pressed={state.superPanel.enabled}
+          >
+            <span />
+          </button>
+        </div>
+
+        <div className="onboarding-super-panel-control">
+          <div className="onboarding-label">触发方式</div>
+          <div className="onboarding-super-panel-pills">
+            {ONBOARDING_SUPER_PANEL_TRIGGER_OPTIONS.map(option => (
+              <button
+                key={option.value}
+                className={`onboarding-super-panel-pill ${trigger.type === option.value ? 'selected' : ''}`}
+                title={option.description}
+                onClick={() => updateSuperPanelState(current => ({
+                  ...current,
+                  trigger: buildTriggerForType(option.value, current.trigger)
+                }))}
+              >
+                {option.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {trigger.type === 'keyboard' && (
+          <div className="onboarding-super-panel-control">
+            <div className="onboarding-label">快捷键</div>
+            <div className="onboarding-super-panel-shortcut-row">
+              <div
+                className="onboarding-input onboarding-shortcut-display"
+                style={{
+                  borderColor: isSuperPanelRecording ? '#7c3aed' : undefined,
+                  boxShadow: isSuperPanelRecording ? '0 0 0 3px rgba(124, 58, 237, 0.15)' : undefined
+                }}
+              >
+                {acceleratorLabel}
+              </div>
+              <button
+                className={`onboarding-btn ${isSuperPanelRecording ? 'onboarding-btn-primary' : 'onboarding-btn-secondary'}`}
+                style={{ padding: '8px 16px', fontSize: 13, whiteSpace: 'nowrap' }}
+                onClick={() => {
+                  if (isSuperPanelRecording) shortcutRecorder.stopRecording()
+                  else startRecording('superPanel')
+                }}
+              >
+                {isSuperPanelRecording ? '取消' : '录制'}
+              </button>
+            </div>
+          </div>
+        )}
+
+        {(trigger.type === 'mouse_click' || trigger.type === 'mouse_longpress') && (
+          <div className="onboarding-super-panel-control">
+            <div className="onboarding-label">鼠标按键</div>
+            <div className="onboarding-super-panel-pills">
+              {ONBOARDING_SUPER_PANEL_MOUSE_OPTIONS.map(option => (
+                <button
+                  key={option.value}
+                  className={`onboarding-super-panel-pill ${trigger.mouseButton === option.value ? 'selected' : ''}`}
+                  onClick={() => updateSuperPanelTrigger({ mouseButton: option.value })}
+                >
+                  {option.label}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {trigger.type === 'mouse_longpress' && (
+          <div className="onboarding-super-panel-control">
+            <div className="onboarding-label">长按时间</div>
+            <div className="onboarding-super-panel-number-row">
+              <input
+                className="onboarding-input"
+                type="number"
+                min={200}
+                max={3000}
+                step={50}
+                value={trigger.longPressMs || 500}
+                onChange={(e) => {
+                  const value = Number(e.target.value)
+                  if (Number.isFinite(value)) {
+                    updateSuperPanelTrigger({ longPressMs: Math.max(200, Math.min(value, 3000)) })
+                  }
+                }}
+              />
+              <span>毫秒</span>
+            </div>
+          </div>
+        )}
+
+        {trigger.type === 'double_tap' && (
+          <div className="onboarding-super-panel-control">
+            <div className="onboarding-label">修饰键</div>
+            <div className="onboarding-super-panel-pills">
+              {ONBOARDING_SUPER_PANEL_MODIFIER_OPTIONS.map(option => (
+                <button
+                  key={option.value}
+                  className={`onboarding-super-panel-pill ${trigger.modifier === option.value ? 'selected' : ''}`}
+                  onClick={() => updateSuperPanelTrigger({ modifier: option.value as DoubleTapModifier })}
+                >
+                  {option.label}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        <div className="onboarding-super-panel-hint">{getSuperPanelTriggerHint()}</div>
       </div>
     )
   }
@@ -668,6 +852,58 @@ export default function OnboardingView() {
                   <circle cx="12" cy="12" r="10" /><path d="M12 16v-4" /><path d="M12 8h.01" />
                 </svg>
                 <span>点击「录制」后按下你想要的快捷键组合即可完成设置。</span>
+              </div>
+            </div>
+          </div>
+
+          {/* 超级面板 */}
+          <div className={getStepClass('super-panel')}>
+            <div className="onboarding-scroll">
+              <div className="onboarding-step-title">超级面板</div>
+              <div className="onboarding-step-desc">
+                选中文本、复制内容或在当前应用中触发超级面板，Mulby 会优先展示相关工具。
+              </div>
+
+              <div className="onboarding-super-panel-layout">
+                <div className="onboarding-super-panel-demo" aria-hidden="true">
+                  <div className="onboarding-demo-document">
+                    <div className="onboarding-demo-line wide" />
+                    <div className="onboarding-demo-selection">Selected text from current app</div>
+                    <div className="onboarding-demo-line medium" />
+                    <div className="onboarding-demo-line short" />
+                  </div>
+                  <div className="onboarding-demo-trigger">
+                    {state.superPanel.trigger.type === 'keyboard'
+                      ? (state.superPanel.trigger.accelerator || 'Alt+Q')
+                      : 'Trigger'}
+                  </div>
+                  <div className="onboarding-demo-panel">
+                    <div className="onboarding-demo-panel-title">超级面板</div>
+                    <div className="onboarding-demo-item active">
+                      <span>译</span>
+                      <div>
+                        <strong>翻译选中文本</strong>
+                        <small>AI 工具</small>
+                      </div>
+                    </div>
+                    <div className="onboarding-demo-item">
+                      <span>摘</span>
+                      <div>
+                        <strong>总结当前内容</strong>
+                        <small>文本处理</small>
+                      </div>
+                    </div>
+                    <div className="onboarding-demo-item">
+                      <span>搜</span>
+                      <div>
+                        <strong>搜索相关插件</strong>
+                        <small>插件命令</small>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {renderSuperPanelTriggerControls()}
               </div>
             </div>
           </div>
@@ -894,23 +1130,28 @@ export default function OnboardingView() {
             </div>
           </div>
 
-          {/* 功能快览 */}
+          {/* 使用方式演示 */}
           <div className={getStepClass('features')}>
-            <div className="onboarding-step-title">核心功能</div>
-            <div className="onboarding-step-desc">Mulby 通过插件系统提供丰富的功能扩展。</div>
+            <div className="onboarding-step-title">怎么开始使用</div>
+            <div className="onboarding-step-desc">
+              完成引导后，你可以按这个顺序试一次 Mulby 的基础工作流。
+            </div>
             <div className="onboarding-feature-grid" key={currentStepId === 'features' ? 'visible' : 'hidden'}>
-              {currentStepId === 'features' && FEATURES.map((feature, i) => (
+              {currentStepId === 'features' && ONBOARDING_USAGE_STEPS.map((feature, i) => {
+                const StepIcon = USAGE_STEP_ICONS[i] || IconSearch
+                return (
                 <div className="onboarding-feature-card" key={i}>
                   <div
                     className="onboarding-feature-icon"
                     style={{ background: feature.bg, color: feature.color }}
                   >
-                    <feature.Icon />
+                    <StepIcon />
                   </div>
                   <div className="onboarding-feature-name">{feature.name}</div>
                   <div className="onboarding-feature-desc">{feature.desc}</div>
                 </div>
-              ))}
+                )
+              })}
             </div>
           </div>
 
