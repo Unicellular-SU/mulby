@@ -184,6 +184,7 @@ export class PluginManager {
   private pluginToolsListener?: (event: 'refresh' | 'remove', pluginId: string, pluginName: string, tools: import('../../shared/types/plugin').PluginToolSchema[]) => void
   private systemCommandExecutor: SystemCommandExecutor
   private systemPageOpenHandler?: (page: string) => void
+  private hideSystemPageHandler?: () => void
 
   // Resident UI：缓存最近关闭的 attached panel，加速热启动。
   private residentSessions: Map<string, ResidentUiSession> = new Map()
@@ -344,6 +345,10 @@ export class PluginManager {
    */
   setSystemPageOpenHandler(handler: (page: string) => void) {
     this.systemPageOpenHandler = handler
+  }
+
+  setHideSystemPageHandler(handler: () => void) {
+    this.hideSystemPageHandler = handler
   }
 
   // 设置 plugin tools 变更监听器（用于同步 pluginToolRegistry）
@@ -1031,6 +1036,7 @@ export class PluginManager {
         if (this.systemPluginWindowManager) {
           await this.systemPluginWindowManager.prepareForAttachedPluginLaunch()
         }
+        this.hideSystemPageHandler?.()
         const success = this.windowManager.attachPlugin(plugin, featureCode, resolvedInput, route, launchStart, undefined, launchRequestId || undefined)
         if (success) {
           this.stateManager.recordRecentUsage(plugin.id, featureCode)

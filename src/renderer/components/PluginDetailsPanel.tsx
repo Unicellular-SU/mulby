@@ -327,15 +327,18 @@ export default function PluginDetailsPanel({
       window.mulby.notification.show('匹配指令需通过匹配输入触发，不能直接打开', 'error')
       return
     }
-    const result = await window.mulby.plugin.runCommand({
-      ...buildTargetPayload(command),
-      input: command.displayLabel
-    })
+    const result = await window.mulby.plugin.run(
+      command.pluginId,
+      command.featureCode,
+      command.displayLabel
+    )
     if (!result.success) {
       window.mulby.notification.show(result.error || '打开指令失败', 'error')
       return
     }
-    window.mulby.notification.show(`已打开：${command.displayLabel}`)
+    if (!result.hasUI) {
+      window.mulby.notification.show(`已执行：${command.displayLabel}`)
+    }
     setCommandMenuTarget(null)
   }, [])
 

@@ -817,6 +817,10 @@ app.whenReady().then(async () => {
       openSystemPageView({ page: page as import('../main/services/system-page-window-manager').SystemPageId })
     })
 
+    pluginManager.setHideSystemPageHandler(() => {
+      systemPageWindowManager.closeAttached()
+    })
+
     appShortcutManager.apply(appSettingsManager.getSettings().shortcuts)
     // 应用鼠标触发和双击修饰键的初始设置
     appShortcutManager.applyMouseTrigger(appSettingsManager.getSettings().mouseTrigger)

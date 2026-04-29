@@ -1063,7 +1063,7 @@ function MainApp() {
   const collapseSystemPluginForAttach = useCallback(async () => {
     let collapsed = false
     setViewMode((prev) => {
-      if (prev === 'system-plugin') {
+      if (prev !== 'home') {
         collapsed = true
         return 'home'
       }
@@ -1085,7 +1085,7 @@ function MainApp() {
 
   useEffect(() => {
     if (isSystemWindow) return
-    const activePluginId = viewMode === 'system-plugin' ? systemPluginRoute.pluginId : null
+    const activePluginId = viewMode !== 'home' ? (viewMode === 'system-plugin' ? systemPluginRoute.pluginId : `__view:${viewMode}`) : null
     void window.mulby.systemPlugin.setActive(activePluginId)
   }, [isSystemWindow, viewMode, systemPluginRoute.pluginId])
 
