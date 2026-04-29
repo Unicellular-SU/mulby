@@ -30,6 +30,7 @@ export type CommandCallerSource = 'app' | 'plugin'
 
 export interface CommandTrustRecord {
   prefix: string
+  matchMode?: 'executable' | 'commandLineExact'
   source: CommandCallerSource
   pluginId?: string
   command: string

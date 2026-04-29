@@ -176,7 +176,7 @@ describe('command runner service', () => {
     assert.equal(getSettings().audit.records[2].status, 'allowed')
   })
 
-  it('derives trust prefix from the executable when command contains a full command line', async () => {
+  it('does not widen shell wrapper command-line trust to the wrapper executable', async () => {
     let consentCount = 0
     let firstDetail = ''
     const { service, getSettings } = createInMemoryRunner({
@@ -208,10 +208,23 @@ describe('command runner service', () => {
       )
     )
 
-    assert.match(firstDetail, /信任前缀: cmd（信任后，以此开头的命令将自动允许）/)
-    assert.equal(consentCount, 1)
-    assert.equal(getSettings().trustedFingerprints.length, 1)
-    assert.equal(getSettings().trustedFingerprints[0].prefix, 'cmd')
+    await assert.rejects(
+      service.runCommand(
+        {
+          command: 'cmd /c echo second'
+        },
+        { source: 'app' }
+      )
+    )
+
+    assert.match(firstDetail, /信任范围: cmd \/c dir c:\\users\\73221\\\.agents\\skills\\/i)
+    assert.equal(consentCount, 2)
+    assert.equal(getSettings().trustedFingerprints.length, 2)
+    assert.equal(getSettings().trustedFingerprints.some((item) => item.prefix === 'cmd'), false)
+    assert.deepEqual(
+      getSettings().trustedFingerprints.map((item) => item.matchMode),
+      ['commandLineExact', 'commandLineExact']
+    )
   })
 
   it('isolates trust by pluginId', async () => {
@@ -545,6 +558,46 @@ describe('command runner service', () => {
       ),
       /命中黑名单/,
       '`cmd` 内部的 curl 应被 denyList 拦截'
+    )
+  })
+
+  it('shell:false wrapper command line still checks denyList against the inner command', async () => {
+    const { service } = createInMemoryRunner({
+      settings: {
+        denyList: [
+          { id: 'd1', enabled: true, mode: 'prefix', value: 'rm' }
+        ]
+      }
+    })
+    await assert.rejects(
+      service.runCommand(
+        {
+          command: 'sh -c "rm -rf /tmp/foo"'
+        },
+        { source: 'app', assumeUserApproved: true }
+      ),
+      /命中黑名单/,
+      'shell:false 的 shell wrapper 也应按 shell-like 命令深度检查 denyList'
+    )
+  })
+
+  it('shell:false wrapper command line checks denyList through combined shell flags', async () => {
+    const { service } = createInMemoryRunner({
+      settings: {
+        denyList: [
+          { id: 'd1', enabled: true, mode: 'prefix', value: 'rm' }
+        ]
+      }
+    })
+    await assert.rejects(
+      service.runCommand(
+        {
+          command: 'bash -lc "rm -rf /tmp/foo"'
+        },
+        { source: 'app', assumeUserApproved: true }
+      ),
+      /命中黑名单/,
+      'bash -lc 等组合 flag 也应解析内层命令'
     )
   })
 

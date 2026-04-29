@@ -15,16 +15,19 @@ function updateCommandRunnerSettings(next: CommandRunnerSettings): CommandRunner
 }
 
 async function requestConsentByInternalUi(request: CommandConsentRequest): Promise<CommandConsentDecision> {
+  const buttons = request.trustPersistable
+    ? ['拒绝', '仅本次允许', request.trustScopeKind === 'commandLineExact' ? '始终允许此完整命令' : '信任并允许']
+    : ['拒绝', '仅本次允许']
   const result = await showInternalMessageBox({
     type: 'warning',
     title: request.title,
     message: request.message,
     detail: request.detail,
-    buttons: ['拒绝', '仅本次允许', '信任并允许'],
+    buttons,
     defaultId: 0,
     cancelId: 0
   })
-  if (result.response === 2) return 'trust'
+  if (request.trustPersistable && result.response === 2) return 'trust'
   if (result.response === 1) return 'allow-once'
   return 'deny'
 }

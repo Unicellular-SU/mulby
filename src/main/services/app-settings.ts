@@ -778,6 +778,7 @@ function normalizeCommandRunnerSettings(input: Partial<CommandRunnerSettings> | 
         const now = Date.now()
         return {
           prefix,
+          matchMode: record.matchMode === 'commandLineExact' ? 'commandLineExact' : 'executable',
           source,
           pluginId: String(record.pluginId || '').trim() || undefined,
           command: String(record.command || '').trim(),

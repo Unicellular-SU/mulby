@@ -59,6 +59,9 @@ export interface CommandConsentRequest {
   shell: boolean
   timeoutMs: number
   preview: string
+  trustPersistable: boolean
+  trustScope: string
+  trustScopeKind: 'executable' | 'commandLineExact' | 'none'
   title: string
   message: string
   detail: string
@@ -77,6 +80,18 @@ export interface CommandRunnerDeps {
 interface RuleMatchResult {
   matched: boolean
   rule?: CommandRule
+}
+
+interface ShellWrapperInvocation {
+  wrapper: string
+  innerCommand?: string
+}
+
+interface TrustCandidate {
+  prefix: string
+  matchMode: NonNullable<CommandTrustRecord['matchMode']>
+  persistable: boolean
+  detail: string
 }
 
 class CommandPolicyError extends Error {
@@ -118,6 +133,24 @@ function normalizeCommandLine(command: string, args: string[]): string {
   return [command, ...args].join(' ').trim().toLowerCase()
 }
 
+function getExecutableName(command: string): string {
+  const normalized = normalizeCommandToken(command)
+  const withoutTrailingSlash = normalized.replace(/[\\/]+$/, '')
+  return withoutTrailingSlash.split(/[\\/]/).pop() || normalized
+}
+
+function stripOuterQuotes(value: string): string {
+  const trimmed = String(value || '').trim()
+  if (trimmed.length >= 2) {
+    const first = trimmed[0]
+    const last = trimmed[trimmed.length - 1]
+    if ((first === '"' && last === '"') || (first === '\'' && last === '\'')) {
+      return trimmed.slice(1, -1).trim()
+    }
+  }
+  return trimmed
+}
+
 function isRuleMatch(rule: CommandRule, executable: string, commandLine: string): boolean {
   if (rule.enabled === false) return false
   const value = normalizeCommandToken(rule.value)
@@ -148,6 +181,30 @@ const SHELL_WRAPPERS = new Set([
   'sh', 'bash', 'zsh', 'fish', 'dash', 'ksh', 'tcsh',
   'cmd', 'cmd.exe', 'powershell', 'powershell.exe', 'pwsh', 'pwsh.exe'
 ])
+
+function parseShellWrapperInvocation(commandLine: string): ShellWrapperInvocation | null {
+  const match = String(commandLine || '').trim().match(/^(?:"([^"]+)"|'([^']+)'|(\S+))(.*)$/)
+  if (!match) return null
+
+  const firstToken = normalizeCommandToken(match[1] ?? match[2] ?? match[3] ?? '')
+  const wrapper = getExecutableName(firstToken)
+  if (!SHELL_WRAPPERS.has(wrapper)) return null
+
+  const rest = match[4] || ''
+  let innerMatch: RegExpMatchArray | null = null
+  if (wrapper === 'cmd' || wrapper === 'cmd.exe') {
+    innerMatch = rest.match(/\s\/c\s+([\s\S]+)$/i)
+  } else if (wrapper === 'powershell' || wrapper === 'powershell.exe' || wrapper === 'pwsh' || wrapper === 'pwsh.exe') {
+    innerMatch = rest.match(/\s-(?:command|c)\s+([\s\S]+)$/i)
+  } else {
+    innerMatch = rest.match(/\s-[a-z]*c[a-z]*\s+([\s\S]+)$/i)
+  }
+
+  return {
+    wrapper,
+    innerCommand: innerMatch ? stripOuterQuotes(innerMatch[1] || '') : undefined
+  }
+}
 
 /**
  * 对 shell 命令字符串做轻量级 token 提取
@@ -192,14 +249,11 @@ function extractShellTokens(commandLine: string, depth = 0): string[] {
     tokens.push(firstToken)
 
     // 检测 shell wrapper 模式：提取 -c / /c 后面的内层实际命令
-    if (SHELL_WRAPPERS.has(firstToken)) {
+    if (SHELL_WRAPPERS.has(getExecutableName(firstToken))) {
       // 支持 "…" / '…' 引号包裹的 -c 参数，完整取出后递归解析
-      const innerMatch = segment.match(/(?:\s+-c\s+|\s+\/c\s+)(?:"([^"]*)"|'([^']*)'|([^\s|&;]+))/i)
-      if (innerMatch) {
-        const innerCmd = (innerMatch[1] ?? innerMatch[2] ?? innerMatch[3] ?? '').trim()
-        if (innerCmd) {
-          tokens.push(...extractShellTokens(innerCmd, depth + 1))
-        }
+      const wrapperInvocation = parseShellWrapperInvocation(segment)
+      if (wrapperInvocation?.innerCommand) {
+        tokens.push(...extractShellTokens(wrapperInvocation.innerCommand, depth + 1))
       }
     }
   }
@@ -387,6 +441,45 @@ function sanitizeEnvKeysForAudit(keys: string[], settings: CommandRunnerSettings
  */
 function buildTrustPrefix(command: string): string {
   return extractExecutableIdentity(command)
+}
+
+function buildTrustCandidate(command: string, args: string[], shell: boolean): TrustCandidate {
+  const commandLine = normalizeCommandLine(command, args)
+  const executable = extractExecutableIdentity(command)
+  const wrapperInvocation = parseShellWrapperInvocation(commandLine)
+
+  if (shell) {
+    return {
+      prefix: commandLine || executable,
+      matchMode: 'commandLineExact',
+      persistable: false,
+      detail: '不可持久信任：shell=true 命令每次都需要确认'
+    }
+  }
+
+  if (wrapperInvocation) {
+    return {
+      prefix: commandLine,
+      matchMode: 'commandLineExact',
+      persistable: !hasObfuscatedShellPatterns(commandLine),
+      detail: '完整命令精确匹配（shell wrapper 不会被泛化信任）'
+    }
+  }
+
+  return {
+    prefix: buildTrustPrefix(command),
+    matchMode: 'executable',
+    persistable: true,
+    detail: '可执行文件匹配'
+  }
+}
+
+function isTrustedCommandMatch(record: CommandTrustRecord, executable: string, commandLine: string): boolean {
+  const mode = record.matchMode || 'executable'
+  if (mode === 'commandLineExact') {
+    return commandLine === record.prefix
+  }
+  return executable === record.prefix
 }
 
 export class CommandRunnerService {
@@ -603,12 +696,14 @@ export class CommandRunnerService {
       throw new CommandPolicyError('当前策略禁止 shell=true 执行')
     }
 
-    const executable = extractExecutableIdentity(command)
     const commandLine = normalizeCommandLine(command, args)
+    const executable = extractExecutableIdentity(command)
+    const wrapperInvocation = parseShellWrapperInvocation(commandLine)
+    const shellLike = shell || !!wrapperInvocation
 
-    // 对 shell:true 命令做增强的 denyList 匹配：
+    // 对 shell 命令做增强的 denyList 匹配：
     // 提取所有可执行 token（包括管道、链接、sh -c 包装的真实命令、$()/backtick 嵌套）
-    if (shell) {
+    if (shellLike) {
       // 兜底：混淆/编码类 shell 命令即使通过 denyList 也不允许继续
       // （base64+eval、PowerShell -EncodedCommand、/dev/tcp 反弹 shell 等）
       if (hasObfuscatedShellPatterns(commandLine)) {
@@ -630,14 +725,14 @@ export class CommandRunnerService {
 
     const enabledAllowRules = (settings.allowList || []).filter((item) => item.enabled !== false && String(item.value || '').trim())
     if (enabledAllowRules.length > 0) {
-      if (shell) {
-        // shell:true 深度校验：要求所有提取出的业务 token（非 shell wrapper）都能匹配白名单
+      if (shellLike) {
+        // shell 深度校验：要求所有提取出的业务 token（非 shell wrapper）都能匹配白名单
         // 避免 `sh -c "rm -rf /"` 仅凭 sh 在白名单就放行
         //
         // 注意：内层 token 匹配时不传完整 commandLine（否则 rule.value='sh' 的
         // prefix 规则会因 commandLine 以 "sh " 开头而满足，导致深度校验失效）。
         const tokens = extractShellTokens(commandLine)
-        const businessTokens = tokens.filter((t) => !SHELL_WRAPPERS.has(t))
+        const businessTokens = tokens.filter((t) => !SHELL_WRAPPERS.has(getExecutableName(t)))
         const candidates = businessTokens.length > 0 ? businessTokens : tokens
         for (const token of candidates) {
           const match = findMatchingRule(enabledAllowRules, token, token)
@@ -662,14 +757,16 @@ export class CommandRunnerService {
     if (!settings.requireConsent) return
     if (context.source === 'app' && context.assumeUserApproved === true) return
 
-    // 信任匹配：精确匹配可执行文件名 + source/pluginId + shell 兼容性
+    const trustCandidate = buildTrustCandidate(command, args, shell)
+
+    // 信任匹配：精确匹配可执行文件名或安全的完整命令 + source/pluginId + shell 兼容性
     // - 用 executable 精确匹配（非 commandLine 前缀），避免 git 匹配到 git-lfs
     // - shell:true 信任记录已废弃 — 不论是旧记录还是新记录，shell:true 一律不免确认
     // - shell:false 信任不覆盖 shell:true 执行（shell:true 风险面更大）
     const trusted = (settings.trustedFingerprints || []).find((item) => {
       if (item.source !== context.source) return false
       if ((item.pluginId || '') !== (context.pluginId || '')) return false
-      if (executable !== item.prefix) return false
+      if (!isTrustedCommandMatch(item, executable, commandLine)) return false
       // 当前执行使用 shell:true 时，无论信任记录如何，都不跳过确认
       if (shell) return false
       // shell:true 的旧信任记录不再有效（安全收紧）
@@ -681,7 +778,6 @@ export class CommandRunnerService {
       return
     }
 
-    const prefix = buildTrustPrefix(command)
     const preview = [command, ...args].join(' ').trim()
     const request: CommandConsentRequest = {
       source: context.source,
@@ -693,13 +789,18 @@ export class CommandRunnerService {
       shell,
       timeoutMs: input.timeoutMs,
       preview: preview || command,
+      trustPersistable: trustCandidate.persistable,
+      trustScope: trustCandidate.prefix,
+      trustScopeKind: trustCandidate.persistable ? trustCandidate.matchMode : 'none',
       title: context.source === 'plugin' ? '插件请求执行命令' : '应用请求执行命令',
       message: context.source === 'plugin'
         ? `插件 ${context.pluginId || 'unknown'} 请求执行系统命令`
         : '应用请求执行系统命令',
       detail: [
         `命令: ${preview || command}`,
-        `信任前缀: ${prefix}（信任后，以此开头的命令将自动允许）`,
+        trustCandidate.persistable
+          ? `信任范围: ${trustCandidate.prefix}（${trustCandidate.detail}）`
+          : `信任范围: ${trustCandidate.detail}`,
         `cwd: ${cwd || process.cwd()}`,
         sanitizedEnvKeys.length > 0 ? `env keys: ${sanitizedEnvKeys.join(', ')}` : 'env keys: (none)',
         `shell: ${shell ? 'true' : 'false'}`,
@@ -717,9 +818,10 @@ export class CommandRunnerService {
     if (decision === 'trust') {
       // shell:true 命令禁止持久信任 — 每次执行都必须确认
       // shell 模式风险面过大（可注入任意命令），不适合免确认
-      if (!shell) {
+      if (trustCandidate.persistable) {
         this.addTrustedPrefix({
-          prefix,
+          prefix: trustCandidate.prefix,
+          matchMode: trustCandidate.matchMode,
           source: context.source,
           pluginId: context.pluginId,
           command,
@@ -889,6 +991,7 @@ export class CommandRunnerService {
 
   private addTrustedPrefix(input: {
     prefix: string
+    matchMode: NonNullable<CommandTrustRecord['matchMode']>
     source: 'app' | 'plugin'
     pluginId?: string
     command: string
@@ -898,9 +1001,10 @@ export class CommandRunnerService {
     const policy = this.getPolicy()
     const now = this.now()
     const nextRecords = [...(policy.trustedFingerprints || [])]
-    // 查找同 source + pluginId + prefix 的已有记录
+    // 查找同 source + pluginId + prefix + matchMode 的已有记录
     const existedIndex = nextRecords.findIndex((item) =>
       item.prefix === input.prefix &&
+      (item.matchMode || 'executable') === input.matchMode &&
       item.source === input.source &&
       (item.pluginId || '') === (input.pluginId || '')
     )
@@ -912,6 +1016,7 @@ export class CommandRunnerService {
     } else {
       const nextRecord: CommandTrustRecord = {
         prefix: input.prefix,
+        matchMode: input.matchMode,
         source: input.source,
         pluginId: input.pluginId,
         command: input.command,
