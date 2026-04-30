@@ -1526,6 +1526,28 @@ interface PluginLaunchEndEvent {
   reason: 'finished' | 'failed' | 'cancelled' | 'skipped'
 }
 
+type DoubleTapModifier = 'Command' | 'Ctrl' | 'Alt' | 'Shift'
+type SuperPanelTriggerType = 'mouse_click' | 'mouse_longpress' | 'keyboard' | 'double_tap'
+type SuperPanelMouseButton = 'middle' | 'back' | 'forward' | 'right'
+
+interface SuperPanelTriggerSettings {
+  type: SuperPanelTriggerType
+  mouseButton?: SuperPanelMouseButton
+  longPressMs?: number
+  accelerator?: string
+  modifier?: DoubleTapModifier
+}
+
+interface SuperPanelSettings {
+  enabled: boolean
+  trigger: SuperPanelTriggerSettings
+  blockedApps: string[]
+  clipboardPollDelayMs: number
+  maxItems: number
+  instantTranslation: boolean
+  translationMaxLength?: number
+}
+
 interface MulbyOnboarding {
   getSettings(): Promise<unknown>
   updateShortcut(action: string, accelerator: string): Promise<unknown>
@@ -1545,6 +1567,7 @@ interface MulbyOnboarding {
     enabled: boolean
     priority: number
   }[]): Promise<unknown>
+  updateSuperPanel(superPanel: SuperPanelSettings): Promise<unknown>
   complete(): Promise<unknown>
   onClose(callback: () => void): Disposable
 }
