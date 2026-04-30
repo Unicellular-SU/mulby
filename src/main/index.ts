@@ -48,20 +48,27 @@ import { PluginInstaller } from './plugin/installer'
 import { PluginStoreService } from './plugin/store-service'
 import { MainWindowManager, isWindowAvailable } from './main-window-manager'
 import { shutdownMainProcessResources, isShutdownComplete, type ShutdownResources } from './app-shutdown'
+import { resolveWindowsNotificationIdentity } from './services/windows-notification-identity'
 import log from 'electron-log'
 
 patchConsoleWithTimestamp()
 
 const APP_DISPLAY_NAME = 'Mulby'
-const WINDOWS_APP_USER_MODEL_ID = 'com.mulby.app'
+const isDev = !app.isPackaged
 
 app.setName(APP_DISPLAY_NAME)
 if (process.platform === 'win32') {
-  app.setAppUserModelId(WINDOWS_APP_USER_MODEL_ID)
+  const windowsNotificationIdentity = resolveWindowsNotificationIdentity({
+    isPackaged: app.isPackaged,
+    execPath: process.execPath
+  })
+  app.setAppUserModelId(windowsNotificationIdentity.appUserModelId)
+  if (windowsNotificationIdentity.toastActivatorClsid) {
+    app.setToastActivatorCLSID(windowsNotificationIdentity.toastActivatorClsid)
+  }
 }
 
 // 开发模式下禁用安全警告（Vite HMR 需要 unsafe-eval）
-const isDev = !app.isPackaged
 if (isDev) {
   process.env['ELECTRON_DISABLE_SECURITY_WARNINGS'] = 'true'
 }
