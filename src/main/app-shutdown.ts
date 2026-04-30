@@ -19,6 +19,7 @@ export interface ShutdownResources {
   actionMenuWindowManager?: { destroy(): void }
   appTrayManager?: { destroy(): void }
   trayMenuWindowManager?: { destroy(): void }
+  activeWindowCleanup?: () => void
 }
 
 let hasShutdownCompleted = false
@@ -54,7 +55,8 @@ export async function shutdownMainProcessResources(
     await safely('actionMenuWindowManager', () => resources.actionMenuWindowManager?.destroy())
     await safely('appTrayManager', () => resources.appTrayManager?.destroy())
     await safely('trayMenuWindowManager', () => resources.trayMenuWindowManager?.destroy())
-    await safely('globalShortcut', () => globalShortcut.unregisterAll())
+    await safely('activeWindowWatcher', () => resources.activeWindowCleanup?.())
+    await safely('globalShortcut', () => globalShortcut?.unregisterAll?.())
   })().finally(() => {
     hasShutdownCompleted = true
   })

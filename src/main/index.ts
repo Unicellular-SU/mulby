@@ -36,7 +36,7 @@ import {
   type SettingsCenterSection
 } from './services/system-page-window-manager'
 import { OnboardingWindowManager } from './services/onboarding-window'
-import { onActiveWindowChange } from './services/active-window'
+import { clearActiveWindowSubscriptions, onActiveWindowChange } from './services/active-window'
 import { patchConsoleWithTimestamp } from '../shared/utils/console'
 import { createOpenClawNodeService, type OpenClawNodeService } from './openclaw'
 import { registerOpenClawHandlers } from './ipc/openclaw'
@@ -354,7 +354,8 @@ function getShutdownResources(): ShutdownResources {
     systemPageWindowManager,
     actionMenuWindowManager,
     appTrayManager: appTrayManager ?? undefined,
-    trayMenuWindowManager: trayMenuWindowManager ?? undefined
+    trayMenuWindowManager: trayMenuWindowManager ?? undefined,
+    activeWindowCleanup: clearActiveWindowSubscriptions
   }
 }
 

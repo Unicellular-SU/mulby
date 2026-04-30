@@ -50,6 +50,15 @@ export function onActiveWindowChange(callback: ActiveWindowChangeCallback): () =
   }
 }
 
+export function clearActiveWindowSubscriptions(): void {
+  subscriptions.clear()
+  if (process.platform === 'darwin') {
+    stopMacOSNativeWatcher()
+  } else if (process.platform === 'win32') {
+    stopWindowsPoller()
+  }
+}
+
 function notifySubscribers(info: ActiveWindowInfo) {
   for (const sub of subscriptions) {
     try {
