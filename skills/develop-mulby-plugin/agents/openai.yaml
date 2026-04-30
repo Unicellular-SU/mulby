@@ -1,4 +1,0 @@
-interface:
-  display_name: "Develop Mulby Plugin"
-  short_description: "Scaffold, brand, and ship Mulby plugins with local CLI."
-  default_prompt: "Use $develop-mulby-plugin to scaffold, implement, finalize the plugin icon, validate, and package a Mulby plugin with the local CLI and API docs."

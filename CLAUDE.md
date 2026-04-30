@@ -72,9 +72,12 @@ Plugin UI can run in two modes:
 - better-sqlite3 for data storage
 - VM2 for plugin sandboxing
 
-## CLI Tool
+## Related Repositories
 
-The `packages/mulby-cli/` contains a CLI for plugin development:
+- `https://github.com/Unicellular-SU/mulby-cli` contains the plugin development CLI.
+- `https://github.com/Unicellular-SU/mulby-skills` contains Mulby AI coding skills and references.
+
+The CLI can be cloned locally to `packages/mulby-cli/` for adjacent development, but that path is ignored by this repository.
 ```bash
 mulby create <plugin-name>  # Create new plugin from template
 ```
