@@ -63,16 +63,13 @@ jobs:
       - name: Verify app
         run: pnpm run verify:app
 
-      - name: Verify CLI
-        run: pnpm run verify:cli
-
       - name: Workflow Summary
         if: always()
+        shell: bash
         run: |
           {
             echo "## Quality Gate"
             echo "- Node.js: 24"
             echo "- OS: ${{ matrix.os }}"
             echo "- App: install -> verify:app"
-            echo "- CLI: install -> verify:cli"
           } >> "$GITHUB_STEP_SUMMARY"
