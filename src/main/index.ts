@@ -113,6 +113,11 @@ setPluginDialogWindowResolver((pluginId) => pluginWindowManager.getPluginWindow(
 setLoggerMinLevel(appSettingsManager.getSettings().developer.logLevel)
 const clipboardWatcher = new ClipboardWatcher()
 const clipboardHistoryManager = new ClipboardHistoryManager()
+
+function markMainProcessQuitting(): void {
+  isQuitting = true
+  mainWindowManager.setQuitting(true)
+}
 const systemPluginWindowManager = new SystemPluginWindowManager()
 const systemPageWindowManager = new SystemPageWindowManager()
 const onboardingWindowManager = new OnboardingWindowManager()
@@ -393,7 +398,7 @@ if (process.platform !== 'darwin') {
 // 单实例锁：确保只有一个应用实例运行
 const gotTheLock = app.requestSingleInstanceLock()
 if (!gotTheLock) {
-  isQuitting = true
+  markMainProcessQuitting()
   app.quit()
 } else {
   // 当第二个实例启动时，聚焦到已有窗口或处理 deep link
@@ -510,7 +515,7 @@ function restartMainProcess() {
 
 function quitMainProcess() {
   if (isQuitting) return
-  isQuitting = true
+  markMainProcessQuitting()
   app.quit()
 }
 
@@ -975,7 +980,7 @@ app.on('window-all-closed', () => {
 })
 
 app.on('before-quit', (event) => {
-  isQuitting = true
+  markMainProcessQuitting()
   mainWindowManager.flushStateSave()
   app.removeListener('second-instance', handleSecondInstance)
   if (process.platform === 'darwin') {

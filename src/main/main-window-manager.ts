@@ -14,6 +14,7 @@ import {
   getMainWindowWindowBounds,
   getMainWindowWindowSize
 } from './main-window-frame'
+import { shouldPreventMainWindowClose } from './main-window-close-policy'
 
 // ── Constants (L5: extracted magic numbers) ────────────────────────────
 export const MW_SHADOW_MARGIN = 12
@@ -137,6 +138,7 @@ export class MainWindowManager {
   private hasBeenShown = false
   private deferShadowShow = false
   private deps: MainWindowDeps | null = null
+  private quitting = false
 
   getWindow(): BrowserWindow | null {
     return this.window
@@ -404,7 +406,7 @@ export class MainWindowManager {
     win.on('close', (event) => {
       this.flushStateSave()
       const closeToTray = appSettingsManager.getSettings().tray.closeToTray
-      if (!closeToTray) return
+      if (!shouldPreventMainWindowClose({ closeToTray, isQuitting: this.quitting })) return
       event.preventDefault()
       this.hide()
     })
@@ -607,9 +609,6 @@ export class MainWindowManager {
 
   /** Allow external code to suppress blur-hide (e.g. during close-to-tray check) */
   setQuitting(quitting: boolean): void {
-    if (quitting) {
-      // Disable the close-event prevention when actually quitting
-      this.window?.removeAllListeners('close')
-    }
+    this.quitting = quitting
   }
 }
