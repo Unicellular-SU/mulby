@@ -1,6 +1,6 @@
 {
   "name": "mulby",
-  "version": "0.5.3",
+  "version": "0.5.4",
   "description": "跨平台插件式效率工具箱",
   "main": "dist/main/index.js",
   "scripts": {
@@ -8,9 +8,10 @@
     "build": "tsc && vite build",
     "build:smoke": "pnpm run build",
     "electron:dev": "vite",
-    "electron:build": "vite build && electron-builder",
-    "electron:publish": "vite build && electron-builder --publish always",
+    "electron:build": "pnpm run native:build && vite build && electron-builder",
+    "electron:publish": "pnpm run native:build && vite build && electron-builder --publish always",
     "postinstall": "node scripts/postinstall.mjs",
+    "native:build": "node scripts/build-native.mjs",
     "lint": "eslint src",
     "typecheck": "tsc --noEmit",
     "check:api-docs": "node scripts/check-api-docs.mjs",
