@@ -1,7 +1,5 @@
-
-import { join } from 'path'
-import { app } from 'electron'
 import log from 'electron-log'
+import { getNativeBuildAddonPathCandidates } from './native-addon-path'
 
 interface WindowWatcherAddon {
   WindowWatcher: {
@@ -38,17 +36,23 @@ export function subscribeNativeWindowChange(callback: WatcherCallback): () => vo
 
   if (!watcherInstance && process.platform === 'darwin') {
     try {
-      // 开发环境：app.getAppPath() 返回项目根目录
-      // 生产环境：app.asar.unpacked 下的 native 目录
-      let addonPath = ''
-      if (app.isPackaged) {
-        addonPath = join(process.resourcesPath, 'app.asar.unpacked', 'native', 'build', 'Release', 'window_watcher.node')
-      } else {
-        addonPath = join(app.getAppPath(), 'native', 'build', 'Release', 'window_watcher.node')
+      let addon: WindowWatcherAddon | null = null
+      const attempts: Array<{ path: string; error: unknown }> = []
+
+      for (const addonPath of getNativeBuildAddonPathCandidates('window_watcher.node')) {
+        try {
+          addon = require(addonPath) as WindowWatcherAddon
+          log.info(`[WindowWatcher] Native addon loaded successfully from: ${addonPath}`)
+          break
+        } catch (err) {
+          attempts.push({ path: addonPath, error: err })
+        }
       }
-      
-      const addon = require(addonPath) as WindowWatcherAddon
-      
+
+      if (!addon) {
+        throw attempts
+      }
+
       watcherInstance = new addon.WindowWatcher((info) => {
         // 窄化 type 字段
         const event: NativeWindowChangeEvent = {

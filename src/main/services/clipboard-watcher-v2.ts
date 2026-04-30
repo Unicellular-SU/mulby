@@ -1,8 +1,7 @@
 import { clipboard } from 'electron'
 import { EventEmitter } from 'events'
-import path from 'path'
-import { app } from 'electron'
 import log from 'electron-log'
+import { getNativeBuildAddonPathCandidates } from './native-addon-path'
 
 /**
  * 基于系统 API 的剪贴板监听器
@@ -29,23 +28,23 @@ interface NativeClipboardAddon {
 // 尝试加载 native addon
 let nativeClipboard: NativeClipboardAddon | null = null
 try {
-  // 开发模式和生产模式的路径不同
-  const isDev = !app.isPackaged
-  let addonPath: string
+  const attempts: Array<{ path: string; error: unknown }> = []
 
-  if (isDev) {
-    // 开发模式：从项目根目录的 native 文件夹加载
-    addonPath = path.join(app.getAppPath(), 'native/build/Release/clipboard_watcher.node')
-  } else {
-    // 生产模式：从 app.asar.unpacked 加载
-    addonPath = path.join(process.resourcesPath, 'native/build/Release/clipboard_watcher.node')
+  for (const addonPath of getNativeBuildAddonPathCandidates('clipboard_watcher.node')) {
+    try {
+      nativeClipboard = require(addonPath) as NativeClipboardAddon
+      log.info('[ClipboardWatcher] Native addon loaded successfully from:', addonPath)
+      break
+    } catch (err) {
+      attempts.push({ path: addonPath, error: err })
+    }
   }
 
-  nativeClipboard = require(addonPath) as NativeClipboardAddon
-  log.info('✅ [ClipboardWatcher] Native addon loaded successfully from:', addonPath)
+  if (!nativeClipboard) {
+    throw attempts
+  }
 } catch (err) {
-  log.warn('⚠️ [ClipboardWatcher] Native addon not available, falling back to polling')
-  log.warn('   Error:', (err as Error).message)
+  log.warn('[ClipboardWatcher] Native addon not available, falling back to polling:', err)
 }
 
 export class ClipboardWatcher extends EventEmitter {

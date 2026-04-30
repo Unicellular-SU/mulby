@@ -8,10 +8,10 @@
  *   - raw BGRA bitmap → nativeImage → Buffer 转换
  */
 
-import { join } from 'path'
-import { app, nativeImage, screen } from 'electron'
+import { nativeImage, screen } from 'electron'
 import log from 'electron-log'
 import { nativePhysicalRegionToDip, type RegionBounds } from './screen-coordinate-utils'
+import { getNativeBuildAddonPathCandidates } from './native-addon-path'
 
 // 原生模块导出的 API 类型
 interface NativeScreenCaptureAddon {
@@ -49,22 +49,21 @@ let cachedAddon: NativeScreenCaptureAddon | null | undefined = undefined
 function loadAddon(): NativeScreenCaptureAddon | null {
   if (cachedAddon !== undefined) return cachedAddon
 
-  try {
-    let addonPath: string
-    if (app.isPackaged) {
-      addonPath = join(process.resourcesPath, 'native', 'build', 'Release', 'screen_capture.node')
-    } else {
-      addonPath = join(app.getAppPath(), 'native', 'build', 'Release', 'screen_capture.node')
-    }
+  const attempts: Array<{ path: string; error: unknown }> = []
 
-    cachedAddon = require(addonPath) as NativeScreenCaptureAddon
-    log.info('[NativeScreenCapture] 原生模块加载成功')
-    return cachedAddon
-  } catch (err) {
-    log.warn('[NativeScreenCapture] 原生模块加载失败，将使用 fallback:', err)
-    cachedAddon = null
-    return null
+  for (const addonPath of getNativeBuildAddonPathCandidates('screen_capture.node')) {
+    try {
+      cachedAddon = require(addonPath) as NativeScreenCaptureAddon
+      log.info(`[NativeScreenCapture] 原生模块加载成功: ${addonPath}`)
+      return cachedAddon
+    } catch (err) {
+      attempts.push({ path: addonPath, error: err })
+    }
   }
+
+  log.warn('[NativeScreenCapture] 原生模块加载失败，将使用 fallback:', attempts)
+  cachedAddon = null
+  return null
 }
 
 /**

@@ -1,6 +1,5 @@
-import { app } from 'electron'
 import log from 'electron-log'
-import { join } from 'path'
+import { getNativeBuildAddonPathCandidates } from './native-addon-path'
 
 interface FinderSelectionAddon {
   getSelectedPaths(): {
@@ -20,19 +19,21 @@ function loadAddon(): FinderSelectionAddon | null {
     return null
   }
 
-  try {
-    const addonPath = app.isPackaged
-      ? join(process.resourcesPath, 'app.asar.unpacked', 'native', 'build', 'Release', 'finder_selection.node')
-      : join(app.getAppPath(), 'native', 'build', 'Release', 'finder_selection.node')
+  const attempts: Array<{ path: string; error: unknown }> = []
 
-    cachedAddon = require(addonPath) as FinderSelectionAddon
-    log.info('[FinderSelection] 原生模块加载成功')
-    return cachedAddon
-  } catch (err) {
-    cachedAddon = null
-    log.warn('[FinderSelection] 原生模块加载失败，将使用剪贴板回退:', err)
-    return null
+  for (const addonPath of getNativeBuildAddonPathCandidates('finder_selection.node')) {
+    try {
+      cachedAddon = require(addonPath) as FinderSelectionAddon
+      log.info(`[FinderSelection] 原生模块加载成功: ${addonPath}`)
+      return cachedAddon
+    } catch (err) {
+      attempts.push({ path: addonPath, error: err })
+    }
   }
+
+  cachedAddon = null
+  log.warn('[FinderSelection] 原生模块加载失败，将使用剪贴板回退:', attempts)
+  return null
 }
 
 export function getDarwinFinderSelectedPaths(): string[] {
