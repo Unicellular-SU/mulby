@@ -1,6 +1,6 @@
 {
   "name": "mulby",
-  "version": "0.5.2",
+  "version": "0.5.3",
   "description": "跨平台插件式效率工具箱",
   "main": "dist/main/index.js",
   "scripts": {
@@ -178,7 +178,9 @@
       {
         "from": "native/win32-text-selection/build/Release/text_selection.dll",
         "to": "native/win32-text-selection/text_selection.dll",
-        "filter": ["**/*"]
+        "filter": [
+          "**/*"
+        ]
       },
       {
         "from": "native/build/Release",
