@@ -160,6 +160,7 @@
       "node_modules/koffi/**/*",
       "native/build/Release/*.node"
     ],
+    "beforeBuild": "scripts/electron-builder-before-build.cjs",
     "afterPack": "scripts/electron-builder-after-pack.cjs",
     "extraResources": [
       {

@@ -55,19 +55,12 @@ jobs:
           cache-dependency-path: pnpm-lock.yaml
 
       - name: Install dependencies
+        if: runner.os != 'macOS'
         run: pnpm install
 
-      - name: Install macOS cross-arch sharp binaries
+      - name: Install dependencies (macOS universal native binaries)
         if: runner.os == 'macOS'
-        run: |
-          # macos-latest runner 是 arm64，npm ci 只装了 arm64 的 sharp binary。
-          # 额外安装 x64 的 native binary，使打包产物同时支持 Intel Mac。
-          # --force 跳过 EBADPLATFORM 的平台硬性验证，允许在 arm64 上安装 x64 包。
-          SHARP_VER=$(node -p "require('./node_modules/sharp/package.json').optionalDependencies['@img/sharp-darwin-x64']")
-          LIBVIPS_VER=$(node -p "require('./node_modules/sharp/package.json').optionalDependencies['@img/sharp-libvips-darwin-x64']")
-          npm install --no-save --no-audit --no-fund --force \
-            "@img/sharp-darwin-x64@${SHARP_VER}" \
-            "@img/sharp-libvips-darwin-x64@${LIBVIPS_VER}"
+        run: pnpm install --force --frozen-lockfile
 
       - name: Initialize releases repo (if empty)
         if: matrix.os == 'macos-latest'
@@ -106,19 +99,3 @@ jobs:
           # macOS 代码签名（可选，未配置时使用 ad-hoc 签名）
           # CSC_LINK: ${{ secrets.CSC_LINK }}
           # CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
-
-      - name: Upload artifacts
-        uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: release-${{ matrix.os }}
-          path: |
-            release/*.dmg
-            release/*.zip
-            release/*.exe
-            release/*.msi
-            release/*.AppImage
-            release/*.deb
-            release/*.yml
-            release/*.yaml
-          retention-days: 30
