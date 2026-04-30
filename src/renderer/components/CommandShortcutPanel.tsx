@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { Ban, Bolt, CheckCircle2, Keyboard, Play, Search, Tag, X } from 'lucide-react'
 import type { PluginCommandItem, PluginCommandShortcutBindingRecord } from '../../shared/types/plugin'
 
 // 精确命令标识，用于从全部指令跳转或候选列表点选
@@ -11,6 +12,7 @@ interface CommandTarget {
 interface CommandShortcutPanelProps {
   active: boolean
   mode: 'quick-launch' | 'all-commands'
+  cardClass: string
   initialQuery?: string
   initialCommandTarget?: CommandTarget
   onInitialQueryConsumed?: () => void
@@ -97,6 +99,10 @@ function getMatchRuleText(command: PluginCommandItem): string {
   return '暂无规则说明'
 }
 
+function getCommandTypeLabel(command: PluginCommandItem): string {
+  return command.commandKind === 'launch' ? '功能' : '匹配'
+}
+
 function commandTargetKey(command: PluginCommandItem): string {
   return `${command.pluginId}:${command.featureCode}:${command.cmdId}`
 }
@@ -113,6 +119,7 @@ function buildTargetPayload(command: PluginCommandItem) {
 export default function CommandShortcutPanel({
   active,
   mode,
+  cardClass,
   initialQuery,
   initialCommandTarget,
   onInitialQueryConsumed,
@@ -453,12 +460,74 @@ export default function CommandShortcutPanel({
     [bindings]
   )
 
+  const renderCommandStatusBadges = (command: PluginCommandItem) => {
+    const binding = bindingByTarget.get(commandTargetKey(command))
+    return (
+      <div className="flex shrink-0 flex-wrap items-center justify-end gap-1.5">
+        <span className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-medium ${command.commandKind === 'launch'
+          ? 'border-blue-200 bg-blue-50 text-blue-700 dark:border-blue-900/60 dark:bg-blue-950/30 dark:text-blue-300'
+          : 'border-violet-200 bg-violet-50 text-violet-700 dark:border-violet-900/60 dark:bg-violet-950/30 dark:text-violet-300'
+          }`}>
+          <Tag className="h-3 w-3" />
+          {getCommandTypeLabel(command)}
+        </span>
+        {binding && (
+          <span
+            className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] font-medium text-emerald-700 dark:border-emerald-900/60 dark:bg-emerald-950/30 dark:text-emerald-300"
+            title={binding.accelerator}
+          >
+            <Keyboard className="h-3 w-3" />
+            已绑定
+          </span>
+        )}
+        {command.disabled && (
+          <span className="inline-flex items-center gap-1 rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] font-medium text-amber-700 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-300">
+            <Ban className="h-3 w-3" />
+            已禁用
+          </span>
+        )}
+      </div>
+    )
+  }
+
+  const renderCommandCard = (command: PluginCommandItem) => {
+    const binding = bindingByTarget.get(commandTargetKey(command))
+    return (
+      <button
+        key={`${commandTargetKey(command)}:${command.cmdSignature}`}
+        className="group w-full border-b border-slate-200/70 px-3 py-3 text-left transition hover:bg-slate-100/70 last:border-b-0 dark:border-slate-800/80 dark:hover:bg-slate-900/70"
+        onClick={() => setSelectedMenuCommand(command)}
+      >
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0 flex-1">
+            <div className="truncate text-sm font-semibold text-slate-900 dark:text-white">{command.displayLabel}</div>
+            <div className="mt-1 truncate text-xs text-slate-500 dark:text-slate-400">
+              {command.featureExplain || command.featureCode}
+            </div>
+            {binding && (
+              <div className="mt-2 inline-flex max-w-full items-center gap-1.5 rounded-lg border border-slate-200 bg-slate-50 px-2 py-1 text-[11px] text-slate-600 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-300">
+                <Keyboard className="h-3 w-3 shrink-0" />
+                <span className="truncate">{binding.accelerator}</span>
+              </div>
+            )}
+          </div>
+          {renderCommandStatusBadges(command)}
+        </div>
+      </button>
+    )
+  }
+
   return (
-    <div className="space-y-4 rounded-2xl border border-slate-200/80 bg-white p-4 dark:border-slate-800/80 dark:bg-slate-900">
-      <div className="space-y-1">
-        <div className="text-sm font-semibold text-slate-900 dark:text-white">插件指令</div>
+    <div className="space-y-5">
+      <div className={`${cardClass} flex items-start justify-between gap-4`}>
+        <div className="space-y-1">
+          <div className="text-sm font-medium text-slate-900 dark:text-white">插件指令</div>
+          <div className="text-xs text-slate-500 dark:text-slate-400">
+            {mode === 'quick-launch' ? '绑定快捷键直接启动指令。' : '查看并管理已安装插件的全部指令。'}
+          </div>
+        </div>
         <div className="text-xs text-slate-500 dark:text-slate-400">
-          {mode === 'quick-launch' ? '绑定快捷键直接启动指令。' : '查看并管理已安装插件的全部指令。'}
+          {loading ? '加载中...' : `${commands.length} 条指令`}
         </div>
       </div>
 
@@ -474,9 +543,13 @@ export default function CommandShortcutPanel({
       )}
 
       {mode === 'quick-launch' && (
-        <div className="space-y-3">
-          <div className="text-xs text-slate-500 dark:text-slate-400">
-            手动输入指令名称并绑定快捷键。不展示全部指令，仅在你输入后匹配候选。
+        <>
+        <div className={`${cardClass} space-y-4`}>
+          <div>
+            <div className="text-sm font-medium text-slate-900 dark:text-white">绑定指令快捷键</div>
+            <div className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+              手动输入指令名称并绑定快捷键。不展示全部指令，仅在你输入后匹配候选。
+            </div>
           </div>
           <input
             className="w-full rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-200"
@@ -549,9 +622,15 @@ export default function CommandShortcutPanel({
               未找到可绑定的功能指令
             </div>
           )}
+        </div>
 
-          <div className="space-y-2">
-            <div className="text-xs font-medium text-slate-700 dark:text-slate-200">已绑定快捷启动</div>
+          <div className={`${cardClass} space-y-3`}>
+            <div>
+              <div className="text-sm font-medium text-slate-900 dark:text-white">已绑定快捷启动</div>
+              <div className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                管理已经注册为全局快捷键的插件指令。
+              </div>
+            </div>
             <div className="max-h-[220px] space-y-2 overflow-auto pr-1">
               {!loading && quickBindings.length === 0 && (
                 <div className="rounded-xl border border-dashed border-slate-200 px-3 py-6 text-center text-xs text-slate-500 dark:border-slate-700 dark:text-slate-400">
@@ -591,29 +670,39 @@ export default function CommandShortcutPanel({
               ))}
             </div>
           </div>
-        </div>
+        </>
       )}
 
       {mode === 'all-commands' && (
-        <div className="space-y-3">
-          <input
-            className="w-full rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-200"
-            placeholder="搜索全部指令（插件名 / 功能名 / 指令名）"
-            value={allCommandsQuery}
-            onChange={(e) => setAllCommandsQuery(e.target.value)}
-          />
+        <div className={`${cardClass} space-y-4`}>
+          <div>
+            <div className="text-sm font-medium text-slate-900 dark:text-white">指令管理</div>
+            <div className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+              按插件浏览功能指令和匹配指令，可打开、禁用或设置全局快捷键。
+            </div>
+          </div>
+          <label className="flex items-center gap-2 border-b border-slate-200/80 bg-transparent px-1 py-3 text-sm text-slate-700 transition focus-within:border-slate-400 dark:border-slate-800/80 dark:text-slate-200 dark:focus-within:border-slate-600">
+            <Search className="h-4 w-4 shrink-0 text-slate-400" />
+            <input
+              className="w-full bg-transparent text-sm outline-none placeholder:text-slate-400 dark:placeholder:text-slate-500"
+              placeholder="搜索全部指令（插件名 / 功能名 / 指令名）"
+              value={allCommandsQuery}
+              onChange={(e) => setAllCommandsQuery(e.target.value)}
+            />
+          </label>
 
           {!loading && filteredAllCommands.length === 0 ? (
             <div className="rounded-xl border border-dashed border-slate-200 px-3 py-8 text-center text-xs text-slate-500 dark:border-slate-700 dark:text-slate-400">
               未找到匹配指令
             </div>
           ) : (
-            <div className="flex flex-col gap-3 md:h-[520px] md:flex-row">
-              <aside className="rounded-2xl border border-slate-200/80 bg-slate-50/40 p-2 dark:border-slate-800/80 dark:bg-slate-950/40 md:w-48 md:shrink-0">
-                <div className="px-2 py-1.5 text-xs font-semibold text-slate-700 dark:text-slate-200">
-                  插件列表
+            <div className="flex flex-col gap-5 md:min-h-[520px] md:flex-row md:gap-0">
+              <aside className="md:w-56 md:shrink-0 md:border-r md:border-slate-200/80 md:pr-4 dark:md:border-slate-800/80">
+                <div className="flex items-center justify-between px-1 pb-3 text-xs font-semibold text-slate-700 dark:text-slate-200">
+                  <span>插件列表</span>
+                  <span className="font-normal text-slate-400">{pluginGroups.length}</span>
                 </div>
-                <div className="max-h-[220px] space-y-2 overflow-auto pr-1 md:max-h-[460px]">
+                <div className="space-y-1 overflow-auto pr-1 md:max-h-[calc(100vh-300px)]">
                   {!loading && pluginGroups.length === 0 && (
                     <div className="rounded-xl border border-dashed border-slate-200 px-3 py-6 text-center text-xs text-slate-500 dark:border-slate-700 dark:text-slate-400">
                       暂无插件指令
@@ -624,16 +713,16 @@ export default function CommandShortcutPanel({
                     return (
                       <button
                         key={`${group.pluginId}:${group.pluginDisplayName}`}
-                        className={`w-full rounded-xl border px-3 py-2 text-left transition ${isActive
-                          ? 'border-slate-900 bg-slate-900 text-white dark:border-white dark:bg-white dark:text-slate-900'
-                          : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300 dark:border-slate-800 dark:bg-slate-900/70 dark:text-slate-200 dark:hover:border-slate-700'
+                        className={`w-full rounded-xl px-3 py-2.5 text-left transition ${isActive
+                          ? 'bg-slate-900 text-white dark:bg-white dark:text-slate-900'
+                          : 'text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-900/70'
                           }`}
                         onClick={() => {
                           setSelectedPluginId(group.pluginId)
                         }}
                       >
                         <div className="truncate text-xs font-semibold">{group.pluginDisplayName}</div>
-                        <div className={`mt-1 text-[10px] ${isActive ? 'text-slate-100 dark:text-slate-700' : 'text-slate-500 dark:text-slate-400'}`}>
+                        <div className={`mt-1 text-[11px] ${isActive ? 'text-slate-100 dark:text-slate-700' : 'text-slate-500 dark:text-slate-400'}`}>
                           {group.items.length} 条指令 · 功能 {group.launchCount} · 匹配 {group.matchCount}
                         </div>
                       </button>
@@ -642,7 +731,7 @@ export default function CommandShortcutPanel({
                 </div>
               </aside>
 
-              <section className="min-w-0 rounded-2xl border border-slate-200/80 bg-slate-50/40 p-3 dark:border-slate-800/80 dark:bg-slate-950/40 md:flex-1">
+              <section className="min-w-0 md:flex-1 md:pl-5">
                 {!loading && !selectedPluginGroup && (
                   <div className="rounded-xl border border-dashed border-slate-200 px-3 py-6 text-center text-xs text-slate-500 dark:border-slate-700 dark:text-slate-400">
                     暂无指令
@@ -650,74 +739,59 @@ export default function CommandShortcutPanel({
                 )}
 
                 {selectedPluginGroup && (
-                  <div className="space-y-3 md:flex md:h-full md:flex-col md:space-y-3">
-                    <div className="text-sm font-semibold text-slate-900 dark:text-white">
-                      {selectedPluginGroup.pluginDisplayName}
+                  <div className="space-y-4 md:flex md:h-full md:flex-col">
+                    <div className="flex flex-wrap items-end justify-between gap-2 border-b border-slate-200/80 pb-3 dark:border-slate-800/80">
+                      <div>
+                        <div className="text-base font-semibold text-slate-900 dark:text-white">
+                          {selectedPluginGroup.pluginDisplayName}
+                        </div>
+                        <div className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                          {selectedPluginGroup.pluginName}
+                        </div>
+                      </div>
+                      <div className="flex gap-2 text-[11px] text-slate-500 dark:text-slate-400">
+                        <span className="rounded-full bg-slate-100 px-2 py-1 dark:bg-slate-900">
+                          功能 {selectedPluginGroup.launchCount}
+                        </span>
+                        <span className="rounded-full bg-slate-100 px-2 py-1 dark:bg-slate-900">
+                          匹配 {selectedPluginGroup.matchCount}
+                        </span>
+                      </div>
                     </div>
 
-                    <div className="max-h-[420px] space-y-3 overflow-auto pr-1 md:max-h-none md:flex-1">
-                      <div className="space-y-2">
-                        <div className="text-xs font-semibold text-slate-600 dark:text-slate-300">功能指令</div>
+                    <div className="space-y-6 overflow-auto pr-1 md:max-h-[calc(100vh-330px)] md:flex-1">
+                      <div>
+                        <div className="flex items-center gap-2 text-xs font-semibold text-slate-600 dark:text-slate-300">
+                          <Bolt className="h-3.5 w-3.5" />
+                          功能指令
+                        </div>
                         {selectedPluginLaunchCommands.length === 0 && (
-                          <div className="rounded-xl border border-dashed border-slate-200 px-3 py-4 text-center text-xs text-slate-500 dark:border-slate-700 dark:text-slate-400">
+                          <div className="mt-2 rounded-xl border border-dashed border-slate-200 px-3 py-4 text-center text-xs text-slate-500 dark:border-slate-700 dark:text-slate-400">
                             暂无功能指令
                           </div>
                         )}
-                        {selectedPluginLaunchCommands.map((command) => (
-                          <button
-                            key={`${commandTargetKey(command)}:${command.cmdSignature}`}
-                            className="w-full rounded-xl border border-slate-200/80 bg-white px-3 py-2 text-left transition hover:border-slate-300 dark:border-slate-800/80 dark:bg-slate-900/70 dark:hover:border-slate-700"
-                            onClick={() => setSelectedMenuCommand(command)}
-                          >
-                            <div className="flex items-center justify-between gap-2">
-                              <div className="min-w-0">
-                                <div className="truncate text-sm font-medium text-slate-900 dark:text-white">{command.displayLabel}</div>
-                                <div className="truncate text-[11px] text-slate-500 dark:text-slate-400">
-                                  {command.featureExplain}
-                                </div>
-                              </div>
-                              {command.disabled && (
-                                <div className="flex items-center gap-2">
-                                  <span className="rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] text-amber-700 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-300">
-                                    已禁用
-                                  </span>
-                                </div>
-                              )}
-                            </div>
-                          </button>
-                        ))}
+                        {selectedPluginLaunchCommands.length > 0 && (
+                          <div className="mt-2 divide-y-0 overflow-hidden border-y border-slate-200/70 dark:border-slate-800/80">
+                            {selectedPluginLaunchCommands.map(renderCommandCard)}
+                          </div>
+                        )}
                       </div>
 
-                      <div className="space-y-2">
-                        <div className="text-xs font-semibold text-slate-600 dark:text-slate-300">匹配指令</div>
+                      <div>
+                        <div className="flex items-center gap-2 text-xs font-semibold text-slate-600 dark:text-slate-300">
+                          <Search className="h-3.5 w-3.5" />
+                          匹配指令
+                        </div>
                         {selectedPluginMatchCommands.length === 0 && (
-                          <div className="rounded-xl border border-dashed border-slate-200 px-3 py-4 text-center text-xs text-slate-500 dark:border-slate-700 dark:text-slate-400">
+                          <div className="mt-2 rounded-xl border border-dashed border-slate-200 px-3 py-4 text-center text-xs text-slate-500 dark:border-slate-700 dark:text-slate-400">
                             暂无匹配指令
                           </div>
                         )}
-                        {selectedPluginMatchCommands.map((command) => (
-                          <button
-                            key={`${commandTargetKey(command)}:${command.cmdSignature}`}
-                            className="w-full rounded-xl border border-slate-200/80 bg-white px-3 py-2 text-left transition hover:border-slate-300 dark:border-slate-800/80 dark:bg-slate-900/70 dark:hover:border-slate-700"
-                            onClick={() => setSelectedMenuCommand(command)}
-                          >
-                            <div className="flex items-center justify-between gap-2">
-                              <div className="min-w-0">
-                                <div className="truncate text-sm font-medium text-slate-900 dark:text-white">{command.displayLabel}</div>
-                                <div className="truncate text-[11px] text-slate-500 dark:text-slate-400">
-                                  {command.featureExplain}
-                                </div>
-                              </div>
-                              {command.disabled && (
-                                <div className="flex items-center gap-2">
-                                  <span className="rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] text-amber-700 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-300">
-                                    已禁用
-                                  </span>
-                                </div>
-                              )}
-                            </div>
-                          </button>
-                        ))}
+                        {selectedPluginMatchCommands.length > 0 && (
+                          <div className="mt-2 overflow-hidden border-y border-slate-200/70 dark:border-slate-800/80">
+                            {selectedPluginMatchCommands.map(renderCommandCard)}
+                          </div>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -730,12 +804,22 @@ export default function CommandShortcutPanel({
 
       {selectedMenuCommand && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 px-4">
-          <div className="w-full max-w-sm rounded-2xl border border-slate-200 bg-white p-4 shadow-2xl dark:border-slate-800 dark:bg-slate-900">
-            <div className="mb-3">
-              <div className="truncate text-sm font-semibold text-slate-900 dark:text-white">{selectedMenuCommand.displayLabel}</div>
-              <div className="truncate text-xs text-slate-500 dark:text-slate-400">
-                {selectedMenuCommand.pluginDisplayName} · {selectedMenuCommand.featureExplain}
+          <div className="w-full max-w-md rounded-[24px] border border-slate-200 bg-white p-5 shadow-2xl dark:border-slate-800 dark:bg-slate-900">
+            <div className="mb-4 flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <div className="truncate text-base font-semibold text-slate-900 dark:text-white">{selectedMenuCommand.displayLabel}</div>
+                <div className="mt-1 truncate text-xs text-slate-500 dark:text-slate-400">
+                  {selectedMenuCommand.pluginDisplayName} · {selectedMenuCommand.featureExplain}
+                </div>
               </div>
+              <button
+                className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-500 transition hover:border-slate-300 hover:text-slate-900 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-300 dark:hover:text-white"
+                onClick={() => setSelectedMenuCommand(null)}
+                aria-label="关闭"
+                title="关闭"
+              >
+                <X className="h-4 w-4" />
+              </button>
             </div>
             {selectedMenuCommand.commandKind !== 'launch' && (
               <div className="mb-3 rounded-xl border border-slate-200/80 bg-slate-50/80 px-3 py-2 dark:border-slate-800/80 dark:bg-slate-950/50">
@@ -750,15 +834,16 @@ export default function CommandShortcutPanel({
             <div className="space-y-2">
               {selectedMenuCommand.commandKind === 'launch' && (
                 <button
-                  className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-left text-sm text-slate-700 transition hover:border-slate-300 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200"
+                  className="flex w-full items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-left text-sm text-slate-700 transition hover:border-slate-300 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200"
                   onClick={() => void openCommand(selectedMenuCommand)}
                 >
-                  打开指令
+                  <Play className="h-4 w-4 text-slate-400" />
+                  <span>打开指令</span>
                 </button>
               )}
               {selectedMenuCommand.commandKind === 'launch' && (
                 <button
-                  className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-left text-sm text-slate-700 transition hover:border-slate-300 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200"
+                  className="flex w-full items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-left text-sm text-slate-700 transition hover:border-slate-300 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200"
                   onClick={() => {
                     onRequestQuickLaunch?.(selectedMenuCommand.displayLabel, {
                       pluginId: selectedMenuCommand.pluginId,
@@ -768,20 +853,26 @@ export default function CommandShortcutPanel({
                     setSelectedMenuCommand(null)
                   }}
                 >
-                  设置全局快捷键
+                  <Keyboard className="h-4 w-4 text-slate-400" />
+                  <span>设置全局快捷键</span>
                 </button>
               )}
               <button
-                className="w-full rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-left text-sm text-red-700 transition hover:border-red-300 dark:border-red-900/60 dark:bg-red-950/30 dark:text-red-300"
+                className={`flex w-full items-center gap-2 rounded-xl border px-3 py-2.5 text-left text-sm transition ${selectedMenuCommand.disabled
+                  ? 'border-emerald-200 bg-emerald-50 text-emerald-700 hover:border-emerald-300 dark:border-emerald-900/60 dark:bg-emerald-950/30 dark:text-emerald-300'
+                  : 'border-red-200 bg-red-50 text-red-700 hover:border-red-300 dark:border-red-900/60 dark:bg-red-950/30 dark:text-red-300'
+                  }`}
                 onClick={() => void toggleCommandDisabled(selectedMenuCommand)}
               >
-                {selectedMenuCommand.disabled ? '启用指令' : '禁用指令'}
+                {selectedMenuCommand.disabled ? <CheckCircle2 className="h-4 w-4" /> : <Ban className="h-4 w-4" />}
+                <span>{selectedMenuCommand.disabled ? '启用指令' : '禁用指令'}</span>
               </button>
               <button
-                className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-left text-sm text-slate-500 transition hover:border-slate-300 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-300"
+                className="flex w-full items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-left text-sm text-slate-500 transition hover:border-slate-300 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-300"
                 onClick={() => setSelectedMenuCommand(null)}
               >
-                取消
+                <X className="h-4 w-4 text-slate-400" />
+                <span>取消</span>
               </button>
             </div>
           </div>

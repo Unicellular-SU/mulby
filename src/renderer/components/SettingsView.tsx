@@ -442,6 +442,7 @@ export default function SettingsView({
                 <CommandShortcutPanel
                   active={section === 'commandQuickLaunch'}
                   mode="quick-launch"
+                  cardClass={cardClass}
                   initialQuery={inlineShortcutCommandHint || shortcutCommandHint}
                   initialCommandTarget={inlineShortcutCommandTarget || undefined}
                   onInitialQueryConsumed={() => {
@@ -456,6 +457,7 @@ export default function SettingsView({
                 <CommandShortcutPanel
                   active={section === 'commandAll'}
                   mode="all-commands"
+                  cardClass={cardClass}
                   onBeforeOpenCommand={onPrepareCommandLaunch}
                   onRequestQuickLaunch={(commandLabel, target) => {
                     setInlineShortcutCommandHint(commandLabel)
