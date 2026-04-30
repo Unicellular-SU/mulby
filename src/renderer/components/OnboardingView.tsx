@@ -969,8 +969,8 @@ export default function OnboardingView() {
           </div>
 
           {/* 插件选装（条件步骤） */}
-          <div className={getStepClass('plugin-install')}>
-            <div className="onboarding-scroll">
+          <div className={`${getStepClass('plugin-install')} onboarding-step-plugin-install`}>
+            <div className="onboarding-scroll onboarding-plugin-install-scroll">
               <div className="onboarding-step-title">选择安装插件</div>
               <div className="onboarding-step-desc">从商店中浏览并安装你需要的插件。</div>
 

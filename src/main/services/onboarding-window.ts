@@ -9,6 +9,7 @@ import {
   applyWindowsFramelessSurface
 } from './window-surface'
 import { registerAppWindow, unregisterAppWindow } from './ipc-caller-resolver'
+import { resolveAppWindowIcon } from './window-icon'
 
 const ONBOARDING_WIDTH = 720
 const ONBOARDING_HEIGHT = 520
@@ -100,6 +101,7 @@ export class OnboardingWindowManager {
       hasShadow: true,
       roundedCorners: true,
       title: 'Mulby - 欢迎',
+      icon: resolveAppWindowIcon(),
       webPreferences: {
         preload: join(__dirname, '../preload/index.js'),
         contextIsolation: true,

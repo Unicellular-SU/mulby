@@ -17,6 +17,7 @@ import {
 } from '../services/window-surface'
 import { registerView } from '../services/webcontents-registry'
 import { registerPluginWindow, unregisterPluginWindow } from '../services/ipc-caller-resolver'
+import { resolvePluginWindowIcon } from '../services/window-icon'
 import { registerProtectedWindow, unregisterProtectedWindow } from './input'
 import {
   DETACHED_TITLEBAR_HEIGHT,
@@ -659,6 +660,7 @@ export class PluginWindowManager {
       transparent: windowConfig.transparent || useWindowsFramelessSurface,
       hasShadow: windowConfig.transparent ? false : !useWindowsFramelessSurface,
       title: plugin.manifest.displayName,
+      icon: resolvePluginWindowIcon(plugin),
       webPreferences: showTitleBar ? {
         preload: titlebarPreloadPath,
         contextIsolation: true,
@@ -910,6 +912,7 @@ export class PluginWindowManager {
       transparent: resolvedTransparent || useWindowsFramelessSurface,
       hasShadow: resolvedTransparent ? false : !useWindowsFramelessSurface,
       title: options?.title || plugin.manifest.displayName,
+      icon: resolvePluginWindowIcon(plugin),
       webPreferences: showTitleBar ? {
         preload: titlebarPreloadPath,
         contextIsolation: true,

@@ -24,6 +24,7 @@ import {
 } from '../main-window-frame'
 import { registerView, unregisterView } from '../services/webcontents-registry'
 import { registerPanelWindow, unregisterPanelWindow, registerPluginWindow, unregisterPluginWindow } from '../services/ipc-caller-resolver'
+import { resolvePluginWindowIcon } from '../services/window-icon'
 import {
     DETACHED_TITLEBAR_HEIGHT,
     setupTitlebarIPC,
@@ -863,6 +864,7 @@ export class PluginPanelWindow {
             transparent: useWindowsFramelessSurface,
             hasShadow: !useWindowsFramelessSurface,
             title: plugin.manifest.displayName,
+            icon: resolvePluginWindowIcon(plugin),
             webPreferences: showTitleBar ? {
                 preload: titlebarPreloadPath,
                 contextIsolation: true,
