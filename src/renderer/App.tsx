@@ -290,6 +290,7 @@ function MainApp() {
   const [attachments, setAttachments] = useState<UiAttachment[]>([])
   const [attachmentsManagerOpen, setAttachmentsManagerOpen] = useState(false)
   const [isWindowsMain, setIsWindowsMain] = useState(false)
+  const [isDocumentVisible, setIsDocumentVisible] = useState(() => document.visibilityState === 'visible')
   const searchText = query.length > 0 ? query : payloadText
   const runText = payloadText || query
   const searchPayload = useMemo(() => buildPayload(searchText, attachments), [searchText, attachments])
@@ -318,6 +319,14 @@ function MainApp() {
   const hasTextInput = query.length > 0 || payloadText.length > 0
   const isMacMain = !isSystemWindow && navigator.platform.toLowerCase().includes('mac')
   const visiblePluginLaunch = pluginLaunch?.visible ? pluginLaunch : null
+
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      setIsDocumentVisible(document.visibilityState === 'visible')
+    }
+    document.addEventListener('visibilitychange', handleVisibilityChange)
+    return () => document.removeEventListener('visibilitychange', handleVisibilityChange)
+  }, [])
 
   const focusSearchAfterPluginAction = useCallback(() => {
     setTimeout(() => {
@@ -632,7 +641,7 @@ function MainApp() {
 
     let height = SEARCH_BOX_HEIGHT
     let allowResize = false
-    const showSearchPanel = (hasTextInput || attachments.length > 0)
+    const showSearchPanel = (hasTextInput || attachments.length > 0 || isDocumentVisible)
       && !pluginOpen
       && !visiblePluginLaunch
       && !systemPageAttached
@@ -670,7 +679,7 @@ function MainApp() {
     }
   // perfTrace 不影响高度计算，不纳入依赖：避免每次搜索都触发多余的
   // setExpendHeight IPC（透明窗口频繁 resize 会破坏合成器）
-  }, [isSystemWindow, hasTextInput, pluginOpen, visiblePluginLaunch, systemPageAttached, detailsPluginName, attachments.length, attachmentsManagerOpen, managerMetrics.managerHeight, viewMode, searchPanelHeight])
+  }, [isSystemWindow, hasTextInput, pluginOpen, visiblePluginLaunch, systemPageAttached, detailsPluginName, attachments.length, attachmentsManagerOpen, managerMetrics.managerHeight, viewMode, searchPanelHeight, isDocumentVisible])
 
 
   // 监听插件附着事件
@@ -1573,7 +1582,7 @@ function MainApp() {
   }
 
   const showAttachmentManager = attachmentsManagerOpen && attachments.length > 0
-  const showPluginList = (hasTextInput || attachments.length > 0) && !pluginOpen && !visiblePluginLaunch && !systemPageAttached && !showAttachmentManager
+  const showPluginList = (hasTextInput || attachments.length > 0 || isDocumentVisible) && !pluginOpen && !visiblePluginLaunch && !systemPageAttached && !showAttachmentManager
   const hasBottomPanel = showAttachmentManager || showPluginList
 
   return (

@@ -91,6 +91,7 @@ export function registerPluginHandlers(manager: PluginManager, pluginToolRegistr
       displayName: plugin.manifest.displayName,
       featureCode: feature.code,
       featureExplain: feature.explain,
+      builtin: isBuiltin(plugin.path),
       matchType,
       icon: iconMeta.icon
     }

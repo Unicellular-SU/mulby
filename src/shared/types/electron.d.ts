@@ -96,6 +96,7 @@ export interface SearchResultItem {
   featureCode: string
   featureExplain: string
   featureRoute?: string
+  builtin?: boolean
   matchType: 'keyword' | 'regex' | 'files' | 'img' | 'over' | 'window'
   icon?: {
     type: 'url' | 'svg' | 'data-url' | 'emoji'

@@ -46,6 +46,11 @@ interface ResultSection {
   items: RenderItem[]
 }
 
+interface NavigationLocation {
+  sectionIndex: number
+  itemIndex: number
+}
+
 interface ResultCardProps {
   item: RenderItem
   isSelected: boolean
@@ -63,6 +68,7 @@ const RECENT_LIMIT = 40
 const MAX_CACHE_SIZE = 80
 const PREWARM_TOP_N = 3
 const PREWARM_DEDUPE_MS = 20_000
+const DEFAULT_SEARCH_SETTINGS: SearchSettings = { enableApps: true, enableFiles: false }
 
 const SYSTEM_APP_ICON_SVG = `
 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
@@ -78,7 +84,62 @@ const SYSTEM_FILE_ICON_SVG = `
 </svg>
 `.trim()
 
+const svgIconSanitizeCache = new Map<string, string | null>()
 
+function sanitizeSvgIcon(svg: string): string | null {
+  const cached = svgIconSanitizeCache.get(svg)
+  if (cached !== undefined) return cached
+
+  const cacheFailure = () => {
+    setLruCache(svgIconSanitizeCache, svg, null, MAX_CACHE_SIZE)
+    return null
+  }
+
+  try {
+    const doc = new DOMParser().parseFromString(svg, 'image/svg+xml')
+    const root = doc.documentElement
+    if (!root || root.tagName.toLowerCase() !== 'svg') return cacheFailure()
+    if (doc.querySelector('parsererror')) return cacheFailure()
+
+    doc.querySelectorAll('script, foreignObject, iframe, object, embed, link, meta, style').forEach((node) => {
+      node.remove()
+    })
+
+    for (const element of Array.from(doc.querySelectorAll('*'))) {
+      for (const attribute of Array.from(element.attributes)) {
+        const name = attribute.name.toLowerCase()
+        const value = attribute.value.trim().toLowerCase()
+        if (name.startsWith('on') || name === 'style') {
+          element.removeAttribute(attribute.name)
+          continue
+        }
+        if ((name === 'href' || name === 'xlink:href') && !value.startsWith('#')) {
+          element.removeAttribute(attribute.name)
+          continue
+        }
+        if (value.includes('javascript:') || value.includes('data:text/html')) {
+          element.removeAttribute(attribute.name)
+        }
+      }
+    }
+
+    const sanitized = new XMLSerializer().serializeToString(root)
+    setLruCache(svgIconSanitizeCache, svg, sanitized, MAX_CACHE_SIZE)
+    return sanitized
+  } catch {
+    return cacheFailure()
+  }
+}
+
+function DefaultPluginIcon() {
+  return (
+    <div className="plugin-icon plugin-icon-default">
+      <svg viewBox="0 0 24 24" fill="currentColor" width="20" height="20">
+        <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z" />
+      </svg>
+    </div>
+  )
+}
 
 // 简单哈希用于缓存键
 function hashPayload(payload: InputPayload): string {
@@ -101,6 +162,52 @@ function getColumns(width: number): number {
   if (width <= 760) return 4
   if (width <= 980) return 5
   return 6
+}
+
+function findNavigationLocation(sections: ResultSection[], selectedKey: string): NavigationLocation | null {
+  for (let sectionIndex = 0; sectionIndex < sections.length; sectionIndex += 1) {
+    const itemIndex = sections[sectionIndex].items.findIndex((item) => item.key === selectedKey)
+    if (itemIndex >= 0) {
+      return { sectionIndex, itemIndex }
+    }
+  }
+  return null
+}
+
+function getVerticalNavigationKey(
+  sections: ResultSection[],
+  selectedKey: string,
+  columns: number,
+  direction: 'up' | 'down'
+): string | null {
+  const location = findNavigationLocation(sections, selectedKey)
+  if (!location) return sections[0]?.items[0]?.key ?? null
+
+  const section = sections[location.sectionIndex]
+  const sameSectionIndex = location.itemIndex + (direction === 'down' ? columns : -columns)
+  if (sameSectionIndex >= 0 && sameSectionIndex < section.items.length) {
+    return section.items[sameSectionIndex].key
+  }
+
+  const column = location.itemIndex % columns
+
+  if (direction === 'down') {
+    for (let sectionIndex = location.sectionIndex + 1; sectionIndex < sections.length; sectionIndex += 1) {
+      const nextItems = sections[sectionIndex].items
+      if (nextItems.length === 0) continue
+      return nextItems[Math.min(column, nextItems.length - 1)].key
+    }
+    return null
+  }
+
+  for (let sectionIndex = location.sectionIndex - 1; sectionIndex >= 0; sectionIndex -= 1) {
+    const previousItems = sections[sectionIndex].items
+    if (previousItems.length === 0) continue
+    const lastRowStart = Math.floor((previousItems.length - 1) / columns) * columns
+    return previousItems[Math.min(lastRowStart + column, previousItems.length - 1)].key
+  }
+
+  return null
 }
 
 function getPluginKey(item: SearchResultItem): string {
@@ -246,17 +353,13 @@ function setLruCache<T>(cache: Map<string, T>, key: string, value: T, maxSize: n
 // 图标组件
 const PluginIcon = memo(function PluginIcon({ icon }: { icon?: SearchResultItem['icon'] }) {
   if (!icon) {
-    return (
-      <div className="plugin-icon plugin-icon-default">
-        <svg viewBox="0 0 24 24" fill="currentColor" width="20" height="20">
-          <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z" />
-        </svg>
-      </div>
-    )
+    return <DefaultPluginIcon />
   }
 
   if (icon.type === 'svg') {
-    return <div className="plugin-icon" dangerouslySetInnerHTML={{ __html: icon.value }} />
+    const sanitized = sanitizeSvgIcon(icon.value)
+    if (!sanitized) return <DefaultPluginIcon />
+    return <div className="plugin-icon" dangerouslySetInnerHTML={{ __html: sanitized }} />
   }
 
   if (icon.type === 'emoji') {
@@ -328,6 +431,7 @@ function PluginList({
   onShowDetails
 }: PluginListProps) {
   const [pluginResults, setPluginResults] = useState<SearchResultItem[]>([])
+  const [pluginResultsHash, setPluginResultsHash] = useState('')
   const [systemApps, setSystemApps] = useState<DesktopAppSearchResult[]>([])
   const [systemFiles, setSystemFiles] = useState<DesktopFileSearchResult[]>([])
   const [systemAppsResultHash, setSystemAppsResultHash] = useState('')
@@ -345,9 +449,6 @@ function PluginList({
   const payloadRef = useRef(runPayload)
   const payloadAttachmentKeyRef = useRef(getAttachmentTraceKey(runPayload.attachments))
   const requestIdRef = useRef(0)
-  const searchStartedAtRef = useRef(0)
-  const searchStartedPayloadHashRef = useRef('')
-  const searchStartedTraceIdRef = useRef(0)
   const launchedSearchTokenRef = useRef('')
 
   const pluginCacheRef = useRef<Map<string, SearchResultItem[]>>(new Map())
@@ -355,8 +456,9 @@ function PluginList({
   const systemFileCacheRef = useRef<Map<string, DesktopFileSearchResult[]>>(new Map())
   const systemIconCacheRef = useRef<Map<string, string>>(new Map())
   const systemIconPendingRef = useRef<Set<string>>(new Set())
+  const mountedRef = useRef(true)
   // 搜索设置：控制是否搜索本机应用和文件
-  const searchSettingsRef = useRef<SearchSettings>({ enableApps: true, enableFiles: false })
+  const [searchSettings, setSearchSettings] = useState<SearchSettings | null>(null)
 
   const [searchPreferences, setSearchPreferences] = useState<SearchPreferenceState>({ pinnedFeatures: [], hiddenFeatures: [] })
 
@@ -372,14 +474,18 @@ function PluginList({
     payloadRef.current = runPayload
   }, [runPayload])
 
+  useEffect(() => {
+    return () => {
+      mountedRef.current = false
+    }
+  }, [])
+
   // 挂载时获取搜索设置
   useEffect(() => {
     void window.mulby.settings.get().then(({ settings }) => {
-      if (settings?.search) {
-        searchSettingsRef.current = settings.search
-      }
+      setSearchSettings(settings?.search ?? DEFAULT_SEARCH_SETTINGS)
     }).catch(() => {
-      // 获取设置失败，保持默认值
+      setSearchSettings(DEFAULT_SEARCH_SETTINGS)
     })
 
     let active = true
@@ -415,16 +521,18 @@ function PluginList({
     return () => window.removeEventListener('resize', handleResize)
   }, [])
 
-  const payloadHash = useMemo(() => hashPayload(searchPayload), [searchPayload.text, searchPayload.attachments])
+  const payloadHash = useMemo(() => hashPayload(searchPayload), [searchPayload])
 
   useEffect(() => {
+    if (!searchSettings) return
+
     let cancelled = false
     let kickoffTimer: ReturnType<typeof setTimeout> | null = null
     let systemTimer: ReturnType<typeof setTimeout> | null = null
 
     const runSearch = () => {
       const currentPayload = searchPayload
-      const searchToken = `${traceId}:${payloadHash}`
+      const searchToken = `${traceId}:${payloadHash}:${searchSettings.enableApps ? 1 : 0}:${searchSettings.enableFiles ? 1 : 0}`
       if (launchedSearchTokenRef.current === searchToken) {
         return
       }
@@ -432,13 +540,9 @@ function PluginList({
 
       const currentRequestId = requestIdRef.current + 1
       requestIdRef.current = currentRequestId
-      searchStartedAtRef.current = performance.now()
-      searchStartedPayloadHashRef.current = payloadHash
-      searchStartedTraceIdRef.current = traceId
-
-
 
       const hasInput = currentPayload.text.trim().length > 0 || currentPayload.attachments.length > 0
+      const canUsePluginCache = Boolean(currentPayload.activeWindow)
       if (!hasInput) {
         // 即使无输入，也调用 plugin.search 以支持窗口匹配（CmdWindow）
         // 主进程会注入 activeWindow 上下文并返回 window 匹配的插件
@@ -449,20 +553,26 @@ function PluginList({
         setIsSystemAppsLoading(false)
         setIsSystemFilesLoading(false)
 
-        const emptyCache = pluginCacheRef.current.get(payloadHash)
+        const emptyCache = canUsePluginCache ? pluginCacheRef.current.get(payloadHash) : undefined
         if (emptyCache) {
           setPluginResults(emptyCache)
+          setPluginResultsHash(payloadHash)
           setIsPluginLoading(false)
           return
         }
 
         setIsPluginLoading(true)
+        setPluginResults([])
+        setPluginResultsHash('')
         void window.mulby.plugin.search(currentPayload)
           .then((result) => {
             if (cancelled || currentRequestId !== requestIdRef.current) return
             const merged = dedupePluginResults(result)
-            setLruCache(pluginCacheRef.current, payloadHash, merged, MAX_CACHE_SIZE)
+            if (canUsePluginCache) {
+              setLruCache(pluginCacheRef.current, payloadHash, merged, MAX_CACHE_SIZE)
+            }
             setPluginResults(merged)
+            setPluginResultsHash(payloadHash)
           })
           .catch((error) => {
             if (cancelled || currentRequestId !== requestIdRef.current) return
@@ -475,19 +585,25 @@ function PluginList({
         return
       }
 
-      const cachedPlugins = pluginCacheRef.current.get(payloadHash)
+      const cachedPlugins = canUsePluginCache ? pluginCacheRef.current.get(payloadHash) : undefined
       if (cachedPlugins) {
         setPluginResults(cachedPlugins)
+        setPluginResultsHash(payloadHash)
         setIsPluginLoading(false)
 
       } else {
         setIsPluginLoading(true)
+        setPluginResults([])
+        setPluginResultsHash('')
         void window.mulby.plugin.search(currentPayload)
           .then((result) => {
             if (cancelled || currentRequestId !== requestIdRef.current) return
             const merged = dedupePluginResults(result)
-            setLruCache(pluginCacheRef.current, payloadHash, merged, MAX_CACHE_SIZE)
+            if (canUsePluginCache) {
+              setLruCache(pluginCacheRef.current, payloadHash, merged, MAX_CACHE_SIZE)
+            }
             setPluginResults(merged)
+            setPluginResultsHash(payloadHash)
 
           })
           .catch((error) => {
@@ -504,8 +620,8 @@ function PluginList({
 
       const query = currentPayload.text.trim()
       const hasTextOnlyInput = query.length > 0 && currentPayload.attachments.length === 0
-      const shouldSearchApps = hasTextOnlyInput && isSystemSearchQueryEligible(query) && searchSettingsRef.current.enableApps
-      const shouldSearchFiles = hasTextOnlyInput && isSystemSearchQueryEligible(query) && searchSettingsRef.current.enableFiles && query.length >= 2
+      const shouldSearchApps = hasTextOnlyInput && isSystemSearchQueryEligible(query) && searchSettings.enableApps
+      const shouldSearchFiles = hasTextOnlyInput && isSystemSearchQueryEligible(query) && searchSettings.enableFiles && query.length >= 2
 
       if (!hasTextOnlyInput) {
         setSystemApps([])
@@ -609,7 +725,7 @@ function PluginList({
         clearTimeout(systemTimer)
       }
     }
-  }, [payloadHash, searchPayload, traceAttachmentCount, traceId, traceInputLength, traceSource, traceStartedAt])
+  }, [payloadHash, searchPayload, searchSettings, traceAttachmentCount, traceId, traceInputLength, traceSource, traceStartedAt])
 
   const promoteRecent = useCallback((pluginItem: SearchResultItem) => {
     setRecentPlugins((prev) => {
@@ -648,7 +764,8 @@ function PluginList({
   }, [searchPreferences.pinnedFeatures])
 
   const bestPlugins = useMemo(() => {
-    const sorted = dedupePluginResults(pluginResults)
+    const sourcePlugins = pluginResultsHash === payloadHash ? pluginResults : []
+    const sorted = dedupePluginResults(sourcePlugins)
       .filter((item) => !hiddenKeys.has(getPluginKey(item)))
       .slice()
     sorted.sort((a, b) => {
@@ -659,7 +776,7 @@ function PluginList({
       return a.displayName.localeCompare(b.displayName)
     })
     return sorted
-  }, [pluginResults, searchPayload.text, frecencyMap, hiddenKeys, pinnedKeys])
+  }, [pluginResults, pluginResultsHash, payloadHash, searchPayload.text, frecencyMap, hiddenKeys, pinnedKeys])
 
   const bestKeys = useMemo(() => {
     return new Set(bestPlugins.map((item) => getPluginKey(item)))
@@ -690,7 +807,7 @@ function PluginList({
       const fb = frecencyMap.get(getPluginKey(b)) ?? 0
       return getRecentItemScore(b, query, fb) - getRecentItemScore(a, query, fa)
     })
-  }, [recentPlugins, searchPayload.text, bestKeys, frecencyMap])
+  }, [recentPlugins, searchPayload.text, bestKeys, hiddenKeys, frecencyMap])
 
   const appDisplayItems = useMemo(() => {
     const seen = new Set<string>()
@@ -765,6 +882,7 @@ function PluginList({
             changed = true
           }
           if (changed) {
+            if (!mountedRef.current) return
             setSystemIconVersion(prev => prev + 1)
           }
         })
@@ -873,7 +991,7 @@ function PluginList({
 
   const flatItems = useMemo(() => sections.flatMap((section) => section.items), [sections])
   const isSystemLoading = isSystemAppsLoading || isSystemFilesLoading
-  const isSearching = isPluginLoading || isSystemLoading
+  const isSearching = searchSettings === null || isPluginLoading || isSystemLoading
 
   // 搜索预热：Top N 结果、选中项变化或鼠标悬停时提前初始化 Host
   const prewarmTimersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map())
@@ -1066,18 +1184,9 @@ function PluginList({
         menuItems.push({ id: 'copy-launch-link', label: '复制启动链接' })
       }
 
-      // 仅非内置插件显示卸载选项
-      if (item.pluginItem) {
-        try {
-          const allPlugins = await window.mulby.plugin.getAll()
-          const pluginInfo = allPlugins.find((p: { id: string }) => p.id === item.pluginItem!.pluginId)
-          if (pluginInfo && !pluginInfo.builtin) {
-            menuItems.push({ id: 'sep2', label: '', separator: true })
-            menuItems.push({ id: 'uninstall', label: '卸载此插件', danger: true })
-          }
-        } catch {
-          // 获取插件列表失败时不显示卸载按钮，安全优先
-        }
+      if (item.pluginItem?.builtin === false) {
+        menuItems.push({ id: 'sep2', label: '', separator: true })
+        menuItems.push({ id: 'uninstall', label: '卸载此插件', danger: true })
       }
     } else if (item.type === 'system-app') {
       // 系统应用
@@ -1241,25 +1350,21 @@ function PluginList({
         }
       }
 
+      const selectKey = (key: string | null) => {
+        if (!key) return
+        setSelectedKey(key)
+        scrollToKey(key)
+      }
+
       switch (e.key) {
         case 'ArrowUp': {
           e.preventDefault()
-          const nextIndex = currentIndex - columns
-          if (nextIndex >= 0) {
-            const nextKey = flatItems[nextIndex].key
-            setSelectedKey(nextKey)
-            scrollToKey(nextKey)
-          }
+          selectKey(getVerticalNavigationKey(sections, selectedKey, columns, 'up'))
           break
         }
         case 'ArrowDown': {
           e.preventDefault()
-          const nextIndex = currentIndex + columns
-          if (nextIndex <= maxIndex) {
-            const nextKey = flatItems[nextIndex].key
-            setSelectedKey(nextKey)
-            scrollToKey(nextKey)
-          }
+          selectKey(getVerticalNavigationKey(sections, selectedKey, columns, 'down'))
           break
         }
         case 'ArrowLeft': {
@@ -1298,7 +1403,7 @@ function PluginList({
 
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [flatItems, selectedKey, columns, handleRun, onShowDetails])
+  }, [flatItems, sections, selectedKey, columns, handleRun, onShowDetails])
 
   return (
     <div className="plugin-grid" role="listbox" aria-label="搜索结果" ref={scrollContainerRef}>
