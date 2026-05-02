@@ -26,6 +26,7 @@ interface PluginListProps {
 }
 
 type ResultSectionKey = 'best' | 'apps' | 'files' | 'recent'
+type ExpandableResultSectionKey = Exclude<ResultSectionKey, 'recent'>
 type RenderItemType = 'plugin' | 'recent' | 'system-app' | 'system-file'
 
 interface RenderItem {
@@ -40,11 +41,15 @@ interface RenderItem {
   fileItem?: DesktopFileSearchResult
 }
 
-interface ResultSection {
-  key: ResultSectionKey
+interface ResultSectionBase {
   title: string
   items: RenderItem[]
+  totalCount: number
 }
+
+type ResultSection =
+  | (ResultSectionBase & { key: 'recent' })
+  | (ResultSectionBase & { key: ExpandableResultSectionKey })
 
 interface NavigationLocation {
   sectionIndex: number
@@ -59,8 +64,9 @@ interface ResultCardProps {
   onContextMenu?: (item: RenderItem, e: React.MouseEvent) => void
 }
 
-const SYSTEM_APP_SEARCH_LIMIT = 12
-const SYSTEM_FILE_SEARCH_LIMIT = 12
+const DEFAULT_DISPLAY_LIMIT = 12
+const SYSTEM_APP_SEARCH_LIMIT = 24
+const SYSTEM_FILE_SEARCH_LIMIT = 50
 const SYSTEM_FILE_STABLE_DELAY_MS = 260
 const SYSTEM_ICON_TARGET_SIZE = 128
 const SYSTEM_ICON_BATCH_CONCURRENCY = 6
@@ -69,6 +75,11 @@ const MAX_CACHE_SIZE = 80
 const PREWARM_TOP_N = 3
 const PREWARM_DEDUPE_MS = 20_000
 const DEFAULT_SEARCH_SETTINGS: SearchSettings = { enableApps: true, enableFiles: false }
+const COLLAPSED_EXPANDED_SECTIONS: Record<ExpandableResultSectionKey, boolean> = {
+  best: false,
+  apps: false,
+  files: false
+}
 
 const SYSTEM_APP_ICON_SVG = `
 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
@@ -445,6 +456,9 @@ function PluginList({
   const contentRef = useRef<HTMLDivElement | null>(null)
   const [columns, setColumns] = useState(() => getColumns(window.innerWidth))
   const [systemIconVersion, setSystemIconVersion] = useState(0)
+  const [expandedSections, setExpandedSections] = useState<Record<ExpandableResultSectionKey, boolean>>(() => ({
+    ...COLLAPSED_EXPANDED_SECTIONS
+  }))
 
   const payloadRef = useRef(runPayload)
   const payloadAttachmentKeyRef = useRef(getAttachmentTraceKey(runPayload.attachments))
@@ -494,7 +508,7 @@ function PluginList({
     let active = true
     void window.mulby.plugin.getSearchPreferences().then(prefs => {
       if (active) setSearchPreferences(prefs)
-    }).catch(() => {})
+    }).catch(() => { })
 
     return () => { active = false }
   }, [])
@@ -525,6 +539,17 @@ function PluginList({
   }, [])
 
   const payloadHash = useMemo(() => hashPayload(searchPayload), [searchPayload])
+
+  useEffect(() => {
+    setExpandedSections({ ...COLLAPSED_EXPANDED_SECTIONS })
+  }, [payloadHash])
+
+  const toggleSectionExpand = useCallback((sectionKey: ExpandableResultSectionKey) => {
+    setExpandedSections(prev => ({
+      ...prev,
+      [sectionKey]: !prev[sectionKey]
+    }))
+  }, [])
 
   useEffect(() => {
     if (!searchSettings) return
@@ -906,10 +931,10 @@ function PluginList({
         pluginItem: item
       }))
     if (recentItems.length > 0) {
-      next.push({ key: 'recent', title: '最近使用', items: recentItems })
+      next.push({ key: 'recent', title: '最近使用', items: recentItems, totalCount: recentDisplayItems.length })
     }
 
-    const bestItems: RenderItem[] = bestPlugins.map((item) => ({
+    const fullBestItems: RenderItem[] = bestPlugins.map((item) => ({
       key: `plugin:${getPluginKey(item)}`,
       type: 'plugin',
       title: item.featureExplain || item.displayName,
@@ -917,11 +942,12 @@ function PluginList({
       icon: item.icon,
       pluginItem: item
     }))
+    const bestItems = expandedSections.best ? fullBestItems : fullBestItems.slice(0, DEFAULT_DISPLAY_LIMIT)
     if (bestItems.length > 0) {
-      next.push({ key: 'best', title: '最佳匹配插件', items: bestItems })
+      next.push({ key: 'best', title: '最佳匹配插件', items: bestItems, totalCount: fullBestItems.length })
     }
 
-    const apps: RenderItem[] = appDisplayItems.map((item) => ({
+    const fullApps: RenderItem[] = appDisplayItems.map((item) => ({
       key: `app:${item.path}`,
       iconKey: getSystemIconCacheKey('app', item.path),
       type: 'system-app',
@@ -932,11 +958,12 @@ function PluginList({
         : { type: 'svg', value: SYSTEM_APP_ICON_SVG },
       appItem: item
     }))
+    const apps = expandedSections.apps ? fullApps : fullApps.slice(0, DEFAULT_DISPLAY_LIMIT)
     if (apps.length > 0) {
-      next.push({ key: 'apps', title: '系统应用', items: apps })
+      next.push({ key: 'apps', title: '系统应用', items: apps, totalCount: fullApps.length })
     }
 
-    const files: RenderItem[] = fileDisplayItems.map((item) => ({
+    const fullFiles: RenderItem[] = fileDisplayItems.map((item) => ({
       key: `file:${item.path}`,
       iconKey: getSystemIconCacheKey('file', item.path),
       type: 'system-file',
@@ -947,12 +974,23 @@ function PluginList({
         : { type: 'svg', value: SYSTEM_FILE_ICON_SVG },
       fileItem: item
     }))
+    const files = expandedSections.files ? fullFiles : fullFiles.slice(0, DEFAULT_DISPLAY_LIMIT)
     if (files.length > 0) {
-      next.push({ key: 'files', title: '系统文件', items: files })
+      next.push({ key: 'files', title: '系统文件', items: files, totalCount: fullFiles.length })
     }
 
     return next
-  }, [bestPlugins, appDisplayItems, fileDisplayItems, recentDisplayItems, systemIconVersion, columns])
+  }, [
+    bestPlugins,
+    appDisplayItems,
+    fileDisplayItems,
+    recentDisplayItems,
+    systemIconVersion,
+    columns,
+    expandedSections.best,
+    expandedSections.apps,
+    expandedSections.files
+  ])
 
   const flatItems = useMemo(() => sections.flatMap((section) => section.items), [sections])
   const isSystemLoading = isSystemAppsLoading || isSystemFilesLoading
@@ -1060,7 +1098,14 @@ function PluginList({
     const observer = new ResizeObserver(report)
     observer.observe(el)
     return () => observer.disconnect()
-  }, [onContentHeightChange, flatItems.length, sections.length])
+  }, [
+    onContentHeightChange,
+    flatItems.length,
+    sections.length,
+    expandedSections.best,
+    expandedSections.apps,
+    expandedSections.files
+  ])
 
   useEffect(() => {
     if (flatItems.length === 0) {
@@ -1215,7 +1260,8 @@ function PluginList({
           })
           if (confirmResult.response === 1) {
             void window.mulby.plugin.hideFeature(pluginId, featureCode).then(() => {
-              setSearchPreferences(prev => ({ ...prev, 
+              setSearchPreferences(prev => ({
+                ...prev,
                 hiddenFeatures: [...prev.hiddenFeatures, { pluginId, featureCode, hiddenAt: Date.now() }],
                 pinnedFeatures: prev.pinnedFeatures.filter(p => !(p.pluginId === pluginId && p.featureCode === featureCode))
               }))
@@ -1376,34 +1422,60 @@ function PluginList({
         {flatItems.length === 0 ? (
           <div className="result-empty">{isSearching ? '正在搜索...' : '没有匹配结果'}</div>
         ) : (
-          sections.map((section) => (
-            section.key === 'recent' ? (
-              <section key="recent" className="result-section result-section-recent" aria-label={section.title}>
-                <div className="recent-bar" role="group" aria-label={section.title}>
-                  {section.items.map((item) => {
-                    return (
-                      <div
-                        key={item.key}
-                        className={`recent-chip ${item.key === selectedKey ? 'selected' : ''}`}
-                        role="option"
-                        aria-selected={item.key === selectedKey}
-                        data-item-key={item.key}
-                        onClick={() => { void handleRun(item) }}
-                        onContextMenu={(e) => {
-                          e.preventDefault()
-                          void handleItemContextMenu(item, e)
-                        }}
-                      >
-                        <PluginIcon icon={item.icon} />
-                        <span className="recent-chip-name">{item.title}</span>
-                      </div>
-                    )
-                  })}
+          sections.map((section) => {
+            if (section.key === 'recent') {
+              return (
+                <section key="recent" className="result-section result-section-recent" aria-label={section.title}>
+                  <div className="recent-bar" role="group" aria-label={section.title}>
+                    {section.items.map((item) => {
+                      return (
+                        <div
+                          key={item.key}
+                          className={`recent-chip ${item.key === selectedKey ? 'selected' : ''}`}
+                          role="option"
+                          aria-selected={item.key === selectedKey}
+                          data-item-key={item.key}
+                          onClick={() => { void handleRun(item) }}
+                          onContextMenu={(e) => {
+                            e.preventDefault()
+                            void handleItemContextMenu(item, e)
+                          }}
+                        >
+                          <PluginIcon icon={item.icon} />
+                          <span className="recent-chip-name">{item.title}</span>
+                        </div>
+                      )
+                    })}
+                  </div>
+                </section>
+              )
+            }
+
+            const sectionKey = section.key
+            const isExpanded = expandedSections[sectionKey]
+
+            return (
+              <section key={sectionKey} className="result-section" aria-label={section.title}>
+                <div className="result-section-title">
+                  <span className="result-section-title-text">{section.title}</span>
+                  {section.totalCount > DEFAULT_DISPLAY_LIMIT && (
+                    <button
+                      type="button"
+                      className="result-section-expand-btn"
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        toggleSectionExpand(sectionKey)
+                      }}
+                      onKeyDown={(e) => {
+                        e.stopPropagation()
+                      }}
+                      aria-expanded={isExpanded}
+                      aria-label={isExpanded ? `收起${section.title}` : `展开${section.title}全部结果`}
+                    >
+                      {isExpanded ? '收起' : `全部 (${section.totalCount})`}
+                    </button>
+                  )}
                 </div>
-              </section>
-            ) : (
-              <section key={section.key} className="result-section" aria-label={section.title}>
-                <div className="result-section-title">{section.title}</div>
                 <div className="result-section-grid" role="group" aria-label={section.title}>
                   {section.items.map((item) => {
                     return (
@@ -1420,7 +1492,7 @@ function PluginList({
                 </div>
               </section>
             )
-          ))
+          })
         )}
       </div>
       {contextMenu.menu}
