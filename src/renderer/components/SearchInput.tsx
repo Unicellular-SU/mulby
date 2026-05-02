@@ -89,6 +89,9 @@ const SearchInput = forwardRef<SearchInputRef, SearchInputProps>(function Search
   onAttachmentsManagerClose
 }, ref) {
   const inputRef = useRef<HTMLTextAreaElement>(null)
+  const pendingCaretAnimationFramesRef = useRef<number[]>([])
+  const pendingCaretTimeoutsRef = useRef<Array<ReturnType<typeof setTimeout>>>([])
+  const caretRestoreGenerationRef = useRef(0)
   const [subInput, setSubInput] = useState<SubInputState>({ enabled: false, placeholder: '' })
   const [subInputValue, setSubInputValue] = useState('')
   const isPluginLaunching = Boolean(launchingPlugin)
@@ -98,12 +101,68 @@ const SearchInput = forwardRef<SearchInputRef, SearchInputProps>(function Search
     input.setSelectionRange(end, end)
   }, [])
 
+  const clearPendingCaretRestore = useCallback(() => {
+    pendingCaretAnimationFramesRef.current.forEach((animationFrameId) => {
+      cancelAnimationFrame(animationFrameId)
+    })
+    pendingCaretAnimationFramesRef.current = []
+
+    pendingCaretTimeoutsRef.current.forEach((timeoutId) => {
+      clearTimeout(timeoutId)
+    })
+    pendingCaretTimeoutsRef.current = []
+  }, [])
+
+  const restoreCaretToEndIfFocused = useCallback((generation: number) => {
+    if (caretRestoreGenerationRef.current !== generation) return
+
+    const input = inputRef.current
+    if (!input || document.activeElement !== input) return
+
+    setCaretToEnd(input)
+  }, [setCaretToEnd])
+
+  const scheduleCaretToEnd = useCallback(() => {
+    clearPendingCaretRestore()
+
+    const generation = caretRestoreGenerationRef.current + 1
+    caretRestoreGenerationRef.current = generation
+
+    queueMicrotask(() => {
+      restoreCaretToEndIfFocused(generation)
+    })
+
+    const firstAnimationFrameId = requestAnimationFrame(() => {
+      restoreCaretToEndIfFocused(generation)
+
+      const secondAnimationFrameId = requestAnimationFrame(() => {
+        restoreCaretToEndIfFocused(generation)
+      })
+      pendingCaretAnimationFramesRef.current.push(secondAnimationFrameId)
+    })
+    pendingCaretAnimationFramesRef.current.push(firstAnimationFrameId)
+
+    const zeroDelayTimeoutId = setTimeout(() => {
+      restoreCaretToEndIfFocused(generation)
+    }, 0)
+    const settledTimeoutId = setTimeout(() => {
+      restoreCaretToEndIfFocused(generation)
+    }, 50)
+    pendingCaretTimeoutsRef.current.push(zeroDelayTimeoutId, settledTimeoutId)
+  }, [clearPendingCaretRestore, restoreCaretToEndIfFocused])
+
+  const cancelCaretRestore = useCallback(() => {
+    caretRestoreGenerationRef.current += 1
+    clearPendingCaretRestore()
+  }, [clearPendingCaretRestore])
+
   const focusAtEnd = useCallback(() => {
     const input = inputRef.current
     if (!input) return
-    input.focus()
+    input.focus({ preventScroll: true })
     setCaretToEnd(input)
-  }, [setCaretToEnd])
+    scheduleCaretToEnd()
+  }, [scheduleCaretToEnd, setCaretToEnd])
 
   useImperativeHandle(ref, () => ({
     focus: () => {
@@ -120,8 +179,10 @@ const SearchInput = forwardRef<SearchInputRef, SearchInputProps>(function Search
   useEffect(() => {
     const input = inputRef.current
     if (!input || document.activeElement !== input) return
-    setCaretToEnd(input)
-  }, [setCaretToEnd])
+    scheduleCaretToEnd()
+  }, [scheduleCaretToEnd])
+
+  useEffect(() => cancelCaretRestore, [cancelCaretRestore])
 
   useEffect(() => {
     const api = window.mulbyMain?.subInput
@@ -306,6 +367,8 @@ const SearchInput = forwardRef<SearchInputRef, SearchInputProps>(function Search
             value={displayValue}
             onChange={handleInputChange}
             onKeyDown={(e) => {
+              cancelCaretRestore()
+
               if (e.nativeEvent.isComposing) return
 
               if (e.key === 'Enter' && !e.shiftKey) {
@@ -336,6 +399,7 @@ const SearchInput = forwardRef<SearchInputRef, SearchInputProps>(function Search
                 onSummaryChange('')
               }
             }}
+            onPointerDown={cancelCaretRestore}
             onPaste={handlePaste}
             onDragOver={(e) => e.preventDefault()}
             onDrop={handleDrop}
