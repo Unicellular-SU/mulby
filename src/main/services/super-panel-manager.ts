@@ -23,7 +23,7 @@ import type { Plugin, InputPayload, InputAttachment, ActiveWindowInfo } from '..
 import { SuperPanelWindowManager } from './super-panel-window'
 import { SuperPanelStore, type SuperPanelPinnedItem, type SuperPanelGroup } from './super-panel-store'
 import { aiService } from '../ai'
-import { getSelectedTextAsync, type SelectionKind } from './native-text-selection'
+import { getSelectedTextAsync, prepareNativeTextSelectionForActiveWindow, type SelectionKind } from './native-text-selection'
 import log from 'electron-log'
 
 // ==================== 类型定义 ====================
@@ -277,15 +277,18 @@ export class SuperPanelManager {
     try {
       const activeWindowInfo = getCachedActiveWindow()
       this.cachedActiveWindow = activeWindowInfo || undefined
+      prepareNativeTextSelectionForActiveWindow(activeWindowInfo)
 
       // 跨平台原生取词
-      // 传入 fallback 选项，在原生 API 完全失败时才会触发安全的模拟复制回退
+      // macOS 超级面板只走原生 AX 取词，避免模拟 Cmd+C 污染剪贴板。
       const selectionResult = await getSelectedTextAsync({
         clipboardHistoryManager: this.clipboardHistoryManager,
         suppressSyntheticInput: (durationMs) => 
           this.inputHookService.suppressDoubleTapForSyntheticInput(durationMs),
+        allowClipboardFallback: process.platform !== 'darwin',
         fallbackDelayMs: this.getSettings().clipboardPollDelayMs,
-        activeWindow: activeWindowInfo || undefined
+        activeWindow: activeWindowInfo || undefined,
+        triggerPoint: { x, y }
       })
 
       // 文件/图片选择通过 attachments 表达。部分系统在复制文件时会同时写入路径文本，

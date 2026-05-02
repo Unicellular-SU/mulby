@@ -37,6 +37,7 @@ import {
 } from './services/system-page-window-manager'
 import { OnboardingWindowManager } from './services/onboarding-window'
 import { clearActiveWindowSubscriptions, onActiveWindowChange } from './services/active-window'
+import { prepareNativeTextSelectionForActiveWindow } from './services/native-text-selection'
 import { patchConsoleWithTimestamp } from '../shared/utils/console'
 import { createOpenClawNodeService, type OpenClawNodeService } from './openclaw'
 import { registerOpenClawHandlers } from './ipc/openclaw'
@@ -530,7 +531,9 @@ app.whenReady().then(async () => {
   log.info(`[ClipboardWatcher] Started - Mode: ${clipboardWatcher.isNativeMode() ? 'Native (zero overhead)' : 'Polling (fallback)'}`)
 
   // 启动活跃窗口监听器
-  onActiveWindowChange(() => {})
+  onActiveWindowChange((info) => {
+    prepareNativeTextSelectionForActiveWindow(info)
+  })
   log.info('[ActiveWindowWatcher] Started permanently')
 
   // 启动剪贴板历史记录管理器
