@@ -475,6 +475,9 @@ function PluginList({
   }, [runPayload])
 
   useEffect(() => {
+    // React StrictMode replays effects in development; reset this during setup
+    // so async icon callbacks from the live mount can still trigger a repaint.
+    mountedRef.current = true
     return () => {
       mountedRef.current = false
     }
@@ -833,98 +836,60 @@ function PluginList({
       })
   }, [payloadHash, systemFiles, systemFilesResultHash])
 
-  // 懒加载系统图标：只对可视区内的卡片请求图标
+  // 加载系统图标：当 app/file 展示列表变化时，批量请求尚未缓存的图标
   useEffect(() => {
-    const container = scrollContainerRef.current
-    if (!container) return
-
-    // 收集所有需要图标的数据
-    const allIconTargets = new Map<string, { path: string; kind: 'app' | 'file' }>()
+    // 收集当前搜索结果中所有需要的 icon key
+    const neededKeys = new Set<string>()
+    const batch: SystemIconRequest[] = []
     for (const item of appDisplayItems) {
       const key = getSystemIconCacheKey('app', item.path)
-      if (!systemIconCacheRef.current.has(key)) {
-        allIconTargets.set(key, { path: item.iconPath || item.path, kind: item.iconPath ? 'file' : 'app' })
+      neededKeys.add(key)
+      if (!systemIconCacheRef.current.has(key) && !systemIconPendingRef.current.has(key)) {
+        batch.push({ key, path: item.iconPath || item.path, kind: item.iconPath ? 'file' : 'app' })
       }
     }
     for (const item of fileDisplayItems) {
       const key = getSystemIconCacheKey('file', item.path)
-      if (!systemIconCacheRef.current.has(key)) {
-        allIconTargets.set(key, { path: item.path, kind: 'file' })
+      neededKeys.add(key)
+      if (!systemIconCacheRef.current.has(key) && !systemIconPendingRef.current.has(key)) {
+        batch.push({ key, path: item.path, kind: 'file' })
       }
     }
 
-    if (allIconTargets.size === 0) return
+    // 只清除不在当前结果中的过期 pending key，保留当前仍在 in-flight 的条目
+    for (const key of systemIconPendingRef.current) {
+      if (!neededKeys.has(key)) {
+        systemIconPendingRef.current.delete(key)
+      }
+    }
 
-    // 用 IntersectionObserver 监控系统类型卡片，只有进入视口才加载图标
-    const pendingBatch: SystemIconRequest[] = []
-    let batchTimer: ReturnType<typeof setTimeout> | null = null
+    if (batch.length === 0) return
 
-    const flushBatch = () => {
-      batchTimer = null
-      if (pendingBatch.length === 0) return
-      const batch = pendingBatch.splice(0)
-      const batchKeys = batch.map(r => r.key)
+    batch.forEach(r => systemIconPendingRef.current.add(r.key))
 
-      // 标记 pending
-      batchKeys.forEach(k => systemIconPendingRef.current.add(k))
-
-      void window.mulby.system.getFileIcons(batch, {
-        size: SYSTEM_ICON_TARGET_SIZE,
-        concurrency: SYSTEM_ICON_BATCH_CONCURRENCY
+    void window.mulby.system.getFileIcons(batch, {
+      size: SYSTEM_ICON_TARGET_SIZE,
+      concurrency: SYSTEM_ICON_BATCH_CONCURRENCY
+    })
+      .then((results) => {
+        if (!Array.isArray(results)) return
+        let changed = false
+        for (const result of results) {
+          if (!result.icon || !isValidIconDataUrl(result.icon)) continue
+          if (systemIconCacheRef.current.get(result.key) === result.icon) continue
+          systemIconCacheRef.current.set(result.key, result.icon)
+          changed = true
+        }
+        if (changed) {
+          if (!mountedRef.current) return
+          setSystemIconVersion(prev => prev + 1)
+        }
       })
-        .then((results) => {
-          if (!Array.isArray(results)) return
-          let changed = false
-          for (const result of results) {
-            if (!result.icon || !isValidIconDataUrl(result.icon)) continue
-            if (systemIconCacheRef.current.get(result.key) === result.icon) continue
-            systemIconCacheRef.current.set(result.key, result.icon)
-            changed = true
-          }
-          if (changed) {
-            if (!mountedRef.current) return
-            setSystemIconVersion(prev => prev + 1)
-          }
-        })
-        .catch(() => { /* ignore icon load errors */ })
-        .finally(() => {
-          batchKeys.forEach(k => systemIconPendingRef.current.delete(k))
-        })
-    }
-
-    const scheduleBatch = (request: SystemIconRequest) => {
-      pendingBatch.push(request)
-      if (batchTimer === null) {
-        batchTimer = setTimeout(flushBatch, 80)
-      }
-    }
-
-    const observer = new IntersectionObserver((entries) => {
-      for (const entry of entries) {
-        if (!entry.isIntersecting) continue
-        const el = entry.target as HTMLElement
-        const itemKey = el.dataset.iconKey
-        if (!itemKey) continue
-
-        const target = allIconTargets.get(itemKey)
-        if (!target) continue
-        if (systemIconCacheRef.current.has(itemKey)) continue
-        if (systemIconPendingRef.current.has(itemKey)) continue
-
-        scheduleBatch({ key: itemKey, path: target.path, kind: target.kind })
-        observer.unobserve(el)
-      }
-    }, { root: container, rootMargin: '100px' })
-
-    // 观察所有系统卡片
-    const cards = container.querySelectorAll('[data-icon-key]')
-    cards.forEach(card => observer.observe(card))
-
-    return () => {
-      observer.disconnect()
-      if (batchTimer !== null) clearTimeout(batchTimer)
-    }
-  }, [appDisplayItems, fileDisplayItems, payloadHash, traceId])
+      .catch(() => { /* ignore icon load errors */ })
+      .finally(() => {
+        batch.forEach(r => systemIconPendingRef.current.delete(r.key))
+      })
+  }, [appDisplayItems, fileDisplayItems])
 
   const sections = useMemo((): ResultSection[] => {
     const next: ResultSection[] = []
