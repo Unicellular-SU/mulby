@@ -66,6 +66,15 @@ export interface FileInfo {
   isDirectory: boolean
 }
 
+export type ClipboardContentFormat = 'text' | 'image' | 'files' | 'html' | 'empty'
+
+export interface AutoPasteClipboardPayload {
+  format: ClipboardContentFormat
+  text?: string
+  image?: Buffer | ArrayBuffer | Uint8Array | null
+  files?: FileInfo[]
+}
+
 // 剪贴板历史条目
 export interface ClipboardHistoryItem {
   id: string
@@ -1048,7 +1057,7 @@ declare global {
         sendChange: (text: string) => void
       }
       clipboard: {
-        onAutoPaste: (callback: () => void) => () => void
+        onAutoPaste: (callback: (payload?: AutoPasteClipboardPayload) => void) => () => void
       }
     }
   }

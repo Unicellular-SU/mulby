@@ -1,4 +1,5 @@
 import type { IpcRenderer } from 'electron'
+import type { AutoPasteClipboardPayload } from '../../shared/types/electron'
 
 export function createMulbyMainApi(ipcRenderer: IpcRenderer) {
   return {
@@ -38,8 +39,8 @@ export function createMulbyMainApi(ipcRenderer: IpcRenderer) {
       }
     },
     clipboard: {
-      onAutoPaste: (callback: () => void) => {
-        const listener = () => callback()
+      onAutoPaste: (callback: (payload?: AutoPasteClipboardPayload) => void) => {
+        const listener = (_event: unknown, payload?: AutoPasteClipboardPayload) => callback(payload)
         ipcRenderer.on('clipboard:autoPaste', listener)
         return () => ipcRenderer.removeListener('clipboard:autoPaste', listener)
       }

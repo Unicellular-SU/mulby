@@ -22,7 +22,8 @@ import type {
   OpenSystemPluginPayload,
   PluginLaunchEndEvent,
   PluginLaunchStartEvent,
-  SystemPluginBeforeAttachPayload
+  SystemPluginBeforeAttachPayload,
+  AutoPasteClipboardPayload
 } from '../shared/types/electron'
 import type { PluginStoreEntry } from '../shared/types/plugin-store'
 
@@ -1163,7 +1164,7 @@ function MainApp() {
   useEffect(() => {
     if (!window.mulbyMain?.clipboard) return
 
-    const cleanup = window.mulbyMain.clipboard.onAutoPaste(async () => {
+    const cleanup = window.mulbyMain.clipboard.onAutoPaste(async (payload?: AutoPasteClipboardPayload) => {
       // 条件1：没有打开插件
       if (pluginOpen || systemPageAttached) {
         return
@@ -1171,11 +1172,11 @@ function MainApp() {
 
       // 执行自动粘贴
       try {
-        const format = await window.mulby.clipboard.getFormat()
+        const format = payload?.format ?? await window.mulby.clipboard.getFormat()
 
         if (format === 'text') {
           // 粘贴文本 - 清空附件
-          const text = await window.mulby.clipboard.readText()
+          const text = payload?.text ?? await window.mulby.clipboard.readText()
           if (text && text.trim()) {
             // 清空旧的附件
             if (attachments.length > 0) {
@@ -1187,7 +1188,7 @@ function MainApp() {
           }
         } else if (format === 'image') {
           // 粘贴图片 - 总是替换附件
-          const imageBuffer = await window.mulby.clipboard.readImage()
+          const imageBuffer = payload?.image ?? await window.mulby.clipboard.readImage()
           if (imageBuffer) {
             // 清理旧的附件
             clearAttachments()
@@ -1216,7 +1217,7 @@ function MainApp() {
           }
         } else if (format === 'files') {
           // 粘贴文件 - 总是替换附件
-          const files = await window.mulby.clipboard.readFiles()
+          const files = payload?.files ?? await window.mulby.clipboard.readFiles()
           if (files && files.length > 0) {
             // 清理旧的附件
             clearAttachments()

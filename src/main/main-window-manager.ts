@@ -4,6 +4,7 @@ import https from 'https'
 import { join } from 'path'
 import log from 'electron-log'
 import { appSettingsManager } from './services/app-settings'
+import { captureAutoPasteClipboardPayload } from './ipc/clipboard'
 import { isIgnoringBlur, startIgnoringBlur, stopIgnoringBlur, isAppExplicitlyHidden, markAppVisible } from './services/blur-manager'
 import { attachShortcutRecordingGuard } from './services/shortcut-recording-guard'
 import { refreshActiveWindowCache } from './services/active-window'
@@ -545,7 +546,8 @@ export class MainWindowManager {
         const appSettings = appSettingsManager.getSettings()
         if (appSettings.input.autoPasteOnShow
             && this.deps?.clipboardWatcher.isRecentlyChanged(appSettings.input.autoPasteMaxAge)) {
-          this.window.webContents.send('clipboard:autoPaste')
+          const payload = captureAutoPasteClipboardPayload()
+          this.window.webContents.send('clipboard:autoPaste', payload)
         }
       }
 

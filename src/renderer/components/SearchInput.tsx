@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback, forwardRef, useImperativeHandle } from 'react'
 import type { InputAttachment } from '../../shared/types/plugin'
+import type { AutoPasteClipboardPayload } from '../../shared/types/electron'
 
 interface SearchInputProps {
   value: string
@@ -38,7 +39,7 @@ declare global {
         sendChange: (text: string) => void
       }
       clipboard: {
-        onAutoPaste: (callback: () => void) => () => void
+        onAutoPaste: (callback: (payload?: AutoPasteClipboardPayload) => void) => () => void
       }
     }
   }

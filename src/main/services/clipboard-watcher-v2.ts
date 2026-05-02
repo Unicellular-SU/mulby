@@ -65,6 +65,22 @@ export class ClipboardWatcher extends EventEmitter {
     this.lastChangeTime = 0
   }
 
+  private hasClipboardContent(): boolean {
+    try {
+      if ((clipboard.readText() || '').trim()) return true
+      if (!clipboard.readImage().isEmpty()) return true
+      if (process.platform === 'darwin') {
+        return Boolean(clipboard.read('public.file-url') || clipboard.read('NSFilenamesPboardType'))
+      }
+      return Boolean(
+        clipboard.read('text/uri-list') ||
+        clipboard.readBuffer('FileNameW').length > 0
+      )
+    } catch {
+      return false
+    }
+  }
+
   /**
    * 获取剪贴板内容哈希
    */
@@ -96,6 +112,9 @@ export class ClipboardWatcher extends EventEmitter {
   start() {
     if (this.isWatching) return
     this.isWatching = true
+    if (this.hasClipboardContent()) {
+      this.markAsChanged()
+    }
 
     // 优先使用 native watcher
     if (nativeClipboard && nativeClipboard.ClipboardWatcher) {

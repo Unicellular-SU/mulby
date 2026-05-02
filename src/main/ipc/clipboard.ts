@@ -2,11 +2,181 @@ import { ipcMain, clipboard, nativeImage } from 'electron'
 import { statSync } from 'fs'
 import { basename, extname } from 'path'
 import log from 'electron-log'
+import type { AutoPasteClipboardPayload, ClipboardContentFormat, FileInfo } from '../../shared/types/electron'
+
+export function readClipboardText(): string {
+  return clipboard.readText()
+}
+
+export function readClipboardImagePng(): Buffer | null {
+  const image = clipboard.readImage()
+  if (image.isEmpty()) return null
+  return image.toPNG()
+}
+
+export function readClipboardFileInfos(): FileInfo[] {
+  if (process.platform === 'darwin') {
+    const nsFiles = clipboard.read('NSFilenamesPboardType')
+    if (nsFiles) {
+      // 解析 XML plist 格式，提取 <string> 标签中的路径
+      const pathMatches = nsFiles.match(/<string>([^<]+)<\/string>/g)
+      if (pathMatches && pathMatches.length > 0) {
+        const paths = pathMatches
+          .map(match => match.replace(/<\/?string>/g, ''))
+          .filter(path => path.startsWith('/'))
+        if (paths.length > 0) {
+          return paths.map(filePath => getFileInfo(filePath))
+        }
+      } else {
+        // 尝试作为 JSON 数组读取
+        try {
+          const paths = JSON.parse(nsFiles) as string[]
+          if (Array.isArray(paths) && paths.length > 0) {
+            return paths.map(filePath => getFileInfo(filePath))
+          }
+        } catch {
+          // 如果只有单一路径字符串
+          if (nsFiles.startsWith('/')) {
+            return [getFileInfo(nsFiles)]
+          }
+        }
+      }
+    }
+
+    const publicFileUrl = clipboard.read('public.file-url')
+    if (publicFileUrl && publicFileUrl.startsWith('file://')) {
+      const filePath = decodeURIComponent(publicFileUrl.replace('file://', ''))
+      return [getFileInfo(filePath)]
+    }
+
+    const promisedFileUrl = clipboard.read('com.apple.pasteboard.promised-file-url')
+    if (promisedFileUrl && promisedFileUrl.startsWith('file://')) {
+      const filePath = decodeURIComponent(promisedFileUrl.replace('file://', ''))
+      return [getFileInfo(filePath)]
+    }
+  }
+
+  // 尝试 text/uri-list
+  const uriList = clipboard.read('text/uri-list')
+  if (uriList) {
+    const filePaths = uriList
+      .split('\n')
+      .map(line => line.trim())
+      .filter(line => line.startsWith('file://'))
+      .map(uri => decodeURIComponent(uri.replace('file://', '')))
+    if (filePaths.length > 0) {
+      return filePaths.map(filePath => getFileInfo(filePath))
+    }
+  }
+
+  // 尝试作为普通文本路径读取（必须存在的文件）
+  const textPlain = clipboard.readText()
+  if (textPlain && (textPlain.startsWith('/') || textPlain.startsWith('file://'))) {
+    const pathStr = textPlain.startsWith('file://')
+      ? decodeURIComponent(textPlain.replace('file://', ''))
+      : textPlain
+    const cleanPath = pathStr.split('\n')[0].trim()
+    try {
+      statSync(cleanPath)
+      return [getFileInfo(cleanPath)]
+    } catch {
+      // failed to stat
+    }
+  }
+
+  return []
+}
+
+export function getClipboardContentFormat(): ClipboardContentFormat {
+  const formats = clipboard.availableFormats()
+
+  // macOS 特有格式检测
+  if (process.platform === 'darwin') {
+    // 读取各种 macOS 格式
+    const publicFileUrl = clipboard.read('public.file-url')
+    const promisedFileUrl = clipboard.read('com.apple.pasteboard.promised-file-url')
+    const nsFilenames = clipboard.read('NSFilenamesPboardType')
+
+    // 检查 public.file-url
+    if (publicFileUrl && publicFileUrl.startsWith('file://')) {
+      return 'files'
+    }
+
+    // 检查 promised-file-url
+    if (promisedFileUrl && promisedFileUrl.startsWith('file://')) {
+      return 'files'
+    }
+
+    // 检查 NSFilenamesPboardType
+    if (nsFilenames) {
+      try {
+        const paths = JSON.parse(nsFilenames) as string[]
+        if (paths.length > 0) return 'files'
+      } catch {
+        // 不是 JSON 格式，可能是其他格式
+        if (nsFilenames.includes('/')) return 'files'
+      }
+    }
+
+    // 启发式检测：如果有 text/uri-list 格式且 text/plain 看起来像文件名
+    const textPlain = clipboard.readText()
+    if (formats.includes('text/uri-list') && textPlain &&
+      !textPlain.includes('\n') &&
+      textPlain.match(/\.\w{2,5}$/)) {
+      return 'files'
+    }
+  }
+
+  // 检查 text/plain 是否包含文件路径
+  const textPlainForPath = clipboard.readText()
+  if (textPlainForPath && (textPlainForPath.startsWith('/') || textPlainForPath.startsWith('file://'))) {
+    const path = textPlainForPath.startsWith('file://')
+      ? decodeURIComponent(textPlainForPath.replace('file://', ''))
+      : textPlainForPath
+    try {
+      statSync(path.split('\n')[0].trim())
+      return 'files'
+    } catch {
+      // 不是有效路径，继续其他检测
+    }
+  }
+
+  // 通用检查 text/uri-list
+  if (formats.includes('text/uri-list')) {
+    const uriList = clipboard.read('text/uri-list')
+    if (uriList && uriList.split('\n').some(line => line.trim().startsWith('file://'))) {
+      return 'files'
+    }
+  }
+
+  if (!clipboard.readImage().isEmpty()) return 'image'
+  if (clipboard.readText()) return 'text'
+  if (clipboard.readHTML()) return 'html'
+  return 'empty'
+}
+
+export function captureAutoPasteClipboardPayload(): AutoPasteClipboardPayload {
+  const format = getClipboardContentFormat()
+
+  if (format === 'text') {
+    return { format, text: readClipboardText() }
+  }
+
+  if (format === 'image') {
+    return { format, image: readClipboardImagePng() }
+  }
+
+  if (format === 'files') {
+    return { format, files: readClipboardFileInfos() }
+  }
+
+  return { format }
+}
 
 export function registerClipboardHandlers() {
   // 读取文本
   ipcMain.handle('clipboard:readText', () => {
-    return clipboard.readText()
+    return readClipboardText()
   })
 
   // 写入文本
@@ -16,9 +186,7 @@ export function registerClipboardHandlers() {
 
   // 读取图片
   ipcMain.handle('clipboard:readImage', () => {
-    const image = clipboard.readImage()
-    if (image.isEmpty()) return null
-    return image.toPNG()
+    return readClipboardImagePng()
   })
 
   // 写入图片
@@ -96,145 +264,12 @@ ${paths.map(p => `    <string>${p}</string>`).join('\n')}
 
   // 读取文件列表
   ipcMain.handle('clipboard:readFiles', () => {
-    if (process.platform === 'darwin') {
-      const nsFiles = clipboard.read('NSFilenamesPboardType')
-      if (nsFiles) {
-        // 解析 XML plist 格式，提取 <string> 标签中的路径
-        const pathMatches = nsFiles.match(/<string>([^<]+)<\/string>/g)
-        if (pathMatches && pathMatches.length > 0) {
-          const paths = pathMatches
-            .map(match => match.replace(/<\/?string>/g, ''))
-            .filter(path => path.startsWith('/'))
-          if (paths.length > 0) {
-            return paths.map(filePath => getFileInfo(filePath))
-          }
-        } else {
-          // 尝试作为 JSON 数组读取
-          try {
-            const paths = JSON.parse(nsFiles) as string[]
-            if (Array.isArray(paths) && paths.length > 0) {
-              return paths.map(filePath => getFileInfo(filePath))
-            }
-          } catch {
-            // 如果只有单一路径字符串
-            if (nsFiles.startsWith('/')) {
-              return [getFileInfo(nsFiles)]
-            }
-          }
-        }
-      }
-
-      const publicFileUrl = clipboard.read('public.file-url')
-      if (publicFileUrl && publicFileUrl.startsWith('file://')) {
-        const filePath = decodeURIComponent(publicFileUrl.replace('file://', ''))
-        return [getFileInfo(filePath)]
-      }
-
-      const promisedFileUrl = clipboard.read('com.apple.pasteboard.promised-file-url')
-      if (promisedFileUrl && promisedFileUrl.startsWith('file://')) {
-        const filePath = decodeURIComponent(promisedFileUrl.replace('file://', ''))
-        return [getFileInfo(filePath)]
-      }
-    }
-
-    // 尝试 text/uri-list
-    const uriList = clipboard.read('text/uri-list')
-    if (uriList) {
-      const filePaths = uriList
-        .split('\n')
-        .map(line => line.trim())
-        .filter(line => line.startsWith('file://'))
-        .map(uri => decodeURIComponent(uri.replace('file://', '')))
-      if (filePaths.length > 0) {
-        return filePaths.map(filePath => getFileInfo(filePath))
-      }
-    }
-
-    // 尝试作为普通文本路径读取（必须存在的文件）
-    const textPlain = clipboard.readText()
-    if (textPlain && (textPlain.startsWith('/') || textPlain.startsWith('file://'))) {
-      const pathStr = textPlain.startsWith('file://')
-        ? decodeURIComponent(textPlain.replace('file://', ''))
-        : textPlain
-      const cleanPath = pathStr.split('\n')[0].trim()
-      try {
-        statSync(cleanPath)
-        return [getFileInfo(cleanPath)]
-      } catch {
-        // failed to stat
-      }
-    }
-
-    return []
+    return readClipboardFileInfos()
   })
 
   // 获取剪贴板格式
   ipcMain.handle('clipboard:getFormat', () => {
-    const formats = clipboard.availableFormats()
-
-    // macOS 特有格式检测
-    if (process.platform === 'darwin') {
-      // 读取各种 macOS 格式
-      const publicFileUrl = clipboard.read('public.file-url')
-      const promisedFileUrl = clipboard.read('com.apple.pasteboard.promised-file-url')
-      const nsFilenames = clipboard.read('NSFilenamesPboardType')
-
-      // 检查 public.file-url
-      if (publicFileUrl && publicFileUrl.startsWith('file://')) {
-        return 'files'
-      }
-
-      // 检查 promised-file-url
-      if (promisedFileUrl && promisedFileUrl.startsWith('file://')) {
-        return 'files'
-      }
-
-      // 检查 NSFilenamesPboardType
-      if (nsFilenames) {
-        try {
-          const paths = JSON.parse(nsFilenames) as string[]
-          if (paths.length > 0) return 'files'
-        } catch {
-          // 不是 JSON 格式，可能是其他格式
-          if (nsFilenames.includes('/')) return 'files'
-        }
-      }
-
-      // 启发式检测：如果有 text/uri-list 格式且 text/plain 看起来像文件名
-      const textPlain = clipboard.readText()
-      if (formats.includes('text/uri-list') && textPlain &&
-        !textPlain.includes('\n') &&
-        textPlain.match(/\.\w{2,5}$/)) {
-        return 'files'
-      }
-    }
-
-    // 检查 text/plain 是否包含文件路径
-    const textPlainForPath = clipboard.readText()
-    if (textPlainForPath && (textPlainForPath.startsWith('/') || textPlainForPath.startsWith('file://'))) {
-      const path = textPlainForPath.startsWith('file://')
-        ? decodeURIComponent(textPlainForPath.replace('file://', ''))
-        : textPlainForPath
-      try {
-        statSync(path.split('\n')[0].trim())
-        return 'files'
-      } catch {
-        // 不是有效路径，继续其他检测
-      }
-    }
-
-    // 通用检查 text/uri-list
-    if (formats.includes('text/uri-list')) {
-      const uriList = clipboard.read('text/uri-list')
-      if (uriList && uriList.split('\n').some(line => line.trim().startsWith('file://'))) {
-        return 'files'
-      }
-    }
-
-    if (!clipboard.readImage().isEmpty()) return 'image'
-    if (clipboard.readText()) return 'text'
-    if (clipboard.readHTML()) return 'html'
-    return 'empty'
+    return getClipboardContentFormat()
   })
 }
 
