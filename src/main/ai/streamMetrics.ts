@@ -8,6 +8,7 @@ interface AiStreamChunkCounters {
   text: number
   reasoning: number
   toolCall: number
+  toolProgress: number
   toolResult: number
   error: number
   end: number
@@ -53,6 +54,7 @@ export function createAiStreamMetrics(input: {
       text: 0,
       reasoning: 0,
       toolCall: 0,
+      toolProgress: 0,
       toolResult: 0,
       error: 0,
       end: 0
@@ -83,6 +85,10 @@ export function recordAiStreamChunk(metrics: AiStreamMetrics, chunk: AiMessage):
   }
   if (chunk.chunkType === 'tool-call') {
     metrics.chunks.toolCall += 1
+    return
+  }
+  if (chunk.chunkType === 'tool-progress') {
+    metrics.chunks.toolProgress += 1
     return
   }
   if (chunk.chunkType === 'tool-result') {

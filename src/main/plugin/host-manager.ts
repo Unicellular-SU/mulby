@@ -16,10 +16,12 @@ import { generateRequestId } from './host-protocol'
 import { createPluginAPI } from './api'
 import { PluginHostWatchdog } from './watchdog'
 import type { InputAttachment, Plugin } from '../../shared/types/plugin'
+import type { ToolProgressResponse } from './host-protocol'
 import { loggerService } from '../services/logger'
 import { resolveResourceLimits, applyResourceLimitsToWatchdog } from './resource-limits'
 import { PLUGIN_READY_TIMEOUT_MS, PROCESS_GRACEFUL_EXIT_MS } from '../constants/timing'
 import { PluginMessageBus } from './message-bus'
+import { routeHostToolProgress } from './host-progress'
 import type { TaskScheduler } from '../scheduler'
 import type { ClipboardHistoryManager } from '../services/clipboard-history'
 import log from 'electron-log'
@@ -40,6 +42,7 @@ interface PluginHost {
     resolve: (value: unknown) => void
     reject: (error: Error) => void
     timeout: NodeJS.Timeout
+    onToolProgress?: (progress: ToolProgressResponse['payload']) => void
   }>
 }
 
@@ -440,6 +443,10 @@ export class PluginHostManager extends EventEmitter {
         this.handleApiCall(host, message, plugin)
         break
 
+      case 'toolProgress':
+        this.handleToolProgress(host, message)
+        break
+
       case 'resourceStats':
         this.handleResourceStats(host, message)
         break
@@ -481,6 +488,10 @@ export class PluginHostManager extends EventEmitter {
     } else {
       pending.resolve(message.payload)
     }
+  }
+
+  private handleToolProgress(host: PluginHost, message: ToolProgressResponse): void {
+    routeHostToolProgress(host, message)
   }
 
   /**
@@ -575,7 +586,11 @@ export class PluginHostManager extends EventEmitter {
   /**
    * 发送请求到 Host
    */
-  private sendRequest<T>(pluginName: string, request: HostRequest): Promise<T> {
+  private sendRequest<T>(
+    pluginName: string,
+    request: HostRequest,
+    options?: { onToolProgress?: (progress: ToolProgressResponse['payload']) => void }
+  ): Promise<T> {
     return new Promise((resolve, reject) => {
       const host = this.hosts.get(pluginName)
       if (!host) {
@@ -615,7 +630,8 @@ export class PluginHostManager extends EventEmitter {
           cleanup()
           reject(error)
         },
-        timeout
+        timeout,
+        onToolProgress: options?.onToolProgress
       })
 
       host.process.postMessage(request)
@@ -920,7 +936,8 @@ export class PluginHostManager extends EventEmitter {
   async callHostMethod(
     pluginName: string,
     method: string,
-    args: unknown[]
+    args: unknown[],
+    options?: { onToolProgress?: (progress: ToolProgressResponse['payload']) => void }
   ): Promise<unknown> {
     const host = this.hosts.get(pluginName)
     if (!host || !host.ready) {
@@ -931,6 +948,6 @@ export class PluginHostManager extends EventEmitter {
       id: generateRequestId(),
       type: 'callHostMethod',
       payload: { method, args }
-    })
+    }, options)
   }
 }

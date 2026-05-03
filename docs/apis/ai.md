@@ -216,6 +216,31 @@ const result = await window.mulby.host.call('my-plugin', 'runWithTools', {
 });
 ```
 
+### 插件 AI Tool 进度事件
+
+通过 `manifest.tools` 暴露给 AI Agent 的插件工具，可以在 `mulby.tools.register(name, handler)` 的第二参数中上报进度：
+
+```ts
+mulby.tools.register('batch_convert', async (args, ctx) => {
+  ctx?.sendProgress({ progress: 1, total: 4, message: '准备文件' })
+  // ...
+  ctx?.sendProgress({ progress: 4, total: 4, message: '转换完成' })
+  return { success: true }
+})
+```
+
+流式 `ai.call(option, onChunk)` 会收到 `chunkType: 'tool-progress'`：
+
+```ts
+await ai.call(option, (chunk) => {
+  if (chunk.chunkType === 'tool-progress') {
+    console.log(chunk.tool_progress)
+  }
+})
+```
+
+`tool_progress` 包含 `{ id?, name, progress, total?, message? }`。同一进度也会在该插件工具通过 Mulby MCP Server 被外部客户端调用时转发为 MCP progress notification。
+
 ### 彻底禁用工具（纯文本翻译/安全限制场景）
 
 当需要确保 AI 仅进行纯文本输出（如：划词翻译功能的背景对话流），并且要求**严格防止 prompt 注入攻击诱导模型执行内部命令**时，必须显式禁用系统内的所有工具注入引擎。简单将 `tools` 置空或设置 `maxToolSteps` 为 0 是**无效的**（默认机制会自动注入并保留插件工具）。
@@ -1317,4 +1342,3 @@ Array<{
 | 参数 | 类型 | 说明 |
 |------|------|------|
 | `port` | `number` | 端口号（1024-65535） |
-

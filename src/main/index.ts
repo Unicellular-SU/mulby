@@ -231,7 +231,7 @@ const handleAppActivate = () => {
   mainWindowManager.show()
 }
 
-setAiToolExecutor(async ({ name, args, context, callId, abortSignal }) => {
+setAiToolExecutor(async ({ name, args, context, callId, abortSignal, onProgress }) => {
   if (name === AI_RUN_COMMAND_TOOL_NAME) {
     const input = parseAiRunCommandArgs(args)
     const pluginName = context?.pluginName
@@ -272,7 +272,8 @@ setAiToolExecutor(async ({ name, args, context, callId, abortSignal }) => {
       toolId: name,
       args,
       context,
-      callId
+      callId,
+      onProgress
     })
   }
 
@@ -307,7 +308,15 @@ setAiToolExecutor(async ({ name, args, context, callId, abortSignal }) => {
       throw new Error(`Failed to initialize host for plugin: ${pluginId}`)
     }
 
-    const result = await hostManager.callHostMethod(pluginId, `__plugin_tool__${toolName}`, [args])
+    const result = await hostManager.callHostMethod(pluginId, `__plugin_tool__${toolName}`, [args], {
+      onToolProgress: (progress) => {
+        onProgress?.({
+          progress: progress.progress,
+          total: progress.total,
+          message: progress.message
+        })
+      }
+    })
     // 解包 host 返回的结果
     if (result && typeof result === 'object' && 'success' in result && 'data' in result) {
       return (result as { data: unknown }).data

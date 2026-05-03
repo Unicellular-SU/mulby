@@ -1,5 +1,6 @@
 import { AiService } from './service'
 import type { AiOption, AiSkillSelectionMeta, AiTool } from '../../shared/types/ai'
+import type { PluginToolProgress } from '../../shared/types/plugin'
 import type { AiToolCapabilityName } from './tools/capabilities'
 
 export const aiService = new AiService()
@@ -11,6 +12,7 @@ export function setAiToolExecutor(
     context?: import('../../shared/types/ai').AiToolContext
     callId?: string
     abortSignal?: AbortSignal
+    onProgress?: (progress: PluginToolProgress) => void
   }) => Promise<unknown>
 ) {
   aiService.setToolExecutor(executor)
@@ -36,4 +38,3 @@ export function setAiSkillActivationScopeManager(manager?: {
 }): void {
   aiService.setSkillActivationScopeManager(manager)
 }
-

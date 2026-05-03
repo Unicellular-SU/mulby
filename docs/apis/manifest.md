@@ -124,6 +124,23 @@ window.mulby.onPluginInit((data) => {
 | `inputSchema` | `object` | **是** | JSON Schema。`type` 必须为 `"object"`。定义 `properties`, `required` 等参数结构。 |
 | `outputSchema`| `object` | 否 | 返回值数据结构的 JSON Schema。 |
 
+### AI Tool 进度上报
+
+执行时间较长的 Tool（建议 5 秒以上）可以在 handler 第二参数 `ctx` 中调用 `sendProgress`，向 Mulby AI Agent 和 Mulby MCP Server 上报任务进度：
+
+```ts
+mulby.tools.register('long_task', async (args, ctx) => {
+  ctx?.sendProgress({ progress: 1, total: 3, message: '读取输入' })
+  // ...
+  ctx?.sendProgress({ progress: 2, total: 3, message: '处理中' })
+  // ...
+  ctx?.sendProgress({ progress: 3, total: 3, message: '完成' })
+  return { ok: true }
+})
+```
+
+`sendProgress` 参数为 `{ progress: number; total?: number; message?: string }`。`progress` 是必填的有限数字，`total` 可表示总步骤或总工作量，`message` 是当前阶段说明。
+
 ---
 
 ## 插件应用后台与运行设定 (PluginSetting)

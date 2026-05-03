@@ -7,6 +7,7 @@ import {
   createReasoningChunk,
   createTextChunk,
   createToolCallChunk,
+  createToolProgressChunk,
   createToolResultChunk
 } from '../streamChunkProtocol'
 
@@ -65,6 +66,18 @@ describe('streamChunkProtocol', () => {
     const callChunk = createToolCallChunk({ id: 'c1', name: 'sumNumbers', args: { a: 1, b: 2 } })
     assert.equal(callChunk.chunkType, 'tool-call')
     assert.equal(callChunk.tool_call?.name, 'sumNumbers')
+
+    const progressChunk = createToolProgressChunk({
+      id: 'c1',
+      name: 'sumNumbers',
+      progress: 1,
+      total: 2,
+      message: 'Adding numbers'
+    })
+    assert.equal(progressChunk.chunkType, 'tool-progress')
+    assert.equal(progressChunk.tool_progress?.progress, 1)
+    assert.equal(progressChunk.tool_progress?.total, 2)
+    assert.equal(progressChunk.tool_progress?.message, 'Adding numbers')
 
     const resultChunk = createToolResultChunk({ id: 'c1', name: 'sumNumbers', result: { result: 3 } })
     assert.equal(resultChunk.chunkType, 'tool-result')

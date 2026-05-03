@@ -20,6 +20,7 @@ import type {
   CallTaskCallbackRequest,
   CallHostMethodRequest
 } from './host-protocol'
+import type { PluginToolCallContext, PluginToolProgress } from '../../shared/types/plugin'
 import log from 'electron-log'
 
 // ============ 状态 ============
@@ -92,7 +93,7 @@ const pendingApiCalls = new Map<string, {
 
 // Plugin Tool Handlers 注册表
 // 插件通过 mulby.tools.register(name, handler) 注册，AI 通过 __plugin_tool__{name} 调用
-const pluginToolHandlers = new Map<string, (args: unknown) => unknown | Promise<unknown>>()
+const pluginToolHandlers = new Map<string, (args: unknown, ctx?: PluginToolCallContext) => unknown | Promise<unknown>>()
 
 // ============ 消息处理 ============
 
@@ -142,6 +143,49 @@ function cloneForMessage<T>(value: T): T {
   }
 }
 
+function normalizeToolProgress(input: PluginToolProgress): PluginToolProgress | null {
+  if (!input || typeof input !== 'object') return null
+  const progress = Number((input as PluginToolProgress).progress)
+  if (!Number.isFinite(progress)) return null
+
+  const normalized: PluginToolProgress = { progress }
+  const total = Number((input as PluginToolProgress).total)
+  if (Number.isFinite(total) && total > 0) {
+    normalized.total = total
+  }
+
+  if ((input as PluginToolProgress).message !== undefined) {
+    normalized.message = String((input as PluginToolProgress).message).slice(0, 500)
+  }
+
+  return normalized
+}
+
+function createToolCallContext(requestId: string, toolName: string): PluginToolCallContext {
+  let lastSentAt = 0
+  const minIntervalMs = 100
+  return {
+    callId: requestId,
+    sendProgress: (progress) => {
+      const normalized = normalizeToolProgress(progress)
+      if (!normalized) return
+      const now = Date.now()
+      if (now - lastSentAt < minIntervalMs) return
+      lastSentAt = now
+      send({
+        id: requestId,
+        type: 'toolProgress',
+        payload: {
+          toolName,
+          callId: requestId,
+          timestamp: now,
+          ...normalized
+        }
+      })
+    }
+  }
+}
+
 /** 创建代理 API 对象 */
 function createProxyAPI(): PluginAPI {
   const handler: ProxyHandler<object> = {
@@ -151,7 +195,7 @@ function createProxyAPI(): PluginAPI {
       // 特殊处理 tools 命名空间：register/unregister 直接在 worker 内处理
       if (prop === 'tools') {
         return {
-          register: (name: string, toolHandler: (args: unknown) => unknown | Promise<unknown>) => {
+          register: (name: string, toolHandler: (args: unknown, ctx?: PluginToolCallContext) => unknown | Promise<unknown>) => {
             if (typeof name !== 'string' || !name.trim()) {
               throw new Error('Tool name must be a non-empty string')
             }
@@ -448,7 +492,7 @@ async function handleCallHostMethod(request: CallHostMethodRequest): Promise<voi
         )
       }
       const toolArgs = Array.isArray(args) ? args[0] : args
-      const result = await handler(toolArgs)
+      const result = await handler(toolArgs, createToolCallContext(request.id, toolName))
       const serializedResult = cloneForMessage(result)
 
       send({

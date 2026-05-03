@@ -73,6 +73,13 @@ export function applyStreamChunkToSummary(
     return next
   }
 
+  if (chunkType === 'tool-progress') {
+    if (!chunk.tool_progress?.name || !Number.isFinite(chunk.tool_progress.progress)) {
+      next.warnings.push('invalid tool-progress chunk')
+    }
+    return next
+  }
+
   if (chunkType === 'tool-result') {
     if (!chunk.tool_result?.id || !chunk.tool_result?.name) {
       next.warnings.push('invalid tool-result chunk')

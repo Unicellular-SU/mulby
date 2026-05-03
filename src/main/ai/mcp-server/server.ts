@@ -16,7 +16,8 @@
 import { Server } from '@modelcontextprotocol/sdk/server/index.js'
 import {
   ListToolsRequestSchema,
-  CallToolRequestSchema
+  CallToolRequestSchema,
+  type ProgressNotification
 } from '@modelcontextprotocol/sdk/types.js'
 import type { PluginToolRegistry } from '../../plugin/plugin-tools'
 import type { PluginManager } from '../../plugin'
@@ -118,10 +119,25 @@ export class MulbyMcpServer {
     })
 
     // 注册 tools/call handler
-    server.setRequestHandler(CallToolRequestSchema, async (request) => {
+    server.setRequestHandler(CallToolRequestSchema, async (request, extra) => {
       const toolName = request.params.name
       const args = (request.params.arguments || {}) as Record<string, unknown>
-      return await this.handleToolCall(toolName, args)
+      return await this.handleToolCall(toolName, args, {
+        progressToken: extra._meta?.progressToken,
+        sendProgress: async (progress) => {
+          if (extra._meta?.progressToken === undefined) return
+          const notification: ProgressNotification = {
+            method: 'notifications/progress',
+            params: {
+              progressToken: extra._meta.progressToken,
+              progress: progress.progress,
+              total: progress.total,
+              message: progress.message
+            }
+          }
+          await extra.sendNotification(notification)
+        }
+      })
     })
 
     await server.connect(transport)
@@ -195,7 +211,11 @@ export class MulbyMcpServer {
    */
   private async handleToolCall(
     mcpName: string,
-    args: Record<string, unknown>
+    args: Record<string, unknown>,
+    options?: {
+      progressToken?: string | number
+      sendProgress?: (progress: { progress: number; total?: number; message?: string }) => Promise<void>
+    }
   ): Promise<{ content: Array<{ type: 'text'; text: string }>; isError?: boolean }> {
     const entry = this.registeredTools.get(mcpName)
     if (!entry) {
@@ -237,7 +257,27 @@ export class MulbyMcpServer {
       const result = await hostManager.callHostMethod(
         entry.pluginId,
         `__plugin_tool__${entry.toolName}`,
-        [args]
+        [args],
+        {
+          onToolProgress: (progress) => {
+            if (options?.progressToken === undefined) {
+              log.debug('[MCP-Server] 插件工具进度（客户端未请求 progress）:', {
+                mcpName,
+                progress: progress.progress,
+                total: progress.total,
+                message: progress.message
+              })
+              return
+            }
+            void options.sendProgress?.({
+              progress: progress.progress,
+              total: progress.total,
+              message: progress.message
+            }).catch((error) => {
+              log.warn('[MCP-Server] progress notification 发送失败:', error)
+            })
+          }
+        }
       )
 
       // 解包 host 返回的结果

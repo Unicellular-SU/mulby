@@ -7,6 +7,7 @@ import type {
   AiTool,
   AiToolContext
 } from '../../../shared/types/ai'
+import type { PluginToolProgress } from '../../../shared/types/plugin'
 import { supportsReasoning } from '../modelCapabilities'
 import { getRotatedApiKey } from '../../../shared/ai/apiKeyPool'
 import {
@@ -78,6 +79,10 @@ export interface OpenAICompatContext {
     onChunk: ((chunk: AiMessage) => void) | undefined,
     toolResult: { id: string; name: string; result?: unknown }
   ) => void
+  emitToolProgressChunk: (
+    onChunk: ((chunk: AiMessage) => void) | undefined,
+    toolProgress: { id?: string; name: string; progress: number; total?: number; message?: string }
+  ) => void
   trackMcpCall: (requestId: string | undefined, callId: string | undefined) => void
   untrackMcpCall: (requestId: string | undefined, callId: string | undefined) => void
   toolExecutor?: (input: {
@@ -86,6 +91,7 @@ export interface OpenAICompatContext {
     context?: AiToolContext
     callId?: string
     abortSignal?: AbortSignal
+    onProgress?: (progress: PluginToolProgress) => void
   }) => Promise<unknown>
 }
 
@@ -530,8 +536,17 @@ export async function runOpenAICompatToolLoop(
             name: toolName,
             args: parsedArgs,
             context: input.toolContext,
-            callId: mcpExecutionCallId,
-            abortSignal
+            callId: mcpExecutionCallId || String(call.id || ''),
+            abortSignal,
+            onProgress: (progress) => {
+              context.emitToolProgressChunk(onChunk, {
+                id: String(call.id || ''),
+                name: toolName,
+                progress: progress.progress,
+                total: progress.total,
+                message: progress.message
+              })
+            }
           })
         } catch (error) {
           if (abortSignal?.aborted) {

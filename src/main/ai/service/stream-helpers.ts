@@ -6,6 +6,7 @@ import {
   createReasoningChunk,
   createTextChunk,
   createToolCallChunk,
+  createToolProgressChunk,
   createToolResultChunk
 } from '../streamChunkProtocol'
 import { aiMcpService } from '../mcp'
@@ -48,6 +49,13 @@ export function emitToolCallChunk(
   toolCall: { id: string; name: string; args?: unknown }
 ): void {
   emitChunk(onChunk, createToolCallChunk(toolCall))
+}
+
+export function emitToolProgressChunk(
+  onChunk: ((chunk: AiMessage) => void) | undefined,
+  toolProgress: { id?: string; name: string; progress: number; total?: number; message?: string }
+): void {
+  emitChunk(onChunk, createToolProgressChunk(toolProgress))
 }
 
 export function emitToolResultChunk(

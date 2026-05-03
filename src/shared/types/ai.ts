@@ -58,13 +58,20 @@ export interface AiMessage {
   /**
    * 流式事件类型（仅 onChunk 过程中出现），用于统一 meta/text/reasoning/tool/error/end 协议。
    */
-  chunkType?: 'meta' | 'text' | 'reasoning' | 'tool-call' | 'tool-result' | 'error' | 'end'
+  chunkType?: 'meta' | 'text' | 'reasoning' | 'tool-call' | 'tool-progress' | 'tool-result' | 'error' | 'end'
   capability_debug?: AiCapabilityDebugInfo
   policy_debug?: AiPolicyDebugInfo
   tool_call?: {
     id: string
     name: string
     args?: unknown
+  }
+  tool_progress?: {
+    id?: string
+    name: string
+    progress: number
+    total?: number
+    message?: string
   }
   tool_result?: {
     id: string

@@ -19,7 +19,7 @@ import { permissionManager } from './permission-manager'
 import { pluginFeatureStore, redirectHotKeySetting, redirectAiModelsSetting } from './dynamic-features'
 import { aiService } from '../ai'
 import { aiSkillService } from '../ai/skills'
-import type { DynamicFeatureInput, PluginMessage } from '../../shared/types/plugin'
+import type { DynamicFeatureInput, PluginMessage, PluginToolHandler } from '../../shared/types/plugin'
 import type { PluginMessageBus } from './message-bus'
 import type { TaskScheduler } from '../scheduler'
 import type { TaskInput, TaskFilter } from '../scheduler/types'
@@ -573,7 +573,7 @@ ${item.files.map(p => `    <string>${p}</string>`).join('\n')}
     },
     // Plugin Tools API（主进程备用执行器使用，实际 handler 注册在 host-worker 内）
     tools: {
-      register: (_name: string, _handler: (args: unknown) => unknown | Promise<unknown>) => {
+      register: (_name: string, _handler: PluginToolHandler) => {
         // 主进程备用执行器中 tools.register 为空操作
         // 实际的 handler 注册在 UtilityProcess (host-worker) 内完成
         log.warn('[PluginAPI] tools.register is only effective in UtilityProcess host-worker')

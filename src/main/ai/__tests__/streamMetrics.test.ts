@@ -23,6 +23,7 @@ describe('streamMetrics', () => {
     recordAiStreamChunk(metrics, { role: 'assistant', chunkType: 'reasoning', reasoning_content: 'think' })
     recordAiStreamChunk(metrics, { role: 'assistant', chunkType: 'text', content: 'answer' })
     recordAiStreamChunk(metrics, { role: 'assistant', chunkType: 'tool-call', tool_call: { id: '1', name: 'sum' } })
+    recordAiStreamChunk(metrics, { role: 'assistant', chunkType: 'tool-progress', tool_progress: { id: '1', name: 'sum', progress: 1, total: 2 } })
     recordAiStreamChunk(metrics, { role: 'assistant', chunkType: 'tool-result', tool_result: { id: '1', name: 'sum' } })
     recordAiStreamChunk(metrics, { role: 'assistant', chunkType: 'end' })
 
@@ -31,6 +32,7 @@ describe('streamMetrics', () => {
     assert.equal(metrics.chunks.reasoning, 1)
     assert.equal(metrics.chunks.text, 1)
     assert.equal(metrics.chunks.toolCall, 1)
+    assert.equal(metrics.chunks.toolProgress, 1)
     assert.equal(metrics.chunks.toolResult, 1)
     assert.equal(metrics.chunks.end, 1)
     assert.equal(metrics.reasoningChars, 5)

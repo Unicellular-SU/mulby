@@ -5,6 +5,7 @@ import type {
   AiTool,
   AiToolContext
 } from '../../../shared/types/ai'
+import type { PluginToolProgress } from '../../../shared/types/plugin'
 import {
   supportsEmbedding,
   supportsFunctionCalling,
@@ -24,12 +25,14 @@ export interface BuildToolsInput {
   capabilityDebug?: AiCapabilityDebugInfo
   policyDebug?: AiPolicyDebugInfo
   abortSignal?: AbortSignal
+  onToolProgress?: (progress: { id?: string; name: string; progress: number; total?: number; message?: string }) => void
   toolExecutor?: (input: {
     name: string
     args: unknown
     context?: AiToolContext
     callId?: string
     abortSignal?: AbortSignal
+    onProgress?: (progress: PluginToolProgress) => void
   }) => Promise<unknown>
 }
 
@@ -66,7 +69,7 @@ function assertExternalToolExecutor(tools: AiTool[], toolExecutor?: BuildToolsIn
 }
 
 export function buildTools(input: BuildToolsInput) {
-  const { tools, context, modelId, capabilityDebug, policyDebug, abortSignal, toolExecutor } = input
+  const { tools, context, modelId, capabilityDebug, policyDebug, abortSignal, onToolProgress, toolExecutor } = input
   if (!tools || tools.length === 0) return undefined
   if (modelId && !supportsFunctionCalling(modelId)) {
     log.info('[AI] buildTools: 模型不支持 function calling', { modelId })
@@ -97,7 +100,7 @@ export function buildTools(input: BuildToolsInput) {
         tool({
           description: fn.description,
           inputSchema: jsonSchema(schema as unknown as Parameters<typeof jsonSchema>[0]),
-          execute: async (toolInput: unknown) => {
+          execute: async (toolInput: unknown, toolOptions: { toolCallId?: string; abortSignal?: AbortSignal } = {}) => {
             log.info('[AI] 工具执行开始', { toolName: fn.name, input: toolInput, context })
             let result: unknown
             if (isRuntimeCapabilityIntrospectionToolName(fn.name)) {
@@ -116,10 +119,22 @@ export function buildTools(input: BuildToolsInput) {
                   name: fn.name,
                   args: toolInput,
                   context,
-                  abortSignal
+                  callId: toolOptions.toolCallId,
+                  abortSignal: toolOptions.abortSignal || abortSignal,
+                  onProgress: onToolProgress
+                    ? (progress) => {
+                        onToolProgress({
+                          id: toolOptions.toolCallId,
+                          name: fn.name,
+                          progress: progress.progress,
+                          total: progress.total,
+                          message: progress.message
+                        })
+                      }
+                    : undefined
                 })
               } catch (error) {
-                if (abortSignal?.aborted) {
+                if (toolOptions.abortSignal?.aborted || abortSignal?.aborted) {
                   throw new Error('AI stream aborted by user')
                 }
                 const message = error instanceof Error ? error.message : String(error)

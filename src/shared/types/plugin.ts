@@ -402,10 +402,18 @@ export interface PluginToolSchema {
   }
 }
 
+// 插件 Tool 进度上报
+export interface PluginToolProgress {
+  progress: number
+  total?: number
+  message?: string
+}
+
 // 插件 Tool 执行上下文
 export interface PluginToolCallContext {
   callId?: string
   abortSignal?: AbortSignal
+  sendProgress: (progress: PluginToolProgress) => void
 }
 
 // 插件 Tool Handler 函数签名

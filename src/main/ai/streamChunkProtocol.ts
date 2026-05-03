@@ -37,6 +37,20 @@ export function createToolCallChunk(toolCall: { id: string; name: string; args?:
   }
 }
 
+export function createToolProgressChunk(toolProgress: {
+  id?: string
+  name: string
+  progress: number
+  total?: number
+  message?: string
+}): AiMessage {
+  return {
+    role: 'assistant',
+    chunkType: 'tool-progress',
+    tool_progress: toolProgress
+  }
+}
+
 export function createToolResultChunk(toolResult: { id: string; name: string; result?: unknown }): AiMessage {
   return {
     role: 'assistant',

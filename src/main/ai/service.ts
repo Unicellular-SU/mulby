@@ -12,6 +12,7 @@ import type {
   AiToolContext,
   AiTool
 } from '../../shared/types/ai'
+import type { PluginToolProgress } from '../../shared/types/plugin'
 import { attachmentStore } from './attachments'
 import { estimateTokens } from './tokens'
 import { getAllModels } from './models'
@@ -89,6 +90,7 @@ import {
   type InjectedInternalToolResult
 } from './service/capability-injection'
 import { resolveMergedTools as resolveMergedToolsHelper } from './service/merged-tools'
+import { emitToolProgressChunk as emitToolProgressChunkHelper } from './service/stream-helpers'
 import log from 'electron-log'
 
 interface StreamCallbacks {
@@ -115,6 +117,7 @@ export class AiService {
     context?: AiToolContext
     callId?: string
     abortSignal?: AbortSignal
+    onProgress?: (progress: PluginToolProgress) => void
   }) => Promise<unknown>
   private capabilityPolicyResolver?: CapabilityPolicyResolver
   private pluginToolResolver?: () => AiTool[]
@@ -312,7 +315,9 @@ export class AiService {
         buildPolicyDebugInfo: (input) => this.buildPolicyDebugInfo(input),
         resolveMergedTools: async (effectiveOption) => await this.resolveMergedTools(effectiveOption),
         buildTools: (tools, context, modelId, capabilityDebug, policyDebug, abortSignal) =>
-          this.buildTools(tools, context, modelId, capabilityDebug, policyDebug, abortSignal),
+          this.buildTools(tools, context, modelId, capabilityDebug, policyDebug, abortSignal, (progress) => {
+            emitToolProgressChunkHelper(runtime?.trackedOnChunk || callbacks.onChunk, progress)
+          }),
         resolveLanguageModel: (modelId) => this.resolveLanguageModel(modelId),
         applyContextWindow: (messages, limit) => this.applyContextWindow(messages, limit)
       })
@@ -413,6 +418,7 @@ export class AiService {
     context?: AiToolContext
     callId?: string
     abortSignal?: AbortSignal
+    onProgress?: (progress: PluginToolProgress) => void
   }) => Promise<unknown>): void {
     this.toolExecutor = executor
   }
@@ -567,7 +573,8 @@ export class AiService {
     modelId?: string,
     capabilityDebug?: AiCapabilityDebugInfo,
     policyDebug?: AiPolicyDebugInfo,
-    abortSignal?: AbortSignal
+    abortSignal?: AbortSignal,
+    onToolProgress?: (progress: { id?: string; name: string; progress: number; total?: number; message?: string }) => void
   ) {
     return buildToolsHelper({
       tools,
@@ -576,6 +583,7 @@ export class AiService {
       capabilityDebug,
       policyDebug,
       abortSignal,
+      onToolProgress,
       toolExecutor: this.toolExecutor
     })
   }

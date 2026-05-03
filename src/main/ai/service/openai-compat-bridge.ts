@@ -7,6 +7,7 @@ import type {
   AiTool,
   AiToolContext
 } from '../../../shared/types/ai'
+import type { PluginToolProgress } from '../../../shared/types/plugin'
 import {
   runOpenAICompatToolLoop as runOpenAICompatToolLoopHelper,
   streamOpenAICompat as streamOpenAICompatHelper,
@@ -18,6 +19,7 @@ import {
   emitReasoningChunk as emitReasoningChunkHelper,
   emitTextChunk as emitTextChunkHelper,
   emitToolCallChunk as emitToolCallChunkHelper,
+  emitToolProgressChunk as emitToolProgressChunkHelper,
   emitToolResultChunk as emitToolResultChunkHelper,
   trackMcpCall as trackMcpCallHelper,
   untrackMcpCall as untrackMcpCallHelper
@@ -33,6 +35,7 @@ interface CreateOpenAICompatBridgeInput {
     context?: AiToolContext
     callId?: string
     abortSignal?: AbortSignal
+    onProgress?: (progress: PluginToolProgress) => void
   }) => Promise<unknown>
 }
 
@@ -91,6 +94,7 @@ function createOpenAICompatContext(input: CreateOpenAICompatBridgeInput): OpenAI
     emitReasoningChunk: (onChunk, text) => emitReasoningChunkHelper(onChunk, text),
     emitTextChunk: (onChunk, text) => emitTextChunkHelper(onChunk, text),
     emitToolCallChunk: (onChunk, toolCall) => emitToolCallChunkHelper(onChunk, toolCall),
+    emitToolProgressChunk: (onChunk, toolProgress) => emitToolProgressChunkHelper(onChunk, toolProgress),
     emitToolResultChunk: (onChunk, toolResult) => emitToolResultChunkHelper(onChunk, toolResult),
     trackMcpCall: (requestId, callId) => trackMcpCallHelper(input.requestMcpCallIds, requestId, callId),
     untrackMcpCall: (requestId, callId) => untrackMcpCallHelper(input.requestMcpCallIds, requestId, callId),

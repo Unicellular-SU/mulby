@@ -3,7 +3,7 @@
  * 定义主进程与 UtilityProcess 之间的消息格式
  */
 
-import type { InputAttachment } from '../../shared/types/plugin'
+import type { InputAttachment, PluginToolProgress } from '../../shared/types/plugin'
 
 // ============ 消息类型 ============
 
@@ -22,6 +22,7 @@ export type HostResponseType =
   | 'result'      // 执行结果
   | 'error'       // 错误
   | 'apiCall'     // API 调用请求
+  | 'toolProgress' // AI Tool 进度上报
   | 'resourceStats' // 资源统计
 
 // ============ 请求消息 ============
@@ -129,6 +130,16 @@ export interface ApiCallResponse extends HostResponseBase {
   }
 }
 
+/** AI Tool 进度上报（Worker -> 主进程） */
+export interface ToolProgressResponse extends HostResponseBase {
+  type: 'toolProgress'
+  payload: PluginToolProgress & {
+    toolName: string
+    callId?: string
+    timestamp: number
+  }
+}
+
 /** 资源统计响应（Worker -> 主进程） */
 export interface ResourceStatsResponse extends HostResponseBase {
   type: 'resourceStats'
@@ -146,7 +157,7 @@ export interface ResourceStatsResponse extends HostResponseBase {
   }
 }
 
-export type HostResponse = ReadyResponse | ResultResponse | ErrorResponse | ApiCallResponse | ResourceStatsResponse
+export type HostResponse = ReadyResponse | ResultResponse | ErrorResponse | ApiCallResponse | ToolProgressResponse | ResourceStatsResponse
 
 // ============ API 响应（主进程 -> Worker） ============
 

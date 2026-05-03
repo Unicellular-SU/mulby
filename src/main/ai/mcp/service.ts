@@ -18,6 +18,7 @@ import type {
   AiTool,
   AiToolContext
 } from '../../../shared/types/ai'
+import type { PluginToolProgress } from '../../../shared/types/plugin'
 import { getAiSettings, updateAiSettings } from '../config'
 import { MCP_PING_TIMEOUT_MS } from '../../constants/timing'
 
@@ -373,6 +374,7 @@ export class AiMcpService {
     args: unknown
     context?: AiToolContext
     callId?: string
+    onProgress?: (progress: PluginToolProgress) => void
   }): Promise<unknown> {
     const { serverId, toolName } = parseMcpToolId(input.toolId)
     return await this.callTool({
@@ -380,7 +382,8 @@ export class AiMcpService {
       toolName,
       args: input.args,
       context: input.context,
-      callId: input.callId
+      callId: input.callId,
+      onProgress: input.onProgress
     })
   }
 
@@ -390,6 +393,7 @@ export class AiMcpService {
     args: unknown
     context?: AiToolContext
     callId?: string
+    onProgress?: (progress: PluginToolProgress) => void
   }): Promise<unknown> {
     const server = this.requireServer(input.serverId)
     this.assertServerUsable(server)
@@ -429,6 +433,11 @@ export class AiMcpService {
           maxTotalTimeout,
           signal: controller.signal,
           onprogress: (progress) => {
+            input.onProgress?.({
+              progress: progress.progress,
+              total: progress.total,
+              message: progress.message
+            })
             this.appendLog(server.id, {
               level: 'debug',
               message: `Tool progress ${input.toolName}`,

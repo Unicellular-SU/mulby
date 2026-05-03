@@ -45,7 +45,8 @@ export interface PrepareChatRequestInput {
     modelId?: string,
     capabilityDebug?: AiCapabilityDebugInfo,
     policyDebug?: AiPolicyDebugInfo,
-    abortSignal?: AbortSignal
+    abortSignal?: AbortSignal,
+    onToolProgress?: (progress: { id?: string; name: string; progress: number; total?: number; message?: string }) => void
   ) => unknown
   resolveLanguageModel: (modelId?: string) => { model: string; modelKey: unknown }
   applyContextWindow: (messages: AiMessage[], limit?: number) => AiMessage[]
