@@ -14,8 +14,8 @@
 const value = await storage.get('myKey');
 const pluginValue = await storage.get('myKey', 'myPlugin');
 
-// 插件后端（同步）
-const backendValue = context.api.storage.get('myKey');
+// 插件后端（异步）
+const backendValue = await context.api.storage.get('myKey');
 ```
 
 **参数**:
@@ -24,7 +24,7 @@ const backendValue = context.api.storage.get('myKey');
 
 **返回值**:
 - 渲染进程：`Promise<any>` - 存储的值，如果不存在返回 `undefined`
-- 插件后端：`any` - 存储的值，如果不存在返回 `undefined`
+- 插件后端：`Promise<any>` - 存储的值，如果不存在返回 `undefined`
 
 ### set(key, value[, namespace])
 [Renderer] [Backend]
@@ -35,8 +35,8 @@ const backendValue = context.api.storage.get('myKey');
 await storage.set('myKey', { foo: 'bar' });
 await storage.set('myKey', { foo: 'bar' }, 'myPlugin');
 
-// 插件后端（同步）
-context.api.storage.set('myKey', { foo: 'bar' });
+// 插件后端（异步）
+await context.api.storage.set('myKey', { foo: 'bar' });
 ```
 
 **参数**:
@@ -46,7 +46,7 @@ context.api.storage.set('myKey', { foo: 'bar' });
 
 **返回值**:
 - 渲染进程：`Promise<boolean>` - 是否保存成功
-- 插件后端：`void`
+- 插件后端：`Promise<void>`
 
 ### remove(key[, namespace])
 [Renderer] [Backend]
@@ -57,8 +57,8 @@ context.api.storage.set('myKey', { foo: 'bar' });
 await storage.remove('myKey');
 await storage.remove('myKey', 'myPlugin');
 
-// 插件后端（同步）
-context.api.storage.remove('myKey');
+// 插件后端（异步）
+await context.api.storage.remove('myKey');
 ```
 
 **参数**:
@@ -67,14 +67,14 @@ context.api.storage.remove('myKey');
 
 **返回值**:
 - 渲染进程：`Promise<boolean>` - 是否删除成功
-- 插件后端：`void`
+- 插件后端：`Promise<void>`
 
 ### clear()
 [Backend]
 清空插件后端存储（仅插件后端可用）。
 
 ```javascript
-context.api.storage.clear();
+await context.api.storage.clear();
 ```
 
 ### keys()
@@ -82,7 +82,7 @@ context.api.storage.clear();
 获取插件后端存储的所有键（仅插件后端可用）。
 
 ```javascript
-const keys = context.api.storage.keys();
+const keys = await context.api.storage.keys();
 ```
 
 ### 备注

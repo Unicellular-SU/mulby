@@ -49,7 +49,7 @@ const status = await permission.request('camera');
 const can = await permission.canRequest('microphone');
 ```
 
-**返回值**: `boolean`
+**返回值**: `boolean`（插件后端返回 `Promise<boolean>`）
 
 ### openSystemSettings(type)
 [Renderer] [Backend]
@@ -59,7 +59,7 @@ const can = await permission.canRequest('microphone');
 await permission.openSystemSettings('accessibility');
 ```
 
-**返回值**: `boolean` - 当前平台不支持时返回 false
+**返回值**: `boolean`（插件后端返回 `Promise<boolean>`） - 当前平台不支持时返回 false
 
 ### isAccessibilityTrusted()
 [Renderer] [Backend]
@@ -69,7 +69,7 @@ await permission.openSystemSettings('accessibility');
 const trusted = await permission.isAccessibilityTrusted();
 ```
 
-**返回值**: `boolean`
+**返回值**: `boolean`（插件后端返回 `Promise<boolean>`）
 
 ### 完整示例
 

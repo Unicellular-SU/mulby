@@ -17,7 +17,7 @@ if (await network.isOnline()) {
 }
 ```
 
-**返回值**: `boolean`
+**返回值**: `boolean`（插件后端返回 `Promise<boolean>`）
 
 ### onOnline(callback)
 [Renderer]

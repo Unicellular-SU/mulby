@@ -562,7 +562,7 @@ const info = await ai.attachments.get(attachmentId);
 await ai.attachments.delete(attachmentId);
 ```
 
-**返回值**: `void`
+**返回值**: `void`（插件后端返回 `Promise<void>`）
 
 ### attachments.uploadToProvider(input)
 [Renderer] [Backend]
@@ -1220,8 +1220,8 @@ module.exports = {
     );
 
     const final = await req;
-    filesystem.writeFile('/tmp/ai-result.txt', final.content || '');
-    notification.show('AI 完成');
+    await filesystem.writeFile('/tmp/ai-result.txt', final.content || '');
+    await notification.show('AI 完成');
   }
 };
 ```

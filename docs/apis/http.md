@@ -101,12 +101,12 @@ module.exports = {
 
       if (response.status === 200) {
         const result = JSON.parse(response.data);
-        notification.show('翻译完成: ' + result.translation);
+        await notification.show('翻译完成: ' + result.translation);
       } else {
-        notification.show('翻译失败', 'error');
+        await notification.show('翻译失败', 'error');
       }
     } catch (error) {
-      notification.show('网络错误', 'error');
+      await notification.show('网络错误', 'error');
     }
   }
 };

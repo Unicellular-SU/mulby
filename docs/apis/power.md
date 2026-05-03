@@ -16,7 +16,7 @@ const idleSeconds = await power.getSystemIdleTime();
 console.log(`系统已空闲 ${idleSeconds} 秒`);
 ```
 
-**返回值**: `number` - 空闲时间（秒）
+**返回值**: `number`（插件后端返回 `Promise<number>`） - 空闲时间（秒）
 
 ### getSystemIdleState(idleThreshold)
 [Renderer] [Backend]
@@ -30,7 +30,7 @@ const state = await power.getSystemIdleState(60);
 **参数**:
 - `idleThreshold` (number) - 空闲阈值（秒）
 
-**返回值**: `string` - 空闲状态
+**返回值**: `string`（插件后端返回 `Promise<string>`） - 空闲状态
 
 ### isOnBatteryPower()
 [Renderer] [Backend]
@@ -42,7 +42,7 @@ if (await power.isOnBatteryPower()) {
 }
 ```
 
-**返回值**: `boolean`
+**返回值**: `boolean`（插件后端返回 `Promise<boolean>`）
 
 ### getCurrentThermalState()
 [Renderer] [Backend]
@@ -54,7 +54,7 @@ const thermal = await power.getCurrentThermalState();
 // Windows/Linux 返回: 'unknown'
 ```
 
-**返回值**: `string`
+**返回值**: `string`（插件后端返回 `Promise<string>`）
 
 ### onSuspend(callback)
 [Renderer]

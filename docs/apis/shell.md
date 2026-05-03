@@ -44,7 +44,7 @@ await shell.openExternal('mailto:test@example.com');
 在文件管理器中显示并选中文件。
 
 ```javascript
-shell.showItemInFolder('/path/to/file.txt');
+await shell.showItemInFolder('/path/to/file.txt');
 ```
 
 **参数**
@@ -87,7 +87,7 @@ await shell.trashItem('/path/to/file.txt');
 播放系统提示音。
 
 ```javascript
-shell.beep();
+await shell.beep();
 ```
 
 **返回值**

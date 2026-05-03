@@ -300,7 +300,7 @@ export async function run({ api }) {
     timestamp: Date.now()
   })
 
-  api.notification.show(`主题已切换为 ${newTheme}`)
+  api.await notification.show(`主题已切换为 ${newTheme}`)
 }
 ```
 

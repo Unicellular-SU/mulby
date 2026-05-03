@@ -24,7 +24,7 @@ const success = await tray.create({
 - `tooltip` (string, 可选) - 鼠标悬停提示
 - `title` (string, 可选) - 托盘标题（仅 macOS）
 
-**返回值**: `boolean` - 是否创建成功
+**返回值**: `boolean`（插件后端返回 `Promise<boolean>`） - 是否创建成功
 
 ### destroy()
 [Renderer] [Backend]
@@ -71,7 +71,7 @@ if (await tray.exists()) {
 }
 ```
 
-**返回值**: `boolean`
+**返回值**: `boolean`（插件后端返回 `Promise<boolean>`）
 
 ### 完整示例
 

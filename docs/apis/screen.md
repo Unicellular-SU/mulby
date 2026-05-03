@@ -132,7 +132,7 @@ interface CaptureSource {
 ```javascript
 // 截取主屏幕
 const buffer = await screen.capture();
-filesystem.writeFile('/tmp/screenshot.png', buffer);
+await filesystem.writeFile('/tmp/screenshot.png', buffer);
 
 // 截取指定源
 const sources = await screen.getSources({ types: ['screen'] });
@@ -280,11 +280,11 @@ module.exports = {
     try {
       const buffer = await screen.capture({ format: 'png' });
       const path = `/tmp/screenshot_${Date.now()}.png`;
-      filesystem.writeFile(path, buffer);
+      await filesystem.writeFile(path, buffer);
       clipboard.writeImage(buffer);
-      notification.show('截图已保存并复制到剪贴板');
+      await notification.show('截图已保存并复制到剪贴板');
     } catch (error) {
-      notification.show('截图失败: ' + error.message, 'error');
+      await notification.show('截图失败: ' + error.message, 'error');
     }
   }
 };

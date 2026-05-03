@@ -110,7 +110,7 @@ const exePath = await system.getPath('exe');  // 可执行文件路径
 **参数**:
 - `name` - 路径名称：'home' | 'appData' | 'userData' | 'temp' | 'exe' | 'desktop' | 'documents' | 'downloads' | 'music' | 'pictures' | 'videos' | 'logs'
 
-**返回值**: `string`
+**返回值**: `string`（插件后端返回 `Promise<string>`）
 
 ### getEnv(name)
 [Renderer] [Backend]
@@ -137,7 +137,7 @@ if (idleSeconds > 300) {
 }
 ```
 
-**返回值**: `number` - 空闲时间（秒）
+**返回值**: `number`（插件后端返回 `Promise<number>`） - 空闲时间（秒）
 
 ### getFileIcon(filePath)
 [Renderer]
@@ -158,7 +158,7 @@ const folderIcon = await system.getFileIcon('folder');
 **参数**:
 - `filePath` (string) - 文件路径、扩展名（如 `.txt`）或 `'folder'`
 
-**返回值**: `string` - base64 Data URL 格式的图标
+**返回值**: `string`（插件后端返回 `Promise<string>`） - base64 Data URL 格式的图标
 
 ### getFileIcons(requests, options?)
 [Renderer]
@@ -186,7 +186,7 @@ storage.set(`${deviceId}/settings`, { ... });
 ```
 
 
-**返回值**: `string` - 32位设备唯一标识
+**返回值**: `string`（插件后端返回 `Promise<string>`） - 32位设备唯一标识
 
 ### isDev()
 [Renderer]
@@ -198,7 +198,7 @@ if (await system.isDev()) {
 }
 ```
 
-**返回值**: `boolean`
+**返回值**: `boolean`（插件后端返回 `Promise<boolean>`）
 
 ### isMacOS() / isWindows() / isLinux()
 [Renderer]
@@ -214,7 +214,7 @@ if (await system.isMacOS()) {
 }
 ```
 
-**返回值**: `boolean`
+**返回值**: `boolean`（插件后端返回 `Promise<boolean>`）
 
 ### onActiveWindowChange(callback)
 [Backend]

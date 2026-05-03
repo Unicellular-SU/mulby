@@ -18,7 +18,7 @@ if (!available) {
 }
 ```
 
-**返回值**: `boolean`
+**返回值**: `boolean`（插件后端返回 `Promise<boolean>`）
 
 ### encryptString(plainText)
 [Renderer] [Backend]
@@ -46,7 +46,7 @@ console.log(decrypted); // 'my-secret-password'
 **参数**:
 - `encrypted` (Buffer | ArrayBuffer) - 加密的数据
 
-**返回值**: `string` - 解密后的明文
+**返回值**: `string`（插件后端返回 `Promise<string>`） - 解密后的明文
 
 ### 完整示例
 
@@ -57,7 +57,7 @@ module.exports = {
 
     // 检查加密是否可用
     if (!security.isEncryptionAvailable()) {
-      notification.show('加密不可用', 'error');
+      await notification.show('加密不可用', 'error');
       return;
     }
 
@@ -71,7 +71,7 @@ module.exports = {
     const buffer = Buffer.from(stored, 'base64');
     const decrypted = security.decryptString(buffer);
 
-    notification.show('API Key 已安全存储');
+    await notification.show('API Key 已安全存储');
   }
 };
 ```

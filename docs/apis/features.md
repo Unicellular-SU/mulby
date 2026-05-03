@@ -81,7 +81,7 @@ interface DynamicFeature {
 [Backend]
 
 ```ts
-features.getFeatures(codes?: string[]): DynamicFeature[]
+features.getFeatures(codes?: string[]): Promise<DynamicFeature[]>
 ```
 
 - 返回当前插件已注册的动态指令
@@ -93,7 +93,7 @@ features.getFeatures(codes?: string[]): DynamicFeature[]
 [Backend]
 
 ```ts
-features.setFeature(feature: DynamicFeatureInput): void
+features.setFeature(feature: DynamicFeatureInput): Promise<void>
 ```
 
 新增或更新动态指令。字段说明：
@@ -117,7 +117,7 @@ features.setFeature(feature: DynamicFeatureInput): void
 [Backend]
 
 ```ts
-features.removeFeature(code: string): boolean
+features.removeFeature(code: string): Promise<boolean>
 ```
 
 删除动态指令，返回是否成功删除。
@@ -127,7 +127,7 @@ features.removeFeature(code: string): boolean
 #### 注册 silent 指令（无 UI）
 
 ```ts
-api.features.setFeature({
+await api.features.setFeature({
   code: 'today',
   explain: '复制今日日期',
   mode: 'silent',
@@ -138,7 +138,7 @@ api.features.setFeature({
 #### 注册 UI 指令（附着面板）
 
 ```ts
-api.features.setFeature({
+await api.features.setFeature({
   code: 'settings',
   explain: '打开设置面板',
   mode: 'ui',
@@ -150,7 +150,7 @@ api.features.setFeature({
 #### 注册 detached 指令（独立窗口）
 
 ```ts
-api.features.setFeature({
+await api.features.setFeature({
   code: 'window',
   explain: '独立窗口打开',
   mode: 'detached',
@@ -163,7 +163,7 @@ api.features.setFeature({
 
 ```ts
 for (const code of ['today', 'settings', 'window']) {
-  api.features.removeFeature(code)
+  await api.features.removeFeature(code)
 }
 ```
 
@@ -171,7 +171,7 @@ for (const code of ['today', 'settings', 'window']) {
 [Backend]
 
 ```ts
-features.redirectHotKeySetting(cmdLabel: string, autocopy?: boolean): void
+features.redirectHotKeySetting(cmdLabel: string, autocopy?: boolean): Promise<void>
 ```
 
 跳转到 Mulby 的「设置 -> 快捷键 -> 指令快捷键」区域，并优先高亮/过滤 `cmdLabel` 对应指令，便于用户直接绑定全局快捷键。
@@ -185,7 +185,7 @@ features.redirectHotKeySetting(cmdLabel: string, autocopy?: boolean): void
 [Backend]
 
 ```ts
-features.redirectAiModelsSetting(): void
+features.redirectAiModelsSetting(): Promise<void>
 ```
 
 当前会弹出提示通知，为保留接口。

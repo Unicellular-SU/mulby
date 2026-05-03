@@ -10,8 +10,8 @@
 显示系统通知（仅当 `type === 'error'` 时不静音）。
 
 ```javascript
-notification.show('操作成功');
-notification.show('发生错误', 'error');
+await notification.show('操作成功');
+await notification.show('发生错误', 'error');
 ```
 
 **参数**:
@@ -21,5 +21,5 @@ notification.show('发生错误', 'error');
 ### 完整示例
 
 ```javascript
-window.mulby.notification.show('操作完成');
+window.mulby.await notification.show('操作完成');
 ```

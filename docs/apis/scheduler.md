@@ -414,7 +414,7 @@ const desc2 = api.scheduler.describeCron('0 */30 * * * *')
 // 在插件中定义回调方法
 export async function onReminder({ api, payload, task }) {
   // payload 是创建任务时传入的数据
-  api.notification.show(payload.message)
+  api.await notification.show(payload.message)
 }
 
 export async function onBackup({ api, payload, task }) {
@@ -510,10 +510,10 @@ export async function run({ api, input }) {
 
 export async function onReminder({ api, payload }) {
   // 显示通知
-  api.notification.show(payload.message)
+  api.await notification.show(payload.message)
 
   // 可选：播放提示音
-  api.shell.beep()
+  api.await shell.beep()
 }
 
 function parseInput(input) {
@@ -557,8 +557,8 @@ export async function onLoad({ api }) {
       cron: '0 0 2 * * *',  // 每天凌晨2点
       callback: 'onBackup',
       payload: {
-        source: api.system.getPath('documents'),
-        target: api.system.getPath('userData') + '/backups'
+        source: api.await system.getPath('documents'),
+        target: api.await system.getPath('userData') + '/backups'
       }
     })
   }
@@ -579,11 +579,11 @@ export async function onBackup({ api, payload }) {
     await api.filesystem.copy(source, backupDir)
 
     // 发送通知
-    api.notification.show('每日备份已完成')
+    api.await notification.show('每日备份已完成')
 
     return { success: true, backupDir }
   } catch (error) {
-    api.notification.show('备份失败，请检查日志', 'error')
+    api.await notification.show('备份失败，请检查日志', 'error')
     throw error
   }
 }
@@ -627,7 +627,7 @@ export async function run({ api }) {
 }
 
 export async function onHealthReminder({ api, payload }) {
-  api.notification.show(payload.message)
+  api.await notification.show(payload.message)
 }
 
 // 查看所有健康提醒
@@ -687,7 +687,7 @@ export async function onLog({ api, payload }) {
 // ✅ 好的做法
 export async function onTask({ api }) {
   // 快速操作
-  api.notification.show('任务完成')
+  api.await notification.show('任务完成')
 }
 
 // ❌ 不好的做法（长时间运行）

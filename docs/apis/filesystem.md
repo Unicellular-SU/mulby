@@ -11,13 +11,13 @@
 
 ```javascript
 // 读取为 Buffer
-const buffer = filesystem.readFile('/path/to/file.png');
+const buffer = await filesystem.readFile('/path/to/file.png');
 
 // 读取为文本
-const text = filesystem.readFile('/path/to/file.txt', 'utf-8');
+const text = await filesystem.readFile('/path/to/file.txt', 'utf-8');
 
 // 读取为 Base64
-const base64 = filesystem.readFile('/path/to/image.jpg', 'base64');
+const base64 = await filesystem.readFile('/path/to/image.jpg', 'base64');
 ```
 
 **参数**:
@@ -32,14 +32,14 @@ const base64 = filesystem.readFile('/path/to/image.jpg', 'base64');
 
 ```javascript
 // 写入 Buffer
-filesystem.writeFile('/path/to/output.png', buffer);
+await filesystem.writeFile('/path/to/output.png', buffer);
 
 // 写入文本
-filesystem.writeFile('/path/to/output.txt', 'Hello World', 'utf-8');
+await filesystem.writeFile('/path/to/output.txt', 'Hello World', 'utf-8');
 
 // 写入 Base64 数据
 // 写入 ArrayBuffer 数据
-filesystem.writeFile('/path/to/output.pdf', arrayBuffer);
+await filesystem.writeFile('/path/to/output.pdf', arrayBuffer);
 ```
 
 **参数**:
@@ -57,14 +57,14 @@ if (filesystem.exists('/path/to/file.txt')) {
 }
 ```
 
-**返回值**: `boolean`
+**返回值**: `boolean`（插件后端返回 `Promise<boolean>`）
 
 ### unlink(path)
 [Renderer] [Backend]
 删除文件。
 
 ```javascript
-filesystem.unlink('/path/to/file.txt');
+await filesystem.unlink('/path/to/file.txt');
 ```
 
 ### readdir(path)
@@ -72,7 +72,7 @@ filesystem.unlink('/path/to/file.txt');
 读取目录内容。
 
 ```javascript
-const files = filesystem.readdir('/path/to/dir');
+const files = await filesystem.readdir('/path/to/dir');
 // 返回: ['file1.txt', 'file2.txt', 'subdir']
 ```
 
@@ -91,7 +91,7 @@ filesystem.mkdir('/path/to/new/dir');
 获取文件信息。
 
 ```javascript
-const info = filesystem.stat('/path/to/file.txt');
+const info = await filesystem.stat('/path/to/file.txt');
 // 返回: { name, path, size, isFile, isDirectory, createdAt, modifiedAt }
 ```
 
@@ -150,7 +150,7 @@ filesystem.basename('/path/to/file.txt', '.txt');  // 'file'
 // 写入并读取文件
 const temp = await window.mulby.system.getPath('temp');
 const filePath = `${temp}/mulby-demo.txt`;
-window.mulby.filesystem.writeFile(filePath, 'Hello Mulby', 'utf-8');
-const text = window.mulby.filesystem.readFile(filePath, 'utf-8');
+window.mulby.await filesystem.writeFile(filePath, 'Hello Mulby', 'utf-8');
+const text = window.mulby.await filesystem.readFile(filePath, 'utf-8');
 console.log(text);
 ```

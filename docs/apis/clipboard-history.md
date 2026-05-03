@@ -159,13 +159,13 @@ module.exports = {
     });
 
     if (items.length === 0) {
-      notification.show('暂无历史记录');
+      await notification.show('暂无历史记录');
       return;
     }
 
     // 显示第一条记录
     const first = items[0];
-    notification.show(`最近复制: ${first.content.substring(0, 50)}...`);
+    await notification.show(`最近复制: ${first.content.substring(0, 50)}...`);
   }
 };
 ```
@@ -187,9 +187,9 @@ module.exports = {
     if (items.length > 0) {
       // 复制到剪贴板
       await clipboardHistory.copy(items[0].id);
-      notification.show('已复制到剪贴板');
+      await notification.show('已复制到剪贴板');
     } else {
-      notification.show('未找到匹配记录');
+      await notification.show('未找到匹配记录');
     }
   }
 };
@@ -207,12 +207,12 @@ module.exports = {
       favorite: true
     });
 
-    notification.show(`你有 ${favorites.length} 条收藏`);
+    await notification.show(`你有 ${favorites.length} 条收藏`);
 
     // 切换第一条记录的收藏状态
     if (favorites.length > 0) {
       await clipboardHistory.toggleFavorite(favorites[0].id);
-      notification.show('已取消收藏');
+      await notification.show('已取消收藏');
     }
   }
 };
@@ -235,7 +235,7 @@ module.exports = {
       收藏: ${stats.favorite}
     `;
 
-    notification.show(message);
+    await notification.show(message);
   }
 };
 ```

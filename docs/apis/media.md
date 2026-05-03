@@ -20,7 +20,7 @@ const status = await media.getAccessStatus('camera');
 **参数**:
 - `mediaType` ('microphone' | 'camera') - 媒体类型
 
-**返回值**: `string` - 权限状态
+**返回值**: `string`（插件后端返回 `Promise<string>`） - 权限状态
 
 **跨平台说明**:
 - macOS: 返回实际权限状态
@@ -40,7 +40,7 @@ if (granted) {
 **参数**:
 - `mediaType` ('microphone' | 'camera') - 媒体类型
 
-**返回值**: `boolean` - 是否获得权限
+**返回值**: `boolean`（插件后端返回 `Promise<boolean>`） - 是否获得权限
 
 ### hasCameraAccess()
 [Renderer] [Backend]
@@ -52,7 +52,7 @@ if (await media.hasCameraAccess()) {
 }
 ```
 
-**返回值**: `boolean`
+**返回值**: `boolean`（插件后端返回 `Promise<boolean>`）
 
 ### hasMicrophoneAccess()
 [Renderer] [Backend]
@@ -64,7 +64,7 @@ if (await media.hasMicrophoneAccess()) {
 }
 ```
 
-**返回值**: `boolean`
+**返回值**: `boolean`（插件后端返回 `Promise<boolean>`）
 
 ### 在插件 UI 中使用摄像头/麦克风
 

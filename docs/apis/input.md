@@ -23,7 +23,7 @@ await input.hideMainWindowPasteText('Hello Mulby');
 **参数**:
 - `text` (string) - 要粘贴的文本
 
-**返回值**: `boolean` - 是否执行成功
+**返回值**: `boolean`（插件后端返回 `Promise<boolean>`） - 是否执行成功
 
 ### hideMainWindowPasteImage(image)
 [Renderer] [Backend]
@@ -40,7 +40,7 @@ await input.hideMainWindowPasteImage('/path/to/image.png');
 **参数**:
 - `image` (string | Buffer | ArrayBuffer) - 图片路径、Data URL、Buffer 或 ArrayBuffer
 
-**返回值**: `boolean` - 是否执行成功
+**返回值**: `boolean`（插件后端返回 `Promise<boolean>`） - 是否执行成功
 
 ### hideMainWindowPasteFile(filePath)
 [Renderer] [Backend]
@@ -54,7 +54,7 @@ await input.hideMainWindowPasteFile(['/path/a.txt', '/path/b.txt']);
 **参数**:
 - `filePath` (string | string[]) - 文件路径或路径数组
 
-**返回值**: `boolean` - 是否执行成功
+**返回值**: `boolean`（插件后端返回 `Promise<boolean>`） - 是否执行成功
 
 ### hideMainWindowTypeString(text)
 [Renderer] [Backend]
@@ -67,7 +67,7 @@ await input.hideMainWindowTypeString('Hello World!');
 **参数**:
 - `text` (string) - 要输入的文本
 
-**返回值**: `boolean` - 是否执行成功
+**返回值**: `boolean`（插件后端返回 `Promise<boolean>`） - 是否执行成功
 
 **注意**: 连续调用输入 API 时，窗口会保持隐藏状态，避免闪烁。完成所有输入后，调用 `restoreWindows()` 恢复窗口。
 
@@ -84,7 +84,7 @@ await input.hideMainWindowTypeString('password');
 await input.restoreWindows();
 ```
 
-**返回值**: `boolean` - 是否执行成功
+**返回值**: `boolean`（插件后端返回 `Promise<boolean>`） - 是否执行成功
 
 **说明**:
 - 当连续调用多个输入 API 时，窗口会保持隐藏状态，避免闪烁
@@ -116,7 +116,7 @@ await input.simulateKeyboardTap('f5');
 - `key` (string) - 被模拟的主键，如 `'a'`, `'enter'`, `'f1'` 等
 - `...modifiers` (string[]) - 可选的修饰键，如 `'ctrl'`, `'alt'`, `'shift'`, `'command'` 等
 
-**返回值**: `boolean` - 是否执行成功
+**返回值**: `boolean`（插件后端返回 `Promise<boolean>`） - 是否执行成功
 
 **支持的键名**:
 
@@ -152,7 +152,7 @@ await input.simulateMouseMove(100, 200);
 - `x` (number) - 相对于屏幕左上角的 X 坐标（像素）
 - `y` (number) - 相对于屏幕左上角的 Y 坐标（像素）
 
-**返回值**: `boolean` - 是否执行成功
+**返回值**: `boolean`（插件后端返回 `Promise<boolean>`） - 是否执行成功
 
 ### simulateMouseClick(x, y)
 [Renderer] [Backend]
@@ -167,7 +167,7 @@ await input.simulateMouseClick(150, 200);
 - `x` (number) - 相对于屏幕左上角的 X 坐标（像素）
 - `y` (number) - 相对于屏幕左上角的 Y 坐标（像素）
 
-**返回值**: `boolean` - 是否执行成功
+**返回值**: `boolean`（插件后端返回 `Promise<boolean>`） - 是否执行成功
 
 ### simulateMouseDoubleClick(x, y)
 [Renderer] [Backend]
@@ -182,7 +182,7 @@ await input.simulateMouseDoubleClick(150, 200);
 - `x` (number) - 相对于屏幕左上角的 X 坐标（像素）
 - `y` (number) - 相对于屏幕左上角的 Y 坐标（像素）
 
-**返回值**: `boolean` - 是否执行成功
+**返回值**: `boolean`（插件后端返回 `Promise<boolean>`） - 是否执行成功
 
 ### simulateMouseRightClick(x, y)
 [Renderer] [Backend]
@@ -197,7 +197,7 @@ await input.simulateMouseRightClick(200, 250);
 - `x` (number) - 相对于屏幕左上角的 X 坐标（像素）
 - `y` (number) - 相对于屏幕左上角的 Y 坐标（像素）
 
-**返回值**: `boolean` - 是否执行成功
+**返回值**: `boolean`（插件后端返回 `Promise<boolean>`） - 是否执行成功
 
 ### 完整示例
 

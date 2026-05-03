@@ -21,7 +21,7 @@ if (success) {
 **参数**:
 - `accelerator` (string) - 快捷键组合
 
-**返回值**: `boolean` - 是否注册成功
+**返回值**: `boolean`（插件后端返回 `Promise<boolean>`） - 是否注册成功
 
 **快捷键格式**:
 - 修饰键: `Command`(macOS), `Control`, `Alt`, `Shift`, `Meta`
@@ -55,7 +55,7 @@ await shortcut.unregisterAll();
 const registered = await shortcut.isRegistered('CommandOrControl+X');
 ```
 
-**返回值**: `boolean`
+**返回值**: `boolean`（插件后端返回 `Promise<boolean>`）
 
 ### onTriggered(callback)
 [Renderer] [Backend]

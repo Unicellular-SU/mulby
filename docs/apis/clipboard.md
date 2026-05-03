@@ -10,10 +10,10 @@
 读取剪贴板文本内容。
 
 ```javascript
-const text = clipboard.readText();
+const text = await clipboard.readText();
 ```
 
-**返回值**: `string` - 剪贴板文本内容
+**返回值**: `string`（插件后端返回 `Promise<string>`） - 剪贴板文本内容
 
 ### writeText(text)
 [Renderer] [Backend]
@@ -31,10 +31,10 @@ await clipboard.writeText('Hello World');
 读取剪贴板图片。
 
 ```javascript
-const imageBuffer = clipboard.readImage();
+const imageBuffer = await clipboard.readImage();
 if (imageBuffer) {
   // PNG 数据（渲染进程中可能表现为 Uint8Array）
-  filesystem.writeFile('/tmp/image.png', imageBuffer);
+  await filesystem.writeFile('/tmp/image.png', imageBuffer);
 }
 ```
 
@@ -62,7 +62,7 @@ await clipboard.writeImage('data:image/png;base64,...');
 
 **返回值**:
 - 渲染进程：`boolean` - 是否写入成功
-- 插件后端：`void`
+- 插件后端：`Promise<void>`
 
 ### writeFiles(filePaths)
 [Renderer]
@@ -76,18 +76,18 @@ await clipboard.writeFiles(['/path/a.txt', '/path/b.txt']);
 **参数**:
 - `filePaths` (string | string[]) - 文件路径
 
-**返回值**: `boolean`
+**返回值**: `boolean`（插件后端返回 `Promise<boolean>`）
 
 ### readFiles()
 [Renderer] [Backend]
 读取剪贴板中的文件列表（支持 macOS/Windows/Linux）。
 
 ```javascript
-const files = clipboard.readFiles();
+const files = await clipboard.readFiles();
 // 返回: [{ path, name, size, type, isDirectory }]
 ```
 
-**返回值**: `Array<ClipboardFileInfo>` - 文件信息数组（插件后端可能不包含 `type`）
+**返回值**: `Array<ClipboardFileInfo>`（插件后端返回 `Promise<Array<ClipboardFileInfo>>`） - 文件信息数组（插件后端可能不包含 `type`）
 
 ```typescript
 interface ClipboardFileInfo {
@@ -104,13 +104,13 @@ interface ClipboardFileInfo {
 获取当前剪贴板内容的格式类型。
 
 ```javascript
-const format = clipboard.getFormat();
+const format = await clipboard.getFormat();
 // 渲染进程可能返回: 'text' | 'image' | 'files' | 'html' | 'empty'
 ```
 
 **返回值**:
 - 渲染进程：`'text' | 'image' | 'files' | 'html' | 'empty'`
-- 插件后端：`'text' | 'image' | 'files' | 'empty'`
+- 插件后端：`Promise<'text' | 'image' | 'files' | 'empty'>`
 
 ### 完整示例
 
@@ -119,24 +119,24 @@ module.exports = {
   async run(context) {
     const { clipboard, filesystem, notification } = context.api;
 
-    const format = clipboard.getFormat();
+    const format = await clipboard.getFormat();
 
     switch (format) {
       case 'image':
-        const imageData = clipboard.readImage();
-        filesystem.writeFile('/tmp/clipboard.png', imageData);
-        notification.show('图片已保存');
+        const imageData = await clipboard.readImage();
+        await filesystem.writeFile('/tmp/clipboard.png', imageData);
+        await notification.show('图片已保存');
         break;
       case 'files':
-        const files = clipboard.readFiles();
-        notification.show(`剪贴板包含 ${files.length} 个文件`);
+        const files = await clipboard.readFiles();
+        await notification.show(`剪贴板包含 ${files.length} 个文件`);
         break;
       case 'text':
-        const text = clipboard.readText();
-        notification.show(`文本长度: ${text.length}`);
+        const text = await clipboard.readText();
+        await notification.show(`文本长度: ${text.length}`);
         break;
       default:
-        notification.show('剪贴板为空');
+        await notification.show('剪贴板为空');
     }
   }
 };

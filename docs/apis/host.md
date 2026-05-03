@@ -54,7 +54,7 @@ const status = await window.mulby.host.status('translator');
 const ok = await window.mulby.host.restart('translator');
 ```
 
-**返回值**: `boolean` - 是否重启成功
+**返回值**: `boolean`（插件后端返回 `Promise<boolean>`） - 是否重启成功
 
 ## 插件后端方法导出
 
@@ -69,7 +69,7 @@ const ok = await window.mulby.host.restart('translator');
 export const rpc = {
   async processData(data: any) {
     // 随时随地调用底层 API，无需从参数中提取
-    mulby.notification.show('处理数据中...')
+    await mulby.notification.show('处理数据中...')
     return { processed: true, result: data }
   },
 
@@ -91,7 +91,7 @@ const tasks = await window.mulby.host.call('my-plugin', 'getTasks', { status: 'a
 // main.ts
 export async function quickAction(context: PluginContext, text: string) {
   const { notification } = context.api
-  notification.show(`处理: ${text}`)
+  await notification.show(`处理: ${text}`)
   return { success: true, message: `完成: ${text}` }
 }
 ```
@@ -109,7 +109,7 @@ console.log(result.data.message) // "完成: Hello"
 export const host = {
   async processData(context: PluginContext, data: any) {
     const { notification } = context.api
-    notification.show('处理数据中...')
+    await notification.show('处理数据中...')
     return { processed: true, result: data }
   },
 
@@ -133,7 +133,7 @@ const tasks = await window.mulby.host.call('my-plugin', 'getTasks')
 export const api = {
   async customMethod(context: PluginContext, params: any) {
     const { notification } = context.api
-    notification.show(`API调用: ${JSON.stringify(params)}`)
+    await notification.show(`API调用: ${JSON.stringify(params)}`)
     return { success: true, received: params }
   }
 }
@@ -157,7 +157,7 @@ Mulby 提供了两套方法映射标准：
 export const rpc = {
   async submitData(data: { id: number }, force: boolean) {
      // 直接使用全局上下文 mulby 即可
-     mulby.notification.show('收到请求');
+     mulby.await notification.show('收到请求');
   }
 }
 ```
@@ -173,7 +173,7 @@ export const rpc = {
 export const host = {
   // 此时参数被挤压，第一个参数其实是 context 对象，而不是 { id: 1 }！
   async submitData(context: PluginContext, data: { id: number }, force: boolean) {
-     context.api.notification.show('依赖首参数提取 API');
+     context.api.await notification.show('依赖首参数提取 API');
   }
 }
 ```
@@ -201,9 +201,9 @@ function MyComponent() {
     try {
       // 不需要传 pluginId，hook 会自动注入
       const result = await host.call('processData', { value: 123 })
-      notification.show(`成功: ${result.data.message}`)
+      await notification.show(`成功: ${result.data.message}`)
     } catch (err) {
-      notification.show(`失败: ${err.message}`, 'error')
+      await notification.show(`失败: ${err.message}`, 'error')
     }
   }
 
@@ -231,7 +231,7 @@ Tip: Export methods directly (export function unknownMethod), or in a 'host' obj
 
 export const rpc = {
   async processData(data: any) {
-    mulby.notification.show('处理中...')
+    await mulby.notification.show('处理中...')
     // 直接处理精确映射入参
     return { processed: true, result: data }
   },
@@ -242,7 +242,7 @@ export const rpc = {
   },
 
   async quickAction(text: string) {
-    mulby.notification.show(`快速操作: ${text}`)
+    await mulby.notification.show(`快速操作: ${text}`)
     return { success: true }
   }
 }
@@ -262,9 +262,9 @@ export default function App() {
     try {
       const result = await host.call('processData', { value: 123 })
       console.log(result.data)
-      notification.show('处理成功')
+      await notification.show('处理成功')
     } catch (err) {
-      notification.show(`错误: ${err.message}`, 'error')
+      await notification.show(`错误: ${err.message}`, 'error')
     }
   }
 

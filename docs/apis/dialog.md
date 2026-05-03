@@ -63,7 +63,7 @@ const savePath = await dialog.showSaveDialog({
 });
 
 if (savePath) {
-  filesystem.writeFile(savePath, content);
+  await filesystem.writeFile(savePath, content);
 }
 ```
 
@@ -123,7 +123,7 @@ dialog.showErrorBox('错误', '发生了一个严重错误');
 - `title` (string) - 标题
 - `content` (string) - 错误内容
 
-**返回值**: `void`
+**返回值**: `void`（插件后端返回 `Promise<void>`）
 
 ### 完整示例
 
@@ -134,6 +134,6 @@ const files = await window.mulby.dialog.showOpenDialog({
   properties: ['openFile', 'multiSelections']
 });
 if (files.length) {
-  window.mulby.notification.show(`已选择 ${files.length} 个文件`);
+  window.mulby.await notification.show(`已选择 ${files.length} 个文件`);
 }
 ```

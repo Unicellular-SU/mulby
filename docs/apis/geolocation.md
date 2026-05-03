@@ -18,7 +18,7 @@ const status = await geolocation.getAccessStatus();
 - macOS: 使用 `node-mac-permissions` 获取实际权限状态
 - Windows/Linux: 默认返回 'granted'
 
-**返回值**: `string`
+**返回值**: `string`（插件后端返回 `Promise<string>`）
 
 ### requestAccess()
 [Renderer]
@@ -35,7 +35,7 @@ if (status === 'granted') {
 - macOS: 尝试触发系统权限弹窗，如果权限已被拒绝，会打开系统设置
 - Windows/Linux: 直接返回当前状态
 
-**返回值**: `string` - 权限状态
+**返回值**: `string`（插件后端返回 `Promise<string>`） - 权限状态
 
 ### canGetPosition()
 [Renderer]
@@ -47,7 +47,7 @@ if (await geolocation.canGetPosition()) {
 }
 ```
 
-**返回值**: `boolean`
+**返回值**: `boolean`（插件后端返回 `Promise<boolean>`）
 
 ### openSettings()
 [Renderer]
@@ -101,7 +101,7 @@ async function getLocation() {
   
   // 2. 处理不同状态
   if (status === 'denied' || status === 'restricted') {
-    notification.show('请在系统设置中开启位置权限', 'error');
+    await notification.show('请在系统设置中开启位置权限', 'error');
     await geolocation.openSettings();
     return null;
   }
@@ -109,7 +109,7 @@ async function getLocation() {
   if (status === 'not-determined') {
     const newStatus = await geolocation.requestAccess();
     if (newStatus !== 'granted') {
-      notification.show('位置权限未授权', 'warning');
+      await notification.show('位置权限未授权', 'warning');
       return null;
     }
   }
@@ -118,7 +118,7 @@ async function getLocation() {
   try {
     return await geolocation.getCurrentPosition();
   } catch (error) {
-    notification.show('获取位置失败: ' + error.message, 'error');
+    await notification.show('获取位置失败: ' + error.message, 'error');
     return null;
   }
 }
