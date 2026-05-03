@@ -88,6 +88,26 @@
 创建子窗口并返回控制句柄。
 
 ```typescript
+interface ChildWindowCreateOptions {
+  width?: number;
+  height?: number;
+  title?: string;
+  type?: 'default' | 'borderless' | 'fullscreen';
+  titleBar?: boolean;
+  fullscreen?: boolean;
+  alwaysOnTop?: boolean;
+  resizable?: boolean;
+  x?: number;
+  y?: number;
+  minWidth?: number;
+  minHeight?: number;
+  maxWidth?: number;
+  maxHeight?: number;
+  opacity?: number;
+  transparent?: boolean;
+  params?: Record<string, string>;
+}
+
 interface ChildWindowHandle {
   id: number;
   show(): Promise<void>;
@@ -98,9 +118,12 @@ interface ChildWindowHandle {
   setSize(width: number, height: number): Promise<void>;
   setPosition(x: number, y: number): Promise<void>;
   setBounds(bounds: { x?: number; y?: number; width?: number; height?: number }): Promise<boolean>;
+  setOpacity(opacity: number): Promise<void>;
   postMessage(channel: string, ...args: unknown[]): Promise<void>;
 }
 ```
+
+`url` 支持路由名（如 `overlay`、`/overlay`）和旧写法（如 `/index.html#overlay?showClicks=true`）。宿主会将路由解析为 `location.hash`，将 query 解析为 `location.search`，并把 `options.params` 透传到子窗口的 `onPluginInit()`。
 
 ### sendToParent(channel, ...args)
 [Renderer]
@@ -204,7 +227,11 @@ interface ChildWindowHandle {
 window.mulby.window.setSize(680, 420);
 window.mulby.window.center();
 
-const child = await window.mulby.window.create('https://example.com', { width: 800, height: 600 });
+const child = await window.mulby.window.create('overlay', {
+  width: 800,
+  height: 600,
+  params: { showClicks: 'true' },
+});
 child?.postMessage('ready');
 await window.mulby.window.setBounds({ x: 100, y: 100, width: 640, height: 420 });
 

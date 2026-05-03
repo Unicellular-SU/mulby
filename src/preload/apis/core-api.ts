@@ -48,6 +48,7 @@ export function createCoreApi(ipcRenderer: IpcRenderer) {
         maxWidth?: number; maxHeight?: number;
         opacity?: number;
         transparent?: boolean;
+        params?: Record<string, string>;
       }) => {
         const id = await ipcRenderer.invoke('window:create', url, options)
         if (!id) return null

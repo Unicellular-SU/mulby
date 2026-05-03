@@ -200,13 +200,16 @@ export function createAppPluginApi(ipcRenderer: IpcRenderer) {
         mode?: string
         capabilities?: PluginRendererCapabilities
         nonce?: number
+        route?: string
+        params?: Record<string, string>
+        windowType?: string
       }
       let bufferedData: PluginInitData | null = null
       ipcRenderer.on('plugin:init', (_event: unknown, data: PluginInitData) => {
         console.log(`[AttachmentTrace][Preload] plugin:init received | plugin=${data?.pluginName} | feature=${data?.featureCode} | nonce=${data?.nonce ?? 'none'} | ${formatPayloadTrace({ text: data?.input || '', attachments: data?.attachments || [] })}`)
         bufferedData = data
       })
-      return (callback: (data: { pluginName: string; featureCode: string; input: string; attachments?: InputPayload['attachments']; mode?: string; capabilities?: PluginRendererCapabilities }) => void) => {
+      return (callback: (data: PluginInitData) => void) => {
         const listener = (_event: unknown, data: PluginInitData) => {
           console.log(`[AttachmentTrace][Preload] plugin:init callback | plugin=${data?.pluginName} | feature=${data?.featureCode} | nonce=${data?.nonce ?? 'none'} | ${formatPayloadTrace({ text: data?.input || '', attachments: data?.attachments || [] })}`)
           callback(data)

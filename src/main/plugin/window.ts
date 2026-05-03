@@ -33,6 +33,7 @@ import {
 } from './titlebar-view'
 import { formatPayloadTrace } from '../../shared/attachment-trace'
 import log from 'electron-log'
+import { createAuxiliaryLoadFileOptions, parseAuxiliaryPath } from './window-path'
 
 interface AttachedPlugin {
   plugin: Plugin
@@ -81,6 +82,7 @@ interface AuxiliaryWindowOptions {
   // 透明度相关
   opacity?: number     // 初始透明度（0.0 ~ 1.0，运行时可调）
   transparent?: boolean // 窗口背景透明（配合 CSS 实现穿透效果，仅创建时生效）
+  params?: Record<string, string> // 结构化初始化参数，透传给子窗口 plugin:init
 }
 
 export class PluginWindowManager {
@@ -957,8 +959,9 @@ export class PluginWindowManager {
       installPluginWebviewSecurity(win.webContents, plugin)
     }
 
-    // 加载页面，附加 hash 路由
-    const hash = path.startsWith('/') ? path.substring(1) : path
+    // 加载页面，分离 hash 路由和 query 参数，兼容 `/index.html#route?a=1` 等旧写法。
+    const auxiliaryPath = parseAuxiliaryPath(path)
+    const loadFileOptions = createAuxiliaryLoadFileOptions(auxiliaryPath)
 
     // 创建插件 WebContentsView（仅在需要标题栏时）
     let pluginView: WebContentsView | null = null
@@ -989,7 +992,11 @@ export class PluginWindowManager {
       registerView(pluginView, win)
 
       // 加载插件 UI
-      void pluginView.webContents.loadFile(uiPath, { hash })
+      if (loadFileOptions) {
+        void pluginView.webContents.loadFile(uiPath, loadFileOptions)
+      } else {
+        void pluginView.webContents.loadFile(uiPath)
+      }
 
       // 设置标题栏 IPC
       setupTitlebarIPC(win, pluginView, this.themeManager)
@@ -1002,7 +1009,11 @@ export class PluginWindowManager {
       })
     } else {
       // 无标题栏：BrowserWindow 直接加载插件
-      win.loadFile(uiPath, { hash })
+      if (loadFileOptions) {
+        void win.loadFile(uiPath, loadFileOptions)
+      } else {
+        void win.loadFile(uiPath)
+      }
 
       // 窗口状态事件
       win.on('maximize', () => win.webContents.send('window:stateChanged', { isMaximized: true }))
@@ -1044,7 +1055,8 @@ export class PluginWindowManager {
           attachments: [],
           mode: 'detached',
           windowType,
-          route: path, // 额外字段，通知前端跳转
+          route: auxiliaryPath.hash,
+          params: options?.params,
           capabilities: getPluginRendererCapabilities(plugin),
           nonce: Date.now()
         })

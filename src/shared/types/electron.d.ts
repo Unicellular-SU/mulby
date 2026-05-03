@@ -526,9 +526,57 @@ export interface SystemPluginBeforeAttachPayload {
   pluginId: string
 }
 
+export interface ChildWindowCreateOptions {
+  width?: number
+  height?: number
+  title?: string
+  type?: 'default' | 'borderless' | 'fullscreen'
+  titleBar?: boolean
+  fullscreen?: boolean
+  alwaysOnTop?: boolean
+  resizable?: boolean
+  x?: number
+  y?: number
+  minWidth?: number
+  minHeight?: number
+  maxWidth?: number
+  maxHeight?: number
+  opacity?: number
+  transparent?: boolean
+  params?: Record<string, string>
+}
+
+export interface ChildWindowHandle {
+  id: number
+  show: () => Promise<void>
+  hide: () => Promise<void>
+  close: () => Promise<void>
+  focus: () => Promise<void>
+  setTitle: (title: string) => Promise<void>
+  setSize: (width: number, height: number) => Promise<void>
+  setPosition: (x: number, y: number) => Promise<void>
+  setBounds: (bounds: { x?: number; y?: number; width?: number; height?: number }) => Promise<boolean>
+  setOpacity: (opacity: number) => Promise<void>
+  postMessage: (channel: string, ...args: unknown[]) => Promise<void>
+}
+
+export interface PluginInitData {
+  pluginName: string
+  featureCode: string
+  input: string
+  attachments?: InputAttachment[]
+  mode?: string
+  capabilities?: PluginRendererCapabilities
+  nonce?: number
+  route?: string
+  params?: Record<string, string>
+  windowType?: string
+}
+
 export interface ElectronAPI {
   window: {
     hide: () => void
+    show: () => void
     setSize: (width: number, height: number) => void
     setPosition: (x: number, y: number) => void
     setBounds: (bounds: { x?: number; y?: number; width?: number; height?: number }) => Promise<boolean>
@@ -545,7 +593,10 @@ export interface ElectronAPI {
     setOpacity: (opacity: number) => Promise<void>
     getOpacity: () => Promise<number>
     getMode: () => Promise<'attached' | 'detached'>
+    getWindowType: () => Promise<string>
     getState: () => Promise<{ isMaximized: boolean; isAlwaysOnTop: boolean; opacity: number }>
+    minimize: () => void
+    maximize: () => void
     resizeDrag: (payload: {
       edge: 'top' | 'right' | 'bottom' | 'left' | 'top-left' | 'top-right' | 'bottom-right' | 'bottom-left'
       startX: number
@@ -554,6 +605,12 @@ export interface ElectronAPI {
       currentY: number
       baseBounds: { x: number; y: number; width: number; height: number }
     }) => void
+    create: (url: string, options?: ChildWindowCreateOptions) => Promise<ChildWindowHandle | null>
+    sendToParent: (channel: string, ...args: unknown[]) => void
+    onChildMessage: (callback: (channel: string, ...args: unknown[]) => void) => () => void
+    findInPage: (text: string, options?: { forward?: boolean; findNext?: boolean; matchCase?: boolean }) => Promise<number>
+    stopFindInPage: (action?: 'clearSelection' | 'keepSelection' | 'activateSelection') => void
+    startDrag: (filePath: string | string[]) => void
   }
   theme: {
     get: () => Promise<ThemeInfo>
@@ -761,7 +818,7 @@ export interface ElectronAPI {
     unsubscribe: () => Promise<{ success: boolean; error?: string }>
     onEvent: (callback: (event: TaskSchedulerEvent) => void) => () => void
   }
-  onPluginInit: (callback: (data: { pluginName: string; featureCode: string; input: string; attachments?: InputAttachment[]; mode?: string; capabilities?: PluginRendererCapabilities }) => void) => () => void
+  onPluginInit: (callback: (data: PluginInitData) => void) => () => void
   onPluginAttach: (callback: (data: { pluginName: string; displayName: string; featureCode: string; input: string; attachments?: InputAttachment[]; mode: 'panel'; launchRequestId?: string }) => void) => () => void
   onPluginDetached: (callback: () => void) => () => void
   onPluginLaunchStart: (callback: (data: PluginLaunchStartEvent) => void) => () => void

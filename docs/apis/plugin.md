@@ -241,6 +241,14 @@ await window.mulby.plugin.outPlugin(true);
 [Renderer]
 插件窗口初始化事件。
 
+回调数据包含插件名、功能码、输入内容、附件、窗口模式、能力信息。辅助窗口还会包含解析后的 `route`、`windowType`，以及 `window.create(url, { params })` 传入的结构化参数。
+
+```typescript
+window.mulby.onPluginInit((data) => {
+  console.log(data.route, data.params, data.windowType);
+});
+```
+
 ### onPluginAttach(callback)
 [Renderer]
 主窗口附着插件事件。
