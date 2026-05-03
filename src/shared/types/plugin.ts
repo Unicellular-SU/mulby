@@ -369,6 +369,7 @@ export interface PluginSetting {
 
 export interface PluginPermissions {
   runCommand?: boolean
+  webview?: boolean
   /**
    * 命令执行时允许继承的环境变量名列表
    *
@@ -379,6 +380,10 @@ export interface PluginPermissions {
    * 仅在 `runCommand === true` 时生效。
    */
   envKeys?: string[] | '*'
+}
+
+export interface PluginRendererCapabilities {
+  webview: boolean
 }
 
 // 插件 AI Tool 声明（在 manifest 中声明，供 AI Agent 发现和调用）

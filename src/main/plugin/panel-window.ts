@@ -7,7 +7,12 @@ import { loggerService } from '../services/logger'
 import { installConsoleCaptureForWebContents } from './console-capture'
 import { isIgnoringBlur, startIgnoringBlur, stopIgnoringBlur } from '../services/blur-manager'
 import { getPluginPreloadPath } from './plugin-preload-wrapper'
-import { PLUGIN_RENDERER_V8_CACHE_OPTIONS } from './plugin-web-preferences'
+import {
+    PLUGIN_RENDERER_V8_CACHE_OPTIONS,
+    getPluginRendererCapabilities,
+    getPluginRendererWebPreferences,
+    installPluginWebviewSecurity
+} from './plugin-web-preferences'
 import { ATTACHED_PANEL_HEIGHT, ATTACHED_PANEL_MIN_OVERFLOW_HEIGHT } from '../constants/panel-window'
 import {
     applyWindowsFramelessSurface,
@@ -426,7 +431,8 @@ export class PluginPanelWindow {
                 nodeIntegration: hasCustomPreload,
                 sandbox: !hasCustomPreload,
                 backgroundThrottling: false,
-                v8CacheOptions: PLUGIN_RENDERER_V8_CACHE_OPTIONS
+                v8CacheOptions: PLUGIN_RENDERER_V8_CACHE_OPTIONS,
+                ...getPluginRendererWebPreferences(plugin)
             }
         })
         pluginView.setBackgroundColor('#00000000')
@@ -446,13 +452,15 @@ export class PluginPanelWindow {
         const capturedWin = panelWindow
         const capturedView = pluginView
         const capturedWebContents = pluginView.webContents
+        installPluginWebviewSecurity(capturedWebContents, plugin)
         const buildInitPayload = () => ({
             pluginName: plugin.id,
             featureCode: this.currentFeatureCode,
             input: this.currentInput,
             attachments: this.currentAttachments,
             mode: 'panel' as const,
-            route: this.currentRoute
+            route: this.currentRoute,
+            capabilities: getPluginRendererCapabilities(plugin)
         })
 
         let readyToShowInitSent = false
@@ -938,6 +946,7 @@ export class PluginPanelWindow {
                 mode: 'detached',
                 windowType: windowConfig.type || 'default',
                 route,
+                capabilities: getPluginRendererCapabilities(plugin),
                 nonce: Date.now()
             })
             if (this.themeManager) {
@@ -1045,6 +1054,7 @@ export class PluginPanelWindow {
                 attachments: this.currentAttachments,
                 mode: 'panel' as const,
                 route: this.currentRoute,
+                capabilities: getPluginRendererCapabilities(restoredPlugin),
                 nonce
             })
             log.info(`[AttachmentTrace][Main] resident plugin:init sent | plugin=${restoredPlugin.id} | feature=${featureCode} | route=${this.currentRoute || ''} | reason=${reason} | nonce=${nonce} | ${formatPayloadTrace({ text: this.currentInput, attachments: this.currentAttachments })}`)

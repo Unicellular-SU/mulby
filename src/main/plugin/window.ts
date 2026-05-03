@@ -9,7 +9,12 @@ import { appSettingsManager } from '../services/app-settings'
 import { PluginPanelWindow } from './panel-window'
 import { clearSubInputState } from '../services/subinput-state'
 import { getPluginPreloadPath } from './plugin-preload-wrapper'
-import { PLUGIN_RENDERER_V8_CACHE_OPTIONS } from './plugin-web-preferences'
+import {
+  PLUGIN_RENDERER_V8_CACHE_OPTIONS,
+  getPluginRendererCapabilities,
+  getPluginRendererWebPreferences,
+  installPluginWebviewSecurity
+} from './plugin-web-preferences'
 import {
   applyWindowsFramelessSurface,
   getWindowsFramelessSurfaceInsets,
@@ -285,6 +290,7 @@ export class PluginWindowManager {
               attachments: input?.attachments || [],
               mode: 'detached',
               route,
+              capabilities: getPluginRendererCapabilities(plugin),
               nonce: Date.now()
             })
             return true
@@ -588,6 +594,7 @@ export class PluginWindowManager {
                 attachments: input?.attachments || [],
                 mode: 'detached',
                 route,
+                capabilities: getPluginRendererCapabilities(plugin),
                 nonce: Date.now()
               })
             }
@@ -674,9 +681,13 @@ export class PluginWindowManager {
         contextIsolation: !hasCustomPreload,
         nodeIntegration: hasCustomPreload,
         sandbox: !hasCustomPreload,
-        v8CacheOptions: PLUGIN_RENDERER_V8_CACHE_OPTIONS
+        v8CacheOptions: PLUGIN_RENDERER_V8_CACHE_OPTIONS,
+        ...getPluginRendererWebPreferences(plugin)
       }
     })
+    if (!showTitleBar) {
+      installPluginWebviewSecurity(win.webContents, plugin)
+    }
 
     // 创建插件 WebContentsView（仅在需要标题栏时）
     let pluginView: WebContentsView | null = null
@@ -696,9 +707,11 @@ export class PluginWindowManager {
           contextIsolation: !hasCustomPreload,
           nodeIntegration: hasCustomPreload,
           sandbox: !hasCustomPreload,
-          v8CacheOptions: PLUGIN_RENDERER_V8_CACHE_OPTIONS
+          v8CacheOptions: PLUGIN_RENDERER_V8_CACHE_OPTIONS,
+          ...getPluginRendererWebPreferences(plugin)
         }
       })
+      installPluginWebviewSecurity(pluginView.webContents, plugin)
 
       // 添加子视图并布局
       win.contentView.addChildView(pluginView)
@@ -785,6 +798,7 @@ export class PluginWindowManager {
           mode: 'detached',
           windowType,
           route,
+          capabilities: getPluginRendererCapabilities(plugin),
           nonce: Date.now()
         })
         if (this.themeManager) {
@@ -925,9 +939,13 @@ export class PluginWindowManager {
         contextIsolation: !hasCustomPreload,
         nodeIntegration: hasCustomPreload,
         sandbox: !hasCustomPreload,
-        v8CacheOptions: PLUGIN_RENDERER_V8_CACHE_OPTIONS
+        v8CacheOptions: PLUGIN_RENDERER_V8_CACHE_OPTIONS,
+        ...getPluginRendererWebPreferences(plugin)
       }
     })
+    if (!showTitleBar) {
+      installPluginWebviewSecurity(win.webContents, plugin)
+    }
 
     // 加载页面，附加 hash 路由
     const hash = path.startsWith('/') ? path.substring(1) : path
@@ -950,9 +968,11 @@ export class PluginWindowManager {
           contextIsolation: !hasCustomPreload,
           nodeIntegration: hasCustomPreload,
           sandbox: !hasCustomPreload,
-          v8CacheOptions: PLUGIN_RENDERER_V8_CACHE_OPTIONS
+          v8CacheOptions: PLUGIN_RENDERER_V8_CACHE_OPTIONS,
+          ...getPluginRendererWebPreferences(plugin)
         }
       })
+      installPluginWebviewSecurity(pluginView.webContents, plugin)
 
       win.contentView.addChildView(pluginView)
       layoutPluginView(win, pluginView, true)
@@ -1016,6 +1036,7 @@ export class PluginWindowManager {
           mode: 'detached',
           windowType,
           route: path, // 额外字段，通知前端跳转
+          capabilities: getPluginRendererCapabilities(plugin),
           nonce: Date.now()
         })
         if (this.themeManager) {

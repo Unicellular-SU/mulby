@@ -20,12 +20,30 @@
 | `ui` | `string` | 否 | 前端渲染进程入口（UI 文件，如 `ui/index.html`）。如果不填则属于纯后台类插件。 |
 | `preload` | `string` | 否 | 指定 Preload 脚本文件路径，用于连接 Node.js 与前端（必须是 CommonJS 的 `.cjs` 后缀）。 |
 | `icon` | `PluginIcon` | 否 | 插件的图标，路径或数据等。参考下方“图标配置”。 |
-| `permissions` | `object` | 否 | 插件向系统申请的特殊权限。例如 `{ "runCommand": true }`。 |
+| `permissions` | `object` | 否 | 插件向系统申请的特殊权限。例如 `{ "runCommand": true, "webview": true }`。 |
 | `tools` | `PluginToolSchema[]`| 否 | 给 AI Agent 提供的工具注册声明。 |
 | `window` | `WindowOptions` | 否 | 独立窗口配置。 |
 | `pluginSetting` | `PluginSetting` | 否 | 插件底层的常规与运行行为配置。 |
 
 ---
+
+## 权限声明 (permissions)
+
+| 字段名 | 类型 | 描述 |
+| --- | --- | --- |
+| `runCommand` | `boolean` | 允许插件调用受策略保护的命令执行能力。 |
+| `webview` | `boolean` | 允许插件 UI 使用 Electron `<webview>` 作为普通远程网页容器。宿主只会对声明为 `true` 的插件开启 `webviewTag`，并会移除 guest preload、关闭 Node 集成。 |
+| `envKeys` | `string[] \| "*"` | `runCommand` 继承环境变量的额外白名单。仅在 `runCommand: true` 时生效。 |
+
+插件前端可通过 `window.mulby.onPluginInit()` 读取宿主暴露的能力状态：
+
+```ts
+window.mulby.onPluginInit((data) => {
+  if (data.capabilities?.webview) {
+    // 可以创建 <webview>
+  }
+})
+```
 
 ## 插件功能特性配置 (PluginFeature)
 

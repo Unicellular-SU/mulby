@@ -1,6 +1,6 @@
 import { webUtils, type IpcRenderer } from 'electron'
 import { formatPayloadTrace } from '../../shared/attachment-trace'
-import type { InputPayload } from '../../shared/types/plugin'
+import type { InputPayload, PluginRendererCapabilities } from '../../shared/types/plugin'
 import type {
   OpenSystemPluginPayload,
   PluginLaunchEndEvent,
@@ -198,6 +198,7 @@ export function createAppPluginApi(ipcRenderer: IpcRenderer) {
         input: string
         attachments?: InputPayload['attachments']
         mode?: string
+        capabilities?: PluginRendererCapabilities
         nonce?: number
       }
       let bufferedData: PluginInitData | null = null
@@ -205,7 +206,7 @@ export function createAppPluginApi(ipcRenderer: IpcRenderer) {
         console.log(`[AttachmentTrace][Preload] plugin:init received | plugin=${data?.pluginName} | feature=${data?.featureCode} | nonce=${data?.nonce ?? 'none'} | ${formatPayloadTrace({ text: data?.input || '', attachments: data?.attachments || [] })}`)
         bufferedData = data
       })
-      return (callback: (data: { pluginName: string; featureCode: string; input: string; attachments?: InputPayload['attachments']; mode?: string }) => void) => {
+      return (callback: (data: { pluginName: string; featureCode: string; input: string; attachments?: InputPayload['attachments']; mode?: string; capabilities?: PluginRendererCapabilities }) => void) => {
         const listener = (_event: unknown, data: PluginInitData) => {
           console.log(`[AttachmentTrace][Preload] plugin:init callback | plugin=${data?.pluginName} | feature=${data?.featureCode} | nonce=${data?.nonce ?? 'none'} | ${formatPayloadTrace({ text: data?.input || '', attachments: data?.attachments || [] })}`)
           callback(data)

@@ -10,7 +10,8 @@ import type {
   PluginCommandShortcutBindInput,
   PluginCommandShortcutBindResult,
   PluginCommandShortcutBindingRecord,
-  PluginCommandShortcutValidationResult
+  PluginCommandShortcutValidationResult,
+  PluginRendererCapabilities
 } from './plugin'
 import type { AiApi } from './ai'
 import type {
@@ -760,7 +761,7 @@ export interface ElectronAPI {
     unsubscribe: () => Promise<{ success: boolean; error?: string }>
     onEvent: (callback: (event: TaskSchedulerEvent) => void) => () => void
   }
-  onPluginInit: (callback: (data: { pluginName: string; featureCode: string; input: string; attachments?: InputAttachment[]; mode?: string }) => void) => () => void
+  onPluginInit: (callback: (data: { pluginName: string; featureCode: string; input: string; attachments?: InputAttachment[]; mode?: string; capabilities?: PluginRendererCapabilities }) => void) => () => void
   onPluginAttach: (callback: (data: { pluginName: string; displayName: string; featureCode: string; input: string; attachments?: InputAttachment[]; mode: 'panel'; launchRequestId?: string }) => void) => () => void
   onPluginDetached: (callback: () => void) => () => void
   onPluginLaunchStart: (callback: (data: PluginLaunchStartEvent) => void) => () => void
