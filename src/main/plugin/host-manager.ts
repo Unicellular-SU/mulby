@@ -473,7 +473,11 @@ export class PluginHostManager extends EventEmitter {
     host.pendingRequests.delete(message.id)
 
     if (message.type === 'error') {
-      pending.reject(new Error(message.payload.message))
+      const error = new Error(message.payload.message)
+      if (message.payload.stack) {
+        error.stack = message.payload.stack
+      }
+      pending.reject(error)
     } else {
       pending.resolve(message.payload)
     }

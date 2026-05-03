@@ -4,6 +4,7 @@ import { existsSync } from 'fs'
 import { InputAttachment, InputPayload, Plugin, WindowOptions } from '../../shared/types/plugin'
 import { ThemeManager } from '../services/theme'
 import { loggerService } from '../services/logger'
+import { appSettingsManager } from '../services/app-settings'
 import { installConsoleCaptureForWebContents } from './console-capture'
 import { isIgnoringBlur, startIgnoringBlur, stopIgnoringBlur } from '../services/blur-manager'
 import { getPluginPreloadPath } from './plugin-preload-wrapper'
@@ -145,6 +146,22 @@ export class PluginPanelWindow {
 
     constructor(mainWindow: BrowserWindow) {
         this.mainWindow = mainWindow
+    }
+
+    private shouldOpenPluginDevTools(): boolean {
+        const developer = appSettingsManager.getSettings().developer
+        return developer.enabled && developer.showDevTools === true
+    }
+
+    private openPluginDevTools(webContents: Electron.WebContents, pluginId: string): void {
+        if (!this.shouldOpenPluginDevTools()) return
+        if (webContents.isDestroyed() || webContents.isDevToolsOpened()) return
+
+        try {
+            webContents.openDevTools({ mode: 'detach' })
+        } catch (err) {
+            log.warn(`[PanelWindow] Failed to open DevTools for ${pluginId}:`, err)
+        }
     }
 
     private shouldUseShadowWindow() {
@@ -519,6 +536,7 @@ export class PluginPanelWindow {
 
             capturedWin.show()
             this.panelWindowHasBeenShown = true
+            this.openPluginDevTools(capturedWebContents, plugin.id)
             onPanelShown?.()
 
             stopIgnoringBlur()
@@ -548,6 +566,7 @@ export class PluginPanelWindow {
 
         let panelDidFinishLoadCount = 0
         capturedWebContents.on('did-finish-load', async () => {
+            this.openPluginDevTools(capturedWebContents, plugin.id)
             panelDidFinishLoadCount++
             const loadNum = panelDidFinishLoadCount
             if (capturedWin.isDestroyed() || capturedWebContents.isDestroyed() || this.panelWindow !== capturedWin || this.pluginView !== capturedView) {
@@ -967,12 +986,14 @@ export class PluginPanelWindow {
             }
             layoutPluginView(independentWindow, pluginView, showTitleBar)
             independentWindow.show()
+            this.openPluginDevTools(pluginWebContents, plugin.id)
             sendDetachedInit()
         })
 
         // 等待插件内容加载完成后再发送初始化数据和主题
         // ready-to-show 是标题栏触发的，此时插件 WebContentsView 可能还在加载
         pluginWebContents.on('did-finish-load', async () => {
+            this.openPluginDevTools(pluginWebContents, plugin.id)
             if (useWindowsFramelessSurface && !independentWindow.isDestroyed()) {
                 await applyWindowsFramelessSurface(independentWindow, { includeTitleBar: false, resizeMode: 'all' })
             }
@@ -1087,6 +1108,7 @@ export class PluginPanelWindow {
                     fallbackTimer = null
                 }
                 this.show({ activate: true })
+                this.openPluginDevTools(pluginWebContents, restoredPlugin.id)
                 sendRestoreInit(reason)
             }
             const onFinishLoad = () => completeRestore('did-finish-load')
@@ -1113,6 +1135,7 @@ export class PluginPanelWindow {
             }
         } else {
             this.show({ activate: true })
+            this.openPluginDevTools(pluginWebContents, restoredPlugin.id)
             sendRestoreInit('same-route')
         }
 

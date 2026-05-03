@@ -4,7 +4,7 @@ import { existsSync } from 'fs'
 import { InputAttachment, InputPayload, Plugin, WindowOptions } from '../../shared/types/plugin'
 import { ThemeManager } from '../services/theme'
 import { loggerService } from '../services/logger'
-import { installConsoleCapture } from './console-capture'
+import { installConsoleCaptureForWebContents } from './console-capture'
 import { appSettingsManager } from '../services/app-settings'
 import { PluginPanelWindow } from './panel-window'
 import { clearSubInputState } from '../services/subinput-state'
@@ -103,6 +103,17 @@ export class PluginWindowManager {
   private shouldOpenPluginDevTools(): boolean {
     const developer = appSettingsManager.getSettings().developer
     return developer.enabled && developer.showDevTools === true
+  }
+
+  private openPluginDevTools(webContents: Electron.WebContents, pluginId: string): void {
+    if (!this.shouldOpenPluginDevTools()) return
+    if (webContents.isDestroyed() || webContents.isDevToolsOpened()) return
+
+    try {
+      webContents.openDevTools({ mode: 'detach' })
+    } catch (err) {
+      log.warn(`[PluginWindowManager] Failed to open DevTools for ${pluginId}:`, err)
+    }
   }
 
   private sendToMainWindow(channel: string, payload?: unknown): void {
@@ -774,13 +785,12 @@ export class PluginWindowManager {
         win.setOpacity(Math.max(0, Math.min(1, windowConfig.opacity)))
       }
       win.show()
-      if (this.shouldOpenPluginDevTools()) {
-        pluginWebContents.openDevTools({ mode: 'detach' })
-      }
+      this.openPluginDevTools(pluginWebContents, plugin.id)
     })
 
     // 等待插件内容加载完成后，发送 plugin:init 和 theme 信息
     pluginWebContents.on('did-finish-load', async () => {
+      this.openPluginDevTools(pluginWebContents, plugin.id)
       if (useWindowsFramelessSurface && !win.isDestroyed()) {
         await applyWindowsFramelessSurface(win, {
           includeTitleBar: false,
@@ -831,7 +841,7 @@ export class PluginWindowManager {
 
     void this.updateDockVisibility()
 
-    installConsoleCapture(win, plugin.id)
+    installConsoleCaptureForWebContents(pluginWebContents, plugin.id)
 
     pluginWebContents.on('render-process-gone', (_event, details) => {
       loggerService.crash({
@@ -1015,13 +1025,12 @@ export class PluginWindowManager {
       if (resolvedOpacity !== undefined) {
         win.setOpacity(Math.max(0, Math.min(1, resolvedOpacity)))
       }
-      if (this.shouldOpenPluginDevTools()) {
-        pluginWebContents.openDevTools({ mode: 'detach' })
-      }
+      this.openPluginDevTools(pluginWebContents, plugin.id)
     })
 
     // 等待插件内容加载完成后，再发送初始化数据和主题
     pluginWebContents.on('did-finish-load', async () => {
+      this.openPluginDevTools(pluginWebContents, plugin.id)
       if (useWindowsFramelessSurface && !win.isDestroyed()) {
         await applyWindowsFramelessSurface(win, { includeTitleBar: false })
       }
@@ -1069,7 +1078,7 @@ export class PluginWindowManager {
 
     this.updateDockVisibility()
 
-    installConsoleCapture(win, plugin.id)
+    installConsoleCaptureForWebContents(pluginWebContents, plugin.id)
 
     win.on('closed', () => {
       this.detachedWindows.delete(windowId)
