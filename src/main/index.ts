@@ -49,6 +49,7 @@ import { PluginInstaller } from './plugin/installer'
 import { PluginStoreService } from './plugin/store-service'
 import { MainWindowManager, isWindowAvailable } from './main-window-manager'
 import { shutdownMainProcessResources, isShutdownComplete, type ShutdownResources } from './app-shutdown'
+import { spawn as cpSpawn } from 'child_process'
 import { resolveWindowsNotificationIdentity } from './services/windows-notification-identity'
 import log from 'electron-log'
 
@@ -1006,13 +1007,35 @@ app.on('before-quit', (event) => {
   if (shutdownFinalizeScheduled) return
   shutdownFinalizeScheduled = true
 
+  const FORCE_EXIT_TIMEOUT_MS = 5000
+  const forceExitTimer = setTimeout(() => {
+    log.warn(`[Main] Shutdown exceeded ${FORCE_EXIT_TIMEOUT_MS}ms, forcing exit`)
+    if (process.platform === 'darwin') {
+      cpSpawn('sh', ['-c', `sleep 1; kill -9 ${process.pid} 2>/dev/null`], {
+        detached: true, stdio: 'ignore'
+      }).unref()
+    }
+    process.exit(0)
+  }, FORCE_EXIT_TIMEOUT_MS)
+  forceExitTimer.unref()
+
   void shutdownMainProcessResources(getShutdownResources())
     .catch((error) => {
       log.error('[Main] Shutdown cleanup failed:', error)
     })
     .finally(() => {
+      clearTimeout(forceExitTimer)
       if (shouldRestartAfterQuit) app.relaunch()
-      app.quit()
+
+      if (process.platform === 'darwin') {
+        // On macOS, process.exit() can deadlock in Chromium atexit handlers.
+        // Spawn an independent watchdog that sends SIGKILL as fallback.
+        cpSpawn('sh', ['-c', `sleep 1; kill -9 ${process.pid} 2>/dev/null`], {
+          detached: true,
+          stdio: 'ignore'
+        }).unref()
+      }
+      process.exit(0)
     })
 })
 

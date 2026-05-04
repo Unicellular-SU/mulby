@@ -617,12 +617,12 @@ export class SystemPageWindowManager {
 
   closeAll(): void {
     const attached = this.getAttachedWindow()
-    if (attached) {
-      attached.close()
+    if (attached && !attached.isDestroyed()) {
+      attached.destroy()
     }
     const detached = this.getDetachedWindow()
-    if (detached) {
-      detached.close()
+    if (detached && !detached.isDestroyed()) {
+      detached.destroy()
     }
     this.cleanupAttached()
     this.detachedWindow = null

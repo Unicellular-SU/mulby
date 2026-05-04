@@ -47,16 +47,17 @@ export async function shutdownMainProcessResources(
     await safely('pluginManager', () => resources.pluginManager?.destroy())
     await safely('mcpServerManager', () => resources.mcpServerManager?.cleanup())
     await safely('openclawService', () => resources.openclawService?.destroy())
-    await safely('superPanelManager', () => resources.superPanelManager?.destroy())
     await safely('nativeKeySim', () => cleanupNativeKeySim())
     await safely('inputHookService', () => resources.inputHookService?.destroy())
-    await safely('pluginWindowManager', () => resources.pluginWindowManager?.closeAll())
-    await safely('systemPageWindowManager', () => resources.systemPageWindowManager?.closeAll())
-    await safely('actionMenuWindowManager', () => resources.actionMenuWindowManager?.destroy())
-    await safely('appTrayManager', () => resources.appTrayManager?.destroy())
-    await safely('trayMenuWindowManager', () => resources.trayMenuWindowManager?.destroy())
     await safely('activeWindowWatcher', () => resources.activeWindowCleanup?.())
     await safely('globalShortcut', () => globalShortcut?.unregisterAll?.())
+
+    // BrowserWindow operations (superPanelManager, pluginWindowManager,
+    // systemPageWindowManager, actionMenuWindowManager, appTrayManager,
+    // trayMenuWindowManager) are intentionally skipped. On macOS,
+    // BrowserWindow.close()/destroy() can synchronously block the main thread
+    // in native Cocoa code, deadlocking the process. The OS reclaims all
+    // window resources when the process exits via app.exit(0).
   })().finally(() => {
     hasShutdownCompleted = true
   })

@@ -1189,7 +1189,7 @@ export class PluginWindowManager {
       unregisterPluginWindow(windowId)
       unregisterProtectedWindow(windowId)
       if (!info.window.isDestroyed()) {
-        info.window.close()
+        info.window.destroy()
       }
     }
     this.detachedWindows.clear()
