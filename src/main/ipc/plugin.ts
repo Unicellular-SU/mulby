@@ -16,6 +16,7 @@ import type {
 import { PluginInstaller } from '../plugin/installer'
 import { PluginStoreService } from '../plugin/store-service'
 import { queryMainPush, handleMainPushSelect, hasMainPushHandler, type MainPushItem } from '../plugin/dynamic-features'
+import { getAppSettings } from '../services/app-settings-runtime'
 
 
 
@@ -175,26 +176,39 @@ export function registerPluginHandlers(manager: PluginManager, pluginToolRegistr
       )
     ))
 
-    // MainPush: 查询已注册 mainPush handler 且匹配搜索结果的插件
+    // MainPush (A+B 按需激活方案):
+    // B: 搜索匹配基于 manifest 元数据 (feature.mainPush === true)，不需要 Worker
+    // A: 仅在需要查询数据时按需启动 Worker → onLoad/onBackground → 注册 handler → 查询
     const text = typeof query === 'string' ? query : query.text || ''
-    if (text.trim()) {
+    const searchCfg = getAppSettings().search
+    if (text.trim() && searchCfg.enableMainPush !== false) {
+      const disabledPlugins = new Set(searchCfg.disabledMainPushPlugins || [])
+      const MAIN_PUSH_CONCURRENCY_LIMIT = 3
       const mainPushPromises: Promise<void>[] = []
       for (let i = 0; i < searchResults.length; i++) {
         const result = searchResults[i]
-        if (result.feature.mainPush && hasMainPushHandler(result.plugin.manifest.name)) {
-          const idx = i
-          mainPushPromises.push(
-            queryMainPush(result.plugin.manifest.name, {
+        if (!result.feature.mainPush) continue
+        if (disabledPlugins.has(result.plugin.id)) continue
+        if (mainPushPromises.length >= MAIN_PUSH_CONCURRENCY_LIMIT) break
+
+        const pluginName = result.plugin.manifest.name
+        const idx = i
+        mainPushPromises.push(
+          (async () => {
+            if (!hasMainPushHandler(pluginName)) {
+              await manager.activateForMainPush(result.plugin.id)
+            }
+            if (!hasMainPushHandler(pluginName)) return
+            const items = await queryMainPush(pluginName, {
               code: result.feature.code,
               type: 'text',
               payload: text
-            }).then((items) => {
-              if (items.length > 0 && formattedResults[idx]) {
-                formattedResults[idx].mainPushItems = items
-              }
             })
-          )
-        }
+            if (items.length > 0 && formattedResults[idx]) {
+              formattedResults[idx].mainPushItems = items
+            }
+          })()
+        )
       }
       if (mainPushPromises.length > 0) {
         await Promise.allSettled(mainPushPromises)
@@ -204,8 +218,16 @@ export function registerPluginHandlers(manager: PluginManager, pluginToolRegistr
     return formattedResults
   })
 
-  // MainPush: 用户选中推送项
+  // MainPush: 用户选中推送项（按需激活 Worker）
   ipcMain.handle('plugin:mainPushSelect', async (_, pluginName: string, action: { code: string; type: string; payload: string; option: MainPushItem }) => {
+    const searchCfg2 = getAppSettings().search
+    if (searchCfg2.enableMainPush === false) return false
+    const plugin = manager.get(pluginName)
+    if (plugin && new Set(searchCfg2.disabledMainPushPlugins || []).has(plugin.id)) return false
+
+    if (!hasMainPushHandler(pluginName)) {
+      if (plugin) await manager.activateForMainPush(plugin.id)
+    }
     return await handleMainPushSelect(pluginName, action)
   })
 
@@ -443,7 +465,7 @@ export function registerPluginHandlers(manager: PluginManager, pluginToolRegistr
 
   // 停止后台插件
   ipcMain.handle('plugin:stopBackground', async (_, pluginId: string) => {
-    await manager.getBackgroundManager().stop(pluginId, 'manual')
+    await manager.stopBackground(pluginId, 'manual')
     return { success: true }
   })
 
@@ -465,6 +487,19 @@ export function registerPluginHandlers(manager: PluginManager, pluginToolRegistr
   // 停止运行中的插件（关闭窗口并销毁 Host 进程）
   ipcMain.handle('plugin:stopPlugin', async (_, pluginId: string) => {
     return manager.stopPlugin(pluginId)
+  })
+
+  // 获取所有有 mainPush 功能的插件列表（用于设置界面）
+  ipcMain.handle('plugin:getMainPushPlugins', () => {
+    return manager.getEnabled()
+      .filter(plugin => {
+        const features = manager.getFeatures(plugin.id)
+        return features.some(f => f.mainPush)
+      })
+      .map(plugin => ({
+        pluginId: plugin.id,
+        displayName: plugin.manifest.displayName
+      }))
   })
 
   return { warmupFeatureIconCache }

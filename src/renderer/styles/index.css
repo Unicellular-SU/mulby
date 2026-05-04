@@ -1469,6 +1469,124 @@ html.platform-win-main .attachment-manager {
 
 
 /* ═══════════════════════════════════════════
+   MainPush Result List
+   ═══════════════════════════════════════════ */
+.result-section-push {
+  gap: 0;
+}
+
+.push-list {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.push-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1px solid transparent;
+  cursor: pointer;
+  transition: background 0.12s ease, border-color 0.12s ease;
+  -webkit-app-region: no-drag;
+}
+
+.push-row:hover {
+  background: var(--glass-bg-strong);
+}
+
+.push-row.selected {
+  background: var(--bg-selected);
+  border-color: rgba(59, 130, 246, 0.25);
+}
+
+.dark .push-row:hover {
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.dark .push-row.selected {
+  background: var(--bg-selected);
+  border-color: rgba(59, 130, 246, 0.35);
+}
+
+.push-row-icon {
+  width: 28px;
+  height: 28px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 7px;
+  background: rgba(59, 130, 246, 0.08);
+  color: var(--accent);
+}
+
+.dark .push-row-icon {
+  background: rgba(59, 130, 246, 0.15);
+}
+
+.push-row-icon img {
+  width: 20px;
+  height: 20px;
+  object-fit: contain;
+  border-radius: 4px;
+}
+
+.push-row-icon svg {
+  width: 16px;
+  height: 16px;
+}
+
+.push-row-content {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.push-row-title {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-primary);
+  line-height: 1.3;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.push-row-text {
+  font-size: 11px;
+  color: var(--text-secondary);
+  line-height: 1.3;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.push-row-source {
+  flex-shrink: 0;
+  font-size: 10px;
+  color: var(--text-secondary);
+  opacity: 0.7;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: rgba(148, 163, 184, 0.08);
+  white-space: nowrap;
+}
+
+.dark .push-row-source {
+  background: rgba(148, 163, 184, 0.12);
+}
+
+.push-row:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* ═══════════════════════════════════════════
    Card grid
    ═══════════════════════════════════════════ */
 .result-section-grid {

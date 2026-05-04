@@ -198,7 +198,9 @@ const DEFAULT_SETTINGS: AppSettings = {
   },
   search: {
     enableApps: true,
-    enableFiles: false
+    enableFiles: false,
+    enableMainPush: true,
+    disabledMainPushPlugins: []
   },
   input: {
     autoPasteOnShow: true,

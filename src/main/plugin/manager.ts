@@ -200,6 +200,7 @@ export class PluginManager {
   private static readonly PREWARM_CACHE_LIMIT = 3
   private poolWarmupTimer: NodeJS.Timeout | null = null
   private preloadWarmupTimer: NodeJS.Timeout | null = null
+  private autoStartBgTimer: NodeJS.Timeout | null = null
 
   private static readonly DEFAULT_IDLE_LOAD_DELAY_MS = 100
   private static readonly UI_IDLE_LOAD_DELAY_MS = 1_500
@@ -476,6 +477,9 @@ export class PluginManager {
     // 恢复持久化的后台插件
     await this.backgroundManager.restorePersistent(this.getAll())
 
+    // 自动启动所有声明 background:true 的已启用插件（非持久化的首次启动）
+    this.autoStartBackgroundPlugins()
+
     // 恢复并刷新指令快捷键绑定
     this.commandShortcutManager.initialize()
 
@@ -483,6 +487,38 @@ export class PluginManager {
     void this.syncSearchWorker().catch((error) => {
       log.warn('[PluginManager] Search worker sync failed', error)
     })
+  }
+
+  /**
+   * 自动启动所有声明 background:true 的已启用插件
+   * 在 restorePersistent 之后调用，确保非持久化的后台插件也能首次启动
+   */
+  private autoStartBackgroundPlugins(): void {
+    const pluginsToStart = this.getEnabled().filter(plugin => {
+      if (!plugin.manifest.pluginSetting?.background) return false
+      if (this.backgroundManager.isRunning(plugin.id)) return false
+      // 拥有 mainPush feature 的后台插件由搜索按需激活，不在启动时运行
+      const hasMainPush = plugin.manifest.features?.some(f => f.mainPush)
+      if (hasMainPush) return false
+      return true
+    })
+
+    if (pluginsToStart.length === 0) return
+
+    log.info(`[PluginManager] Auto-starting ${pluginsToStart.length} background plugins:`,
+      pluginsToStart.map(p => p.id))
+
+    this.autoStartBgTimer = setTimeout(async () => {
+      this.autoStartBgTimer = null
+      for (const plugin of pluginsToStart) {
+        try {
+          await this.backgroundManager.start(plugin, true)
+          log.info(`[PluginManager] Auto-started background plugin: ${plugin.id}`)
+        } catch (err) {
+          log.warn(`[PluginManager] Failed to auto-start background plugin ${plugin.id}:`, err)
+        }
+      }
+    }, 3000)
   }
 
   // 方案A: 构建并同步插件数据到搜索 Worker
@@ -1721,6 +1757,38 @@ export class PluginManager {
     return this.backgroundManager
   }
 
+  /**
+   * 停止后台插件并同步清除 Worker 状态标记，
+   * 确保下次搜索时 initializePlugin 能重新触发 onLoad
+   */
+  async stopBackground(pluginId: string, reason: string = 'manual'): Promise<void> {
+    await this.backgroundManager.stop(pluginId, reason)
+    this.workerOnloadedPlugins.delete(pluginId)
+  }
+
+  /**
+   * 按需激活 mainPush 插件：确保 Worker 运行且 handler 已注册。
+   * - 非 background 插件：调用 onLoad（handler 通常在 onLoad 中注册）
+   * - background 插件：调用 onLoad + onBackground（handler 通常在 onBackground 中注册）
+   * 复用 idle timeout 自动回收，搜索结束后不会长期占用内存。
+   */
+  async activateForMainPush(pluginId: string): Promise<void> {
+    const plugin = this.resolve(pluginId)
+    if (!plugin || !plugin.enabled) return
+
+    const isBackground = plugin.manifest.pluginSetting?.background === true
+
+    if (isBackground) {
+      // background 插件走完整启动流程（createHost + initPlugin + onBackground）
+      if (!this.backgroundManager.isRunning(pluginId)) {
+        await this.backgroundManager.start(plugin, true)
+      }
+    } else {
+      // 非 background 插件只需 onLoad
+      await this.initializePlugin(pluginId)
+    }
+  }
+
   // 获取当前由窗口驱动的活跃插件（用于任务管理器补全）
   getActiveWindowPlugins(): Array<{ pluginId: string; pluginName: string; displayName: string; startedAt: number }> {
     if (!this.windowManager) return []
@@ -1759,7 +1827,11 @@ export class PluginManager {
       // 关闭任务调度器
       await this.taskScheduler.shutdown()
 
-      // 取消待发的池填充定时器
+      // 取消待发的定时器
+      if (this.autoStartBgTimer) {
+        clearTimeout(this.autoStartBgTimer)
+        this.autoStartBgTimer = null
+      }
       if (this.poolWarmupTimer) {
         clearTimeout(this.poolWarmupTimer)
         this.poolWarmupTimer = null
@@ -2195,11 +2267,15 @@ export class PluginManager {
       // 2. 如果不保留后台进程，停止后台运行
       if (!keepBackground && this.backgroundManager.isRunning(pluginId)) {
         await this.backgroundManager.stop(pluginId, 'manual')
+        this.workerOnloadedPlugins.delete(pluginId)
       }
 
       // 3. 如果不保留后台进程，销毁 Host 进程
       if (!keepBackground && this.useUtilityProcess && this.hostManager.isHostReady(pluginId)) {
         await this.hostManager.destroyHost(pluginId)
+        // 同步清除 Worker 级标记，不依赖异步 exit 事件，
+        // 确保下次搜索时 initializePlugin 能重新触发 onLoad
+        this.workerOnloadedPlugins.delete(pluginId)
       }
 
       return { success: true }

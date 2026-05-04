@@ -14,6 +14,8 @@ export type HostRequestType =
   | 'callHook'    // 调用生命周期钩子
   | 'callTaskCallback'  // 调用任务回调
   | 'callHostMethod'    // 调用 host 方法
+  | 'callMainPush'      // 查询 MainPush 结果
+  | 'callMainPushSelect' // MainPush 项选中
   | 'terminate'   // 终止插件
 
 /** Worker -> 主进程的响应类型 */
@@ -80,13 +82,34 @@ export interface CallHostMethodRequest extends HostRequestBase {
   }
 }
 
+/** MainPush 查询请求 */
+export interface CallMainPushRequest extends HostRequestBase {
+  type: 'callMainPush'
+  payload: {
+    code: string
+    type: string
+    payload: string
+  }
+}
+
+/** MainPush 选中请求 */
+export interface CallMainPushSelectRequest extends HostRequestBase {
+  type: 'callMainPushSelect'
+  payload: {
+    code: string
+    type: string
+    payload: string
+    option: { icon?: string; title: string; text: string; [key: string]: unknown }
+  }
+}
+
 /** 终止请求 */
 export interface TerminateRequest extends HostRequestBase {
   type: 'terminate'
   payload: null
 }
 
-export type HostRequest = InitRequest | RunRequest | CallHookRequest | CallTaskCallbackRequest | CallHostMethodRequest | TerminateRequest
+export type HostRequest = InitRequest | RunRequest | CallHookRequest | CallTaskCallbackRequest | CallHostMethodRequest | CallMainPushRequest | CallMainPushSelectRequest | TerminateRequest
 
 // ============ 响应消息 ============
 

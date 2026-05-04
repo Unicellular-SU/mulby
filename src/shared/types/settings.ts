@@ -342,6 +342,8 @@ export interface DoubleTapSettings {
 export interface SearchSettings {
   enableApps: boolean             // 搜索框是否搜索本机应用
   enableFiles: boolean            // 搜索框是否搜索本机文件
+  enableMainPush: boolean         // 搜索框是否展示插件推送结果（全局开关）
+  disabledMainPushPlugins: string[]  // 禁用推送的插件 ID 列表
 }
 
 // 输入设置

@@ -60,6 +60,7 @@ export default function SettingsView({
   const [startupBusy, setStartupBusy] = useState(false)
   const [updateBusy, setUpdateBusy] = useState(false)
   const [activeRecordings, setActiveRecordings] = useState(0)
+  const [mainPushPlugins, setMainPushPlugins] = useState<Array<{ pluginId: string; displayName: string }>>([])
 
   useEffect(() => {
     window.mulby.settings.get().then(({ settings, shortcutStatus }) => {
@@ -80,6 +81,7 @@ export default function SettingsView({
     }).catch(() => {
       setUpdateCenterState(null)
     })
+    window.mulby.plugin.getMainPushPlugins().then(setMainPushPlugins).catch(() => {})
   }, [])
 
   useEffect(() => {
@@ -391,7 +393,8 @@ export default function SettingsView({
                   openAtLoginState={openAtLoginState}
                   startupBusy={startupBusy}
                   onToggleOpenAtLogin={toggleOpenAtLogin}
-                  searchSettings={settings?.search ?? { enableApps: true, enableFiles: false }}
+                  searchSettings={settings?.search ?? { enableApps: true, enableFiles: false, enableMainPush: true, disabledMainPushPlugins: [] }}
+                  mainPushPlugins={mainPushPlugins}
                   onSearchSettingsChange={async (patch) => {
                     if (!settings) return
                     await updateSettings({

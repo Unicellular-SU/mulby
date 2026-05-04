@@ -95,6 +95,10 @@ const pendingApiCalls = new Map<string, {
 // 插件通过 mulby.tools.register(name, handler) 注册，AI 通过 __plugin_tool__{name} 调用
 const pluginToolHandlers = new Map<string, (args: unknown, ctx?: PluginToolCallContext) => unknown | Promise<unknown>>()
 
+// MainPush 本地回调存储（回调函数无法序列化到主进程，需在 worker 内本地保持）
+let mainPushHandler: ((action: { code: string; type: string; payload: string }) => unknown) | null = null
+let mainPushSelectHandler: ((action: { code: string; type: string; payload: string; option: unknown }) => unknown) | null = null
+
 // ============ 消息处理 ============
 
 /** 发送消息到主进程 */
@@ -208,6 +212,37 @@ function createProxyAPI(): PluginAPI {
             pluginToolHandlers.delete(String(name || '').trim())
           }
         }
+      }
+
+      // 特殊处理 features 命名空间中的 onMainPush/onMainPushSelect：
+      // 回调函数无法通过消息序列化，需在 worker 内本地保持
+      if (prop === 'features') {
+        return new Proxy({}, {
+          get(_, method: string) {
+            if (typeof method !== 'string') return undefined
+
+            if (method === 'onMainPush') {
+              return (callback: (action: { code: string; type: string; payload: string }) => unknown) => {
+                if (typeof callback !== 'function') return
+                mainPushHandler = callback
+                return callMainApi('features.onMainPush', ['__registered__'])
+              }
+            }
+
+            if (method === 'onMainPushSelect') {
+              return (callback: (action: { code: string; type: string; payload: string; option: unknown }) => unknown) => {
+                if (typeof callback !== 'function') return
+                mainPushSelectHandler = callback
+                return callMainApi('features.onMainPushSelect', ['__registered__'])
+              }
+            }
+
+            // 其他 features 方法正常转发
+            return (...args: unknown[]) => {
+              return callMainApi(`features.${method}`, args)
+            }
+          }
+        })
       }
 
       // 返回一个代理对象，用于处理嵌套属性访问
@@ -614,6 +649,37 @@ function handleApiResult(result: ApiResult): void {
   }
 }
 
+// ============ MainPush 请求处理 ============
+
+async function handleCallMainPush(request: HostRequest & { type: 'callMainPush' }): Promise<void> {
+  try {
+    if (!mainPushHandler) {
+      send({ id: request.id, type: 'result', payload: { success: true, data: [] } })
+      return
+    }
+    const result = await mainPushHandler(request.payload)
+    const items = Array.isArray(result) ? result : []
+    send({ id: request.id, type: 'result', payload: { success: true, data: items } })
+  } catch (err) {
+    console.error('[host-worker] MainPush handler error:', err)
+    send({ id: request.id, type: 'result', payload: { success: true, data: [] } })
+  }
+}
+
+async function handleCallMainPushSelect(request: HostRequest & { type: 'callMainPushSelect' }): Promise<void> {
+  try {
+    if (!mainPushSelectHandler) {
+      send({ id: request.id, type: 'result', payload: { success: true, data: true } })
+      return
+    }
+    const result = await mainPushSelectHandler(request.payload)
+    send({ id: request.id, type: 'result', payload: { success: true, data: result } })
+  } catch (err) {
+    console.error('[host-worker] MainPushSelect handler error:', err)
+    send({ id: request.id, type: 'result', payload: { success: true, data: true } })
+  }
+}
+
 // ============ 主入口 ============
 
 /** 处理来自主进程的消息 */
@@ -641,6 +707,12 @@ function handleMessage(message: HostRequest | ApiResult): void {
       break
     case 'callHostMethod':
       handleCallHostMethod(request)
+      break
+    case 'callMainPush':
+      void handleCallMainPush(request)
+      break
+    case 'callMainPushSelect':
+      void handleCallMainPushSelect(request)
       break
     case 'terminate':
       process.exit(0)

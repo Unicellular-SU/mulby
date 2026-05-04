@@ -154,7 +154,8 @@ export function createAppPluginApi(ipcRenderer: IpcRenderer) {
         ipcRenderer.invoke('plugin:redirect', label, payload),
       outPlugin: (isKill?: boolean) => ipcRenderer.invoke('plugin:out', isKill),
       mainPushSelect: (pluginName: string, action: { code: string; type: string; payload: string; option: unknown }) =>
-        ipcRenderer.invoke('plugin:mainPushSelect', pluginName, action)
+        ipcRenderer.invoke('plugin:mainPushSelect', pluginName, action),
+      getMainPushPlugins: () => ipcRenderer.invoke('plugin:getMainPushPlugins')
     },
 
     pluginStore: {

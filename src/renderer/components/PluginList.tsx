@@ -4,6 +4,7 @@ import { formatPayloadTrace, getAttachmentTraceKey } from '../../shared/attachme
 import type {
   DesktopAppSearchResult,
   DesktopFileSearchResult,
+  MainPushItem,
   SearchResultItem,
   SystemIconKind,
   SystemIconRequest
@@ -25,9 +26,17 @@ interface PluginListProps {
   onShowDetails?: (pluginName: string) => void
 }
 
-type ResultSectionKey = 'best' | 'apps' | 'files' | 'recent'
+type ResultSectionKey = 'best' | 'apps' | 'files' | 'recent' | 'push'
 type ExpandableResultSectionKey = Exclude<ResultSectionKey, 'recent'>
-type RenderItemType = 'plugin' | 'recent' | 'system-app' | 'system-file'
+type RenderItemType = 'plugin' | 'recent' | 'system-app' | 'system-file' | 'main-push'
+
+interface MainPushRenderData {
+  pluginName: string
+  displayName: string
+  featureCode: string
+  pushItem: MainPushItem
+  searchText: string
+}
 
 interface RenderItem {
   key: string
@@ -39,6 +48,7 @@ interface RenderItem {
   pluginItem?: SearchResultItem
   appItem?: DesktopAppSearchResult
   fileItem?: DesktopFileSearchResult
+  pushData?: MainPushRenderData
 }
 
 interface ResultSectionBase {
@@ -75,9 +85,11 @@ const MAX_CACHE_SIZE = 80
 const PREWARM_TOP_N = 3
 const PREWARM_DEDUPE_MS = 20_000
 const DEFAULT_SEARCH_SETTINGS: SearchSettings = { enableApps: true, enableFiles: false }
+const PUSH_DISPLAY_LIMIT = 5
 const COLLAPSED_EXPANDED_SECTIONS: Record<ExpandableResultSectionKey, boolean> = {
   best: false,
   apps: false,
+  push: false,
   files: false
 }
 
@@ -185,6 +197,10 @@ function findNavigationLocation(sections: ResultSection[], selectedKey: string):
   return null
 }
 
+function isSingleColumnSection(section: ResultSection): boolean {
+  return section.key === 'push'
+}
+
 function getVerticalNavigationKey(
   sections: ResultSection[],
   selectedKey: string,
@@ -195,17 +211,19 @@ function getVerticalNavigationKey(
   if (!location) return sections[0]?.items[0]?.key ?? null
 
   const section = sections[location.sectionIndex]
-  const sameSectionIndex = location.itemIndex + (direction === 'down' ? columns : -columns)
+  const effectiveCols = isSingleColumnSection(section) ? 1 : columns
+  const sameSectionIndex = location.itemIndex + (direction === 'down' ? effectiveCols : -effectiveCols)
   if (sameSectionIndex >= 0 && sameSectionIndex < section.items.length) {
     return section.items[sameSectionIndex].key
   }
 
-  const column = location.itemIndex % columns
+  const column = isSingleColumnSection(section) ? 0 : location.itemIndex % columns
 
   if (direction === 'down') {
     for (let sectionIndex = location.sectionIndex + 1; sectionIndex < sections.length; sectionIndex += 1) {
       const nextItems = sections[sectionIndex].items
       if (nextItems.length === 0) continue
+      if (isSingleColumnSection(sections[sectionIndex])) return nextItems[0].key
       return nextItems[Math.min(column, nextItems.length - 1)].key
     }
     return null
@@ -214,6 +232,7 @@ function getVerticalNavigationKey(
   for (let sectionIndex = location.sectionIndex - 1; sectionIndex >= 0; sectionIndex -= 1) {
     const previousItems = sections[sectionIndex].items
     if (previousItems.length === 0) continue
+    if (isSingleColumnSection(sections[sectionIndex])) return previousItems[previousItems.length - 1].key
     const lastRowStart = Math.floor((previousItems.length - 1) / columns) * columns
     return previousItems[Math.min(lastRowStart + column, previousItems.length - 1)].key
   }
@@ -425,6 +444,48 @@ const ResultCard = memo(function ResultCard({
         <span className="plugin-card-name">{item.title}</span>
         <span className="plugin-card-explain">{item.subtitle}</span>
       </div>
+    </div>
+  )
+})
+
+const PUSH_ITEM_ICON_SVG = `
+<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+  <path d="M12 19V5M5 12l7-7 7 7" />
+</svg>
+`.trim()
+
+interface PushResultRowProps {
+  item: RenderItem
+  isSelected: boolean
+  onSelect: (item: RenderItem) => Promise<void>
+}
+
+const PushResultRow = memo(function PushResultRow({
+  item,
+  isSelected,
+  onSelect
+}: PushResultRowProps) {
+  const pushIcon = item.pushData?.pushItem.icon
+  return (
+    <div
+      className={`push-row ${isSelected ? 'selected' : ''}`}
+      role="option"
+      aria-selected={isSelected}
+      data-item-key={item.key}
+      onClick={() => { void onSelect(item) }}
+    >
+      <div className="push-row-icon">
+        {pushIcon ? (
+          <img src={pushIcon} alt="" width="20" height="20" />
+        ) : (
+          <div dangerouslySetInnerHTML={{ __html: PUSH_ITEM_ICON_SVG }} />
+        )}
+      </div>
+      <div className="push-row-content">
+        <span className="push-row-title">{item.title}</span>
+        <span className="push-row-text">{item.subtitle}</span>
+      </div>
+      <span className="push-row-source">{item.pushData?.displayName}</span>
     </div>
   )
 })
@@ -916,6 +977,34 @@ function PluginList({
       })
   }, [appDisplayItems, fileDisplayItems])
 
+  // 从搜索结果中提取所有 MainPush 项，聚合为扁平列表
+  const pushDisplayItems = useMemo(() => {
+    const sourcePlugins = pluginResultsHash === payloadHash ? pluginResults : []
+    const items: RenderItem[] = []
+    const searchText = searchPayload.text.trim()
+    for (const plugin of sourcePlugins) {
+      if (!plugin.mainPushItems || plugin.mainPushItems.length === 0) continue
+      for (let i = 0; i < plugin.mainPushItems.length; i++) {
+        const pushItem = plugin.mainPushItems[i]
+        items.push({
+          key: `push:${plugin.pluginId}:${plugin.featureCode}:${i}`,
+          type: 'main-push',
+          title: pushItem.title,
+          subtitle: pushItem.text,
+          icon: pushItem.icon ? { type: 'url', value: pushItem.icon } : undefined,
+          pushData: {
+            pluginName: plugin.pluginName,
+            displayName: plugin.displayName,
+            featureCode: plugin.featureCode,
+            pushItem,
+            searchText
+          }
+        })
+      }
+    }
+    return items
+  }, [pluginResults, pluginResultsHash, payloadHash, searchPayload.text])
+
   const sections = useMemo((): ResultSection[] => {
     const next: ResultSection[] = []
 
@@ -932,6 +1021,12 @@ function PluginList({
       }))
     if (recentItems.length > 0) {
       next.push({ key: 'recent', title: '最近使用', items: recentItems, totalCount: recentDisplayItems.length })
+    }
+
+    // MainPush 推送结果：在"最近使用"之后、"最佳匹配"之前
+    if (pushDisplayItems.length > 0) {
+      const pushItems = expandedSections.push ? pushDisplayItems : pushDisplayItems.slice(0, PUSH_DISPLAY_LIMIT)
+      next.push({ key: 'push', title: '推送结果', items: pushItems, totalCount: pushDisplayItems.length })
     }
 
     const fullBestItems: RenderItem[] = bestPlugins.map((item) => ({
@@ -985,11 +1080,13 @@ function PluginList({
     appDisplayItems,
     fileDisplayItems,
     recentDisplayItems,
+    pushDisplayItems,
     systemIconVersion,
     columns,
     expandedSections.best,
     expandedSections.apps,
-    expandedSections.files
+    expandedSections.files,
+    expandedSections.push
   ])
 
   const flatItems = useMemo(() => sections.flatMap((section) => section.items), [sections])
@@ -1104,7 +1201,8 @@ function PluginList({
     sections.length,
     expandedSections.best,
     expandedSections.apps,
-    expandedSections.files
+    expandedSections.files,
+    expandedSections.push
   ])
 
   useEffect(() => {
@@ -1121,6 +1219,26 @@ function PluginList({
   }, [flatItems])
 
   const handleRun = useCallback(async (item: RenderItem) => {
+    if (item.type === 'main-push' && item.pushData) {
+      try {
+        const shouldOpenUI = await window.mulby.plugin.mainPushSelect(
+          item.pushData.pluginName,
+          {
+            code: item.pushData.featureCode,
+            type: 'text',
+            payload: item.pushData.searchText,
+            option: item.pushData.pushItem
+          }
+        )
+        if (!shouldOpenUI) {
+          window.mulby.window.hide()
+        }
+      } catch (error) {
+        console.error('[PluginList] MainPush select failed:', error)
+      }
+      return
+    }
+
     if (item.pluginItem) {
       const currentPayload = payloadRef.current
       const launchStart = Date.now()
@@ -1446,6 +1564,42 @@ function PluginList({
                         </div>
                       )
                     })}
+                  </div>
+                </section>
+              )
+            }
+
+            if (section.key === 'push') {
+              const isPushExpanded = expandedSections.push
+              return (
+                <section key="push" className="result-section result-section-push" aria-label={section.title}>
+                  <div className="result-section-title">
+                    <span className="result-section-title-text">{section.title}</span>
+                    {section.totalCount > PUSH_DISPLAY_LIMIT && (
+                      <button
+                        type="button"
+                        className="result-section-expand-btn"
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          toggleSectionExpand('push')
+                        }}
+                        onKeyDown={(e) => { e.stopPropagation() }}
+                        aria-expanded={isPushExpanded}
+                        aria-label={isPushExpanded ? '收起推送结果' : '展开全部推送结果'}
+                      >
+                        {isPushExpanded ? '收起' : `全部 (${section.totalCount})`}
+                      </button>
+                    )}
+                  </div>
+                  <div className="push-list" role="group" aria-label={section.title}>
+                    {section.items.map((item) => (
+                      <PushResultRow
+                        key={item.key}
+                        item={item}
+                        isSelected={item.key === selectedKey}
+                        onSelect={handleRun}
+                      />
+                    ))}
                   </div>
                 </section>
               )

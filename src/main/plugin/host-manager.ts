@@ -15,7 +15,8 @@ import type {
 import { generateRequestId } from './host-protocol'
 import { createPluginAPI } from './api'
 import { pluginInputMonitor } from './input-monitor'
-import { unregisterMainPushHandlers } from './dynamic-features'
+import { unregisterMainPushHandlers, registerMainPushHandler, registerMainPushSelectHandler } from './dynamic-features'
+import type { MainPushAction, MainPushItem } from './dynamic-features'
 import { PluginHostWatchdog } from './watchdog'
 import type { InputAttachment, Plugin } from '../../shared/types/plugin'
 import type { ToolProgressResponse } from './host-protocol'
@@ -107,7 +108,7 @@ export class PluginHostManager extends EventEmitter {
   private residentPins: Set<string> = new Set()
 
   // ==================== Host 进程池 ====================
-  private static readonly MAX_POOL_SIZE = 1
+  private static readonly MAX_POOL_SIZE = 3
   private pooledProcesses: PooledProcess[] = []
   private poolFilling = false
   private poolDestroyed = false
@@ -510,6 +511,39 @@ export class PluginHostManager extends EventEmitter {
     const [namespace, method] = api.split('.')
 
     try {
+      // MainPush: Worker 发送 '__registered__' 哨兵值表示已注册本地回调，
+      // 注册代理回调通过 sendRequest(callMainPush) 桥接查询到 Worker
+      if (api === 'features.onMainPush' && args[0] === '__registered__') {
+        const registryKey = plugin.manifest.name
+        const hostKey = host.pluginName  // = plugin.id, hosts Map 的实际 key
+        log.info(`[HostManager] MainPush handler registered: ${registryKey}`)
+        registerMainPushHandler(registryKey, async (action: MainPushAction) => {
+          const result = await this.sendRequest<{ success: boolean; data: MainPushItem[] }>(hostKey, {
+            id: generateRequestId(),
+            type: 'callMainPush',
+            payload: action
+          })
+          return Array.isArray(result?.data) ? result.data : []
+        })
+        host.process.postMessage({ id: message.id, success: true, data: undefined } as ApiResult)
+        return
+      }
+
+      if (api === 'features.onMainPushSelect' && args[0] === '__registered__') {
+        const registryKey = plugin.manifest.name
+        const hostKey = host.pluginName
+        registerMainPushSelectHandler(registryKey, async (action: MainPushAction & { option: MainPushItem }) => {
+          const result = await this.sendRequest<{ success: boolean; data: boolean }>(hostKey, {
+            id: generateRequestId(),
+            type: 'callMainPushSelect',
+            payload: action
+          })
+          return result?.data ?? true
+        })
+        host.process.postMessage({ id: message.id, success: true, data: undefined } as ApiResult)
+        return
+      }
+
       // 缓存 pluginAPI 实例，避免每次 API 调用都重新创建
       if (!host.cachedApi) {
         host.cachedApi = createPluginAPI(

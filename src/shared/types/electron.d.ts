@@ -98,6 +98,14 @@ export interface ClipboardHistoryStats {
   favorite: number
 }
 
+// MainPush 推送项
+export interface MainPushItem {
+  icon?: string
+  title: string
+  text: string
+  [key: string]: unknown
+}
+
 // 搜索结果项（功能入口）
 export interface SearchResultItem {
   pluginId: string
@@ -116,6 +124,8 @@ export interface SearchResultItem {
   lastUsedAt?: number
   /** 使用次数，仅 getRecentUsed 返回时有值 */
   useCount?: number
+  /** MainPush 推送项，仅搜索结果中 mainPush feature 匹配时有值 */
+  mainPushItems?: MainPushItem[]
 }
 
 export interface DesktopFileSearchResult {
@@ -775,6 +785,8 @@ export interface ElectronAPI {
     unpinFeature: (pluginId: string, featureCode: string) => Promise<{ success: boolean }>
     hideFeature: (pluginId: string, featureCode: string) => Promise<{ success: boolean }>
     unhideFeature: (pluginId: string, featureCode: string) => Promise<{ success: boolean }>
+    mainPushSelect: (pluginName: string, action: { code: string; type: string; payload: string; option: MainPushItem }) => Promise<boolean>
+    getMainPushPlugins: () => Promise<Array<{ pluginId: string; displayName: string }>>
     resolveDroppedFilePaths: (files: File[]) => string[]
     install: (filePath: string) => Promise<{ success: boolean; pluginName?: string; pluginId?: string; action?: 'installed' | 'updated' | 'already-installed' | 'downgrade-blocked'; isUpdate?: boolean; oldVersion?: string; newVersion?: string; error?: string }>
     enable: (name: string) => Promise<{ success: boolean; error?: string }>
