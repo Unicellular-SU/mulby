@@ -84,7 +84,8 @@ export class PluginRunner {
   async run(featureCode: string, input?: string, attachments?: InputAttachment[]): Promise<void> {
     const pluginModule = await this.loadModule()
     const api = createPluginAPI(this.plugin.id, undefined, undefined, undefined, {
-      runCommandAllowed: this.plugin.manifest.permissions?.runCommand === true
+      runCommandAllowed: this.plugin.manifest.permissions?.runCommand === true,
+      inputMonitorAllowed: this.plugin.manifest.permissions?.inputMonitor === true
     })
     const context = { api, featureCode, input: input || '', attachments }
 

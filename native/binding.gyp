@@ -123,6 +123,50 @@
       ]
     },
     {
+      "target_name": "input_monitor",
+      "sources": [],
+      "include_dirs": [
+        "<!@(node -p \"require('node-addon-api').include\")"
+      ],
+      "cflags!": ["-fno-exceptions"],
+      "cflags_cc!": ["-fno-exceptions"],
+      "defines": ["NAPI_DISABLE_CPP_EXCEPTIONS"],
+      "conditions": [
+        [
+          "OS=='mac'",
+          {
+            "sources": ["input-monitor.mm"],
+            "xcode_settings": {
+              "GCC_ENABLE_CPP_EXCEPTIONS": "YES",
+              "CLANG_CXX_LIBRARY": "libc++",
+              "MACOSX_DEPLOYMENT_TARGET": "12.0",
+              "OTHER_CFLAGS": ["-ObjC++"]
+            },
+            "link_settings": {
+              "libraries": ["-framework ApplicationServices", "-framework Carbon", "-framework CoreFoundation"]
+            }
+          }
+        ],
+        [
+          "OS=='win'",
+          {
+            "sources": ["input-monitor.cpp"],
+            "msvs_settings": {
+              "VCCLCompilerTool": {
+                "ExceptionHandling": 1
+              }
+            }
+          }
+        ],
+        [
+          "OS=='linux'",
+          {
+            "sources": ["input-monitor.cpp"]
+          }
+        ]
+      ]
+    },
+    {
       "target_name": "screen_capture",
       "sources": [],
       "include_dirs": [

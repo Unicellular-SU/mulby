@@ -504,15 +504,17 @@
     "nodedir": "/Users/su/Library/Caches/node-gyp/25.2.1",
     "python": "/usr/local/opt/python@3.14/bin/python3.14",
     "standalone_static_library": 1,
+    "target": "25.2.1",
     "prefix": "/usr/local",
     "user_agent": "npm/11.8.0 node/v25.2.1 darwin x64 workspaces/false",
     "cache": "/Users/su/.npm",
     "node_gyp": "/usr/local/lib/node_modules/npm/node_modules/node-gyp/bin/node-gyp.js",
     "npm_version": "11.8.0",
-    "init_module": "/Users/su/.npm-init.js",
     "userconfig": "/Users/su/.npmrc",
+    "init_module": "/Users/su/.npm-init.js",
     "globalconfig": "/usr/local/etc/npmrc",
     "local_prefix": "/Users/su/workspace/mulby/native",
+    "registry": "https://registry.npmmirror.com/",
     "global_prefix": "/usr/local"
   }
 }

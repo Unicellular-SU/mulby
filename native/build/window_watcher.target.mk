@@ -54,7 +54,7 @@ INCS_Debug := \
 	-I/Users/su/Library/Caches/node-gyp/25.2.1/deps/uv/include \
 	-I/Users/su/Library/Caches/node-gyp/25.2.1/deps/zlib \
 	-I/Users/su/Library/Caches/node-gyp/25.2.1/deps/v8/include \
-	-I/Users/su/workspace/mulby/node_modules/node-addon-api
+	-I/Users/su/workspace/mulby/node_modules/.pnpm/node-addon-api@8.7.0/node_modules/node-addon-api
 
 DEFS_Release := \
 	'-DNODE_GYP_MODULE_NAME=window_watcher' \
@@ -106,16 +106,13 @@ INCS_Release := \
 	-I/Users/su/Library/Caches/node-gyp/25.2.1/deps/uv/include \
 	-I/Users/su/Library/Caches/node-gyp/25.2.1/deps/zlib \
 	-I/Users/su/Library/Caches/node-gyp/25.2.1/deps/v8/include \
-	-I/Users/su/workspace/mulby/node_modules/node-addon-api
+	-I/Users/su/workspace/mulby/node_modules/.pnpm/node-addon-api@8.7.0/node_modules/node-addon-api
 
 OBJS := \
 	$(obj).target/$(TARGET)/window-watcher.o
 
 # Add to the list of files we specially track dependencies for.
 all_deps += $(OBJS)
-
-# Make sure our dependencies are built before any of us.
-$(OBJS): | $(builddir)/nothing.a
 
 # CFLAGS et al overrides must be target-local.
 # See "Target-specific Variable Values" in the GNU Make manual.
@@ -174,7 +171,7 @@ $(builddir)/window_watcher.node: GYP_LDFLAGS := $(LDFLAGS_$(BUILDTYPE))
 $(builddir)/window_watcher.node: LIBS := $(LIBS)
 $(builddir)/window_watcher.node: GYP_LIBTOOLFLAGS := $(LIBTOOLFLAGS_$(BUILDTYPE))
 $(builddir)/window_watcher.node: TOOLSET := $(TOOLSET)
-$(builddir)/window_watcher.node: $(OBJS) $(builddir)/nothing.a FORCE_DO_CMD
+$(builddir)/window_watcher.node: $(OBJS) FORCE_DO_CMD
 	$(call do_cmd,solink_module)
 
 all_deps += $(builddir)/window_watcher.node

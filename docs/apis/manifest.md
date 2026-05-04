@@ -33,6 +33,7 @@
 | --- | --- | --- |
 | `runCommand` | `boolean` | 允许插件调用受策略保护的命令执行能力。 |
 | `webview` | `boolean` | 允许插件 UI 使用 Electron `<webview>` 作为普通远程网页容器。宿主只会对声明为 `true` 的插件开启 `webviewTag`，并会移除 guest preload、关闭 Node 集成。 |
+| `inputMonitor` | `boolean` | 允许插件调用全局输入监听 API（鼠标点击轨迹、键盘按键监听）。macOS 需辅助功能权限，首次使用时自动引导授权。详见 [全局输入监听 API](./input-monitor.md)。 |
 | `envKeys` | `string[] \| "*"` | `runCommand` 继承环境变量的额外白名单。仅在 `runCommand: true` 时生效。 |
 
 插件前端可通过 `window.mulby.onPluginInit()` 读取宿主暴露的能力状态：

@@ -147,6 +147,19 @@ export function createCoreApi(ipcRenderer: IpcRenderer) {
         ipcRenderer.send('notification:show', message, type)
     },
 
+    inputMonitor: {
+      isAvailable: () => ipcRenderer.invoke('inputMonitor:isAvailable'),
+      requireAccessibility: () => ipcRenderer.invoke('inputMonitor:requireAccessibility'),
+      start: (options?: { mouse?: boolean; keyboard?: boolean; throttleMs?: number }) =>
+        ipcRenderer.invoke('inputMonitor:start', options),
+      stop: (sessionId: string) => ipcRenderer.invoke('inputMonitor:stop', sessionId),
+      onEvent: (callback: (event: unknown) => void) => {
+        const listener = (_event: unknown, inputEvent: unknown) => callback(inputEvent)
+        ipcRenderer.on('inputMonitor:event', listener)
+        return () => ipcRenderer.removeListener('inputMonitor:event', listener)
+      }
+    },
+
     onboarding: {
       getSettings: () => ipcRenderer.invoke('onboarding:getSettings'),
       updateShortcut: (action: string, accelerator: string) =>

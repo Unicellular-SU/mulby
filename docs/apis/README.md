@@ -32,6 +32,7 @@
 - [剪贴板 API (clipboard)](./clipboard.md)
 - [剪贴板历史 API (clipboardHistory)](./clipboard-history.md)
 - [输入 API (input)](./input.md)
+- [全局输入监听 API (inputMonitor)](./input-monitor.md)
 
 ## 插件与调度
 - [插件管理 API (plugin)](./plugin.md)

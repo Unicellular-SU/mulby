@@ -16,6 +16,7 @@ import { createPluginTray } from './tray'
 import { pluginNetwork } from './network'
 import { pluginInput } from './input'
 import { permissionManager } from './permission-manager'
+import { pluginInputMonitor, type GlobalInputEvent, type InputMonitorOptions, type InputEventCallback } from './input-monitor'
 import { pluginFeatureStore, redirectHotKeySetting, redirectAiModelsSetting } from './dynamic-features'
 import { aiService } from '../ai'
 import { aiSkillService } from '../ai/skills'
@@ -46,6 +47,7 @@ const pluginHttp = new PluginHttp()
 
 interface CreatePluginApiOptions {
   runCommandAllowed?: boolean
+  inputMonitorAllowed?: boolean
 }
 
 function toAbortablePromise<T>(promise: Promise<T>, abort: () => void): AiPromiseLike<T> {
@@ -63,6 +65,7 @@ export function createPluginAPI(
   options?: CreatePluginApiOptions
 ) {
   const runCommandAllowed = options?.runCommandAllowed === true
+  const inputMonitorAllowed = options?.inputMonitorAllowed === true
   // 为每个插件创建独立的 PluginFilesystem 实例（带插件名 → 启用跨插件数据隔离）
   const pluginFilesystem = new PluginFilesystem(pluginName)
   return {
@@ -570,6 +573,23 @@ ${item.files.map(p => `    <string>${p}</string>`).join('\n')}
         }
         return taskScheduler.describeCron(expression)
       }
+    },
+    inputMonitor: {
+      isAvailable: () => inputMonitorAllowed && pluginInputMonitor.isAvailable(),
+      requireAccessibility: () => {
+        if (!inputMonitorAllowed) return Promise.resolve(false)
+        return pluginInputMonitor.requireAccessibility()
+      },
+      start: (options?: InputMonitorOptions, callback?: InputEventCallback) => {
+        if (!inputMonitorAllowed) {
+          log.warn(`[PluginAPI] ${pluginName}: inputMonitor permission not declared`)
+          return Promise.resolve(null)
+        }
+        return pluginInputMonitor.start(pluginName, options, callback)
+      },
+      stop: (sessionId: string) => pluginInputMonitor.stop(pluginName, sessionId),
+      onEvent: (sessionId: string, callback: (event: GlobalInputEvent) => void) =>
+        pluginInputMonitor.onEvent(sessionId, callback)
     },
     // Plugin Tools API（主进程备用执行器使用，实际 handler 注册在 host-worker 内）
     tools: {

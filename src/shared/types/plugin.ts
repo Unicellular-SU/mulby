@@ -371,6 +371,13 @@ export interface PluginPermissions {
   runCommand?: boolean
   webview?: boolean
   /**
+   * 全局输入事件监听（鼠标/键盘）
+   *
+   * 启用后插件可调用 inputMonitor API 监听全局鼠标点击轨迹和键盘输入。
+   * macOS 需要辅助功能权限 (Accessibility)，首次使用时自动引导授权。
+   */
+  inputMonitor?: boolean
+  /**
    * 命令执行时允许继承的环境变量名列表
    *
    * - 未声明 / 空数组：仅继承内置安全基线（PATH、HOME、LANG 等）
@@ -619,10 +626,38 @@ export interface PluginAPI {
       edit: (input: { imageAttachmentId: string; prompt: string; model: string }) => Promise<{ images: string[]; tokens: AiTokenBreakdown }>
     }
   }
+  inputMonitor: {
+    isAvailable: () => boolean
+    requireAccessibility: () => Promise<boolean>
+    start: (options?: {
+      mouse?: boolean
+      keyboard?: boolean
+      throttleMs?: number
+    }, callback?: (event: GlobalInputEventData) => void) => Promise<string | null>
+    stop: (sessionId: string) => void
+    onEvent: (sessionId: string, callback: (event: GlobalInputEventData) => void) => void
+  }
   tools: {
     register: (name: string, handler: PluginToolHandler) => void   // 注册 tool handler（需先在 manifest.tools 中声明）
     unregister: (name: string) => void                              // 注销 tool handler
   }
+}
+
+export interface GlobalInputEventData {
+  type: 'mouseMove' | 'mouseDown' | 'mouseUp' | 'mouseScroll' | 'keyDown' | 'keyUp'
+  timestamp: number
+  x: number
+  y: number
+  button?: 'left' | 'right' | 'middle'
+  clickCount?: number
+  scrollDeltaX?: number
+  scrollDeltaY?: number
+  keyCode?: number
+  key?: string
+  shift: boolean
+  ctrl: boolean
+  alt: boolean
+  meta: boolean
 }
 
 // 插件状态配置

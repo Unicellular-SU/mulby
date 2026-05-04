@@ -14,6 +14,7 @@ import type {
 } from './host-protocol'
 import { generateRequestId } from './host-protocol'
 import { createPluginAPI } from './api'
+import { pluginInputMonitor } from './input-monitor'
 import { PluginHostWatchdog } from './watchdog'
 import type { InputAttachment, Plugin } from '../../shared/types/plugin'
 import type { ToolProgressResponse } from './host-protocol'
@@ -32,6 +33,7 @@ interface PluginHost {
   process: UtilityProcess
   pluginName: string
   runCommandAllowed: boolean
+  inputMonitorAllowed: boolean
   ready: boolean
   activeRequests: number  // 活跃请求计数器
   startedAt: number       // 启动时间戳
@@ -318,6 +320,7 @@ export class PluginHostManager extends EventEmitter {
         process: child,
         pluginName,
         runCommandAllowed: plugin.manifest.permissions?.runCommand === true,
+        inputMonitorAllowed: plugin.manifest.permissions?.inputMonitor === true,
         ready: isPooled,
         activeRequests: 0,
         startedAt: Date.now(),
@@ -513,7 +516,10 @@ export class PluginHostManager extends EventEmitter {
           this.messageBus,
           this.taskScheduler,
           this.clipboardHistoryManager,
-          { runCommandAllowed: host.runCommandAllowed }
+          {
+            runCommandAllowed: host.runCommandAllowed,
+            inputMonitorAllowed: plugin.manifest.permissions?.inputMonitor === true
+          }
         )
       }
       const pluginApi = host.cachedApi
@@ -826,6 +832,9 @@ export class PluginHostManager extends EventEmitter {
     // Phase 4: 清理消息总线订阅
     this.messageBus.cleanup(pluginName)
 
+    // 清理全局输入监听会话
+    pluginInputMonitor.cleanupPlugin(pluginName)
+
     // 清理所有待处理的请求
     for (const [, pending] of host.pendingRequests) {
       clearTimeout(pending.timeout)
@@ -902,14 +911,16 @@ export class PluginHostManager extends EventEmitter {
 
     // 直接调用主进程的 API（因为 API 实现在主进程中）
     const [namespace, methodName] = method.split('.')
-    // 缓存 pluginAPI 实例，避免每次调用都重新创建
     if (!host.cachedApi) {
       host.cachedApi = createPluginAPI(
         pluginName,
         this.messageBus,
         this.taskScheduler,
         this.clipboardHistoryManager,
-        { runCommandAllowed: host.runCommandAllowed }
+        {
+          runCommandAllowed: host.runCommandAllowed,
+          inputMonitorAllowed: host.inputMonitorAllowed
+        }
       )
     }
     const pluginApi = host.cachedApi

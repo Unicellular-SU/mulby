@@ -21,6 +21,7 @@ import { registerHttpHandlers } from './http'
 import { registerMenuHandlers } from './menu'
 import { registerGeolocationHandlers } from './geolocation'
 import { registerInputHandlers } from './input'
+import { registerInputMonitorHandlers } from './input-monitor'
 import { registerPermissionHandlers } from './permission'
 import { registerHostHandlers } from './host'
 import { registerFilesystemHandlers } from './filesystem'
@@ -105,6 +106,7 @@ export function registerAllHandlers(
   registerMenuHandlers()
   registerGeolocationHandlers()
   registerInputHandlers()
+  registerInputMonitorHandlers(pluginWindowManager)
   registerPermissionHandlers()
   registerHostHandlers(pluginManager)
   registerFilesystemHandlers()
