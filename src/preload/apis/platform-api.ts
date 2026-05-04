@@ -31,7 +31,15 @@ export function createPlatformApi(ipcRenderer: IpcRenderer, options?: { restrict
       getMediaStreamConstraints: (options: { sourceId: string; audio?: boolean; frameRate?: number }) =>
         ipcRenderer.invoke('screen:getMediaStreamConstraints', options),
       screenCapture: () => ipcRenderer.invoke('screen:startRegionCapture'),
-      colorPick: () => ipcRenderer.invoke('screen:colorPick')
+      colorPick: () => ipcRenderer.invoke('screen:colorPick'),
+      screenToDipPoint: (point: { x: number; y: number }) =>
+        ipcRenderer.invoke('screen:screenToDipPoint', point),
+      dipToScreenPoint: (point: { x: number; y: number }) =>
+        ipcRenderer.invoke('screen:dipToScreenPoint', point),
+      screenToDipRect: (rect: { x: number; y: number; width: number; height: number }) =>
+        ipcRenderer.invoke('screen:screenToDipRect', rect),
+      dipToScreenRect: (rect: { x: number; y: number; width: number; height: number }) =>
+        ipcRenderer.invoke('screen:dipToScreenRect', rect)
     },
 
     shell: {
@@ -180,6 +188,20 @@ export function createPlatformApi(ipcRenderer: IpcRenderer, options?: { restrict
           if (watchId !== null) ipcRenderer.invoke('storage:unwatch', watchId)
           ipcRenderer.removeListener('storage:change', listener)
         }
+      },
+      encrypted: {
+        set: (key: string, value: unknown) => ipcRenderer.invoke('storage:encrypted:set', key, value),
+        get: (key: string) => ipcRenderer.invoke('storage:encrypted:get', key),
+        remove: (key: string) => ipcRenderer.invoke('storage:encrypted:remove', key),
+        has: (key: string) => ipcRenderer.invoke('storage:encrypted:has', key)
+      },
+      attachment: {
+        put: (id: string, data: ArrayBuffer | Uint8Array, mimeType: string) =>
+          ipcRenderer.invoke('storage:attachment:put', id, data, mimeType),
+        get: (id: string) => ipcRenderer.invoke('storage:attachment:get', id),
+        getType: (id: string) => ipcRenderer.invoke('storage:attachment:getType', id),
+        remove: (id: string) => ipcRenderer.invoke('storage:attachment:remove', id),
+        list: (prefix?: string) => ipcRenderer.invoke('storage:attachment:list', prefix)
       }
     },
 

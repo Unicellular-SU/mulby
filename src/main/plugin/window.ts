@@ -466,6 +466,9 @@ export class PluginWindowManager {
 
     log.info(`[ResidentUI] evict | plugin=${targetId}`)
     this.residentPanels.delete(targetId)
+    if (cached.panelWindow.isOpen()) {
+      cached.panelWindow.send('plugin:out', true)
+    }
     this.destroyPanelWindow(cached.panelWindow)
     clearSubInputState()
     return targetId
@@ -495,6 +498,11 @@ export class PluginWindowManager {
       if (!force && pluginId && this.shouldSuspendOnCloseCallback?.(pluginId, featureCode, route)) {
         // 已由回调执行 suspendAttached()，不走 close 路径
         return
+      }
+
+      // 通知插件 UI 即将退出
+      if (this.panelWindow?.isOpen()) {
+        this.panelWindow.send('plugin:out', force)
       }
 
       this.attachedPlugin = null

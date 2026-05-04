@@ -243,3 +243,62 @@ export function redirectAiModelsSetting(): void {
     body: 'AI model settings are not available yet.'
   }).show()
 }
+
+// ====== MainPush 注册表 ======
+
+export interface MainPushAction {
+  code: string
+  type: string
+  payload: string
+}
+
+export interface MainPushItem {
+  icon?: string
+  title: string
+  text: string
+  [key: string]: unknown
+}
+
+type MainPushCallback = (action: MainPushAction) => MainPushItem[] | Promise<MainPushItem[]>
+type MainPushSelectCallback = (action: MainPushAction & { option: MainPushItem }) => boolean | Promise<boolean>
+
+const mainPushHandlers = new Map<string, MainPushCallback>()
+const mainPushSelectHandlers = new Map<string, MainPushSelectCallback>()
+
+export function registerMainPushHandler(pluginName: string, callback: MainPushCallback): void {
+  mainPushHandlers.set(pluginName, callback)
+}
+
+export function registerMainPushSelectHandler(pluginName: string, callback: MainPushSelectCallback): void {
+  mainPushSelectHandlers.set(pluginName, callback)
+}
+
+export function unregisterMainPushHandlers(pluginName: string): void {
+  mainPushHandlers.delete(pluginName)
+  mainPushSelectHandlers.delete(pluginName)
+}
+
+export async function queryMainPush(pluginName: string, action: MainPushAction): Promise<MainPushItem[]> {
+  const handler = mainPushHandlers.get(pluginName)
+  if (!handler) return []
+  try {
+    const result = await handler(action)
+    return Array.isArray(result) ? result : []
+  } catch {
+    return []
+  }
+}
+
+export async function handleMainPushSelect(pluginName: string, action: MainPushAction & { option: MainPushItem }): Promise<boolean> {
+  const handler = mainPushSelectHandlers.get(pluginName)
+  if (!handler) return true
+  try {
+    return await handler(action)
+  } catch {
+    return true
+  }
+}
+
+export function hasMainPushHandler(pluginName: string): boolean {
+  return mainPushHandlers.has(pluginName)
+}

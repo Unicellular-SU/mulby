@@ -12,6 +12,7 @@ import { PluginHostManager } from './host-manager'
 import { PluginCommandShortcutManager } from './command-shortcuts'
 import { PluginCommandDisabledManager } from './command-disabled'
 import { pluginFeatureStore } from './dynamic-features'
+import type { MainPushItem } from './dynamic-features'
 import { preparePluginPreload } from './plugin-preload-wrapper'
 import { materializeDataUrlImageAttachments } from './input-attachments'
 import {
@@ -53,6 +54,7 @@ interface SearchResult {
   plugin: Plugin
   feature: PluginFeature
   matchType: MatchType
+  mainPushItems?: MainPushItem[]
 }
 
 interface RecentUsedResult {

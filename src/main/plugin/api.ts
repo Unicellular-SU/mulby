@@ -17,7 +17,7 @@ import { pluginNetwork } from './network'
 import { pluginInput } from './input'
 import { permissionManager } from './permission-manager'
 import { pluginInputMonitor, type GlobalInputEvent, type InputMonitorOptions, type InputEventCallback } from './input-monitor'
-import { pluginFeatureStore, redirectHotKeySetting, redirectAiModelsSetting } from './dynamic-features'
+import { pluginFeatureStore, redirectHotKeySetting, redirectAiModelsSetting, registerMainPushHandler, registerMainPushSelectHandler, type MainPushAction, type MainPushItem } from './dynamic-features'
 import { aiService } from '../ai'
 import { aiSkillService } from '../ai/skills'
 import type { DynamicFeatureInput, PluginMessage, PluginToolHandler } from '../../shared/types/plugin'
@@ -415,6 +415,14 @@ ${item.files.map(p => `    <string>${p}</string>`).join('\n')}
       },
       redirectAiModelsSetting: () => {
         redirectAiModelsSetting()
+      },
+      onMainPush: (callback: (action: MainPushAction) => MainPushItem[] | Promise<MainPushItem[]>) => {
+        if (typeof callback !== 'function') return
+        registerMainPushHandler(pluginName, callback)
+      },
+      onMainPushSelect: (callback: (action: MainPushAction & { option: MainPushItem }) => boolean | Promise<boolean>) => {
+        if (typeof callback !== 'function') return
+        registerMainPushSelectHandler(pluginName, callback)
       }
     },
     messaging: {

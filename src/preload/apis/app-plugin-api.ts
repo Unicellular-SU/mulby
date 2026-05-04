@@ -152,7 +152,9 @@ export function createAppPluginApi(ipcRenderer: IpcRenderer) {
       setCommandDisabled: (input: unknown) => ipcRenderer.invoke('plugin:command:setDisabled', input),
       redirect: (label: string | [string, string], payload?: unknown) =>
         ipcRenderer.invoke('plugin:redirect', label, payload),
-      outPlugin: (isKill?: boolean) => ipcRenderer.invoke('plugin:out', isKill)
+      outPlugin: (isKill?: boolean) => ipcRenderer.invoke('plugin:out', isKill),
+      mainPushSelect: (pluginName: string, action: { code: string; type: string; payload: string; option: unknown }) =>
+        ipcRenderer.invoke('plugin:mainPushSelect', pluginName, action)
     },
 
     pluginStore: {
@@ -235,6 +237,12 @@ export function createAppPluginApi(ipcRenderer: IpcRenderer) {
       const listener = () => callback()
       ipcRenderer.on('plugin:detached', listener)
       return () => ipcRenderer.removeListener('plugin:detached', listener)
+    },
+
+    onPluginOut: (callback: (isKill: boolean) => void) => {
+      const listener = (_event: unknown, isKill: boolean) => callback(isKill)
+      ipcRenderer.on('plugin:out', listener)
+      return () => ipcRenderer.removeListener('plugin:out', listener)
     },
 
     onPluginLaunchStart: (callback: (data: PluginLaunchStartEvent) => void) => {

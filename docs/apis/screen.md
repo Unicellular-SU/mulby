@@ -268,6 +268,60 @@ interface ColorPickResult {
 }
 ```
 
+### screenToDipPoint(point)
+[Renderer] [Backend]
+屏幕物理坐标转 DIP 坐标。
+
+```javascript
+const dipPoint = await screen.screenToDipPoint({ x: 200, y: 200 });
+```
+
+**参数**:
+- `point` ({ x: number; y: number }) - 物理屏幕坐标
+
+**返回值**: `{ x: number; y: number }`
+
+### dipToScreenPoint(point)
+[Renderer] [Backend]
+DIP 坐标转屏幕物理坐标。
+
+```javascript
+const screenPoint = await screen.dipToScreenPoint({ x: 200, y: 200 });
+```
+
+**参数**:
+- `point` ({ x: number; y: number }) - DIP 坐标
+
+**返回值**: `{ x: number; y: number }`
+
+### screenToDipRect(rect)
+[Renderer] [Backend]
+屏幕物理区域转 DIP 区域。
+
+```javascript
+const dipRect = await screen.screenToDipRect({ x: 0, y: 0, width: 200, height: 200 });
+```
+
+**参数**:
+- `rect` ({ x: number; y: number; width: number; height: number }) - 物理区域
+
+**返回值**: `{ x: number; y: number; width: number; height: number }`
+
+### dipToScreenRect(rect)
+[Renderer] [Backend]
+DIP 区域转屏幕物理区域。
+
+```javascript
+const screenRect = await screen.dipToScreenRect({ x: 0, y: 0, width: 200, height: 200 });
+```
+
+**参数**:
+- `rect` ({ x: number; y: number; width: number; height: number }) - DIP 区域
+
+**返回值**: `{ x: number; y: number; width: number; height: number }`
+
+> DIP (Device Independent Pixels) 坐标在高 DPI 屏幕上与物理像素不同。macOS Retina 屏上 1 DIP = 2 物理像素。这些方法主要用于跨进程或原生模块场景的坐标精确转换。
+
 ### 完整示例
 
 #### 截图插件示例

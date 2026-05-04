@@ -15,6 +15,7 @@ import type {
 import { generateRequestId } from './host-protocol'
 import { createPluginAPI } from './api'
 import { pluginInputMonitor } from './input-monitor'
+import { unregisterMainPushHandlers } from './dynamic-features'
 import { PluginHostWatchdog } from './watchdog'
 import type { InputAttachment, Plugin } from '../../shared/types/plugin'
 import type { ToolProgressResponse } from './host-protocol'
@@ -834,6 +835,9 @@ export class PluginHostManager extends EventEmitter {
 
     // 清理全局输入监听会话
     pluginInputMonitor.cleanupPlugin(pluginName)
+
+    // 清理 MainPush 回调
+    unregisterMainPushHandlers(pluginName)
 
     // 清理所有待处理的请求
     for (const [, pending] of host.pendingRequests) {

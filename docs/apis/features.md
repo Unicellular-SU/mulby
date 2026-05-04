@@ -104,8 +104,8 @@ features.setFeature(feature: DynamicFeatureInput): Promise<void>
 - `platform`: 指定平台（可选，`string | string[]`）
 - `mode`: 指令模式（可选，`'ui' | 'silent' | 'detached'`，默认 `ui`）
 - `route`: UI 路由（可选，传给窗口的 hash）
-- `mainHide`: Mulby 暂未支持（保留字段）
-- `mainPush`: Mulby 暂未支持（保留字段）
+- `mainHide`: 进入插件后隐藏主窗口
+- `mainPush`: 启用搜索框推送（见下方 MainPush 章节）
 - `cmds`: 指令列表（必填）
 
 `cmds` 支持两种写法：
@@ -166,6 +166,91 @@ for (const code of ['today', 'settings', 'window']) {
   await api.features.removeFeature(code)
 }
 ```
+
+---
+
+## MainPush 搜索框推送
+
+当 feature 设置 `mainPush: true` 时，插件可在搜索匹配时动态推送额外选项到搜索结果列表中，实现类似 uTools 的 `onMainPush` 能力。
+
+### onMainPush
+[Backend]
+
+```ts
+features.onMainPush(callback: (action: MainPushAction) => MainPushItem[] | Promise<MainPushItem[]>)
+```
+
+注册主搜索推送回调。当用户输入文本匹配到该 feature 时，Mulby 会调用此回调获取推送项。
+
+**MainPushAction**:
+```ts
+interface MainPushAction {
+  code: string    // 匹配的 feature code
+  type: string    // 当前固定为 'text'
+  payload: string // 用户输入的搜索文本
+}
+```
+
+**MainPushItem**:
+```ts
+interface MainPushItem {
+  icon?: string   // 图标（可选，支持 URL 或 base64）
+  title: string   // 标题
+  text: string    // 描述文本
+  [key: string]: unknown // 自定义扩展字段
+}
+```
+
+### onMainPushSelect
+[Backend]
+
+```ts
+features.onMainPushSelect(callback: (action: MainPushAction & { option: MainPushItem }) => boolean | Promise<boolean>)
+```
+
+注册推送项选中回调。当用户点击推送项时触发。
+
+- 返回 `true`：打开插件 UI
+- 返回 `false`：不打开 UI（操作已在回调中完成）
+
+### 完整 MainPush 示例
+
+```ts
+// manifest.json
+{
+  "features": [{
+    "code": "translate",
+    "explain": "翻译",
+    "mainPush": true,
+    "cmds": [{ "type": "over", "label": "翻译选中文本", "minLength": 1 }]
+  }]
+}
+
+// src/main.ts
+module.exports = {
+  async run(context) {
+    const { features } = context.api;
+
+    features.onMainPush(async (action) => {
+      const result = await translate(action.payload);
+      return [{
+        title: result.translation,
+        text: `${action.payload} → ${result.translation}`
+      }];
+    });
+
+    features.onMainPushSelect(async (action) => {
+      await context.api.clipboard.writeText(action.option.title);
+      await context.api.notification.show('已复制翻译结果');
+      return false; // 不打开 UI
+    });
+  }
+};
+```
+
+> 注意：`onMainPush` 在插件后端注册，插件 Host 必须正在运行才能响应搜索推送。推荐在后台插件中使用。
+
+---
 
 #### redirectHotKeySetting
 [Backend]

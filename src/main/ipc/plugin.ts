@@ -15,6 +15,7 @@ import type {
 } from '../../shared/types/plugin'
 import { PluginInstaller } from '../plugin/installer'
 import { PluginStoreService } from '../plugin/store-service'
+import { queryMainPush, handleMainPushSelect, hasMainPushHandler, type MainPushItem } from '../plugin/dynamic-features'
 
 
 
@@ -82,7 +83,17 @@ export function registerPluginHandlers(manager: PluginManager, pluginToolRegistr
     plugin: Plugin,
     feature: PluginFeature,
     matchType: string
-  ) => {
+  ): Promise<{
+    pluginId: string
+    pluginName: string
+    displayName: string
+    featureCode: string
+    featureExplain?: string
+    builtin: boolean
+    matchType: string
+    icon: unknown
+    mainPushItems?: MainPushItem[]
+  }> => {
     const iconMeta = await resolveResultIcon(plugin, feature, plugin.resolvedIcon)
 
     return {
@@ -164,7 +175,38 @@ export function registerPluginHandlers(manager: PluginManager, pluginToolRegistr
       )
     ))
 
+    // MainPush: 查询已注册 mainPush handler 且匹配搜索结果的插件
+    const text = typeof query === 'string' ? query : query.text || ''
+    if (text.trim()) {
+      const mainPushPromises: Promise<void>[] = []
+      for (let i = 0; i < searchResults.length; i++) {
+        const result = searchResults[i]
+        if (result.feature.mainPush && hasMainPushHandler(result.plugin.manifest.name)) {
+          const idx = i
+          mainPushPromises.push(
+            queryMainPush(result.plugin.manifest.name, {
+              code: result.feature.code,
+              type: 'text',
+              payload: text
+            }).then((items) => {
+              if (items.length > 0 && formattedResults[idx]) {
+                formattedResults[idx].mainPushItems = items
+              }
+            })
+          )
+        }
+      }
+      if (mainPushPromises.length > 0) {
+        await Promise.allSettled(mainPushPromises)
+      }
+    }
+
     return formattedResults
+  })
+
+  // MainPush: 用户选中推送项
+  ipcMain.handle('plugin:mainPushSelect', async (_, pluginName: string, action: { code: string; type: string; payload: string; option: MainPushItem }) => {
+    return await handleMainPushSelect(pluginName, action)
   })
 
   // 最近使用插件

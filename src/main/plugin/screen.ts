@@ -128,6 +128,34 @@ export class PluginScreen {
   }
 
   /**
+   * 屏幕物理坐标转 DIP 坐标
+   */
+  screenToDipPoint(point: { x: number; y: number }): { x: number; y: number } {
+    return screen.screenToDipPoint(point)
+  }
+
+  /**
+   * DIP 坐标转屏幕物理坐标
+   */
+  dipToScreenPoint(point: { x: number; y: number }): { x: number; y: number } {
+    return screen.dipToScreenPoint(point)
+  }
+
+  /**
+   * 屏幕物理区域转 DIP 区域
+   */
+  screenToDipRect(rect: { x: number; y: number; width: number; height: number }): { x: number; y: number; width: number; height: number } {
+    return screen.screenToDipRect(null as unknown as Electron.BrowserWindow, rect) as { x: number; y: number; width: number; height: number }
+  }
+
+  /**
+   * DIP 区域转屏幕物理区域
+   */
+  dipToScreenRect(rect: { x: number; y: number; width: number; height: number }): { x: number; y: number; width: number; height: number } {
+    return screen.dipToScreenRect(null as unknown as Electron.BrowserWindow, rect) as { x: number; y: number; width: number; height: number }
+  }
+
+  /**
    * 获取可捕获的源（屏幕和窗口）
    */
   async getSources(options: CaptureOptions = {}): Promise<CaptureSource[]> {

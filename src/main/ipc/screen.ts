@@ -50,4 +50,21 @@ export function registerScreenHandlers() {
   ipcMain.handle('screen:getMediaStreamConstraints', (_, options: RecordingOptions) => {
     return pluginScreen.getMediaStreamConstraints(options)
   })
+
+  // DIP/物理坐标转换
+  ipcMain.handle('screen:screenToDipPoint', (_, point: { x: number; y: number }) => {
+    return pluginScreen.screenToDipPoint(point)
+  })
+
+  ipcMain.handle('screen:dipToScreenPoint', (_, point: { x: number; y: number }) => {
+    return pluginScreen.dipToScreenPoint(point)
+  })
+
+  ipcMain.handle('screen:screenToDipRect', (_, rect: { x: number; y: number; width: number; height: number }) => {
+    return pluginScreen.screenToDipRect(rect)
+  })
+
+  ipcMain.handle('screen:dipToScreenRect', (_, rect: { x: number; y: number; width: number; height: number }) => {
+    return pluginScreen.dipToScreenRect(rect)
+  })
 }

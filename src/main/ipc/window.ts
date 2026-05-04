@@ -336,13 +336,19 @@ export function registerWindowHandlers(
       if (win === mainWin || win === pluginWindowManager.getPanelWindow()?.getWindow()) {
         pluginWindowManager.closeAttached(true)
       } else {
+        if (!win.isDestroyed() && !win.webContents.isDestroyed()) {
+          win.webContents.send('plugin:out', true)
+        }
         win.destroy()
       }
     } else if (win === mainWin || win === pluginWindowManager.getPanelWindow()?.getWindow()) {
       // 附着模式，普通关闭允许 PluginWindowManager 决定是否进入 resident-ui。
       pluginWindowManager.closeAttached(false)
     } else {
-      // 独立窗口普通退出必须走 close 路径，避免留下隐藏且不可管理的插件窗口。
+      // 独立窗口普通退出必须走 close 路径
+      if (!win.isDestroyed() && !win.webContents.isDestroyed()) {
+        win.webContents.send('plugin:out', false)
+      }
       win.close()
     }
 
@@ -781,6 +787,9 @@ export function registerWindowHandlers(
       if (win === mainWin) {
         pluginWindowManager.closeAttached()
       } else {
+        if (!win.isDestroyed() && !win.webContents.isDestroyed()) {
+          win.webContents.send('plugin:out', false)
+        }
         win.close()
       }
     }
