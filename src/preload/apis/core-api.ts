@@ -42,12 +42,24 @@ export function createCoreApi(ipcRenderer: IpcRenderer) {
         titleBar?: boolean;
         fullscreen?: boolean;
         alwaysOnTop?: boolean;
+        alwaysOnTopLevel?: string;
         resizable?: boolean;
+        movable?: boolean;
+        minimizable?: boolean;
+        maximizable?: boolean;
+        fullscreenable?: boolean;
+        focusable?: boolean;
+        skipTaskbar?: boolean;
+        enableLargerThanScreen?: boolean;
         x?: number; y?: number;
         minWidth?: number; minHeight?: number;
         maxWidth?: number; maxHeight?: number;
         opacity?: number;
         transparent?: boolean;
+        visibleOnAllWorkspaces?: boolean;
+        visibleOnFullScreen?: boolean;
+        ignoreMouseEvents?: boolean;
+        forwardMouseEvents?: boolean;
         params?: Record<string, string>;
       }) => {
         const id = await ipcRenderer.invoke('window:create', url, options)
@@ -57,12 +69,19 @@ export function createCoreApi(ipcRenderer: IpcRenderer) {
           show: () => ipcRenderer.invoke('window:child:action', id, 'show'),
           hide: () => ipcRenderer.invoke('window:child:action', id, 'hide'),
           close: () => ipcRenderer.invoke('window:child:action', id, 'close'),
+          destroy: () => ipcRenderer.invoke('window:child:action', id, 'destroy'),
           focus: () => ipcRenderer.invoke('window:child:action', id, 'focus'),
+          showInactive: () => ipcRenderer.invoke('window:child:action', id, 'showInactive'),
           setTitle: (title: string) => ipcRenderer.invoke('window:child:action', id, 'setTitle', title),
           setSize: (width: number, height: number) => ipcRenderer.invoke('window:child:action', id, 'setSize', width, height),
           setPosition: (x: number, y: number) => ipcRenderer.invoke('window:child:action', id, 'setPosition', x, y),
           setBounds: (bounds: { x?: number; y?: number; width?: number; height?: number }) => ipcRenderer.invoke('window:child:action', id, 'setBounds', bounds),
+          getBounds: () => ipcRenderer.invoke('window:child:action', id, 'getBounds'),
           setOpacity: (opacity: number) => ipcRenderer.invoke('window:child:action', id, 'setOpacity', opacity),
+          setIgnoreMouseEvents: (ignore: boolean, opts?: { forward?: boolean }) => ipcRenderer.invoke('window:child:action', id, 'setIgnoreMouseEvents', ignore, opts),
+          setAlwaysOnTop: (flag: boolean, level?: string) => ipcRenderer.invoke('window:child:action', id, 'setAlwaysOnTop', flag, level),
+          setVisibleOnAllWorkspaces: (flag: boolean, opts?: { visibleOnFullScreen?: boolean }) => ipcRenderer.invoke('window:child:action', id, 'setVisibleOnAllWorkspaces', flag, opts),
+          setFullScreen: (flag: boolean) => ipcRenderer.invoke('window:child:action', id, 'setFullScreen', flag),
           postMessage: (channel: string, ...args: unknown[]) => ipcRenderer.invoke('window:child:action', id, 'postMessage', channel, ...args)
         }
       },

@@ -478,17 +478,19 @@ export function registerWindowHandlers(
 
   // 让我们先把 window:child:action 加上。
 
-  // 控制子窗口 (BrowserWindowProxy)
-  ipcMain.handle('window:child:action', (_event, childId: number, action: string, ...args: unknown[]) => {
-    // 验证调用者是否有权限控制该窗口
-    // 只有创建者（父窗口）或主窗口通常有权限。
-    // 为简化，这里允许同一插件的窗口控制其创建的子窗口。
+  ipcMain.handle('window:child:action', (event, childId: number, action: string, ...args: unknown[]) => {
+    const callerWin = windowFromWebContents(event.sender)
+    if (!callerWin) return null
 
-    // 获取目标窗口
+    const callerPlugin = pluginWindowManager.getPluginByWindow(callerWin)
+    if (!callerPlugin) return null
+
     const allDetached = pluginWindowManager.getAllDetachedWindows()
     const childWin = allDetached.find(w => w.id === childId)
-
     if (!childWin || childWin.isDestroyed()) return null
+
+    const childPlugin = pluginWindowManager.getPluginByWindow(childWin)
+    if (!childPlugin || childPlugin.id !== callerPlugin.id) return null
 
     switch (action) {
       case 'show':
@@ -500,15 +502,20 @@ export function registerWindowHandlers(
       case 'close':
         childWin.close()
         break
+      case 'destroy':
+        childWin.destroy()
+        break
       case 'focus':
         childWin.focus()
+        break
+      case 'showInactive':
+        childWin.showInactive()
         break
       case 'setTitle':
         childWin.setTitle(String(args[0] ?? ''))
         break
       case 'setSize':
         if (typeof args[0] === 'number' && typeof args[1] === 'number') {
-          // macOs setSize works
           childWin.setSize(args[0], args[1])
         }
         break
@@ -529,13 +536,37 @@ export function registerWindowHandlers(
           })
         }
         break
+      case 'getBounds':
+        return childWin.getBounds()
       case 'setOpacity':
         if (typeof args[0] === 'number') {
           childWin.setOpacity(Math.max(0, Math.min(1, args[0])))
         }
         break
+      case 'setIgnoreMouseEvents':
+        if (typeof args[0] === 'boolean') {
+          const opts = (args[1] && typeof args[1] === 'object') ? args[1] as { forward?: boolean } : undefined
+          childWin.setIgnoreMouseEvents(args[0], opts)
+        }
+        break
+      case 'setAlwaysOnTop':
+        if (typeof args[0] === 'boolean') {
+          const level = typeof args[1] === 'string' ? args[1] as Parameters<BrowserWindow['setAlwaysOnTop']>[1] : undefined
+          childWin.setAlwaysOnTop(args[0], level)
+        }
+        break
+      case 'setVisibleOnAllWorkspaces':
+        if (typeof args[0] === 'boolean') {
+          const opts = (args[1] && typeof args[1] === 'object') ? args[1] as { visibleOnFullScreen?: boolean } : undefined
+          childWin.setVisibleOnAllWorkspaces(args[0], opts)
+        }
+        break
+      case 'setFullScreen':
+        if (typeof args[0] === 'boolean') {
+          childWin.setFullScreen(args[0])
+        }
+        break
       case 'postMessage':
-        // 发送消息给子窗口
         childWin.webContents.send('window:childMessage', String(args[0] ?? ''), ...args.slice(1))
         break
       default:
@@ -967,12 +998,11 @@ export function registerWindowHandlers(
     if (!win) return null
 
     const plugin = pluginWindowManager.getPluginByWindow(win)
-    // 只要是插件上下文都可以创建
     if (plugin) {
-      // 传递 creatorId 以建立父子关系
       const newWin = pluginWindowManager.createAuxiliaryWindow(plugin, url, options, win.id)
       return newWin ? newWin.id : null
     }
     return null
   })
+
 }

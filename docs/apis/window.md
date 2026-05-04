@@ -96,7 +96,15 @@ interface ChildWindowCreateOptions {
   titleBar?: boolean;
   fullscreen?: boolean;
   alwaysOnTop?: boolean;
+  alwaysOnTopLevel?: string;           // 置顶级别，如 'screen-saver'、'floating'
   resizable?: boolean;
+  movable?: boolean;
+  minimizable?: boolean;
+  maximizable?: boolean;
+  fullscreenable?: boolean;
+  focusable?: boolean;                 // false 时窗口不抢焦点
+  skipTaskbar?: boolean;               // 不出现在 Dock/任务栏
+  enableLargerThanScreen?: boolean;    // 允许窗口大于屏幕
   x?: number;
   y?: number;
   minWidth?: number;
@@ -105,6 +113,10 @@ interface ChildWindowCreateOptions {
   maxHeight?: number;
   opacity?: number;
   transparent?: boolean;
+  visibleOnAllWorkspaces?: boolean;    // 全桌面可见
+  visibleOnFullScreen?: boolean;       // 全屏应用上方可见（macOS）
+  ignoreMouseEvents?: boolean;         // 鼠标事件穿透
+  forwardMouseEvents?: boolean;        // 穿透时仍转发 move 事件（用于 hover 检测）
   params?: Record<string, string>;
 }
 
@@ -113,17 +125,49 @@ interface ChildWindowHandle {
   show(): Promise<void>;
   hide(): Promise<void>;
   close(): Promise<void>;
+  destroy(): Promise<void>;
   focus(): Promise<void>;
+  showInactive(): Promise<void>;       // 显示但不抢焦点
   setTitle(title: string): Promise<void>;
   setSize(width: number, height: number): Promise<void>;
   setPosition(x: number, y: number): Promise<void>;
   setBounds(bounds: { x?: number; y?: number; width?: number; height?: number }): Promise<boolean>;
+  getBounds(): Promise<{ x: number; y: number; width: number; height: number }>;
   setOpacity(opacity: number): Promise<void>;
+  setIgnoreMouseEvents(ignore: boolean, options?: { forward?: boolean }): Promise<void>;
+  setAlwaysOnTop(flag: boolean, level?: string): Promise<void>;
+  setVisibleOnAllWorkspaces(flag: boolean, options?: { visibleOnFullScreen?: boolean }): Promise<void>;
+  setFullScreen(flag: boolean): Promise<void>;
   postMessage(channel: string, ...args: unknown[]): Promise<void>;
 }
 ```
 
 `url` 支持路由名（如 `overlay`、`/overlay`）和旧写法（如 `/index.html#overlay?showClicks=true`）。宿主会将路由解析为 `location.hash`，将 query 解析为 `location.search`，并把 `options.params` 透传到子窗口的 `onPluginInit()`。
+
+**Overlay 窗口典型用法：**
+
+```javascript
+const display = await window.mulby.screen.getPrimaryDisplay();
+const overlay = await window.mulby.window.create('overlay', {
+  x: display.bounds.x,
+  y: display.bounds.y,
+  width: display.bounds.width,
+  height: display.bounds.height,
+  transparent: true,
+  type: 'borderless',
+  alwaysOnTop: true,
+  alwaysOnTopLevel: 'screen-saver',
+  focusable: false,
+  skipTaskbar: true,
+  enableLargerThanScreen: true,
+  ignoreMouseEvents: true,
+  forwardMouseEvents: true,
+  visibleOnAllWorkspaces: true,
+  visibleOnFullScreen: true,
+});
+```
+
+> 安全约束：子窗口控制方法仅允许操作当前插件自身创建的 child window，宿主会校验 pluginId 一致性。
 
 ### sendToParent(channel, ...args)
 [Renderer]
@@ -224,17 +268,39 @@ interface ChildWindowHandle {
 ### 完整示例
 
 ```javascript
-window.mulby.window.setSize(680, 420);
-window.mulby.window.center();
-
-const child = await window.mulby.window.create('overlay', {
+// 基础子窗口
+const child = await window.mulby.window.create('settings', {
   width: 800,
   height: 600,
   params: { showClicks: 'true' },
 });
 child?.postMessage('ready');
-await window.mulby.window.setBounds({ x: 100, y: 100, width: 640, height: 420 });
 
+// Overlay 窗口（录屏标记、取色器等场景）
+const display = await window.mulby.screen.getPrimaryDisplay();
+const overlay = await window.mulby.window.create('overlay', {
+  x: display.bounds.x,
+  y: display.bounds.y,
+  width: display.bounds.width,
+  height: display.bounds.height,
+  transparent: true,
+  type: 'borderless',
+  alwaysOnTop: true,
+  alwaysOnTopLevel: 'screen-saver',
+  focusable: false,
+  skipTaskbar: true,
+  ignoreMouseEvents: true,
+  forwardMouseEvents: true,
+  visibleOnAllWorkspaces: true,
+  visibleOnFullScreen: true,
+});
+
+// 动态切换穿透状态（如需要交互时临时关闭穿透）
+await overlay?.setIgnoreMouseEvents(false);
+// 操作完毕后恢复穿透
+await overlay?.setIgnoreMouseEvents(true, { forward: true });
+
+// 子输入框
 await window.mulby.subInput.set('请输入...', true);
 window.mulby.subInput.onChange(({ text }) => console.log(text));
 ```

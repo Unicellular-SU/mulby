@@ -544,7 +544,15 @@ export interface ChildWindowCreateOptions {
   titleBar?: boolean
   fullscreen?: boolean
   alwaysOnTop?: boolean
+  alwaysOnTopLevel?: string
   resizable?: boolean
+  movable?: boolean
+  minimizable?: boolean
+  maximizable?: boolean
+  fullscreenable?: boolean
+  focusable?: boolean
+  skipTaskbar?: boolean
+  enableLargerThanScreen?: boolean
   x?: number
   y?: number
   minWidth?: number
@@ -553,6 +561,10 @@ export interface ChildWindowCreateOptions {
   maxHeight?: number
   opacity?: number
   transparent?: boolean
+  visibleOnAllWorkspaces?: boolean
+  visibleOnFullScreen?: boolean
+  ignoreMouseEvents?: boolean
+  forwardMouseEvents?: boolean
   params?: Record<string, string>
 }
 
@@ -561,12 +573,19 @@ export interface ChildWindowHandle {
   show: () => Promise<void>
   hide: () => Promise<void>
   close: () => Promise<void>
+  destroy: () => Promise<void>
   focus: () => Promise<void>
+  showInactive: () => Promise<void>
   setTitle: (title: string) => Promise<void>
   setSize: (width: number, height: number) => Promise<void>
   setPosition: (x: number, y: number) => Promise<void>
   setBounds: (bounds: { x?: number; y?: number; width?: number; height?: number }) => Promise<boolean>
+  getBounds: () => Promise<{ x: number; y: number; width: number; height: number }>
   setOpacity: (opacity: number) => Promise<void>
+  setIgnoreMouseEvents: (ignore: boolean, options?: { forward?: boolean }) => Promise<void>
+  setAlwaysOnTop: (flag: boolean, level?: string) => Promise<void>
+  setVisibleOnAllWorkspaces: (flag: boolean, options?: { visibleOnFullScreen?: boolean }) => Promise<void>
+  setFullScreen: (flag: boolean) => Promise<void>
   postMessage: (channel: string, ...args: unknown[]) => Promise<void>
 }
 

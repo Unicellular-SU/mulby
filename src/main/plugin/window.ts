@@ -65,24 +65,32 @@ interface AuxiliaryWindowOptions {
   width?: number
   height?: number
   title?: string
-  // 窗口类型，覆盖 manifest.window.type
   type?: 'default' | 'borderless' | 'fullscreen'
-  // 是否显示标题栏，覆盖 manifest.window.titleBar
   titleBar?: boolean
-  // Electron 原生选项
   fullscreen?: boolean
   alwaysOnTop?: boolean
+  alwaysOnTopLevel?: string
   resizable?: boolean
+  movable?: boolean
+  minimizable?: boolean
+  maximizable?: boolean
+  fullscreenable?: boolean
+  focusable?: boolean
+  skipTaskbar?: boolean
+  enableLargerThanScreen?: boolean
   x?: number
   y?: number
   minWidth?: number
   minHeight?: number
   maxWidth?: number
   maxHeight?: number
-  // 透明度相关
-  opacity?: number     // 初始透明度（0.0 ~ 1.0，运行时可调）
-  transparent?: boolean // 窗口背景透明（配合 CSS 实现穿透效果，仅创建时生效）
-  params?: Record<string, string> // 结构化初始化参数，透传给子窗口 plugin:init
+  opacity?: number
+  transparent?: boolean
+  visibleOnAllWorkspaces?: boolean
+  visibleOnFullScreen?: boolean
+  ignoreMouseEvents?: boolean
+  forwardMouseEvents?: boolean
+  params?: Record<string, string>
 }
 
 export class PluginWindowManager {
@@ -926,6 +934,8 @@ export class PluginWindowManager {
     const baseWidth = options?.width || windowConfig.width || 800
     const baseHeight = options?.height || windowConfig.height || 600
 
+    const isOverlayLike = resolvedTransparent && options?.ignoreMouseEvents === true
+
     const win = new BrowserWindow({
       width: isFullscreen ? fullscreenBounds!.width : toWindowWidth(baseWidth)!,
       height: isFullscreen ? fullscreenBounds!.height : toWindowHeight(baseHeight + (showTitleBar ? DETACHED_TITLEBAR_HEIGHT : 0))!,
@@ -938,13 +948,19 @@ export class PluginWindowManager {
       show: false,
       frame: false,
       fullscreen: isFullscreen,
-      fullscreenable: isFullscreen,
+      fullscreenable: options?.fullscreenable ?? isFullscreen,
       alwaysOnTop: options?.alwaysOnTop,
       resizable: options?.resizable,
+      movable: options?.movable,
+      minimizable: options?.minimizable,
+      maximizable: options?.maximizable,
+      focusable: options?.focusable,
+      skipTaskbar: options?.skipTaskbar,
+      enableLargerThanScreen: options?.enableLargerThanScreen,
       thickFrame: !useWindowsFramelessSurface,
       backgroundColor: (resolvedTransparent || useWindowsFramelessSurface) ? '#00000000' : backgroundColor,
       transparent: resolvedTransparent || useWindowsFramelessSurface,
-      hasShadow: resolvedTransparent ? false : !useWindowsFramelessSurface,
+      hasShadow: isOverlayLike ? false : (resolvedTransparent ? false : !useWindowsFramelessSurface),
       title: options?.title || plugin.manifest.displayName,
       icon: resolvePluginWindowIcon(plugin),
       webPreferences: showTitleBar ? {
@@ -1039,8 +1055,24 @@ export class PluginWindowManager {
         await applyWindowsFramelessSurface(win, { includeTitleBar: false })
         if (win.isDestroyed()) return
       }
-      win.show()
-      // 应用初始透明度
+
+      if (options?.alwaysOnTop && options.alwaysOnTopLevel) {
+        win.setAlwaysOnTop(true, options.alwaysOnTopLevel as Parameters<BrowserWindow['setAlwaysOnTop']>[1])
+      }
+      if (options?.ignoreMouseEvents) {
+        win.setIgnoreMouseEvents(true, { forward: options.forwardMouseEvents === true })
+      }
+      if (options?.visibleOnAllWorkspaces) {
+        win.setVisibleOnAllWorkspaces(true, {
+          visibleOnFullScreen: options.visibleOnFullScreen === true
+        })
+      }
+
+      if (options?.focusable === false) {
+        win.showInactive()
+      } else {
+        win.show()
+      }
       if (resolvedOpacity !== undefined) {
         win.setOpacity(Math.max(0, Math.min(1, resolvedOpacity)))
       }
