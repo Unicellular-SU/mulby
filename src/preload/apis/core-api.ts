@@ -54,6 +54,7 @@ export function createCoreApi(ipcRenderer: IpcRenderer) {
         x?: number; y?: number;
         minWidth?: number; minHeight?: number;
         maxWidth?: number; maxHeight?: number;
+        inheritWindowSizeLimits?: boolean;
         opacity?: number;
         transparent?: boolean;
         visibleOnAllWorkspaces?: boolean;

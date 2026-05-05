@@ -34,6 +34,7 @@ import {
 import { formatPayloadTrace } from '../../shared/attachment-trace'
 import log from 'electron-log'
 import { createAuxiliaryLoadFileOptions, parseAuxiliaryPath } from './window-path'
+import { resolveAuxiliaryWindowSizeLimits } from './auxiliary-window-options'
 
 interface AttachedPlugin {
   plugin: Plugin
@@ -84,6 +85,7 @@ interface AuxiliaryWindowOptions {
   minHeight?: number
   maxWidth?: number
   maxHeight?: number
+  inheritWindowSizeLimits?: boolean
   opacity?: number
   transparent?: boolean
   visibleOnAllWorkspaces?: boolean
@@ -933,6 +935,13 @@ export class PluginWindowManager {
 
     const baseWidth = options?.width || windowConfig.width || 800
     const baseHeight = options?.height || windowConfig.height || 600
+    const sizeLimits = resolveAuxiliaryWindowSizeLimits(options, windowConfig)
+    const minHeight = sizeLimits.minHeight == null
+      ? undefined
+      : sizeLimits.minHeight + (showTitleBar ? DETACHED_TITLEBAR_HEIGHT : 0)
+    const maxHeight = sizeLimits.maxHeight == null
+      ? undefined
+      : sizeLimits.maxHeight + (showTitleBar ? DETACHED_TITLEBAR_HEIGHT : 0)
 
     const isOverlayLike = resolvedTransparent && options?.ignoreMouseEvents === true
 
@@ -941,10 +950,10 @@ export class PluginWindowManager {
       height: isFullscreen ? fullscreenBounds!.height : toWindowHeight(baseHeight + (showTitleBar ? DETACHED_TITLEBAR_HEIGHT : 0))!,
       x: isFullscreen ? fullscreenBounds!.x : options?.x,
       y: isFullscreen ? fullscreenBounds!.y : options?.y,
-      minWidth: isFullscreen ? undefined : toWindowWidth(options?.minWidth ?? windowConfig.minWidth ?? 300)!,
-      minHeight: isFullscreen ? undefined : toWindowHeight((options?.minHeight ?? windowConfig.minHeight ?? 200) + (showTitleBar ? DETACHED_TITLEBAR_HEIGHT : 0))!,
-      maxWidth: isFullscreen ? undefined : toWindowWidth(options?.maxWidth ?? windowConfig.maxWidth),
-      maxHeight: isFullscreen ? undefined : toWindowHeight((options?.maxHeight ?? windowConfig.maxHeight) != null ? ((options?.maxHeight ?? windowConfig.maxHeight)! + (showTitleBar ? DETACHED_TITLEBAR_HEIGHT : 0)) : undefined),
+      minWidth: isFullscreen ? undefined : toWindowWidth(sizeLimits.minWidth),
+      minHeight: isFullscreen ? undefined : toWindowHeight(minHeight),
+      maxWidth: isFullscreen ? undefined : toWindowWidth(sizeLimits.maxWidth),
+      maxHeight: isFullscreen ? undefined : toWindowHeight(maxHeight),
       show: false,
       frame: false,
       fullscreen: isFullscreen,

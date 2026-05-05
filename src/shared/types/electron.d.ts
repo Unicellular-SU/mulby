@@ -559,6 +559,7 @@ export interface ChildWindowCreateOptions {
   minHeight?: number
   maxWidth?: number
   maxHeight?: number
+  inheritWindowSizeLimits?: boolean
   opacity?: number
   transparent?: boolean
   visibleOnAllWorkspaces?: boolean

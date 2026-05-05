@@ -111,6 +111,7 @@ interface ChildWindowCreateOptions {
   minHeight?: number;
   maxWidth?: number;
   maxHeight?: number;
+  inheritWindowSizeLimits?: boolean;   // 默认 false；true 时 min/max 尺寸约束回退到 manifest.window
   opacity?: number;
   transparent?: boolean;
   visibleOnAllWorkspaces?: boolean;    // 全桌面可见
@@ -143,6 +144,8 @@ interface ChildWindowHandle {
 ```
 
 `url` 支持路由名（如 `overlay`、`/overlay`）和旧写法（如 `/index.html#overlay?showClicks=true`）。宿主会将路由解析为 `location.hash`，将 query 解析为 `location.search`，并把 `options.params` 透传到子窗口的 `onPluginInit()`。
+
+子窗口默认不会继承 `manifest.window` 中的 `minWidth`、`minHeight`、`maxWidth`、`maxHeight`，避免主插件面板的尺寸约束限制 overlay、截图、取色器等辅助窗口。需要沿用 manifest 尺寸约束时，显式传入 `inheritWindowSizeLimits: true`。
 
 **Overlay 窗口典型用法：**
 
