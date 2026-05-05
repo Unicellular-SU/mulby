@@ -543,6 +543,14 @@ export function registerWindowHandlers(
           childWin.setOpacity(Math.max(0, Math.min(1, args[0])))
         }
         break
+      case 'setBackgroundThrottling':
+        if (typeof args[0] === 'boolean') {
+          const childPluginWc = getPluginWebContents(childWin) ?? childWin.webContents
+          if (!childPluginWc.isDestroyed()) {
+            childPluginWc.setBackgroundThrottling(args[0])
+          }
+        }
+        break
       case 'setIgnoreMouseEvents':
         if (typeof args[0] === 'boolean') {
           const opts = (args[1] && typeof args[1] === 'object') ? args[1] as { forward?: boolean } : undefined
@@ -870,6 +878,12 @@ export function registerWindowHandlers(
   ipcMain.handle('window:getOpacity', (event) => {
     const win = windowFromWebContents(event.sender)
     return win?.getOpacity() ?? 1
+  })
+
+  ipcMain.handle('window:setBackgroundThrottling', (event, allowed: boolean) => {
+    if (typeof allowed !== 'boolean' || event.sender.isDestroyed()) return false
+    event.sender.setBackgroundThrottling(allowed)
+    return true
   })
 
   // 获取插件模式

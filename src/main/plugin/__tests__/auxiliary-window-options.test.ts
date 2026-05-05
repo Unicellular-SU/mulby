@@ -1,6 +1,9 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
-import { resolveAuxiliaryWindowSizeLimits } from '../auxiliary-window-options'
+import {
+  resolveAuxiliaryWindowBackgroundThrottling,
+  resolveAuxiliaryWindowSizeLimits
+} from '../auxiliary-window-options'
 import type { WindowOptions } from '../../../shared/types/plugin'
 
 const manifestWindowConfig: WindowOptions = {
@@ -56,5 +59,31 @@ describe('auxiliary window size limits', () => {
       maxWidth: 1920,
       maxHeight: 1080
     })
+  })
+})
+
+describe('auxiliary window background throttling', () => {
+  it('allows Electron background throttling by default', () => {
+    assert.equal(resolveAuxiliaryWindowBackgroundThrottling(undefined, {}), true)
+    assert.equal(resolveAuxiliaryWindowBackgroundThrottling({}, {}), true)
+  })
+
+  it('inherits manifest background throttling when child options omit it', () => {
+    assert.equal(resolveAuxiliaryWindowBackgroundThrottling(undefined, {
+      backgroundThrottling: false
+    }), false)
+  })
+
+  it('lets child options override manifest background throttling', () => {
+    assert.equal(resolveAuxiliaryWindowBackgroundThrottling({
+      backgroundThrottling: true
+    }, {
+      backgroundThrottling: false
+    }), true)
+    assert.equal(resolveAuxiliaryWindowBackgroundThrottling({
+      backgroundThrottling: false
+    }, {
+      backgroundThrottling: true
+    }), false)
   })
 })

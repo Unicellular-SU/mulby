@@ -177,6 +177,7 @@ mulby.tools.register('long_task', async (args, ctx) => {
 | `alwaysOnTop` | `boolean` | detached 窗口初始是否置顶。适合截图标注工具条、浮动控制面板等短时窗口。 |
 | `opacity` | `number` | 初始时窗口的整体透明度占比。支持范围 `0.0` - `1.0`。 |
 | `transparent` | `boolean` | 创建时就开启窗口层穿透方案，用以实现类似异形悬浮窗的设计（需要搭配 CSS 背景 `transparent` 运作）。 |
+| `backgroundThrottling` | `boolean` | 是否允许 Chromium 在窗口后台/遮挡时节流 timer 和 repaint。默认 `true`；设置为 `false` 可让录屏控制面板、计时器、悬浮监控等窗口持续刷新。 |
 | `position` | `'default' \| 'capture-region'` | 当功能使用 `preCapture: 'region'` 时，可将 detached 窗口左上角定位到截图区域左上角。无法获取截图区域坐标的平台会回退到默认定位。 |
 | `fit` | `'default' \| 'capture-region' \| 'capture-region-with-toolbar'` | 当功能使用 `preCapture: 'region'` 时，可将 detached 窗口尺寸适配到截图区域；`capture-region-with-toolbar` 会额外增加工具条高度。 |
 | `captureToolbarHeight` | `number` | `fit: 'capture-region-with-toolbar'` 时追加的工具条高度，默认 `56`。 |
@@ -199,6 +200,7 @@ mulby.tools.register('long_task', async (args, ctx) => {
     "titleBar": false,
     "transparent": true,
     "alwaysOnTop": true,
+    "backgroundThrottling": false,
     "position": "capture-region",
     "fit": "capture-region-with-toolbar",
     "captureToolbarHeight": 56

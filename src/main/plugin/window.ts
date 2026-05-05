@@ -34,7 +34,10 @@ import {
 import { formatPayloadTrace } from '../../shared/attachment-trace'
 import log from 'electron-log'
 import { createAuxiliaryLoadFileOptions, parseAuxiliaryPath } from './window-path'
-import { resolveAuxiliaryWindowSizeLimits } from './auxiliary-window-options'
+import {
+  resolveAuxiliaryWindowBackgroundThrottling,
+  resolveAuxiliaryWindowSizeLimits
+} from './auxiliary-window-options'
 
 interface AttachedPlugin {
   plugin: Plugin
@@ -88,6 +91,7 @@ interface AuxiliaryWindowOptions {
   inheritWindowSizeLimits?: boolean
   opacity?: number
   transparent?: boolean
+  backgroundThrottling?: boolean
   visibleOnAllWorkspaces?: boolean
   visibleOnFullScreen?: boolean
   ignoreMouseEvents?: boolean
@@ -648,6 +652,7 @@ export class PluginWindowManager {
     const windowConfig = plugin.manifest.window || {}
     const windowType = windowConfig.type || 'default'
     const showTitleBar = shouldShowTitleBar(windowConfig)
+    const backgroundThrottling = windowConfig.backgroundThrottling ?? true
     const isFullscreen = windowType === 'fullscreen'
     const captureRegion = input?.attachments?.find(attachment => attachment.kind === 'image' && attachment.capture?.region)?.capture?.region
     const shouldPositionAtCaptureRegion = windowConfig.position === 'capture-region' && captureRegion
@@ -712,6 +717,7 @@ export class PluginWindowManager {
         contextIsolation: !hasCustomPreload,
         nodeIntegration: hasCustomPreload,
         sandbox: !hasCustomPreload,
+        backgroundThrottling,
         v8CacheOptions: PLUGIN_RENDERER_V8_CACHE_OPTIONS,
         ...getPluginRendererWebPreferences(plugin)
       }
@@ -738,6 +744,7 @@ export class PluginWindowManager {
           contextIsolation: !hasCustomPreload,
           nodeIntegration: hasCustomPreload,
           sandbox: !hasCustomPreload,
+          backgroundThrottling,
           v8CacheOptions: PLUGIN_RENDERER_V8_CACHE_OPTIONS,
           ...getPluginRendererWebPreferences(plugin)
         }
@@ -803,6 +810,14 @@ export class PluginWindowManager {
       // 应用 manifest.window.opacity 初始透明度
       if (windowConfig.opacity !== undefined) {
         win.setOpacity(Math.max(0, Math.min(1, windowConfig.opacity)))
+      }
+      if (windowConfig.visibleOnAllWorkspaces) {
+        win.setVisibleOnAllWorkspaces(true, {
+          visibleOnFullScreen: windowConfig.visibleOnFullScreen === true
+        })
+      }
+      if (windowConfig.skipTaskbar) {
+        win.setSkipTaskbar(true)
       }
       win.show()
       this.openPluginDevTools(pluginWebContents, plugin.id)
@@ -921,6 +936,7 @@ export class PluginWindowManager {
     // 透明度相关：options 优先于 manifest
     const resolvedTransparent = options?.transparent ?? windowConfig.transparent ?? false
     const resolvedOpacity = options?.opacity ?? windowConfig.opacity
+    const backgroundThrottling = resolveAuxiliaryWindowBackgroundThrottling(options, windowConfig)
 
     // 获取插件 preload 路径（支持自定义 preload）
     const basePreloadPath = join(__dirname, '../preload/index.js')
@@ -984,6 +1000,7 @@ export class PluginWindowManager {
         contextIsolation: !hasCustomPreload,
         nodeIntegration: hasCustomPreload,
         sandbox: !hasCustomPreload,
+        backgroundThrottling,
         v8CacheOptions: PLUGIN_RENDERER_V8_CACHE_OPTIONS,
         ...getPluginRendererWebPreferences(plugin)
       }
@@ -1014,6 +1031,7 @@ export class PluginWindowManager {
           contextIsolation: !hasCustomPreload,
           nodeIntegration: hasCustomPreload,
           sandbox: !hasCustomPreload,
+          backgroundThrottling,
           v8CacheOptions: PLUGIN_RENDERER_V8_CACHE_OPTIONS,
           ...getPluginRendererWebPreferences(plugin)
         }

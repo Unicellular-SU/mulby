@@ -8,6 +8,10 @@ export interface AuxiliaryWindowSizeLimitOptions {
   inheritWindowSizeLimits?: boolean
 }
 
+export interface AuxiliaryWindowBackgroundThrottlingOptions {
+  backgroundThrottling?: boolean
+}
+
 export interface AuxiliaryWindowSizeLimits {
   minWidth?: number
   minHeight?: number
@@ -33,4 +37,11 @@ export function resolveAuxiliaryWindowSizeLimits(
   if (maxHeight !== undefined) resolved.maxHeight = maxHeight
 
   return resolved
+}
+
+export function resolveAuxiliaryWindowBackgroundThrottling(
+  options: AuxiliaryWindowBackgroundThrottlingOptions | undefined,
+  windowConfig: WindowOptions
+): boolean {
+  return options?.backgroundThrottling ?? windowConfig.backgroundThrottling ?? true
 }

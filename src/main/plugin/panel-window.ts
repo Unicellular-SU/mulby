@@ -862,6 +862,7 @@ export class PluginPanelWindow {
         // 从 manifest.window 读取窗口配置
         const windowConfig = plugin.manifest.window || {}
         const showTitleBar = shouldShowTitleBarForPanel(windowConfig)
+        const backgroundThrottling = windowConfig.backgroundThrottling ?? true
 
         // 标题栏 preload 路径
         const titlebarPreloadPath = join(__dirname, '../preload/titlebar.js')
@@ -955,6 +956,7 @@ export class PluginPanelWindow {
 
         // 目标 webContents（插件内容）
         const pluginWebContents = pluginView.webContents
+        pluginWebContents.setBackgroundThrottling(backgroundThrottling)
         const sendDetachedInit = () => {
             if (independentWindow.isDestroyed() || pluginWebContents.isDestroyed()) return
             pluginWebContents.send('plugin:init', {

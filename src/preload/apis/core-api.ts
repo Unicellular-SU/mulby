@@ -22,6 +22,7 @@ export function createCoreApi(ipcRenderer: IpcRenderer) {
       setAlwaysOnTop: (flag: boolean) => ipcRenderer.send('window:alwaysOnTop', flag),
       setOpacity: (opacity: number) => ipcRenderer.invoke('window:setOpacity', opacity),
       getOpacity: () => ipcRenderer.invoke('window:getOpacity'),
+      setBackgroundThrottling: (allowed: boolean) => ipcRenderer.invoke('window:setBackgroundThrottling', allowed),
       getMode: () => ipcRenderer.invoke('plugin:getMode'),
       getWindowType: () => ipcRenderer.invoke('window:getType'),
       minimize: () => ipcRenderer.send('window:minimize'),
@@ -57,6 +58,7 @@ export function createCoreApi(ipcRenderer: IpcRenderer) {
         inheritWindowSizeLimits?: boolean;
         opacity?: number;
         transparent?: boolean;
+        backgroundThrottling?: boolean;
         visibleOnAllWorkspaces?: boolean;
         visibleOnFullScreen?: boolean;
         ignoreMouseEvents?: boolean;
@@ -79,6 +81,7 @@ export function createCoreApi(ipcRenderer: IpcRenderer) {
           setBounds: (bounds: { x?: number; y?: number; width?: number; height?: number }) => ipcRenderer.invoke('window:child:action', id, 'setBounds', bounds),
           getBounds: () => ipcRenderer.invoke('window:child:action', id, 'getBounds'),
           setOpacity: (opacity: number) => ipcRenderer.invoke('window:child:action', id, 'setOpacity', opacity),
+          setBackgroundThrottling: (allowed: boolean) => ipcRenderer.invoke('window:child:action', id, 'setBackgroundThrottling', allowed),
           setIgnoreMouseEvents: (ignore: boolean, opts?: { forward?: boolean }) => ipcRenderer.invoke('window:child:action', id, 'setIgnoreMouseEvents', ignore, opts),
           setAlwaysOnTop: (flag: boolean, level?: string) => ipcRenderer.invoke('window:child:action', id, 'setAlwaysOnTop', flag, level),
           setVisibleOnAllWorkspaces: (flag: boolean, opts?: { visibleOnFullScreen?: boolean }) => ipcRenderer.invoke('window:child:action', id, 'setVisibleOnAllWorkspaces', flag, opts),

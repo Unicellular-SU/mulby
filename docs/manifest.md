@@ -165,6 +165,7 @@
 | minHeight | number | 200 | 最小高度 |
 | maxWidth | number | - | 最大宽度（不设置则无限制） |
 | maxHeight | number | - | 最大高度（不设置则无限制） |
+| backgroundThrottling | boolean | true | 是否允许后台/遮挡窗口节流 timer 和 repaint。录屏、计时器、悬浮监控等需要持续刷新的 detached 窗口可设为 `false` |
 
 ### Feature 字段
 | 字段 | 类型 | 必需 | 说明 |

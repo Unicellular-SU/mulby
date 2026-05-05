@@ -334,6 +334,10 @@ export interface WindowOptions {
   alwaysOnTop?: boolean // detached 窗口初始置顶状态
   opacity?: number     // 窗口透明度（0.0 完全透明 ~ 1.0 完全不透明，运行时可调）
   transparent?: boolean // 窗口背景透明（配合 CSS background: transparent 实现穿透效果，仅创建时生效）
+  visibleOnAllWorkspaces?: boolean // 是否在所有桌面/工作区可见（macOS Mission Control / Windows 虚拟桌面）
+  visibleOnFullScreen?: boolean    // 配合 visibleOnAllWorkspaces 使用，全屏应用上方可见（macOS）
+  skipTaskbar?: boolean            // 是否从任务栏/Dock 隐藏
+  backgroundThrottling?: boolean // 是否允许后台节流；false 可让后台/遮挡窗口继续刷新 timer/repaint
   position?: 'default' | 'capture-region' // preCapture 区域截图后，按截图区域定位窗口
   fit?: 'default' | 'capture-region' | 'capture-region-with-toolbar' // preCapture 区域截图后，按截图区域调整窗口大小
   captureToolbarHeight?: number // fit 为 capture-region-with-toolbar 时追加的工具条高度

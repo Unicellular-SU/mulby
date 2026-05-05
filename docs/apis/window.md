@@ -39,6 +39,10 @@
 [Renderer]
 设置窗口置顶状态。
 
+### setBackgroundThrottling(allowed)
+[Renderer]
+设置当前插件内容 `webContents` 是否允许后台节流。语义与 Electron 一致：`true` 表示允许后台节流，`false` 表示禁用节流，让窗口即使被判定为后台/遮挡也继续刷新 timer/repaint。
+
 ### detach()
 [Renderer]
 将插件窗口分离为独立窗口。
@@ -114,6 +118,7 @@ interface ChildWindowCreateOptions {
   inheritWindowSizeLimits?: boolean;   // 默认 false；true 时 min/max 尺寸约束回退到 manifest.window
   opacity?: number;
   transparent?: boolean;
+  backgroundThrottling?: boolean;      // 默认 true；false 时禁用后台 timer/repaint 节流
   visibleOnAllWorkspaces?: boolean;    // 全桌面可见
   visibleOnFullScreen?: boolean;       // 全屏应用上方可见（macOS）
   ignoreMouseEvents?: boolean;         // 鼠标事件穿透
@@ -135,6 +140,7 @@ interface ChildWindowHandle {
   setBounds(bounds: { x?: number; y?: number; width?: number; height?: number }): Promise<boolean>;
   getBounds(): Promise<{ x: number; y: number; width: number; height: number }>;
   setOpacity(opacity: number): Promise<void>;
+  setBackgroundThrottling(allowed: boolean): Promise<boolean>;
   setIgnoreMouseEvents(ignore: boolean, options?: { forward?: boolean }): Promise<void>;
   setAlwaysOnTop(flag: boolean, level?: string): Promise<void>;
   setVisibleOnAllWorkspaces(flag: boolean, options?: { visibleOnFullScreen?: boolean }): Promise<void>;
@@ -148,6 +154,8 @@ interface ChildWindowHandle {
 > 注意：`window.create()` 的 `url` 不是 HTML 文件路径，也不会用于选择或加载另一个 UI 文件。子窗口始终加载当前插件 `manifest.ui` 指定的同一个前端入口（通常是 `ui/index.html`）；`url` 只负责传递 hash/query 路由。多页面 UI 应在这个入口内部用前端路由处理。
 
 子窗口默认不会继承 `manifest.window` 中的 `minWidth`、`minHeight`、`maxWidth`、`maxHeight`，避免主插件面板的尺寸约束限制 overlay、截图、取色器等辅助窗口。需要沿用 manifest 尺寸约束时，显式传入 `inheritWindowSizeLimits: true`。
+
+子窗口的 `backgroundThrottling` 解析优先级为 `options.backgroundThrottling ?? manifest.window.backgroundThrottling ?? true`。
 
 **Overlay 窗口典型用法：**
 
@@ -169,6 +177,7 @@ const overlay = await window.mulby.window.create('overlay', {
   forwardMouseEvents: true,
   visibleOnAllWorkspaces: true,
   visibleOnFullScreen: true,
+  backgroundThrottling: false,
 });
 ```
 
@@ -298,12 +307,17 @@ const overlay = await window.mulby.window.create('overlay', {
   forwardMouseEvents: true,
   visibleOnAllWorkspaces: true,
   visibleOnFullScreen: true,
+  backgroundThrottling: false,
 });
 
 // 动态切换穿透状态（如需要交互时临时关闭穿透）
 await overlay?.setIgnoreMouseEvents(false);
 // 操作完毕后恢复穿透
 await overlay?.setIgnoreMouseEvents(true, { forward: true });
+
+// 录制开始时禁用当前控制面板节流，结束/卸载时恢复默认
+await window.mulby.window.setBackgroundThrottling(false);
+await window.mulby.window.setBackgroundThrottling(true);
 
 // 子输入框
 await window.mulby.subInput.set('请输入...', true);

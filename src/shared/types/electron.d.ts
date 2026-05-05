@@ -562,6 +562,7 @@ export interface ChildWindowCreateOptions {
   inheritWindowSizeLimits?: boolean
   opacity?: number
   transparent?: boolean
+  backgroundThrottling?: boolean
   visibleOnAllWorkspaces?: boolean
   visibleOnFullScreen?: boolean
   ignoreMouseEvents?: boolean
@@ -583,6 +584,7 @@ export interface ChildWindowHandle {
   setBounds: (bounds: { x?: number; y?: number; width?: number; height?: number }) => Promise<boolean>
   getBounds: () => Promise<{ x: number; y: number; width: number; height: number }>
   setOpacity: (opacity: number) => Promise<void>
+  setBackgroundThrottling: (allowed: boolean) => Promise<boolean>
   setIgnoreMouseEvents: (ignore: boolean, options?: { forward?: boolean }) => Promise<void>
   setAlwaysOnTop: (flag: boolean, level?: string) => Promise<void>
   setVisibleOnAllWorkspaces: (flag: boolean, options?: { visibleOnFullScreen?: boolean }) => Promise<void>
@@ -622,6 +624,7 @@ export interface ElectronAPI {
     setAlwaysOnTop: (flag: boolean) => void
     setOpacity: (opacity: number) => Promise<void>
     getOpacity: () => Promise<number>
+    setBackgroundThrottling: (allowed: boolean) => Promise<boolean>
     getMode: () => Promise<'attached' | 'detached'>
     getWindowType: () => Promise<string>
     getState: () => Promise<{ isMaximized: boolean; isAlwaysOnTop: boolean; opacity: number }>
