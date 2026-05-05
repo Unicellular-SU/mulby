@@ -14,6 +14,7 @@ import {
   isNativeScreenCaptureAvailable
 } from '../services/native-screen-capture'
 import { SCREEN_CAPTURE_THUMBNAIL_SIZE } from '../constants/window-defaults'
+import { createSystemPermissionDeniedError } from './media-permission-policy'
 import log from 'electron-log'
 
 export interface DisplayInfo {
@@ -162,11 +163,11 @@ export class PluginScreen {
     const types = options.types || ['screen', 'window']
     const thumbnailSize = options.thumbnailSize || { width: SCREEN_CAPTURE_THUMBNAIL_SIZE, height: SCREEN_CAPTURE_THUMBNAIL_SIZE }
 
-    const sources = await desktopCapturer.getSources({
+    const sources = await withScreenPermissionErrorMapping(() => desktopCapturer.getSources({
       types,
       thumbnailSize,
       fetchWindowIcons: true
-    })
+    }))
 
     return sources.map(source => ({
       id: source.id,
@@ -229,10 +230,10 @@ export class PluginScreen {
 
     let sourceId = options.sourceId
     if (!sourceId) {
-      const sources = await desktopCapturer.getSources({
+      const sources = await withScreenPermissionErrorMapping(() => desktopCapturer.getSources({
         types: ['screen'],
         thumbnailSize: { width: 1, height: 1 }
-      })
+      }))
       if (sources.length === 0) {
         throw new Error('No screen source available')
       }
@@ -253,13 +254,13 @@ export class PluginScreen {
       display = this.getPrimaryDisplay()
     }
 
-    const sources = await desktopCapturer.getSources({
+    const sources = await withScreenPermissionErrorMapping(() => desktopCapturer.getSources({
       types: ['screen', 'window'],
       thumbnailSize: {
         width: Math.max(1, Math.round(display.bounds.width * display.scaleFactor)),
         height: Math.max(1, Math.round(display.bounds.height * display.scaleFactor))
       }
-    })
+    }))
     const source = sources.find(s => s.id === sourceId)
     if (!source) throw new Error('Source not found')
 
@@ -314,13 +315,13 @@ export class PluginScreen {
   ): Promise<Buffer> {
     const display = screen.getDisplayMatching(normalizedRegion)
 
-    const sources = await desktopCapturer.getSources({
+    const sources = await withScreenPermissionErrorMapping(() => desktopCapturer.getSources({
       types: ['screen'],
       thumbnailSize: {
         width: Math.max(1, Math.round(display.bounds.width * display.scaleFactor)),
         height: Math.max(1, Math.round(display.bounds.height * display.scaleFactor))
       }
-    })
+    }))
 
     const source = sources.find((s) => s.display_id === String(display.id)) || sources[0]
     if (!source) {
@@ -417,5 +418,29 @@ function clampInteger(value: number, min: number, max: number): number {
   if (rounded >= max) return max
   return rounded
 }
+
+async function withScreenPermissionErrorMapping<T>(operation: () => Promise<T>): Promise<T> {
+  try {
+    return await operation()
+  } catch (error) {
+    if (isScreenPermissionDeniedError(error)) {
+      throw createSystemPermissionDeniedError('screen')
+    }
+    throw error
+  }
+}
+
+function isScreenPermissionDeniedError(error: unknown): boolean {
+  if (process.platform !== 'darwin') return false
+
+  const name = error instanceof Error ? error.name : ''
+  const message = error instanceof Error ? error.message : String(error)
+  const text = `${name} ${message}`.toLowerCase()
+  return text.includes('notallowed') ||
+    text.includes('not allowed') ||
+    text.includes('permission denied') ||
+    text.includes('access denied')
+}
+
 // 单例
 export const pluginScreen = new PluginScreen()

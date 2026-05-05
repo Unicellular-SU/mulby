@@ -17,6 +17,7 @@ import {
 
 type MacPermissionsModule = {
     getAuthStatus: (type: string) => string
+    askForScreenCaptureAccess?: (openPreferences?: boolean) => unknown | Promise<unknown>
     [key: string]: unknown
 }
 
@@ -24,6 +25,14 @@ interface PermissionPluginLookupResult {
     manifest: {
         permissions?: MediaPermissionManifest
     }
+}
+
+type PendingDesktopCapture = {
+    expiresAt: number
+    audio: boolean
+    webContentsId: number
+    pluginId?: string
+    windowId?: number
 }
 
 let permissionPluginLookup: ((pluginId: string) => PermissionPluginLookupResult | undefined) | null = null
@@ -105,7 +114,10 @@ export class PermissionManager {
     private sessionHandlerSetup = false
     private geolocationStatusOverride: PermissionStatus | null = null
     private nonMacDecisions = new Map<string, boolean>()
-    private pendingDesktopCaptures = new Map<number, { expiresAt: number; audio: boolean }>()
+    private pendingDesktopCapturesByWebContents = new Map<number, PendingDesktopCapture>()
+    private pendingDesktopCapturesByPlugin = new Map<string, PendingDesktopCapture>()
+    private pendingDesktopCapturesByWindow = new Map<number, PendingDesktopCapture>()
+    private macOSScreenRecordingNoticeShown = false
 
     private constructor() {
         log.debug('[PermissionManager] Initializing...')
@@ -206,10 +218,22 @@ export class PermissionManager {
 
     markPendingDesktopCapture(webContents: Electron.WebContents, options?: { audio?: boolean }): void {
         const ttlMs = 10_000
-        this.pendingDesktopCaptures.set(webContents.id, {
+        const caller = resolveIpcCallerSource(webContents)
+        const pending: PendingDesktopCapture = {
             expiresAt: Date.now() + ttlMs,
-            audio: options?.audio === true
-        })
+            audio: options?.audio === true,
+            webContentsId: webContents.id,
+            pluginId: caller.pluginId,
+            windowId: caller.windowId
+        }
+
+        this.pendingDesktopCapturesByWebContents.set(webContents.id, pending)
+        if (caller.pluginId) {
+            this.pendingDesktopCapturesByPlugin.set(caller.pluginId, pending)
+        }
+        if (caller.windowId !== undefined) {
+            this.pendingDesktopCapturesByWindow.set(caller.windowId, pending)
+        }
     }
 
     private resolveMediaRequestPermissions(
@@ -225,8 +249,8 @@ export class PermissionManager {
         const mediaPermissions = resolveRequiredMediaPermissions(permission, details, resolutionOptions)
         if (!mediaPermissions) return null
 
-        if (consumePendingDesktopCapture && pendingDesktopCapture && webContents) {
-            this.pendingDesktopCaptures.delete(webContents.id)
+        if (consumePendingDesktopCapture && pendingDesktopCapture) {
+            this.clearPendingDesktopCapture(pendingDesktopCapture)
         }
 
         if (mediaPermissions.length > 0) return mediaPermissions
@@ -252,22 +276,46 @@ export class PermissionManager {
     private getPendingDesktopCapture(
         webContents: Electron.WebContents | null,
         details: MediaPermissionDetails | undefined
-    ): { audio: boolean } | null {
+    ): PendingDesktopCapture | null {
         if (!webContents) return null
-
-        const context = this.pendingDesktopCaptures.get(webContents.id)
-        if (!context) return null
-
-        if (context.expiresAt <= Date.now()) {
-            this.pendingDesktopCaptures.delete(webContents.id)
-            return null
-        }
 
         if (!this.shouldApplyPendingDesktopCapture(details)) {
             return null
         }
 
-        return { audio: context.audio }
+        const caller = resolveIpcCallerSource(webContents)
+        const candidates = [
+            this.pendingDesktopCapturesByWebContents.get(webContents.id),
+            caller.pluginId ? this.pendingDesktopCapturesByPlugin.get(caller.pluginId) : undefined,
+            caller.windowId !== undefined ? this.pendingDesktopCapturesByWindow.get(caller.windowId) : undefined
+        ]
+
+        for (const context of candidates) {
+            if (!context) continue
+
+            if (context.expiresAt <= Date.now()) {
+                this.clearPendingDesktopCapture(context)
+                continue
+            }
+
+            return context
+        }
+
+        return null
+    }
+
+    private clearPendingDesktopCapture(context: PendingDesktopCapture | undefined): void {
+        if (!context) return
+
+        if (this.pendingDesktopCapturesByWebContents.get(context.webContentsId) === context) {
+            this.pendingDesktopCapturesByWebContents.delete(context.webContentsId)
+        }
+        if (context.pluginId && this.pendingDesktopCapturesByPlugin.get(context.pluginId) === context) {
+            this.pendingDesktopCapturesByPlugin.delete(context.pluginId)
+        }
+        if (context.windowId !== undefined && this.pendingDesktopCapturesByWindow.get(context.windowId) === context) {
+            this.pendingDesktopCapturesByWindow.delete(context.windowId)
+        }
     }
 
     private shouldApplyPendingDesktopCapture(details: MediaPermissionDetails | undefined): boolean {
@@ -307,12 +355,7 @@ export class PermissionManager {
         details: Electron.PermissionRequest | Electron.FilesystemPermissionRequest | Electron.MediaAccessPermissionRequest | Electron.OpenExternalPermissionRequest
     ): Promise<boolean> {
         if (process.platform === 'darwin') {
-            const status = this.getStatus(type)
-            log.debug(`[PermissionManager] macOS status for ${type}: ${status}`)
-            if (type === 'geolocation') {
-                return status !== 'denied' && status !== 'restricted'
-            }
-            return status === 'granted'
+            return this.requestSingleMacOSPermission(type)
         }
 
         // Use webContents.id as the primary cache scope so that
@@ -332,6 +375,25 @@ export class PermissionManager {
         return granted
     }
 
+    private async requestSingleMacOSPermission(type: PermissionType): Promise<boolean> {
+        if (type === 'screen') {
+            // Screen capture TCC status can be a false negative for dev builds,
+            // re-signed Electron binaries, or sessions that have not restarted
+            // after authorization. Once manifest policy passes, let the actual
+            // capture/getUserMedia call determine whether the system allows it.
+            return true
+        }
+
+        const status = this.getStatus(type)
+        log.debug(`[PermissionManager] macOS status for ${type}: ${status}`)
+
+        if (type === 'geolocation') {
+            return status !== 'denied' && status !== 'restricted'
+        }
+
+        return status === 'granted'
+    }
+
     private checkResolvedPermissions(webContents: Electron.WebContents | null, types: PermissionType[]): boolean {
         if (types.length === 0) return false
         const manifestPermissions = types.filter(isPluginManifestPermissionType)
@@ -347,6 +409,9 @@ export class PermissionManager {
 
     private checkSinglePermission(webContents: Electron.WebContents | null, type: PermissionType): boolean {
         if (process.platform === 'darwin') {
+            if (type === 'screen') {
+                return true
+            }
             const status = this.getStatus(type)
             if (type === 'geolocation') {
                 return status !== 'denied' && status !== 'restricted'
@@ -466,6 +531,29 @@ export class PermissionManager {
             }
         }
 
+        if (type === 'screen') {
+            if (permissions) {
+                const askFn = permissions.askForScreenCaptureAccess
+                if (typeof askFn === 'function') {
+                    try {
+                        await askFn(true)
+                        await this.showMacOSScreenRecordingRestartNotice()
+                        const status = this.getStatus('screen')
+                        return status
+                    } catch (error) {
+                        log.error('[PermissionManager] askForScreenCaptureAccess error:', error)
+                    }
+                } else {
+                    log.warn('[PermissionManager] No askForScreenCaptureAccess method for screen')
+                }
+            }
+
+            this.openSystemSettings('screen')
+            await this.showMacOSScreenRecordingRestartNotice()
+            const status = this.getStatus('screen')
+            return status
+        }
+
         // 对于位置等其他权限，使用 node-mac-permissions
         if (permissions) {
             const macType = mapToMacPermissionType(type)
@@ -490,6 +578,28 @@ export class PermissionManager {
         // 后备：提示用户手动开启
         log.warn(`[PermissionManager] Cannot programmatically request ${type}, user needs to enable manually`)
         return this.getStatus(type)
+    }
+
+    private async showMacOSScreenRecordingRestartNotice(): Promise<void> {
+        if (this.macOSScreenRecordingNoticeShown) return
+        this.macOSScreenRecordingNoticeShown = true
+
+        const opts: Electron.MessageBoxOptions = {
+            type: 'info',
+            buttons: ['知道了'],
+            defaultId: 0,
+            cancelId: 0,
+            title: '需要屏幕录制权限',
+            message: '请在 macOS 系统设置中允许 Mulby 进行屏幕录制',
+            detail: '授权后需要完全退出并重新打开 Mulby，屏幕录制权限才会生效。',
+        }
+
+        const parentWindow = BrowserWindow.getFocusedWindow()
+        if (parentWindow) {
+            await dialog.showMessageBox(parentWindow, opts)
+            return
+        }
+        await dialog.showMessageBox(opts)
     }
 
     /**
