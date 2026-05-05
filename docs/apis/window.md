@@ -145,6 +145,8 @@ interface ChildWindowHandle {
 
 `url` 支持路由名（如 `overlay`、`/overlay`）和旧写法（如 `/index.html#overlay?showClicks=true`）。宿主会将路由解析为 `location.hash`，将 query 解析为 `location.search`，并把 `options.params` 透传到子窗口的 `onPluginInit()`。
 
+> 注意：`window.create()` 的 `url` 不是 HTML 文件路径，也不会用于选择或加载另一个 UI 文件。子窗口始终加载当前插件 `manifest.ui` 指定的同一个前端入口（通常是 `ui/index.html`）；`url` 只负责传递 hash/query 路由。多页面 UI 应在这个入口内部用前端路由处理。
+
 子窗口默认不会继承 `manifest.window` 中的 `minWidth`、`minHeight`、`maxWidth`、`maxHeight`，避免主插件面板的尺寸约束限制 overlay、截图、取色器等辅助窗口。需要沿用 manifest 尺寸约束时，显式传入 `inheritWindowSizeLimits: true`。
 
 **Overlay 窗口典型用法：**
