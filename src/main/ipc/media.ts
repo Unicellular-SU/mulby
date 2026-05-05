@@ -1,35 +1,46 @@
 import { ipcMain } from 'electron'
 import { pluginMedia } from '../plugin/media'
 import { permissionManager } from '../plugin/permission-manager'
-import { isMediaPermissionType, type MediaPermissionType } from '../plugin/media-permission-policy'
+import {
+  createSystemPermissionDeniedError,
+  isMediaDevicePermissionType,
+  type MediaDevicePermissionType
+} from '../plugin/media-permission-policy'
+import log from 'electron-log'
 
-function hasDeclaredMediaPermission(sender: Electron.WebContents, mediaType: string): mediaType is MediaPermissionType {
-  if (!isMediaPermissionType(mediaType)) return false
-  return permissionManager.canCallerAccessMediaPermission(sender, mediaType)
+function assertDeclaredMediaPermission(sender: Electron.WebContents, mediaType: string): asserts mediaType is MediaDevicePermissionType {
+  if (!isMediaDevicePermissionType(mediaType)) {
+    throw new Error(`Unknown media permission: ${mediaType}`)
+  }
+  permissionManager.ensureCallerAccessMediaPermissions(sender, [mediaType])
 }
 
 export function registerMediaHandlers() {
   // 获取媒体访问权限状态
   ipcMain.handle('media:getAccessStatus', (event, mediaType: string) => {
-    if (!hasDeclaredMediaPermission(event.sender, mediaType)) return 'denied'
+    assertDeclaredMediaPermission(event.sender, mediaType)
     return pluginMedia.getMediaAccessStatus(mediaType)
   })
 
   // 请求媒体访问权限
   ipcMain.handle('media:askForAccess', async (event, mediaType: string) => {
-    if (!hasDeclaredMediaPermission(event.sender, mediaType)) return false
-    return pluginMedia.askForMediaAccess(mediaType)
+    assertDeclaredMediaPermission(event.sender, mediaType)
+    const granted = await pluginMedia.askForMediaAccess(mediaType)
+    if (!granted) {
+      log.warn(`[IPC:media] ${createSystemPermissionDeniedError(mediaType).message}`)
+    }
+    return granted
   })
 
   // 检查摄像头权限
   ipcMain.handle('media:hasCameraAccess', (event) => {
-    if (!hasDeclaredMediaPermission(event.sender, 'camera')) return false
+    assertDeclaredMediaPermission(event.sender, 'camera')
     return pluginMedia.hasCameraAccess()
   })
 
   // 检查麦克风权限
   ipcMain.handle('media:hasMicrophoneAccess', (event) => {
-    if (!hasDeclaredMediaPermission(event.sender, 'microphone')) return false
+    assertDeclaredMediaPermission(event.sender, 'microphone')
     return pluginMedia.hasMicrophoneAccess()
   })
 }

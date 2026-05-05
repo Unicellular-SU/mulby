@@ -5,6 +5,18 @@
 > - UI/渲染进程：`window.mulby.clipboardHistory`
 > - 插件后端：`context.api.clipboardHistory`
 
+插件必须在 `manifest.json` 中声明剪贴板权限：
+
+```json
+{
+  "permissions": {
+    "clipboard": true
+  }
+}
+```
+
+未声明时宿主会拦截调用并抛出 `Plugin "<pluginId>" lacks manifest.permissions.clipboard`。
+
 ## 功能概述
 
 剪贴板历史管理器会自动记录所有剪贴板变化，并提供查询、收藏、删除等功能。

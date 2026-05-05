@@ -29,6 +29,7 @@ import {
 } from '../services/native-screen-capture'
 import { portalPickColor, isPortalColorPickAvailable } from '../services/linux-portal-color-pick'
 import { registerSystemInternalWindow, unregisterSystemInternalWindow } from '../services/ipc-caller-resolver'
+import { permissionManager } from './permission-manager'
 import log from 'electron-log'
 
 interface ColorPickResult {
@@ -624,7 +625,8 @@ function closeAllPickerWindows(): void {
  * 注册 IPC 处理器
  */
 export function registerColorPickHandlers(): void {
-  ipcMain.handle('screen:colorPick', async () => {
+  ipcMain.handle('screen:colorPick', async (event) => {
+    permissionManager.ensureCallerAccessMediaPermissions(event.sender, ['screen'])
     return startColorPick()
   })
 

@@ -1,34 +1,56 @@
 import { ipcMain } from 'electron'
 import { permissionManager, type PermissionType } from '../plugin/permission-manager'
-import { isMediaPermissionType } from '../plugin/media-permission-policy'
+import {
+  isPluginManifestPermissionType,
+  type PluginManifestPermissionType
+} from '../plugin/media-permission-policy'
 
-function hasDeclaredMediaPermission(sender: Electron.WebContents, type: PermissionType): boolean {
-  if (!isMediaPermissionType(type)) return true
-  return permissionManager.canCallerAccessMediaPermission(sender, type)
+type PermissionApiType = PermissionType | 'notifications'
+
+function manifestPermissionForPermissionApi(type: PermissionApiType): PluginManifestPermissionType | null {
+  if (type === 'notifications') return 'notification'
+  if (isPluginManifestPermissionType(type)) return type
+  return null
+}
+
+function normalizePermissionApiType(type: PermissionApiType): PermissionType | null {
+  if (type === 'notifications') return 'notification'
+  return type
+}
+
+function assertDeclaredPermission(sender: Electron.WebContents, type: PermissionApiType): void {
+  const permission = manifestPermissionForPermissionApi(type)
+  if (!permission) return
+  permissionManager.ensureCallerAccessPluginPermissions(sender, [permission])
 }
 
 export function registerPermissionHandlers() {
-  ipcMain.handle('permission:getStatus', (event, type: PermissionType) => {
-    if (!hasDeclaredMediaPermission(event.sender, type)) return 'denied'
-    return permissionManager.getStatus(type)
+  ipcMain.handle('permission:getStatus', (event, type: PermissionApiType) => {
+    assertDeclaredPermission(event.sender, type)
+    const normalized = normalizePermissionApiType(type)
+    return normalized ? permissionManager.getStatus(normalized) : 'unknown'
   })
 
-  ipcMain.handle('permission:request', (event, type: PermissionType) => {
-    if (!hasDeclaredMediaPermission(event.sender, type)) return 'denied'
-    return permissionManager.request(type)
+  ipcMain.handle('permission:request', (event, type: PermissionApiType) => {
+    assertDeclaredPermission(event.sender, type)
+    const normalized = normalizePermissionApiType(type)
+    return normalized ? permissionManager.request(normalized) : Promise.resolve('unknown' as const)
   })
 
-  ipcMain.handle('permission:canRequest', (event, type: PermissionType) => {
-    if (!hasDeclaredMediaPermission(event.sender, type)) return false
-    return permissionManager.canRequest(type)
+  ipcMain.handle('permission:canRequest', (event, type: PermissionApiType) => {
+    assertDeclaredPermission(event.sender, type)
+    const normalized = normalizePermissionApiType(type)
+    return normalized ? permissionManager.canRequest(normalized) : false
   })
 
-  ipcMain.handle('permission:openSystemSettings', (event, type: PermissionType) => {
-    if (!hasDeclaredMediaPermission(event.sender, type)) return false
-    return permissionManager.openSystemSettings(type)
+  ipcMain.handle('permission:openSystemSettings', (event, type: PermissionApiType) => {
+    assertDeclaredPermission(event.sender, type)
+    const normalized = normalizePermissionApiType(type)
+    return normalized ? permissionManager.openSystemSettings(normalized) : false
   })
 
-  ipcMain.handle('permission:isAccessibilityTrusted', () => {
+  ipcMain.handle('permission:isAccessibilityTrusted', (event) => {
+    permissionManager.ensureCallerAccessPluginPermissions(event.sender, ['accessibility'])
     return permissionManager.isAccessibilityTrusted()
   })
 }

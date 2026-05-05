@@ -1,7 +1,9 @@
 import { app, ipcMain, Notification } from 'electron'
+import { permissionManager } from '../plugin/permission-manager'
 
 export function registerNotificationHandlers() {
-  ipcMain.on('notification:show', (_, message: string, type?: string) => {
+  ipcMain.handle('notification:show', (event, message: string, type?: string) => {
+    permissionManager.ensureCallerAccessPluginPermissions(event.sender, ['notification'])
     const notification = new Notification({
       title: app.getName() || 'Mulby',
       body: message,

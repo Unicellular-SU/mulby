@@ -2,12 +2,17 @@ import { systemPreferences, session, app, dialog, BrowserWindow } from 'electron
 import log from 'electron-log'
 import { resolveIpcCallerSource } from '../services/ipc-caller-resolver'
 import {
-    getMissingMediaPermissions,
+    createMissingPluginPermissionError,
+    createSystemPermissionDeniedError,
+    getMissingPluginPermissions,
     isMediaPermissionType,
+    isPluginManifestPermissionType,
     resolveRequiredMediaPermissions,
     type MediaPermissionManifest,
     type MediaPermissionDetails,
-    type MediaPermissionType
+    type MediaPermissionType,
+    type MediaPermissionResolutionOptions,
+    type PluginManifestPermissionType
 } from './media-permission-policy'
 
 type MacPermissionsModule = {
@@ -45,6 +50,8 @@ export type PermissionType =
     | 'camera'
     | 'microphone'
     | 'screen'
+    | 'clipboard'
+    | 'notification'
     | 'accessibility'
     | 'contacts'
     | 'calendar'
@@ -84,6 +91,8 @@ function mapToMacPermissionType(type: PermissionType): string | null {
         'camera': 'camera',
         'microphone': 'microphone',
         'screen': 'screen',
+        'clipboard': null,
+        'notification': null,
         'accessibility': 'accessibility',
         'contacts': 'contacts',
         'calendar': 'calendar',
@@ -96,6 +105,7 @@ export class PermissionManager {
     private sessionHandlerSetup = false
     private geolocationStatusOverride: PermissionStatus | null = null
     private nonMacDecisions = new Map<string, boolean>()
+    private pendingDesktopCaptures = new Map<number, { expiresAt: number; audio: boolean }>()
 
     private constructor() {
         log.debug('[PermissionManager] Initializing...')
@@ -135,9 +145,9 @@ export class PermissionManager {
             (webContents, permission, callback, details) => {
                 log.debug(`[PermissionManager] Permission request: ${permission}`, details)
 
-                const mediaPermissions = resolveRequiredMediaPermissions(permission, details as MediaPermissionDetails)
+                const mediaPermissions = this.resolveMediaRequestPermissions(webContents, permission, details as unknown as MediaPermissionDetails, true)
                 if (mediaPermissions) {
-                    this.requestResolvedPermissions(webContents, this.resolveUnknownMediaFallback(webContents, mediaPermissions), details)
+                    this.requestResolvedPermissions(webContents, mediaPermissions, details)
                         .then((granted) => callback(granted))
                         .catch(() => callback(false))
                     return
@@ -165,9 +175,9 @@ export class PermissionManager {
 
                 log.debug(`[PermissionManager] Permission check: ${permission}`, { requestingOrigin, details })
 
-                const mediaPermissions = resolveRequiredMediaPermissions(permission, details as MediaPermissionDetails)
+                const mediaPermissions = this.resolveMediaRequestPermissions(webContents, permission, details as unknown as MediaPermissionDetails, false)
                 if (mediaPermissions) {
-                    return this.checkResolvedPermissions(webContents, this.resolveUnknownMediaFallback(webContents, mediaPermissions))
+                    return this.checkResolvedPermissions(webContents, mediaPermissions)
                 }
 
                 const permType = this.mapElectronPermission(permission)
@@ -185,16 +195,40 @@ export class PermissionManager {
             'geolocation': 'geolocation',
             'camera': 'camera',
             'microphone': 'microphone',
+            'notifications': 'notification',
+            'clipboard-read': 'clipboard',
+            'clipboard-sanitized-write': 'clipboard',
             'mediaKeySystem': 'screen',
             'accessibility-events': 'accessibility',
         }
         return mapping[permission] || null
     }
 
-    private resolveUnknownMediaFallback(
+    markPendingDesktopCapture(webContents: Electron.WebContents, options?: { audio?: boolean }): void {
+        const ttlMs = 10_000
+        this.pendingDesktopCaptures.set(webContents.id, {
+            expiresAt: Date.now() + ttlMs,
+            audio: options?.audio === true
+        })
+    }
+
+    private resolveMediaRequestPermissions(
         webContents: Electron.WebContents | null,
-        mediaPermissions: MediaPermissionType[]
-    ): PermissionType[] {
+        permission: string,
+        details: MediaPermissionDetails | undefined,
+        consumePendingDesktopCapture: boolean
+    ): MediaPermissionType[] | null {
+        const pendingDesktopCapture = this.getPendingDesktopCapture(webContents, details)
+        const resolutionOptions: MediaPermissionResolutionOptions = pendingDesktopCapture
+            ? { desktopCapture: true, desktopAudio: pendingDesktopCapture.audio }
+            : {}
+        const mediaPermissions = resolveRequiredMediaPermissions(permission, details, resolutionOptions)
+        if (!mediaPermissions) return null
+
+        if (consumePendingDesktopCapture && pendingDesktopCapture && webContents) {
+            this.pendingDesktopCaptures.delete(webContents.id)
+        }
+
         if (mediaPermissions.length > 0) return mediaPermissions
 
         if (!webContents) {
@@ -215,19 +249,53 @@ export class PermissionManager {
         return []
     }
 
+    private getPendingDesktopCapture(
+        webContents: Electron.WebContents | null,
+        details: MediaPermissionDetails | undefined
+    ): { audio: boolean } | null {
+        if (!webContents) return null
+
+        const context = this.pendingDesktopCaptures.get(webContents.id)
+        if (!context) return null
+
+        if (context.expiresAt <= Date.now()) {
+            this.pendingDesktopCaptures.delete(webContents.id)
+            return null
+        }
+
+        if (!this.shouldApplyPendingDesktopCapture(details)) {
+            return null
+        }
+
+        return { audio: context.audio }
+    }
+
+    private shouldApplyPendingDesktopCapture(details: MediaPermissionDetails | undefined): boolean {
+        if (!details) return true
+        if (Array.isArray(details.mediaTypes)) {
+            return details.mediaTypes.includes('video')
+        }
+        return details.mediaType === undefined || details.mediaType === 'unknown' || details.mediaType === 'video'
+    }
+
     private async requestResolvedPermissions(
         webContents: Electron.WebContents,
         types: PermissionType[],
         details: Electron.PermissionRequest | Electron.FilesystemPermissionRequest | Electron.MediaAccessPermissionRequest | Electron.OpenExternalPermissionRequest
     ): Promise<boolean> {
         if (types.length === 0) return false
-        if (!this.canCallerAccessMediaPermissions(webContents, types.filter(isMediaPermissionType))) {
+        if (!this.canCallerAccessPluginPermissions(webContents, types.filter(isPluginManifestPermissionType))) {
             return false
         }
 
         for (const type of types) {
             const granted = await this.requestSinglePermission(webContents, type, details)
-            if (!granted) return false
+            if (!granted) {
+                if (isMediaPermissionType(type)) {
+                    log.warn(`[PermissionManager] ${createSystemPermissionDeniedError(type).message}`)
+                }
+                return false
+            }
         }
 
         return true
@@ -266,11 +334,11 @@ export class PermissionManager {
 
     private checkResolvedPermissions(webContents: Electron.WebContents | null, types: PermissionType[]): boolean {
         if (types.length === 0) return false
-        const mediaPermissions = types.filter(isMediaPermissionType)
-        if (mediaPermissions.length > 0 && !webContents) {
+        const manifestPermissions = types.filter(isPluginManifestPermissionType)
+        if (manifestPermissions.length > 0 && !webContents) {
             return false
         }
-        if (webContents && !this.canCallerAccessMediaPermissions(webContents, mediaPermissions)) {
+        if (webContents && !this.canCallerAccessPluginPermissions(webContents, manifestPermissions)) {
             return false
         }
 
@@ -316,6 +384,10 @@ export class PermissionManager {
 
         if (type === 'geolocation' && this.geolocationStatusOverride) {
             return this.geolocationStatusOverride
+        }
+
+        if (type === 'clipboard' || type === 'notification') {
+            return 'granted'
         }
 
         if (process.platform === 'darwin' && permissions) {
@@ -440,6 +512,8 @@ export class PermissionManager {
             camera: '摄像头',
             microphone: '麦克风',
             screen: '屏幕录制',
+            clipboard: '剪贴板',
+            notification: '通知',
             accessibility: '辅助功能',
             contacts: '通讯录',
             calendar: '日历',
@@ -484,6 +558,10 @@ export class PermissionManager {
     }
 
     canCallerAccessMediaPermissions(sender: Electron.WebContents, required: readonly MediaPermissionType[]): boolean {
+        return this.canCallerAccessPluginPermissions(sender, required)
+    }
+
+    canCallerAccessPluginPermissions(sender: Electron.WebContents, required: readonly PluginManifestPermissionType[]): boolean {
         if (required.length === 0) return true
 
         const caller = resolveIpcCallerSource(sender)
@@ -495,13 +573,36 @@ export class PermissionManager {
         }
 
         const plugin = permissionPluginLookup?.(caller.pluginId)
-        const missing = getMissingMediaPermissions(plugin?.manifest.permissions, required)
+        const missing = getMissingPluginPermissions(plugin?.manifest.permissions, required)
         if (missing.length > 0) {
-            log.warn(`[PermissionManager] Plugin "${caller.pluginId}" lacks manifest permissions: ${missing.join(', ')}`)
+            log.warn(`[PermissionManager] Plugin "${caller.pluginId}" lacks ${missing.map((type) => `manifest.permissions.${type}`).join(', ')}`)
             return false
         }
 
         return true
+    }
+
+    ensureCallerAccessMediaPermissions(sender: Electron.WebContents, required: readonly MediaPermissionType[]): void {
+        this.ensureCallerAccessPluginPermissions(sender, required)
+    }
+
+    ensureCallerAccessPluginPermissions(sender: Electron.WebContents, required: readonly PluginManifestPermissionType[]): void {
+        if (required.length === 0) return
+
+        const caller = resolveIpcCallerSource(sender)
+        if (caller.source === 'app') return
+
+        if (caller.source !== 'plugin' || !caller.pluginId) {
+            throw new Error(`Rejected media permission ${required.join(', ')} from ${caller.source}`)
+        }
+
+        const plugin = permissionPluginLookup?.(caller.pluginId)
+        const missing = getMissingPluginPermissions(plugin?.manifest.permissions, required)
+        if (missing.length > 0) {
+            const message = `Plugin "${caller.pluginId}" lacks ${missing.map((type) => `manifest.permissions.${type}`).join(', ')}`
+            log.warn(`[PermissionManager] ${message}`)
+            throw createMissingPluginPermissionError(caller.pluginId, missing[0])
+        }
     }
 
     /**
@@ -519,6 +620,8 @@ export class PermissionManager {
                 'camera': 'x-apple.systempreferences:com.apple.preference.security?Privacy_Camera',
                 'microphone': 'x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone',
                 'screen': 'x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture',
+                'clipboard': '',
+                'notification': '',
                 'accessibility': 'x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility',
                 'contacts': 'x-apple.systempreferences:com.apple.preference.security?Privacy_Contacts',
                 'calendar': 'x-apple.systempreferences:com.apple.preference.security?Privacy_Calendars',
@@ -536,6 +639,8 @@ export class PermissionManager {
                 'geolocation': 'ms-settings:privacy-location',
                 'camera': 'ms-settings:privacy-webcam',
                 'microphone': 'ms-settings:privacy-microphone',
+                'clipboard': 'ms-settings:clipboard',
+                'notification': 'ms-settings:notifications',
             }
             const url = winUrlMap[type] || 'ms-settings:privacy'
             shell.openExternal(url)

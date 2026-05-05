@@ -33,7 +33,14 @@ import type {
 } from '../../shared/types/ai'
 import { commandRunnerService } from '../services/command-runner'
 import { executeSharpOperations } from '../ipc/sharp'
-import { isMediaPermissionType, type MediaPermissionType } from './media-permission-policy'
+import {
+  createMissingPluginPermissionError,
+  createSystemPermissionDeniedError,
+  isMediaPermissionType,
+  type MediaDevicePermissionType,
+  type MediaPermissionType,
+  type PluginManifestPermissionType
+} from './media-permission-policy'
 import type {
   StorageListOptions,
   StorageSetManyItem,
@@ -46,11 +53,30 @@ const pluginStorage = new PluginStorage()
 // PluginFilesystem 实例在 createPluginAPI 内部按插件名创建（实现跨插件数据隔离）
 const pluginHttp = new PluginHttp()
 
+type PluginPermissionApiType =
+  | 'geolocation'
+  | 'camera'
+  | 'microphone'
+  | 'screen'
+  | 'accessibility'
+  | 'contacts'
+  | 'calendar'
+  | 'notifications'
+
+type NormalizedPluginPermissionApiType = Exclude<PluginPermissionApiType, 'notifications'> | 'notification'
+
 interface CreatePluginApiOptions {
   runCommandAllowed?: boolean
   inputMonitorAllowed?: boolean
   microphoneAllowed?: boolean
   cameraAllowed?: boolean
+  screenAllowed?: boolean
+  geolocationAllowed?: boolean
+  accessibilityAllowed?: boolean
+  contactsAllowed?: boolean
+  notificationAllowed?: boolean
+  calendarAllowed?: boolean
+  clipboardAllowed?: boolean
 }
 
 function toAbortablePromise<T>(promise: Promise<T>, abort: () => void): AiPromiseLike<T> {
@@ -69,40 +95,74 @@ export function createPluginAPI(
 ) {
   const runCommandAllowed = options?.runCommandAllowed === true
   const inputMonitorAllowed = options?.inputMonitorAllowed === true
-  const allowedMediaPermissions: Record<MediaPermissionType, boolean> = {
+  const allowedPluginPermissions: Record<PluginManifestPermissionType, boolean> = {
     microphone: options?.microphoneAllowed === true,
-    camera: options?.cameraAllowed === true
+    camera: options?.cameraAllowed === true,
+    screen: options?.screenAllowed === true,
+    inputMonitor: inputMonitorAllowed,
+    geolocation: options?.geolocationAllowed === true,
+    accessibility: options?.accessibilityAllowed === true,
+    contacts: options?.contactsAllowed === true,
+    notification: options?.notificationAllowed === true,
+    calendar: options?.calendarAllowed === true,
+    clipboard: options?.clipboardAllowed === true
   }
-  const hasMediaPermission = (type: MediaPermissionType): boolean => {
-    const allowed = allowedMediaPermissions[type] === true
+  const hasPluginPermission = (type: PluginManifestPermissionType): boolean => {
+    const allowed = allowedPluginPermissions[type] === true
     if (!allowed) {
       log.warn(`[PluginAPI:${pluginName}] Missing manifest permission: ${type}`)
     }
     return allowed
   }
-  const hasPermissionAccess = (type: 'geolocation' | 'camera' | 'microphone' | 'screen' | 'accessibility' | 'contacts' | 'calendar'): boolean => {
-    if (!isMediaPermissionType(type)) return true
-    return hasMediaPermission(type)
+  const ensurePluginPermission = (type: PluginManifestPermissionType): void => {
+    if (!hasPluginPermission(type)) {
+      throw createMissingPluginPermissionError(pluginName, type)
+    }
+  }
+  const ensureMediaPermission = (type: MediaPermissionType): void => {
+    ensurePluginPermission(type)
+  }
+  const manifestPermissionForPermissionApi = (type: PluginPermissionApiType): PluginManifestPermissionType | null => {
+    if (type === 'notifications') return 'notification'
+    return type
+  }
+  const normalizePermissionApiType = (type: PluginPermissionApiType): NormalizedPluginPermissionApiType => {
+    return type === 'notifications' ? 'notification' : type
+  }
+  const ensurePermissionAccess = (type: PluginPermissionApiType): void => {
+    if (isMediaPermissionType(type)) {
+      ensureMediaPermission(type)
+      return
+    }
+    const permission = manifestPermissionForPermissionApi(type)
+    if (permission) ensurePluginPermission(permission)
   }
   // 为每个插件创建独立的 PluginFilesystem 实例（带插件名 → 启用跨插件数据隔离）
   const pluginFilesystem = new PluginFilesystem(pluginName)
   return {
     clipboard: {
-      readText: () => clipboard.readText(),
+      readText: () => {
+        ensurePluginPermission('clipboard')
+        return clipboard.readText()
+      },
       writeText: (text: string) => {
+        ensurePluginPermission('clipboard')
         clipboard.writeText(text)
         return Promise.resolve()
       },
       readImage: () => {
+        ensurePluginPermission('clipboard')
         const image = clipboard.readImage()
         if (image.isEmpty()) return null
         return image.toPNG()
       },
       writeImage: (buffer: Buffer) => {
+        ensurePluginPermission('clipboard')
         const image = nativeImage.createFromBuffer(buffer)
         clipboard.writeImage(image)
       },
       readFiles: () => {
+        ensurePluginPermission('clipboard')
         // macOS: 优先使用 NSFilenamesPboardType（支持多文件）
         if (process.platform === 'darwin') {
           const nsFiles = clipboard.read('NSFilenamesPboardType')
@@ -168,6 +228,7 @@ export function createPluginAPI(
         return []
       },
       getFormat: () => {
+        ensurePluginPermission('clipboard')
         // macOS 特有格式检测（与 ipc/clipboard.ts 保持一致）
         if (process.platform === 'darwin') {
           const nsFilenames = clipboard.read('NSFilenamesPboardType')
@@ -189,18 +250,21 @@ export function createPluginAPI(
         limit?: number
         offset?: number
       }) => {
+        ensurePluginPermission('clipboard')
         if (!clipboardHistoryManager) {
           throw new Error('Clipboard history not available')
         }
         return clipboardHistoryManager.query(options || {})
       },
       get: async (id: string) => {
+        ensurePluginPermission('clipboard')
         if (!clipboardHistoryManager) {
           throw new Error('Clipboard history not available')
         }
         return clipboardHistoryManager.getById(id)
       },
       copy: async (id: string) => {
+        ensurePluginPermission('clipboard')
         if (!clipboardHistoryManager) {
           throw new Error('Clipboard history not available')
         }
@@ -237,6 +301,7 @@ ${item.files.map(p => `    <string>${p}</string>`).join('\n')}
         }
       },
       toggleFavorite: async (id: string) => {
+        ensurePluginPermission('clipboard')
         if (!clipboardHistoryManager) {
           throw new Error('Clipboard history not available')
         }
@@ -244,6 +309,7 @@ ${item.files.map(p => `    <string>${p}</string>`).join('\n')}
         return { success: true }
       },
       delete: async (id: string) => {
+        ensurePluginPermission('clipboard')
         if (!clipboardHistoryManager) {
           throw new Error('Clipboard history not available')
         }
@@ -251,6 +317,7 @@ ${item.files.map(p => `    <string>${p}</string>`).join('\n')}
         return { success: true }
       },
       clear: async () => {
+        ensurePluginPermission('clipboard')
         if (!clipboardHistoryManager) {
           throw new Error('Clipboard history not available')
         }
@@ -258,6 +325,7 @@ ${item.files.map(p => `    <string>${p}</string>`).join('\n')}
         return { success: true }
       },
       stats: async () => {
+        ensurePluginPermission('clipboard')
         if (!clipboardHistoryManager) {
           throw new Error('Clipboard history not available')
         }
@@ -278,6 +346,7 @@ ${item.files.map(p => `    <string>${p}</string>`).join('\n')}
     },
     notification: {
       show: (message: string, _type?: string) => {
+        ensurePluginPermission('notification')
         // 使用 setImmediate 确保不阻塞事件循环
         setImmediate(() => {
           new Notification({
@@ -337,13 +406,26 @@ ${item.files.map(p => `    <string>${p}</string>`).join('\n')}
       getPrimaryDisplay: () => pluginScreen.getPrimaryDisplay(),
       getDisplayNearestPoint: (point: { x: number; y: number }) => pluginScreen.getDisplayNearestPoint(point),
       getCursorScreenPoint: () => pluginScreen.getCursorScreenPoint(),
-      getSources: (options?: CaptureOptions) => pluginScreen.getSources(options),
-      capture: (options?: ScreenshotOptions) => pluginScreen.captureScreen(options),
+      getSources: (options?: CaptureOptions) => {
+        ensureMediaPermission('screen')
+        return pluginScreen.getSources(options)
+      },
+      capture: (options?: ScreenshotOptions) => {
+        ensureMediaPermission('screen')
+        return pluginScreen.captureScreen(options)
+      },
       captureRegion: (
         region: { x: number; y: number; width: number; height: number },
         options?: Omit<ScreenshotOptions, 'sourceId'>
-      ) => pluginScreen.captureRegion(region, options),
-      getMediaStreamConstraints: (options: RecordingOptions) => pluginScreen.getMediaStreamConstraints(options)
+      ) => {
+        ensureMediaPermission('screen')
+        return pluginScreen.captureRegion(region, options)
+      },
+      getMediaStreamConstraints: (options: RecordingOptions) => {
+        ensureMediaPermission('screen')
+        if (options.audio === true) ensureMediaPermission('microphone')
+        return pluginScreen.getMediaStreamConstraints(options)
+      }
     },
     shell: {
       openPath: (path: string) => pluginShell.openPath(path),
@@ -395,12 +477,27 @@ ${item.files.map(p => `    <string>${p}</string>`).join('\n')}
     shortcut: createPluginGlobalShortcut(pluginName),
     security: createPluginSecurity(),
     media: {
-      getAccessStatus: (mediaType: MediaPermissionType) =>
-        hasMediaPermission(mediaType) ? pluginMedia.getMediaAccessStatus(mediaType) : 'denied',
-      askForAccess: (mediaType: MediaPermissionType) =>
-        hasMediaPermission(mediaType) ? pluginMedia.askForMediaAccess(mediaType) : Promise.resolve(false),
-      hasCameraAccess: () => hasMediaPermission('camera') && pluginMedia.hasCameraAccess(),
-      hasMicrophoneAccess: () => hasMediaPermission('microphone') && pluginMedia.hasMicrophoneAccess()
+      getAccessStatus: (mediaType: MediaDevicePermissionType) => {
+        ensureMediaPermission(mediaType)
+        return pluginMedia.getMediaAccessStatus(mediaType)
+      },
+      askForAccess: (mediaType: MediaDevicePermissionType) => {
+        ensureMediaPermission(mediaType)
+        return pluginMedia.askForMediaAccess(mediaType).then((granted) => {
+          if (!granted) {
+            log.warn(`[PluginAPI:${pluginName}] ${createSystemPermissionDeniedError(mediaType).message}`)
+          }
+          return granted
+        })
+      },
+      hasCameraAccess: () => {
+        ensureMediaPermission('camera')
+        return pluginMedia.hasCameraAccess()
+      },
+      hasMicrophoneAccess: () => {
+        ensureMediaPermission('microphone')
+        return pluginMedia.hasMicrophoneAccess()
+      }
     },
     power: {
       getSystemIdleTime: () => pluginPowerMonitor.getSystemIdleTime(),
@@ -414,15 +511,26 @@ ${item.files.map(p => `    <string>${p}</string>`).join('\n')}
     },
     input: pluginInput,
     permission: {
-      getStatus: (type: 'geolocation' | 'camera' | 'microphone' | 'screen' | 'accessibility' | 'contacts' | 'calendar') =>
-        hasPermissionAccess(type) ? permissionManager.getStatus(type) : 'denied',
-      request: (type: 'geolocation' | 'camera' | 'microphone' | 'screen' | 'accessibility' | 'contacts' | 'calendar') =>
-        hasPermissionAccess(type) ? permissionManager.request(type) : Promise.resolve('denied' as const),
-      canRequest: (type: 'geolocation' | 'camera' | 'microphone' | 'screen' | 'accessibility' | 'contacts' | 'calendar') =>
-        hasPermissionAccess(type) && permissionManager.canRequest(type),
-      openSystemSettings: (type: 'geolocation' | 'camera' | 'microphone' | 'screen' | 'accessibility' | 'contacts' | 'calendar') =>
-        hasPermissionAccess(type) && permissionManager.openSystemSettings(type),
-      isAccessibilityTrusted: () => permissionManager.isAccessibilityTrusted()
+      getStatus: (type: PluginPermissionApiType) => {
+        ensurePermissionAccess(type)
+        return permissionManager.getStatus(normalizePermissionApiType(type))
+      },
+      request: (type: PluginPermissionApiType) => {
+        ensurePermissionAccess(type)
+        return permissionManager.request(normalizePermissionApiType(type))
+      },
+      canRequest: (type: PluginPermissionApiType) => {
+        ensurePermissionAccess(type)
+        return permissionManager.canRequest(normalizePermissionApiType(type))
+      },
+      openSystemSettings: (type: PluginPermissionApiType) => {
+        ensurePermissionAccess(type)
+        return permissionManager.openSystemSettings(normalizePermissionApiType(type))
+      },
+      isAccessibilityTrusted: () => {
+        ensurePluginPermission('accessibility')
+        return permissionManager.isAccessibilityTrusted()
+      }
     },
     features: {
       getFeatures: (codes?: string[]) => pluginFeatureStore.getFeatures(pluginName, codes),
@@ -603,21 +711,27 @@ ${item.files.map(p => `    <string>${p}</string>`).join('\n')}
       }
     },
     inputMonitor: {
-      isAvailable: () => inputMonitorAllowed && pluginInputMonitor.isAvailable(),
+      isAvailable: () => {
+        ensurePluginPermission('inputMonitor')
+        return pluginInputMonitor.isAvailable()
+      },
       requireAccessibility: () => {
-        if (!inputMonitorAllowed) return Promise.resolve(false)
+        ensurePluginPermission('accessibility')
         return pluginInputMonitor.requireAccessibility()
       },
       start: (options?: InputMonitorOptions, callback?: InputEventCallback) => {
-        if (!inputMonitorAllowed) {
-          log.warn(`[PluginAPI] ${pluginName}: inputMonitor permission not declared`)
-          return Promise.resolve(null)
-        }
+        ensurePluginPermission('inputMonitor')
+        ensurePluginPermission('accessibility')
         return pluginInputMonitor.start(pluginName, options, callback)
       },
-      stop: (sessionId: string) => pluginInputMonitor.stop(pluginName, sessionId),
-      onEvent: (sessionId: string, callback: (event: GlobalInputEvent) => void) =>
-        pluginInputMonitor.onEvent(sessionId, callback)
+      stop: (sessionId: string) => {
+        ensurePluginPermission('inputMonitor')
+        return pluginInputMonitor.stop(pluginName, sessionId)
+      },
+      onEvent: (sessionId: string, callback: (event: GlobalInputEvent) => void) => {
+        ensurePluginPermission('inputMonitor')
+        return pluginInputMonitor.onEvent(sessionId, callback)
+      }
     },
     // Plugin Tools API（主进程备用执行器使用，实际 handler 注册在 host-worker 内）
     tools: {

@@ -9,9 +9,11 @@
 
 **权限要求**:
 - 插件 `manifest.json` 中需声明 `"permissions": { "inputMonitor": true }`
-- macOS 需要辅助功能权限 (Accessibility)，首次调用 `start()` 时自动引导授权
+- macOS 需要辅助功能权限 (Accessibility)。插件调用 `requireAccessibility()` 或 `start()` 时还需声明 `"permissions": { "accessibility": true }`
 - Windows 使用低级钩子，无需额外权限
 - Linux 当前仅提供存根实现
+
+缺少 `inputMonitor` 或 `accessibility` 声明时，宿主会拦截调用并抛出对应的 `Plugin "<pluginId>" lacks manifest.permissions.<permission>`。
 
 ---
 
@@ -243,7 +245,7 @@ function KeystrokeDisplay() {
 
 ## 注意事项
 
-1. **权限声明必须**: 插件 `manifest.json` 必须声明 `"permissions": { "inputMonitor": true }`，否则 API 调用将被忽略。
+1. **权限声明必须**: 插件 `manifest.json` 必须声明 `"permissions": { "inputMonitor": true }`；macOS 辅助功能授权相关调用还需声明 `"accessibility": true`，否则 API 调用会被宿主拦截。
 
 2. **隐私安全**: 全局键盘监听可捕获密码等敏感输入，插件不应记录或传输键盘内容。Mulby 审核机制会标记使用此权限的插件。
 

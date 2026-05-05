@@ -5,6 +5,18 @@
 > - UI/渲染进程：`window.mulby.notification`
 > - 插件后端：`context.api.notification`
 
+插件必须在 `manifest.json` 中声明通知权限：
+
+```json
+{
+  "permissions": {
+    "notification": true
+  }
+}
+```
+
+未声明时宿主会拦截调用并抛出 `Plugin "<pluginId>" lacks manifest.permissions.notification`。
+
 ### show(message, type?)
 [Renderer] [Backend]
 显示系统通知（仅当 `type === 'error'` 时不静音）。

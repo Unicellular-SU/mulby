@@ -50,7 +50,7 @@
 | ui | string | 否 | UI 文件路径 |
 | preload | string | 否 | 自定义 preload 脚本路径（可使用 Node.js） |
 | icon | string/object | 否 | 插件图标 |
-| permissions | object | 否 | 插件权限声明，如 `runCommand`、`microphone`、`camera`、`webview`、`inputMonitor` |
+| permissions | object | 否 | 插件权限声明，如 `runCommand`、`screen`、`microphone`、`camera`、`clipboard`、`notification`、`inputMonitor` |
 | features | array | 是 | 功能入口列表 |
 | window | object | 否 | 独立窗口配置 |
 | pluginSetting | object | 否 | 插件行为设置 |
@@ -60,8 +60,11 @@
 ```json
 {
   "permissions": {
+    "screen": true,
     "microphone": true,
-    "camera": true
+    "camera": true,
+    "clipboard": true,
+    "notification": true
   }
 }
 ```
@@ -69,10 +72,17 @@
 | 字段 | 类型 | 说明 |
 |------|------|------|
 | runCommand | boolean | 允许插件调用受策略保护的命令执行能力 |
+| screen | boolean | 允许插件访问屏幕录制/截图能力，包括 `screen.getSources()`、`screen.capture()`、`screen.captureRegion()`、`screen.getMediaStreamConstraints()` 和桌面捕获 `getUserMedia` |
 | microphone | boolean | 允许插件访问麦克风，包括 `getUserMedia({ audio: true })` 和麦克风权限 API |
-| camera | boolean | 允许插件访问摄像头，包括 `getUserMedia({ video: true })` 和摄像头权限 API |
+| camera | boolean | 允许插件访问摄像头，包括普通摄像头 `getUserMedia({ video: true })` 和摄像头权限 API；桌面录制视频流使用 `screen` 而不是 `camera` |
+| clipboard | boolean | 允许插件读写系统剪贴板和访问剪贴板历史 |
+| notification | boolean | 允许插件发送系统通知 |
+| geolocation | boolean | 允许插件访问定位权限 API 和获取当前位置 |
+| accessibility | boolean | 允许插件检查/请求系统辅助功能权限 |
+| contacts | boolean | 允许插件检查/请求通讯录权限 |
+| calendar | boolean | 允许插件检查/请求日历权限 |
 | webview | boolean | 允许插件 UI 使用 Electron `<webview>` |
-| inputMonitor | boolean | 允许插件监听全局鼠标/键盘输入事件 |
+| inputMonitor | boolean | 允许插件监听全局鼠标/键盘输入事件；在 macOS 上通常还需要同时声明 `accessibility` |
 | envKeys | string[] \| "*" | `runCommand` 继承环境变量的额外白名单 |
 
 ### PluginSetting 配置

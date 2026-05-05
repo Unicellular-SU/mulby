@@ -38,6 +38,13 @@ interface PluginHost {
   inputMonitorAllowed: boolean
   microphoneAllowed: boolean
   cameraAllowed: boolean
+  screenAllowed: boolean
+  geolocationAllowed: boolean
+  accessibilityAllowed: boolean
+  contactsAllowed: boolean
+  notificationAllowed: boolean
+  calendarAllowed: boolean
+  clipboardAllowed: boolean
   ready: boolean
   activeRequests: number  // 活跃请求计数器
   startedAt: number       // 启动时间戳
@@ -327,6 +334,13 @@ export class PluginHostManager extends EventEmitter {
         inputMonitorAllowed: plugin.manifest.permissions?.inputMonitor === true,
         microphoneAllowed: plugin.manifest.permissions?.microphone === true,
         cameraAllowed: plugin.manifest.permissions?.camera === true,
+        screenAllowed: plugin.manifest.permissions?.screen === true,
+        geolocationAllowed: plugin.manifest.permissions?.geolocation === true,
+        accessibilityAllowed: plugin.manifest.permissions?.accessibility === true,
+        contactsAllowed: plugin.manifest.permissions?.contacts === true,
+        notificationAllowed: plugin.manifest.permissions?.notification === true,
+        calendarAllowed: plugin.manifest.permissions?.calendar === true,
+        clipboardAllowed: plugin.manifest.permissions?.clipboard === true,
         ready: isPooled,
         activeRequests: 0,
         startedAt: Date.now(),
@@ -559,7 +573,14 @@ export class PluginHostManager extends EventEmitter {
             runCommandAllowed: host.runCommandAllowed,
             inputMonitorAllowed: host.inputMonitorAllowed,
             microphoneAllowed: host.microphoneAllowed,
-            cameraAllowed: host.cameraAllowed
+            cameraAllowed: host.cameraAllowed,
+            screenAllowed: host.screenAllowed,
+            geolocationAllowed: host.geolocationAllowed,
+            accessibilityAllowed: host.accessibilityAllowed,
+            contactsAllowed: host.contactsAllowed,
+            notificationAllowed: host.notificationAllowed,
+            calendarAllowed: host.calendarAllowed,
+            clipboardAllowed: host.clipboardAllowed
           }
         )
       }
@@ -965,7 +986,14 @@ export class PluginHostManager extends EventEmitter {
           runCommandAllowed: host.runCommandAllowed,
           inputMonitorAllowed: host.inputMonitorAllowed,
           microphoneAllowed: host.microphoneAllowed,
-          cameraAllowed: host.cameraAllowed
+          cameraAllowed: host.cameraAllowed,
+          screenAllowed: host.screenAllowed,
+          geolocationAllowed: host.geolocationAllowed,
+          accessibilityAllowed: host.accessibilityAllowed,
+          contactsAllowed: host.contactsAllowed,
+          notificationAllowed: host.notificationAllowed,
+          calendarAllowed: host.calendarAllowed,
+          clipboardAllowed: host.clipboardAllowed
         }
       )
     }

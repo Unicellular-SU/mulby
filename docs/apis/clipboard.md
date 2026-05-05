@@ -5,6 +5,18 @@
 > - UI/渲染进程：`window.mulby.clipboard`
 > - 插件后端：`context.api.clipboard`
 
+插件必须在 `manifest.json` 中声明剪贴板权限：
+
+```json
+{
+  "permissions": {
+    "clipboard": true
+  }
+}
+```
+
+未声明时宿主会拦截调用并抛出 `Plugin "<pluginId>" lacks manifest.permissions.clipboard`。
+
 ### readText()
 [Renderer] [Backend]
 读取剪贴板文本内容。

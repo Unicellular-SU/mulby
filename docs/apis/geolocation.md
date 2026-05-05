@@ -5,6 +5,18 @@
 
 Geolocation API 提供地理位置功能，支持 macOS、Windows 和 Linux。
 
+插件必须在 `manifest.json` 中声明定位权限：
+
+```json
+{
+  "permissions": {
+    "geolocation": true
+  }
+}
+```
+
+未声明时宿主会拦截调用并抛出 `Plugin "<pluginId>" lacks manifest.permissions.geolocation`。
+
 ### getAccessStatus()
 [Renderer]
 获取位置权限状态。

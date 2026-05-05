@@ -3,6 +3,11 @@ import { statSync } from 'fs'
 import { basename, extname } from 'path'
 import log from 'electron-log'
 import type { AutoPasteClipboardPayload, ClipboardContentFormat, FileInfo } from '../../shared/types/electron'
+import { permissionManager } from '../plugin/permission-manager'
+
+function assertClipboardPermission(sender: Electron.WebContents): void {
+  permissionManager.ensureCallerAccessPluginPermissions(sender, ['clipboard'])
+}
 
 export function readClipboardText(): string {
   return clipboard.readText()
@@ -175,22 +180,26 @@ export function captureAutoPasteClipboardPayload(): AutoPasteClipboardPayload {
 
 export function registerClipboardHandlers() {
   // 读取文本
-  ipcMain.handle('clipboard:readText', () => {
+  ipcMain.handle('clipboard:readText', (event) => {
+    assertClipboardPermission(event.sender)
     return readClipboardText()
   })
 
   // 写入文本
-  ipcMain.handle('clipboard:writeText', (_, text: string) => {
+  ipcMain.handle('clipboard:writeText', (event, text: string) => {
+    assertClipboardPermission(event.sender)
     clipboard.writeText(text)
   })
 
   // 读取图片
-  ipcMain.handle('clipboard:readImage', () => {
+  ipcMain.handle('clipboard:readImage', (event) => {
+    assertClipboardPermission(event.sender)
     return readClipboardImagePng()
   })
 
   // 写入图片
-  ipcMain.handle('clipboard:writeImage', (_, image: string | Buffer | ArrayBuffer | Uint8Array) => {
+  ipcMain.handle('clipboard:writeImage', (event, image: string | Buffer | ArrayBuffer | Uint8Array) => {
+    assertClipboardPermission(event.sender)
     try {
       let nativeImg: Electron.NativeImage
 
@@ -222,7 +231,8 @@ export function registerClipboardHandlers() {
   })
 
   // 写入文件
-  ipcMain.handle('clipboard:writeFiles', (_, filePaths: string | string[]) => {
+  ipcMain.handle('clipboard:writeFiles', (event, filePaths: string | string[]) => {
+    assertClipboardPermission(event.sender)
     const paths = Array.isArray(filePaths) ? filePaths : [filePaths]
     if (paths.length === 0) return false
 
@@ -263,12 +273,14 @@ ${paths.map(p => `    <string>${p}</string>`).join('\n')}
   })
 
   // 读取文件列表
-  ipcMain.handle('clipboard:readFiles', () => {
+  ipcMain.handle('clipboard:readFiles', (event) => {
+    assertClipboardPermission(event.sender)
     return readClipboardFileInfos()
   })
 
   // 获取剪贴板格式
-  ipcMain.handle('clipboard:getFormat', () => {
+  ipcMain.handle('clipboard:getFormat', (event) => {
+    assertClipboardPermission(event.sender)
     return getClipboardContentFormat()
   })
 }

@@ -3,6 +3,7 @@ import { describe, it } from 'node:test'
 
 import {
   getMissingMediaPermissions,
+  getMissingPluginPermissions,
   hasDeclaredMediaPermissions,
   resolveRequiredMediaPermissions
 } from '../media-permission-policy'
@@ -30,6 +31,25 @@ describe('media permission policy', () => {
     )
   })
 
+  it('maps desktop video media requests to screen permission', () => {
+    assert.deepEqual(
+      resolveRequiredMediaPermissions('media', { mediaTypes: ['video'] }, { desktopCapture: true }),
+      ['screen']
+    )
+    assert.deepEqual(
+      resolveRequiredMediaPermissions('media', {
+        mediaTypes: ['video'],
+        video: {
+          mandatory: {
+            chromeMediaSource: 'desktop',
+            chromeMediaSourceId: 'screen:1:0'
+          }
+        }
+      }),
+      ['screen']
+    )
+  })
+
   it('requires both manifest permissions for combined audio and video requests', () => {
     const required = resolveRequiredMediaPermissions('media', { mediaTypes: ['audio', 'video'] })
 
@@ -39,6 +59,29 @@ describe('media permission policy', () => {
     assert.equal(hasDeclaredMediaPermissions({ microphone: true, camera: true }, required!), true)
   })
 
+  it('requires microphone and screen for desktop recording with audio', () => {
+    const required = resolveRequiredMediaPermissions(
+      'media',
+      { mediaTypes: ['audio', 'video'] },
+      { desktopCapture: true, desktopAudio: true }
+    )
+
+    assert.deepEqual(required, ['microphone', 'screen'])
+    assert.equal(hasDeclaredMediaPermissions({ microphone: true, screen: true }, required!), true)
+    assert.deepEqual(getMissingMediaPermissions({ screen: true }, required!), ['microphone'])
+  })
+
+  it('uses pending desktop capture context when Electron omits media details', () => {
+    assert.deepEqual(
+      resolveRequiredMediaPermissions('media', {}, { desktopCapture: true }),
+      ['screen']
+    )
+    assert.deepEqual(
+      resolveRequiredMediaPermissions('media', {}, { desktopCapture: true, desktopAudio: true }),
+      ['microphone', 'screen']
+    )
+  })
+
   it('returns an empty requirement list for unknown media requests so callers can reject plugins explicitly', () => {
     assert.deepEqual(resolveRequiredMediaPermissions('media', {}), [])
     assert.deepEqual(resolveRequiredMediaPermissions('media', { mediaType: 'unknown' }), [])
@@ -46,5 +89,16 @@ describe('media permission policy', () => {
 
   it('ignores non-media Electron permissions', () => {
     assert.equal(resolveRequiredMediaPermissions('geolocation', { mediaTypes: ['audio'] }), null)
+  })
+
+  it('reports missing non-media plugin manifest permissions', () => {
+    assert.deepEqual(
+      getMissingPluginPermissions({ clipboard: true, notification: true }, ['clipboard', 'notification']),
+      []
+    )
+    assert.deepEqual(
+      getMissingPluginPermissions({ inputMonitor: true }, ['inputMonitor', 'accessibility']),
+      ['accessibility']
+    )
   })
 })

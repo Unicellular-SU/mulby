@@ -1,26 +1,34 @@
 import { ipcMain } from 'electron'
 import { ClipboardHistoryManager } from '../services/clipboard-history'
+import { permissionManager } from '../plugin/permission-manager'
+
+function assertClipboardPermission(sender: Electron.WebContents): void {
+  permissionManager.ensureCallerAccessPluginPermissions(sender, ['clipboard'])
+}
 
 export function registerClipboardHistoryHandlers(historyManager: ClipboardHistoryManager) {
   // 查询历史记录
-  ipcMain.handle('clipboardHistory:query', (_, options: {
+  ipcMain.handle('clipboardHistory:query', (event, options: {
     type?: 'text' | 'image' | 'files'
     search?: string
     favorite?: boolean
     limit?: number
     offset?: number
   }) => {
+    assertClipboardPermission(event.sender)
     return historyManager.query(options)
   })
 
   // 获取单条记录
-  ipcMain.handle('clipboardHistory:get', (_, id: string) => {
+  ipcMain.handle('clipboardHistory:get', (event, id: string) => {
+    assertClipboardPermission(event.sender)
     const items = historyManager.query({ limit: 1 })
     return items.find(item => item.id === id) || null
   })
 
   // 复制历史记录到剪贴板
-  ipcMain.handle('clipboardHistory:copy', async (_, id: string) => {
+  ipcMain.handle('clipboardHistory:copy', async (event, id: string) => {
+    assertClipboardPermission(event.sender)
     const items = historyManager.query({ limit: 1000 })
     const item = items.find(i => i.id === id)
 
@@ -58,25 +66,29 @@ ${item.files.map(p => `    <string>${p}</string>`).join('\n')}
   })
 
   // 切换收藏
-  ipcMain.handle('clipboardHistory:toggleFavorite', (_, id: string) => {
+  ipcMain.handle('clipboardHistory:toggleFavorite', (event, id: string) => {
+    assertClipboardPermission(event.sender)
     historyManager.toggleFavorite(id)
     return { success: true }
   })
 
   // 删除记录
-  ipcMain.handle('clipboardHistory:delete', (_, id: string) => {
+  ipcMain.handle('clipboardHistory:delete', (event, id: string) => {
+    assertClipboardPermission(event.sender)
     historyManager.delete(id)
     return { success: true }
   })
 
   // 清空历史
-  ipcMain.handle('clipboardHistory:clear', () => {
+  ipcMain.handle('clipboardHistory:clear', (event) => {
+    assertClipboardPermission(event.sender)
     historyManager.clear()
     return { success: true }
   })
 
   // 获取统计信息
-  ipcMain.handle('clipboardHistory:stats', () => {
+  ipcMain.handle('clipboardHistory:stats', (event) => {
+    assertClipboardPermission(event.sender)
     const all = historyManager.query({ limit: 10000 })
     const text = all.filter(i => i.type === 'text').length
     const image = all.filter(i => i.type === 'image').length

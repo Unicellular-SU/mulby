@@ -1,5 +1,17 @@
 import { ipcMain } from 'electron'
 import { pluginScreen, CaptureOptions, ScreenshotOptions, RecordingOptions } from '../plugin/screen'
+import { permissionManager } from '../plugin/permission-manager'
+
+function assertScreenPermission(sender: Electron.WebContents): void {
+  permissionManager.ensureCallerAccessMediaPermissions(sender, ['screen'])
+}
+
+function assertRecordingPermissions(sender: Electron.WebContents, options: RecordingOptions): void {
+  permissionManager.ensureCallerAccessMediaPermissions(
+    sender,
+    options.audio === true ? ['screen', 'microphone'] : ['screen']
+  )
+}
 
 export function registerScreenHandlers() {
   // 获取所有显示器
@@ -28,26 +40,31 @@ export function registerScreenHandlers() {
   })
 
   // 获取可捕获的源
-  ipcMain.handle('screen:getSources', async (_, options?: CaptureOptions) => {
+  ipcMain.handle('screen:getSources', async (event, options?: CaptureOptions) => {
+    assertScreenPermission(event.sender)
     return pluginScreen.getSources(options)
   })
 
   // 截取屏幕
-  ipcMain.handle('screen:capture', async (_, options?: ScreenshotOptions) => {
+  ipcMain.handle('screen:capture', async (event, options?: ScreenshotOptions) => {
+    assertScreenPermission(event.sender)
     return pluginScreen.captureScreen(options)
   })
 
   // 截取指定区域
   ipcMain.handle('screen:captureRegion', async (
-    _,
+    event,
     region: { x: number; y: number; width: number; height: number },
     options?: Omit<ScreenshotOptions, 'sourceId'>
   ) => {
+    assertScreenPermission(event.sender)
     return pluginScreen.captureRegion(region, options)
   })
 
   // 获取录屏 MediaStream 约束
-  ipcMain.handle('screen:getMediaStreamConstraints', (_, options: RecordingOptions) => {
+  ipcMain.handle('screen:getMediaStreamConstraints', (event, options: RecordingOptions) => {
+    assertRecordingPermissions(event.sender, options)
+    permissionManager.markPendingDesktopCapture(event.sender, { audio: options.audio === true })
     return pluginScreen.getMediaStreamConstraints(options)
   })
 

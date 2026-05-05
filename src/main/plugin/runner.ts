@@ -87,7 +87,14 @@ export class PluginRunner {
       runCommandAllowed: this.plugin.manifest.permissions?.runCommand === true,
       inputMonitorAllowed: this.plugin.manifest.permissions?.inputMonitor === true,
       microphoneAllowed: this.plugin.manifest.permissions?.microphone === true,
-      cameraAllowed: this.plugin.manifest.permissions?.camera === true
+      cameraAllowed: this.plugin.manifest.permissions?.camera === true,
+      screenAllowed: this.plugin.manifest.permissions?.screen === true,
+      geolocationAllowed: this.plugin.manifest.permissions?.geolocation === true,
+      accessibilityAllowed: this.plugin.manifest.permissions?.accessibility === true,
+      contactsAllowed: this.plugin.manifest.permissions?.contacts === true,
+      notificationAllowed: this.plugin.manifest.permissions?.notification === true,
+      calendarAllowed: this.plugin.manifest.permissions?.calendar === true,
+      clipboardAllowed: this.plugin.manifest.permissions?.clipboard === true
     })
     const context = { api, featureCode, input: input || '', attachments }
 

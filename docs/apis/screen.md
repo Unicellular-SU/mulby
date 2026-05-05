@@ -7,6 +7,18 @@
 
 屏幕 API 提供截图、录屏和屏幕信息获取功能，支持 macOS、Windows 和 Linux。
 
+调用捕获类 API 前，插件必须在 `manifest.json` 中声明屏幕权限：
+
+```json
+{
+  "permissions": {
+    "screen": true
+  }
+}
+```
+
+受此权限保护的能力包括 `getSources()`、`capture()`、`captureRegion()`、`getMediaStreamConstraints()`、`screenCapture()`、`colorPick()`，以及这些约束触发的桌面录制 `getUserMedia`。普通摄像头 `getUserMedia({ video: true })` 仍使用 `permissions.camera`，桌面录制视频流使用 `permissions.screen`。
+
 ### getAllDisplays()
 [Renderer] [Backend]
 获取所有显示器信息。
@@ -198,10 +210,12 @@ const recorder = new MediaRecorder(stream, { mimeType: 'video/webm' });
 
 **参数** (RecordingOptions):
 - `sourceId` (string, 必需) - 捕获源 ID
-- `audio` (boolean, 可选) - 是否录制音频，默认 false
+- `audio` (boolean, 可选) - 是否录制音频，默认 false。设为 true 时除 `permissions.screen` 外还需要 `permissions.microphone`
 - `frameRate` (number, 可选) - 帧率，默认 30
 
 **返回值**: `object` - MediaStream 约束配置
+
+插件未声明 `permissions.screen` 时会抛出 `Plugin "<pluginId>" lacks manifest.permissions.screen`。系统层拒绝屏幕录制时，宿主会记录或返回 `Screen recording permission denied by system`。
 
 ### screenCapture()
 [Renderer]

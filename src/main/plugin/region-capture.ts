@@ -23,6 +23,7 @@ import {
   nativeStartRegionCapture
 } from '../services/native-screen-capture'
 import { registerSystemInternalWindow, unregisterSystemInternalWindow } from '../services/ipc-caller-resolver'
+import { permissionManager } from './permission-manager'
 import log from 'electron-log'
 
 interface RegionCaptureWindow {
@@ -576,7 +577,8 @@ function closeAllCaptureWindows(): void {
  * 注册 IPC 处理器
  */
 export function registerRegionCaptureHandlers(): void {
-  ipcMain.handle('screen:startRegionCapture', async () => {
+  ipcMain.handle('screen:startRegionCapture', async (event) => {
+    permissionManager.ensureCallerAccessMediaPermissions(event.sender, ['screen'])
     log.info('[RegionCapture] IPC: screen:startRegionCapture received')
     return startRegionCapture()
   })

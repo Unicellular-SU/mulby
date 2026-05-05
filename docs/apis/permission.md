@@ -7,16 +7,21 @@
 
 权限 API 封装系统权限检测与跳转设置页，优先在 macOS 上提供真实状态。
 
-插件访问 `camera` / `microphone` 权限 API 时，必须先在 `manifest.json` 中声明对应权限：
+插件访问 `screen` / `camera` / `microphone` / `geolocation` / `accessibility` / `contacts` / `calendar` 权限 API 时，必须先在 `manifest.json` 中声明对应权限：
 
 ```json
 {
   "permissions": {
+    "screen": true,
     "microphone": true,
-    "camera": true
+    "camera": true,
+    "geolocation": true,
+    "accessibility": true
   }
 }
 ```
+
+未声明对应权限时，宿主会抛出 `Plugin "<pluginId>" lacks manifest.permissions.<permission>`；声明存在但系统拒绝时，状态会体现为 `denied`。`permission.*('notifications')` 对应 manifest 中的 `permissions.notification`。
 
 ### getStatus(type)
 [Renderer] [Backend]

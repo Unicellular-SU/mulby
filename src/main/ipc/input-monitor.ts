@@ -2,6 +2,7 @@ import { ipcMain, BrowserWindow } from 'electron'
 import { pluginInputMonitor } from '../plugin/input-monitor'
 import type { InputMonitorOptions } from '../plugin/input-monitor'
 import type { PluginWindowManager } from '../plugin/window'
+import { permissionManager } from '../plugin/permission-manager'
 import log from 'electron-log'
 
 /**
@@ -27,15 +28,20 @@ export function registerInputMonitorHandlers(pluginWindowManager: PluginWindowMa
     return plugin.id
   }
 
-  ipcMain.handle('inputMonitor:isAvailable', () => {
+  ipcMain.handle('inputMonitor:isAvailable', (event) => {
+    // No plugin id is needed to check native module availability, but plugin callers
+    // still need to declare the capability before probing it.
+    permissionManager.ensureCallerAccessPluginPermissions(event.sender, ['inputMonitor'])
     return pluginInputMonitor.isAvailable()
   })
 
-  ipcMain.handle('inputMonitor:requireAccessibility', async () => {
+  ipcMain.handle('inputMonitor:requireAccessibility', async (event) => {
+    permissionManager.ensureCallerAccessPluginPermissions(event.sender, ['accessibility'])
     return pluginInputMonitor.requireAccessibility()
   })
 
   ipcMain.handle('inputMonitor:start', async (event, options?: InputMonitorOptions) => {
+    permissionManager.ensureCallerAccessPluginPermissions(event.sender, ['inputMonitor', 'accessibility'])
     const pluginName = resolvePluginWithPermission(event.sender)
     if (!pluginName) return null
 
@@ -68,6 +74,7 @@ export function registerInputMonitorHandlers(pluginWindowManager: PluginWindowMa
   })
 
   ipcMain.handle('inputMonitor:stop', (event, sessionId: string) => {
+    permissionManager.ensureCallerAccessPluginPermissions(event.sender, ['inputMonitor'])
     const pluginName = resolvePluginWithPermission(event.sender)
     if (!pluginName) return
     pluginInputMonitor.stop(pluginName, sessionId)

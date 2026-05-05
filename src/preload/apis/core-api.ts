@@ -5,6 +5,7 @@ export function createCoreApi(ipcRenderer: IpcRenderer) {
     window: {
       hide: (isRestorePreWindow?: boolean) => ipcRenderer.send('window:hide', isRestorePreWindow),
       show: () => ipcRenderer.send('window:show'),
+      focus: () => ipcRenderer.send('window:requestFocus'),
       setSize: (width: number, height: number) =>
         ipcRenderer.send('window:setSize', width, height),
       setPosition: (x: number, y: number) =>
@@ -167,7 +168,7 @@ export function createCoreApi(ipcRenderer: IpcRenderer) {
 
     notification: {
       show: (message: string, type?: string) =>
-        ipcRenderer.send('notification:show', message, type)
+        ipcRenderer.invoke('notification:show', message, type)
     },
 
     inputMonitor: {

@@ -719,7 +719,7 @@ export interface ElectronAPI {
     hideMainWindowTypeString: (text: string) => Promise<boolean>
   }
   notification: {
-    show: (message: string, type?: string) => void
+    show: (message: string, type?: string) => Promise<void>
   }
   onboarding: {
     getSettings: () => Promise<{

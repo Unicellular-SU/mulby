@@ -332,6 +332,7 @@ export interface WindowOptions {
   type?: WindowType    // 窗口类型：default(带标题栏)、borderless(无边框)、fullscreen(全屏)
   titleBar?: boolean   // 是否显示 Mulby 标题栏（default 类型默认 true，其他类型默认 false）
   alwaysOnTop?: boolean // detached 窗口初始置顶状态
+  focusable?: boolean  // 是否可获取焦点（默认 true）；设为 false 时窗口不会成为 key window
   opacity?: number     // 窗口透明度（0.0 完全透明 ~ 1.0 完全不透明，运行时可调）
   transparent?: boolean // 窗口背景透明（配合 CSS background: transparent 实现穿透效果，仅创建时生效）
   visibleOnAllWorkspaces?: boolean // 是否在所有桌面/工作区可见（macOS Mission Control / Windows 虚拟桌面）
@@ -384,6 +385,36 @@ export interface PluginPermissions {
    * 或调用 media/permission 的摄像头权限 API 时必须声明。
    */
   camera?: boolean
+  /**
+   * 允许插件访问屏幕录制/截图能力。插件 UI 使用 screen API 或
+   * getUserMedia({ video: { mandatory: { chromeMediaSource: 'desktop' } } })
+   * 进行桌面捕获时必须声明。
+   */
+  screen?: boolean
+  /**
+   * 允许插件读写系统剪贴板和剪贴板历史。
+   */
+  clipboard?: boolean
+  /**
+   * 允许插件发送系统通知。
+   */
+  notification?: boolean
+  /**
+   * 允许插件访问定位权限 API 和获取当前位置。
+   */
+  geolocation?: boolean
+  /**
+   * 允许插件检查/请求系统辅助功能权限。
+   */
+  accessibility?: boolean
+  /**
+   * 允许插件检查/请求通讯录权限。
+   */
+  contacts?: boolean
+  /**
+   * 允许插件检查/请求日历权限。
+   */
+  calendar?: boolean
   /**
    * 全局输入事件监听（鼠标/键盘）
    *
@@ -618,10 +649,10 @@ export interface PluginAPI {
     hasMicrophoneAccess: () => boolean
   }
   permission: {
-    getStatus: (type: 'geolocation' | 'camera' | 'microphone' | 'screen' | 'accessibility' | 'contacts' | 'calendar') => PluginPermissionStatus
-    request: (type: 'geolocation' | 'camera' | 'microphone' | 'screen' | 'accessibility' | 'contacts' | 'calendar') => Promise<PluginPermissionStatus>
-    canRequest: (type: 'geolocation' | 'camera' | 'microphone' | 'screen' | 'accessibility' | 'contacts' | 'calendar') => boolean
-    openSystemSettings: (type: 'geolocation' | 'camera' | 'microphone' | 'screen' | 'accessibility' | 'contacts' | 'calendar') => boolean
+    getStatus: (type: 'geolocation' | 'camera' | 'microphone' | 'screen' | 'accessibility' | 'contacts' | 'calendar' | 'notifications') => PluginPermissionStatus
+    request: (type: 'geolocation' | 'camera' | 'microphone' | 'screen' | 'accessibility' | 'contacts' | 'calendar' | 'notifications') => Promise<PluginPermissionStatus>
+    canRequest: (type: 'geolocation' | 'camera' | 'microphone' | 'screen' | 'accessibility' | 'contacts' | 'calendar' | 'notifications') => boolean
+    openSystemSettings: (type: 'geolocation' | 'camera' | 'microphone' | 'screen' | 'accessibility' | 'contacts' | 'calendar' | 'notifications') => boolean
     isAccessibilityTrusted: () => boolean
   }
   features: {

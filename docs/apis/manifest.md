@@ -20,7 +20,7 @@
 | `ui` | `string` | 否 | 前端渲染进程入口（UI 文件，如 `ui/index.html`）。如果不填则属于纯后台类插件。 |
 | `preload` | `string` | 否 | 指定 Preload 脚本文件路径，用于连接 Node.js 与前端（必须是 CommonJS 的 `.cjs` 后缀）。 |
 | `icon` | `PluginIcon` | 否 | 插件的图标，路径或数据等。参考下方“图标配置”。 |
-| `permissions` | `object` | 否 | 插件向系统申请的特殊权限。例如 `{ "runCommand": true, "microphone": true }`。 |
+| `permissions` | `object` | 否 | 插件向系统申请的特殊权限。例如 `{ "runCommand": true, "screen": true, "clipboard": true }`。 |
 | `tools` | `PluginToolSchema[]`| 否 | 给 AI Agent 提供的工具注册声明。 |
 | `window` | `WindowOptions` | 否 | 独立窗口配置。 |
 | `pluginSetting` | `PluginSetting` | 否 | 插件底层的常规与运行行为配置。 |
@@ -33,9 +33,16 @@
 | --- | --- | --- |
 | `runCommand` | `boolean` | 允许插件调用受策略保护的命令执行能力。 |
 | `webview` | `boolean` | 允许插件 UI 使用 Electron `<webview>` 作为普通远程网页容器。宿主只会对声明为 `true` 的插件开启 `webviewTag`，并会移除 guest preload、关闭 Node 集成。 |
+| `screen` | `boolean` | 允许插件访问屏幕录制/截图能力。插件调用 `screen.getSources()`、`screen.capture()`、`screen.captureRegion()`、`screen.getMediaStreamConstraints()`，或通过 `chromeMediaSource: 'desktop'` 进行桌面捕获时必须声明。 |
 | `microphone` | `boolean` | 允许插件访问麦克风。插件 UI 调用 `getUserMedia({ audio: true })` 或使用 `media` / `permission` 的麦克风权限 API 时必须声明。 |
-| `camera` | `boolean` | 允许插件访问摄像头。插件 UI 调用 `getUserMedia({ video: true })` 或使用 `media` / `permission` 的摄像头权限 API 时必须声明。 |
-| `inputMonitor` | `boolean` | 允许插件调用全局输入监听 API（鼠标点击轨迹、键盘按键监听）。macOS 需辅助功能权限，首次使用时自动引导授权。详见 [全局输入监听 API](./input-monitor.md)。 |
+| `camera` | `boolean` | 允许插件访问摄像头。插件 UI 调用普通摄像头 `getUserMedia({ video: true })` 或使用 `media` / `permission` 的摄像头权限 API 时必须声明；桌面录制视频流使用 `screen`。 |
+| `clipboard` | `boolean` | 允许插件读写系统剪贴板，以及查询/复制剪贴板历史。 |
+| `notification` | `boolean` | 允许插件发送系统通知。 |
+| `geolocation` | `boolean` | 允许插件访问定位权限 API 和获取当前位置。 |
+| `accessibility` | `boolean` | 允许插件检查/请求系统辅助功能权限。 |
+| `contacts` | `boolean` | 允许插件检查/请求通讯录权限。 |
+| `calendar` | `boolean` | 允许插件检查/请求日历权限。 |
+| `inputMonitor` | `boolean` | 允许插件调用全局输入监听 API（鼠标点击轨迹、键盘按键监听）。macOS 通常还需声明 `accessibility` 并获得系统辅助功能授权。详见 [全局输入监听 API](./input-monitor.md)。 |
 | `envKeys` | `string[] \| "*"` | `runCommand` 继承环境变量的额外白名单。仅在 `runCommand: true` 时生效。 |
 
 插件前端可通过 `window.mulby.onPluginInit()` 读取宿主暴露的能力状态：
