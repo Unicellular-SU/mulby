@@ -50,9 +50,30 @@
 | ui | string | 否 | UI 文件路径 |
 | preload | string | 否 | 自定义 preload 脚本路径（可使用 Node.js） |
 | icon | string/object | 否 | 插件图标 |
+| permissions | object | 否 | 插件权限声明，如 `runCommand`、`microphone`、`camera`、`webview`、`inputMonitor` |
 | features | array | 是 | 功能入口列表 |
 | window | object | 否 | 独立窗口配置 |
 | pluginSetting | object | 否 | 插件行为设置 |
+
+### Permissions 配置
+
+```json
+{
+  "permissions": {
+    "microphone": true,
+    "camera": true
+  }
+}
+```
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| runCommand | boolean | 允许插件调用受策略保护的命令执行能力 |
+| microphone | boolean | 允许插件访问麦克风，包括 `getUserMedia({ audio: true })` 和麦克风权限 API |
+| camera | boolean | 允许插件访问摄像头，包括 `getUserMedia({ video: true })` 和摄像头权限 API |
+| webview | boolean | 允许插件 UI 使用 Electron `<webview>` |
+| inputMonitor | boolean | 允许插件监听全局鼠标/键盘输入事件 |
+| envKeys | string[] \| "*" | `runCommand` 继承环境变量的额外白名单 |
 
 ### PluginSetting 配置
 

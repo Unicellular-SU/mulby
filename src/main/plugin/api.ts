@@ -33,6 +33,7 @@ import type {
 } from '../../shared/types/ai'
 import { commandRunnerService } from '../services/command-runner'
 import { executeSharpOperations } from '../ipc/sharp'
+import { isMediaPermissionType, type MediaPermissionType } from './media-permission-policy'
 import type {
   StorageListOptions,
   StorageSetManyItem,
@@ -48,6 +49,8 @@ const pluginHttp = new PluginHttp()
 interface CreatePluginApiOptions {
   runCommandAllowed?: boolean
   inputMonitorAllowed?: boolean
+  microphoneAllowed?: boolean
+  cameraAllowed?: boolean
 }
 
 function toAbortablePromise<T>(promise: Promise<T>, abort: () => void): AiPromiseLike<T> {
@@ -66,6 +69,21 @@ export function createPluginAPI(
 ) {
   const runCommandAllowed = options?.runCommandAllowed === true
   const inputMonitorAllowed = options?.inputMonitorAllowed === true
+  const allowedMediaPermissions: Record<MediaPermissionType, boolean> = {
+    microphone: options?.microphoneAllowed === true,
+    camera: options?.cameraAllowed === true
+  }
+  const hasMediaPermission = (type: MediaPermissionType): boolean => {
+    const allowed = allowedMediaPermissions[type] === true
+    if (!allowed) {
+      log.warn(`[PluginAPI:${pluginName}] Missing manifest permission: ${type}`)
+    }
+    return allowed
+  }
+  const hasPermissionAccess = (type: 'geolocation' | 'camera' | 'microphone' | 'screen' | 'accessibility' | 'contacts' | 'calendar'): boolean => {
+    if (!isMediaPermissionType(type)) return true
+    return hasMediaPermission(type)
+  }
   // 为每个插件创建独立的 PluginFilesystem 实例（带插件名 → 启用跨插件数据隔离）
   const pluginFilesystem = new PluginFilesystem(pluginName)
   return {
@@ -377,10 +395,12 @@ ${item.files.map(p => `    <string>${p}</string>`).join('\n')}
     shortcut: createPluginGlobalShortcut(pluginName),
     security: createPluginSecurity(),
     media: {
-      getAccessStatus: (mediaType: 'microphone' | 'camera') => pluginMedia.getMediaAccessStatus(mediaType),
-      askForAccess: (mediaType: 'microphone' | 'camera') => pluginMedia.askForMediaAccess(mediaType),
-      hasCameraAccess: () => pluginMedia.hasCameraAccess(),
-      hasMicrophoneAccess: () => pluginMedia.hasMicrophoneAccess()
+      getAccessStatus: (mediaType: MediaPermissionType) =>
+        hasMediaPermission(mediaType) ? pluginMedia.getMediaAccessStatus(mediaType) : 'denied',
+      askForAccess: (mediaType: MediaPermissionType) =>
+        hasMediaPermission(mediaType) ? pluginMedia.askForMediaAccess(mediaType) : Promise.resolve(false),
+      hasCameraAccess: () => hasMediaPermission('camera') && pluginMedia.hasCameraAccess(),
+      hasMicrophoneAccess: () => hasMediaPermission('microphone') && pluginMedia.hasMicrophoneAccess()
     },
     power: {
       getSystemIdleTime: () => pluginPowerMonitor.getSystemIdleTime(),
@@ -395,13 +415,13 @@ ${item.files.map(p => `    <string>${p}</string>`).join('\n')}
     input: pluginInput,
     permission: {
       getStatus: (type: 'geolocation' | 'camera' | 'microphone' | 'screen' | 'accessibility' | 'contacts' | 'calendar') =>
-        permissionManager.getStatus(type),
+        hasPermissionAccess(type) ? permissionManager.getStatus(type) : 'denied',
       request: (type: 'geolocation' | 'camera' | 'microphone' | 'screen' | 'accessibility' | 'contacts' | 'calendar') =>
-        permissionManager.request(type),
+        hasPermissionAccess(type) ? permissionManager.request(type) : Promise.resolve('denied' as const),
       canRequest: (type: 'geolocation' | 'camera' | 'microphone' | 'screen' | 'accessibility' | 'contacts' | 'calendar') =>
-        permissionManager.canRequest(type),
+        hasPermissionAccess(type) && permissionManager.canRequest(type),
       openSystemSettings: (type: 'geolocation' | 'camera' | 'microphone' | 'screen' | 'accessibility' | 'contacts' | 'calendar') =>
-        permissionManager.openSystemSettings(type),
+        hasPermissionAccess(type) && permissionManager.openSystemSettings(type),
       isAccessibilityTrusted: () => permissionManager.isAccessibilityTrusted()
     },
     features: {

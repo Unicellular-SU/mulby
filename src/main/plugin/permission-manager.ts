@@ -1,9 +1,32 @@
 import { systemPreferences, session, app, dialog, BrowserWindow } from 'electron'
 import log from 'electron-log'
+import { resolveIpcCallerSource } from '../services/ipc-caller-resolver'
+import {
+    getMissingMediaPermissions,
+    isMediaPermissionType,
+    resolveRequiredMediaPermissions,
+    type MediaPermissionManifest,
+    type MediaPermissionDetails,
+    type MediaPermissionType
+} from './media-permission-policy'
 
 type MacPermissionsModule = {
     getAuthStatus: (type: string) => string
     [key: string]: unknown
+}
+
+interface PermissionPluginLookupResult {
+    manifest: {
+        permissions?: MediaPermissionManifest
+    }
+}
+
+let permissionPluginLookup: ((pluginId: string) => PermissionPluginLookupResult | undefined) | null = null
+
+export function setPermissionPluginLookup(
+    lookup: (pluginId: string) => PermissionPluginLookupResult | undefined
+): void {
+    permissionPluginLookup = lookup
 }
 
 // 仅在 macOS 上加载原生模块
@@ -112,45 +135,24 @@ export class PermissionManager {
             (webContents, permission, callback, details) => {
                 log.debug(`[PermissionManager] Permission request: ${permission}`, details)
 
+                const mediaPermissions = resolveRequiredMediaPermissions(permission, details as MediaPermissionDetails)
+                if (mediaPermissions) {
+                    this.requestResolvedPermissions(webContents, this.resolveUnknownMediaFallback(webContents, mediaPermissions), details)
+                        .then((granted) => callback(granted))
+                        .catch(() => callback(false))
+                    return
+                }
+
                 const permType = this.mapElectronPermission(permission)
-
-                if (permType) {
-                    if (process.platform === 'darwin') {
-                        const status = this.getStatus(permType)
-                        log.debug(`[PermissionManager] macOS status for ${permType}: ${status}`)
-                        if (permType === 'geolocation') {
-                            callback(status !== 'denied' && status !== 'restricted')
-                            return
-                        }
-                        callback(status === 'granted')
-                    } else {
-                        // Use webContents.id as the primary cache scope so that
-                        // file:// pages (whose URL origin is "null") don't share
-                        // a single grant across all local windows.
-                        const wcId = webContents?.id ?? 0
-                        const cacheKey = `wc:${wcId}:${permType}`
-
-                        const cached = this.nonMacDecisions.get(cacheKey)
-                        if (cached !== undefined) {
-                            callback(cached)
-                            return
-                        }
-
-                        const displayOrigin = details.requestingUrl
-                            ? new URL(details.requestingUrl).origin
-                            : 'unknown'
-
-                        this.showPermissionDialog(permType, displayOrigin)
-                            .then(granted => {
-                                this.nonMacDecisions.set(cacheKey, granted)
-                                callback(granted)
-                            })
-                            .catch(() => callback(false))
-                    }
-                } else {
+                if (!permType) {
                     log.warn(`[PermissionManager] Unknown permission type: ${permission}`)
                     callback(false)
+                    return
                 }
+
+                this.requestResolvedPermissions(webContents, [permType], details)
+                    .then((granted) => callback(granted))
+                    .catch(() => callback(false))
             }
         )
 
@@ -163,26 +165,14 @@ export class PermissionManager {
 
                 log.debug(`[PermissionManager] Permission check: ${permission}`, { requestingOrigin, details })
 
-                const permType = this.mapElectronPermission(permission)
-                if (permType) {
-                    if (process.platform === 'darwin') {
-                        const status = this.getStatus(permType)
-                        if (permType === 'geolocation') {
-                            return status !== 'denied' && status !== 'restricted'
-                        }
-                        return status === 'granted'
-                    }
-                    // Windows/Linux: check per-webContents cache
-                    const wcId = webContents?.id ?? 0
-                    const cacheKey = `wc:${wcId}:${permType}`
-                    const cached = this.nonMacDecisions.get(cacheKey)
-                    if (permType === 'geolocation') {
-                        return cached !== false
-                    }
-                    return cached === true
+                const mediaPermissions = resolveRequiredMediaPermissions(permission, details as MediaPermissionDetails)
+                if (mediaPermissions) {
+                    return this.checkResolvedPermissions(webContents, this.resolveUnknownMediaFallback(webContents, mediaPermissions))
                 }
 
-                return false
+                const permType = this.mapElectronPermission(permission)
+                if (!permType) return false
+                return this.checkResolvedPermissions(webContents, [permType])
             }
         )
     }
@@ -193,13 +183,129 @@ export class PermissionManager {
     private mapElectronPermission(permission: string): PermissionType | null {
         const mapping: Record<string, PermissionType> = {
             'geolocation': 'geolocation',
-            'media': 'camera', // 需要进一步区分
             'camera': 'camera',
             'microphone': 'microphone',
             'mediaKeySystem': 'screen',
             'accessibility-events': 'accessibility',
         }
         return mapping[permission] || null
+    }
+
+    private resolveUnknownMediaFallback(
+        webContents: Electron.WebContents | null,
+        mediaPermissions: MediaPermissionType[]
+    ): PermissionType[] {
+        if (mediaPermissions.length > 0) return mediaPermissions
+
+        if (!webContents) {
+            log.warn('[PermissionManager] Rejected media permission with unknown audio/video type from unknown webContents')
+            return []
+        }
+
+        const caller = resolveIpcCallerSource(webContents)
+        if (caller.source === 'app') {
+            return ['camera']
+        }
+
+        if (caller.source === 'plugin' && caller.pluginId) {
+            log.warn(`[PermissionManager] Plugin "${caller.pluginId}" requested media permission without a concrete audio/video type`)
+        } else {
+            log.warn(`[PermissionManager] Rejected media permission with unknown audio/video type from ${caller.source}`)
+        }
+        return []
+    }
+
+    private async requestResolvedPermissions(
+        webContents: Electron.WebContents,
+        types: PermissionType[],
+        details: Electron.PermissionRequest | Electron.FilesystemPermissionRequest | Electron.MediaAccessPermissionRequest | Electron.OpenExternalPermissionRequest
+    ): Promise<boolean> {
+        if (types.length === 0) return false
+        if (!this.canCallerAccessMediaPermissions(webContents, types.filter(isMediaPermissionType))) {
+            return false
+        }
+
+        for (const type of types) {
+            const granted = await this.requestSinglePermission(webContents, type, details)
+            if (!granted) return false
+        }
+
+        return true
+    }
+
+    private async requestSinglePermission(
+        webContents: Electron.WebContents,
+        type: PermissionType,
+        details: Electron.PermissionRequest | Electron.FilesystemPermissionRequest | Electron.MediaAccessPermissionRequest | Electron.OpenExternalPermissionRequest
+    ): Promise<boolean> {
+        if (process.platform === 'darwin') {
+            const status = this.getStatus(type)
+            log.debug(`[PermissionManager] macOS status for ${type}: ${status}`)
+            if (type === 'geolocation') {
+                return status !== 'denied' && status !== 'restricted'
+            }
+            return status === 'granted'
+        }
+
+        // Use webContents.id as the primary cache scope so that
+        // file:// pages (whose URL origin is "null") don't share
+        // a single grant across all local windows.
+        const wcId = webContents?.id ?? 0
+        const cacheKey = `wc:${wcId}:${type}`
+
+        const cached = this.nonMacDecisions.get(cacheKey)
+        if (cached !== undefined) {
+            return cached
+        }
+
+        const displayOrigin = this.getDisplayOrigin(details)
+        const granted = await this.showPermissionDialog(type, displayOrigin)
+        this.nonMacDecisions.set(cacheKey, granted)
+        return granted
+    }
+
+    private checkResolvedPermissions(webContents: Electron.WebContents | null, types: PermissionType[]): boolean {
+        if (types.length === 0) return false
+        const mediaPermissions = types.filter(isMediaPermissionType)
+        if (mediaPermissions.length > 0 && !webContents) {
+            return false
+        }
+        if (webContents && !this.canCallerAccessMediaPermissions(webContents, mediaPermissions)) {
+            return false
+        }
+
+        return types.every((type) => this.checkSinglePermission(webContents, type))
+    }
+
+    private checkSinglePermission(webContents: Electron.WebContents | null, type: PermissionType): boolean {
+        if (process.platform === 'darwin') {
+            const status = this.getStatus(type)
+            if (type === 'geolocation') {
+                return status !== 'denied' && status !== 'restricted'
+            }
+            return status === 'granted'
+        }
+
+        // Windows/Linux: check per-webContents cache
+        const wcId = webContents?.id ?? 0
+        const cacheKey = `wc:${wcId}:${type}`
+        const cached = this.nonMacDecisions.get(cacheKey)
+        if (type === 'geolocation') {
+            return cached !== false
+        }
+        return cached === true
+    }
+
+    private getDisplayOrigin(
+        details: Electron.PermissionRequest | Electron.FilesystemPermissionRequest | Electron.MediaAccessPermissionRequest | Electron.OpenExternalPermissionRequest
+    ): string {
+        const requestingUrl = 'requestingUrl' in details ? details.requestingUrl : undefined
+        if (!requestingUrl) return 'unknown'
+        try {
+            return new URL(requestingUrl).origin
+        } catch {
+            return requestingUrl
+        }
     }
 
     /**
@@ -371,6 +477,31 @@ export class PermissionManager {
         }
         // 只有 not-determined 状态可以程序化请求
         return status === 'not-determined'
+    }
+
+    canCallerAccessMediaPermission(sender: Electron.WebContents, type: MediaPermissionType): boolean {
+        return this.canCallerAccessMediaPermissions(sender, [type])
+    }
+
+    canCallerAccessMediaPermissions(sender: Electron.WebContents, required: readonly MediaPermissionType[]): boolean {
+        if (required.length === 0) return true
+
+        const caller = resolveIpcCallerSource(sender)
+        if (caller.source === 'app') return true
+
+        if (caller.source !== 'plugin' || !caller.pluginId) {
+            log.warn(`[PermissionManager] Rejected media permission ${required.join(', ')} from ${caller.source}`)
+            return false
+        }
+
+        const plugin = permissionPluginLookup?.(caller.pluginId)
+        const missing = getMissingMediaPermissions(plugin?.manifest.permissions, required)
+        if (missing.length > 0) {
+            log.warn(`[PermissionManager] Plugin "${caller.pluginId}" lacks manifest permissions: ${missing.join(', ')}`)
+            return false
+        }
+
+        return true
     }
 
     /**

@@ -36,6 +36,8 @@ interface PluginHost {
   pluginName: string
   runCommandAllowed: boolean
   inputMonitorAllowed: boolean
+  microphoneAllowed: boolean
+  cameraAllowed: boolean
   ready: boolean
   activeRequests: number  // 活跃请求计数器
   startedAt: number       // 启动时间戳
@@ -323,6 +325,8 @@ export class PluginHostManager extends EventEmitter {
         pluginName,
         runCommandAllowed: plugin.manifest.permissions?.runCommand === true,
         inputMonitorAllowed: plugin.manifest.permissions?.inputMonitor === true,
+        microphoneAllowed: plugin.manifest.permissions?.microphone === true,
+        cameraAllowed: plugin.manifest.permissions?.camera === true,
         ready: isPooled,
         activeRequests: 0,
         startedAt: Date.now(),
@@ -553,7 +557,9 @@ export class PluginHostManager extends EventEmitter {
           this.clipboardHistoryManager,
           {
             runCommandAllowed: host.runCommandAllowed,
-            inputMonitorAllowed: plugin.manifest.permissions?.inputMonitor === true
+            inputMonitorAllowed: host.inputMonitorAllowed,
+            microphoneAllowed: host.microphoneAllowed,
+            cameraAllowed: host.cameraAllowed
           }
         )
       }
@@ -957,7 +963,9 @@ export class PluginHostManager extends EventEmitter {
         this.clipboardHistoryManager,
         {
           runCommandAllowed: host.runCommandAllowed,
-          inputMonitorAllowed: host.inputMonitorAllowed
+          inputMonitorAllowed: host.inputMonitorAllowed,
+          microphoneAllowed: host.microphoneAllowed,
+          cameraAllowed: host.cameraAllowed
         }
       )
     }

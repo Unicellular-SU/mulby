@@ -371,6 +371,16 @@ export interface PluginPermissions {
   runCommand?: boolean
   webview?: boolean
   /**
+   * 允许插件访问麦克风。插件 UI 使用 getUserMedia({ audio: true })
+   * 或调用 media/permission 的麦克风权限 API 时必须声明。
+   */
+  microphone?: boolean
+  /**
+   * 允许插件访问摄像头。插件 UI 使用 getUserMedia({ video: true })
+   * 或调用 media/permission 的摄像头权限 API 时必须声明。
+   */
+  camera?: boolean
+  /**
    * 全局输入事件监听（鼠标/键盘）
    *
    * 启用后插件可调用 inputMonitor API 监听全局鼠标点击轨迹和键盘输入。
@@ -388,6 +398,15 @@ export interface PluginPermissions {
    */
   envKeys?: string[] | '*'
 }
+
+export type PluginPermissionStatus =
+  | 'authorized'
+  | 'granted'
+  | 'denied'
+  | 'not-determined'
+  | 'restricted'
+  | 'limited'
+  | 'unknown'
 
 export interface PluginRendererCapabilities {
   webview: boolean
@@ -587,6 +606,19 @@ export interface PluginAPI {
     runCommand: (input: PluginRunCommandInput) => Promise<PluginRunCommandResult>
     getRunCommandPolicy: () => Promise<Pick<CommandRunnerSettings, 'enabled' | 'requireConsent' | 'allowShell' | 'allowList' | 'denyList'>>
     listRunCommandAudit: (limit?: number) => Promise<CommandAuditItem[]>
+  }
+  media: {
+    getAccessStatus: (mediaType: 'microphone' | 'camera') => PluginPermissionStatus
+    askForAccess: (mediaType: 'microphone' | 'camera') => Promise<boolean>
+    hasCameraAccess: () => boolean
+    hasMicrophoneAccess: () => boolean
+  }
+  permission: {
+    getStatus: (type: 'geolocation' | 'camera' | 'microphone' | 'screen' | 'accessibility' | 'contacts' | 'calendar') => PluginPermissionStatus
+    request: (type: 'geolocation' | 'camera' | 'microphone' | 'screen' | 'accessibility' | 'contacts' | 'calendar') => Promise<PluginPermissionStatus>
+    canRequest: (type: 'geolocation' | 'camera' | 'microphone' | 'screen' | 'accessibility' | 'contacts' | 'calendar') => boolean
+    openSystemSettings: (type: 'geolocation' | 'camera' | 'microphone' | 'screen' | 'accessibility' | 'contacts' | 'calendar') => boolean
+    isAccessibilityTrusted: () => boolean
   }
   features: {
     getFeatures: (codes?: string[]) => DynamicFeature[]

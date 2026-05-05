@@ -23,6 +23,7 @@ import { registerGeolocationHandlers } from './geolocation'
 import { registerInputHandlers } from './input'
 import { registerInputMonitorHandlers } from './input-monitor'
 import { registerPermissionHandlers } from './permission'
+import { setPermissionPluginLookup } from '../plugin/permission-manager'
 import { registerHostHandlers } from './host'
 import { registerFilesystemHandlers } from './filesystem'
 import { registerStorageHandlers } from './storage'
@@ -93,6 +94,8 @@ export function registerAllHandlers(
   registerShellHandlers()
   // 注入插件查找函数，供 shell:runCommand 来源识别时检查 manifest 权限
   setShellPluginLookup((pluginId) => pluginManager.get(pluginId))
+  // 注入插件查找函数，供媒体设备权限请求检查 manifest 权限
+  setPermissionPluginLookup((pluginId) => pluginManager.get(pluginId))
   registerDialogHandlers()
   registerSystemHandlers()
   registerDesktopHandlers()

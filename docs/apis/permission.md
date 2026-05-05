@@ -7,6 +7,17 @@
 
 权限 API 封装系统权限检测与跳转设置页，优先在 macOS 上提供真实状态。
 
+插件访问 `camera` / `microphone` 权限 API 时，必须先在 `manifest.json` 中声明对应权限：
+
+```json
+{
+  "permissions": {
+    "microphone": true,
+    "camera": true
+  }
+}
+```
+
 ### getStatus(type)
 [Renderer] [Backend]
 获取权限状态。

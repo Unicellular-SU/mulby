@@ -85,7 +85,9 @@ export class PluginRunner {
     const pluginModule = await this.loadModule()
     const api = createPluginAPI(this.plugin.id, undefined, undefined, undefined, {
       runCommandAllowed: this.plugin.manifest.permissions?.runCommand === true,
-      inputMonitorAllowed: this.plugin.manifest.permissions?.inputMonitor === true
+      inputMonitorAllowed: this.plugin.manifest.permissions?.inputMonitor === true,
+      microphoneAllowed: this.plugin.manifest.permissions?.microphone === true,
+      cameraAllowed: this.plugin.manifest.permissions?.camera === true
     })
     const context = { api, featureCode, input: input || '', attachments }
 

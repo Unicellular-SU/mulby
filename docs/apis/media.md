@@ -7,6 +7,17 @@
 
 Media API 提供摄像头和麦克风的权限管理，支持 macOS、Windows 和 Linux。
 
+插件必须在 `manifest.json` 中声明对应媒体权限，否则宿主会拒绝访问：
+
+```json
+{
+  "permissions": {
+    "microphone": true,
+    "camera": true
+  }
+}
+```
+
 ### getAccessStatus(mediaType)
 [Renderer] [Backend]
 获取媒体访问权限状态。
@@ -25,6 +36,7 @@ const status = await media.getAccessStatus('camera');
 **跨平台说明**:
 - macOS: 返回实际权限状态
 - Windows/Linux: 始终返回 'granted'（权限由浏览器在使用时处理）
+- 插件未声明对应 `permissions.microphone` / `permissions.camera` 时返回 `denied`
 
 ### askForAccess(mediaType)
 [Renderer] [Backend]
@@ -68,9 +80,12 @@ if (await media.hasMicrophoneAccess()) {
 
 ### 在插件 UI 中使用摄像头/麦克风
 
-权限检查后，在插件 UI 中使用标准 Web API：
+权限检查后，在插件 UI 中使用标准 Web API。Mulby 只负责权限检查与授权，录音数据由 `navigator.mediaDevices.getUserMedia` 和 `MediaRecorder` 读取。
 
 ```javascript
+// manifest.json 需要声明:
+// { "permissions": { "microphone": true, "camera": true } }
+
 // 检查权限
 const hasCamera = await window.mulby.media.hasCameraAccess();
 if (!hasCamera) {
@@ -91,6 +106,15 @@ video.srcObject = stream;
 ### 完整示例
 
 ```javascript
+// manifest.json 需要声明:
+// { "permissions": { "microphone": true } }
+
 const granted = await window.mulby.media.askForAccess('microphone');
 console.log('microphone:', granted);
+
+if (granted) {
+  const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+  const recorder = new MediaRecorder(stream);
+  recorder.start();
+}
 ```
