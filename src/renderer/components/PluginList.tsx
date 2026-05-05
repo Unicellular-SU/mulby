@@ -84,7 +84,12 @@ const RECENT_LIMIT = 40
 const MAX_CACHE_SIZE = 80
 const PREWARM_TOP_N = 3
 const PREWARM_DEDUPE_MS = 20_000
-const DEFAULT_SEARCH_SETTINGS: SearchSettings = { enableApps: true, enableFiles: false }
+const DEFAULT_SEARCH_SETTINGS: SearchSettings = {
+  enableApps: true,
+  enableFiles: false,
+  enableMainPush: true,
+  disabledMainPushPlugins: []
+}
 const PUSH_DISPLAY_LIMIT = 5
 const COLLAPSED_EXPANDED_SECTIONS: Record<ExpandableResultSectionKey, boolean> = {
   best: false,

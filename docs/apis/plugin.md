@@ -60,6 +60,30 @@ const translatorCommands = await window.mulby.plugin.listCommands('translator');
 const results = await window.mulby.plugin.search('translate');
 ```
 
+### plugin.mainPushSelect(pluginName, action)
+[Renderer]
+通知指定插件用户选中了某个 MainPush 推送项。宿主会在全局 MainPush 开关关闭或该插件已禁用推送时返回 `false`；如果插件的 MainPush worker 尚未运行，宿主会先尝试按需激活。
+
+```javascript
+const ok = await window.mulby.plugin.mainPushSelect('translator', {
+  code: 'translate',
+  type: 'text',
+  payload: 'hello',
+  option: pushItem,
+});
+```
+
+返回值：`boolean`
+
+### plugin.getMainPushPlugins()
+[Renderer]
+获取当前已启用且声明了 MainPush 功能的插件列表，用于设置界面展示全局/单插件推送开关。
+
+```javascript
+const plugins = await window.mulby.plugin.getMainPushPlugins();
+// Array<{ pluginId: string; displayName: string }>
+```
+
 ### plugin.run(name, featureCode[, input])
 [Renderer]
 执行插件功能入口。
