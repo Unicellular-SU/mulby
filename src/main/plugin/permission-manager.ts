@@ -265,6 +265,7 @@ export class PermissionManager {
             return ['camera']
         }
 
+        this.logUnresolvedMediaPermission(webContents, details, caller)
         if (caller.source === 'plugin' && caller.pluginId) {
             log.warn(`[PermissionManager] Plugin "${caller.pluginId}" requested media permission without a concrete audio/video type`)
         } else {
@@ -321,9 +322,27 @@ export class PermissionManager {
     private shouldApplyPendingDesktopCapture(details: MediaPermissionDetails | undefined): boolean {
         if (!details) return true
         if (Array.isArray(details.mediaTypes)) {
+            if (details.mediaTypes.length === 0) return true
             return details.mediaTypes.includes('video')
         }
         return details.mediaType === undefined || details.mediaType === 'unknown' || details.mediaType === 'video'
+    }
+
+    private logUnresolvedMediaPermission(
+        webContents: Electron.WebContents,
+        details: MediaPermissionDetails | undefined,
+        caller: ReturnType<typeof resolveIpcCallerSource>
+    ): void {
+        log.warn('[PermissionManager] Unresolved media permission details', {
+            mediaTypes: details?.mediaTypes,
+            mediaType: details?.mediaType,
+            webContentsId: webContents.id,
+            pluginId: caller.pluginId,
+            windowId: caller.windowId,
+            pendingByWebContents: this.pendingDesktopCapturesByWebContents.has(webContents.id),
+            pendingByPlugin: caller.pluginId ? this.pendingDesktopCapturesByPlugin.has(caller.pluginId) : false,
+            pendingByWindow: caller.windowId !== undefined ? this.pendingDesktopCapturesByWindow.has(caller.windowId) : false,
+        })
     }
 
     private async requestResolvedPermissions(
