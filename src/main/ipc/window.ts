@@ -851,20 +851,20 @@ export function registerWindowHandlers(
 
     const pluginWc = getPluginWebContents(win)
     const wasFocused = win.isFocused()
-    const pluginWasFocused = pluginWc ? pluginWc.isFocused() : false
-
-    log.info(`[requestFocus] winId=${win.id} win.isFocused=${wasFocused} pluginWc=${pluginWc ? 'found' : 'null'} pluginWc.isFocused=${pluginWasFocused} focusedWinId=${BrowserWindow.getFocusedWindow()?.id}`)
 
     if (!wasFocused) {
       // On macOS, frame:false + WebContentsView windows may fail win.focus().
       // Use win.show() which calls [NSWindow makeKeyAndOrderFront:] and
       // app.focus({steal:true}) to ensure the app is active.
       if (process.platform === 'darwin') {
+        app.show()
         app.focus({ steal: true })
+      }
+      if (win.isMinimized()) {
+        win.restore()
       }
       win.show()
       win.focus()
-      log.info(`[requestFocus] after show+focus: win.isFocused=${win.isFocused()} focusedWinId=${BrowserWindow.getFocusedWindow()?.id}`)
     }
     // 关键：即使 win 已 focused，pluginView 可能没有内部焦点
     if (pluginWc && !pluginWc.isDestroyed() && !pluginWc.isFocused()) {

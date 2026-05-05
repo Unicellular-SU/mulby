@@ -698,7 +698,7 @@ export class PluginWindowManager {
       fullscreen: isFullscreen,
       fullscreenable: isFullscreen,
       alwaysOnTop: windowConfig.alwaysOnTop,
-      focusable: windowConfig.focusable,
+      focusable: windowConfig.focusable !== false,
       thickFrame: !useWindowsFramelessSurface,
       backgroundColor: (windowConfig.transparent || useWindowsFramelessSurface) ? '#00000000' : backgroundColor,
       transparent: windowConfig.transparent || useWindowsFramelessSurface,
