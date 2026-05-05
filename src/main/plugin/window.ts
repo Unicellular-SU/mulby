@@ -698,6 +698,7 @@ export class PluginWindowManager {
       fullscreen: isFullscreen,
       fullscreenable: isFullscreen,
       alwaysOnTop: windowConfig.alwaysOnTop,
+      focusable: windowConfig.focusable,
       thickFrame: !useWindowsFramelessSurface,
       backgroundColor: (windowConfig.transparent || useWindowsFramelessSurface) ? '#00000000' : backgroundColor,
       transparent: windowConfig.transparent || useWindowsFramelessSurface,
@@ -768,6 +769,25 @@ export class PluginWindowManager {
       // 设置标题栏 IPC
       setupTitlebarIPC(win, pluginView, this.themeManager)
 
+      // macOS multi-view focus fix:
+      // frame:false + WebContentsView may not properly become key window on click.
+      win.on('focus', () => {
+        if (pluginView && !pluginView.webContents.isDestroyed()) {
+          const alreadyFocused = pluginView.webContents.isFocused()
+          log.info(`[detached:win.focus] winId=${win.id} pluginView.isFocused=${alreadyFocused}`)
+          if (!alreadyFocused) {
+            pluginView.webContents.focus()
+            log.info(`[detached:win.focus] called pluginView.focus(), now=${pluginView.webContents.isFocused()}`)
+          }
+        }
+      })
+      pluginView.webContents.on('before-input-event', () => {
+        if (!win.isDestroyed() && !win.isFocused()) {
+          log.info(`[detached:before-input-event] winId=${win.id} calling win.focus()`)
+          win.focus()
+        }
+      })
+
       // 窗口 resize 时更新插件视图布局
       win.on('resize', () => {
         if (!win.isDestroyed() && pluginView && !pluginView.webContents.isDestroyed()) {
@@ -819,9 +839,27 @@ export class PluginWindowManager {
       if (windowConfig.skipTaskbar) {
         win.setSkipTaskbar(true)
       }
-      win.show()
+      if (windowConfig.focusable === false) {
+        win.showInactive()
+      } else {
+        win.show()
+      }
       this.openPluginDevTools(pluginWebContents, plugin.id)
     })
+
+    // macOS multi-view focus: inject mousedown handler for titlebar windows
+    if (showTitleBar && pluginView) {
+      pluginView.webContents.on('dom-ready', () => {
+        if (pluginView.webContents.isDestroyed()) return
+        pluginView.webContents.executeJavaScript(`
+          document.addEventListener('mousedown', function() {
+            if (window.mulby && window.mulby.window && window.mulby.window.focus) {
+              window.mulby.window.focus()
+            }
+          }, true)
+        `).catch(() => {})
+      })
+    }
 
     // 等待插件内容加载完成后，发送 plugin:init 和 theme 信息
     pluginWebContents.on('did-finish-load', async () => {
@@ -979,7 +1017,7 @@ export class PluginWindowManager {
       movable: options?.movable,
       minimizable: options?.minimizable,
       maximizable: options?.maximizable,
-      focusable: options?.focusable,
+      focusable: options?.focusable !== false,
       skipTaskbar: options?.skipTaskbar,
       enableLargerThanScreen: options?.enableLargerThanScreen,
       thickFrame: !useWindowsFramelessSurface,
@@ -1052,6 +1090,25 @@ export class PluginWindowManager {
       // 设置标题栏 IPC
       setupTitlebarIPC(win, pluginView, this.themeManager)
 
+      // macOS multi-view focus fix:
+      // frame:false + WebContentsView may not properly become key window on click.
+      win.on('focus', () => {
+        if (pluginView && !pluginView.webContents.isDestroyed()) {
+          const alreadyFocused = pluginView.webContents.isFocused()
+          log.info(`[auxiliary:win.focus] winId=${win.id} pluginView.isFocused=${alreadyFocused}`)
+          if (!alreadyFocused) {
+            pluginView.webContents.focus()
+            log.info(`[auxiliary:win.focus] called pluginView.focus(), now=${pluginView.webContents.isFocused()}`)
+          }
+        }
+      })
+      pluginView.webContents.on('before-input-event', () => {
+        if (!win.isDestroyed() && !win.isFocused()) {
+          log.info(`[auxiliary:before-input-event] winId=${win.id} calling win.focus()`)
+          win.focus()
+        }
+      })
+
       // 窗口 resize 时更新插件视图布局
       win.on('resize', () => {
         if (!win.isDestroyed() && pluginView && !pluginView.webContents.isDestroyed()) {
@@ -1105,6 +1162,23 @@ export class PluginWindowManager {
       }
       this.openPluginDevTools(pluginWebContents, plugin.id)
     })
+
+    // macOS multi-view focus: inject mousedown handler to request focus on click.
+    // This fixes the issue where frame:false + WebContentsView windows don't
+    // properly become key window on macOS when clicked.
+    if (showTitleBar && pluginView) {
+      pluginView.webContents.on('dom-ready', () => {
+        if (pluginView.webContents.isDestroyed()) return
+        pluginView.webContents.executeJavaScript(`
+          document.addEventListener('mousedown', function(e) {
+            console.log('[mulby:focus-fix] mousedown on plugin content, requesting focus, target:', e.target?.tagName)
+            if (window.mulby && window.mulby.window && window.mulby.window.focus) {
+              window.mulby.window.focus()
+            }
+          }, true)
+        `).catch(() => {})
+      })
+    }
 
     // 等待插件内容加载完成后，再发送初始化数据和主题
     pluginWebContents.on('did-finish-load', async () => {

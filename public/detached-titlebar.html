@@ -52,8 +52,8 @@
       width: 100%;
       height: 36px;
       border-bottom: 1px solid var(--tb-border);
-      -webkit-app-region: drag;
       position: relative;
+      cursor: default;
     }
 
     /* ===== 标题文字 ===== */
@@ -79,7 +79,6 @@
       height: 100%;
       display: flex;
       align-items: center;
-      -webkit-app-region: no-drag;
     }
 
     /* ===== 按钮 ===== */
@@ -178,6 +177,7 @@
       const btnMinimize = document.getElementById('btn-minimize')
       const btnMaximize = document.getElementById('btn-maximize')
       const btnClose = document.getElementById('btn-close')
+      const titlebar = document.querySelector('.titlebar')
       const api = window.mulbyTitlebar
 
       if (!api) {
@@ -186,6 +186,41 @@
       }
 
       let isAlwaysOnTop = false
+
+      // === JS-based window drag (fallback for -webkit-app-region issues in multi-view) ===
+      var isDragging = false
+      var didDrag = false
+      var dragStartScreenX = 0
+      var dragStartScreenY = 0
+
+      titlebar.addEventListener('mousedown', function(e) {
+        if (e.button !== 0) return
+        if (e.target.closest('.titlebar-controls')) return
+
+        isDragging = true
+        didDrag = false
+        dragStartScreenX = e.screenX
+        dragStartScreenY = e.screenY
+        api.startDrag(e.screenX, e.screenY)
+        e.preventDefault()
+      })
+
+      document.addEventListener('mousemove', function(e) {
+        if (!isDragging) return
+        didDrag = true
+        api.dragging(e.screenX, e.screenY)
+      })
+
+      document.addEventListener('mouseup', function(e) {
+        if (isDragging) {
+          isDragging = false
+          api.endDrag()
+          // If it was a click (no drag movement), request focus for the plugin content
+          if (!didDrag) {
+            api.requestFocus()
+          }
+        }
+      })
 
       // 接收初始化数据
       api.onInit(function(data) {
@@ -201,7 +236,7 @@
       // 更多插件操作
       btnMore.addEventListener('click', function() {
         if (typeof api.showPluginMenu === 'function') {
-          const rect = btnMore.getBoundingClientRect()
+          var rect = btnMore.getBoundingClientRect()
           api.showPluginMenu({ x: rect.left, y: rect.bottom })
         }
       })

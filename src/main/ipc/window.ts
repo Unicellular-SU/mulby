@@ -840,6 +840,39 @@ export function registerWindowHandlers(
     win?.setAlwaysOnTop(flag)
   })
 
+  // 窗口焦点请求 (multi-view focus fix for macOS)
+  // 必须同时确保 BrowserWindow 是 key window 且 pluginView 拥有内部焦点
+  ipcMain.on('window:requestFocus', (event) => {
+    const win = windowFromWebContents(event.sender)
+    if (!win || win.isDestroyed()) {
+      log.info(`[requestFocus] FAILED: windowFromWebContents returned null for sender.id=${event.sender.id}`)
+      return
+    }
+
+    const pluginWc = getPluginWebContents(win)
+    const wasFocused = win.isFocused()
+    const pluginWasFocused = pluginWc ? pluginWc.isFocused() : false
+
+    log.info(`[requestFocus] winId=${win.id} win.isFocused=${wasFocused} pluginWc=${pluginWc ? 'found' : 'null'} pluginWc.isFocused=${pluginWasFocused} focusedWinId=${BrowserWindow.getFocusedWindow()?.id}`)
+
+    if (!wasFocused) {
+      // On macOS, frame:false + WebContentsView windows may fail win.focus().
+      // Use win.show() which calls [NSWindow makeKeyAndOrderFront:] and
+      // app.focus({steal:true}) to ensure the app is active.
+      if (process.platform === 'darwin') {
+        app.focus({ steal: true })
+      }
+      win.show()
+      win.focus()
+      log.info(`[requestFocus] after show+focus: win.isFocused=${win.isFocused()} focusedWinId=${BrowserWindow.getFocusedWindow()?.id}`)
+    }
+    // 关键：即使 win 已 focused，pluginView 可能没有内部焦点
+    if (pluginWc && !pluginWc.isDestroyed() && !pluginWc.isFocused()) {
+      pluginWc.focus()
+      log.info(`[requestFocus] called pluginWc.focus() for winId=${win.id}, now isFocused=${pluginWc.isFocused()}`)
+    }
+  })
+
   ipcMain.on('window:setPosition', (event, x: number, y: number) => {
     const win = windowFromWebContents(event.sender)
     if (!win || !Number.isFinite(x) || !Number.isFinite(y)) return

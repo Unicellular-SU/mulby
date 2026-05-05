@@ -1,10 +1,14 @@
-import { BrowserWindow, ipcMain, WebContentsView } from 'electron'
+import { app, BrowserWindow, ipcMain, WebContentsView } from 'electron'
 import { ThemeManager } from '../services/theme'
+import log from 'electron-log'
 
 export const DETACHED_TITLEBAR_HEIGHT = 36
 
 // 存储活跃的标题栏窗口 → 插件视图映射
 const titlebarWindows = new Map<number, { win: BrowserWindow; pluginView: WebContentsView }>()
+
+// 存储拖拽状态
+const dragStates = new Map<number, { startX: number; startY: number; winStartX: number; winStartY: number }>()
 
 // 全局 handler 只注册一次
 let globalHandlersRegistered = false
@@ -44,6 +48,69 @@ function ensureGlobalHandlers(): void {
           pluginView.webContents.reload()
         }
         break
+    }
+  })
+
+  // JS-based window drag: start
+  ipcMain.on('titlebar:startDrag', (event, screenX: number, screenY: number) => {
+    const entry = titlebarWindows.get(event.sender.id)
+    if (!entry) {
+      log.info(`[titlebar:startDrag] no entry for sender.id=${event.sender.id}`)
+      return
+    }
+    const { win } = entry
+    if (win.isDestroyed()) return
+    const [winX, winY] = win.getPosition()
+    dragStates.set(event.sender.id, {
+      startX: screenX,
+      startY: screenY,
+      winStartX: winX,
+      winStartY: winY
+    })
+    log.info(`[titlebar:startDrag] winId=${win.id} screen=(${screenX},${screenY}) winPos=(${winX},${winY})`)
+  })
+
+  // JS-based window drag: move
+  ipcMain.on('titlebar:dragging', (event, screenX: number, screenY: number) => {
+    const entry = titlebarWindows.get(event.sender.id)
+    const dragState = dragStates.get(event.sender.id)
+    if (!entry || !dragState) return
+    const { win } = entry
+    if (win.isDestroyed()) return
+    const dx = screenX - dragState.startX
+    const dy = screenY - dragState.startY
+    win.setPosition(dragState.winStartX + dx, dragState.winStartY + dy)
+  })
+
+  // JS-based window drag: end
+  ipcMain.on('titlebar:endDrag', (event) => {
+    dragStates.delete(event.sender.id)
+  })
+
+  // Focus request from titlebar: make window key + focus plugin content
+  ipcMain.on('titlebar:requestFocus', (event) => {
+    const entry = titlebarWindows.get(event.sender.id)
+    if (!entry) {
+      log.info(`[titlebar:requestFocus] no entry for sender.id=${event.sender.id}`)
+      return
+    }
+    const { win, pluginView } = entry
+    if (win.isDestroyed()) return
+
+    const wasFocused = win.isFocused()
+    const pluginWasFocused = pluginView.webContents.isDestroyed() ? false : pluginView.webContents.isFocused()
+    log.info(`[titlebar:requestFocus] winId=${win.id} win.isFocused=${wasFocused} pluginView.isFocused=${pluginWasFocused}`)
+
+    if (!wasFocused) {
+      if (process.platform === 'darwin') {
+        app.focus({ steal: true })
+      }
+      win.show()
+      win.focus()
+    }
+    if (!pluginView.webContents.isDestroyed() && !pluginView.webContents.isFocused()) {
+      pluginView.webContents.focus()
+      log.info(`[titlebar:requestFocus] called pluginView.webContents.focus() for winId=${win.id}, now=${pluginView.webContents.isFocused()}`)
     }
   })
 

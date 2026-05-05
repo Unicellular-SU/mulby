@@ -7,6 +7,7 @@
  * - 窗口状态查询
  * - 主题变化监听
  * - 初始化数据接收
+ * - 窗口拖拽 (JS fallback for -webkit-app-region issues in multi-view)
  */
 import { contextBridge, ipcRenderer } from 'electron'
 
@@ -24,6 +25,26 @@ const api = {
   /** 获取窗口状态 */
   getState: (): Promise<{ isMaximized: boolean; isAlwaysOnTop: boolean }> => {
     return ipcRenderer.invoke('titlebar:getState')
+  },
+
+  /** 开始拖拽窗口 */
+  startDrag: (screenX: number, screenY: number) => {
+    ipcRenderer.send('titlebar:startDrag', screenX, screenY)
+  },
+
+  /** 拖拽中移动窗口 */
+  dragging: (screenX: number, screenY: number) => {
+    ipcRenderer.send('titlebar:dragging', screenX, screenY)
+  },
+
+  /** 结束拖拽 */
+  endDrag: () => {
+    ipcRenderer.send('titlebar:endDrag')
+  },
+
+  /** 请求窗口获取焦点 */
+  requestFocus: () => {
+    ipcRenderer.send('titlebar:requestFocus')
   },
 
   /** 监听窗口状态变化 */
