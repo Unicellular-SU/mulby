@@ -352,6 +352,84 @@ static Napi::Value GetDisplays(const Napi::CallbackInfo& info) {
     return result;
 }
 
+/**
+ * 获取指定 CGWindowID 的窗口边界
+ * getWindowBounds(windowId) → { x, y, width, height } | null
+ *
+ * 坐标来自 kCGWindowBounds，和 Electron screen.getAllDisplays().bounds
+ * 同属 macOS 逻辑屏幕坐标。
+ */
+static Napi::Value GetWindowBounds(const Napi::CallbackInfo& info) {
+    Napi::Env env = info.Env();
+
+    if (info.Length() < 1 || !info[0].IsNumber()) {
+        Napi::TypeError::New(env, "需要 1 个参数: windowId").ThrowAsJavaScriptException();
+        return env.Null();
+    }
+
+    uint32_t targetWindowId = info[0].As<Napi::Number>().Uint32Value();
+    if (targetWindowId == 0) {
+        return env.Null();
+    }
+
+    CFArrayRef windows = CGWindowListCopyWindowInfo(kCGWindowListOptionAll, kCGNullWindowID);
+    if (!windows) {
+        return env.Null();
+    }
+
+    CFIndex count = CFArrayGetCount(windows);
+    for (CFIndex i = 0; i < count; i++) {
+        CFDictionaryRef windowInfo = (CFDictionaryRef)CFArrayGetValueAtIndex(windows, i);
+        if (!windowInfo) continue;
+
+        CFNumberRef windowNumberRef = (CFNumberRef)CFDictionaryGetValue(windowInfo, kCGWindowNumber);
+        if (!windowNumberRef) continue;
+
+        int64_t windowNumber = 0;
+        if (!CFNumberGetValue(windowNumberRef, kCFNumberSInt64Type, &windowNumber)) continue;
+        if (windowNumber != targetWindowId) continue;
+
+        CFBooleanRef onscreenRef = (CFBooleanRef)CFDictionaryGetValue(windowInfo, kCGWindowIsOnscreen);
+        if (
+            onscreenRef &&
+            CFGetTypeID(onscreenRef) == CFBooleanGetTypeID() &&
+            !CFBooleanGetValue(onscreenRef)
+        ) {
+            CFRelease(windows);
+            return env.Null();
+        }
+
+        CFDictionaryRef boundsDict = (CFDictionaryRef)CFDictionaryGetValue(windowInfo, kCGWindowBounds);
+        if (!boundsDict) {
+            CFRelease(windows);
+            return env.Null();
+        }
+
+        CGRect bounds;
+        if (!CGRectMakeWithDictionaryRepresentation(boundsDict, &bounds)) {
+            CFRelease(windows);
+            return env.Null();
+        }
+
+        if (bounds.size.width <= 0 || bounds.size.height <= 0) {
+            CFRelease(windows);
+            return env.Null();
+        }
+
+        Napi::Object result = Napi::Object::New(env);
+        result.Set("x", Napi::Number::New(env, bounds.origin.x));
+        result.Set("y", Napi::Number::New(env, bounds.origin.y));
+        result.Set("width", Napi::Number::New(env, bounds.size.width));
+        result.Set("height", Napi::Number::New(env, bounds.size.height));
+
+        CFRelease(windows);
+        return result;
+    }
+
+    CFRelease(windows);
+    return env.Null();
+}
+
 #endif // __APPLE__
 
 // ============================================================
@@ -365,6 +443,7 @@ Napi::Object Init(Napi::Env env, Napi::Object exports) {
     exports.Set("getPixelColor", Napi::Function::New(env, GetPixelColor));
     exports.Set("pickColor", Napi::Function::New(env, PickColor));
     exports.Set("getDisplays", Napi::Function::New(env, GetDisplays));
+    exports.Set("getWindowBounds", Napi::Function::New(env, GetWindowBounds));
 #endif
     return exports;
 }

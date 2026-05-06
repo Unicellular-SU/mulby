@@ -11,8 +11,15 @@ import { desktopCapturer, screen } from 'electron'
 import {
   nativeCaptureScreen,
   nativeCaptureRegion,
+  nativeGetWindowBounds,
   isNativeScreenCaptureAvailable
 } from '../services/native-screen-capture'
+import {
+  createPublicCaptureSource,
+  normalizeCaptureBounds,
+  type CaptureBounds,
+  type PublicCaptureSource
+} from '../services/capture-source-utils'
 import { SCREEN_CAPTURE_THUMBNAIL_SIZE } from '../constants/window-defaults'
 import { createSystemPermissionDeniedError } from './media-permission-policy'
 import log from 'electron-log'
@@ -27,13 +34,9 @@ export interface DisplayInfo {
   isPrimary: boolean
 }
 
-export interface CaptureSource {
-  id: string
-  name: string
-  thumbnailDataUrl: string
-  displayId?: string
-  appIconDataUrl?: string
-}
+export type { CaptureBounds }
+
+export type CaptureSource = PublicCaptureSource
 
 export interface CaptureOptions {
   types?: ('screen' | 'window')[]
@@ -52,7 +55,26 @@ export interface RecordingOptions {
   frameRate?: number
 }
 
+interface DesktopCapturerLike {
+  getSources(options: Electron.SourcesOptions): Promise<Electron.DesktopCapturerSource[]>
+}
+
+interface PluginScreenDependencies {
+  desktopCapturer?: DesktopCapturerLike
+  getWindowBounds?: (sourceId: string) => CaptureBounds | null
+}
+
 export class PluginScreen {
+  constructor(private readonly dependencies: PluginScreenDependencies = {}) {}
+
+  private get desktopCapturer(): DesktopCapturerLike {
+    const capturer = this.dependencies.desktopCapturer || desktopCapturer
+    if (!capturer) {
+      throw new Error('Electron desktopCapturer is unavailable')
+    }
+    return capturer
+  }
+
   /**
    * 获取所有显示器信息
    */
@@ -163,19 +185,28 @@ export class PluginScreen {
     const types = options.types || ['screen', 'window']
     const thumbnailSize = options.thumbnailSize || { width: SCREEN_CAPTURE_THUMBNAIL_SIZE, height: SCREEN_CAPTURE_THUMBNAIL_SIZE }
 
-    const sources = await withScreenPermissionErrorMapping(() => desktopCapturer.getSources({
+    const sources = await withScreenPermissionErrorMapping(() => this.desktopCapturer.getSources({
       types,
       thumbnailSize,
       fetchWindowIcons: true
     }))
 
-    return sources.map(source => ({
-      id: source.id,
-      name: source.name,
-      thumbnailDataUrl: source.thumbnail.toDataURL(),
-      displayId: source.display_id || undefined,
-      appIconDataUrl: source.appIcon ? source.appIcon.toDataURL() : undefined
-    }))
+    return sources.map(source => createPublicCaptureSource(
+      source,
+      this.resolveWindowBounds(source.id)
+    ))
+  }
+
+  /**
+   * 获取指定窗口捕获源的当前窗口边界。
+   */
+  async getWindowBounds(sourceId: string): Promise<CaptureBounds | null> {
+    return this.resolveWindowBounds(sourceId)
+  }
+
+  private resolveWindowBounds(sourceId: string): CaptureBounds | null {
+    const resolver = this.dependencies.getWindowBounds || nativeGetWindowBounds
+    return normalizeCaptureBounds(resolver(sourceId))
   }
 
   /**
@@ -230,7 +261,7 @@ export class PluginScreen {
 
     let sourceId = options.sourceId
     if (!sourceId) {
-      const sources = await withScreenPermissionErrorMapping(() => desktopCapturer.getSources({
+      const sources = await withScreenPermissionErrorMapping(() => this.desktopCapturer.getSources({
         types: ['screen'],
         thumbnailSize: { width: 1, height: 1 }
       }))
@@ -254,7 +285,7 @@ export class PluginScreen {
       display = this.getPrimaryDisplay()
     }
 
-    const sources = await withScreenPermissionErrorMapping(() => desktopCapturer.getSources({
+    const sources = await withScreenPermissionErrorMapping(() => this.desktopCapturer.getSources({
       types: ['screen', 'window'],
       thumbnailSize: {
         width: Math.max(1, Math.round(display.bounds.width * display.scaleFactor)),
@@ -315,7 +346,7 @@ export class PluginScreen {
   ): Promise<Buffer> {
     const display = screen.getDisplayMatching(normalizedRegion)
 
-    const sources = await withScreenPermissionErrorMapping(() => desktopCapturer.getSources({
+    const sources = await withScreenPermissionErrorMapping(() => this.desktopCapturer.getSources({
       types: ['screen'],
       thumbnailSize: {
         width: Math.max(1, Math.round(display.bounds.width * display.scaleFactor)),

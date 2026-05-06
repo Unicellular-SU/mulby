@@ -22,6 +22,7 @@ export function createPlatformApi(ipcRenderer: IpcRenderer, options?: { restrict
       getCursorScreenPoint: () => ipcRenderer.invoke('screen:getCursorScreenPoint'),
       getSources: (options?: { types?: ('screen' | 'window')[]; thumbnailSize?: { width: number; height: number } }) =>
         ipcRenderer.invoke('screen:getSources', options),
+      getWindowBounds: (sourceId: string) => ipcRenderer.invoke('screen:getWindowBounds', sourceId),
       capture: (options?: { sourceId?: string; format?: 'png' | 'jpeg'; quality?: number }) =>
         ipcRenderer.invoke('screen:capture', options),
       captureRegion: (

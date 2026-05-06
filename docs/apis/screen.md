@@ -17,7 +17,7 @@
 }
 ```
 
-受此权限保护的能力包括 `getSources()`、`capture()`、`captureRegion()`、`getMediaStreamConstraints()`、`screenCapture()`、`colorPick()`，以及这些约束触发的桌面录制 `getUserMedia`。普通摄像头 `getUserMedia({ video: true })` 仍使用 `permissions.camera`，桌面录制视频流使用 `permissions.screen`。
+受此权限保护的能力包括 `getSources()`、`getWindowBounds()`、`capture()`、`captureRegion()`、`getMediaStreamConstraints()`、`screenCapture()`、`colorPick()`，以及这些约束触发的桌面录制 `getUserMedia`。普通摄像头 `getUserMedia({ video: true })` 仍使用 `permissions.camera`，桌面录制视频流使用 `permissions.screen`。
 
 ### getAllDisplays()
 [Renderer] [Backend]
@@ -134,8 +134,36 @@ interface CaptureSource {
   thumbnailDataUrl: string; // 缩略图 Data URL
   displayId?: string;      // 关联的显示器 ID
   appIconDataUrl?: string; // 应用图标 Data URL（仅窗口）
+  bounds?: {               // 窗口边界（窗口源，macOS 原生支持）
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+  };
 }
 ```
+
+`bounds` 与 `screen.getAllDisplays().bounds`、`inputMonitor` 鼠标事件使用同一套屏幕逻辑坐标。多显示器场景可能出现负坐标。Windows/Linux 或无法解析窗口边界时，该字段会省略。
+
+### getWindowBounds(sourceId)
+[Renderer] [Backend]
+获取指定窗口捕获源的当前边界。适合窗口移动或缩放后刷新鼠标轨迹映射。
+
+```javascript
+const windows = await screen.getSources({ types: ['window'] });
+const bounds = await screen.getWindowBounds(windows[0].id);
+
+if (bounds) {
+  console.log(bounds.x, bounds.y, bounds.width, bounds.height);
+}
+```
+
+**参数**:
+- `sourceId` (string) - `getSources()` 返回的窗口源 ID
+
+**返回值**: `{ x: number; y: number; width: number; height: number } | null`
+
+当前 macOS 原生支持窗口边界查询。非窗口源、窗口已不可见、原生模块不可用或平台暂不支持时返回 `null`。
 
 ### capture(options?)
 [Renderer] [Backend]

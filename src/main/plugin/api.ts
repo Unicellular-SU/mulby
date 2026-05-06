@@ -410,6 +410,10 @@ ${item.files.map(p => `    <string>${p}</string>`).join('\n')}
         ensureMediaPermission('screen')
         return pluginScreen.getSources(options)
       },
+      getWindowBounds: (sourceId: string) => {
+        ensureMediaPermission('screen')
+        return pluginScreen.getWindowBounds(sourceId)
+      },
       capture: (options?: ScreenshotOptions) => {
         ensureMediaPermission('screen')
         return pluginScreen.captureScreen(options)

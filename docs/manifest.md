@@ -72,7 +72,7 @@
 | 字段 | 类型 | 说明 |
 |------|------|------|
 | runCommand | boolean | 允许插件调用受策略保护的命令执行能力 |
-| screen | boolean | 允许插件访问屏幕录制/截图能力，包括 `screen.getSources()`、`screen.capture()`、`screen.captureRegion()`、`screen.getMediaStreamConstraints()` 和桌面捕获 `getUserMedia` |
+| screen | boolean | 允许插件访问屏幕录制/截图能力，包括 `screen.getSources()`、`screen.getWindowBounds()`、`screen.capture()`、`screen.captureRegion()`、`screen.getMediaStreamConstraints()` 和桌面捕获 `getUserMedia` |
 | microphone | boolean | 允许插件访问麦克风，包括 `getUserMedia({ audio: true })` 和麦克风权限 API |
 | camera | boolean | 允许插件访问摄像头，包括普通摄像头 `getUserMedia({ video: true })` 和摄像头权限 API；桌面录制视频流使用 `screen` 而不是 `camera` |
 | clipboard | boolean | 允许插件读写系统剪贴板和访问剪贴板历史 |

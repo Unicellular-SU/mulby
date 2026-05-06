@@ -45,6 +45,12 @@ export function registerScreenHandlers() {
     return pluginScreen.getSources(options)
   })
 
+  // 获取窗口捕获源的当前边界
+  ipcMain.handle('screen:getWindowBounds', async (event, sourceId: string) => {
+    assertScreenPermission(event.sender)
+    return pluginScreen.getWindowBounds(sourceId)
+  })
+
   // 截取屏幕
   ipcMain.handle('screen:capture', async (event, options?: ScreenshotOptions) => {
     assertScreenPermission(event.sender)

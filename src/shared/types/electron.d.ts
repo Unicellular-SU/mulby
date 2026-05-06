@@ -244,12 +244,20 @@ export interface DisplayInfo {
   isPrimary: boolean
 }
 
+export interface CaptureBounds {
+  x: number
+  y: number
+  width: number
+  height: number
+}
+
 export interface CaptureSource {
   id: string
   name: string
   thumbnailDataUrl: string
   displayId?: string
   appIconDataUrl?: string
+  bounds?: CaptureBounds
 }
 
 export interface CaptureOptions {
@@ -865,6 +873,7 @@ export interface ElectronAPI {
     getDisplayMatching: (rect: { x: number; y: number; width: number; height: number }) => Promise<DisplayInfo>
     getCursorScreenPoint: () => Promise<{ x: number; y: number }>
     getSources: (options?: CaptureOptions) => Promise<CaptureSource[]>
+    getWindowBounds: (sourceId: string) => Promise<CaptureBounds | null>
     capture: (options?: ScreenshotOptions) => Promise<Buffer>
     captureRegion: (
       region: { x: number; y: number; width: number; height: number },

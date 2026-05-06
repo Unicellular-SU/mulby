@@ -12,6 +12,11 @@ import { nativeImage, screen } from 'electron'
 import log from 'electron-log'
 import { nativePhysicalRegionToDip, type RegionBounds } from './screen-coordinate-utils'
 import { getNativeBuildAddonPathCandidates } from './native-addon-path'
+import {
+  normalizeCaptureBounds,
+  parseDesktopCapturerWindowId,
+  type CaptureBounds
+} from './capture-source-utils'
 
 // 原生模块导出的 API 类型
 interface NativeScreenCaptureAddon {
@@ -19,6 +24,7 @@ interface NativeScreenCaptureAddon {
   captureRegion(x: number, y: number, width: number, height: number): { buffer: Buffer; width: number; height: number }
   getPixelColor(x: number, y: number): { r: number; g: number; b: number }
   getDisplays(): Array<{ id: number; x: number; y: number; width: number; height: number; scaleFactor: number }>
+  getWindowBounds?(windowId: number): CaptureBounds | null
   // macOS 独有：NSColorSampler 异步取色
   pickColor?(callback: (color: { r: number; g: number; b: number } | null) => void): void
   // Windows 独有：原生区域截图
@@ -193,6 +199,29 @@ export function nativeGetPixelColor(
     return addon.getPixelColor(devX, devY)
   } catch (err) {
     log.error('[NativeScreenCapture] getPixelColor 失败:', err)
+    return null
+  }
+}
+
+/**
+ * macOS 窗口边界查询。
+ *
+ * Electron desktopCapturer 的窗口 sourceId 形如 window:<CGWindowID>:<other_id>。
+ * 返回坐标与 Electron screen.getAllDisplays().bounds 使用同一套逻辑屏幕坐标。
+ */
+export function nativeGetWindowBounds(sourceId: string): CaptureBounds | null {
+  if (process.platform !== 'darwin') return null
+
+  const windowId = parseDesktopCapturerWindowId(sourceId)
+  if (windowId === null) return null
+
+  const addon = loadAddon()
+  if (!addon || typeof addon.getWindowBounds !== 'function') return null
+
+  try {
+    return normalizeCaptureBounds(addon.getWindowBounds(windowId))
+  } catch (err) {
+    log.error('[NativeScreenCapture] getWindowBounds 失败:', err)
     return null
   }
 }

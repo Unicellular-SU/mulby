@@ -9,8 +9,18 @@ DEFS_Debug := \
 	'-DV8_DEPRECATION_WARNINGS=1' \
 	'-D_GLIBCXX_USE_CXX11_ABI=1' \
 	'-D_FILE_OFFSET_BITS=64' \
+	'-DELECTRON_ENSURE_CONFIG_GYPI' \
 	'-D_DARWIN_USE_64_BIT_INODE=1' \
 	'-D_LARGEFILE_SOURCE' \
+	'-DUSING_ELECTRON_CONFIG_GYPI' \
+	'-DV8_COMPRESS_POINTERS' \
+	'-DV8_COMPRESS_POINTERS_IN_MULTIPLE_CAGES' \
+	'-DV8_31BIT_SMIS_ON_64BIT_ARCH' \
+	'-DV8_ENABLE_SANDBOX' \
+	'-DV8_EXTERNAL_CODE_SPACE' \
+	'-DOPENSSL_NO_PINSHARED' \
+	'-DOPENSSL_THREADS' \
+	'-DOPENSSL_NO_ASM' \
 	'-DNAPI_DISABLE_CPP_EXCEPTIONS' \
 	'-DBUILDING_NODE_EXTENSION' \
 	'-DDEBUG' \
@@ -47,13 +57,13 @@ CFLAGS_OBJC_Debug :=
 CFLAGS_OBJCC_Debug :=
 
 INCS_Debug := \
-	-I/Users/su/Library/Caches/node-gyp/25.2.1/include/node \
-	-I/Users/su/Library/Caches/node-gyp/25.2.1/src \
-	-I/Users/su/Library/Caches/node-gyp/25.2.1/deps/openssl/config \
-	-I/Users/su/Library/Caches/node-gyp/25.2.1/deps/openssl/openssl/include \
-	-I/Users/su/Library/Caches/node-gyp/25.2.1/deps/uv/include \
-	-I/Users/su/Library/Caches/node-gyp/25.2.1/deps/zlib \
-	-I/Users/su/Library/Caches/node-gyp/25.2.1/deps/v8/include \
+	-I/Users/su/Library/Caches/node-gyp/41.2.0/include/node \
+	-I/Users/su/Library/Caches/node-gyp/41.2.0/src \
+	-I/Users/su/Library/Caches/node-gyp/41.2.0/deps/openssl/config \
+	-I/Users/su/Library/Caches/node-gyp/41.2.0/deps/openssl/openssl/include \
+	-I/Users/su/Library/Caches/node-gyp/41.2.0/deps/uv/include \
+	-I/Users/su/Library/Caches/node-gyp/41.2.0/deps/zlib \
+	-I/Users/su/Library/Caches/node-gyp/41.2.0/deps/v8/include \
 	-I/Users/su/workspace/mulby/node_modules/.pnpm/node-addon-api@8.7.0/node_modules/node-addon-api
 
 DEFS_Release := \
@@ -63,8 +73,18 @@ DEFS_Release := \
 	'-DV8_DEPRECATION_WARNINGS=1' \
 	'-D_GLIBCXX_USE_CXX11_ABI=1' \
 	'-D_FILE_OFFSET_BITS=64' \
+	'-DELECTRON_ENSURE_CONFIG_GYPI' \
 	'-D_DARWIN_USE_64_BIT_INODE=1' \
 	'-D_LARGEFILE_SOURCE' \
+	'-DUSING_ELECTRON_CONFIG_GYPI' \
+	'-DV8_COMPRESS_POINTERS' \
+	'-DV8_COMPRESS_POINTERS_IN_MULTIPLE_CAGES' \
+	'-DV8_31BIT_SMIS_ON_64BIT_ARCH' \
+	'-DV8_ENABLE_SANDBOX' \
+	'-DV8_EXTERNAL_CODE_SPACE' \
+	'-DOPENSSL_NO_PINSHARED' \
+	'-DOPENSSL_THREADS' \
+	'-DOPENSSL_NO_ASM' \
 	'-DNAPI_DISABLE_CPP_EXCEPTIONS' \
 	'-DBUILDING_NODE_EXTENSION'
 
@@ -99,13 +119,13 @@ CFLAGS_OBJC_Release :=
 CFLAGS_OBJCC_Release :=
 
 INCS_Release := \
-	-I/Users/su/Library/Caches/node-gyp/25.2.1/include/node \
-	-I/Users/su/Library/Caches/node-gyp/25.2.1/src \
-	-I/Users/su/Library/Caches/node-gyp/25.2.1/deps/openssl/config \
-	-I/Users/su/Library/Caches/node-gyp/25.2.1/deps/openssl/openssl/include \
-	-I/Users/su/Library/Caches/node-gyp/25.2.1/deps/uv/include \
-	-I/Users/su/Library/Caches/node-gyp/25.2.1/deps/zlib \
-	-I/Users/su/Library/Caches/node-gyp/25.2.1/deps/v8/include \
+	-I/Users/su/Library/Caches/node-gyp/41.2.0/include/node \
+	-I/Users/su/Library/Caches/node-gyp/41.2.0/src \
+	-I/Users/su/Library/Caches/node-gyp/41.2.0/deps/openssl/config \
+	-I/Users/su/Library/Caches/node-gyp/41.2.0/deps/openssl/openssl/include \
+	-I/Users/su/Library/Caches/node-gyp/41.2.0/deps/uv/include \
+	-I/Users/su/Library/Caches/node-gyp/41.2.0/deps/zlib \
+	-I/Users/su/Library/Caches/node-gyp/41.2.0/deps/v8/include \
 	-I/Users/su/workspace/mulby/node_modules/.pnpm/node-addon-api@8.7.0/node_modules/node-addon-api
 
 OBJS := \
