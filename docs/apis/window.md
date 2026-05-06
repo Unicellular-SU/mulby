@@ -11,9 +11,17 @@
 [Renderer]
 显示当前窗口。
 
+### showInactive()
+[Renderer]
+显示当前窗口但不主动抢占焦点，适用于悬浮层、桌面宠物等需要保持可见但不打断当前应用焦点的 detached 窗口。
+
 ### focus()
 [Renderer]
 聚焦当前窗口。独立窗口和子窗口可用它在用户明确交互后请求焦点；macOS 上宿主会尽量避免把普通 Dock 同步误判为焦点切换。
+
+### setTitle(title)
+[Renderer]
+设置当前窗口标题。
 
 ### setSize(width, height)
 [Renderer]
@@ -39,9 +47,26 @@
 [Renderer]
 窗口居中。
 
-### setAlwaysOnTop(flag)
+### setAlwaysOnTop(flag, level?)
 [Renderer]
-设置窗口置顶状态。
+设置窗口置顶状态。`level` 可选，语义与 Electron `BrowserWindow.setAlwaysOnTop` 一致，例如 `'floating'`、`'screen-saver'`。
+
+### setIgnoreMouseEvents(ignore, options?)
+[Renderer]
+设置当前窗口是否忽略鼠标事件。`options.forward: true` 时，窗口穿透点击的同时仍会转发鼠标移动事件给渲染进程，可用于 CSS hover/mousemove 检测。
+
+```javascript
+window.mulby.window.setIgnoreMouseEvents(true, { forward: true });
+window.mulby.window.setIgnoreMouseEvents(false);
+```
+
+### setVisibleOnAllWorkspaces(flag, options?)
+[Renderer]
+设置当前窗口是否在所有桌面/工作区可见。`options.visibleOnFullScreen: true` 可请求在 macOS 全屏应用上方可见。
+
+### setFullScreen(flag)
+[Renderer]
+设置当前窗口全屏状态。
 
 ### setBackgroundThrottling(allowed)
 [Renderer]
@@ -322,6 +347,9 @@ const overlay = await window.mulby.window.create('overlay', {
 await overlay?.setIgnoreMouseEvents(false);
 // 操作完毕后恢复穿透
 await overlay?.setIgnoreMouseEvents(true, { forward: true });
+
+// detached 主窗口透明区域点击穿透（如桌面宠物）
+window.mulby.window.setIgnoreMouseEvents(true, { forward: true });
 
 // 录制开始时禁用当前控制面板节流，结束/卸载时恢复默认
 await window.mulby.window.setBackgroundThrottling(false);

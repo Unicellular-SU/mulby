@@ -6,6 +6,8 @@ export function createCoreApi(ipcRenderer: IpcRenderer) {
       hide: (isRestorePreWindow?: boolean) => ipcRenderer.send('window:hide', isRestorePreWindow),
       show: () => ipcRenderer.send('window:show'),
       focus: () => ipcRenderer.send('window:requestFocus'),
+      showInactive: () => ipcRenderer.send('window:showInactive'),
+      setTitle: (title: string) => ipcRenderer.send('window:setTitle', title),
       setSize: (width: number, height: number) =>
         ipcRenderer.send('window:setSize', width, height),
       setPosition: (x: number, y: number) =>
@@ -20,10 +22,15 @@ export function createCoreApi(ipcRenderer: IpcRenderer) {
       close: () => ipcRenderer.send('plugin:close'),
       terminatePlugin: () => ipcRenderer.invoke('plugin:terminateCurrent'),
       showPluginMenu: (point?: { x: number; y: number }) => ipcRenderer.invoke('plugin:showAttachedMenu', point),
-      setAlwaysOnTop: (flag: boolean) => ipcRenderer.send('window:alwaysOnTop', flag),
+      setAlwaysOnTop: (flag: boolean, level?: string) => ipcRenderer.send('window:alwaysOnTop', flag, level),
       setOpacity: (opacity: number) => ipcRenderer.invoke('window:setOpacity', opacity),
       getOpacity: () => ipcRenderer.invoke('window:getOpacity'),
       setBackgroundThrottling: (allowed: boolean) => ipcRenderer.invoke('window:setBackgroundThrottling', allowed),
+      setIgnoreMouseEvents: (ignore: boolean, opts?: { forward?: boolean }) =>
+        ipcRenderer.send('window:setIgnoreMouseEvents', ignore, opts),
+      setVisibleOnAllWorkspaces: (flag: boolean, opts?: { visibleOnFullScreen?: boolean }) =>
+        ipcRenderer.send('window:setVisibleOnAllWorkspaces', flag, opts),
+      setFullScreen: (flag: boolean) => ipcRenderer.send('window:setFullScreen', flag),
       getMode: () => ipcRenderer.invoke('plugin:getMode'),
       getWindowType: () => ipcRenderer.invoke('window:getType'),
       minimize: () => ipcRenderer.send('window:minimize'),

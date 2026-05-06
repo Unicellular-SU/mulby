@@ -617,7 +617,9 @@ export interface ElectronAPI {
   window: {
     hide: () => void
     show: () => void
+    showInactive: () => void
     setSize: (width: number, height: number) => void
+    setTitle: (title: string) => void
     setPosition: (x: number, y: number) => void
     setBounds: (bounds: { x?: number; y?: number; width?: number; height?: number }) => Promise<boolean>
     getBounds: () => Promise<{ x: number; y: number; width: number; height: number } | null>
@@ -629,10 +631,13 @@ export interface ElectronAPI {
     terminatePlugin: () => Promise<{ success: boolean; error?: string }>
     showPluginMenu: (point?: { x: number; y: number }) => Promise<boolean>
     reload: () => void
-    setAlwaysOnTop: (flag: boolean) => void
+    setAlwaysOnTop: (flag: boolean, level?: string) => void
     setOpacity: (opacity: number) => Promise<void>
     getOpacity: () => Promise<number>
     setBackgroundThrottling: (allowed: boolean) => Promise<boolean>
+    setIgnoreMouseEvents: (ignore: boolean, options?: { forward?: boolean }) => void
+    setVisibleOnAllWorkspaces: (flag: boolean, options?: { visibleOnFullScreen?: boolean }) => void
+    setFullScreen: (flag: boolean) => void
     getMode: () => Promise<'attached' | 'detached'>
     getWindowType: () => Promise<string>
     getState: () => Promise<{ isMaximized: boolean; isAlwaysOnTop: boolean; opacity: number }>

@@ -810,6 +810,11 @@ export class PluginWindowManager {
           visibleOnFullScreen: windowConfig.visibleOnFullScreen === true
         })
       }
+      if (windowConfig.ignoreMouseEvents) {
+        win.setIgnoreMouseEvents(true, {
+          forward: windowConfig.forwardMouseEvents === true
+        })
+      }
       if (windowConfig.skipTaskbar) {
         win.setSkipTaskbar(true)
       }

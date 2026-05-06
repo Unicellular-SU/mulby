@@ -337,6 +337,8 @@ export interface WindowOptions {
   transparent?: boolean // 窗口背景透明（配合 CSS background: transparent 实现穿透效果，仅创建时生效）
   visibleOnAllWorkspaces?: boolean // 是否在所有桌面/工作区可见（macOS Mission Control / Windows 虚拟桌面）
   visibleOnFullScreen?: boolean    // 配合 visibleOnAllWorkspaces 使用，全屏应用上方可见（macOS）
+  ignoreMouseEvents?: boolean      // detached 窗口初始是否忽略鼠标事件
+  forwardMouseEvents?: boolean     // ignoreMouseEvents 为 true 时是否继续转发鼠标移动事件
   skipTaskbar?: boolean            // 请求从任务栏/Dock 隐藏该窗口；macOS 仍可能显示 Mulby 应用级 Dock 图标
   backgroundThrottling?: boolean // 是否允许后台节流；false 可让后台/遮挡窗口继续刷新 timer/repaint
   position?: 'default' | 'capture-region' // preCapture 区域截图后，按截图区域定位窗口

@@ -513,7 +513,13 @@ export function registerWindowHandlers(
         childWin.showInactive()
         break
       case 'setTitle':
-        childWin.setTitle(String(args[0] ?? ''))
+        {
+          const title = String(args[0] ?? '')
+          childWin.setTitle(title)
+          if (!childWin.webContents.isDestroyed()) {
+            childWin.webContents.send('titlebar:titleChanged', title)
+          }
+        }
         break
       case 'setSize':
         if (typeof args[0] === 'number' && typeof args[1] === 'number') {
@@ -788,6 +794,24 @@ export function registerWindowHandlers(
     }
   })
 
+  ipcMain.on('window:showInactive', (event) => {
+    const win = windowFromWebContents(event.sender)
+    if (!win || win.isDestroyed()) return
+
+    win.showInactive()
+  })
+
+  ipcMain.on('window:setTitle', (event, title: string) => {
+    const win = windowFromWebContents(event.sender)
+    if (!win || win.isDestroyed()) return
+
+    const normalizedTitle = String(title ?? '')
+    win.setTitle(normalizedTitle)
+    if (!win.webContents.isDestroyed()) {
+      win.webContents.send('titlebar:titleChanged', normalizedTitle)
+    }
+  })
+
   ipcMain.on('window:setSize', (event, width: number, height: number, allowResize?: boolean) => {
     // 使用发送者窗口而非主窗口，以支持面板和独立窗口模式
     const win = windowFromWebContents(event.sender)
@@ -844,9 +868,41 @@ export function registerWindowHandlers(
   })
 
   // 窗口置顶
-  ipcMain.on('window:alwaysOnTop', (event, flag: boolean) => {
+  ipcMain.on('window:alwaysOnTop', (event, flag: boolean, level?: string) => {
     const win = windowFromWebContents(event.sender)
-    win?.setAlwaysOnTop(flag)
+    if (!win || typeof flag !== 'boolean') return
+
+    const normalizedLevel = typeof level === 'string'
+      ? level as Parameters<BrowserWindow['setAlwaysOnTop']>[1]
+      : undefined
+    win.setAlwaysOnTop(flag, normalizedLevel)
+  })
+
+  ipcMain.on('window:setIgnoreMouseEvents', (event, ignore: boolean, opts?: { forward?: boolean }) => {
+    const win = windowFromWebContents(event.sender)
+    if (!win || typeof ignore !== 'boolean') return
+
+    const normalizedOpts = opts && typeof opts === 'object'
+      ? { forward: opts.forward === true }
+      : undefined
+    win.setIgnoreMouseEvents(ignore, normalizedOpts)
+  })
+
+  ipcMain.on('window:setVisibleOnAllWorkspaces', (event, flag: boolean, opts?: { visibleOnFullScreen?: boolean }) => {
+    const win = windowFromWebContents(event.sender)
+    if (!win || typeof flag !== 'boolean') return
+
+    const normalizedOpts = opts && typeof opts === 'object'
+      ? { visibleOnFullScreen: opts.visibleOnFullScreen === true }
+      : undefined
+    win.setVisibleOnAllWorkspaces(flag, normalizedOpts)
+  })
+
+  ipcMain.on('window:setFullScreen', (event, flag: boolean) => {
+    const win = windowFromWebContents(event.sender)
+    if (!win || typeof flag !== 'boolean') return
+
+    win.setFullScreen(flag)
   })
 
   // 窗口焦点请求 (multi-view focus fix for macOS)

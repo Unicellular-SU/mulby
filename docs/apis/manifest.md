@@ -186,6 +186,8 @@ mulby.tools.register('long_task', async (args, ctx) => {
 | `transparent` | `boolean` | 创建时就开启窗口层穿透方案，用以实现类似异形悬浮窗的设计（需要搭配 CSS 背景 `transparent` 运作）。 |
 | `visibleOnAllWorkspaces` | `boolean` | 是否在所有桌面/工作区可见。 |
 | `visibleOnFullScreen` | `boolean` | 配合 `visibleOnAllWorkspaces`，是否在全屏应用上方可见（macOS）。 |
+| `ignoreMouseEvents` | `boolean` | detached 窗口初始是否忽略鼠标事件，用于透明区域点击穿透。 |
+| `forwardMouseEvents` | `boolean` | 配合 `ignoreMouseEvents`，穿透时是否继续转发鼠标移动事件以支持 hover/mousemove 检测。 |
 | `skipTaskbar` | `boolean` | 请求从任务栏/Dock 隐藏该窗口。macOS 的 Dock 是应用级表示，存在其他独立窗口时 Mulby 仍可能显示 Dock 图标。 |
 | `backgroundThrottling` | `boolean` | 是否允许 Chromium 在窗口后台/遮挡时节流 timer 和 repaint。默认 `true`；设置为 `false` 可让录屏控制面板、计时器、悬浮监控等窗口持续刷新。 |
 | `position` | `'default' \| 'capture-region'` | 当功能使用 `preCapture: 'region'` 时，可将 detached 窗口左上角定位到截图区域左上角。无法获取截图区域坐标的平台会回退到默认定位。 |

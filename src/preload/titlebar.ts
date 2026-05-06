@@ -57,6 +57,11 @@ const api = {
     ipcRenderer.on('titlebar:init', (_event, data) => callback(data))
   },
 
+  /** 监听标题变化 */
+  onTitleChange: (callback: (title: string) => void) => {
+    ipcRenderer.on('titlebar:titleChanged', (_event, title) => callback(title))
+  },
+
   /** 监听主题变化 */
   onThemeChange: (callback: (theme: string) => void) => {
     ipcRenderer.on('titlebar:themeChanged', (_event, theme) => callback(theme))

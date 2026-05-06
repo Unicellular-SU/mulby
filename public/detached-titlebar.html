@@ -233,6 +233,15 @@
         }
       })
 
+      if (typeof api.onTitleChange === 'function') {
+        api.onTitleChange(function(title) {
+          if (titleEl) {
+            titleEl.textContent = title || ''
+          }
+          document.title = title || 'Titlebar'
+        })
+      }
+
       // 更多插件操作
       btnMore.addEventListener('click', function() {
         if (typeof api.showPluginMenu === 'function') {
