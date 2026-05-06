@@ -2,7 +2,7 @@ import { app, BrowserWindow, clipboard, nativeImage } from 'electron'
 import { execFile } from 'child_process'
 import { promisify } from 'util'
 import log from 'electron-log'
-import { markAppHidden, markAppVisible } from '../services/blur-manager'
+import { hasDetachedWindows, isAppExplicitlyHidden, markAppHidden, markAppVisible } from '../services/blur-manager'
 
 const execFileAsync = promisify(execFile)
 const FOCUS_DELAY_MS = 160
@@ -182,7 +182,7 @@ function hideAllAppWindows(): void {
     }
   }
 
-  if (process.platform === 'darwin') {
+  if (process.platform === 'darwin' && !hasDetachedWindows()) {
     app.hide()
     markAppHidden()
   }
@@ -190,7 +190,7 @@ function hideAllAppWindows(): void {
 
 // 恢复之前隐藏的窗口
 function restoreHiddenWindows(): void {
-  if (process.platform === 'darwin') {
+  if (process.platform === 'darwin' && isAppExplicitlyHidden()) {
     app.show()
     markAppVisible()
   }

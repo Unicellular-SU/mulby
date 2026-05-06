@@ -175,7 +175,22 @@
 | minHeight | number | 200 | 最小高度 |
 | maxWidth | number | - | 最大宽度（不设置则无限制） |
 | maxHeight | number | - | 最大高度（不设置则无限制） |
+| alwaysOnTop | boolean | false | 独立窗口初始是否置顶 |
+| focusable | boolean | true | 独立窗口是否可获得焦点 |
+| visibleOnAllWorkspaces | boolean | false | 是否在所有桌面/工作区可见 |
+| visibleOnFullScreen | boolean | false | 配合 `visibleOnAllWorkspaces`，是否在全屏应用上方可见（macOS） |
+| skipTaskbar | boolean | false | 请求从任务栏/Dock 隐藏该窗口；macOS 上 Mulby 仍可能用应用级 Dock 图标表示其他独立窗口 |
+| transparent | boolean | false | 创建透明窗口，适合悬浮层、截图标注等场景 |
+| opacity | number | 1 | 初始窗口透明度，范围 `0.0` - `1.0` |
 | backgroundThrottling | boolean | true | 是否允许后台/遮挡窗口节流 timer 和 repaint。录屏、计时器、悬浮监控等需要持续刷新的 detached 窗口可设为 `false` |
+
+#### macOS Dock 表示
+
+在 macOS 上，Mulby 的 Dock 图标是宿主应用级别的表示，不是每个插件独立创建一个进程图标。只要存在独立插件窗口或独立系统页面，Mulby 会显示 Dock 图标；插件独立窗口会使用“宿主图标 + 最近聚焦插件图标”的组合样式，多于一个插件窗口时会显示数量徽标。
+
+Dock 右键菜单会列出可操作的插件窗口，并提供关闭单个窗口、关闭所有插件窗口、打开 Mulby 和退出 Mulby 等动作。系统级“退出”仍然表示退出宿主应用；插件自身退出应使用菜单中的插件窗口动作或插件 UI 内的关闭能力。
+
+`skipTaskbar` 只表示请求隐藏具体窗口的任务栏/Dock 呈现。由于 macOS Dock 是应用级图标，只要还有独立应用窗口需要表示，Mulby 仍可能显示 Dock 图标。
 
 ### Feature 字段
 | 字段 | 类型 | 必需 | 说明 |

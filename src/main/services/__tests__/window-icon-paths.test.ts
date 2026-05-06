@@ -4,6 +4,7 @@ import { dirname, join } from 'node:path'
 import {
   findFirstExistingIcon,
   getAppWindowIconCandidates,
+  getMacDockIconCandidates,
   getRuntimeIconRoots
 } from '../window-icon-paths'
 
@@ -43,6 +44,17 @@ describe('window icon path resolution', () => {
     assert.equal(
       findFirstExistingIcon(candidates, (candidate) => candidate === 'present.ico'),
       'present.ico'
+    )
+  })
+
+  it('prefers full-size app artwork for macOS Dock composition', () => {
+    const root = join('/Applications', 'Mulby.app', 'Contents', 'Resources')
+    const candidates = getMacDockIconCandidates([root])
+
+    assert.equal(candidates[0], join(root, 'build', 'icon.png'))
+    assert.ok(
+      candidates.indexOf(join(root, 'build', 'icon.png')) <
+      candidates.indexOf(join(root, 'resources', 'tray', 'icon.png'))
     )
   })
 })

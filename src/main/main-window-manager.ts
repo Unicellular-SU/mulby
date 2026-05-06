@@ -9,6 +9,7 @@ import { isIgnoringBlur, startIgnoringBlur, stopIgnoringBlur, isAppExplicitlyHid
 import { attachShortcutRecordingGuard } from './services/shortcut-recording-guard'
 import { refreshActiveWindowCache } from './services/active-window'
 import { registerAppWindow } from './services/ipc-caller-resolver'
+import { shouldHideMainWindowOnToggle } from './services/main-window-toggle-policy'
 import {
   MAIN_WINDOW_COLLAPSED_VISIBLE_HEIGHT,
   getMainWindowVisibleBounds,
@@ -21,6 +22,8 @@ import { shouldPreventMainWindowClose } from './main-window-close-policy'
 export const MW_SHADOW_MARGIN = 12
 export const MW_TOGGLE_DEBOUNCE_MS = 180
 export const MW_SHOW_BLUR_GUARD_MS = 260
+export const MW_SHOW_WITH_DETACHED_BLUR_GUARD_MS = 1800
+export const MW_MAC_STAGE_MANAGER_ACTIVATION_SETTLE_MS = 350
 export const MW_STATE_SAVE_DEBOUNCE_MS = 500
 export const MW_BLUR_HIDE_DELAY_MS = 50
 export const MW_MIN_COLLAPSED_WIDTH = 400
@@ -87,6 +90,7 @@ export interface MainWindowDeps {
   getTrayMenuManager: () => { hide: () => void } | null
   clipboardWatcher: { isRecentlyChanged: (maxAge: number) => boolean }
   getLastDeepLinkTime: () => number
+  refreshMacDockPresentation?: () => void
 }
 
 // ── Utility helpers ────────────────────────────────────────────────────
@@ -135,6 +139,7 @@ export class MainWindowManager {
   private blurHideTimer: NodeJS.Timeout | null = null
   private stateSaveTimer: NodeJS.Timeout | null = null
   private suppressBlurHideUntil = 0
+  private suppressActivationRoutingUntil = 0
   private lastToggleAt = 0
   private hasBeenShown = false
   private deferShadowShow = false
@@ -169,6 +174,29 @@ export class MainWindowManager {
 
   private extendBlurHideSuppression(durationMs: number): void {
     this.suppressBlurHideUntil = Math.max(this.suppressBlurHideUntil, Date.now() + durationMs)
+  }
+
+  suppressActivationRouting(durationMs: number): void {
+    const until = Date.now() + Math.max(0, durationMs)
+    this.suppressActivationRoutingUntil = Math.max(this.suppressActivationRoutingUntil, until)
+  }
+
+  shouldSuppressActivationRouting(): boolean {
+    return Date.now() < this.suppressActivationRoutingUntil
+  }
+
+  private hasDetachedAppSurface(): boolean {
+    return (this.deps?.pluginWindowManager.getAllDetachedWindows().length ?? 0) > 0
+      || Boolean(this.deps?.systemPageWindowManager.getDetachedWindow())
+  }
+
+  private isMainSurfaceFocused(): boolean {
+    if (this.window && !this.window.isDestroyed() && this.window.isFocused()) return true
+    const panelWin = this.deps?.pluginWindowManager.getPanelWindow()?.getWindow()
+    if (panelWin && !panelWin.isDestroyed() && panelWin.isFocused()) return true
+    const systemPageAttached = this.deps?.systemPageWindowManager.getAttachedWindow()
+    if (systemPageAttached && !systemPageAttached.isDestroyed() && systemPageAttached.isFocused()) return true
+    return false
   }
 
   // ── Persistence ────────────────────────────────────────────────
@@ -470,6 +498,10 @@ export class MainWindowManager {
     if (!isWindowAvailable(this.window)) return
     this.clearBlurHideTimer()
     this.deps?.getTrayMenuManager()?.hide()
+    const hasDetachedAppSurface = this.hasDetachedAppSurface()
+    if (process.platform === 'darwin' && hasDetachedAppSurface) {
+      this.suppressActivationRouting(MW_MAC_STAGE_MANAGER_ACTIVATION_SETTLE_MS)
+    }
 
     // Only activate the app when it was explicitly hidden (via app.hide()).
     // Unconditional app.show() / app.focus({ steal: true }) triggers macOS
@@ -485,13 +517,11 @@ export class MainWindowManager {
 
     if (process.platform === 'darwin') {
       try {
-        this.window.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true })
+        this.window.setVisibleOnAllWorkspaces(true, {
+          visibleOnFullScreen: true,
+          skipTransformProcessType: true
+        })
         this.window.setAlwaysOnTop(true, 'floating')
-        const hasDetached = (this.deps?.pluginWindowManager.getAllDetachedWindows().length ?? 0) > 0
-          || Boolean(this.deps?.systemPageWindowManager.getDetachedWindow())
-        if (hasDetached && app.dock) {
-          void app.dock.show()
-        }
       } catch (e) {
         log.error('[MainWindow] Error setting window properties:', e)
       }
@@ -506,7 +536,11 @@ export class MainWindowManager {
       this.window.setPosition(windowBounds.x, windowBounds.y)
 
       startIgnoringBlur()
-      this.extendBlurHideSuppression(MW_SHOW_BLUR_GUARD_MS)
+      this.extendBlurHideSuppression(
+        process.platform === 'darwin' && hasDetachedAppSurface
+          ? MW_SHOW_WITH_DETACHED_BLUR_GUARD_MS
+          : MW_SHOW_BLUR_GUARD_MS
+      )
 
       const needsOpacityGuard = process.platform === 'win32' && this.hasBeenShown
       if (needsOpacityGuard) {
@@ -518,7 +552,7 @@ export class MainWindowManager {
       this.window.focus()
       this.hasBeenShown = true
 
-      if (needsAppReactivation) {
+      if (needsAppReactivation && !(process.platform === 'darwin' && hasDetachedAppSurface)) {
         try { app.focus({ steal: true }) } catch (error) {
           log.warn('[MainWindow] app.focus() failed:', error)
         }
@@ -552,14 +586,8 @@ export class MainWindowManager {
       }
 
       stopIgnoringBlur()
+      this.scheduleMacDockPresentationRefresh()
 
-      if (process.platform === 'darwin' && app.dock) {
-        const hasDetached = (this.deps?.pluginWindowManager.getAllDetachedWindows().length ?? 0) > 0
-          || Boolean(this.deps?.systemPageWindowManager.getDetachedWindow())
-        if (hasDetached) {
-          setImmediate(() => { if (app.dock) void app.dock.show() })
-        }
-      }
     } catch (e) {
       stopIgnoringBlur()
       log.error('[MainWindow] Error in show sequence:', e)
@@ -580,14 +608,14 @@ export class MainWindowManager {
     this.deps?.systemPageWindowManager.hideAttached()
     this.window.hide()
     this.shadowWindow?.hide()
+    this.scheduleMacDockPresentationRefresh()
 
-    if (process.platform === 'darwin' && app.dock) {
-      const hasDetached = (this.deps?.pluginWindowManager.getAllDetachedWindows().length ?? 0) > 0
-        || Boolean(this.deps?.systemPageWindowManager.getDetachedWindow())
-      if (hasDetached) {
-        void app.dock.show()
-      }
-    }
+  }
+
+  private scheduleMacDockPresentationRefresh(): void {
+    if (process.platform !== 'darwin') return
+    setImmediate(() => this.deps?.refreshMacDockPresentation?.())
+    setTimeout(() => this.deps?.refreshMacDockPresentation?.(), 50)
   }
 
   toggle(): void {
@@ -595,7 +623,10 @@ export class MainWindowManager {
     const now = Date.now()
     if (now - this.lastToggleAt < MW_TOGGLE_DEBOUNCE_MS) return
     this.lastToggleAt = now
-    if (this.window.isVisible()) {
+    if (shouldHideMainWindowOnToggle({
+      isWindowVisible: this.window.isVisible(),
+      isMainSurfaceFocused: this.isMainSurfaceFocused()
+    })) {
       this.hide()
     } else {
       this.show()

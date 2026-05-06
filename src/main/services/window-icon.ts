@@ -23,7 +23,7 @@ export function resolvePluginWindowIcon(plugin: Pick<Plugin, 'resolvedIcon'>): W
   return createNativeImageFromResolvedIcon(plugin.resolvedIcon) ?? resolveAppWindowIcon()
 }
 
-function createNativeImageFromResolvedIcon(icon: ResolvedIcon | undefined): NativeImage | undefined {
+export function createNativeImageFromResolvedIcon(icon: ResolvedIcon | undefined): NativeImage | undefined {
   if (!icon) return undefined
 
   try {

@@ -17,7 +17,7 @@ import { setHotKeySettingRedirectHandler } from './plugin/dynamic-features'
 import { PluginWindowManager } from './plugin/window'
 import { ThemeManager } from './services/theme'
 import { setUiDialogThemeResolver } from './services/ui-dialog-service'
-import { setWindowsProvider, setHasDetachedWindowsProvider } from './services/blur-manager'
+import { markAppVisible, setWindowsProvider, setHasDetachedWindowsProvider } from './services/blur-manager'
 import { appSettingsManager } from './services/app-settings'
 import { AppShortcutManager } from './services/app-shortcuts'
 import { InputHookService } from './services/input-hook'
@@ -29,6 +29,7 @@ import { ClipboardHistoryManager } from './services/clipboard-history'
 import { commandRunnerService } from './services/command-runner'
 import { initAutoUpdater } from './services/update-center'
 import { setLoggerMinLevel } from './services/logger'
+import { MacDockPresentationController } from './services/mac-dock-presentation'
 import { SystemPluginWindowManager } from './services/system-plugin-window-manager'
 import {
   SystemPageWindowManager,
@@ -107,6 +108,26 @@ const pluginManager = new PluginManager()
 const pluginWindowManager = new PluginWindowManager()
 const themeManager = new ThemeManager()
 const mainWindowManager = new MainWindowManager()
+const macDockPresentationController = new MacDockPresentationController({
+  getPluginWindows: () => pluginWindowManager.getDockPluginWindows(),
+  hasSystemDetachedWindow: () => Boolean(systemPageWindowManager.getDetachedWindow()),
+  focusPluginWindow: (windowId) => {
+    pluginWindowManager.focusDetachedWindow(windowId)
+  },
+  closePluginWindow: (windowId) => {
+    pluginWindowManager.closeDetached(windowId)
+  },
+  stopPlugin: async (pluginId) => {
+    const result = await pluginManager.stopPlugin(pluginId, false)
+    if (!result.success) {
+      log.warn(`[MacDock] Failed to stop plugin ${pluginId}: ${result.error || 'unknown error'}`)
+    }
+  },
+  focusSystemWindow: () => systemPageWindowManager.focusDetachedWindow(),
+  openMainWindow: () => showMainWindow(),
+  quitMainProcess: () => quitMainProcess(),
+  suppressActivateRouting: (durationMs) => mainWindowManager.suppressActivationRouting(durationMs)
+})
 setUiDialogThemeResolver(() => themeManager.getActualTheme())
 
 // 注入插件对话框的窗口解析器，使插件调用 dialog API 时能找到正确的 parent window
@@ -198,22 +219,32 @@ const handleSecondInstance = (_event: Electron.Event, argv: string[]) => {
 
 const handleAppActivate = () => {
   if (isQuitting) return
-  try { app.show() } catch (error) {
-    log.warn('[Main] Failed to restore app state on activate:', error)
+  if (mainWindowManager.shouldSuppressActivationRouting()) {
+    return
+  }
+  try {
+    if (app.isHidden()) {
+      app.show()
+      markAppVisible()
+    }
+  } catch (error) {
+    log.warn('[Main] Failed to restore hidden app on activate:', error)
+  }
+
+  const mainWindow = mainWindowManager.getWindow()
+  if (isWindowAvailable(mainWindow) && mainWindow.isVisible()) {
+    try {
+      if (mainWindow.isMinimized()) mainWindow.restore()
+      mainWindow.focus()
+    } catch (error) {
+      log.warn('[Main] Failed to focus visible main window on activate:', error)
+    }
+    return
   }
 
   const detachedWindows = pluginWindowManager.getAllDetachedWindows()
   if (detachedWindows.length > 0) {
-    for (const win of detachedWindows) {
-      if (!isWindowAvailable(win)) continue
-      try {
-        if (!win.isVisible()) win.show()
-        if (win.isMinimized()) win.restore()
-        win.focus()
-      } catch (error) {
-        log.warn('[Main] Failed to restore detached window on activate:', error)
-      }
-    }
+    if (macDockPresentationController.focusPrimaryWindow()) return
     return
   }
 
@@ -591,7 +622,8 @@ app.whenReady().then(async () => {
     systemPageWindowManager,
     onboardingWindowManager,
     actionMenuWindowManager,
-    pluginToolRegistry
+    pluginToolRegistry,
+    () => macDockPresentationController.refresh()
   )
 
   // 创建 OpenClaw Node 服务并注册 IPC
@@ -756,7 +788,8 @@ app.whenReady().then(async () => {
       systemPageWindowManager,
       getTrayMenuManager: () => trayMenuWindowManager,
       clipboardWatcher,
-      getLastDeepLinkTime: () => lastDeepLinkTime
+      getLastDeepLinkTime: () => lastDeepLinkTime,
+      refreshMacDockPresentation: () => macDockPresentationController.refresh()
     })
     mainWindowManager.create()
     const mainWindow = mainWindowManager.getWindow()!
@@ -826,6 +859,9 @@ app.whenReady().then(async () => {
     pluginWindowManager.setMainWindow(mainWindow!)
     systemPluginWindowManager.setMainWindow(mainWindow!)
     systemPageWindowManager.setMainWindow(mainWindow!)
+    pluginWindowManager.setDockPresentationRefreshHandler(() => macDockPresentationController.refresh())
+    systemPageWindowManager.setDockPresentationRefreshHandler(() => macDockPresentationController.refresh())
+    macDockPresentationController.refresh()
 
     // 设置主题管理器到插件窗口管理器
     pluginWindowManager.setThemeManager(themeManager)

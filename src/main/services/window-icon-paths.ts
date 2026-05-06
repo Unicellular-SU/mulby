@@ -45,6 +45,18 @@ export function getAppWindowIconCandidates(
   )
 }
 
+export function getMacDockIconCandidates(roots: string[]): string[] {
+  const relativeCandidates = [
+    join('build', 'icon.png'),
+    'icon.png',
+    join('resources', 'tray', 'icon.png')
+  ]
+
+  return roots.flatMap((root) =>
+    relativeCandidates.map((candidate) => join(root, candidate))
+  )
+}
+
 export function findFirstExistingIcon(
   candidates: string[],
   exists: (candidate: string) => boolean = existsSync

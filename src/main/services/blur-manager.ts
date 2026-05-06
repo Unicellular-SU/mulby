@@ -41,6 +41,22 @@ export function hasDetachedWindows(): boolean {
     return getHasDetachedWindows ? getHasDetachedWindows() : false
 }
 
+export interface HideWholeAppAfterWindowHideInput {
+    platform: NodeJS.Platform
+    restorePreviousWindow: boolean
+    hasOtherVisibleWindows: boolean
+    hasDetachedWindows: boolean
+}
+
+export function shouldHideWholeAppAfterWindowHide(
+    input: HideWholeAppAfterWindowHideInput
+): boolean {
+    return input.platform === 'darwin'
+        && input.restorePreviousWindow
+        && !input.hasOtherVisibleWindows
+        && !input.hasDetachedWindows
+}
+
 /**
  * 开始忽略 blur 事件
  */

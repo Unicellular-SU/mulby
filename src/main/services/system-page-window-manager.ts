@@ -104,6 +104,7 @@ export class SystemPageWindowManager {
   private attachedShadowWindow: BrowserWindow | null = null
   private detachedWindow: BrowserWindow | null = null
   private currentRoute: OpenSystemPagePayload | null = null
+  private dockPresentationRefreshHandler?: () => void | Promise<void>
 
   private moveHandler: (() => void) | null = null
   private resizeHandler: (() => void) | null = null
@@ -136,6 +137,15 @@ export class SystemPageWindowManager {
     }
   }
 
+  setDockPresentationRefreshHandler(handler: () => void | Promise<void>): void {
+    this.dockPresentationRefreshHandler = handler
+  }
+
+  private refreshDockPresentation(): void {
+    if (process.platform !== 'darwin') return
+    void this.dockPresentationRefreshHandler?.()
+  }
+
   getAttachedWindow(): BrowserWindow | null {
     if (!this.attachedWindow || this.attachedWindow.isDestroyed()) return null
     return this.attachedWindow
@@ -144,6 +154,19 @@ export class SystemPageWindowManager {
   getDetachedWindow(): BrowserWindow | null {
     if (!this.detachedWindow || this.detachedWindow.isDestroyed()) return null
     return this.detachedWindow
+  }
+
+  focusDetachedWindow(): boolean {
+    const detached = this.getDetachedWindow()
+    if (!detached) return false
+    if (!detached.isVisible()) {
+      detached.show()
+    }
+    if (detached.isMinimized()) {
+      detached.restore()
+    }
+    detached.focus()
+    return true
   }
 
   isAttachedOpen(): boolean {
@@ -412,6 +435,7 @@ export class SystemPageWindowManager {
     this.detachedWindow = detachedWindow
     registerAppWindow(detachedWindow.id)
     registerProtectedWindow(detachedWindow.id)
+    this.refreshDockPresentation()
 
     detachedWindow.once('ready-to-show', async () => {
       const activeDetached = this.getDetachedWindow()
@@ -439,6 +463,7 @@ export class SystemPageWindowManager {
           this.currentRoute = null
         }
         this.emitState()
+        this.refreshDockPresentation()
       }
     })
 
@@ -628,6 +653,7 @@ export class SystemPageWindowManager {
     this.detachedWindow = null
     this.currentRoute = null
     this.emitState()
+    this.refreshDockPresentation()
   }
 
   private resolveTitle(route: OpenSystemPagePayload | null): string {

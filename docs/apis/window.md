@@ -11,6 +11,10 @@
 [Renderer]
 显示当前窗口。
 
+### focus()
+[Renderer]
+聚焦当前窗口。独立窗口和子窗口可用它在用户明确交互后请求焦点；macOS 上宿主会尽量避免把普通 Dock 同步误判为焦点切换。
+
 ### setSize(width, height)
 [Renderer]
 设置窗口大小。
@@ -46,6 +50,8 @@
 ### detach()
 [Renderer]
 将插件窗口分离为独立窗口。
+
+macOS 上，分离后的插件窗口会让 Mulby 显示应用级 Dock 图标。Dock 图标会优先使用“宿主图标 + 最近聚焦插件图标”的组合样式，多窗口时显示数量徽标。Dock 右键菜单可用于切换或关闭插件窗口；系统 Dock 的“退出”仍然退出宿主应用。
 
 ### close()
 [Renderer]
@@ -107,7 +113,7 @@ interface ChildWindowCreateOptions {
   maximizable?: boolean;
   fullscreenable?: boolean;
   focusable?: boolean;                 // false 时窗口不抢焦点
-  skipTaskbar?: boolean;               // 不出现在 Dock/任务栏
+  skipTaskbar?: boolean;               // 请求不出现在 Dock/任务栏；macOS 仍可能显示 Mulby 应用级 Dock 图标
   enableLargerThanScreen?: boolean;    // 允许窗口大于屏幕
   x?: number;
   y?: number;
@@ -156,6 +162,8 @@ interface ChildWindowHandle {
 子窗口默认不会继承 `manifest.window` 中的 `minWidth`、`minHeight`、`maxWidth`、`maxHeight`，避免主插件面板的尺寸约束限制 overlay、截图、取色器等辅助窗口。需要沿用 manifest 尺寸约束时，显式传入 `inheritWindowSizeLimits: true`。
 
 子窗口的 `backgroundThrottling` 解析优先级为 `options.backgroundThrottling ?? manifest.window.backgroundThrottling ?? true`。
+
+在 macOS 上，`skipTaskbar` 不能保证隐藏 Mulby 的 Dock 图标。Dock 是应用级表示；只要存在独立插件窗口或子窗口，Mulby 可能保持 Dock 可见，并在菜单中提供插件窗口操作。
 
 **Overlay 窗口典型用法：**
 

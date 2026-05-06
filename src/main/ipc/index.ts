@@ -82,12 +82,21 @@ export function registerAllHandlers(
   systemPageWindowManager: SystemPageWindowManager,
   onboardingWindowManager: OnboardingWindowManager,
   actionMenuWindowManager: ActionMenuWindowManager,
-  pluginToolRegistry?: PluginToolRegistry
+  pluginToolRegistry?: PluginToolRegistry,
+  refreshMacDockPresentation?: () => void
 ): { warmupFeatureIconCache: () => void; setOnDisabledPluginToolsChanged: (fn: () => void) => void; setOnSuperPanelChanged: (fn: (settings: import('../../shared/types/settings').AppSettings) => void) => void } {
   registerClipboardHandlers()
   registerClipboardHistoryHandlers(clipboardHistoryManager)
   registerNotificationHandlers()
-  registerWindowHandlers(getMainWindow, pluginWindowManager, themeManager, appSettingsManager, pluginManager, actionMenuWindowManager)
+  registerWindowHandlers(
+    getMainWindow,
+    pluginWindowManager,
+    themeManager,
+    appSettingsManager,
+    pluginManager,
+    actionMenuWindowManager,
+    refreshMacDockPresentation
+  )
   const pluginHooks = registerPluginHandlers(pluginManager, pluginToolRegistry)
   registerThemeHandlers(themeManager)
   registerScreenHandlers()

@@ -14,7 +14,7 @@ import {
 } from '../services/subinput-state'
 import { shouldUseWindowsFramelessSurface } from '../services/window-surface'
 import { windowFromWebContents, getPluginWebContents } from '../services/webcontents-registry'
-import { markAppHidden } from '../services/blur-manager'
+import { hasDetachedWindows, markAppHidden, shouldHideWholeAppAfterWindowHide } from '../services/blur-manager'
 import { ActionMenuWindowManager } from '../services/action-menu-window-manager'
 import log from 'electron-log'
 
@@ -33,7 +33,8 @@ export function registerWindowHandlers(
   themeManager: ThemeManager,
   appSettingsManager: AppSettingsManager,
   pluginManager: PluginManager | undefined,
-  actionMenuWindowManager: ActionMenuWindowManager
+  actionMenuWindowManager: ActionMenuWindowManager,
+  refreshMacDockPresentation?: () => void
 ) {
   const toMainWindowWindowSize = (width: number, height: number) => getMainWindowWindowSize(width, height)
 
@@ -750,14 +751,22 @@ export function registerWindowHandlers(
     // 焦点恢复：隐藏窗口后将系统焦点归还给之前的前台应用
     if (isRestorePreWindow && process.platform === 'darwin') {
       // app.hide() 会隐藏整个 Electron 应用的所有窗口，
-      // 仅当隐藏当前窗口后没有其他可见窗口时才使用，避免误伤
+      // 仅当没有其他可见窗口且没有独立窗口时才使用，避免误伤 Dock 表示。
       const hasOtherVisible = BrowserWindow.getAllWindows().some(
         w => !w.isDestroyed() && w.isVisible() && w.id !== win.id
       )
-      if (!hasOtherVisible) {
+      if (shouldHideWholeAppAfterWindowHide({
+        platform: process.platform,
+        restorePreviousWindow: true,
+        hasOtherVisibleWindows: hasOtherVisible,
+        hasDetachedWindows: hasDetachedWindows()
+      })) {
         app.hide()
         markAppHidden()
       }
+    }
+    if (process.platform === 'darwin' && hasDetachedWindows()) {
+      setTimeout(() => refreshMacDockPresentation?.(), 50)
     }
     // Windows/Linux: 窗口隐藏后系统会自动将焦点转移给下一个可见窗口，
     // 无需额外操作

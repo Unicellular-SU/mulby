@@ -1,4 +1,4 @@
-import { BrowserWindow, app, Menu, screen, WebContentsView } from 'electron'
+import { BrowserWindow, app, screen, WebContentsView } from 'electron'
 import { join } from 'path'
 import { existsSync } from 'fs'
 import { InputAttachment, InputPayload, Plugin, WindowOptions } from '../../shared/types/plugin'
@@ -38,6 +38,7 @@ import {
   resolveAuxiliaryWindowBackgroundThrottling,
   resolveAuxiliaryWindowSizeLimits
 } from './auxiliary-window-options'
+import type { MacDockPluginWindowSnapshot } from '../services/mac-dock-presentation-model'
 
 interface AttachedPlugin {
   plugin: Plugin
@@ -56,6 +57,7 @@ interface DetachedWindowInfo {
   input: string
   attachments?: InputAttachment[]
   startedAt: number
+  lastFocusedAt: number
   creatorId?: number  // 创建此窗口的父窗口 ID
 }
 
@@ -104,7 +106,7 @@ export class PluginWindowManager {
   private themeManager: ThemeManager | null = null
   private attachedPlugin: AttachedPlugin | null = null
   private detachedWindows: Map<number, DetachedWindowInfo> = new Map()
-  private dockVisible = false
+  private dockPresentationRefreshHandler?: () => void | Promise<void>
   private onWindowClosedCallback?: (pluginId: string) => Promise<void>
   /**
    * 回调：attached panel 即将关闭时，由 PluginManager 决定是否挂起为 resident-ui。
@@ -150,43 +152,13 @@ export class PluginWindowManager {
     return candidates.find((candidate) => existsSync(candidate)) ?? null
   }
 
-  // 更新 macOS Dock 图标显示状态
-  private async updateDockVisibility(): Promise<void> {
-    if (process.platform !== 'darwin' || !app.dock) return
-
-    const shouldShow = this.detachedWindows.size > 0
-
-    if (shouldShow && !this.dockVisible) {
-      this.dockVisible = true
-      await app.dock.show()
-      this.updateDockMenu()
-    } else if (shouldShow && this.dockVisible) {
-      this.updateDockMenu()
-    } else if (!shouldShow && this.dockVisible) {
-      this.dockVisible = false
-      app.dock.setMenu(Menu.buildFromTemplate([]))
-      app.dock.hide()
-    }
+  setDockPresentationRefreshHandler(handler: () => void | Promise<void>) {
+    this.dockPresentationRefreshHandler = handler
   }
 
-  // 更新 Dock 右键菜单
-  private updateDockMenu(): void {
-    if (process.platform !== 'darwin' || !app.dock) return
-
-    const menuItems = Array.from(this.detachedWindows.values())
-      .filter(info => !info.window.isDestroyed())
-      .map(info => ({
-        label: info.plugin.manifest.displayName,
-        click: () => {
-          if (!info.window.isDestroyed()) {
-            info.window.show()
-            info.window.focus()
-          }
-        }
-      }))
-
-    const menu = Menu.buildFromTemplate(menuItems)
-    app.dock.setMenu(menu)
+  private refreshDockPresentation(): void {
+    if (process.platform !== 'darwin') return
+    void this.dockPresentationRefreshHandler?.()
   }
 
   setMainWindow(win: BrowserWindow) {
@@ -571,15 +543,17 @@ export class PluginWindowManager {
           featureCode,
           input,
           attachments,
-          startedAt
+          startedAt,
+          lastFocusedAt: Date.now()
         })
         registerProtectedWindow(windowId)
-        this.updateDockVisibility()
+        this.installDetachedDockRefreshHandlers(win, windowId)
+        this.refreshDockPresentation()
 
         win.on('closed', () => {
           this.detachedWindows.delete(windowId)
           unregisterProtectedWindow(windowId)
-          this.updateDockVisibility()
+          this.refreshDockPresentation()
           this.notifyPluginWindowClosed(plugin.id)
         })
 
@@ -906,13 +880,15 @@ export class PluginWindowManager {
       featureCode,
       input: input?.text || '',
       attachments: input?.attachments,
-      startedAt: Date.now()
+      startedAt: Date.now(),
+      lastFocusedAt: Date.now()
     })
 
     registerPluginWindow(windowId, plugin.id)
     registerProtectedWindow(windowId)
 
-    void this.updateDockVisibility()
+    this.installDetachedDockRefreshHandlers(win, windowId)
+    this.refreshDockPresentation()
 
     installConsoleCaptureForWebContents(pluginWebContents, plugin.id)
 
@@ -933,7 +909,7 @@ export class PluginWindowManager {
       if (pluginView && !pluginView.webContents.isDestroyed()) {
         pluginView.webContents.close()
       }
-      this.updateDockVisibility()
+      this.refreshDockPresentation()
       this.notifyPluginWindowClosed(plugin.id)
     })
 
@@ -1223,13 +1199,15 @@ export class PluginWindowManager {
       input: '',
       attachments: [],
       startedAt: Date.now(),
+      lastFocusedAt: Date.now(),
       creatorId
     })
 
     registerPluginWindow(windowId, plugin.id)
     registerProtectedWindow(windowId)
 
-    this.updateDockVisibility()
+    this.installDetachedDockRefreshHandlers(win, windowId)
+    this.refreshDockPresentation()
 
     installConsoleCaptureForWebContents(pluginWebContents, plugin.id)
 
@@ -1240,11 +1218,35 @@ export class PluginWindowManager {
       if (pluginView && !pluginView.webContents.isDestroyed()) {
         pluginView.webContents.close()
       }
-      this.updateDockVisibility()
+      this.refreshDockPresentation()
       this.notifyPluginWindowClosed(plugin.id)
     })
 
     return win
+  }
+
+  private installDetachedDockRefreshHandlers(win: BrowserWindow, windowId: number): void {
+    win.on('focus', () => {
+      const info = this.detachedWindows.get(windowId)
+      if (!info || info.window.isDestroyed()) return
+      info.lastFocusedAt = Date.now()
+      this.refreshDockPresentation()
+    })
+  }
+
+  focusDetachedWindow(windowId: number): boolean {
+    const info = this.detachedWindows.get(windowId)
+    if (!info || info.window.isDestroyed()) return false
+    if (!info.window.isVisible()) {
+      info.window.show()
+    }
+    if (info.window.isMinimized()) {
+      info.window.restore()
+    }
+    info.window.focus()
+    info.lastFocusedAt = Date.now()
+    this.refreshDockPresentation()
+    return true
   }
 
   // 关闭指定独立窗口
@@ -1281,6 +1283,19 @@ export class PluginWindowManager {
   getAllDetachedInfos(): DetachedWindowInfo[] {
     return Array.from(this.detachedWindows.values())
       .filter(info => !info.window.isDestroyed())
+  }
+
+  getDockPluginWindows(): MacDockPluginWindowSnapshot[] {
+    return Array.from(this.detachedWindows.entries())
+      .filter(([, info]) => !info.window.isDestroyed())
+      .map(([windowId, info]) => ({
+        windowId,
+        pluginId: info.plugin.id,
+        displayName: info.plugin.manifest.displayName,
+        startedAt: info.startedAt,
+        lastFocusedAt: info.lastFocusedAt,
+        resolvedIcon: info.plugin.resolvedIcon
+      }))
   }
 
   // 获取当前所有可见/存活窗口对应的插件（用于任务管理器）
@@ -1326,6 +1341,7 @@ export class PluginWindowManager {
       }
     }
     this.detachedWindows.clear()
+    this.refreshDockPresentation()
   }
 
   // 设置窗口置顶
