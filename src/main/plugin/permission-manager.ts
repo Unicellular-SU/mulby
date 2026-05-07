@@ -1,6 +1,7 @@
 import { systemPreferences, session, app, dialog, BrowserWindow } from 'electron'
 import log from 'electron-log'
 import { resolveIpcCallerSource } from '../services/ipc-caller-resolver'
+import { showInternalMessageBox } from '../services/ui-dialog-service'
 import {
     createMissingPluginPermissionError,
     createSystemPermissionDeniedError,
@@ -388,7 +389,7 @@ export class PermissionManager {
             return cached
         }
 
-        const displayOrigin = this.getDisplayOrigin(details)
+        const displayOrigin = this.getCallerDisplayName(webContents, details)
         const granted = await this.showPermissionDialog(type, displayOrigin)
         this.nonMacDecisions.set(cacheKey, granted)
         return granted
@@ -448,16 +449,27 @@ export class PermissionManager {
         return cached === true
     }
 
-    private getDisplayOrigin(
+    private getCallerDisplayName(
+        webContents: Electron.WebContents,
         details: Electron.PermissionRequest | Electron.FilesystemPermissionRequest | Electron.MediaAccessPermissionRequest | Electron.OpenExternalPermissionRequest
     ): string {
-        const requestingUrl = 'requestingUrl' in details ? details.requestingUrl : undefined
-        if (!requestingUrl) return 'unknown'
-        try {
-            return new URL(requestingUrl).origin
-        } catch {
-            return requestingUrl
+        const caller = resolveIpcCallerSource(webContents)
+        if (caller.source === 'plugin' && caller.pluginId) {
+            const plugin = permissionPluginLookup?.(caller.pluginId)
+            const displayName = (plugin?.manifest as { displayName?: string })?.displayName
+            if (displayName) return displayName
+            return caller.pluginId
         }
+
+        const requestingUrl = 'requestingUrl' in details ? details.requestingUrl : undefined
+        if (requestingUrl) {
+            try {
+                const origin = new URL(requestingUrl).origin
+                if (origin && origin !== 'null') return origin
+            } catch { /* fall through */ }
+        }
+
+        return app.getName() || 'Mulby'
     }
 
     /**
@@ -649,20 +661,15 @@ export class PermissionManager {
         }
         const label = labels[type] || type
 
-        const parentWindow = BrowserWindow.getFocusedWindow()
-        const opts: Electron.MessageBoxOptions = {
+        const result = await showInternalMessageBox({
             type: 'question',
-            buttons: ['允许', '拒绝'],
-            defaultId: 1,
-            cancelId: 1,
             title: '权限请求',
             message: `"${origin}" 请求访问${label}`,
             detail: '你可以选择允许或拒绝此请求。本次选择在应用重启前持续有效。',
-        }
-
-        const result = parentWindow
-            ? await dialog.showMessageBox(parentWindow, opts)
-            : await dialog.showMessageBox(opts)
+            buttons: ['允许', '拒绝'],
+            defaultId: 1,
+            cancelId: 1,
+        })
 
         const granted = result.response === 0
         log.debug(`[PermissionManager] User ${granted ? 'allowed' : 'denied'} ${type} for ${origin}`)
