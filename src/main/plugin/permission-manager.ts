@@ -1,5 +1,6 @@
 import { systemPreferences, session, app, dialog, BrowserWindow } from 'electron'
 import log from 'electron-log'
+import db from '../db'
 import { resolveIpcCallerSource } from '../services/ipc-caller-resolver'
 import { showInternalMessageBox } from '../services/ui-dialog-service'
 import {
@@ -35,6 +36,13 @@ type PendingDesktopCapture = {
     pluginId?: string
     windowId?: number
 }
+
+const PERM_NAMESPACE = '__system:permissions'
+const permStmtGet = db.prepare('SELECT value FROM store WHERE plugin_id = ? AND key = ?')
+const permStmtSet = db.prepare(`
+  INSERT OR REPLACE INTO store (plugin_id, key, value, updated_at)
+  VALUES (?, ?, ?, ?)
+`)
 
 let permissionPluginLookup: ((pluginId: string) => PermissionPluginLookupResult | undefined) | null = null
 
@@ -378,21 +386,32 @@ export class PermissionManager {
             return this.requestSingleMacOSPermission(type)
         }
 
-        // Use webContents.id as the primary cache scope so that
-        // file:// pages (whose URL origin is "null") don't share
-        // a single grant across all local windows.
-        const wcId = webContents?.id ?? 0
-        const cacheKey = `wc:${wcId}:${type}`
+        const scopeKey = this.buildScopeKey(webContents, type)
 
-        const cached = this.nonMacDecisions.get(cacheKey)
+        const persistent = this.loadPersistentDecision(scopeKey)
+        if (persistent !== undefined) {
+            return persistent
+        }
+
+        const cached = this.nonMacDecisions.get(scopeKey)
         if (cached !== undefined) {
             return cached
         }
 
         const displayOrigin = this.getCallerDisplayName(webContents, details)
-        const granted = await this.showPermissionDialog(type, displayOrigin)
-        this.nonMacDecisions.set(cacheKey, granted)
-        return granted
+        const decision = await this.showPermissionDialog(type, displayOrigin)
+
+        if (decision === 'always') {
+            this.savePersistentDecision(scopeKey, true)
+            this.nonMacDecisions.set(scopeKey, true)
+            return true
+        }
+        if (decision === 'session') {
+            this.nonMacDecisions.set(scopeKey, true)
+            return true
+        }
+        this.nonMacDecisions.set(scopeKey, false)
+        return false
     }
 
     private async requestSingleMacOSPermission(type: PermissionType): Promise<boolean> {
@@ -439,10 +458,16 @@ export class PermissionManager {
             return status === 'granted'
         }
 
-        // Windows/Linux: check per-webContents cache
-        const wcId = webContents?.id ?? 0
-        const cacheKey = `wc:${wcId}:${type}`
-        const cached = this.nonMacDecisions.get(cacheKey)
+        const scopeKey = webContents
+            ? this.buildScopeKey(webContents, type)
+            : `wc:0:${type}`
+
+        const persistent = this.loadPersistentDecision(scopeKey)
+        if (persistent !== undefined) {
+            return persistent
+        }
+
+        const cached = this.nonMacDecisions.get(scopeKey)
         if (type === 'geolocation') {
             return cached !== false
         }
@@ -644,10 +669,37 @@ export class PermissionManager {
         return this.getStatus(type)
     }
 
+    private buildScopeKey(webContents: Electron.WebContents, type: PermissionType): string {
+        const caller = resolveIpcCallerSource(webContents)
+        if (caller.source === 'plugin' && caller.pluginId) {
+            return `plugin:${caller.pluginId}:${type}`
+        }
+        return `app:${type}`
+    }
+
+    private loadPersistentDecision(scopeKey: string): boolean | undefined {
+        try {
+            const row = permStmtGet.get(PERM_NAMESPACE, scopeKey) as { value: string } | undefined
+            if (!row?.value) return undefined
+            return JSON.parse(row.value) === true
+        } catch {
+            return undefined
+        }
+    }
+
+    private savePersistentDecision(scopeKey: string, granted: boolean): void {
+        try {
+            permStmtSet.run(PERM_NAMESPACE, scopeKey, JSON.stringify(granted), Date.now())
+            log.debug(`[PermissionManager] Saved persistent decision: ${scopeKey} = ${granted}`)
+        } catch (err) {
+            log.error('[PermissionManager] Failed to save persistent decision:', err)
+        }
+    }
+
     private async showPermissionDialog(
         type: PermissionType,
         origin: string,
-    ): Promise<boolean> {
+    ): Promise<'always' | 'session' | 'denied'> {
         const labels: Record<PermissionType, string> = {
             geolocation: '位置信息',
             camera: '摄像头',
@@ -665,15 +717,15 @@ export class PermissionManager {
             type: 'question',
             title: '权限请求',
             message: `"${origin}" 请求访问${label}`,
-            detail: '你可以选择允许或拒绝此请求。本次选择在应用重启前持续有效。',
-            buttons: ['允许', '拒绝'],
-            defaultId: 1,
-            cancelId: 1,
+            detail: '「始终允许」将在重启后仍然生效。',
+            buttons: ['始终允许', '本次允许', '拒绝'],
+            defaultId: 2,
+            cancelId: 2,
         })
 
-        const granted = result.response === 0
-        log.debug(`[PermissionManager] User ${granted ? 'allowed' : 'denied'} ${type} for ${origin}`)
-        return granted
+        const decision = result.response === 0 ? 'always' : result.response === 1 ? 'session' : 'denied'
+        log.debug(`[PermissionManager] User chose "${decision}" for ${type} from ${origin}`)
+        return decision
     }
 
     /**
