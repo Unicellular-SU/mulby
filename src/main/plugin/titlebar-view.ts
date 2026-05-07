@@ -1,6 +1,7 @@
 import { app, BrowserWindow, ipcMain, WebContentsView } from 'electron'
 import { ThemeManager } from '../services/theme'
 import log from 'electron-log'
+import { getPinnedSize } from '../services/window-size-pin'
 
 export const DETACHED_TITLEBAR_HEIGHT = 36
 
@@ -79,7 +80,14 @@ function ensureGlobalHandlers(): void {
     if (win.isDestroyed()) return
     const dx = screenX - dragState.startX
     const dy = screenY - dragState.startY
-    win.setPosition(dragState.winStartX + dx, dragState.winStartY + dy)
+    const newX = dragState.winStartX + dx
+    const newY = dragState.winStartY + dy
+    const pinned = process.platform === 'win32' ? getPinnedSize(win.id) : undefined
+    if (pinned) {
+      win.setBounds({ x: newX, y: newY, width: pinned.width, height: pinned.height })
+    } else {
+      win.setPosition(newX, newY)
+    }
   })
 
   // JS-based window drag: end
