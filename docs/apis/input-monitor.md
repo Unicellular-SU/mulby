@@ -123,8 +123,8 @@ api.inputMonitor.onEvent(sessionId, (event) => {
 |------|------|------|
 | `type` | `string` | 事件类型，见下方事件类型表 |
 | `timestamp` | `number` | 事件时间戳 (毫秒) |
-| `x` | `number` | 鼠标屏幕 X 坐标 |
-| `y` | `number` | 鼠标屏幕 Y 坐标 |
+| `x` | `number` | 鼠标屏幕 X 坐标（Electron DIP 坐标，可直接与 `screen.getAllDisplays().bounds` / 窗口 bounds 一起使用） |
+| `y` | `number` | 鼠标屏幕 Y 坐标（Electron DIP 坐标，可直接与 `screen.getAllDisplays().bounds` / 窗口 bounds 一起使用） |
 | `button` | `string?` | 鼠标按键: `'left'`, `'right'`, `'middle'` |
 | `clickCount` | `number?` | 点击次数 (1=单击, 2=双击) |
 | `scrollDeltaX` | `number?` | 水平滚动量 |

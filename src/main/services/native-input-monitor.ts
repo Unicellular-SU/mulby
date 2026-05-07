@@ -9,6 +9,7 @@
  */
 
 import log from 'electron-log'
+import { screen } from 'electron'
 import { getNativeBuildAddonPathCandidates } from './native-addon-path'
 
 export interface GlobalInputEvent {
@@ -50,6 +51,8 @@ interface NativeInputMonitorAddon {
 
 let cachedAddon: NativeInputMonitorAddon | null | undefined = undefined
 
+type ScreenToDipPoint = (point: { x: number; y: number }) => { x: number; y: number }
+
 function loadAddon(): NativeInputMonitorAddon | null {
   if (cachedAddon !== undefined) return cachedAddon
 
@@ -75,6 +78,33 @@ export function isInputMonitorAvailable(): boolean {
 }
 
 export type InputEventCallback = (event: GlobalInputEvent) => void
+
+export function normalizeInputMonitorEventCoordinates(
+  event: GlobalInputEvent,
+  options: {
+    platform?: NodeJS.Platform
+    screenToDipPoint?: ScreenToDipPoint
+  } = {}
+): GlobalInputEvent {
+  const platform = options.platform ?? process.platform
+  if (platform !== 'win32') return event
+  if (!Number.isFinite(event.x) || !Number.isFinite(event.y)) return event
+
+  const screenToDipPoint = options.screenToDipPoint ?? screen?.screenToDipPoint?.bind(screen)
+  if (typeof screenToDipPoint !== 'function') return event
+
+  try {
+    const point = screenToDipPoint({ x: event.x, y: event.y })
+    if (!Number.isFinite(point.x) || !Number.isFinite(point.y)) return event
+    return {
+      ...event,
+      x: point.x,
+      y: point.y
+    }
+  } catch {
+    return event
+  }
+}
 
 export interface InputMonitorHandle {
   start(): void
@@ -105,7 +135,9 @@ export function createInputMonitor(
   let instance: NativeInputMonitorInstance | null = null
 
   try {
-    instance = new addon.InputMonitor(callback)
+    instance = new addon.InputMonitor((event) => {
+      callback(normalizeInputMonitorEventCoordinates(event))
+    })
   } catch (err) {
     log.error('[NativeInputMonitor] 创建实例失败:', err)
     return null
