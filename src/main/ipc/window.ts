@@ -17,6 +17,7 @@ import { windowFromWebContents, getPluginWebContents } from '../services/webcont
 import { hasDetachedWindows, markAppHidden, shouldHideWholeAppAfterWindowHide } from '../services/blur-manager'
 import { ActionMenuWindowManager } from '../services/action-menu-window-manager'
 import log from 'electron-log'
+import { getPinnedSize, updatePinnedSize } from '../services/window-size-pin'
 
 // 重新导出 clearSubInputState 供其他模块使用
 export { clearSubInputState } from '../services/subinput-state'
@@ -524,23 +525,32 @@ export function registerWindowHandlers(
       case 'setSize':
         if (typeof args[0] === 'number' && typeof args[1] === 'number') {
           childWin.setSize(args[0], args[1])
+          updatePinnedSize(childWin.id, args[0], args[1])
         }
         break
       case 'setPosition':
         if (typeof args[0] === 'number' && typeof args[1] === 'number') {
-          childWin.setPosition(args[0], args[1])
+          const pinned = process.platform === 'win32' ? getPinnedSize(childWin.id) : undefined
+          if (pinned) {
+            childWin.setBounds({ x: Math.round(args[0]), y: Math.round(args[1]), width: pinned.width, height: pinned.height })
+          } else {
+            childWin.setPosition(args[0], args[1])
+          }
         }
         break
       case 'setBounds':
         if (args[0] && typeof args[0] === 'object') {
           const bounds = args[0] as { x?: number; y?: number; width?: number; height?: number }
           const current = childWin.getBounds()
+          const nextW = Number.isFinite(bounds.width) ? Math.max(1, Math.round(bounds.width!)) : current.width
+          const nextH = Number.isFinite(bounds.height) ? Math.max(1, Math.round(bounds.height!)) : current.height
           childWin.setBounds({
             x: Number.isFinite(bounds.x) ? Math.round(bounds.x!) : current.x,
             y: Number.isFinite(bounds.y) ? Math.round(bounds.y!) : current.y,
-            width: Number.isFinite(bounds.width) ? Math.max(1, Math.round(bounds.width!)) : current.width,
-            height: Number.isFinite(bounds.height) ? Math.max(1, Math.round(bounds.height!)) : current.height
+            width: nextW,
+            height: nextH
           })
+          updatePinnedSize(childWin.id, nextW, nextH)
         }
         break
       case 'getBounds':
@@ -838,6 +848,7 @@ export function registerWindowHandlers(
       // 直接调整大小，无需切换 resizable 状态
       // setSize 在 macOS 上对无边框窗口也有效
       win.setSize(width, height)
+      updatePinnedSize(win.id, width, height)
     }
   })
 
@@ -941,7 +952,14 @@ export function registerWindowHandlers(
   ipcMain.on('window:setPosition', (event, x: number, y: number) => {
     const win = windowFromWebContents(event.sender)
     if (!win || !Number.isFinite(x) || !Number.isFinite(y)) return
-    win.setPosition(Math.round(x), Math.round(y))
+    // On Windows, setPosition() on frameless windows causes cumulative size drift.
+    // Use setBounds() with the pinned initial size to prevent accumulation.
+    const pinned = process.platform === 'win32' ? getPinnedSize(win.id) : undefined
+    if (pinned) {
+      win.setBounds({ x: Math.round(x), y: Math.round(y), width: pinned.width, height: pinned.height })
+    } else {
+      win.setPosition(Math.round(x), Math.round(y))
+    }
   })
 
   ipcMain.handle('window:setBounds', (event, bounds: { x?: number; y?: number; width?: number; height?: number }) => {
@@ -949,12 +967,15 @@ export function registerWindowHandlers(
     if (!win || !bounds || typeof bounds !== 'object') return false
 
     const current = win.getBounds()
+    const nextW = Number.isFinite(bounds.width) ? Math.max(1, Math.round(bounds.width!)) : current.width
+    const nextH = Number.isFinite(bounds.height) ? Math.max(1, Math.round(bounds.height!)) : current.height
     win.setBounds({
       x: Number.isFinite(bounds.x) ? Math.round(bounds.x!) : current.x,
       y: Number.isFinite(bounds.y) ? Math.round(bounds.y!) : current.y,
-      width: Number.isFinite(bounds.width) ? Math.max(1, Math.round(bounds.width!)) : current.width,
-      height: Number.isFinite(bounds.height) ? Math.max(1, Math.round(bounds.height!)) : current.height
+      width: nextW,
+      height: nextH
     })
+    updatePinnedSize(win.id, nextW, nextH)
     return true
   })
 
