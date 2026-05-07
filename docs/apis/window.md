@@ -127,6 +127,8 @@ interface ChildWindowCreateOptions {
   width?: number;
   height?: number;
   title?: string;
+  loadMode?: 'route' | 'file';         // 默认 'route'
+  preload?: string;                    // 仅 loadMode: 'file' 时指定该子窗口 preload
   type?: 'default' | 'borderless' | 'fullscreen';
   titleBar?: boolean;
   fullscreen?: boolean;
@@ -180,9 +182,31 @@ interface ChildWindowHandle {
 }
 ```
 
-`url` 支持路由名（如 `overlay`、`/overlay`）和旧写法（如 `/index.html#overlay?showClicks=true`）。宿主会将路由解析为 `location.hash`，将 query 解析为 `location.search`，并把 `options.params` 透传到子窗口的 `onPluginInit()`。
+默认 `loadMode: 'route'`。`url` 支持路由名（如 `overlay`、`/overlay`）和旧写法（如 `/index.html#overlay?showClicks=true`）。宿主会将路由解析为 `location.hash`，将 query 解析为 `location.search`，并把 `options.params` 透传到子窗口的 `onPluginInit()`。
 
-> 注意：`window.create()` 的 `url` 不是 HTML 文件路径，也不会用于选择或加载另一个 UI 文件。子窗口始终加载当前插件 `manifest.ui` 指定的同一个前端入口（通常是 `ui/index.html`）；`url` 只负责传递 hash/query 路由。多页面 UI 应在这个入口内部用前端路由处理。
+> 注意：默认路由模式下，`window.create()` 的 `url` 不是 HTML 文件路径，也不会用于选择或加载另一个 UI 文件。子窗口始终加载当前插件 `manifest.ui` 指定的同一个前端入口（通常是 `ui/index.html`）；`url` 只负责传递 hash/query 路由。多页面 UI 应优先在这个入口内部用前端路由处理。
+
+**旧插件兼容模式：多 HTML / 多 preload**
+
+`loadMode: 'file'` 用于迁移 zTools/uTools 旧插件的多文件窗口结构，不建议新插件优先使用。启用后，`url` 会被解释为当前插件目录内的 HTML 文件路径，可带 query/hash：
+
+```javascript
+const region = await window.mulby.window.create('region/index.html?key=abc', {
+  loadMode: 'file',
+  preload: 'region/preload.cjs',
+  width: 640,
+  height: 480,
+  title: 'Region Select',
+});
+```
+
+文件模式约束：
+
+- HTML 入口必须是插件目录内的相对路径，只允许 `.html` / `.htm`，禁止绝对路径、`../` 越界和 NUL 字符。
+- `preload` 仅在 `loadMode: 'file'` 时生效；必须是插件目录内的 `.js` / `.cjs` 文件。未指定时回退到 `manifest.preload`，没有 manifest preload 时只加载 Mulby 核心 preload。
+- Mulby 会先加载核心 preload 暴露 `window.mulby`，再加载该窗口指定的插件 preload。
+- 文件窗口仍归属创建它的 pluginId，父子窗口控制和消息通信仍受当前插件边界限制。
+- 使用 Mulby CLI 打包时，应把额外 HTML、窗口 preload、`.node` 原生模块、`.exe`、`aperture` 等运行资源列入 `manifest.assets`，确保它们进入 `.inplugin`。
 
 子窗口默认不会继承 `manifest.window` 中的 `minWidth`、`minHeight`、`maxWidth`、`maxHeight`，避免主插件面板的尺寸约束限制 overlay、截图、取色器等辅助窗口。需要沿用 manifest 尺寸约束时，显式传入 `inheritWindowSizeLimits: true`。
 

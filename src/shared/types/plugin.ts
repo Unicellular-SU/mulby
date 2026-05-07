@@ -501,6 +501,7 @@ export interface PluginManifest {
   main: string
   ui?: string  // UI 文件路径（可选）
   preload?: string  // 自定义 preload 脚本路径（可选）
+  assets?: string[]  // 打包时额外包含的文件或目录（可选）
   icon?: PluginIcon  // 插件图标（可选）
   permissions?: PluginPermissions  // 权限声明（可选）
   features: PluginFeature[]

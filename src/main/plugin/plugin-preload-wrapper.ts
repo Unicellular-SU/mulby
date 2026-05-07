@@ -9,9 +9,11 @@
  */
 
 import { writeFileSync, mkdirSync, existsSync } from 'fs'
+import { createHash } from 'crypto'
 import { join } from 'path'
 import { app } from 'electron'
 import log from 'electron-log'
+import { resolvePluginRelativeFile } from './window-path'
 
 // 缓存生成的 preload 文件路径
 const preloadCache = new Map<string, string>()
@@ -64,7 +66,7 @@ export function generateWrappedPreload(
     try {
         require(${JSON.stringify(pluginPreloadPath)});
     } catch (error) {
-        log.error('[Mulby] 插件 preload 加载失败:', error);
+        console.error('[Mulby] 插件 preload 加载失败:', error);
     }
 })();
 `
@@ -72,7 +74,8 @@ export function generateWrappedPreload(
     // 写入缓存目录
     const cacheDir = getPreloadCacheDir()
     const safePluginId = pluginId.replace(/[^a-zA-Z0-9_-]/g, '_')
-    const wrapperPath = join(cacheDir, `${safePluginId}-preload.js`)
+    const preloadHash = createHash('sha256').update(pluginPreloadPath).digest('hex').slice(0, 12)
+    const wrapperPath = join(cacheDir, `${safePluginId}-${preloadHash}-preload.js`)
 
     writeFileSync(wrapperPath, wrapperCode, 'utf-8')
     preloadCache.set(cacheKey, wrapperPath)
@@ -99,17 +102,43 @@ export function getPluginPreloadPath(
     basePreloadPath: string,
     plugin: { id: string; path: string; manifest: { preload?: string } }
 ): string {
+    return getPluginPreloadPathForEntry(basePreloadPath, plugin)
+}
+
+/**
+ * 获取插件指定入口应使用的 preload 路径。
+ *
+ * auxiliary file window 可显式传入 preloadPath；未传入时回退到 manifest.preload。
+ */
+export function getPluginPreloadPathForEntry(
+    basePreloadPath: string,
+    plugin: { id: string; path: string; manifest: { preload?: string } },
+    preloadPath?: string
+): string {
+    const configuredPreload = preloadPath ?? plugin.manifest.preload
+
     // 如果插件没有自定义 preload，使用核心 preload
-    if (!plugin.manifest.preload) {
+    if (!configuredPreload) {
         return basePreloadPath
     }
 
     // 构建插件 preload 完整路径
-    const pluginPreloadPath = join(plugin.path, plugin.manifest.preload)
+    let pluginPreloadPath: string
+    try {
+        pluginPreloadPath = resolvePluginRelativeFile(plugin.path, configuredPreload, ['.js', '.cjs'])
+    } catch (err) {
+        const message = err instanceof Error ? err.message : String(err)
+        log.warn(`[Mulby] 插件 preload 路径非法: ${configuredPreload} (${message})`)
+        if (preloadPath) throw err
+        return basePreloadPath
+    }
 
     // 检查文件是否存在
     if (!existsSync(pluginPreloadPath)) {
         log.warn(`[Mulby] 插件 preload 文件不存在: ${pluginPreloadPath}`)
+        if (preloadPath) {
+            throw new Error(`Plugin preload file does not exist: ${configuredPreload}`)
+        }
         return basePreloadPath
     }
 

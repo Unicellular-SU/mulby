@@ -19,6 +19,7 @@
 | `platform` | `string` \| `string[]` | 否 | 平台限制。缺省则代表全平台。可选受限值: `darwin`, `win32`, `linux`。如 `["win32", "linux"]`。 |
 | `ui` | `string` | 否 | 前端渲染进程入口（UI 文件，如 `ui/index.html`）。如果不填则属于纯后台类插件。 |
 | `preload` | `string` | 否 | 指定 Preload 脚本文件路径，用于连接 Node.js 与前端（必须是 CommonJS 的 `.cjs` 后缀）。 |
+| `assets` | `string[]` | 否 | 打包时额外包含的插件内文件或目录。多 HTML 辅助窗口、额外 preload、`.node` 原生模块、外部二进制等需要显式列入。 |
 | `icon` | `PluginIcon` | 否 | 插件的图标，路径或数据等。参考下方“图标配置”。 |
 | `permissions` | `object` | 否 | 插件向系统申请的特殊权限。例如 `{ "runCommand": true, "screen": true, "clipboard": true }`。 |
 | `tools` | `PluginToolSchema[]`| 否 | 给 AI Agent 提供的工具注册声明。 |
@@ -26,6 +27,28 @@
 | `pluginSetting` | `PluginSetting` | 否 | 插件底层的常规与运行行为配置。 |
 
 ---
+
+## 打包资源 (assets)
+
+`assets` 是 Mulby CLI 打包白名单。`manifest.main`、`manifest.ui`、`manifest.preload` 和默认 `ui/` 目录会按规则打包；除此之外的旧插件兼容资源应显式列入 `assets`。
+
+```json
+{
+  "ui": "ui/index.html",
+  "preload": "preload.cjs",
+  "assets": [
+    "region",
+    "effect",
+    "recorder",
+    "countdown.html",
+    "region/preload.cjs",
+    "addon-darwin-arm64.node",
+    "bin/aperture"
+  ]
+}
+```
+
+常见需要列入 `assets` 的资源包括：通过 `window.mulby.window.create(path, { loadMode: 'file' })` 加载的额外 HTML 目录或文件、每个文件窗口自己的 preload、`.node` 原生模块、`.exe`/可执行文件、`aperture` 等外部二进制。
 
 ## 权限声明 (permissions)
 

@@ -548,6 +548,8 @@ export interface ChildWindowCreateOptions {
   width?: number
   height?: number
   title?: string
+  loadMode?: 'route' | 'file'
+  preload?: string
   type?: 'default' | 'borderless' | 'fullscreen'
   titleBar?: boolean
   fullscreen?: boolean

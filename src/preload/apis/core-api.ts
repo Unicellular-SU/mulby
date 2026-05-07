@@ -47,6 +47,8 @@ export function createCoreApi(ipcRenderer: IpcRenderer) {
       reload: () => ipcRenderer.send('plugin:reload'),
       create: async (url: string, options?: {
         width?: number; height?: number; title?: string;
+        loadMode?: 'route' | 'file';
+        preload?: string;
         type?: 'default' | 'borderless' | 'fullscreen';
         titleBar?: boolean;
         fullscreen?: boolean;

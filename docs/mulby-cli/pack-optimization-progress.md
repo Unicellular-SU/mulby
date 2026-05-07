@@ -22,6 +22,7 @@
 由于旧版的打死逻辑，任何不是写死的特定的目录（如 `locales/` 等等）都被抛弃。
 - 在 `PluginPackageManifest` 和文件收集逻辑中，增加了对 `manifest.assets` 字段的遍历支持。
 - 现在开发者可在 `manifest.json` 中配置 `"assets": ["locales", "my-config.json"]`，打包时会自适应将它们加入 zip 文件内。
+- 旧插件兼容模式中通过 `window.mulby.window.create(path, { loadMode: "file" })` 加载的额外 HTML、窗口专属 preload、`.node` 原生模块、`.exe`、`aperture` 等资源也需要列入 `assets`，否则打包后的 `.inplugin` 中不会包含这些文件。
 
 ## 📈 预期效果
 - 当开发者在插件目录中使用 `npx mulby pack` 打包时，不会再出现巨大的未使用依赖包。

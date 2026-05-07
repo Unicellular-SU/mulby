@@ -8,7 +8,7 @@ import { installConsoleCaptureForWebContents } from './console-capture'
 import { appSettingsManager } from '../services/app-settings'
 import { PluginPanelWindow } from './panel-window'
 import { clearSubInputState } from '../services/subinput-state'
-import { getPluginPreloadPath } from './plugin-preload-wrapper'
+import { getPluginPreloadPath, getPluginPreloadPathForEntry } from './plugin-preload-wrapper'
 import {
   PLUGIN_RENDERER_V8_CACHE_OPTIONS,
   getPluginRendererCapabilities,
@@ -33,7 +33,11 @@ import {
 } from './titlebar-view'
 import { formatPayloadTrace } from '../../shared/attachment-trace'
 import log from 'electron-log'
-import { createAuxiliaryLoadFileOptions, parseAuxiliaryPath } from './window-path'
+import {
+  createAuxiliaryLoadFileOptions,
+  parseAuxiliaryPath,
+  resolveLegacyAuxiliaryFileEntry
+} from './window-path'
 import {
   resolveAuxiliaryWindowBackgroundThrottling,
   resolveAuxiliaryWindowSizeLimits
@@ -71,6 +75,8 @@ interface AuxiliaryWindowOptions {
   width?: number
   height?: number
   title?: string
+  loadMode?: 'route' | 'file'
+  preload?: string
   type?: 'default' | 'borderless' | 'fullscreen'
   titleBar?: boolean
   fullscreen?: boolean
@@ -928,10 +934,31 @@ export class PluginWindowManager {
     options?: AuxiliaryWindowOptions,
     creatorId?: number  // 创建此窗口的父窗口 ID
   ): BrowserWindow | null {
-    if (!plugin.manifest.ui) return null
+    const loadMode = options?.loadMode === 'file' ? 'file' : 'route'
+    let contentPath: string
+    let loadFileOptions: Electron.LoadFileOptions | undefined
+    let auxiliaryRoute: string | undefined
 
-    const uiPath = join(plugin.path, plugin.manifest.ui)
-    if (!existsSync(uiPath)) return null
+    if (loadMode === 'file') {
+      try {
+        const entry = resolveLegacyAuxiliaryFileEntry(plugin.path, path)
+        contentPath = entry.htmlPath
+        loadFileOptions = entry.loadFileOptions
+      } catch (err) {
+        log.warn(`[PluginWindowManager] 拒绝创建文件模式辅助窗口: plugin=${plugin.id}, path=${path}, error=${err instanceof Error ? err.message : String(err)}`)
+        return null
+      }
+    } else {
+      if (!plugin.manifest.ui) return null
+
+      contentPath = join(plugin.path, plugin.manifest.ui)
+      if (!existsSync(contentPath)) return null
+
+      // 加载页面，分离 hash 路由和 query 参数，兼容 `/index.html#route?a=1` 等旧写法。
+      const auxiliaryPath = parseAuxiliaryPath(path)
+      loadFileOptions = createAuxiliaryLoadFileOptions(auxiliaryPath)
+      auxiliaryRoute = auxiliaryPath.hash
+    }
 
     const currentTheme = this.themeManager?.getActualTheme() || 'dark'
     const isDark = currentTheme === 'dark'
@@ -959,8 +986,18 @@ export class PluginWindowManager {
 
     // 获取插件 preload 路径（支持自定义 preload）
     const basePreloadPath = join(__dirname, '../preload/index.js')
-    const preloadPath = getPluginPreloadPath(basePreloadPath, plugin)
-    const hasCustomPreload = !!plugin.manifest.preload
+    let preloadPath: string
+    try {
+      preloadPath = loadMode === 'file'
+        ? getPluginPreloadPathForEntry(basePreloadPath, plugin, options?.preload)
+        : getPluginPreloadPath(basePreloadPath, plugin)
+    } catch (err) {
+      log.warn(`[PluginWindowManager] 拒绝创建文件模式辅助窗口: plugin=${plugin.id}, preload=${options?.preload}, error=${err instanceof Error ? err.message : String(err)}`)
+      return null
+    }
+    const hasCustomPreload = loadMode === 'file'
+      ? Boolean(options?.preload ?? plugin.manifest.preload)
+      : !!plugin.manifest.preload
 
     // 全屏模式：获取主屏幕工作区大小
     const fullscreenBounds = isFullscreen ? screen.getPrimaryDisplay().workArea : null
@@ -1028,10 +1065,6 @@ export class PluginWindowManager {
       installPluginWebviewSecurity(win.webContents, plugin)
     }
 
-    // 加载页面，分离 hash 路由和 query 参数，兼容 `/index.html#route?a=1` 等旧写法。
-    const auxiliaryPath = parseAuxiliaryPath(path)
-    const loadFileOptions = createAuxiliaryLoadFileOptions(auxiliaryPath)
-
     // 创建插件 WebContentsView（仅在需要标题栏时）
     let pluginView: WebContentsView | null = null
 
@@ -1063,9 +1096,9 @@ export class PluginWindowManager {
 
       // 加载插件 UI
       if (loadFileOptions) {
-        void pluginView.webContents.loadFile(uiPath, loadFileOptions)
+        void pluginView.webContents.loadFile(contentPath, loadFileOptions)
       } else {
-        void pluginView.webContents.loadFile(uiPath)
+        void pluginView.webContents.loadFile(contentPath)
       }
 
       // 设置标题栏 IPC
@@ -1099,9 +1132,9 @@ export class PluginWindowManager {
     } else {
       // 无标题栏：BrowserWindow 直接加载插件
       if (loadFileOptions) {
-        void win.loadFile(uiPath, loadFileOptions)
+        void win.loadFile(contentPath, loadFileOptions)
       } else {
-        void win.loadFile(uiPath)
+        void win.loadFile(contentPath)
       }
 
       // 窗口状态事件
@@ -1177,7 +1210,7 @@ export class PluginWindowManager {
           attachments: [],
           mode: 'detached',
           windowType,
-          route: auxiliaryPath.hash,
+          route: auxiliaryRoute,
           params: options?.params,
           capabilities: getPluginRendererCapabilities(plugin),
           nonce: Date.now()
