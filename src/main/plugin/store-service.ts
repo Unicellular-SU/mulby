@@ -437,8 +437,8 @@ export class PluginStoreService {
     for (const row of index.plugins) {
       if (!row || typeof row !== 'object' || Array.isArray(row)) continue
       const candidate = row as Record<string, unknown>
-      const id = String(candidate.id || '').trim()
-      const name = String(candidate.name || '').trim()
+      const id = String(candidate.id || candidate.pluginId || candidate.name || '').trim()
+      const name = String(candidate.name || candidate.id || candidate.pluginId || '').trim()
       const displayName = this.resolveOptionalText(candidate.displayName)
       const pluginVersion = String(candidate.version || '').trim()
       const description = this.resolveOptionalText(candidate.description)
