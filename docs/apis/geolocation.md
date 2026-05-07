@@ -51,7 +51,7 @@ if (status === 'granted') {
 
 ### canGetPosition()
 [Renderer]
-检查是否可以获取位置。
+检查是否可以获取位置。该方法表示当前位置流程是否可继续执行；即使原生定位权限尚未授予，`getCurrentPosition()` 仍可能使用 IP 定位后备。
 
 ```javascript
 if (await geolocation.canGetPosition()) {
@@ -76,7 +76,7 @@ await geolocation.openSettings();
 
 ### getCurrentPosition()
 [Renderer]
-获取当前位置。
+获取当前位置。macOS 会优先尝试原生定位；原生定位超时或不可用时，会继续尝试 IP 定位后备。
 
 ```javascript
 try {
@@ -120,7 +120,7 @@ async function getLocation() {
   
   if (status === 'not-determined') {
     const newStatus = await geolocation.requestAccess();
-    if (newStatus !== 'granted') {
+    if (newStatus === 'denied' || newStatus === 'restricted') {
       await notification.show('位置权限未授权', 'warning');
       return null;
     }

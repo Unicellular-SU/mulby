@@ -46,6 +46,9 @@ type NativeProbeResult = NativeProbeSuccess | NativeProbeFailure
 
 type ProbeError = Error & { code?: number | null }
 
+const GEOLOCATION_ERROR_PERMISSION_DENIED = 1
+const GEOLOCATION_ERROR_TIMEOUT = 3
+
 interface IpGeolocationParseResult {
   latitude: unknown
   longitude: unknown
@@ -118,10 +121,16 @@ export class PluginGeolocation {
         return 'granted'
       } catch (error) {
         const status = this.classifyNativeError(error)
-        this.setNativeAccessStatus(status)
         if (status === 'denied' || status === 'restricted') {
+          this.setNativeAccessStatus(status)
           permissionManager.openSystemSettings('geolocation')
+          return status
         }
+        if (status === 'not-determined') {
+          this.setNativeAccessStatus(null)
+          return status
+        }
+        this.setNativeAccessStatus(status)
         return status
       }
     }
@@ -134,7 +143,8 @@ export class PluginGeolocation {
    * 检查是否可以获取位置
    */
   canGetPosition(): boolean {
-    return this.getAccessStatus() === 'granted'
+    const status = this.getAccessStatus()
+    return status !== 'denied' && status !== 'restricted'
   }
 
   /**
@@ -328,11 +338,17 @@ export class PluginGeolocation {
 
   private classifyNativeError(error: unknown): GeolocationAccessStatus {
     const code = (error as ProbeError | undefined)?.code
-    if (code === 1) {
+    if (code === GEOLOCATION_ERROR_PERMISSION_DENIED) {
       return 'denied'
+    }
+    if (code === GEOLOCATION_ERROR_TIMEOUT) {
+      return 'not-determined'
     }
 
     const message = String(error instanceof Error ? error.message : error).toLowerCase()
+    if (message.includes('timeout') || message.includes('timed out') || message.includes('expired')) {
+      return 'not-determined'
+    }
     if (message.includes('restricted')) {
       return 'restricted'
     }
