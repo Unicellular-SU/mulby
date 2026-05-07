@@ -33,7 +33,7 @@ import {
 } from './titlebar-view'
 import { formatPayloadTrace } from '../../shared/attachment-trace'
 import log from 'electron-log'
-import { pinWindowSize, unpinWindowSize, updatePinnedSize } from '../services/window-size-pin'
+import { pinWindowSize, unpinWindowSize } from '../services/window-size-pin'
 import {
   createAuxiliaryLoadFileOptions,
   parseAuxiliaryPath,
