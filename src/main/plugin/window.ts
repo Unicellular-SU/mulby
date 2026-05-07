@@ -836,6 +836,11 @@ export class PluginWindowManager {
       if (windowConfig.skipTaskbar) {
         win.setSkipTaskbar(true)
       }
+      if (windowConfig.alwaysOnTop && windowConfig.alwaysOnTopLevel) {
+        win.setAlwaysOnTop(true, windowConfig.alwaysOnTopLevel as Parameters<BrowserWindow['setAlwaysOnTop']>[1])
+      } else if (windowConfig.alwaysOnTop && process.platform === 'win32') {
+        win.setAlwaysOnTop(true, 'screen-saver')
+      }
       if (windowConfig.focusable === false) {
         win.showInactive()
       } else {
@@ -1175,6 +1180,8 @@ export class PluginWindowManager {
 
       if (options?.alwaysOnTop && options.alwaysOnTopLevel) {
         win.setAlwaysOnTop(true, options.alwaysOnTopLevel as Parameters<BrowserWindow['setAlwaysOnTop']>[1])
+      } else if (options?.alwaysOnTop && process.platform === 'win32') {
+        win.setAlwaysOnTop(true, 'screen-saver')
       }
       if (options?.ignoreMouseEvents) {
         win.setIgnoreMouseEvents(true, { forward: options.forwardMouseEvents === true })
