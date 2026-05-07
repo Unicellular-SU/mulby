@@ -1150,7 +1150,10 @@ export class PluginWindowManager {
         initTitlebar(win, options?.title || plugin.manifest.displayName, currentTheme)
       }
       if (useWindowsFramelessSurface) {
-        await applyWindowsFramelessSurface(win, { includeTitleBar: false })
+        await applyWindowsFramelessSurface(win, {
+          includeTitleBar: false,
+          contentBackground: resolvedTransparent ? 'transparent' : 'theme'
+        })
         if (win.isDestroyed()) return
       }
 
@@ -1198,7 +1201,10 @@ export class PluginWindowManager {
     pluginWebContents.on('did-finish-load', async () => {
       this.openPluginDevTools(pluginWebContents, plugin.id)
       if (useWindowsFramelessSurface && !win.isDestroyed()) {
-        await applyWindowsFramelessSurface(win, { includeTitleBar: false })
+        await applyWindowsFramelessSurface(win, {
+          includeTitleBar: false,
+          contentBackground: resolvedTransparent ? 'transparent' : 'theme'
+        })
       }
       // 延迟确保 React useEffect 已注册 IPC 回调
       setTimeout(() => {
