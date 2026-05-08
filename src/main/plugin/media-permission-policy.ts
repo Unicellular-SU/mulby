@@ -91,8 +91,13 @@ export function resolveRequiredMediaPermissions(
   }
 
   const required: MediaPermissionType[] = []
+  if (desktopCapture) {
+    required.push('screen')
+    return required
+  }
+
   if (requested.has('audio')) required.push('microphone')
-  if (requested.has('video')) required.push(desktopCapture ? 'screen' : 'camera')
+  if (requested.has('video')) required.push('camera')
   return required
 }
 

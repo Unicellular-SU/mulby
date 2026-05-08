@@ -83,6 +83,10 @@ export type PermissionStatus =
     | 'limited'        // 受限访问
     | 'unknown'        // 无法确定
 
+export interface PermissionRequestOptions {
+    openSystemSettingsOnDenied?: boolean
+}
+
 // 将 node-mac-permissions 状态标准化
 function normalizeStatus(status: string): PermissionStatus {
     switch (status) {
@@ -116,6 +120,24 @@ function mapToMacPermissionType(type: PermissionType): string | null {
         'calendar': 'calendar',
     }
     return mapping[type] || null
+}
+
+function getMacAccessibilityStatus(): PermissionStatus {
+    try {
+        return systemPreferences.isTrustedAccessibilityClient(false) ? 'granted' : 'denied'
+    } catch (error) {
+        log.warn('[PermissionManager] Failed to read Accessibility trust status:', error)
+        return 'unknown'
+    }
+}
+
+function getMacScreenStatus(): PermissionStatus {
+    try {
+        return normalizeStatus(systemPreferences.getMediaAccessStatus('screen'))
+    } catch (error) {
+        log.warn('[PermissionManager] Failed to read screen recording status:', error)
+        return 'unknown'
+    }
 }
 
 export class PermissionManager {
@@ -511,6 +533,14 @@ export class PermissionManager {
             return 'granted'
         }
 
+        if (process.platform === 'darwin' && type === 'accessibility') {
+            return getMacAccessibilityStatus()
+        }
+
+        if (process.platform === 'darwin' && type === 'screen') {
+            return getMacScreenStatus()
+        }
+
         if (process.platform === 'darwin' && permissions) {
             const macType = mapToMacPermissionType(type)
             if (macType) {
@@ -558,11 +588,11 @@ export class PermissionManager {
     /**
      * 请求权限
      */
-    async request(type: PermissionType): Promise<PermissionStatus> {
+    async request(type: PermissionType, options?: PermissionRequestOptions): Promise<PermissionStatus> {
         log.debug(`[PermissionManager] Requesting permission: ${type}`)
 
         if (process.platform === 'darwin') {
-            return this.requestMacOS(type)
+            return this.requestMacOS(type, options)
         } else {
             // Windows/Linux: 通过触发实际功能来请求权限
             return this.requestWindowsLinux(type)
@@ -572,8 +602,22 @@ export class PermissionManager {
     /**
      * macOS 权限请求
      */
-    private async requestMacOS(type: PermissionType): Promise<PermissionStatus> {
+    private async requestMacOS(type: PermissionType, options: PermissionRequestOptions = {}): Promise<PermissionStatus> {
         log.debug(`[PermissionManager] macOS requesting: ${type}`)
+
+        if (type === 'accessibility') {
+            try {
+                const trusted = systemPreferences.isTrustedAccessibilityClient(true)
+                if (trusted) return 'granted'
+            } catch (error) {
+                log.warn('[PermissionManager] Failed to request Accessibility trust:', error)
+            }
+
+            if (options.openSystemSettingsOnDenied !== false) {
+                this.openSystemSettings('accessibility')
+            }
+            return this.getStatus('accessibility')
+        }
 
         // 对于相机和麦克风，使用 systemPreferences
         if (type === 'camera' || type === 'microphone') {
@@ -588,14 +632,17 @@ export class PermissionManager {
         }
 
         if (type === 'screen') {
+            const currentStatus = this.getStatus('screen')
+            if (currentStatus === 'granted' || currentStatus === 'authorized') return currentStatus
+
             if (permissions) {
                 const askFn = permissions.askForScreenCaptureAccess
                 if (typeof askFn === 'function') {
                     try {
                         await askFn(true)
                         await this.showMacOSScreenRecordingRestartNotice()
-                        const status = this.getStatus('screen')
-                        return status
+                        const requestedStatus = this.getStatus('screen')
+                        return requestedStatus
                     } catch (error) {
                         log.error('[PermissionManager] askForScreenCaptureAccess error:', error)
                     }
@@ -606,8 +653,8 @@ export class PermissionManager {
 
             this.openSystemSettings('screen')
             await this.showMacOSScreenRecordingRestartNotice()
-            const status = this.getStatus('screen')
-            return status
+            const fallbackStatus = this.getStatus('screen')
+            return fallbackStatus
         }
 
         // 对于位置等其他权限，使用 node-mac-permissions
@@ -737,6 +784,9 @@ export class PermissionManager {
         if (type === 'geolocation') {
             return status !== 'denied' && status !== 'restricted'
         }
+        if (process.platform === 'darwin' && (type === 'accessibility' || type === 'screen')) {
+            return status !== 'granted' && status !== 'authorized' && status !== 'restricted'
+        }
         // 只有 not-determined 状态可以程序化请求
         return status === 'not-determined'
     }
@@ -843,7 +893,7 @@ export class PermissionManager {
      */
     isAccessibilityTrusted(): boolean {
         if (process.platform !== 'darwin') return true
-        return systemPreferences.isTrustedAccessibilityClient(false)
+        return getMacAccessibilityStatus() === 'granted'
     }
 
     /**

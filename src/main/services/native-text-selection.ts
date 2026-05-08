@@ -280,7 +280,7 @@ export function prepareNativeTextSelectionForActiveWindow(activeWindow?: ActiveW
 
   try {
     const api = getDarwinAxApi()
-    darwinPrepareAccessibilityForPids(api, [activeWindow.pid], 'activeWindow')
+    darwinPrepareAccessibilityForPids(api, [activeWindow.pid])
   } catch (err) {
     log.warn('[NativeTextSelection][AX] 预激活目标应用无障碍树失败:', err)
   }
@@ -352,7 +352,6 @@ interface DarwinAxApi {
   AXUIElementCopyElementAtPosition: (application: unknown, x: number, y: number, valueOut: unknown[]) => number
   AXUIElementCopyAttributeValue: (element: unknown, attribute: unknown, valueOut: unknown[]) => number
   AXUIElementCopyParameterizedAttributeValue: (element: unknown, attribute: unknown, parameter: unknown, valueOut: unknown[]) => number
-  AXUIElementSetAttributeValue: (element: unknown, attribute: unknown, value: unknown) => number
   AXUIElementSetMessagingTimeout: (element: unknown, timeoutInSeconds: number) => number
   AXValueGetValue: (value: unknown, type: number, valueOut: unknown) => boolean
   CFStringCreateWithCString: (alloc: null, str: string, encoding: number) => unknown
@@ -363,15 +362,11 @@ interface DarwinAxApi {
   kAXFocusedUIElementAttribute: unknown
   kAXFocusedWindowAttribute: unknown
   kAXParentAttribute: unknown
-  kAXRoleAttribute: unknown
-  kAXManualAccessibilityAttribute: unknown
   kAXSelectedTextAttribute: unknown
   kAXSelectedTextRangeAttribute: unknown
   kAXSelectedTextMarkerRangeAttribute: unknown
   kAXStringForRangeParameterizedAttribute: unknown
   kAXStringForTextMarkerRangeParameterizedAttribute: unknown
-  kAXEnhancedUserInterfaceAttribute: unknown
-  kCFBooleanTrue: unknown
 }
 
 let _darwinAxApi: DarwinAxApi | null = null
@@ -395,15 +390,11 @@ function getDarwinAxApi(): DarwinAxApi {
   const focusedAttr = cfStringCreate(null, 'AXFocusedUIElement', kCFStringEncodingUTF8)
   const focusedWindowAttr = cfStringCreate(null, 'AXFocusedWindow', kCFStringEncodingUTF8)
   const parentAttr = cfStringCreate(null, 'AXParent', kCFStringEncodingUTF8)
-  const roleAttr = cfStringCreate(null, 'AXRole', kCFStringEncodingUTF8)
-  const manualAccessibilityAttr = cfStringCreate(null, 'AXManualAccessibility', kCFStringEncodingUTF8)
   const selectedTextAttr = cfStringCreate(null, 'AXSelectedText', kCFStringEncodingUTF8)
   const selectedTextRangeAttr = cfStringCreate(null, 'AXSelectedTextRange', kCFStringEncodingUTF8)
   const selectedTextMarkerRangeAttr = cfStringCreate(null, 'AXSelectedTextMarkerRange', kCFStringEncodingUTF8)
   const stringForRangeAttr = cfStringCreate(null, 'AXStringForRange', kCFStringEncodingUTF8)
   const stringForTextMarkerRangeAttr = cfStringCreate(null, 'AXStringForTextMarkerRange', kCFStringEncodingUTF8)
-  const enhancedUserInterfaceAttr = cfStringCreate(null, 'AXEnhancedUserInterface', kCFStringEncodingUTF8)
-  const cfBooleanTrue = koffi.decode(cf.symbol('kCFBooleanTrue', 'void*'), 'void*')
 
   // 检查辅助功能权限
   const AXIsProcessTrusted = ax.func('bool AXIsProcessTrusted()')
@@ -418,7 +409,6 @@ function getDarwinAxApi(): DarwinAxApi {
     // 注意：第三个参数是 CFTypeRef*（即 void**），koffi _Out_ 正确处理
     AXUIElementCopyAttributeValue: ax.func('int32_t AXUIElementCopyAttributeValue(void*, void*, _Out_ void**)'),
     AXUIElementCopyParameterizedAttributeValue: ax.func('int32_t AXUIElementCopyParameterizedAttributeValue(void*, void*, void*, _Out_ void**)'),
-    AXUIElementSetAttributeValue: ax.func('int32_t AXUIElementSetAttributeValue(void*, void*, void*)'),
     AXUIElementSetMessagingTimeout: ax.func('int32_t AXUIElementSetMessagingTimeout(void*, float)'),
     AXValueGetValue: ax.func('bool AXValueGetValue(void*, int32_t, _Out_ void*)'),
     CFStringCreateWithCString: cfStringCreate,
@@ -428,15 +418,11 @@ function getDarwinAxApi(): DarwinAxApi {
     kAXFocusedUIElementAttribute: focusedAttr,
     kAXFocusedWindowAttribute: focusedWindowAttr,
     kAXParentAttribute: parentAttr,
-    kAXRoleAttribute: roleAttr,
-    kAXManualAccessibilityAttribute: manualAccessibilityAttr,
     kAXSelectedTextAttribute: selectedTextAttr,
     kAXSelectedTextRangeAttribute: selectedTextRangeAttr,
     kAXSelectedTextMarkerRangeAttribute: selectedTextMarkerRangeAttr,
     kAXStringForRangeParameterizedAttribute: stringForRangeAttr,
-    kAXStringForTextMarkerRangeParameterizedAttribute: stringForTextMarkerRangeAttr,
-    kAXEnhancedUserInterfaceAttribute: enhancedUserInterfaceAttr,
-    kCFBooleanTrue: cfBooleanTrue
+    kAXStringForTextMarkerRangeParameterizedAttribute: stringForTextMarkerRangeAttr
   }
 
   const t3 = performance.now()
@@ -555,7 +541,7 @@ function createDarwinAxRootCandidates(
       continue
     }
     const source = `app(pid=${pid})`
-    darwinEnableAccessibilityTree(api, element, source)
+    darwinEnableAccessibilityTree(api, element)
     candidates.push({ source, element })
   }
 
@@ -567,7 +553,7 @@ function createDarwinAxRootCandidates(
   return candidates
 }
 
-function darwinPrepareAccessibilityForPids(api: DarwinAxApi, appPids: number[], reason: string): void {
+function darwinPrepareAccessibilityForPids(api: DarwinAxApi, appPids: number[]): void {
   for (const pid of uniquePositiveNumbers(appPids)) {
     const element = api.AXUIElementCreateApplication(pid)
     if (!element) {
@@ -575,45 +561,24 @@ function darwinPrepareAccessibilityForPids(api: DarwinAxApi, appPids: number[], 
     }
 
     try {
-      darwinEnableAccessibilityTree(api, element, `app(pid=${pid}).prepare(${reason})`)
+      darwinEnableAccessibilityTree(api, element)
     } finally {
       api.CFRelease(element)
     }
   }
 }
 
-function darwinEnableAccessibilityTree(api: DarwinAxApi, element: unknown, source: string): void {
+function darwinEnableAccessibilityTree(api: DarwinAxApi, element: unknown): void {
   api.AXUIElementSetMessagingTimeout(element, 0.1)
-
-  darwinSetAccessibilityTreeAttributes(api, element, source)
 
   const windowOut: unknown[] = [null]
   const windowErr = api.AXUIElementCopyAttributeValue(element, api.kAXFocusedWindowAttribute, windowOut)
   if (windowErr === 0 && windowOut[0]) {
     try {
-      darwinSetAccessibilityTreeAttributes(api, windowOut[0], `${source}.focusedWindow`)
+      api.AXUIElementSetMessagingTimeout(windowOut[0], 0.1)
     } finally {
       api.CFRelease(windowOut[0])
     }
-  }
-}
-
-function darwinSetAccessibilityTreeAttributes(api: DarwinAxApi, element: unknown, _source: string): void {
-  api.AXUIElementSetAttributeValue(
-    element,
-    api.kAXManualAccessibilityAttribute,
-    api.kCFBooleanTrue
-  )
-  api.AXUIElementSetAttributeValue(
-    element,
-    api.kAXEnhancedUserInterfaceAttribute,
-    api.kCFBooleanTrue
-  )
-
-  const roleRefOut: unknown[] = [null]
-  api.AXUIElementCopyAttributeValue(element, api.kAXRoleAttribute, roleRefOut)
-  if (roleRefOut[0]) {
-    api.CFRelease(roleRefOut[0])
   }
 }
 

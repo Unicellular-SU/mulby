@@ -13,6 +13,8 @@ const runtimeDependencyNames = new Set([
   ...Object.keys(packageJson.dependencies || {}),
   ...Object.keys(packageJson.optionalDependencies || {})
 ])
+const macResourceUpdatePublicKeyPem = process.env.MULBY_MAC_RESOURCE_UPDATE_PUBLIC_KEY_PEM || ''
+const macUnsignedResourceUpdates = process.env.MULBY_MAC_UNSIGNED_RESOURCE_UPDATES === 'true'
 
 function isRuntimeExternal(id: string): boolean {
   if (id === 'electron') return true
@@ -25,6 +27,10 @@ function isRuntimeExternal(id: string): boolean {
 }
 
 export default defineConfig({
+  define: {
+    __MULBY_MAC_RESOURCE_UPDATE_PUBLIC_KEY_PEM__: JSON.stringify(macResourceUpdatePublicKeyPem),
+    __MULBY_MAC_UNSIGNED_RESOURCE_UPDATES__: JSON.stringify(macUnsignedResourceUpdates)
+  },
   plugins: [
     react(),
     electron([

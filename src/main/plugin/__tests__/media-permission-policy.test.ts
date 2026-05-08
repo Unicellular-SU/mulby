@@ -59,16 +59,16 @@ describe('media permission policy', () => {
     assert.equal(hasDeclaredMediaPermissions({ microphone: true, camera: true }, required!), true)
   })
 
-  it('requires microphone and screen for desktop recording with audio', () => {
+  it('requires screen permission for desktop recording with system audio', () => {
     const required = resolveRequiredMediaPermissions(
       'media',
       { mediaTypes: ['audio', 'video'] },
       { desktopCapture: true, desktopAudio: true }
     )
 
-    assert.deepEqual(required, ['microphone', 'screen'])
-    assert.equal(hasDeclaredMediaPermissions({ microphone: true, screen: true }, required!), true)
-    assert.deepEqual(getMissingMediaPermissions({ screen: true }, required!), ['microphone'])
+    assert.deepEqual(required, ['screen'])
+    assert.equal(hasDeclaredMediaPermissions({ screen: true }, required!), true)
+    assert.deepEqual(getMissingMediaPermissions({ microphone: true }, required!), ['screen'])
   })
 
   it('uses pending desktop capture context when Electron omits media details', () => {
@@ -78,7 +78,7 @@ describe('media permission policy', () => {
     )
     assert.deepEqual(
       resolveRequiredMediaPermissions('media', {}, { desktopCapture: true, desktopAudio: true }),
-      ['microphone', 'screen']
+      ['screen']
     )
   })
 

@@ -427,7 +427,6 @@ ${item.files.map(p => `    <string>${p}</string>`).join('\n')}
       },
       getMediaStreamConstraints: (options: RecordingOptions) => {
         ensureMediaPermission('screen')
-        if (options.audio === true) ensureMediaPermission('microphone')
         return pluginScreen.getMediaStreamConstraints(options)
       }
     },

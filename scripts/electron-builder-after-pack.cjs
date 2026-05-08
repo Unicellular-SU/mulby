@@ -177,6 +177,17 @@ module.exports = async function afterPack(context) {
     throw new Error(`[afterPack] App not found: ${appPath}`)
   }
 
+  // 先签 app.asar.unpacked 下的 Mach-O 文件（例如 .node/native helper）
+  const unpackedDir = path.join(appPath, 'Contents', 'Resources', 'app.asar.unpacked')
+
+  // 修复 sharp exports subpath 兼容问题（详见 fixSharpNativeBinaries 注释）
+  fixSharpNativeBinaries(unpackedDir)
+
+  if (process.env.MULBY_MAC_UNSIGNED_RESOURCE_UPDATES === 'true') {
+    console.log('[afterPack] Unsigned macOS resource update mode enabled; skipping bundle and nested code signing')
+    return
+  }
+
   const identities = listSigningIdentities()
   const selectedIdentity = chooseIdentity(identities)
 
@@ -186,11 +197,6 @@ module.exports = async function afterPack(context) {
     console.log(`[afterPack] No local signing identity found, fallback to ad-hoc signing ${appPath}`)
   }
 
-  // 先签 app.asar.unpacked 下的 Mach-O 文件（例如 .node/native helper）
-  const unpackedDir = path.join(appPath, 'Contents', 'Resources', 'app.asar.unpacked')
-
-  // 修复 sharp exports subpath 兼容问题（详见 fixSharpNativeBinaries 注释）
-  fixSharpNativeBinaries(unpackedDir)
   let signedNestedCount = 0
   if (existsSync(unpackedDir)) {
     const codeObjects = listFilesRecursively(unpackedDir).filter((filePath) => {

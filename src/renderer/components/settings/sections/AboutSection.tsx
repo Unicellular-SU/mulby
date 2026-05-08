@@ -29,6 +29,7 @@ export default function AboutSection({
 }: AboutSectionProps) {
   const status = updateCenterState?.status || 'idle'
   const progress = updateCenterState?.downloadProgress
+  const isManualInstall = updateCenterState?.installMode === 'manual'
 
   return (
     <div className={`${cardClass} space-y-6 text-sm text-slate-600 dark:text-slate-300`}>
@@ -45,6 +46,9 @@ export default function AboutSection({
         <div className="break-all">数据目录：{appInfo?.userDataPath || '-'}</div>
         {updateCenterState?.message && (
           <div>{updateCenterState.message}</div>
+        )}
+        {updateCenterState?.manualInstallReason && (
+          <div className="text-amber-600 dark:text-amber-400">{updateCenterState.manualInstallReason}</div>
         )}
       </div>
 
@@ -79,6 +83,14 @@ export default function AboutSection({
             onClick={() => onInstallUpdate()}
           >
             安装并重启
+          </button>
+        ) : status === 'update-available' && isManualInstall ? (
+          <button
+            className={primaryPillClass}
+            disabled={updateBusy || !updateCenterState?.releasePageUrl}
+            onClick={() => void onOpenUpdateReleasePage()}
+          >
+            下载新版安装包
           </button>
         ) : status === 'update-available' ? (
           <button
