@@ -50,6 +50,7 @@ import { PluginInstaller } from './plugin/installer'
 import { PluginStoreService } from './plugin/store-service'
 import { MainWindowManager, isWindowAvailable } from './main-window-manager'
 import { shutdownMainProcessResources, isShutdownComplete, type ShutdownResources } from './app-shutdown'
+import { claimPrimaryInstanceLock } from './single-instance'
 import { spawn as cpSpawn } from 'child_process'
 import { resolveWindowsNotificationIdentity } from './services/windows-notification-identity'
 import log from 'electron-log'
@@ -440,14 +441,13 @@ if (process.platform !== 'darwin') {
 }
 
 // 单实例锁：确保只有一个应用实例运行
-const gotTheLock = app.requestSingleInstanceLock()
-if (!gotTheLock) {
-  markMainProcessQuitting()
-  app.quit()
-} else {
-  // 当第二个实例启动时，聚焦到已有窗口或处理 deep link
-  app.on('second-instance', handleSecondInstance)
-}
+const isPrimaryInstance = claimPrimaryInstanceLock({
+  requestSingleInstanceLock: () => app.requestSingleInstanceLock(),
+  quit: () => app.quit(),
+  onSecondInstance: (listener) => {
+    app.on('second-instance', listener)
+  }
+}, handleSecondInstance, markMainProcessQuitting)
 
 
 function getMainWindow() {
@@ -587,6 +587,8 @@ function quitMainProcess() {
 }
 
 app.whenReady().then(async () => {
+  if (!isPrimaryInstance) return
+
   // macOS: 默认隐藏 Dock 图标，只有独立窗口时才显示
   if (process.platform === 'darwin' && app.dock) {
     app.dock.hide()
@@ -1044,77 +1046,79 @@ app.whenReady().then(async () => {
   }
 })
 
-app.on('window-all-closed', () => {
-  if (isQuitting) {
-    return
-  }
-  if (process.platform !== 'darwin') {
-    app.quit()
-  }
-})
-
-app.on('before-quit', (event) => {
-  markMainProcessQuitting()
-  mainWindowManager.flushStateSave()
-  app.removeListener('second-instance', handleSecondInstance)
-  if (process.platform === 'darwin') {
-    app.removeListener('activate', handleAppActivate)
-  }
-
-  if (isShutdownComplete()) return
-
-  event.preventDefault()
-
-  if (shutdownFinalizeScheduled) return
-  shutdownFinalizeScheduled = true
-
-  const FORCE_EXIT_TIMEOUT_MS = 5000
-  const forceExitTimer = setTimeout(() => {
-    log.warn(`[Main] Shutdown exceeded ${FORCE_EXIT_TIMEOUT_MS}ms, forcing exit`)
-    if (process.platform === 'darwin') {
-      cpSpawn('sh', ['-c', `sleep 1; kill -9 ${process.pid} 2>/dev/null`], {
-        detached: true, stdio: 'ignore'
-      }).unref()
+if (isPrimaryInstance) {
+  app.on('window-all-closed', () => {
+    if (isQuitting) {
+      return
     }
-    process.exit(0)
-  }, FORCE_EXIT_TIMEOUT_MS)
-  forceExitTimer.unref()
+    if (process.platform !== 'darwin') {
+      app.quit()
+    }
+  })
 
-  void shutdownMainProcessResources(getShutdownResources())
-    .catch((error) => {
-      log.error('[Main] Shutdown cleanup failed:', error)
-    })
-    .finally(() => {
-      clearTimeout(forceExitTimer)
-      if (shouldRestartAfterQuit) app.relaunch()
+  app.on('before-quit', (event) => {
+    markMainProcessQuitting()
+    mainWindowManager.flushStateSave()
+    app.removeListener('second-instance', handleSecondInstance)
+    if (process.platform === 'darwin') {
+      app.removeListener('activate', handleAppActivate)
+    }
 
+    if (isShutdownComplete()) return
+
+    event.preventDefault()
+
+    if (shutdownFinalizeScheduled) return
+    shutdownFinalizeScheduled = true
+
+    const FORCE_EXIT_TIMEOUT_MS = 5000
+    const forceExitTimer = setTimeout(() => {
+      log.warn(`[Main] Shutdown exceeded ${FORCE_EXIT_TIMEOUT_MS}ms, forcing exit`)
       if (process.platform === 'darwin') {
-        // On macOS, process.exit() can deadlock in Chromium atexit handlers.
-        // Spawn an independent watchdog that sends SIGKILL as fallback.
         cpSpawn('sh', ['-c', `sleep 1; kill -9 ${process.pid} 2>/dev/null`], {
-          detached: true,
-          stdio: 'ignore'
+          detached: true, stdio: 'ignore'
         }).unref()
       }
       process.exit(0)
-    })
-})
+    }, FORCE_EXIT_TIMEOUT_MS)
+    forceExitTimer.unref()
 
-app.on('will-quit', () => {
-  app.removeListener('second-instance', handleSecondInstance)
-  if (process.platform === 'darwin') {
-    app.removeListener('activate', handleAppActivate)
-  }
+    void shutdownMainProcessResources(getShutdownResources())
+      .catch((error) => {
+        log.error('[Main] Shutdown cleanup failed:', error)
+      })
+      .finally(() => {
+        clearTimeout(forceExitTimer)
+        if (shouldRestartAfterQuit) app.relaunch()
 
-  try { appTrayManager?.destroy() } catch (error) {
-    log.error('[Main] Failed to destroy tray on will-quit:', error)
-  } finally { appTrayManager = null }
+        if (process.platform === 'darwin') {
+          // On macOS, process.exit() can deadlock in Chromium atexit handlers.
+          // Spawn an independent watchdog that sends SIGKILL as fallback.
+          cpSpawn('sh', ['-c', `sleep 1; kill -9 ${process.pid} 2>/dev/null`], {
+            detached: true,
+            stdio: 'ignore'
+          }).unref()
+        }
+        process.exit(0)
+      })
+  })
 
-  try { trayMenuWindowManager?.destroy() } catch (error) {
-    log.error('[Main] Failed to destroy tray menu on will-quit:', error)
-  } finally { trayMenuWindowManager = null }
+  app.on('will-quit', () => {
+    app.removeListener('second-instance', handleSecondInstance)
+    if (process.platform === 'darwin') {
+      app.removeListener('activate', handleAppActivate)
+    }
 
-  try { globalShortcut.unregisterAll() } catch (error) {
-    log.error('[Main] Failed to unregister shortcuts on will-quit:', error)
-  }
-})
+    try { appTrayManager?.destroy() } catch (error) {
+      log.error('[Main] Failed to destroy tray on will-quit:', error)
+    } finally { appTrayManager = null }
+
+    try { trayMenuWindowManager?.destroy() } catch (error) {
+      log.error('[Main] Failed to destroy tray menu on will-quit:', error)
+    } finally { trayMenuWindowManager = null }
+
+    try { globalShortcut.unregisterAll() } catch (error) {
+      log.error('[Main] Failed to unregister shortcuts on will-quit:', error)
+    }
+  })
+}
