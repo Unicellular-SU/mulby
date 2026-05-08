@@ -9,6 +9,16 @@ on:
       tag:
         description: '手动发布的版本 tag（例如 v0.2.0）'
         required: false
+      platform:
+        description: '手动发布的平台'
+        required: false
+        type: choice
+        default: all
+        options:
+          - all
+          - macos
+          - windows
+          - linux
 
 permissions:
   contents: write
@@ -37,7 +47,7 @@ jobs:
           ref: ${{ github.event.inputs.tag || github.ref }}
 
       - name: Install Linux build dependencies
-        if: runner.os == 'Linux'
+        if: runner.os == 'Linux' && (github.event_name != 'workflow_dispatch' || github.event.inputs.platform == 'all' || github.event.inputs.platform == 'linux')
         run: |
           sudo apt-get update
           sudo apt-get install -y build-essential libarchive-tools libx11-dev rpm
@@ -55,18 +65,19 @@ jobs:
           cache-dependency-path: pnpm-lock.yaml
 
       - name: Install dependencies
-        if: runner.os != 'macOS'
+        if: runner.os != 'macOS' && (github.event_name != 'workflow_dispatch' || github.event.inputs.platform == 'all' || (runner.os == 'Windows' && github.event.inputs.platform == 'windows') || (runner.os == 'Linux' && github.event.inputs.platform == 'linux'))
         run: pnpm install
 
       - name: Install dependencies (macOS universal native binaries)
-        if: runner.os == 'macOS'
+        if: runner.os == 'macOS' && (github.event_name != 'workflow_dispatch' || github.event.inputs.platform == 'all' || github.event.inputs.platform == 'macos')
         run: pnpm install --force --frozen-lockfile
 
       - name: Build app native modules
+        if: github.event_name != 'workflow_dispatch' || github.event.inputs.platform == 'all' || (runner.os == 'macOS' && github.event.inputs.platform == 'macos') || (runner.os == 'Windows' && github.event.inputs.platform == 'windows') || (runner.os == 'Linux' && github.event.inputs.platform == 'linux')
         run: pnpm run native:build
 
       - name: Initialize releases repo (if empty)
-        if: matrix.os == 'macos-latest'
+        if: matrix.os == 'macos-latest' && (github.event_name != 'workflow_dispatch' || github.event.inputs.platform == 'all' || github.event.inputs.platform == 'macos')
         env:
           GH_TOKEN: ${{ secrets.GH_TOKEN }}
         run: |
@@ -96,13 +107,13 @@ jobs:
           fi
 
       - name: Build and Publish (Windows/Linux)
-        if: runner.os != 'macOS'
+        if: runner.os != 'macOS' && (github.event_name != 'workflow_dispatch' || github.event.inputs.platform == 'all' || (runner.os == 'Windows' && github.event.inputs.platform == 'windows') || (runner.os == 'Linux' && github.event.inputs.platform == 'linux'))
         run: pnpm run electron:publish
         env:
           GH_TOKEN: ${{ secrets.GH_TOKEN }}
 
       - name: Build macOS unsigned installers
-        if: runner.os == 'macOS'
+        if: runner.os == 'macOS' && (github.event_name != 'workflow_dispatch' || github.event.inputs.platform == 'all' || github.event.inputs.platform == 'macos')
         shell: bash
         run: |
           set -euo pipefail
@@ -115,13 +126,13 @@ jobs:
           MAC_RESOURCE_UPDATE_PRIVATE_KEY_PEM: ${{ secrets.MAC_RESOURCE_UPDATE_PRIVATE_KEY_PEM }}
 
       - name: Generate macOS resource update assets
-        if: runner.os == 'macOS'
-        run: pnpm run mac:resource-update -- --tag "${{ github.event.inputs.tag || github.ref_name }}"
+        if: runner.os == 'macOS' && (github.event_name != 'workflow_dispatch' || github.event.inputs.platform == 'all' || github.event.inputs.platform == 'macos')
+        run: node scripts/generate-mac-resource-update.cjs --tag "${{ github.event.inputs.tag || github.ref_name }}"
         env:
           MAC_RESOURCE_UPDATE_PRIVATE_KEY_PEM: ${{ secrets.MAC_RESOURCE_UPDATE_PRIVATE_KEY_PEM }}
 
       - name: Publish macOS release assets
-        if: runner.os == 'macOS'
+        if: runner.os == 'macOS' && (github.event_name != 'workflow_dispatch' || github.event.inputs.platform == 'all' || github.event.inputs.platform == 'macos')
         shell: bash
         env:
           GH_TOKEN: ${{ secrets.GH_TOKEN }}

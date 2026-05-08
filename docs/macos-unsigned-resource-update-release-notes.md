@@ -49,3 +49,25 @@ xattr -dr com.apple.quarantine "/Applications/Mulby.app"
 ```
 
 如果后续版本包含 Electron、主可执行文件、`Info.plist`、entitlements 或 updater helper 变更，应通过 manifest compatibility 标记为手动安装完整包，而不是资源替换。
+
+## CI 修复记录
+
+v0.6.2 第一次 tag 发布时，macOS runner 实际已经生成了 `.dmg` 和 `.zip`，但 `Generate macOS resource update assets` 步骤失败，导致后续 `Publish macOS release assets` 被跳过。失败原因是 workflow 使用：
+
+```sh
+pnpm run mac:resource-update -- --tag "v0.6.2"
+```
+
+pnpm 会把独立的 `--` 继续传给脚本，最终脚本收到：
+
+```sh
+node scripts/generate-mac-resource-update.cjs -- --tag v0.6.2
+```
+
+旧版 `parseArgs` 把独立 `--` 当成需要值的参数，于是抛出 `Missing value for --`。
+
+修复策略：
+
+- workflow 直接调用 `node scripts/generate-mac-resource-update.cjs --tag "$RELEASE_TAG"`，避免 npm/pnpm 参数转发歧义。
+- 脚本参数解析兼容独立 `--`，以后即使用 npm-style 分隔符也不会误报。
+- `workflow_dispatch` 增加 `platform` 输入；补发某个版本的 macOS 资产时选择 `platform=macos`，避免重新构建和覆盖 Windows/Linux 资产。
