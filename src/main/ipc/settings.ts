@@ -143,7 +143,6 @@ export function registerSettingsHandlers(
   })
 
   ipcMain.handle('settings:updateCenter:installUpdate', () => {
-    installUpdate()
-    return true
+    return installUpdate()
   })
 }

@@ -437,6 +437,8 @@ export interface UpdateCenterState {
   releaseNotes?: string
   message?: string
   lastCheckedAt?: number
+  installMode?: 'resource' | 'manual'
+  manualInstallReason?: string
   downloadProgress?: {
     bytesPerSecond: number
     percent: number

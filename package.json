@@ -1,6 +1,6 @@
 {
   "name": "mulby",
-  "version": "0.6.1",
+  "version": "0.6.2",
   "description": "跨平台插件式效率工具箱",
   "main": "dist/main/index.js",
   "scripts": {
@@ -9,7 +9,9 @@
     "build:smoke": "pnpm run build",
     "electron:dev": "vite",
     "electron:build": "pnpm run native:build && vite build && electron-builder",
+    "electron:build:mac:unsigned": "pnpm run native:build && vite build && electron-builder --mac --publish never",
     "electron:publish": "pnpm run native:build && vite build && electron-builder --publish always",
+    "mac:resource-update": "node scripts/generate-mac-resource-update.cjs",
     "postinstall": "node scripts/postinstall.mjs",
     "native:build": "node scripts/build-native.mjs",
     "lint": "eslint src",
@@ -119,6 +121,7 @@
       "releaseType": "release"
     },
     "mac": {
+      "identity": null,
       "icon": "icon.icns",
       "category": "public.app-category.developer-tools",
       "target": [
@@ -168,6 +171,13 @@
       {
         "from": "resources/bin",
         "to": "bin"
+      },
+      {
+        "from": "resources/updater",
+        "to": "updater",
+        "filter": [
+          "**/*"
+        ]
       },
       {
         "from": "resources/tray",
