@@ -13,6 +13,7 @@ import { isAiInternalToolName } from './ai/tools/internal-tools'
 import { PluginManager } from './plugin'
 import { PluginToolRegistry, isPluginToolName, parsePluginToolId } from './plugin/plugin-tools'
 import { pluginDesktop } from './plugin/desktop'
+import { permissionManager } from './plugin/permission-manager'
 import { setHotKeySettingRedirectHandler } from './plugin/dynamic-features'
 import { PluginWindowManager } from './plugin/window'
 import { ThemeManager } from './services/theme'
@@ -57,6 +58,7 @@ patchConsoleWithTimestamp()
 
 const APP_DISPLAY_NAME = 'Mulby'
 const isDev = !app.isPackaged
+const MACOS_POST_ONBOARDING_ACCESSIBILITY_PROMPT_DELAY_MS = 1200
 
 app.setName(APP_DISPLAY_NAME)
 if (process.platform === 'win32') {
@@ -96,6 +98,7 @@ let trayMenuWindowManager: TrayMenuWindowManager | null = null
 let isQuitting = false
 let shouldRestartAfterQuit = false
 let shutdownFinalizeScheduled = false
+let postOnboardingAccessibilityPromptScheduled = false
 let mcpServerManager: McpServerManager | null = null
 let _inputHookService: InputHookService | null = null
 let _openclawService: OpenClawNodeService | null = null
@@ -457,6 +460,29 @@ function showMainWindow(options?: { skipAutoPaste?: boolean }) {
 
 function toggleWindow() {
   mainWindowManager.toggle()
+}
+
+function schedulePostOnboardingAccessibilityPrompt() {
+  if (process.platform !== 'darwin') return
+  if (postOnboardingAccessibilityPromptScheduled) return
+
+  postOnboardingAccessibilityPromptScheduled = true
+  setTimeout(() => {
+    if (isQuitting) return
+
+    try {
+      const status = permissionManager.getStatus('accessibility')
+      if (status === 'granted' || status === 'authorized') return
+
+      void permissionManager
+        .request('accessibility', { openSystemSettingsOnDenied: false })
+        .catch((error) => {
+          log.warn('[Onboarding] 首次辅助功能权限请求失败:', error)
+        })
+    } catch (error) {
+      log.warn('[Onboarding] 首次辅助功能权限状态检查失败:', error)
+    }
+  }, MACOS_POST_ONBOARDING_ACCESSIBILITY_PROMPT_DELAY_MS)
 }
 
 
@@ -944,6 +970,7 @@ app.whenReady().then(async () => {
       log.info('[Onboarding] 引导完成，初始化并展示主窗口')
       initMainWindow()
       showMainWindow()
+      schedulePostOnboardingAccessibilityPrompt()
       // 初始化插件管理器
       pluginManager.init().then(() => {
         // 预热系统应用搜索索引
