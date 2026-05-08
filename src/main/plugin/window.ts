@@ -33,6 +33,7 @@ import {
 } from './titlebar-view'
 import { formatPayloadTrace } from '../../shared/attachment-trace'
 import log from 'electron-log'
+import { pinWindowSize, unpinWindowSize } from '../services/window-size-pin'
 import {
   createAuxiliaryLoadFileOptions,
   parseAuxiliaryPath,
@@ -664,6 +665,15 @@ export class PluginWindowManager {
     const maxContentWidth = shouldFitCaptureRegion && windowConfig.maxWidth != null ? Math.max(contentWidth, windowConfig.maxWidth) : windowConfig.maxWidth
     const maxContentHeight = shouldFitCaptureRegion && windowConfig.maxHeight != null ? Math.max(contentHeight, windowConfig.maxHeight) : windowConfig.maxHeight
 
+    // 透明且不可调整大小的窗口：锁定 maxWidth/maxHeight 防止 Windows DWM 尺寸漂移
+    const pinTransparentSize = windowConfig.transparent && windowConfig.resizable === false
+    const resolvedMaxWidth = pinTransparentSize
+      ? windowWidth
+      : (isFullscreen ? undefined : toWindowWidth(maxContentWidth))
+    const resolvedMaxHeight = pinTransparentSize
+      ? windowHeight
+      : (isFullscreen ? undefined : toWindowHeight(maxContentHeight != null ? maxContentHeight + (showTitleBar ? DETACHED_TITLEBAR_HEIGHT : 0) : undefined))
+
     const win = new BrowserWindow({
       width: windowWidth,
       height: windowHeight,
@@ -671,8 +681,9 @@ export class PluginWindowManager {
       y: windowY,
       minWidth: isFullscreen ? undefined : toWindowWidth(minContentWidth)!,
       minHeight: isFullscreen ? undefined : toWindowHeight(minContentHeight + (showTitleBar ? DETACHED_TITLEBAR_HEIGHT : 0))!,
-      maxWidth: isFullscreen ? undefined : toWindowWidth(maxContentWidth),
-      maxHeight: isFullscreen ? undefined : toWindowHeight(maxContentHeight != null ? maxContentHeight + (showTitleBar ? DETACHED_TITLEBAR_HEIGHT : 0) : undefined),
+      maxWidth: resolvedMaxWidth,
+      maxHeight: resolvedMaxHeight,
+      resizable: windowConfig.resizable !== undefined ? windowConfig.resizable : undefined,
       show: false,
       frame: false,
       fullscreen: isFullscreen,
@@ -799,11 +810,12 @@ export class PluginWindowManager {
         // WebContentsView 架构：初始化标题栏
         initTitlebar(win, plugin.manifest.displayName, currentTheme)
       }
-      if (useWindowsFramelessSurface) {
+      if (useWindowsFramelessSurface && !windowConfig.transparent) {
         // 标题栏已独立，不需要 surface 注入 padding-top
+        // 跳过明确透明的窗口——surface 的 box-shadow / resize-handle 会透过透明背景可见
         await applyWindowsFramelessSurface(win, {
           includeTitleBar: false,
-          contentBackground: windowConfig.transparent ? 'transparent' : 'theme'
+          contentBackground: 'theme'
         })
         if (win.isDestroyed()) return
       }
@@ -823,6 +835,11 @@ export class PluginWindowManager {
       }
       if (windowConfig.skipTaskbar) {
         win.setSkipTaskbar(true)
+      }
+      if (windowConfig.alwaysOnTop && windowConfig.alwaysOnTopLevel) {
+        win.setAlwaysOnTop(true, windowConfig.alwaysOnTopLevel as Parameters<BrowserWindow['setAlwaysOnTop']>[1])
+      } else if (windowConfig.alwaysOnTop && process.platform === 'win32') {
+        win.setAlwaysOnTop(true, 'screen-saver')
       }
       if (windowConfig.focusable === false) {
         win.showInactive()
@@ -849,10 +866,10 @@ export class PluginWindowManager {
     // 等待插件内容加载完成后，发送 plugin:init 和 theme 信息
     pluginWebContents.on('did-finish-load', async () => {
       this.openPluginDevTools(pluginWebContents, plugin.id)
-      if (useWindowsFramelessSurface && !win.isDestroyed()) {
+      if (useWindowsFramelessSurface && !windowConfig.transparent && !win.isDestroyed()) {
         await applyWindowsFramelessSurface(win, {
           includeTitleBar: false,
-          contentBackground: windowConfig.transparent ? 'transparent' : 'theme'
+          contentBackground: 'theme'
         })
       }
       // 延迟确保 React useEffect 已注册 IPC 回调
@@ -884,6 +901,9 @@ export class PluginWindowManager {
     }
 
     const windowId = win.id
+    // 注册窗口尺寸，用于 setPosition 时通过 setBounds 固定尺寸防止 DWM 漂移
+    pinWindowSize(windowId, windowWidth, windowHeight)
+
     this.detachedWindows.set(windowId, {
       window: win,
       pluginView: pluginView ?? undefined,
@@ -915,6 +935,7 @@ export class PluginWindowManager {
 
     win.on('closed', () => {
       this.detachedWindows.delete(windowId)
+      unpinWindowSize(windowId)
       unregisterPluginWindow(windowId)
       unregisterProtectedWindow(windowId)
       if (pluginView && !pluginView.webContents.isDestroyed()) {
@@ -1149,16 +1170,18 @@ export class PluginWindowManager {
       if (showTitleBar) {
         initTitlebar(win, options?.title || plugin.manifest.displayName, currentTheme)
       }
-      if (useWindowsFramelessSurface) {
+      if (useWindowsFramelessSurface && !resolvedTransparent) {
         await applyWindowsFramelessSurface(win, {
           includeTitleBar: false,
-          contentBackground: resolvedTransparent ? 'transparent' : 'theme'
+          contentBackground: 'theme'
         })
         if (win.isDestroyed()) return
       }
 
       if (options?.alwaysOnTop && options.alwaysOnTopLevel) {
         win.setAlwaysOnTop(true, options.alwaysOnTopLevel as Parameters<BrowserWindow['setAlwaysOnTop']>[1])
+      } else if (options?.alwaysOnTop && process.platform === 'win32') {
+        win.setAlwaysOnTop(true, 'screen-saver')
       }
       if (options?.ignoreMouseEvents) {
         win.setIgnoreMouseEvents(true, { forward: options.forwardMouseEvents === true })
@@ -1200,10 +1223,10 @@ export class PluginWindowManager {
     // 等待插件内容加载完成后，再发送初始化数据和主题
     pluginWebContents.on('did-finish-load', async () => {
       this.openPluginDevTools(pluginWebContents, plugin.id)
-      if (useWindowsFramelessSurface && !win.isDestroyed()) {
+      if (useWindowsFramelessSurface && !resolvedTransparent && !win.isDestroyed()) {
         await applyWindowsFramelessSurface(win, {
           includeTitleBar: false,
-          contentBackground: resolvedTransparent ? 'transparent' : 'theme'
+          contentBackground: 'theme'
         })
       }
       // 延迟确保 React useEffect 已注册 IPC 回调
@@ -1235,6 +1258,10 @@ export class PluginWindowManager {
     }
 
     const windowId = win.id
+    const auxWinWidth = isFullscreen ? fullscreenBounds!.width : toWindowWidth(baseWidth)!
+    const auxWinHeight = isFullscreen ? fullscreenBounds!.height : toWindowHeight(baseHeight + (showTitleBar ? DETACHED_TITLEBAR_HEIGHT : 0))!
+    pinWindowSize(windowId, auxWinWidth, auxWinHeight)
+
     this.detachedWindows.set(windowId, {
       window: win,
       pluginView: pluginView ?? undefined,
@@ -1257,6 +1284,7 @@ export class PluginWindowManager {
 
     win.on('closed', () => {
       this.detachedWindows.delete(windowId)
+      unpinWindowSize(windowId)
       unregisterPluginWindow(windowId)
       unregisterProtectedWindow(windowId)
       if (pluginView && !pluginView.webContents.isDestroyed()) {

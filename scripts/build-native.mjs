@@ -47,6 +47,7 @@ const addonOutputDir = join(nativeDir, 'build', 'Release')
 for (const fileName of [
   'clipboard_watcher.node',
   'finder_selection.node',
+  'input_monitor.node',
   'screen_capture.node',
   'window_watcher.node'
 ]) {
