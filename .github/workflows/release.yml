@@ -64,6 +64,12 @@ jobs:
           cache: pnpm
           cache-dependency-path: pnpm-lock.yaml
 
+      - name: Validate macOS resource update signing key
+        if: runner.os == 'macOS' && (github.event_name != 'workflow_dispatch' || github.event.inputs.platform == 'all' || github.event.inputs.platform == 'macos')
+        run: node scripts/derive-mac-resource-update-public-key.cjs >/dev/null
+        env:
+          MAC_RESOURCE_UPDATE_PRIVATE_KEY_PEM: ${{ secrets.MAC_RESOURCE_UPDATE_PRIVATE_KEY_PEM }}
+
       - name: Install dependencies
         if: runner.os != 'macOS' && (github.event_name != 'workflow_dispatch' || github.event.inputs.platform == 'all' || (runner.os == 'Windows' && github.event.inputs.platform == 'windows') || (runner.os == 'Linux' && github.event.inputs.platform == 'linux'))
         run: pnpm install
@@ -117,7 +123,8 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          export MULBY_MAC_RESOURCE_UPDATE_PUBLIC_KEY_PEM="$(node scripts/derive-mac-resource-update-public-key.cjs)"
+          public_key_pem="$(node scripts/derive-mac-resource-update-public-key.cjs)"
+          export MULBY_MAC_RESOURCE_UPDATE_PUBLIC_KEY_PEM="$public_key_pem"
           pnpm run electron:build:mac:unsigned
         env:
           GH_TOKEN: ${{ secrets.GH_TOKEN }}

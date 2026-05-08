@@ -71,3 +71,4 @@ node scripts/generate-mac-resource-update.cjs -- --tag v0.6.2
 - workflow 直接调用 `node scripts/generate-mac-resource-update.cjs --tag "$RELEASE_TAG"`，避免 npm/pnpm 参数转发歧义。
 - 脚本参数解析兼容独立 `--`，以后即使用 npm-style 分隔符也不会误报。
 - `workflow_dispatch` 增加 `platform` 输入；补发某个版本的 macOS 资产时选择 `platform=macos`，避免重新构建和覆盖 Windows/Linux 资产。
+- macOS job 在安装依赖前先运行 signing key 校验；并避免使用 `export VAR="$(command)"` 吞掉派生公钥失败。`MAC_RESOURCE_UPDATE_PRIVATE_KEY_PEM` 必须是 Node `crypto.createPrivateKey` 可解析的 Ed25519 PKCS#8 PEM，例如 `-----BEGIN PRIVATE KEY-----`，不要使用 OpenSSH 私钥格式。
