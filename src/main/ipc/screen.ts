@@ -6,11 +6,8 @@ function assertScreenPermission(sender: Electron.WebContents): void {
   permissionManager.ensureCallerAccessMediaPermissions(sender, ['screen'])
 }
 
-function assertRecordingPermissions(sender: Electron.WebContents, options: RecordingOptions): void {
-  permissionManager.ensureCallerAccessMediaPermissions(
-    sender,
-    options.audio === true ? ['screen', 'microphone'] : ['screen']
-  )
+function assertRecordingPermissions(sender: Electron.WebContents): void {
+  permissionManager.ensureCallerAccessMediaPermissions(sender, ['screen'])
 }
 
 export function registerScreenHandlers() {
@@ -69,7 +66,7 @@ export function registerScreenHandlers() {
 
   // 获取录屏 MediaStream 约束
   ipcMain.handle('screen:getMediaStreamConstraints', (event, options: RecordingOptions) => {
-    assertRecordingPermissions(event.sender, options)
+    assertRecordingPermissions(event.sender)
     permissionManager.markPendingDesktopCapture(event.sender, { audio: options.audio === true })
     return pluginScreen.getMediaStreamConstraints(options)
   })

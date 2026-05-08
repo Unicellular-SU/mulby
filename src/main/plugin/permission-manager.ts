@@ -109,6 +109,24 @@ function mapToMacPermissionType(type: PermissionType): string | null {
     return mapping[type] || null
 }
 
+function getMacAccessibilityStatus(): PermissionStatus {
+    try {
+        return systemPreferences.isTrustedAccessibilityClient(false) ? 'granted' : 'denied'
+    } catch (error) {
+        log.warn('[PermissionManager] Failed to read Accessibility trust status:', error)
+        return 'unknown'
+    }
+}
+
+function getMacScreenStatus(): PermissionStatus {
+    try {
+        return normalizeStatus(systemPreferences.getMediaAccessStatus('screen'))
+    } catch (error) {
+        log.warn('[PermissionManager] Failed to read screen recording status:', error)
+        return 'unknown'
+    }
+}
+
 export class PermissionManager {
     private static instance: PermissionManager
     private sessionHandlerSetup = false
@@ -474,6 +492,14 @@ export class PermissionManager {
             return 'granted'
         }
 
+        if (process.platform === 'darwin' && type === 'accessibility') {
+            return getMacAccessibilityStatus()
+        }
+
+        if (process.platform === 'darwin' && type === 'screen') {
+            return getMacScreenStatus()
+        }
+
         if (process.platform === 'darwin' && permissions) {
             const macType = mapToMacPermissionType(type)
             if (macType) {
@@ -537,6 +563,18 @@ export class PermissionManager {
      */
     private async requestMacOS(type: PermissionType): Promise<PermissionStatus> {
         log.debug(`[PermissionManager] macOS requesting: ${type}`)
+
+        if (type === 'accessibility') {
+            try {
+                const trusted = systemPreferences.isTrustedAccessibilityClient(true)
+                if (trusted) return 'granted'
+            } catch (error) {
+                log.warn('[PermissionManager] Failed to request Accessibility trust:', error)
+            }
+
+            this.openSystemSettings('accessibility')
+            return this.getStatus('accessibility')
+        }
 
         // 对于相机和麦克风，使用 systemPreferences
         if (type === 'camera' || type === 'microphone') {
@@ -784,7 +822,7 @@ export class PermissionManager {
      */
     isAccessibilityTrusted(): boolean {
         if (process.platform !== 'darwin') return true
-        return systemPreferences.isTrustedAccessibilityClient(false)
+        return getMacAccessibilityStatus() === 'granted'
     }
 
     /**
