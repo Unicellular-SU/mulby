@@ -475,7 +475,9 @@ ${item.files.map(p => `    <string>${p}</string>`).join('\n')}
       isMacOS: () => pluginSystem.isMacOS(),
       isWindows: () => pluginSystem.isWindows(),
       isLinux: () => pluginSystem.isLinux(),
-      onActiveWindowChange: (callback: (info: import('../services/active-window').ActiveWindowInfo) => void) => pluginSystem.onActiveWindowChange(callback)
+      onActiveWindowChange: (callback: (info: import('../services/active-window').ActiveWindowInfo) => void) => pluginSystem.onActiveWindowChange(callback),
+      getCachedActiveWindow: () => pluginSystem.getCachedActiveWindow(),
+      getActiveWindow: () => pluginSystem.getActiveWindow(),
     },
     shortcut: createPluginGlobalShortcut(pluginName),
     security: createPluginSecurity(),

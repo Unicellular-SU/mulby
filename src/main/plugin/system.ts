@@ -5,7 +5,12 @@ import { existsSync, readFileSync } from 'fs'
 import { lstat, readdir } from 'fs/promises'
 import { extname, join } from 'path'
 import { spawnSync } from 'child_process'
-import { onActiveWindowChange, type ActiveWindowInfo } from '../services/active-window'
+import {
+  getActiveWindow as resolveActiveWindowFromOs,
+  getCachedActiveWindow,
+  onActiveWindowChange,
+  type ActiveWindowInfo,
+} from '../services/active-window'
 
 export interface SystemInfo {
   platform: NodeJS.Platform
@@ -291,6 +296,21 @@ export class PluginSystem {
    */
   onActiveWindowChange(callback: (info: ActiveWindowInfo) => void): () => void {
     return onActiveWindowChange(callback)
+  }
+
+  /**
+   * 同步读取主进程已缓存的前台窗口（零等待；主应用会常驻订阅以维持缓存）。
+   * 可在插件 Worker 后端通过 mulby.system.getCachedActiveWindow() 安全调用（返回值可序列化）。
+   */
+  getCachedActiveWindow(): ActiveWindowInfo | null {
+    return getCachedActiveWindow()
+  }
+
+  /**
+   * 异步抓取前台窗口（可能触发系统查询）；多数场景用 getCachedActiveWindow 即可。
+   */
+  async getActiveWindow(): Promise<ActiveWindowInfo | null> {
+    return resolveActiveWindowFromOs()
   }
 
   /**

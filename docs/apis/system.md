@@ -243,6 +243,31 @@ interface ActiveWindowInfo {
 
 **返回值**: `() => void` - 取消监听函数
 
+**插件 Worker 注意**：该方法的返回值是函数，无法通过 Worker 与主进程之间的 `postMessage` 结构化克隆传递。若在插件后端（`main.js` Worker）调用，可能导致 **「An object could not be cloned」** 或未处理的 Promise 拒绝。Worker 场景请改用下面的 `getCachedActiveWindow` / `getActiveWindow`。
+
+### getCachedActiveWindow()
+[Backend]
+同步读取主进程已缓存的前台窗口信息（不阻塞；依赖主应用常驻的活跃窗口订阅维持缓存）。返回值仅为普通对象，可在插件 Worker 中安全使用。
+
+```javascript
+const info = await mulby.system.getCachedActiveWindow();
+if (info) {
+  console.log(info.app, info.title);
+}
+```
+
+**返回值**: `Promise<ActiveWindowInfo | null>`
+
+### getActiveWindow()
+[Backend]
+异步抓取当前前台窗口（必要时触发系统查询）。多数场景优先使用 `getCachedActiveWindow`。
+
+```javascript
+const info = await mulby.system.getActiveWindow();
+```
+
+**返回值**: `Promise<ActiveWindowInfo | null>`
+
 ### 完整示例
 
 ```javascript
