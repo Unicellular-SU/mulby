@@ -13,6 +13,12 @@ import {
 import SearchInput, { SearchInputRef } from './components/SearchInput'
 import PluginList from './components/PluginList'
 import AttachmentManager from './components/AttachmentManager'
+import {
+  getSearchPanelHeight,
+  shouldResetSearchPanelHeight,
+  shouldShowEmptyLaunchSuggestions,
+  shouldShowSearchPanel
+} from './search-panel-layout'
 import { shouldUseSummaryText } from './utils/summary-text'
 import type { SettingsSection } from './components/SettingsView'
 import { DEFAULT_SYSTEM_PLUGIN_ROUTE, type SystemPluginRoute } from './system-plugins/types'
@@ -23,7 +29,8 @@ import type {
   PluginLaunchEndEvent,
   PluginLaunchStartEvent,
   SystemPluginBeforeAttachPayload,
-  AutoPasteClipboardPayload
+  AutoPasteClipboardPayload,
+  MainWindowShowEvent
 } from '../shared/types/electron'
 import type { PluginStoreEntry } from '../shared/types/plugin-store'
 
@@ -291,7 +298,7 @@ function MainApp() {
   const [attachments, setAttachments] = useState<UiAttachment[]>([])
   const [attachmentsManagerOpen, setAttachmentsManagerOpen] = useState(false)
   const [isWindowsMain, setIsWindowsMain] = useState(false)
-  const [isDocumentVisible, setIsDocumentVisible] = useState(() => document.visibilityState === 'visible')
+  const [activationSessionIdle, setActivationSessionIdle] = useState(false)
   const searchText = query.length > 0 ? query : payloadText
   const runText = payloadText || query
   const searchPayload = useMemo(() => buildPayload(searchText, attachments), [searchText, attachments])
@@ -318,16 +325,17 @@ function MainApp() {
   const [searchPanelHeight, setSearchPanelHeight] = useState(0)
   const systemPageAttached = !isSystemWindow && systemPageState.open && systemPageState.mode === 'attached'
   const hasTextInput = query.length > 0 || payloadText.length > 0
+  const hasInput = hasTextInput || attachments.length > 0
   const isMacMain = !isSystemWindow && navigator.platform.toLowerCase().includes('mac')
   const visiblePluginLaunch = pluginLaunch?.visible ? pluginLaunch : null
 
   useEffect(() => {
-    const handleVisibilityChange = () => {
-      setIsDocumentVisible(document.visibilityState === 'visible')
-    }
-    document.addEventListener('visibilitychange', handleVisibilityChange)
-    return () => document.removeEventListener('visibilitychange', handleVisibilityChange)
-  }, [])
+    if (isSystemWindow) return
+    const cleanup = window.mulby.app.onMainWindowShow((event: MainWindowShowEvent) => {
+      setActivationSessionIdle(!event.autoPasteScheduled)
+    })
+    return cleanup
+  }, [isSystemWindow])
 
   const focusSearchAfterPluginAction = useCallback(() => {
     setTimeout(() => {
@@ -598,8 +606,13 @@ function MainApp() {
     }, PLUGIN_LAUNCH_TIMEOUT_MS)
   }, [cancelPendingShrinkTimer, clearPluginLaunchTimers, scheduleMacInvalidate])
 
-  const handleContentHeightChange = useCallback((contentHeight: number) => {
-    const clamped = Math.min(Math.max(contentHeight, SEARCH_PANEL_MIN_HEIGHT), SEARCH_PANEL_MAX_HEIGHT_CONST)
+  const handleContentHeightChange = useCallback((contentHeight: number, options?: { compact?: boolean }) => {
+    const clamped = getSearchPanelHeight({
+      contentHeight,
+      minHeight: SEARCH_PANEL_MIN_HEIGHT,
+      maxHeight: SEARCH_PANEL_MAX_HEIGHT_CONST,
+      compact: options?.compact === true
+    })
 
     const prev = searchPanelContentHeightRef.current
     searchPanelContentHeightRef.current = contentHeight
@@ -642,11 +655,22 @@ function MainApp() {
 
     let height = SEARCH_BOX_HEIGHT
     let allowResize = false
-    const showSearchPanel = (hasTextInput || attachments.length > 0 || isDocumentVisible)
-      && !pluginOpen
-      && !visiblePluginLaunch
-      && !systemPageAttached
-      && !attachmentsManagerOpen
+    const showEmptyLaunchSuggestions = shouldShowEmptyLaunchSuggestions({
+      hasInput,
+      activationSessionIdle,
+      pluginOpen,
+      visiblePluginLaunch: Boolean(visiblePluginLaunch),
+      systemPageAttached,
+      attachmentsManagerOpen
+    })
+    const showSearchPanel = shouldShowSearchPanel({
+      hasInput,
+      showEmptyLaunchSuggestions,
+      pluginOpen,
+      visiblePluginLaunch: Boolean(visiblePluginLaunch),
+      systemPageAttached,
+      attachmentsManagerOpen
+    })
 
     if (viewMode !== 'home') {
       // 设置/详情页高度，允许自由调整大小
@@ -669,10 +693,9 @@ function MainApp() {
     }
     window.mulby.window.setExpendHeight(height, allowResize)
 
-    const hasInput = hasTextInput || attachments.length > 0
     if (hasInput && lastHeightRef.current !== height) {
       lastHeightRef.current = height
-    } else if (!hasInput) {
+    } else if (shouldResetSearchPanelHeight({ hasInput, showSearchPanel })) {
       lastHeightRef.current = null
       // Reset panel height when input is cleared
       searchPanelContentHeightRef.current = 0
@@ -680,7 +703,7 @@ function MainApp() {
     }
   // perfTrace 不影响高度计算，不纳入依赖：避免每次搜索都触发多余的
   // setExpendHeight IPC（透明窗口频繁 resize 会破坏合成器）
-  }, [isSystemWindow, hasTextInput, pluginOpen, visiblePluginLaunch, systemPageAttached, detailsPluginName, attachments.length, attachmentsManagerOpen, managerMetrics.managerHeight, viewMode, searchPanelHeight, isDocumentVisible])
+  }, [isSystemWindow, hasInput, activationSessionIdle, pluginOpen, visiblePluginLaunch, systemPageAttached, detailsPluginName, attachmentsManagerOpen, managerMetrics.managerHeight, viewMode, searchPanelHeight])
 
 
   // 监听插件附着事件
@@ -957,6 +980,7 @@ function MainApp() {
           void window.mulby.systemPage.close()
         } else if (hasTextInput) {
           // 3. 清空搜索框与附件
+          setActivationSessionIdle(false)
           setQuery('')
           setPayloadText('')
           clearAttachments()
@@ -964,6 +988,7 @@ function MainApp() {
           setDetailsPluginName(null)
         } else if (attachments.length > 0) {
           // 4. 清空附件
+          setActivationSessionIdle(false)
           clearAttachments()
           setResultCount(0)
         } else {
@@ -1142,6 +1167,7 @@ function MainApp() {
 
   useEffect(() => {
     const cleanup = window.mulby.app.onSetSearchText((queryText) => {
+      setActivationSessionIdle(false)
       // 通过 requestAnimationFrame 确保在正确的渲染周期应用
       requestAnimationFrame(() => {
         applySearchTextInput(queryText)
@@ -1178,6 +1204,7 @@ function MainApp() {
           // 粘贴文本 - 清空附件
           const text = payload?.text ?? await window.mulby.clipboard.readText()
           if (text && text.trim()) {
+            setActivationSessionIdle(false)
             // 清空旧的附件
             if (attachments.length > 0) {
               clearAttachments()
@@ -1190,6 +1217,7 @@ function MainApp() {
           // 粘贴图片 - 总是替换附件
           const imageBuffer = payload?.image ?? await window.mulby.clipboard.readImage()
           if (imageBuffer) {
+            setActivationSessionIdle(false)
             // 清理旧的附件
             clearAttachments()
 
@@ -1219,6 +1247,7 @@ function MainApp() {
           // 粘贴文件 - 总是替换附件
           const files = payload?.files ?? await window.mulby.clipboard.readFiles()
           if (files && files.length > 0) {
+            setActivationSessionIdle(false)
             // 清理旧的附件
             clearAttachments()
 
@@ -1246,6 +1275,7 @@ function MainApp() {
   }, [attachments.length, beginPerfTrace, clearAttachments, clearTextInputs, pluginOpen, replaceTextInput, systemPageAttached])
 
   const handleQueryChange = (value: string) => {
+    setActivationSessionIdle(false)
     if (pluginOpen) {
       cancelPendingShrinkTimer('queryChange close plugin')
       scheduleMacInvalidate()
@@ -1269,6 +1299,7 @@ function MainApp() {
   }
 
   const handlePayloadTextChange = useCallback((value: string) => {
+    setActivationSessionIdle(false)
     setPayloadText(value)
     if (value.length === 0 && query.length === 0 && attachments.length === 0) {
       setResultCount(0)
@@ -1278,6 +1309,7 @@ function MainApp() {
   }, [attachments.length, query.length])
 
   const handleAttachmentsChange = (next: UiAttachment[]) => {
+    setActivationSessionIdle(false)
     if (pluginOpen) {
       window.mulby.window.close()
       setPluginOpen(false)
@@ -1583,7 +1615,22 @@ function MainApp() {
   }
 
   const showAttachmentManager = attachmentsManagerOpen && attachments.length > 0
-  const showPluginList = (hasTextInput || attachments.length > 0 || isDocumentVisible) && !pluginOpen && !visiblePluginLaunch && !systemPageAttached && !showAttachmentManager
+  const showEmptyLaunchSuggestions = shouldShowEmptyLaunchSuggestions({
+    hasInput,
+    activationSessionIdle,
+    pluginOpen,
+    visiblePluginLaunch: Boolean(visiblePluginLaunch),
+    systemPageAttached,
+    attachmentsManagerOpen
+  })
+  const showPluginList = shouldShowSearchPanel({
+    hasInput,
+    showEmptyLaunchSuggestions,
+    pluginOpen,
+    visiblePluginLaunch: Boolean(visiblePluginLaunch),
+    systemPageAttached,
+    attachmentsManagerOpen
+  })
   const hasBottomPanel = showAttachmentManager || showPluginList
 
   return (
@@ -1737,6 +1784,7 @@ function MainApp() {
             traceSource={perfTrace.source}
             traceInputLength={perfTrace.textLength}
             traceAttachmentCount={perfTrace.attachmentCount}
+            showEmptyLaunchSuggestions={showEmptyLaunchSuggestions}
             onResultsChange={setResultCount}
             onContentHeightChange={handleContentHeightChange}
             onShowDetails={(pluginName) => {

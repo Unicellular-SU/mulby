@@ -2,6 +2,7 @@ import { webUtils, type IpcRenderer } from 'electron'
 import { formatPayloadTrace } from '../../shared/attachment-trace'
 import type { InputPayload, PluginRendererCapabilities } from '../../shared/types/plugin'
 import type {
+  MainWindowShowEvent,
   OpenSystemPluginPayload,
   PluginLaunchEndEvent,
   PluginLaunchStartEvent,
@@ -83,6 +84,11 @@ export function createAppPluginApi(ipcRenderer: IpcRenderer) {
         const listener = (_event: unknown, query: string) => callback(query)
         ipcRenderer.on('app:setSearchText', listener)
         return () => ipcRenderer.removeListener('app:setSearchText', listener)
+      },
+      onMainWindowShow: (callback: (event: MainWindowShowEvent) => void) => {
+        const listener = (_event: unknown, payload: MainWindowShowEvent) => callback(payload)
+        ipcRenderer.on('app:mainWindowShow', listener)
+        return () => ipcRenderer.removeListener('app:mainWindowShow', listener)
       }
     },
 

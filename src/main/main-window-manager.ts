@@ -576,13 +576,28 @@ export class MainWindowManager {
 
       const skipAutoPaste = options?.skipAutoPaste
         || (Date.now() - (this.deps?.getLastDeepLinkTime() ?? 0) < 1000)
+      let autoPastePayload: ReturnType<typeof captureAutoPasteClipboardPayload> | null = null
       if (!skipAutoPaste) {
         const appSettings = appSettingsManager.getSettings()
         if (appSettings.input.autoPasteOnShow
             && this.deps?.clipboardWatcher.isRecentlyChanged(appSettings.input.autoPasteMaxAge)) {
-          const payload = captureAutoPasteClipboardPayload()
-          this.window.webContents.send('clipboard:autoPaste', payload)
+          autoPastePayload = captureAutoPasteClipboardPayload()
         }
+      }
+      const shouldAutoPaste = Boolean(
+        autoPastePayload && (
+          (autoPastePayload.format === 'text' && autoPastePayload.text?.trim()) ||
+          (autoPastePayload.format === 'image' && autoPastePayload.image) ||
+          (autoPastePayload.format === 'files' && autoPastePayload.files && autoPastePayload.files.length > 0)
+        )
+      )
+
+      this.window.webContents.send('app:mainWindowShow', {
+        autoPasteScheduled: shouldAutoPaste
+      })
+
+      if (shouldAutoPaste && autoPastePayload) {
+        this.window.webContents.send('clipboard:autoPaste', autoPastePayload)
       }
 
       stopIgnoringBlur()

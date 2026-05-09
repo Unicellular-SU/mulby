@@ -76,6 +76,10 @@ export interface AutoPasteClipboardPayload {
   files?: FileInfo[]
 }
 
+export interface MainWindowShowEvent {
+  autoPasteScheduled: boolean
+}
+
 // 剪贴板历史条目
 export interface ClipboardHistoryItem {
   id: string
@@ -684,6 +688,7 @@ export interface ElectronAPI {
     onOpenStorageExplorer: (callback: () => void) => () => void
     onOpenCommandShortcuts: (callback: (payload?: { cmdLabel?: string }) => void) => () => void
     onSetSearchText: (callback: (query: string) => void) => () => void
+    onMainWindowShow: (callback: (event: MainWindowShowEvent) => void) => () => void
   }
   systemPlugin: {
     setActive: (pluginId: string | null) => Promise<boolean>

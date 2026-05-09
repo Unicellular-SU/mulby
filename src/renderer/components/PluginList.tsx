@@ -21,8 +21,9 @@ interface PluginListProps {
   traceSource: 'text' | 'attachments'
   traceInputLength: number
   traceAttachmentCount: number
+  showEmptyLaunchSuggestions?: boolean
   onResultsChange?: (count: number) => void
-  onContentHeightChange?: (height: number) => void
+  onContentHeightChange?: (height: number, options?: { compact?: boolean }) => void
   onShowDetails?: (pluginName: string) => void
 }
 
@@ -503,6 +504,7 @@ function PluginList({
   traceSource,
   traceInputLength,
   traceAttachmentCount,
+  showEmptyLaunchSuggestions = false,
   onResultsChange,
   onContentHeightChange,
   onShowDetails
@@ -878,6 +880,10 @@ function PluginList({
 
   const recentDisplayItems = useMemo(() => {
     const query = searchPayload.text.trim()
+    const hasInput = query.length > 0 || searchPayload.attachments.length > 0
+    if (!hasInput && !showEmptyLaunchSuggestions) {
+      return []
+    }
     const normalized = query.toLowerCase()
     let items = recentPlugins.filter((item) => {
       const key = getPluginKey(item)
@@ -901,7 +907,7 @@ function PluginList({
       const fb = frecencyMap.get(getPluginKey(b)) ?? 0
       return getRecentItemScore(b, query, fb) - getRecentItemScore(a, query, fa)
     })
-  }, [recentPlugins, searchPayload.text, bestKeys, hiddenKeys, frecencyMap])
+  }, [recentPlugins, searchPayload.text, searchPayload.attachments.length, showEmptyLaunchSuggestions, bestKeys, hiddenKeys, frecencyMap])
 
   const appDisplayItems = useMemo(() => {
     const seen = new Set<string>()
@@ -1095,6 +1101,11 @@ function PluginList({
   ])
 
   const flatItems = useMemo(() => sections.flatMap((section) => section.items), [sections])
+  const compactEmptyLaunchSuggestions = showEmptyLaunchSuggestions &&
+    searchPayload.text.trim().length === 0 &&
+    searchPayload.attachments.length === 0 &&
+    sections.length === 1 &&
+    sections[0]?.key === 'recent'
   const isSystemLoading = isSystemAppsLoading || isSystemFilesLoading
   const isSearching = searchSettings === null || isPluginLoading || isSystemLoading
 
@@ -1191,7 +1202,7 @@ function PluginList({
 
     const report = () => {
       const h = el.scrollHeight
-      onContentHeightChange(h)
+      onContentHeightChange(h, { compact: compactEmptyLaunchSuggestions })
     }
 
     // Initial measurement
@@ -1207,7 +1218,8 @@ function PluginList({
     expandedSections.best,
     expandedSections.apps,
     expandedSections.files,
-    expandedSections.push
+    expandedSections.push,
+    compactEmptyLaunchSuggestions
   ])
 
   useEffect(() => {

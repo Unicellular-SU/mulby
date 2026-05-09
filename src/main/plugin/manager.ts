@@ -30,6 +30,7 @@ import {
   PluginFeature
 } from '../../shared/types/plugin'
 import { PluginSearchWorker } from './search-worker-manager'
+import { getEmptyQuerySearchResults } from './empty-query-search'
 import { SystemPluginWindowManager } from '../services/system-plugin-window-manager'
 import { getCachedActiveWindow, getActiveWindow } from '../services/active-window'
 import {
@@ -817,32 +818,11 @@ export class PluginManager {
     }
 
     if (!hasText && !hasAttachments) {
-      // 有 activeWindow 时，先找 window 匹配的插件置顶
-      if (normalizedInput.activeWindow) {
-        const windowMatched: SearchResult[] = []
-        const rest: SearchResult[] = []
-        for (const plugin of enabledPlugins) {
-          let matched = false
-          for (const feature of this.getCombinedFeatures(plugin)) {
-            const match = findBestMatch(feature, normalizedInput)
-            if (match && match.matchType === 'window') {
-              windowMatched.push({ plugin, feature, matchType: 'window' })
-              matched = true
-              break
-            }
-          }
-          if (!matched && plugin.manifest.features[0]) {
-            rest.push({ plugin, feature: plugin.manifest.features[0], matchType: 'keyword' })
-          }
-        }
-        return [...windowMatched, ...rest]
-      }
-
-      return enabledPlugins.map(p => ({
-        plugin: p,
-        feature: p.manifest.features[0],
-        matchType: 'keyword' as const
-      }))
+      return getEmptyQuerySearchResults(
+        enabledPlugins,
+        normalizedInput,
+        (plugin) => this.getCombinedFeatures(plugin)
+      )
     }
 
     try {
