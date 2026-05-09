@@ -170,19 +170,33 @@ const result = await ai.call({
 
 ## 工具调用（Function Calling）
 
-工具调用仅在插件后端执行（`context.api.ai`）。工具函数名需要对应插件后端导出方法名，导出方式可参考 `docs/apis/host.md`（直接导出 / host 对象 / api 对象等）。
+Mulby 提供 **两种相互独立** 的"插件工具"机制，新手非常容易混淆。两者**互不依赖、互不必要**：
 
-### 插件后端示例
+| 维度 | A. 插件内部工具（`option.tools` 直传） | B. 全局共享工具（`manifest.tools` 注册） |
+|---|---|---|
+| 适用场景 | 插件**自己**调用 `ai.call` 时让模型回调本插件的方法 | 把工具**暴露**给 Mulby 内置 AI、其他插件、以及外部 MCP 客户端（Claude / Cursor / Cherry Studio） |
+| 是否需要在 `manifest.tools` 声明 | ❌ **不需要** | ✅ **必须**声明 |
+| 是否需要调用 `api.tools.register(name, handler)` | ❌ **不需要** | ✅ 必须在 host-worker 内注册 handler |
+| 工具命名 | 直接用插件 host 导出的方法名（如 `getSystemInfo`） | 自动包装为 `plugin_tool__{sanitizedPluginId}__{toolName}`（系统会做规范化与重名去重） |
+| 工具执行路径 | 宿主收到 AI 的 tool_call 后，按 host RPC 协议直接调用 `host.{toolName}(args)`（不区分前缀，是 toolExecutor 的兜底分支） | 宿主从 `plugin_tool__` 前缀解出 sanitizedId，查 `PluginToolRegistry` 还原原始 pluginId，调用对应插件 host-worker 内 `register` 注册的 handler |
+| 工具可见性 | 仅在本次 `ai.call` 调用中对 AI 模型可见 | 全局可见：Mulby 内置 AI / 其他插件的 AI 调用 / 外部 AI 客户端（通过 MCP Server）都能看到 |
+| 是否可被用户禁用 | 否（每次 `ai.call` 时动态传入） | 是（设置中按 `pluginId:toolName` 禁用，影响所有调用方） |
+| 进度上报通道 | 暂不支持中途进度（仅 `tool-call`/`tool-result` chunk） | 通过 handler 第二参数 `ctx.sendProgress(...)` 上报，对应 `chunkType: 'tool-progress'` |
+
+> **结论**：如果你只是想让 AI 在本插件内调用一两个本地方法，请使用方式 A，**不要**画蛇添足往 `manifest.tools` 加声明。`manifest.tools` 是用来"对外公开"的契约，只有当你希望其他插件、设置面板里的 AI 助手、外部 Claude/Cursor 等也能发现并调用这个工具时，才需要它。
+
+---
+
+### 方式 A：插件内部使用 `option.tools`
+
+工具仅对本次 `ai.call` 可见，工具名直接对应插件 `main.ts` 中导出的方法。`docs/apis/host.md` 详细介绍了 host 方法的导出方式（直接导出 / `export const host = {...}` / `export const api = {...}`）。
 
 ```ts
-// main.ts (插件后端)
+// main.ts （插件后端，运行在 host-worker）
 export const host = {
   async getSystemInfo(context: PluginContext) {
-    const os = require('node:os');
-    return {
-      platform: os.platform(),
-      release: os.release()
-    };
+    const os = require('node:os')
+    return { platform: os.platform(), release: os.release() }
   },
 
   async runWithTools(context: PluginContext, input: { messages: AiMessage[] }) {
@@ -190,46 +204,83 @@ export const host = {
       {
         type: 'function',
         function: {
-          name: 'getSystemInfo',
+          name: 'getSystemInfo',           // 直接是 host 的方法名，无前缀
           description: '获取系统信息',
           parameters: { type: 'object', properties: {} }
         }
       }
-    ];
+    ]
 
     return await context.api.ai.call({
       model: 'openai:gpt-4o-mini',
       messages: input.messages,
       tools,
-      maxToolSteps: 20  // 设置最大工具调用步骤数为 20
-    });
+      maxToolSteps: 20
+    })
   }
-};
+}
 ```
 
-### UI 调用插件后端
+**UI 进程触发后端：**
 
 ```ts
-// UI/渲染进程
 const result = await window.mulby.host.call('my-plugin', 'runWithTools', {
   messages: [{ role: 'user', content: '我的系统信息是什么？' }]
-});
-```
-
-### 插件 AI Tool 进度事件
-
-通过 `manifest.tools` 暴露给 AI Agent 的插件工具，可以在 `mulby.tools.register(name, handler)` 的第二参数中上报进度：
-
-```ts
-mulby.tools.register('batch_convert', async (args, ctx) => {
-  ctx?.sendProgress({ progress: 1, total: 4, message: '准备文件' })
-  // ...
-  ctx?.sendProgress({ progress: 4, total: 4, message: '转换完成' })
-  return { success: true }
 })
 ```
 
-流式 `ai.call(option, onChunk)` 会收到 `chunkType: 'tool-progress'`：
+> 实现细节：宿主的 `setAiToolExecutor` 在分发工具调用时会优先匹配内置工具（`mulby_*`）、MCP 工具（`mcp__*`）、注册的插件工具（`plugin_tool__*`）；都不命中时，**兜底**直接通过 `hostManager.callHostMethod(pluginName, name, [args])` 调用同名 host 方法。这就是方式 A 不需要任何注册的原因——只要 `option.toolContext.pluginName` 携带（`api.ai.call` 自动注入），AI 选择的工具名就会被路由到该插件的 host RPC。
+
+---
+
+### 方式 B：通过 `manifest.tools` 暴露给所有 AI
+
+适用于把工具公开给生态，例如：你写了一个二维码插件，希望 Mulby 设置里的 AI 助手、其他插件的 AI、Claude Desktop / Cursor 都能调用 `qrcode.generate`。
+
+**Step 1：在 `manifest.json` 声明 schema**
+
+```json
+{
+  "name": "qrcode",
+  "tools": [
+    {
+      "name": "generate",
+      "description": "Generate a QR code from text",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "text": { "type": "string" },
+          "size": { "type": "number" }
+        },
+        "required": ["text"]
+      }
+    }
+  ]
+}
+```
+
+**Step 2：在 host-worker（`main.ts`）注册 handler**
+
+```ts
+mulby.tools.register('generate', async (args, ctx) => {
+  ctx?.sendProgress({ progress: 1, total: 4, message: '准备文件' })
+  // ...
+  ctx?.sendProgress({ progress: 4, total: 4, message: '完成' })
+  return { dataUrl: '...' }
+})
+```
+
+> `mulby.tools.register` 必须在 host-worker 内调用（即插件 `main.ts` 运行的 UtilityProcess）。在主进程兜底实现里 `tools.register` 是空操作，这是设计如此（详见 `src/main/plugin/api.ts` 的 740 行附近注释）。
+
+**Step 3：自动生效**
+
+注册成功后，工具会以 `plugin_tool__qrcode__generate` 名称：
+- 自动加入 Mulby 内置 AI 工具池（其他插件 / 设置面板 AI 也可见）；
+- 通过 MCP Server 同步给外部 AI 客户端（如 Claude Desktop、Cursor）。
+
+**接收进度事件：**
+
+流式 `ai.call(option, onChunk)` 在工具执行期间会收到 `chunkType: 'tool-progress'`：
 
 ```ts
 await ai.call(option, (chunk) => {
@@ -239,7 +290,38 @@ await ai.call(option, (chunk) => {
 })
 ```
 
-`tool_progress` 包含 `{ id?, name, progress, total?, message? }`。同一进度也会在该插件工具通过 Mulby MCP Server 被外部客户端调用时转发为 MCP progress notification。
+`tool_progress` 包含 `{ id?, name, progress, total?, message? }`。同一进度也会在该工具被外部 MCP 客户端调用时转发为 MCP progress notification。
+
+---
+
+### 速记决策
+
+- **只想让 AI 调一下我的本地函数** → 方式 A，`option.tools` 直接传，不碰 manifest。
+- **想让别人也能用我这个工具** → 方式 B，写 `manifest.tools` + `register`。
+- **不确定？** → 先方式 A，等需要对外暴露时再升级到方式 B。
+
+### 内置工具能力（Capabilities）
+
+`option.capabilities` 接受以下能力名（见 `src/main/ai/tools/capabilities.ts`），命中后会按需注入对应的 Mulby 内置工具。每个能力都对应一个内置工具：
+
+| Capability | 对应工具名 | 说明 | 高风险 |
+|--------|----------|------|---|
+| `shell.exec` | `mulby_run_command` | 执行外部命令 | ✓ |
+| `shell.script` | `mulby_run_script` | 执行已注册脚本 | ✓ |
+| `fs.read` | `mulby_read_file` | 读取文件 | |
+| `fs.list` | `mulby_list_dir` | 列出目录 | |
+| `fs.search` | `mulby_search_text` | 文本搜索 | |
+| `patch.apply` | `mulby_apply_patch` | 应用 unified diff | ✓ |
+| `http.fetch` | `mulby_http_fetch` | HTTP 请求 | ✓ |
+| `web.search` | `mulby_web_search` | 联网搜索 | |
+| `web.fetch` | `mulby_web_fetch` | 抓取网页（Markdown） | |
+| `git.status` | `mulby_git_status` | git status | ✓ |
+| `git.diff` | `mulby_git_diff` | git diff | ✓ |
+| `skill.activate` | `mulby_activate_skill` | 加载 Skill 正文 | |
+
+> 高风险能力默认会被宿主安全策略拦截，必须在 `toolingPolicy.capabilityAllowList` 中显式放行才能在本次会话使用，详见下文「网络搜索工具设置」末尾的示例。
+
+> `internalTools` 字段已废弃，新代码请使用 `capabilities`。两者的别名兼容映射定义于 `src/main/ai/tools/capabilities.ts`（如 `runcommand` → `shell.exec`、`websearch` → `web.search`）。
 
 ### 彻底禁用工具（纯文本翻译/安全限制场景）
 
@@ -639,6 +721,12 @@ const tokens2 = await ai.tokens.estimate({
 });
 ```
 
+**参数**：
+- `model` (string, optional) - 模型 ID，未传时使用全局默认模型
+- `messages` (AiMessage[]) - 待估算的对话消息
+- `attachments` (AiAttachmentRef[], optional) - 附件引用（影响输入 token）
+- `outputText` (string, optional) - 已知的输出文本，用于精确计算 `outputTokens`
+
 **返回值**:
 ```typescript
 {
@@ -646,9 +734,11 @@ const tokens2 = await ai.tokens.estimate({
   outputTokens: number;
 }
 ```
+
 **说明**:
 - `outputText` 传入时，`outputTokens` 会按实际输出文本分词计算。
 - `outputText` 未传时，`outputTokens` 会使用 `maxOutputTokens`（若开启）或启发式估算。
+- 插件后端类型签名为 `{ model: string; messages: AiMessage[]; attachments?: AiAttachmentRef[] }`，未在类型上声明 `outputText`。如需在后端使用实际输出文本估算，可通过类型断言传入；运行时会被透传到底层估算逻辑。
 
 ---
 
@@ -716,7 +806,19 @@ type AiMessage = {
   role: 'system' | 'user' | 'assistant';
   content?: string | AiMessageContent[];
   reasoning_content?: string;
-  chunkType?: 'meta' | 'text' | 'reasoning' | 'tool-call' | 'tool-result' | 'error' | 'end';
+  /**
+   * 流式事件类型（仅 onChunk 过程中出现），用于统一
+   * meta / text / reasoning / tool-call / tool-progress / tool-result / error / end 协议。
+   */
+  chunkType?:
+    | 'meta'
+    | 'text'
+    | 'reasoning'
+    | 'tool-call'
+    | 'tool-progress'
+    | 'tool-result'
+    | 'error'
+    | 'end';
   capability_debug?: {
     requested: string[];
     allowed: string[];
@@ -737,6 +839,13 @@ type AiMessage = {
     internalTools: { requested: string[]; resolved: string[] };
   };
   tool_call?: { id: string; name: string; args?: unknown };
+  tool_progress?: {
+    id?: string;
+    name: string;
+    progress: number;
+    total?: number;
+    message?: string;
+  };
   tool_result?: { id: string; name: string; result?: unknown };
   error?: {
     message: string;
@@ -952,9 +1061,64 @@ type AiSkillSelection = {
   variables?: Record<string, string>;
 };
 
+type AiSkillSource =
+  | 'manual'
+  | 'local-dir'
+  | 'zip'
+  | 'npx'
+  | 'json'
+  | 'builtin'
+  | 'system';
+
+type AiSkillTrustLevel = 'untrusted' | 'reviewed' | 'trusted';
+
+type AiSkillMcpPolicy = {
+  serverIds?: string[];
+  allowedToolIds?: string[];
+  blockedToolIds?: string[];
+};
+
+type AiSkillMulbyExtensions = {
+  mode?: 'manual' | 'auto' | 'both';
+  triggerPhrases?: string[];
+  capabilities?: string[];
+  /** @deprecated Prefer capabilities. */
+  internalTools?: string[];
+  mcpPolicy?: AiSkillMcpPolicy;
+};
+
+type AiSkillDescriptor = {
+  id: string;
+  name: string;
+  /** SKILL.md frontmatter `description`，必填。 */
+  description: string;
+  license?: string;
+  compatibility?: string;
+  metadata?: Record<string, string>;
+  /**
+   * SKILL.md frontmatter `allowed-tools`（空格分隔字符串）的标准化结果。
+   */
+  allowedTools?: string[];
+  /** SKILL.md 正文（懒加载）。 */
+  promptTemplate?: string;
+  /** 解析自 `metadata.mulby.*` 的 Mulby 私有扩展。 */
+  mulbyExtensions?: AiSkillMulbyExtensions;
+
+  /** @deprecated 使用 mulbyExtensions.mode */
+  mode?: 'manual' | 'auto' | 'both';
+  /** @deprecated 使用 mulbyExtensions.triggerPhrases */
+  triggerPhrases?: string[];
+  /** @deprecated 使用 mulbyExtensions.capabilities */
+  capabilities?: string[];
+  /** @deprecated 使用 mulbyExtensions.capabilities */
+  internalTools?: string[];
+  /** @deprecated 使用 mulbyExtensions.mcpPolicy */
+  mcpPolicy?: AiSkillMcpPolicy;
+};
+
 type AiSkillRecord = {
   id: string;
-  source: 'manual' | 'local-dir' | 'zip' | 'json' | 'builtin' | 'system';
+  source: AiSkillSource;
   origin?: 'system' | 'app';
   readonly?: boolean;
   sourceRef?: string;
@@ -962,26 +1126,10 @@ type AiSkillRecord = {
   skillMdPath?: string;
   contentHash: string;
   enabled: boolean;
-  trustLevel: 'untrusted' | 'reviewed' | 'trusted';
+  trustLevel: AiSkillTrustLevel;
   installedAt: number;
   updatedAt: number;
-  descriptor: {
-    id: string;
-    name: string;
-    description?: string;
-    version?: string;
-    author?: string;
-    tags?: string[];
-    triggerPhrases?: string[];
-    promptTemplate?: string;
-    mcpPolicy?: {
-      serverIds?: string[];
-      allowedToolIds?: string[];
-      blockedToolIds?: string[];
-    };
-    capabilities?: string[];
-    internalTools?: string[]; // 已废弃
-  };
+  descriptor: AiSkillDescriptor;
 };
 
 type AiSkillPreview = {
@@ -1006,41 +1154,6 @@ type AiSkillResolveResult = {
   capabilities?: string[];
   internalTools?: string[]; // 已废弃
   reasons?: string[];
-};
-```
-
-### AiSkillCreateWithAiInput / AiSkillCreateProgressChunk
-```typescript
-type AiSkillCreateModelOption = {
-  id: string;
-  label: string;
-  providerRef?: string;
-  providerLabel?: string;
-};
-
-type AiSkillCreateWithAiInput = {
-  requirements: string;
-  model: string;
-  previousRawText?: string;
-  replaceSkillId?: string;
-  enabled?: boolean;
-  trustLevel?: 'untrusted' | 'reviewed' | 'trusted';
-};
-
-type AiSkillCreateWithAiResult = {
-  record: AiSkillRecord;
-  generation: {
-    model: string;
-    rawText: string;
-    notes?: string[];
-  };
-};
-
-type AiSkillCreateProgressChunk = {
-  type: 'status' | 'content' | 'reasoning';
-  text: string;
-  stage?: 'generating' | 'parsing' | 'validating' | 'writing' | 'completed';
-  stageStatus?: 'start' | 'done' | 'error';
 };
 ```
 
@@ -1090,29 +1203,64 @@ type AiAttachmentRef = {
 
 ### tooling.webSearch.get()
 [Renderer]
-获取当前网络搜索原始配置。
+获取当前网络搜索原始配置。返回值与 `AiToolWebSearchSettings` 结构一致：
+
+```typescript
+type AiToolWebSearchSettings = {
+  /** 当前激活的 Provider ID（如 local-bing / local-google / tavily / jina / custom-xxx） */
+  activeProvider: string;
+  /** 搜索最大结果数 */
+  maxResults: number;
+  /** web_fetch 返回内容最大字符数 */
+  maxContentLength: number;
+  /** 搜索/抓取超时（毫秒） */
+  timeoutMs: number;
+  /** 内置 API Provider 的独立 Key 存储 */
+  providerKeys: { tavily?: string; jina?: string };
+  /** Tavily 自定义 Host（默认 https://api.tavily.com） */
+  tavilyApiHost?: string;
+  /** 本地搜索引擎列表（内置 + 用户自定义） */
+  localEngines: LocalSearchEngineConfig[];
+  /** 用户自定义 API Provider 列表 */
+  customApis: CustomSearchApiConfig[];
+  /** 本地搜索是否自动获取各结果链接正文（默认 true） */
+  fetchContent?: boolean;
+  /** 每条结果正文最大字符数（默认 2000） */
+  maxContentPerResult?: number;
+  /** 搜索结果域名黑名单 */
+  resultDenyHosts?: string[];
+
+  /** @deprecated 使用 activeProvider 替代 */
+  provider?: string;
+  /** @deprecated 使用 providerKeys.jina 替代 */
+  jinaApiKey?: string;
+  /** @deprecated 使用 providerKeys.tavily 替代 */
+  tavilyApiKey?: string;
+};
+```
 
 ```javascript
 const config = await ai.tooling.webSearch.get();
 ```
 
-**返回值**: `Record<string, unknown>`
+**返回值**: `Promise<AiToolWebSearchSettings>`（接口签名为 `Record<string, unknown>`，运行时形状如上）
 
 ### tooling.webSearch.update(partial)
 [Renderer]
-更新网络搜索配置（部分更新）。
+更新网络搜索配置（部分更新）。`providerKeys` 会做浅合并。
 
 ```javascript
 await ai.tooling.webSearch.update({
   activeProvider: 'local-bing',
-  maxResults: 10
+  maxResults: 10,
+  providerKeys: { tavily: 'tvly-xxx' }
 });
 ```
 
 **参数**:
-- `partial` (Record<string, unknown>) - 需要更新的字段
+- `partial` (Partial<AiToolWebSearchSettings>) - 需要更新的字段
 
-**返回值**: `Record<string, unknown>` - 更新后的完整配置
+**返回值**: `Promise<AiToolWebSearchSettings>` - 更新后的完整配置
 
 ### tooling.webSearch.getSettings()
 [Renderer]
@@ -1321,9 +1469,12 @@ Array<{
 {
   claudeDesktop: object  // Claude Desktop 配置 JSON
   cursor: object         // Cursor 配置 JSON
-  generic: object        // 通用配置（含 url 和 token）
+  cherryStudio: object   // Cherry Studio 配置 JSON（含 isActive 字段）
+  generic: object        // 通用配置（含 name / type / url / token）
 }
 ```
+
+> 端口在运行时使用实际绑定的端口；停止时使用配置端口。
 
 ### `ai.mcpServer.refreshTools()`
 
