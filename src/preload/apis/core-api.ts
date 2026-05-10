@@ -159,7 +159,7 @@ export function createCoreApi(ipcRenderer: IpcRenderer) {
 
     input: {
       hideMainWindowPasteText: (text: string) => ipcRenderer.invoke('input:hideMainWindowPasteText', text),
-      hideMainWindowPasteImage: (image: string | Buffer) => ipcRenderer.invoke('input:hideMainWindowPasteImage', image),
+      hideMainWindowPasteImage: (image: string | Buffer | ArrayBuffer | Uint8Array) => ipcRenderer.invoke('input:hideMainWindowPasteImage', image),
       hideMainWindowPasteFile: (filePaths: string | string[]) => ipcRenderer.invoke('input:hideMainWindowPasteFile', filePaths),
       hideMainWindowTypeString: (text: string) => ipcRenderer.invoke('input:hideMainWindowTypeString', text),
       restoreWindows: () => ipcRenderer.invoke('input:restoreWindows'),

@@ -1,21 +1,28 @@
 import { ipcMain } from 'electron'
 import { pluginInput } from '../plugin/input'
 
+function normalizeModifierArguments(modifiers: unknown): string[] {
+  if (modifiers === undefined || modifiers === null) {
+    return []
+  }
+  return (Array.isArray(modifiers) ? modifiers : [modifiers]) as string[]
+}
+
 export function registerInputHandlers() {
-  ipcMain.handle('input:hideMainWindowPasteText', (_, text: string) =>
-    pluginInput.hideMainWindowPasteText(text)
+  ipcMain.handle('input:hideMainWindowPasteText', (_, text: unknown) =>
+    pluginInput.hideMainWindowPasteText(text as string)
   )
 
-  ipcMain.handle('input:hideMainWindowPasteImage', (_, image: string | Buffer | ArrayBuffer) =>
-    pluginInput.hideMainWindowPasteImage(image)
+  ipcMain.handle('input:hideMainWindowPasteImage', (_, image: unknown) =>
+    pluginInput.hideMainWindowPasteImage(image as string | Buffer | ArrayBuffer | Uint8Array)
   )
 
-  ipcMain.handle('input:hideMainWindowPasteFile', (_, filePaths: string | string[]) =>
-    pluginInput.hideMainWindowPasteFile(filePaths)
+  ipcMain.handle('input:hideMainWindowPasteFile', (_, filePaths: unknown) =>
+    pluginInput.hideMainWindowPasteFile(filePaths as string | string[])
   )
 
-  ipcMain.handle('input:hideMainWindowTypeString', (_, text: string) =>
-    pluginInput.hideMainWindowTypeString(text)
+  ipcMain.handle('input:hideMainWindowTypeString', (_, text: unknown) =>
+    pluginInput.hideMainWindowTypeString(text as string)
   )
 
   ipcMain.handle('input:restoreWindows', () =>
@@ -23,23 +30,23 @@ export function registerInputHandlers() {
   )
 
   // 模拟按键 API
-  ipcMain.handle('input:simulateKeyboardTap', (_, key: string, modifiers: string[]) =>
-    pluginInput.simulateKeyboardTap(key, ...modifiers)
+  ipcMain.handle('input:simulateKeyboardTap', (_, key: unknown, modifiers: unknown) =>
+    pluginInput.simulateKeyboardTap(key as string, ...normalizeModifierArguments(modifiers))
   )
 
-  ipcMain.handle('input:simulateMouseMove', (_, x: number, y: number) =>
-    pluginInput.simulateMouseMove(x, y)
+  ipcMain.handle('input:simulateMouseMove', (_, x: unknown, y: unknown) =>
+    pluginInput.simulateMouseMove(x as number, y as number)
   )
 
-  ipcMain.handle('input:simulateMouseClick', (_, x: number, y: number) =>
-    pluginInput.simulateMouseClick(x, y)
+  ipcMain.handle('input:simulateMouseClick', (_, x: unknown, y: unknown) =>
+    pluginInput.simulateMouseClick(x as number, y as number)
   )
 
-  ipcMain.handle('input:simulateMouseDoubleClick', (_, x: number, y: number) =>
-    pluginInput.simulateMouseDoubleClick(x, y)
+  ipcMain.handle('input:simulateMouseDoubleClick', (_, x: unknown, y: unknown) =>
+    pluginInput.simulateMouseDoubleClick(x as number, y as number)
   )
 
-  ipcMain.handle('input:simulateMouseRightClick', (_, x: number, y: number) =>
-    pluginInput.simulateMouseRightClick(x, y)
+  ipcMain.handle('input:simulateMouseRightClick', (_, x: unknown, y: unknown) =>
+    pluginInput.simulateMouseRightClick(x as number, y as number)
   )
 }

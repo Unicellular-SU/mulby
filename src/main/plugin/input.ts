@@ -1,11 +1,13 @@
 import { app, BrowserWindow, clipboard, nativeImage } from 'electron'
 import { execFile } from 'child_process'
 import { promisify } from 'util'
+import { pathToFileURL } from 'url'
 import log from 'electron-log'
 import { hasDetachedWindows, isAppExplicitlyHidden, markAppHidden, markAppVisible } from '../services/blur-manager'
 
 const execFileAsync = promisify(execFile)
 const FOCUS_DELAY_MS = 160
+const SINGLE_KEY_PATTERN = /^[a-z0-9]$/
 
 // 记录隐藏前可见的窗口
 const hiddenWindows: Set<number> = new Set()
@@ -145,12 +147,16 @@ function getPlatformKey(key: string): string {
     return lowerKey
   }
 
-  if (KEY_MAP[lowerKey]) {
-    return KEY_MAP[lowerKey][platform as 'win32' | 'linux'] || key
+  const mappedKey = KEY_MAP[lowerKey]?.[platform as 'win32' | 'linux']
+  if (mappedKey) {
+    return mappedKey
   }
 
-  // 对于单字符键，直接返回
-  return key.toLowerCase()
+  if (isSingleKey(lowerKey)) {
+    return lowerKey
+  }
+
+  throw new TypeError(`Unsupported input key: ${key}`)
 }
 
 function getPlatformModifier(modifier: string): string {
@@ -158,14 +164,19 @@ function getPlatformModifier(modifier: string): string {
   const lowerMod = modifier.toLowerCase()
 
   if (platform === 'darwin') {
-    return MAC_MODIFIER_MAP[lowerMod] || modifier
+    const mappedModifier = MAC_MODIFIER_MAP[lowerMod]
+    if (mappedModifier) {
+      return mappedModifier
+    }
+    throw new TypeError(`Unsupported input modifier: ${modifier}`)
   }
 
-  if (MODIFIER_MAP[lowerMod]) {
-    return MODIFIER_MAP[lowerMod][platform as 'win32' | 'linux']
+  const mappedModifier = MODIFIER_MAP[lowerMod]?.[platform as 'win32' | 'linux']
+  if (mappedModifier) {
+    return mappedModifier
   }
 
-  return modifier
+  throw new TypeError(`Unsupported input modifier: ${modifier}`)
 }
 
 function sleep(ms: number): Promise<void> {
@@ -173,8 +184,6 @@ function sleep(ms: number): Promise<void> {
 }
 
 function hideAllAppWindows(): void {
-  hiddenWindows.clear()
-
   for (const win of BrowserWindow.getAllWindows()) {
     if (!win.isDestroyed() && win.isVisible() && !protectedWindowIds.has(win.id)) {
       hiddenWindows.add(win.id)
@@ -204,13 +213,97 @@ function restoreHiddenWindows(): void {
   hiddenWindows.clear()
 }
 
-function writeImageToClipboard(image: string | Buffer | ArrayBuffer): boolean {
+function escapeXmlText(text: string): string {
+  return text
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&apos;')
+}
+
+export function normalizeInputCoordinate(value: unknown, label: string): number {
+  const numeric = typeof value === 'number'
+    ? value
+    : typeof value === 'string' && value.trim() !== ''
+      ? Number(value)
+      : NaN
+
+  if (!Number.isFinite(numeric)) {
+    throw new TypeError(`${label} must be a finite number`)
+  }
+
+  return Math.round(numeric)
+}
+
+function normalizeInputText(value: unknown, label: string): string {
+  if (typeof value !== 'string') {
+    throw new TypeError(`${label} must be a string`)
+  }
+  return value
+}
+
+function hasOwn<T extends object>(record: T, key: PropertyKey): key is keyof T {
+  return Object.prototype.hasOwnProperty.call(record, key)
+}
+
+function isSingleKey(key: string): boolean {
+  return SINGLE_KEY_PATTERN.test(key)
+}
+
+export function normalizeInputKeyboardKey(key: unknown): string {
+  if (typeof key !== 'string') {
+    throw new TypeError('key must be a string')
+  }
+
+  const normalized = key.trim().toLowerCase()
+  if (isSingleKey(normalized) || hasOwn(MAC_KEY_CODES, normalized) || hasOwn(KEY_MAP, normalized)) {
+    return normalized
+  }
+
+  throw new TypeError(`Unsupported input key: ${key}`)
+}
+
+export function normalizeInputKeyboardModifiers(modifiers: unknown[]): string[] {
+  return modifiers.map((modifier) => {
+    if (typeof modifier !== 'string') {
+      throw new TypeError('modifier must be a string')
+    }
+
+    const normalized = modifier.trim().toLowerCase()
+    if (!hasOwn(MAC_MODIFIER_MAP, normalized) && !hasOwn(MODIFIER_MAP, normalized)) {
+      throw new TypeError(`Unsupported input modifier: ${modifier}`)
+    }
+
+    return normalized
+  })
+}
+
+function normalizeFilePaths(filePaths: unknown): string[] {
+  const paths = Array.isArray(filePaths) ? filePaths : [filePaths]
+  const normalized = paths.map((filePath) => {
+    if (typeof filePath !== 'string') {
+      throw new TypeError('file path must be a string')
+    }
+    return filePath
+  }).filter(filePath => filePath.length > 0)
+
+  if (normalized.length === 0) {
+    throw new TypeError('file path list must not be empty')
+  }
+
+  return normalized
+}
+
+function writeImageToClipboard(image: string | Buffer | ArrayBuffer | Uint8Array): boolean {
   try {
     let nativeImg: Electron.NativeImage
     if (Buffer.isBuffer(image)) {
       nativeImg = nativeImage.createFromBuffer(image)
     } else if (image instanceof ArrayBuffer) {
       nativeImg = nativeImage.createFromBuffer(Buffer.from(image))
+    } else if (ArrayBuffer.isView(image)) {
+      nativeImg = nativeImage.createFromBuffer(Buffer.from(image.buffer, image.byteOffset, image.byteLength))
     } else if (typeof image === 'string') {
       if (image.startsWith('data:image')) {
         nativeImg = nativeImage.createFromDataURL(image)
@@ -231,15 +324,14 @@ function writeImageToClipboard(image: string | Buffer | ArrayBuffer): boolean {
 }
 
 function writeFilesToClipboard(filePaths: string | string[]): boolean {
-  const paths = Array.isArray(filePaths) ? filePaths : [filePaths]
-  if (paths.length === 0) return false
+  const paths = normalizeFilePaths(filePaths)
 
   if (process.platform === 'darwin') {
     const plist = `<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <array>
-${paths.map(p => `    <string>${p}</string>`).join('\n')}
+${paths.map(p => `    <string>${escapeXmlText(p)}</string>`).join('\n')}
 </array>
 </plist>`
     clipboard.writeBuffer('NSFilenamesPboardType', Buffer.from(plist))
@@ -247,17 +339,11 @@ ${paths.map(p => `    <string>${p}</string>`).join('\n')}
   }
 
   if (process.platform === 'win32') {
-    const clipboardWithWrite = clipboard as typeof clipboard & {
-      write?: (data: { files: string[] }) => void
-    }
-    if (typeof clipboardWithWrite.write === 'function') {
-      clipboardWithWrite.write({ files: paths })
-      return true
-    }
+    log.warn('[Input] Windows file clipboard write is not supported by Electron clipboard.write; returning false')
     return false
   }
 
-  const uriList = paths.map(p => `file://${p}`).join('\n')
+  const uriList = paths.map(p => pathToFileURL(p).toString()).join('\n')
   clipboard.writeBuffer('text/uri-list', Buffer.from(uriList))
   return true
 }
@@ -325,50 +411,60 @@ async function simulateKeyboardTapInternal(key: string, modifiers: string[]): Pr
   if (process.platform === 'darwin') {
     // macOS: 使用 osascript
     const keyCode = MAC_KEY_CODES[lowerKey]
-    let script: string
+    const modifierStr = modifiers.map(m => getPlatformModifier(m)).join(', ')
+    const usingClause = modifiers.length > 0 ? ` using {${modifierStr}}` : ''
 
-    if (modifiers.length > 0) {
-      const modifierStr = modifiers.map(m => getPlatformModifier(m)).join(', ')
-      if (keyCode !== undefined) {
-        // 使用 key code 数字
-        script = `tell application "System Events" to key code ${keyCode} using {${modifierStr}}`
-      } else {
-        // 普通字符使用 keystroke
-        script = `tell application "System Events" to keystroke "${lowerKey}" using {${modifierStr}}`
-      }
-    } else {
-      if (keyCode !== undefined) {
-        // 使用 key code 数字
-        script = `tell application "System Events" to key code ${keyCode}`
-      } else {
-        // 普通字符使用 keystroke
-        script = `tell application "System Events" to keystroke "${lowerKey}"`
-      }
+    if (keyCode !== undefined) {
+      // 使用 key code 数字
+      await execFileAsync('osascript', ['-e', `tell application "System Events" to key code ${keyCode}${usingClause}`])
+      return
     }
-    await execFileAsync('osascript', ['-e', script])
+
+    if (!isSingleKey(lowerKey)) {
+      throw new TypeError(`Unsupported macOS input key: ${key}`)
+    }
+
+    // 普通字符通过 argv 传入，避免把调用方字符串插入 AppleScript。
+    await execFileAsync('osascript', [
+      '-e',
+      'on run argv',
+      '-e',
+      `tell application "System Events" to keystroke (item 1 of argv)${usingClause}`,
+      '-e',
+      'end run',
+      lowerKey
+    ])
     return
   }
 
   if (process.platform === 'win32') {
     // Windows: 使用 PowerShell SendKeys
+    if (!KEY_MAP[lowerKey] && !isSingleKey(lowerKey)) {
+      throw new TypeError(`Unsupported Windows input key: ${key}`)
+    }
+
     const platformKey = getPlatformKey(key)
     let keyStr: string
     if (KEY_MAP[lowerKey]) {
       keyStr = platformKey
     } else {
-      keyStr = lowerKey
+      keyStr = escapeSendKeys(lowerKey)
     }
 
     // 添加修饰键前缀
     const modifierPrefix = modifiers.map(m => getPlatformModifier(m)).join('')
     const fullKey = `${modifierPrefix}${keyStr}`
 
-    const script = `Add-Type -AssemblyName System.Windows.Forms; [System.Windows.Forms.SendKeys]::SendWait("${fullKey}")`
-    await execFileAsync('powershell', ['-NoProfile', '-Command', script])
+    const script = 'param([string]$keys) Add-Type -AssemblyName System.Windows.Forms; [System.Windows.Forms.SendKeys]::SendWait($keys)'
+    await execFileAsync('powershell', ['-NoProfile', '-Command', script, fullKey])
     return
   }
 
   // Linux: 使用 xdotool
+  if (!KEY_MAP[lowerKey] && !isSingleKey(lowerKey)) {
+    throw new TypeError(`Unsupported Linux input key: ${key}`)
+  }
+
   const platformKey = getPlatformKey(key)
   const xdotoolModifiers = modifiers.map(m => getPlatformModifier(m))
   const fullKey = [...xdotoolModifiers, platformKey].join('+')
@@ -487,7 +583,8 @@ async function withHiddenWindow(action: () => Promise<void>): Promise<void> {
 export const pluginInput = {
   async hideMainWindowPasteText(text: string): Promise<boolean> {
     try {
-      clipboard.writeText(text)
+      const normalizedText = normalizeInputText(text, 'text')
+      clipboard.writeText(normalizedText)
       await withHiddenWindow(() => sendPasteShortcut())
       return true
     } catch (error) {
@@ -495,7 +592,7 @@ export const pluginInput = {
       return false
     }
   },
-  async hideMainWindowPasteImage(image: string | Buffer | ArrayBuffer): Promise<boolean> {
+  async hideMainWindowPasteImage(image: string | Buffer | ArrayBuffer | Uint8Array): Promise<boolean> {
     try {
       const ok = writeImageToClipboard(image)
       if (!ok) return false
@@ -519,7 +616,8 @@ export const pluginInput = {
   },
   async hideMainWindowTypeString(text: string): Promise<boolean> {
     try {
-      await withHiddenWindow(() => sendTypeString(text))
+      const normalizedText = normalizeInputText(text, 'text')
+      await withHiddenWindow(() => sendTypeString(normalizedText))
       return true
     } catch (error) {
       log.error('[Input] Failed to type string:', error)
@@ -548,7 +646,9 @@ export const pluginInput = {
    */
   async simulateKeyboardTap(key: string, ...modifiers: string[]): Promise<boolean> {
     try {
-      await withHiddenWindow(() => simulateKeyboardTapInternal(key, modifiers))
+      const normalizedKey = normalizeInputKeyboardKey(key)
+      const normalizedModifiers = normalizeInputKeyboardModifiers(modifiers)
+      await withHiddenWindow(() => simulateKeyboardTapInternal(normalizedKey, normalizedModifiers))
       return true
     } catch (error) {
       log.error('[Input] Failed to simulate keyboard tap:', error)
@@ -563,7 +663,9 @@ export const pluginInput = {
    */
   async simulateMouseMove(x: number, y: number): Promise<boolean> {
     try {
-      await withHiddenWindow(() => simulateMouseMoveInternal(x, y))
+      const normalizedX = normalizeInputCoordinate(x, 'x')
+      const normalizedY = normalizeInputCoordinate(y, 'y')
+      await withHiddenWindow(() => simulateMouseMoveInternal(normalizedX, normalizedY))
       return true
     } catch (error) {
       log.error('[Input] Failed to simulate mouse move:', error)
@@ -578,7 +680,9 @@ export const pluginInput = {
    */
   async simulateMouseClick(x: number, y: number): Promise<boolean> {
     try {
-      await withHiddenWindow(() => simulateMouseClickInternal(x, y, 'left', 1))
+      const normalizedX = normalizeInputCoordinate(x, 'x')
+      const normalizedY = normalizeInputCoordinate(y, 'y')
+      await withHiddenWindow(() => simulateMouseClickInternal(normalizedX, normalizedY, 'left', 1))
       return true
     } catch (error) {
       log.error('[Input] Failed to simulate mouse click:', error)
@@ -593,7 +697,9 @@ export const pluginInput = {
    */
   async simulateMouseDoubleClick(x: number, y: number): Promise<boolean> {
     try {
-      await withHiddenWindow(() => simulateMouseClickInternal(x, y, 'left', 2))
+      const normalizedX = normalizeInputCoordinate(x, 'x')
+      const normalizedY = normalizeInputCoordinate(y, 'y')
+      await withHiddenWindow(() => simulateMouseClickInternal(normalizedX, normalizedY, 'left', 2))
       return true
     } catch (error) {
       log.error('[Input] Failed to simulate mouse double click:', error)
@@ -608,7 +714,9 @@ export const pluginInput = {
    */
   async simulateMouseRightClick(x: number, y: number): Promise<boolean> {
     try {
-      await withHiddenWindow(() => simulateMouseClickInternal(x, y, 'right', 1))
+      const normalizedX = normalizeInputCoordinate(x, 'x')
+      const normalizedY = normalizeInputCoordinate(y, 'y')
+      await withHiddenWindow(() => simulateMouseClickInternal(normalizedX, normalizedY, 'right', 1))
       return true
     } catch (error) {
       log.error('[Input] Failed to simulate mouse right click:', error)

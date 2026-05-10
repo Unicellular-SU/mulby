@@ -38,7 +38,7 @@ await input.hideMainWindowPasteImage('/path/to/image.png');
 ```
 
 **参数**:
-- `image` (string | Buffer | ArrayBuffer) - 图片路径、Data URL、Buffer 或 ArrayBuffer
+- `image` (string | Buffer | ArrayBuffer | Uint8Array) - 图片路径、Data URL、Buffer、ArrayBuffer 或 Uint8Array
 
 **返回值**: `boolean`（插件后端返回 `Promise<boolean>`） - 是否执行成功
 
@@ -55,6 +55,8 @@ await input.hideMainWindowPasteFile(['/path/a.txt', '/path/b.txt']);
 - `filePath` (string | string[]) - 文件路径或路径数组
 
 **返回值**: `boolean`（插件后端返回 `Promise<boolean>`） - 是否执行成功
+
+**注意**: Windows 当前不支持通过 Electron 剪贴板可靠写入文件列表，此方法会返回 `false`，避免误报粘贴成功。
 
 ### hideMainWindowTypeString(text)
 [Renderer] [Backend]

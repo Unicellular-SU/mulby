@@ -736,9 +736,15 @@ export interface ElectronAPI {
   }
   input: {
     hideMainWindowPasteText: (text: string) => Promise<boolean>
-    hideMainWindowPasteImage: (image: string | Buffer) => Promise<boolean>
+    hideMainWindowPasteImage: (image: string | Buffer | ArrayBuffer | Uint8Array) => Promise<boolean>
     hideMainWindowPasteFile: (filePaths: string | string[]) => Promise<boolean>
     hideMainWindowTypeString: (text: string) => Promise<boolean>
+    restoreWindows: () => Promise<boolean>
+    simulateKeyboardTap: (key: string, ...modifiers: string[]) => Promise<boolean>
+    simulateMouseMove: (x: number, y: number) => Promise<boolean>
+    simulateMouseClick: (x: number, y: number) => Promise<boolean>
+    simulateMouseDoubleClick: (x: number, y: number) => Promise<boolean>
+    simulateMouseRightClick: (x: number, y: number) => Promise<boolean>
   }
   notification: {
     show: (message: string, type?: string) => Promise<void>
