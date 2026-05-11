@@ -138,7 +138,7 @@ interface ChildWindowCreateOptions {
   movable?: boolean;
   minimizable?: boolean;
   maximizable?: boolean;
-  fullscreenable?: boolean;
+  fullscreenable?: boolean;            // 默认 true；子窗口默认可全屏
   focusable?: boolean;                 // false 时窗口不抢焦点
   skipTaskbar?: boolean;               // 请求不出现在 Dock/任务栏；macOS 仍可能显示 Mulby 应用级 Dock 图标
   enableLargerThanScreen?: boolean;    // 允许窗口大于屏幕
@@ -210,6 +210,8 @@ const region = await window.mulby.window.create('region/index.html?key=abc', {
 
 子窗口默认不会继承 `manifest.window` 中的 `minWidth`、`minHeight`、`maxWidth`、`maxHeight`，避免主插件面板的尺寸约束限制 overlay、截图、取色器等辅助窗口。需要沿用 manifest 尺寸约束时，显式传入 `inheritWindowSizeLimits: true`。
 
+子窗口的 `fullscreenable` 默认为 `true`，即子窗口默认允许进入全屏（与主插件面板仅在 `type: 'fullscreen'` 时全屏的行为不同）。不需要全屏的子窗口可显式传入 `fullscreenable: false`。
+
 子窗口的 `backgroundThrottling` 解析优先级为 `options.backgroundThrottling ?? manifest.window.backgroundThrottling ?? true`。
 
 在 macOS 上，`skipTaskbar` 不能保证隐藏 Mulby 的 Dock 图标。Dock 是应用级表示；只要存在独立插件窗口或子窗口，Mulby 可能保持 Dock 可见，并在菜单中提供插件窗口操作。
@@ -246,7 +248,25 @@ const overlay = await window.mulby.window.create('overlay', {
 
 ### onChildMessage(callback)
 [Renderer]
-监听子窗口发来的消息。
+监听子窗口发来的消息。回调签名：`(channel: string, ...args: unknown[]) => void`。
+
+除了插件自行通过 `sendToParent()` 或 `postMessage()` 发送的自定义消息外，宿主还会自动推送以下内置事件：
+
+**`child-window-closed`** — 子窗口关闭时自动通知父窗口。
+
+```typescript
+window.mulby.window.onChildMessage((channel, ...args) => {
+  if (channel === 'child-window-closed') {
+    const payload = args[0] as {
+      id: number           // 已关闭子窗口的 window ID
+      pluginId: string     // 所属插件 ID
+      featureCode: string  // 关联的 feature code
+      at: number           // 关闭时间戳 (ms)
+    }
+    console.log('子窗口已关闭:', payload.id)
+  }
+})
+```
 
 ### findInPage(text, options?)
 [Renderer]
@@ -378,6 +398,14 @@ window.mulby.window.setIgnoreMouseEvents(true, { forward: true });
 // 录制开始时禁用当前控制面板节流，结束/卸载时恢复默认
 await window.mulby.window.setBackgroundThrottling(false);
 await window.mulby.window.setBackgroundThrottling(true);
+
+// 监听子窗口关闭事件
+window.mulby.window.onChildMessage((channel, ...args) => {
+  if (channel === 'child-window-closed') {
+    const { id, pluginId, featureCode, at } = args[0];
+    console.log(`子窗口 ${id} 已关闭`);
+  }
+});
 
 // 子输入框
 await window.mulby.subInput.set('请输入...', true);
