@@ -1,9 +1,63 @@
-import { ipcRenderer } from 'electron';
+import { contextBridge, ipcRenderer } from 'electron';
 import { InBrowserOp, InBrowserOptions, InBrowserRunPayload } from '../../shared/types/inbrowser';
 
 type SerializableFn = (...args: unknown[]) => unknown;
 type MouseButton = 'left' | 'middle' | 'right';
 type ScreenshotTarget = string | { x: number; y: number; width: number; height: number };
+
+function isNativeOrProxyFunctionSource(source: string): boolean {
+    return source.includes('[native code]');
+}
+
+function isUsableFunctionSource(source: string): boolean {
+    const trimmed = source.trim();
+    return Boolean(trimmed) && !isNativeOrProxyFunctionSource(trimmed);
+}
+
+function readFunctionSourceInCurrentWorld(func: SerializableFn): string | null {
+    try {
+        return Function.prototype.toString.call(func);
+    } catch {
+        try {
+            return func.toString();
+        } catch {
+            return null;
+        }
+    }
+}
+
+function readFunctionSourceInMainWorld(func: SerializableFn): string | null {
+    if (typeof contextBridge.executeInMainWorld !== 'function') {
+        return null;
+    }
+
+    try {
+        const source = contextBridge.executeInMainWorld({
+            func: (mainWorldFunc: SerializableFn) => Function.prototype.toString.call(mainWorldFunc),
+            args: [func],
+        });
+        return typeof source === 'string' ? source : null;
+    } catch {
+        return null;
+    }
+}
+
+export function serializeInBrowserFunction(func: SerializableFn, methodName: string): string {
+    const currentWorldSource = readFunctionSourceInCurrentWorld(func);
+    if (currentWorldSource && isUsableFunctionSource(currentWorldSource)) {
+        return currentWorldSource;
+    }
+
+    const mainWorldSource = readFunctionSourceInMainWorld(func);
+    if (mainWorldSource && isUsableFunctionSource(mainWorldSource)) {
+        return mainWorldSource;
+    }
+
+    throw new Error(
+        `Cannot serialize function passed across ContextBridge for inbrowser.${methodName}. ` +
+        'Please pass a real page function from the renderer context or use a function source string.'
+    );
+}
 
 export class InBrowserBuilder {
     private queue: InBrowserOp[] = [];
@@ -97,11 +151,8 @@ export class InBrowserBuilder {
     }
 
     public when = (selectorOrFunc: string | SerializableFn, ...params: unknown[]): this => {
-        let funcString: string | undefined;
         if (typeof selectorOrFunc === 'function') {
-            funcString = selectorOrFunc.toString();
-            // Simple native code check
-            if (funcString.includes('[native code]')) throw new Error('Cannot serialize native function');
+            const funcString = serializeInBrowserFunction(selectorOrFunc, 'when');
             this.queue.push({ type: 'when', args: [funcString, ...params] });
         } else {
             this.queue.push({ type: 'when', args: [selectorOrFunc, ...params] });
@@ -184,9 +235,8 @@ export class InBrowserBuilder {
     }
 
     public download = (urlOrFunc: string | SerializableFn, savePath?: string | null, ...params: unknown[]): this => {
-        let funcString: string | undefined;
         if (typeof urlOrFunc === 'function') {
-            funcString = urlOrFunc.toString();
+            const funcString = serializeInBrowserFunction(urlOrFunc, 'download');
             this.queue.push({ type: 'download', args: [funcString, savePath, ...params] });
         } else {
             this.queue.push({ type: 'download', args: [urlOrFunc, savePath] });
@@ -197,10 +247,7 @@ export class InBrowserBuilder {
     public evaluate = (func: string | SerializableFn, ...params: unknown[]): this => {
         let funcString: string;
         if (typeof func === 'function') {
-            funcString = func.toString();
-            if (funcString.includes('[native code]')) {
-                throw new Error('Cannot serialize function passed across ContextBridge. Please pass the function as a string or use .toString().');
-            }
+            funcString = serializeInBrowserFunction(func, 'evaluate');
         } else {
             funcString = func;
         }
@@ -214,7 +261,7 @@ export class InBrowserBuilder {
 
     public wait = (msOrSelectorOrFunc: number | string | SerializableFn, ...args: unknown[]): this => {
         if (typeof msOrSelectorOrFunc === 'function') {
-            const funcString = msOrSelectorOrFunc.toString();
+            const funcString = serializeInBrowserFunction(msOrSelectorOrFunc, 'wait');
             this.queue.push({ type: 'wait', args: [funcString, ...args] });
         } else {
             this.queue.push({ type: 'wait', args: [msOrSelectorOrFunc, ...args] });

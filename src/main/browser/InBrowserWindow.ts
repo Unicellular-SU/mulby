@@ -4,6 +4,16 @@ import { registerSystemInternalWindow, unregisterSystemInternalWindow } from '..
 import { IN_BROWSER_POLL_INTERVAL_MS } from '../constants/timing';
 import log from 'electron-log'
 
+export function isInBrowserFunctionSource(value: unknown): value is string {
+    if (typeof value !== 'string') {
+        return false;
+    }
+
+    const source = value.trim();
+    return /^(?:async\s+)?function(?:\s*\*)?(?:\s+[$A-Z_a-z][$\w]*)?\s*\(/.test(source) ||
+        /^(?:async\s+)?(?:\([^)]*\)|[$A-Z_a-z][$\w]*)\s*=>/.test(source);
+}
+
 export class InBrowserWindow {
     public window: BrowserWindow;
     public id: number;
@@ -166,7 +176,7 @@ export class InBrowserWindow {
                             await new Promise(resolve => setTimeout(resolve, firstArg));
                             return;
                         }
-                        if (typeof firstArg === 'string' && !firstArg.trim().startsWith('function')) {
+                        if (typeof firstArg === 'string' && !isInBrowserFunctionSource(firstArg)) {
                             // It's a selector string for wait(selector)
                             // Handle below in selector-wait block
                             // Re-assign to handle in separate block or goto label? Switch doesn't restart.
@@ -178,7 +188,7 @@ export class InBrowserWindow {
                         }
                     } else { // when
                         const [firstArg, ...rest] = args;
-                        if (typeof firstArg === 'string' && !firstArg.trim().startsWith('function')) {
+                        if (typeof firstArg === 'string' && !isInBrowserFunctionSource(firstArg)) {
                             // Selector case
                         } else {
                             eFuncString = firstArg;
@@ -187,7 +197,7 @@ export class InBrowserWindow {
                     }
 
                     // Handle 'wait' selector case specifically
-                    if (op.type === 'wait' && typeof args[0] === 'string' && !args[0].trim().startsWith('function')) {
+                    if (op.type === 'wait' && typeof args[0] === 'string' && !isInBrowserFunctionSource(args[0])) {
                         const [msOrSelector] = args;
                         // ... existing wait logic ...
                         const startTime = Date.now();
@@ -206,7 +216,7 @@ export class InBrowserWindow {
                     }
 
                     // Handle 'when' selector case specifically
-                    if (op.type === 'when' && typeof args[0] === 'string' && !args[0].trim().startsWith('function')) {
+                    if (op.type === 'when' && typeof args[0] === 'string' && !isInBrowserFunctionSource(args[0])) {
                         const [whenSelector] = args;
                         const wStartTime = Date.now();
                         const wTimeoutMs = 15000;
@@ -571,7 +581,7 @@ export class InBrowserWindow {
                 const [urlOrFunc, dSavePath, ...dParams] = args;
                 let downloadUrl = urlOrFunc;
 
-                if (typeof urlOrFunc === 'string' && (urlOrFunc.includes('function') || urlOrFunc.includes('=>'))) {
+                if (isInBrowserFunctionSource(urlOrFunc)) {
                     // Evaluate function to get URL
                     const code = `
                     (async () => {
@@ -591,12 +601,12 @@ export class InBrowserWindow {
 
                 if (!downloadUrl) throw new Error('Download URL is empty');
 
-                win.webContents.downloadURL(downloadUrl);
                 if (dSavePath) {
                     win.webContents.session.once('will-download', (_event, item, _webContents) => {
                         item.setSavePath(dSavePath);
                     });
                 }
+                win.webContents.downloadURL(downloadUrl);
                 break;
             }
 

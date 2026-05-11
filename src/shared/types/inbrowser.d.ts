@@ -50,6 +50,8 @@ export interface CookieFilter {
     httpOnly?: boolean;
 }
 
+type InBrowserFunction = (...params: unknown[]) => unknown;
+
 export interface InBrowserOp {
     type: 'goto' | 'show' | 'hide' | 'viewport' | 'click' | 'type' | 'press' | 'evaluate' | 'wait' | 'css' | 'when' | 'cookies' | 'pdf' | 'value' | 'check' | 'scroll' | 'devTools' | 'useragent' | 'focus' | 'end' | 'paste' | 'file' | 'device' | 'mousedown' | 'mouseup' | 'input' | 'clearCookies' | 'dblclick' | 'hover' | 'screenshot' | 'markdown' | 'setCookies' | 'removeCookies' | 'download' | 'drop';
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -73,8 +75,7 @@ export interface InBrowser {
     hide(): InBrowser;
     show(): InBrowser;
     css(css: string): InBrowser;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    evaluate(func: string | ((...params: any[]) => unknown), ...params: any[]): InBrowser;
+    evaluate(func: string | InBrowserFunction, ...params: unknown[]): InBrowser;
     press(key: string, modifiers?: string[]): InBrowser;
     click(selector: string, mouseButton?: 'left' | 'middle' | 'right'): InBrowser;
     click(x: number, y: number, mouseButton?: 'left' | 'middle' | 'right'): InBrowser;
@@ -97,11 +98,7 @@ export interface InBrowser {
     scroll(selector: string, optional?: boolean | { behavior?: 'auto' | 'smooth'; block?: 'start' | 'center' | 'end' | 'nearest'; inline?: 'start' | 'center' | 'end' | 'nearest'; }): InBrowser;
     scroll(y: number): InBrowser;
     scroll(x: number, y: number): InBrowser;
-    download(url: string, savePath?: string): InBrowser; // Not in original Op list! Added to Op list? 
-    // Wait, download was in doc but not in my Op list addition above.
-    // I missed `download` in the Op list update. I should add it.
-    // Doc says: ubrowser.download(url[, savePath])
-    // I'll add 'download' to Op list too.
+    download(urlOrFunc: string | InBrowserFunction, savePath?: string | null, ...params: unknown[]): InBrowser;
     paste(text: string): InBrowser;
     screenshot(target?: string | { x: number; y: number; width: number; height: number }, savePath?: string): InBrowser;
     markdown(selector?: string): InBrowser;
@@ -111,10 +108,9 @@ export interface InBrowser {
     wait(selector: string, result?: boolean): InBrowser;
     wait(selector: string, timeout?: number): InBrowser;
     wait(selector: string, option?: { timeout?: number, interval?: number, result?: boolean }): InBrowser;
-    // wait(func...) complex signatures omitted for brevity but supported via generic args pass-through
+    wait(func: InBrowserFunction, ...params: unknown[]): InBrowser;
     when(selector: string, result?: boolean): InBrowser;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    when(func: string | ((...params: any[]) => unknown), ...params: any[]): InBrowser;
+    when(func: string | InBrowserFunction, ...params: unknown[]): InBrowser;
     end(): InBrowser;
     devTools(mode?: 'right' | 'bottom' | 'undocked' | 'detach'): InBrowser;
     cookies(name?: string): InBrowser;
