@@ -592,7 +592,10 @@ export function registerWindowHandlers(
         }
         break
       case 'postMessage':
-        childWin.webContents.send('window:childMessage', String(args[0] ?? ''), ...args.slice(1))
+        {
+          const childPluginWc = getPluginWebContents(childWin) ?? childWin.webContents
+          childPluginWc.send('window:childMessage', String(args[0] ?? ''), ...args.slice(1))
+        }
         break
       default:
         log.warn(`Unknown child action: ${action}`)

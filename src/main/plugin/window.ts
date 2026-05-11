@@ -20,7 +20,7 @@ import {
   getWindowsFramelessSurfaceInsets,
   shouldUseWindowsFramelessSurface
 } from '../services/window-surface'
-import { registerView } from '../services/webcontents-registry'
+import { registerView, getPluginWebContents } from '../services/webcontents-registry'
 import { registerPluginWindow, unregisterPluginWindow } from '../services/ipc-caller-resolver'
 import { resolvePluginWindowIcon } from '../services/window-icon'
 import { registerProtectedWindow, unregisterProtectedWindow } from './input'
@@ -1050,7 +1050,7 @@ export class PluginWindowManager {
       show: false,
       frame: false,
       fullscreen: isFullscreen,
-      fullscreenable: options?.fullscreenable ?? isFullscreen,
+      fullscreenable: options?.fullscreenable ?? true,
       alwaysOnTop: options?.alwaysOnTop,
       resizable: options?.resizable,
       movable: options?.movable,
@@ -1283,6 +1283,10 @@ export class PluginWindowManager {
     installConsoleCaptureForWebContents(pluginWebContents, plugin.id)
 
     win.on('closed', () => {
+      const info = this.detachedWindows.get(windowId)
+      if (info) {
+        this.notifyParentChildWindowClosed(windowId, info)
+      }
       this.detachedWindows.delete(windowId)
       unpinWindowSize(windowId)
       unregisterPluginWindow(windowId)
@@ -1303,6 +1307,24 @@ export class PluginWindowManager {
       if (!info || info.window.isDestroyed()) return
       info.lastFocusedAt = Date.now()
       this.refreshDockPresentation()
+    })
+  }
+
+  private notifyParentChildWindowClosed(windowId: number, info: DetachedWindowInfo): void {
+    const parentId = info.creatorId
+    if (!parentId) return
+
+    const parentWin = BrowserWindow.fromId(parentId)
+    if (!parentWin || parentWin.isDestroyed()) return
+
+    const targetWc = getPluginWebContents(parentWin) ?? parentWin.webContents
+    if (targetWc.isDestroyed()) return
+
+    targetWc.send('window:childMessage', 'child-window-closed', {
+      id: windowId,
+      pluginId: info.plugin.id,
+      featureCode: info.featureCode,
+      at: Date.now()
     })
   }
 

@@ -7,6 +7,7 @@ const ROOT_DIR = process.cwd()
 const TEST_DIRS = [
   'src/renderer/__tests__',
   'src/main/ai/__tests__',
+  'src/main/ipc/__tests__',
   'src/main/services/__tests__',
   'src/main/plugin/__tests__'
 ]
