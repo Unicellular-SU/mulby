@@ -24,6 +24,7 @@ import { loggerService } from '../services/logger'
 import { resolveResourceLimits, applyResourceLimitsToWatchdog } from './resource-limits'
 import { PLUGIN_READY_TIMEOUT_MS, PROCESS_GRACEFUL_EXIT_MS } from '../constants/timing'
 import { PluginMessageBus } from './message-bus'
+import type { PluginMessage } from './message-bus'
 import { routeHostToolProgress } from './host-progress'
 import type { TaskScheduler } from '../scheduler'
 import type { ClipboardHistoryManager } from '../services/clipboard-history'
@@ -51,6 +52,7 @@ interface PluginHost {
   idleTimer: NodeJS.Timeout | null  // 空闲超时计时器
   idleTimeoutMs: number             // 空闲超时时长（0 = 永不销毁）
   cachedApi?: ReturnType<typeof createPluginAPI>  // 缓存 API 实例，避免每次请求重建
+  messageHandlers: Map<string, (message: PluginMessage) => void | Promise<void>>
   pendingRequests: Map<string, {
     resolve: (value: unknown) => void
     reject: (error: Error) => void
@@ -346,6 +348,7 @@ export class PluginHostManager extends EventEmitter {
         startedAt: Date.now(),
         idleTimer: null,
         idleTimeoutMs,
+        messageHandlers: new Map(),
         pendingRequests: new Map()
       }
 
@@ -558,6 +561,54 @@ export class PluginHostManager extends EventEmitter {
           })
           return result?.data ?? true
         })
+        host.process.postMessage({ id: message.id, success: true, data: undefined } as ApiResult)
+        return
+      }
+
+      if (api === 'messaging.on' && args[0] === '__plugin_messaging_on__') {
+        const handlerId = String(args[1] || '')
+        if (!handlerId) {
+          throw new Error('Missing messaging handler id')
+        }
+
+        const previousHandler = host.messageHandlers.get(handlerId)
+        if (previousHandler) {
+          this.messageBus.unsubscribe(plugin.id, previousHandler)
+        }
+
+        const handler = async (pluginMessage: PluginMessage) => {
+          await this.sendRequest(plugin.id, {
+            id: generateRequestId(),
+            type: 'deliverPluginMessage',
+            payload: {
+              handlerId,
+              message: pluginMessage
+            }
+          })
+        }
+
+        host.messageHandlers.set(handlerId, handler)
+        this.messageBus.subscribe(plugin.id, handler)
+        host.process.postMessage({ id: message.id, success: true, data: undefined } as ApiResult)
+        return
+      }
+
+      if (api === 'messaging.off' && args[0] === '__plugin_messaging_off__') {
+        const handlerId = String(args[1] || '')
+        const handler = host.messageHandlers.get(handlerId)
+        if (handler) {
+          this.messageBus.unsubscribe(plugin.id, handler)
+          host.messageHandlers.delete(handlerId)
+        }
+        host.process.postMessage({ id: message.id, success: true, data: undefined } as ApiResult)
+        return
+      }
+
+      if (api === 'messaging.off' && args[0] === '__plugin_messaging_off_all__') {
+        for (const handler of host.messageHandlers.values()) {
+          this.messageBus.unsubscribe(plugin.id, handler)
+        }
+        host.messageHandlers.clear()
         host.process.postMessage({ id: message.id, success: true, data: undefined } as ApiResult)
         return
       }
@@ -881,6 +932,7 @@ export class PluginHostManager extends EventEmitter {
     if (!host) return
 
     this.residentPins.delete(pluginName)
+    host.messageHandlers.clear()
 
     // 清理 idle timer（防止 host 销毁后 timer 仍悬挂触发）
     if (host.idleTimer) {

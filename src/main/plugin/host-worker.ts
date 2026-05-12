@@ -18,9 +18,10 @@ import type {
   RunRequest,
   CallHookRequest,
   CallTaskCallbackRequest,
-  CallHostMethodRequest
+  CallHostMethodRequest,
+  DeliverPluginMessageRequest
 } from './host-protocol'
-import type { PluginToolCallContext, PluginToolProgress } from '../../shared/types/plugin'
+import type { PluginMessage, PluginToolCallContext, PluginToolProgress } from '../../shared/types/plugin'
 import log from 'electron-log'
 
 // ============ 状态 ============
@@ -98,6 +99,11 @@ const pluginToolHandlers = new Map<string, (args: unknown, ctx?: PluginToolCallC
 // MainPush 本地回调存储（回调函数无法序列化到主进程，需在 worker 内本地保持）
 let mainPushHandler: ((action: { code: string; type: string; payload: string }) => unknown) | null = null
 let mainPushSelectHandler: ((action: { code: string; type: string; payload: string; option: unknown }) => unknown) | null = null
+
+// Messaging 本地回调存储。函数无法跨 UtilityProcess 序列化，主进程只保存 handlerId，
+// 收到消息后再通过 deliverPluginMessage 请求回投到当前 Worker。
+const pluginMessageHandlers = new Map<string, (message: PluginMessage) => void | Promise<void>>()
+let pluginMessageHandlerIds = new WeakMap<(message: PluginMessage) => void | Promise<void>, string>()
 
 // ============ 消息处理 ============
 
@@ -245,6 +251,50 @@ function createProxyAPI(): PluginAPI {
         })
       }
 
+      if (prop === 'messaging') {
+        return new Proxy({}, {
+          get(_, method: string) {
+            if (typeof method !== 'string') return undefined
+
+            if (method === 'on') {
+              return (callback: (message: PluginMessage) => void | Promise<void>) => {
+                if (typeof callback !== 'function') return
+                let handlerId = pluginMessageHandlerIds.get(callback)
+                if (!handlerId) {
+                  handlerId = `msg_handler_${Date.now()}_${Math.random().toString(36).slice(2, 11)}`
+                  pluginMessageHandlerIds.set(callback, handlerId)
+                }
+                pluginMessageHandlers.set(handlerId, callback)
+                return callMainApi('messaging.on', ['__plugin_messaging_on__', handlerId])
+              }
+            }
+
+            if (method === 'off') {
+              return (callback?: (message: PluginMessage) => void | Promise<void>) => {
+                if (!callback) {
+                  pluginMessageHandlers.clear()
+                  return callMainApi('messaging.off', ['__plugin_messaging_off_all__'])
+                }
+
+                const handlerId = pluginMessageHandlerIds.get(callback)
+                if (!handlerId) return
+                pluginMessageHandlers.delete(handlerId)
+                pluginMessageHandlerIds.delete(callback)
+                return callMainApi('messaging.off', ['__plugin_messaging_off__', handlerId])
+              }
+            }
+
+            if (method === 'send' || method === 'broadcast') {
+              return (...args: unknown[]) => {
+                return callMainApi(`messaging.${method}`, args)
+              }
+            }
+
+            return undefined
+          }
+        })
+      }
+
       // 返回一个代理对象，用于处理嵌套属性访问
       return new Proxy({}, {
         get(_, method: string) {
@@ -272,11 +322,26 @@ function handleInit(request: InitRequest): void {
   const { pluginName, pluginPath, mainFile } = request.payload
 
   try {
+    const previousPluginState = pluginState
+    const samePlugin = previousPluginState !== null
+      && previousPluginState.pluginName === pluginName
+      && previousPluginState.pluginPath === pluginPath
+      && previousPluginState.mainFile === mainFile
+    const currentModule = samePlugin ? previousPluginState.module : null
+
+    if (!samePlugin) {
+      pluginToolHandlers.clear()
+      mainPushHandler = null
+      mainPushSelectHandler = null
+      pluginMessageHandlers.clear()
+      pluginMessageHandlerIds = new WeakMap()
+    }
+
     pluginState = {
       pluginName,
       pluginPath,
       mainFile,
-      module: null
+      module: currentModule
     }
 
     send({
@@ -680,6 +745,30 @@ async function handleCallMainPushSelect(request: HostRequest & { type: 'callMain
   }
 }
 
+async function handleDeliverPluginMessage(request: DeliverPluginMessageRequest): Promise<void> {
+  try {
+    const handler = pluginMessageHandlers.get(request.payload.handlerId)
+    if (handler) {
+      await handler(request.payload.message)
+    }
+
+    send({
+      id: request.id,
+      type: 'result',
+      payload: { success: true }
+    })
+  } catch (err) {
+    send({
+      id: request.id,
+      type: 'error',
+      payload: {
+        message: err instanceof Error ? err.message : 'Plugin message handler failed',
+        stack: err instanceof Error ? err.stack : undefined
+      }
+    })
+  }
+}
+
 // ============ 主入口 ============
 
 /** 处理来自主进程的消息 */
@@ -713,6 +802,9 @@ function handleMessage(message: HostRequest | ApiResult): void {
       break
     case 'callMainPushSelect':
       void handleCallMainPushSelect(request)
+      break
+    case 'deliverPluginMessage':
+      void handleDeliverPluginMessage(request)
       break
     case 'terminate':
       process.exit(0)

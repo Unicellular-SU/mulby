@@ -4,6 +4,7 @@
  */
 
 import type { InputAttachment, PluginToolProgress } from '../../shared/types/plugin'
+import type { PluginMessage } from '../../shared/types/plugin'
 
 // ============ 消息类型 ============
 
@@ -16,6 +17,7 @@ export type HostRequestType =
   | 'callHostMethod'    // 调用 host 方法
   | 'callMainPush'      // 查询 MainPush 结果
   | 'callMainPushSelect' // MainPush 项选中
+  | 'deliverPluginMessage' // 向 Worker 内的 messaging.on 回调投递插件消息
   | 'terminate'   // 终止插件
 
 /** Worker -> 主进程的响应类型 */
@@ -103,13 +105,22 @@ export interface CallMainPushSelectRequest extends HostRequestBase {
   }
 }
 
+/** 插件消息投递请求 */
+export interface DeliverPluginMessageRequest extends HostRequestBase {
+  type: 'deliverPluginMessage'
+  payload: {
+    handlerId: string
+    message: PluginMessage
+  }
+}
+
 /** 终止请求 */
 export interface TerminateRequest extends HostRequestBase {
   type: 'terminate'
   payload: null
 }
 
-export type HostRequest = InitRequest | RunRequest | CallHookRequest | CallTaskCallbackRequest | CallHostMethodRequest | CallMainPushRequest | CallMainPushSelectRequest | TerminateRequest
+export type HostRequest = InitRequest | RunRequest | CallHookRequest | CallTaskCallbackRequest | CallHostMethodRequest | CallMainPushRequest | CallMainPushSelectRequest | DeliverPluginMessageRequest | TerminateRequest
 
 // ============ 响应消息 ============
 

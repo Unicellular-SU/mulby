@@ -5,10 +5,12 @@
 ## 概述
 
 Messaging API 提供了一个基于事件总线的插件间通信机制，支持：
+
 - 点对点消息发送
 - 广播消息到所有插件
 - 订阅和处理来自其他插件的消息
-- 消息历史查询
+
+消息总线只负责实时投递，不持久化未送达消息。插件如果需要在 UI 中展示最近消息，应在自己的后台进程中订阅并缓存消息，再通过 `host.call()` 暴露查询方法。
 
 ## 使用场景
 
@@ -59,8 +61,9 @@ await api.messaging.send('com.example.storage', 'save-data', {
 **注意事项**
 
 - 目标插件必须已启动并订阅了消息
-- 如果目标插件未订阅消息，消息会被丢弃
+- 如果目标插件未订阅消息，消息会被丢弃，不会排队等待
 - 消息发送是异步的，不保证立即送达
+- 目标插件 ID 必须使用 `manifest.id`，未声明 `id` 时才回退到 `manifest.name`
 
 ---
 
@@ -103,6 +106,7 @@ await api.messaging.broadcast('data-updated', {
 
 - 广播消息会发送给所有已订阅的插件（除了发送者）
 - 未订阅的插件不会收到消息
+- 广播不会发回发送者自己；如果 UI 需要即时反馈，请本地记录一条发送摘要
 - 广播是异步的，不保证所有插件同时收到
 
 ---
@@ -168,6 +172,7 @@ api.messaging.on((message) => {
 - 可以注册多个处理器，所有处理器都会被调用
 - 处理器支持异步函数
 - 处理器中的错误会被捕获，不会影响其他处理器
+- 在 UtilityProcess 后端中，回调会保存在 worker 内并由主进程转发投递；同一插件重复初始化不会丢失已加载模块中的订阅状态
 
 ---
 
@@ -208,6 +213,70 @@ api.messaging.off()
 - 取消订阅后，该处理器不会再收到新消息
 - 如果不提供 handler 参数，会移除该插件的所有消息处理器
 - 插件卸载时会自动清理所有订阅
+- 传入 `off(handler)` 的必须是当初传给 `on(handler)` 的同一个函数引用
+
+---
+
+## 后台订阅与 UI 查询
+
+需要稳定接收其他插件消息的插件应启用后台运行，并在 `onLoad` 或 `onBackground` 中注册订阅。UI 不直接接收后端消息，而是通过 `host.call()` 调用后端方法读取插件自己维护的缓存。
+
+**manifest.json**
+
+```json
+{
+  "id": "com.example.messaging-listener",
+  "name": "messaging-listener",
+  "main": "dist/main.js",
+  "ui": "ui/index.html",
+  "pluginSetting": {
+    "background": true,
+    "persistent": true,
+    "idleTimeoutMs": "never"
+  }
+}
+```
+
+**src/main.ts**
+
+```typescript
+let handler: ((message: PluginMessage) => void | Promise<void>) | null = null
+const recentMessages: PluginMessage[] = []
+
+function registerMessaging(api: BackendPluginAPI) {
+  if (handler) {
+    api.messaging.off(handler)
+  }
+
+  handler = (message) => {
+    recentMessages.unshift(message)
+    recentMessages.splice(50)
+  }
+
+  api.messaging.on(handler)
+}
+
+export function onLoad(context?: BackendPluginContext) {
+  if (context) registerMessaging(context.api)
+}
+
+export function onBackground(context?: BackendPluginContext) {
+  if (context) registerMessaging(context.api)
+}
+
+export function onUnload(context?: BackendPluginContext) {
+  if (handler && context) {
+    context.api.messaging.off(handler)
+    handler = null
+  }
+}
+
+export const rpc = {
+  getRecentMessages() {
+    return recentMessages
+  }
+}
+```
 
 ---
 
