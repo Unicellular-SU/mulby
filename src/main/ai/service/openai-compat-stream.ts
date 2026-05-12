@@ -246,7 +246,7 @@ export async function streamOpenAICompatChat(
   },
   onChunk?: (chunk: AiMessage) => void,
   abortSignal?: AbortSignal
-): Promise<{ content: string; reasoning: string }> {
+): Promise<{ content: string; reasoning: string; usage?: { inputTokens?: number; outputTokens?: number } }> {
   context.assertNotAborted(abortSignal)
   const allowReasoning = supportsReasoning(`openai:${input.model}`)
   const baseURL = context.resolveCompatBaseURL(input.baseURL, input.providerType)
@@ -261,6 +261,7 @@ export async function streamOpenAICompatChat(
   const requestBody = JSON.stringify({
     model: input.model,
     stream: true,
+    stream_options: { include_usage: true },
     messages: input.messages,
     tools: input.tools,
     temperature: input.params.temperature,
@@ -309,6 +310,7 @@ export async function streamOpenAICompatChat(
   let buffer = ''
   let content = ''
   let reasoning = ''
+  let usage: { inputTokens?: number; outputTokens?: number } | undefined
   const thinkTagState = allowReasoning ? createThinkTagStreamState(input.model) : undefined
 
   while (true) {
@@ -338,10 +340,11 @@ export async function streamOpenAICompatChat(
             context.emitTextChunk(onChunk, tail.content)
           }
         }
-        return { content, reasoning }
+        return { content, reasoning, usage }
       }
       try {
         const json = JSON.parse(data)
+        usage = extractUsage(json) || usage
         const delta = json.choices?.[0]?.delta || {}
         const reasoningChunk = delta.reasoning_content || delta.reasoning
         const contentChunk = delta.content
@@ -386,7 +389,7 @@ export async function streamOpenAICompatChat(
     }
   }
 
-  return { content, reasoning }
+  return { content, reasoning, usage }
 }
 
 export async function runOpenAICompatToolLoop(

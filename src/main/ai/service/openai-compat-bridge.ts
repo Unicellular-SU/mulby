@@ -64,7 +64,7 @@ export interface OpenAICompatBridge {
     },
     onChunk?: (chunk: AiMessage) => void,
     abortSignal?: AbortSignal
-  ) => Promise<{ content: string; reasoning: string }>
+  ) => Promise<{ content: string; reasoning: string; usage?: { inputTokens?: number; outputTokens?: number } }>
   runOpenAICompatToolLoop: (
     input: {
       model: string

@@ -638,7 +638,7 @@ export function extractUsage(result: unknown): { inputTokens?: number; outputTok
   const resultRecord = asRecord(result)
   const responseRecord = asRecord(resultRecord?.response)
   const metadataRecord = asRecord(resultRecord?.metadata)
-  const usage = resultRecord?.usage ?? responseRecord?.usage ?? metadataRecord?.usage
+  const usage = resultRecord?.totalUsage ?? resultRecord?.usage ?? responseRecord?.usage ?? metadataRecord?.usage
   const usageRecord = asRecord(usage)
   if (!usageRecord) return undefined
   const inputTokens =
@@ -658,6 +658,33 @@ export function extractUsage(result: unknown): { inputTokens?: number; outputTok
     inputTokens: inputTokens !== undefined ? Number(inputTokens) : undefined,
     outputTokens: outputTokens !== undefined ? Number(outputTokens) : undefined
   }
+}
+
+function isPromiseLike(value: unknown): value is PromiseLike<unknown> {
+  return !!value && typeof value === 'object' && typeof (value as { then?: unknown }).then === 'function'
+}
+
+async function resolveOptionalPromise(value: unknown): Promise<unknown> {
+  return isPromiseLike(value) ? await value : value
+}
+
+export async function extractUsageAsync(result: unknown): Promise<{ inputTokens?: number; outputTokens?: number } | undefined> {
+  const resultRecord = asRecord(result)
+  if (!resultRecord) return undefined
+
+  const sources = [
+    resultRecord.totalUsage,
+    resultRecord.usage,
+    asRecord(resultRecord.response)?.usage,
+    asRecord(resultRecord.metadata)?.usage
+  ]
+
+  for (const source of sources) {
+    const usage = extractUsage({ usage: await resolveOptionalPromise(source) })
+    if (usage) return usage
+  }
+
+  return undefined
 }
 
 export function normalizeUsage(

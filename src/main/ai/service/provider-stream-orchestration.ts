@@ -15,7 +15,7 @@ import { supportsReasoning } from '../modelCapabilities'
 import { isOpenAICompatibleProvider, shouldUseChatCompletions } from '../providerAdapterCatalog'
 import { countTokensForText, countTokensFromMessages } from '../tokens'
 import { aggregateSdkStreamResult } from './reply-aggregation'
-import { extractUsage, normalizeUsage, resolveMaxToolSteps } from './utils'
+import { extractUsageAsync, normalizeUsage, resolveMaxToolSteps } from './utils'
 import log from 'electron-log'
 
 type StreamRoute = 'anthropic-native' | 'openai-compat-chat' | 'openai-compat-tool-loop' | 'ai-sdk-stream'
@@ -37,7 +37,7 @@ export interface ProviderStreamOrchestrationDeps {
     },
     onChunk?: (chunk: AiMessage) => void,
     abortSignal?: AbortSignal
-  ) => Promise<{ content: string; reasoning: string }>
+  ) => Promise<{ content: string; reasoning: string; usage?: { inputTokens?: number; outputTokens?: number } }>
   toOpenAIChatMessages: (
     messages: AiMessage[],
     modelId?: string,
@@ -63,7 +63,7 @@ export interface ProviderStreamOrchestrationDeps {
     },
     onChunk?: (chunk: AiMessage) => void,
     abortSignal?: AbortSignal
-  ) => Promise<{ content: string; reasoning: string }>
+  ) => Promise<{ content: string; reasoning: string; usage?: { inputTokens?: number; outputTokens?: number } }>
   runOpenAICompatToolLoop: (
     input: {
       model: string
@@ -181,7 +181,7 @@ export async function executeProviderStreamOrchestration(
     executeCompatChatStream: async () => {
       input.markRoute('openai-compat-chat')
       const messages = await input.deps.toOpenAIChatMessages(input.effectiveOption.messages, input.effectiveOption.model)
-      const { content, reasoning } = await input.deps.streamOpenAICompatChat({
+      const { content, reasoning, usage } = await input.deps.streamOpenAICompatChat({
         model: input.resolvedModelId,
         providerType: input.providerType,
         messages: messages as Array<{
@@ -203,7 +203,7 @@ export async function executeProviderStreamOrchestration(
         content,
         reasoning,
         usage: normalizeUsage(
-          undefined,
+          usage,
           countTokensFromMessages(input.trimmedMessages, input.effectiveOption.model),
           countTokensForText(`${reasoning || ''}${content || ''}`, input.effectiveOption.model)
         )
@@ -297,7 +297,7 @@ export async function executeProviderStreamOrchestration(
         reasoning,
         allowReasoning,
         usage: normalizeUsage(
-          extractUsage(result),
+          await extractUsageAsync(result),
           countTokensFromMessages(input.trimmedMessages, input.effectiveOption.model),
           countTokensForText(`${reasoning || ''}${content || ''}`, input.effectiveOption.model)
         )
