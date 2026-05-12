@@ -183,21 +183,25 @@ module.exports = async function afterPack(context) {
   // 修复 sharp exports subpath 兼容问题（详见 fixSharpNativeBinaries 注释）
   fixSharpNativeBinaries(unpackedDir)
 
-  if (process.env.MULBY_MAC_UNSIGNED_RESOURCE_UPDATES === 'true') {
-    console.log('[afterPack] Unsigned macOS resource update mode enabled; skipping bundle and nested code signing')
-    return
+  const forceAdhoc = process.env.MULBY_MAC_UNSIGNED_RESOURCE_UPDATES === 'true'
+
+  let selectedIdentity = null
+  if (!forceAdhoc) {
+    const identities = listSigningIdentities()
+    selectedIdentity = chooseIdentity(identities)
   }
 
-  const identities = listSigningIdentities()
-  const selectedIdentity = chooseIdentity(identities)
-
-  if (selectedIdentity) {
+  if (forceAdhoc) {
+    console.log(`[afterPack] Unsigned resource update mode: using ad-hoc signing for bundle integrity`)
+  } else if (selectedIdentity) {
     console.log(`[afterPack] Using local signing identity: ${selectedIdentity.name} (${selectedIdentity.hash})`)
   } else {
     console.log(`[afterPack] No local signing identity found, fallback to ad-hoc signing ${appPath}`)
   }
 
   let signedNestedCount = 0
+
+  // Sign code objects in app.asar.unpacked (node_modules native addons)
   if (existsSync(unpackedDir)) {
     const codeObjects = listFilesRecursively(unpackedDir).filter((filePath) => {
       if (filePath.endsWith('.dSYM')) return false
@@ -221,6 +225,28 @@ module.exports = async function afterPack(context) {
 
   if (signedNestedCount > 0) {
     console.log(`[afterPack] Signed nested code objects: ${signedNestedCount}`)
+  }
+
+  // Sign code objects in extraResources (native/build/Release/*.node)
+  const extraResourcesDir = path.join(appPath, 'Contents', 'Resources')
+  const nativeReleaseDir = path.join(extraResourcesDir, 'native', 'build', 'Release')
+  if (existsSync(nativeReleaseDir)) {
+    const nativeNodes = listFilesRecursively(nativeReleaseDir).filter((filePath) =>
+      filePath.endsWith('.node') || isMachOFile(filePath)
+    )
+    nativeNodes
+      .sort((a, b) => b.length - a.length)
+      .forEach((codePath) => {
+        if (selectedIdentity) {
+          signWithIdentity(codePath, selectedIdentity.hash)
+        } else {
+          signAdhoc(codePath)
+        }
+        signedNestedCount += 1
+      })
+    if (nativeNodes.length > 0) {
+      console.log(`[afterPack] Signed extraResources native modules: ${nativeNodes.length}`)
+    }
   }
 
   const appSignArgs = [

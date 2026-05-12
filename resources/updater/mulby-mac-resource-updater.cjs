@@ -136,6 +136,50 @@ function validateStaging(stagingDir) {
   return stagedRoots
 }
 
+function adhocSignUpdatedBundle(resourcesDir, stagedRoots, logFile) {
+  const dirsToSign = []
+
+  if (stagedRoots.includes('native/build/Release')) {
+    const nativeDir = path.join(resourcesDir, 'native/build/Release')
+    if (fs.existsSync(nativeDir)) dirsToSign.push(nativeDir)
+  }
+
+  if (stagedRoots.includes('app.asar.unpacked')) {
+    const unpackedDir = path.join(resourcesDir, 'app.asar.unpacked')
+    if (fs.existsSync(unpackedDir)) dirsToSign.push(unpackedDir)
+  }
+
+  if (dirsToSign.length === 0) return
+
+  let signedCount = 0
+  for (const dir of dirsToSign) {
+    const entries = collectRelativeEntries(dir)
+    for (const entry of entries) {
+      if (!entry.endsWith('.node') && !entry.endsWith('.dylib')) continue
+      const filePath = path.join(dir, entry)
+      try {
+        const stat = fs.statSync(filePath)
+        if (!stat.isFile()) continue
+        execFileSync('/usr/bin/codesign', ['--force', '--sign', '-', '--timestamp=none', filePath], { stdio: 'pipe' })
+        signedCount += 1
+      } catch (err) {
+        appendLog(logFile, `Warning: failed to sign ${entry}: ${err.message}`)
+      }
+    }
+  }
+
+  if (signedCount > 0) {
+    appendLog(logFile, `Ad-hoc signed ${signedCount} native module(s)`)
+  }
+
+  // NOTE: Do NOT re-sign the .app bundle here.
+  // Re-signing with --deep changes the main executable's CDHash, which invalidates
+  // the TCC (Transparency, Consent, and Control) accessibility permission grant.
+  // macOS does not enforce sealed resource validation at runtime for ad-hoc signed apps;
+  // it only matters at Gatekeeper first-launch. Individual .node files are signed above
+  // so that dlopen() can load them.
+}
+
 function applyResources({ stagingDir, resourcesDir, backupDir, stagedRoots, logFile }) {
   const changedRoots = []
 
@@ -205,6 +249,7 @@ async function main() {
     const stagedRoots = validateStaging(stagingDir)
     ensureDir(backupDir)
     applyResources({ stagingDir, resourcesDir, backupDir, stagedRoots, logFile })
+    adhocSignUpdatedBundle(resourcesDir, stagedRoots, logFile)
 
     appendLog(logFile, `Resource update applied; backup=${backupDir}`)
     if (!args.noRelaunch) {
