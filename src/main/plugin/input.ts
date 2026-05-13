@@ -4,6 +4,16 @@ import { promisify } from 'util'
 import { pathToFileURL } from 'url'
 import log from 'electron-log'
 import { hasDetachedWindows, isAppExplicitlyHidden, markAppHidden, markAppVisible } from '../services/blur-manager'
+import {
+  nativeWin32KeyboardTap,
+  nativeWin32MouseClick,
+  nativeWin32MouseMove,
+  nativeWin32Paste,
+  restoreWin32ForegroundWindow,
+  nativeWin32TypeText,
+  writeWin32FilesToClipboard
+} from '../services/native-win32-input'
+import { getCachedWindowsForegroundWindow } from '../services/active-window'
 
 const execFileAsync = promisify(execFile)
 const FOCUS_DELAY_MS = 160
@@ -339,27 +349,12 @@ ${paths.map(p => `    <string>${escapeXmlText(p)}</string>`).join('\n')}
   }
 
   if (process.platform === 'win32') {
-    log.warn('[Input] Windows file clipboard write is not supported by Electron clipboard.write; returning false')
-    return false
+    return writeWin32FilesToClipboard(paths)
   }
 
   const uriList = paths.map(p => pathToFileURL(p).toString()).join('\n')
   clipboard.writeBuffer('text/uri-list', Buffer.from(uriList))
   return true
-}
-
-function escapeSendKeys(text: string): string {
-  const map: Record<string, string> = {
-    '{': '{{}',
-    '}': '{}}',
-    '+': '{+}',
-    '^': '{^}',
-    '%': '{%}',
-    '~': '{~}',
-    '(': '{(}',
-    ')': '{)}'
-  }
-  return text.replace(/[{}+^%~()]/g, ch => map[ch])
 }
 
 async function sendPasteShortcut(): Promise<void> {
@@ -372,8 +367,10 @@ async function sendPasteShortcut(): Promise<void> {
   }
 
   if (process.platform === 'win32') {
-    const script = '$wshell = New-Object -ComObject wscript.shell; $wshell.SendKeys("^v")'
-    await execFileAsync('powershell', ['-NoProfile', '-Command', script])
+    const ok = nativeWin32Paste()
+    if (!ok) {
+      throw new Error('Windows SendInput paste shortcut failed')
+    }
     return
   }
 
@@ -395,9 +392,10 @@ async function sendTypeString(text: string): Promise<void> {
   }
 
   if (process.platform === 'win32') {
-    const escaped = escapeSendKeys(text)
-    const script = 'param([string]$text) Add-Type -AssemblyName System.Windows.Forms; [System.Windows.Forms.SendKeys]::SendWait($text)'
-    await execFileAsync('powershell', ['-NoProfile', '-Command', script, escaped])
+    const ok = nativeWin32TypeText(text)
+    if (!ok) {
+      throw new Error('Windows SendInput unicode typing failed')
+    }
     return
   }
 
@@ -438,25 +436,10 @@ async function simulateKeyboardTapInternal(key: string, modifiers: string[]): Pr
   }
 
   if (process.platform === 'win32') {
-    // Windows: 使用 PowerShell SendKeys
-    if (!KEY_MAP[lowerKey] && !isSingleKey(lowerKey)) {
-      throw new TypeError(`Unsupported Windows input key: ${key}`)
+    const ok = nativeWin32KeyboardTap(lowerKey, modifiers)
+    if (!ok) {
+      throw new Error(`Windows SendInput keyboard tap failed: ${key}`)
     }
-
-    const platformKey = getPlatformKey(key)
-    let keyStr: string
-    if (KEY_MAP[lowerKey]) {
-      keyStr = platformKey
-    } else {
-      keyStr = escapeSendKeys(lowerKey)
-    }
-
-    // 添加修饰键前缀
-    const modifierPrefix = modifiers.map(m => getPlatformModifier(m)).join('')
-    const fullKey = `${modifierPrefix}${keyStr}`
-
-    const script = 'param([string]$keys) Add-Type -AssemblyName System.Windows.Forms; [System.Windows.Forms.SendKeys]::SendWait($keys)'
-    await execFileAsync('powershell', ['-NoProfile', '-Command', script, fullKey])
     return
   }
 
@@ -486,11 +469,10 @@ async function simulateMouseMoveInternal(x: number, y: number): Promise<void> {
   }
 
   if (process.platform === 'win32') {
-    const script = `
-Add-Type -AssemblyName System.Windows.Forms
-[System.Windows.Forms.Cursor]::Position = New-Object System.Drawing.Point(${x}, ${y})
-`
-    await execFileAsync('powershell', ['-NoProfile', '-Command', script])
+    const ok = nativeWin32MouseMove(x, y)
+    if (!ok) {
+      throw new Error(`Windows SetCursorPos failed: ${x}, ${y}`)
+    }
     return
   }
 
@@ -532,25 +514,10 @@ async function simulateMouseClickInternal(x: number, y: number, button: 'left' |
   }
 
   if (process.platform === 'win32') {
-    const downFlag = button === 'right' ? '0x0008' : '0x0002'
-    const upFlag = button === 'right' ? '0x0010' : '0x0004'
-
-    let clickScript = `
-Add-Type -AssemblyName System.Windows.Forms
-$signature = @'
-[DllImport("user32.dll")]
-public static extern void mouse_event(int dwFlags, int dx, int dy, int dwData, int dwExtraInfo);
-'@
-$mouse = Add-Type -MemberDefinition $signature -Name "Win32MouseEvent" -Namespace Win32Functions -PassThru
-[System.Windows.Forms.Cursor]::Position = New-Object System.Drawing.Point(${x}, ${y})
-`
-    for (let i = 0; i < clickCount; i++) {
-      clickScript += `
-$mouse::mouse_event(${downFlag}, 0, 0, 0, 0)
-$mouse::mouse_event(${upFlag}, 0, 0, 0, 0)
-`
+    const ok = nativeWin32MouseClick(x, y, button, clickCount)
+    if (!ok) {
+      throw new Error(`Windows SendInput mouse click failed: ${button}`)
     }
-    await execFileAsync('powershell', ['-NoProfile', '-Command', clickScript])
     return
   }
 
@@ -562,6 +529,12 @@ $mouse::mouse_event(${upFlag}, 0, 0, 0, 0)
 
 async function withHiddenWindow(action: () => Promise<void>): Promise<void> {
   hideAllAppWindows()
+  if (process.platform === 'win32') {
+    const targetWindow = getCachedWindowsForegroundWindow()
+    if (targetWindow && !restoreWin32ForegroundWindow(targetWindow)) {
+      log.warn('[Input] Failed to restore previous Windows foreground window before input')
+    }
+  }
   await sleep(FOCUS_DELAY_MS)
   try {
     await action()

@@ -530,6 +530,10 @@ export class MainWindowManager {
     }
 
     try {
+      if (process.platform === 'win32') {
+        refreshActiveWindowCache()
+      }
+
       const visibleBounds = getMainWindowVisibleBounds(this.window.getBounds())
       const targetVisibleBounds = this.resolveVisibleBounds(visibleBounds)
       const windowBounds = getMainWindowWindowBounds(targetVisibleBounds)
@@ -558,7 +562,9 @@ export class MainWindowManager {
         }
       }
 
-      refreshActiveWindowCache()
+      if (process.platform !== 'win32') {
+        refreshActiveWindowCache()
+      }
 
       if (needsOpacityGuard) {
         this.window.webContents.invalidate()

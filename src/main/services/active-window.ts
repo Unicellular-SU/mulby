@@ -24,6 +24,9 @@ export interface ActiveWindowInfo {
   bundleId?: string
 }
 
+/** Windows 专用：最近一个非 Mulby 自身的前台窗口句柄。 */
+let cachedWindowsForegroundWindow: unknown = null
+
 type ActiveWindowChangeCallback = (info: ActiveWindowInfo) => void
 const subscriptions = new Set<ActiveWindowChangeCallback>()
 
@@ -88,8 +91,10 @@ export async function getActiveWindow(): Promise<ActiveWindowInfo | null> {
 
   try {
     const result = await getActiveWindowPlatform()
-    cachedResult = result
-    cachedAt = now
+    if (shouldPublishActiveWindowInfo(result, process.pid)) {
+      cachedResult = result
+      cachedAt = now
+    }
     return result
   } catch {
     return null
@@ -103,7 +108,7 @@ export async function getActiveWindow(): Promise<ActiveWindowInfo | null> {
 export function refreshActiveWindowCache(): void {
   getActiveWindowPlatform()
     .then((result) => {
-      if (result) {
+      if (shouldPublishActiveWindowInfo(result, process.pid)) {
         cachedResult = result
         cachedAt = Date.now()
       }
@@ -123,10 +128,15 @@ export function getCachedActiveWindow(): ActiveWindowInfo | null {
   return cachedResult
 }
 
+export function getCachedWindowsForegroundWindow(): unknown {
+  return cachedWindowsForegroundWindow
+}
+
 /** 清除缓存（测试用） */
 export function clearActiveWindowCache(): void {
   cachedResult = null
   cachedAt = 0
+  cachedWindowsForegroundWindow = null
 }
 
 // --- 平台实现 ---
@@ -153,6 +163,13 @@ let _macOSWatcherUnsub: (() => void) | null = null
 function isSelfProcess(pid: number | undefined): boolean {
   if (!pid) return false
   return pid === process.pid
+}
+
+export function shouldPublishActiveWindowInfo(
+  info: ActiveWindowInfo | null,
+  selfPid: number
+): info is ActiveWindowInfo {
+  return Boolean(info && (!info.pid || info.pid !== selfPid))
 }
 
 function startMacOSNativeWatcher() {
@@ -255,7 +272,7 @@ function startWindowsPoller() {
   if (_winPollerInterval) return
   _winPollerInterval = setInterval(() => {
     const info = getActiveWindowWindows()
-    if (info) {
+    if (shouldPublishActiveWindowInfo(info, process.pid)) {
       if (!cachedResult || cachedResult.app !== info.app || cachedResult.title !== info.title) {
         cachedResult = info
         cachedAt = Date.now()
@@ -374,6 +391,14 @@ function getWin32(): Win32Api {
 
 const PROCESS_QUERY_LIMITED_INFORMATION = 0x1000
 
+export function shouldCacheWindowsForegroundWindow(
+  hWnd: unknown,
+  selfPid: number,
+  foregroundPid?: number
+): boolean {
+  return Boolean(hWnd && foregroundPid && foregroundPid !== selfPid)
+}
+
 function getActiveWindowWindows(): ActiveWindowInfo | null {
   const api = getWin32()
 
@@ -392,6 +417,9 @@ function getActiveWindowWindows(): ActiveWindowInfo | null {
   const pidOut: unknown[] = [null]
   const tid = api.GetWindowThreadProcessId(hWnd, pidOut)
   const pid = pidOut[0] as number
+  if (shouldCacheWindowsForegroundWindow(hWnd, process.pid, pid)) {
+    cachedWindowsForegroundWindow = hWnd
+  }
   if (!tid || !pid) {
     return { app: '', title, pid: undefined }
   }

@@ -56,7 +56,7 @@ await input.hideMainWindowPasteFile(['/path/a.txt', '/path/b.txt']);
 
 **返回值**: `boolean`（插件后端返回 `Promise<boolean>`） - 是否执行成功
 
-**注意**: Windows 当前不支持通过 Electron 剪贴板可靠写入文件列表，此方法会返回 `false`，避免误报粘贴成功。
+**说明**: Windows 使用原生 `CF_HDROP` 文件列表写入剪贴板，macOS 和 Linux 使用各自平台的文件剪贴板格式。
 
 ### hideMainWindowTypeString(text)
 [Renderer] [Backend]
@@ -258,7 +258,7 @@ module.exports = {
 
 3. **权限要求**:
    - macOS: 需要在系统偏好设置中授予辅助功能权限
-   - Windows: 某些操作可能需要管理员权限
+   - Windows: 输入模拟使用系统原生 `SendInput`，无法向更高完整性级别的受保护窗口注入输入
    - Linux: 依赖 `xdotool` 工具，Wayland 环境可能受限
 
 4. **获取鼠标坐标**: 可以配合 `screen.getCursorScreenPoint()` API 获取当前鼠标位置：
