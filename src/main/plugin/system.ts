@@ -1,16 +1,35 @@
 import { app, nativeImage, NativeImage, shell } from 'electron'
 import * as os from 'os'
 import * as crypto from 'crypto'
-import { existsSync, readFileSync } from 'fs'
+import { closeSync, existsSync, mkdirSync, openSync, readFileSync } from 'fs'
 import { lstat, readdir } from 'fs/promises'
 import { extname, join } from 'path'
-import { spawnSync } from 'child_process'
+import { execFile, spawnSync } from 'child_process'
+import { promisify } from 'util'
 import {
   getActiveWindow as resolveActiveWindowFromOs,
   getCachedActiveWindow,
   onActiveWindowChange,
   type ActiveWindowInfo,
 } from '../services/active-window'
+import { recordCrashBreadcrumb } from '../services/crash-breadcrumbs'
+
+const EXTENSION_ONLY_ICON_REQUEST_RE = /^\.[a-z0-9][a-z0-9.+_-]{0,63}$/i
+const DARWIN_SYNTHETIC_ICON_HELPER_TIMEOUT_MS = 2500
+const DARWIN_SYNTHETIC_ICON_HELPER_MAX_BUFFER = 1024 * 1024
+const execFileAsync = promisify(execFile)
+
+export function isExtensionOnlyIconRequest(filePath: string): boolean {
+  const normalized = filePath.trim()
+  return EXTENSION_ONLY_ICON_REQUEST_RE.test(normalized) &&
+    !normalized.includes('/') &&
+    !normalized.includes('\\')
+}
+
+export function isSyntheticSystemIconRequest(filePath: string): boolean {
+  const normalized = filePath.trim()
+  return isExtensionOnlyIconRequest(normalized) || normalized.toLowerCase() === 'folder'
+}
 
 export interface SystemInfo {
   platform: NodeJS.Platform
@@ -91,6 +110,14 @@ export interface SystemIconSingleOptions {
 export interface SystemIconBatchOptions {
   size?: number
   concurrency?: number
+}
+
+export interface SystemIconTraceContext {
+  pluginId?: string
+  callerSource?: 'app' | 'plugin' | 'untrusted'
+  windowId?: number
+  webContentsId?: number
+  channel?: string
 }
 
 export class PluginSystem {
@@ -318,20 +345,51 @@ export class PluginSystem {
    * @param filePath 文件路径、扩展名（如 .txt）或 'folder'
    * @returns base64 Data URL 格式的图标
    */
-  async getFileIcon(filePath: string, options: SystemIconSingleOptions = {}): Promise<string> {
+  async getFileIcon(
+    filePath: string,
+    options: SystemIconSingleOptions = {},
+    traceContext?: SystemIconTraceContext
+  ): Promise<string> {
     const normalizedPath = filePath.trim()
-    if (!normalizedPath) return ''
+    if (!normalizedPath) {
+      this.recordIconBreadcrumb('system.icon:getFileIcon:empty', traceContext)
+      return ''
+    }
 
     const kind = this.resolveIconKind(normalizedPath, options.kind)
     const size = this.normalizeIconSize(options.size)
-    return this.getFileIconInternal(normalizedPath, { kind, size })
+    this.recordIconBreadcrumb('system.icon:getFileIcon:start', traceContext, {
+      path: normalizedPath,
+      kind,
+      size,
+      platform: process.platform
+    })
+    try {
+      const icon = await this.getFileIconInternal(normalizedPath, { kind, size }, traceContext)
+      this.recordIconBreadcrumb('system.icon:getFileIcon:done', traceContext, {
+        path: normalizedPath,
+        kind,
+        hasIcon: Boolean(icon),
+        length: icon.length
+      })
+      return icon
+    } catch (error) {
+      this.recordIconBreadcrumb('system.icon:getFileIcon:error', traceContext, {
+        path: normalizedPath,
+        kind,
+        error
+      })
+      throw error
+    }
   }
 
   async getFileIcons(
     requests: SystemIconRequest[],
-    options: SystemIconBatchOptions = {}
+    options: SystemIconBatchOptions = {},
+    traceContext?: SystemIconTraceContext
   ): Promise<SystemIconResult[]> {
     if (!Array.isArray(requests) || requests.length === 0) {
+      this.recordIconBreadcrumb('system.icon:getFileIcons:empty', traceContext)
       return []
     }
 
@@ -340,70 +398,162 @@ export class PluginSystem {
     const results = new Array<SystemIconResult>(requests.length)
     const localInflight = new Map<string, Promise<string>>()
 
-    await this.runWithConcurrency(requests, concurrency, async (request, index) => {
-      const normalizedPath = (request.path || '').trim()
-      const kind = this.resolveIconKind(normalizedPath, request.kind)
-      const size = this.normalizeIconSize(request.size ?? defaultSize)
-      const key = request.key || `${kind}:${normalizedPath}`
-
-      if (!normalizedPath) {
-        results[index] = { key, path: normalizedPath, kind, icon: '' }
-        return
-      }
-
-      const cacheKey = this.buildIconCacheKey(normalizedPath, kind, size)
-      let pending = localInflight.get(cacheKey)
-      if (!pending) {
-        pending = this.getFileIconInternal(normalizedPath, { kind, size })
-        localInflight.set(cacheKey, pending)
-      }
-
-      const icon = await pending
-      results[index] = {
-        key,
-        path: normalizedPath,
-        kind,
-        icon
-      }
+    this.recordIconBreadcrumb('system.icon:getFileIcons:start', traceContext, {
+      count: requests.length,
+      defaultSize,
+      concurrency,
+      platform: process.platform
     })
 
-    return results
+    try {
+      await this.runWithConcurrency(requests, concurrency, async (request, index) => {
+        const normalizedPath = (request.path || '').trim()
+        const kind = this.resolveIconKind(normalizedPath, request.kind)
+        const size = this.normalizeIconSize(request.size ?? defaultSize)
+        const key = request.key || `${kind}:${normalizedPath}`
+
+        this.recordIconBreadcrumb('system.icon:getFileIcons:item:start', traceContext, {
+          index,
+          key,
+          path: normalizedPath,
+          kind,
+          size
+        })
+
+        if (!normalizedPath) {
+          results[index] = { key, path: normalizedPath, kind, icon: '' }
+          return
+        }
+
+        const cacheKey = this.buildIconCacheKey(normalizedPath, kind, size)
+        let pending = localInflight.get(cacheKey)
+        if (!pending) {
+          pending = this.getFileIconInternal(normalizedPath, { kind, size }, traceContext)
+          localInflight.set(cacheKey, pending)
+        }
+
+        const icon = await pending
+        results[index] = {
+          key,
+          path: normalizedPath,
+          kind,
+          icon
+        }
+        this.recordIconBreadcrumb('system.icon:getFileIcons:item:done', traceContext, {
+          index,
+          key,
+          path: normalizedPath,
+          hasIcon: Boolean(icon),
+          length: icon.length
+        })
+      })
+
+      this.recordIconBreadcrumb('system.icon:getFileIcons:done', traceContext, {
+        count: requests.length,
+        icons: results.filter((result) => Boolean(result?.icon)).length
+      })
+
+      return results
+    } catch (error) {
+      this.recordIconBreadcrumb('system.icon:getFileIcons:error', traceContext, {
+        count: requests.length,
+        error
+      })
+      throw error
+    }
   }
 
   clearFileIconCache(): void {
     this.fileIconCache.clear()
   }
 
+  private recordIconBreadcrumb(
+    event: string,
+    traceContext: SystemIconTraceContext | undefined,
+    data: Record<string, unknown> = {}
+  ): void {
+    recordCrashBreadcrumb(event, {
+      pluginId: traceContext?.pluginId,
+      callerSource: traceContext?.callerSource,
+      windowId: traceContext?.windowId,
+      webContentsId: traceContext?.webContentsId,
+      channel: traceContext?.channel,
+      ...data
+    })
+  }
+
   private async getFileIconInternal(
     normalizedPath: string,
-    options: { kind: SystemIconKind; size: number }
+    options: { kind: SystemIconKind; size: number },
+    traceContext?: SystemIconTraceContext
   ): Promise<string> {
     const cacheKey = this.buildIconCacheKey(normalizedPath, options.kind, options.size)
     const cached = this.fileIconCache.get(cacheKey)
     if (cached) {
-
+      this.recordIconBreadcrumb('system.icon:cache-hit', traceContext, {
+        path: normalizedPath,
+        kind: options.kind,
+        size: options.size
+      })
       return cached
     }
 
 
 
-
-    const resolved = await this.resolveNativeIcon(normalizedPath, options)
+    this.recordIconBreadcrumb('system.icon:resolve:start', traceContext, {
+      path: normalizedPath,
+      kind: options.kind,
+      size: options.size
+    })
+    const resolved = await this.resolveNativeIcon(normalizedPath, options, traceContext)
+    this.recordIconBreadcrumb('system.icon:resolve:done', traceContext, {
+      path: normalizedPath,
+      source: resolved.source,
+      error: resolved.error
+    })
     if (!this.isUsableNativeIcon(resolved.icon)) {
-
+      this.recordIconBreadcrumb('system.icon:unusable-native-icon', traceContext, {
+        path: normalizedPath,
+        source: resolved.source
+      })
       return ''
     }
 
+    this.recordIconBreadcrumb('system.icon:normalize:before', traceContext, {
+      path: normalizedPath,
+      source: resolved.source,
+      targetSize: options.size
+    })
     const normalizedIcon = this.normalizeIcon(resolved.icon, options.size)
+    this.recordIconBreadcrumb('system.icon:normalize:after', traceContext, {
+      path: normalizedPath,
+      source: resolved.source
+    })
     if (!this.isUsableNativeIcon(normalizedIcon)) {
-
+      this.recordIconBreadcrumb('system.icon:unusable-normalized-icon', traceContext, {
+        path: normalizedPath,
+        source: resolved.source
+      })
       return ''
     }
 
+    this.recordIconBreadcrumb('system.icon:toDataURL:before', traceContext, {
+      path: normalizedPath,
+      source: resolved.source
+    })
     const dataUrl = normalizedIcon.toDataURL()
+    this.recordIconBreadcrumb('system.icon:toDataURL:after', traceContext, {
+      path: normalizedPath,
+      source: resolved.source,
+      length: dataUrl.length
+    })
 
     if (!this.isValidIconDataUrl(dataUrl)) {
-
+      this.recordIconBreadcrumb('system.icon:invalid-data-url', traceContext, {
+        path: normalizedPath,
+        source: resolved.source,
+        length: dataUrl.length
+      })
       return ''
     }
 
@@ -414,14 +564,33 @@ export class PluginSystem {
 
   private async resolveNativeIcon(
     normalizedPath: string,
-    options: { kind: SystemIconKind; size: number }
+    options: { kind: SystemIconKind; size: number },
+    traceContext?: SystemIconTraceContext
   ): Promise<{ icon: NativeImage; source: string; error?: string }> {
+    this.recordIconBreadcrumb('system.icon.native:start', traceContext, {
+      path: normalizedPath,
+      kind: options.kind,
+      size: options.size,
+      platform: process.platform
+    })
+
+    const syntheticIcon = await this.resolveDarwinSyntheticIcon(normalizedPath, options.size, traceContext)
+    if (syntheticIcon) {
+      return syntheticIcon
+    }
+
     const ext = extname(normalizedPath).toLowerCase()
     const isMacAppBundle = process.platform === 'darwin' && ext === '.app'
 
     if (options.kind === 'app' && isMacAppBundle) {
+      this.recordIconBreadcrumb('system.icon.native:macBundle:before', traceContext, {
+        path: normalizedPath
+      })
       const bundleIcon = this.resolveMacAppBundleIcon(normalizedPath)
       if (this.isUsableNativeIcon(bundleIcon)) {
+        this.recordIconBreadcrumb('system.icon.native:macBundle:hit', traceContext, {
+          path: normalizedPath
+        })
         return { icon: bundleIcon, source: 'bundle' }
       }
 
@@ -433,7 +602,7 @@ export class PluginSystem {
         const shortcutDetails = shell.readShortcutLink(normalizedPath)
         const targetPath = shortcutDetails.target
         if (targetPath && targetPath !== normalizedPath && existsSync(targetPath)) {
-          return this.resolveNativeIcon(targetPath, options)
+          return this.resolveNativeIcon(targetPath, options, traceContext)
         }
       } catch {
         // readShortcutLink 失败时继续走默认流程
@@ -441,13 +610,24 @@ export class PluginSystem {
     }
 
     if (options.kind === 'file' && this.isDirectImagePath(normalizedPath)) {
+      this.recordIconBreadcrumb('system.icon.native:createFromPath:before', traceContext, {
+        path: normalizedPath
+      })
       const directImage = nativeImage.createFromPath(normalizedPath)
-      if (this.isUsableNativeIcon(directImage)) {
+      this.recordIconBreadcrumb('system.icon.native:createFromPath:returned', traceContext, {
+        path: normalizedPath
+      })
+      const usable = this.isUsableNativeIcon(directImage)
+      this.recordIconBreadcrumb('system.icon.native:createFromPath:after', traceContext, {
+        path: normalizedPath,
+        usable
+      })
+      if (usable) {
         return { icon: directImage, source: 'direct-image' }
       }
     }
 
-    const thumbnail = await this.tryCreateThumbnail(normalizedPath, options.size)
+    const thumbnail = await this.tryCreateThumbnail(normalizedPath, options.size, traceContext)
     if (this.isUsableNativeIcon(thumbnail)) {
       return { icon: thumbnail, source: 'thumbnail' }
     }
@@ -458,34 +638,229 @@ export class PluginSystem {
 
     for (const candidate of sizeCandidates) {
       try {
+        this.recordIconBreadcrumb('system.icon.native:appGetFileIcon:before', traceContext, {
+          path: normalizedPath,
+          candidate
+        })
         const icon = await app.getFileIcon(normalizedPath, { size: candidate })
-        if (this.isUsableNativeIcon(icon)) {
+        this.recordIconBreadcrumb('system.icon.native:appGetFileIcon:returned', traceContext, {
+          path: normalizedPath,
+          candidate
+        })
+        const usable = this.isUsableNativeIcon(icon)
+        this.recordIconBreadcrumb('system.icon.native:appGetFileIcon:after', traceContext, {
+          path: normalizedPath,
+          candidate,
+          usable
+        })
+        if (usable) {
           return { icon, source: `app.getFileIcon:${candidate}` }
         }
 
 
       } catch (error) {
         lastError = error instanceof Error ? error.message : String(error)
+        this.recordIconBreadcrumb('system.icon.native:appGetFileIcon:error', traceContext, {
+          path: normalizedPath,
+          candidate,
+          error
+        })
       }
     }
 
     return { icon: nativeImage.createEmpty(), source: 'none', error: lastError }
   }
 
-  private async tryCreateThumbnail(filePath: string, targetSize: number): Promise<NativeImage> {
+  private async resolveDarwinSyntheticIcon(
+    normalizedPath: string,
+    size: number,
+    traceContext?: SystemIconTraceContext
+  ): Promise<{ icon: NativeImage; source: string; error?: string } | null> {
+    if (process.platform !== 'darwin' || !isSyntheticSystemIconRequest(normalizedPath)) {
+      return null
+    }
+
+    this.recordIconBreadcrumb('system.icon.synthetic:start', traceContext, {
+      path: normalizedPath,
+      size
+    })
+
+    if (existsSync(normalizedPath)) {
+      this.recordIconBreadcrumb('system.icon.synthetic:real-path-skip', traceContext, {
+        path: normalizedPath
+      })
+      return null
+    }
+
+    // Extension-only requests such as ".txt" are not real paths. Passing them
+    // into QuickLook/app icon APIs can crash macOS native code, so materialize
+    // an app-owned sample path and ask the same system icon API for that path.
+    this.recordIconBreadcrumb('system.icon.synthetic:path:before', traceContext, {
+      path: normalizedPath
+    })
+    const syntheticPath = this.resolveDarwinSyntheticIconPath(normalizedPath)
+    this.recordIconBreadcrumb('system.icon.synthetic:path:after', traceContext, {
+      path: normalizedPath,
+      syntheticPath
+    })
+    if (!syntheticPath) {
+      return { icon: nativeImage.createEmpty(), source: 'darwin-synthetic:none' }
+    }
+
+    this.recordIconBreadcrumb('system.icon.synthetic:helper:before', traceContext, {
+      path: normalizedPath,
+      syntheticPath,
+      size
+    })
+    const helperStartedAt = Date.now()
+    const helperResult = await this.resolveDarwinSyntheticIconWithHelper(syntheticPath, size)
+    this.recordIconBreadcrumb('system.icon.synthetic:helper:after', traceContext, {
+      path: normalizedPath,
+      syntheticPath,
+      hasIcon: this.isUsableNativeIcon(helperResult.icon),
+      error: helperResult.error,
+      elapsedMs: Date.now() - helperStartedAt
+    })
+
+    if (this.isUsableNativeIcon(helperResult.icon)) {
+      return {
+        icon: helperResult.icon,
+        source: 'darwin-synthetic:nsworkspace-helper'
+      }
+    }
+
+    return {
+      icon: nativeImage.createEmpty(),
+      source: 'darwin-synthetic:none',
+      error: helperResult.error
+    }
+  }
+
+  private async resolveDarwinSyntheticIconWithHelper(
+    filePath: string,
+    size: number
+  ): Promise<{ icon: NativeImage; error?: string }> {
+    const script = `
+ObjC.import('AppKit');
+ObjC.import('Foundation');
+const path = $.NSString.alloc.initWithUTF8String(${JSON.stringify(filePath)});
+const image = $.NSWorkspace.sharedWorkspace.iconForFile(path);
+image.setSize($.NSMakeSize(${Math.max(1, Math.round(size))}, ${Math.max(1, Math.round(size))}));
+const tiff = image.TIFFRepresentation;
+const bitmap = $.NSBitmapImageRep.imageRepWithData(tiff);
+const png = bitmap.representationUsingTypeProperties($.NSBitmapImageFileTypePNG, $());
+png.base64EncodedStringWithOptions(0).js;
+`
+
     try {
+      const result = await execFileAsync('osascript', ['-l', 'JavaScript', '-e', script], {
+        encoding: 'utf-8',
+        timeout: DARWIN_SYNTHETIC_ICON_HELPER_TIMEOUT_MS,
+        maxBuffer: DARWIN_SYNTHETIC_ICON_HELPER_MAX_BUFFER
+      })
+
+      const base64 = String(result.stdout || '').trim()
+      if (!base64) {
+        return {
+          icon: nativeImage.createEmpty(),
+          error: 'osascript returned empty icon data'
+        }
+      }
+
+      return {
+        icon: nativeImage.createFromDataURL(`data:image/png;base64,${base64}`)
+      }
+    } catch (error) {
+      return {
+        icon: nativeImage.createEmpty(),
+        error: this.formatProcessError(error)
+      }
+    }
+  }
+
+  private formatProcessError(error: unknown): string {
+    if (!(error instanceof Error)) {
+      return String(error)
+    }
+
+    const processError = error as Error & {
+      stderr?: unknown
+      code?: unknown
+      signal?: unknown
+    }
+    const stderr = processError.stderr ? String(processError.stderr).trim() : ''
+    if (stderr) {
+      return stderr
+    }
+
+    const details = [error.message]
+    if (processError.code !== undefined) {
+      details.push(`code=${String(processError.code)}`)
+    }
+    if (processError.signal !== undefined) {
+      details.push(`signal=${String(processError.signal)}`)
+    }
+    return details.join(' ')
+  }
+
+  private resolveDarwinSyntheticIconPath(filePath: string): string | null {
+    try {
+      const root = join(app.getPath('temp'), 'mulby-icon-samples')
+      mkdirSync(root, { recursive: true })
+
+      if (filePath.trim().toLowerCase() === 'folder') {
+        const folderPath = join(root, 'folder')
+        mkdirSync(folderPath, { recursive: true })
+        return folderPath
+      }
+
+      if (!isExtensionOnlyIconRequest(filePath)) {
+        return null
+      }
+
+      const extension = filePath.trim().toLowerCase()
+      const samplePath = join(root, `sample${extension}`)
+      const fd = openSync(samplePath, 'a')
+      closeSync(fd)
+      return samplePath
+    } catch {
+      return null
+    }
+  }
+
+  private async tryCreateThumbnail(
+    filePath: string,
+    targetSize: number,
+    traceContext?: SystemIconTraceContext
+  ): Promise<NativeImage> {
+    try {
+      this.recordIconBreadcrumb('system.icon.thumbnail:before', traceContext, {
+        path: filePath,
+        targetSize
+      })
       const thumbnail = await nativeImage.createThumbnailFromPath(filePath, {
         width: targetSize,
         height: targetSize
       })
-      if (this.isUsableNativeIcon(thumbnail)) {
+      this.recordIconBreadcrumb('system.icon.thumbnail:returned', traceContext, {
+        path: filePath
+      })
+      const usable = this.isUsableNativeIcon(thumbnail)
+      this.recordIconBreadcrumb('system.icon.thumbnail:after', traceContext, {
+        path: filePath,
+        usable
+      })
+      if (usable) {
         return thumbnail
       }
 
 
       return nativeImage.createEmpty()
-    } catch {
-
+    } catch (error) {
+      this.recordIconBreadcrumb('system.icon.thumbnail:error', traceContext, {
+        path: filePath,
+        error
+      })
       return nativeImage.createEmpty()
     }
   }

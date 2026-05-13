@@ -53,6 +53,11 @@ import { shutdownMainProcessResources, isShutdownComplete, type ShutdownResource
 import { claimPrimaryInstanceLock } from './single-instance'
 import { spawn as cpSpawn } from 'child_process'
 import { resolveWindowsNotificationIdentity } from './services/windows-notification-identity'
+import {
+  getCrashBreadcrumbLogPath,
+  installCrashBreadcrumbHandlers,
+  recordCrashBreadcrumb
+} from './services/crash-breadcrumbs'
 import log from 'electron-log'
 
 patchConsoleWithTimestamp()
@@ -92,7 +97,13 @@ crashReporter.start({
   uploadToServer: false,
   ignoreSystemCrashHandler: false
 })
+installCrashBreadcrumbHandlers()
+recordCrashBreadcrumb('main:crashReporter-started', {
+  crashDumps: app.getPath('crashDumps'),
+  breadcrumbs: getCrashBreadcrumbLogPath()
+})
 log.info('[CrashReporter] 崩溃报告器已启动，dump 目录:', app.getPath('crashDumps'))
+log.info('[CrashBreadcrumbs] 同步日志路径:', getCrashBreadcrumbLogPath())
 
 let appTrayManager: AppTrayManager | null = null
 let trayMenuWindowManager: TrayMenuWindowManager | null = null
