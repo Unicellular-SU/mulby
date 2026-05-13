@@ -1,7 +1,13 @@
 import { app } from 'electron'
 import { join } from 'path'
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'fs'
-import { PluginStateConfig, RecentPluginUsageEntry, SearchPreferenceState } from '../../shared/types/plugin'
+import {
+  PluginLaunchMode,
+  PluginLaunchOnStartupState,
+  PluginStateConfig,
+  RecentPluginUsageEntry,
+  SearchPreferenceState
+} from '../../shared/types/plugin'
 
 interface PluginStateFile {
   plugins: PluginStateConfig
@@ -62,7 +68,7 @@ export class PluginStateManager {
   }
 
   // 获取插件状态
-  getPluginState(name: string): { enabled: boolean; installedAt?: number; updatedAt?: number; backgroundRunning?: boolean; backgroundStartedAt?: number; backgroundRestartCount?: number } {
+  getPluginState(name: string): PluginStateConfig[string] {
     return this.pluginStates[name] || { enabled: true }
   }
 
@@ -136,6 +142,46 @@ export class PluginStateManager {
       this.pluginStates[name].backgroundRestartCount = 0
       this.save()
     }
+  }
+
+  getLaunchOnStartup(name: string): PluginLaunchOnStartupState | undefined {
+    return this.pluginStates[name]?.launchOnStartup
+  }
+
+  setLaunchOnStartup(
+    name: string,
+    enabled: boolean,
+    target?: { featureCode: string; mode: PluginLaunchMode }
+  ): PluginLaunchOnStartupState | undefined {
+    if (!this.pluginStates[name]) {
+      this.pluginStates[name] = { enabled: true }
+    }
+
+    if (!enabled) {
+      delete this.pluginStates[name].launchOnStartup
+      this.save()
+      return undefined
+    }
+
+    if (!target?.featureCode) {
+      throw new Error('featureCode is required when enabling launch on startup')
+    }
+
+    const state: PluginLaunchOnStartupState = {
+      enabled: true,
+      featureCode: target.featureCode,
+      mode: target.mode,
+      updatedAt: Date.now()
+    }
+    this.pluginStates[name].launchOnStartup = state
+    this.save()
+    return state
+  }
+
+  getLaunchOnStartupPlugins(): Array<{ pluginId: string; state: PluginLaunchOnStartupState }> {
+    return Object.entries(this.pluginStates)
+      .map(([pluginId, state]) => ({ pluginId, state: state.launchOnStartup }))
+      .filter((item): item is { pluginId: string; state: PluginLaunchOnStartupState } => item.state?.enabled === true)
   }
 
   // 记录最近使用
@@ -234,17 +280,34 @@ export class PluginStateManager {
         backgroundRunning?: boolean
         backgroundStartedAt?: number
         backgroundRestartCount?: number
+        launchOnStartup?: Partial<PluginLaunchOnStartupState>
       }
+      const launchOnStartup = this.normalizeLaunchOnStartup(state.launchOnStartup)
       result[key] = {
         enabled: state.enabled !== false,
         installedAt: typeof state.installedAt === 'number' ? state.installedAt : undefined,
         updatedAt: typeof state.updatedAt === 'number' ? state.updatedAt : undefined,
         backgroundRunning: typeof state.backgroundRunning === 'boolean' ? state.backgroundRunning : undefined,
         backgroundStartedAt: typeof state.backgroundStartedAt === 'number' ? state.backgroundStartedAt : undefined,
-        backgroundRestartCount: typeof state.backgroundRestartCount === 'number' ? state.backgroundRestartCount : undefined
+        backgroundRestartCount: typeof state.backgroundRestartCount === 'number' ? state.backgroundRestartCount : undefined,
+        launchOnStartup
       }
     }
     return result
+  }
+
+  private normalizeLaunchOnStartup(input: unknown): PluginLaunchOnStartupState | undefined {
+    if (!input || typeof input !== 'object') return undefined
+    const candidate = input as Partial<PluginLaunchOnStartupState>
+    if (candidate.enabled !== true) return undefined
+    if (typeof candidate.featureCode !== 'string' || !candidate.featureCode.trim()) return undefined
+    if (candidate.mode !== 'attached' && candidate.mode !== 'detached') return undefined
+    return {
+      enabled: true,
+      featureCode: candidate.featureCode,
+      mode: candidate.mode,
+      updatedAt: typeof candidate.updatedAt === 'number' ? candidate.updatedAt : Date.now()
+    }
   }
 
   private normalizeRecentUsage(input: unknown): RecentPluginUsageEntry[] {

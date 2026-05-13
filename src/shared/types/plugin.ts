@@ -365,7 +365,7 @@ export interface PluginSetting {
   height?: number           // 插件初始高度
   defaultDetached?: boolean // 是否默认以独立窗口运行（默认 false）
   background?: boolean      // 是否允许后台运行（默认 false）
-  persistent?: boolean      // 是否持久化（重启后自动恢复，默认 false）
+  persistent?: boolean      // 是否在重启后恢复上次后台运行状态（默认 false）
   maxRuntime?: number       // 最大运行时间（毫秒，0 表示无限制，默认 0）
   resourceLimits?: ResourceLimits | ResourceLimitPreset  // 资源限制配置或预设
   /**
@@ -753,7 +753,17 @@ export interface PluginStateConfig {
     backgroundRunning?: boolean      // 是否在后台运行
     backgroundStartedAt?: number     // 后台启动时间
     backgroundRestartCount?: number  // 重启次数
+    launchOnStartup?: PluginLaunchOnStartupState // 用户配置的跟随 Mulby 启动
   }
+}
+
+export type PluginLaunchMode = 'attached' | 'detached'
+
+export interface PluginLaunchOnStartupState {
+  enabled: boolean
+  featureCode: string
+  mode: PluginLaunchMode
+  updatedAt: number
 }
 
 // 搜索偏好配置

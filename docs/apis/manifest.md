@@ -184,8 +184,8 @@ mulby.tools.register('long_task', async (args, ctx) => {
 | --- | --- | --- |
 | `single` | `boolean` | 是否只允许单例运行。默认 `true`。 |
 | `defaultDetached` | `boolean` | 是否默认让此插件以独立窗口运行。默认 `false`。 |
-| `persistent` | `boolean` | 是否持久化。设置 `true` 后即使 Mulby 重启，它也能从其原本状态尝试继续或保持数据。 |
-| `background` | `boolean` | 是否允许本插件彻底在后台保留运行（适用于爬虫、常驻定时调度等）。 |
+| `background` | `boolean` | 是否允许本插件在后台保留运行（适用于消息监听、常驻定时调度等）。它只表示能力，不会让插件随 Mulby 启动自动运行；跟随启动由用户在插件窗口菜单中勾选。 |
+| `persistent` | `boolean` | 是否在 Mulby 重启后恢复“上次退出前正在后台运行”的状态。仅在 `background: true` 时有效。 |
 | `height` | `number` | Mulby Super Panel 面板启动此 UI 插件时使用的预期高度。 |
 | `maxRuntime` | `number` | 限定最大运行时间（毫秒）。超时会自动终止进程。`0` 表示无限制。 |
 | `idleTimeoutMs` | `number` \| `'never'` | 宿主进程空闲多少毫秒后自动销毁内存。设置为 `'never'` 可以永不过期。默认 5 分钟。 |

@@ -53,6 +53,23 @@ export function registerWindowHandlers(
     return pluginWindowManager.getPluginByWindow(win)
   }
 
+  const resolveCurrentLaunchTarget = (win: BrowserWindow | null) => {
+    if (!win) return null
+
+    const mainWin = getMainWindow()
+    if (win === mainWin) {
+      const attached = pluginWindowManager.getAttachedPlugin()
+      if (!attached) return null
+      return {
+        plugin: attached.plugin,
+        featureCode: attached.featureCode,
+        mode: 'attached' as const
+      }
+    }
+
+    return pluginWindowManager.getLaunchTargetByWindow(win)
+  }
+
   const terminatePluginForWindow = async (win: BrowserWindow | null): Promise<{ success: boolean; error?: string }> => {
     if (!pluginManager) {
       return { success: false, error: '插件管理器未初始化' }
@@ -367,17 +384,40 @@ export function registerWindowHandlers(
     if (!win || win.isDestroyed()) return false
 
     const plugin = resolveCurrentPlugin(win)
+    const launchTarget = resolveCurrentLaunchTarget(win)
+    const launchOnStartup = launchTarget && pluginManager
+      ? pluginManager.getLaunchOnStartup(launchTarget.plugin.id)
+      : undefined
     return actionMenuWindowManager.show({
       ownerWindow: win,
       anchor: point,
       items: [
         { id: 'reload', label: '重新加载界面', disabled: !plugin },
+        {
+          id: 'toggle-launch-on-startup',
+          label: '跟随 Mulby 启动',
+          checked: launchOnStartup?.enabled === true,
+          disabled: !(launchTarget && pluginManager)
+        },
         { id: 'separator-main', label: '', separator: true },
         { id: 'terminate', label: '结束运行', danger: true, disabled: !(plugin && pluginManager) }
       ],
       onSelect: async (id) => {
         if (id === 'reload') {
           reloadPluginWindow(win)
+          return
+        }
+        if (id === 'toggle-launch-on-startup') {
+          if (!launchTarget || !pluginManager) return
+          const current = pluginManager.getLaunchOnStartup(launchTarget.plugin.id)
+          pluginManager.setLaunchOnStartup(
+            launchTarget.plugin.id,
+            current?.enabled !== true,
+            {
+              featureCode: launchTarget.featureCode,
+              mode: launchTarget.mode
+            }
+          )
           return
         }
         if (id === 'terminate') {
@@ -395,17 +435,40 @@ export function registerWindowHandlers(
     if (!win || win.isDestroyed()) return false
 
     const plugin = resolveCurrentPlugin(win)
+    const launchTarget = resolveCurrentLaunchTarget(win)
+    const launchOnStartup = launchTarget && pluginManager
+      ? pluginManager.getLaunchOnStartup(launchTarget.plugin.id)
+      : undefined
     return actionMenuWindowManager.show({
       ownerWindow: win,
       anchor: point,
       items: [
         { id: 'reload', label: '重新加载界面', disabled: !plugin },
+        {
+          id: 'toggle-launch-on-startup',
+          label: '跟随 Mulby 启动',
+          checked: launchOnStartup?.enabled === true,
+          disabled: !(launchTarget && pluginManager)
+        },
         { id: 'separator-titlebar', label: '', separator: true },
         { id: 'terminate', label: '结束运行', danger: true, disabled: !(plugin && pluginManager) }
       ],
       onSelect: async (id) => {
         if (id === 'reload') {
           reloadPluginWindow(win)
+          return
+        }
+        if (id === 'toggle-launch-on-startup') {
+          if (!launchTarget || !pluginManager) return
+          const current = pluginManager.getLaunchOnStartup(launchTarget.plugin.id)
+          pluginManager.setLaunchOnStartup(
+            launchTarget.plugin.id,
+            current?.enabled !== true,
+            {
+              featureCode: launchTarget.featureCode,
+              mode: launchTarget.mode
+            }
+          )
           return
         }
         if (id === 'terminate') {

@@ -84,6 +84,23 @@
       cursor: default;
     }
 
+    .item-check {
+      width: 14px;
+      flex: 0 0 14px;
+      color: currentColor;
+      font-size: 13px;
+      line-height: 1;
+      text-align: center;
+    }
+
+    .item-label {
+      min-width: 0;
+      flex: 1;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
     .item:hover,
     .item.active {
       color: var(--menu-hover-text);
@@ -186,10 +203,24 @@
           const button = document.createElement('button')
           button.type = 'button'
           button.className = 'item' + (item.danger ? ' danger' : '')
-          button.textContent = item.label
           button.dataset.id = item.id
           button.disabled = item.disabled === true
-          button.setAttribute('role', 'menuitem')
+          const isCheckbox = typeof item.checked === 'boolean'
+          button.setAttribute('role', isCheckbox ? 'menuitemcheckbox' : 'menuitem')
+          if (isCheckbox) {
+            button.setAttribute('aria-checked', item.checked === true ? 'true' : 'false')
+          }
+
+          const check = document.createElement('span')
+          check.className = 'item-check'
+          check.textContent = item.checked === true ? '✓' : ''
+          check.setAttribute('aria-hidden', 'true')
+          button.appendChild(check)
+
+          const label = document.createElement('span')
+          label.className = 'item-label'
+          label.textContent = item.label
+          button.appendChild(label)
           button.addEventListener('mouseenter', function() {
             setActive(actionableItems.indexOf(button))
           })

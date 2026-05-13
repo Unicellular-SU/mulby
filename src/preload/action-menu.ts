@@ -6,6 +6,7 @@ export interface ActionMenuItem {
   separator?: boolean
   danger?: boolean
   disabled?: boolean
+  checked?: boolean
 }
 
 const api = {

@@ -1,7 +1,7 @@
 import { BrowserWindow, app, screen, WebContentsView } from 'electron'
 import { join } from 'path'
 import { existsSync } from 'fs'
-import { InputAttachment, InputPayload, Plugin, WindowOptions } from '../../shared/types/plugin'
+import { InputAttachment, InputPayload, Plugin, PluginLaunchMode, WindowOptions } from '../../shared/types/plugin'
 import { ThemeManager } from '../services/theme'
 import { loggerService } from '../services/logger'
 import { installConsoleCaptureForWebContents } from './console-capture'
@@ -64,6 +64,12 @@ interface DetachedWindowInfo {
   startedAt: number
   lastFocusedAt: number
   creatorId?: number  // 创建此窗口的父窗口 ID
+}
+
+export interface PluginLaunchTarget {
+  plugin: Plugin
+  featureCode: string
+  mode: PluginLaunchMode
 }
 
 interface ResidentPanelInfo {
@@ -1499,6 +1505,30 @@ export class PluginWindowManager {
     if (panelWin && panelWin.id === win.id) {
       if (this.panelWindow?.isSuspendedForResident()) return null
       return this.attachedPlugin?.plugin || null
+    }
+
+    return null
+  }
+
+  getLaunchTargetByWindow(win: BrowserWindow): PluginLaunchTarget | null {
+    if (!win) return null
+
+    const detachedInfo = this.detachedWindows.get(win.id)
+    if (detachedInfo) {
+      return {
+        plugin: detachedInfo.plugin,
+        featureCode: detachedInfo.featureCode,
+        mode: 'detached'
+      }
+    }
+
+    const panelWin = this.panelWindow?.getWindow()
+    if (panelWin && panelWin.id === win.id && this.attachedPlugin && !this.panelWindow?.isSuspendedForResident()) {
+      return {
+        plugin: this.attachedPlugin.plugin,
+        featureCode: this.attachedPlugin.featureCode,
+        mode: 'attached'
+      }
     }
 
     return null
