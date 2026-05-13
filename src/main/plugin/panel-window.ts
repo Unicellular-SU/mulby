@@ -31,6 +31,7 @@ import {
 import { registerView, unregisterView } from '../services/webcontents-registry'
 import { registerPanelWindow, unregisterPanelWindow, registerPluginWindow, unregisterPluginWindow } from '../services/ipc-caller-resolver'
 import { resolvePluginWindowIcon } from '../services/window-icon'
+import { registerWindowsInputTargetWindow, unregisterWindowsInputTargetWindow } from '../services/windows-input-target-window'
 import {
     DETACHED_TITLEBAR_HEIGHT,
     setupTitlebarIPC,
@@ -909,6 +910,7 @@ export class PluginPanelWindow {
 
         // 注册插件分离独立窗口（必须注册以保证安全的 IPC）
         registerPluginWindow(independentWindow.id, plugin.id)
+        registerWindowsInputTargetWindow(independentWindow.id, independentWindow.getNativeWindowHandle())
 
         const pluginView = promotedPluginView
 
@@ -1016,6 +1018,7 @@ export class PluginPanelWindow {
         // 窗口关闭时清理 WebContentsView
         independentWindow.once('closed', () => {
             unregisterPluginWindow(independentWindow.id)
+            unregisterWindowsInputTargetWindow(independentWindow.id)
             if (pluginView && !pluginView.webContents.isDestroyed()) {
                 unregisterView(pluginView)
                 pluginView.webContents.close()

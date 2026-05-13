@@ -6,6 +6,7 @@ describe('active window cache helpers', () => {
   it('keeps the last external Windows foreground window when Mulby becomes foreground', () => {
     assert.equal(shouldCacheWindowsForegroundWindow(100, process.pid, 1234), true)
     assert.equal(shouldCacheWindowsForegroundWindow(100, process.pid, process.pid), false)
+    assert.equal(shouldCacheWindowsForegroundWindow(100, process.pid, process.pid, true), true)
     assert.equal(shouldCacheWindowsForegroundWindow(null, process.pid, 1234), false)
     assert.equal(shouldCacheWindowsForegroundWindow(100, process.pid, undefined), false)
   })

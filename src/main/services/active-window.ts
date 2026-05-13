@@ -9,6 +9,7 @@ import { execFile } from 'child_process'
 import { promisify } from 'util'
 import log from 'electron-log'
 import { OS_COMMAND_TIMEOUT_MS } from '../constants/timing'
+import { isWindowsInputTargetWindowHandle } from './windows-input-target-window'
 
 const execFileAsync = promisify(execFile)
 
@@ -394,9 +395,10 @@ const PROCESS_QUERY_LIMITED_INFORMATION = 0x1000
 export function shouldCacheWindowsForegroundWindow(
   hWnd: unknown,
   selfPid: number,
-  foregroundPid?: number
+  foregroundPid?: number,
+  isRegisteredInputTarget = false
 ): boolean {
-  return Boolean(hWnd && foregroundPid && foregroundPid !== selfPid)
+  return Boolean(hWnd && foregroundPid && (foregroundPid !== selfPid || isRegisteredInputTarget))
 }
 
 function getActiveWindowWindows(): ActiveWindowInfo | null {
@@ -417,7 +419,7 @@ function getActiveWindowWindows(): ActiveWindowInfo | null {
   const pidOut: unknown[] = [null]
   const tid = api.GetWindowThreadProcessId(hWnd, pidOut)
   const pid = pidOut[0] as number
-  if (shouldCacheWindowsForegroundWindow(hWnd, process.pid, pid)) {
+  if (shouldCacheWindowsForegroundWindow(hWnd, process.pid, pid, isWindowsInputTargetWindowHandle(hWnd))) {
     cachedWindowsForegroundWindow = hWnd
   }
   if (!tid || !pid) {

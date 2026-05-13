@@ -23,6 +23,7 @@ import {
 import { registerView, getPluginWebContents } from '../services/webcontents-registry'
 import { registerPluginWindow, unregisterPluginWindow } from '../services/ipc-caller-resolver'
 import { resolvePluginWindowIcon } from '../services/window-icon'
+import { registerWindowsInputTargetWindow, unregisterWindowsInputTargetWindow } from '../services/windows-input-target-window'
 import { registerProtectedWindow, unregisterProtectedWindow } from './input'
 import {
   DETACHED_TITLEBAR_HEIGHT,
@@ -560,12 +561,14 @@ export class PluginWindowManager {
           lastFocusedAt: Date.now()
         })
         registerProtectedWindow(windowId)
+        registerWindowsInputTargetWindow(windowId, win.getNativeWindowHandle())
         this.installDetachedDockRefreshHandlers(win, windowId)
         this.refreshDockPresentation()
 
         win.on('closed', () => {
           this.detachedWindows.delete(windowId)
           unregisterProtectedWindow(windowId)
+          unregisterWindowsInputTargetWindow(windowId)
           this.refreshDockPresentation()
           this.notifyPluginWindowClosed(plugin.id)
         })
@@ -923,6 +926,7 @@ export class PluginWindowManager {
 
     registerPluginWindow(windowId, plugin.id)
     registerProtectedWindow(windowId)
+    registerWindowsInputTargetWindow(windowId, win.getNativeWindowHandle())
 
     this.installDetachedDockRefreshHandlers(win, windowId)
     this.refreshDockPresentation()
@@ -944,6 +948,7 @@ export class PluginWindowManager {
       unpinWindowSize(windowId)
       unregisterPluginWindow(windowId)
       unregisterProtectedWindow(windowId)
+      unregisterWindowsInputTargetWindow(windowId)
       if (pluginView && !pluginView.webContents.isDestroyed()) {
         pluginView.webContents.close()
       }
@@ -1282,6 +1287,7 @@ export class PluginWindowManager {
 
     registerPluginWindow(windowId, plugin.id)
     registerProtectedWindow(windowId)
+    registerWindowsInputTargetWindow(windowId, win.getNativeWindowHandle())
 
     this.installDetachedDockRefreshHandlers(win, windowId)
     this.refreshDockPresentation()
@@ -1297,6 +1303,7 @@ export class PluginWindowManager {
       unpinWindowSize(windowId)
       unregisterPluginWindow(windowId)
       unregisterProtectedWindow(windowId)
+      unregisterWindowsInputTargetWindow(windowId)
       if (pluginView && !pluginView.webContents.isDestroyed()) {
         pluginView.webContents.close()
       }
@@ -1436,6 +1443,7 @@ export class PluginWindowManager {
     for (const [windowId, info] of this.detachedWindows.entries()) {
       unregisterPluginWindow(windowId)
       unregisterProtectedWindow(windowId)
+      unregisterWindowsInputTargetWindow(windowId)
       if (!info.window.isDestroyed()) {
         info.window.destroy()
       }
