@@ -8,6 +8,10 @@ export interface ContextMenuItem {
   separator?: boolean
   /** 危险操作（红色文字） */
   danger?: boolean
+  /** 勾选项 */
+  checked?: boolean
+  /** 禁用项 */
+  disabled?: boolean
 }
 
 interface ContextMenuProps {
@@ -88,14 +92,20 @@ const ContextMenu = memo(function ContextMenu({
         ) : (
           <div
             key={item.id}
-            className={`ctx-menu-item ${item.danger ? 'danger' : ''}`}
-            role="menuitem"
+            className={`ctx-menu-item ${item.danger ? 'danger' : ''} ${item.disabled ? 'disabled' : ''}`}
+            role={typeof item.checked === 'boolean' ? 'menuitemcheckbox' : 'menuitem'}
+            aria-checked={typeof item.checked === 'boolean' ? item.checked : undefined}
+            aria-disabled={item.disabled === true ? 'true' : undefined}
             onClick={() => {
+              if (item.disabled) return
               onSelect(item.id)
               onClose()
             }}
           >
-            {item.label}
+            {typeof item.checked === 'boolean' && (
+              <span className="ctx-menu-check" aria-hidden="true">{item.checked ? '✓' : ''}</span>
+            )}
+            <span className="ctx-menu-label">{item.label}</span>
           </div>
         )
       )}

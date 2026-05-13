@@ -73,6 +73,13 @@ interface PluginRunOptions {
   launchMode?: PluginLaunchMode
 }
 
+function shouldForceDetachedByUser(
+  pluginId: string,
+  stateManager: PluginStateManager
+): boolean {
+  return stateManager.getAlwaysOpenDetached(pluginId)?.enabled === true
+}
+
 function formatMatchRuleExplain(cmd: PluginCmd): string | undefined {
   if (cmd.type === 'keyword') {
     return undefined
@@ -285,8 +292,14 @@ export class PluginManager {
     return `${pluginId}:${featureCode}:${Date.now()}:${Math.random().toString(36).slice(2, 8)}`
   }
 
-  private shouldShowAttachedLaunchStatus(plugin: Plugin, feature: PluginFeature | undefined): boolean {
+  private shouldShowAttachedLaunchStatus(
+    plugin: Plugin,
+    feature: PluginFeature | undefined,
+    launchMode?: PluginLaunchMode
+  ): boolean {
     if (!this.windowManager || !plugin.manifest.ui || !feature) return false
+    if (launchMode === 'detached') return false
+    if (shouldForceDetachedByUser(plugin.id, this.stateManager)) return false
     if (feature.mode === 'silent' || feature.mode === 'detached') return false
     if (feature.mainHide === true || feature.preCapture) return false
     if (feature.mode !== 'ui' && plugin.manifest.pluginSetting?.defaultDetached === true) return false
@@ -811,9 +824,17 @@ export class PluginManager {
   setLaunchOnStartup(
     pluginId: string,
     enabled: boolean,
-    target?: { featureCode: string; mode: PluginLaunchMode }
+    target?: { featureCode: string; mode?: PluginLaunchMode }
   ) {
     return this.stateManager.setLaunchOnStartup(pluginId, enabled, target)
+  }
+
+  getAlwaysOpenDetached(pluginId: string) {
+    return this.stateManager.getAlwaysOpenDetached(pluginId)
+  }
+
+  setAlwaysOpenDetached(pluginId: string, enabled: boolean) {
+    return this.stateManager.setAlwaysOpenDetached(pluginId, enabled)
   }
 
   // 搜索插件（返回匹配的功能入口，只搜索启用的插件）
@@ -920,17 +941,19 @@ export class PluginManager {
     }
     log.info(`[PluginManager][Run] plugin=${name} feature=${featureCode} matchType=${matched?.matchType || 'none'} text="${normalizedInput.text.slice(0, 100)}" normalizedAttachments=${normalizedInput.attachments.length} filteredAttachments=${filteredAttachments.length} paths=${JSON.stringify(filteredAttachments.map(a => a.path))}`)
     let useUI = Boolean(plugin.manifest.ui) && feature?.mode !== 'silent'
-    let useDetached = feature?.mode === 'detached' ||
+    const forceDetachedByUser = shouldForceDetachedByUser(pluginId, this.stateManager)
+    let useDetached = forceDetachedByUser ||
+                      feature?.mode === 'detached' ||
                       (feature?.mode !== 'ui' && plugin.manifest.pluginSetting?.defaultDetached === true)
     if (useUI && options.launchMode === 'detached') {
       useDetached = true
-    } else if (useUI && options.launchMode === 'attached') {
+    } else if (useUI && options.launchMode === 'attached' && !forceDetachedByUser) {
       useDetached = false
     }
     let route = feature?.route
     let shouldHideMain = feature?.mainHide === true
     let isAttachedUI = useUI && !useDetached
-    let launchRequestId: string | null = this.shouldShowAttachedLaunchStatus(plugin, feature)
+    let launchRequestId: string | null = this.shouldShowAttachedLaunchStatus(plugin, feature, options.launchMode)
       ? this.beginAttachedLaunchStatus(plugin, featureCode)
       : null
 
@@ -945,17 +968,18 @@ export class PluginManager {
       filteredAttachments = filterAttachmentsByCmd(normalizedInput.attachments, matched?.cmd)
       resolvedInput = { text: normalizedInput.text, attachments: filteredAttachments }
       useUI = Boolean(plugin.manifest.ui) && feature?.mode !== 'silent'
-      useDetached = feature?.mode === 'detached' ||
+      useDetached = forceDetachedByUser ||
+                    feature?.mode === 'detached' ||
                     (feature?.mode !== 'ui' && plugin.manifest.pluginSetting?.defaultDetached === true)
       if (useUI && options.launchMode === 'detached') {
         useDetached = true
-      } else if (useUI && options.launchMode === 'attached') {
+      } else if (useUI && options.launchMode === 'attached' && !forceDetachedByUser) {
         useDetached = false
       }
       route = feature?.route
       shouldHideMain = feature?.mainHide === true
       isAttachedUI = useUI && !useDetached
-      if (launchRequestId && !this.shouldShowAttachedLaunchStatus(plugin, feature)) {
+      if (launchRequestId && !this.shouldShowAttachedLaunchStatus(plugin, feature, options.launchMode)) {
         this.endAttachedLaunchStatus(launchRequestId, plugin, featureCode, 'skipped')
         launchRequestId = null
       }

@@ -2063,6 +2063,9 @@ html.platform-win-main .attachment-manager {
 }
 
 .ctx-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   padding: 6px 12px;
   font-size: 12px;
   font-weight: 500;
@@ -2076,8 +2079,25 @@ html.platform-win-main .attachment-manager {
   user-select: none;
 }
 
-.ctx-menu-item:hover {
+.ctx-menu-item:hover:not(.disabled) {
   background: var(--bg-selected);
+}
+
+.ctx-menu-item.disabled {
+  cursor: default;
+  opacity: 0.45;
+}
+
+.ctx-menu-check {
+  width: 12px;
+  flex: 0 0 12px;
+  text-align: center;
+}
+
+.ctx-menu-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .ctx-menu-item.danger {
@@ -2088,11 +2108,11 @@ html.platform-win-main .attachment-manager {
   color: #f87171;
 }
 
-.ctx-menu-item.danger:hover {
+.ctx-menu-item.danger:hover:not(.disabled) {
   background: rgba(239, 68, 68, 0.1);
 }
 
-.dark .ctx-menu-item.danger:hover {
+.dark .ctx-menu-item.danger:hover:not(.disabled) {
   background: rgba(248, 113, 113, 0.12);
 }
 

@@ -754,15 +754,21 @@ export interface PluginStateConfig {
     backgroundStartedAt?: number     // 后台启动时间
     backgroundRestartCount?: number  // 重启次数
     launchOnStartup?: PluginLaunchOnStartupState // 用户配置的跟随 Mulby 启动
+    alwaysOpenDetached?: PluginAlwaysOpenDetachedState // 用户配置的始终以独立窗口运行
   }
 }
 
-export type PluginLaunchMode = 'attached' | 'detached'
+export type PluginLaunchMode = 'normal' | 'attached' | 'detached'
 
 export interface PluginLaunchOnStartupState {
   enabled: boolean
   featureCode: string
   mode: PluginLaunchMode
+  updatedAt: number
+}
+
+export interface PluginAlwaysOpenDetachedState {
+  enabled: boolean
   updatedAt: number
 }
 

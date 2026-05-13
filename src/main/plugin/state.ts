@@ -2,6 +2,7 @@ import { app } from 'electron'
 import { join } from 'path'
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'fs'
 import {
+  PluginAlwaysOpenDetachedState,
   PluginLaunchMode,
   PluginLaunchOnStartupState,
   PluginStateConfig,
@@ -151,7 +152,7 @@ export class PluginStateManager {
   setLaunchOnStartup(
     name: string,
     enabled: boolean,
-    target?: { featureCode: string; mode: PluginLaunchMode }
+    target?: { featureCode: string; mode?: PluginLaunchMode }
   ): PluginLaunchOnStartupState | undefined {
     if (!this.pluginStates[name]) {
       this.pluginStates[name] = { enabled: true }
@@ -166,11 +167,14 @@ export class PluginStateManager {
     if (!target?.featureCode) {
       throw new Error('featureCode is required when enabling launch on startup')
     }
+    const mode = target.mode === 'attached' || target.mode === 'detached' || target.mode === 'normal'
+      ? target.mode
+      : 'normal'
 
     const state: PluginLaunchOnStartupState = {
       enabled: true,
       featureCode: target.featureCode,
-      mode: target.mode,
+      mode,
       updatedAt: Date.now()
     }
     this.pluginStates[name].launchOnStartup = state
@@ -182,6 +186,30 @@ export class PluginStateManager {
     return Object.entries(this.pluginStates)
       .map(([pluginId, state]) => ({ pluginId, state: state.launchOnStartup }))
       .filter((item): item is { pluginId: string; state: PluginLaunchOnStartupState } => item.state?.enabled === true)
+  }
+
+  getAlwaysOpenDetached(name: string): PluginAlwaysOpenDetachedState | undefined {
+    return this.pluginStates[name]?.alwaysOpenDetached
+  }
+
+  setAlwaysOpenDetached(name: string, enabled: boolean): PluginAlwaysOpenDetachedState | undefined {
+    if (!this.pluginStates[name]) {
+      this.pluginStates[name] = { enabled: true }
+    }
+
+    if (!enabled) {
+      delete this.pluginStates[name].alwaysOpenDetached
+      this.save()
+      return undefined
+    }
+
+    const state: PluginAlwaysOpenDetachedState = {
+      enabled: true,
+      updatedAt: Date.now()
+    }
+    this.pluginStates[name].alwaysOpenDetached = state
+    this.save()
+    return state
   }
 
   // 记录最近使用
@@ -281,8 +309,10 @@ export class PluginStateManager {
         backgroundStartedAt?: number
         backgroundRestartCount?: number
         launchOnStartup?: Partial<PluginLaunchOnStartupState>
+        alwaysOpenDetached?: Partial<PluginAlwaysOpenDetachedState>
       }
       const launchOnStartup = this.normalizeLaunchOnStartup(state.launchOnStartup)
+      const alwaysOpenDetached = this.normalizeAlwaysOpenDetached(state.alwaysOpenDetached)
       result[key] = {
         enabled: state.enabled !== false,
         installedAt: typeof state.installedAt === 'number' ? state.installedAt : undefined,
@@ -290,7 +320,8 @@ export class PluginStateManager {
         backgroundRunning: typeof state.backgroundRunning === 'boolean' ? state.backgroundRunning : undefined,
         backgroundStartedAt: typeof state.backgroundStartedAt === 'number' ? state.backgroundStartedAt : undefined,
         backgroundRestartCount: typeof state.backgroundRestartCount === 'number' ? state.backgroundRestartCount : undefined,
-        launchOnStartup
+        launchOnStartup,
+        alwaysOpenDetached
       }
     }
     return result
@@ -301,11 +332,23 @@ export class PluginStateManager {
     const candidate = input as Partial<PluginLaunchOnStartupState>
     if (candidate.enabled !== true) return undefined
     if (typeof candidate.featureCode !== 'string' || !candidate.featureCode.trim()) return undefined
-    if (candidate.mode !== 'attached' && candidate.mode !== 'detached') return undefined
+    const mode = candidate.mode === 'attached' || candidate.mode === 'detached' || candidate.mode === 'normal'
+      ? candidate.mode
+      : 'normal'
     return {
       enabled: true,
       featureCode: candidate.featureCode,
-      mode: candidate.mode,
+      mode,
+      updatedAt: typeof candidate.updatedAt === 'number' ? candidate.updatedAt : Date.now()
+    }
+  }
+
+  private normalizeAlwaysOpenDetached(input: unknown): PluginAlwaysOpenDetachedState | undefined {
+    if (!input || typeof input !== 'object') return undefined
+    const candidate = input as Partial<PluginAlwaysOpenDetachedState>
+    if (candidate.enabled !== true) return undefined
+    return {
+      enabled: true,
       updatedAt: typeof candidate.updatedAt === 'number' ? candidate.updatedAt : Date.now()
     }
   }

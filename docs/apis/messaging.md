@@ -219,7 +219,7 @@ api.messaging.off()
 
 ## 后台订阅与 UI 查询
 
-需要稳定接收其他插件消息的插件应启用后台运行，并在 `onLoad` 或 `onBackground` 中注册订阅。`background: true` 只表示支持后台运行；是否跟随 Mulby 启动由用户在插件窗口菜单中勾选。UI 不直接接收后端消息，而是通过 `host.call()` 调用后端方法读取插件自己维护的缓存。
+需要稳定接收其他插件消息的插件应启用后台运行，并在 `onLoad` 或 `onBackground` 中注册订阅。`background: true` 只表示支持后台运行；是否跟随 Mulby 启动由用户在插件窗口菜单或搜索结果右键菜单中勾选。UI 不直接接收后端消息，而是通过 `host.call()` 调用后端方法读取插件自己维护的缓存。
 
 **manifest.json**
 
