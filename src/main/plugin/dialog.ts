@@ -86,14 +86,22 @@ export class PluginDialog {
    * 显示消息框
    */
   async showMessageBox(options: MessageBoxOptions): Promise<{ response: number; checkboxChecked: boolean }> {
-    return showInternalMessageBox(options)
+    return showInternalMessageBox(options, { parentWindow: this.resolveParentWindow() })
   }
 
   /**
    * 显示错误框
    */
-  showErrorBox(title: string, content: string): void {
-    dialog.showErrorBox(title, content)
+  async showErrorBox(title: string, content: string): Promise<void> {
+    const parentWindow = this.resolveParentWindow()
+    await showInternalMessageBox({
+      type: 'error',
+      title,
+      message: content,
+      buttons: ['OK'],
+      defaultId: 0,
+      cancelId: 0
+    }, { parentWindow })
   }
 }
 

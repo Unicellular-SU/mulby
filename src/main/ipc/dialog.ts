@@ -68,7 +68,15 @@ export function registerDialogHandlers() {
   })
 
   // 错误框
-  ipcMain.handle('dialog:showErrorBox', (_, title: string, content: string) => {
-    dialog.showErrorBox(title, content)
+  ipcMain.handle('dialog:showErrorBox', async (event, title: string, content: string) => {
+    const parentWindow = windowFromWebContents(event.sender)
+    await showInternalMessageBox({
+      type: 'error',
+      title,
+      message: content,
+      buttons: ['OK'],
+      defaultId: 0,
+      cancelId: 0
+    }, { parentWindow })
   })
 }

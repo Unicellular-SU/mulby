@@ -5,7 +5,7 @@
 > - UI/渲染进程：`window.mulby.dialog`
 > - 插件后端：`context.api.dialog`
 
-Dialog API 提供系统原生对话框，支持 macOS、Windows 和 Linux。
+Dialog API 提供文件选择、保存对话框和消息对话框，支持 macOS、Windows 和 Linux。
 
 ### showOpenDialog(options?)
 [Renderer] [Backend]
@@ -113,17 +113,17 @@ if (result.response === 1) {
 
 ### showErrorBox(title, content)
 [Renderer] [Backend]
-显示错误框（同步，会阻塞）。
+显示错误消息框。该方法使用 Mulby 内部消息框渲染，以便正确绑定调用方窗口并避免被置顶插件窗口遮挡。
 
 ```javascript
-dialog.showErrorBox('错误', '发生了一个严重错误');
+await dialog.showErrorBox('错误', '发生了一个严重错误');
 ```
 
 **参数**:
 - `title` (string) - 标题
 - `content` (string) - 错误内容
 
-**返回值**: `void`（插件后端返回 `Promise<void>`）
+**返回值**: `Promise<void>`
 
 ### 完整示例
 
