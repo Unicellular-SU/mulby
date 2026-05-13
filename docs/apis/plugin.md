@@ -178,6 +178,56 @@ await window.mulby.plugin.removeRecentUsage('translator', 'translate');
 
 返回值：`{ success: boolean }`
 
+### plugin.getLaunchOnStartup(pluginId)
+[Renderer]
+获取指定插件的跟随 Mulby 启动配置。未配置时返回 `undefined`。
+
+```javascript
+const state = await window.mulby.plugin.getLaunchOnStartup('translator');
+// state: { enabled: true, featureCode: 'translate', mode: 'normal', updatedAt: 1710000000000 } | undefined
+```
+
+返回值：`PluginLaunchOnStartupState | undefined`
+
+### plugin.setLaunchOnStartup(pluginId, enabled, target?)
+[Renderer]
+设置指定插件是否跟随 Mulby 启动。启用时必须提供 `target.featureCode`，宿主会校验插件与功能入口是否存在；关闭时会移除该配置。
+
+```javascript
+const result = await window.mulby.plugin.setLaunchOnStartup('translator', true, {
+  featureCode: 'translate',
+  mode: 'normal'
+});
+
+await window.mulby.plugin.setLaunchOnStartup('translator', false);
+```
+
+`target.mode` 可选值为 `'normal' | 'attached' | 'detached'`，默认 `'normal'`。
+
+返回值：`{ success: boolean; state?: PluginLaunchOnStartupState; error?: string }`
+
+### plugin.getAlwaysOpenDetached(pluginId)
+[Renderer]
+获取指定插件的始终以独立窗口打开配置。未配置时返回 `undefined`。
+
+```javascript
+const state = await window.mulby.plugin.getAlwaysOpenDetached('translator');
+// state: { enabled: true, updatedAt: 1710000000000 } | undefined
+```
+
+返回值：`PluginAlwaysOpenDetachedState | undefined`
+
+### plugin.setAlwaysOpenDetached(pluginId, enabled)
+[Renderer]
+设置指定插件是否始终以独立窗口打开。宿主会校验插件是否存在，以及插件是否声明了 UI。
+
+```javascript
+const result = await window.mulby.plugin.setAlwaysOpenDetached('translator', true);
+await window.mulby.plugin.setAlwaysOpenDetached('translator', false);
+```
+
+返回值：`{ success: boolean; state?: PluginAlwaysOpenDetachedState; error?: string }`
+
 ### plugin.install(filePath)
 [Renderer]
 安装插件。
