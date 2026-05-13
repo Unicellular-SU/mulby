@@ -53,6 +53,23 @@ export function registerWindowHandlers(
     return pluginWindowManager.getPluginByWindow(win)
   }
 
+  const resolveCurrentLaunchTarget = (win: BrowserWindow | null) => {
+    if (!win) return null
+
+    const mainWin = getMainWindow()
+    if (win === mainWin) {
+      const attached = pluginWindowManager.getAttachedPlugin()
+      if (!attached) return null
+      return {
+        plugin: attached.plugin,
+        featureCode: attached.featureCode,
+        mode: 'attached' as const
+      }
+    }
+
+    return pluginWindowManager.getLaunchTargetByWindow(win)
+  }
+
   const terminatePluginForWindow = async (win: BrowserWindow | null): Promise<{ success: boolean; error?: string }> => {
     if (!pluginManager) {
       return { success: false, error: '插件管理器未初始化' }
@@ -307,7 +324,9 @@ export function registerWindowHandlers(
     const isAttachedContext = (callerWin && mainWin && callerWin === mainWin) ||
       (callerWin && panelWin && callerWin === panelWin)
 
-    if (isAttachedContext) {
+    const forceDetached = pluginManager.getAlwaysOpenDetached(plugin.id)?.enabled === true
+
+    if (isAttachedContext && !forceDetached) {
       // 附着模式 -> 保持附着模式跳转
       return pluginWindowManager.attachPlugin(plugin, featureCode, isInputPayload(input) ? input : { text: input, attachments: [] })
     } else {
@@ -367,17 +386,55 @@ export function registerWindowHandlers(
     if (!win || win.isDestroyed()) return false
 
     const plugin = resolveCurrentPlugin(win)
+    const launchTarget = resolveCurrentLaunchTarget(win)
+    const launchOnStartup = launchTarget && pluginManager
+      ? pluginManager.getLaunchOnStartup(launchTarget.plugin.id)
+      : undefined
+    const alwaysOpenDetached = plugin && pluginManager
+      ? pluginManager.getAlwaysOpenDetached(plugin.id)
+      : undefined
     return actionMenuWindowManager.show({
       ownerWindow: win,
       anchor: point,
       items: [
         { id: 'reload', label: '重新加载界面', disabled: !plugin },
+        {
+          id: 'toggle-launch-on-startup',
+          label: '跟随 Mulby 启动',
+          checked: launchOnStartup?.enabled === true,
+          disabled: !(launchTarget && pluginManager)
+        },
+        {
+          id: 'toggle-always-open-detached',
+          label: '始终以独立窗口运行',
+          checked: alwaysOpenDetached?.enabled === true,
+          disabled: !(plugin && pluginManager && plugin.manifest.ui)
+        },
         { id: 'separator-main', label: '', separator: true },
         { id: 'terminate', label: '结束运行', danger: true, disabled: !(plugin && pluginManager) }
       ],
       onSelect: async (id) => {
         if (id === 'reload') {
           reloadPluginWindow(win)
+          return
+        }
+        if (id === 'toggle-launch-on-startup') {
+          if (!launchTarget || !pluginManager) return
+          const current = pluginManager.getLaunchOnStartup(launchTarget.plugin.id)
+          pluginManager.setLaunchOnStartup(
+            launchTarget.plugin.id,
+            current?.enabled !== true,
+            {
+              featureCode: launchTarget.featureCode,
+              mode: launchTarget.mode
+            }
+          )
+          return
+        }
+        if (id === 'toggle-always-open-detached') {
+          if (!plugin || !pluginManager || !plugin.manifest.ui) return
+          const current = pluginManager.getAlwaysOpenDetached(plugin.id)
+          pluginManager.setAlwaysOpenDetached(plugin.id, current?.enabled !== true)
           return
         }
         if (id === 'terminate') {
@@ -395,17 +452,55 @@ export function registerWindowHandlers(
     if (!win || win.isDestroyed()) return false
 
     const plugin = resolveCurrentPlugin(win)
+    const launchTarget = resolveCurrentLaunchTarget(win)
+    const launchOnStartup = launchTarget && pluginManager
+      ? pluginManager.getLaunchOnStartup(launchTarget.plugin.id)
+      : undefined
+    const alwaysOpenDetached = plugin && pluginManager
+      ? pluginManager.getAlwaysOpenDetached(plugin.id)
+      : undefined
     return actionMenuWindowManager.show({
       ownerWindow: win,
       anchor: point,
       items: [
         { id: 'reload', label: '重新加载界面', disabled: !plugin },
+        {
+          id: 'toggle-launch-on-startup',
+          label: '跟随 Mulby 启动',
+          checked: launchOnStartup?.enabled === true,
+          disabled: !(launchTarget && pluginManager)
+        },
+        {
+          id: 'toggle-always-open-detached',
+          label: '始终以独立窗口运行',
+          checked: alwaysOpenDetached?.enabled === true,
+          disabled: !(plugin && pluginManager && plugin.manifest.ui)
+        },
         { id: 'separator-titlebar', label: '', separator: true },
         { id: 'terminate', label: '结束运行', danger: true, disabled: !(plugin && pluginManager) }
       ],
       onSelect: async (id) => {
         if (id === 'reload') {
           reloadPluginWindow(win)
+          return
+        }
+        if (id === 'toggle-launch-on-startup') {
+          if (!launchTarget || !pluginManager) return
+          const current = pluginManager.getLaunchOnStartup(launchTarget.plugin.id)
+          pluginManager.setLaunchOnStartup(
+            launchTarget.plugin.id,
+            current?.enabled !== true,
+            {
+              featureCode: launchTarget.featureCode,
+              mode: launchTarget.mode
+            }
+          )
+          return
+        }
+        if (id === 'toggle-always-open-detached') {
+          if (!plugin || !pluginManager || !plugin.manifest.ui) return
+          const current = pluginManager.getAlwaysOpenDetached(plugin.id)
+          pluginManager.setAlwaysOpenDetached(plugin.id, current?.enabled !== true)
           return
         }
         if (id === 'terminate') {

@@ -91,6 +91,8 @@ export function registerPluginHandlers(manager: PluginManager, pluginToolRegistr
     featureCode: string
     featureExplain?: string
     builtin: boolean
+    hasUI: boolean
+    featureMode?: 'ui' | 'silent' | 'detached'
     matchType: string
     icon: unknown
     mainPushItems?: MainPushItem[]
@@ -104,6 +106,8 @@ export function registerPluginHandlers(manager: PluginManager, pluginToolRegistr
       featureCode: feature.code,
       featureExplain: feature.explain,
       builtin: isBuiltin(plugin.path),
+      hasUI: Boolean(plugin.manifest.ui),
+      featureMode: feature.mode,
       matchType,
       icon: iconMeta.icon
     }
@@ -279,6 +283,47 @@ export function registerPluginHandlers(manager: PluginManager, pluginToolRegistr
   ipcMain.handle('plugin:removeRecentUsage', (_, pluginId: string, featureCode: string) => {
     manager.removeRecentUsage(pluginId, featureCode)
     return { success: true }
+  })
+
+  ipcMain.handle('plugin:getLaunchOnStartup', (_, pluginId: string) => {
+    return manager.getLaunchOnStartup(pluginId)
+  })
+
+  ipcMain.handle(
+    'plugin:setLaunchOnStartup',
+    (_, pluginId: string, enabled: boolean, target?: { featureCode?: string; mode?: 'normal' | 'attached' | 'detached' }) => {
+      const plugin = manager.get(pluginId)
+      if (!plugin) return { success: false, error: '插件不存在' }
+
+      if (!enabled) {
+        const state = manager.setLaunchOnStartup(plugin.id, false)
+        return { success: true, state }
+      }
+
+      const featureCode = typeof target?.featureCode === 'string' ? target.featureCode : ''
+      if (!featureCode || !manager.getFeatures(plugin.id).some(feature => feature.code === featureCode)) {
+        return { success: false, error: '功能入口不存在' }
+      }
+
+      const state = manager.setLaunchOnStartup(plugin.id, true, {
+        featureCode,
+        mode: target?.mode ?? 'normal'
+      })
+      return { success: true, state }
+    }
+  )
+
+  ipcMain.handle('plugin:getAlwaysOpenDetached', (_, pluginId: string) => {
+    return manager.getAlwaysOpenDetached(pluginId)
+  })
+
+  ipcMain.handle('plugin:setAlwaysOpenDetached', (_, pluginId: string, enabled: boolean) => {
+    const plugin = manager.get(pluginId)
+    if (!plugin) return { success: false, error: '插件不存在' }
+    if (!plugin.manifest.ui) return { success: false, error: '插件没有 UI，不能以独立窗口运行' }
+
+    const state = manager.setAlwaysOpenDetached(plugin.id, enabled === true)
+    return { success: true, state }
   })
 
   // 搜索预热：Top N 结果稳定后提前初始化 Host

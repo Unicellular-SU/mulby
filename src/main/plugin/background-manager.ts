@@ -9,6 +9,7 @@ import type { PluginHostManager } from './host-manager'
 import type { PluginHostWatchdog } from './watchdog'
 import type { PluginStateManager } from './state'
 import { BG_BATCH_DELAY_MS, BG_FORCE_STOP_TIMEOUT_MS } from '../constants/timing'
+import { shouldRestorePersistentBackgroundPlugin } from './background-policy'
 import log from 'electron-log'
 
 // ============ 类型定义 ============
@@ -192,7 +193,11 @@ export class BackgroundPluginManager extends EventEmitter {
   /**
    * 停止后台插件
    */
-  async stop(pluginId: string, reason: string = 'manual'): Promise<void> {
+  async stop(
+    pluginId: string,
+    reason: string = 'manual',
+    options: { preserveRunningState?: boolean } = {}
+  ): Promise<void> {
     const backgroundPlugin = this.backgroundPlugins.get(pluginId)
     if (!backgroundPlugin) {
       return
@@ -213,8 +218,10 @@ export class BackgroundPluginManager extends EventEmitter {
       // 销毁 Host 进程
       await this.hostManager.destroyHost(pluginId)
 
-      // 更新状态
-      this.stateManager.setBackgroundRunning(pluginId, false)
+      // 更新状态。应用退出恢复场景需要保留 backgroundRunning=true，供下次启动恢复。
+      if (!options.preserveRunningState) {
+        this.stateManager.setBackgroundRunning(pluginId, false)
+      }
 
       // 触发事件
       this.emit('background:stopped', pluginId, reason)
@@ -305,12 +312,7 @@ export class BackgroundPluginManager extends EventEmitter {
 
     const pluginsToRestore = plugins.filter(plugin => {
       const state = this.stateManager.getPluginState(plugin.id)
-      return (
-        plugin.enabled &&
-        state.backgroundRunning &&
-        plugin.manifest.pluginSetting?.background &&
-        plugin.manifest.pluginSetting?.persistent
-      )
+      return shouldRestorePersistentBackgroundPlugin(plugin, state)
     })
 
     if (pluginsToRestore.length === 0) {
@@ -443,10 +445,12 @@ export class BackgroundPluginManager extends EventEmitter {
   /**
    * 停止所有后台插件
    */
-  async stopAll(): Promise<void> {
+  async stopAll(options: { preserveRunningStateFor?: ReadonlySet<string> } = {}): Promise<void> {
     this.cancelRestoreTimer()
     const pluginIds = Array.from(this.backgroundPlugins.keys())
-    await Promise.all(pluginIds.map(id => this.stop(id, 'shutdown')))
+    await Promise.all(pluginIds.map(id => this.stop(id, 'shutdown', {
+      preserveRunningState: options.preserveRunningStateFor?.has(id) === true
+    })))
   }
 
   /**
@@ -464,16 +468,21 @@ export class BackgroundPluginManager extends EventEmitter {
 
     log.info(`[BackgroundManager] Shutting down ${plugins.length} background plugins...`)
 
-    // 保存状态
+    // 保存状态。只有 persistent 后台插件需要在下次启动恢复。
+    const preserveRunningStateFor = new Set<string>()
     for (const info of plugins) {
       log.info(`[BackgroundManager] Saving state for plugin: ${info.pluginId}`)
-      this.stateManager.setBackgroundRunning(info.pluginId, true)
+      const shouldPreserve = info.persistent === true
+      this.stateManager.setBackgroundRunning(info.pluginId, shouldPreserve)
+      if (shouldPreserve) {
+        preserveRunningStateFor.add(info.pluginId)
+      }
     }
 
     // 优雅退出（最多等待 3 秒）
     const startTime = Date.now()
     await Promise.race([
-      this.stopAll(),
+      this.stopAll({ preserveRunningStateFor }),
       new Promise(resolve => setTimeout(resolve, BG_FORCE_STOP_TIMEOUT_MS))
     ])
 

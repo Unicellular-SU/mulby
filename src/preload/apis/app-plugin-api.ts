@@ -133,6 +133,15 @@ export function createAppPluginApi(ipcRenderer: IpcRenderer) {
       hideFeature: (pluginId: string, featureCode: string) => ipcRenderer.invoke('plugin:hideFeature', pluginId, featureCode),
       unhideFeature: (pluginId: string, featureCode: string) => ipcRenderer.invoke('plugin:unhideFeature', pluginId, featureCode),
       removeRecentUsage: (pluginId: string, featureCode: string) => ipcRenderer.invoke('plugin:removeRecentUsage', pluginId, featureCode),
+      getLaunchOnStartup: (pluginId: string) => ipcRenderer.invoke('plugin:getLaunchOnStartup', pluginId),
+      setLaunchOnStartup: (
+        pluginId: string,
+        enabled: boolean,
+        target?: { featureCode: string; mode?: 'normal' | 'attached' | 'detached' }
+      ) => ipcRenderer.invoke('plugin:setLaunchOnStartup', pluginId, enabled, target),
+      getAlwaysOpenDetached: (pluginId: string) => ipcRenderer.invoke('plugin:getAlwaysOpenDetached', pluginId),
+      setAlwaysOpenDetached: (pluginId: string, enabled: boolean) =>
+        ipcRenderer.invoke('plugin:setAlwaysOpenDetached', pluginId, enabled),
       resolveDroppedFilePaths: (files: File[]) => files.map((file) => {
         try {
           return webUtils.getPathForFile(file)

@@ -183,13 +183,15 @@ mulby.tools.register('long_task', async (args, ctx) => {
 | 字段名 | 类型 | 描述 |
 | --- | --- | --- |
 | `single` | `boolean` | 是否只允许单例运行。默认 `true`。 |
-| `defaultDetached` | `boolean` | 是否默认让此插件以独立窗口运行。默认 `false`。 |
-| `persistent` | `boolean` | 是否持久化。设置 `true` 后即使 Mulby 重启，它也能从其原本状态尝试继续或保持数据。 |
-| `background` | `boolean` | 是否允许本插件彻底在后台保留运行（适用于爬虫、常驻定时调度等）。 |
+| `defaultDetached` | `boolean` | 是否默认让此插件以独立窗口运行。默认 `false`。用户也可以在插件菜单中勾选“始终以独立窗口运行”，该用户偏好优先于 manifest 默认值。 |
+| `background` | `boolean` | 是否允许本插件在后台保留运行（适用于消息监听、常驻定时调度等）。它只表示能力，不会让插件随 Mulby 启动自动运行；跟随启动由用户在插件窗口菜单或搜索结果右键菜单中勾选。 |
+| `persistent` | `boolean` | 是否在 Mulby 重启后恢复“上次退出前正在后台运行”的状态。仅在 `background: true` 时有效。 |
 | `height` | `number` | Mulby Super Panel 面板启动此 UI 插件时使用的预期高度。 |
 | `maxRuntime` | `number` | 限定最大运行时间（毫秒）。超时会自动终止进程。`0` 表示无限制。 |
 | `idleTimeoutMs` | `number` \| `'never'` | 宿主进程空闲多少毫秒后自动销毁内存。设置为 `'never'` 可以永不过期。默认 5 分钟。 |
 | `resourceLimits` | `object` \| `string` | 对该插件可设置资源限制。可以是字符串级别的 `"low"`, `"medium"`, `"high"`, `"unlimited"`；或者提供更复杂的对象限额，如 `{ "maxMemoryMB": 200 }`。 |
+
+`background`、`persistent`、`defaultDetached` 都是插件声明的能力或默认行为；是否跟随 Mulby 启动、是否始终以独立窗口运行，最终由用户在 Mulby 的插件菜单或搜索结果右键菜单中决定并保存在本机用户状态里。
 
 ---
 

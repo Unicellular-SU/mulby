@@ -1305,10 +1305,22 @@ function PluginList({
 
   // 右键菜单：根据结果类型构建不同菜单项
   const handleItemContextMenu = useCallback(async (item: RenderItem, e: React.MouseEvent) => {
+    const menuPoint = { clientX: e.clientX, clientY: e.clientY }
     const menuItems: ContextMenuItem[] = []
 
     if (item.type === 'plugin' || item.type === 'recent') {
       const isPinned = item.pluginItem ? pinnedKeys.has(getPluginKey(item.pluginItem)) : false
+      const pluginItem = item.pluginItem
+      let launchOnStartupChecked = false
+      let alwaysOpenDetachedChecked = false
+      if (pluginItem) {
+        const [launchOnStartup, alwaysOpenDetached] = await Promise.all([
+          window.mulby.plugin.getLaunchOnStartup(pluginItem.pluginId).catch(() => undefined),
+          window.mulby.plugin.getAlwaysOpenDetached(pluginItem.pluginId).catch(() => undefined)
+        ])
+        launchOnStartupChecked = launchOnStartup?.enabled === true
+        alwaysOpenDetachedChecked = alwaysOpenDetached?.enabled === true
+      }
 
       if (isPinned) {
         menuItems.push({ id: 'unpin-feature', label: '取消置顶' })
@@ -1316,6 +1328,20 @@ function PluginList({
         menuItems.push({ id: 'pin-feature', label: '置顶此项' })
       }
       menuItems.push({ id: 'hide-feature', label: '隐藏此功能' })
+
+      if (pluginItem) {
+        menuItems.push({
+          id: 'toggle-launch-on-startup',
+          label: '跟随 Mulby 启动',
+          checked: launchOnStartupChecked
+        })
+        menuItems.push({
+          id: 'toggle-always-open-detached',
+          label: '始终以独立窗口运行',
+          checked: alwaysOpenDetachedChecked,
+          disabled: pluginItem.hasUI !== true
+        })
+      }
 
       if (item.type === 'recent') {
         menuItems.push({ id: 'remove-recent', label: '从最近使用中移除' })
@@ -1348,7 +1374,7 @@ function PluginList({
 
     if (menuItems.length === 0) return
 
-    const selectedId = await contextMenu.show(menuItems, e)
+    const selectedId = await contextMenu.show(menuItems, menuPoint)
     if (!selectedId) return
 
     const path = item.appItem?.path || item.fileItem?.path
@@ -1411,6 +1437,30 @@ function PluginList({
           void window.mulby.plugin.removeRecentUsage(pluginId, featureCode).then(() => {
             setRecentPlugins(curr => curr.filter(i => !(i.pluginId === pluginId && i.featureCode === featureCode)))
           })
+        }
+        break
+      case 'toggle-launch-on-startup':
+        if (item.pluginItem) {
+          const { pluginId, featureCode } = item.pluginItem
+          const current = await window.mulby.plugin.getLaunchOnStartup(pluginId)
+          const result = await window.mulby.plugin.setLaunchOnStartup(
+            pluginId,
+            current?.enabled !== true,
+            { featureCode, mode: 'normal' }
+          )
+          if (!result.success && result.error) {
+            window.mulby.notification.show(result.error, 'error')
+          }
+        }
+        break
+      case 'toggle-always-open-detached':
+        if (item.pluginItem?.hasUI) {
+          const { pluginId } = item.pluginItem
+          const current = await window.mulby.plugin.getAlwaysOpenDetached(pluginId)
+          const result = await window.mulby.plugin.setAlwaysOpenDetached(pluginId, current?.enabled !== true)
+          if (!result.success && result.error) {
+            window.mulby.notification.show(result.error, 'error')
+          }
         }
         break
       case 'config-shortcut':

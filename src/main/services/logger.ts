@@ -6,6 +6,7 @@ import log from 'electron-log'
 import { app, BrowserWindow } from 'electron'
 import { join } from 'path'
 import { existsSync, mkdirSync, readdirSync, unlinkSync, statSync } from 'fs'
+import { recordCrashBreadcrumb } from './crash-breadcrumbs'
 
 // 日志条目接口
 export interface LogEntry {
@@ -161,6 +162,7 @@ export const loggerService = {
         exitCode?: number
         windowId?: number
     }) {
+        recordCrashBreadcrumb('logger:plugin-crash', data)
         const entry: LogEntry = {
             timestamp: Date.now(),
             level: 'crash',

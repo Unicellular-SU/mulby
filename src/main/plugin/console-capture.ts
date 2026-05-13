@@ -8,6 +8,7 @@
  */
 import { BrowserWindow } from 'electron'
 import { loggerService, LogEntry } from '../services/logger'
+import { recordCrashBreadcrumb } from '../services/crash-breadcrumbs'
 
 // Electron console-message 事件的 level 值映射
 const CONSOLE_LEVEL_MAP: Record<number, LogEntry['level']> = {
@@ -46,6 +47,12 @@ export function installConsoleCaptureForWebContents(webContents: Electron.WebCon
 
     webContents.on('console-message', (_event, level, message, _line, _sourceId) => {
         const logLevel = CONSOLE_LEVEL_MAP[level] ?? 'debug'
+        recordCrashBreadcrumb('plugin:console', {
+            pluginId,
+            webContentsId,
+            level: logLevel,
+            message
+        })
         loggerService.write(logLevel, pluginId, message)
     })
 }

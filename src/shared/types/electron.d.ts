@@ -119,6 +119,8 @@ export interface SearchResultItem {
   featureExplain: string
   featureRoute?: string
   builtin?: boolean
+  hasUI?: boolean
+  featureMode?: 'ui' | 'silent' | 'detached'
   matchType: 'keyword' | 'regex' | 'files' | 'img' | 'over' | 'window'
   icon?: {
     type: 'url' | 'svg' | 'data-url' | 'emoji'
@@ -836,6 +838,17 @@ export interface ElectronAPI {
     unpinFeature: (pluginId: string, featureCode: string) => Promise<{ success: boolean }>
     hideFeature: (pluginId: string, featureCode: string) => Promise<{ success: boolean }>
     unhideFeature: (pluginId: string, featureCode: string) => Promise<{ success: boolean }>
+    getLaunchOnStartup: (pluginId: string) => Promise<import('./plugin').PluginLaunchOnStartupState | undefined>
+    setLaunchOnStartup: (
+      pluginId: string,
+      enabled: boolean,
+      target?: { featureCode: string; mode?: import('./plugin').PluginLaunchMode }
+    ) => Promise<{ success: boolean; state?: import('./plugin').PluginLaunchOnStartupState; error?: string }>
+    getAlwaysOpenDetached: (pluginId: string) => Promise<import('./plugin').PluginAlwaysOpenDetachedState | undefined>
+    setAlwaysOpenDetached: (
+      pluginId: string,
+      enabled: boolean
+    ) => Promise<{ success: boolean; state?: import('./plugin').PluginAlwaysOpenDetachedState; error?: string }>
     mainPushSelect: (pluginName: string, action: { code: string; type: string; payload: string; option: MainPushItem }) => Promise<boolean>
     getMainPushPlugins: () => Promise<Array<{ pluginId: string; displayName: string }>>
     resolveDroppedFilePaths: (files: File[]) => string[]

@@ -27,7 +27,9 @@ import {
   PluginCommandShortcutBindResult,
   PluginCommandShortcutBindingRecord,
   PluginCommandShortcutValidationResult,
-  PluginFeature
+  PluginFeature,
+  PluginLaunchMode,
+  PluginLaunchOnStartupState
 } from '../../shared/types/plugin'
 import { PluginSearchWorker } from './search-worker-manager'
 import { getEmptyQuerySearchResults } from './empty-query-search'
@@ -66,6 +68,17 @@ interface RecentUsedResult {
 }
 
 type PluginLaunchEndReason = 'finished' | 'failed' | 'cancelled' | 'skipped'
+
+interface PluginRunOptions {
+  launchMode?: PluginLaunchMode
+}
+
+function shouldForceDetachedByUser(
+  pluginId: string,
+  stateManager: PluginStateManager
+): boolean {
+  return stateManager.getAlwaysOpenDetached(pluginId)?.enabled === true
+}
 
 function formatMatchRuleExplain(cmd: PluginCmd): string | undefined {
   if (cmd.type === 'keyword') {
@@ -201,7 +214,7 @@ export class PluginManager {
   private static readonly PREWARM_CACHE_LIMIT = 3
   private poolWarmupTimer: NodeJS.Timeout | null = null
   private preloadWarmupTimer: NodeJS.Timeout | null = null
-  private autoStartBgTimer: NodeJS.Timeout | null = null
+  private launchOnStartupTimer: NodeJS.Timeout | null = null
 
   private static readonly DEFAULT_IDLE_LOAD_DELAY_MS = 100
   private static readonly UI_IDLE_LOAD_DELAY_MS = 1_500
@@ -279,8 +292,14 @@ export class PluginManager {
     return `${pluginId}:${featureCode}:${Date.now()}:${Math.random().toString(36).slice(2, 8)}`
   }
 
-  private shouldShowAttachedLaunchStatus(plugin: Plugin, feature: PluginFeature | undefined): boolean {
+  private shouldShowAttachedLaunchStatus(
+    plugin: Plugin,
+    feature: PluginFeature | undefined,
+    launchMode?: PluginLaunchMode
+  ): boolean {
     if (!this.windowManager || !plugin.manifest.ui || !feature) return false
+    if (launchMode === 'detached') return false
+    if (shouldForceDetachedByUser(plugin.id, this.stateManager)) return false
     if (feature.mode === 'silent' || feature.mode === 'detached') return false
     if (feature.mainHide === true || feature.preCapture) return false
     if (feature.mode !== 'ui' && plugin.manifest.pluginSetting?.defaultDetached === true) return false
@@ -478,8 +497,8 @@ export class PluginManager {
     // 恢复持久化的后台插件
     await this.backgroundManager.restorePersistent(this.getAll())
 
-    // 自动启动所有声明 background:true 的已启用插件（非持久化的首次启动）
-    this.autoStartBackgroundPlugins()
+    // 启动用户显式勾选“跟随 Mulby 启动”的插件
+    this.launchUserStartupPlugins()
 
     // 恢复并刷新指令快捷键绑定
     this.commandShortcutManager.initialize()
@@ -490,33 +509,36 @@ export class PluginManager {
     })
   }
 
-  /**
-   * 自动启动所有声明 background:true 的已启用插件
-   * 在 restorePersistent 之后调用，确保非持久化的后台插件也能首次启动
-   */
-  private autoStartBackgroundPlugins(): void {
-    const pluginsToStart = this.getEnabled().filter(plugin => {
-      if (!plugin.manifest.pluginSetting?.background) return false
-      if (this.backgroundManager.isRunning(plugin.id)) return false
-      // 拥有 mainPush feature 的后台插件由搜索按需激活，不在启动时运行
-      const hasMainPush = plugin.manifest.features?.some(f => f.mainPush)
-      if (hasMainPush) return false
-      return true
-    })
+  private launchUserStartupPlugins(): void {
+    const startupEntries: Array<{ plugin: Plugin; state: PluginLaunchOnStartupState }> = []
+    for (const entry of this.stateManager.getLaunchOnStartupPlugins()) {
+      const plugin = this.plugins.get(entry.pluginId)
+      if (!plugin?.enabled) continue
+      if (!this.getCombinedFeatures(plugin).some(feature => feature.code === entry.state.featureCode)) continue
+      startupEntries.push({ plugin, state: entry.state })
+    }
 
-    if (pluginsToStart.length === 0) return
+    if (startupEntries.length === 0) return
 
-    log.info(`[PluginManager] Auto-starting ${pluginsToStart.length} background plugins:`,
-      pluginsToStart.map(p => p.id))
+    log.info(`[PluginManager] Launching ${startupEntries.length} user startup plugins:`,
+      startupEntries.map(entry => `${entry.plugin.id}:${entry.state.featureCode}:${entry.state.mode}`))
 
-    this.autoStartBgTimer = setTimeout(async () => {
-      this.autoStartBgTimer = null
-      for (const plugin of pluginsToStart) {
+    this.launchOnStartupTimer = setTimeout(async () => {
+      this.launchOnStartupTimer = null
+      for (const { plugin, state } of startupEntries) {
         try {
-          await this.backgroundManager.start(plugin, true)
-          log.info(`[PluginManager] Auto-started background plugin: ${plugin.id}`)
+          const result = await this.run(
+            plugin.id,
+            state.featureCode,
+            '',
+            undefined,
+            { launchMode: state.mode }
+          )
+          if (!result.success) {
+            log.warn(`[PluginManager] User startup launch failed for ${plugin.id}: ${result.error || 'unknown error'}`)
+          }
         } catch (err) {
-          log.warn(`[PluginManager] Failed to auto-start background plugin ${plugin.id}:`, err)
+          log.warn(`[PluginManager] User startup launch error for ${plugin.id}:`, err)
         }
       }
     }, 3000)
@@ -577,6 +599,10 @@ export class PluginManager {
       if (this.preloadWarmupTimer) {
         clearTimeout(this.preloadWarmupTimer)
         this.preloadWarmupTimer = null
+      }
+      if (this.launchOnStartupTimer) {
+        clearTimeout(this.launchOnStartupTimer)
+        this.launchOnStartupTimer = null
       }
 
       for (const timer of this.idleLoadTimers.values()) {
@@ -791,6 +817,26 @@ export class PluginManager {
     this.stateManager.removeRecentUsage(pluginId, featureCode)
   }
 
+  getLaunchOnStartup(pluginId: string) {
+    return this.stateManager.getLaunchOnStartup(pluginId)
+  }
+
+  setLaunchOnStartup(
+    pluginId: string,
+    enabled: boolean,
+    target?: { featureCode: string; mode?: PluginLaunchMode }
+  ) {
+    return this.stateManager.setLaunchOnStartup(pluginId, enabled, target)
+  }
+
+  getAlwaysOpenDetached(pluginId: string) {
+    return this.stateManager.getAlwaysOpenDetached(pluginId)
+  }
+
+  setAlwaysOpenDetached(pluginId: string, enabled: boolean) {
+    return this.stateManager.setAlwaysOpenDetached(pluginId, enabled)
+  }
+
   // 搜索插件（返回匹配的功能入口，只搜索启用的插件）
   async search(input: string | InputPayload): Promise<SearchResult[]> {
     const enabledPlugins = this.getEnabled()
@@ -860,7 +906,8 @@ export class PluginManager {
     name: string,
     featureCode: string,
     input?: string | InputPayload,
-    launchStart?: number
+    launchStart?: number,
+    options: PluginRunOptions = {}
   ): Promise<{ success: boolean; hasUI?: boolean; error?: string }> {
     const plugin = this.resolve(name)
     if (!plugin) {
@@ -894,12 +941,19 @@ export class PluginManager {
     }
     log.info(`[PluginManager][Run] plugin=${name} feature=${featureCode} matchType=${matched?.matchType || 'none'} text="${normalizedInput.text.slice(0, 100)}" normalizedAttachments=${normalizedInput.attachments.length} filteredAttachments=${filteredAttachments.length} paths=${JSON.stringify(filteredAttachments.map(a => a.path))}`)
     let useUI = Boolean(plugin.manifest.ui) && feature?.mode !== 'silent'
-    let useDetached = feature?.mode === 'detached' ||
+    const forceDetachedByUser = shouldForceDetachedByUser(pluginId, this.stateManager)
+    let useDetached = forceDetachedByUser ||
+                      feature?.mode === 'detached' ||
                       (feature?.mode !== 'ui' && plugin.manifest.pluginSetting?.defaultDetached === true)
+    if (useUI && options.launchMode === 'detached') {
+      useDetached = true
+    } else if (useUI && options.launchMode === 'attached' && !forceDetachedByUser) {
+      useDetached = false
+    }
     let route = feature?.route
     let shouldHideMain = feature?.mainHide === true
     let isAttachedUI = useUI && !useDetached
-    let launchRequestId: string | null = this.shouldShowAttachedLaunchStatus(plugin, feature)
+    let launchRequestId: string | null = this.shouldShowAttachedLaunchStatus(plugin, feature, options.launchMode)
       ? this.beginAttachedLaunchStatus(plugin, featureCode)
       : null
 
@@ -914,12 +968,18 @@ export class PluginManager {
       filteredAttachments = filterAttachmentsByCmd(normalizedInput.attachments, matched?.cmd)
       resolvedInput = { text: normalizedInput.text, attachments: filteredAttachments }
       useUI = Boolean(plugin.manifest.ui) && feature?.mode !== 'silent'
-      useDetached = feature?.mode === 'detached' ||
+      useDetached = forceDetachedByUser ||
+                    feature?.mode === 'detached' ||
                     (feature?.mode !== 'ui' && plugin.manifest.pluginSetting?.defaultDetached === true)
+      if (useUI && options.launchMode === 'detached') {
+        useDetached = true
+      } else if (useUI && options.launchMode === 'attached' && !forceDetachedByUser) {
+        useDetached = false
+      }
       route = feature?.route
       shouldHideMain = feature?.mainHide === true
       isAttachedUI = useUI && !useDetached
-      if (launchRequestId && !this.shouldShowAttachedLaunchStatus(plugin, feature)) {
+      if (launchRequestId && !this.shouldShowAttachedLaunchStatus(plugin, feature, options.launchMode)) {
         this.endAttachedLaunchStatus(launchRequestId, plugin, featureCode, 'skipped')
         launchRequestId = null
       }
@@ -1808,9 +1868,9 @@ export class PluginManager {
       await this.taskScheduler.shutdown()
 
       // 取消待发的定时器
-      if (this.autoStartBgTimer) {
-        clearTimeout(this.autoStartBgTimer)
-        this.autoStartBgTimer = null
+      if (this.launchOnStartupTimer) {
+        clearTimeout(this.launchOnStartupTimer)
+        this.launchOnStartupTimer = null
       }
       if (this.poolWarmupTimer) {
         clearTimeout(this.poolWarmupTimer)
