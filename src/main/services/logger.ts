@@ -301,9 +301,16 @@ export const loggerService = {
     /**
      * 广播日志到指定窗口
      */
-    broadcastTo(window: BrowserWindow, entry: LogEntry) {
-        if (!window.isDestroyed()) {
-            window.webContents.send('log:new', entry)
+    broadcastTo(target: BrowserWindow | Electron.WebContents, entry: LogEntry) {
+        if ('webContents' in target) {
+            if (!target.isDestroyed()) {
+                target.webContents.send('log:new', entry)
+            }
+            return
+        }
+
+        if (!target.isDestroyed()) {
+            target.send('log:new', entry)
         }
     },
 

@@ -4,7 +4,7 @@
  */
 import { ipcMain } from 'electron'
 import { loggerService, LogEntry } from '../services/logger'
-import { windowFromWebContents } from '../services/webcontents-registry'
+import { windowFromWebContents, getPluginWebContents } from '../services/webcontents-registry'
 
 /**
  * 从 webContents 获取插件 ID
@@ -67,9 +67,10 @@ export function registerLogIpc() {
     ipcMain.handle('log:subscribe', (event) => {
         const win = windowFromWebContents(event.sender)
         if (!win) return { success: false, error: 'Window not found' }
+        const targetWebContents = getPluginWebContents(win) ?? win.webContents
 
         const unsubscribe = loggerService.subscribe((entry) => {
-            loggerService.broadcastTo(win, entry)
+            loggerService.broadcastTo(targetWebContents, entry)
         })
 
         // 窗口关闭时自动取消订阅
