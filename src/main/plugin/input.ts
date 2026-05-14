@@ -13,7 +13,11 @@ import {
   nativeWin32TypeText,
   writeWin32FilesToClipboard
 } from '../services/native-win32-input'
-import { getCachedWindowsForegroundWindow } from '../services/active-window'
+import {
+  getCachedActiveWindow,
+  getCachedLinuxActiveWindowId,
+  getCachedWindowsForegroundWindow
+} from '../services/active-window'
 
 const execFileAsync = promisify(execFile)
 const FOCUS_DELAY_MS = 160
@@ -36,6 +40,7 @@ export function unregisterProtectedWindow(windowId: number): void {
 export interface InputInvocationContext {
   callerWindowId?: number
   callerNativeWindowHandle?: unknown
+  callerLinuxWindowId?: string
 }
 
 interface WindowLikeForInput {
@@ -46,11 +51,29 @@ interface WindowLikeForInput {
 
 export function shouldHideWindowForInput(
   win: WindowLikeForInput,
+  protectedIds: ReadonlySet<number>
+): boolean {
+  if (win.isDestroyed() || !win.isVisible()) return false
+  return !protectedIds.has(win.id)
+}
+
+export function shouldKeepCallerWindowVisibleForInput(
   protectedIds: ReadonlySet<number>,
   context: InputInvocationContext = {}
 ): boolean {
-  if (win.isDestroyed() || !win.isVisible()) return false
-  return !protectedIds.has(win.id) || win.id === context.callerWindowId
+  return typeof context.callerWindowId === 'number' && protectedIds.has(context.callerWindowId)
+}
+
+export type InputWindowStrategy = 'hide-app-windows' | 'visible-target-focus'
+
+export function getInputWindowStrategy(
+  _platform: NodeJS.Platform,
+  protectedIds: ReadonlySet<number>,
+  context: InputInvocationContext = {}
+): InputWindowStrategy {
+  return shouldKeepCallerWindowVisibleForInput(protectedIds, context)
+    ? 'visible-target-focus'
+    : 'hide-app-windows'
 }
 
 export function shouldHideWholeAppAfterInputWindowHide(input: {
@@ -224,9 +247,9 @@ function hasVisibleAppWindows(): boolean {
   return BrowserWindow.getAllWindows().some(win => !win.isDestroyed() && win.isVisible())
 }
 
-function hideAllAppWindows(context: InputInvocationContext = {}): void {
+function hideAllAppWindows(): void {
   for (const win of BrowserWindow.getAllWindows()) {
-    if (shouldHideWindowForInput(win, protectedWindowIds, context)) {
+    if (shouldHideWindowForInput(win, protectedWindowIds)) {
       hiddenWindows.add(win.id)
       win.hide()
     }
@@ -239,6 +262,52 @@ function hideAllAppWindows(context: InputInvocationContext = {}): void {
     app.hide()
     markAppHidden()
   }
+}
+
+function getTargetMacOSAppIdentifier(): string | null {
+  const activeWindow = getCachedActiveWindow()
+  return activeWindow?.bundleId || activeWindow?.app || null
+}
+
+export function buildMacOSActivateTargetScript(): string {
+  return `
+on run argv
+  set targetIdentifier to item 1 of argv
+  try
+    tell application id targetIdentifier to activate
+    return
+  on error
+    tell application targetIdentifier to activate
+  end try
+end run`
+}
+
+async function restoreInputTargetFocus(context: InputInvocationContext = {}): Promise<boolean | null> {
+  if (process.platform === 'win32') {
+    const targetWindow = getCachedWindowsForegroundWindow({
+      excludeWindowHandle: context.callerNativeWindowHandle
+    })
+    if (!targetWindow) return null
+    return restoreWin32ForegroundWindow(targetWindow)
+  }
+
+  if (process.platform === 'darwin') {
+    const targetIdentifier = getTargetMacOSAppIdentifier()
+    if (!targetIdentifier) return null
+    await execFileAsync('osascript', ['-e', buildMacOSActivateTargetScript(), targetIdentifier])
+    return true
+  }
+
+  if (process.platform === 'linux') {
+    const targetWindowId = getCachedLinuxActiveWindowId({
+      excludeWindowId: context.callerLinuxWindowId
+    })
+    if (!targetWindowId) return null
+    await execFileAsync('xdotool', ['windowactivate', '--sync', targetWindowId])
+    return true
+  }
+
+  return null
 }
 
 // 恢复之前隐藏的窗口
@@ -561,16 +630,21 @@ async function simulateMouseClickInternal(x: number, y: number, button: 'left' |
   await execFileAsync('xdotool', ['mousemove', '--sync', x.toString(), y.toString(), 'click', ...clickArg, buttonNum])
 }
 
-async function withHiddenWindow(action: () => Promise<void>, context: InputInvocationContext = {}): Promise<void> {
-  hideAllAppWindows(context)
-  if (process.platform === 'win32') {
-    const targetWindow = getCachedWindowsForegroundWindow({
-      excludeWindowHandle: context.callerNativeWindowHandle
-    })
-    if (targetWindow && !restoreWin32ForegroundWindow(targetWindow)) {
-      log.warn('[Input] Failed to restore previous Windows foreground window before input')
+async function prepareInputTargetFocus(context: InputInvocationContext = {}): Promise<void> {
+  getInputWindowStrategy(process.platform, protectedWindowIds, context)
+  hideAllAppWindows()
+  try {
+    const restored = await restoreInputTargetFocus(context)
+    if (restored === false) {
+      log.warn('[Input] Failed to restore previous target focus before input')
     }
+  } catch (error) {
+    log.warn('[Input] Failed to restore previous target focus before input:', error)
   }
+}
+
+async function withInputTargetFocus(action: () => Promise<void>, context: InputInvocationContext = {}): Promise<void> {
+  await prepareInputTargetFocus(context)
   await sleep(FOCUS_DELAY_MS)
   try {
     await action()
@@ -597,7 +671,7 @@ export async function simulateKeyboardTapForInputContext(
   try {
     const normalizedKey = normalizeInputKeyboardKey(key)
     const normalizedModifiers = normalizeInputKeyboardModifiers(modifiers)
-    await withHiddenWindow(() => simulateKeyboardTapInternal(normalizedKey, normalizedModifiers), context)
+    await withInputTargetFocus(() => simulateKeyboardTapInternal(normalizedKey, normalizedModifiers), context)
     return true
   } catch (error) {
     log.error('[Input] Failed to simulate keyboard tap:', error)
@@ -610,7 +684,7 @@ export const pluginInput = {
     try {
       const normalizedText = normalizeInputText(text, 'text')
       clipboard.writeText(normalizedText)
-      await withHiddenWindow(() => sendPasteShortcut(), context)
+      await withInputTargetFocus(() => sendPasteShortcut(), context)
       return true
     } catch (error) {
       log.error('[Input] Failed to paste text:', error)
@@ -621,7 +695,7 @@ export const pluginInput = {
     try {
       const ok = writeImageToClipboard(image)
       if (!ok) return false
-      await withHiddenWindow(() => sendPasteShortcut(), context)
+      await withInputTargetFocus(() => sendPasteShortcut(), context)
       return true
     } catch (error) {
       log.error('[Input] Failed to paste image:', error)
@@ -632,7 +706,7 @@ export const pluginInput = {
     try {
       const ok = writeFilesToClipboard(filePaths)
       if (!ok) return false
-      await withHiddenWindow(() => sendPasteShortcut(), context)
+      await withInputTargetFocus(() => sendPasteShortcut(), context)
       return true
     } catch (error) {
       log.error('[Input] Failed to paste file:', error)
@@ -642,7 +716,7 @@ export const pluginInput = {
   async hideMainWindowTypeString(text: string, context?: InputInvocationContext): Promise<boolean> {
     try {
       const normalizedText = normalizeInputText(text, 'text')
-      await withHiddenWindow(() => sendTypeString(normalizedText), context)
+      await withInputTargetFocus(() => sendTypeString(normalizedText), context)
       return true
     } catch (error) {
       log.error('[Input] Failed to type string:', error)
@@ -682,7 +756,7 @@ export const pluginInput = {
     try {
       const normalizedX = normalizeInputCoordinate(x, 'x')
       const normalizedY = normalizeInputCoordinate(y, 'y')
-      await withHiddenWindow(() => simulateMouseMoveInternal(normalizedX, normalizedY), context)
+      await withInputTargetFocus(() => simulateMouseMoveInternal(normalizedX, normalizedY), context)
       return true
     } catch (error) {
       log.error('[Input] Failed to simulate mouse move:', error)
@@ -699,7 +773,7 @@ export const pluginInput = {
     try {
       const normalizedX = normalizeInputCoordinate(x, 'x')
       const normalizedY = normalizeInputCoordinate(y, 'y')
-      await withHiddenWindow(() => simulateMouseClickInternal(normalizedX, normalizedY, 'left', 1), context)
+      await withInputTargetFocus(() => simulateMouseClickInternal(normalizedX, normalizedY, 'left', 1), context)
       return true
     } catch (error) {
       log.error('[Input] Failed to simulate mouse click:', error)
@@ -716,7 +790,7 @@ export const pluginInput = {
     try {
       const normalizedX = normalizeInputCoordinate(x, 'x')
       const normalizedY = normalizeInputCoordinate(y, 'y')
-      await withHiddenWindow(() => simulateMouseClickInternal(normalizedX, normalizedY, 'left', 2), context)
+      await withInputTargetFocus(() => simulateMouseClickInternal(normalizedX, normalizedY, 'left', 2), context)
       return true
     } catch (error) {
       log.error('[Input] Failed to simulate mouse double click:', error)
@@ -733,7 +807,7 @@ export const pluginInput = {
     try {
       const normalizedX = normalizeInputCoordinate(x, 'x')
       const normalizedY = normalizeInputCoordinate(y, 'y')
-      await withHiddenWindow(() => simulateMouseClickInternal(normalizedX, normalizedY, 'right', 1), context)
+      await withInputTargetFocus(() => simulateMouseClickInternal(normalizedX, normalizedY, 'right', 1), context)
       return true
     } catch (error) {
       log.error('[Input] Failed to simulate mouse right click:', error)

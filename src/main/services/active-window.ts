@@ -30,6 +30,11 @@ let cachedWindowsForegroundWindow: unknown = null
 const cachedWindowsForegroundWindowHistory: unknown[] = []
 const WINDOWS_FOREGROUND_HISTORY_LIMIT = 8
 
+/** Linux/X11 专用：最近一个非 Mulby 自身的活跃窗口 ID。 */
+let cachedLinuxActiveWindowId: string | null = null
+const cachedLinuxActiveWindowIdHistory: string[] = []
+const LINUX_ACTIVE_WINDOW_HISTORY_LIMIT = 8
+
 type ActiveWindowChangeCallback = (info: ActiveWindowInfo) => void
 const subscriptions = new Set<ActiveWindowChangeCallback>()
 
@@ -131,6 +136,11 @@ export function getCachedActiveWindow(): ActiveWindowInfo | null {
   return cachedResult
 }
 
+export function setCachedActiveWindowForTest(info: ActiveWindowInfo | null): void {
+  cachedResult = info
+  cachedAt = info ? Date.now() : 0
+}
+
 function isSameWindowsNativeWindowHandle(left: unknown, right: unknown): boolean {
   const normalizedLeft = normalizeWindowsNativeWindowHandle(left)
   const normalizedRight = normalizeWindowsNativeWindowHandle(right)
@@ -169,12 +179,50 @@ export function getCachedWindowsForegroundWindowForTest(): unknown {
   return cachedWindowsForegroundWindow
 }
 
+function normalizeLinuxWindowId(windowId: unknown): string | null {
+  if (typeof windowId === 'number' && Number.isFinite(windowId)) return String(Math.trunc(windowId))
+  if (typeof windowId !== 'string') return null
+  const normalized = windowId.trim()
+  return normalized.length > 0 ? normalized : null
+}
+
+export function rememberLinuxActiveWindowId(windowId: unknown): void {
+  const normalized = normalizeLinuxWindowId(windowId)
+  if (!normalized) return
+  cachedLinuxActiveWindowId = normalized
+  for (let i = cachedLinuxActiveWindowIdHistory.length - 1; i >= 0; i -= 1) {
+    if (cachedLinuxActiveWindowIdHistory[i] === normalized) {
+      cachedLinuxActiveWindowIdHistory.splice(i, 1)
+    }
+  }
+  cachedLinuxActiveWindowIdHistory.push(normalized)
+  while (cachedLinuxActiveWindowIdHistory.length > LINUX_ACTIVE_WINDOW_HISTORY_LIMIT) {
+    cachedLinuxActiveWindowIdHistory.shift()
+  }
+}
+
+export function getCachedLinuxActiveWindowId(options: { excludeWindowId?: unknown } = {}): string | null {
+  const excludeWindowId = normalizeLinuxWindowId(options.excludeWindowId)
+  if (!excludeWindowId) return cachedLinuxActiveWindowId
+
+  for (let i = cachedLinuxActiveWindowIdHistory.length - 1; i >= 0; i -= 1) {
+    const candidate = cachedLinuxActiveWindowIdHistory[i]
+    if (candidate !== excludeWindowId) {
+      return candidate
+    }
+  }
+
+  return null
+}
+
 /** 清除缓存（测试用） */
 export function clearActiveWindowCache(): void {
   cachedResult = null
   cachedAt = 0
   cachedWindowsForegroundWindow = null
   cachedWindowsForegroundWindowHistory.length = 0
+  cachedLinuxActiveWindowId = null
+  cachedLinuxActiveWindowIdHistory.length = 0
 }
 
 // --- 平台实现 ---
@@ -503,6 +551,7 @@ async function getActiveWindowLinux(): Promise<ActiveWindowInfo | null> {
     })
     const wid = windowId.trim()
     if (!wid) return null
+    rememberLinuxActiveWindowId(wid)
 
     // 获取窗口标题
     const { stdout: titleOut } = await execFileAsync('xdotool', ['getactivewindow', 'getwindowname'], {

@@ -16,6 +16,9 @@ export function registerInputHandlers() {
       callerWindowId: callerWindow?.id,
       callerNativeWindowHandle: process.platform === 'win32' && callerWindow && !callerWindow.isDestroyed()
         ? callerWindow.getNativeWindowHandle()
+        : undefined,
+      callerLinuxWindowId: process.platform === 'linux' && callerWindow && !callerWindow.isDestroyed()
+        ? String(callerWindow.getNativeWindowHandle())
         : undefined
     }
   }

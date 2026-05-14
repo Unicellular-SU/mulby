@@ -2,8 +2,12 @@ import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
 import {
   clearActiveWindowCache,
+  getCachedActiveWindow,
+  getCachedLinuxActiveWindowId,
   getCachedWindowsForegroundWindow,
+  rememberLinuxActiveWindowId,
   rememberWindowsForegroundWindow,
+  setCachedActiveWindowForTest,
   shouldCacheWindowsForegroundWindow,
   shouldPublishActiveWindowInfo
 } from '../active-window'
@@ -32,5 +36,33 @@ describe('active window cache helpers', () => {
 
     assert.equal(getCachedWindowsForegroundWindow(), 200)
     assert.equal(getCachedWindowsForegroundWindow({ excludeWindowHandle: 200 }), 100)
+  })
+
+  it('tracks the previous Linux active window id for visible input restore', () => {
+    clearActiveWindowCache()
+
+    rememberLinuxActiveWindowId('0x100')
+    rememberLinuxActiveWindowId('0x200')
+
+    assert.equal(getCachedLinuxActiveWindowId(), '0x200')
+    assert.equal(getCachedLinuxActiveWindowId({ excludeWindowId: '0x200' }), '0x100')
+  })
+
+  it('allows tests to seed cached active window info for macOS target activation', () => {
+    clearActiveWindowCache()
+
+    setCachedActiveWindowForTest({
+      app: 'TextEdit',
+      title: 'Untitled',
+      pid: 123,
+      bundleId: 'com.apple.TextEdit'
+    })
+
+    assert.deepEqual(getCachedActiveWindow(), {
+      app: 'TextEdit',
+      title: 'Untitled',
+      pid: 123,
+      bundleId: 'com.apple.TextEdit'
+    })
   })
 })

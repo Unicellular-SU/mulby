@@ -101,7 +101,7 @@ describe('plugin input validation', () => {
     assert.throws(() => normalizeInputKeyboardModifiers(['ctrl', 12]), /modifier must be a string/)
   })
 
-  it('hides the calling detached plugin window while preserving other protected targets', async () => {
+  it('keeps detached plugin windows visible while hiding attached app windows', async () => {
     const { shouldHideWindowForInput } = await loadInput()
     const protectedWindowIds = new Set([2, 3])
     const visibleWindow = { id: 1, isDestroyed: () => false, isVisible: () => true }
@@ -109,10 +109,25 @@ describe('plugin input validation', () => {
     const protectedTarget = { id: 3, isDestroyed: () => false, isVisible: () => true }
     const hiddenWindow = { id: 4, isDestroyed: () => false, isVisible: () => false }
 
-    assert.equal(shouldHideWindowForInput(visibleWindow, protectedWindowIds, { callerWindowId: 2 }), true)
-    assert.equal(shouldHideWindowForInput(protectedCaller, protectedWindowIds, { callerWindowId: 2 }), true)
-    assert.equal(shouldHideWindowForInput(protectedTarget, protectedWindowIds, { callerWindowId: 2 }), false)
-    assert.equal(shouldHideWindowForInput(hiddenWindow, protectedWindowIds, { callerWindowId: 2 }), false)
+    assert.equal(shouldHideWindowForInput(visibleWindow, protectedWindowIds), true)
+    assert.equal(shouldHideWindowForInput(protectedCaller, protectedWindowIds), false)
+    assert.equal(shouldHideWindowForInput(protectedTarget, protectedWindowIds), false)
+    assert.equal(shouldHideWindowForInput(hiddenWindow, protectedWindowIds), false)
+  })
+
+  it('keeps the calling detached plugin window visible for input while hiding attached windows', async () => {
+    const { shouldKeepCallerWindowVisibleForInput, shouldHideWindowForInput } = await loadInput()
+    const protectedWindowIds = new Set([2, 3])
+    const attachedWindow = { id: 1, isDestroyed: () => false, isVisible: () => true }
+    const protectedCaller = { id: 2, isDestroyed: () => false, isVisible: () => true }
+    const protectedTarget = { id: 3, isDestroyed: () => false, isVisible: () => true }
+
+    assert.equal(shouldKeepCallerWindowVisibleForInput(protectedWindowIds, { callerWindowId: 2 }), true)
+    assert.equal(shouldKeepCallerWindowVisibleForInput(protectedWindowIds, { callerWindowId: 1 }), false)
+    assert.equal(shouldKeepCallerWindowVisibleForInput(protectedWindowIds, {}), false)
+    assert.equal(shouldHideWindowForInput(attachedWindow, protectedWindowIds), true)
+    assert.equal(shouldHideWindowForInput(protectedCaller, protectedWindowIds), false)
+    assert.equal(shouldHideWindowForInput(protectedTarget, protectedWindowIds), false)
   })
 
   it('hides the whole macOS app after input hiding only when no visible Mulby window remains', async () => {
@@ -121,6 +136,26 @@ describe('plugin input validation', () => {
     assert.equal(shouldHideWholeAppAfterInputWindowHide({ platform: 'darwin', hasVisibleWindowsAfterHide: false }), true)
     assert.equal(shouldHideWholeAppAfterInputWindowHide({ platform: 'darwin', hasVisibleWindowsAfterHide: true }), false)
     assert.equal(shouldHideWholeAppAfterInputWindowHide({ platform: 'win32', hasVisibleWindowsAfterHide: false }), false)
+  })
+
+  it('selects the visible input strategy for detached plugin callers on every platform', async () => {
+    const { getInputWindowStrategy } = await loadInput()
+    const protectedWindowIds = new Set([2])
+
+    assert.equal(getInputWindowStrategy('win32', protectedWindowIds, { callerWindowId: 2 }), 'visible-target-focus')
+    assert.equal(getInputWindowStrategy('darwin', protectedWindowIds, { callerWindowId: 2 }), 'visible-target-focus')
+    assert.equal(getInputWindowStrategy('linux', protectedWindowIds, { callerWindowId: 2 }), 'visible-target-focus')
+    assert.equal(getInputWindowStrategy('win32', protectedWindowIds, { callerWindowId: 1 }), 'hide-app-windows')
+  })
+
+  it('builds safe macOS activation scripts from cached app identifiers', async () => {
+    const { buildMacOSActivateTargetScript } = await loadInput()
+
+    const script = buildMacOSActivateTargetScript()
+
+    assert.match(script, /on run argv/)
+    assert.match(script, /tell application id targetIdentifier to activate/)
+    assert.doesNotMatch(script, /TextEdit/)
   })
 })
 

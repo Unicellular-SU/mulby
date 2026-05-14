@@ -6,7 +6,7 @@
 > - 插件后端：`context.api.input`
 
 输入 API 用于对外部应用执行粘贴、键入操作以及模拟键盘和鼠标操作，适配 macOS、Windows、Linux。
-调用时部分方法会先隐藏 Mulby 窗口，以便目标应用接收输入焦点。
+调用时会先把输入焦点切回之前活跃的目标应用。附着模式窗口会被隐藏；独立窗口会保持可见，并在发送输入前把焦点还给目标应用。
 
 注意：
 - macOS 需要在系统设置中授予 Mulby 辅助功能权限
@@ -60,7 +60,7 @@ await input.hideMainWindowPasteFile(['/path/a.txt', '/path/b.txt']);
 
 ### hideMainWindowTypeString(text)
 [Renderer] [Backend]
-隐藏主窗口并模拟键入文本（不依赖剪贴板）。
+将焦点切回目标应用并模拟键入文本（不依赖剪贴板）。附着模式窗口会先隐藏，独立窗口会保持可见。
 
 ```javascript
 await input.hideMainWindowTypeString('Hello World!');
@@ -71,7 +71,7 @@ await input.hideMainWindowTypeString('Hello World!');
 
 **返回值**: `boolean`（插件后端返回 `Promise<boolean>`） - 是否执行成功
 
-**注意**: 连续调用输入 API 时，窗口会保持隐藏状态，避免闪烁。完成所有输入后，调用 `restoreWindows()` 恢复窗口。
+**注意**: 连续调用输入 API 时，被隐藏的附着窗口会保持隐藏状态，避免闪烁。完成所有输入后，调用 `restoreWindows()` 恢复窗口。
 
 ### restoreWindows()
 [Renderer] [Backend]
@@ -92,10 +92,11 @@ await input.restoreWindows();
 - 当连续调用多个输入 API 时，窗口会保持隐藏状态，避免闪烁
 - 完成所有输入操作后，调用此方法恢复窗口
 - 如果不调用此方法，用户可以通过快捷键或 dock 图标手动恢复窗口
+- 独立窗口输入时通常不会被隐藏，调用此方法是安全的 no-op
 
 ### simulateKeyboardTap(key, ...modifiers)
 [Renderer] [Backend]
-隐藏主窗口并模拟键盘按键，支持单键和组合键。操作会发送到之前活跃的应用。
+将焦点切回目标应用并模拟键盘按键，支持单键和组合键。附着模式窗口会先隐藏，独立窗口会保持可见。
 
 ```javascript
 // 模拟单个键（发送到目标应用）
@@ -143,7 +144,7 @@ await input.simulateKeyboardTap('f5');
 
 ### simulateMouseMove(x, y)
 [Renderer] [Backend]
-隐藏主窗口并将鼠标移动到指定的屏幕坐标位置。
+将焦点切回目标应用并把鼠标移动到指定的屏幕坐标位置。附着模式窗口会先隐藏，独立窗口会保持可见。
 
 ```javascript
 // 移动鼠标到屏幕坐标 (100, 200)
@@ -158,7 +159,7 @@ await input.simulateMouseMove(100, 200);
 
 ### simulateMouseClick(x, y)
 [Renderer] [Backend]
-隐藏主窗口并模拟鼠标左键单击操作。
+将焦点切回目标应用并模拟鼠标左键单击操作。附着模式窗口会先隐藏，独立窗口会保持可见。
 
 ```javascript
 // 在坐标 (150, 200) 处单击
@@ -173,7 +174,7 @@ await input.simulateMouseClick(150, 200);
 
 ### simulateMouseDoubleClick(x, y)
 [Renderer] [Backend]
-隐藏主窗口并模拟鼠标左键双击操作。
+将焦点切回目标应用并模拟鼠标左键双击操作。附着模式窗口会先隐藏，独立窗口会保持可见。
 
 ```javascript
 // 在坐标 (150, 200) 处双击
@@ -188,7 +189,7 @@ await input.simulateMouseDoubleClick(150, 200);
 
 ### simulateMouseRightClick(x, y)
 [Renderer] [Backend]
-隐藏主窗口并模拟鼠标右键点击操作。
+将焦点切回目标应用并模拟鼠标右键点击操作。附着模式窗口会先隐藏，独立窗口会保持可见。
 
 ```javascript
 // 在坐标 (200, 250) 处右键点击
@@ -255,6 +256,7 @@ module.exports = {
 2. **平台差异**: 
    - macOS 上使用 `command` 键代替 `ctrl` 执行常见快捷键
    - Windows/Linux 上使用 `ctrl` 键
+   - 独立窗口输入采用“窗口可见但目标应用获得焦点”的策略；这不是后台定向输入，目标应用仍需要能成为前台焦点
 
 3. **权限要求**:
    - macOS: 需要在系统偏好设置中授予辅助功能权限
