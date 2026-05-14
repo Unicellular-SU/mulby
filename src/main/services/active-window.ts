@@ -9,7 +9,7 @@ import { execFile } from 'child_process'
 import { promisify } from 'util'
 import log from 'electron-log'
 import { OS_COMMAND_TIMEOUT_MS } from '../constants/timing'
-import { isWindowsInputTargetWindowHandle } from './windows-input-target-window'
+import { isWindowsInputTargetWindowHandle, normalizeWindowsNativeWindowHandle } from './windows-input-target-window'
 
 const execFileAsync = promisify(execFile)
 
@@ -27,6 +27,8 @@ export interface ActiveWindowInfo {
 
 /** Windows 专用：最近一个非 Mulby 自身的前台窗口句柄。 */
 let cachedWindowsForegroundWindow: unknown = null
+const cachedWindowsForegroundWindowHistory: unknown[] = []
+const WINDOWS_FOREGROUND_HISTORY_LIMIT = 8
 
 type ActiveWindowChangeCallback = (info: ActiveWindowInfo) => void
 const subscriptions = new Set<ActiveWindowChangeCallback>()
@@ -129,7 +131,41 @@ export function getCachedActiveWindow(): ActiveWindowInfo | null {
   return cachedResult
 }
 
-export function getCachedWindowsForegroundWindow(): unknown {
+function isSameWindowsNativeWindowHandle(left: unknown, right: unknown): boolean {
+  const normalizedLeft = normalizeWindowsNativeWindowHandle(left)
+  const normalizedRight = normalizeWindowsNativeWindowHandle(right)
+  if (normalizedLeft && normalizedRight) return normalizedLeft === normalizedRight
+  return left === right
+}
+
+export function rememberWindowsForegroundWindow(hWnd: unknown): void {
+  if (!hWnd) return
+  cachedWindowsForegroundWindow = hWnd
+  for (let i = cachedWindowsForegroundWindowHistory.length - 1; i >= 0; i -= 1) {
+    if (isSameWindowsNativeWindowHandle(cachedWindowsForegroundWindowHistory[i], hWnd)) {
+      cachedWindowsForegroundWindowHistory.splice(i, 1)
+    }
+  }
+  cachedWindowsForegroundWindowHistory.push(hWnd)
+  while (cachedWindowsForegroundWindowHistory.length > WINDOWS_FOREGROUND_HISTORY_LIMIT) {
+    cachedWindowsForegroundWindowHistory.shift()
+  }
+}
+
+export function getCachedWindowsForegroundWindow(options: { excludeWindowHandle?: unknown } = {}): unknown {
+  if (!options.excludeWindowHandle) return cachedWindowsForegroundWindow
+
+  for (let i = cachedWindowsForegroundWindowHistory.length - 1; i >= 0; i -= 1) {
+    const candidate = cachedWindowsForegroundWindowHistory[i]
+    if (!isSameWindowsNativeWindowHandle(candidate, options.excludeWindowHandle)) {
+      return candidate
+    }
+  }
+
+  return null
+}
+
+export function getCachedWindowsForegroundWindowForTest(): unknown {
   return cachedWindowsForegroundWindow
 }
 
@@ -138,6 +174,7 @@ export function clearActiveWindowCache(): void {
   cachedResult = null
   cachedAt = 0
   cachedWindowsForegroundWindow = null
+  cachedWindowsForegroundWindowHistory.length = 0
 }
 
 // --- 平台实现 ---
@@ -420,7 +457,7 @@ function getActiveWindowWindows(): ActiveWindowInfo | null {
   const tid = api.GetWindowThreadProcessId(hWnd, pidOut)
   const pid = pidOut[0] as number
   if (shouldCacheWindowsForegroundWindow(hWnd, process.pid, pid, isWindowsInputTargetWindowHandle(hWnd))) {
-    cachedWindowsForegroundWindow = hWnd
+    rememberWindowsForegroundWindow(hWnd)
   }
   if (!tid || !pid) {
     return { app: '', title, pid: undefined }

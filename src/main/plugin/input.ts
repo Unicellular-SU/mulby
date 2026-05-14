@@ -3,7 +3,7 @@ import { execFile } from 'child_process'
 import { promisify } from 'util'
 import { pathToFileURL } from 'url'
 import log from 'electron-log'
-import { hasDetachedWindows, isAppExplicitlyHidden, markAppHidden, markAppVisible } from '../services/blur-manager'
+import { isAppExplicitlyHidden, markAppHidden, markAppVisible } from '../services/blur-manager'
 import {
   nativeWin32KeyboardTap,
   nativeWin32MouseClick,
@@ -31,6 +31,33 @@ export function registerProtectedWindow(windowId: number): void {
 
 export function unregisterProtectedWindow(windowId: number): void {
   protectedWindowIds.delete(windowId)
+}
+
+export interface InputInvocationContext {
+  callerWindowId?: number
+  callerNativeWindowHandle?: unknown
+}
+
+interface WindowLikeForInput {
+  id: number
+  isDestroyed(): boolean
+  isVisible(): boolean
+}
+
+export function shouldHideWindowForInput(
+  win: WindowLikeForInput,
+  protectedIds: ReadonlySet<number>,
+  context: InputInvocationContext = {}
+): boolean {
+  if (win.isDestroyed() || !win.isVisible()) return false
+  return !protectedIds.has(win.id) || win.id === context.callerWindowId
+}
+
+export function shouldHideWholeAppAfterInputWindowHide(input: {
+  platform: NodeJS.Platform
+  hasVisibleWindowsAfterHide: boolean
+}): boolean {
+  return input.platform === 'darwin' && !input.hasVisibleWindowsAfterHide
 }
 
 // macOS 键码映射 (key code)
@@ -193,15 +220,22 @@ function sleep(ms: number): Promise<void> {
   return new Promise(resolve => setTimeout(resolve, ms))
 }
 
-function hideAllAppWindows(): void {
+function hasVisibleAppWindows(): boolean {
+  return BrowserWindow.getAllWindows().some(win => !win.isDestroyed() && win.isVisible())
+}
+
+function hideAllAppWindows(context: InputInvocationContext = {}): void {
   for (const win of BrowserWindow.getAllWindows()) {
-    if (!win.isDestroyed() && win.isVisible() && !protectedWindowIds.has(win.id)) {
+    if (shouldHideWindowForInput(win, protectedWindowIds, context)) {
       hiddenWindows.add(win.id)
       win.hide()
     }
   }
 
-  if (process.platform === 'darwin' && !hasDetachedWindows()) {
+  if (shouldHideWholeAppAfterInputWindowHide({
+    platform: process.platform,
+    hasVisibleWindowsAfterHide: hasVisibleAppWindows()
+  })) {
     app.hide()
     markAppHidden()
   }
@@ -527,10 +561,12 @@ async function simulateMouseClickInternal(x: number, y: number, button: 'left' |
   await execFileAsync('xdotool', ['mousemove', '--sync', x.toString(), y.toString(), 'click', ...clickArg, buttonNum])
 }
 
-async function withHiddenWindow(action: () => Promise<void>): Promise<void> {
-  hideAllAppWindows()
+async function withHiddenWindow(action: () => Promise<void>, context: InputInvocationContext = {}): Promise<void> {
+  hideAllAppWindows(context)
   if (process.platform === 'win32') {
-    const targetWindow = getCachedWindowsForegroundWindow()
+    const targetWindow = getCachedWindowsForegroundWindow({
+      excludeWindowHandle: context.callerNativeWindowHandle
+    })
     if (targetWindow && !restoreWin32ForegroundWindow(targetWindow)) {
       log.warn('[Input] Failed to restore previous Windows foreground window before input')
     }
@@ -553,44 +589,60 @@ async function withHiddenWindow(action: () => Promise<void>): Promise<void> {
   // 控制节奏（例如先执行多次粘贴再统一恢复）。
 }
 
+export async function simulateKeyboardTapForInputContext(
+  context: InputInvocationContext | undefined,
+  key: string,
+  ...modifiers: string[]
+): Promise<boolean> {
+  try {
+    const normalizedKey = normalizeInputKeyboardKey(key)
+    const normalizedModifiers = normalizeInputKeyboardModifiers(modifiers)
+    await withHiddenWindow(() => simulateKeyboardTapInternal(normalizedKey, normalizedModifiers), context)
+    return true
+  } catch (error) {
+    log.error('[Input] Failed to simulate keyboard tap:', error)
+    return false
+  }
+}
+
 export const pluginInput = {
-  async hideMainWindowPasteText(text: string): Promise<boolean> {
+  async hideMainWindowPasteText(text: string, context?: InputInvocationContext): Promise<boolean> {
     try {
       const normalizedText = normalizeInputText(text, 'text')
       clipboard.writeText(normalizedText)
-      await withHiddenWindow(() => sendPasteShortcut())
+      await withHiddenWindow(() => sendPasteShortcut(), context)
       return true
     } catch (error) {
       log.error('[Input] Failed to paste text:', error)
       return false
     }
   },
-  async hideMainWindowPasteImage(image: string | Buffer | ArrayBuffer | Uint8Array): Promise<boolean> {
+  async hideMainWindowPasteImage(image: string | Buffer | ArrayBuffer | Uint8Array, context?: InputInvocationContext): Promise<boolean> {
     try {
       const ok = writeImageToClipboard(image)
       if (!ok) return false
-      await withHiddenWindow(() => sendPasteShortcut())
+      await withHiddenWindow(() => sendPasteShortcut(), context)
       return true
     } catch (error) {
       log.error('[Input] Failed to paste image:', error)
       return false
     }
   },
-  async hideMainWindowPasteFile(filePaths: string | string[]): Promise<boolean> {
+  async hideMainWindowPasteFile(filePaths: string | string[], context?: InputInvocationContext): Promise<boolean> {
     try {
       const ok = writeFilesToClipboard(filePaths)
       if (!ok) return false
-      await withHiddenWindow(() => sendPasteShortcut())
+      await withHiddenWindow(() => sendPasteShortcut(), context)
       return true
     } catch (error) {
       log.error('[Input] Failed to paste file:', error)
       return false
     }
   },
-  async hideMainWindowTypeString(text: string): Promise<boolean> {
+  async hideMainWindowTypeString(text: string, context?: InputInvocationContext): Promise<boolean> {
     try {
       const normalizedText = normalizeInputText(text, 'text')
-      await withHiddenWindow(() => sendTypeString(normalizedText))
+      await withHiddenWindow(() => sendTypeString(normalizedText), context)
       return true
     } catch (error) {
       log.error('[Input] Failed to type string:', error)
@@ -618,15 +670,7 @@ export const pluginInput = {
    * @param modifiers 修饰键数组，如 ['ctrl'], ['ctrl', 'shift'] 等
    */
   async simulateKeyboardTap(key: string, ...modifiers: string[]): Promise<boolean> {
-    try {
-      const normalizedKey = normalizeInputKeyboardKey(key)
-      const normalizedModifiers = normalizeInputKeyboardModifiers(modifiers)
-      await withHiddenWindow(() => simulateKeyboardTapInternal(normalizedKey, normalizedModifiers))
-      return true
-    } catch (error) {
-      log.error('[Input] Failed to simulate keyboard tap:', error)
-      return false
-    }
+    return simulateKeyboardTapForInputContext(undefined, key, ...modifiers)
   },
 
   /**
@@ -634,11 +678,11 @@ export const pluginInput = {
    * @param x 相对于屏幕左上角的 X 坐标（像素）
    * @param y 相对于屏幕左上角的 Y 坐标（像素）
    */
-  async simulateMouseMove(x: number, y: number): Promise<boolean> {
+  async simulateMouseMove(x: number, y: number, context?: InputInvocationContext): Promise<boolean> {
     try {
       const normalizedX = normalizeInputCoordinate(x, 'x')
       const normalizedY = normalizeInputCoordinate(y, 'y')
-      await withHiddenWindow(() => simulateMouseMoveInternal(normalizedX, normalizedY))
+      await withHiddenWindow(() => simulateMouseMoveInternal(normalizedX, normalizedY), context)
       return true
     } catch (error) {
       log.error('[Input] Failed to simulate mouse move:', error)
@@ -651,11 +695,11 @@ export const pluginInput = {
    * @param x 相对于屏幕左上角的 X 坐标（像素）
    * @param y 相对于屏幕左上角的 Y 坐标（像素）
    */
-  async simulateMouseClick(x: number, y: number): Promise<boolean> {
+  async simulateMouseClick(x: number, y: number, context?: InputInvocationContext): Promise<boolean> {
     try {
       const normalizedX = normalizeInputCoordinate(x, 'x')
       const normalizedY = normalizeInputCoordinate(y, 'y')
-      await withHiddenWindow(() => simulateMouseClickInternal(normalizedX, normalizedY, 'left', 1))
+      await withHiddenWindow(() => simulateMouseClickInternal(normalizedX, normalizedY, 'left', 1), context)
       return true
     } catch (error) {
       log.error('[Input] Failed to simulate mouse click:', error)
@@ -668,11 +712,11 @@ export const pluginInput = {
    * @param x 相对于屏幕左上角的 X 坐标（像素）
    * @param y 相对于屏幕左上角的 Y 坐标（像素）
    */
-  async simulateMouseDoubleClick(x: number, y: number): Promise<boolean> {
+  async simulateMouseDoubleClick(x: number, y: number, context?: InputInvocationContext): Promise<boolean> {
     try {
       const normalizedX = normalizeInputCoordinate(x, 'x')
       const normalizedY = normalizeInputCoordinate(y, 'y')
-      await withHiddenWindow(() => simulateMouseClickInternal(normalizedX, normalizedY, 'left', 2))
+      await withHiddenWindow(() => simulateMouseClickInternal(normalizedX, normalizedY, 'left', 2), context)
       return true
     } catch (error) {
       log.error('[Input] Failed to simulate mouse double click:', error)
@@ -685,11 +729,11 @@ export const pluginInput = {
    * @param x 相对于屏幕左上角的 X 坐标（像素）
    * @param y 相对于屏幕左上角的 Y 坐标（像素）
    */
-  async simulateMouseRightClick(x: number, y: number): Promise<boolean> {
+  async simulateMouseRightClick(x: number, y: number, context?: InputInvocationContext): Promise<boolean> {
     try {
       const normalizedX = normalizeInputCoordinate(x, 'x')
       const normalizedY = normalizeInputCoordinate(y, 'y')
-      await withHiddenWindow(() => simulateMouseClickInternal(normalizedX, normalizedY, 'right', 1))
+      await withHiddenWindow(() => simulateMouseClickInternal(normalizedX, normalizedY, 'right', 1), context)
       return true
     } catch (error) {
       log.error('[Input] Failed to simulate mouse right click:', error)

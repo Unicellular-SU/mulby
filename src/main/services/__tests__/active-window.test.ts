@@ -1,6 +1,12 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
-import { shouldCacheWindowsForegroundWindow, shouldPublishActiveWindowInfo } from '../active-window'
+import {
+  clearActiveWindowCache,
+  getCachedWindowsForegroundWindow,
+  rememberWindowsForegroundWindow,
+  shouldCacheWindowsForegroundWindow,
+  shouldPublishActiveWindowInfo
+} from '../active-window'
 
 describe('active window cache helpers', () => {
   it('keeps the last external Windows foreground window when Mulby becomes foreground', () => {
@@ -16,5 +22,15 @@ describe('active window cache helpers', () => {
     assert.equal(shouldPublishActiveWindowInfo({ app: 'Mulby', title: 'Mulby', pid: process.pid }, process.pid), false)
     assert.equal(shouldPublishActiveWindowInfo({ app: 'unknown', title: 'no pid' }, process.pid), true)
     assert.equal(shouldPublishActiveWindowInfo(null, process.pid), false)
+  })
+
+  it('returns the previous Windows target when the current foreground target is the caller window', () => {
+    clearActiveWindowCache()
+
+    rememberWindowsForegroundWindow(100)
+    rememberWindowsForegroundWindow(200)
+
+    assert.equal(getCachedWindowsForegroundWindow(), 200)
+    assert.equal(getCachedWindowsForegroundWindow({ excludeWindowHandle: 200 }), 100)
   })
 })

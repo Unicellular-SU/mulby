@@ -25,6 +25,7 @@ import { registerPluginWindow, unregisterPluginWindow } from '../services/ipc-ca
 import { resolvePluginWindowIcon } from '../services/window-icon'
 import { registerWindowsInputTargetWindow, unregisterWindowsInputTargetWindow } from '../services/windows-input-target-window'
 import { registerProtectedWindow, unregisterProtectedWindow } from './input'
+import { installPluginViewFocusBridge } from './plugin-view-focus-bridge'
 import {
   DETACHED_TITLEBAR_HEIGHT,
   setupTitlebarIPC,
@@ -769,24 +770,9 @@ export class PluginWindowManager {
       // 设置标题栏 IPC
       setupTitlebarIPC(win, pluginView, this.themeManager)
 
-      // macOS multi-view focus fix:
-      // frame:false + WebContentsView may not properly become key window on click.
-      win.on('focus', () => {
-        if (pluginView && !pluginView.webContents.isDestroyed()) {
-          const alreadyFocused = pluginView.webContents.isFocused()
-          log.info(`[detached:win.focus] winId=${win.id} pluginView.isFocused=${alreadyFocused}`)
-          if (!alreadyFocused) {
-            pluginView.webContents.focus()
-            log.info(`[detached:win.focus] called pluginView.focus(), now=${pluginView.webContents.isFocused()}`)
-          }
-        }
-      })
-      pluginView.webContents.on('before-input-event', () => {
-        if (!win.isDestroyed() && !win.isFocused()) {
-          log.info(`[detached:before-input-event] winId=${win.id} calling win.focus()`)
-          win.focus()
-        }
-      })
+      // WebContentsView-backed windows need explicit focus handoff on macOS
+      // and after Windows foreground restoration.
+      installPluginViewFocusBridge(win, pluginView)
 
       // 窗口 resize 时更新插件视图布局
       win.on('resize', () => {
@@ -828,6 +814,7 @@ export class PluginWindowManager {
         })
         if (win.isDestroyed()) return
       }
+      registerWindowsInputTargetWindow(win.id, win.getNativeWindowHandle())
       // 应用 manifest.window.opacity 初始透明度
       if (windowConfig.opacity !== undefined) {
         win.setOpacity(Math.max(0, Math.min(1, windowConfig.opacity)))
@@ -1136,24 +1123,7 @@ export class PluginWindowManager {
       // 设置标题栏 IPC
       setupTitlebarIPC(win, pluginView, this.themeManager)
 
-      // macOS multi-view focus fix:
-      // frame:false + WebContentsView may not properly become key window on click.
-      win.on('focus', () => {
-        if (pluginView && !pluginView.webContents.isDestroyed()) {
-          const alreadyFocused = pluginView.webContents.isFocused()
-          log.info(`[auxiliary:win.focus] winId=${win.id} pluginView.isFocused=${alreadyFocused}`)
-          if (!alreadyFocused) {
-            pluginView.webContents.focus()
-            log.info(`[auxiliary:win.focus] called pluginView.focus(), now=${pluginView.webContents.isFocused()}`)
-          }
-        }
-      })
-      pluginView.webContents.on('before-input-event', () => {
-        if (!win.isDestroyed() && !win.isFocused()) {
-          log.info(`[auxiliary:before-input-event] winId=${win.id} calling win.focus()`)
-          win.focus()
-        }
-      })
+      installPluginViewFocusBridge(win, pluginView)
 
       // 窗口 resize 时更新插件视图布局
       win.on('resize', () => {
@@ -1188,6 +1158,7 @@ export class PluginWindowManager {
         })
         if (win.isDestroyed()) return
       }
+      registerWindowsInputTargetWindow(win.id, win.getNativeWindowHandle())
 
       if (options?.alwaysOnTop && options.alwaysOnTopLevel) {
         win.setAlwaysOnTop(true, options.alwaysOnTopLevel as Parameters<BrowserWindow['setAlwaysOnTop']>[1])

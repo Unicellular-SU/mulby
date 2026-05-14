@@ -100,6 +100,28 @@ describe('plugin input validation', () => {
     assert.throws(() => normalizeInputKeyboardModifiers(['ctrl', 'bad;command']), /Unsupported input modifier/)
     assert.throws(() => normalizeInputKeyboardModifiers(['ctrl', 12]), /modifier must be a string/)
   })
+
+  it('hides the calling detached plugin window while preserving other protected targets', async () => {
+    const { shouldHideWindowForInput } = await loadInput()
+    const protectedWindowIds = new Set([2, 3])
+    const visibleWindow = { id: 1, isDestroyed: () => false, isVisible: () => true }
+    const protectedCaller = { id: 2, isDestroyed: () => false, isVisible: () => true }
+    const protectedTarget = { id: 3, isDestroyed: () => false, isVisible: () => true }
+    const hiddenWindow = { id: 4, isDestroyed: () => false, isVisible: () => false }
+
+    assert.equal(shouldHideWindowForInput(visibleWindow, protectedWindowIds, { callerWindowId: 2 }), true)
+    assert.equal(shouldHideWindowForInput(protectedCaller, protectedWindowIds, { callerWindowId: 2 }), true)
+    assert.equal(shouldHideWindowForInput(protectedTarget, protectedWindowIds, { callerWindowId: 2 }), false)
+    assert.equal(shouldHideWindowForInput(hiddenWindow, protectedWindowIds, { callerWindowId: 2 }), false)
+  })
+
+  it('hides the whole macOS app after input hiding only when no visible Mulby window remains', async () => {
+    const { shouldHideWholeAppAfterInputWindowHide } = await loadInput()
+
+    assert.equal(shouldHideWholeAppAfterInputWindowHide({ platform: 'darwin', hasVisibleWindowsAfterHide: false }), true)
+    assert.equal(shouldHideWholeAppAfterInputWindowHide({ platform: 'darwin', hasVisibleWindowsAfterHide: true }), false)
+    assert.equal(shouldHideWholeAppAfterInputWindowHide({ platform: 'win32', hasVisibleWindowsAfterHide: false }), false)
+  })
 })
 
 after(() => {

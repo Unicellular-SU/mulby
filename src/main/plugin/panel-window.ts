@@ -32,6 +32,7 @@ import { registerView, unregisterView } from '../services/webcontents-registry'
 import { registerPanelWindow, unregisterPanelWindow, registerPluginWindow, unregisterPluginWindow } from '../services/ipc-caller-resolver'
 import { resolvePluginWindowIcon } from '../services/window-icon'
 import { registerWindowsInputTargetWindow, unregisterWindowsInputTargetWindow } from '../services/windows-input-target-window'
+import { installPluginViewFocusBridge } from './plugin-view-focus-bridge'
 import {
     DETACHED_TITLEBAR_HEIGHT,
     setupTitlebarIPC,
@@ -948,6 +949,7 @@ export class PluginPanelWindow {
         independentWindow.contentView.addChildView(pluginView)
         layoutPluginView(independentWindow, pluginView, showTitleBar)
         registerView(pluginView, independentWindow)
+        installPluginViewFocusBridge(independentWindow, pluginView)
 
         // 窗口 resize 时更新插件视图布局
         independentWindow.on('resize', () => {
@@ -988,6 +990,7 @@ export class PluginPanelWindow {
                 await applyWindowsFramelessSurface(independentWindow, { includeTitleBar: false, resizeMode: 'all' })
                 if (independentWindow.isDestroyed()) return
             }
+            registerWindowsInputTargetWindow(independentWindow.id, independentWindow.getNativeWindowHandle())
             layoutPluginView(independentWindow, pluginView, showTitleBar)
             independentWindow.show()
             this.openPluginDevTools(pluginWebContents, plugin.id)
