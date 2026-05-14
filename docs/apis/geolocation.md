@@ -51,7 +51,7 @@ if (status === 'granted') {
 ```
 
 **跨平台说明**：
-- macOS：优先通过 CoreLocation 触发系统授权；失败时尝试 Electron Web Geolocation；被拒绝或受限时会打开系统设置。
+- macOS：调用系统权限请求流程，不执行定位探测。dev 模式或未签名应用可能仍返回 `not-determined`；实际定位失败原因会在 `getCurrentPosition()` 的 `attempts` 中体现。
 - Windows/Linux：返回当前可判断状态；系统级授权通常在实际定位调用时由系统服务决定。
 
 **返回值**：`Promise<'not-determined' | 'granted' | 'denied' | 'restricted' | 'unknown'>`
@@ -153,7 +153,7 @@ interface GeolocationPosition {
 
 字段说明：
 - `source`：本次最终结果来源。`native` 表示系统原生定位，`web` 表示 Electron Web Geolocation，`ip` 表示 IP 后备定位。
-- `provider`：本次最终成功的 provider 名称。
+- `provider`：本次最终成功的 provider 名称。IP 后备成功时会返回具体服务名，例如 `freegeoip.app`、`ip-api.com` 或 `ipwho.is`，而不是固定返回 `ip`。
 - `fallbackUsed`：是否在成功前发生过 provider 失败或跳过。为 `true` 时应查看 `attempts`。
 - `attempts`：按调用顺序记录每个 provider 的结果，便于展示清晰 fallback 原因。
 

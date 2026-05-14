@@ -6,6 +6,7 @@ import { getLinuxGeoCluePosition } from '../services/linux-geoclue-location'
 import { getWindowsLocationServicePosition } from '../services/windows-location-service'
 import {
   GeolocationResolutionError,
+  resolveGeolocationAccessRequest,
   resolveGeolocationPosition,
   selectProvidersForPlatform,
   type GeolocationAccessStatus,
@@ -110,7 +111,7 @@ export class PluginGeolocation {
     return this.normalizePermissionStatus(permissionManager.getStatus('geolocation'))
   }
 
-  async requestAccess(webContents?: WebContents): Promise<GeolocationAccessStatus> {
+  async requestAccess(_webContents?: WebContents): Promise<GeolocationAccessStatus> {
     const currentStatus = this.getAccessStatus()
     log.info(`[Geolocation] Requesting access, current status: ${currentStatus}`)
 
@@ -118,38 +119,20 @@ export class PluginGeolocation {
       return 'granted'
     }
 
-    if ((currentStatus === 'denied' || currentStatus === 'restricted') && this.nativeAccessAttempted) {
-      permissionManager.openSystemSettings('geolocation')
-      return currentStatus
-    }
-
     if (process.platform === 'darwin') {
       this.nativeAccessAttempted = true
-      try {
-        await this.getMacOSCoreLocationPosition(GEOLOCATION_NATIVE_TIMEOUT_MS)
-        this.setNativeAccessStatus('granted')
-        return 'granted'
-      } catch (coreLocationError) {
-        log.warn('[Geolocation] CoreLocation permission probe failed:', coreLocationError)
-        try {
-          await this.getElectronWebPosition(webContents, 15_000)
-          this.setNativeAccessStatus('granted')
-          return 'granted'
-        } catch (error) {
-          const status = this.classifyNativeError(error)
-          if (status === 'denied' || status === 'restricted') {
-            this.setNativeAccessStatus(status)
-            permissionManager.openSystemSettings('geolocation')
-            return status
-          }
-          if (status === 'not-determined') {
-            this.setNativeAccessStatus(null)
-            return status
-          }
-          this.setNativeAccessStatus(status)
-          return status
-        }
+      const outcome = await resolveGeolocationAccessRequest({
+        currentStatus,
+        requestSystemAccess: async () => this.normalizePermissionStatus(
+          await permissionManager.request('geolocation', { openSystemSettingsOnDenied: false })
+        )
+      })
+
+      this.setNativeAccessStatus(outcome.cacheStatus)
+      if (outcome.shouldOpenSettings) {
+        permissionManager.openSystemSettings('geolocation')
       }
+      return outcome.status
     }
 
     const status = await permissionManager.request('geolocation')

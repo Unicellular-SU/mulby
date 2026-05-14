@@ -6,6 +6,7 @@ import {
   type GeolocationProviderName,
   type GeolocationPosition,
   resolveGeolocationPosition,
+  resolveGeolocationAccessRequest,
   selectProvidersForPlatform
 } from '../geolocation-orchestrator'
 import {
@@ -42,6 +43,34 @@ function provider(
 }
 
 describe('PluginGeolocation provider orchestration', () => {
+  it('requests macOS geolocation permission without requiring a position probe', async () => {
+    let permissionRequests = 0
+
+    const outcome = await resolveGeolocationAccessRequest({
+      currentStatus: 'not-determined',
+      requestSystemAccess: async () => {
+        permissionRequests += 1
+        return 'unknown'
+      }
+    })
+
+    assert.equal(permissionRequests, 1)
+    assert.equal(outcome.status, 'not-determined')
+    assert.equal(outcome.cacheStatus, null)
+    assert.equal(outcome.shouldOpenSettings, false)
+  })
+
+  it('opens settings when a macOS geolocation permission request is denied', async () => {
+    const outcome = await resolveGeolocationAccessRequest({
+      currentStatus: 'not-determined',
+      requestSystemAccess: async () => 'denied'
+    })
+
+    assert.equal(outcome.status, 'denied')
+    assert.equal(outcome.cacheStatus, 'denied')
+    assert.equal(outcome.shouldOpenSettings, true)
+  })
+
   it('selects only the native provider for the current platform before web and IP fallbacks', () => {
     const providers = [
       provider('macos-corelocation', async () => createPosition({ provider: 'macos-corelocation' })),
@@ -126,6 +155,28 @@ describe('PluginGeolocation provider orchestration', () => {
     assert.equal(position.attempts[1].status, 'error')
     assert.match(position.attempts[1].message || '', /timeout/)
     assert.equal(position.attempts[2].status, 'success')
+  })
+
+  it('preserves the concrete IP geolocation service name on successful fallback', async () => {
+    const providers = [
+      provider('linux-geoclue', async () => {
+        throw new Error('GeoClue timeout')
+      }),
+      provider('ip', async () => createPosition({
+        latitude: 1.2899,
+        longitude: 103.8503,
+        accuracy: 5000,
+        source: 'ip',
+        provider: 'freegeoip.app'
+      }))
+    ]
+
+    const position = await resolveGeolocationPosition(providers, { allowFallback: true })
+
+    assert.equal(position.source, 'ip')
+    assert.equal(position.provider, 'freegeoip.app')
+    assert.equal(position.attempts.at(-1)?.provider, 'freegeoip.app')
+    assert.equal(position.attempts.at(-1)?.source, 'ip')
   })
 
   it('does not fall back to IP when fallback is disabled', async () => {

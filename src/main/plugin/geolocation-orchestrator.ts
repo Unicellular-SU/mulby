@@ -55,6 +55,44 @@ export interface GeolocationProvider {
   locate: (context: GeolocationProviderContext) => Promise<Omit<GeolocationPosition, 'fallbackUsed' | 'attempts'>>
 }
 
+export interface GeolocationAccessRequestInput {
+  currentStatus: GeolocationAccessStatus
+  requestSystemAccess: () => Promise<GeolocationAccessStatus>
+}
+
+export interface GeolocationAccessRequestOutcome {
+  status: GeolocationAccessStatus
+  cacheStatus: GeolocationAccessStatus | null
+  shouldOpenSettings: boolean
+}
+
+export async function resolveGeolocationAccessRequest(
+  input: GeolocationAccessRequestInput
+): Promise<GeolocationAccessRequestOutcome> {
+  if (input.currentStatus === 'granted') {
+    return {
+      status: 'granted',
+      cacheStatus: 'granted',
+      shouldOpenSettings: false
+    }
+  }
+
+  if (input.currentStatus === 'denied' || input.currentStatus === 'restricted') {
+    return {
+      status: input.currentStatus,
+      cacheStatus: input.currentStatus,
+      shouldOpenSettings: true
+    }
+  }
+
+  const requestedStatus = normalizeAccessRequestStatus(await input.requestSystemAccess())
+  return {
+    status: requestedStatus,
+    cacheStatus: requestedStatus === 'not-determined' ? null : requestedStatus,
+    shouldOpenSettings: requestedStatus === 'denied' || requestedStatus === 'restricted'
+  }
+}
+
 export function selectProvidersForPlatform(
   providers: GeolocationProvider[],
   platform: NodeJS.Platform = process.platform
@@ -122,7 +160,7 @@ export async function resolveGeolocationPosition(
     try {
       const position = await currentProvider.locate({ desiredAccuracy, timeoutMs })
       const successAttempt: GeolocationAttempt = {
-        provider: currentProvider.name,
+        provider: position.provider,
         source: currentProvider.source,
         status: 'success',
         accuracy: position.accuracy
@@ -131,7 +169,6 @@ export async function resolveGeolocationPosition(
       return {
         ...position,
         source: currentProvider.source,
-        provider: currentProvider.name,
         fallbackUsed: allAttempts.some((attempt) => attempt.status === 'error' || attempt.status === 'skipped'),
         attempts: allAttempts
       }
@@ -155,6 +192,10 @@ export async function resolveGeolocationPosition(
 function getErrorMessage(error: unknown): string {
   if (error instanceof Error) return error.message
   return String(error)
+}
+
+function normalizeAccessRequestStatus(status: GeolocationAccessStatus): GeolocationAccessStatus {
+  return status === 'unknown' ? 'not-determined' : status
 }
 
 function getNativeProviderNameForPlatform(platform: NodeJS.Platform): GeolocationProviderName | null {
