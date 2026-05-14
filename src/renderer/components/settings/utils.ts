@@ -5,6 +5,8 @@ export function formatPermissionStatus(status: string) {
   switch (status) {
     case 'granted':
       return '已授权'
+    case 'authorized':
+      return '已授权'
     case 'denied':
       return '已拒绝'
     case 'not-determined':
@@ -13,6 +15,8 @@ export function formatPermissionStatus(status: string) {
       return '受限'
     case 'limited':
       return '受限访问'
+    case 'runtime-check':
+      return '使用时检测'
     default:
       return '未知'
   }

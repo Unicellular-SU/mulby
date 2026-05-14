@@ -19,6 +19,7 @@ import DeveloperSection from './settings/sections/DeveloperSection'
 import OpenClawSection from './settings/sections/OpenClawSection'
 import type { SettingsViewProps } from './settings/types'
 import { PERMISSIONS, SECTION_ITEMS } from './settings/constants'
+import { loadPermissionStatuses } from './settings/permission-status-loader'
 
 export default function SettingsView({
   section,
@@ -103,10 +104,10 @@ export default function SettingsView({
 
   // 加载所有权限状态
   const loadPermissions = useCallback(async () => {
-    const next: Record<string, string> = {}
-    for (const item of PERMISSIONS) {
-      next[item.id] = await window.mulby.permission.getStatus(item.id)
-    }
+    const next = await loadPermissionStatuses({
+      permissions: PERMISSIONS,
+      api: window.mulby
+    })
     setPermissionStatus(next)
   }, [])
 

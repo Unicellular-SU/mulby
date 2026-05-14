@@ -1,6 +1,13 @@
 import { useState, useMemo, useCallback } from 'react'
 import { PERMISSIONS } from '../constants'
 import { formatPermissionStatus } from '../utils'
+import {
+  getPermissionOverview,
+  getPermissionViewItems,
+  shouldShowPermissionRequestButton,
+  type PermissionDisplayStatus,
+  type SettingsPlatform
+} from '../permissions-view-model'
 
 interface PermissionsSectionProps {
   permissionStatus: Record<string, string>
@@ -10,7 +17,7 @@ interface PermissionsSectionProps {
 }
 
 /** 当前平台名 */
-const PLATFORM: 'darwin' | 'win32' | 'linux' =
+const PLATFORM: SettingsPlatform =
   navigator.userAgent.includes('Macintosh') ? 'darwin'
     : navigator.userAgent.includes('Windows') ? 'win32'
       : 'linux'
@@ -34,14 +41,17 @@ function ImportanceBadge({ importance }: { importance: 'required' | 'recommended
 }
 
 /** 权限状态指示器 */
-function StatusIndicator({ status }: { status: string }) {
+function StatusIndicator({ status }: { status: PermissionDisplayStatus }) {
   const isGranted = status === 'granted' || status === 'authorized'
   const isDenied = status === 'denied' || status === 'restricted'
+  const isRuntimeCheck = status === 'runtime-check'
   const color = isGranted
     ? 'bg-emerald-500'
     : isDenied
       ? 'bg-red-500'
-      : 'bg-amber-400'
+      : isRuntimeCheck
+        ? 'bg-sky-400'
+        : 'bg-amber-400'
 
   return (
     <div className="flex items-center gap-1.5">
@@ -66,10 +76,22 @@ export default function PermissionsSection({
 }: PermissionsSectionProps) {
   const [requesting, setRequesting] = useState<string | null>(null)
 
-  // 过滤出当前平台适用的权限项
-  const filteredPermissions = useMemo(
-    () => PERMISSIONS.filter(item => !item.platforms || item.platforms.includes(PLATFORM)),
-    []
+  const permissionItems = useMemo(
+    () => getPermissionViewItems({
+      platform: PLATFORM,
+      permissions: PERMISSIONS,
+      permissionStatus
+    }),
+    [permissionStatus]
+  )
+
+  const overview = useMemo(
+    () => getPermissionOverview({
+      platform: PLATFORM,
+      permissions: PERMISSIONS,
+      permissionStatus
+    }),
+    [permissionStatus]
   )
 
   // 请求权限
@@ -86,12 +108,6 @@ export default function PermissionsSection({
     }
   }, [onRefresh])
 
-  // 统计
-  const grantedCount = filteredPermissions.filter(
-    item => permissionStatus[item.id] === 'granted' || permissionStatus[item.id] === 'authorized'
-  ).length
-  const totalCount = filteredPermissions.length
-
   return (
     <div className="space-y-5">
       {/* 平台信息与总览 */}
@@ -101,28 +117,34 @@ export default function PermissionsSection({
             系统权限 · {PLATFORM_LABEL[PLATFORM]}
           </div>
           <div className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-            已授权 {grantedCount}/{totalCount} 项
-            {PLATFORM === 'win32' && ' · Windows 下大部分权限由系统自动管理'}
+            {overview.text}
+            {PLATFORM === 'win32' && ' · 媒体和定位权限以系统设置及实际调用结果为准'}
             {PLATFORM === 'linux' && ' · Linux 下权限取决于桌面环境和发行版配置'}
           </div>
         </div>
         <div className="flex items-center gap-2">
           <div
             className={`h-2.5 w-20 rounded-full overflow-hidden ${
-              grantedCount === totalCount
+              overview.progressMode === 'managed' || overview.grantedCount === overview.totalCount
                 ? 'bg-emerald-100 dark:bg-emerald-900/30'
                 : 'bg-slate-100 dark:bg-slate-800'
             }`}
           >
             <div
               className={`h-full rounded-full transition-all duration-500 ${
-                grantedCount === totalCount
-                  ? 'bg-emerald-500'
-                  : grantedCount > 0
+                overview.progressMode === 'managed'
+                  ? 'bg-sky-400'
+                  : overview.grantedCount === overview.totalCount
+                    ? 'bg-emerald-500'
+                    : overview.grantedCount > 0
                     ? 'bg-amber-400'
                     : 'bg-slate-300 dark:bg-slate-600'
               }`}
-              style={{ width: `${totalCount > 0 ? (grantedCount / totalCount) * 100 : 0}%` }}
+              style={{
+                width: overview.progressMode === 'managed'
+                  ? '100%'
+                  : `${overview.totalCount > 0 ? (overview.grantedCount / overview.totalCount) * 100 : 0}%`
+              }}
             />
           </div>
         </div>
@@ -130,10 +152,14 @@ export default function PermissionsSection({
 
       {/* 权限列表 */}
       <div className="space-y-2.5">
-        {filteredPermissions.map(item => {
-          const status = permissionStatus[item.id] || 'unknown'
-          const isGranted = status === 'granted' || status === 'authorized'
-          const canRequest = item.canRequestProgrammatically && !isGranted
+        {permissionItems.map(item => {
+          const status = item.displayStatus
+          const isGranted = item.countsAsGranted === true
+          const canRequest = shouldShowPermissionRequestButton({
+            platform: PLATFORM,
+            canRequestProgrammatically: item.canRequestProgrammatically,
+            displayStatus: status
+          })
           const isThisRequesting = requesting === item.id
 
           return (
@@ -156,6 +182,9 @@ export default function PermissionsSection({
                 </div>
                 <div className="text-xs text-slate-500 dark:text-slate-400 mt-1 leading-relaxed">
                   {item.description}
+                  {PLATFORM === 'win32' && item.id === 'geolocation' && (
+                    <span>，Windows 下会在实际获取位置时检测系统定位服务并自动降级</span>
+                  )}
                 </div>
                 <div className="mt-1.5">
                   <StatusIndicator status={status} />

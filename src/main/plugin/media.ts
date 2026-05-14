@@ -9,15 +9,38 @@ export interface MediaDeviceInfo {
 
 export type MediaAccessStatus = 'not-determined' | 'granted' | 'denied' | 'restricted' | 'unknown'
 
+type MediaPermissionPlatform = NodeJS.Platform
+
+interface MediaSystemPreferences {
+  getMediaAccessStatus: (mediaType: 'microphone' | 'camera') => MediaAccessStatus
+  askForMediaAccess: (mediaType: 'microphone' | 'camera') => Promise<boolean>
+}
+
+interface PluginMediaDeps {
+  platform?: MediaPermissionPlatform
+  systemPreferences?: MediaSystemPreferences
+}
+
 export class PluginMedia {
+  private readonly platform: MediaPermissionPlatform
+  private readonly systemPreferences: MediaSystemPreferences
+
+  constructor(deps: PluginMediaDeps = {}) {
+    this.platform = deps.platform || process.platform
+    this.systemPreferences = deps.systemPreferences || systemPreferences
+  }
+
   /**
    * 获取媒体访问权限状态
    * @param mediaType 媒体类型
    */
   getMediaAccessStatus(mediaType: 'microphone' | 'camera'): MediaAccessStatus {
-    // macOS 需要检查权限
-    if (process.platform === 'darwin') {
-      return systemPreferences.getMediaAccessStatus(mediaType)
+    if (this.platform === 'darwin' || this.platform === 'win32') {
+      try {
+        return this.systemPreferences.getMediaAccessStatus(mediaType)
+      } catch {
+        return this.platform === 'win32' ? 'granted' : 'unknown'
+      }
     }
     // Windows/Linux 默认返回 granted（权限在使用时由浏览器处理）
     return 'granted'
@@ -28,8 +51,8 @@ export class PluginMedia {
    * @param mediaType 媒体类型
    */
   async askForMediaAccess(mediaType: 'microphone' | 'camera'): Promise<boolean> {
-    if (process.platform === 'darwin') {
-      return systemPreferences.askForMediaAccess(mediaType)
+    if (this.platform === 'darwin') {
+      return this.systemPreferences.askForMediaAccess(mediaType)
     }
     // Windows/Linux 返回 true（权限在使用时由浏览器处理）
     return true
@@ -39,21 +62,19 @@ export class PluginMedia {
    * 检查是否有摄像头权限
    */
   hasCameraAccess(): boolean {
-    if (process.platform === 'darwin') {
-      return systemPreferences.getMediaAccessStatus('camera') === 'granted'
-    }
-    return true
+    return this.getMediaAccessStatus('camera') === 'granted'
   }
 
   /**
    * 检查是否有麦克风权限
    */
   hasMicrophoneAccess(): boolean {
-    if (process.platform === 'darwin') {
-      return systemPreferences.getMediaAccessStatus('microphone') === 'granted'
-    }
-    return true
+    return this.getMediaAccessStatus('microphone') === 'granted'
   }
 }
 
-export const pluginMedia = new PluginMedia()
+export function createPluginMedia(deps: PluginMediaDeps = {}): PluginMedia {
+  return new PluginMedia(deps)
+}
+
+export const pluginMedia = createPluginMedia()
