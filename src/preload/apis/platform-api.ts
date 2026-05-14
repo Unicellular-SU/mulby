@@ -358,9 +358,13 @@ export function createPlatformApi(ipcRenderer: IpcRenderer, options?: { restrict
       requestAccess: () => ipcRenderer.invoke('geolocation:requestAccess'),
       canGetPosition: () => ipcRenderer.invoke('geolocation:canGetPosition'),
       openSettings: () => ipcRenderer.invoke('geolocation:openSettings'),
-      getCurrentPosition: () => {
+      getCurrentPosition: (options?: {
+        desiredAccuracy?: 'best' | 'balanced' | 'coarse'
+        allowFallback?: boolean
+        timeoutMs?: number
+      }) => {
         console.log('[Geolocation] getCurrentPosition called (using IPC)')
-        return ipcRenderer.invoke('geolocation:getCurrentPosition')
+        return ipcRenderer.invoke('geolocation:getCurrentPosition', options)
       }
     },
 

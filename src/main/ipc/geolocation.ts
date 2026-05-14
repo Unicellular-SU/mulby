@@ -43,11 +43,15 @@ export function registerGeolocationHandlers() {
   })
 
   // 获取当前位置（macOS 原生定位优先，IP 地理定位作为后备）
-  ipcMain.handle('geolocation:getCurrentPosition', async (event) => {
+  ipcMain.handle('geolocation:getCurrentPosition', async (event, options?: {
+    desiredAccuracy?: 'best' | 'balanced' | 'coarse'
+    allowFallback?: boolean
+    timeoutMs?: number
+  }) => {
     assertGeolocationPermission(event.sender)
     log.info('[IPC] geolocation:getCurrentPosition called')
     try {
-      const position = await pluginGeolocation.getCurrentPosition(event.sender)
+      const position = await pluginGeolocation.getCurrentPosition(event.sender, options)
       log.info('[IPC] geolocation:getCurrentPosition result:', position)
       return position
     } catch (error) {

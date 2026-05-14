@@ -1029,16 +1029,29 @@ export interface ElectronAPI {
     requestAccess: () => Promise<'not-determined' | 'granted' | 'denied' | 'restricted' | 'unknown'>
     canGetPosition: () => Promise<boolean>
     openSettings: () => Promise<void>
-    getCurrentPosition: () => Promise<{
+    getCurrentPosition: (options?: {
+      desiredAccuracy?: 'best' | 'balanced' | 'coarse'
+      allowFallback?: boolean
+      timeoutMs?: number
+    }) => Promise<{
       latitude: number
       longitude: number
       accuracy: number
-      source: 'native' | 'ip'
+      source: 'native' | 'web' | 'ip'
+      provider: 'macos-corelocation' | 'windows-location-service' | 'linux-geoclue' | 'electron-web' | 'ip' | 'freegeoip.app' | 'ip-api.com' | 'ipwho.is'
       altitude?: number | null
       altitudeAccuracy?: number | null
       heading?: number | null
       speed?: number | null
       timestamp: number
+      fallbackUsed: boolean
+      attempts: Array<{
+        provider: 'macos-corelocation' | 'windows-location-service' | 'linux-geoclue' | 'electron-web' | 'ip' | 'freegeoip.app' | 'ip-api.com' | 'ipwho.is'
+        source: 'native' | 'web' | 'ip'
+        status: 'success' | 'skipped' | 'error'
+        accuracy?: number
+        message?: string
+      }>
     }>
   }
   tts: {

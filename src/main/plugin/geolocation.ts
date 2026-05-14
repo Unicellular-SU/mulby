@@ -2,20 +2,29 @@ import log from 'electron-log'
 import { net, BrowserWindow, WebContents } from 'electron'
 import { permissionManager, type PermissionStatus } from './permission-manager'
 import { GEOLOCATION_NATIVE_TIMEOUT_MS } from '../constants/timing'
+import { getLinuxGeoCluePosition } from '../services/linux-geoclue-location'
+import { getWindowsLocationServicePosition } from '../services/windows-location-service'
+import {
+  GeolocationResolutionError,
+  resolveGeolocationPosition,
+  selectProvidersForPlatform,
+  type GeolocationAccessStatus,
+  type GeolocationOptions,
+  type GeolocationPosition,
+  type GeolocationProvider,
+  type GeolocationProviderName
+} from './geolocation-orchestrator'
 
-export interface GeolocationPosition {
-  latitude: number
-  longitude: number
-  accuracy: number
-  source: 'native' | 'ip'
-  altitude?: number
-  altitudeAccuracy?: number
-  heading?: number
-  speed?: number
-  timestamp: number
-}
-
-export type GeolocationAccessStatus = 'not-determined' | 'granted' | 'denied' | 'restricted' | 'unknown'
+export type {
+  GeolocationAccessStatus,
+  GeolocationAttempt,
+  GeolocationDesiredAccuracy,
+  GeolocationOptions,
+  GeolocationPosition,
+  GeolocationProvider,
+  GeolocationProviderName,
+  GeolocationSource
+} from './geolocation-orchestrator'
 
 type NativeProbeSuccess = {
   ok: true
@@ -46,9 +55,6 @@ type NativeProbeResult = NativeProbeSuccess | NativeProbeFailure
 
 type ProbeError = Error & { code?: number | null }
 
-const GEOLOCATION_ERROR_PERMISSION_DENIED = 1
-const GEOLOCATION_ERROR_TIMEOUT = 3
-
 interface IpGeolocationParseResult {
   latitude: unknown
   longitude: unknown
@@ -56,18 +62,27 @@ interface IpGeolocationParseResult {
 }
 
 interface IpGeolocationService {
-  name: string
+  name: GeolocationProviderName
   url: string
   parse: (data: Record<string, unknown>) => IpGeolocationParseResult
 }
 
+interface PluginGeolocationDeps {
+  providers?: GeolocationProvider[]
+}
+
+const GEOLOCATION_ERROR_PERMISSION_DENIED = 1
+const GEOLOCATION_ERROR_TIMEOUT = 3
+
 export class PluginGeolocation {
   private nativeAccessStatus: GeolocationAccessStatus | null = null
   private nativeAccessAttempted = false
+  private readonly injectedProviders: GeolocationProvider[] | null
 
-  /**
-   * 检查位置权限状态
-   */
+  constructor(deps: PluginGeolocationDeps = {}) {
+    this.injectedProviders = deps.providers || null
+  }
+
   getAccessStatus(): GeolocationAccessStatus {
     if (process.platform === 'darwin') {
       if (this.nativeAccessStatus) {
@@ -87,8 +102,6 @@ export class PluginGeolocation {
         return 'not-determined'
       }
       if (status === 'denied') {
-        // node-mac-permissions 在 location 上存在误报 denied 的问题：
-        // 未真实请求过时，先按 not-determined 处理，允许触发一次真实请求。
         return this.nativeAccessAttempted ? 'denied' : 'not-determined'
       }
       return 'unknown'
@@ -97,9 +110,6 @@ export class PluginGeolocation {
     return this.normalizePermissionStatus(permissionManager.getStatus('geolocation'))
   }
 
-  /**
-   * 请求位置权限
-   */
   async requestAccess(webContents?: WebContents): Promise<GeolocationAccessStatus> {
     const currentStatus = this.getAccessStatus()
     log.info(`[Geolocation] Requesting access, current status: ${currentStatus}`)
@@ -116,22 +126,29 @@ export class PluginGeolocation {
     if (process.platform === 'darwin') {
       this.nativeAccessAttempted = true
       try {
-        await this.getNativePosition(webContents, 15000)
+        await this.getMacOSCoreLocationPosition(GEOLOCATION_NATIVE_TIMEOUT_MS)
         this.setNativeAccessStatus('granted')
         return 'granted'
-      } catch (error) {
-        const status = this.classifyNativeError(error)
-        if (status === 'denied' || status === 'restricted') {
+      } catch (coreLocationError) {
+        log.warn('[Geolocation] CoreLocation permission probe failed:', coreLocationError)
+        try {
+          await this.getElectronWebPosition(webContents, 15_000)
+          this.setNativeAccessStatus('granted')
+          return 'granted'
+        } catch (error) {
+          const status = this.classifyNativeError(error)
+          if (status === 'denied' || status === 'restricted') {
+            this.setNativeAccessStatus(status)
+            permissionManager.openSystemSettings('geolocation')
+            return status
+          }
+          if (status === 'not-determined') {
+            this.setNativeAccessStatus(null)
+            return status
+          }
           this.setNativeAccessStatus(status)
-          permissionManager.openSystemSettings('geolocation')
           return status
         }
-        if (status === 'not-determined') {
-          this.setNativeAccessStatus(null)
-          return status
-        }
-        this.setNativeAccessStatus(status)
-        return status
       }
     }
 
@@ -139,42 +156,77 @@ export class PluginGeolocation {
     return this.normalizePermissionStatus(status)
   }
 
-  /**
-   * 检查是否可以获取位置
-   */
   canGetPosition(): boolean {
     const status = this.getAccessStatus()
     return status !== 'denied' && status !== 'restricted'
   }
 
-  /**
-   * 打开系统位置设置
-   */
   openSettings(): void {
     permissionManager.openSystemSettings('geolocation')
   }
 
-  /**
-   * 获取当前位置
-   * macOS: 优先使用主进程内 geolocation（无外部 helper）
-   * 后备: 使用 IP 地理位置 (约 5km 精度)
-   */
-  async getCurrentPosition(webContents?: WebContents): Promise<GeolocationPosition> {
-    if (process.platform === 'darwin') {
-      try {
-        const nativePosition = await this.getNativePosition(webContents, GEOLOCATION_NATIVE_TIMEOUT_MS)
+  async getCurrentPosition(
+    webContents?: WebContents,
+    options: GeolocationOptions = {}
+  ): Promise<GeolocationPosition> {
+    const providers = this.injectedProviders || this.createProviders(webContents)
+    try {
+      const position = await resolveGeolocationPosition(providers, {
+        desiredAccuracy: options.desiredAccuracy || 'best',
+        allowFallback: options.allowFallback !== false,
+        timeoutMs: options.timeoutMs || GEOLOCATION_NATIVE_TIMEOUT_MS
+      })
+      if (position.source !== 'ip') {
         this.setNativeAccessStatus('granted')
-        return nativePosition
-      } catch (error) {
-        const status = this.classifyNativeError(error)
-        if (status === 'denied' || status === 'restricted') {
-          this.setNativeAccessStatus(status)
-        }
-        log.warn('[Geolocation] Native position failed, fallback to IP:', error)
       }
+      return position
+    } catch (error) {
+      const status = this.classifyNativeError(error)
+      if (status === 'denied' || status === 'restricted') {
+        this.setNativeAccessStatus(status)
+      }
+      if (error instanceof GeolocationResolutionError) {
+        log.warn('[Geolocation] All providers failed:', error.attempts)
+      }
+      throw error
     }
+  }
 
-    return this.getPositionByIP()
+  private createProviders(webContents?: WebContents): GeolocationProvider[] {
+    const providers: GeolocationProvider[] = [
+      {
+        name: 'macos-corelocation',
+        source: 'native',
+        isAvailable: () => process.platform === 'darwin',
+        locate: async (context) => this.getMacOSCoreLocationPosition(context.timeoutMs)
+      },
+      {
+        name: 'windows-location-service',
+        source: 'native',
+        isAvailable: () => process.platform === 'win32',
+        locate: async (context) => getWindowsLocationServicePosition(context.timeoutMs)
+      },
+      {
+        name: 'linux-geoclue',
+        source: 'native',
+        isAvailable: () => process.platform === 'linux',
+        locate: async (context) => getLinuxGeoCluePosition(context.timeoutMs)
+      },
+      {
+        name: 'electron-web',
+        source: 'web',
+        isAvailable: () => this.pickWebContents(webContents) !== null,
+        locate: async (context) => this.getElectronWebPosition(webContents, context.timeoutMs)
+      },
+      {
+        name: 'ip',
+        source: 'ip',
+        isAvailable: () => true,
+        locate: async () => this.getPositionByIP()
+      }
+    ]
+
+    return selectProvidersForPlatform(providers)
   }
 
   private normalizePermissionStatus(status: PermissionStatus): GeolocationAccessStatus {
@@ -221,7 +273,37 @@ export class PluginGeolocation {
     return null
   }
 
-  private async getNativePosition(preferredWebContents: WebContents | undefined, timeoutMs: number): Promise<GeolocationPosition> {
+  private async getMacOSCoreLocationPosition(timeoutMs: number): Promise<Omit<GeolocationPosition, 'fallbackUsed' | 'attempts'>> {
+    if (process.platform !== 'darwin') {
+      throw new Error('CoreLocation is only available on macOS')
+    }
+
+    const getLocation = require('electron-get-location') as () => Promise<{
+      latitude?: string
+      longitude?: string
+    }>
+
+    const result = await withTimeout(getLocation(), timeoutMs, 'CoreLocation')
+    const latitude = this.parseCoordinate(result.latitude)
+    const longitude = this.parseCoordinate(result.longitude)
+    if (latitude === null || longitude === null) {
+      throw new Error('CoreLocation returned invalid coordinates')
+    }
+
+    return {
+      latitude,
+      longitude,
+      accuracy: 100,
+      source: 'native',
+      provider: 'macos-corelocation',
+      timestamp: Date.now()
+    }
+  }
+
+  private async getElectronWebPosition(
+    preferredWebContents: WebContents | undefined,
+    timeoutMs: number
+  ): Promise<Omit<GeolocationPosition, 'fallbackUsed' | 'attempts'>> {
     const target = this.pickWebContents(preferredWebContents)
     if (!target || target.isDestroyed()) {
       const error: ProbeError = new Error('No available webContents to request geolocation')
@@ -302,20 +384,21 @@ export class PluginGeolocation {
       const accuracy = this.parseCoordinate(coords.accuracy)
 
       if (latitude === null || longitude === null || accuracy === null) {
-        const parseError: ProbeError = new Error('Native geolocation returned invalid coordinates')
+        const parseError: ProbeError = new Error('Electron Web Geolocation returned invalid coordinates')
         parseError.code = null
         throw parseError
       }
 
       log.info(
-        `[Geolocation] Native probe success (webContents=${target.id}, secure=${coords.secureContext}, accuracy=${accuracy})`
+        `[Geolocation] Electron Web Geolocation success (webContents=${target.id}, secure=${coords.secureContext}, accuracy=${accuracy})`
       )
 
       return {
         latitude,
         longitude,
         accuracy,
-        source: 'native',
+        source: 'web',
+        provider: 'electron-web',
         altitude: this.parseCoordinate(coords.altitude) ?? undefined,
         altitudeAccuracy: this.parseCoordinate(coords.altitudeAccuracy) ?? undefined,
         heading: this.parseCoordinate(coords.heading) ?? undefined,
@@ -325,12 +408,12 @@ export class PluginGeolocation {
     }
 
     const probeError: ProbeError = new Error(
-      `Native geolocation failed: ${probeResult.error.message}; code=${probeResult.error.code}; secure=${probeResult.error.secureContext}`
+      `Electron Web Geolocation failed: ${probeResult.error.message}; code=${probeResult.error.code}; secure=${probeResult.error.secureContext}`
     )
     probeError.code = probeResult.error.code
 
     log.warn(
-      `[Geolocation] Native probe failed (webContents=${target.id}, code=${probeResult.error.code}, secure=${probeResult.error.secureContext}, hasGeo=${probeResult.error.hasGeolocation}): ${probeResult.error.message}`
+      `[Geolocation] Electron Web Geolocation failed (webContents=${target.id}, code=${probeResult.error.code}, secure=${probeResult.error.secureContext}, hasGeo=${probeResult.error.hasGeolocation}): ${probeResult.error.message}`
     )
 
     throw probeError
@@ -379,10 +462,7 @@ export class PluginGeolocation {
     return null
   }
 
-  /**
-   * 使用 IP 地理位置作为后备
-   */
-  private async getPositionByIP(): Promise<GeolocationPosition> {
+  private async getPositionByIP(): Promise<Omit<GeolocationPosition, 'fallbackUsed' | 'attempts'>> {
     log.info('[Geolocation] Using IP geolocation fallback...')
 
     const services: IpGeolocationService[] = [
@@ -392,7 +472,7 @@ export class PluginGeolocation {
         parse: (data: Record<string, unknown>) => ({
           latitude: data.latitude,
           longitude: data.longitude,
-          accuracy: 5000,
+          accuracy: 5000
         })
       },
       {
@@ -401,7 +481,7 @@ export class PluginGeolocation {
         parse: (data: Record<string, unknown>) => ({
           latitude: data.lat,
           longitude: data.lon,
-          accuracy: 5000,
+          accuracy: 5000
         })
       },
       {
@@ -410,7 +490,7 @@ export class PluginGeolocation {
         parse: (data: Record<string, unknown>) => ({
           latitude: data.latitude,
           longitude: data.longitude,
-          accuracy: 5000,
+          accuracy: 5000
         })
       }
     ]
@@ -430,6 +510,7 @@ export class PluginGeolocation {
             longitude,
             accuracy: parsed.accuracy,
             source: 'ip',
+            provider: service.name,
             timestamp: Date.now()
           }
         }
@@ -471,6 +552,24 @@ export class PluginGeolocation {
       request.end()
     })
   }
+}
+
+function withTimeout<T>(promise: Promise<T>, timeoutMs: number, label: string): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const timeout = setTimeout(() => {
+      reject(new Error(`${label} timed out after ${timeoutMs}ms`))
+    }, timeoutMs)
+
+    promise
+      .then((value) => {
+        clearTimeout(timeout)
+        resolve(value)
+      })
+      .catch((error) => {
+        clearTimeout(timeout)
+        reject(error)
+      })
+  })
 }
 
 export const pluginGeolocation = new PluginGeolocation()
