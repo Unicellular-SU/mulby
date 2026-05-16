@@ -144,6 +144,7 @@ export class PluginPanelWindow {
     private syncingBounds = false
     private panelWindowHasBeenShown = false
     private opacityRestoreTimer: NodeJS.Timeout | null = null
+    private panelShellSurfacePromise: Promise<void> | null = null
     private suspendedForResident = false
 
     constructor(mainWindow: BrowserWindow) {
@@ -320,6 +321,8 @@ export class PluginPanelWindow {
             return this.panelWindow
         }
 
+        this.panelShellSurfacePromise = null
+
         const panelWindow = new BrowserWindow({
             width: initialBounds.width,
             height: initialBounds.height,
@@ -390,6 +393,23 @@ export class PluginPanelWindow {
 
         this.panelWindow = panelWindow
         return panelWindow
+    }
+
+    private applyAttachedPanelShellSurface(): Promise<void> {
+        if (!this.panelWindow || this.panelWindow.isDestroyed()) return Promise.resolve()
+        if (this.panelShellSurfacePromise) return this.panelShellSurfacePromise
+
+        const panelWindow = this.panelWindow
+        this.panelShellSurfacePromise = (async () => {
+            if (panelWindow.isDestroyed() || this.panelWindow !== panelWindow) return
+            await applyWindowsFramelessSurface(panelWindow, { resizeMode: 'bottom', contentBackground: 'transparent' })
+        })().catch((err) => {
+            if (!panelWindow.isDestroyed() && this.panelWindow === panelWindow) {
+                this.panelShellSurfacePromise = null
+            }
+            log.warn('[PanelWindow] Failed to apply attached panel shell surface:', err)
+        })
+        return this.panelShellSurfacePromise
     }
 
     /**
@@ -502,14 +522,26 @@ export class PluginPanelWindow {
             }
         }
 
-        const applyAttachedPanelSurface = async () => {
+        let pluginContentSurfacePromise: Promise<void> | null = null
+
+        const applyAttachedPanelShellSurface = async () => {
             if (!useWindowsFramelessSurface) return
             if (capturedWin.isDestroyed() || capturedWebContents.isDestroyed()) return
             if (this.panelWindow !== capturedWin || this.pluginView !== capturedView) return
-            await applyWindowsFramelessSurface(capturedWin, { resizeMode: 'bottom', contentBackground: 'transparent' })
-            if (capturedWin.isDestroyed() || capturedWebContents.isDestroyed()) return
-            if (this.panelWindow !== capturedWin || this.pluginView !== capturedView) return
-            await applyWindowsFramelessSurfaceToWebContents(capturedWebContents, { resizeMode: 'bottom' })
+            await this.applyAttachedPanelShellSurface()
+        }
+
+        const ensureAttachedPluginContentSurface = (): Promise<void> => {
+            if (!useWindowsFramelessSurface) return Promise.resolve()
+            if (pluginContentSurfacePromise) return pluginContentSurfacePromise
+            pluginContentSurfacePromise = (async () => {
+                if (capturedWin.isDestroyed() || capturedWebContents.isDestroyed()) return
+                if (this.panelWindow !== capturedWin || this.pluginView !== capturedView) return
+                await applyWindowsFramelessSurfaceToWebContents(capturedWebContents, { resizeMode: 'bottom' })
+            })().catch((err) => {
+                log.warn('[PanelWindow] Failed to apply attached plugin content surface:', err)
+            })
+            return pluginContentSurfacePromise
         }
 
         const showPanel = async (reason: string) => {
@@ -519,7 +551,7 @@ export class PluginPanelWindow {
             if (this.panelWindow !== capturedWin || this.pluginView !== capturedView) return
 
             if (useWindowsFramelessSurface) {
-                await applyAttachedPanelSurface()
+                await applyAttachedPanelShellSurface()
                 if (capturedWin.isDestroyed() || this.panelWindow !== capturedWin || this.pluginView !== capturedView) return
             }
 
@@ -537,6 +569,7 @@ export class PluginPanelWindow {
             }
 
             capturedWin.show()
+            void ensureAttachedPluginContentSurface()
             this.panelWindowHasBeenShown = true
             this.openPluginDevTools(capturedWebContents, plugin.id)
             onPanelShown?.()
@@ -575,7 +608,7 @@ export class PluginPanelWindow {
                 return
             }
             if (useWindowsFramelessSurface) {
-                await applyAttachedPanelSurface()
+                await applyAttachedPanelShellSurface()
             }
             if (loadNum === 1) {
                 sendInitialPluginInit('did-finish-load')
@@ -1178,6 +1211,7 @@ export class PluginPanelWindow {
     private cleanup() {
         this.clearCurrentPluginSession()
         this.panelWindow = null
+        this.panelShellSurfacePromise = null
     }
 
     /**
