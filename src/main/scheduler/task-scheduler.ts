@@ -17,7 +17,7 @@ interface SchedulerHostManagerLike {
   isHostReady(pluginId: string): boolean
   initPlugin(plugin: Plugin): Promise<boolean>
   callTaskCallback(plugin: Plugin, callback: string, payload: unknown, task: Task): Promise<unknown>
-  destroyHost(pluginId: string): Promise<void>
+  destroyHost(pluginId: string, options?: { force?: boolean; reason?: string }): Promise<boolean>
   getWatchdog(): {
     recordHeartbeat(pluginId: string): void
   }
@@ -701,7 +701,7 @@ export class TaskScheduler extends EventEmitter {
     const hostManager = this.pluginManager.getHostManager()
     if (hostManager.isHostReady(pluginId)) {
       log.info(`[TaskScheduler] Cleaning up plugin: ${pluginId}`)
-      await hostManager.destroyHost(pluginId)
+      await hostManager.destroyHost(pluginId, { reason: 'scheduler-cleanup' })
     }
   }
 

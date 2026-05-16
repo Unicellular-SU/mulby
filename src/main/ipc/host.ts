@@ -75,7 +75,7 @@ export function registerHostHandlers(pluginManager: PluginManager) {
       throw new Error(`Plugin not found: ${pluginName}`)
     }
 
-    await hostManager.destroyHost(pluginName)
+    await hostManager.destroyHost(pluginName, { force: true, reason: 'host-ipc-restart' })
     return await hostManager.createHost(plugin)
   })
 }

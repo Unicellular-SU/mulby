@@ -51,6 +51,7 @@ interface PluginHost {
   startedAt: number       // 启动时间戳
   idleTimer: NodeJS.Timeout | null  // 空闲超时计时器
   idleTimeoutMs: number             // 空闲超时时长（0 = 永不销毁）
+  destroyReason?: string
   cachedApi?: ReturnType<typeof createPluginAPI>  // 缓存 API 实例，避免每次请求重建
   messageHandlers: Map<string, (message: PluginMessage) => void | Promise<void>>
   pendingRequests: Map<string, {
@@ -103,6 +104,11 @@ function isValidUtf8(chunk: Buffer): boolean {
 interface PooledProcess {
   process: UtilityProcess
   readyAt: number
+}
+
+interface DestroyHostOptions {
+  force?: boolean
+  reason?: string
 }
 
 export class PluginHostManager extends EventEmitter {
@@ -302,7 +308,7 @@ export class PluginHostManager extends EventEmitter {
 
     // 如果已存在，先销毁
     if (this.hosts.has(pluginName)) {
-      await this.destroyHost(pluginName)
+      await this.destroyHost(pluginName, { force: true, reason: 'replace-existing-host' })
     }
 
     try {
@@ -790,7 +796,7 @@ export class PluginHostManager extends EventEmitter {
       }
 
       console.info(`[HostManager] Idle timeout → destroying host: ${pluginName}`)
-      await this.destroyHost(pluginName)
+      await this.destroyHost(pluginName, { reason: 'idle-timeout' })
     }, host.idleTimeoutMs).unref()
   }
 
@@ -898,11 +904,20 @@ export class PluginHostManager extends EventEmitter {
   /**
    * 销毁 Host 进程
    */
-  async destroyHost(pluginName: string): Promise<void> {
+  async destroyHost(pluginName: string, options: DestroyHostOptions = {}): Promise<boolean> {
     const host = this.hosts.get(pluginName)
-    if (!host) return
+    if (!host) return false
+
+    const reason = options.reason || 'unspecified'
+    if (!options.force && this.hasActiveRequests(pluginName)) {
+      log.info(`[HostManager] Skip destroying active host ${pluginName} (reason: ${reason}, activeRequests=${host.activeRequests}, pendingRequests=${host.pendingRequests.size})`)
+      return false
+    }
 
     try {
+      host.destroyReason = reason
+      log.info(`[HostManager] Destroying host ${pluginName} (reason: ${reason}, force=${options.force === true})`)
+
       // 发送终止请求
       host.process.postMessage({
         id: generateRequestId(),
@@ -922,6 +937,7 @@ export class PluginHostManager extends EventEmitter {
     }
 
     this.cleanupHost(pluginName)
+    return true
   }
 
   /**
@@ -955,7 +971,7 @@ export class PluginHostManager extends EventEmitter {
     // 清理所有待处理的请求
     for (const [, pending] of host.pendingRequests) {
       clearTimeout(pending.timeout)
-      pending.reject(new Error('Host destroyed'))
+      pending.reject(new Error(`Host destroyed${host.destroyReason ? ` (${host.destroyReason})` : ''}`))
     }
 
     this.hosts.delete(pluginName)
@@ -969,7 +985,7 @@ export class PluginHostManager extends EventEmitter {
     this.watchdog.stop()
 
     const names = Array.from(this.hosts.keys())
-    await Promise.all(names.map(name => this.destroyHost(name)))
+    await Promise.all(names.map(name => this.destroyHost(name, { force: true, reason: 'destroy-all' })))
   }
 
   /**
@@ -978,6 +994,14 @@ export class PluginHostManager extends EventEmitter {
   isHostReady(pluginName: string): boolean {
     const host = this.hosts.get(pluginName)
     return host?.ready ?? false
+  }
+
+  /**
+   * 检查 Host 是否仍有正在处理的请求
+   */
+  hasActiveRequests(pluginName: string): boolean {
+    const host = this.hosts.get(pluginName)
+    return Boolean(host && (host.activeRequests > 0 || host.pendingRequests.size > 0))
   }
 
   /**

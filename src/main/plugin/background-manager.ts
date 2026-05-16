@@ -216,7 +216,7 @@ export class BackgroundPluginManager extends EventEmitter {
       this.watchdog.unregisterHost(pluginId)
 
       // 销毁 Host 进程
-      await this.hostManager.destroyHost(pluginId)
+      await this.hostManager.destroyHost(pluginId, { force: true, reason: `background-stop:${reason}` })
 
       // 更新状态。应用退出恢复场景需要保留 backgroundRunning=true，供下次启动恢复。
       if (!options.preserveRunningState) {

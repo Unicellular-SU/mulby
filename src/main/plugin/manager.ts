@@ -621,7 +621,7 @@ export class PluginManager {
       // 销毁所有活跃 Host，后续按需重建
       const activeHosts = this.hostManager.getActiveHosts()
       if (activeHosts.length > 0) {
-        await Promise.all(activeHosts.map((pluginId) => this.hostManager.destroyHost(pluginId)))
+        await Promise.all(activeHosts.map((pluginId) => this.hostManager.destroyHost(pluginId, { force: true, reason: 'runtime-reset' })))
       }
 
       // 清理旧内存状态
@@ -1359,9 +1359,12 @@ export class PluginManager {
   private destroyUnusedPrewarmHost(pluginId: string): void {
     if (!this.useUtilityProcess || !this.hostManager.isHostReady(pluginId)) return
     if (this.hasPluginRuntimeDemand(pluginId)) return
+    if (this.hostManager.hasActiveRequests(pluginId)) return
 
-    void this.hostManager.destroyHost(pluginId).then(() => {
-      this.workerOnloadedPlugins.delete(pluginId)
+    void this.hostManager.destroyHost(pluginId, { reason: 'prewarm-cleanup' }).then((destroyed) => {
+      if (destroyed) {
+        this.workerOnloadedPlugins.delete(pluginId)
+      }
     })
   }
 
@@ -1390,8 +1393,10 @@ export class PluginManager {
 
     // 如果不是后台插件且没有其他窗口，销毁 Host
     if (!options?.preserveHost && !this.hasPluginRuntimeDemand(pluginId) && this.useUtilityProcess && this.hostManager.isHostReady(pluginId)) {
-      void this.hostManager.destroyHost(pluginId).then(() => {
-        this.workerOnloadedPlugins.delete(pluginId)
+      void this.hostManager.destroyHost(pluginId, { reason: `resident-evict:${reason}` }).then((destroyed) => {
+        if (destroyed) {
+          this.workerOnloadedPlugins.delete(pluginId)
+        }
       })
     }
   }
@@ -1511,11 +1516,12 @@ export class PluginManager {
       if (hasWindow || isBackground || isLoading) return
       if (!this.hostManager.isHostReady(pluginId)) return
 
-      this.workerOnloadedPlugins.delete(pluginId)
-
-      const teardown = this.hostManager.destroyHost(pluginId)
-        .then(() => {
-          log.info(`[ResidentUI] host destroyed after keepalive | plugin=${pluginId}`)
+      const teardown = this.hostManager.destroyHost(pluginId, { reason: 'resident-keepalive-expired' })
+        .then((destroyed) => {
+          if (destroyed) {
+            this.workerOnloadedPlugins.delete(pluginId)
+            log.info(`[ResidentUI] host destroyed after keepalive | plugin=${pluginId}`)
+          }
         })
         .catch((err) => {
           log.warn(`[ResidentUI] failed to destroy host after keepalive | plugin=${pluginId}:`, err)
@@ -1593,7 +1599,8 @@ export class PluginManager {
     const isResident = this.residentSessions.has(pluginId) || this.hostManager.isResidentPinned(pluginId)
     const isLoading = this.loadingPromises.has(pluginId)
     const isPrewarming = this.prewarmState.has(pluginId)
-    return hasWindow || isBackground || isResident || isLoading || isPrewarming
+    const hasActiveHostRequests = this.hostManager.hasActiveRequests(pluginId)
+    return hasWindow || isBackground || isResident || isLoading || isPrewarming || hasActiveHostRequests
   }
 
   private hasDetachedWindowForPlugin(pluginId: string): boolean {
@@ -1684,13 +1691,13 @@ export class PluginManager {
       await this.callPluginHook(plugin, 'onDisable')
       // 销毁 Host 进程
       if (this.useUtilityProcess) {
-        await this.hostManager.destroyHost(pluginId)
+        await this.hostManager.destroyHost(pluginId, { force: true, reason: 'disable' })
       }
       this.initializedPlugins.delete(pluginId)
       this.workerOnloadedPlugins.delete(pluginId)
     } else if (this.useUtilityProcess && this.hostManager.isHostReady(pluginId) && !this.backgroundManager.isRunning(pluginId)) {
       // 兜底：可能由 redirect/initPlugin 直接拉起 Host，但未进入 initializedPlugins
-      await this.hostManager.destroyHost(pluginId)
+      await this.hostManager.destroyHost(pluginId, { force: true, reason: 'disable-uninitialized-host' })
     }
 
     plugin.enabled = false
@@ -1737,13 +1744,13 @@ export class PluginManager {
       if (this.initializedPlugins.has(pluginId)) {
         await this.callPluginHook(plugin, 'onUnload')
         if (this.useUtilityProcess) {
-          await this.hostManager.destroyHost(pluginId)
+          await this.hostManager.destroyHost(pluginId, { force: true, reason: 'uninstall' })
         }
         this.initializedPlugins.delete(pluginId)
         this.workerOnloadedPlugins.delete(pluginId)
       } else if (this.useUtilityProcess && this.hostManager.isHostReady(pluginId) && !this.backgroundManager.isRunning(pluginId)) {
         // 兜底：可能由 redirect/initPlugin 直接拉起 Host，但未进入 initializedPlugins
-        await this.hostManager.destroyHost(pluginId)
+        await this.hostManager.destroyHost(pluginId, { force: true, reason: 'uninstall-uninitialized-host' })
       }
 
       // 删除插件文件
@@ -1842,11 +1849,10 @@ export class PluginManager {
   async initializePlugin(name: string): Promise<void> {
     const plugin = this.resolve(name)
     if (!plugin) return
-    if (this.initializedPlugins.has(plugin.id) && this.workerOnloadedPlugins.has(plugin.id)) return
-    await this.callPluginHook(plugin, 'onLoad')
-    this.initializedPlugins.add(plugin.id)
-    this.workerOnloadedPlugins.add(plugin.id)
-    this.scheduleIdleLoad(plugin, plugin.id)
+    const loaded = await this.ensurePluginLoaded(plugin, plugin.id)
+    if (loaded) {
+      this.scheduleIdleLoad(plugin, plugin.id)
+    }
   }
 
   // 销毁所有资源
@@ -2047,7 +2053,7 @@ export class PluginManager {
 
     // 1. 如果有运行中的 Host，销毁它（强制下次运行重新加载代码）
     if (this.hostManager.isHostReady(pluginId)) {
-      await this.hostManager.destroyHost(pluginId)
+      await this.hostManager.destroyHost(pluginId, { force: true, reason: 'code-reload' })
     }
 
     // 2. 如果插件已初始化（触发过 onLoad），重新触发 onLoad
@@ -2109,7 +2115,7 @@ export class PluginManager {
     if (wasBackgroundRunning) {
       await this.backgroundManager.stop(pluginId, 'metadata-reload')
     } else if (this.useUtilityProcess && this.hostManager.isHostReady(pluginId)) {
-      await this.hostManager.destroyHost(pluginId)
+      await this.hostManager.destroyHost(pluginId, { force: true, reason: 'metadata-reload' })
     }
 
     this.runners.delete(pluginId)
@@ -2182,7 +2188,7 @@ export class PluginManager {
 
     if (this.isReloading) {
       if (this.useUtilityProcess && this.hostManager.isHostReady(pluginId)) {
-        await this.hostManager.destroyHost(pluginId)
+        await this.hostManager.destroyHost(pluginId, { force: true, reason: 'window-closed-during-reload' })
       }
       return
     }
@@ -2193,7 +2199,7 @@ export class PluginManager {
     // 已禁用插件不应因窗口关闭被拉起后台
     if (!plugin.enabled) {
       if (this.useUtilityProcess && this.hostManager.isHostReady(pluginId) && !this.backgroundManager.isRunning(pluginId)) {
-        await this.hostManager.destroyHost(pluginId)
+        await this.hostManager.destroyHost(pluginId, { reason: 'window-closed-disabled-plugin' })
       }
       return
     }
@@ -2222,7 +2228,7 @@ export class PluginManager {
         log.warn(`[PluginManager] Failed to start plugin ${pluginId} in background`)
         // 如果启动后台失败，销毁 Host 进程
         if (this.useUtilityProcess && this.hostManager.isHostReady(pluginId)) {
-          await this.hostManager.destroyHost(pluginId)
+          await this.hostManager.destroyHost(pluginId, { reason: 'window-closed-background-start-failed' })
         }
       }
     } else {
@@ -2231,7 +2237,7 @@ export class PluginManager {
       // 若走到此处说明不是 attached panel（如 detached window）或已被 evict。
       if (this.useUtilityProcess && this.hostManager.isHostReady(pluginId)) {
         log.info(`[PluginManager] Plugin ${pluginId} does not support background, destroying host`)
-        await this.hostManager.destroyHost(pluginId)
+        await this.hostManager.destroyHost(pluginId, { reason: 'window-closed-no-background' })
       }
     }
   }
@@ -2312,7 +2318,7 @@ export class PluginManager {
 
       // 3. 如果不保留后台进程，销毁 Host 进程
       if (!keepBackground && this.useUtilityProcess && this.hostManager.isHostReady(pluginId)) {
-        await this.hostManager.destroyHost(pluginId)
+        await this.hostManager.destroyHost(pluginId, { force: true, reason: 'manual-stop' })
         // 同步清除 Worker 级标记，不依赖异步 exit 事件，
         // 确保下次搜索时 initializePlugin 能重新触发 onLoad
         this.workerOnloadedPlugins.delete(pluginId)
