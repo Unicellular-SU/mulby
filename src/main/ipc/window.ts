@@ -1207,12 +1207,16 @@ export function registerWindowHandlers(
       nextY = baseBounds.y + (baseBounds.height - clampedHeight)
     }
 
+    const appliedWidth = Math.max(1, Math.round(clampedWidth))
+    const appliedHeight = Math.max(1, Math.round(clampedHeight))
+
     win.setBounds({
       x: Math.round(nextX),
       y: Math.round(nextY),
-      width: Math.max(1, Math.round(clampedWidth)),
-      height: Math.max(1, Math.round(clampedHeight))
+      width: appliedWidth,
+      height: appliedHeight
     })
+    updatePinnedSize(win.id, appliedWidth, appliedHeight)
   })
 
   ipcMain.on('plugin:reload', (event) => {

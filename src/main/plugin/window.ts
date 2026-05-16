@@ -551,6 +551,8 @@ export class PluginWindowManager {
       if (promoted) {
         const win = promoted.window
         const windowId = win.id
+        const promotedBounds = win.getBounds()
+        pinWindowSize(windowId, promotedBounds.width, promotedBounds.height)
         this.detachedWindows.set(windowId, {
           window: win,
           pluginView: promoted.pluginView,
@@ -568,6 +570,7 @@ export class PluginWindowManager {
 
         win.on('closed', () => {
           this.detachedWindows.delete(windowId)
+          unpinWindowSize(windowId)
           unregisterProtectedWindow(windowId)
           unregisterWindowsInputTargetWindow(windowId)
           this.refreshDockPresentation()
