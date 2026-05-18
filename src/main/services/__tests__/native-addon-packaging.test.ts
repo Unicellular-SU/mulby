@@ -51,6 +51,15 @@ describe('native addon packaging', () => {
     )
   })
 
+  it('forces macOS unsigned builds onto the resource update route', () => {
+    const pkg = readPackageJson()
+    const releaseWorkflow = readReleaseWorkflow()
+    const macUnsignedScript = pkg.scripts?.['electron:build:mac:unsigned'] || ''
+
+    assert.match(macUnsignedScript, /MULBY_MAC_UNSIGNED_RESOURCE_UPDATES=true vite build/)
+    assert.match(releaseWorkflow, /MULBY_MAC_UNSIGNED_RESOURCE_UPDATES:\s*"true"/)
+  })
+
   it('copies native build addons into runtime extraResources', () => {
     const pkg = readPackageJson()
     const extraResources = pkg.build?.extraResources || []

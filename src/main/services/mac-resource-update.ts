@@ -56,7 +56,20 @@ function isHttpUrl(input: string): boolean {
 }
 
 export function isMacResourceUpdateRuntime(): boolean {
-  return process.platform === 'darwin' && app.isPackaged && BUILD_MAC_UNSIGNED_RESOURCE_UPDATES
+  return isPackagedMacRuntime() && BUILD_MAC_UNSIGNED_RESOURCE_UPDATES
+}
+
+export function isPackagedMacRuntime(): boolean {
+  return shouldUseMacResourceUpdatesForRuntime(process.platform, app.isPackaged)
+}
+
+export function shouldUseMacResourceUpdatesForRuntime(platform: NodeJS.Platform, isPackaged: boolean): boolean {
+  return platform === 'darwin' && isPackaged
+}
+
+export function shouldUseMacResourceUpdates(): boolean {
+  // Mulby publishes unsigned macOS builds with resource manifests, not latest-mac.yml.
+  return isPackagedMacRuntime()
 }
 
 export function resolveMacResourceManifestUrls(arch: NodeJS.Architecture = process.arch): string[] {

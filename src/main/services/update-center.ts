@@ -5,8 +5,8 @@ import {
   downloadMacResourceUpdatePackage,
   fetchMacResourceUpdateManifest,
   installMacResourceUpdatePackage,
-  isMacResourceUpdateRuntime,
-  resolveMacResourceManifestUrls
+  resolveMacResourceManifestUrls,
+  shouldUseMacResourceUpdates
 } from './mac-resource-update'
 import type { MacResourceUpdateManifest } from './mac-resource-update-manifest'
 
@@ -116,7 +116,7 @@ function broadcastUpdateState(): void {
 
 /** 初始化 autoUpdater，在 app ready 后调用 */
 export function initAutoUpdater(): void {
-  if (isMacResourceUpdateRuntime()) {
+  if (shouldUseMacResourceUpdates()) {
     patchState({
       latestReleaseApiUrl: resolveMacResourceManifestUrls()[0]
     })
@@ -211,7 +211,7 @@ export function initAutoUpdater(): void {
 
 /** 检查更新（生产环境走 electron-updater，开发环境回退到 GitHub API） */
 export async function checkAppUpdates(): Promise<UpdateCenterState> {
-  if (isMacResourceUpdateRuntime()) {
+  if (shouldUseMacResourceUpdates()) {
     return checkMacResourceUpdates()
   }
 
@@ -399,7 +399,7 @@ export async function checkAppUpdatesFallback(): Promise<UpdateCenterState> {
 
 /** 下载更新 */
 export async function downloadUpdate(): Promise<UpdateCenterState> {
-  if (isMacResourceUpdateRuntime()) {
+  if (shouldUseMacResourceUpdates()) {
     return downloadMacResourceUpdate()
   }
 
@@ -482,7 +482,7 @@ async function downloadMacResourceUpdate(): Promise<UpdateCenterState> {
 
 /** 安装更新并重启 */
 export function installUpdate(): boolean {
-  if (isMacResourceUpdateRuntime()) {
+  if (shouldUseMacResourceUpdates()) {
     if (updateCenterState.status !== 'downloaded' || !macResourceManifest || !macResourcePackagePath) {
       return false
     }
