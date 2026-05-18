@@ -24,6 +24,14 @@ function readPackageJson(): PackageJson {
   return JSON.parse(readFileSync(resolve(process.cwd(), 'package.json'), 'utf8')) as PackageJson
 }
 
+function readAfterPackScript(): string {
+  return readFileSync(resolve(process.cwd(), 'scripts/electron-builder-after-pack.cjs'), 'utf8')
+}
+
+function readMacSigningVerifierScript(): string {
+  return readFileSync(resolve(process.cwd(), 'scripts/verify-mac-app-signing.cjs'), 'utf8')
+}
+
 describe('native addon packaging', () => {
   it('builds app native addons before release publishing', () => {
     const pkg = readPackageJson()
@@ -62,5 +70,19 @@ describe('native addon packaging', () => {
     )
 
     assert.ok(textSelectionResource, 'Windows text_selection.dll must be copied as extraResources')
+  })
+
+  it('prunes unsupported sharp optional native packages from macOS app bundles', () => {
+    const afterPackScript = readAfterPackScript()
+    const verifierScript = readMacSigningVerifierScript()
+
+    assert.match(afterPackScript, /pruneUnsupportedSharpOptionalPackages\(unpackedDir\)/)
+    assert.match(afterPackScript, /assertNoUnsupportedSharpOptionalPackages\(unpackedDir\)/)
+    assert.match(afterPackScript, /sharp-darwin-arm64/)
+    assert.match(afterPackScript, /sharp-darwin-x64/)
+    assert.match(afterPackScript, /sharp-libvips-darwin-arm64/)
+    assert.match(afterPackScript, /sharp-libvips-darwin-x64/)
+
+    assert.match(verifierScript, /Unsupported sharp optional packages in macOS app bundle/)
   })
 })

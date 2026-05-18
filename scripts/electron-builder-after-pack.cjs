@@ -1,6 +1,13 @@
 const { execFileSync } = require('child_process')
-const { existsSync, readdirSync, statSync, copyFileSync } = require('fs')
+const { existsSync, readdirSync, statSync, copyFileSync, rmSync } = require('fs')
 const path = require('path')
+
+const SUPPORTED_DARWIN_SHARP_PACKAGES = new Set([
+  'sharp-darwin-arm64',
+  'sharp-darwin-x64',
+  'sharp-libvips-darwin-arm64',
+  'sharp-libvips-darwin-x64'
+])
 
 function run(command, args) {
   execFileSync(command, args, { stdio: 'inherit' })
@@ -122,6 +129,57 @@ function signWithIdentity(targetPath, identityHash) {
   ])
 }
 
+function isSharpOptionalPackage(name) {
+  return name.startsWith('sharp-') || name.startsWith('sharp-libvips-')
+}
+
+function isSupportedDarwinSharpPackage(name) {
+  return SUPPORTED_DARWIN_SHARP_PACKAGES.has(name)
+}
+
+function getImgPackageDirs(unpackedDir) {
+  const imgDir = path.join(unpackedDir, 'node_modules', '@img')
+  if (!existsSync(imgDir)) return []
+
+  return readdirSync(imgDir)
+    .filter((name) => isSharpOptionalPackage(name))
+    .map((name) => ({
+      name,
+      fullPath: path.join(imgDir, name)
+    }))
+    .filter((entry) => {
+      try {
+        return statSync(entry.fullPath).isDirectory()
+      } catch {
+        return false
+      }
+    })
+}
+
+function pruneUnsupportedSharpOptionalPackages(unpackedDir) {
+  const removed = []
+  for (const entry of getImgPackageDirs(unpackedDir)) {
+    if (isSupportedDarwinSharpPackage(entry.name)) continue
+    rmSync(entry.fullPath, { recursive: true, force: true })
+    removed.push(entry.name)
+  }
+
+  if (removed.length > 0) {
+    console.log(`[afterPack] Pruned unsupported sharp optional packages: ${removed.join(', ')}`)
+  }
+}
+
+function assertNoUnsupportedSharpOptionalPackages(unpackedDir) {
+  const unsupported = getImgPackageDirs(unpackedDir)
+    .filter((entry) => !isSupportedDarwinSharpPackage(entry.name))
+    .map((entry) => entry.name)
+    .sort((a, b) => a.localeCompare(b))
+
+  if (unsupported.length > 0) {
+    throw new Error(`[afterPack] Unsupported sharp optional packages in macOS app bundle: ${unsupported.join(', ')}`)
+  }
+}
+
 /**
  * 修复 sharp 在 Electron + asar.unpacked 环境下的 exports subpath 兼容问题。
  *
@@ -139,7 +197,7 @@ function fixSharpNativeBinaries(unpackedDir) {
   const imgDir = path.join(unpackedDir, 'node_modules', '@img')
   if (!existsSync(imgDir)) return
 
-  const sharpPkgs = readdirSync(imgDir).filter((name) => name.startsWith('sharp-') && !name.startsWith('sharp-libvips'))
+  const sharpPkgs = readdirSync(imgDir).filter((name) => name.startsWith('sharp-darwin-'))
   let fixedCount = 0
 
   for (const pkgName of sharpPkgs) {
@@ -179,6 +237,11 @@ module.exports = async function afterPack(context) {
 
   // 先签 app.asar.unpacked 下的 Mach-O 文件（例如 .node/native helper）
   const unpackedDir = path.join(appPath, 'Contents', 'Resources', 'app.asar.unpacked')
+
+  // GitHub Actions 的 pnpm install --force 会把 sharp 的所有平台 optional 包带进 node_modules。
+  // 非 macOS native 包会明显改变 .app 内容，并会导致辅助功能 TCC 出现“显示已授权但 CGEventTap 不工作”。
+  pruneUnsupportedSharpOptionalPackages(unpackedDir)
+  assertNoUnsupportedSharpOptionalPackages(unpackedDir)
 
   // 修复 sharp exports subpath 兼容问题（详见 fixSharpNativeBinaries 注释）
   fixSharpNativeBinaries(unpackedDir)

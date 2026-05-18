@@ -5,6 +5,12 @@ const fs = require('fs')
 const path = require('path')
 
 const ROOT_DIR = path.resolve(__dirname, '..')
+const SUPPORTED_DARWIN_SHARP_PACKAGES = new Set([
+  'sharp-darwin-arm64',
+  'sharp-darwin-x64',
+  'sharp-libvips-darwin-arm64',
+  'sharp-libvips-darwin-x64'
+])
 
 function run(command, args, options = {}) {
   return execFileSync(command, args, {
@@ -92,6 +98,20 @@ function verifyCodeSignature(targetPath) {
   ], { stdio: 'inherit' })
 }
 
+function assertNoUnsupportedSharpOptionalPackages(resourcesDir) {
+  const imgDir = path.join(resourcesDir, 'app.asar.unpacked', 'node_modules', '@img')
+  if (!fs.existsSync(imgDir)) return
+
+  const unsupported = fs.readdirSync(imgDir)
+    .filter((name) => name.startsWith('sharp-') || name.startsWith('sharp-libvips-'))
+    .filter((name) => !SUPPORTED_DARWIN_SHARP_PACKAGES.has(name))
+    .sort((left, right) => left.localeCompare(right))
+
+  if (unsupported.length > 0) {
+    throw new Error(`Unsupported sharp optional packages in macOS app bundle: ${unsupported.join(', ')}`)
+  }
+}
+
 function verifyAppBundle(appPath) {
   console.log(`[verify-mac-signing] Verifying ${appPath}`)
   run('/usr/bin/codesign', [
@@ -110,6 +130,8 @@ function verifyAppBundle(appPath) {
   verifyCodeSignature(mainExecutable)
 
   const resourcesDir = path.join(appPath, 'Contents', 'Resources')
+  assertNoUnsupportedSharpOptionalPackages(resourcesDir)
+
   const nativeDirs = [
     path.join(resourcesDir, 'native', 'build', 'Release'),
     path.join(resourcesDir, 'app.asar.unpacked')
