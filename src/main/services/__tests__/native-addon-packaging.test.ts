@@ -32,6 +32,10 @@ function readMacSigningVerifierScript(): string {
   return readFileSync(resolve(process.cwd(), 'scripts/verify-mac-app-signing.cjs'), 'utf8')
 }
 
+function readBuildNativeScript(): string {
+  return readFileSync(resolve(process.cwd(), 'scripts/build-native.mjs'), 'utf8')
+}
+
 describe('native addon packaging', () => {
   it('builds app native addons before release publishing', () => {
     const pkg = readPackageJson()
@@ -84,5 +88,18 @@ describe('native addon packaging', () => {
     assert.match(afterPackScript, /sharp-libvips-darwin-x64/)
 
     assert.match(verifierScript, /Unsupported sharp optional packages in macOS app bundle/)
+  })
+
+  it('builds macOS project native addons as universal binaries and verifies packaged architectures', () => {
+    const buildNativeScript = readBuildNativeScript()
+    const afterPackScript = readAfterPackScript()
+    const verifierScript = readMacSigningVerifierScript()
+
+    assert.match(buildNativeScript, /--arch=\$\{arch\}/)
+    assert.match(buildNativeScript, /'x64', 'arm64'/)
+    assert.match(buildNativeScript, /lipo/)
+
+    assert.match(afterPackScript, /assertNativeModuleArchitectures\(appPath, nativeNodes\)/)
+    assert.match(verifierScript, /assertNativeModuleArchitectures\(appPath, extraResourceNativeModules\)/)
   })
 })

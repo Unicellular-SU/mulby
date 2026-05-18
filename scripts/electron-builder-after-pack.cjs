@@ -109,6 +109,14 @@ function isMachOFile(filePath) {
   }
 }
 
+function getMachOArchs(filePath) {
+  try {
+    return runText('lipo', ['-archs', filePath]).trim().split(/\s+/).filter(Boolean)
+  } catch (error) {
+    throw new Error(`[afterPack] Failed to read Mach-O architectures for ${filePath}: ${error.message}`)
+  }
+}
+
 function signAdhoc(targetPath) {
   run('codesign', [
     '--force',
@@ -177,6 +185,22 @@ function assertNoUnsupportedSharpOptionalPackages(unpackedDir) {
 
   if (unsupported.length > 0) {
     throw new Error(`[afterPack] Unsupported sharp optional packages in macOS app bundle: ${unsupported.join(', ')}`)
+  }
+}
+
+function assertNativeModuleArchitectures(appPath, nativeModulePaths) {
+  const appName = path.basename(appPath, '.app')
+  const executablePath = path.join(appPath, 'Contents', 'MacOS', appName)
+  const appArchs = getMachOArchs(executablePath)
+
+  for (const nativeModulePath of nativeModulePaths) {
+    const nativeArchs = getMachOArchs(nativeModulePath)
+    const missingArchs = appArchs.filter((arch) => !nativeArchs.includes(arch))
+    if (missingArchs.length === 0) continue
+    throw new Error(
+      `[afterPack] Native module architecture mismatch: ${nativeModulePath} has [${nativeArchs.join(', ')}], ` +
+      `but ${appName} requires [${appArchs.join(', ')}]`
+    )
   }
 }
 
@@ -297,6 +321,7 @@ module.exports = async function afterPack(context) {
     const nativeNodes = listFilesRecursively(nativeReleaseDir).filter((filePath) =>
       filePath.endsWith('.node') || isMachOFile(filePath)
     )
+    assertNativeModuleArchitectures(appPath, nativeNodes)
     nativeNodes
       .sort((a, b) => b.length - a.length)
       .forEach((codePath) => {

@@ -89,6 +89,14 @@ function isMachOFile(filePath) {
   }
 }
 
+function getMachOArchs(filePath) {
+  try {
+    return run('/usr/bin/lipo', ['-archs', filePath]).trim().split(/\s+/).filter(Boolean)
+  } catch (error) {
+    throw new Error(`Failed to read Mach-O architectures for ${filePath}: ${error.message}`)
+  }
+}
+
 function verifyCodeSignature(targetPath) {
   run('/usr/bin/codesign', [
     '--verify',
@@ -96,6 +104,22 @@ function verifyCodeSignature(targetPath) {
     '--verbose=2',
     targetPath
   ], { stdio: 'inherit' })
+}
+
+function assertNativeModuleArchitectures(appPath, nativeModulePaths) {
+  const appName = path.basename(appPath, '.app')
+  const executablePath = path.join(appPath, 'Contents', 'MacOS', appName)
+  const appArchs = getMachOArchs(executablePath)
+
+  for (const nativeModulePath of nativeModulePaths) {
+    const nativeArchs = getMachOArchs(nativeModulePath)
+    const missingArchs = appArchs.filter((arch) => !nativeArchs.includes(arch))
+    if (missingArchs.length === 0) continue
+    throw new Error(
+      `Native module architecture mismatch: ${nativeModulePath} has [${nativeArchs.join(', ')}], ` +
+      `but ${appName} requires [${appArchs.join(', ')}]`
+    )
+  }
 }
 
 function assertNoUnsupportedSharpOptionalPackages(resourcesDir) {
@@ -154,6 +178,12 @@ function verifyAppBundle(appPath) {
   if (!inputMonitorCandidates.some((candidate) => fs.existsSync(candidate))) {
     throw new Error(`input_monitor.node not found in packaged resources for ${appPath}`)
   }
+
+  const extraResourceNativeDir = path.join(resourcesDir, 'native', 'build', 'Release')
+  const extraResourceNativeModules = fs.existsSync(extraResourceNativeDir)
+    ? collectFiles(extraResourceNativeDir).filter((filePath) => filePath.endsWith('.node') || isMachOFile(filePath))
+    : []
+  assertNativeModuleArchitectures(appPath, extraResourceNativeModules)
 
   for (const codePath of nativeCodeObjects.sort((left, right) => left.localeCompare(right))) {
     verifyCodeSignature(codePath)
