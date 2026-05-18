@@ -266,6 +266,8 @@ module.exports = async function afterPack(context) {
   run('codesign', [
     '--verify',
     '--deep',
+    '--strict',
+    '--verbose=2',
     appPath
   ])
 

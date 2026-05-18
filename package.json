@@ -1,6 +1,6 @@
 {
   "name": "mulby",
-  "version": "0.7.1",
+  "version": "0.7.2",
   "description": "跨平台插件式效率工具箱",
   "main": "dist/main/index.js",
   "scripts": {
@@ -12,6 +12,7 @@
     "electron:build:mac:unsigned": "pnpm run native:build && vite build && electron-builder --mac --publish never",
     "electron:publish": "pnpm run native:build && vite build && electron-builder --publish always",
     "mac:resource-update": "node scripts/generate-mac-resource-update.cjs",
+    "mac:verify-signing": "node scripts/verify-mac-app-signing.cjs",
     "postinstall": "node scripts/postinstall.mjs",
     "native:build": "node scripts/build-native.mjs",
     "lint": "eslint src",
