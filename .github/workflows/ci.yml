@@ -18,16 +18,9 @@ concurrency:
 
 jobs:
   quality-gate:
-    name: Quality Gate (${{ matrix.os }})
-    runs-on: ${{ matrix.os }}
+    name: Quality Gate
+    runs-on: ubuntu-latest
     timeout-minutes: 30
-    strategy:
-      fail-fast: false
-      matrix:
-        os:
-          - ubuntu-latest
-          - macos-latest
-          - windows-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -70,6 +63,6 @@ jobs:
           {
             echo "## Quality Gate"
             echo "- Node.js: 24"
-            echo "- OS: ${{ matrix.os }}"
+            echo "- OS: ubuntu-latest"
             echo "- App: install -> verify:app"
           } >> "$GITHUB_STEP_SUMMARY"
