@@ -15,6 +15,10 @@ const runtimeDependencyNames = new Set([
 ])
 const macResourceUpdatePublicKeyPem = process.env.MULBY_MAC_RESOURCE_UPDATE_PUBLIC_KEY_PEM || ''
 const macUnsignedResourceUpdates = process.env.MULBY_MAC_UNSIGNED_RESOURCE_UPDATES === 'true'
+const buildDefines = {
+  __MULBY_MAC_RESOURCE_UPDATE_PUBLIC_KEY_PEM__: JSON.stringify(macResourceUpdatePublicKeyPem),
+  __MULBY_MAC_UNSIGNED_RESOURCE_UPDATES__: JSON.stringify(macUnsignedResourceUpdates)
+}
 
 function isRuntimeExternal(id: string): boolean {
   if (id === 'electron') return true
@@ -27,16 +31,14 @@ function isRuntimeExternal(id: string): boolean {
 }
 
 export default defineConfig({
-  define: {
-    __MULBY_MAC_RESOURCE_UPDATE_PUBLIC_KEY_PEM__: JSON.stringify(macResourceUpdatePublicKeyPem),
-    __MULBY_MAC_UNSIGNED_RESOURCE_UPDATES__: JSON.stringify(macUnsignedResourceUpdates)
-  },
+  define: buildDefines,
   plugins: [
     react(),
     electron([
       {
         entry: 'src/main/index.ts',
         vite: {
+          define: buildDefines,
           build: {
             outDir: 'dist/main',
             rollupOptions: {
@@ -48,6 +50,7 @@ export default defineConfig({
       {
         entry: 'src/preload/index.ts',
         vite: {
+          define: buildDefines,
           build: {
             outDir: 'dist/preload'
           }
@@ -56,6 +59,7 @@ export default defineConfig({
       {
         entry: 'src/main/plugin/host-worker.ts',
         vite: {
+          define: buildDefines,
           build: {
             outDir: 'dist/worker',
             rollupOptions: {
@@ -67,6 +71,7 @@ export default defineConfig({
       {
         entry: 'src/main/plugin/search-worker.ts',
         vite: {
+          define: buildDefines,
           build: {
             outDir: 'dist/worker'
           }
@@ -75,6 +80,7 @@ export default defineConfig({
       {
         entry: 'src/preload/apis/region-capture.ts',
         vite: {
+          define: buildDefines,
           build: {
             outDir: 'dist/preload'
           }
@@ -83,6 +89,7 @@ export default defineConfig({
       {
         entry: 'src/preload/apis/color-pick.ts',
         vite: {
+          define: buildDefines,
           build: {
             outDir: 'dist/preload'
           }
@@ -91,6 +98,7 @@ export default defineConfig({
       {
         entry: 'src/preload/titlebar.ts',
         vite: {
+          define: buildDefines,
           build: {
             outDir: 'dist/preload'
           }
@@ -99,6 +107,7 @@ export default defineConfig({
       {
         entry: 'src/preload/action-menu.ts',
         vite: {
+          define: buildDefines,
           build: {
             outDir: 'dist/preload'
           }
@@ -107,6 +116,7 @@ export default defineConfig({
       {
         entry: 'src/preload/web-parser.ts',
         vite: {
+          define: buildDefines,
           build: {
             outDir: 'dist/preload'
           }
@@ -115,6 +125,7 @@ export default defineConfig({
       {
         entry: 'src/preload/search-stealth.ts',
         vite: {
+          define: buildDefines,
           build: {
             outDir: 'dist/preload'
           }

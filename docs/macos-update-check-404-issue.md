@@ -17,7 +17,20 @@ HttpError: 404
 1. `src/main/services/update-center.ts` 不再让已打包的 macOS 应用落入 `electron-updater` 分支。macOS packaged runtime 始终走 `checkMacResourceUpdates()` / `downloadMacResourceUpdate()` / `installMacResourceUpdatePackage()`，避免 unsigned 构建去请求 `latest-mac.yml`。
 2. `src/main/services/mac-resource-update.ts` 增加 `shouldUseMacResourceUpdates()`，把“当前发布策略下已打包 macOS 应使用资源更新”作为运行时兜底，而不是完全依赖编译时常量。
 3. `package.json` 的 `electron:build:mac:unsigned` 脚本在执行 `vite build` 时强制设置 `MULBY_MAC_UNSIGNED_RESOURCE_UPDATES=true`，降低本地手工构建漏配环境变量的概率。
-4. `src/main/services/__tests__/mac-resource-update-routing.test.ts` 和 `src/main/services/__tests__/native-addon-packaging.test.ts` 增加运行时路由与发布脚本约束测试，防止后续回归。
+4. `vite.config.ts` 将 `__MULBY_MAC_RESOURCE_UPDATE_PUBLIC_KEY_PEM__` 和 `__MULBY_MAC_UNSIGNED_RESOURCE_UPDATES__` 同时注入 renderer 与所有 `vite-plugin-electron` 子构建，确保 macOS main 进程内置 CI 派生公钥。
+5. `src/main/services/__tests__/mac-resource-update-routing.test.ts` 和 `src/main/services/__tests__/native-addon-packaging.test.ts` 增加运行时路由、Electron 子构建 define 注入与发布脚本约束测试，防止后续回归。
+
+## v0.8.0 后续签名问题
+
+`v0.8.0` 解决了 `latest-mac.yml` 404，但检查更新会继续报：
+
+```text
+资源更新 manifest 签名校验失败
+```
+
+根因是 `vite.config.ts` 的顶层 `define` 没有传入 `vite-plugin-electron` 的 main 子构建。`dist/main/index.js` 里仍残留 `__MULBY_MAC_RESOURCE_UPDATE_PUBLIC_KEY_PEM__`，运行时因此回退到源码内置 fallback 公钥；而 GitHub Actions 生成的 `latest-mac-resource-*.json` 使用 secret 私钥签名，两者不匹配。
+
+修复版本为 `v0.8.1`。已经安装 `v0.8.0` 的用户无法通过资源更新自动升级到 `v0.8.1`，需要手动安装一次完整包；后续版本可恢复资源更新。
 
 ## 背景：两条更新路径
 

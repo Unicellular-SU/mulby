@@ -36,6 +36,10 @@ function readBuildNativeScript(): string {
   return readFileSync(resolve(process.cwd(), 'scripts/build-native.mjs'), 'utf8')
 }
 
+function readViteConfig(): string {
+  return readFileSync(resolve(process.cwd(), 'vite.config.ts'), 'utf8')
+}
+
 describe('native addon packaging', () => {
   it('builds app native addons before release publishing', () => {
     const pkg = readPackageJson()
@@ -58,6 +62,18 @@ describe('native addon packaging', () => {
 
     assert.match(macUnsignedScript, /MULBY_MAC_UNSIGNED_RESOURCE_UPDATES=true vite build/)
     assert.match(releaseWorkflow, /MULBY_MAC_UNSIGNED_RESOURCE_UPDATES:\s*"true"/)
+  })
+
+  it('injects macOS resource update defines into Electron child builds', () => {
+    const viteConfig = readViteConfig()
+    const defineUsages = viteConfig.match(/define:\s*buildDefines/g) || []
+
+    assert.match(viteConfig, /__MULBY_MAC_RESOURCE_UPDATE_PUBLIC_KEY_PEM__/)
+    assert.match(viteConfig, /__MULBY_MAC_UNSIGNED_RESOURCE_UPDATES__/)
+    assert.ok(
+      defineUsages.length >= 11,
+      'Vite defines must be applied to the renderer and every vite-plugin-electron child build'
+    )
   })
 
   it('copies native build addons into runtime extraResources', () => {
