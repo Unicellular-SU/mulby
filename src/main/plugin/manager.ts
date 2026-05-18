@@ -158,6 +158,7 @@ interface ResidentUiSession {
   pluginId: string
   featureCode: string
   route?: string
+  uiMode?: 'attached' | 'detached'
   cachedAt: number
   lastUsedAt: number
   ttlTimer: NodeJS.Timeout
@@ -205,7 +206,7 @@ export class PluginManager {
   // Resident UI：缓存最近关闭的 attached panel，加速热启动。
   private residentSessions: Map<string, ResidentUiSession> = new Map()
   private residentHostKeepaliveTimers: Map<string, NodeJS.Timeout> = new Map()
-  private static readonly RESIDENT_UI_CACHE_LIMIT = 3
+  private static readonly RESIDENT_UI_CACHE_LIMIT = 6
   private static readonly RESIDENT_TTL_MS = 3 * 60_000
   private static readonly RESIDENT_HOST_KEEPALIVE_MS = 60_000
 
@@ -514,28 +515,37 @@ export class PluginManager {
     for (const entry of this.stateManager.getLaunchOnStartupPlugins()) {
       const plugin = this.plugins.get(entry.pluginId)
       if (!plugin?.enabled) continue
-      if (!this.getCombinedFeatures(plugin).some(feature => feature.code === entry.state.featureCode)) continue
+      if (!this.supportsLaunchOnStartup(plugin)) {
+        log.warn(`[PluginManager] Ignoring launch-on-startup for ${entry.pluginId}: plugin has neither background support nor UI`)
+        continue
+      }
       startupEntries.push({ plugin, state: entry.state })
     }
 
     if (startupEntries.length === 0) return
 
     log.info(`[PluginManager] Launching ${startupEntries.length} user startup plugins:`,
-      startupEntries.map(entry => `${entry.plugin.id}:${entry.state.featureCode}:${entry.state.mode}`))
+      startupEntries.map(entry => `${entry.plugin.id}:${entry.state.mode}${entry.state.featureCode ? `:${entry.state.featureCode}` : ''}`))
 
     this.launchOnStartupTimer = setTimeout(async () => {
       this.launchOnStartupTimer = null
       for (const { plugin, state } of startupEntries) {
+        const supportsBackground = plugin.manifest.pluginSetting?.background === true
+        const hasUi = Boolean(plugin.manifest.ui)
+        let backgroundStarted = false
         try {
-          const result = await this.run(
-            plugin.id,
-            state.featureCode,
-            '',
-            undefined,
-            { launchMode: state.mode }
-          )
-          if (!result.success) {
-            log.warn(`[PluginManager] User startup launch failed for ${plugin.id}: ${result.error || 'unknown error'}`)
+          if (supportsBackground) {
+            backgroundStarted = await this.backgroundManager.start(plugin, true)
+            if (!backgroundStarted) {
+              log.warn(`[PluginManager] User startup background launch failed for ${plugin.id}`)
+            }
+          }
+
+          if (hasUi) {
+            if (!backgroundStarted) {
+              await this.ensurePluginLoaded(plugin, plugin.id)
+            }
+            this.cacheLaunchOnStartupUi(plugin, state)
           }
         } catch (err) {
           log.warn(`[PluginManager] User startup launch error for ${plugin.id}:`, err)
@@ -817,16 +827,56 @@ export class PluginManager {
     this.stateManager.removeRecentUsage(pluginId, featureCode)
   }
 
+  private supportsLaunchOnStartup(plugin: Plugin): boolean {
+    return plugin.manifest.pluginSetting?.background === true || Boolean(plugin.manifest.ui)
+  }
+
+  private resolveStartupUiMode(plugin: Plugin, feature?: PluginFeature, targetMode?: PluginLaunchMode | 'background'): 'attached' | 'detached' | undefined {
+    if (!plugin.manifest.ui || !feature || feature.mode === 'silent') return undefined
+    if (targetMode === 'attached' || targetMode === 'detached') return targetMode
+    if (shouldForceDetachedByUser(plugin.id, this.stateManager)) return 'detached'
+    if (feature.mode === 'detached') return 'detached'
+    if (feature.mode !== 'ui' && plugin.manifest.pluginSetting?.defaultDetached === true) return 'detached'
+    return 'attached'
+  }
+
   getLaunchOnStartup(pluginId: string) {
-    return this.stateManager.getLaunchOnStartup(pluginId)
+    const plugin = this.resolve(pluginId)
+    if (!plugin || !this.supportsLaunchOnStartup(plugin)) return undefined
+    return this.stateManager.getLaunchOnStartup(plugin.id)
   }
 
   setLaunchOnStartup(
     pluginId: string,
     enabled: boolean,
-    target?: { featureCode: string; mode?: PluginLaunchMode }
+    target?: { featureCode?: string; route?: string; mode?: PluginLaunchMode | 'background'; uiMode?: 'attached' | 'detached' }
   ) {
-    return this.stateManager.setLaunchOnStartup(pluginId, enabled, target)
+    const plugin = this.resolve(pluginId)
+    if (!plugin) {
+      throw new Error('插件不存在')
+    }
+    if (enabled && !this.supportsLaunchOnStartup(plugin)) {
+      throw new Error('插件未声明后台运行且没有 UI，不能跟随 Mulby 启动')
+    }
+    const featureCode = typeof target?.featureCode === 'string' && target.featureCode.trim()
+      ? target.featureCode.trim()
+      : undefined
+    const feature = featureCode
+      ? this.getCombinedFeatures(plugin, true).find((item) => item.code === featureCode)
+      : undefined
+    if (enabled && featureCode && !feature) {
+      throw new Error('功能入口不存在')
+    }
+    const route = typeof target?.route === 'string' && target.route.trim()
+      ? target.route.trim()
+      : feature?.route
+    const uiMode = target?.uiMode === 'attached' || target?.uiMode === 'detached'
+      ? target.uiMode
+      : this.resolveStartupUiMode(plugin, feature, target?.mode)
+    const normalizedTarget = featureCode
+      ? { featureCode, route, uiMode, mode: 'background' as const }
+      : undefined
+    return this.stateManager.setLaunchOnStartup(plugin.id, enabled, normalizedTarget)
   }
 
   getAlwaysOpenDetached(pluginId: string) {
@@ -1139,6 +1189,12 @@ export class PluginManager {
         }
       }
 
+      if (this.tryRestoreDetachedResident(pluginId, featureCode, resolvedInput, route)) {
+        this.stateManager.recordRecentUsage(plugin.id, featureCode)
+        schedulePostOnLoadIdle(PluginManager.UI_IDLE_LOAD_DELAY_MS)
+        return { success: true, hasUI: true }
+      }
+
       const shouldEvictResidentForDetached =
         plugin.manifest.pluginSetting?.single !== false && this.residentSessions.has(pluginId)
       const win = this.windowManager.createDetachedWindow(plugin, featureCode, resolvedInput, route)
@@ -1407,6 +1463,98 @@ export class PluginManager {
     }
   }
 
+  private createResidentSession(
+    pluginId: string,
+    featureCode: string,
+    route: string | undefined,
+    options: { source: string; replaceExisting?: boolean; uiMode?: 'attached' | 'detached' } = { source: 'close' }
+  ): void {
+    if (options.replaceExisting !== false && this.residentSessions.has(pluginId)) {
+      this.evictResidentSession(pluginId, 'replaced-by-same-plugin', { preserveHost: true })
+    }
+
+    const now = Date.now()
+    const ttlTimer = setTimeout(() => {
+      const current = this.residentSessions.get(pluginId)
+      if (current?.ttlTimer === ttlTimer) {
+        this.evictResidentSession(pluginId, 'ttl-expired')
+      }
+    }, PluginManager.RESIDENT_TTL_MS)
+    ttlTimer.unref()
+
+    this.residentSessions.set(pluginId, {
+      pluginId,
+      featureCode,
+      route: this.normalizeResidentRoute(route),
+      uiMode: options.uiMode,
+      cachedAt: now,
+      lastUsedAt: now,
+      ttlTimer
+    })
+
+    this.enforceResidentLimit()
+
+    log.info(`[ResidentUI] create | plugin=${pluginId} | feature=${featureCode} | mode=${options.uiMode || 'attached'} | source=${options.source} | ttl=${PluginManager.RESIDENT_TTL_MS}ms | limit=${PluginManager.RESIDENT_UI_CACHE_LIMIT}`)
+
+    this.keepResidentHostWarm(pluginId)
+  }
+
+  private resolveLaunchOnStartupUiTarget(
+    plugin: Plugin,
+    state: PluginLaunchOnStartupState
+  ): { featureCode: string; route?: string; uiMode: 'attached' | 'detached' } | null {
+    if (!plugin.manifest.ui) return null
+
+    const resolveFeature = (feature: PluginFeature) => {
+      const uiMode = state.uiMode === 'attached' || state.uiMode === 'detached'
+        ? state.uiMode
+        : this.resolveStartupUiMode(plugin, feature)
+      if (!uiMode) return null
+      return {
+        featureCode: feature.code,
+        route: state.route || feature.route,
+        uiMode
+      }
+    }
+
+    const features = this.getCombinedFeatures(plugin, true)
+    if (state.featureCode) {
+      const feature = features.find((item) => item.code === state.featureCode)
+      return feature ? resolveFeature(feature) : null
+    }
+
+    for (const feature of features) {
+      const target = resolveFeature(feature)
+      if (target) return target
+    }
+    return null
+  }
+
+  private cacheLaunchOnStartupUi(plugin: Plugin, state: PluginLaunchOnStartupState): void {
+    if (!this.windowManager) return
+
+    const target = this.resolveLaunchOnStartupUiTarget(plugin, state)
+    if (!target) return
+
+    if (this.residentSessions.has(plugin.id)) {
+      this.evictResidentSession(plugin.id, 'startup-refresh', { preserveHost: true })
+    }
+
+    const cached = target.uiMode === 'detached'
+      ? this.windowManager.createHiddenResidentDetachedWindow(plugin, target.featureCode, target.route)
+      : this.windowManager.createHiddenResidentPanel(plugin, target.featureCode, target.route)
+    if (!cached) {
+      log.warn(`[PluginManager] User startup UI cache failed for ${plugin.id}:${target.featureCode}`)
+      return
+    }
+
+    this.createResidentSession(plugin.id, target.featureCode, target.route, {
+      source: 'startup-hidden',
+      uiMode: target.uiMode,
+      replaceExisting: false
+    })
+  }
+
   private enforceResidentLimit(): void {
     while (this.residentSessions.size > PluginManager.RESIDENT_UI_CACHE_LIMIT) {
       let oldestId: string | null = null
@@ -1433,55 +1581,40 @@ export class PluginManager {
     const plugin = this.plugins.get(pluginId)
     if (!plugin || !plugin.enabled) return false
 
-    // background 插件走正常的 background-host 路径，不走 resident-ui
-    if (plugin.manifest.pluginSetting?.background) return false
-
     // 只对有 UI 的 attached panel 插件生效
     if (!plugin.manifest.ui) return false
 
-    this.suspendToResident(pluginId, featureCode, route)
-    return true
+    const suspended = this.suspendToResident(pluginId, featureCode, route)
+    if (suspended && plugin.manifest.pluginSetting?.background === true && !this.backgroundManager.isRunning(pluginId)) {
+      void this.handleWindowClosed(pluginId).catch((err) => {
+        log.warn(`[ResidentUI] failed to move background plugin after suspend | plugin=${pluginId}:`, err)
+      })
+    }
+    return suspended
   }
 
   /**
    * 将当前 attached panel 挂起为 resident-ui。
    */
-  private suspendToResident(pluginId: string, featureCode: string, route?: string): void {
-    if (!this.windowManager) return
+  private suspendToResident(pluginId: string, featureCode: string, route?: string): boolean {
+    if (!this.windowManager) return false
 
     if (this.residentSessions.has(pluginId)) {
       this.evictResidentSession(pluginId, 'replaced-by-same-plugin', { preserveHost: true })
     }
 
     const suspendedId = this.windowManager.suspendAttached()
-    if (!suspendedId) return
+    if (!suspendedId) return false
     if (suspendedId !== pluginId) {
       log.warn(`[ResidentUI] suspended unexpected plugin | expected=${pluginId} | actual=${suspendedId}`)
     }
 
-    const now = Date.now()
-    const ttlTimer = setTimeout(() => {
-      const current = this.residentSessions.get(suspendedId)
-      if (current?.ttlTimer === ttlTimer) {
-        this.evictResidentSession(suspendedId, 'ttl-expired')
-      }
-    }, PluginManager.RESIDENT_TTL_MS)
-    ttlTimer.unref()
-
-    this.residentSessions.set(suspendedId, {
-      pluginId: suspendedId,
-      featureCode,
-      route: this.normalizeResidentRoute(route),
-      cachedAt: now,
-      lastUsedAt: now,
-      ttlTimer
+    this.createResidentSession(suspendedId, featureCode, route, {
+      source: 'close',
+      uiMode: 'attached',
+      replaceExisting: false
     })
-
-    this.enforceResidentLimit()
-
-    log.info(`[ResidentUI] create | plugin=${suspendedId} | ttl=${PluginManager.RESIDENT_TTL_MS}ms | limit=${PluginManager.RESIDENT_UI_CACHE_LIMIT}`)
-
-    this.keepResidentHostWarm(suspendedId)
+    return true
   }
 
   private keepResidentHostWarm(pluginId: string): void {
@@ -1568,6 +1701,7 @@ export class PluginManager {
     const session = this.residentSessions.get(pluginId)
     if (!session) return false
     if (!this.windowManager) return false
+    if (session.uiMode === 'detached') return false
 
     const cachedRoute = this.normalizeResidentRoute(session.route)
     const requestedRoute = this.normalizeResidentRoute(route)
@@ -1590,6 +1724,38 @@ export class PluginManager {
     this.clearResidentHostKeepalive(pluginId)
 
     log.info(`[ResidentUI] resume | plugin=${pluginId} | feature=${featureCode} | route=${route || ''} | ${formatPayloadTrace(input)}`)
+    return true
+  }
+
+  private tryRestoreDetachedResident(
+    pluginId: string,
+    featureCode: string,
+    input?: InputPayload,
+    route?: string
+  ): boolean {
+    const session = this.residentSessions.get(pluginId)
+    if (!session) return false
+    if (!this.windowManager) return false
+    if (session.uiMode !== 'detached') return false
+
+    const cachedRoute = this.normalizeResidentRoute(session.route)
+    const requestedRoute = this.normalizeResidentRoute(route)
+    if (session.featureCode !== featureCode || cachedRoute !== requestedRoute) {
+      this.evictResidentSession(pluginId, 'route-or-feature-mismatch', { preserveHost: true })
+      return false
+    }
+
+    const restored = this.windowManager.restoreDetachedIfResident(pluginId, featureCode, input, route)
+    if (!restored) {
+      this.evictResidentSession(pluginId, 'restore-failed', { preserveHost: true })
+      return false
+    }
+
+    clearTimeout(session.ttlTimer)
+    this.residentSessions.delete(pluginId)
+    this.clearResidentHostKeepalive(pluginId)
+
+    log.info(`[ResidentUI] detached resume | plugin=${pluginId} | feature=${featureCode} | route=${route || ''} | ${formatPayloadTrace(input)}`)
     return true
   }
 

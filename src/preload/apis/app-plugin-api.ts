@@ -137,7 +137,7 @@ export function createAppPluginApi(ipcRenderer: IpcRenderer) {
       setLaunchOnStartup: (
         pluginId: string,
         enabled: boolean,
-        target?: { featureCode: string; mode?: 'normal' | 'attached' | 'detached' }
+        target?: { featureCode?: string; route?: string; mode?: 'normal' | 'attached' | 'detached' | 'background'; uiMode?: 'attached' | 'detached' }
       ) => ipcRenderer.invoke('plugin:setLaunchOnStartup', pluginId, enabled, target),
       getAlwaysOpenDetached: (pluginId: string) => ipcRenderer.invoke('plugin:getAlwaysOpenDetached', pluginId),
       setAlwaysOpenDetached: (pluginId: string, enabled: boolean) =>

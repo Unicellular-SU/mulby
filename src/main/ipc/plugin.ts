@@ -17,6 +17,7 @@ import { PluginInstaller } from '../plugin/installer'
 import { PluginStoreService } from '../plugin/store-service'
 import { queryMainPush, handleMainPushSelect, hasMainPushHandler, type MainPushItem } from '../plugin/dynamic-features'
 import { getAppSettings } from '../services/app-settings-runtime'
+import { appOnlyInvoke } from './_shared/caller-middleware'
 
 
 
@@ -92,7 +93,9 @@ export function registerPluginHandlers(manager: PluginManager, pluginToolRegistr
     featureExplain?: string
     builtin: boolean
     hasUI: boolean
+    supportsBackground: boolean
     featureMode?: 'ui' | 'silent' | 'detached'
+    featureRoute?: string
     matchType: string
     icon: unknown
     mainPushItems?: MainPushItem[]
@@ -107,7 +110,9 @@ export function registerPluginHandlers(manager: PluginManager, pluginToolRegistr
       featureExplain: feature.explain,
       builtin: isBuiltin(plugin.path),
       hasUI: Boolean(plugin.manifest.ui),
+      supportsBackground: plugin.manifest.pluginSetting?.background === true,
       featureMode: feature.mode,
+      featureRoute: feature.route,
       matchType,
       icon: iconMeta.icon
     }
@@ -285,32 +290,36 @@ export function registerPluginHandlers(manager: PluginManager, pluginToolRegistr
     return { success: true }
   })
 
-  ipcMain.handle('plugin:getLaunchOnStartup', (_, pluginId: string) => {
+  ipcMain.handle('plugin:getLaunchOnStartup', appOnlyInvoke((_event, pluginId: string) => {
     return manager.getLaunchOnStartup(pluginId)
-  })
+  }))
 
   ipcMain.handle(
     'plugin:setLaunchOnStartup',
-    (_, pluginId: string, enabled: boolean, target?: { featureCode?: string; mode?: 'normal' | 'attached' | 'detached' }) => {
+    appOnlyInvoke((_event, pluginId: string, enabled: boolean, target?: { featureCode?: string; route?: string; mode?: 'normal' | 'attached' | 'detached' | 'background'; uiMode?: 'attached' | 'detached' }) => {
       const plugin = manager.get(pluginId)
       if (!plugin) return { success: false, error: '插件不存在' }
 
       if (!enabled) {
-        const state = manager.setLaunchOnStartup(plugin.id, false)
+        try {
+          const state = manager.setLaunchOnStartup(plugin.id, false)
+          return { success: true, state }
+        } catch (err) {
+          return { success: false, error: err instanceof Error ? err.message : '设置跟随启动失败' }
+        }
+      }
+
+      if (plugin.manifest.pluginSetting?.background !== true && !plugin.manifest.ui) {
+        return { success: false, error: '插件未声明后台运行且没有 UI，不能跟随 Mulby 启动' }
+      }
+
+      try {
+        const state = manager.setLaunchOnStartup(plugin.id, true, target)
         return { success: true, state }
+      } catch (err) {
+        return { success: false, error: err instanceof Error ? err.message : '设置跟随启动失败' }
       }
-
-      const featureCode = typeof target?.featureCode === 'string' ? target.featureCode : ''
-      if (!featureCode || !manager.getFeatures(plugin.id).some(feature => feature.code === featureCode)) {
-        return { success: false, error: '功能入口不存在' }
-      }
-
-      const state = manager.setLaunchOnStartup(plugin.id, true, {
-        featureCode,
-        mode: target?.mode ?? 'normal'
-      })
-      return { success: true, state }
-    }
+    })
   )
 
   ipcMain.handle('plugin:getAlwaysOpenDetached', (_, pluginId: string) => {

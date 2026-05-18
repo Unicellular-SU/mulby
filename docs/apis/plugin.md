@@ -180,29 +180,32 @@ await window.mulby.plugin.removeRecentUsage('translator', 'translate');
 
 ### plugin.getLaunchOnStartup(pluginId)
 [Renderer]
-获取指定插件的跟随 Mulby 启动配置。未配置时返回 `undefined`。
+获取指定插件的跟随 Mulby 启动配置。未配置，或插件既未声明后台运行也没有 UI 时返回 `undefined`。
 
 ```javascript
 const state = await window.mulby.plugin.getLaunchOnStartup('translator');
-// state: { enabled: true, featureCode: 'translate', mode: 'normal', updatedAt: 1710000000000 } | undefined
+// state: { enabled: true, mode: 'background', featureCode: 'translate', route: '/translate', uiMode: 'attached', updatedAt: 1710000000000 } | undefined
 ```
 
 返回值：`PluginLaunchOnStartupState | undefined`
 
 ### plugin.setLaunchOnStartup(pluginId, enabled, target?)
 [Renderer]
-设置指定插件是否跟随 Mulby 启动。启用时必须提供 `target.featureCode`，宿主会校验插件与功能入口是否存在；关闭时会移除该配置。
+设置指定插件是否跟随 Mulby 启动。启用后 Mulby 会按插件能力执行启动动作：纯后台插件只启动后台；纯 UI 插件只隐藏加载并缓存对应 UI；同时具备后台和 UI 的插件会同时启动后台并缓存 UI。UI 缓存支持附着模式和独立窗口模式，用于后续热启动，但不会自动打开主窗口、附着面板或独立窗口。
+
+启用时插件必须至少满足 `manifest.pluginSetting.background: true` 或声明了 `ui`；关闭时会移除该配置。该 IPC 仅允许主应用窗口调用，插件窗口不能静默修改启动持久化配置。
 
 ```javascript
 const result = await window.mulby.plugin.setLaunchOnStartup('translator', true, {
   featureCode: 'translate',
-  mode: 'normal'
+  route: '/translate',
+  uiMode: 'attached'
 });
 
 await window.mulby.plugin.setLaunchOnStartup('translator', false);
 ```
 
-`target.mode` 可选值为 `'normal' | 'attached' | 'detached'`，默认 `'normal'`。
+`target.featureCode` / `target.route` / `target.uiMode` 由主应用菜单传入，用于选择启动时缓存的 UI 功能和窗口形态。`mode` 会统一规范为 `background`，表示该配置属于跟随 Mulby 启动策略，不表示一定会启动后台进程。
 
 返回值：`{ success: boolean; state?: PluginLaunchOnStartupState; error?: string }`
 

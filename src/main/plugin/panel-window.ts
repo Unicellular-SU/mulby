@@ -120,6 +120,10 @@ export interface PromotedPanelWindow {
     pluginView?: WebContentsView
 }
 
+interface CreatePanelOptions {
+    hiddenResident?: boolean
+}
+
 /**
  * 插件面板窗口管理器
  * 负责创建和管理跟随主窗口的面板式插件窗口
@@ -422,15 +426,17 @@ export class PluginPanelWindow {
         route?: string,
         launchStart?: number,
         onLoadReady?: Promise<unknown>,
-        onPanelShown?: () => void
+        onPanelShown?: () => void,
+        options: CreatePanelOptions = {}
     ): BrowserWindow | null {
         if (!plugin.manifest.ui) return null
+        const hiddenResident = options.hiddenResident === true
 
         const uiPath = join(plugin.path, plugin.manifest.ui)
 
         // 清理现有插件 view，但保留可复用 shell BrowserWindow。
         this.clearCurrentPluginSession()
-        this.suspendedForResident = false
+        this.suspendedForResident = hiddenResident
 
         // 存储当前插件信息
         this.currentPlugin = plugin
@@ -601,7 +607,9 @@ export class PluginPanelWindow {
 
         let panelDidFinishLoadCount = 0
         capturedWebContents.on('did-finish-load', async () => {
-            this.openPluginDevTools(capturedWebContents, plugin.id)
+            if (!hiddenResident) {
+                this.openPluginDevTools(capturedWebContents, plugin.id)
+            }
             panelDidFinishLoadCount++
             const loadNum = panelDidFinishLoadCount
             if (capturedWin.isDestroyed() || capturedWebContents.isDestroyed() || this.panelWindow !== capturedWin || this.pluginView !== capturedView) {
@@ -620,7 +628,9 @@ export class PluginPanelWindow {
             if (loadNum > 1 && readyToShowInitSent && !capturedWebContents.isDestroyed() && this.panelWindow === capturedWin && this.pluginView === capturedView) {
                 sendPluginInit(`reload #${loadNum}`)
             }
-            void showPanel('did-finish-load')
+            if (!hiddenResident) {
+                void showPanel('did-finish-load')
+            }
         })
 
         // 安装 console 输出捕获（主进程侧捕获插件 console 输出）

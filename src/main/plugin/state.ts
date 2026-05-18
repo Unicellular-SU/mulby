@@ -152,7 +152,7 @@ export class PluginStateManager {
   setLaunchOnStartup(
     name: string,
     enabled: boolean,
-    target?: { featureCode: string; mode?: PluginLaunchMode }
+    target?: { featureCode?: string; route?: string; mode?: PluginLaunchMode | 'background'; uiMode?: 'attached' | 'detached' }
   ): PluginLaunchOnStartupState | undefined {
     if (!this.pluginStates[name]) {
       this.pluginStates[name] = { enabled: true }
@@ -164,17 +164,22 @@ export class PluginStateManager {
       return undefined
     }
 
-    if (!target?.featureCode) {
-      throw new Error('featureCode is required when enabling launch on startup')
-    }
-    const mode = target.mode === 'attached' || target.mode === 'detached' || target.mode === 'normal'
-      ? target.mode
-      : 'normal'
+    const featureCode = typeof target?.featureCode === 'string' && target.featureCode.trim()
+      ? target.featureCode.trim()
+      : undefined
+    const route = typeof target?.route === 'string' && target.route.trim()
+      ? target.route.trim()
+      : undefined
+    const uiMode = target?.uiMode === 'attached' || target?.uiMode === 'detached'
+      ? target.uiMode
+      : undefined
 
     const state: PluginLaunchOnStartupState = {
       enabled: true,
-      featureCode: target.featureCode,
-      mode,
+      mode: 'background',
+      ...(featureCode ? { featureCode } : {}),
+      ...(route ? { route } : {}),
+      ...(uiMode ? { uiMode } : {}),
       updatedAt: Date.now()
     }
     this.pluginStates[name].launchOnStartup = state
@@ -331,14 +336,21 @@ export class PluginStateManager {
     if (!input || typeof input !== 'object') return undefined
     const candidate = input as Partial<PluginLaunchOnStartupState>
     if (candidate.enabled !== true) return undefined
-    if (typeof candidate.featureCode !== 'string' || !candidate.featureCode.trim()) return undefined
-    const mode = candidate.mode === 'attached' || candidate.mode === 'detached' || candidate.mode === 'normal'
-      ? candidate.mode
-      : 'normal'
+    const featureCode = typeof candidate.featureCode === 'string' && candidate.featureCode.trim()
+      ? candidate.featureCode.trim()
+      : undefined
+    const route = typeof candidate.route === 'string' && candidate.route.trim()
+      ? candidate.route.trim()
+      : undefined
+    const uiMode = candidate.uiMode === 'attached' || candidate.uiMode === 'detached'
+      ? candidate.uiMode
+      : undefined
     return {
       enabled: true,
-      featureCode: candidate.featureCode,
-      mode,
+      mode: 'background',
+      ...(featureCode ? { featureCode } : {}),
+      ...(route ? { route } : {}),
+      ...(uiMode ? { uiMode } : {}),
       updatedAt: typeof candidate.updatedAt === 'number' ? candidate.updatedAt : Date.now()
     }
   }

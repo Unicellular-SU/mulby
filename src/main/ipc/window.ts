@@ -63,7 +63,8 @@ export function registerWindowHandlers(
       return {
         plugin: attached.plugin,
         featureCode: attached.featureCode,
-        mode: 'attached' as const
+        mode: 'attached' as const,
+        route: attached.route
       }
     }
 
@@ -387,8 +388,10 @@ export function registerWindowHandlers(
 
     const plugin = resolveCurrentPlugin(win)
     const launchTarget = resolveCurrentLaunchTarget(win)
-    const launchOnStartup = launchTarget && pluginManager
-      ? pluginManager.getLaunchOnStartup(launchTarget.plugin.id)
+    const startupPlugin = launchTarget?.plugin ?? plugin
+    const supportsLaunchOnStartup = startupPlugin?.manifest.pluginSetting?.background === true || Boolean(startupPlugin?.manifest.ui)
+    const launchOnStartup = startupPlugin && supportsLaunchOnStartup && pluginManager
+      ? pluginManager.getLaunchOnStartup(startupPlugin.id)
       : undefined
     const alwaysOpenDetached = plugin && pluginManager
       ? pluginManager.getAlwaysOpenDetached(plugin.id)
@@ -400,9 +403,9 @@ export function registerWindowHandlers(
         { id: 'reload', label: '重新加载界面', disabled: !plugin },
         {
           id: 'toggle-launch-on-startup',
-          label: '跟随 Mulby 启动',
+          label: supportsLaunchOnStartup ? '跟随 Mulby 启动' : '跟随 Mulby 启动（需后台或 UI）',
           checked: launchOnStartup?.enabled === true,
-          disabled: !(launchTarget && pluginManager)
+          disabled: !(startupPlugin && supportsLaunchOnStartup && pluginManager)
         },
         {
           id: 'toggle-always-open-detached',
@@ -419,15 +422,20 @@ export function registerWindowHandlers(
           return
         }
         if (id === 'toggle-launch-on-startup') {
-          if (!launchTarget || !pluginManager) return
-          const current = pluginManager.getLaunchOnStartup(launchTarget.plugin.id)
+          if (!startupPlugin || !supportsLaunchOnStartup || !pluginManager) return
+          const current = pluginManager.getLaunchOnStartup(startupPlugin.id)
+          const nextEnabled = current?.enabled !== true
           pluginManager.setLaunchOnStartup(
-            launchTarget.plugin.id,
-            current?.enabled !== true,
-            {
-              featureCode: launchTarget.featureCode,
-              mode: launchTarget.mode
-            }
+            startupPlugin.id,
+            nextEnabled,
+            nextEnabled && launchTarget
+              ? {
+                  featureCode: launchTarget.featureCode,
+                  route: launchTarget.route,
+                  mode: launchTarget.mode,
+                  uiMode: launchTarget.mode === 'detached' ? 'detached' : 'attached'
+                }
+              : undefined
           )
           return
         }
@@ -453,8 +461,10 @@ export function registerWindowHandlers(
 
     const plugin = resolveCurrentPlugin(win)
     const launchTarget = resolveCurrentLaunchTarget(win)
-    const launchOnStartup = launchTarget && pluginManager
-      ? pluginManager.getLaunchOnStartup(launchTarget.plugin.id)
+    const startupPlugin = launchTarget?.plugin ?? plugin
+    const supportsLaunchOnStartup = startupPlugin?.manifest.pluginSetting?.background === true || Boolean(startupPlugin?.manifest.ui)
+    const launchOnStartup = startupPlugin && supportsLaunchOnStartup && pluginManager
+      ? pluginManager.getLaunchOnStartup(startupPlugin.id)
       : undefined
     const alwaysOpenDetached = plugin && pluginManager
       ? pluginManager.getAlwaysOpenDetached(plugin.id)
@@ -466,9 +476,9 @@ export function registerWindowHandlers(
         { id: 'reload', label: '重新加载界面', disabled: !plugin },
         {
           id: 'toggle-launch-on-startup',
-          label: '跟随 Mulby 启动',
+          label: supportsLaunchOnStartup ? '跟随 Mulby 启动' : '跟随 Mulby 启动（需后台或 UI）',
           checked: launchOnStartup?.enabled === true,
-          disabled: !(launchTarget && pluginManager)
+          disabled: !(startupPlugin && supportsLaunchOnStartup && pluginManager)
         },
         {
           id: 'toggle-always-open-detached',
@@ -485,15 +495,20 @@ export function registerWindowHandlers(
           return
         }
         if (id === 'toggle-launch-on-startup') {
-          if (!launchTarget || !pluginManager) return
-          const current = pluginManager.getLaunchOnStartup(launchTarget.plugin.id)
+          if (!startupPlugin || !supportsLaunchOnStartup || !pluginManager) return
+          const current = pluginManager.getLaunchOnStartup(startupPlugin.id)
+          const nextEnabled = current?.enabled !== true
           pluginManager.setLaunchOnStartup(
-            launchTarget.plugin.id,
-            current?.enabled !== true,
-            {
-              featureCode: launchTarget.featureCode,
-              mode: launchTarget.mode
-            }
+            startupPlugin.id,
+            nextEnabled,
+            nextEnabled && launchTarget
+              ? {
+                  featureCode: launchTarget.featureCode,
+                  route: launchTarget.route,
+                  mode: launchTarget.mode,
+                  uiMode: launchTarget.mode === 'detached' ? 'detached' : 'attached'
+                }
+              : undefined
           )
           return
         }

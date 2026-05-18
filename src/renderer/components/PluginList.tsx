@@ -1313,12 +1313,13 @@ function PluginList({
       const pluginItem = item.pluginItem
       let launchOnStartupChecked = false
       let alwaysOpenDetachedChecked = false
+      const supportsLaunchOnStartup = pluginItem?.supportsBackground === true || pluginItem?.hasUI === true
       if (pluginItem) {
         const [launchOnStartup, alwaysOpenDetached] = await Promise.all([
           window.mulby.plugin.getLaunchOnStartup(pluginItem.pluginId).catch(() => undefined),
           window.mulby.plugin.getAlwaysOpenDetached(pluginItem.pluginId).catch(() => undefined)
         ])
-        launchOnStartupChecked = launchOnStartup?.enabled === true
+        launchOnStartupChecked = supportsLaunchOnStartup && launchOnStartup?.enabled === true
         alwaysOpenDetachedChecked = alwaysOpenDetached?.enabled === true
       }
 
@@ -1332,8 +1333,9 @@ function PluginList({
       if (pluginItem) {
         menuItems.push({
           id: 'toggle-launch-on-startup',
-          label: '跟随 Mulby 启动',
-          checked: launchOnStartupChecked
+          label: supportsLaunchOnStartup ? '跟随 Mulby 启动' : '跟随 Mulby 启动（需后台或 UI）',
+          checked: launchOnStartupChecked,
+          disabled: !supportsLaunchOnStartup
         })
         menuItems.push({
           id: 'toggle-always-open-detached',
@@ -1440,13 +1442,14 @@ function PluginList({
         }
         break
       case 'toggle-launch-on-startup':
-        if (item.pluginItem) {
-          const { pluginId, featureCode } = item.pluginItem
+        if (item.pluginItem && (item.pluginItem.supportsBackground || item.pluginItem.hasUI)) {
+          const { pluginId, featureCode, featureRoute } = item.pluginItem
           const current = await window.mulby.plugin.getLaunchOnStartup(pluginId)
+          const nextEnabled = current?.enabled !== true
           const result = await window.mulby.plugin.setLaunchOnStartup(
             pluginId,
-            current?.enabled !== true,
-            { featureCode, mode: 'normal' }
+            nextEnabled,
+            nextEnabled ? { featureCode, route: featureRoute } : undefined
           )
           if (!result.success && result.error) {
             window.mulby.notification.show(result.error, 'error')

@@ -61,6 +61,8 @@ interface DetachedWindowInfo {
   pluginView?: WebContentsView  // 插件内容视图（WebContentsView 架构时存在）
   plugin: Plugin
   featureCode: string
+  route?: string
+  resident?: boolean
   input: string
   attachments?: InputAttachment[]
   startedAt: number
@@ -72,11 +74,16 @@ export interface PluginLaunchTarget {
   plugin: Plugin
   featureCode: string
   mode: PluginLaunchMode
+  route?: string
 }
 
 interface ResidentPanelInfo {
   panelWindow: PluginPanelWindow
   attachedPlugin: AttachedPlugin
+}
+
+interface DetachedWindowCreateOptions {
+  hiddenResident?: boolean
 }
 
 // 子窗口创建选项
@@ -152,6 +159,10 @@ export class PluginWindowManager {
   private sendToMainWindow(channel: string, payload?: unknown): void {
     if (!this.mainWindow || this.mainWindow.isDestroyed() || this.mainWindow.webContents.isDestroyed()) return
     this.mainWindow.webContents.send(channel, payload)
+  }
+
+  private normalizeRoute(route?: string): string | undefined {
+    return route || undefined
   }
 
   private getDetachedTitlebarPath(): string | null {
@@ -398,6 +409,134 @@ export class PluginWindowManager {
   }
 
   /**
+   * 创建一个不显示的 resident attached 面板。
+   * 用于“跟随 Mulby 启动”时缓存 UI Renderer，避免启动后抢占唯一的可见附着面板。
+   */
+  createHiddenResidentPanel(plugin: Plugin, featureCode: string, route?: string): boolean {
+    if (!this.mainWindow || this.mainWindow.isDestroyed()) return false
+    if (!plugin.manifest.ui) return false
+
+    const uiPath = join(plugin.path, plugin.manifest.ui)
+    if (!existsSync(uiPath)) {
+      log.error(`Plugin UI not found: ${uiPath}`)
+      return false
+    }
+
+    if (this.residentPanels.has(plugin.id)) {
+      this.evictResident(plugin.id)
+    }
+
+    const panelWindow = this.createPanelWindow()
+    const input: InputPayload = { text: '', attachments: [] }
+    const panelWin = panelWindow.createPanel(
+      plugin,
+      featureCode,
+      input,
+      route,
+      undefined,
+      undefined,
+      undefined,
+      { hiddenResident: true }
+    )
+    if (!panelWin) {
+      this.destroyPanelWindow(panelWindow)
+      return false
+    }
+
+    const suspended = panelWindow.suspend()
+    if (!suspended) {
+      this.destroyPanelWindow(panelWindow)
+      return false
+    }
+
+    this.residentPanels.set(plugin.id, {
+      panelWindow,
+      attachedPlugin: {
+        plugin,
+        featureCode,
+        route,
+        input: '',
+        attachments: [],
+        startedAt: Date.now()
+      }
+    })
+
+    log.info(`[ResidentUI] hidden cache created | plugin=${plugin.id} | feature=${featureCode} | route=${route || ''}`)
+    return true
+  }
+
+  createHiddenResidentDetachedWindow(plugin: Plugin, featureCode: string, route?: string): boolean {
+    const win = this.createDetachedWindow(
+      plugin,
+      featureCode,
+      { text: '', attachments: [] },
+      route,
+      { hiddenResident: true }
+    )
+    if (!win) return false
+
+    log.info(`[ResidentUI] hidden detached cache created | plugin=${plugin.id} | feature=${featureCode} | route=${route || ''}`)
+    return true
+  }
+
+  restoreDetachedIfResident(
+    pluginId: string,
+    featureCode: string,
+    input?: InputPayload,
+    route?: string
+  ): boolean {
+    for (const info of this.detachedWindows.values()) {
+      if (!info.resident || info.plugin.id !== pluginId) continue
+      if (info.featureCode !== featureCode || this.normalizeRoute(info.route) !== this.normalizeRoute(route)) {
+        return false
+      }
+
+      const win = info.window
+      if (win.isDestroyed()) return false
+
+      info.resident = false
+      info.input = input?.text || ''
+      info.attachments = input?.attachments || []
+      info.route = route
+      info.lastFocusedAt = Date.now()
+
+      if (win.isMinimized()) {
+        win.restore()
+      }
+      if (!win.isVisible()) {
+        win.show()
+      }
+      try {
+        win.focus()
+      } catch {
+        // Non-focusable detached windows can still be shown as a cached UI.
+      }
+
+      const target = info.pluginView?.webContents ?? win.webContents
+      if (!target.isDestroyed()) {
+        target.send('plugin:init', {
+          pluginName: info.plugin.id,
+          featureCode,
+          input: input?.text || '',
+          attachments: input?.attachments || [],
+          mode: 'detached',
+          route,
+          capabilities: getPluginRendererCapabilities(info.plugin),
+          nonce: Date.now()
+        })
+        if (this.themeManager) {
+          target.send('theme:changed', this.themeManager.getActualTheme())
+        }
+      }
+
+      log.info(`[ResidentUI] detached restore | plugin=${pluginId} | feature=${featureCode} | route=${route || ''}`)
+      return true
+    }
+
+    return false
+  }
+
+  /**
    * 尝试恢复 resident-ui 状态的面板。
    * 如果缓存的面板匹配 pluginId，直接 restore 并返回 true。
    */
@@ -460,10 +599,29 @@ export class PluginWindowManager {
   evictResident(pluginId?: string): string | null {
     const firstResident = this.residentPanels.keys().next()
     const targetId = pluginId ?? (firstResident.done ? undefined : firstResident.value)
-    if (!targetId) return null
+    if (!targetId) {
+      for (const info of this.detachedWindows.values()) {
+        if (info.resident) {
+          return this.evictResident(info.plugin.id)
+        }
+      }
+      return null
+    }
 
     const cached = this.residentPanels.get(targetId)
-    if (!cached) return null
+    if (!cached) {
+      for (const [windowId, info] of this.detachedWindows.entries()) {
+        if (info.plugin.id !== targetId || !info.resident) continue
+        log.info(`[ResidentUI] evict detached | plugin=${targetId}`)
+        this.detachedWindows.delete(windowId)
+        if (!info.window.isDestroyed()) {
+          info.window.close()
+        }
+        clearSubInputState()
+        return targetId
+      }
+      return null
+    }
 
     log.info(`[ResidentUI] evict | plugin=${targetId}`)
     this.residentPanels.delete(targetId)
@@ -478,6 +636,13 @@ export class PluginWindowManager {
   evictAllResidents(): string[] {
     const evicted: string[] = []
     for (const pluginId of Array.from(this.residentPanels.keys())) {
+      const removed = this.evictResident(pluginId)
+      if (removed) evicted.push(removed)
+    }
+    const detachedResidentPluginIds = Array.from(this.detachedWindows.values())
+      .filter((info) => info.resident)
+      .map((info) => info.plugin.id)
+    for (const pluginId of detachedResidentPluginIds) {
       const removed = this.evictResident(pluginId)
       if (removed) evicted.push(removed)
     }
@@ -535,7 +700,7 @@ export class PluginWindowManager {
   detachCurrent(): BrowserWindow | null {
     if (!this.attachedPlugin) return null
 
-    const { plugin, featureCode, input, attachments, startedAt } = this.attachedPlugin
+    const { plugin, featureCode, route, input, attachments, startedAt } = this.attachedPlugin
     this.attachedPlugin = null
 
     // 清理主进程中的 SubInput 状态
@@ -558,6 +723,7 @@ export class PluginWindowManager {
           pluginView: promoted.pluginView,
           plugin,
           featureCode,
+          route,
           input,
           attachments,
           startedAt,
@@ -582,7 +748,7 @@ export class PluginWindowManager {
     }
 
     // 如果 promoteToWindow 失败，创建新的独立窗口
-    return this.createDetachedWindow(plugin, featureCode, { text: input, attachments: attachments || [] })
+    return this.createDetachedWindow(plugin, featureCode, { text: input, attachments: attachments || [] }, route)
   }
 
   // 创建独立窗口
@@ -590,9 +756,11 @@ export class PluginWindowManager {
     plugin: Plugin,
     featureCode: string,
     input?: InputPayload,
-    route?: string
+    route?: string,
+    options: DetachedWindowCreateOptions = {}
   ): BrowserWindow | null {
     if (!plugin.manifest.ui) return null
+    const hiddenResident = options.hiddenResident === true
 
     const uiPath = join(plugin.path, plugin.manifest.ui)
     if (!existsSync(uiPath)) return null
@@ -603,6 +771,8 @@ export class PluginWindowManager {
       // 查找已存在的该插件窗口
       for (const info of this.detachedWindows.values()) {
         if (info.plugin.id === plugin.id) {
+          if (hiddenResident) return null
+          if (info.resident) continue
           // 已有窗口，显示并聚焦
           const existingWindow = info.window
           if (existingWindow && !existingWindow.isDestroyed()) {
@@ -840,12 +1010,14 @@ export class PluginWindowManager {
       } else if (windowConfig.alwaysOnTop && process.platform === 'win32') {
         win.setAlwaysOnTop(true, 'screen-saver')
       }
-      if (windowConfig.focusable === false) {
-        win.showInactive()
-      } else {
-        win.show()
+      if (!hiddenResident) {
+        if (windowConfig.focusable === false) {
+          win.showInactive()
+        } else {
+          win.show()
+        }
+        this.openPluginDevTools(pluginWebContents, plugin.id)
       }
-      this.openPluginDevTools(pluginWebContents, plugin.id)
     })
 
     // macOS multi-view focus: inject mousedown handler for titlebar windows
@@ -864,7 +1036,9 @@ export class PluginWindowManager {
 
     // 等待插件内容加载完成后，发送 plugin:init 和 theme 信息
     pluginWebContents.on('did-finish-load', async () => {
-      this.openPluginDevTools(pluginWebContents, plugin.id)
+      if (!hiddenResident) {
+        this.openPluginDevTools(pluginWebContents, plugin.id)
+      }
       if (useWindowsFramelessSurface && !windowConfig.transparent && !win.isDestroyed()) {
         await applyWindowsFramelessSurface(win, {
           includeTitleBar: false,
@@ -908,6 +1082,8 @@ export class PluginWindowManager {
       pluginView: pluginView ?? undefined,
       plugin,
       featureCode,
+      route,
+      resident: hiddenResident,
       input: input?.text || '',
       attachments: input?.attachments,
       startedAt: Date.now(),
@@ -1480,7 +1656,7 @@ export class PluginWindowManager {
 
     // 检查是否为独立窗口
     const detachedInfo = this.detachedWindows.get(win.id)
-    if (detachedInfo) return detachedInfo.plugin
+    if (detachedInfo) return detachedInfo.resident ? null : detachedInfo.plugin
 
     // 检查是否为面板窗口
     const panelWin = this.panelWindow?.getWindow()
@@ -1497,10 +1673,12 @@ export class PluginWindowManager {
 
     const detachedInfo = this.detachedWindows.get(win.id)
     if (detachedInfo) {
+      if (detachedInfo.resident) return null
       return {
         plugin: detachedInfo.plugin,
         featureCode: detachedInfo.featureCode,
-        mode: 'detached'
+        mode: 'detached',
+        route: detachedInfo.route
       }
     }
 
@@ -1509,7 +1687,8 @@ export class PluginWindowManager {
       return {
         plugin: this.attachedPlugin.plugin,
         featureCode: this.attachedPlugin.featureCode,
-        mode: 'attached'
+        mode: 'attached',
+        route: this.attachedPlugin.route
       }
     }
 
@@ -1537,7 +1716,7 @@ export class PluginWindowManager {
    */
   getPluginWindow(pluginId: string): BrowserWindow | null {
     for (const info of this.detachedWindows.values()) {
-      if (info.plugin.id === pluginId && !info.window.isDestroyed()) {
+      if (!info.resident && info.plugin.id === pluginId && !info.window.isDestroyed()) {
         return info.window
       }
     }

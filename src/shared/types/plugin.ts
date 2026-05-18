@@ -762,8 +762,10 @@ export type PluginLaunchMode = 'normal' | 'attached' | 'detached'
 
 export interface PluginLaunchOnStartupState {
   enabled: boolean
-  featureCode: string
-  mode: PluginLaunchMode
+  mode: 'background'
+  featureCode?: string
+  route?: string
+  uiMode?: 'attached' | 'detached'
   updatedAt: number
 }
 

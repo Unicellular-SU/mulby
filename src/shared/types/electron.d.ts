@@ -120,6 +120,7 @@ export interface SearchResultItem {
   featureRoute?: string
   builtin?: boolean
   hasUI?: boolean
+  supportsBackground?: boolean
   featureMode?: 'ui' | 'silent' | 'detached'
   matchType: 'keyword' | 'regex' | 'files' | 'img' | 'over' | 'window'
   icon?: {
@@ -842,7 +843,7 @@ export interface ElectronAPI {
     setLaunchOnStartup: (
       pluginId: string,
       enabled: boolean,
-      target?: { featureCode: string; mode?: import('./plugin').PluginLaunchMode }
+      target?: { featureCode?: string; route?: string; mode?: import('./plugin').PluginLaunchMode | 'background'; uiMode?: 'attached' | 'detached' }
     ) => Promise<{ success: boolean; state?: import('./plugin').PluginLaunchOnStartupState; error?: string }>
     getAlwaysOpenDetached: (pluginId: string) => Promise<import('./plugin').PluginAlwaysOpenDetachedState | undefined>
     setAlwaysOpenDetached: (
