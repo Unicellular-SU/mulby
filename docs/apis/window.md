@@ -76,7 +76,7 @@ window.mulby.window.setIgnoreMouseEvents(false);
 [Renderer]
 将插件窗口分离为独立窗口。
 
-macOS 上，分离后的插件窗口会让 Mulby 显示应用级 Dock 图标。Dock 图标会优先使用“宿主图标 + 最近聚焦插件图标”的组合样式，多窗口时显示数量徽标。Dock 右键菜单可用于切换或关闭插件窗口；系统 Dock 的“退出”仍然退出宿主应用。
+macOS 上，分离后的插件窗口会让 Mulby 显示应用级 Dock 图标。Dock 图标会优先使用“宿主图标 + 最近聚焦插件图标”的组合样式，多个插件同时有窗口时按插件数量显示徽标。同一插件创建多个窗口时只占一个 Dock 表示。Dock 右键菜单可用于切换或关闭插件窗口；系统 Dock 的“退出”仍然退出宿主应用。
 
 ### close()
 [Renderer]
@@ -214,7 +214,7 @@ const region = await window.mulby.window.create('region/index.html?key=abc', {
 
 子窗口的 `backgroundThrottling` 解析优先级为 `options.backgroundThrottling ?? manifest.window.backgroundThrottling ?? true`。
 
-在 macOS 上，`skipTaskbar` 不能保证隐藏 Mulby 的 Dock 图标。Dock 是应用级表示；只要存在独立插件窗口或子窗口，Mulby 可能保持 Dock 可见，并在菜单中提供插件窗口操作。
+在 macOS 上，`skipTaskbar` 不能保证隐藏 Mulby 的 Dock 图标。Dock 是应用级表示；只要存在独立插件窗口或子窗口，Mulby 可能保持 Dock 可见，并在菜单中按插件聚合提供窗口操作。
 
 **Overlay 窗口典型用法：**
 

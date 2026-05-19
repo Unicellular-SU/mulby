@@ -24,7 +24,7 @@ export interface MacDockPresentation {
 }
 
 export type MacDockMenuModelItem =
-  | { type: 'plugin-window'; windowId: number; pluginId: string; label: string }
+  | { type: 'plugin-window'; windowId: number; windowIds: number[]; pluginId: string; label: string }
   | { type: 'close-all-plugin-windows'; label: string }
   | { type: 'open-main-window'; label: string }
   | { type: 'quit-app'; label: string }
@@ -46,7 +46,8 @@ export function resolveMacDockPresentation(
 ): MacDockPresentation {
   const pluginWindows = sortDockPluginWindows(input.pluginWindows)
   const representativePluginWindow = pluginWindows[0] ?? null
-  const badge = pluginWindows.length > 1 ? String(pluginWindows.length) : ''
+  const pluginCount = countDockPlugins(pluginWindows)
+  const badge = pluginCount > 1 ? String(pluginCount) : ''
 
   if (input.hasSystemDetachedWindow) {
     return {
@@ -80,17 +81,19 @@ export function buildMacDockMenuModel(
   if (presentation.mode === 'hidden') return []
 
   const items: MacDockMenuModelItem[] = []
+  const pluginGroups = groupDockPluginWindows(presentation.pluginWindows)
 
-  for (const windowInfo of presentation.pluginWindows) {
+  for (const group of pluginGroups) {
     items.push({
       type: 'plugin-window',
-      windowId: windowInfo.windowId,
-      pluginId: windowInfo.pluginId,
-      label: windowInfo.displayName
+      windowId: group.representative.windowId,
+      windowIds: group.windows.map((windowInfo) => windowInfo.windowId),
+      pluginId: group.representative.pluginId,
+      label: group.representative.displayName
     })
   }
 
-  if (presentation.pluginWindows.length > 1) {
+  if (pluginGroups.length > 1) {
     items.push({ type: 'separator' })
     items.push({
       type: 'close-all-plugin-windows',
@@ -106,4 +109,33 @@ export function buildMacDockMenuModel(
   items.push({ type: 'quit-app', label: '退出 Mulby' })
 
   return items
+}
+
+export function countDockPlugins(
+  windows: MacDockPluginWindowSnapshot[]
+): number {
+  return new Set(windows.map((windowInfo) => windowInfo.pluginId)).size
+}
+
+export function groupDockPluginWindows(
+  windows: MacDockPluginWindowSnapshot[]
+): Array<{
+  representative: MacDockPluginWindowSnapshot
+  windows: MacDockPluginWindowSnapshot[]
+}> {
+  const groupsByPluginId = new Map<string, MacDockPluginWindowSnapshot[]>()
+
+  for (const windowInfo of sortDockPluginWindows(windows)) {
+    const group = groupsByPluginId.get(windowInfo.pluginId)
+    if (group) {
+      group.push(windowInfo)
+    } else {
+      groupsByPluginId.set(windowInfo.pluginId, [windowInfo])
+    }
+  }
+
+  return Array.from(groupsByPluginId.values()).map((group) => ({
+    representative: group[0],
+    windows: group
+  }))
 }

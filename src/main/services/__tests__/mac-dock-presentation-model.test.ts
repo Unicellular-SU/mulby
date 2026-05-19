@@ -83,7 +83,7 @@ describe('macOS Dock presentation model', () => {
     ])
   })
 
-  it('adds a close-all action only when multiple plugin windows exist', () => {
+  it('adds a close-all action only when multiple plugin groups exist', () => {
     const single = buildMacDockMenuModel(resolveMacDockPresentation({
       pluginWindows: [
         pluginWindow({ windowId: 1, pluginId: 'one', displayName: 'One' })
@@ -100,5 +100,48 @@ describe('macOS Dock presentation model', () => {
 
     assert.equal(single.some((item) => item.type === 'close-all-plugin-windows'), false)
     assert.equal(multiple.some((item) => item.type === 'close-all-plugin-windows'), true)
+  })
+
+  it('groups multiple windows from the same plugin into one Dock item', () => {
+    const presentation = resolveMacDockPresentation({
+      pluginWindows: [
+        pluginWindow({
+          windowId: 1,
+          pluginId: 'desktop-pet',
+          displayName: '桌面宠物',
+          startedAt: 100,
+          lastFocusedAt: 200
+        }),
+        pluginWindow({
+          windowId: 2,
+          pluginId: 'desktop-pet',
+          displayName: '桌面宠物',
+          startedAt: 110,
+          lastFocusedAt: 500
+        }),
+        pluginWindow({
+          windowId: 3,
+          pluginId: 'desktop-pet',
+          displayName: '桌面宠物',
+          startedAt: 120,
+          lastFocusedAt: 300
+        })
+      ],
+      hasSystemDetachedWindow: false
+    })
+
+    const menu = buildMacDockMenuModel(presentation)
+    const pluginItems = menu.filter((item) => item.type === 'plugin-window')
+
+    assert.equal(presentation.badge, '')
+    assert.equal(pluginItems.length, 1)
+    assert.deepEqual(pluginItems[0], {
+      type: 'plugin-window',
+      windowId: 2,
+      windowIds: [2, 3, 1],
+      pluginId: 'desktop-pet',
+      label: '桌面宠物'
+    })
+    assert.equal(menu.some((item) => item.type === 'close-all-plugin-windows'), false)
   })
 })

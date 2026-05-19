@@ -238,8 +238,12 @@ export class MacDockPresentationController {
                   click: () => this.options.focusPluginWindow(item.windowId)
                 },
                 {
-                  label: '关闭窗口',
-                  click: () => this.options.closePluginWindow(item.windowId)
+                  label: '关闭插件窗口',
+                  click: () => {
+                    for (const windowId of item.windowIds) {
+                      this.options.closePluginWindow(windowId)
+                    }
+                  }
                 },
                 {
                   label: '停止插件',
