@@ -76,6 +76,17 @@ export async function getSelectedTextAsync(options?: {
   const start = performance.now()
   const allowClipboardFallback = options?.allowClipboardFallback ?? true
 
+  // 文件管理器选区有可靠的原生路径，先读文件，避免把 Finder/Explorer 拖进文本 AX 扫描。
+  if (shouldProbeFileSelection(options?.activeWindow)) {
+    const fileSelectionAttachments = getNativeFileSelectionAttachments()
+    if (fileSelectionAttachments.length > 0) {
+      const durationMs = Math.round(performance.now() - start)
+      const kind = inferSelectionKind(null, fileSelectionAttachments)
+      log.info(`[NativeTextSelection] 原生文件选区读取成功 (${durationMs}ms, attachments=${fileSelectionAttachments.length}, kind=${kind})`)
+      return { text: null, attachments: fileSelectionAttachments, kind, source: 'accessibility', durationMs }
+    }
+  }
+
   // 1. 尝试原生 API
   const nativeResult = await getNativeSelectedText(options?.activeWindow, options?.triggerPoint)
   if (nativeResult !== null && nativeResult.trim().length > 0) {
@@ -323,6 +334,10 @@ async function getNativeSelectedText(
         // 优先使用系统当前前台 PID，缓存 PID 只作为触发瞬间的兜底，避免读到旧应用选区。
         const appPids = uniquePositiveNumbers([darwinGetFrontmostPid(), activeWindow?.pid])
         result = darwinGetSelectedText(appPids, triggerPoint)
+        if (result === null && darwinShouldRetryAfterAccessibilityWarmup()) {
+          await sleep(80)
+          result = darwinGetSelectedText(appPids, triggerPoint)
+        }
         break
       }
       case 'win32':
@@ -350,26 +365,94 @@ interface DarwinAxApi {
   AXUIElementCreateSystemWide: () => unknown
   AXUIElementCreateApplication: (pid: number) => unknown
   AXUIElementCopyElementAtPosition: (application: unknown, x: number, y: number, valueOut: unknown[]) => number
+  AXUIElementCopyAttributeNames: (element: unknown, namesOut: unknown[]) => number
+  AXUIElementCopyParameterizedAttributeNames: (element: unknown, namesOut: unknown[]) => number
   AXUIElementCopyAttributeValue: (element: unknown, attribute: unknown, valueOut: unknown[]) => number
   AXUIElementCopyParameterizedAttributeValue: (element: unknown, attribute: unknown, parameter: unknown, valueOut: unknown[]) => number
+  AXUIElementSetAttributeValue: (element: unknown, attribute: unknown, value: unknown) => number
   AXUIElementSetMessagingTimeout: (element: unknown, timeoutInSeconds: number) => number
   AXValueGetValue: (value: unknown, type: number, valueOut: unknown) => boolean
+  CFArrayGetCount: (array: unknown) => number
+  CFArrayGetValueAtIndex: (array: unknown, index: number) => unknown
+  CFGetTypeID: (obj: unknown) => number
+  CFStringGetTypeID: () => number
   CFStringCreateWithCString: (alloc: null, str: string, encoding: number) => unknown
   CFStringGetLength: (str: unknown) => number
   CFStringGetCString: (str: unknown, buf: Buffer, bufSize: number, encoding: number) => boolean
+  CFRetain: (obj: unknown) => unknown
   CFRelease: (obj: unknown) => void
   // 预创建的属性名 CFString（避免每次调用重复创建）
   kAXFocusedUIElementAttribute: unknown
   kAXFocusedWindowAttribute: unknown
   kAXParentAttribute: unknown
+  kAXChildrenAttribute: unknown
+  kAXVisibleChildrenAttribute: unknown
+  kAXRoleAttribute: unknown
+  kAXSubroleAttribute: unknown
+  kAXTitleAttribute: unknown
+  kAXDescriptionAttribute: unknown
+  kAXValueAttribute: unknown
+  kAXEnhancedUserInterfaceAttribute: unknown
+  kAXManualAccessibilityAttribute: unknown
   kAXSelectedTextAttribute: unknown
   kAXSelectedTextRangeAttribute: unknown
+  kAXSelectedTextRangesAttribute: unknown
   kAXSelectedTextMarkerRangeAttribute: unknown
   kAXStringForRangeParameterizedAttribute: unknown
   kAXStringForTextMarkerRangeParameterizedAttribute: unknown
+  kCFBooleanTrue: unknown
 }
 
+interface DarwinReadOptions {
+  logFailures?: boolean
+}
+
+const DARWIN_AX_PARENT_SEARCH_DEPTH = 10
+const DARWIN_AX_TREE_SCAN_MAX_DEPTH = 8
+const DARWIN_AX_TREE_SCAN_MAX_NODES = 180
+const DARWIN_AX_TREE_SCAN_DEADLINE_MS = 120
+const DARWIN_AX_ACCESSIBILITY_WARMUP_RETRY_MS = 400
+const DARWIN_AX_DIAGNOSTIC_THROTTLE_MS = 2_000
+const DARWIN_AX_DIAGNOSTIC_IMPORTANT_NAMES = [
+  'AXFocusedUIElement',
+  'AXFocusedWindow',
+  'AXSelectedText',
+  'AXSelectedTextRange',
+  'AXSelectedTextRanges',
+  'AXSelectedTextMarkerRange',
+  'AXStringForRange',
+  'AXStringForTextMarkerRange',
+  'AXValue',
+  'AXRole',
+  'AXSubrole',
+  'AXTitle',
+  'AXDescription',
+  'AXChildren',
+  'AXVisibleChildren',
+  'AXManualAccessibility',
+  'AXEnhancedUserInterface'
+]
+const DARWIN_AX_DIAGNOSTIC_NAME_KEYWORDS = [
+  'Text',
+  'Range',
+  'Marker',
+  'Value',
+  'Editable',
+  'DOM',
+  'Line',
+  'Sentence',
+  'Word',
+  'Selected',
+  'Focused'
+]
+
 let _darwinAxApi: DarwinAxApi | null = null
+let _darwinAccessibilityWarmupUntil = 0
+let _darwinLastFailureDiagnosticAt = 0
+const _darwinEnhancedUserInterfaceEnabledPids = new Set<number>()
+const _darwinEnhancedUserInterfaceUnsupportedPids = new Set<number>()
+const _darwinManualAccessibilityEnabledPids = new Set<number>()
+const _darwinManualAccessibilityUnsupportedPids = new Set<number>()
 
 /** 懒加载 macOS Accessibility API 绑定 */
 function getDarwinAxApi(): DarwinAxApi {
@@ -390,11 +473,22 @@ function getDarwinAxApi(): DarwinAxApi {
   const focusedAttr = cfStringCreate(null, 'AXFocusedUIElement', kCFStringEncodingUTF8)
   const focusedWindowAttr = cfStringCreate(null, 'AXFocusedWindow', kCFStringEncodingUTF8)
   const parentAttr = cfStringCreate(null, 'AXParent', kCFStringEncodingUTF8)
+  const childrenAttr = cfStringCreate(null, 'AXChildren', kCFStringEncodingUTF8)
+  const visibleChildrenAttr = cfStringCreate(null, 'AXVisibleChildren', kCFStringEncodingUTF8)
+  const roleAttr = cfStringCreate(null, 'AXRole', kCFStringEncodingUTF8)
+  const subroleAttr = cfStringCreate(null, 'AXSubrole', kCFStringEncodingUTF8)
+  const titleAttr = cfStringCreate(null, 'AXTitle', kCFStringEncodingUTF8)
+  const descriptionAttr = cfStringCreate(null, 'AXDescription', kCFStringEncodingUTF8)
+  const valueAttr = cfStringCreate(null, 'AXValue', kCFStringEncodingUTF8)
+  const enhancedUserInterfaceAttr = cfStringCreate(null, 'AXEnhancedUserInterface', kCFStringEncodingUTF8)
+  const manualAccessibilityAttr = cfStringCreate(null, 'AXManualAccessibility', kCFStringEncodingUTF8)
   const selectedTextAttr = cfStringCreate(null, 'AXSelectedText', kCFStringEncodingUTF8)
   const selectedTextRangeAttr = cfStringCreate(null, 'AXSelectedTextRange', kCFStringEncodingUTF8)
+  const selectedTextRangesAttr = cfStringCreate(null, 'AXSelectedTextRanges', kCFStringEncodingUTF8)
   const selectedTextMarkerRangeAttr = cfStringCreate(null, 'AXSelectedTextMarkerRange', kCFStringEncodingUTF8)
   const stringForRangeAttr = cfStringCreate(null, 'AXStringForRange', kCFStringEncodingUTF8)
   const stringForTextMarkerRangeAttr = cfStringCreate(null, 'AXStringForTextMarkerRange', kCFStringEncodingUTF8)
+  const cfBooleanTrue = koffi.decode(cf.symbol('kCFBooleanTrue', 'void *'), 'void *')
 
   // 检查辅助功能权限
   const AXIsProcessTrusted = ax.func('bool AXIsProcessTrusted()')
@@ -406,23 +500,42 @@ function getDarwinAxApi(): DarwinAxApi {
     AXUIElementCreateSystemWide: ax.func('void* AXUIElementCreateSystemWide()'),
     AXUIElementCreateApplication: ax.func('void* AXUIElementCreateApplication(int32_t)'),
     AXUIElementCopyElementAtPosition: ax.func('int32_t AXUIElementCopyElementAtPosition(void*, float, float, _Out_ void**)'),
+    AXUIElementCopyAttributeNames: ax.func('int32_t AXUIElementCopyAttributeNames(void*, _Out_ void**)'),
+    AXUIElementCopyParameterizedAttributeNames: ax.func('int32_t AXUIElementCopyParameterizedAttributeNames(void*, _Out_ void**)'),
     // 注意：第三个参数是 CFTypeRef*（即 void**），koffi _Out_ 正确处理
     AXUIElementCopyAttributeValue: ax.func('int32_t AXUIElementCopyAttributeValue(void*, void*, _Out_ void**)'),
     AXUIElementCopyParameterizedAttributeValue: ax.func('int32_t AXUIElementCopyParameterizedAttributeValue(void*, void*, void*, _Out_ void**)'),
+    AXUIElementSetAttributeValue: ax.func('int32_t AXUIElementSetAttributeValue(void*, void*, void*)'),
     AXUIElementSetMessagingTimeout: ax.func('int32_t AXUIElementSetMessagingTimeout(void*, float)'),
     AXValueGetValue: ax.func('bool AXValueGetValue(void*, int32_t, _Out_ void*)'),
+    CFArrayGetCount: cf.func('int64_t CFArrayGetCount(void*)'),
+    CFArrayGetValueAtIndex: cf.func('void* CFArrayGetValueAtIndex(void*, int64_t)'),
+    CFGetTypeID: cf.func('uint64_t CFGetTypeID(void*)'),
+    CFStringGetTypeID: cf.func('uint64_t CFStringGetTypeID()'),
     CFStringCreateWithCString: cfStringCreate,
     CFStringGetLength: cf.func('int64_t CFStringGetLength(void*)'),
     CFStringGetCString: cf.func('bool CFStringGetCString(void*, _Out_ uint8_t*, int64_t, uint32_t)'),
+    CFRetain: cf.func('void* CFRetain(void*)'),
     CFRelease: cf.func('void CFRelease(void*)'),
     kAXFocusedUIElementAttribute: focusedAttr,
     kAXFocusedWindowAttribute: focusedWindowAttr,
     kAXParentAttribute: parentAttr,
+    kAXChildrenAttribute: childrenAttr,
+    kAXVisibleChildrenAttribute: visibleChildrenAttr,
+    kAXRoleAttribute: roleAttr,
+    kAXSubroleAttribute: subroleAttr,
+    kAXTitleAttribute: titleAttr,
+    kAXDescriptionAttribute: descriptionAttr,
+    kAXValueAttribute: valueAttr,
+    kAXEnhancedUserInterfaceAttribute: enhancedUserInterfaceAttr,
+    kAXManualAccessibilityAttribute: manualAccessibilityAttr,
     kAXSelectedTextAttribute: selectedTextAttr,
     kAXSelectedTextRangeAttribute: selectedTextRangeAttr,
+    kAXSelectedTextRangesAttribute: selectedTextRangesAttr,
     kAXSelectedTextMarkerRangeAttribute: selectedTextMarkerRangeAttr,
     kAXStringForRangeParameterizedAttribute: stringForRangeAttr,
-    kAXStringForTextMarkerRangeParameterizedAttribute: stringForTextMarkerRangeAttr
+    kAXStringForTextMarkerRangeParameterizedAttribute: stringForTextMarkerRangeAttr,
+    kCFBooleanTrue: cfBooleanTrue
   }
 
   const t3 = performance.now()
@@ -521,6 +634,14 @@ function darwinGetSelectedText(appPids: number[], triggerPoint?: { x: number; y:
       }
     }
 
+    for (const candidate of candidates) {
+      const text = darwinReadSelectedTextFromTree(api, candidate.element, candidate.source, t0, tInit)
+      if (text !== null) {
+        return text
+      }
+    }
+
+    darwinLogSelectionFailureDiagnostics(api, candidates, appPids, triggerPoint, t0)
     return null
   } finally {
     for (const candidate of candidates) {
@@ -541,7 +662,7 @@ function createDarwinAxRootCandidates(
       continue
     }
     const source = `app(pid=${pid})`
-    darwinEnableAccessibilityTree(api, element)
+    darwinEnableAccessibilityTree(api, element, pid)
     candidates.push({ source, element })
   }
 
@@ -561,25 +682,106 @@ function darwinPrepareAccessibilityForPids(api: DarwinAxApi, appPids: number[]):
     }
 
     try {
-      darwinEnableAccessibilityTree(api, element)
+      darwinEnableAccessibilityTree(api, element, pid)
     } finally {
       api.CFRelease(element)
     }
   }
 }
 
-function darwinEnableAccessibilityTree(api: DarwinAxApi, element: unknown): void {
+function darwinEnableAccessibilityTree(api: DarwinAxApi, element: unknown, pid?: number): void {
   api.AXUIElementSetMessagingTimeout(element, 0.1)
 
   const windowOut: unknown[] = [null]
   const windowErr = api.AXUIElementCopyAttributeValue(element, api.kAXFocusedWindowAttribute, windowOut)
-  if (windowErr === 0 && windowOut[0]) {
-    try {
-      api.AXUIElementSetMessagingTimeout(windowOut[0], 0.1)
-    } finally {
-      api.CFRelease(windowOut[0])
+  const focusedWindow = windowErr === 0 && windowOut[0] ? windowOut[0] : null
+
+  try {
+    if (focusedWindow) {
+      api.AXUIElementSetMessagingTimeout(focusedWindow, 0.1)
+    }
+
+    darwinEnableEnhancedUserInterface(api, element, focusedWindow, pid)
+    darwinEnableManualAccessibility(api, element, pid)
+  } finally {
+    if (focusedWindow) {
+      api.CFRelease(focusedWindow)
     }
   }
+}
+
+function darwinEnableEnhancedUserInterface(
+  api: DarwinAxApi,
+  appElement: unknown,
+  focusedWindow: unknown | null,
+  pid?: number
+): void {
+  if (!pid || _darwinEnhancedUserInterfaceEnabledPids.has(pid) || _darwinEnhancedUserInterfaceUnsupportedPids.has(pid)) {
+    return
+  }
+
+  const attempts: Array<{ target: string; element: unknown }> = [{ target: 'app', element: appElement }]
+  if (focusedWindow) {
+    attempts.push({ target: 'focusedWindow', element: focusedWindow })
+  }
+
+  const errors: Array<{ target: string; err: number }> = []
+  for (const attempt of attempts) {
+    const err = api.AXUIElementSetAttributeValue(
+      attempt.element,
+      api.kAXEnhancedUserInterfaceAttribute,
+      api.kCFBooleanTrue
+    )
+    if (err === 0) {
+      _darwinEnhancedUserInterfaceEnabledPids.add(pid)
+      _darwinAccessibilityWarmupUntil = performance.now() + DARWIN_AX_ACCESSIBILITY_WARMUP_RETRY_MS
+      log.info(`[NativeTextSelection][AX] AXEnhancedUserInterface 已启用: pid=${pid}, target=${attempt.target}`)
+      return
+    }
+    errors.push({ target: attempt.target, err })
+  }
+
+  const errorSummary = errors
+    .map(({ target, err }) => `${target}:${err}(${darwinAxErrorName(err)})`)
+    .join(',')
+  const isUnsupported = errors.length > 0 && errors.every(({ err }) => err === -25205 || err === -25206)
+  if (isUnsupported && focusedWindow) {
+    _darwinEnhancedUserInterfaceUnsupportedPids.add(pid)
+    log.info(`[NativeTextSelection][AX] AXEnhancedUserInterface 不支持: pid=${pid}, errors=${errorSummary}`)
+    return
+  }
+
+  log.info(`[NativeTextSelection][AX] AXEnhancedUserInterface 启用失败: pid=${pid}, errors=${errorSummary || 'none'}`)
+}
+
+function darwinEnableManualAccessibility(api: DarwinAxApi, element: unknown, pid?: number): void {
+  if (!pid || _darwinManualAccessibilityEnabledPids.has(pid) || _darwinManualAccessibilityUnsupportedPids.has(pid)) {
+    return
+  }
+
+  const err = api.AXUIElementSetAttributeValue(
+    element,
+    api.kAXManualAccessibilityAttribute,
+    api.kCFBooleanTrue
+  )
+  if (err === 0) {
+    _darwinManualAccessibilityEnabledPids.add(pid)
+    _darwinAccessibilityWarmupUntil = performance.now() + DARWIN_AX_ACCESSIBILITY_WARMUP_RETRY_MS
+    log.info(`[NativeTextSelection][AX] AXManualAccessibility 已启用: pid=${pid}`)
+    return
+  }
+
+  if (err === -25205 || err === -25206) {
+    _darwinManualAccessibilityUnsupportedPids.add(pid)
+    log.info(`[NativeTextSelection][AX] AXManualAccessibility 不支持: pid=${pid}, AXError=${err}(${darwinAxErrorName(err)})`)
+    return
+  }
+
+  log.info(`[NativeTextSelection][AX] AXManualAccessibility 启用失败: pid=${pid}, AXError=${err}(${darwinAxErrorName(err)})`)
+}
+
+function darwinShouldRetryAfterAccessibilityWarmup(): boolean {
+  return performance.now() < _darwinAccessibilityWarmupUntil
 }
 
 function darwinReadSelectedTextFromRoot(
@@ -644,8 +846,11 @@ function darwinReadSelectedTextFromElement(
   element: unknown,
   source: string,
   t0: number,
-  tInit: number
+  tInit: number,
+  options?: DarwinReadOptions
 ): string | null {
+  const logFailures = options?.logFailures !== false
+
   // 对目标元素设置 100ms 超时防止目标应用卡住主线程
   api.AXUIElementSetMessagingTimeout(element, 0.1)
 
@@ -655,8 +860,10 @@ function darwinReadSelectedTextFromElement(
   )
   const tText = performance.now()
   if (err !== 0 || !textRefOut[0]) {
-    log.info(`[NativeTextSelection][AX] GetSelectedText 失败: source=${source}, AXError=${err}(${darwinAxErrorName(err)}), hasRef=${!!textRefOut[0]}, init=${Math.round(tInit - t0)}ms, text=${Math.round(tText - tInit)}ms`)
-    return darwinReadSelectedTextFromParameterizedRange(api, element, source, t0, tInit)
+    if (logFailures) {
+      log.info(`[NativeTextSelection][AX] GetSelectedText 失败: source=${source}, AXError=${err}(${darwinAxErrorName(err)}), hasRef=${!!textRefOut[0]}, init=${Math.round(tInit - t0)}ms, text=${Math.round(tText - tInit)}ms`)
+    }
+    return darwinReadSelectedTextFromParameterizedRange(api, element, source, t0, tInit, options)
   }
 
   const textRef = textRefOut[0]
@@ -664,8 +871,10 @@ function darwinReadSelectedTextFromElement(
     const result = cfStringToJs(api, textRef)
     const tDone = performance.now()
     if (!result || result.trim().length === 0) {
-      log.info(`[NativeTextSelection][AX] GetSelectedText 空结果: source=${source}, text=${Math.round(tText - tInit)}ms, convert=${Math.round(tDone - tText)}ms`)
-      return darwinReadSelectedTextFromParameterizedRange(api, element, source, t0, tInit)
+      if (logFailures) {
+        log.info(`[NativeTextSelection][AX] GetSelectedText 空结果: source=${source}, text=${Math.round(tText - tInit)}ms, convert=${Math.round(tDone - tText)}ms`)
+      }
+      return darwinReadSelectedTextFromParameterizedRange(api, element, source, t0, tInit, options)
     }
     log.info(`[NativeTextSelection][AX] 成功: source=${source}, length=${result.length}, text=${Math.round(tText - tInit)}ms, convert=${Math.round(tDone - tText)}ms, 总计=${Math.round(tDone - t0)}ms`)
     return result
@@ -679,12 +888,16 @@ function darwinReadSelectedTextFromParameterizedRange(
   element: unknown,
   source: string,
   t0: number,
-  tInit: number
+  tInit: number,
+  options?: DarwinReadOptions
 ): string | null {
-  const rangeText = darwinReadSelectedTextFromRange(api, element, source, t0, tInit)
+  const rangeText = darwinReadSelectedTextFromRange(api, element, source, t0, tInit, options)
   if (rangeText !== null) return rangeText
 
-  return darwinReadSelectedTextFromTextMarkerRange(api, element, source, t0, tInit)
+  const rangesText = darwinReadSelectedTextFromRanges(api, element, source, t0, tInit, options)
+  if (rangesText !== null) return rangesText
+
+  return darwinReadSelectedTextFromTextMarkerRange(api, element, source, t0, tInit, options)
 }
 
 function darwinReadSelectedTextFromRange(
@@ -692,13 +905,18 @@ function darwinReadSelectedTextFromRange(
   element: unknown,
   source: string,
   t0: number,
-  tInit: number
+  tInit: number,
+  options?: DarwinReadOptions
 ): string | null {
+  const logFailures = options?.logFailures !== false
+
   const rangeRefOut: unknown[] = [null]
   const err = api.AXUIElementCopyAttributeValue(element, api.kAXSelectedTextRangeAttribute, rangeRefOut)
   const tRange = performance.now()
   if (err !== 0 || !rangeRefOut[0]) {
-    log.info(`[NativeTextSelection][AX] GetSelectedTextRange 失败: source=${source}, AXError=${err}(${darwinAxErrorName(err)}), hasRef=${!!rangeRefOut[0]}, range=${Math.round(tRange - tInit)}ms`)
+    if (logFailures) {
+      log.info(`[NativeTextSelection][AX] GetSelectedTextRange 失败: source=${source}, AXError=${err}(${darwinAxErrorName(err)}), hasRef=${!!rangeRefOut[0]}, range=${Math.round(tRange - tInit)}ms`)
+    }
     return null
   }
 
@@ -707,11 +925,15 @@ function darwinReadSelectedTextFromRange(
     const range: { location?: number; length?: number } = {}
     const ok = api.AXValueGetValue(rangeRef, 4, koffi.as(range, 'CFRange *'))
     if (!ok) {
-      log.info(`[NativeTextSelection][AX] AXValueGetValue(range) 失败: source=${source}`)
+      if (logFailures) {
+        log.info(`[NativeTextSelection][AX] AXValueGetValue(range) 失败: source=${source}`)
+      }
       return null
     }
     if (!range.length || range.length <= 0) {
-      log.info(`[NativeTextSelection][AX] SelectedTextRange 空范围: source=${source}, location=${range.location ?? -1}, length=${range.length ?? 0}`)
+      if (logFailures) {
+        log.info(`[NativeTextSelection][AX] SelectedTextRange 空范围: source=${source}, location=${range.location ?? -1}, length=${range.length ?? 0}`)
+      }
       return null
     }
 
@@ -722,10 +944,98 @@ function darwinReadSelectedTextFromRange(
       rangeRef,
       `${source}.stringForRange`,
       t0,
-      tInit
+      tInit,
+      options
     )
   } finally {
     api.CFRelease(rangeRef)
+  }
+}
+
+function darwinReadSelectedTextFromRanges(
+  api: DarwinAxApi,
+  element: unknown,
+  source: string,
+  t0: number,
+  tInit: number,
+  options?: DarwinReadOptions
+): string | null {
+  const logFailures = options?.logFailures !== false
+
+  const rangesRefOut: unknown[] = [null]
+  const err = api.AXUIElementCopyAttributeValue(element, api.kAXSelectedTextRangesAttribute, rangesRefOut)
+  const tRange = performance.now()
+  if (err !== 0 || !rangesRefOut[0]) {
+    if (logFailures) {
+      log.info(`[NativeTextSelection][AX] GetSelectedTextRanges 失败: source=${source}, AXError=${err}(${darwinAxErrorName(err)}), hasRef=${!!rangesRefOut[0]}, range=${Math.round(tRange - tInit)}ms`)
+    }
+    return null
+  }
+
+  const rangesRef = rangesRefOut[0]
+  try {
+    const count = Math.max(0, Math.min(Number(api.CFArrayGetCount(rangesRef)), 8))
+    if (count <= 0) {
+      if (logFailures) {
+        log.info(`[NativeTextSelection][AX] SelectedTextRanges 空数组: source=${source}`)
+      }
+      return null
+    }
+
+    const parts: string[] = []
+    const rangeDetails: string[] = []
+    for (let i = 0; i < count; i++) {
+      const rangeRef = api.CFArrayGetValueAtIndex(rangesRef, i)
+      if (!rangeRef) continue
+
+      const range: { location?: number; length?: number } = {}
+      const ok = api.AXValueGetValue(rangeRef, 4, koffi.as(range, 'CFRange *'))
+      rangeDetails.push(`#${i}:type=${darwinCfTypeId(api, rangeRef)},range=${ok ? `${range.location ?? -1}+${range.length ?? 0}` : 'no'}`)
+
+      let text: string | null = null
+      if (ok && range.length && range.length > 0) {
+        text = darwinReadStringForParameterizedAttribute(
+          api,
+          element,
+          api.kAXStringForRangeParameterizedAttribute,
+          rangeRef,
+          `${source}.stringForRanges[${i}]`,
+          t0,
+          tInit,
+          { logFailures: false }
+        )
+      }
+
+      if (!text || text.trim().length === 0) {
+        text = darwinReadStringForParameterizedAttribute(
+          api,
+          element,
+          api.kAXStringForTextMarkerRangeParameterizedAttribute,
+          rangeRef,
+          `${source}.stringForTextMarkerRanges[${i}]`,
+          t0,
+          tInit,
+          { logFailures: false }
+        )
+      }
+
+      if (text && text.trim().length > 0) {
+        parts.push(text)
+      }
+    }
+
+    const result = parts.join('\n')
+    if (result.trim().length === 0) {
+      if (logFailures) {
+        log.info(`[NativeTextSelection][AX] SelectedTextRanges 无文本: source=${source}, count=${count}, items=${rangeDetails.join('|')}`)
+      }
+      return null
+    }
+
+    log.info(`[NativeTextSelection][AX] 复数范围取词成功: source=${source}, ranges=${count}, length=${result.length}, 总计=${Math.round(performance.now() - t0)}ms`)
+    return result
+  } finally {
+    api.CFRelease(rangesRef)
   }
 }
 
@@ -734,13 +1044,18 @@ function darwinReadSelectedTextFromTextMarkerRange(
   element: unknown,
   source: string,
   t0: number,
-  tInit: number
+  tInit: number,
+  options?: DarwinReadOptions
 ): string | null {
+  const logFailures = options?.logFailures !== false
+
   const markerRangeOut: unknown[] = [null]
   const err = api.AXUIElementCopyAttributeValue(element, api.kAXSelectedTextMarkerRangeAttribute, markerRangeOut)
   const tRange = performance.now()
   if (err !== 0 || !markerRangeOut[0]) {
-    log.info(`[NativeTextSelection][AX] GetSelectedTextMarkerRange 失败: source=${source}, AXError=${err}(${darwinAxErrorName(err)}), hasRef=${!!markerRangeOut[0]}, range=${Math.round(tRange - tInit)}ms`)
+    if (logFailures) {
+      log.info(`[NativeTextSelection][AX] GetSelectedTextMarkerRange 失败: source=${source}, AXError=${err}(${darwinAxErrorName(err)}), hasRef=${!!markerRangeOut[0]}, range=${Math.round(tRange - tInit)}ms`)
+    }
     return null
   }
 
@@ -753,7 +1068,8 @@ function darwinReadSelectedTextFromTextMarkerRange(
       markerRange,
       `${source}.stringForTextMarkerRange`,
       t0,
-      tInit
+      tInit,
+      options
     )
   } finally {
     api.CFRelease(markerRange)
@@ -767,13 +1083,18 @@ function darwinReadStringForParameterizedAttribute(
   parameter: unknown,
   source: string,
   t0: number,
-  tInit: number
+  tInit: number,
+  options?: DarwinReadOptions
 ): string | null {
+  const logFailures = options?.logFailures !== false
+
   const textRefOut: unknown[] = [null]
   const err = api.AXUIElementCopyParameterizedAttributeValue(element, attribute, parameter, textRefOut)
   const tText = performance.now()
   if (err !== 0 || !textRefOut[0]) {
-    log.info(`[NativeTextSelection][AX] GetParameterizedText 失败: source=${source}, AXError=${err}(${darwinAxErrorName(err)}), hasRef=${!!textRefOut[0]}, text=${Math.round(tText - tInit)}ms`)
+    if (logFailures) {
+      log.info(`[NativeTextSelection][AX] GetParameterizedText 失败: source=${source}, AXError=${err}(${darwinAxErrorName(err)}), hasRef=${!!textRefOut[0]}, text=${Math.round(tText - tInit)}ms`)
+    }
     return null
   }
 
@@ -782,13 +1103,209 @@ function darwinReadStringForParameterizedAttribute(
     const result = cfStringToJs(api, textRef)
     const tDone = performance.now()
     if (!result || result.trim().length === 0) {
-      log.info(`[NativeTextSelection][AX] GetParameterizedText 空结果: source=${source}, text=${Math.round(tText - tInit)}ms, convert=${Math.round(tDone - tText)}ms`)
+      if (logFailures) {
+        log.info(`[NativeTextSelection][AX] GetParameterizedText 空结果: source=${source}, text=${Math.round(tText - tInit)}ms, convert=${Math.round(tDone - tText)}ms`)
+      }
       return null
     }
     log.info(`[NativeTextSelection][AX] 参数化取词成功: source=${source}, length=${result.length}, text=${Math.round(tText - tInit)}ms, convert=${Math.round(tDone - tText)}ms, 总计=${Math.round(tDone - t0)}ms`)
     return result
   } finally {
     api.CFRelease(textRef)
+  }
+}
+
+function darwinReadSelectedTextFromTree(
+  api: DarwinAxApi,
+  axElement: unknown,
+  source: string,
+  t0: number,
+  tInit: number
+): string | null {
+  const focusedText = darwinReadSelectedTextFromAttributeTree(
+    api,
+    axElement,
+    api.kAXFocusedUIElementAttribute,
+    `${source}.focusedUIElement.tree`,
+    t0,
+    tInit
+  )
+  if (focusedText !== null) return focusedText
+
+  const focusedWindowText = darwinReadSelectedTextFromAttributeTree(
+    api,
+    axElement,
+    api.kAXFocusedWindowAttribute,
+    `${source}.focusedWindow.tree`,
+    t0,
+    tInit
+  )
+  if (focusedWindowText !== null) return focusedWindowText
+
+  return darwinScanSelectedTextSubtree(api, axElement, `${source}.root.tree`, t0, tInit)
+}
+
+function darwinReadSelectedTextFromAttributeTree(
+  api: DarwinAxApi,
+  axElement: unknown,
+  attribute: unknown,
+  source: string,
+  t0: number,
+  tInit: number
+): string | null {
+  const elementOut: unknown[] = [null]
+  const err = api.AXUIElementCopyAttributeValue(axElement, attribute, elementOut)
+  if (err !== 0 || !elementOut[0]) {
+    return null
+  }
+
+  const element = elementOut[0]
+  try {
+    return darwinScanSelectedTextSubtree(api, element, source, t0, tInit)
+  } finally {
+    api.CFRelease(element)
+  }
+}
+
+function darwinScanSelectedTextSubtree(
+  api: DarwinAxApi,
+  root: unknown,
+  source: string,
+  t0: number,
+  tInit: number,
+  options?: {
+    maxDepth?: number
+    maxNodes?: number
+    deadlineMs?: number
+  }
+): string | null {
+  const started = performance.now()
+  const state = {
+    deadline: started + (options?.deadlineMs ?? DARWIN_AX_TREE_SCAN_DEADLINE_MS),
+    maxDepth: options?.maxDepth ?? DARWIN_AX_TREE_SCAN_MAX_DEPTH,
+    maxNodes: options?.maxNodes ?? DARWIN_AX_TREE_SCAN_MAX_NODES,
+    nodes: 0,
+    visited: new Set<unknown>()
+  }
+
+  const text = darwinScanSelectedTextNode(api, root, source, 0, state, t0, tInit)
+  const elapsed = Math.round(performance.now() - started)
+  if (text === null) {
+    log.info(`[NativeTextSelection][AX] TreeScan 无结果: source=${source}, nodes=${state.nodes}, elapsed=${elapsed}ms`)
+  }
+  return text
+}
+
+function darwinScanSelectedTextNode(
+  api: DarwinAxApi,
+  element: unknown,
+  source: string,
+  depth: number,
+  state: {
+    deadline: number
+    maxDepth: number
+    maxNodes: number
+    nodes: number
+    visited: Set<unknown>
+  },
+  t0: number,
+  tInit: number
+): string | null {
+  if (!element || state.nodes >= state.maxNodes || performance.now() > state.deadline) {
+    return null
+  }
+  if (state.visited.has(element)) {
+    return null
+  }
+
+  state.visited.add(element)
+  state.nodes++
+
+  const text = darwinReadSelectedTextFromElement(
+    api,
+    element,
+    `${source}(depth=${depth},node=${state.nodes})`,
+    t0,
+    tInit,
+    { logFailures: false }
+  )
+  if (text !== null) {
+    log.info(`[NativeTextSelection][AX] TreeScan 成功: source=${source}, depth=${depth}, nodes=${state.nodes}, length=${text.length}, 总计=${Math.round(performance.now() - t0)}ms`)
+    return text
+  }
+
+  if (depth >= state.maxDepth) {
+    return null
+  }
+
+  const children = darwinCopyAxChildren(api, element, state.maxNodes - state.nodes)
+  try {
+    for (const child of children) {
+      const childText = darwinScanSelectedTextNode(api, child, source, depth + 1, state, t0, tInit)
+      if (childText !== null) {
+        return childText
+      }
+      if (state.nodes >= state.maxNodes || performance.now() > state.deadline) {
+        return null
+      }
+    }
+  } finally {
+    for (const child of children) {
+      api.CFRelease(child)
+    }
+  }
+
+  return null
+}
+
+function darwinCopyAxChildren(api: DarwinAxApi, element: unknown, maxCount: number): unknown[] {
+  if (maxCount <= 0) return []
+
+  const visibleChildren = darwinCopyAxChildrenFromAttribute(
+    api,
+    element,
+    api.kAXVisibleChildrenAttribute,
+    maxCount
+  )
+  const remaining = maxCount - visibleChildren.length
+  if (remaining <= 0) return visibleChildren
+
+  const allChildren = darwinCopyAxChildrenFromAttribute(
+    api,
+    element,
+    api.kAXChildrenAttribute,
+    remaining
+  )
+  return [...visibleChildren, ...allChildren]
+}
+
+function darwinCopyAxChildrenFromAttribute(
+  api: DarwinAxApi,
+  element: unknown,
+  attribute: unknown,
+  maxCount: number
+): unknown[] {
+  const childrenOut: unknown[] = [null]
+  const err = api.AXUIElementCopyAttributeValue(element, attribute, childrenOut)
+  if (err !== 0 || !childrenOut[0]) {
+    return []
+  }
+
+  const childrenRef = childrenOut[0]
+  try {
+    const count = Math.max(0, Math.min(Number(api.CFArrayGetCount(childrenRef)), maxCount))
+    const children: unknown[] = []
+    for (let i = 0; i < count; i++) {
+      const child = api.CFArrayGetValueAtIndex(childrenRef, i)
+      if (child) {
+        children.push(api.CFRetain(child))
+      }
+    }
+    return children
+  } catch {
+    return []
+  } finally {
+    api.CFRelease(childrenRef)
   }
 }
 
@@ -812,10 +1329,24 @@ function darwinReadSelectedTextAtPosition(
 
   let element = elementOut[0]
   try {
-    for (let depth = 0; depth < 4 && element; depth++) {
+    for (let depth = 0; depth < DARWIN_AX_PARENT_SEARCH_DEPTH && element; depth++) {
       const text = darwinReadSelectedTextFromElement(api, element, `${source}.atPosition(depth=${depth})`, t0, tInit)
       if (text !== null) {
         return text
+      }
+
+      if (source.startsWith('app(') && depth <= 2) {
+        const subtreeText = darwinScanSelectedTextSubtree(
+          api,
+          element,
+          `${source}.atPosition(depth=${depth}).tree`,
+          t0,
+          tInit,
+          { maxDepth: 4, maxNodes: 80, deadlineMs: 60 }
+        )
+        if (subtreeText !== null) {
+          return subtreeText
+        }
       }
 
       const parentOut: unknown[] = [null]
@@ -836,6 +1367,216 @@ function darwinReadSelectedTextAtPosition(
   }
 
   return null
+}
+
+function darwinLogSelectionFailureDiagnostics(
+  api: DarwinAxApi,
+  candidates: Array<{ source: string; element: unknown }>,
+  appPids: number[],
+  triggerPoint: { x: number; y: number } | undefined,
+  t0: number
+): void {
+  const now = performance.now()
+  if (now - _darwinLastFailureDiagnosticAt < DARWIN_AX_DIAGNOSTIC_THROTTLE_MS) {
+    return
+  }
+  _darwinLastFailureDiagnosticAt = now
+
+  try {
+    const pidSummary = appPids.length > 0 ? appPids.join(',') : 'none'
+    const pointSummary = triggerPoint ? `${Math.round(triggerPoint.x)},${Math.round(triggerPoint.y)}` : 'none'
+    const enhancedEnabled = appPids.filter(pid => _darwinEnhancedUserInterfaceEnabledPids.has(pid)).join(',') || 'none'
+    const enhancedUnsupported = appPids.filter(pid => _darwinEnhancedUserInterfaceUnsupportedPids.has(pid)).join(',') || 'none'
+    const manualEnabled = appPids.filter(pid => _darwinManualAccessibilityEnabledPids.has(pid)).join(',') || 'none'
+    const manualUnsupported = appPids.filter(pid => _darwinManualAccessibilityUnsupportedPids.has(pid)).join(',') || 'none'
+    log.info(`[NativeTextSelection][AX-Diag] failure pids=${pidSummary}, point=${pointSummary}, enhancedEnabled=${enhancedEnabled}, enhancedUnsupported=${enhancedUnsupported}, manualEnabled=${manualEnabled}, manualUnsupported=${manualUnsupported}, elapsed=${Math.round(now - t0)}ms`)
+
+    for (const candidate of candidates.slice(0, 4)) {
+      darwinLogElementDiagnostics(api, candidate.element, `${candidate.source}.diag.root`)
+      darwinLogAttributeElementDiagnostics(api, candidate.element, api.kAXFocusedUIElementAttribute, `${candidate.source}.diag.focusedUIElement`)
+      darwinLogAttributeElementDiagnostics(api, candidate.element, api.kAXFocusedWindowAttribute, `${candidate.source}.diag.focusedWindow`)
+      if (triggerPoint) {
+        darwinLogElementAtPositionDiagnostics(api, candidate.element, candidate.source, triggerPoint)
+      }
+    }
+  } catch (err) {
+    log.warn('[NativeTextSelection][AX-Diag] 诊断失败:', err)
+  }
+}
+
+function darwinLogAttributeElementDiagnostics(
+  api: DarwinAxApi,
+  element: unknown,
+  attribute: unknown,
+  source: string
+): void {
+  const elementOut: unknown[] = [null]
+  const err = api.AXUIElementCopyAttributeValue(element, attribute, elementOut)
+  if (err !== 0 || !elementOut[0]) {
+    log.info(`[NativeTextSelection][AX-Diag] ${source}: unavailable AXError=${err}(${darwinAxErrorName(err)})`)
+    return
+  }
+
+  const child = elementOut[0]
+  try {
+    darwinLogElementDiagnostics(api, child, source)
+  } finally {
+    api.CFRelease(child)
+  }
+}
+
+function darwinLogElementAtPositionDiagnostics(
+  api: DarwinAxApi,
+  axElement: unknown,
+  source: string,
+  point: { x: number; y: number }
+): void {
+  const elementOut: unknown[] = [null]
+  const err = api.AXUIElementCopyElementAtPosition(axElement, point.x, point.y, elementOut)
+  if (err !== 0 || !elementOut[0]) {
+    log.info(`[NativeTextSelection][AX-Diag] ${source}.diag.atPosition: unavailable point=${Math.round(point.x)},${Math.round(point.y)}, AXError=${err}(${darwinAxErrorName(err)})`)
+    return
+  }
+
+  let element = elementOut[0]
+  try {
+    for (let depth = 0; depth < 3 && element; depth++) {
+      darwinLogElementDiagnostics(api, element, `${source}.diag.atPosition(depth=${depth})`)
+
+      const parentOut: unknown[] = [null]
+      const parentErr = api.AXUIElementCopyAttributeValue(element, api.kAXParentAttribute, parentOut)
+      if (parentErr !== 0 || !parentOut[0]) {
+        log.info(`[NativeTextSelection][AX-Diag] ${source}.diag.atPosition(depth=${depth}).parent: unavailable AXError=${parentErr}(${darwinAxErrorName(parentErr)})`)
+        return
+      }
+
+      const parent = parentOut[0]
+      api.CFRelease(element)
+      element = parent
+    }
+  } finally {
+    if (element) {
+      api.CFRelease(element)
+    }
+  }
+}
+
+function darwinLogElementDiagnostics(api: DarwinAxApi, element: unknown, source: string): void {
+  api.AXUIElementSetMessagingTimeout(element, 0.05)
+
+  const role = darwinReadCfStringAttribute(api, element, api.kAXRoleAttribute)
+  const subrole = darwinReadCfStringAttribute(api, element, api.kAXSubroleAttribute)
+  const title = darwinReadCfStringAttribute(api, element, api.kAXTitleAttribute)
+  const description = darwinReadCfStringAttribute(api, element, api.kAXDescriptionAttribute)
+  const value = darwinReadCfStringAttribute(api, element, api.kAXValueAttribute)
+  const selectedText = darwinReadCfStringAttribute(api, element, api.kAXSelectedTextAttribute)
+  const attrs = darwinCopyInterestingAxNames(api, element, false)
+  const parameterizedAttrs = darwinCopyInterestingAxNames(api, element, true)
+
+  log.info(
+    `[NativeTextSelection][AX-Diag] ${source}: ` +
+    `role=${darwinFormatDiagnosticText(role)}, ` +
+    `subrole=${darwinFormatDiagnosticText(subrole)}, ` +
+    `title=${darwinFormatDiagnosticText(title)}, ` +
+    `desc=${darwinFormatDiagnosticText(description)}, ` +
+    `valueLen=${value?.length ?? '-'}, ` +
+    `selectedLen=${selectedText?.length ?? '-'}, ` +
+    `attrsErr=${attrs.err === 0 ? '-' : `${attrs.err}(${darwinAxErrorName(attrs.err)})`}, ` +
+    `attrs=[${attrs.names.join(',')}], ` +
+    `pAttrsErr=${parameterizedAttrs.err === 0 ? '-' : `${parameterizedAttrs.err}(${darwinAxErrorName(parameterizedAttrs.err)})`}, ` +
+    `pAttrs=[${parameterizedAttrs.names.join(',')}]`
+  )
+}
+
+function darwinReadCfStringAttribute(api: DarwinAxApi, element: unknown, attribute: unknown): string | null {
+  const valueOut: unknown[] = [null]
+  const err = api.AXUIElementCopyAttributeValue(element, attribute, valueOut)
+  if (err !== 0 || !valueOut[0]) {
+    return null
+  }
+
+  const value = valueOut[0]
+  try {
+    if (!darwinIsCfString(api, value)) {
+      return null
+    }
+    return cfStringToJs(api, value)
+  } finally {
+    api.CFRelease(value)
+  }
+}
+
+function darwinCopyInterestingAxNames(
+  api: DarwinAxApi,
+  element: unknown,
+  parameterized: boolean
+): { err: number; names: string[] } {
+  const namesOut: unknown[] = [null]
+  const err = parameterized
+    ? api.AXUIElementCopyParameterizedAttributeNames(element, namesOut)
+    : api.AXUIElementCopyAttributeNames(element, namesOut)
+  if (err !== 0 || !namesOut[0]) {
+    return { err, names: [] }
+  }
+
+  const namesRef = namesOut[0]
+  try {
+    const count = Math.max(0, Math.min(Number(api.CFArrayGetCount(namesRef)), 200))
+    const names: string[] = []
+    for (let i = 0; i < count; i++) {
+      const nameRef = api.CFArrayGetValueAtIndex(namesRef, i)
+      if (!nameRef || !darwinIsCfString(api, nameRef)) continue
+      const name = cfStringToJs(api, nameRef)
+      if (name) names.push(name)
+    }
+    return { err: 0, names: darwinFilterDiagnosticNames(names) }
+  } catch {
+    return { err: -25200, names: [] }
+  } finally {
+    api.CFRelease(namesRef)
+  }
+}
+
+function darwinFilterDiagnosticNames(names: string[]): string[] {
+  const selected = new Set<string>()
+  for (const importantName of DARWIN_AX_DIAGNOSTIC_IMPORTANT_NAMES) {
+    if (names.includes(importantName)) {
+      selected.add(importantName)
+    }
+  }
+  for (const name of names) {
+    if (selected.has(name)) continue
+    if (DARWIN_AX_DIAGNOSTIC_NAME_KEYWORDS.some(keyword => name.includes(keyword))) {
+      selected.add(name)
+    }
+  }
+  return Array.from(selected).slice(0, 30)
+}
+
+function darwinFormatDiagnosticText(value: string | null): string {
+  if (!value) return '-'
+  const compact = value.replace(/\s+/g, ' ').trim()
+  if (!compact) return '-'
+  const escaped = compact.replace(/"/g, "'")
+  return `"${escaped.length > 48 ? `${escaped.slice(0, 48)}...` : escaped}"`
+}
+
+function darwinIsCfString(api: DarwinAxApi, value: unknown): boolean {
+  if (!value) return false
+  try {
+    return Number(api.CFGetTypeID(value)) === Number(api.CFStringGetTypeID())
+  } catch {
+    return false
+  }
+}
+
+function darwinCfTypeId(api: DarwinAxApi, value: unknown): string {
+  if (!value) return 'null'
+  try {
+    return String(api.CFGetTypeID(value))
+  } catch {
+    return 'unknown'
+  }
 }
 
 function darwinAxErrorName(error: number): string {
