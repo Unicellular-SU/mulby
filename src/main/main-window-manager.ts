@@ -290,7 +290,7 @@ export class MainWindowManager {
   // ── Shadow window ──────────────────────────────────────────────
 
   private shouldUseShadow(): boolean {
-    return process.platform !== 'win32'
+    return process.platform === 'linux'
   }
 
   private createShadow(): void {

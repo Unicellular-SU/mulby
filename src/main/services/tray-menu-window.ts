@@ -5,6 +5,7 @@ import type { AppSettingsManager } from './app-settings'
 import type { ThemeManager } from './theme'
 import { loggerService } from './logger'
 import { registerAppWindow, unregisterAppWindow } from './ipc-caller-resolver'
+import { refreshNativeShadow } from './window-shadow'
 import log from 'electron-log'
 
 interface TrayMenuWindowOptions {
@@ -69,9 +70,27 @@ interface TrayMenuState {
 const TRAY_MENU_WIDTH = 380
 const TRAY_MENU_HEIGHT = 560
 const TRAY_MENU_MARGIN = 8
+const TRAY_MENU_DEFAULT_RENDERER_PADDING = 8
+const MAC_POPUP_RENDERER_PADDING = 16
 
 function clamp(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, value))
+}
+
+function getRendererPadding(): number {
+  return process.platform === 'darwin' ? MAC_POPUP_RENDERER_PADDING : TRAY_MENU_DEFAULT_RENDERER_PADDING
+}
+
+function getLegacyRendererPaddingDelta(): number {
+  return getRendererPadding() - TRAY_MENU_DEFAULT_RENDERER_PADDING
+}
+
+function getWindowWidth(): number {
+  return TRAY_MENU_WIDTH + getLegacyRendererPaddingDelta() * 2
+}
+
+function getWindowHeight(): number {
+  return TRAY_MENU_HEIGHT + getLegacyRendererPaddingDelta() * 2
 }
 
 function safeText(input: unknown, fallback = ''): string {
@@ -119,6 +138,7 @@ export class TrayMenuWindowManager {
     this.positionWindow(win, anchorBounds)
     await this.pushState()
     win.show()
+    refreshNativeShadow(win)
     win.focus()
   }
 
@@ -153,8 +173,8 @@ export class TrayMenuWindowManager {
     }
 
     const win = new BrowserWindow({
-      width: TRAY_MENU_WIDTH,
-      height: TRAY_MENU_HEIGHT,
+      width: getWindowWidth(),
+      height: getWindowHeight(),
       show: false,
       frame: false,
       transparent: true,
@@ -164,7 +184,8 @@ export class TrayMenuWindowManager {
       fullscreenable: false,
       skipTaskbar: true,
       movable: false,
-      hasShadow: true,
+      hasShadow: process.platform !== 'darwin',
+      backgroundColor: '#00000000',
       webPreferences: {
         preload: join(__dirname, '../preload/index.js'),
         contextIsolation: true,
@@ -215,12 +236,15 @@ export class TrayMenuWindowManager {
     const display = screen.getDisplayNearestPoint(anchorPoint)
     const area = display.workArea
     const bounds = win.getBounds()
+    const rendererPadding = process.platform === 'darwin' ? getRendererPadding() : 0
+    const visualWidth = Math.max(1, bounds.width - rendererPadding * 2)
+    const visualHeight = Math.max(1, bounds.height - rendererPadding * 2)
     const gap = TRAY_MENU_MARGIN
 
     const xExpandRight = Math.round(anchor.x)
-    const xFallbackLeft = Math.round(anchor.x + anchor.width - bounds.width)
+    const xFallbackLeft = Math.round(anchor.x + anchor.width - visualWidth)
     const rightEdgeLimit = area.x + area.width - gap
-    const canExpandRight = xExpandRight + bounds.width <= rightEdgeLimit
+    const canExpandRight = xExpandRight + visualWidth <= rightEdgeLimit
     let x = process.platform === 'darwin' && canExpandRight
       ? xExpandRight
       : xFallbackLeft
@@ -228,21 +252,22 @@ export class TrayMenuWindowManager {
     const preferAbove =
       process.platform === 'win32' ||
       anchor.y > area.y + area.height / 2
-    const yAbove = Math.round(anchor.y - bounds.height - gap)
+    const yAbove = Math.round(anchor.y - visualHeight - gap)
     const yBelow = Math.round(anchor.y + anchor.height + gap)
     let y = preferAbove ? yAbove : yBelow
 
     if (y < area.y + gap) {
       y = yBelow
     }
-    if (y + bounds.height > area.y + area.height - gap) {
+    if (y + visualHeight > area.y + area.height - gap) {
       y = yAbove
     }
 
-    x = clamp(x, area.x + gap, area.x + area.width - bounds.width - gap)
-    y = clamp(y, area.y + gap, area.y + area.height - bounds.height - gap)
+    x = clamp(x, area.x + gap, area.x + area.width - visualWidth - gap)
+    y = clamp(y, area.y + gap, area.y + area.height - visualHeight - gap)
 
-    win.setPosition(x, y, false)
+    win.setPosition(Math.round(x - rendererPadding), Math.round(y - rendererPadding), false)
+    refreshNativeShadow(win)
   }
 
   private buildFallbackAnchor(): Rectangle {

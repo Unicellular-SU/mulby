@@ -15,12 +15,15 @@ import { join } from 'path'
 import type { ThemeManager } from './theme'
 import type { SuperPanelState } from './super-panel-manager'
 import { registerAppWindow, unregisterAppWindow } from './ipc-caller-resolver'
+import { refreshNativeShadow } from './window-shadow'
 import log from 'electron-log'
 
 // 面板尺寸
 const PANEL_WIDTH = 300
 const PANEL_MAX_HEIGHT = 580
 const PANEL_MARGIN = 8
+const PANEL_DEFAULT_RENDERER_PADDING = 6
+const MAC_POPUP_RENDERER_PADDING = 16
 
 interface SuperPanelWindowOptions {
   themeManager: ThemeManager
@@ -30,6 +33,29 @@ interface SuperPanelWindowOptions {
 
 function clamp(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, value))
+}
+
+function getRendererPadding(): number {
+  return process.platform === 'darwin' ? MAC_POPUP_RENDERER_PADDING : PANEL_DEFAULT_RENDERER_PADDING
+}
+
+function getLegacyRendererPaddingDelta(): number {
+  return getRendererPadding() - PANEL_DEFAULT_RENDERER_PADDING
+}
+
+function getWindowWidth(): number {
+  return PANEL_WIDTH + getLegacyRendererPaddingDelta() * 2
+}
+
+function getInitialWindowHeight(legacyHeight: number): number {
+  return legacyHeight + getLegacyRendererPaddingDelta() * 2
+}
+
+function clampWindowHeight(height: number): number {
+  return Math.min(
+    Math.max(Math.round(height), getInitialWindowHeight(100)),
+    getInitialWindowHeight(PANEL_MAX_HEIGHT)
+  )
 }
 
 export class SuperPanelWindowManager {
@@ -55,15 +81,15 @@ export class SuperPanelWindowManager {
       this.setOpacitySafely(win, 0)
     }
 
-    let height = this.computePanelHeight(state)
-    win.setSize(PANEL_WIDTH, height)
+    let height = getInitialWindowHeight(this.computePanelHeight(state))
+    win.setSize(getWindowWidth(), height)
     this.positionWindow(win, x, y)
 
     if (!wasVisible) {
       const preparedHeight = await this.prepareRendererForShow(win, state)
       if (preparedHeight && preparedHeight > 0) {
-        height = Math.min(Math.max(Math.round(preparedHeight), 100), PANEL_MAX_HEIGHT)
-        win.setSize(PANEL_WIDTH, height)
+        height = clampWindowHeight(preparedHeight)
+        win.setSize(getWindowWidth(), height)
         this.positionWindow(win, x, y)
       } else {
         win.webContents.send('super-panel:state', state)
@@ -74,6 +100,7 @@ export class SuperPanelWindowManager {
 
     if (!win.isVisible()) {
       win.show()
+      refreshNativeShadow(win)
     }
     // 确保窗口获焦以接收键盘事件（↑↓/Enter/Esc）和 blur 自动隐藏
     win.focus()
@@ -90,13 +117,15 @@ export class SuperPanelWindowManager {
     if (!this.window || this.window.isDestroyed()) return
 
     if (!this.window.isVisible()) {
-      const newHeight = this.computePanelHeight(state)
+      const newHeight = getInitialWindowHeight(this.computePanelHeight(state))
       const [currentWidth, currentHeight] = this.window.getSize()
-      if (currentWidth !== PANEL_WIDTH || currentHeight !== newHeight) {
-        this.window.setSize(PANEL_WIDTH, newHeight)
+      const nextWidth = getWindowWidth()
+      if (currentWidth !== nextWidth || currentHeight !== newHeight) {
+        this.window.setSize(nextWidth, newHeight)
         if (newHeight > currentHeight) {
           this.repositionIfOverflow()
         }
+        refreshNativeShadow(this.window)
       }
     }
 
@@ -139,27 +168,38 @@ export class SuperPanelWindowManager {
   /** 前端请求调整窗口高度（动作面板展开/收起或渲染后校正） */
   adjustHeight(height: number): void {
     if (!this.window || this.window.isDestroyed()) return
-    const clamped = Math.min(Math.max(height, 100), PANEL_MAX_HEIGHT)
+    const clamped = clampWindowHeight(height)
     const [currentWidth] = this.window.getSize()
     this.window.setSize(currentWidth, Math.round(clamped))
     this.repositionIfOverflow()
+    refreshNativeShadow(this.window)
   }
 
   /** 窗口高度变化后，确保不超出屏幕工作区域 */
   private repositionIfOverflow(): void {
     if (!this.window || this.window.isDestroyed()) return
     const bounds = this.window.getBounds()
+    const rendererPadding = process.platform === 'darwin' ? getRendererPadding() : 0
+    const visualBounds = {
+      x: bounds.x + rendererPadding,
+      y: bounds.y + rendererPadding,
+      width: Math.max(1, bounds.width - rendererPadding * 2),
+      height: Math.max(1, bounds.height - rendererPadding * 2)
+    }
     const display = screen.getDisplayNearestPoint({ x: bounds.x, y: bounds.y })
     const area = display.workArea
 
-    let { x, y } = bounds
-    const maxX = area.x + area.width - bounds.width - PANEL_MARGIN
-    const maxY = area.y + area.height - bounds.height - PANEL_MARGIN
+    let { x, y } = visualBounds
+    const maxX = area.x + area.width - visualBounds.width - PANEL_MARGIN
+    const maxY = area.y + area.height - visualBounds.height - PANEL_MARGIN
     if (x > maxX) x = Math.max(area.x + PANEL_MARGIN, maxX)
     if (y > maxY) y = Math.max(area.y + PANEL_MARGIN, maxY)
 
-    if (x !== bounds.x || y !== bounds.y) {
-      this.window.setPosition(Math.round(x), Math.round(y), false)
+    const nextWindowX = Math.round(x - rendererPadding)
+    const nextWindowY = Math.round(y - rendererPadding)
+    if (nextWindowX !== bounds.x || nextWindowY !== bounds.y) {
+      this.window.setPosition(nextWindowX, nextWindowY, false)
+      refreshNativeShadow(this.window)
     }
   }
 
@@ -323,8 +363,8 @@ export class SuperPanelWindowManager {
       let win: BrowserWindow | null = null
       try {
         win = new BrowserWindow({
-          width: PANEL_WIDTH,
-          height: PANEL_MAX_HEIGHT,
+          width: getWindowWidth(),
+          height: getInitialWindowHeight(PANEL_MAX_HEIGHT),
           show: false,
           frame: false,
           transparent: true,
@@ -334,8 +374,9 @@ export class SuperPanelWindowManager {
           fullscreenable: false,
           skipTaskbar: true,
           movable: false,
-          hasShadow: true,
+          hasShadow: process.platform !== 'darwin',
           type: process.platform === 'darwin' ? 'panel' : 'toolbar',
+          backgroundColor: '#00000000',
           webPreferences: {
             preload: join(__dirname, '../preload/index.js'),
             contextIsolation: true,
@@ -416,6 +457,9 @@ export class SuperPanelWindowManager {
     const display = screen.getDisplayNearestPoint({ x: cursorX, y: cursorY })
     const area = display.workArea
     const bounds = win.getBounds()
+    const rendererPadding = process.platform === 'darwin' ? getRendererPadding() : 0
+    const visualWidth = Math.max(1, bounds.width - rendererPadding * 2)
+    const visualHeight = Math.max(1, bounds.height - rendererPadding * 2)
     const gap = PANEL_MARGIN
 
     // 默认在光标右下方
@@ -423,19 +467,20 @@ export class SuperPanelWindowManager {
     let y = cursorY + gap
 
     // 右侧溢出 → 翻转到左侧
-    if (x + bounds.width > area.x + area.width - gap) {
-      x = cursorX - bounds.width - gap
+    if (x + visualWidth > area.x + area.width - gap) {
+      x = cursorX - visualWidth - gap
     }
 
     // 下方溢出 → 翻转到上方
-    if (y + bounds.height > area.y + area.height - gap) {
-      y = cursorY - bounds.height - gap
+    if (y + visualHeight > area.y + area.height - gap) {
+      y = cursorY - visualHeight - gap
     }
 
     // 最终 clamp 确保不超出工作区域
-    x = clamp(x, area.x + gap, area.x + area.width - bounds.width - gap)
-    y = clamp(y, area.y + gap, area.y + area.height - bounds.height - gap)
+    x = clamp(x, area.x + gap, area.x + area.width - visualWidth - gap)
+    y = clamp(y, area.y + gap, area.y + area.height - visualHeight - gap)
 
-    win.setPosition(Math.round(x), Math.round(y), false)
+    win.setPosition(Math.round(x - rendererPadding), Math.round(y - rendererPadding), false)
+    refreshNativeShadow(win)
   }
 }

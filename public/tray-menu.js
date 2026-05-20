@@ -5,6 +5,11 @@ const openAtLoginSwitch = document.getElementById('open-at-login-switch');
 const statusGrid = document.getElementById('status-grid');
 const recentList = document.getElementById('recent-list');
 
+document.documentElement.classList.toggle(
+  'platform-mac-popup',
+  navigator.platform.toLowerCase().includes('mac')
+);
+
 let unsubscribeState = null;
 let unsubscribeTheme = null;
 

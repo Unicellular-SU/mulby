@@ -13,6 +13,8 @@
   --glass-accent: rgba(59, 130, 246, 0.6);
   --glass-accent-bg: rgba(219, 234, 254, 0.6);
   --glass-blur: 16px;
+  --popup-window-padding: 8px;
+  --popup-window-shadow: var(--glass-shadow);
 }
 
 .dark {
@@ -30,6 +32,22 @@
   --glass-accent: rgba(59, 130, 246, 0.7);
   --glass-accent-bg: rgba(30, 58, 138, 0.35);
   --glass-blur: 16px;
+  --popup-window-shadow: var(--glass-shadow);
+}
+
+html.platform-mac-popup {
+  --popup-window-padding: 16px;
+  --popup-window-shadow:
+    0 18px 38px -18px rgba(15, 23, 42, 0.34),
+    0 8px 18px -12px rgba(15, 23, 42, 0.18),
+    0 2px 6px rgba(15, 23, 42, 0.08);
+}
+
+html.platform-mac-popup.dark {
+  --popup-window-shadow:
+    0 20px 42px -18px rgba(0, 0, 0, 0.58),
+    0 10px 22px -12px rgba(0, 0, 0, 0.34),
+    0 2px 8px rgba(0, 0, 0, 0.18);
 }
 
 * {
@@ -49,7 +67,7 @@ body {
 }
 
 body {
-  padding: 8px;
+  padding: var(--popup-window-padding);
 }
 
 .tray-shell {
@@ -61,7 +79,7 @@ body {
     radial-gradient(circle at 0% 0%, rgba(59, 130, 246, 0.14), transparent 40%),
     radial-gradient(circle at 100% 100%, rgba(16, 185, 129, 0.14), transparent 45%),
     linear-gradient(140deg, var(--glass-bg-strong), var(--glass-bg));
-  box-shadow: var(--glass-shadow);
+  box-shadow: var(--popup-window-shadow);
   backdrop-filter: blur(var(--glass-blur));
   -webkit-backdrop-filter: blur(var(--glass-blur));
   padding: 16px;

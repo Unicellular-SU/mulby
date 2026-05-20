@@ -20,6 +20,11 @@ const translationCard = document.getElementById('translation-card');
 const translationText = document.getElementById('translation-text');
 const translationCopyBtn = document.getElementById('translation-copy-btn');
 
+document.documentElement.classList.toggle(
+  'platform-mac-popup',
+  navigator.platform.toLowerCase().includes('mac')
+);
+
 let currentItems = [];
 let currentPinnedItems = [];
 let currentMode = 'match';
@@ -720,8 +725,17 @@ function measureContentHeight() {
     const translation = document.querySelector('.sp-translation');
     const footer = document.querySelector('.sp-footer');
     const list = document.querySelector('.sp-list');
-    // body padding 6×2 = 12, .sp-shell border 1×2 = 2 → 14
-    let contentHeight = 14;
+    const bodyStyle = getComputedStyle(document.body);
+    const shell = document.querySelector('.sp-shell');
+    const shellStyle = shell ? getComputedStyle(shell) : null;
+    let contentHeight =
+      parseFloat(bodyStyle.paddingTop || '0') +
+      parseFloat(bodyStyle.paddingBottom || '0');
+    if (shellStyle) {
+      contentHeight +=
+        parseFloat(shellStyle.borderTopWidth || '0') +
+        parseFloat(shellStyle.borderBottomWidth || '0');
+    }
     if (header) contentHeight += header.offsetHeight;
     if (translation && translation.style.display !== 'none') contentHeight += translation.scrollHeight + 6;
     if (list) {

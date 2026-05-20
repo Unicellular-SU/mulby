@@ -20,10 +20,18 @@ export const MAIN_WINDOW_WINDOWS_FRAME_INSETS: Readonly<WindowFrameInsets> = {
   bottom: 24,
   left: 16
 }
+export const MAIN_WINDOW_MAC_FRAME_INSETS: Readonly<WindowFrameInsets> = {
+  top: 14,
+  right: 18,
+  bottom: 24,
+  left: 18
+}
 export const MAIN_WINDOW_COLLAPSED_VISIBLE_HEIGHT = 62
 
 function getMainWindowFrameInsets(): WindowFrameInsets {
-  return process.platform === 'win32' ? MAIN_WINDOW_WINDOWS_FRAME_INSETS : ZERO_INSETS
+  if (process.platform === 'win32') return MAIN_WINDOW_WINDOWS_FRAME_INSETS
+  if (process.platform === 'darwin') return MAIN_WINDOW_MAC_FRAME_INSETS
+  return ZERO_INSETS
 }
 
 export function getMainWindowVisibleBounds(bounds: Rectangle): Rectangle {
