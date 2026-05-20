@@ -16,7 +16,8 @@ const UPDATABLE_ROOTS = [
   'mcp',
   'native/build/Release',
   'resources/tray',
-  'bin'
+  'bin',
+  'updater'
 ]
 
 function parseArgs(argv) {
@@ -25,6 +26,18 @@ function parseArgs(argv) {
     const key = argv[index]
     if (key === '--') continue
     if (!key.startsWith('--')) continue
+
+    if (key === '--requires-manual-install') {
+      const next = argv[index + 1]
+      if (next === 'true' || next === 'false') {
+        result[key.slice(2)] = next === 'true'
+        index += 1
+      } else {
+        result[key.slice(2)] = true
+      }
+      continue
+    }
+
     const value = argv[index + 1]
     if (value === undefined || value.startsWith('--')) {
       throw new Error(`Missing value for ${key}`)
@@ -57,6 +70,22 @@ function canonicalize(input) {
 
 function normalizeVersion(input) {
   return String(input || '').trim().replace(/^v/i, '')
+}
+
+function requireNonEmptyString(input, flagName) {
+  const value = String(input || '').trim()
+  if (!value) {
+    throw new Error(`${flagName} must not be empty`)
+  }
+  return value
+}
+
+function requireVersion(input, flagName) {
+  const value = normalizeVersion(input)
+  if (!value) {
+    throw new Error(`${flagName} must not be empty`)
+  }
+  return value
 }
 
 function normalizePemSecret(input) {
@@ -164,6 +193,29 @@ function signManifest(unsignedManifest, privateKeyPem) {
   return sign(null, Buffer.from(canonicalize(unsignedManifest), 'utf8'), privateKey).toString('base64')
 }
 
+function buildCompatibility(args, electronVersion) {
+  const compatibility = {
+    protocolVersion: PROTOCOL_VERSION,
+    appId: APP_ID,
+    electronVersion
+  }
+
+  if (args['min-app-version'] !== undefined) {
+    compatibility.minAppVersion = requireVersion(args['min-app-version'], '--min-app-version')
+  }
+  if (args['max-app-version'] !== undefined) {
+    compatibility.maxAppVersion = requireVersion(args['max-app-version'], '--max-app-version')
+  }
+  if (args['requires-manual-install']) {
+    compatibility.requiresManualInstall = true
+  }
+  if (args['manual-install-reason'] !== undefined) {
+    compatibility.manualInstallReason = requireNonEmptyString(args['manual-install-reason'], '--manual-install-reason')
+  }
+
+  return compatibility
+}
+
 function main() {
   const args = parseArgs(process.argv.slice(2))
   const releaseDir = path.resolve(args['release-dir'] || path.join(ROOT_DIR, 'release'))
@@ -174,6 +226,7 @@ function main() {
   const electronVersion = normalizeVersion(args['electron-version'] || resolveElectronVersion())
   const privateKeyPem = normalizePemSecret(process.env.MAC_RESOURCE_UPDATE_PRIVATE_KEY_PEM)
   const appBundles = args.app ? [path.resolve(args.app)] : findAppBundles(releaseDir)
+  const compatibility = buildCompatibility(args, electronVersion)
 
   if (appBundles.length === 0) {
     throw new Error(`No .app bundles found under ${releaseDir}`)
@@ -196,11 +249,7 @@ function main() {
       sha256,
       size,
       releasePageUrl: buildReleasePageUrl(repo, tag),
-      compatibility: {
-        protocolVersion: PROTOCOL_VERSION,
-        appId: APP_ID,
-        electronVersion
-      }
+      compatibility
     }
     const manifest = {
       ...unsignedManifest,
@@ -223,4 +272,15 @@ function main() {
   }
 }
 
-main()
+if (require.main === module) {
+  main()
+} else {
+  module.exports = {
+    UPDATABLE_ROOTS,
+    buildCompatibility,
+    canonicalize,
+    normalizeVersion,
+    parseArgs,
+    signManifest
+  }
+}

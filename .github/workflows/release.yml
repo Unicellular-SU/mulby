@@ -134,9 +134,29 @@ jobs:
 
       - name: Generate macOS resource update assets
         if: runner.os == 'macOS' && (github.event_name != 'workflow_dispatch' || github.event.inputs.platform == 'all' || github.event.inputs.platform == 'macos')
-        run: node scripts/generate-mac-resource-update.cjs --tag "${{ github.event.inputs.tag || github.ref_name }}"
+        shell: bash
+        run: |
+          set -euo pipefail
+          args=(--tag "${{ github.event.inputs.tag || github.ref_name }}")
+          if [ -n "${MULBY_MAC_RESOURCE_UPDATE_MIN_APP_VERSION:-}" ]; then
+            args+=(--min-app-version "$MULBY_MAC_RESOURCE_UPDATE_MIN_APP_VERSION")
+          fi
+          if [ -n "${MULBY_MAC_RESOURCE_UPDATE_MAX_APP_VERSION:-}" ]; then
+            args+=(--max-app-version "$MULBY_MAC_RESOURCE_UPDATE_MAX_APP_VERSION")
+          fi
+          if [ "${MULBY_MAC_RESOURCE_UPDATE_REQUIRES_MANUAL_INSTALL:-false}" = "true" ]; then
+            args+=(--requires-manual-install)
+          fi
+          if [ -n "${MULBY_MAC_RESOURCE_UPDATE_MANUAL_INSTALL_REASON:-}" ]; then
+            args+=(--manual-install-reason "$MULBY_MAC_RESOURCE_UPDATE_MANUAL_INSTALL_REASON")
+          fi
+          node scripts/generate-mac-resource-update.cjs "${args[@]}"
         env:
           MAC_RESOURCE_UPDATE_PRIVATE_KEY_PEM: ${{ secrets.MAC_RESOURCE_UPDATE_PRIVATE_KEY_PEM }}
+          MULBY_MAC_RESOURCE_UPDATE_MIN_APP_VERSION: ${{ vars.MULBY_MAC_RESOURCE_UPDATE_MIN_APP_VERSION || '0.8.3' }}
+          MULBY_MAC_RESOURCE_UPDATE_MAX_APP_VERSION: ${{ vars.MULBY_MAC_RESOURCE_UPDATE_MAX_APP_VERSION }}
+          MULBY_MAC_RESOURCE_UPDATE_REQUIRES_MANUAL_INSTALL: ${{ vars.MULBY_MAC_RESOURCE_UPDATE_REQUIRES_MANUAL_INSTALL }}
+          MULBY_MAC_RESOURCE_UPDATE_MANUAL_INSTALL_REASON: ${{ vars.MULBY_MAC_RESOURCE_UPDATE_MANUAL_INSTALL_REASON }}
 
       - name: Publish macOS release assets
         if: runner.os == 'macOS' && (github.event_name != 'workflow_dispatch' || github.event.inputs.platform == 'all' || github.event.inputs.platform == 'macos')

@@ -5,6 +5,8 @@ const fs = require('fs')
 const os = require('os')
 const path = require('path')
 
+process.noAsar = true
+
 const UPDATABLE_ROOTS = [
   'app.asar',
   'app.asar.unpacked',
@@ -12,7 +14,8 @@ const UPDATABLE_ROOTS = [
   'mcp',
   'native/build/Release',
   'resources/tray',
-  'bin'
+  'bin',
+  'updater'
 ]
 
 function parseArgs(argv) {
