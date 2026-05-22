@@ -387,7 +387,7 @@ function buildWindowResizeScript(resizeMode: WindowResizeMode): string {
       element.addEventListener('pointercancel', onPointerCancel)
     })
   }
-})()
+})();
 `
 }
 
@@ -439,7 +439,7 @@ function buildWindowSurfaceScript(includeTitleBar: boolean, resizeMode: WindowRe
   if (body.lastChild !== host) {
     body.appendChild(host)
   }
-})()
+})();
 ${buildWindowResizeScript(resizeMode)}
 `
 }
