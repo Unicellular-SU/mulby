@@ -8,10 +8,10 @@ export interface WindowSurfaceInsets {
 }
 
 export const WINDOWS_FRAMELESS_SURFACE_INSETS: Readonly<WindowSurfaceInsets> = {
-  top: 0,
-  right: 0,
-  bottom: 0,
-  left: 0
+  top: 18,
+  right: 18,
+  bottom: 18,
+  left: 18
 }
 
 const ZERO_INSETS: Readonly<WindowSurfaceInsets> = {
@@ -28,16 +28,12 @@ const WINDOW_RESIZE_HANDLE_CORNER_PX = 16
 const WINDOW_SURFACE_BACKGROUND_LIGHT = '#ffffff'
 const WINDOW_SURFACE_BACKGROUND_DARK = '#1e293b'
 const WINDOW_SURFACE_SHADOW_LIGHT = [
-  'inset 0 18px 28px -28px rgba(255, 255, 255, 0.3)',
-  'inset 0 -18px 28px -24px rgba(15, 23, 42, 0.18)',
-  'inset 14px 0 22px -22px rgba(15, 23, 42, 0.08)',
-  'inset -14px 0 22px -22px rgba(15, 23, 42, 0.08)'
+  '0 6px 12px rgba(15, 23, 42, 0.14)',
+  '0 1px 3px rgba(15, 23, 42, 0.10)'
 ].join(', ')
 const WINDOW_SURFACE_SHADOW_DARK = [
-  'inset 0 18px 28px -28px rgba(255, 255, 255, 0.08)',
-  'inset 0 -20px 30px -24px rgba(2, 6, 23, 0.42)',
-  'inset 16px 0 24px -22px rgba(2, 6, 23, 0.24)',
-  'inset -16px 0 24px -22px rgba(2, 6, 23, 0.24)'
+  '0 6px 14px rgba(0, 0, 0, 0.34)',
+  '0 1px 3px rgba(0, 0, 0, 0.26)'
 ].join(', ')
 
 export interface ApplyWindowSurfaceOptions {

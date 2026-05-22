@@ -71,7 +71,7 @@ const TRAY_MENU_WIDTH = 380
 const TRAY_MENU_HEIGHT = 560
 const TRAY_MENU_MARGIN = 8
 const TRAY_MENU_DEFAULT_RENDERER_PADDING = 8
-const MAC_POPUP_RENDERER_PADDING = 16
+const MAC_POPUP_RENDERER_PADDING = 18
 
 function clamp(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, value))

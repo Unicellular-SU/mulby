@@ -19,7 +19,7 @@ import {
 import { shouldPreventMainWindowClose } from './main-window-close-policy'
 
 // ── Constants (L5: extracted magic numbers) ────────────────────────────
-export const MW_SHADOW_MARGIN = 12
+export const MW_SHADOW_MARGIN = 18
 export const MW_TOGGLE_DEBOUNCE_MS = 180
 export const MW_SHOW_BLUR_GUARD_MS = 260
 export const MW_SHOW_WITH_DETACHED_BLUR_GUARD_MS = 1800
@@ -51,8 +51,8 @@ const SHADOW_HTML = `<!doctype html>
       inset: ${MW_SHADOW_MARGIN}px;
       border-radius: 12px;
       box-shadow:
-        0 2px 10px rgba(15, 23, 42, 0.12),
-        0 1px 2px rgba(15, 23, 42, 0.08);
+        0 6px 12px rgba(15, 23, 42, 0.14),
+        0 1px 3px rgba(15, 23, 42, 0.10);
     }
   </style>
 </head>

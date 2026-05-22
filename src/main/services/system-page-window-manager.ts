@@ -24,7 +24,7 @@ import { registerAppWindow, unregisterAppWindow } from './ipc-caller-resolver'
 import { registerProtectedWindow, unregisterProtectedWindow } from '../plugin/input'
 import log from 'electron-log'
 
-const ATTACHED_SYSTEM_SHADOW_MARGIN = 12
+const ATTACHED_SYSTEM_SHADOW_MARGIN = 18
 const WINDOWS_ATTACHED_SHOW_OPACITY_GUARD_MS = 50
 const ATTACHED_SYSTEM_SHADOW_HTML = `<!doctype html>
 <html>
@@ -44,8 +44,8 @@ const ATTACHED_SYSTEM_SHADOW_HTML = `<!doctype html>
       inset: ${ATTACHED_SYSTEM_SHADOW_MARGIN}px;
       border-radius: 12px;
       box-shadow:
-        0 2px 10px rgba(15, 23, 42, 0.12),
-        0 1px 2px rgba(15, 23, 42, 0.08);
+        0 6px 12px rgba(15, 23, 42, 0.14),
+        0 1px 3px rgba(15, 23, 42, 0.10);
     }
   </style>
 </head>

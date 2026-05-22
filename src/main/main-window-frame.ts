@@ -15,15 +15,15 @@ const ZERO_INSETS: WindowFrameInsets = {
 }
 
 export const MAIN_WINDOW_WINDOWS_FRAME_INSETS: Readonly<WindowFrameInsets> = {
-  top: 10,
-  right: 16,
-  bottom: 24,
-  left: 16
+  top: 18,
+  right: 18,
+  bottom: 18,
+  left: 18
 }
 export const MAIN_WINDOW_MAC_FRAME_INSETS: Readonly<WindowFrameInsets> = {
-  top: 14,
+  top: 18,
   right: 18,
-  bottom: 24,
+  bottom: 18,
   left: 18
 }
 export const MAIN_WINDOW_COLLAPSED_VISIBLE_HEIGHT = 62

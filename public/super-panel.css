@@ -12,7 +12,7 @@
   --glass-bg: rgba(255, 255, 255, 0.78);
   --glass-bg-strong: rgba(255, 255, 255, 0.88);
   --glass-border: rgba(255, 255, 255, 0.55);
-  --glass-shadow: 0 12px 30px rgba(15, 23, 42, 0.12);
+  --glass-shadow: 0 6px 12px rgba(15, 23, 42, 0.14), 0 1px 3px rgba(15, 23, 42, 0.10);
   --glass-accent: rgba(59, 130, 246, 0.6);
   --glass-accent-bg: rgba(219, 234, 254, 0.6);
   --glass-blur: 16px;
@@ -34,7 +34,7 @@
   --glass-bg: rgba(15, 23, 42, 0.72);
   --glass-bg-strong: rgba(15, 23, 42, 0.84);
   --glass-border: rgba(148, 163, 184, 0.18);
-  --glass-shadow: 0 16px 32px rgba(0, 0, 0, 0.22);
+  --glass-shadow: 0 6px 14px rgba(0, 0, 0, 0.34), 0 1px 3px rgba(0, 0, 0, 0.26);
   --glass-accent: rgba(59, 130, 246, 0.7);
   --glass-accent-bg: rgba(30, 58, 138, 0.35);
   --glass-blur: 16px;
@@ -42,18 +42,12 @@
 }
 
 html.platform-mac-popup {
-  --popup-window-padding: 16px;
-  --popup-window-shadow:
-    0 18px 38px -18px rgba(15, 23, 42, 0.34),
-    0 8px 18px -12px rgba(15, 23, 42, 0.18),
-    0 2px 6px rgba(15, 23, 42, 0.08);
+  --popup-window-padding: 18px;
+  --popup-window-shadow: var(--glass-shadow);
 }
 
 html.platform-mac-popup.dark {
-  --popup-window-shadow:
-    0 20px 42px -18px rgba(0, 0, 0, 0.58),
-    0 10px 22px -12px rgba(0, 0, 0, 0.34),
-    0 2px 8px rgba(0, 0, 0, 0.18);
+  --popup-window-shadow: var(--glass-shadow);
 }
 
 * {

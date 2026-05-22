@@ -23,7 +23,7 @@ const PANEL_WIDTH = 300
 const PANEL_MAX_HEIGHT = 580
 const PANEL_MARGIN = 8
 const PANEL_DEFAULT_RENDERER_PADDING = 6
-const MAC_POPUP_RENDERER_PADDING = 16
+const MAC_POPUP_RENDERER_PADDING = 18
 
 interface SuperPanelWindowOptions {
   themeManager: ThemeManager
