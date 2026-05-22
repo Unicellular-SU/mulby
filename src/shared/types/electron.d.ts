@@ -174,6 +174,20 @@ export interface ContextMenuItem {
   submenu?: ContextMenuItem[]
 }
 
+export interface ActionMenuItem {
+  id: string
+  label: string
+  separator?: boolean
+  danger?: boolean
+  disabled?: boolean
+  checked?: boolean
+}
+
+export interface ActionMenuPoint {
+  x: number
+  y: number
+}
+
 export interface PluginInfo {
   id: string
   name: string
@@ -1025,6 +1039,7 @@ export interface ElectronAPI {
   }
   menu: {
     showContextMenu: (items: ContextMenuItem[]) => Promise<string | null>
+    showActionMenu: (items: ActionMenuItem[], point?: ActionMenuPoint) => Promise<string | null>
   }
   geolocation: {
     getAccessStatus: () => Promise<'not-determined' | 'granted' | 'denied' | 'restricted' | 'unknown'>

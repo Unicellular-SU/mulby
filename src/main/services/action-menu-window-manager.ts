@@ -20,26 +20,33 @@ export interface ActionMenuAnchor {
   y?: unknown
 }
 
-interface ShowActionMenuOptions {
+interface ActionMenuRequestOptions {
   ownerWindow: BrowserWindow
   anchor?: ActionMenuAnchor
   items: ActionMenuItem[]
-  onSelect: (id: string) => void | Promise<void>
+  onSelect?: (id: string) => void | Promise<void>
+}
+
+interface CurrentActionMenuRequest {
+  ownerWindow: BrowserWindow
+  onSelect?: (id: string) => void | Promise<void>
+  resolveSelection?: (id: string | null) => void
 }
 
 const MENU_WIDTH = 220
+const MENU_SHADOW_PADDING = 18
+const MENU_WINDOW_WIDTH = MENU_WIDTH + MENU_SHADOW_PADDING * 2
 const MENU_PADDING = 8
 const MENU_ITEM_HEIGHT = 36
 const MENU_SEPARATOR_HEIGHT = 9
 const SCREEN_MARGIN = 8
 const ANCHOR_GAP = 6
-const LIGHT_MENU_BACKGROUND = '#ffffff'
-const DARK_MENU_BACKGROUND = '#0f172a'
+const TRANSPARENT_MENU_BACKGROUND = '#00000000'
 
 export class ActionMenuWindowManager {
   private menuWindow: BrowserWindow | null = null
   private createPromise: Promise<BrowserWindow> | null = null
-  private currentRequest: { ownerWindow: BrowserWindow; onSelect: (id: string) => void | Promise<void> } | null = null
+  private currentRequest: CurrentActionMenuRequest | null = null
   private ownerCleanup: (() => void) | null = null
   private blurSuppressed = false
 
@@ -47,11 +54,11 @@ export class ActionMenuWindowManager {
     ipcMain.handle('actionMenu:select', async (event, id: unknown) => {
       if (!this.isMenuSender(event.sender) || typeof id !== 'string') return false
       const request = this.currentRequest
-      this.hide()
       if (!request) return false
+      this.closeCurrent(id)
 
       try {
-        await request.onSelect(id)
+        await request.onSelect?.(id)
       } catch (error) {
         log.error('[ActionMenu] action failed:', error)
       }
@@ -65,28 +72,49 @@ export class ActionMenuWindowManager {
     })
   }
 
-  async show(options: ShowActionMenuOptions): Promise<boolean> {
+  async show(options: ActionMenuRequestOptions & { onSelect: (id: string) => void | Promise<void> }): Promise<boolean> {
+    return await this.present(options)
+  }
+
+  async showForSelection(options: ActionMenuRequestOptions): Promise<string | null> {
+    let resolveSelection!: (id: string | null) => void
+    const selection = new Promise<string | null>((resolve) => {
+      resolveSelection = resolve
+    })
+    const shown = await this.present(options, resolveSelection)
+    if (!shown) {
+      resolveSelection(null)
+    }
+    return await selection
+  }
+
+  private async present(
+    options: ActionMenuRequestOptions,
+    resolveSelection?: (id: string | null) => void
+  ): Promise<boolean> {
     if (options.ownerWindow.isDestroyed()) return false
 
     const items = options.items.filter((item) => item.separator || item.label.trim().length > 0)
     if (items.length === 0) return false
+
+    this.hide()
 
     const win = await this.ensureWindow()
     if (win.isDestroyed()) return false
 
     this.currentRequest = {
       ownerWindow: options.ownerWindow,
-      onSelect: options.onSelect
+      onSelect: options.onSelect,
+      resolveSelection
     }
     this.attachOwner(options.ownerWindow)
     this.startBlurSuppression()
 
     const height = this.measureHeight(items)
     const bounds = this.resolveBounds(options.ownerWindow, options.anchor, height)
+    this.configureWindowForShow(win)
     win.setBounds(bounds, false)
-    win.setBackgroundColor(this.themeManager.getActualTheme() === 'dark'
-      ? DARK_MENU_BACKGROUND
-      : LIGHT_MENU_BACKGROUND)
+    win.setBackgroundColor(TRANSPARENT_MENU_BACKGROUND)
 
     win.webContents.send('actionMenu:show', {
       items,
@@ -99,6 +127,11 @@ export class ActionMenuWindowManager {
   }
 
   hide(): void {
+    this.closeCurrent(null)
+  }
+
+  private closeCurrent(selection: string | null): void {
+    const request = this.currentRequest
     this.ownerCleanup?.()
     this.ownerCleanup = null
     this.currentRequest = null
@@ -107,6 +140,7 @@ export class ActionMenuWindowManager {
       win.hide()
     }
     this.stopBlurSuppression()
+    request?.resolveSelection?.(selection)
   }
 
   destroy(): void {
@@ -139,7 +173,7 @@ export class ActionMenuWindowManager {
   private async createWindow(): Promise<BrowserWindow> {
     const preloadPath = join(__dirname, '../preload/action-menu.js')
     const win = new BrowserWindow({
-      width: MENU_WIDTH,
+      width: MENU_WINDOW_WIDTH,
       height: 80,
       show: false,
       frame: false,
@@ -148,9 +182,9 @@ export class ActionMenuWindowManager {
       maximizable: false,
       fullscreenable: false,
       skipTaskbar: true,
-      transparent: false,
+      transparent: true,
       hasShadow: false,
-      backgroundColor: LIGHT_MENU_BACKGROUND,
+      backgroundColor: TRANSPARENT_MENU_BACKGROUND,
       alwaysOnTop: true,
       webPreferences: {
         preload: preloadPath,
@@ -161,7 +195,7 @@ export class ActionMenuWindowManager {
     })
 
     if (process.platform === 'darwin') {
-      win.setAlwaysOnTop(true, 'pop-up-menu')
+      this.configureWindowForShow(win)
     }
 
     registerProtectedWindow(win.id)
@@ -188,6 +222,19 @@ export class ActionMenuWindowManager {
     await win.loadFile(menuPath)
     this.menuWindow = win
     return win
+  }
+
+  private configureWindowForShow(win: BrowserWindow): void {
+    if (process.platform !== 'darwin' || win.isDestroyed()) return
+    try {
+      win.setVisibleOnAllWorkspaces(true, {
+        visibleOnFullScreen: true,
+        skipTransformProcessType: true
+      })
+      win.setAlwaysOnTop(true, 'pop-up-menu')
+    } catch (error) {
+      log.warn('[ActionMenu] Failed to configure macOS menu window:', error)
+    }
   }
 
   private getActionMenuPath(): string | null {
@@ -224,21 +271,26 @@ export class ActionMenuWindowManager {
     const display = screen.getDisplayNearestPoint(anchorPoint)
     const area = display.workArea
 
-    let x = anchorPoint.x
-    let y = anchorPoint.y + ANCHOR_GAP
+    let menuX = anchorPoint.x
+    let menuY = anchorPoint.y + ANCHOR_GAP
 
     const maxX = area.x + area.width - MENU_WIDTH - SCREEN_MARGIN
     const minX = area.x + SCREEN_MARGIN
-    x = Math.min(Math.max(x, minX), Math.max(minX, maxX))
+    menuX = Math.min(Math.max(menuX, minX), Math.max(minX, maxX))
 
     const maxY = area.y + area.height - height - SCREEN_MARGIN
-    if (y > maxY) {
-      y = anchorPoint.y - height - ANCHOR_GAP
+    if (menuY > maxY) {
+      menuY = anchorPoint.y - height - ANCHOR_GAP
     }
     const minY = area.y + SCREEN_MARGIN
-    y = Math.min(Math.max(y, minY), Math.max(minY, maxY))
+    menuY = Math.min(Math.max(menuY, minY), Math.max(minY, maxY))
 
-    return { x, y, width: MENU_WIDTH, height }
+    return {
+      x: menuX - MENU_SHADOW_PADDING,
+      y: menuY - MENU_SHADOW_PADDING,
+      width: MENU_WINDOW_WIDTH,
+      height: height + MENU_SHADOW_PADDING * 2
+    }
   }
 
   private attachOwner(ownerWindow: BrowserWindow): void {

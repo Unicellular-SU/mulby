@@ -115,7 +115,7 @@ export function registerAllHandlers(
   registerTrayHandlers()
   registerNetworkHandlers()
   registerHttpHandlers()
-  registerMenuHandlers()
+  registerMenuHandlers(actionMenuWindowManager)
   registerGeolocationHandlers()
   registerInputHandlers()
   registerInputMonitorHandlers(pluginWindowManager)

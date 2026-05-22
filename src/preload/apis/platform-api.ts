@@ -350,7 +350,15 @@ export function createPlatformApi(ipcRenderer: IpcRenderer, options?: { restrict
         enabled?: boolean
         id?: string
         submenu?: Array<Record<string, unknown>>
-      }[]) => ipcRenderer.invoke('menu:showContextMenu', items)
+      }[]) => ipcRenderer.invoke('menu:showContextMenu', items),
+      showActionMenu: (items: {
+        id: string
+        label: string
+        separator?: boolean
+        danger?: boolean
+        disabled?: boolean
+        checked?: boolean
+      }[], point?: { x: number; y: number }) => ipcRenderer.invoke('menu:showActionMenu', items, point)
     },
 
     geolocation: {

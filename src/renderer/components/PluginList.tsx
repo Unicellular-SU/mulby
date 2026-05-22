@@ -1,7 +1,7 @@
 import { useState, useEffect, useLayoutEffect, useCallback, useRef, memo, useMemo } from 'react'
-import { useContextMenu, type ContextMenuItem } from './ContextMenu'
 import { formatPayloadTrace, getAttachmentTraceKey } from '../../shared/attachment-trace'
 import type {
+  ActionMenuItem,
   DesktopAppSearchResult,
   DesktopFileSearchResult,
   MainPushItem,
@@ -1265,9 +1265,6 @@ function PluginList({
     }
   }, [promoteRecent])
 
-  // 自定义右键菜单
-  const contextMenu = useContextMenu()
-
   // 跨平台文案：「在 Finder/资源管理器/文件管理器 中显示」
   const revealLabel = useMemo(() => {
     const p = navigator.platform.toLowerCase()
@@ -1283,8 +1280,8 @@ function PluginList({
 
   // 右键菜单：根据结果类型构建不同菜单项
   const handleItemContextMenu = useCallback(async (item: RenderItem, e: React.MouseEvent) => {
-    const menuPoint = { clientX: e.clientX, clientY: e.clientY }
-    const menuItems: ContextMenuItem[] = []
+    const menuPoint = { x: e.clientX, y: e.clientY }
+    const menuItems: ActionMenuItem[] = []
 
     if (item.type === 'plugin' || item.type === 'recent') {
       const isPinned = item.pluginItem ? pinnedKeys.has(getPluginKey(item.pluginItem)) : false
@@ -1354,7 +1351,7 @@ function PluginList({
 
     if (menuItems.length === 0) return
 
-    const selectedId = await contextMenu.show(menuItems, menuPoint)
+    const selectedId = await window.mulby.menu.showActionMenu(menuItems, menuPoint)
     if (!selectedId) return
 
     const path = item.appItem?.path || item.fileItem?.path
@@ -1509,7 +1506,7 @@ function PluginList({
         }
         break
     }
-  }, [onShowDetails, contextMenu, revealLabel, trashLabel, pinnedKeys])
+  }, [onShowDetails, revealLabel, trashLabel, pinnedKeys])
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -1697,7 +1694,6 @@ function PluginList({
           })
         )}
       </div>
-      {contextMenu.menu}
     </div>
   )
 }
