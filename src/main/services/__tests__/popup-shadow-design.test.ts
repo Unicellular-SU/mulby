@@ -59,4 +59,20 @@ describe('popup shadow design', () => {
     assert.match(superPanelCss, /--popup-window-padding: 18px/, 'super panel mac popup must reserve 18px')
     assert.match(trayMenuCss, /--popup-window-padding: 18px/, 'tray menu mac popup must reserve 18px')
   })
+
+  it('keeps the main search box from drawing a clipped window shadow', () => {
+    const rendererCss = readFileSync(rendererCssPath, 'utf8')
+    const searchBoxRules = Array.from(rendererCss.matchAll(/([^{}]*\.search-box-container[^{}]*)\{([^{}]*)\}/g))
+
+    assert.ok(searchBoxRules.length > 0, 'renderer css must define search box styles')
+
+    for (const [, selector, body] of searchBoxRules) {
+      if (!/box-shadow\s*:/.test(body)) continue
+      assert.doesNotMatch(
+        body,
+        /var\(--popup-window-shadow\)/,
+        `${selector.trim()} must not use the external popup shadow`
+      )
+    }
+  })
 })

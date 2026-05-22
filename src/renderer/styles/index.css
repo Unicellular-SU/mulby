@@ -432,7 +432,7 @@ html.platform-win-main .drop-hint {
   background: var(--glass-bg-strong);
   border: none;
   border-radius: 12px;
-  box-shadow: var(--popup-window-shadow);
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.18) inset;
   backdrop-filter: blur(var(--glass-blur));
   -webkit-backdrop-filter: blur(var(--glass-blur));
   transition: background-color 0.2s ease-out;
@@ -444,7 +444,7 @@ html.platform-win-main .drop-hint {
 }
 
 .dark .search-box-container {
-  box-shadow: var(--popup-window-shadow);
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.06) inset;
 }
 
 .dark .search-box-container.with-bottom-panel {
@@ -459,9 +459,7 @@ html.platform-mac-main .search-box-container.with-bottom-panel {
 }
 
 html.platform-mac-main .search-box-container {
-  box-shadow:
-    0 1px 0 rgba(255, 255, 255, 0.28) inset,
-    var(--popup-window-shadow);
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.28) inset;
 }
 
 html.platform-mac-main .search-box-container.with-bottom-panel {
@@ -469,9 +467,7 @@ html.platform-mac-main .search-box-container.with-bottom-panel {
 }
 
 html.platform-mac-main.dark .search-box-container {
-  box-shadow:
-    0 1px 0 rgba(255, 255, 255, 0.08) inset,
-    var(--popup-window-shadow);
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.08) inset;
 }
 
 html.platform-mac-main.dark .search-box-container.with-bottom-panel {
@@ -480,13 +476,14 @@ html.platform-mac-main.dark .search-box-container.with-bottom-panel {
 
 html.platform-win-main .search-box-container,
 html.platform-win-main .search-box-container.with-bottom-panel {
-  box-shadow: var(--popup-window-shadow);
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.18) inset;
 }
 
 html.platform-win-main .search-box-container.with-bottom-panel {
   box-shadow: 0 1px 0 rgba(255, 255, 255, 0.18) inset;
 }
 
+html.platform-win-main.dark .search-box-container,
 html.platform-win-main.dark .search-box-container.with-bottom-panel {
   box-shadow: 0 1px 0 rgba(255, 255, 255, 0.06) inset;
 }
