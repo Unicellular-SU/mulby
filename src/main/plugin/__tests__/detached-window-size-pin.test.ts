@@ -4,7 +4,9 @@ import { join } from 'node:path'
 import { describe, it } from 'node:test'
 
 const pluginWindowSourcePath = join(process.cwd(), 'src/main/plugin/window.ts')
+const panelWindowSourcePath = join(process.cwd(), 'src/main/plugin/panel-window.ts')
 const windowIpcSourcePath = join(process.cwd(), 'src/main/ipc/window.ts')
+const windowSurfaceSourcePath = join(process.cwd(), 'src/main/services/window-surface.ts')
 
 describe('detached window size pinning', () => {
   it('pins promoted panel windows so Windows titlebar dragging cannot fall back to setPosition drift', () => {
@@ -37,6 +39,28 @@ describe('detached window size pinning', () => {
       resizeDragHandler[0],
       /const appliedWidth = Math\.max\(1, Math\.round\(clampedWidth\)\)[\s\S]*const appliedHeight = Math\.max\(1, Math\.round\(clampedHeight\)\)[\s\S]*updatePinnedSize\(win\.id, appliedWidth, appliedHeight\)/,
       'custom resize drags must update the pinned size used by later Windows titlebar moves'
+    )
+  })
+
+  it('injects resize handles into WebContentsView-backed detached plugin content', () => {
+    const pluginWindowSource = readFileSync(pluginWindowSourcePath, 'utf8')
+    const panelWindowSource = readFileSync(panelWindowSourcePath, 'utf8')
+    const windowSurfaceSource = readFileSync(windowSurfaceSourcePath, 'utf8')
+
+    assert.match(
+      windowSurfaceSource,
+      /export type WindowResizeMode = 'none' \| 'bottom' \| 'side-bottom' \| 'all'/,
+      'window surface must support side/bottom resize handles for plugin WebContentsView content'
+    )
+    assert.match(
+      pluginWindowSource,
+      /applyWindowResizeHandlesToWebContents\(pluginWebContents,[\s\S]*resizeMode: showTitleBar \? 'side-bottom' : 'all'/,
+      'fresh detached titlebar windows must inject resize handles into the plugin WebContentsView'
+    )
+    assert.match(
+      panelWindowSource,
+      /applyWindowResizeHandlesToWebContents\(pluginWebContents,[\s\S]*resizeMode: showTitleBar \? 'side-bottom' : 'all'/,
+      'promoted detached titlebar windows must keep the same plugin-content resize handles'
     )
   })
 })

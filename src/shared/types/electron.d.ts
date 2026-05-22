@@ -651,7 +651,7 @@ export interface ElectronAPI {
     setFullScreen: (flag: boolean) => void
     getMode: () => Promise<'attached' | 'detached'>
     getWindowType: () => Promise<string>
-    getState: () => Promise<{ isMaximized: boolean; isAlwaysOnTop: boolean; opacity: number }>
+    getState: () => Promise<{ isMaximized: boolean; isAlwaysOnTop: boolean; opacity: number; canMaximize: boolean }>
     minimize: () => void
     maximize: () => void
     resizeDrag: (payload: {
@@ -675,6 +675,7 @@ export interface ElectronAPI {
     getActual: () => Promise<'light' | 'dark'>
   }
   onThemeChange: (callback: (theme: 'light' | 'dark') => void) => () => void
+  onWindowStateChange: (callback: (state: { isMaximized: boolean; canMaximize?: boolean }) => void) => () => void
   ai: AiApi
   app: {
     onOpenSystemPlugin: (callback: (payload: OpenSystemPluginPayload) => void) => () => void

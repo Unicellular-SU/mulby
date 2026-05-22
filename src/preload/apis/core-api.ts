@@ -1,5 +1,10 @@
 import type { IpcRenderer } from 'electron'
 
+type WindowState = {
+  isMaximized: boolean
+  canMaximize?: boolean
+}
+
 export function createCoreApi(ipcRenderer: IpcRenderer) {
   return {
     window: {
@@ -140,8 +145,8 @@ export function createCoreApi(ipcRenderer: IpcRenderer) {
       return () => ipcRenderer.removeListener('theme:changed', listener)
     },
 
-    onWindowStateChange: (callback: (state: { isMaximized: boolean }) => void) => {
-      const listener = (_event: unknown, state: { isMaximized: boolean }) => callback(state)
+    onWindowStateChange: (callback: (state: WindowState) => void) => {
+      const listener = (_event: unknown, state: WindowState) => callback(state)
       ipcRenderer.on('window:stateChanged', listener)
       return () => ipcRenderer.removeListener('window:stateChanged', listener)
     },

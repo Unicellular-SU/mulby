@@ -14,6 +14,18 @@ const dragStates = new Map<number, { startX: number; startY: number; winStartX: 
 // 全局 handler 只注册一次
 let globalHandlersRegistered = false
 
+function canMaximizeWindow(win: BrowserWindow): boolean {
+  return !win.isDestroyed() && win.isResizable()
+}
+
+function getTitlebarState(win: BrowserWindow) {
+  return {
+    isMaximized: win.isMaximized(),
+    isAlwaysOnTop: win.isAlwaysOnTop(),
+    canMaximize: canMaximizeWindow(win)
+  }
+}
+
 function ensureGlobalHandlers(): void {
   if (globalHandlersRegistered) return
   globalHandlersRegistered = true
@@ -30,6 +42,7 @@ function ensureGlobalHandlers(): void {
         win.minimize()
         break
       case 'maximize':
+        if (!canMaximizeWindow(win)) return
         if (win.isMaximized()) {
           win.unmaximize()
         } else {
@@ -125,13 +138,10 @@ function ensureGlobalHandlers(): void {
   // 处理获取窗口状态（handle 只能注册一次，通过 sender.id 区分）
   ipcMain.handle('titlebar:getState', (event) => {
     const entry = titlebarWindows.get(event.sender.id)
-    if (!entry) return { isMaximized: false, isAlwaysOnTop: false }
+    if (!entry) return { isMaximized: false, isAlwaysOnTop: false, canMaximize: false }
     const { win } = entry
-    if (win.isDestroyed()) return { isMaximized: false, isAlwaysOnTop: false }
-    return {
-      isMaximized: win.isMaximized(),
-      isAlwaysOnTop: win.isAlwaysOnTop()
-    }
+    if (win.isDestroyed()) return { isMaximized: false, isAlwaysOnTop: false, canMaximize: false }
+    return getTitlebarState(win)
   })
 }
 
@@ -153,19 +163,21 @@ export function setupTitlebarIPC(
 
   // 窗口状态变化时通知标题栏
   win.on('maximize', () => {
+    const state = getTitlebarState(win)
     if (!win.isDestroyed()) {
-      win.webContents.send('titlebar:windowState', { isMaximized: true })
+      win.webContents.send('titlebar:windowState', state)
     }
     if (!pluginView.webContents.isDestroyed()) {
-      pluginView.webContents.send('window:stateChanged', { isMaximized: true })
+      pluginView.webContents.send('window:stateChanged', state)
     }
   })
   win.on('unmaximize', () => {
+    const state = getTitlebarState(win)
     if (!win.isDestroyed()) {
-      win.webContents.send('titlebar:windowState', { isMaximized: false })
+      win.webContents.send('titlebar:windowState', state)
     }
     if (!pluginView.webContents.isDestroyed()) {
-      pluginView.webContents.send('window:stateChanged', { isMaximized: false })
+      pluginView.webContents.send('window:stateChanged', state)
     }
   })
 

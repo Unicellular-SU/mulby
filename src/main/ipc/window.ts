@@ -1136,6 +1136,7 @@ export function registerWindowHandlers(
   ipcMain.on('window:maximize', (event) => {
     const win = windowFromWebContents(event.sender)
     if (win) {
+      if (!win.isResizable()) return
       if (win.isMaximized()) {
         win.unmaximize()
       } else {
@@ -1150,7 +1151,8 @@ export function registerWindowHandlers(
     return {
       isMaximized: win?.isMaximized() ?? false,
       isAlwaysOnTop: win?.isAlwaysOnTop() ?? false,
-      opacity: win?.getOpacity() ?? 1
+      opacity: win?.getOpacity() ?? 1,
+      canMaximize: win ? win.isResizable() : false
     }
   })
 

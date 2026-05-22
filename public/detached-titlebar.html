@@ -112,6 +112,16 @@
       color: var(--tb-btn-hover-color);
     }
 
+    .tb-btn:disabled {
+      opacity: 0.45;
+      cursor: default;
+    }
+
+    .tb-btn:disabled:hover {
+      background: transparent;
+      color: var(--tb-btn-color);
+    }
+
     .tb-btn.active {
       color: var(--tb-pin-active-color);
     }
@@ -186,6 +196,7 @@
       }
 
       let isAlwaysOnTop = false
+      let canMaximize = true
 
       // === JS-based window drag (fallback for -webkit-app-region issues in multi-view) ===
       var isDragging = false
@@ -265,6 +276,7 @@
 
       // 最大化/还原
       btnMaximize.addEventListener('click', function() {
+        if (!canMaximize) return
         api.action('maximize')
       })
 
@@ -275,8 +287,7 @@
 
       // 窗口状态变化
       api.onWindowState(function(state) {
-        btnMaximize.classList.toggle('active', state.isMaximized)
-        btnMaximize.title = state.isMaximized ? '还原' : '最大化'
+        updateMaximizeState(state)
       })
 
       // 获取初始状态
@@ -284,8 +295,7 @@
         isAlwaysOnTop = state.isAlwaysOnTop
         btnPin.classList.toggle('active', isAlwaysOnTop)
         btnPin.title = isAlwaysOnTop ? '取消置顶' : '置顶'
-        btnMaximize.classList.toggle('active', state.isMaximized)
-        btnMaximize.title = state.isMaximized ? '还原' : '最大化'
+        updateMaximizeState(state)
       })
 
       // 主题变化
@@ -296,6 +306,14 @@
       function applyTheme(theme) {
         document.documentElement.classList.toggle('dark', theme === 'dark')
         document.documentElement.classList.toggle('light', theme === 'light')
+      }
+
+      function updateMaximizeState(state) {
+        canMaximize = state.canMaximize !== false
+        btnMaximize.disabled = !canMaximize
+        btnMaximize.setAttribute('aria-disabled', canMaximize ? 'false' : 'true')
+        btnMaximize.classList.toggle('active', canMaximize && state.isMaximized)
+        btnMaximize.title = canMaximize ? (state.isMaximized ? '还原' : '最大化') : '不可最大化'
       }
     })()
   </script>

@@ -207,6 +207,8 @@ mulby.tools.register('long_task', async (args, ctx) => {
 | `type` | `string` | 窗口结构类型。可选：`default` (常规标题栏), `borderless` (无边框的定制), `fullscreen` (全屏沉浸应用)。 |
 | `titleBar` | `boolean` | 显式强制决定是否展示带有 Mulby 原生风格标题栏。 |
 | `alwaysOnTop` | `boolean` | detached 窗口初始是否置顶。适合截图标注工具条、浮动控制面板等短时窗口。 |
+| `resizable` | `boolean` | 是否允许用户调整窗口大小。默认 `true`。 |
+| `fullscreenable` | `boolean` | 是否允许进入系统全屏/缩放。默认 `true`；macOS 上也会影响最大化能力。 |
 | `opacity` | `number` | 初始时窗口的整体透明度占比。支持范围 `0.0` - `1.0`。 |
 | `transparent` | `boolean` | 创建时就开启窗口层穿透方案，用以实现类似异形悬浮窗的设计（需要搭配 CSS 背景 `transparent` 运作）。 |
 | `visibleOnAllWorkspaces` | `boolean` | 是否在所有桌面/工作区可见。 |

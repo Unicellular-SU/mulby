@@ -16,6 +16,7 @@ import {
   installPluginWebviewSecurity
 } from './plugin-web-preferences'
 import {
+  applyWindowResizeHandlesToWebContents,
   applyWindowsFramelessSurface,
   getWindowsFramelessSurfaceInsets,
   shouldUseWindowsFramelessSurface
@@ -818,6 +819,9 @@ export class PluginWindowManager {
     const showTitleBar = shouldShowTitleBar(windowConfig)
     const backgroundThrottling = windowConfig.backgroundThrottling ?? true
     const isFullscreen = windowType === 'fullscreen'
+    const isResizable = windowConfig.resizable ?? true
+    const isMaximizable = windowConfig.resizable !== false
+    const isFullscreenable = windowConfig.fullscreenable ?? true
     const captureRegion = input?.attachments?.find(attachment => attachment.kind === 'image' && attachment.capture?.region)?.capture?.region
     const shouldPositionAtCaptureRegion = windowConfig.position === 'capture-region' && captureRegion
     const shouldFitCaptureRegion = (windowConfig.fit === 'capture-region' || windowConfig.fit === 'capture-region-with-toolbar') && captureRegion
@@ -866,11 +870,12 @@ export class PluginWindowManager {
       minHeight: isFullscreen ? undefined : toWindowHeight(minContentHeight + (showTitleBar ? DETACHED_TITLEBAR_HEIGHT : 0))!,
       maxWidth: resolvedMaxWidth,
       maxHeight: resolvedMaxHeight,
-      resizable: windowConfig.resizable !== undefined ? windowConfig.resizable : undefined,
+      resizable: isResizable,
+      maximizable: isMaximizable,
       show: false,
       frame: false,
       fullscreen: isFullscreen,
-      fullscreenable: isFullscreen,
+      fullscreenable: isFullscreenable,
       alwaysOnTop: windowConfig.alwaysOnTop,
       focusable: windowConfig.focusable !== false,
       thickFrame: !useWindowsFramelessSurface,
@@ -897,6 +902,9 @@ export class PluginWindowManager {
         ...getPluginRendererWebPreferences(plugin)
       }
     })
+    win.setResizable(isResizable)
+    win.setMaximizable(isMaximizable)
+    win.setFullScreenable(isFullscreenable)
     if (!showTitleBar) {
       installPluginWebviewSecurity(win.webContents, plugin)
     }
@@ -963,10 +971,16 @@ export class PluginWindowManager {
 
       // 监听窗口状态变化，通知渲染进程
       win.on('maximize', () => {
-        win.webContents.send('window:stateChanged', { isMaximized: true })
+        win.webContents.send('window:stateChanged', {
+          isMaximized: true,
+          canMaximize: win.isResizable()
+        })
       })
       win.on('unmaximize', () => {
-        win.webContents.send('window:stateChanged', { isMaximized: false })
+        win.webContents.send('window:stateChanged', {
+          isMaximized: false,
+          canMaximize: win.isResizable()
+        })
       })
     }
 
@@ -983,7 +997,8 @@ export class PluginWindowManager {
         // 跳过明确透明的窗口——surface 的 box-shadow / resize-handle 会透过透明背景可见
         await applyWindowsFramelessSurface(win, {
           includeTitleBar: false,
-          contentBackground: 'theme'
+          contentBackground: 'theme',
+          resizeMode: showTitleBar ? 'none' : 'all'
         })
         if (win.isDestroyed()) return
       }
@@ -1042,7 +1057,13 @@ export class PluginWindowManager {
       if (useWindowsFramelessSurface && !windowConfig.transparent && !win.isDestroyed()) {
         await applyWindowsFramelessSurface(win, {
           includeTitleBar: false,
-          contentBackground: 'theme'
+          contentBackground: 'theme',
+          resizeMode: showTitleBar ? 'none' : 'all'
+        })
+      }
+      if (isResizable && !isFullscreen) {
+        await applyWindowResizeHandlesToWebContents(pluginWebContents, {
+          resizeMode: showTitleBar ? 'side-bottom' : 'all'
         })
       }
       // 延迟确保 React useEffect 已注册 IPC 回调
@@ -1319,8 +1340,14 @@ export class PluginWindowManager {
       }
 
       // 窗口状态事件
-      win.on('maximize', () => win.webContents.send('window:stateChanged', { isMaximized: true }))
-      win.on('unmaximize', () => win.webContents.send('window:stateChanged', { isMaximized: false }))
+      win.on('maximize', () => win.webContents.send('window:stateChanged', {
+        isMaximized: true,
+        canMaximize: win.isResizable()
+      }))
+      win.on('unmaximize', () => win.webContents.send('window:stateChanged', {
+        isMaximized: false,
+        canMaximize: win.isResizable()
+      }))
     }
 
     // 目标 webContents（插件内容）

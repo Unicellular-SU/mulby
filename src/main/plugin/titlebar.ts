@@ -111,6 +111,16 @@ function getTitleBarCSS(): string {
   color: #f1f5f9 !important;
 }
 
+.it-pb-btn:disabled {
+  opacity: 0.45 !important;
+  cursor: default !important;
+}
+
+.it-pb-btn:disabled:hover {
+  background: transparent !important;
+  color: #94a3b8 !important;
+}
+
 /* 置顶按钮激活状态 */
 .it-pb-btn.active {
   color: #3b82f6 !important;
@@ -149,6 +159,12 @@ function getTitleBarCSS(): string {
   color: #1e293b !important;
 }
 
+.light .it-pb-btn:disabled:hover,
+:root:not(.dark) .it-pb-btn:disabled:hover {
+  background: transparent !important;
+  color: #64748b !important;
+}
+
 /* 深色主题强制 */
 .dark .it-pb-container {
   background: #1e293b !important;
@@ -166,6 +182,11 @@ function getTitleBarCSS(): string {
 .dark .it-pb-btn:hover {
   background: rgba(255, 255, 255, 0.1) !important;
   color: #f1f5f9 !important;
+}
+
+.dark .it-pb-btn:disabled:hover {
+  background: transparent !important;
+  color: #94a3b8 !important;
 }
 
 /* 内容区域偏移 */
@@ -234,6 +255,7 @@ function initTitleBar() {
   var maximizeBtn = document.getElementById('titlebar-maximize');
   var closeBtn = document.getElementById('titlebar-close');
   var isAlwaysOnTop = false;
+  var canMaximize = true;
 
   // 检查元素是否存在，如果不存在则等待 DOM 重新生成
   if (!pinBtn || !reloadBtn || !minimizeBtn || !maximizeBtn || !closeBtn) {
@@ -245,7 +267,7 @@ function initTitleBar() {
     window.mulby.window.getState().then(function(state) {
       isAlwaysOnTop = state.isAlwaysOnTop;
       updatePinState();
-      updateMaximizeIcon(state.isMaximized);
+      updateMaximizeIcon(state.isMaximized, state.canMaximize);
     });
   }
 
@@ -284,21 +306,25 @@ function initTitleBar() {
 
   // 最大化/还原按钮
   maximizeBtn.addEventListener('click', function() {
+    if (!canMaximize) return;
     window.mulby.window.maximize();
   });
 
-  function updateMaximizeIcon(isMaximized) {
+  function updateMaximizeIcon(isMaximized, nextCanMaximize) {
     var maxIcon = maximizeBtn.querySelector('.maximize-icon');
     var restoreIcon = maximizeBtn.querySelector('.restore-icon');
-    maxIcon.style.display = isMaximized ? 'none' : 'block';
-    restoreIcon.style.display = isMaximized ? 'block' : 'none';
-    maximizeBtn.title = isMaximized ? '还原' : '最大化';
+    canMaximize = nextCanMaximize !== false;
+    maximizeBtn.disabled = !canMaximize;
+    maximizeBtn.setAttribute('aria-disabled', canMaximize ? 'false' : 'true');
+    maxIcon.style.display = canMaximize && isMaximized ? 'none' : 'block';
+    restoreIcon.style.display = canMaximize && isMaximized ? 'block' : 'none';
+    maximizeBtn.title = canMaximize ? (isMaximized ? '还原' : '最大化') : '不可最大化';
   }
 
   // 监听窗口状态变化
   if (window.mulby && window.mulby.onWindowStateChange) {
     window.mulby.onWindowStateChange(function(state) {
-      updateMaximizeIcon(state.isMaximized);
+      updateMaximizeIcon(state.isMaximized, state.canMaximize);
     });
   }
 

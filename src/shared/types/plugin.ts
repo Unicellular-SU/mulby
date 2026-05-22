@@ -334,6 +334,7 @@ export interface WindowOptions {
   alwaysOnTop?: boolean // detached 窗口初始置顶状态
   alwaysOnTopLevel?: string // Electron setAlwaysOnTop 的 level（如 screen-saver）；未设时 Windows 会补默认
   resizable?: boolean  // 是否可调整大小；与透明窗口尺寸钉扎逻辑配合
+  fullscreenable?: boolean // 是否允许进入系统全屏/缩放；默认 true，macOS 上也影响最大化能力
   focusable?: boolean  // 是否可获取焦点（默认 true）；设为 false 时窗口不会成为 key window
   opacity?: number     // 窗口透明度（0.0 完全透明 ~ 1.0 完全不透明，运行时可调）
   transparent?: boolean // 窗口背景透明（配合 CSS background: transparent 实现穿透效果，仅创建时生效）

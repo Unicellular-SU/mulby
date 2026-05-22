@@ -42,8 +42,14 @@ const WINDOW_SURFACE_SHADOW_DARK = [
 
 export interface ApplyWindowSurfaceOptions {
   includeTitleBar?: boolean
-  resizeMode?: 'none' | 'bottom' | 'all'
+  resizeMode?: WindowResizeMode
   contentBackground?: 'theme' | 'transparent'
+}
+
+export type WindowResizeMode = 'none' | 'bottom' | 'side-bottom' | 'all'
+
+export interface ApplyWindowResizeHandlesOptions {
+  resizeMode?: WindowResizeMode
 }
 
 interface ResizeHandleLayout {
@@ -167,7 +173,7 @@ ${includeTitleBar ? `
 `
 }
 
-function buildResizeHandleLayouts(resizeMode: 'none' | 'bottom' | 'all'): ResizeHandleLayout[] {
+function buildResizeHandleLayouts(resizeMode: WindowResizeMode): ResizeHandleLayout[] {
   if (resizeMode === 'none') return []
   if (resizeMode === 'bottom') {
     return [{
@@ -177,7 +183,7 @@ function buildResizeHandleLayouts(resizeMode: 'none' | 'bottom' | 'all'): Resize
     }]
   }
 
-  return [
+  const allHandles: ResizeHandleLayout[] = [
     {
       edge: 'top',
       cursor: 'ns-resize',
@@ -219,9 +225,21 @@ function buildResizeHandleLayouts(resizeMode: 'none' | 'bottom' | 'all'): Resize
       styles: `left: 0; bottom: 0; width: ${WINDOW_RESIZE_HANDLE_CORNER_PX}px; height: ${WINDOW_RESIZE_HANDLE_CORNER_PX}px;`
     }
   ]
+
+  if (resizeMode === 'side-bottom') {
+    return allHandles.filter((handle) => (
+      handle.edge === 'left'
+      || handle.edge === 'right'
+      || handle.edge === 'bottom'
+      || handle.edge === 'bottom-left'
+      || handle.edge === 'bottom-right'
+    ))
+  }
+
+  return allHandles
 }
 
-function buildWindowResizeCss(resizeMode: 'none' | 'bottom' | 'all'): string {
+function buildWindowResizeCss(resizeMode: WindowResizeMode): string {
   if (resizeMode === 'none') return ''
 
   const { top, right, bottom, left } = WINDOWS_FRAMELESS_SURFACE_INSETS
@@ -254,8 +272,7 @@ ${handleRules}
 `
 }
 
-function buildWindowSurfaceScript(includeTitleBar: boolean, resizeMode: 'none' | 'bottom' | 'all'): string {
-  const preserveTitleBar = includeTitleBar ? ", 'mulby-titlebar'" : ''
+function buildWindowResizeScript(resizeMode: WindowResizeMode): string {
   const resizeHandles = buildResizeHandleLayouts(resizeMode)
   const resizeHandleMarkup = resizeHandles
     .map((handle) => `<div class="mulby-window-resize-handle" data-resize-edge="${handle.edge}"></div>`)
@@ -263,49 +280,9 @@ function buildWindowSurfaceScript(includeTitleBar: boolean, resizeMode: 'none' |
 
   return `
 (() => {
+  const resizeLayerId = 'mulby-window-resize-layer'
   const body = document.body
   if (!body) return
-
-  const shadowId = 'mulby-window-surface-shadow'
-  const hostId = 'mulby-window-content-host'
-  const resizeLayerId = 'mulby-window-resize-layer'
-  const preserveIds = new Set([shadowId, hostId, resizeLayerId${preserveTitleBar}])
-
-  let shadow = document.getElementById(shadowId)
-  if (!shadow) {
-    shadow = document.createElement('div')
-    shadow.id = shadowId
-    body.insertBefore(shadow, body.firstChild)
-  }
-
-  let host = document.getElementById(hostId)
-  if (!host) {
-    host = document.createElement('div')
-    host.id = hostId
-    body.appendChild(host)
-  }
-
-  for (const node of Array.from(body.childNodes)) {
-    if (node === shadow || node === host) continue
-
-    if (node.nodeType === Node.ELEMENT_NODE) {
-      const element = node
-      const tagName = element.tagName
-      if (preserveIds.has(element.id) || tagName === 'SCRIPT' || tagName === 'STYLE' || tagName === 'LINK') {
-        continue
-      }
-      host.appendChild(element)
-      continue
-    }
-
-    if (node.nodeType === Node.TEXT_NODE && node.textContent && node.textContent.trim()) {
-      host.appendChild(node)
-    }
-  }
-
-  if (body.lastChild !== host) {
-    body.appendChild(host)
-  }
 
   const resizeMode = ${JSON.stringify(resizeMode)}
   let resizeLayer = document.getElementById(resizeLayerId)
@@ -318,9 +295,11 @@ function buildWindowSurfaceScript(includeTitleBar: boolean, resizeMode: 'none' |
     resizeLayer = document.createElement('div')
     resizeLayer.id = resizeLayerId
     resizeLayer.innerHTML = ${JSON.stringify(resizeHandleMarkup)}
+    resizeLayer.dataset.resizeMode = resizeMode
     body.appendChild(resizeLayer)
-  } else if (!resizeLayer.hasChildNodes()) {
+  } else if (!resizeLayer.hasChildNodes() || resizeLayer.dataset.resizeMode !== resizeMode) {
     resizeLayer.innerHTML = ${JSON.stringify(resizeHandleMarkup)}
+    resizeLayer.dataset.resizeMode = resizeMode
   }
 
   const resizeApi = window.mulby && window.mulby.window && window.mulby.window.resizeDrag
@@ -416,6 +395,59 @@ function buildWindowSurfaceScript(includeTitleBar: boolean, resizeMode: 'none' |
 `
 }
 
+function buildWindowSurfaceScript(includeTitleBar: boolean, resizeMode: WindowResizeMode): string {
+  const preserveTitleBar = includeTitleBar ? ", 'mulby-titlebar'" : ''
+
+  return `
+(() => {
+  const body = document.body
+  if (!body) return
+
+  const shadowId = 'mulby-window-surface-shadow'
+  const hostId = 'mulby-window-content-host'
+  const resizeLayerId = 'mulby-window-resize-layer'
+  const preserveIds = new Set([shadowId, hostId, resizeLayerId${preserveTitleBar}])
+
+  let shadow = document.getElementById(shadowId)
+  if (!shadow) {
+    shadow = document.createElement('div')
+    shadow.id = shadowId
+    body.insertBefore(shadow, body.firstChild)
+  }
+
+  let host = document.getElementById(hostId)
+  if (!host) {
+    host = document.createElement('div')
+    host.id = hostId
+    body.appendChild(host)
+  }
+
+  for (const node of Array.from(body.childNodes)) {
+    if (node === shadow || node === host) continue
+
+    if (node.nodeType === Node.ELEMENT_NODE) {
+      const element = node
+      const tagName = element.tagName
+      if (preserveIds.has(element.id) || tagName === 'SCRIPT' || tagName === 'STYLE' || tagName === 'LINK') {
+        continue
+      }
+      host.appendChild(element)
+      continue
+    }
+
+    if (node.nodeType === Node.TEXT_NODE && node.textContent && node.textContent.trim()) {
+      host.appendChild(node)
+    }
+  }
+
+  if (body.lastChild !== host) {
+    body.appendChild(host)
+  }
+})()
+${buildWindowResizeScript(resizeMode)}
+`
+}
+
 export async function applyWindowsFramelessSurface(
   win: BrowserWindow,
   options: ApplyWindowSurfaceOptions = {}
@@ -439,4 +471,15 @@ export async function applyWindowsFramelessSurfaceToWebContents(
   await webContents.insertCSS(buildWindowSurfaceCss(includeTitleBar, contentBackground))
   await webContents.insertCSS(buildWindowResizeCss(resizeMode))
   await webContents.executeJavaScript(buildWindowSurfaceScript(includeTitleBar, resizeMode))
+}
+
+export async function applyWindowResizeHandlesToWebContents(
+  webContents: WebContents,
+  options: ApplyWindowResizeHandlesOptions = {}
+): Promise<void> {
+  if (webContents.isDestroyed()) return
+
+  const resizeMode = options.resizeMode ?? 'all'
+  await webContents.insertCSS(buildWindowResizeCss(resizeMode))
+  await webContents.executeJavaScript(buildWindowResizeScript(resizeMode))
 }

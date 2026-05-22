@@ -16,6 +16,7 @@ import {
 } from './plugin-web-preferences'
 import { ATTACHED_PANEL_HEIGHT, ATTACHED_PANEL_MIN_OVERFLOW_HEIGHT } from '../constants/panel-window'
 import {
+    applyWindowResizeHandlesToWebContents,
     applyWindowsFramelessSurface,
     applyWindowsFramelessSurfaceToWebContents,
     getWindowsFramelessSurfaceInsets,
@@ -908,6 +909,9 @@ export class PluginPanelWindow {
         const windowConfig = plugin.manifest.window || {}
         const showTitleBar = shouldShowTitleBarForPanel(windowConfig)
         const backgroundThrottling = windowConfig.backgroundThrottling ?? true
+        const isResizable = windowConfig.resizable ?? true
+        const isMaximizable = windowConfig.resizable !== false
+        const isFullscreenable = windowConfig.fullscreenable ?? true
 
         // 标题栏 preload 路径
         const titlebarPreloadPath = join(__dirname, '../preload/titlebar.js')
@@ -930,8 +934,10 @@ export class PluginPanelWindow {
             maxHeight: toWindowHeight(windowConfig.maxHeight != null ? windowConfig.maxHeight + (showTitleBar ? DETACHED_TITLEBAR_HEIGHT : 0) : undefined),
             frame: false,
             show: false,
-            resizable: true,
+            resizable: isResizable,
             movable: true,
+            maximizable: isMaximizable,
+            fullscreenable: isFullscreenable,
             thickFrame: !useWindowsFramelessSurface,
             backgroundColor,
             transparent: useWindowsFramelessSurface,
@@ -951,6 +957,9 @@ export class PluginPanelWindow {
                 v8CacheOptions: PLUGIN_RENDERER_V8_CACHE_OPTIONS
             }
         })
+        independentWindow.setResizable(isResizable)
+        independentWindow.setMaximizable(isMaximizable)
+        independentWindow.setFullScreenable(isFullscreenable)
 
         // 注册插件分离独立窗口（必须注册以保证安全的 IPC）
         registerPluginWindow(independentWindow.id, plugin.id)
@@ -979,12 +988,18 @@ export class PluginPanelWindow {
             // 窗口状态事件
             independentWindow.on('maximize', () => {
                 if (!pluginView.webContents.isDestroyed()) {
-                    pluginView.webContents.send('window:stateChanged', { isMaximized: true })
+                    pluginView.webContents.send('window:stateChanged', {
+                        isMaximized: true,
+                        canMaximize: independentWindow.isResizable()
+                    })
                 }
             })
             independentWindow.on('unmaximize', () => {
                 if (!pluginView.webContents.isDestroyed()) {
-                    pluginView.webContents.send('window:stateChanged', { isMaximized: false })
+                    pluginView.webContents.send('window:stateChanged', {
+                        isMaximized: false,
+                        canMaximize: independentWindow.isResizable()
+                    })
                 }
             })
         }
@@ -1030,8 +1045,16 @@ export class PluginPanelWindow {
                 initTitlebar(independentWindow, plugin.manifest.displayName, currentTheme)
             }
             if (useWindowsFramelessSurface) {
-                await applyWindowsFramelessSurface(independentWindow, { includeTitleBar: false, resizeMode: 'all' })
+                await applyWindowsFramelessSurface(independentWindow, {
+                    includeTitleBar: false,
+                    resizeMode: showTitleBar ? 'none' : 'all'
+                })
                 if (independentWindow.isDestroyed()) return
+            }
+            if (isResizable) {
+                await applyWindowResizeHandlesToWebContents(pluginWebContents, {
+                    resizeMode: showTitleBar ? 'side-bottom' : 'all'
+                })
             }
             registerWindowsInputTargetWindow(independentWindow.id, independentWindow.getNativeWindowHandle())
             layoutPluginView(independentWindow, pluginView, showTitleBar)
@@ -1045,7 +1068,15 @@ export class PluginPanelWindow {
         pluginWebContents.on('did-finish-load', async () => {
             this.openPluginDevTools(pluginWebContents, plugin.id)
             if (useWindowsFramelessSurface && !independentWindow.isDestroyed()) {
-                await applyWindowsFramelessSurface(independentWindow, { includeTitleBar: false, resizeMode: 'all' })
+                await applyWindowsFramelessSurface(independentWindow, {
+                    includeTitleBar: false,
+                    resizeMode: showTitleBar ? 'none' : 'all'
+                })
+            }
+            if (isResizable && !pluginWebContents.isDestroyed()) {
+                await applyWindowResizeHandlesToWebContents(pluginWebContents, {
+                    resizeMode: showTitleBar ? 'side-bottom' : 'all'
+                })
             }
             // 延迟确保 React useEffect 已注册 IPC 回调
             setTimeout(() => {

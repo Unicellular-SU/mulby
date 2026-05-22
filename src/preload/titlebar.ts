@@ -11,6 +11,12 @@
  */
 import { contextBridge, ipcRenderer } from 'electron'
 
+type TitlebarWindowState = {
+  isMaximized: boolean
+  isAlwaysOnTop?: boolean
+  canMaximize: boolean
+}
+
 const api = {
   /** 发送标题栏动作 */
   action: (name: string) => {
@@ -23,7 +29,7 @@ const api = {
   },
 
   /** 获取窗口状态 */
-  getState: (): Promise<{ isMaximized: boolean; isAlwaysOnTop: boolean }> => {
+  getState: (): Promise<TitlebarWindowState & { isAlwaysOnTop: boolean }> => {
     return ipcRenderer.invoke('titlebar:getState')
   },
 
@@ -48,7 +54,7 @@ const api = {
   },
 
   /** 监听窗口状态变化 */
-  onWindowState: (callback: (state: { isMaximized: boolean }) => void) => {
+  onWindowState: (callback: (state: TitlebarWindowState) => void) => {
     ipcRenderer.on('titlebar:windowState', (_event, state) => callback(state))
   },
 

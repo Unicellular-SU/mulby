@@ -468,10 +468,16 @@ export class SystemPageWindowManager {
     })
 
     detachedWindow.on('maximize', () => {
-      detachedWindow.webContents.send('window:stateChanged', { isMaximized: true })
+      detachedWindow.webContents.send('window:stateChanged', {
+        isMaximized: true,
+        canMaximize: detachedWindow.isResizable()
+      })
     })
     detachedWindow.on('unmaximize', () => {
-      detachedWindow.webContents.send('window:stateChanged', { isMaximized: false })
+      detachedWindow.webContents.send('window:stateChanged', {
+        isMaximized: false,
+        canMaximize: detachedWindow.isResizable()
+      })
     })
 
     detachedWindow.webContents.on('did-finish-load', async () => {
