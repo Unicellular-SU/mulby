@@ -2,6 +2,10 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { ReactNode } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
+import {
+  buildAcceleratorFromKeyboardEvent,
+  formatAcceleratorForPlatform
+} from '../../shared/shortcut-accelerator'
 import type { PluginInfo } from '../../shared/types/electron'
 import type {
   PluginCommandItem,
@@ -12,36 +16,6 @@ interface PluginDetailsPanelProps {
   pluginName: string
   onClose: () => void
   onUninstall: (plugin: PluginInfo) => void
-}
-
-function normalizeShortcutKey(event: KeyboardEvent): string | null {
-  const code = event.code
-  const key = event.key
-  if (key === 'Escape' || key === 'Dead') return null
-
-  const codeMap: Record<string, string> = {
-    Space: 'Space',
-    Comma: ',',
-    Period: '.',
-    Slash: '/',
-    Backslash: '\\',
-    Semicolon: ';',
-    Quote: '\'',
-    BracketLeft: '[',
-    BracketRight: ']',
-    Minus: '-',
-    Equal: '=',
-    Backquote: '`',
-    ArrowUp: 'Up',
-    ArrowDown: 'Down',
-    ArrowLeft: 'Left',
-    ArrowRight: 'Right'
-  }
-  if (code in codeMap) return codeMap[code]
-  if (code.startsWith('Key')) return code.slice(3).toUpperCase()
-  if (code.startsWith('Digit')) return code.slice(5)
-  if (code.startsWith('F')) return code
-  return null
 }
 
 function commandTargetKey(command: PluginCommandItem): string {
@@ -276,7 +250,7 @@ export default function PluginDetailsPanel({
         if (!result.success) {
           setRecordError(result.error || '绑定失败')
         } else {
-          window.mulby.notification.show(`已绑定：${currentCommand.displayLabel} → ${accelerator}`)
+          window.mulby.notification.show(`已绑定：${currentCommand.displayLabel} → ${formatAcceleratorForPlatform(accelerator)}`)
         }
         await reloadCommands()
       })()
@@ -293,19 +267,13 @@ export default function PluginDetailsPanel({
         return
       }
 
-      const mainKey = normalizeShortcutKey(event)
-      const parts: string[] = []
-      if (event.metaKey || event.ctrlKey) parts.push('CommandOrControl')
-      if (event.altKey) parts.push('Alt')
-      if (event.shiftKey) parts.push('Shift')
-      if (mainKey) parts.push(mainKey)
-
-      if (!mainKey || !(event.metaKey || event.ctrlKey || event.altKey)) {
-        setRecordError('需要至少一个主修饰键（Command/Ctrl/Alt）')
+      const result = buildAcceleratorFromKeyboardEvent(event)
+      if (result.error) {
+        setRecordError(result.error)
         return
       }
 
-      submitBinding(parts.join('+'))
+      submitBinding(result.accelerator)
     }
 
     const offShortcutCaptured = window.mulby.settings.onShortcutCaptured((accelerator) => {
@@ -511,7 +479,7 @@ export default function PluginDetailsPanel({
                     正在录制快捷键：{recordingCommand.displayLabel}
                   </div>
                   <div className="mt-0.5 text-xs text-blue-600 dark:text-blue-300">
-                    请按下快捷键组合（需包含 Command/Ctrl/Alt），按 Esc 取消
+                    请按 Ctrl/Alt + 按键，或直接按 F1–F24；按 Esc 取消
                   </div>
                 </div>
                 <button
@@ -604,7 +572,7 @@ export default function PluginDetailsPanel({
                                 )}
                                 {binding && (
                                   <span className="shrink-0 rounded-md border border-slate-200 bg-white px-1.5 py-0.5 font-mono text-[11px] text-slate-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200">
-                                    {binding.accelerator}
+                                    {formatAcceleratorForPlatform(binding.accelerator)}
                                   </span>
                                 )}
                               </div>

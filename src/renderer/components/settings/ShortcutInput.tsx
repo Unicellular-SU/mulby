@@ -1,7 +1,10 @@
 import { useEffect, useState } from 'react'
 import type { ShortcutStatusMap } from '../../../shared/types/settings'
+import {
+  buildAcceleratorFromKeyboardEvent,
+  formatAcceleratorForPlatform
+} from '../../../shared/shortcut-accelerator'
 import { getShortcutStatusText } from './shortcut-status-text'
-import { normalizeShortcutKey } from './utils'
 
 interface ShortcutInputProps {
   label: string
@@ -50,35 +53,17 @@ export default function ShortcutInput({
     }
 
     const commitAccelerator = (event: KeyboardEvent) => {
-      const mainKey = normalizeShortcutKey(event)
-      const parts: string[] = []
-
-      if (event.metaKey || event.ctrlKey) {
-        parts.push('CommandOrControl')
-      }
-      if (event.altKey) {
-        parts.push('Alt')
-      }
-      if (event.shiftKey) {
-        parts.push('Shift')
-      }
-      if (mainKey) {
-        parts.push(mainKey)
-      }
-
-      const accelerator = parts.join('+')
-      setPreview(accelerator)
-
-      const hasPrimaryModifier = event.metaKey || event.ctrlKey || event.altKey
-      if (!mainKey || !hasPrimaryModifier) {
-        setError('至少需要一个修饰键')
+      const result = buildAcceleratorFromKeyboardEvent(event)
+      setPreview(formatAcceleratorForPlatform(result.accelerator))
+      if (result.error) {
+        setError(result.error)
         return
       }
 
       if (finished) return
       finished = true
       finishRecording()
-      onChange(accelerator)
+      onChange(result.accelerator)
     }
 
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -134,7 +119,9 @@ export default function ShortcutInput({
 
   const statusText = getShortcutStatusText(status)
 
-  const displayValue = recording ? (preview || '按下快捷键') : (value || '未设置')
+  const displayValue = recording
+    ? (preview || '按下快捷键')
+    : (value ? formatAcceleratorForPlatform(value) : '未设置')
 
   const content = (
     <div className="space-y-3">

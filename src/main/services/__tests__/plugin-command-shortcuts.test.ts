@@ -176,6 +176,12 @@ describe('plugin command shortcut manager', () => {
     assert.equal(second.binding?.id, first.binding?.id)
     assert.equal(manager.listBindings().length, 1)
 
+    const functionKey = manager.bind(toBindInput(command, 'F1'))
+    assert.equal(functionKey.success, true)
+    assert.equal(functionKey.state, 'active')
+    assert.equal(functionKey.binding?.accelerator, 'F1')
+    assert.equal(shortcuts.hasActive('F1'), true)
+
     commands = [command]
   })
 

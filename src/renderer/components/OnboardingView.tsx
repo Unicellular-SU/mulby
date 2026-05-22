@@ -1,7 +1,10 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
-import { normalizeShortcutKey } from './settings/utils'
 import { getSystemDefaultProviders } from '../../shared/ai/systemProviders'
 import { getSystemDefaultModels } from '../../shared/ai/systemModels'
+import {
+  buildAcceleratorFromKeyboardEvent,
+  formatAcceleratorForPlatform
+} from '../../shared/shortcut-accelerator'
 import type { AiProviderConfig } from '../../shared/types/ai'
 import type { PluginStoreEntry } from '../../shared/types/plugin-store'
 import type {
@@ -149,17 +152,9 @@ function useShortcutRecorder(
       e.stopPropagation()
       if (e.key === 'Escape') { finish(); return }
 
-      const mainKey = normalizeShortcutKey(e)
-      const parts: string[] = []
-      if (e.metaKey || e.ctrlKey) parts.push('CommandOrControl')
-      if (e.altKey) parts.push('Alt')
-      if (e.shiftKey) parts.push('Shift')
-      if (mainKey) parts.push(mainKey)
-      const accel = parts.join('+')
-      setPreview(accel)
-
-      const hasMod = e.metaKey || e.ctrlKey || e.altKey
-      if (mainKey && hasMod) finish(accel)
+      const result = buildAcceleratorFromKeyboardEvent(e)
+      setPreview(formatAcceleratorForPlatform(result.accelerator))
+      if (!result.error) finish(result.accelerator)
     }
 
     const offCaptured = window.mulby.settings.onShortcutCaptured((accel) => {
@@ -564,7 +559,7 @@ export default function OnboardingView() {
     const isRecording = recording === action
     const displayValue = isRecording
       ? (preview || '按下快捷键…')
-      : (state.shortcuts[action] || '未设置')
+      : (state.shortcuts[action] ? formatAcceleratorForPlatform(state.shortcuts[action]) : '未设置')
 
     return (
       <div className="onboarding-form-group">
@@ -615,7 +610,7 @@ export default function OnboardingView() {
     const isSuperPanelRecording = recording === 'superPanel'
     const acceleratorLabel = isSuperPanelRecording
       ? (preview || '按下快捷键…')
-      : (trigger.accelerator || '未设置')
+      : (trigger.accelerator ? formatAcceleratorForPlatform(trigger.accelerator) : '未设置')
 
     return (
       <div className="onboarding-super-panel-config">
@@ -874,7 +869,7 @@ export default function OnboardingView() {
                   </div>
                   <div className="onboarding-demo-trigger">
                     {state.superPanel.trigger.type === 'keyboard'
-                      ? (state.superPanel.trigger.accelerator || 'Alt+Q')
+                      ? formatAcceleratorForPlatform(state.superPanel.trigger.accelerator || 'Alt+Q')
                       : 'Trigger'}
                   </div>
                   <div className="onboarding-demo-panel">

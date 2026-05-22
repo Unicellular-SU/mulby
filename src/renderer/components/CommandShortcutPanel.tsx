@@ -1,5 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Ban, Bolt, CheckCircle2, Keyboard, Play, Search, Tag, X } from 'lucide-react'
+import {
+  buildAcceleratorFromKeyboardEvent,
+  formatAcceleratorForPlatform
+} from '../../shared/shortcut-accelerator'
 import type { PluginCommandItem, PluginCommandShortcutBindingRecord } from '../../shared/types/plugin'
 
 // 精确命令标识，用于从全部指令跳转或候选列表点选
@@ -18,36 +22,6 @@ interface CommandShortcutPanelProps {
   onInitialQueryConsumed?: () => void
   onRequestQuickLaunch?: (commandLabel: string, target: CommandTarget) => void
   onBeforeOpenCommand?: () => Promise<void> | void
-}
-
-function normalizeShortcutKey(event: KeyboardEvent): string | null {
-  const code = event.code
-  const key = event.key
-  if (key === 'Escape' || key === 'Dead') return null
-
-  const codeMap: Record<string, string> = {
-    Space: 'Space',
-    Comma: ',',
-    Period: '.',
-    Slash: '/',
-    Backslash: '\\',
-    Semicolon: ';',
-    Quote: '\'',
-    BracketLeft: '[',
-    BracketRight: ']',
-    Minus: '-',
-    Equal: '=',
-    Backquote: '`',
-    ArrowUp: 'Up',
-    ArrowDown: 'Down',
-    ArrowLeft: 'Left',
-    ArrowRight: 'Right'
-  }
-  if (code in codeMap) return codeMap[code]
-  if (code.startsWith('Key')) return code.slice(3).toUpperCase()
-  if (code.startsWith('Digit')) return code.slice(5)
-  if (code.startsWith('F')) return code
-  return null
 }
 
 function getBindingStateLabel(state: PluginCommandShortcutBindingRecord['state']): string {
@@ -346,7 +320,7 @@ export default function CommandShortcutPanel({
         if (!result.success) {
           setRecordError(result.error || '绑定失败')
         } else {
-          window.mulby.notification.show(`已绑定：${currentCommand.displayLabel} -> ${accelerator}`)
+          window.mulby.notification.show(`已绑定：${currentCommand.displayLabel} -> ${formatAcceleratorForPlatform(accelerator)}`)
         }
         await loadData()
       })()
@@ -363,20 +337,13 @@ export default function CommandShortcutPanel({
         return
       }
 
-      const mainKey = normalizeShortcutKey(event)
-      const parts: string[] = []
-      if (event.metaKey || event.ctrlKey) parts.push('CommandOrControl')
-      if (event.altKey) parts.push('Alt')
-      if (event.shiftKey) parts.push('Shift')
-      if (mainKey) parts.push(mainKey)
-      const accelerator = parts.join('+')
-
-      if (!mainKey || !(event.metaKey || event.ctrlKey || event.altKey)) {
-        setRecordError('需要至少一个主修饰键（Command/Ctrl/Alt）')
+      const result = buildAcceleratorFromKeyboardEvent(event)
+      if (result.error) {
+        setRecordError(result.error)
         return
       }
 
-      submitBinding(accelerator)
+      submitBinding(result.accelerator)
     }
 
     const offShortcutCaptured = window.mulby.settings.onShortcutCaptured((accelerator) => {
@@ -474,7 +441,7 @@ export default function CommandShortcutPanel({
         {binding && (
           <span
             className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] font-medium text-emerald-700 dark:border-emerald-900/60 dark:bg-emerald-950/30 dark:text-emerald-300"
-            title={binding.accelerator}
+            title={formatAcceleratorForPlatform(binding.accelerator)}
           >
             <Keyboard className="h-3 w-3" />
             已绑定
@@ -507,7 +474,7 @@ export default function CommandShortcutPanel({
             {binding && (
               <div className="mt-2 inline-flex max-w-full items-center gap-1.5 rounded-lg border border-slate-200 bg-slate-50 px-2 py-1 text-[11px] text-slate-600 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-300">
                 <Keyboard className="h-3 w-3 shrink-0" />
-                <span className="truncate">{binding.accelerator}</span>
+                <span className="truncate">{formatAcceleratorForPlatform(binding.accelerator)}</span>
               </div>
             )}
           </div>
@@ -572,7 +539,7 @@ export default function CommandShortcutPanel({
                 </div>
                 <div className="flex items-center gap-2">
                   <div className="rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs text-slate-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200">
-                    {quickLaunchBinding?.accelerator || '未设置'}
+                    {quickLaunchBinding?.accelerator ? formatAcceleratorForPlatform(quickLaunchBinding.accelerator) : '未设置'}
                   </div>
                   <button
                     className="rounded-full border border-slate-200 bg-white px-2 py-1 text-xs text-slate-700 hover:border-slate-300 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200"
@@ -651,7 +618,7 @@ export default function CommandShortcutPanel({
                     </div>
                     <div className="flex items-center gap-2">
                       <div className="rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs text-slate-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200">
-                        {binding.accelerator}
+                        {formatAcceleratorForPlatform(binding.accelerator)}
                       </div>
                       <button
                         className="rounded-full border border-slate-200 bg-white px-2 py-1 text-xs text-slate-600 hover:border-slate-300 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300"

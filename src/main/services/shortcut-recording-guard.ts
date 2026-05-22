@@ -1,4 +1,5 @@
 import type { BrowserWindow, Input } from 'electron'
+import { isFunctionShortcutKey } from '../../shared/shortcut-accelerator'
 
 const WM_INITMENU = 0x0116
 
@@ -42,8 +43,9 @@ const CODE_MAP: Record<string, string> = {
 
 function normalizeMainKey(input: Input): string | null {
   const code = String(input.code || '')
-  const rawKey = String(input.key || '').trim()
-  const key = rawKey.toLowerCase()
+  const rawKey = String(input.key || '')
+  const trimmedKey = rawKey.trim()
+  const key = trimmedKey.toLowerCase()
 
   if (!rawKey || key === 'dead' || key === 'escape') return null
   if (NON_MAIN_KEYS.has(key)) return null
@@ -52,9 +54,9 @@ function normalizeMainKey(input: Input): string | null {
   if (code && code.startsWith('Digit') && code.length === 6) return code.slice(5)
   if (code && /^F\d{1,2}$/.test(code)) return code
 
-  if (/^[a-z]$/i.test(rawKey)) return rawKey.toUpperCase()
-  if (/^\d$/.test(rawKey)) return rawKey
-  if (/^f\d{1,2}$/i.test(rawKey)) return rawKey.toUpperCase()
+  if (/^[a-z]$/i.test(trimmedKey)) return trimmedKey.toUpperCase()
+  if (/^\d$/.test(trimmedKey)) return trimmedKey
+  if (/^f\d{1,2}$/i.test(trimmedKey)) return trimmedKey.toUpperCase()
   if (['space', 'spacebar'].includes(key)) return 'Space'
   if (['up', 'down', 'left', 'right'].includes(key)) {
     const mapped = key.charAt(0).toUpperCase() + key.slice(1)
@@ -65,14 +67,15 @@ function normalizeMainKey(input: Input): string | null {
     if (key === 'pagedown') return 'PageDown'
     return key.charAt(0).toUpperCase() + key.slice(1)
   }
-  if ([',', '.', '/', '\\', ';', '\'', '[', ']', '-', '=', '`'].includes(rawKey)) return rawKey
+  if ([',', '.', '/', '\\', ';', '\'', '[', ']', '-', '=', '`'].includes(trimmedKey)) return trimmedKey
   return null
 }
 
-function toAccelerator(input: Input): string | null {
+export function toShortcutRecordingAccelerator(input: Input): string | null {
   const mainKey = normalizeMainKey(input)
   const hasPrimaryModifier = input.control || input.meta || input.alt
-  if (!mainKey || !hasPrimaryModifier) return null
+  if (!mainKey) return null
+  if (!hasPrimaryModifier && !isFunctionShortcutKey(mainKey)) return null
 
   const parts: string[] = []
   if (input.control || input.meta) parts.push('CommandOrControl')
@@ -161,7 +164,7 @@ export function attachShortcutRecordingGuard(win: BrowserWindow): void {
   win.webContents.on('before-input-event', (event, input) => {
     if (!recordingWebContentsIds.has(webContentsId)) return
     if (input.type !== 'keyDown' || input.isAutoRepeat) return
-    const accelerator = toAccelerator(input)
+    const accelerator = toShortcutRecordingAccelerator(input)
     if (!accelerator) return
     event.preventDefault()
     win.webContents.send('settings:shortcut:captured', accelerator)
