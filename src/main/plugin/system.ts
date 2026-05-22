@@ -31,6 +31,14 @@ export function isSyntheticSystemIconRequest(filePath: string): boolean {
   return isExtensionOnlyIconRequest(normalized) || normalized.toLowerCase() === 'folder'
 }
 
+export function shouldUseNativeThumbnailForIcon(
+  _filePath: string,
+  _kind: SystemIconKind,
+  platform: NodeJS.Platform = process.platform
+): boolean {
+  return platform !== 'win32'
+}
+
 export interface SystemInfo {
   platform: NodeJS.Platform
   arch: string
@@ -627,9 +635,11 @@ export class PluginSystem {
       }
     }
 
-    const thumbnail = await this.tryCreateThumbnail(normalizedPath, options.size, traceContext)
-    if (this.isUsableNativeIcon(thumbnail)) {
-      return { icon: thumbnail, source: 'thumbnail' }
+    if (shouldUseNativeThumbnailForIcon(normalizedPath, options.kind)) {
+      const thumbnail = await this.tryCreateThumbnail(normalizedPath, options.size, traceContext)
+      if (this.isUsableNativeIcon(thumbnail)) {
+        return { icon: thumbnail, source: 'thumbnail' }
+      }
     }
 
     const sizeCandidates: Array<'large' | 'normal' | 'small'> =

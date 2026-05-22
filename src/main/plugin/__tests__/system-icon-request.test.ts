@@ -2,7 +2,8 @@ import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
 import {
   isExtensionOnlyIconRequest,
-  isSyntheticSystemIconRequest
+  isSyntheticSystemIconRequest,
+  shouldUseNativeThumbnailForIcon
 } from '../system'
 
 describe('PluginSystem icon request classification', () => {
@@ -25,5 +26,11 @@ describe('PluginSystem icon request classification', () => {
     assert.equal(isSyntheticSystemIconRequest('/Applications/Safari.app'), false)
     assert.equal(isSyntheticSystemIconRequest('/Users/su/Documents'), false)
     assert.equal(isSyntheticSystemIconRequest('report.pdf'), false)
+  })
+
+  it('skips native thumbnail generation on Windows icon requests', () => {
+    assert.equal(shouldUseNativeThumbnailForIcon('C:\\Users\\73221\\简历.pdf', 'file', 'win32'), false)
+    assert.equal(shouldUseNativeThumbnailForIcon('C:\\Program Files\\App\\app.exe', 'app', 'win32'), false)
+    assert.equal(shouldUseNativeThumbnailForIcon('/Users/73221/简历.pdf', 'file', 'darwin'), true)
   })
 })

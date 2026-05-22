@@ -5,13 +5,12 @@ import type {
   DesktopAppSearchResult,
   DesktopFileSearchResult,
   MainPushItem,
-  SearchResultItem,
-  SystemIconKind,
-  SystemIconRequest
+  SearchResultItem
 } from '../../shared/types/electron'
 import { isSystemSearchQueryEligible } from '../../shared/system-search'
 import type { InputPayload, SearchPreferenceState } from '../../shared/types/plugin'
 import type { SearchSettings } from '../../shared/types/settings'
+import { buildSystemIconBatch, getSystemFileIconSvg, getSystemIconCacheKey } from './plugin-list-icons'
 
 interface PluginListProps {
   searchPayload: InputPayload
@@ -106,13 +105,6 @@ const SYSTEM_APP_ICON_SVG = `
 </svg>
 `.trim()
 
-const SYSTEM_FILE_ICON_SVG = `
-<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-  <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-  <path d="M14 2v6h6" />
-</svg>
-`.trim()
-
 const svgIconSanitizeCache = new Map<string, string | null>()
 
 function sanitizeSvgIcon(svg: string): string | null {
@@ -175,10 +167,6 @@ function hashPayload(payload: InputPayload): string {
   const aw = payload.activeWindow
   const awKey = aw ? `${aw.app}|${aw.title}|${aw.bundleId || ''}` : ''
   return `${payload.text}|${payload.attachments.map((a) => `${a.id}:${a.name}`).join(',')}|${awKey}`
-}
-
-function getSystemIconCacheKey(kind: SystemIconKind, path: string): string {
-  return `${kind}:${path}`
 }
 
 function isValidIconDataUrl(value: string): boolean {
@@ -935,27 +923,17 @@ function PluginList({
 
   // 加载系统图标：当 app/file 展示列表变化时，批量请求尚未缓存的图标
   useEffect(() => {
-    // 收集当前搜索结果中所有需要的 icon key
-    const neededKeys = new Set<string>()
-    const batch: SystemIconRequest[] = []
-    for (const item of appDisplayItems) {
-      const key = getSystemIconCacheKey('app', item.path)
-      neededKeys.add(key)
-      if (!systemIconCacheRef.current.has(key) && !systemIconPendingRef.current.has(key)) {
-        batch.push({ key, path: item.iconPath || item.path, kind: item.iconPath ? 'file' : 'app' })
-      }
-    }
-    for (const item of fileDisplayItems) {
-      const key = getSystemIconCacheKey('file', item.path)
-      neededKeys.add(key)
-      if (!systemIconCacheRef.current.has(key) && !systemIconPendingRef.current.has(key)) {
-        batch.push({ key, path: item.path, kind: 'file' })
-      }
-    }
+    const { neededKeys, requests: batch } = buildSystemIconBatch({
+      appItems: appDisplayItems,
+      fileItems: fileDisplayItems,
+      iconCache: systemIconCacheRef.current,
+      pendingKeys: systemIconPendingRef.current
+    })
+    const neededKeySet = new Set(neededKeys)
 
     // 只清除不在当前结果中的过期 pending key，保留当前仍在 in-flight 的条目
     for (const key of systemIconPendingRef.current) {
-      if (!neededKeys.has(key)) {
+      if (!neededKeySet.has(key)) {
         systemIconPendingRef.current.delete(key)
       }
     }
@@ -1077,7 +1055,7 @@ function PluginList({
       subtitle: trimPath(item.path),
       icon: systemIconCacheRef.current.has(getSystemIconCacheKey('file', item.path))
         ? { type: 'data-url', value: systemIconCacheRef.current.get(getSystemIconCacheKey('file', item.path))! }
-        : { type: 'svg', value: SYSTEM_FILE_ICON_SVG },
+        : { type: 'svg', value: getSystemFileIconSvg(item) },
       fileItem: item
     }))
     const files = expandedSections.files ? fullFiles : fullFiles.slice(0, DEFAULT_DISPLAY_LIMIT)
