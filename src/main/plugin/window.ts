@@ -194,6 +194,10 @@ export class PluginWindowManager {
     this.panelWindow = this.createPanelWindow()
   }
 
+  isMainWindowVisible(): boolean {
+    return Boolean(this.mainWindow && !this.mainWindow.isDestroyed() && this.mainWindow.isVisible())
+  }
+
   setThemeManager(manager: ThemeManager) {
     this.themeManager = manager
     // 同时设置到面板窗口管理器

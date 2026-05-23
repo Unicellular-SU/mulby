@@ -3,6 +3,7 @@ import { join } from 'path'
 import { existsSync, rmSync } from 'fs'
 import { getInternalPluginDirs, isSystemPlugin } from './internal-plugins'
 import { SystemCommandExecutor } from './system-command-executor'
+import { shouldRestoreMainWindowAfterPreCapture } from './pre-capture-window-policy'
 import { collectDevPluginWatchTargets } from './dev-reload-utils'
 import { PluginLoader } from './loader'
 import { PluginRunner } from './runner'
@@ -1054,6 +1055,8 @@ export class PluginManager {
     // preCapture：在启动插件窗口前先执行截图
     // 必须先隐藏主搜索框，否则截图中会包含搜索框
     if (feature?.preCapture) {
+      const mainWindowWasVisibleBeforePreCapture = this.windowManager?.isMainWindowVisible() === true
+
       // 隐藏主窗口和面板（无论 mainHide 设置如何）
       if (this.windowManager) {
         this.windowManager.hideMainWindowForCapture()
@@ -1101,10 +1104,16 @@ export class PluginManager {
           }
         }
 
-        // 用户取消截图 → 不启动插件，恢复主窗口
+        // 用户取消截图 → 不启动插件；只恢复截图前本来可见的主窗口
         if (!capturedDataUrl) {
           schedulePostOnLoadIdle(PluginManager.DEFAULT_IDLE_LOAD_DELAY_MS)
-          if (this.windowManager && !shouldHideMain) {
+          if (
+            this.windowManager
+            && shouldRestoreMainWindowAfterPreCapture({
+              mainHide: shouldHideMain,
+              mainWindowWasVisibleBeforeCapture: mainWindowWasVisibleBeforePreCapture
+            })
+          ) {
             this.windowManager.showMainWindowAfterCapture()
           }
           this.endAttachedLaunchStatus(launchRequestId, plugin, featureCode, 'cancelled')
@@ -1123,8 +1132,14 @@ export class PluginManager {
         }]
       } catch (err) {
         log.error(`[PluginManager] preCapture failed for ${pluginId}:`, err)
-        // preCapture 失败时恢复主窗口，回退到旧流程（让插件自行截图）
-        if (this.windowManager && !shouldHideMain) {
+        // preCapture 失败时仅恢复截图前本来可见的主窗口，回退到旧流程（让插件自行截图）
+        if (
+          this.windowManager
+          && shouldRestoreMainWindowAfterPreCapture({
+            mainHide: shouldHideMain,
+            mainWindowWasVisibleBeforeCapture: mainWindowWasVisibleBeforePreCapture
+          })
+        ) {
           this.windowManager.showMainWindowAfterCapture()
         }
       }
