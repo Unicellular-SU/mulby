@@ -2,7 +2,6 @@ type ModifierKey = 'ctrl' | 'alt' | 'shift' | 'meta'
 
 export type SystemReservedShortcutReason =
   | 'win-meta'
-  | 'win-alt-space'
   | 'win-alt-tab'
   | 'win-alt-escape'
   | 'win-alt-f4'
@@ -75,9 +74,6 @@ export function detectSystemReservedShortcut(
 
   if (modifiers.has('meta')) {
     return 'win-meta'
-  }
-  if (key === 'space' && hasExactModifiers(modifiers, ['alt'])) {
-    return 'win-alt-space'
   }
   if (key === 'tab' && hasExactModifiers(modifiers, ['alt'])) {
     return 'win-alt-tab'

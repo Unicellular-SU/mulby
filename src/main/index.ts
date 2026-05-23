@@ -624,6 +624,7 @@ app.whenReady().then(async () => {
   // 底层输入钩子服务（统一管理键盘/鼠标/双击修饰键）
   const inputHookService = new InputHookService()
   _inputHookService = inputHookService
+  pluginManager.setInputHookService(inputHookService)
 
   const appShortcutManager = new AppShortcutManager({
     actions: {

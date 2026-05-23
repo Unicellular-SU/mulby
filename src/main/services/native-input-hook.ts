@@ -31,10 +31,22 @@ export interface NativeMouseEvent {
 }
 
 export interface NativeInputHookCallbacks {
-  onKeyDown?: (event: NativeKeyEvent) => void
+  onKeyDown?: (event: NativeKeyEvent) => boolean | void
   onKeyUp?: (event: NativeKeyEvent) => void
   onMouseDown?: (event: NativeMouseEvent) => void
   onMouseUp?: (event: NativeMouseEvent) => void
+}
+
+export function resolveWin32KeyboardHookResult(
+  handled: boolean,
+  callNextHook: () => number
+): number {
+  if (handled) return 1
+  return callNextHook()
+}
+
+export function resolveDarwinKeyboardHookResult<T>(handled: boolean, event: T): T | null {
+  return handled ? null : event
 }
 
 // ==================== 公共 API ====================
@@ -222,6 +234,7 @@ function createWin32InputHook(callbacks: NativeInputHookCallbacks): NativeInputH
         kbCallback = koffi.register(
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           (nCode: number, wParam: any, lParam: any) => {
+            let handled = false
             if (nCode >= 0) {
               try {
                 // 手动从 raw pointer 解码 KBDLLHOOKSTRUCT
@@ -232,10 +245,10 @@ function createWin32InputHook(callbacks: NativeInputHookCallbacks): NativeInputH
                 const modifiers = getModifierState(api)
 
                 if (wParamNum === WM_KEYDOWN || wParamNum === WM_SYSKEYDOWN) {
-                  callbacks.onKeyDown?.({
+                  handled = callbacks.onKeyDown?.({
                     vkCode,
                     ...modifiers
-                  })
+                  }) === true
                 } else if (wParamNum === WM_KEYUP || wParamNum === WM_SYSKEYUP) {
                   callbacks.onKeyUp?.({
                     vkCode,
@@ -246,7 +259,7 @@ function createWin32InputHook(callbacks: NativeInputHookCallbacks): NativeInputH
                 log.error('[NativeInputHook] Keyboard callback error:', err)
               }
             }
-            return api.CallNextHookEx(kbHook, nCode, wParam, lParam)
+            return resolveWin32KeyboardHookResult(handled, () => api.CallNextHookEx(kbHook, nCode, wParam, lParam))
           },
           koffi.pointer('LowLevelKeyboardProc')
         )
@@ -365,7 +378,7 @@ const kCGEventFlagMaskCommand = 0x00100000
 // CGEventTap 参数
 const kCGHIDEventTap = 0
 const kCGHeadInsertEventTap = 0
-const kCGEventTapOptionListenOnly = 1
+const kCGEventTapOptionDefault = 0
 
 /**
  * macOS keycode → Windows VK Code 映射
@@ -547,7 +560,8 @@ function createDarwinInputHook(callbacks: NativeInputHookCallbacks): NativeInput
                 const vkCode = MACOS_TO_VK[macKeyCode] ?? macKeyCode
 
                 if (type === kCGEventKeyDown) {
-                  callbacks.onKeyDown?.({ vkCode, ...modifiers })
+                  const handled = callbacks.onKeyDown?.({ vkCode, ...modifiers }) === true
+                  return resolveDarwinKeyboardHookResult(handled, event)
                 } else {
                   callbacks.onKeyUp?.({ vkCode, ...modifiers })
                 }
@@ -568,7 +582,8 @@ function createDarwinInputHook(callbacks: NativeInputHookCallbacks): NativeInput
                 const isDown = ((flags & changed) !== 0)
 
                 if (isDown) {
-                  callbacks.onKeyDown?.({ vkCode, ...modifiers })
+                  const handled = callbacks.onKeyDown?.({ vkCode, ...modifiers }) === true
+                  return resolveDarwinKeyboardHookResult(handled, event)
                 } else {
                   callbacks.onKeyUp?.({ vkCode, ...modifiers })
                 }
@@ -602,7 +617,7 @@ function createDarwinInputHook(callbacks: NativeInputHookCallbacks): NativeInput
         tap = api.CGEventTapCreate(
           kCGHIDEventTap,
           kCGHeadInsertEventTap,
-          kCGEventTapOptionListenOnly,
+          kCGEventTapOptionDefault,
           eventMask,
           tapCallback,
           null

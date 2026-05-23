@@ -10,4 +10,8 @@ describe('shortcut input status text', () => {
   it('shows registration failure only for an explicit failed status without a specific reason', () => {
     assert.equal(getShortcutStatusText({ ok: false }), '注册失败')
   })
+
+  it('describes hook-backed shortcuts as captured by the low-level hook', () => {
+    assert.equal(getShortcutStatusText({ ok: true, via: 'hook' }), '底层接管中')
+  })
 })

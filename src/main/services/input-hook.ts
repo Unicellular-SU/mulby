@@ -85,9 +85,18 @@ function parseAccelerator(accelerator: string): ParsedAccelerator | null {
   return { vkCode, alt, ctrl, meta, shift }
 }
 
+export function isKeyboardAcceleratorSupported(accelerator: string): boolean {
+  return parseAccelerator(accelerator) !== null
+}
+
 interface HookBinding {
   parsed: ParsedAccelerator
   callback: () => void
+  consume: boolean
+}
+
+interface KeyboardHookOptions {
+  consume?: boolean
 }
 
 // ==================== 鼠标部分 ====================
@@ -302,7 +311,9 @@ export class InputHookService {
 
   // ---- 键盘事件处理 ----
 
-  private onKeyDown = (event: NativeKeyEvent) => {
+  private onKeyDown = (event: NativeKeyEvent): boolean => {
+    let handled = false
+
     // 键盘绑定匹配
     for (const [, binding] of this.keyBindings) {
       const { parsed, callback } = binding
@@ -314,11 +325,15 @@ export class InputHookService {
         event.shiftKey === parsed.shift
       ) {
         callback()
+        if (binding.consume) {
+          handled = true
+        }
       }
     }
 
     // 驱动双击修饰键状态机
     this.doubleTap.handleKeyDown(event.vkCode)
+    return handled
   }
 
   private onKeyUp = (event: NativeKeyEvent) => {
@@ -374,14 +389,14 @@ export class InputHookService {
    * 为指定 accelerator 注册底层键盘钩子
    * @returns true 表示注册成功
    */
-  register(id: string, accelerator: string, callback: () => void): boolean {
+  register(id: string, accelerator: string, callback: () => void, options: KeyboardHookOptions = {}): boolean {
     const parsed = parseAccelerator(accelerator)
     if (!parsed) {
       log.warn(`[InputHook] 无法解析 accelerator: "${accelerator}"`)
       return false
     }
 
-    this.keyBindings.set(id, { parsed, callback })
+    this.keyBindings.set(id, { parsed, callback, consume: options.consume !== false })
 
     if (!this.running && !this.startHook()) {
       this.keyBindings.delete(id)
@@ -398,6 +413,20 @@ export class InputHookService {
       log.info(`[InputHook] 注销键盘钩子: ${id}`)
     }
     this.stopIfEmpty()
+  }
+
+  /** 注销指定前缀下的键盘钩子 */
+  unregisterByPrefix(prefix: string): void {
+    let changed = false
+    for (const id of Array.from(this.keyBindings.keys())) {
+      if (!id.startsWith(prefix)) continue
+      this.keyBindings.delete(id)
+      changed = true
+      log.info(`[InputHook] 注销键盘钩子: ${id}`)
+    }
+    if (changed) {
+      this.stopIfEmpty()
+    }
   }
 
   /** 检查指定键盘 id 是否已注册 */

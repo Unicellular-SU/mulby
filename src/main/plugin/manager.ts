@@ -35,6 +35,7 @@ import {
 import { PluginSearchWorker } from './search-worker-manager'
 import { getEmptyQuerySearchResults } from './empty-query-search'
 import { SystemPluginWindowManager } from '../services/system-plugin-window-manager'
+import type { InputHookService } from '../services/input-hook'
 import { getCachedActiveWindow, getActiveWindow } from '../services/active-window'
 import {
   filterAttachmentsByCmd,
@@ -275,6 +276,10 @@ export class PluginManager {
         this.idleLoadTimers.delete(pluginId)
       }
     })
+  }
+
+  setInputHookService(inputHook: InputHookService): void {
+    this.commandShortcutManager.setInputHookService(inputHook)
   }
 
   private async normalizeRunInput(input?: string | InputPayload): Promise<InputPayload> {

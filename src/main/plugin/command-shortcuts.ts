@@ -16,6 +16,10 @@ import {
   detectSystemReservedShortcut,
   type SystemReservedShortcutReason
 } from '../services/system-reserved-shortcuts'
+import {
+  isKeyboardAcceleratorSupported,
+  type InputHookService
+} from '../services/input-hook'
 import log from 'electron-log'
 
 interface PluginCommandShortcutManagerOptions {
@@ -40,9 +44,21 @@ interface CommandShortcutRegistrarLike {
   isRegistered: (accelerator: string) => boolean
 }
 
+interface CommandShortcutInputHookLike {
+  register: (
+    id: string,
+    accelerator: string,
+    callback: () => void,
+    options?: { consume?: boolean }
+  ) => boolean
+  unregister: (id: string) => void
+  unregisterByPrefix?: (prefix: string) => void
+}
+
 interface PluginCommandShortcutManagerDependencies {
   app?: CommandShortcutAppLike
   globalShortcut?: CommandShortcutRegistrarLike
+  inputHook?: CommandShortcutInputHookLike
 }
 
 interface CommandShortcutStoreFile {
@@ -65,12 +81,12 @@ const EMPTY_PAYLOAD: InputPayload = {
   attachments: []
 }
 
+const PLUGIN_COMMAND_HOOK_PREFIX = 'plugin-command:'
+
 function formatSystemReservedShortcutError(reason: SystemReservedShortcutReason): string {
   switch (reason) {
     case 'win-meta':
       return '包含 Win 键的快捷键由系统保留'
-    case 'win-alt-space':
-      return 'Alt+Space 为 Windows 系统窗口菜单快捷键'
     case 'win-alt-tab':
       return 'Alt+Tab 为 Windows 任务切换快捷键'
     case 'win-alt-escape':
@@ -88,11 +104,14 @@ export class PluginCommandShortcutManager {
   private readonly options: PluginCommandShortcutManagerOptions
   private readonly app: CommandShortcutAppLike
   private readonly globalShortcut: CommandShortcutRegistrarLike
+  private inputHook?: CommandShortcutInputHookLike
   private readonly storePath: string
   private bindings = new Map<string, PluginCommandShortcutBinding>()
   private state = new Map<string, CommandShortcutStateInfo>()
   private activeBindingAccelerators = new Map<string, string>()
   private activeAcceleratorOwners = new Map<string, string>()
+  private activeBindingBackends = new Map<string, 'hook' | 'global'>()
+  private initialized = false
 
   constructor(
     options: PluginCommandShortcutManagerOptions,
@@ -101,6 +120,7 @@ export class PluginCommandShortcutManager {
     this.options = options
     this.app = dependencies.app || electronApp
     this.globalShortcut = dependencies.globalShortcut || electronGlobalShortcut
+    this.inputHook = dependencies.inputHook
     const configDir = this.app.getPath('userData')
     if (!existsSync(configDir)) {
       mkdirSync(configDir, { recursive: true })
@@ -110,12 +130,21 @@ export class PluginCommandShortcutManager {
   }
 
   initialize(): void {
+    this.initialized = true
     this.reconcileRegistrations()
+  }
+
+  setInputHookService(inputHook: InputHookService): void {
+    this.inputHook = inputHook
+    if (this.initialized) {
+      this.reconcileRegistrations()
+    }
   }
 
   destroy(): void {
     this.unregisterAllActive()
     this.state.clear()
+    this.initialized = false
   }
 
   listBindings(pluginId?: string): PluginCommandShortcutBindingRecord[] {
@@ -332,6 +361,22 @@ export class PluginCommandShortcutManager {
       return { ok: false, state: 'shortcut-conflict', error: '该快捷键正在被其他指令占用' }
     }
 
+    const reservedReason = detectSystemReservedShortcut(accelerator)
+    if (reservedReason) {
+      return {
+        ok: false,
+        state: 'system-reserved-shortcut',
+        error: formatSystemReservedShortcutError(reservedReason)
+      }
+    }
+
+    if (this.inputHook) {
+      if (!isKeyboardAcceleratorSupported(accelerator)) {
+        return { ok: false, state: 'invalid-shortcut', error: '快捷键格式无效' }
+      }
+      return { ok: true }
+    }
+
     if (this.globalShortcut.isRegistered(accelerator) && ownerId !== excludeBindingId) {
       return { ok: false, state: 'shortcut-conflict', error: '该快捷键已被系统或应用占用' }
     }
@@ -408,6 +453,18 @@ export class PluginCommandShortcutManager {
       }
     }
 
+    const reservedReason = detectSystemReservedShortcut(binding.accelerator)
+    if (reservedReason) {
+      return {
+        state: 'system-reserved-shortcut',
+        error: formatSystemReservedShortcutError(reservedReason)
+      }
+    }
+
+    if (this.inputHook) {
+      return this.registerHookBinding(binding)
+    }
+
     if (this.globalShortcut.isRegistered(binding.accelerator)) {
       return {
         state: 'shortcut-conflict',
@@ -416,39 +473,9 @@ export class PluginCommandShortcutManager {
     }
 
     try {
-      const success = this.globalShortcut.register(binding.accelerator, () => {
-        void this.options
-          .runPluginCommand(
-            binding.pluginId,
-            binding.featureCode,
-            binding.cmdId,
-            binding.cmdSignature,
-            EMPTY_PAYLOAD
-          )
-          .then((result) => {
-            if (!result.success) {
-              log.warn(
-                `[CommandShortcut] Failed to run ${binding.pluginId}:${binding.featureCode} via "${binding.accelerator}"`,
-                result.error
-              )
-            }
-          })
-          .catch((error) => {
-            log.warn(
-              `[CommandShortcut] Failed to run ${binding.pluginId}:${binding.featureCode} via "${binding.accelerator}"`,
-              error
-            )
-          })
-      })
+      const success = this.globalShortcut.register(binding.accelerator, () => this.runBinding(binding))
 
       if (!success) {
-        const reservedReason = detectSystemReservedShortcut(binding.accelerator)
-        if (reservedReason) {
-          return {
-            state: 'system-reserved-shortcut',
-            error: formatSystemReservedShortcutError(reservedReason)
-          }
-        }
         return {
           state: 'shortcut-conflict',
           error: '该快捷键已被系统或应用占用'
@@ -463,23 +490,108 @@ export class PluginCommandShortcutManager {
 
     this.activeBindingAccelerators.set(binding.id, binding.accelerator)
     this.activeAcceleratorOwners.set(binding.accelerator, binding.id)
+    this.activeBindingBackends.set(binding.id, 'global')
     return { state: 'active' }
+  }
+
+  private registerHookBinding(binding: PluginCommandShortcutBinding): CommandShortcutStateInfo {
+    if (!this.inputHook) {
+      return {
+        state: 'shortcut-conflict',
+        error: '底层快捷键接管服务不可用'
+      }
+    }
+
+    try {
+      const success = this.inputHook.register(
+        this.getHookId(binding.id),
+        binding.accelerator,
+        () => this.runBinding(binding),
+        { consume: true }
+      )
+      if (!success) {
+        return {
+          state: 'invalid-shortcut',
+          error: '快捷键格式无效或底层接管不可用'
+        }
+      }
+    } catch {
+      return {
+        state: 'invalid-shortcut',
+        error: '快捷键格式无效'
+      }
+    }
+
+    this.activeBindingAccelerators.set(binding.id, binding.accelerator)
+    this.activeAcceleratorOwners.set(binding.accelerator, binding.id)
+    this.activeBindingBackends.set(binding.id, 'hook')
+    return { state: 'active' }
+  }
+
+  private runBinding(binding: PluginCommandShortcutBinding): void {
+    void this.options
+      .runPluginCommand(
+        binding.pluginId,
+        binding.featureCode,
+        binding.cmdId,
+        binding.cmdSignature,
+        EMPTY_PAYLOAD
+      )
+      .then((result) => {
+        if (!result.success) {
+          log.warn(
+            `[CommandShortcut] Failed to run ${binding.pluginId}:${binding.featureCode} via "${binding.accelerator}"`,
+            result.error
+          )
+        }
+      })
+      .catch((error) => {
+        log.warn(
+          `[CommandShortcut] Failed to run ${binding.pluginId}:${binding.featureCode} via "${binding.accelerator}"`,
+          error
+        )
+      })
   }
 
   private unregisterBinding(bindingId: string): void {
     const accelerator = this.activeBindingAccelerators.get(bindingId)
     if (!accelerator) return
-    this.globalShortcut.unregister(accelerator)
+    const backend = this.activeBindingBackends.get(bindingId)
+    if (backend === 'hook') {
+      this.inputHook?.unregister(this.getHookId(bindingId))
+    } else {
+      this.globalShortcut.unregister(accelerator)
+    }
     this.activeBindingAccelerators.delete(bindingId)
     this.activeAcceleratorOwners.delete(accelerator)
+    this.activeBindingBackends.delete(bindingId)
   }
 
   private unregisterAllActive(): void {
-    for (const accelerator of this.activeBindingAccelerators.values()) {
-      this.globalShortcut.unregister(accelerator)
+    if (this.inputHook && Array.from(this.activeBindingBackends.values()).includes('hook')) {
+      if (this.inputHook.unregisterByPrefix) {
+        this.inputHook.unregisterByPrefix(PLUGIN_COMMAND_HOOK_PREFIX)
+      } else {
+        for (const bindingId of this.activeBindingBackends.keys()) {
+          if (this.activeBindingBackends.get(bindingId) === 'hook') {
+            this.inputHook.unregister(this.getHookId(bindingId))
+          }
+        }
+      }
+    }
+
+    for (const [bindingId, accelerator] of this.activeBindingAccelerators) {
+      if (this.activeBindingBackends.get(bindingId) === 'global') {
+        this.globalShortcut.unregister(accelerator)
+      }
     }
     this.activeBindingAccelerators.clear()
     this.activeAcceleratorOwners.clear()
+    this.activeBindingBackends.clear()
+  }
+
+  private getHookId(bindingId: string): string {
+    return `${PLUGIN_COMMAND_HOOK_PREFIX}${bindingId}`
   }
 
   private generateBindingId(): string {

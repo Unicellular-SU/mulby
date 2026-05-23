@@ -51,6 +51,33 @@ class MockGlobalShortcut {
   }
 }
 
+class MockInputHook {
+  readonly registerCalls: Array<{ id: string; accelerator: string; consume?: boolean }> = []
+  readonly unregisterCalls: string[] = []
+  private readonly callbacks = new Map<string, () => void>()
+
+  register(id: string, accelerator: string, callback: () => void, options?: { consume?: boolean }): boolean {
+    this.registerCalls.push({ id, accelerator, consume: options?.consume })
+    this.callbacks.set(id, callback)
+    return true
+  }
+
+  unregister(id: string): void {
+    this.unregisterCalls.push(id)
+    this.callbacks.delete(id)
+  }
+
+  unregisterByPrefix(prefix: string): void {
+    for (const id of Array.from(this.callbacks.keys())) {
+      if (id.startsWith(prefix)) this.unregister(id)
+    }
+  }
+
+  trigger(id: string): void {
+    this.callbacks.get(id)?.()
+  }
+}
+
 function createPlugin(id: string, enabled = true, displayName = id): Plugin {
   return {
     id,
@@ -255,6 +282,62 @@ describe('plugin command shortcut manager', () => {
     const empty = manager.bind(toBindInput(commandB, '   '))
     assert.equal(empty.success, false)
     assert.equal(empty.state, 'invalid-shortcut')
+  })
+
+  it('binds plugin command shortcuts through InputHookService despite external occupation', async (t) => {
+    const tempDir = await mkdtemp(path.join(os.tmpdir(), 'mulby-cmd-shortcuts-'))
+    t.after(async () => {
+      await rm(tempDir, { recursive: true, force: true })
+    })
+
+    const shortcuts = new MockGlobalShortcut()
+    shortcuts.failOnRegister.add('Alt+Space')
+    const inputHook = new MockInputHook()
+    const plugins = new Map<string, Plugin>([
+      ['plugin.alpha', createPlugin('plugin.alpha', true, 'Alpha')]
+    ])
+    const command = createCommand({
+      pluginId: 'plugin.alpha',
+      pluginName: 'plugin.alpha',
+      pluginDisplayName: 'Alpha',
+      featureCode: 'feature.hook',
+      featureExplain: 'Hook',
+      cmdId: 'cmd-hook',
+      cmdSignature: 'keyword|hook',
+      displayLabel: 'hook'
+    })
+    const runCalls: Array<{ pluginId: string; featureCode: string }> = []
+
+    const manager = new PluginCommandShortcutManager(
+      {
+        listCommands: () => [command],
+        getPlugin: (pluginId: string) => plugins.get(pluginId),
+        runPluginCommand: async (pluginId, featureCode) => {
+          runCalls.push({ pluginId, featureCode })
+          return { success: true }
+        }
+      },
+      {
+        app: { getPath: () => tempDir },
+        globalShortcut: shortcuts,
+        inputHook
+      } as never
+    )
+
+    const bound = manager.bind(toBindInput(command, 'Alt+Space'))
+    assert.equal(bound.success, true)
+    assert.equal(bound.state, 'active')
+    assert.equal(inputHook.registerCalls.length, 1)
+    assert.equal(inputHook.registerCalls[0].accelerator, 'Alt+Space')
+    assert.equal(inputHook.registerCalls[0].consume, true)
+    assert.equal(shortcuts.registerCalls.includes('Alt+Space'), false)
+
+    inputHook.trigger(inputHook.registerCalls[0].id)
+    await flushMicrotasks()
+    assert.deepEqual(runCalls, [{ pluginId: 'plugin.alpha', featureCode: 'feature.hook' }])
+
+    assert.equal(manager.unbind(bound.binding!.id), true)
+    assert.deepEqual(inputHook.unregisterCalls, [inputHook.registerCalls[0].id])
   })
 
   it('returns expected bind states for missing, non-bindable, disabled, and missing-command cases', async (t) => {

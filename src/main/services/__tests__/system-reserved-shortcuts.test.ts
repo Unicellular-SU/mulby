@@ -4,11 +4,14 @@ import { detectSystemReservedShortcut } from '../system-reserved-shortcuts'
 
 describe('detectSystemReservedShortcut', () => {
   it('detects common Windows-reserved combinations', () => {
-    assert.equal(detectSystemReservedShortcut('Alt+Space', 'win32'), 'win-alt-space')
     assert.equal(detectSystemReservedShortcut('Alt+Tab', 'win32'), 'win-alt-tab')
     assert.equal(detectSystemReservedShortcut('Alt+Esc', 'win32'), 'win-alt-escape')
     assert.equal(detectSystemReservedShortcut('Alt+F4', 'win32'), 'win-alt-f4')
     assert.equal(detectSystemReservedShortcut('Ctrl+Escape', 'win32'), 'win-ctrl-escape')
+  })
+
+  it('allows Alt+Space so the low-level hook can take it over', () => {
+    assert.equal(detectSystemReservedShortcut('Alt+Space', 'win32'), null)
   })
 
   it('normalizes aliases before detection', () => {

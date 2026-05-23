@@ -5,7 +5,7 @@ type ShortcutStatus = ShortcutStatusMap[keyof ShortcutStatusMap]
 export function getShortcutStatusText(status?: ShortcutStatus): string {
   if (!status) return ''
   if (status.ok) {
-    return status.via === 'hook' ? '已通过底层监听接管，其他应用可能同时响应' : ''
+    return status.via === 'hook' ? '底层接管中' : ''
   }
   if (status.reason === 'duplicate') return '快捷键冲突'
   if (status.reason === 'system-reserved') return '系统保留快捷键'
