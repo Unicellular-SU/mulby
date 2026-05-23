@@ -15,6 +15,7 @@ import type {
   CommandRule,
   CustomSearchApiConfig,
   DoubleTapSettings,
+  FloatingBallSettings,
   LocalSearchEngineConfig,
   MouseTriggerSettings,
   TraySettings,
@@ -24,6 +25,7 @@ import type {
   SuperPanelSettings,
   SuperPanelTriggerSettings
 } from '../../shared/types/settings'
+import { normalizeFloatingBallSettings } from './floating-ball-utils'
 
 const SETTINGS_NAMESPACE = 'app'
 const SETTINGS_KEY = 'settings'
@@ -210,6 +212,15 @@ const DEFAULT_SETTINGS: AppSettings = {
     enabled: true,
     closeToTray: true,
     clickAction: 'toggleWindow'
+  },
+  floatingBall: {
+    enabled: false,
+    label: 'M',
+    size: 52,
+    opacity: 0.92,
+    snapToEdge: true,
+    longPressAction: 'captureRegion',
+    dropAction: 'openMatches'
   },
   onboardingCompleted: false,
   mcpServer: {
@@ -895,6 +906,10 @@ function mergeSettings(current: AppSettings, next: Partial<AppSettings>): AppSet
       ...current.tray,
       ...(next.tray || {})
     }),
+    floatingBall: normalizeFloatingBallSettings({
+      ...current.floatingBall,
+      ...(next.floatingBall || {})
+    } as Partial<FloatingBallSettings>),
     onboardingCompleted: next.onboardingCompleted ?? current.onboardingCompleted ?? false,
     mcpServer: normalizeMcpServerSettings({
       ...current.mcpServer,
@@ -917,7 +932,8 @@ function sanitizeShortcuts(settings: AppSettings): AppSettings {
     shortcuts: { ...settings.shortcuts },
     commandRunner: normalizeCommandRunnerSettings(settings.commandRunner),
     aiTooling: normalizeAiToolingSettings(settings.aiTooling),
-    tray: normalizeTraySettings(settings.tray)
+    tray: normalizeTraySettings(settings.tray),
+    floatingBall: normalizeFloatingBallSettings(settings.floatingBall)
   }
 
   if (next.shortcuts.openSettings === 'CommandOrControl+Comma') {

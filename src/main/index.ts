@@ -45,6 +45,7 @@ import { registerOpenClawHandlers } from './ipc/openclaw'
 import { createMcpServerManager, type McpServerManager } from './ai/mcp-server'
 import { registerMcpServerHandlers } from './ipc/mcp-server'
 import { SuperPanelManager } from './services/super-panel-manager'
+import { FloatingBallManager } from './services/floating-ball-manager'
 import { DeepLinkRouter } from './services/deep-link'
 import { PluginInstaller } from './plugin/installer'
 import { PluginStoreService } from './plugin/store-service'
@@ -115,6 +116,7 @@ let mcpServerManager: McpServerManager | null = null
 let _inputHookService: InputHookService | null = null
 let _openclawService: OpenClawNodeService | null = null
 let _superPanelManager: SuperPanelManager | null = null
+let _floatingBallManager: FloatingBallManager | null = null
 let deepLinkRouter: DeepLinkRouter | null = null
 let pendingDeepLinkUrl: string | null = null
 let lastDeepLinkTime: number = 0
@@ -410,6 +412,7 @@ function getShutdownResources(): ShutdownResources {
     mcpServerManager: mcpServerManager ?? undefined,
     openclawService: _openclawService ?? undefined,
     superPanelManager: _superPanelManager ?? undefined,
+    floatingBallManager: _floatingBallManager ?? undefined,
     inputHookService: _inputHookService ?? undefined,
     pluginWindowManager,
     systemPageWindowManager,
@@ -943,6 +946,22 @@ app.whenReady().then(async () => {
     ipcHooks.setOnSuperPanelChanged(() => {
       superPanelManager.enable() // enable() 内部会读取最新设置并自动处理启用/禁用
     })
+
+    const floatingBallManager = new FloatingBallManager({
+      settingsManager: appSettingsManager,
+      pluginManager,
+      getMainWindow: () => mainWindowManager.getWindow(),
+      showMainWindow,
+      toggleMainWindow: toggleWindow,
+      openFloatingBallSettings: () => openSettingsView('floatingBall'),
+      quitApp: quitMainProcess
+    })
+    _floatingBallManager = floatingBallManager
+    floatingBallManager.init()
+    ipcHooks.setOnFloatingBallChanged((settings) => {
+      floatingBallManager.applySettings(settings)
+    })
+    log.info('[FloatingBall] 管理器已初始化')
 
     // 绑定 plugin tools 变更监听器到注册中心
     pluginManager.setPluginToolsListener((event, pluginId, pluginName, tools) => {

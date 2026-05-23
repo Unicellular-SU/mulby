@@ -84,7 +84,12 @@ export function registerAllHandlers(
   actionMenuWindowManager: ActionMenuWindowManager,
   pluginToolRegistry?: PluginToolRegistry,
   refreshMacDockPresentation?: () => void
-): { warmupFeatureIconCache: () => void; setOnDisabledPluginToolsChanged: (fn: () => void) => void; setOnSuperPanelChanged: (fn: (settings: import('../../shared/types/settings').AppSettings) => void) => void } {
+): {
+  warmupFeatureIconCache: () => void
+  setOnDisabledPluginToolsChanged: (fn: () => void) => void
+  setOnSuperPanelChanged: (fn: (settings: import('../../shared/types/settings').AppSettings) => void) => void
+  setOnFloatingBallChanged: (fn: (settings: import('../../shared/types/settings').AppSettings) => void) => void
+} {
   registerClipboardHandlers()
   registerClipboardHistoryHandlers(clipboardHistoryManager)
   registerNotificationHandlers()
@@ -128,9 +133,13 @@ export function registerAllHandlers(
   registerInBrowserHandlers()
   registerSharpHandlers()
   registerFFmpegHandlers()
-  const settingsHooks: { onSuperPanelChanged?: (settings: import('../../shared/types/settings').AppSettings) => void } = {}
+  const settingsHooks: {
+    onSuperPanelChanged?: (settings: import('../../shared/types/settings').AppSettings) => void
+    onFloatingBallChanged?: (settings: import('../../shared/types/settings').AppSettings) => void
+  } = {}
   registerSettingsHandlers(appSettingsManager, appShortcutManager, pluginManager, {
-    onSuperPanelChanged: (settings) => settingsHooks.onSuperPanelChanged?.(settings)
+    onSuperPanelChanged: (settings) => settingsHooks.onSuperPanelChanged?.(settings),
+    onFloatingBallChanged: (settings) => settingsHooks.onFloatingBallChanged?.(settings)
   })
   registerDeveloperHandlers(pluginManager)
   registerSchedulerHandlers(pluginManager)
@@ -152,6 +161,9 @@ export function registerAllHandlers(
     },
     setOnSuperPanelChanged: (fn: (settings: import('../../shared/types/settings').AppSettings) => void) => {
       settingsHooks.onSuperPanelChanged = fn
+    },
+    setOnFloatingBallChanged: (fn: (settings: import('../../shared/types/settings').AppSettings) => void) => {
+      settingsHooks.onFloatingBallChanged = fn
     }
   }
 }

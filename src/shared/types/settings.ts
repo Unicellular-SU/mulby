@@ -377,6 +377,34 @@ export interface TraySettings {
   clickAction: TrayClickAction
 }
 
+// ==================== 悬浮球设置 ====================
+
+export interface FloatingBallPosition {
+  x: number
+  y: number
+  displayId?: number
+}
+
+export interface FloatingBallCommandTarget {
+  pluginId: string
+  featureCode: string
+}
+
+export type FloatingBallLongPressAction = 'captureRegion'
+export type FloatingBallDropAction = 'openMatches'
+
+export interface FloatingBallSettings {
+  enabled: boolean
+  position?: FloatingBallPosition
+  label: string
+  size: number
+  opacity: number
+  snapToEdge: boolean
+  doubleClickCommand?: FloatingBallCommandTarget
+  longPressAction: FloatingBallLongPressAction
+  dropAction: FloatingBallDropAction
+}
+
 // ==================== 超级面板设置 ====================
 
 /** 超级面板触发方式 */
@@ -429,6 +457,7 @@ export interface AppSettings {
   search: SearchSettings
   input: InputSettings
   tray: TraySettings
+  floatingBall: FloatingBallSettings
   onboardingCompleted?: boolean
   mcpServer: McpServerSettings
   openclaw: OpenClawSettings

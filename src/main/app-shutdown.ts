@@ -13,6 +13,7 @@ export interface ShutdownResources {
   mcpServerManager?: { cleanup(): Promise<void> }
   openclawService?: { destroy(): void }
   superPanelManager?: { destroy(): void }
+  floatingBallManager?: { destroy(): void }
   inputHookService?: { destroy(): void }
   pluginWindowManager?: { closeAll(): void }
   systemPageWindowManager?: { closeAll(): void }

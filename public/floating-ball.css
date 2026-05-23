@@ -1,0 +1,149 @@
+* {
+  box-sizing: border-box;
+}
+
+:root {
+  --floating-ball-size: 52px;
+  --floating-ball-shadow-padding: 16px;
+}
+
+html,
+body {
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  overflow: hidden;
+  background: transparent;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+body {
+  display: grid;
+  place-items: center;
+  padding: var(--floating-ball-shadow-padding);
+}
+
+.floating-ball {
+  position: relative;
+  width: var(--floating-ball-size);
+  height: var(--floating-ball-size);
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  cursor: pointer;
+  transform: scale(1);
+  transition: transform 140ms ease, opacity 140ms ease;
+}
+
+.floating-ball::before {
+  content: "";
+  position: absolute;
+  inset: 2px;
+  border-radius: inherit;
+  box-shadow:
+    0 8px 18px rgba(15, 23, 42, 0.28),
+    0 2px 7px rgba(15, 23, 42, 0.18);
+  pointer-events: none;
+}
+
+.floating-ball:active,
+.floating-ball.is-pressing {
+  transform: scale(0.94);
+}
+
+.floating-ball.is-dragging {
+  transform: scale(1);
+  opacity: 0.82;
+  transition: none;
+}
+
+.floating-ring {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background:
+    conic-gradient(from 220deg, #16a34a, #0ea5e9, #7c3aed, #ec4899, #f59e0b, #16a34a);
+  opacity: 0.94;
+  animation: ring-spin 5s linear infinite paused;
+}
+
+.floating-ball:hover .floating-ring,
+.floating-ball.is-dragging .floating-ring,
+.floating-ball.is-file-hover .floating-ring,
+.floating-ball.is-busy .floating-ring {
+  animation-play-state: running;
+}
+
+.floating-inner {
+  position: absolute;
+  inset: 4px;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  border-radius: inherit;
+  background:
+    radial-gradient(circle at 30% 20%, rgba(255, 255, 255, 0.82), rgba(255, 255, 255, 0.16) 36%, rgba(15, 23, 42, 0.68) 100%);
+  border: 1px solid rgba(255, 255, 255, 0.34);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.5),
+    inset 0 -10px 22px rgba(15, 23, 42, 0.18);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+}
+
+.floating-label {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-size: min(calc(var(--floating-ball-size) * 0.5), 26px);
+  font-weight: 800;
+  line-height: 1;
+  color: #ffffff;
+  text-shadow: 0 1px 8px rgba(15, 23, 42, 0.45);
+  pointer-events: none;
+}
+
+.floating-status {
+  position: absolute;
+  right: 5px;
+  bottom: 5px;
+  width: 11px;
+  height: 11px;
+  border-radius: 999px;
+  border: 2px solid rgba(255, 255, 255, 0.9);
+  background: #64748b;
+  opacity: 0;
+  transform: scale(0.8);
+  transition: opacity 120ms ease, transform 120ms ease, background 120ms ease;
+}
+
+.floating-ball.is-file-hover .floating-inner {
+  background:
+    radial-gradient(circle at 30% 20%, rgba(255, 255, 255, 0.9), rgba(14, 165, 233, 0.28) 36%, rgba(30, 64, 175, 0.72) 100%);
+}
+
+.floating-ball.is-busy .floating-status,
+.floating-ball.is-success .floating-status,
+.floating-ball.is-error .floating-status {
+  opacity: 1;
+  transform: scale(1);
+}
+
+.floating-ball.is-busy .floating-status {
+  background: #38bdf8;
+}
+
+.floating-ball.is-success .floating-status {
+  background: #22c55e;
+}
+
+.floating-ball.is-error .floating-status {
+  background: #ef4444;
+}
+
+@keyframes ring-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}

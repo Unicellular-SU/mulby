@@ -361,6 +361,11 @@ let cachedCaptureResult: RegionCaptureResult | null = null
 let cachedCaptureTime = 0
 const CAPTURE_CACHE_TTL = 3000 // 3 秒内的第二次调用直接返回缓存
 
+function clearCachedRegionCaptureResult(): void {
+  cachedCaptureResult = null
+  cachedCaptureTime = 0
+}
+
 function toCaptureDisplayInfo(display: Electron.Display): RegionCaptureResult['display'] {
   return {
     id: display.id,
@@ -392,6 +397,7 @@ export async function startRegionCapture(): Promise<string | null> {
   }
 
   const result = await startRegionCaptureDetailed()
+  clearCachedRegionCaptureResult()
   return result?.dataUrl ?? null
 }
 

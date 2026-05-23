@@ -114,6 +114,15 @@ export default defineConfig({
         }
       },
       {
+        entry: 'src/preload/floating-ball.ts',
+        vite: {
+          define: buildDefines,
+          build: {
+            outDir: 'dist/preload'
+          }
+        }
+      },
+      {
         entry: 'src/preload/web-parser.ts',
         vite: {
           define: buildDefines,

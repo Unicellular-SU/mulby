@@ -15,6 +15,7 @@ import PermissionsSection from './settings/sections/PermissionsSection'
 import AboutSection from './settings/sections/AboutSection'
 import SecuritySection from './settings/sections/SecuritySection'
 import SuperPanelSection from './settings/sections/SuperPanelSection'
+import FloatingBallSection from './settings/sections/FloatingBallSection'
 import DeveloperSection from './settings/sections/DeveloperSection'
 import OpenClawSection from './settings/sections/OpenClawSection'
 import type { SettingsViewProps } from './settings/types'
@@ -428,6 +429,14 @@ export default function SettingsView({
                       }
                     })
                   }}
+                  cardClass={cardClass}
+                />
+              )}
+
+              {section === 'floatingBall' && settings && (
+                <FloatingBallSection
+                  settings={settings}
+                  updateSettings={updateSettings}
                   cardClass={cardClass}
                 />
               )}

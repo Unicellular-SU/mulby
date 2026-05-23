@@ -1,6 +1,7 @@
 export type SettingsSection =
   | 'dashboard'
   | 'general'
+  | 'floatingBall'
   | 'superPanel'
   | 'commandQuickLaunch'
   | 'commandAll'

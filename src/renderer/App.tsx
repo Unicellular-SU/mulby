@@ -94,6 +94,7 @@ async function resolveDroppedFilePath(file: DroppedFile): Promise<string> {
 const SETTINGS_SECTION_SET = new Set<SettingsSection>([
   'dashboard',
   'general',
+  'floatingBall',
   'commandQuickLaunch',
   'commandAll',
   'permissions',

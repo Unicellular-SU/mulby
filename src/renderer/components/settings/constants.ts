@@ -4,6 +4,7 @@ import type { SettingsSection } from './types'
 export const SECTION_ITEMS: { id: SettingsSection; label: string }[] = [
   { id: 'dashboard', label: '控制中心' },
   { id: 'general', label: '通用' },
+  { id: 'floatingBall', label: '悬浮球' },
   { id: 'superPanel', label: '超级面板' },
   { id: 'commandQuickLaunch', label: '快捷启动' },
   { id: 'commandAll', label: '全部指令' },

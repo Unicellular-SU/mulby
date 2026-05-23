@@ -37,6 +37,8 @@ export function registerSettingsHandlers(
   options?: {
     /** 超级面板设置变更时回调 */
     onSuperPanelChanged?: (settings: AppSettings) => void
+    /** 悬浮球设置变更时回调 */
+    onFloatingBallChanged?: (settings: AppSettings) => void
   }
 ) {
   setLoggerMinLevel(settingsManager.getSettings().developer.logLevel)
@@ -54,6 +56,7 @@ export function registerSettingsHandlers(
     const hasMouseTrigger = Boolean(partial && typeof partial === 'object' && 'mouseTrigger' in partial)
     const hasDoubleTap = Boolean(partial && typeof partial === 'object' && 'doubleTap' in partial)
     const hasSuperPanel = Boolean(partial && typeof partial === 'object' && 'superPanel' in partial)
+    const hasFloatingBall = Boolean(partial && typeof partial === 'object' && 'floatingBall' in partial)
     const next = settingsManager.updateSettings(partial || {})
     setLoggerMinLevel(next.developer.logLevel)
 
@@ -88,6 +91,10 @@ export function registerSettingsHandlers(
       options?.onSuperPanelChanged?.(next)
     }
 
+    if (hasFloatingBall) {
+      options?.onFloatingBallChanged?.(next)
+    }
+
     return { settings: next, shortcutStatus }
   })
 
@@ -100,6 +107,7 @@ export function registerSettingsHandlers(
     shortcutManager.applyMouseTrigger(next.mouseTrigger)
     shortcutManager.applyDoubleTap(next.doubleTap)
     options?.onSuperPanelChanged?.(next)
+    options?.onFloatingBallChanged?.(next)
     return { settings: next, shortcutStatus }
   })
 
