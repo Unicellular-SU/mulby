@@ -30,7 +30,8 @@ import {
   PluginCommandShortcutValidationResult,
   PluginFeature,
   PluginLaunchMode,
-  PluginLaunchOnStartupState
+  PluginLaunchOnStartupState,
+  PluginRunResult
 } from '../../shared/types/plugin'
 import { PluginSearchWorker } from './search-worker-manager'
 import { getEmptyQuerySearchResults } from './empty-query-search'
@@ -744,7 +745,7 @@ export class PluginManager {
     return this.commandShortcutManager.validateAccelerator(accelerator, bindingId)
   }
 
-  async runCommand(input: PluginCommandRunInput): Promise<{ success: boolean; hasUI?: boolean; error?: string }> {
+  async runCommand(input: PluginCommandRunInput): Promise<PluginRunResult> {
     const command = this.resolveCommandItem(input.pluginId, input.featureCode, input.cmdId, input.cmdSignature)
     if (!command) {
       return { success: false, error: '指令不存在' }
@@ -964,7 +965,7 @@ export class PluginManager {
     input?: string | InputPayload,
     launchStart?: number,
     options: PluginRunOptions = {}
-  ): Promise<{ success: boolean; hasUI?: boolean; error?: string }> {
+  ): Promise<PluginRunResult> {
     const plugin = this.resolve(name)
     if (!plugin) {
       return { success: false, error: 'Plugin not found' }
@@ -1177,7 +1178,7 @@ export class PluginManager {
           launchRequestId = null
           this.stateManager.recordRecentUsage(plugin.id, featureCode)
           schedulePostOnLoadIdle(PluginManager.UI_IDLE_LOAD_DELAY_MS)
-          return { success: true, hasUI: true }
+          return { success: true, hasUI: true, uiMode: 'attached' }
         }
 
         // onLoad 已完成，使用最终 feature metadata 创建 panel，避免旧 route/mainHide/mode 竞态。
@@ -1194,7 +1195,7 @@ export class PluginManager {
           launchRequestId = null
           schedulePostOnLoadIdle(PluginManager.DEFAULT_IDLE_LOAD_DELAY_MS)
         }
-        return { success, hasUI: true }
+        return { success, hasUI: true, uiMode: 'attached' }
       }
 
       // Optimization 3: onLoad 内部已调用 initPlugin，跳过冗余 hostInit
@@ -1212,7 +1213,7 @@ export class PluginManager {
       if (this.tryRestoreDetachedResident(pluginId, featureCode, resolvedInput, route)) {
         this.stateManager.recordRecentUsage(plugin.id, featureCode)
         schedulePostOnLoadIdle(PluginManager.UI_IDLE_LOAD_DELAY_MS)
-        return { success: true, hasUI: true }
+        return { success: true, hasUI: true, uiMode: 'detached' }
       }
 
       const shouldEvictResidentForDetached =
@@ -1228,7 +1229,7 @@ export class PluginManager {
       } else {
         schedulePostOnLoadIdle(PluginManager.DEFAULT_IDLE_LOAD_DELAY_MS)
       }
-      return { success: detachedSuccess, hasUI: true }
+      return { success: detachedSuccess, hasUI: true, uiMode: 'detached' }
     }
 
     // 无 UI 插件，使用 UtilityProcess 或 VM2 执行

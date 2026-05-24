@@ -339,7 +339,6 @@ export class FloatingBallManager {
 
   private async executeCommandAction(target: FloatingBallCommandTarget): Promise<void> {
     this.setStatus('busy', target.commandLabel ? `正在打开 ${target.commandLabel}` : '正在打开指令')
-    this.options.showMainWindow({ skipAutoPaste: true })
     try {
       const result = target.cmdId && target.cmdSignature
         ? await this.options.pluginManager.runCommand({
@@ -354,6 +353,9 @@ export class FloatingBallManager {
         this.setStatus('error', result.error || '指令执行失败')
         notify(result.error || '指令执行失败')
         return
+      }
+      if (result.uiMode === 'attached') {
+        this.options.showMainWindow({ skipAutoPaste: true })
       }
       this.setStatus('success', '已打开')
     } catch (error) {

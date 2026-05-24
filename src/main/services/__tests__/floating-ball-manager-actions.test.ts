@@ -61,4 +61,22 @@ describe('floating ball action execution', () => {
       'legacy command actions should fall back to pluginManager.run'
     )
   })
+
+  it('only shows the host search window after command actions resolve to attached UI', () => {
+    const source = readFileSync(floatingBallManagerSourcePath, 'utf8')
+    const match = source.match(/private async executeCommandAction\(target: FloatingBallCommandTarget\): Promise<void> \{([\s\S]*?)\n {2}\}/)
+    assert.ok(match, 'executeCommandAction should exist')
+    const body = match[1]
+
+    const firstShowIndex = body.indexOf('this.options.showMainWindow({ skipAutoPaste: true })')
+    const runResultIndex = body.indexOf('const result = target.cmdId && target.cmdSignature')
+    assert.ok(firstShowIndex !== -1, 'attached command actions should still show the host search window')
+    assert.ok(runResultIndex !== -1, 'command actions should execute the plugin command')
+    assert.ok(firstShowIndex > runResultIndex, 'the host window must not be shown before the plugin run decides the UI mode')
+    assert.match(
+      body,
+      /result\.uiMode === 'attached'[\s\S]*this\.options\.showMainWindow\(\{ skipAutoPaste: true \}\)/,
+      'only attached plugin UI launches should show the host search window'
+    )
+  })
 })

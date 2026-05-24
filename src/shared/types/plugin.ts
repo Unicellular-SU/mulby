@@ -265,6 +265,13 @@ export interface PluginCommandRunInput {
   input?: string | InputPayload
 }
 
+export interface PluginRunResult {
+  success: boolean
+  hasUI?: boolean
+  uiMode?: 'attached' | 'detached'
+  error?: string
+}
+
 export interface PluginCommandDisabledToggleInput {
   pluginId: string
   featureCode: string
