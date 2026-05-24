@@ -63,4 +63,31 @@ describe('detached window size pinning', () => {
       'promoted detached titlebar windows must keep the same plugin-content resize handles'
     )
   })
+
+  it('clears attached panel surface padding before promoting plugin content to a detached window', () => {
+    const panelWindowSource = readFileSync(panelWindowSourcePath, 'utf8')
+    const windowSurfaceSource = readFileSync(windowSurfaceSourcePath, 'utf8')
+    const readyToShowStart = panelWindowSource.indexOf("independentWindow.once('ready-to-show'")
+    const didFinishLoadStart = panelWindowSource.indexOf("pluginWebContents.on('did-finish-load'", readyToShowStart)
+    const readyToShowHandler = readyToShowStart >= 0 && didFinishLoadStart > readyToShowStart
+      ? panelWindowSource.slice(readyToShowStart, didFinishLoadStart)
+      : ''
+
+    assert.match(
+      windowSurfaceSource,
+      /export async function clearWindowsFramelessSurfaceFromWebContents/,
+      'window surface module must expose a cleanup helper for reused plugin WebContents'
+    )
+    assert.match(
+      panelWindowSource,
+      /clearWindowsFramelessSurfaceFromWebContents/,
+      'promoted panel windows must call the cleanup helper'
+    )
+    assert.ok(readyToShowHandler, 'promoted detached window ready-to-show handler must exist')
+    assert.match(
+      readyToShowHandler,
+      /await clearWindowsFramelessSurfaceFromWebContents\(pluginWebContents\)[\s\S]*applyWindowResizeHandlesToWebContents\(pluginWebContents,/,
+      'promoted plugin content must clear attached panel padding before detached resize handles are injected'
+    )
+  })
 })

@@ -444,6 +444,53 @@ ${buildWindowResizeScript(resizeMode)}
 `
 }
 
+function buildWindowSurfaceCleanupCss(): string {
+  return `
+html,
+body {
+  width: 100% !important;
+  height: 100% !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  background: transparent !important;
+  overflow: hidden !important;
+  border-radius: 0 !important;
+}
+
+body {
+  box-sizing: border-box !important;
+  position: relative !important;
+}
+
+#mulby-window-surface-shadow {
+  display: none !important;
+}
+`
+}
+
+function buildWindowSurfaceCleanupScript(): string {
+  return `
+(() => {
+  const body = document.body
+  if (!body) return
+
+  const shadow = document.getElementById('mulby-window-surface-shadow')
+  if (shadow) shadow.remove()
+
+  const host = document.getElementById('mulby-window-content-host')
+  if (host) {
+    while (host.firstChild) {
+      body.insertBefore(host.firstChild, host)
+    }
+    host.remove()
+  }
+
+  const resizeLayer = document.getElementById('mulby-window-resize-layer')
+  if (resizeLayer) resizeLayer.remove()
+})();
+`
+}
+
 export async function applyWindowsFramelessSurface(
   win: BrowserWindow,
   options: ApplyWindowSurfaceOptions = {}
@@ -467,6 +514,16 @@ export async function applyWindowsFramelessSurfaceToWebContents(
   await webContents.insertCSS(buildWindowSurfaceCss(includeTitleBar, contentBackground))
   await webContents.insertCSS(buildWindowResizeCss(resizeMode))
   await webContents.executeJavaScript(buildWindowSurfaceScript(includeTitleBar, resizeMode))
+}
+
+export async function clearWindowsFramelessSurfaceFromWebContents(
+  webContents: WebContents
+): Promise<void> {
+  if (!shouldUseWindowsFramelessSurface()) return
+  if (webContents.isDestroyed()) return
+
+  await webContents.insertCSS(buildWindowSurfaceCleanupCss())
+  await webContents.executeJavaScript(buildWindowSurfaceCleanupScript())
 }
 
 export async function applyWindowResizeHandlesToWebContents(

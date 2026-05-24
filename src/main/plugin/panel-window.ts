@@ -22,6 +22,7 @@ import {
     getWindowsFramelessSurfaceInsets,
     getWindowsFramelessSurfaceVisibleBounds,
     getWindowsFramelessSurfaceWindowBounds,
+    clearWindowsFramelessSurfaceFromWebContents,
     shouldUseWindowsFramelessSurface
 } from '../services/window-surface'
 import {
@@ -1050,6 +1051,8 @@ export class PluginPanelWindow {
                     resizeMode: showTitleBar ? 'none' : 'all'
                 })
                 if (independentWindow.isDestroyed()) return
+                await clearWindowsFramelessSurfaceFromWebContents(pluginWebContents)
+                if (independentWindow.isDestroyed() || pluginWebContents.isDestroyed()) return
             }
             if (isResizable) {
                 await applyWindowResizeHandlesToWebContents(pluginWebContents, {
