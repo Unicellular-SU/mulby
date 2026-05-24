@@ -555,38 +555,46 @@ export class FloatingBallManager {
     if (!this.window || this.window.isDestroyed()) return
     const mainWindow = this.options.getMainWindow()
     const mainVisible = Boolean(mainWindow && !mainWindow.isDestroyed() && mainWindow.isVisible())
+    let pendingMenuAction: (() => void) | null = null
+    const runAfterMenuClosed = (action: () => void) => {
+      pendingMenuAction = action
+    }
     const menu = Menu.buildFromTemplate([
       {
         label: mainVisible ? '隐藏 Mulby' : '显示 Mulby',
-        click: () => this.handleClick()
+        click: () => runAfterMenuClosed(() => this.handleClick())
       },
       {
         label: '投递剪贴板',
-        click: () => this.handleClipboardDelivery()
+        click: () => runAfterMenuClosed(() => this.handleClipboardDelivery())
       },
       {
         label: '区域截图投递',
-        click: () => void this.handleRegionCapture()
+        click: () => runAfterMenuClosed(() => void this.handleRegionCapture())
       },
       { type: 'separator' },
       {
         label: '悬浮球设置',
-        click: () => this.options.openFloatingBallSettings()
+        click: () => runAfterMenuClosed(() => this.options.openFloatingBallSettings())
       },
       {
         label: '隐藏悬浮球',
-        click: () => this.persistSettings({ enabled: false })
+        click: () => runAfterMenuClosed(() => this.persistSettings({ enabled: false }))
       },
       { type: 'separator' },
       {
         label: '退出 Mulby',
-        click: () => this.options.quitApp()
+        click: () => runAfterMenuClosed(() => this.options.quitApp())
       }
     ])
-    this.popupNativeContextMenu(menu)
+    this.popupNativeContextMenu(menu, () => {
+      const action = pendingMenuAction
+      pendingMenuAction = null
+      return action
+    })
   }
 
-  private popupNativeContextMenu(menu: Menu): void {
+  private popupNativeContextMenu(menu: Menu, consumePendingMenuAction?: () => (() => void) | null): void {
     const win = this.window
     if (!win || win.isDestroyed()) return
 
@@ -612,10 +620,17 @@ export class FloatingBallManager {
         log.warn('[FloatingBall] Failed to restore floating ball menu window chrome:', error)
       }
     }
+    const completeMenu = () => {
+      const action = consumePendingMenuAction?.() ?? null
+      restoreMenuWindowChrome()
+      if (action) {
+        setTimeout(action, 0)
+      }
+    }
 
     keepFloatingBallOutOfTaskbar()
     if (process.platform !== 'win32') {
-      menu.popup({ window: win, callback: restoreMenuWindowChrome })
+      menu.popup({ window: win, callback: completeMenu })
       return
     }
 
@@ -627,7 +642,7 @@ export class FloatingBallManager {
       keepFloatingBallOutOfTaskbar()
       menu.popup({
         window: win,
-        callback: restoreMenuWindowChrome
+        callback: completeMenu
       })
     } catch (error) {
       restoreMenuWindowChrome()

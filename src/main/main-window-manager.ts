@@ -32,6 +32,8 @@ export const MW_DEFAULT_WIDTH = 800
 export const MW_EXPANDED_HEIGHT_THRESHOLD = 100
 export const MW_DEFAULT_Y_RATIO = 1 / 5
 export const MW_OPACITY_RESTORE_DELAY_MS = 50
+export const MW_POST_SHOW_FOCUS_RETRY_MS = 80
+export const MW_POST_SHOW_FOCUS_VERIFY_MS = 180
 
 const SHADOW_HTML = `<!doctype html>
 <html>
@@ -137,9 +139,12 @@ export class MainWindowManager {
   private window: BrowserWindow | null = null
   private shadowWindow: BrowserWindow | null = null
   private blurHideTimer: NodeJS.Timeout | null = null
+  private blurSuppressionFlushTimer: NodeJS.Timeout | null = null
+  private postShowFocusRetryTimer: NodeJS.Timeout | null = null
   private stateSaveTimer: NodeJS.Timeout | null = null
   private suppressBlurHideUntil = 0
   private suppressActivationRoutingUntil = 0
+  private pendingBlurHideAfterSuppression = false
   private lastToggleAt = 0
   private hasBeenShown = false
   private deferShadowShow = false
@@ -162,6 +167,18 @@ export class MainWindowManager {
     this.blurHideTimer = null
   }
 
+  private clearBlurSuppressionFlushTimer(): void {
+    if (!this.blurSuppressionFlushTimer) return
+    clearTimeout(this.blurSuppressionFlushTimer)
+    this.blurSuppressionFlushTimer = null
+  }
+
+  private clearPostShowFocusRetryTimer(): void {
+    if (!this.postShowFocusRetryTimer) return
+    clearTimeout(this.postShowFocusRetryTimer)
+    this.postShowFocusRetryTimer = null
+  }
+
   private clearStateSaveTimer(): void {
     if (!this.stateSaveTimer) return
     clearTimeout(this.stateSaveTimer)
@@ -174,6 +191,12 @@ export class MainWindowManager {
 
   private extendBlurHideSuppression(durationMs: number): void {
     this.suppressBlurHideUntil = Math.max(this.suppressBlurHideUntil, Date.now() + durationMs)
+  }
+
+  private getBlurSuppressionFlushDelay(): number {
+    const suppressionDelay = Math.max(0, this.suppressBlurHideUntil - Date.now())
+    const ignoringBlurDelay = isIgnoringBlur() ? 120 : 0
+    return Math.max(MW_BLUR_HIDE_DELAY_MS, suppressionDelay + MW_BLUR_HIDE_DELAY_MS, ignoringBlurDelay)
   }
 
   suppressActivationRouting(durationMs: number): void {
@@ -197,6 +220,64 @@ export class MainWindowManager {
     const systemPageAttached = this.deps?.systemPageWindowManager.getAttachedWindow()
     if (systemPageAttached && !systemPageAttached.isDestroyed() && systemPageAttached.isFocused()) return true
     return false
+  }
+
+  private hideIfMainSurfaceUnfocused(): void {
+    if (isIgnoringBlur() || this.shouldSuppressBlurHide()) {
+      this.deferBlurHideUntilSuppressionEnds()
+      return
+    }
+    if (this.isMainSurfaceFocused()) return
+    this.hide()
+  }
+
+  private scheduleBlurHideCheck(): void {
+    this.clearBlurHideTimer()
+    this.blurHideTimer = setTimeout(() => {
+      this.blurHideTimer = null
+      this.hideIfMainSurfaceUnfocused()
+    }, MW_BLUR_HIDE_DELAY_MS)
+  }
+
+  private deferBlurHideUntilSuppressionEnds(): void {
+    this.pendingBlurHideAfterSuppression = true
+    this.clearBlurSuppressionFlushTimer()
+    this.blurSuppressionFlushTimer = setTimeout(() => {
+      this.blurSuppressionFlushTimer = null
+      if (isIgnoringBlur() || this.shouldSuppressBlurHide()) {
+        this.deferBlurHideUntilSuppressionEnds()
+        return
+      }
+      if (!this.pendingBlurHideAfterSuppression) return
+      this.pendingBlurHideAfterSuppression = false
+      this.scheduleBlurHideCheck()
+    }, this.getBlurSuppressionFlushDelay())
+  }
+
+  private schedulePostShowFocusRetry(): void {
+    this.clearPostShowFocusRetryTimer()
+    this.postShowFocusRetryTimer = setTimeout(() => {
+      this.postShowFocusRetryTimer = null
+      if (!isWindowAvailable(this.window) || !this.window.isVisible()) return
+      if (this.isMainSurfaceFocused()) return
+
+      try {
+        if (this.window.isMinimized()) this.window.restore()
+        this.window.show()
+        this.window.focus()
+        this.window.webContents.focus()
+      } catch (error) {
+        log.warn('[MainWindow] Failed to retry focus after show:', error)
+        return
+      }
+
+      this.postShowFocusRetryTimer = setTimeout(() => {
+        this.postShowFocusRetryTimer = null
+        if (!isWindowAvailable(this.window) || !this.window.isVisible()) return
+        if (this.isMainSurfaceFocused()) return
+        log.warn('[MainWindow] Main window is visible but not focused after show retry')
+      }, MW_POST_SHOW_FOCUS_VERIFY_MS)
+    }, MW_POST_SHOW_FOCUS_RETRY_MS)
   }
 
   // ── Persistence ────────────────────────────────────────────────
@@ -427,8 +508,11 @@ export class MainWindowManager {
 
     win.on('closed', () => {
       this.clearBlurHideTimer()
+      this.clearBlurSuppressionFlushTimer()
+      this.clearPostShowFocusRetryTimer()
       this.clearStateSaveTimer()
       this.closeShadow()
+      this.pendingBlurHideAfterSuppression = false
       this.window = null
     })
 
@@ -441,18 +525,11 @@ export class MainWindowManager {
     })
 
     win.on('blur', () => {
-      if (isIgnoringBlur() || this.shouldSuppressBlurHide()) return
-      this.clearBlurHideTimer()
-      this.blurHideTimer = setTimeout(() => {
-        this.blurHideTimer = null
-        if (isIgnoringBlur() || this.shouldSuppressBlurHide()) return
-        if (this.window && !this.window.isDestroyed() && this.window.isFocused()) return
-        const panelWin = this.deps?.pluginWindowManager.getPanelWindow()?.getWindow()
-        if (panelWin && panelWin.isFocused()) return
-        const systemPageAttached = this.deps?.systemPageWindowManager.getAttachedWindow()
-        if (systemPageAttached && systemPageAttached.isFocused()) return
-        this.hide()
-      }, MW_BLUR_HIDE_DELAY_MS)
+      if (isIgnoringBlur() || this.shouldSuppressBlurHide()) {
+        this.deferBlurHideUntilSuppressionEnds()
+        return
+      }
+      this.scheduleBlurHideCheck()
     })
 
     win.on('focus', () => {
@@ -497,6 +574,9 @@ export class MainWindowManager {
   show(options?: { skipAutoPaste?: boolean }): void {
     if (!isWindowAvailable(this.window)) return
     this.clearBlurHideTimer()
+    this.clearBlurSuppressionFlushTimer()
+    this.clearPostShowFocusRetryTimer()
+    this.pendingBlurHideAfterSuppression = false
     this.deps?.getTrayMenuManager()?.hide()
     const hasDetachedAppSurface = this.hasDetachedAppSurface()
     if (process.platform === 'darwin' && hasDetachedAppSurface) {
@@ -601,6 +681,7 @@ export class MainWindowManager {
       this.window.webContents.send('app:mainWindowShow', {
         autoPasteScheduled: shouldAutoPaste
       })
+      this.schedulePostShowFocusRetry()
 
       if (shouldAutoPaste && autoPastePayload) {
         this.window.webContents.send('clipboard:autoPaste', autoPastePayload)
@@ -618,12 +699,18 @@ export class MainWindowManager {
   hide(): void {
     if (!isWindowAvailable(this.window)) {
       this.clearBlurHideTimer()
+      this.clearBlurSuppressionFlushTimer()
+      this.clearPostShowFocusRetryTimer()
       this.closeShadow()
+      this.pendingBlurHideAfterSuppression = false
       this.window = null
       return
     }
 
     this.clearBlurHideTimer()
+    this.clearBlurSuppressionFlushTimer()
+    this.clearPostShowFocusRetryTimer()
+    this.pendingBlurHideAfterSuppression = false
     this.deps?.getTrayMenuManager()?.hide()
     this.deps?.pluginWindowManager.hidePanelWindow()
     this.deps?.systemPageWindowManager.hideAttached()
