@@ -2,8 +2,15 @@ import { BrowserWindow, Menu, Notification, app, ipcMain, screen } from 'electro
 import { existsSync, statSync } from 'node:fs'
 import { basename, extname, join } from 'node:path'
 import log from 'electron-log'
-import type { AppSettings, FloatingBallPosition, FloatingBallSettings } from '../../shared/types/settings'
+import type {
+  AppSettings,
+  FloatingBallCommandTarget,
+  FloatingBallGesture,
+  FloatingBallPosition,
+  FloatingBallSettings
+} from '../../shared/types/settings'
 import type { AutoPasteClipboardPayload, FileInfo } from '../../shared/types/electron'
+import type { InputPayload } from '../../shared/types/plugin'
 import type { AppSettingsManager } from './app-settings'
 import type { PluginManager } from '../plugin'
 import { PluginInstaller } from '../plugin/installer'
@@ -45,6 +52,7 @@ interface FloatingBallRendererState {
 
 const FLOATING_BALL_STATUS_RESET_MS = 1400
 const FLOATING_BALL_PAYLOAD_DELAY_MS = 120
+const EMPTY_ACTION_PAYLOAD: InputPayload = { text: '', attachments: [] }
 
 function dataUrlToPngBuffer(dataUrl: string): Buffer | null {
   const match = /^data:image\/[a-z0-9.+-]+;base64,(.+)$/i.exec(dataUrl)
@@ -125,7 +133,7 @@ export class FloatingBallManager {
     ipcMain.handle('floating-ball:getState', () => this.buildRendererState())
     ipcMain.on('floating-ball:click', () => this.handleClick())
     ipcMain.on('floating-ball:doubleClick', () => void this.handleDoubleClick())
-    ipcMain.on('floating-ball:longPress', () => void this.handleRegionCapture())
+    ipcMain.on('floating-ball:longPress', () => void this.executeFloatingBallAction('longPress'))
     ipcMain.on('floating-ball:contextMenu', () => this.showContextMenu())
     ipcMain.on('floating-ball:dragStart', (_event, point: { screenX: number; screenY: number }) => this.handleDragStart(point))
     ipcMain.on('floating-ball:dragging', (_event, point: { screenX: number; screenY: number }) => this.handleDragging(point))
@@ -297,20 +305,51 @@ export class FloatingBallManager {
   }
 
   private handleClick(): void {
-    this.options.toggleMainWindow()
+    void this.executeFloatingBallAction('click')
   }
 
   private async handleDoubleClick(): Promise<void> {
-    const target = this.settings.doubleClickCommand
-    if (!target) {
-      this.handleClick()
+    await this.executeFloatingBallAction('doubleClick')
+  }
+
+  private async executeFloatingBallAction(gesture: FloatingBallGesture): Promise<void> {
+    const binding = this.settings.actions[gesture]
+    if (binding.type === 'inheritClick') {
+      if (gesture === 'click') {
+        this.options.toggleMainWindow()
+        return
+      }
+      await this.executeFloatingBallAction('click')
       return
     }
 
-    this.setStatus('busy', '正在打开指令')
+    if (binding.type === 'builtin') {
+      if (binding.action === 'toggleMulby') {
+        this.options.toggleMainWindow()
+        return
+      }
+      if (binding.action === 'captureRegion') {
+        await this.handleRegionCapture()
+      }
+      return
+    }
+
+    await this.executeCommandAction(binding.target)
+  }
+
+  private async executeCommandAction(target: FloatingBallCommandTarget): Promise<void> {
+    this.setStatus('busy', target.commandLabel ? `正在打开 ${target.commandLabel}` : '正在打开指令')
     this.options.showMainWindow({ skipAutoPaste: true })
     try {
-      const result = await this.options.pluginManager.run(target.pluginId, target.featureCode, { text: '', attachments: [] })
+      const result = target.cmdId && target.cmdSignature
+        ? await this.options.pluginManager.runCommand({
+          pluginId: target.pluginId,
+          featureCode: target.featureCode,
+          cmdId: target.cmdId,
+          cmdSignature: target.cmdSignature,
+          input: EMPTY_ACTION_PAYLOAD
+        })
+        : await this.options.pluginManager.run(target.pluginId, target.featureCode, EMPTY_ACTION_PAYLOAD)
       if (!result.success) {
         this.setStatus('error', result.error || '指令执行失败')
         notify(result.error || '指令执行失败')
@@ -433,7 +472,6 @@ export class FloatingBallManager {
   }
 
   private async handleRegionCapture(): Promise<void> {
-    if (this.settings.longPressAction !== 'captureRegion') return
     this.setStatus('busy', '选择截图区域')
     this.suspendWindowForRegionCapture()
     try {

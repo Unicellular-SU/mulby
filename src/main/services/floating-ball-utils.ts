@@ -1,6 +1,9 @@
 import { extname } from 'node:path'
 import type { AutoPasteClipboardPayload, FileInfo } from '../../shared/types/electron'
 import type {
+  FloatingBallActionBinding,
+  FloatingBallActionSettings,
+  FloatingBallBuiltinAction,
   FloatingBallCommandTarget,
   FloatingBallPosition,
   FloatingBallSettings
@@ -25,8 +28,11 @@ const DEFAULT_FLOATING_BALL_SETTINGS: FloatingBallSettings = {
   size: 52,
   opacity: 0.92,
   snapToEdge: true,
-  doubleClickCommand: undefined,
-  longPressAction: 'captureRegion',
+  actions: {
+    click: { type: 'builtin', action: 'toggleMulby' },
+    doubleClick: { type: 'inheritClick' },
+    longPress: { type: 'builtin', action: 'captureRegion' }
+  },
   dropAction: 'openMatches'
 }
 
@@ -61,7 +67,48 @@ function normalizeCommandTarget(input: unknown): FloatingBallCommandTarget | und
   const pluginId = String(value.pluginId || '').trim()
   const featureCode = String(value.featureCode || '').trim()
   if (!pluginId || !featureCode) return undefined
-  return { pluginId, featureCode }
+  const target: FloatingBallCommandTarget = { pluginId, featureCode }
+  const cmdId = String(value.cmdId || '').trim()
+  const cmdSignature = String(value.cmdSignature || '').trim()
+  const commandLabel = String(value.commandLabel || '').trim()
+  if (cmdId) target.cmdId = cmdId
+  if (cmdSignature) target.cmdSignature = cmdSignature
+  if (commandLabel) target.commandLabel = commandLabel
+  return target
+}
+
+function normalizeBuiltinAction(input: unknown): FloatingBallBuiltinAction | undefined {
+  return input === 'toggleMulby' || input === 'captureRegion' ? input : undefined
+}
+
+function normalizeActionBinding(input: unknown, fallback: FloatingBallActionBinding): FloatingBallActionBinding {
+  if (!input || typeof input !== 'object' || Array.isArray(input)) return fallback
+  const value = input as Record<string, unknown>
+  if (value.type === 'inheritClick') return { type: 'inheritClick' }
+  if (value.type === 'builtin') {
+    const action = normalizeBuiltinAction(value.action)
+    return action ? { type: 'builtin', action } : fallback
+  }
+  if (value.type === 'command') {
+    const target = normalizeCommandTarget(value.target)
+    return target ? { type: 'command', target } : fallback
+  }
+  return fallback
+}
+
+function normalizeActionSettings(current: Partial<FloatingBallSettings>): FloatingBallActionSettings {
+  const defaults = DEFAULT_FLOATING_BALL_SETTINGS.actions
+  const source: Partial<FloatingBallActionSettings> = current.actions || {}
+  const legacyDoubleClick = normalizeCommandTarget(current.doubleClickCommand)
+
+  return {
+    click: normalizeActionBinding(source.click, defaults.click),
+    doubleClick: normalizeActionBinding(
+      source.doubleClick,
+      legacyDoubleClick ? { type: 'command', target: legacyDoubleClick } : defaults.doubleClick
+    ),
+    longPress: normalizeActionBinding(source.longPress, defaults.longPress)
+  }
 }
 
 export function normalizeFloatingBallSettings(input: Partial<FloatingBallSettings> | undefined): FloatingBallSettings {
@@ -80,8 +127,7 @@ export function normalizeFloatingBallSettings(input: Partial<FloatingBallSetting
     size: Math.round(size),
     opacity: Number(opacity.toFixed(2)),
     snapToEdge: current.snapToEdge !== false,
-    doubleClickCommand: normalizeCommandTarget(current.doubleClickCommand),
-    longPressAction: 'captureRegion',
+    actions: normalizeActionSettings(input || {}),
     dropAction: 'openMatches'
   }
   const position = normalizePosition(current.position)

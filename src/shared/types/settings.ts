@@ -388,6 +388,22 @@ export interface FloatingBallPosition {
 export interface FloatingBallCommandTarget {
   pluginId: string
   featureCode: string
+  cmdId?: string
+  cmdSignature?: string
+  commandLabel?: string
+}
+
+export type FloatingBallGesture = 'click' | 'doubleClick' | 'longPress'
+export type FloatingBallBuiltinAction = 'toggleMulby' | 'captureRegion'
+export type FloatingBallActionBinding =
+  | { type: 'builtin'; action: FloatingBallBuiltinAction }
+  | { type: 'command'; target: FloatingBallCommandTarget }
+  | { type: 'inheritClick' }
+
+export interface FloatingBallActionSettings {
+  click: FloatingBallActionBinding
+  doubleClick: FloatingBallActionBinding
+  longPress: FloatingBallActionBinding
 }
 
 export type FloatingBallLongPressAction = 'captureRegion'
@@ -400,8 +416,11 @@ export interface FloatingBallSettings {
   size: number
   opacity: number
   snapToEdge: boolean
+  actions: FloatingBallActionSettings
+  /** @deprecated use actions.doubleClick */
   doubleClickCommand?: FloatingBallCommandTarget
-  longPressAction: FloatingBallLongPressAction
+  /** @deprecated use actions.longPress */
+  longPressAction?: FloatingBallLongPressAction
   dropAction: FloatingBallDropAction
 }
 

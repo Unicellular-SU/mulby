@@ -24,20 +24,62 @@ describe('floating ball utilities', () => {
       size: 52,
       opacity: 0.92,
       snapToEdge: true,
-      doubleClickCommand: undefined,
-      longPressAction: 'captureRegion',
+      actions: {
+        click: { type: 'builtin', action: 'toggleMulby' },
+        doubleClick: { type: 'inheritClick' },
+        longPress: { type: 'builtin', action: 'captureRegion' }
+      },
       dropAction: 'openMatches'
     })
   })
 
-  it('normalizes unsafe settings without losing a valid command target', () => {
+  it('migrates legacy double-click and long-press settings into action bindings', () => {
+    assert.deepEqual(normalizeFloatingBallSettings({
+      doubleClickCommand: {
+        pluginId: ' system ',
+        featureCode: ' open-settings ',
+        cmdId: ' keyword:open-settings ',
+        cmdSignature: ' keyword:open-settings ',
+        commandLabel: ' Open Settings '
+      },
+      longPressAction: 'captureRegion'
+    }), {
+      enabled: false,
+      label: 'M',
+      size: 52,
+      opacity: 0.92,
+      snapToEdge: true,
+      actions: {
+        click: { type: 'builtin', action: 'toggleMulby' },
+        doubleClick: {
+          type: 'command',
+          target: {
+            pluginId: 'system',
+            featureCode: 'open-settings',
+            cmdId: 'keyword:open-settings',
+            cmdSignature: 'keyword:open-settings',
+            commandLabel: 'Open Settings'
+          }
+        },
+        longPress: { type: 'builtin', action: 'captureRegion' }
+      },
+      dropAction: 'openMatches'
+    })
+  })
+
+  it('normalizes unsafe settings without losing valid action targets', () => {
     assert.deepEqual(normalizeFloatingBallSettings({
       enabled: true,
       label: ' Mulby ',
       size: 200,
       opacity: 2,
       snapToEdge: false,
-      doubleClickCommand: { pluginId: ' system ', featureCode: ' open-settings ' },
+      actions: {
+        click: { type: 'command', target: { pluginId: ' demo ', featureCode: ' launch ' } },
+        doubleClick: { type: 'builtin', action: 'captureRegion' },
+        longPress: { type: 'bad-action' } as never
+      },
+      doubleClickCommand: { pluginId: ' legacy ', featureCode: ' ignored ' },
       longPressAction: 'unknown' as never,
       dropAction: 'unknown' as never,
       position: { x: Number.NaN, y: 20 }
@@ -47,8 +89,11 @@ describe('floating ball utilities', () => {
       size: 80,
       opacity: 1,
       snapToEdge: false,
-      doubleClickCommand: { pluginId: 'system', featureCode: 'open-settings' },
-      longPressAction: 'captureRegion',
+      actions: {
+        click: { type: 'command', target: { pluginId: 'demo', featureCode: 'launch' } },
+        doubleClick: { type: 'builtin', action: 'captureRegion' },
+        longPress: { type: 'builtin', action: 'captureRegion' }
+      },
       dropAction: 'openMatches'
     })
   })

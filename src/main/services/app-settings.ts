@@ -219,7 +219,11 @@ const DEFAULT_SETTINGS: AppSettings = {
     size: 52,
     opacity: 0.92,
     snapToEdge: true,
-    longPressAction: 'captureRegion',
+    actions: {
+      click: { type: 'builtin', action: 'toggleMulby' },
+      doubleClick: { type: 'inheritClick' },
+      longPress: { type: 'builtin', action: 'captureRegion' }
+    },
     dropAction: 'openMatches'
   },
   onboardingCompleted: false,
