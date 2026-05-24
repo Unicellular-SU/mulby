@@ -581,7 +581,56 @@ export class FloatingBallManager {
         click: () => this.options.quitApp()
       }
     ])
-    menu.popup({ window: this.window })
+    this.popupNativeContextMenu(menu)
+  }
+
+  private popupNativeContextMenu(menu: Menu): void {
+    const win = this.window
+    if (!win || win.isDestroyed()) return
+
+    let restored = false
+    const keepFloatingBallOutOfTaskbar = () => {
+      if (win.isDestroyed()) return
+      try {
+        win.setSkipTaskbar(true)
+      } catch (error) {
+        log.warn('[FloatingBall] Failed to keep floating ball out of taskbar:', error)
+      }
+    }
+    const restoreMenuWindowChrome = () => {
+      if (restored) return
+      restored = true
+      if (win.isDestroyed()) return
+      try {
+        keepFloatingBallOutOfTaskbar()
+        win.setFocusable(false)
+        if (win.isVisible()) win.showInactive()
+        keepFloatingBallOutOfTaskbar()
+      } catch (error) {
+        log.warn('[FloatingBall] Failed to restore floating ball menu window chrome:', error)
+      }
+    }
+
+    keepFloatingBallOutOfTaskbar()
+    if (process.platform !== 'win32') {
+      menu.popup({ window: win, callback: restoreMenuWindowChrome })
+      return
+    }
+
+    try {
+      win.setFocusable(true)
+      keepFloatingBallOutOfTaskbar()
+      if (!win.isVisible()) win.show()
+      win.focus()
+      keepFloatingBallOutOfTaskbar()
+      menu.popup({
+        window: win,
+        callback: restoreMenuWindowChrome
+      })
+    } catch (error) {
+      restoreMenuWindowChrome()
+      log.warn('[FloatingBall] Failed to show context menu:', error)
+    }
   }
 
   private persistSettings(patch: Partial<FloatingBallSettings>): void {

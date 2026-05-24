@@ -486,17 +486,6 @@ export default function CommandShortcutPanel({
 
   return (
     <div className="space-y-5">
-      <div className={`${cardClass} flex items-start justify-between gap-4`}>
-        <div className="space-y-1">
-          <div className="text-sm font-medium text-slate-900 dark:text-white">插件指令</div>
-          <div className="text-xs text-slate-500 dark:text-slate-400">
-            {mode === 'quick-launch' ? '绑定快捷键直接启动指令。' : '查看并管理已安装插件的全部指令。'}
-          </div>
-        </div>
-        <div className="text-xs text-slate-500 dark:text-slate-400">
-          {loading ? '加载中...' : `${commands.length} 条指令`}
-        </div>
-      </div>
 
       {recordingCommand && (
         <div className="rounded-xl border border-blue-200 bg-blue-50 px-3 py-2 text-xs text-blue-700 dark:border-blue-900/50 dark:bg-blue-950/40 dark:text-blue-200">
@@ -511,85 +500,85 @@ export default function CommandShortcutPanel({
 
       {mode === 'quick-launch' && (
         <>
-        <div className={`${cardClass} space-y-4`}>
-          <div>
-            <div className="text-sm font-medium text-slate-900 dark:text-white">绑定指令快捷键</div>
-            <div className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-              手动输入指令名称并绑定快捷键。不展示全部指令，仅在你输入后匹配候选。
-            </div>
-          </div>
-          <input
-            className="w-full rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-200"
-            placeholder="输入指令（例如：open / 翻译）"
-            value={quickCommandInput}
-            onChange={(e) => {
-              setPinnedCommand(null)
-              setQuickCommandInput(e.target.value)
-            }}
-          />
-
-          {quickLaunchTarget && (
-            <div className="rounded-xl border border-slate-200/80 bg-slate-50/60 px-3 py-2 dark:border-slate-800/80 dark:bg-slate-950/40">
-              <div className="flex items-center justify-between gap-2">
-                <div className="min-w-0">
-                  <div className="truncate text-sm font-medium text-slate-900 dark:text-white">{quickLaunchTarget.displayLabel}</div>
-                  <div className="truncate text-[11px] text-slate-500 dark:text-slate-400">
-                    {quickLaunchTarget.pluginDisplayName} · {quickLaunchTarget.featureExplain}
-                  </div>
-                </div>
-                <div className="flex items-center gap-2">
-                  <div className="rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs text-slate-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200">
-                    {quickLaunchBinding?.accelerator ? formatAcceleratorForPlatform(quickLaunchBinding.accelerator) : '未设置'}
-                  </div>
-                  <button
-                    className="rounded-full border border-slate-200 bg-white px-2 py-1 text-xs text-slate-700 hover:border-slate-300 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200"
-                    onClick={() => startRecord(quickLaunchTarget)}
-                  >
-                    录制快捷键
-                  </button>
-                  {quickLaunchBinding && (
-                    <button
-                      className="rounded-full border border-slate-200 bg-white px-2 py-1 text-xs text-slate-600 hover:border-slate-300 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300"
-                      onClick={() => void clearBinding(quickLaunchBinding.id)}
-                    >
-                      清除
-                    </button>
-                  )}
-                </div>
+          <div className={`${cardClass} space-y-4`}>
+            <div>
+              <div className="text-sm font-medium text-slate-900 dark:text-white">绑定指令快捷键</div>
+              <div className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                手动输入指令名称并绑定快捷键。不展示全部指令，仅在你输入后匹配候选。
               </div>
             </div>
-          )}
+            <input
+              className="w-full rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-200"
+              placeholder="输入指令（例如：open / 翻译）"
+              value={quickCommandInput}
+              onChange={(e) => {
+                setPinnedCommand(null)
+                setQuickCommandInput(e.target.value)
+              }}
+            />
 
-          {quickCommandInput.trim() && !quickLaunchTarget && quickMatchedCommands.length > 0 && (
-            <div className="space-y-2">
-              <div className="text-xs text-slate-500 dark:text-slate-400">匹配到多个候选，请点选目标指令：</div>
-              {quickMatchedCommands.slice(0, 8).map((command) => (
-                <button
-                  key={`${commandTargetKey(command)}:${command.cmdSignature}`}
-                  className="flex w-full items-center justify-between rounded-xl border border-slate-200/80 bg-white px-3 py-2 text-left text-xs text-slate-700 transition hover:border-slate-300 dark:border-slate-800/80 dark:bg-slate-950 dark:text-slate-200"
-                  onClick={() => {
-                    // 锁定到用户选择的具体命令
-                    setPinnedCommand({
-                      pluginId: command.pluginId,
-                      featureCode: command.featureCode,
-                      cmdId: command.cmdId
-                    })
-                    setQuickCommandInput(command.displayLabel)
-                  }}
-                >
-                  <span className="truncate">{command.displayLabel}</span>
-                  <span className="truncate text-slate-500 dark:text-slate-400">{command.pluginDisplayName}</span>
-                </button>
-              ))}
-            </div>
-          )}
+            {quickLaunchTarget && (
+              <div className="rounded-xl border border-slate-200/80 bg-slate-50/60 px-3 py-2 dark:border-slate-800/80 dark:bg-slate-950/40">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="min-w-0">
+                    <div className="truncate text-sm font-medium text-slate-900 dark:text-white">{quickLaunchTarget.displayLabel}</div>
+                    <div className="truncate text-[11px] text-slate-500 dark:text-slate-400">
+                      {quickLaunchTarget.pluginDisplayName} · {quickLaunchTarget.featureExplain}
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <div className="rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs text-slate-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200">
+                      {quickLaunchBinding?.accelerator ? formatAcceleratorForPlatform(quickLaunchBinding.accelerator) : '未设置'}
+                    </div>
+                    <button
+                      className="rounded-full border border-slate-200 bg-white px-2 py-1 text-xs text-slate-700 hover:border-slate-300 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200"
+                      onClick={() => startRecord(quickLaunchTarget)}
+                    >
+                      录制快捷键
+                    </button>
+                    {quickLaunchBinding && (
+                      <button
+                        className="rounded-full border border-slate-200 bg-white px-2 py-1 text-xs text-slate-600 hover:border-slate-300 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300"
+                        onClick={() => void clearBinding(quickLaunchBinding.id)}
+                      >
+                        清除
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
 
-          {quickCommandInput.trim() && quickMatchedCommands.length === 0 && (
-            <div className="rounded-xl border border-dashed border-slate-200 px-3 py-6 text-center text-xs text-slate-500 dark:border-slate-700 dark:text-slate-400">
-              未找到可绑定的功能指令
-            </div>
-          )}
-        </div>
+            {quickCommandInput.trim() && !quickLaunchTarget && quickMatchedCommands.length > 0 && (
+              <div className="space-y-2">
+                <div className="text-xs text-slate-500 dark:text-slate-400">匹配到多个候选，请点选目标指令：</div>
+                {quickMatchedCommands.slice(0, 8).map((command) => (
+                  <button
+                    key={`${commandTargetKey(command)}:${command.cmdSignature}`}
+                    className="flex w-full items-center justify-between rounded-xl border border-slate-200/80 bg-white px-3 py-2 text-left text-xs text-slate-700 transition hover:border-slate-300 dark:border-slate-800/80 dark:bg-slate-950 dark:text-slate-200"
+                    onClick={() => {
+                      // 锁定到用户选择的具体命令
+                      setPinnedCommand({
+                        pluginId: command.pluginId,
+                        featureCode: command.featureCode,
+                        cmdId: command.cmdId
+                      })
+                      setQuickCommandInput(command.displayLabel)
+                    }}
+                  >
+                    <span className="truncate">{command.displayLabel}</span>
+                    <span className="truncate text-slate-500 dark:text-slate-400">{command.pluginDisplayName}</span>
+                  </button>
+                ))}
+              </div>
+            )}
+
+            {quickCommandInput.trim() && quickMatchedCommands.length === 0 && (
+              <div className="rounded-xl border border-dashed border-slate-200 px-3 py-6 text-center text-xs text-slate-500 dark:border-slate-700 dark:text-slate-400">
+                未找到可绑定的功能指令
+              </div>
+            )}
+          </div>
 
           <div className={`${cardClass} space-y-3`}>
             <div>
