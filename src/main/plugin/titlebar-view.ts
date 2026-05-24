@@ -2,6 +2,7 @@ import { app, BrowserWindow, ipcMain, WebContentsView } from 'electron'
 import { ThemeManager } from '../services/theme'
 import log from 'electron-log'
 import { getPinnedSize } from '../services/window-size-pin'
+import { getWindowsFramelessSurfaceInsets } from '../services/window-surface'
 
 export const DETACHED_TITLEBAR_HEIGHT = 36
 
@@ -222,10 +223,11 @@ export function layoutPluginView(
   if (win.isDestroyed()) return
   const [contentWidth, contentHeight] = win.getContentSize()
   const titleBarHeight = includeTitleBar ? DETACHED_TITLEBAR_HEIGHT : 0
+  const { top, right, bottom, left } = getWindowsFramelessSurfaceInsets()
   pluginView.setBounds({
-    x: 0,
-    y: titleBarHeight,
-    width: contentWidth,
-    height: Math.max(1, contentHeight - titleBarHeight)
+    x: left,
+    y: top + titleBarHeight,
+    width: Math.max(1, contentWidth - left - right),
+    height: Math.max(1, contentHeight - top - bottom - titleBarHeight)
   })
 }
