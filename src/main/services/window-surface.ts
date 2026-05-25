@@ -46,6 +46,7 @@ export type WindowResizeMode = 'none' | 'bottom' | 'side-bottom' | 'all'
 
 export interface ApplyWindowResizeHandlesOptions {
   resizeMode?: WindowResizeMode
+  useSurfaceInsets?: boolean
 }
 
 interface ResizeHandleLayout {
@@ -235,10 +236,10 @@ function buildResizeHandleLayouts(resizeMode: WindowResizeMode): ResizeHandleLay
   return allHandles
 }
 
-function buildWindowResizeCss(resizeMode: WindowResizeMode): string {
+function buildWindowResizeCss(resizeMode: WindowResizeMode, useSurfaceInsets = true): string {
   if (resizeMode === 'none') return ''
 
-  const { top, right, bottom, left } = WINDOWS_FRAMELESS_SURFACE_INSETS
+  const { top, right, bottom, left } = useSurfaceInsets ? WINDOWS_FRAMELESS_SURFACE_INSETS : ZERO_INSETS
   const handleRules = buildResizeHandleLayouts(resizeMode)
     .map((handle) => `
 #mulby-window-resize-layer [data-resize-edge="${handle.edge}"] {
@@ -491,6 +492,24 @@ function buildWindowSurfaceCleanupScript(): string {
 `
 }
 
+function buildWindowContentClipCss(): string {
+  return `
+html,
+body {
+  width: 100% !important;
+  height: 100% !important;
+  margin: 0 !important;
+  background: transparent !important;
+  overflow: hidden !important;
+  border-radius: ${WINDOW_SURFACE_RADIUS_PX}px !important;
+}
+
+body > :not(script):not(style):not(link):not(#mulby-window-resize-layer) {
+  border-radius: inherit !important;
+}
+`
+}
+
 export async function applyWindowsFramelessSurface(
   win: BrowserWindow,
   options: ApplyWindowSurfaceOptions = {}
@@ -526,6 +545,14 @@ export async function clearWindowsFramelessSurfaceFromWebContents(
   await webContents.executeJavaScript(buildWindowSurfaceCleanupScript())
 }
 
+export async function applyWindowContentClipToWebContents(
+  webContents: WebContents
+): Promise<void> {
+  if (webContents.isDestroyed()) return
+
+  await webContents.insertCSS(buildWindowContentClipCss())
+}
+
 export async function applyWindowResizeHandlesToWebContents(
   webContents: WebContents,
   options: ApplyWindowResizeHandlesOptions = {}
@@ -533,6 +560,6 @@ export async function applyWindowResizeHandlesToWebContents(
   if (webContents.isDestroyed()) return
 
   const resizeMode = options.resizeMode ?? 'all'
-  await webContents.insertCSS(buildWindowResizeCss(resizeMode))
+  await webContents.insertCSS(buildWindowResizeCss(resizeMode, options.useSurfaceInsets ?? true))
   await webContents.executeJavaScript(buildWindowResizeScript(resizeMode))
 }

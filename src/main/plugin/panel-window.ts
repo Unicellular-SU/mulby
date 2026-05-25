@@ -16,9 +16,9 @@ import {
 } from './plugin-web-preferences'
 import { ATTACHED_PANEL_HEIGHT, ATTACHED_PANEL_MIN_OVERFLOW_HEIGHT } from '../constants/panel-window'
 import {
+    applyWindowContentClipToWebContents,
     applyWindowResizeHandlesToWebContents,
     applyWindowsFramelessSurface,
-    applyWindowsFramelessSurfaceToWebContents,
     getWindowsFramelessSurfaceInsets,
     getWindowsFramelessSurfaceVisibleBounds,
     getWindowsFramelessSurfaceWindowBounds,
@@ -210,11 +210,12 @@ export class PluginPanelWindow {
         if (!this.pluginView || this.pluginView.webContents.isDestroyed()) return
 
         const [contentWidth, contentHeight] = this.panelWindow.getContentSize()
+        const { top, right, bottom, left } = getWindowsFramelessSurfaceInsets()
         this.pluginView.setBounds({
-            x: 0,
-            y: 0,
-            width: Math.max(1, contentWidth),
-            height: Math.max(1, contentHeight)
+            x: left,
+            y: top,
+            width: Math.max(1, contentWidth - left - right),
+            height: Math.max(1, contentHeight - top - bottom)
         })
     }
 
@@ -545,7 +546,11 @@ export class PluginPanelWindow {
             pluginContentSurfacePromise = (async () => {
                 if (capturedWin.isDestroyed() || capturedWebContents.isDestroyed()) return
                 if (this.panelWindow !== capturedWin || this.pluginView !== capturedView) return
-                await applyWindowsFramelessSurfaceToWebContents(capturedWebContents, { resizeMode: 'bottom' })
+                await applyWindowContentClipToWebContents(capturedWebContents)
+                await applyWindowResizeHandlesToWebContents(capturedWebContents, {
+                    resizeMode: 'bottom',
+                    useSurfaceInsets: false
+                })
             })().catch((err) => {
                 log.warn('[PanelWindow] Failed to apply attached plugin content surface:', err)
             })
