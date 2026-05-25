@@ -292,13 +292,39 @@ window.mulby.window.onChildMessage((channel, ...args) => {
 [Renderer]
 监听窗口最大化状态变化事件。
 
-### subInput.set(placeholder?, isFocus?)
+### subInput.set(placeholder?, isFocus?, options?)
 [Renderer]
-显示子输入框并设置占位与焦点。
+显示子输入框并设置占位与焦点。仅附着模式可用。
+
+当 subInput 激活时，宿主搜索框和附着插件视为一个整体：文本输入留在搜索框，导航键自动转发给插件。
+
+```javascript
+// 基本用法：零配置即获得默认导航键转发
+await window.mulby.subInput.set('输入关键词搜索...', true);
+
+// 声明额外转发键（与默认键合并）
+await window.mulby.subInput.set('输入关键词搜索...', true, {
+  forwardKeys: ['ArrowRight']
+});
+```
+
+**参数**:
+- `placeholder` (string, 可选) - 占位文本，默认 `'请输入...'`
+- `isFocus` (boolean, 可选) - 是否自动聚焦，默认 `true`
+- `options` (object, 可选) - 配置选项
+  - `forwardKeys` (string[], 可选) - 需要额外转发的键名数组，会与默认转发键合并
+
+**默认转发键**: `ArrowDown`, `ArrowUp`, `Enter`, `Tab`, `Escape`, `PageDown`, `PageUp`
+
+这些键在单行搜索框中无实际输入用途，宿主会自动拦截并通过 IPC 转发给拥有 subInput 的插件。修饰键（Shift、Ctrl 等）会随事件一起传递。
+
+若插件需要额外的键（如 `ArrowRight` 用于打开菜单），通过 `forwardKeys` 声明。注意 `ArrowRight`/`ArrowLeft`/`Home`/`End` 在搜索框中有光标移动用途，不会默认转发。
+
+**返回值**: `boolean` - 是否成功启用
 
 ### subInput.remove()
 [Renderer]
-移除子输入框。
+移除子输入框，还原宿主搜索框。
 
 ### subInput.setValue(text)
 [Renderer]
@@ -306,7 +332,7 @@ window.mulby.window.onChildMessage((channel, ...args) => {
 
 ### subInput.focus()
 [Renderer]
-聚焦子输入框。
+聚焦子输入框（将焦点从插件还给宿主搜索框）。
 
 ### subInput.blur()
 [Renderer]
@@ -314,39 +340,83 @@ window.mulby.window.onChildMessage((channel, ...args) => {
 
 ### subInput.select()
 [Renderer]
-选中子输入框文本。
+选中子输入框全部文本。
 
 ### subInput.onChange(callback)
 [Renderer]
-监听子输入框文本变化。
+监听子输入框文本变化。当用户在宿主搜索框中输入时触发。
+
+```javascript
+const dispose = window.mulby.subInput.onChange(({ text }) => {
+  console.log('用户输入:', text);
+});
+// 取消监听
+dispose();
+```
+
+**参数**:
+- `callback` (function) - 回调函数，接收 `{ text: string }`
+
+**返回值**: `() => void` - 取消监听函数
+
+### subInput.onKeyDown(callback)
+[Renderer]
+监听从宿主搜索框转发的键盘事件。当用户在 subInput 中按下已注册的转发键时触发。
+
+```javascript
+const dispose = window.mulby.subInput.onKeyDown(({ key, shift, ctrl, alt, meta }) => {
+  if (key === 'ArrowDown') {
+    // 选中下一项
+  } else if (key === 'Enter') {
+    // 打开选中项
+  } else if (key === 'ArrowDown' && shift) {
+    // Shift+ArrowDown 多选
+  }
+});
+// 取消监听
+dispose();
+```
+
+**参数**:
+- `callback` (function) - 回调函数，接收 `{ key: string, shift?: boolean, ctrl?: boolean, alt?: boolean, meta?: boolean }`
+
+**返回值**: `() => void` - 取消监听函数
 
 ### mulbyMain.subInput.onEnabled(callback)
-[Renderer]
-主窗口侧监听子输入框启用事件。
+[Renderer - 主窗口侧]
+主窗口侧监听子输入框启用事件。回调数据包含 `placeholder`、`isFocus` 和 `forwardKeys`。
 
 ### mulbyMain.subInput.onDisabled(callback)
-[Renderer]
+[Renderer - 主窗口侧]
 主窗口侧监听子输入框移除事件。
 
 ### mulbyMain.subInput.onSetValue(callback)
-[Renderer]
+[Renderer - 主窗口侧]
 主窗口侧监听子输入框设值事件。
 
 ### mulbyMain.subInput.onFocus(callback)
-[Renderer]
+[Renderer - 主窗口侧]
 主窗口侧监听子输入框聚焦事件。
 
 ### mulbyMain.subInput.onBlur(callback)
-[Renderer]
+[Renderer - 主窗口侧]
 主窗口侧监听子输入框失焦事件。
 
 ### mulbyMain.subInput.onSelect(callback)
-[Renderer]
+[Renderer - 主窗口侧]
 主窗口侧监听子输入框选中文本事件。
 
 ### mulbyMain.subInput.sendChange(text)
-[Renderer]
+[Renderer - 主窗口侧]
 主窗口向主进程发送输入变更（转发给插件）。
+
+### mulbyMain.subInput.sendKeyDown(key, modifiers)
+[Renderer - 主窗口侧]
+主窗口向主进程发送键盘事件（转发给插件）。当 subInput 启用且用户按下 `forwardKeys` 中的键时，SearchInput 会自动调用此方法。
+
+**参数**:
+- `key` (string) - 键名，如 `'ArrowDown'`、`'Enter'`
+- `modifiers` (object) - 修饰键状态 `{ shift?: boolean, ctrl?: boolean, alt?: boolean, meta?: boolean }`
 
 ### mulbyMain.clipboard.onAutoPaste(callback)
 [Renderer]
@@ -407,7 +477,12 @@ window.mulby.window.onChildMessage((channel, ...args) => {
   }
 });
 
-// 子输入框
-await window.mulby.subInput.set('请输入...', true);
-window.mulby.subInput.onChange(({ text }) => console.log(text));
+// 子输入框（附着模式）
+await window.mulby.subInput.set('搜索文件...', true, { forwardKeys: ['ArrowRight'] });
+window.mulby.subInput.onChange(({ text }) => doSearch(text));
+window.mulby.subInput.onKeyDown(({ key, shift }) => {
+  if (key === 'ArrowDown') selectNext(shift);
+  else if (key === 'ArrowUp') selectPrev(shift);
+  else if (key === 'Enter') openSelected();
+});
 ```
