@@ -119,8 +119,8 @@ export function createCoreApi(ipcRenderer: IpcRenderer) {
     },
 
     subInput: {
-      set: (placeholder?: string, isFocus?: boolean) =>
-        ipcRenderer.invoke('subInput:set', placeholder, isFocus),
+      set: (placeholder?: string, isFocus?: boolean, options?: { forwardKeys?: string[] }) =>
+        ipcRenderer.invoke('subInput:set', placeholder, isFocus, options),
       remove: () => ipcRenderer.invoke('subInput:remove'),
       setValue: (text: string) => ipcRenderer.send('subInput:setValue', text),
       focus: () => ipcRenderer.send('subInput:focus'),
@@ -130,6 +130,11 @@ export function createCoreApi(ipcRenderer: IpcRenderer) {
         const listener = (_event: unknown, data: { text: string }) => callback(data)
         ipcRenderer.on('subInput:onChange', listener)
         return () => ipcRenderer.removeListener('subInput:onChange', listener)
+      },
+      onKeyDown: (callback: (data: { key: string; shift?: boolean; ctrl?: boolean; alt?: boolean; meta?: boolean }) => void) => {
+        const listener = (_event: unknown, data: { key: string; shift?: boolean; ctrl?: boolean; alt?: boolean; meta?: boolean }) => callback(data)
+        ipcRenderer.on('subInput:onKeyDown', listener)
+        return () => ipcRenderer.removeListener('subInput:onKeyDown', listener)
       }
     },
 

@@ -30,12 +30,13 @@ declare global {
   interface Window {
     mulbyMain?: {
       subInput: {
-        onEnabled: (callback: (data: { placeholder: string; isFocus: boolean }) => void) => () => void
+        onEnabled: (callback: (data: { placeholder: string; isFocus: boolean; forwardKeys?: string[] }) => void) => () => void
         onDisabled: (callback: () => void) => () => void
         onSetValue: (callback: (text: string) => void) => () => void
         onFocus: (callback: () => void) => () => void
         onBlur: (callback: () => void) => () => void
         onSelect: (callback: () => void) => () => void
+        sendKeyDown: (key: string, modifiers: { shift?: boolean; ctrl?: boolean; alt?: boolean; meta?: boolean }) => void
         sendChange: (text: string) => void
       }
       clipboard: {
@@ -48,6 +49,7 @@ declare global {
 interface SubInputState {
   enabled: boolean
   placeholder: string
+  forwardKeys: string[]
 }
 
 interface UiAttachment extends InputAttachment {
@@ -92,7 +94,7 @@ const SearchInput = forwardRef<SearchInputRef, SearchInputProps>(function Search
   const pendingCaretAnimationFramesRef = useRef<number[]>([])
   const pendingCaretTimeoutsRef = useRef<Array<ReturnType<typeof setTimeout>>>([])
   const caretRestoreGenerationRef = useRef(0)
-  const [subInput, setSubInput] = useState<SubInputState>({ enabled: false, placeholder: '' })
+  const [subInput, setSubInput] = useState<SubInputState>({ enabled: false, placeholder: '', forwardKeys: [] })
   const [subInputValue, setSubInputValue] = useState('')
   const isPluginLaunching = Boolean(launchingPlugin)
 
@@ -189,7 +191,7 @@ const SearchInput = forwardRef<SearchInputRef, SearchInputProps>(function Search
     if (!api) return
 
     const cleanupEnabled = api.onEnabled((data) => {
-      setSubInput({ enabled: true, placeholder: data.placeholder })
+      setSubInput({ enabled: true, placeholder: data.placeholder, forwardKeys: data.forwardKeys || [] })
       setSubInputValue('')
       if (data.isFocus) {
         focusAtEnd()
@@ -197,7 +199,7 @@ const SearchInput = forwardRef<SearchInputRef, SearchInputProps>(function Search
     })
 
     const cleanupDisabled = api.onDisabled(() => {
-      setSubInput({ enabled: false, placeholder: '' })
+      setSubInput({ enabled: false, placeholder: '', forwardKeys: [] })
       setSubInputValue('')
     })
 
@@ -370,6 +372,17 @@ const SearchInput = forwardRef<SearchInputRef, SearchInputProps>(function Search
               cancelCaretRestore()
 
               if (e.nativeEvent.isComposing) return
+
+              if (subInput.enabled && subInput.forwardKeys.includes(e.key)) {
+                e.preventDefault()
+                window.mulbyMain?.subInput.sendKeyDown(e.key, {
+                  shift: e.shiftKey,
+                  ctrl: e.ctrlKey,
+                  alt: e.altKey,
+                  meta: e.metaKey,
+                })
+                return
+              }
 
               if (e.key === 'Enter' && !e.shiftKey) {
                 e.preventDefault()

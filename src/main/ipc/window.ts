@@ -10,7 +10,8 @@ import {
   setSubInputState,
   clearSubInputState,
   isSubInputEnabled,
-  getSubInputOwnerId
+  getSubInputOwnerId,
+  buildForwardKeys
 } from '../services/subinput-state'
 import { shouldUseWindowsFramelessSurface } from '../services/window-surface'
 import { windowFromWebContents, getPluginWebContents } from '../services/webcontents-registry'
@@ -174,7 +175,7 @@ export function registerWindowHandlers(
   // =========================================
 
   // 设置子输入框（只允许附着模式的插件使用）
-  ipcMain.handle('subInput:set', (event, placeholder?: string, isFocus?: boolean) => {
+  ipcMain.handle('subInput:set', (event, placeholder?: string, isFocus?: boolean, options?: { forwardKeys?: string[] }) => {
     const mainWin = getMainWindow()
     if (!mainWin) return false
 
@@ -187,16 +188,19 @@ export function registerWindowHandlers(
     }
 
     const placeholderText = placeholder || '请输入...'
+    const forwardKeys = buildForwardKeys(options?.forwardKeys)
     setSubInputState({
       enabled: true,
       placeholder: placeholderText,
-      ownerId: event.sender.id
+      ownerId: event.sender.id,
+      forwardKeys
     })
 
     // 通知主窗口切换到 SubInput 模式
     mainWin.webContents.send('subInput:enabled', {
       placeholder: placeholderText,
-      isFocus: isFocus !== false
+      isFocus: isFocus !== false,
+      forwardKeys
     })
 
     return true
@@ -260,6 +264,18 @@ export function registerWindowHandlers(
     const owner = webContents.fromId(ownerId)
     if (owner && !owner.isDestroyed()) {
       owner.send('subInput:onChange', { text })
+    }
+  })
+
+  // 子输入框键盘事件转发（由主窗口发送导航键，转发给插件）
+  ipcMain.on('subInput:keyDown', (_event, key: string, modifiers: { shift?: boolean; ctrl?: boolean; alt?: boolean; meta?: boolean }) => {
+    if (!isSubInputEnabled()) return
+    const ownerId = getSubInputOwnerId()
+    if (ownerId === 0) return
+
+    const owner = webContents.fromId(ownerId)
+    if (owner && !owner.isDestroyed()) {
+      owner.send('subInput:onKeyDown', { key, ...modifiers })
     }
   })
 

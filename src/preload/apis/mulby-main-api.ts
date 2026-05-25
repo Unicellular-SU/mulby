@@ -4,8 +4,8 @@ import type { AutoPasteClipboardPayload } from '../../shared/types/electron'
 export function createMulbyMainApi(ipcRenderer: IpcRenderer) {
   return {
     subInput: {
-      onEnabled: (callback: (data: { placeholder: string; isFocus: boolean }) => void) => {
-        const listener = (_event: unknown, data: { placeholder: string; isFocus: boolean }) => callback(data)
+      onEnabled: (callback: (data: { placeholder: string; isFocus: boolean; forwardKeys?: string[] }) => void) => {
+        const listener = (_event: unknown, data: { placeholder: string; isFocus: boolean; forwardKeys?: string[] }) => callback(data)
         ipcRenderer.on('subInput:enabled', listener)
         return () => ipcRenderer.removeListener('subInput:enabled', listener)
       },
@@ -36,6 +36,9 @@ export function createMulbyMainApi(ipcRenderer: IpcRenderer) {
       },
       sendChange: (text: string) => {
         ipcRenderer.send('subInput:change', text)
+      },
+      sendKeyDown: (key: string, modifiers: { shift?: boolean; ctrl?: boolean; alt?: boolean; meta?: boolean }) => {
+        ipcRenderer.send('subInput:keyDown', key, modifiers)
       }
     },
     clipboard: {
