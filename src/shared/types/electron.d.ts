@@ -1217,12 +1217,13 @@ declare global {
     mulby: ElectronAPI
     mulbyMain?: {
       subInput: {
-        onEnabled: (callback: (data: { placeholder: string; isFocus: boolean }) => void) => () => void
+        onEnabled: (callback: (data: { placeholder: string; isFocus: boolean; forwardKeys?: string[] }) => void) => () => void
         onDisabled: (callback: () => void) => () => void
         onSetValue: (callback: (text: string) => void) => () => void
         onFocus: (callback: () => void) => () => void
         onBlur: (callback: () => void) => () => void
         onSelect: (callback: () => void) => () => void
+        sendKeyDown: (key: string, modifiers: { shift?: boolean; ctrl?: boolean; alt?: boolean; meta?: boolean }) => void
         sendChange: (text: string) => void
       }
       clipboard: {
