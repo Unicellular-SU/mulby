@@ -134,6 +134,8 @@ const DEFAULT_SETTINGS: AppSettings = {
     trustedFingerprints: [],
     sandbox: {
       enabled: true,
+      backendMode: 'auto',
+      fallbackToPolicy: true,
       allowedRoots: [process.cwd()],
       writableRoots: [process.cwd()],
       networkAllowed: false
@@ -819,6 +821,10 @@ function normalizeCommandRunnerSettings(input: Partial<CommandRunnerSettings> | 
   const sandboxInput = current.sandbox || DEFAULT_SETTINGS.commandRunner.sandbox
   const sandbox = {
     enabled: sandboxInput.enabled !== false,
+    backendMode: sandboxInput.backendMode === 'policy' || sandboxInput.backendMode === 'os' || sandboxInput.backendMode === 'auto'
+      ? sandboxInput.backendMode
+      : DEFAULT_SETTINGS.commandRunner.sandbox.backendMode,
+    fallbackToPolicy: sandboxInput.fallbackToPolicy !== false,
     allowedRoots: normalizePathList(sandboxInput.allowedRoots, DEFAULT_SETTINGS.commandRunner.sandbox.allowedRoots),
     writableRoots: normalizePathList(sandboxInput.writableRoots, DEFAULT_SETTINGS.commandRunner.sandbox.writableRoots),
     networkAllowed: sandboxInput.networkAllowed === true
@@ -844,6 +850,10 @@ function normalizeCommandRunnerSettings(input: Partial<CommandRunnerSettings> | 
           sandboxLevel: item.sandboxLevel === 'os' || item.sandboxLevel === 'policy' || item.sandboxLevel === 'none'
             ? item.sandboxLevel
             : undefined,
+          sandboxBackend: item.sandboxBackend === 'policy' || item.sandboxBackend === 'macos-sandbox-exec' || item.sandboxBackend === 'windows-job-object' || item.sandboxBackend === 'linux-namespace'
+            ? item.sandboxBackend
+            : undefined,
+          sandboxFallbackReason: String(item.sandboxFallbackReason || '').trim() || undefined,
           elevatedFrom: item.elevatedFrom === 'sandbox' || item.elevatedFrom === 'workspace' || item.elevatedFrom === 'trusted'
             ? item.elevatedFrom
             : undefined,

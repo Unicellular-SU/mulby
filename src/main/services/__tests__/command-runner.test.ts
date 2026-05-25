@@ -6,6 +6,7 @@ import {
   type CommandConsentDecision,
   type CommandConsentRequest
 } from '../command-runner-core'
+import type { CommandSandboxPreparer } from '../command-sandbox-backend'
 
 function createBaseSettings(): CommandRunnerSettings {
   return {
@@ -24,6 +25,8 @@ function createBaseSettings(): CommandRunnerSettings {
     trustedFingerprints: [],
     sandbox: {
       enabled: true,
+      backendMode: 'policy',
+      fallbackToPolicy: true,
       allowedRoots: [process.cwd()],
       writableRoots: [process.cwd()],
       networkAllowed: false
@@ -38,6 +41,7 @@ function createBaseSettings(): CommandRunnerSettings {
 function createInMemoryRunner(input?: {
   settings?: Partial<CommandRunnerSettings>
   consent?: (request: CommandConsentRequest) => Promise<CommandConsentDecision>
+  prepareSandbox?: CommandSandboxPreparer
 }) {
   let nowCounter = 1_700_000_000_000
   let idCounter = 1
@@ -53,6 +57,7 @@ function createInMemoryRunner(input?: {
       return settings
     },
     requestConsent: input?.consent,
+    prepareSandbox: input?.prepareSandbox,
     now: () => {
       nowCounter += 10
       return nowCounter
@@ -878,6 +883,98 @@ describe('command runner service', () => {
     )
     assert.equal(getSettings().audit.records[0].status, 'blocked')
     assert.equal(getSettings().audit.records[0].networkAllowed, false)
+  })
+
+  it('records OS sandbox backend fields from the prepared spawn plan', async () => {
+    const { service, getSettings } = createInMemoryRunner({
+      prepareSandbox: (plan) => ({
+        command: plan.command,
+        args: plan.args,
+        cwd: plan.cwd,
+        env: plan.env,
+        shell: plan.shell,
+        sandboxLevel: 'os',
+        sandboxBackend: 'linux-namespace'
+      })
+    })
+
+    const result = await service.runCommand(
+      {
+        command: process.execPath,
+        args: ['-e', 'process.stdout.write("os-sandbox")']
+      },
+      {
+        source: 'app',
+        defaultProfile: 'sandbox',
+        maxProfile: 'workspace',
+        caller: { kind: 'ai', host: 'app', actor: 'ai' }
+      }
+    )
+
+    assert.equal(result.stdout, 'os-sandbox')
+    assert.equal(getSettings().audit.records[0].sandboxLevel, 'os')
+    assert.equal(getSettings().audit.records[0].sandboxBackend, 'linux-namespace')
+  })
+
+  it('records policy fallback when OS sandbox preparation falls back', async () => {
+    const { service, getSettings } = createInMemoryRunner({
+      prepareSandbox: (plan) => ({
+        command: plan.command,
+        args: plan.args,
+        cwd: plan.cwd,
+        env: plan.env,
+        shell: plan.shell,
+        sandboxLevel: 'policy',
+        sandboxBackend: 'policy',
+        sandboxFallbackReason: 'unshare not found'
+      })
+    })
+
+    const result = await service.runCommand(
+      {
+        command: process.execPath,
+        args: ['-e', 'process.stdout.write("fallback")']
+      },
+      {
+        source: 'app',
+        defaultProfile: 'sandbox',
+        maxProfile: 'workspace',
+        caller: { kind: 'ai', host: 'app', actor: 'ai' }
+      }
+    )
+
+    assert.equal(result.stdout, 'fallback')
+    assert.equal(getSettings().audit.records[0].sandboxLevel, 'policy')
+    assert.equal(getSettings().audit.records[0].sandboxBackend, 'policy')
+    assert.equal(getSettings().audit.records[0].sandboxFallbackReason, 'unshare not found')
+  })
+
+  it('blocks command when strict OS sandbox preparation fails', async () => {
+    const { service, getSettings } = createInMemoryRunner({
+      prepareSandbox: () => {
+        const error = new Error('OS sandbox backend unavailable: test backend missing') as Error & { kind?: string }
+        error.kind = 'blocked'
+        throw error
+      }
+    })
+
+    await assert.rejects(
+      service.runCommand(
+        {
+          command: process.execPath,
+          args: ['--version']
+        },
+        {
+          source: 'app',
+          defaultProfile: 'sandbox',
+          maxProfile: 'workspace',
+          caller: { kind: 'ai', host: 'app', actor: 'ai' }
+        }
+      ),
+      /OS sandbox backend unavailable/
+    )
+    assert.equal(getSettings().audit.records[0].status, 'blocked')
+    assert.match(getSettings().audit.records[0].reason || '', /test backend missing/)
   })
 
   it('blocks execution profile requests above caller maximum', async () => {

@@ -1,15 +1,20 @@
-import { spawn } from 'node:child_process'
+import { spawn, type ChildProcess } from 'node:child_process'
 import path from 'node:path'
 import treeKill from 'tree-kill'
 import type {
   CommandAuditItem,
   CommandCallerIdentity,
+  CommandSandboxBackendName,
   CommandExecutionProfile,
   CommandRule,
   CommandRunnerSettings,
   CommandSandboxLevel,
   CommandTrustRecord
 } from '../../shared/types/settings'
+import {
+  prepareCommandSandbox,
+  type CommandSandboxPreparer
+} from './command-sandbox-backend'
 
 export interface RunCommandInput {
   command: string
@@ -83,6 +88,7 @@ export interface CommandRunnerDeps {
   getPolicy: () => CommandRunnerSettings
   updatePolicy: (next: CommandRunnerSettings) => CommandRunnerSettings
   requestConsent?: (request: CommandConsentRequest) => Promise<CommandConsentDecision>
+  prepareSandbox?: CommandSandboxPreparer
   now?: () => number
   randomId?: () => string
 }
@@ -118,6 +124,14 @@ class CommandPolicyError extends Error {
     this.name = 'CommandPolicyError'
     this.kind = 'blocked'
   }
+}
+
+function isCommandPolicyError(error: unknown): boolean {
+  return error instanceof CommandPolicyError || (
+    !!error &&
+    typeof error === 'object' &&
+    (error as { kind?: unknown }).kind === 'blocked'
+  )
 }
 
 function normalizeCommandToken(value: string): string {
@@ -619,11 +633,13 @@ export class CommandRunnerService {
   private readonly now: () => number
   private readonly randomId: () => string
   private readonly requestConsent?: (request: CommandConsentRequest) => Promise<CommandConsentDecision>
+  private readonly prepareSandbox: CommandSandboxPreparer
 
   constructor(private readonly deps: CommandRunnerDeps) {
     this.now = deps.now || (() => Date.now())
     this.randomId = deps.randomId || (() => Math.random().toString(36).slice(2, 8))
     this.requestConsent = deps.requestConsent
+    this.prepareSandbox = deps.prepareSandbox || prepareCommandSandbox
   }
 
   getPolicy(): CommandRunnerSettings {
@@ -719,7 +735,9 @@ export class CommandRunnerService {
     }
     const executionProfile = profileResolution.resolved
     const rootScope = resolveCommandRootScope(input, settings, executionProfile)
-    const sandboxLevel = resolveSandboxLevel(executionProfile, settings)
+    let sandboxLevel = resolveSandboxLevel(executionProfile, settings)
+    let sandboxBackend: CommandSandboxBackendName | undefined = sandboxLevel === 'policy' ? 'policy' : undefined
+    let sandboxFallbackReason: string | undefined
     const networkAllowed = executionProfile === 'trusted'
       ? true
       : input.network === true && (executionProfile !== 'sandbox' || settings.sandbox?.networkAllowed === true)
@@ -730,7 +748,7 @@ export class CommandRunnerService {
       // 队列/并发拒绝路径也需要写入审计，避免异常原因静默丢失
       const durationMs = this.now() - startAt
       const message = error instanceof Error ? error.message : String(error)
-      const status: CommandAuditItem['status'] = error instanceof CommandPolicyError ? 'blocked' : 'error'
+      const status: CommandAuditItem['status'] = isCommandPolicyError(error) ? 'blocked' : 'error'
       this.appendAudit({
         id: this.makeAuditId(),
         timestamp: startAt,
@@ -739,6 +757,8 @@ export class CommandRunnerService {
         caller: context.caller,
         executionProfile,
         sandboxLevel,
+        sandboxBackend,
+        sandboxFallbackReason,
         elevatedFrom: profileResolution.elevatedFrom,
         networkAllowed,
         rootScope,
@@ -775,16 +795,31 @@ export class CommandRunnerService {
 
       // 构建安全环境变量：根据来源 + manifest 声明决定继承范围
       const safeEnv = buildSafeEnv(context, env, context.envKeys, executionProfile)
-
-      const result = await this.execute({
+      const spawnPlan = this.prepareSandbox({
         command,
         args,
         cwd: input.cwd,
         env: safeEnv,
         shell,
+        executionProfile,
+        settings,
+        rootScope,
+        networkAllowed
+      })
+      sandboxLevel = spawnPlan.sandboxLevel
+      sandboxBackend = spawnPlan.sandboxBackend
+      sandboxFallbackReason = spawnPlan.sandboxFallbackReason
+
+      const result = await this.execute({
+        command: spawnPlan.command,
+        args: spawnPlan.args,
+        cwd: spawnPlan.cwd,
+        env: spawnPlan.env,
+        shell: spawnPlan.shell,
         timeoutMs,
         maxOutputBytes: settings.maxOutputBytes || 1_048_576,
-        abortSignal: context.abortSignal
+        abortSignal: context.abortSignal,
+        onChildSpawned: spawnPlan.onChildSpawned
       })
       const durationMs = this.now() - startAt
       const auditStatus: CommandAuditItem['status'] = result.timedOut ? 'timeout' : 'allowed'
@@ -796,6 +831,8 @@ export class CommandRunnerService {
         caller: context.caller,
         executionProfile,
         sandboxLevel,
+        sandboxBackend,
+        sandboxFallbackReason,
         elevatedFrom: profileResolution.elevatedFrom,
         networkAllowed,
         rootScope,
@@ -824,7 +861,7 @@ export class CommandRunnerService {
     } catch (error) {
       const durationMs = this.now() - startAt
       const message = error instanceof Error ? error.message : String(error)
-      const status: CommandAuditItem['status'] = error instanceof CommandPolicyError ? 'blocked' : 'error'
+      const status: CommandAuditItem['status'] = isCommandPolicyError(error) ? 'blocked' : 'error'
       this.appendAudit({
         id: this.makeAuditId(),
         timestamp: startAt,
@@ -833,6 +870,8 @@ export class CommandRunnerService {
         caller: context.caller,
         executionProfile,
         sandboxLevel,
+        sandboxBackend,
+        sandboxFallbackReason,
         elevatedFrom: profileResolution.elevatedFrom,
         networkAllowed,
         rootScope,
@@ -1055,6 +1094,7 @@ export class CommandRunnerService {
     timeoutMs: number
     maxOutputBytes: number
     abortSignal?: AbortSignal
+    onChildSpawned?: (child: ChildProcess) => void | (() => void)
   }): Promise<Omit<RunCommandResult, 'command' | 'args' | 'cwd' | 'shell' | 'durationMs'>> {
     return new Promise((resolve, reject) => {
       // 严格使用 buildSafeEnv 构造的受限环境，禁止回退到 process.env
@@ -1082,6 +1122,7 @@ export class CommandRunnerService {
       let forceKillTimer: NodeJS.Timeout | null = null
       let settled = false
       let abortListener: (() => void) | null = null
+      let processSandboxCleanup: (() => void) | void
 
       const cleanup = () => {
         if (killTimer) {
@@ -1095,6 +1136,14 @@ export class CommandRunnerService {
         if (abortListener && input.abortSignal) {
           input.abortSignal.removeEventListener('abort', abortListener)
           abortListener = null
+        }
+        if (processSandboxCleanup) {
+          try {
+            processSandboxCleanup()
+          } catch {
+            // ignore cleanup failures
+          }
+          processSandboxCleanup = undefined
         }
       }
 
@@ -1155,6 +1204,14 @@ export class CommandRunnerService {
           stderrBytes = next.bytes
           truncated = truncated || next.truncated
         })
+      }
+
+      try {
+        processSandboxCleanup = input.onChildSpawned?.(child)
+      } catch (error) {
+        terminateProcess()
+        finalizeReject(error instanceof Error ? error : new Error(String(error)))
+        return
       }
 
       killTimer = setTimeout(() => {

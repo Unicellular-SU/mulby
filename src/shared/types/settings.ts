@@ -32,6 +32,14 @@ export type CommandExecutionProfile = 'sandbox' | 'workspace' | 'trusted'
 
 export type CommandSandboxLevel = 'os' | 'policy' | 'none'
 
+export type CommandSandboxBackendMode = 'auto' | 'policy' | 'os'
+
+export type CommandSandboxBackendName =
+  | 'policy'
+  | 'macos-sandbox-exec'
+  | 'windows-job-object'
+  | 'linux-namespace'
+
 export interface CommandCallerIdentity {
   kind: 'app' | 'plugin' | 'ai' | 'openclaw' | 'system'
   host?: 'app' | 'plugin' | 'openclaw' | 'system'
@@ -45,6 +53,8 @@ export interface CommandCallerIdentity {
 
 export interface CommandSandboxSettings {
   enabled: boolean
+  backendMode: CommandSandboxBackendMode
+  fallbackToPolicy: boolean
   allowedRoots: string[]
   writableRoots: string[]
   networkAllowed: boolean
@@ -72,6 +82,8 @@ export interface CommandAuditItem {
   caller?: CommandCallerIdentity
   executionProfile?: CommandExecutionProfile
   sandboxLevel?: CommandSandboxLevel
+  sandboxBackend?: CommandSandboxBackendName
+  sandboxFallbackReason?: string
   elevatedFrom?: CommandExecutionProfile
   networkAllowed?: boolean
   rootScope?: string[]

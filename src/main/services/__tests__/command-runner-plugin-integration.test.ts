@@ -20,6 +20,8 @@ function createSettings(): CommandRunnerSettings {
     trustedFingerprints: [],
     sandbox: {
       enabled: true,
+      backendMode: 'policy',
+      fallbackToPolicy: true,
       allowedRoots: [process.cwd()],
       writableRoots: [process.cwd()],
       networkAllowed: false
