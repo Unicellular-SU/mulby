@@ -1,5 +1,6 @@
 import { app } from 'electron'
-import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'fs'
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'fs'
+import { stat } from 'fs/promises'
 import { basename, dirname, join } from 'path'
 import type {
   AppSearchResult,
@@ -89,12 +90,15 @@ export class DarwinSearchProvider implements DesktopSearchProvider {
 
     this.execution.cancelSearchProcess(SEARCH_KEY_FILES)
 
+    const baseLimit = normalizedQuery.length === 1
+      ? Math.max(limit, 60)
+      : Math.max(limit * 2, 60)
+
     let paths: string[] = []
     try {
-      const baseLimit = Math.max(limit * 4, 60)
       paths = await this.execution.runCommand('mdfind', ['-name', normalizedQuery], baseLimit, SEARCH_KEY_FILES)
 
-      if (paths.length < limit * 2) {
+      if (paths.length < limit) {
         const wildcard = this.ranking.buildWildcardPattern(normalizedQuery)
         if (wildcard && wildcard.toLowerCase() !== normalizedQuery.toLowerCase()) {
           const fallback = await this.execution.runCommand('mdfind', ['-name', wildcard], baseLimit, SEARCH_KEY_FILES)
@@ -109,24 +113,24 @@ export class DarwinSearchProvider implements DesktopSearchProvider {
       return []
     }
 
-    const formatted: FileSearchResult[] = []
-    for (const rawPath of paths) {
-      const cleanPath = rawPath.trim()
-      if (!cleanPath) continue
+    const cleanPaths = paths.map((p) => p.trim()).filter(Boolean)
 
-      try {
-        const stats = statSync(cleanPath)
-        formatted.push({
+    const statResults = await Promise.allSettled(
+      cleanPaths.map(async (cleanPath) => {
+        const stats = await stat(cleanPath)
+        return {
           name: basename(cleanPath),
           path: cleanPath,
           isDirectory: stats.isDirectory(),
           size: stats.size,
           source: 'spotlight'
-        })
-      } catch {
-        // ignore invalid paths
-      }
-    }
+        } as FileSearchResult
+      })
+    )
+
+    const formatted = statResults
+      .filter((r): r is PromiseFulfilledResult<FileSearchResult> => r.status === 'fulfilled')
+      .map((r) => r.value)
 
     const sorted = formatted
       .map((item) => ({ ...item, score: this.ranking.scoreFile(item, normalizedQuery) }))
