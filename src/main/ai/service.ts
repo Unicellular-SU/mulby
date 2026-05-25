@@ -158,7 +158,9 @@ export class AiService {
       if (!value) return undefined
       const next: AiToolContext = {
         ...(value.pluginName ? { pluginName: value.pluginName } : {}),
-        ...(value.internalTag ? { internalTag: value.internalTag } : {})
+        ...(value.internalTag ? { internalTag: value.internalTag } : {}),
+        ...(value.caller ? { caller: value.caller } : {}),
+        ...(value.requestId ? { requestId: value.requestId } : {})
       }
       if (value.mcpScope) {
         next.mcpScope = {
@@ -222,7 +224,13 @@ export class AiService {
       // Thread requestId into toolContext for per-request tool state scoping
       const scopedOption = {
         ...option,
-        toolContext: { ...option.toolContext, requestId }
+        toolContext: {
+          ...option.toolContext,
+          requestId,
+          caller: option.toolContext?.caller
+            ? { ...option.toolContext.caller, requestId, model: option.model }
+            : undefined
+        }
       }
       const prepared = await prepareChatRequest({
         option: scopedOption,
@@ -306,7 +314,13 @@ export class AiService {
       // Thread requestId into toolContext for per-request tool state scoping
       const scopedOption = {
         ...option,
-        toolContext: { ...option.toolContext, requestId: id }
+        toolContext: {
+          ...option.toolContext,
+          requestId: id,
+          caller: option.toolContext?.caller
+            ? { ...option.toolContext.caller, requestId: id, model: option.model }
+            : undefined
+        }
       }
       prepared = await prepareChatRequest({
         option: scopedOption,

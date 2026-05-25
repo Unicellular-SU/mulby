@@ -6,6 +6,7 @@ import {
   normalizeAiToolCapabilityNames
 } from '../tools/capabilities'
 import { resolveAiCapabilityPolicy } from '../tools/capability-policy'
+import { filterPluginHostedAiCommandCapabilities } from '../tools/plugin-hosted-capability-policy'
 
 describe('ai tool capabilities', () => {
   it('normalizes aliases and deduplicates capabilities', () => {
@@ -161,5 +162,21 @@ describe('ai capability policy', () => {
     })
     assert.deepEqual(result.allowedCapabilities, [])
     assert.deepEqual(result.deniedCapabilities, [])
+  })
+
+  it('removes command-backed capabilities for plugin-hosted AI without explicit command execution permission', () => {
+    const result = filterPluginHostedAiCommandCapabilities({
+      pluginId: 'mulby-ai-chat',
+      aiCommandAllowed: false,
+      result: {
+        allowedCapabilities: ['shell.exec', 'git.status', 'fs.read', 'web.search'],
+        deniedCapabilities: [],
+        reasons: []
+      }
+    })
+
+    assert.deepEqual(result.allowedCapabilities, ['fs.read', 'web.search'])
+    assert.deepEqual(result.deniedCapabilities, ['shell.exec', 'git.status'])
+    assert.match(result.reasons?.join('\n') || '', /permissions\.commandExecution\.ai\.enabled/)
   })
 })

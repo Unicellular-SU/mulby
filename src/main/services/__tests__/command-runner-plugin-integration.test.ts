@@ -18,6 +18,12 @@ function createSettings(): CommandRunnerSettings {
     allowList: [],
     denyList: [],
     trustedFingerprints: [],
+    sandbox: {
+      enabled: true,
+      allowedRoots: [process.cwd()],
+      writableRoots: [process.cwd()],
+      networkAllowed: false
+    },
     audit: {
       maxItems: 500,
       records: []

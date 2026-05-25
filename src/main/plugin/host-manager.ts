@@ -14,11 +14,13 @@ import type {
 } from './host-protocol'
 import { generateRequestId } from './host-protocol'
 import { createPluginAPI } from './api'
+import { resolveDirectCommandExecutionPermission } from './command-execution-permissions'
 import { pluginInputMonitor } from './input-monitor'
 import { unregisterMainPushHandlers, registerMainPushHandler, registerMainPushSelectHandler } from './dynamic-features'
 import type { MainPushAction, MainPushItem } from './dynamic-features'
 import { PluginHostWatchdog } from './watchdog'
 import type { InputAttachment, Plugin } from '../../shared/types/plugin'
+import type { CommandExecutionProfile } from '../../shared/types/settings'
 import type { ToolProgressResponse } from './host-protocol'
 import { loggerService } from '../services/logger'
 import { resolveResourceLimits, applyResourceLimitsToWatchdog } from './resource-limits'
@@ -36,6 +38,9 @@ interface PluginHost {
   process: UtilityProcess
   pluginName: string
   runCommandAllowed: boolean
+  envKeys?: string[] | '*'
+  defaultCommandProfile?: CommandExecutionProfile
+  maxCommandProfile?: CommandExecutionProfile
   inputMonitorAllowed: boolean
   microphoneAllowed: boolean
   cameraAllowed: boolean
@@ -335,10 +340,14 @@ export class PluginHostManager extends EventEmitter {
           ? idleTimeoutCfg
           : DEFAULT_IDLE_TIMEOUT_MS
 
+      const commandPermission = resolveDirectCommandExecutionPermission(plugin.manifest.permissions)
       const host: PluginHost = {
         process: child,
         pluginName,
-        runCommandAllowed: plugin.manifest.permissions?.runCommand === true,
+        runCommandAllowed: commandPermission.allowed,
+        envKeys: plugin.manifest.permissions?.envKeys,
+        defaultCommandProfile: commandPermission.defaultProfile,
+        maxCommandProfile: commandPermission.maxProfile,
         inputMonitorAllowed: plugin.manifest.permissions?.inputMonitor === true,
         microphoneAllowed: plugin.manifest.permissions?.microphone === true,
         cameraAllowed: plugin.manifest.permissions?.camera === true,
@@ -628,6 +637,9 @@ export class PluginHostManager extends EventEmitter {
           this.clipboardHistoryManager,
           {
             runCommandAllowed: host.runCommandAllowed,
+            envKeys: host.envKeys,
+            defaultCommandProfile: host.defaultCommandProfile,
+            maxCommandProfile: host.maxCommandProfile,
             inputMonitorAllowed: host.inputMonitorAllowed,
             microphoneAllowed: host.microphoneAllowed,
             cameraAllowed: host.cameraAllowed,
@@ -1057,10 +1069,13 @@ export class PluginHostManager extends EventEmitter {
         pluginName,
         this.messageBus,
         this.taskScheduler,
-        this.clipboardHistoryManager,
-        {
-          runCommandAllowed: host.runCommandAllowed,
-          inputMonitorAllowed: host.inputMonitorAllowed,
+          this.clipboardHistoryManager,
+          {
+            runCommandAllowed: host.runCommandAllowed,
+            envKeys: host.envKeys,
+            defaultCommandProfile: host.defaultCommandProfile,
+            maxCommandProfile: host.maxCommandProfile,
+            inputMonitorAllowed: host.inputMonitorAllowed,
           microphoneAllowed: host.microphoneAllowed,
           cameraAllowed: host.cameraAllowed,
           screenAllowed: host.screenAllowed,

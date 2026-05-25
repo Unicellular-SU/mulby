@@ -386,6 +386,18 @@ export interface PluginSetting {
 
 export interface PluginPermissions {
   runCommand?: boolean
+  commandExecution?: {
+    direct?: {
+      enabled?: boolean
+      defaultProfile?: 'sandbox' | 'workspace' | 'trusted'
+      maxProfile?: 'sandbox' | 'workspace' | 'trusted'
+    }
+    ai?: {
+      enabled?: boolean
+      defaultProfile?: 'sandbox' | 'workspace' | 'trusted'
+      maxProfile?: 'sandbox' | 'workspace' | 'trusted'
+    }
+  }
   webview?: boolean
   /**
    * 允许插件访问麦克风。插件 UI 使用 getUserMedia({ audio: true })
@@ -441,7 +453,7 @@ export interface PluginPermissions {
    * - `['JAVA_HOME', 'GOPATH']`：在安全基线之上额外继承指定变量
    * - `'*'`：继承主进程全部环境变量（高风险，仅可信插件使用）
    *
-   * 仅在 `runCommand === true` 时生效。
+   * 仅在命令执行权限启用时生效（legacy `runCommand` 或 `commandExecution`）。
    */
   envKeys?: string[] | '*'
 }
@@ -527,6 +539,9 @@ export interface PluginRunCommandInput {
   env?: Record<string, string>
   timeoutMs?: number
   shell?: boolean
+  executionProfile?: 'sandbox' | 'workspace' | 'trusted'
+  network?: boolean
+  writableRoots?: string[]
 }
 
 export interface PluginRunCommandResult {

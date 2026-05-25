@@ -132,6 +132,12 @@ const DEFAULT_SETTINGS: AppSettings = {
       { id: 'deny-powershell-encoded', mode: 'prefix', value: 'powershell -EncodedCommand', enabled: true }
     ],
     trustedFingerprints: [],
+    sandbox: {
+      enabled: true,
+      allowedRoots: [process.cwd()],
+      writableRoots: [process.cwd()],
+      networkAllowed: false
+    },
     audit: {
       maxItems: 500,
       records: []
@@ -810,6 +816,13 @@ function normalizeCommandRunnerSettings(input: Partial<CommandRunnerSettings> | 
   const maxItems = Math.max(50, Math.min(5000, Number(current.audit?.maxItems || DEFAULT_SETTINGS.commandRunner.audit.maxItems)))
   const denyEnvKeys = normalizeStringList(current.denyEnvKeys, 500)
   const maskEnvKeysInAudit = normalizeStringList(current.maskEnvKeysInAudit, 500)
+  const sandboxInput = current.sandbox || DEFAULT_SETTINGS.commandRunner.sandbox
+  const sandbox = {
+    enabled: sandboxInput.enabled !== false,
+    allowedRoots: normalizePathList(sandboxInput.allowedRoots, DEFAULT_SETTINGS.commandRunner.sandbox.allowedRoots),
+    writableRoots: normalizePathList(sandboxInput.writableRoots, DEFAULT_SETTINGS.commandRunner.sandbox.writableRoots),
+    networkAllowed: sandboxInput.networkAllowed === true
+  }
   const auditRecords: CommandAuditItem[] = Array.isArray(current.audit?.records)
     ? current.audit.records
       .filter((item) => item && typeof item === 'object' && String(item.id || '').trim())
@@ -824,6 +837,18 @@ function normalizeCommandRunnerSettings(input: Partial<CommandRunnerSettings> | 
           id: String(item.id || ''),
           source,
           pluginId: String(item.pluginId || '').trim() || undefined,
+          caller: item.caller && typeof item.caller === 'object' ? item.caller : undefined,
+          executionProfile: item.executionProfile === 'sandbox' || item.executionProfile === 'workspace' || item.executionProfile === 'trusted'
+            ? item.executionProfile
+            : undefined,
+          sandboxLevel: item.sandboxLevel === 'os' || item.sandboxLevel === 'policy' || item.sandboxLevel === 'none'
+            ? item.sandboxLevel
+            : undefined,
+          elevatedFrom: item.elevatedFrom === 'sandbox' || item.elevatedFrom === 'workspace' || item.elevatedFrom === 'trusted'
+            ? item.elevatedFrom
+            : undefined,
+          networkAllowed: item.networkAllowed === true ? true : item.networkAllowed === false ? false : undefined,
+          rootScope: Array.isArray(item.rootScope) ? item.rootScope.map((root) => String(root || '')).filter(Boolean) : undefined,
           command: String(item.command || ''),
           args: Array.isArray(item.args) ? item.args.map((arg) => String(arg)) : [],
           envKeys: Array.isArray(item.envKeys) ? item.envKeys.map((key) => String(key)).filter(Boolean) : undefined,
@@ -848,6 +873,7 @@ function normalizeCommandRunnerSettings(input: Partial<CommandRunnerSettings> | 
     allowList,
     denyList,
     trustedFingerprints,
+    sandbox,
     audit: {
       maxItems,
       records: auditRecords

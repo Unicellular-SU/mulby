@@ -2,6 +2,8 @@ import { ipcMain } from 'electron'
 import { pluginShell } from '../plugin/shell'
 import { commandRunnerService } from '../services/command-runner'
 import { resolveIpcCallerSource } from '../services/ipc-caller-resolver'
+import { resolveDirectCommandExecutionPermission } from '../plugin/command-execution-permissions'
+import type { PluginPermissions } from '../../shared/types/plugin'
 
 /**
  * 插件管理器查找函数（延迟注入，避免循环依赖）
@@ -9,10 +11,7 @@ import { resolveIpcCallerSource } from '../services/ipc-caller-resolver'
  */
 interface PluginLookupResult {
   manifest: {
-    permissions?: {
-      runCommand?: boolean
-      envKeys?: string[] | '*'
-    }
+    permissions?: PluginPermissions
   }
 }
 
@@ -62,20 +61,33 @@ export function registerShellHandlers() {
     if (caller.source === 'plugin' && caller.pluginId) {
       // 插件来源：检查 manifest permissions
       const plugin = pluginLookup?.(caller.pluginId)
-      const allowed = plugin?.manifest.permissions?.runCommand === true
+      const commandPermission = resolveDirectCommandExecutionPermission(plugin?.manifest.permissions)
       const envKeys = plugin?.manifest.permissions?.envKeys
       return await commandRunnerService.runCommand(input, {
         source: 'plugin',
         pluginId: caller.pluginId,
-        runCommandAllowed: allowed,
-        envKeys
+        runCommandAllowed: commandPermission.allowed,
+        envKeys,
+        defaultProfile: commandPermission.defaultProfile,
+        maxProfile: commandPermission.maxProfile,
+        caller: {
+          kind: 'plugin',
+          host: 'plugin',
+          actor: 'system',
+          pluginId: caller.pluginId
+        }
       })
     }
 
     if (caller.source === 'app') {
       // 主应用来源
       return await commandRunnerService.runCommand(input, {
-        source: 'app'
+        source: 'app',
+        caller: {
+          kind: 'app',
+          host: 'app',
+          actor: 'human'
+        }
       })
     }
 

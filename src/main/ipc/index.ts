@@ -42,7 +42,7 @@ import { registerDeveloperHandlers } from './developer'
 import { registerLogIpc } from './log'
 import { registerSchedulerHandlers } from './scheduler'
 import { ClipboardHistoryManager } from '../services/clipboard-history'
-import { registerAiHandlers, type AiHandlersHooks } from './ai'
+import { registerAiHandlers, setAiPluginLookup, type AiHandlersHooks } from './ai'
 import { registerSystemPluginHandlers } from './system-plugin'
 import { SystemPluginWindowManager } from '../services/system-plugin-window-manager'
 import { registerSystemPageHandlers } from './system-page'
@@ -108,6 +108,8 @@ export function registerAllHandlers(
   registerShellHandlers()
   // 注入插件查找函数，供 shell:runCommand 来源识别时检查 manifest 权限
   setShellPluginLookup((pluginId) => pluginManager.get(pluginId))
+  // 注入插件查找函数，供 AI 请求传播宿主身份与权限
+  setAiPluginLookup((pluginId) => pluginManager.get(pluginId))
   // 注入插件查找函数，供媒体设备权限请求检查 manifest 权限
   setPermissionPluginLookup((pluginId) => pluginManager.get(pluginId))
   registerDialogHandlers()

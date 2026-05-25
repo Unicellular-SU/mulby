@@ -2,6 +2,7 @@ import { join, dirname } from 'path'
 import { readFileSync } from 'fs'
 import { InputAttachment, Plugin, PluginModule } from '../../shared/types/plugin'
 import { createPluginAPI } from './api'
+import { resolveDirectCommandExecutionPermission } from './command-execution-permissions'
 import log from 'electron-log'
 
 interface NodeModuleInstance {
@@ -83,8 +84,12 @@ export class PluginRunner {
   // 执行插件
   async run(featureCode: string, input?: string, attachments?: InputAttachment[]): Promise<void> {
     const pluginModule = await this.loadModule()
+    const commandPermission = resolveDirectCommandExecutionPermission(this.plugin.manifest.permissions)
     const api = createPluginAPI(this.plugin.id, undefined, undefined, undefined, {
-      runCommandAllowed: this.plugin.manifest.permissions?.runCommand === true,
+      runCommandAllowed: commandPermission.allowed,
+      envKeys: this.plugin.manifest.permissions?.envKeys,
+      defaultCommandProfile: commandPermission.defaultProfile,
+      maxCommandProfile: commandPermission.maxProfile,
       inputMonitorAllowed: this.plugin.manifest.permissions?.inputMonitor === true,
       microphoneAllowed: this.plugin.manifest.permissions?.microphone === true,
       cameraAllowed: this.plugin.manifest.permissions?.camera === true,

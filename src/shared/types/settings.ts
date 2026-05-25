@@ -28,6 +28,28 @@ export interface CommandRule {
 
 export type CommandCallerSource = 'app' | 'plugin'
 
+export type CommandExecutionProfile = 'sandbox' | 'workspace' | 'trusted'
+
+export type CommandSandboxLevel = 'os' | 'policy' | 'none'
+
+export interface CommandCallerIdentity {
+  kind: 'app' | 'plugin' | 'ai' | 'openclaw' | 'system'
+  host?: 'app' | 'plugin' | 'openclaw' | 'system'
+  actor?: 'human' | 'ai' | 'remote' | 'system'
+  pluginId?: string
+  pluginType?: string
+  requestId?: string
+  model?: string
+  skillIds?: string[]
+}
+
+export interface CommandSandboxSettings {
+  enabled: boolean
+  allowedRoots: string[]
+  writableRoots: string[]
+  networkAllowed: boolean
+}
+
 export interface CommandTrustRecord {
   prefix: string
   matchMode?: 'executable' | 'commandLineExact'
@@ -47,6 +69,12 @@ export interface CommandAuditItem {
   timestamp: number
   source: CommandCallerSource
   pluginId?: string
+  caller?: CommandCallerIdentity
+  executionProfile?: CommandExecutionProfile
+  sandboxLevel?: CommandSandboxLevel
+  elevatedFrom?: CommandExecutionProfile
+  networkAllowed?: boolean
+  rootScope?: string[]
   command: string
   args?: string[]
   envKeys?: string[]
@@ -77,6 +105,7 @@ export interface CommandRunnerSettings {
   allowList: CommandRule[]
   denyList: CommandRule[]
   trustedFingerprints: CommandTrustRecord[]
+  sandbox: CommandSandboxSettings
   audit: {
     maxItems: number
     records: CommandAuditItem[]

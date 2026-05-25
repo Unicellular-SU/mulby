@@ -1,3 +1,5 @@
+import type { CommandCallerIdentity } from './settings'
+
 export interface AiMessageContentText {
   type: 'text'
   text: string
@@ -315,6 +317,7 @@ export interface AiOption {
 export interface AiToolContext {
   pluginName?: string
   internalTag?: string
+  caller?: CommandCallerIdentity
   /** Per-request identifier for scoping runtime state (e.g. skill activation deduplication). */
   requestId?: string
   mcpScope?: {

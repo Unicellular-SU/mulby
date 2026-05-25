@@ -22,6 +22,12 @@ function createBaseSettings(): CommandRunnerSettings {
     allowList: [],
     denyList: [],
     trustedFingerprints: [],
+    sandbox: {
+      enabled: true,
+      allowedRoots: [process.cwd()],
+      writableRoots: [process.cwd()],
+      networkAllowed: false
+    },
     audit: {
       maxItems: 500,
       records: []
@@ -766,5 +772,134 @@ describe('command runner service', () => {
       { source: 'app' }
     )
     assert.equal(result.stdout, 'true')
+  })
+
+  it('sandbox profile uses minimal env and records caller/profile audit fields', async () => {
+    const { service, getSettings } = createInMemoryRunner()
+    process.env.__MULBY_SANDBOX_SECRET = 'hidden'
+    try {
+      const result = await service.runCommand(
+        {
+          command: process.execPath,
+          args: ['-e', 'process.stdout.write(process.env.__MULBY_SANDBOX_SECRET || "missing")']
+        },
+        {
+          source: 'app',
+          defaultProfile: 'sandbox',
+          maxProfile: 'workspace',
+          caller: {
+            kind: 'ai',
+            host: 'app',
+            actor: 'ai',
+            requestId: 'req-1'
+          }
+        }
+      )
+      assert.equal(result.stdout, 'missing')
+      assert.equal(getSettings().audit.records[0].executionProfile, 'sandbox')
+      assert.equal(getSettings().audit.records[0].sandboxLevel, 'policy')
+      assert.equal(getSettings().audit.records[0].caller?.kind, 'ai')
+      assert.equal(getSettings().audit.records[0].caller?.requestId, 'req-1')
+    } finally {
+      delete process.env.__MULBY_SANDBOX_SECRET
+    }
+  })
+
+  it('sandbox profile blocks shell=true commands before execution', async () => {
+    const { service, getSettings } = createInMemoryRunner({
+      settings: {
+        allowShell: true
+      }
+    })
+
+    await assert.rejects(
+      service.runCommand(
+        {
+          command: 'sh',
+          args: ['-c', 'echo blocked'],
+          shell: true
+        },
+        {
+          source: 'app',
+          defaultProfile: 'sandbox',
+          maxProfile: 'workspace',
+          caller: { kind: 'ai', host: 'app', actor: 'ai' }
+        }
+      ),
+      /sandbox 执行环境默认禁止 shell=true/
+    )
+    assert.equal(getSettings().audit.records[0].status, 'blocked')
+    assert.equal(getSettings().audit.records[0].executionProfile, 'sandbox')
+  })
+
+  it('sandbox profile does not let input writableRoots expand configured roots', async () => {
+    const { service, getSettings } = createInMemoryRunner()
+    const outsideRoot = `${process.cwd()}/..`
+
+    await assert.rejects(
+      service.runCommand(
+        {
+          command: process.execPath,
+          args: ['--version'],
+          cwd: outsideRoot,
+          writableRoots: [outsideRoot]
+        },
+        {
+          source: 'app',
+          defaultProfile: 'sandbox',
+          maxProfile: 'workspace',
+          caller: { kind: 'ai', host: 'app', actor: 'ai' }
+        }
+      ),
+      /sandbox 执行环境禁止使用白名单外 cwd/
+    )
+    assert.equal(getSettings().audit.records[0].status, 'blocked')
+    assert.equal(getSettings().audit.records[0].executionProfile, 'sandbox')
+  })
+
+  it('sandbox profile rejects explicit network requests when sandbox network is disabled', async () => {
+    const { service, getSettings } = createInMemoryRunner()
+
+    await assert.rejects(
+      service.runCommand(
+        {
+          command: process.execPath,
+          args: ['--version'],
+          network: true
+        },
+        {
+          source: 'app',
+          defaultProfile: 'sandbox',
+          maxProfile: 'workspace',
+          caller: { kind: 'ai', host: 'app', actor: 'ai' }
+        }
+      ),
+      /sandbox 执行环境默认禁止网络访问/
+    )
+    assert.equal(getSettings().audit.records[0].status, 'blocked')
+    assert.equal(getSettings().audit.records[0].networkAllowed, false)
+  })
+
+  it('blocks execution profile requests above caller maximum', async () => {
+    const { service, getSettings } = createInMemoryRunner()
+
+    await assert.rejects(
+      service.runCommand(
+        {
+          command: process.execPath,
+          args: ['--version'],
+          executionProfile: 'trusted'
+        },
+        {
+          source: 'app',
+          defaultProfile: 'sandbox',
+          maxProfile: 'workspace',
+          caller: { kind: 'ai', host: 'app', actor: 'ai' }
+        }
+      ),
+      /最多允许 workspace 执行环境/
+    )
+    assert.equal(getSettings().audit.records[0].status, 'blocked')
+    assert.equal(getSettings().audit.records[0].caller?.actor, 'ai')
   })
 })

@@ -9,8 +9,10 @@ import {
 } from './ai/tools/run-command-tool'
 import { createAiInternalToolRuntime } from './ai/tools/internal-tool-runtime'
 import { resolveAiCapabilityPolicy } from './ai/tools/capability-policy'
+import { filterPluginHostedAiCommandCapabilities } from './ai/tools/plugin-hosted-capability-policy'
 import { isAiInternalToolName } from './ai/tools/internal-tools'
 import { PluginManager } from './plugin'
+import { resolveAiCommandExecutionPermission } from './plugin/command-execution-permissions'
 import { PluginToolRegistry, isPluginToolName, parsePluginToolId } from './plugin/plugin-tools'
 import { pluginDesktop } from './plugin/desktop'
 import { permissionManager } from './plugin/permission-manager'
@@ -161,20 +163,53 @@ const systemPluginWindowManager = new SystemPluginWindowManager()
 const systemPageWindowManager = new SystemPageWindowManager()
 const onboardingWindowManager = new OnboardingWindowManager()
 const actionMenuWindowManager = new ActionMenuWindowManager(themeManager)
+function resolveAiRunCommandContext(toolContext?: import('../shared/types/ai').AiToolContext, abortSignal?: AbortSignal) {
+  const pluginName = toolContext?.caller
+    ? toolContext.caller.host === 'plugin'
+      ? toolContext.caller.pluginId || toolContext.pluginName
+      : undefined
+    : toolContext?.pluginName
+  const plugin = pluginName ? pluginManager.get(pluginName) : undefined
+  if (pluginName) {
+    const permission = resolveAiCommandExecutionPermission(plugin?.manifest.permissions)
+    return {
+      source: 'plugin' as const,
+      pluginId: pluginName,
+      runCommandAllowed: permission.allowed,
+      envKeys: plugin?.manifest.permissions?.envKeys,
+      defaultProfile: permission.defaultProfile || 'sandbox' as const,
+      maxProfile: permission.maxProfile || 'sandbox' as const,
+      caller: {
+        ...(toolContext?.caller || {}),
+        kind: 'ai' as const,
+        host: 'plugin' as const,
+        actor: 'ai' as const,
+        pluginId: pluginName,
+        pluginType: plugin?.manifest.type,
+        requestId: toolContext?.requestId || toolContext?.caller?.requestId
+      },
+      abortSignal
+    }
+  }
+  return {
+    source: 'app' as const,
+    defaultProfile: 'sandbox' as const,
+    maxProfile: 'workspace' as const,
+    caller: {
+      ...(toolContext?.caller || {}),
+      kind: 'ai' as const,
+      host: 'app' as const,
+      actor: 'ai' as const,
+      requestId: toolContext?.requestId || toolContext?.caller?.requestId
+    },
+    abortSignal
+  }
+}
+
 const aiInternalToolRuntime = createAiInternalToolRuntime({
   getToolingSettings: () => appSettingsManager.getSettings().aiTooling,
   runCommand: (input, context) => commandRunnerService.runCommand(input, context),
-  resolveRunCommandContext: (toolContext) => {
-    const pluginName = toolContext?.pluginName
-    const plugin = pluginName ? pluginManager.get(pluginName) : undefined
-    const source = pluginName ? 'plugin' : 'app'
-    return {
-      source,
-      pluginId: pluginName || undefined,
-      runCommandAllowed: plugin ? plugin.manifest.permissions?.runCommand === true : undefined,
-      envKeys: plugin?.manifest.permissions?.envKeys,
-    }
-  }
+  resolveRunCommandContext: (toolContext) => resolveAiRunCommandContext(toolContext)
 })
 
 // 创建 Plugin Tools 注册中心并注入到 AI 管道
@@ -282,17 +317,8 @@ const handleAppActivate = () => {
 setAiToolExecutor(async ({ name, args, context, callId, abortSignal, onProgress }) => {
   if (name === AI_RUN_COMMAND_TOOL_NAME) {
     const input = parseAiRunCommandArgs(args)
-    const pluginName = context?.pluginName
-    const plugin = pluginName ? pluginManager.get(pluginName) : undefined
     try {
-      const source = pluginName ? 'plugin' : 'app'
-      return await commandRunnerService.runCommand(input, {
-        source,
-        pluginId: pluginName || undefined,
-        runCommandAllowed: plugin ? plugin.manifest.permissions?.runCommand === true : undefined,
-        envKeys: plugin?.manifest.permissions?.envKeys,
-        abortSignal
-      })
+      return await commandRunnerService.runCommand(input, resolveAiRunCommandContext(context, abortSignal))
     } catch (error) {
       if (abortSignal?.aborted || isAbortLikeError(error)) {
         throw error instanceof Error ? error : new Error(String(error))
@@ -396,11 +422,24 @@ setAiCapabilityPolicyResolver(({ option, requestedCapabilities, selectedSkills }
       reasons: ['aiTooling disabled']
     }
   }
-  return resolveAiCapabilityPolicy({
+  const base = resolveAiCapabilityPolicy({
     option,
     requestedCapabilities,
     selectedSkills,
     policy: settings.capabilityPolicy
+  })
+  const caller = option.toolContext?.caller
+  const pluginName = caller?.host === 'plugin' ? caller.pluginId || option.toolContext?.pluginName : undefined
+  if (!pluginName || caller?.actor !== 'ai') {
+    return base
+  }
+
+  const plugin = pluginManager.get(pluginName)
+  const permission = resolveAiCommandExecutionPermission(plugin?.manifest.permissions)
+  return filterPluginHostedAiCommandCapabilities({
+    result: base,
+    pluginId: pluginName,
+    aiCommandAllowed: permission.allowed
   })
 })
 

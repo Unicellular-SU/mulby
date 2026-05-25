@@ -1,9 +1,13 @@
 import { spawn } from 'node:child_process'
+import path from 'node:path'
 import treeKill from 'tree-kill'
 import type {
   CommandAuditItem,
+  CommandCallerIdentity,
+  CommandExecutionProfile,
   CommandRule,
   CommandRunnerSettings,
+  CommandSandboxLevel,
   CommandTrustRecord
 } from '../../shared/types/settings'
 
@@ -14,6 +18,9 @@ export interface RunCommandInput {
   env?: Record<string, string>
   timeoutMs?: number
   shell?: boolean
+  executionProfile?: CommandExecutionProfile
+  network?: boolean
+  writableRoots?: string[]
 }
 
 export interface RunCommandResult {
@@ -45,6 +52,9 @@ export interface RunCommandContext {
    * source === 'app' 时忽略该字段（主应用永远完整继承）。
    */
   envKeys?: string[] | '*'
+  caller?: CommandCallerIdentity
+  defaultProfile?: CommandExecutionProfile
+  maxProfile?: CommandExecutionProfile
   assumeUserApproved?: boolean
   abortSignal?: AbortSignal
 }
@@ -178,6 +188,115 @@ function findMatchingRule(rules: CommandRule[], executable: string, commandLine:
 
 function clamp(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, value))
+}
+
+const PROFILE_RANK: Record<CommandExecutionProfile, number> = {
+  sandbox: 0,
+  workspace: 1,
+  trusted: 2
+}
+
+function normalizeExecutionProfile(value: unknown): CommandExecutionProfile | undefined {
+  return value === 'sandbox' || value === 'workspace' || value === 'trusted'
+    ? value
+    : undefined
+}
+
+function compareProfile(a: CommandExecutionProfile, b: CommandExecutionProfile): number {
+  return PROFILE_RANK[a] - PROFILE_RANK[b]
+}
+
+function inferDefaultProfile(context: RunCommandContext): CommandExecutionProfile {
+  const actor = context.caller?.actor
+  const kind = context.caller?.kind
+  if (actor === 'ai' || kind === 'ai' || kind === 'openclaw') return 'sandbox'
+  if (context.source === 'plugin') return 'workspace'
+  return 'trusted'
+}
+
+function inferMaxProfile(context: RunCommandContext): CommandExecutionProfile {
+  const actor = context.caller?.actor
+  const kind = context.caller?.kind
+  if (actor === 'ai' || kind === 'ai') return context.source === 'plugin' ? 'sandbox' : 'workspace'
+  if (kind === 'openclaw') return 'workspace'
+  if (context.source === 'plugin') return 'workspace'
+  return 'trusted'
+}
+
+function resolveExecutionProfile(input: RunCommandInput, context: RunCommandContext): {
+  requested: CommandExecutionProfile
+  resolved: CommandExecutionProfile
+  maxProfile: CommandExecutionProfile
+  elevatedFrom?: CommandExecutionProfile
+} {
+  const defaultProfile = normalizeExecutionProfile(context.defaultProfile) || inferDefaultProfile(context)
+  const requested = normalizeExecutionProfile(input.executionProfile) || defaultProfile
+  const maxProfile = normalizeExecutionProfile(context.maxProfile) || inferMaxProfile(context)
+  if (compareProfile(requested, maxProfile) > 0) {
+    throw new CommandPolicyError(`当前调用方最多允许 ${maxProfile} 执行环境，不能请求 ${requested}`)
+  }
+  return {
+    requested,
+    resolved: requested,
+    maxProfile,
+    elevatedFrom: requested !== defaultProfile ? defaultProfile : undefined
+  }
+}
+
+function resolveSandboxLevel(profile: CommandExecutionProfile, settings: CommandRunnerSettings): CommandSandboxLevel {
+  if (profile !== 'sandbox') return 'none'
+  return settings.sandbox?.enabled === false ? 'none' : 'policy'
+}
+
+function normalizeRootList(values: unknown): string[] {
+  if (!Array.isArray(values)) return []
+  const out: string[] = []
+  const seen = new Set<string>()
+  for (const item of values) {
+    const raw = String(item || '').trim()
+    if (!raw) continue
+    const resolved = path.resolve(raw)
+    if (seen.has(resolved)) continue
+    seen.add(resolved)
+    out.push(resolved)
+  }
+  return out
+}
+
+function pathInside(root: string, target: string): boolean {
+  const relative = path.relative(root, target)
+  return relative === '' || (!!relative && !relative.startsWith('..') && !path.isAbsolute(relative))
+}
+
+function resolveCommandRootScope(
+  input: RunCommandInput,
+  settings: CommandRunnerSettings,
+  profile: CommandExecutionProfile
+): string[] {
+  if (profile === 'trusted') return []
+  const configured = profile === 'sandbox'
+    ? settings.sandbox?.writableRoots?.length
+      ? settings.sandbox.writableRoots
+      : settings.sandbox?.allowedRoots
+    : settings.sandbox?.allowedRoots
+  const roots = normalizeRootList(configured || [])
+  const requested = normalizeRootList(input.writableRoots || [])
+  if (requested.length === 0 || roots.length === 0) return roots
+
+  // Per-command roots may narrow the configured scope, but must not expand it.
+  // The authoritative boundary is settings.sandbox.{allowedRoots,writableRoots}.
+  const scopedRequested = requested.filter((requestedRoot) =>
+    roots.some((configuredRoot) => pathInside(configuredRoot, requestedRoot))
+  )
+  return scopedRequested.length > 0 ? uniqueNonEmpty(scopedRequested) : roots
+}
+
+function assertCwdAllowed(cwd: string | undefined, roots: string[], profile: CommandExecutionProfile): void {
+  if (profile === 'trusted' || roots.length === 0) return
+  const resolvedCwd = path.resolve(cwd || process.cwd())
+  if (!roots.some((root) => pathInside(root, resolvedCwd))) {
+    throw new CommandPolicyError(`${profile} 执行环境禁止使用白名单外 cwd：${resolvedCwd}`)
+  }
 }
 
 /**
@@ -362,10 +481,12 @@ const SAFE_ENV_BASELINE_KEYS = [
 function buildSafeEnv(
   context: RunCommandContext,
   userEnv?: Record<string, string>,
-  manifestEnvKeys?: string[] | string
+  manifestEnvKeys?: string[] | string,
+  profile: CommandExecutionProfile = 'trusted'
 ): Record<string, string> {
+  const inheritBaselineOnly = profile === 'sandbox'
   // 主应用来源：完整继承
-  if (context.source === 'app') {
+  if (context.source === 'app' && !inheritBaselineOnly) {
     return {
       ...process.env as Record<string, string>,
       ...(userEnv || {})
@@ -373,7 +494,7 @@ function buildSafeEnv(
   }
 
   // 插件来源：通配符 '*' 等同于完整继承
-  if (manifestEnvKeys === '*') {
+  if (manifestEnvKeys === '*' && !inheritBaselineOnly) {
     return {
       ...process.env as Record<string, string>,
       ...(userEnv || {})
@@ -571,6 +692,37 @@ export class CommandRunnerService {
     const startAt = this.now()
     const envKeys = listEnvKeys(env)
     const sanitizedEnvKeys = sanitizeEnvKeysForAudit(envKeys, settings)
+    let profileResolution: ReturnType<typeof resolveExecutionProfile>
+    try {
+      profileResolution = resolveExecutionProfile(input, context)
+    } catch (error) {
+      const durationMs = this.now() - startAt
+      const message = error instanceof Error ? error.message : String(error)
+      this.appendAudit({
+        id: this.makeAuditId(),
+        timestamp: startAt,
+        source: context.source,
+        pluginId: context.pluginId,
+        caller: context.caller,
+        command,
+        args,
+        envKeys: sanitizedEnvKeys,
+        cwd: input.cwd,
+        shell,
+        timeoutMs,
+        durationMs,
+        status: 'blocked',
+        reason: message,
+        success: false
+      })
+      throw error
+    }
+    const executionProfile = profileResolution.resolved
+    const rootScope = resolveCommandRootScope(input, settings, executionProfile)
+    const sandboxLevel = resolveSandboxLevel(executionProfile, settings)
+    const networkAllowed = executionProfile === 'trusted'
+      ? true
+      : input.network === true && (executionProfile !== 'sandbox' || settings.sandbox?.networkAllowed === true)
 
     try {
       await this.acquire(settings.maxConcurrent || 4, settings.maxQueueSize)
@@ -584,6 +736,12 @@ export class CommandRunnerService {
         timestamp: startAt,
         source: context.source,
         pluginId: context.pluginId,
+        caller: context.caller,
+        executionProfile,
+        sandboxLevel,
+        elevatedFrom: profileResolution.elevatedFrom,
+        networkAllowed,
+        rootScope,
         command,
         args,
         envKeys: sanitizedEnvKeys,
@@ -608,11 +766,15 @@ export class CommandRunnerService {
         shell,
         timeoutMs,
         context,
-        settings
+        settings,
+        executionProfile,
+        rootScope,
+        networkRequested: input.network === true,
+        networkAllowed
       })
 
       // 构建安全环境变量：根据来源 + manifest 声明决定继承范围
-      const safeEnv = buildSafeEnv(context, env, context.envKeys)
+      const safeEnv = buildSafeEnv(context, env, context.envKeys, executionProfile)
 
       const result = await this.execute({
         command,
@@ -631,6 +793,12 @@ export class CommandRunnerService {
         timestamp: startAt,
         source: context.source,
         pluginId: context.pluginId,
+        caller: context.caller,
+        executionProfile,
+        sandboxLevel,
+        elevatedFrom: profileResolution.elevatedFrom,
+        networkAllowed,
+        rootScope,
         command,
         args,
         envKeys: sanitizedEnvKeys,
@@ -662,6 +830,12 @@ export class CommandRunnerService {
         timestamp: startAt,
         source: context.source,
         pluginId: context.pluginId,
+        caller: context.caller,
+        executionProfile,
+        sandboxLevel,
+        elevatedFrom: profileResolution.elevatedFrom,
+        networkAllowed,
+        rootScope,
         command,
         args,
         envKeys: sanitizedEnvKeys,
@@ -694,8 +868,12 @@ export class CommandRunnerService {
     timeoutMs: number
     context: RunCommandContext
     settings: CommandRunnerSettings
+    executionProfile: CommandExecutionProfile
+    rootScope: string[]
+    networkRequested: boolean
+    networkAllowed: boolean
   }): Promise<void> {
-    const { command, args, envKeys, sanitizedEnvKeys, cwd, shell, context, settings } = input
+    const { command, args, envKeys, sanitizedEnvKeys, cwd, shell, context, settings, executionProfile, rootScope, networkRequested, networkAllowed } = input
     if (!settings.enabled) {
       throw new CommandPolicyError('命令执行能力已在设置中禁用')
     }
@@ -704,6 +882,13 @@ export class CommandRunnerService {
     }
     if (shell && !settings.allowShell) {
       throw new CommandPolicyError('当前策略禁止 shell=true 执行')
+    }
+    assertCwdAllowed(cwd, rootScope, executionProfile)
+    if (executionProfile === 'sandbox' && networkAllowed !== true && networkRequested) {
+      throw new CommandPolicyError('sandbox 执行环境默认禁止网络访问')
+    }
+    if (executionProfile === 'sandbox' && shell) {
+      throw new CommandPolicyError('sandbox 执行环境默认禁止 shell=true 执行')
     }
 
     const commandLine = normalizeCommandLine(command, args)

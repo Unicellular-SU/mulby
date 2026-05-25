@@ -20,7 +20,7 @@ import { pluginInputMonitor, type GlobalInputEvent, type InputMonitorOptions, ty
 import { pluginFeatureStore, redirectHotKeySetting, redirectAiModelsSetting, registerMainPushHandler, registerMainPushSelectHandler, type MainPushAction, type MainPushItem } from './dynamic-features'
 import { aiService } from '../ai'
 import { aiSkillService } from '../ai/skills'
-import type { DynamicFeatureInput, PluginMessage, PluginToolHandler } from '../../shared/types/plugin'
+import type { DynamicFeatureInput, PluginMessage, PluginRunCommandInput, PluginToolHandler } from '../../shared/types/plugin'
 import type { PluginMessageBus } from './message-bus'
 import type { TaskScheduler } from '../scheduler'
 import type { TaskInput, TaskFilter } from '../scheduler/types'
@@ -31,6 +31,7 @@ import type {
   AiImageGenerateProgressChunk,
   AiPromiseLike
 } from '../../shared/types/ai'
+import type { CommandExecutionProfile } from '../../shared/types/settings'
 import { commandRunnerService } from '../services/command-runner'
 import { executeSharpOperations } from '../ipc/sharp'
 import {
@@ -67,6 +68,9 @@ type NormalizedPluginPermissionApiType = Exclude<PluginPermissionApiType, 'notif
 
 interface CreatePluginApiOptions {
   runCommandAllowed?: boolean
+  envKeys?: string[] | '*'
+  defaultCommandProfile?: CommandExecutionProfile
+  maxCommandProfile?: CommandExecutionProfile
   inputMonitorAllowed?: boolean
   microphoneAllowed?: boolean
   cameraAllowed?: boolean
@@ -437,18 +441,20 @@ ${item.files.map(p => `    <string>${p}</string>`).join('\n')}
       openFolder: (path: string) => pluginShell.openFolder(path),
       trashItem: (path: string) => pluginShell.trashItem(path),
       beep: () => pluginShell.beep(),
-      runCommand: async (input: {
-        command: string
-        args?: string[]
-        cwd?: string
-        env?: Record<string, string>
-        timeoutMs?: number
-        shell?: boolean
-      }) => {
+      runCommand: async (input: PluginRunCommandInput) => {
         return await commandRunnerService.runCommand(input, {
           source: 'plugin',
           pluginId: pluginName,
-          runCommandAllowed
+          runCommandAllowed,
+          envKeys: options?.envKeys,
+          defaultProfile: options?.defaultCommandProfile,
+          maxProfile: options?.maxCommandProfile,
+          caller: {
+            kind: 'plugin',
+            host: 'plugin',
+            actor: 'system',
+            pluginId: pluginName
+          }
         })
       },
       getRunCommandPolicy: async () => {

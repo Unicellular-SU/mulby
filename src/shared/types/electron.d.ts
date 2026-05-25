@@ -491,6 +491,9 @@ export interface RunCommandInput {
   env?: Record<string, string>
   timeoutMs?: number
   shell?: boolean
+  executionProfile?: 'sandbox' | 'workspace' | 'trusted'
+  network?: boolean
+  writableRoots?: string[]
 }
 
 export interface RunCommandResult {

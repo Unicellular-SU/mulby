@@ -76,7 +76,19 @@ export interface PreparedChatRequest {
 export async function prepareChatRequest(input: PrepareChatRequestInput): Promise<PreparedChatRequest> {
   await aiSkillService.ensureCatalogLoaded()
   const skillResolution = aiSkillService.resolveForAiCall(input.option)
-  const resolvedOption = aiSkillService.applyResolutionToOption(input.option, skillResolution)
+  const resolvedBaseOption = aiSkillService.applyResolutionToOption(input.option, skillResolution)
+  const resolvedOption = resolvedBaseOption.toolContext?.caller
+    ? {
+        ...resolvedBaseOption,
+        toolContext: {
+          ...resolvedBaseOption.toolContext,
+          caller: {
+            ...resolvedBaseOption.toolContext.caller,
+            skillIds: skillResolution.selectedSkillIds
+          }
+        }
+      }
+    : resolvedBaseOption
   const effective = input.injectInternalRuntimeTools({
     option: resolvedOption,
     skillCapabilities: skillResolution.capabilities,

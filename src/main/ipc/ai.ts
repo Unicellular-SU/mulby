@@ -5,8 +5,10 @@ import { aiSkillService } from '../ai/skills'
 import { getAiSettings, updateAiSettings } from '../ai/config'
 import { resetProviderRegistry } from '../ai/providers'
 import { appSettingsManager } from '../services/app-settings'
+import { resolveIpcCallerSource, type IpcCallerInfo } from '../services/ipc-caller-resolver'
 import type { AiOption, AiMessage, AiImageGenerateProgressChunk, AiMcpServer } from '../../shared/types/ai'
 import type { AiToolWebSearchSettings } from '../../shared/types/settings'
+import type { PluginPermissions } from '../../shared/types/plugin'
 
 /** AI IPC handlers 的可选回调钩子 */
 export interface AiHandlersHooks {
@@ -14,19 +16,75 @@ export interface AiHandlersHooks {
   onDisabledPluginToolsChanged?: () => void
 }
 
+interface AiPluginLookupResult {
+  manifest: {
+    type?: string
+    permissions?: PluginPermissions
+  }
+}
+
+let pluginLookup: ((pluginId: string) => AiPluginLookupResult | undefined) | null = null
+
+export function setAiPluginLookup(
+  lookup: (pluginId: string) => AiPluginLookupResult | undefined
+): void {
+  pluginLookup = lookup
+}
+
+export function optionWithCallerIdentity(option: AiOption, caller: IpcCallerInfo): AiOption {
+  if (caller.source === 'untrusted') {
+    throw new Error('拒绝未知窗口调用 AI 能力')
+  }
+
+  const plugin = caller.source === 'plugin' && caller.pluginId
+    ? pluginLookup?.(caller.pluginId)
+    : undefined
+  const callerIdentity = caller.source === 'plugin' && caller.pluginId
+    ? {
+        kind: 'ai' as const,
+        host: 'plugin' as const,
+        actor: 'ai' as const,
+        pluginId: caller.pluginId,
+        pluginType: plugin?.manifest.type
+      }
+    : {
+        kind: 'ai' as const,
+        host: 'app' as const,
+        actor: 'ai' as const
+      }
+
+  return {
+    ...option,
+    toolContext: {
+      ...option.toolContext,
+      pluginName: caller.source === 'plugin' && caller.pluginId ? caller.pluginId : undefined,
+      caller: callerIdentity
+    }
+  }
+}
+
 export function registerAiHandlers(hooks?: AiHandlersHooks) {
-  ipcMain.handle('ai:call', async (_event: IpcMainInvokeEvent, option: AiOption) => {
-    return await aiService.call(option)
+  ipcMain.handle('ai:call', async (event: IpcMainInvokeEvent, option: AiOption) => {
+    const caller = resolveIpcCallerSource(event.sender)
+    return await aiService.call(optionWithCallerIdentity(option, caller))
   })
 
   ipcMain.handle('ai:stream', async (event: IpcMainInvokeEvent, option: AiOption) => {
     const requestId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+    let scopedOption: AiOption
+    try {
+      const caller = resolveIpcCallerSource(event.sender)
+      scopedOption = optionWithCallerIdentity(option, caller)
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error || 'AI stream rejected')
+      throw new Error(message)
+    }
 
     // 避免在 renderer 监听器挂载前发送首个 chunk/end，导致 Promise 永久等待。
     setTimeout(() => {
       let settled = false
       aiService
-        .stream(option, {
+        .stream(scopedOption, {
           onChunk: (chunk: AiMessage) => {
             event.sender.send('ai:stream:chunk', requestId, chunk)
           },

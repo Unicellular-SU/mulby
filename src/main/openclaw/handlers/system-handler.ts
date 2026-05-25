@@ -11,6 +11,7 @@
 import { app, Notification } from 'electron'
 import os from 'node:os'
 import type { CommandHandler } from '../command-registry'
+import type { CommandCallerIdentity, CommandExecutionProfile } from '../../../shared/types/settings'
 
 /** 所需的外部依赖注入 */
 export interface SystemHandlerDeps {
@@ -25,6 +26,9 @@ export interface SystemHandlerDeps {
     source: 'app' | 'plugin'
     pluginId?: string
     runCommandAllowed?: boolean
+    caller?: CommandCallerIdentity
+    defaultProfile?: CommandExecutionProfile
+    maxProfile?: CommandExecutionProfile
   }) => Promise<unknown>
 }
 
@@ -55,7 +59,17 @@ export function createSystemHandlers(deps: SystemHandlerDeps): Record<string, { 
             shell,
             timeoutMs
           },
-          { source: 'app', runCommandAllowed: true }
+          {
+            source: 'app',
+            runCommandAllowed: true,
+            defaultProfile: 'workspace',
+            maxProfile: 'workspace',
+            caller: {
+              kind: 'openclaw',
+              host: 'openclaw',
+              actor: 'remote'
+            }
+          }
         ) as { exitCode?: number | null; timedOut?: boolean; success?: boolean; stdout?: string; stderr?: string }
 
         // 返回 Gateway 期望的标准格式
