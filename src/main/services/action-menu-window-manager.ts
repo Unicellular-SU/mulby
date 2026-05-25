@@ -107,7 +107,7 @@ export class ActionMenuWindowManager {
       onSelect: options.onSelect,
       resolveSelection
     }
-    this.attachOwner(options.ownerWindow)
+    this.attachOwner(options.ownerWindow, this.shouldPreserveOwnerFocus())
     this.startBlurSuppression()
 
     const height = this.measureHeight(items)
@@ -121,8 +121,13 @@ export class ActionMenuWindowManager {
       theme: this.themeManager.getActualTheme()
     })
 
-    win.show()
-    win.focus()
+    if (this.shouldPreserveOwnerFocus()) {
+      win.setFocusable(false)
+      win.showInactive()
+    } else {
+      win.show()
+      win.focus()
+    }
     return true
   }
 
@@ -237,6 +242,10 @@ export class ActionMenuWindowManager {
     }
   }
 
+  private shouldPreserveOwnerFocus(): boolean {
+    return process.platform === 'win32'
+  }
+
   private getActionMenuPath(): string | null {
     const candidates = app.isPackaged
       ? [join(__dirname, '../renderer/action-menu.html')]
@@ -293,18 +302,24 @@ export class ActionMenuWindowManager {
     }
   }
 
-  private attachOwner(ownerWindow: BrowserWindow): void {
+  private attachOwner(ownerWindow: BrowserWindow, closeOnOwnerBlur = false): void {
     this.ownerCleanup?.()
     const hide = () => this.hide()
     ownerWindow.once('closed', hide)
     ownerWindow.on('hide', hide)
     ownerWindow.on('move', hide)
     ownerWindow.on('resize', hide)
+    if (closeOnOwnerBlur) {
+      ownerWindow.on('blur', hide)
+    }
     this.ownerCleanup = () => {
       ownerWindow.removeListener('closed', hide)
       ownerWindow.removeListener('hide', hide)
       ownerWindow.removeListener('move', hide)
       ownerWindow.removeListener('resize', hide)
+      if (closeOnOwnerBlur) {
+        ownerWindow.removeListener('blur', hide)
+      }
     }
   }
 
