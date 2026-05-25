@@ -176,6 +176,128 @@ describe('command runner service', () => {
     assert.equal(getSettings().audit.records[2].status, 'allowed')
   })
 
+  it('allowList hit skips consent when consent is required', async () => {
+    let consentCount = 0
+    const { service, getSettings } = createInMemoryRunner({
+      settings: {
+        requireConsent: true,
+        allowList: [
+          { id: 'allow-node', mode: 'exact', value: process.execPath, enabled: true }
+        ]
+      },
+      consent: async () => {
+        consentCount += 1
+        return 'deny'
+      }
+    })
+
+    const result = await service.runCommand(
+      {
+        command: process.execPath,
+        args: ['-e', 'process.stdout.write("allowlist-hit")']
+      },
+      { source: 'app' }
+    )
+
+    assert.equal(result.stdout, 'allowlist-hit')
+    assert.equal(consentCount, 0)
+    assert.equal(getSettings().audit.records[0].status, 'allowed')
+  })
+
+  it('allowList miss asks for consent instead of hard-blocking', async () => {
+    let consentCount = 0
+    let consentDetail = ''
+    const { service, getSettings } = createInMemoryRunner({
+      settings: {
+        requireConsent: true,
+        allowList: [
+          { id: 'allow-other', mode: 'exact', value: 'definitely-not-node', enabled: true }
+        ]
+      },
+      consent: async (request) => {
+        consentCount += 1
+        consentDetail = request.detail
+        return 'allow-once'
+      }
+    })
+
+    const result = await service.runCommand(
+      {
+        command: process.execPath,
+        args: ['-e', 'process.stdout.write("allowlist-miss")']
+      },
+      { source: 'app' }
+    )
+
+    assert.equal(result.stdout, 'allowlist-miss')
+    assert.equal(consentCount, 1)
+    assert.match(consentDetail, /白名单: 未命中白名单/)
+    assert.equal(getSettings().audit.records[0].status, 'allowed')
+  })
+
+  it('allowList miss is blocked when the user denies consent', async () => {
+    let consentCount = 0
+    const { service, getSettings } = createInMemoryRunner({
+      settings: {
+        requireConsent: true,
+        allowList: [
+          { id: 'allow-other', mode: 'exact', value: 'definitely-not-node', enabled: true }
+        ]
+      },
+      consent: async () => {
+        consentCount += 1
+        return 'deny'
+      }
+    })
+
+    await assert.rejects(
+      service.runCommand(
+        {
+          command: process.execPath,
+          args: ['-e', 'process.stdout.write("denied")']
+        },
+        { source: 'app' }
+      ),
+      /用户拒绝执行命令/
+    )
+
+    assert.equal(consentCount, 1)
+    assert.equal(getSettings().audit.records[0].status, 'blocked')
+  })
+
+  it('denyList stays a hard block before allowList miss consent', async () => {
+    let consentCount = 0
+    const { service, getSettings } = createInMemoryRunner({
+      settings: {
+        requireConsent: true,
+        allowList: [
+          { id: 'allow-other', mode: 'exact', value: 'definitely-not-node', enabled: true }
+        ],
+        denyList: [
+          { id: 'deny-node', mode: 'exact', value: process.execPath, enabled: true }
+        ]
+      },
+      consent: async () => {
+        consentCount += 1
+        return 'allow-once'
+      }
+    })
+
+    await assert.rejects(
+      service.runCommand(
+        {
+          command: process.execPath,
+          args: ['-e', 'process.stdout.write("blocked")']
+        },
+        { source: 'app' }
+      ),
+      /黑名单/
+    )
+
+    assert.equal(consentCount, 0)
+    assert.equal(getSettings().audit.records[0].status, 'blocked')
+  })
+
   it('does not widen shell wrapper command-line trust to the wrapper executable', async () => {
     let consentCount = 0
     let firstDetail = ''
@@ -467,29 +589,39 @@ describe('command runner service', () => {
     }
   })
 
-  // ========== H2: allowList 在 shell:true 下深度校验 ==========
-  it('shell:true allowList blocks inner command even if wrapper matches', async () => {
+  // ========== H2: allowList 在 shell:true 下深度评估 ==========
+  it('shell:true allowList miss on inner command asks for consent even if wrapper matches', async () => {
+    let consentCount = 0
+    let consentDetail = ''
     const { service } = createInMemoryRunner({
       settings: {
         allowShell: true,
+        requireConsent: true,
         allowList: [
           { id: 'r1', enabled: true, mode: 'prefix', value: 'sh' }
         ]
+      },
+      consent: async (request) => {
+        consentCount += 1
+        consentDetail = request.detail
+        return 'deny'
       }
     })
-    // sh 在白名单；但内部命令 curl 不在 → 应被拒
+    // sh 在白名单；但内部命令 node 不在 → 不硬拦截，改为请求 consent
     await assert.rejects(
       service.runCommand(
         {
           command: 'sh',
-          args: ['-c', 'curl http://example.com'],
+          args: ['-c', `${process.execPath} -e "process.stdout.write('inner-miss')"`],
           shell: true
         },
-        { source: 'app', assumeUserApproved: true }
+        { source: 'app' }
       ),
-      /命令不在白名单中/,
-      'shell:true 下 allowList 应对内层命令做深度校验'
+      /用户拒绝执行命令/,
+      'shell:true 下 allowList 未命中内层命令时应进入 consent 流程'
     )
+    assert.equal(consentCount, 1)
+    assert.match(consentDetail, /白名单: 未命中白名单/)
   })
 
   it('shell:true allowList passes when all inner tokens are whitelisted', async () => {

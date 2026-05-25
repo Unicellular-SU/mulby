@@ -94,6 +94,12 @@ interface TrustCandidate {
   detail: string
 }
 
+interface AllowListEvaluation {
+  hasRules: boolean
+  matched: boolean
+  detail?: string
+}
+
 class CommandPolicyError extends Error {
   readonly kind: 'blocked'
 
@@ -482,6 +488,10 @@ function isTrustedCommandMatch(record: CommandTrustRecord, executable: string, c
   return executable === record.prefix
 }
 
+function uniqueNonEmpty(values: Array<string | undefined>): string[] {
+  return [...new Set(values.map((item) => String(item || '').trim()).filter(Boolean))]
+}
+
 export class CommandRunnerService {
   private activeCount = 0
   private waitQueue: Array<() => void> = []
@@ -724,26 +734,41 @@ export class CommandRunnerService {
     }
 
     const enabledAllowRules = (settings.allowList || []).filter((item) => item.enabled !== false && String(item.value || '').trim())
+    let allowListEvaluation: AllowListEvaluation = { hasRules: enabledAllowRules.length > 0, matched: false }
     if (enabledAllowRules.length > 0) {
       if (shellLike) {
-        // shell 深度校验：要求所有提取出的业务 token（非 shell wrapper）都能匹配白名单
-        // 避免 `sh -c "rm -rf /"` 仅凭 sh 在白名单就放行
+        // shell 深度评估：所有提取出的业务 token（非 shell wrapper）都匹配时，
+        // 视为命中白名单；未命中不再硬拒绝，而是进入 consent 流程。
         //
         // 注意：内层 token 匹配时不传完整 commandLine（否则 rule.value='sh' 的
         // prefix 规则会因 commandLine 以 "sh " 开头而满足，导致深度校验失效）。
         const tokens = extractShellTokens(commandLine)
         const businessTokens = tokens.filter((t) => !SHELL_WRAPPERS.has(getExecutableName(t)))
         const candidates = businessTokens.length > 0 ? businessTokens : tokens
+        const matchedRules: string[] = []
+        const unmatchedTokens: string[] = []
         for (const token of candidates) {
           const match = findMatchingRule(enabledAllowRules, token, token)
-          if (!match.matched) {
-            throw new CommandPolicyError(`命令不在白名单中：${token}`)
-          }
+          if (match.matched) matchedRules.push(match.rule?.value || token)
+          else unmatchedTokens.push(token)
+        }
+        const uniqueMatchedRules = uniqueNonEmpty(matchedRules)
+        const uniqueUnmatchedTokens = uniqueNonEmpty(unmatchedTokens)
+        allowListEvaluation = {
+          hasRules: true,
+          matched: candidates.length > 0 && uniqueUnmatchedTokens.length === 0,
+          detail: uniqueUnmatchedTokens.length === 0
+            ? `命中白名单规则：${uniqueMatchedRules.join(', ') || '(unknown)'}`
+            : `未命中白名单：${uniqueUnmatchedTokens.join(', ')}`
         }
       } else {
         const allowMatch = findMatchingRule(enabledAllowRules, executable, commandLine)
-        if (!allowMatch.matched) {
-          throw new CommandPolicyError('命令不在白名单中')
+        allowListEvaluation = {
+          hasRules: true,
+          matched: allowMatch.matched,
+          detail: allowMatch.matched
+            ? `命中白名单规则：${allowMatch.rule?.value || executable || command}`
+            : `未命中白名单：${executable || command}`
         }
       }
     }
@@ -756,6 +781,7 @@ export class CommandRunnerService {
 
     if (!settings.requireConsent) return
     if (context.source === 'app' && context.assumeUserApproved === true) return
+    if (allowListEvaluation.hasRules && allowListEvaluation.matched) return
 
     const trustCandidate = buildTrustCandidate(command, args, shell)
 
@@ -798,6 +824,9 @@ export class CommandRunnerService {
         : '应用请求执行系统命令',
       detail: [
         `命令: ${preview || command}`,
+        allowListEvaluation.hasRules
+          ? `白名单: ${allowListEvaluation.detail || (allowListEvaluation.matched ? '命中' : '未命中，将请求本次确认')}`
+          : undefined,
         trustCandidate.persistable
           ? `信任范围: ${trustCandidate.prefix}（${trustCandidate.detail}）`
           : `信任范围: ${trustCandidate.detail}`,
@@ -805,7 +834,7 @@ export class CommandRunnerService {
         sanitizedEnvKeys.length > 0 ? `env keys: ${sanitizedEnvKeys.join(', ')}` : 'env keys: (none)',
         `shell: ${shell ? 'true' : 'false'}`,
         `timeout: ${input.timeoutMs}ms`
-      ].join('\n')
+      ].filter((line): line is string => !!line).join('\n')
     }
 
     const decision = this.requestConsent
