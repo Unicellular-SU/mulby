@@ -74,4 +74,29 @@ describe('action menu window manager', () => {
       'the menu surface must render a themed shadow'
     )
   })
+
+  it('shows Windows action menus without stealing focus from the attached host surface', () => {
+    const source = readFileSync(actionMenuWindowManagerPath, 'utf8')
+
+    assert.match(
+      source,
+      /private shouldPreserveOwnerFocus\(\): boolean \{[\s\S]*process\.platform === 'win32'/,
+      'Windows action menus should use a dedicated focus-preserving path'
+    )
+    assert.match(
+      source,
+      /this\.attachOwner\(options\.ownerWindow, this\.shouldPreserveOwnerFocus\(\)\)/,
+      'focus-preserving menus need owner blur cleanup because the menu window itself will not receive focus'
+    )
+    assert.match(
+      source,
+      /if \(this\.shouldPreserveOwnerFocus\(\)\) \{[\s\S]*win\.setFocusable\(false\)[\s\S]*win\.showInactive\(\)[\s\S]*\} else \{[\s\S]*win\.show\(\)[\s\S]*win\.focus\(\)/,
+      'Windows action menus must show inactive instead of focusing a separate BrowserWindow'
+    )
+    assert.match(
+      source,
+      /if \(closeOnOwnerBlur\) \{[\s\S]*ownerWindow\.on\('blur', hide\)[\s\S]*ownerWindow\.removeListener\('blur', hide\)/,
+      'a non-focusable Windows menu should close when the owner actually blurs to another app'
+    )
+  })
 })
