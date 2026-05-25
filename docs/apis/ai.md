@@ -321,6 +321,8 @@ await ai.call(option, (chunk) => {
 
 > 高风险能力默认会被宿主安全策略拦截，必须在 `toolingPolicy.capabilityAllowList` 中显式放行才能在本次会话使用，详见下文「网络搜索工具设置」末尾的示例。
 
+> 插件承载的 AI 还需要插件 manifest 显式声明对应权限。命令型能力（`shell.exec`、`shell.script`、`git.status`、`git.diff`、`patch.apply`）要求 `permissions.commandExecution.ai.enabled: true`；旧版 `permissions.runCommand: true` 只授权插件代码直接调用命令，不授权 AI 生成命令。
+
 > `internalTools` 字段已废弃，新代码请使用 `capabilities`。两者的别名兼容映射定义于 `src/main/ai/tools/capabilities.ts`（如 `runcommand` → `shell.exec`、`websearch` → `web.search`）。
 
 ### 彻底禁用工具（纯文本翻译/安全限制场景）

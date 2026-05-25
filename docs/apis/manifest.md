@@ -21,7 +21,7 @@
 | `preload` | `string` | 否 | 指定 Preload 脚本文件路径，用于连接 Node.js 与前端（必须是 CommonJS 的 `.cjs` 后缀）。 |
 | `assets` | `string[]` | 否 | 打包时额外包含的插件内文件或目录。多 HTML 辅助窗口、额外 preload、`.node` 原生模块、外部二进制等需要显式列入。 |
 | `icon` | `PluginIcon` | 否 | 插件的图标，路径或数据等。参考下方“图标配置”。 |
-| `permissions` | `object` | 否 | 插件向系统申请的特殊权限。例如 `{ "runCommand": true, "screen": true, "clipboard": true }`。 |
+| `permissions` | `object` | 否 | 插件向系统申请的特殊权限。例如 `{ "commandExecution": { "direct": { "enabled": true } }, "screen": true, "clipboard": true }`。 |
 | `tools` | `PluginToolSchema[]`| 否 | 给 AI Agent 提供的工具注册声明。 |
 | `window` | `WindowOptions` | 否 | 独立窗口配置。 |
 | `pluginSetting` | `PluginSetting` | 否 | 插件底层的常规与运行行为配置。 |
@@ -54,7 +54,8 @@
 
 | 字段名 | 类型 | 描述 |
 | --- | --- | --- |
-| `runCommand` | `boolean` | 允许插件调用受策略保护的命令执行能力。 |
+| `runCommand` | `boolean` | 旧版命令执行权限。仅授权插件自身直接调用 `shell.runCommand`，不授权插件承载 AI 生成命令。新插件优先使用 `commandExecution.direct`。 |
+| `commandExecution` | `object` | 命令执行分场景授权。可分别声明 `direct`（插件代码直接调用）和 `ai`（插件承载 AI 生成命令）。 |
 | `webview` | `boolean` | 允许插件 UI 使用 Electron `<webview>` 作为普通远程网页容器。宿主只会对声明为 `true` 的插件开启 `webviewTag`，并会移除 guest preload、关闭 Node 集成。 |
 | `screen` | `boolean` | 允许插件访问屏幕录制/截图能力。插件调用 `screen.getSources()`、`screen.getWindowBounds()`、`screen.capture()`、`screen.captureRegion()`、`screen.getMediaStreamConstraints()`，或通过 `chromeMediaSource: 'desktop'` 进行桌面捕获时必须声明。 |
 | `microphone` | `boolean` | 允许插件访问麦克风。插件 UI 调用 `getUserMedia({ audio: true })` 或使用 `media` / `permission` 的麦克风权限 API 时必须声明。 |
@@ -66,7 +67,47 @@
 | `contacts` | `boolean` | 允许插件检查/请求通讯录权限。 |
 | `calendar` | `boolean` | 允许插件检查/请求日历权限。 |
 | `inputMonitor` | `boolean` | 允许插件调用全局输入监听 API（鼠标点击轨迹、键盘按键监听）。macOS 通常还需声明 `accessibility` 并获得系统辅助功能授权。详见 [全局输入监听 API](./input-monitor.md)。 |
-| `envKeys` | `string[] \| "*"` | `runCommand` 继承环境变量的额外白名单。仅在 `runCommand: true` 时生效。 |
+| `envKeys` | `string[] \| "*"` | 命令执行继承环境变量的额外白名单。仅在 legacy `runCommand` 或 `commandExecution` 启用时生效。未声明时只继承安全基线；`"*"` 表示继承完整环境，风险较高。 |
+
+### 命令执行权限 (commandExecution)
+
+`commandExecution` 将“插件代码直接调命令”和“插件承载 AI 生成命令”拆开授权，避免 AI 插件继承 legacy `runCommand` 权限。
+
+```json
+{
+  "permissions": {
+    "commandExecution": {
+      "direct": {
+        "enabled": true,
+        "defaultProfile": "workspace",
+        "maxProfile": "workspace"
+      },
+      "ai": {
+        "enabled": true,
+        "defaultProfile": "sandbox",
+        "maxProfile": "workspace"
+      }
+    },
+    "envKeys": ["PATH", "JAVA_HOME"]
+  }
+}
+```
+
+| 字段名 | 类型 | 描述 |
+| --- | --- | --- |
+| `commandExecution.direct.enabled` | `boolean` | 允许插件自身调用 `context.api.shell.runCommand`。 |
+| `commandExecution.direct.defaultProfile` | `"sandbox" \| "workspace" \| "trusted"` | 插件直接命令未显式传 `executionProfile` 时使用的默认 profile。 |
+| `commandExecution.direct.maxProfile` | `"sandbox" \| "workspace" \| "trusted"` | 插件直接命令允许请求的最高 profile。 |
+| `commandExecution.ai.enabled` | `boolean` | 允许该插件承载的 AI 使用 Mulby 内置命令型能力，如 `shell.exec` / `git.diff` / `patch.apply`。 |
+| `commandExecution.ai.defaultProfile` | `"sandbox" \| "workspace" \| "trusted"` | 插件承载 AI 命令的默认 profile。 |
+| `commandExecution.ai.maxProfile` | `"sandbox" \| "workspace" \| "trusted"` | 插件承载 AI 命令允许请求的最高 profile。 |
+
+默认策略：
+
+- 未声明 `commandExecution.direct` 但声明了 `runCommand: true`：兼容旧插件，直接命令默认/最高为 `trusted`。
+- 显式声明 `commandExecution.direct.enabled: true`：默认/最高为 `workspace`，除非 manifest 指定 profile。
+- 显式声明 `commandExecution.ai.enabled: true`：默认/最高为 `sandbox`，除非 manifest 指定 profile。
+- 未声明 `commandExecution.ai.enabled`：插件承载 AI 的命令型能力会被过滤或拒绝，即使插件有 `runCommand: true`。
 
 插件前端可通过 `window.mulby.onPluginInit()` 读取宿主暴露的能力状态：
 
