@@ -539,9 +539,8 @@ describe('command runner service', () => {
   })
 
   // ========== H1: 插件 envKeys 接通 ==========
-  it('plugin without envKeys gets minimal safe env baseline only', async () => {
+  it('plugin without envKeys inherits non-denied env vars', async () => {
     const { service } = createInMemoryRunner()
-    // 主进程设置一个非基线的变量
     process.env.__MULBY_TEST_SECRET = 'super-secret-value'
     try {
       const result = await service.runCommand(
@@ -551,9 +550,28 @@ describe('command runner service', () => {
         },
         { source: 'plugin', pluginId: 'p1', runCommandAllowed: true }
       )
-      assert.equal(result.stdout, 'missing', '插件未声明 envKeys 时不应继承非基线变量')
+      assert.equal(result.stdout, 'super-secret-value', '插件应继承非 denyEnvKeys 的变量')
     } finally {
       delete process.env.__MULBY_TEST_SECRET
+    }
+  })
+
+  it('plugin env excludes denyEnvKeys', async () => {
+    const { service } = createInMemoryRunner({
+      settings: { denyEnvKeys: ['__MULBY_DENIED_KEY'] }
+    })
+    process.env.__MULBY_DENIED_KEY = 'should-be-hidden'
+    try {
+      const result = await service.runCommand(
+        {
+          command: process.execPath,
+          args: ['-e', 'process.stdout.write(process.env.__MULBY_DENIED_KEY || "missing")']
+        },
+        { source: 'plugin', pluginId: 'p1', runCommandAllowed: true }
+      )
+      assert.equal(result.stdout, 'missing', 'denyEnvKeys 中的变量不应被继承')
+    } finally {
+      delete process.env.__MULBY_DENIED_KEY
     }
   })
 
@@ -780,34 +798,47 @@ describe('command runner service', () => {
     assert.equal(result.stdout, 'true')
   })
 
-  it('sandbox profile uses minimal env and records caller/profile audit fields', async () => {
-    const { service, getSettings } = createInMemoryRunner()
-    process.env.__MULBY_SANDBOX_SECRET = 'hidden'
+  it('sandbox profile inherits env filtered by denyEnvKeys and records caller/profile audit fields', async () => {
+    const { service, getSettings } = createInMemoryRunner({
+      settings: { denyEnvKeys: ['__MULBY_SANDBOX_DENIED'] }
+    })
+    process.env.__MULBY_SANDBOX_VISIBLE = 'visible-value'
+    process.env.__MULBY_SANDBOX_DENIED = 'hidden-value'
     try {
-      const result = await service.runCommand(
+      const resultVisible = await service.runCommand(
         {
           command: process.execPath,
-          args: ['-e', 'process.stdout.write(process.env.__MULBY_SANDBOX_SECRET || "missing")']
+          args: ['-e', 'process.stdout.write(process.env.__MULBY_SANDBOX_VISIBLE || "missing")']
         },
         {
           source: 'app',
           defaultProfile: 'sandbox',
           maxProfile: 'workspace',
-          caller: {
-            kind: 'ai',
-            host: 'app',
-            actor: 'ai',
-            requestId: 'req-1'
-          }
+          caller: { kind: 'ai', host: 'app', actor: 'ai', requestId: 'req-1' }
         }
       )
-      assert.equal(result.stdout, 'missing')
+      assert.equal(resultVisible.stdout, 'visible-value')
+
+      const resultDenied = await service.runCommand(
+        {
+          command: process.execPath,
+          args: ['-e', 'process.stdout.write(process.env.__MULBY_SANDBOX_DENIED || "missing")']
+        },
+        {
+          source: 'app',
+          defaultProfile: 'sandbox',
+          maxProfile: 'workspace',
+          caller: { kind: 'ai', host: 'app', actor: 'ai', requestId: 'req-2' }
+        }
+      )
+      assert.equal(resultDenied.stdout, 'missing')
       assert.equal(getSettings().audit.records[0].executionProfile, 'sandbox')
       assert.equal(getSettings().audit.records[0].sandboxLevel, 'policy')
       assert.equal(getSettings().audit.records[0].caller?.kind, 'ai')
       assert.equal(getSettings().audit.records[0].caller?.requestId, 'req-1')
     } finally {
-      delete process.env.__MULBY_SANDBOX_SECRET
+      delete process.env.__MULBY_SANDBOX_VISIBLE
+      delete process.env.__MULBY_SANDBOX_DENIED
     }
   })
 

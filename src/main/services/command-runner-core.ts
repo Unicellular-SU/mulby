@@ -537,45 +537,54 @@ function buildSafeEnv(
   context: RunCommandContext,
   userEnv?: Record<string, string>,
   manifestEnvKeys?: string[] | string,
-  profile: CommandExecutionProfile = 'trusted'
+  profile: CommandExecutionProfile = 'trusted',
+  denyEnvKeys?: string[]
 ): Record<string, string> {
-  const inheritBaselineOnly = profile === 'sandbox'
-  // 主应用来源：完整继承
-  if (context.source === 'app' && !inheritBaselineOnly) {
+  // 非 sandbox 主应用来源：完整继承
+  if (context.source === 'app' && profile !== 'sandbox') {
     return {
       ...process.env as Record<string, string>,
       ...(userEnv || {})
     }
   }
 
-  // 插件来源：通配符 '*' 等同于完整继承
-  if (manifestEnvKeys === '*' && !inheritBaselineOnly) {
+  // 非 sandbox 插件 + 通配符 '*'：完整继承
+  if (manifestEnvKeys === '*' && profile !== 'sandbox') {
     return {
       ...process.env as Record<string, string>,
       ...(userEnv || {})
     }
   }
 
-  // 插件来源：最小基线 + manifest 声明
+  // 插件来源（含 sandbox）：继承 process.env，但排除 denyEnvKeys 黑名单
+  // + manifest 声明的额外 key 始终包含
+  const denySet = new Set((denyEnvKeys || []).map((k) => k.toUpperCase()))
+  const manifestExtra = new Set(
+    (Array.isArray(manifestEnvKeys) ? manifestEnvKeys : []).map((k) => k.toUpperCase())
+  )
   const baseEnv: Record<string, string> = {}
-  const allowedKeys = new Set([
-    ...SAFE_ENV_BASELINE_KEYS,
-    ...(Array.isArray(manifestEnvKeys) ? manifestEnvKeys : [])
-  ])
 
-  for (const key of allowedKeys) {
-    if (process.env[key] !== undefined) {
-      baseEnv[key] = process.env[key]!
+  for (const [key, value] of Object.entries(process.env)) {
+    if (value === undefined) continue
+    const upper = key.toUpperCase()
+    if (denySet.has(upper) && !manifestExtra.has(upper)) continue
+    baseEnv[key] = value
+  }
+
+  // 额外的安全屏障：过滤明确危险的注入类变量（无论黑名单配置如何）
+  const INJECTION_KEYS = ['LD_PRELOAD', 'DYLD_INSERT_LIBRARIES', 'LD_LIBRARY_PATH']
+  for (const key of INJECTION_KEYS) {
+    if (!manifestExtra.has(key.toUpperCase())) {
+      delete baseEnv[key]
     }
   }
 
-  // Filter plugin-supplied env vars against the allowlist to prevent
-  // injection of dangerous keys (LD_PRELOAD, DYLD_INSERT_LIBRARIES, etc.)
   if (userEnv) {
     for (const [key, value] of Object.entries(userEnv)) {
-      if (allowedKeys.has(key)) {
-        baseEnv[key] = value
-      }
+      const upper = key.toUpperCase()
+      if (denySet.has(upper) && !manifestExtra.has(upper)) continue
+      if (INJECTION_KEYS.includes(upper) && !manifestExtra.has(upper)) continue
+      baseEnv[key] = value
     }
   }
 
@@ -835,8 +844,8 @@ export class CommandRunnerService {
         networkAllowed
       })
 
-      // 构建安全环境变量：根据来源 + manifest 声明决定继承范围
-      const safeEnv = buildSafeEnv(context, env, context.envKeys, executionProfile)
+      // 构建安全环境变量：继承 process.env 但排除 denyEnvKeys 黑名单
+      const safeEnv = buildSafeEnv(context, env, context.envKeys, executionProfile, settings.denyEnvKeys)
       const spawnPlan = this.prepareSandbox({
         command,
         args,

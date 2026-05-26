@@ -147,7 +147,7 @@ const result = await shell.runCommand({
 
 | Profile | 适用场景 | 默认约束 |
 | --- | --- | --- |
-| `sandbox` | AI 生成命令、低信任命令 | 最小环境变量、限制 cwd/root、禁止 `shell=true`、默认禁网；优先使用 OS sandbox 后端，不可用时回退 policy sandbox。 |
+| `sandbox` | AI 生成命令、低信任命令 | 受限继承环境变量（继承完整 `process.env`，但过滤全局安全黑名单 `denyEnvKeys` 与危险注入变量，除非在 `manifest.envKeys` 中显式声明）、限制 cwd/root、禁止 `shell=true`、默认禁网；优先使用 OS sandbox 后端，不可用时回退 policy sandbox。 |
 | `workspace` | 明确授权的插件直接命令、OpenClaw 等 | 限制 cwd/root，仍受 denyList/allowList/consent 保护。 |
 | `trusted` | 主应用或 legacy 兼容场景 | 不做 root 限制，仍受全局命令策略保护。 |
 

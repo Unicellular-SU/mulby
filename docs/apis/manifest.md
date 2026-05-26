@@ -67,7 +67,7 @@
 | `contacts` | `boolean` | 允许插件检查/请求通讯录权限。 |
 | `calendar` | `boolean` | 允许插件检查/请求日历权限。 |
 | `inputMonitor` | `boolean` | 允许插件调用全局输入监听 API（鼠标点击轨迹、键盘按键监听）。macOS 通常还需声明 `accessibility` 并获得系统辅助功能授权。详见 [全局输入监听 API](./input-monitor.md)。 |
-| `envKeys` | `string[] \| "*"` | 命令执行继承环境变量的额外白名单。仅在 legacy `runCommand` 或 `commandExecution` 启用时生效。未声明时只继承安全基线；`"*"` 表示继承完整环境，风险较高。 |
+| `envKeys` | `string[] \| "*"` | 命令执行继承环境变量的特别声明。仅在 legacy `runCommand` 或 `commandExecution` 启用时生效。在非沙箱主应用或非沙箱 `*` 声明时，完整继承；其余情况下，插件默认继承 `process.env`（但自动排除全局设置 `settings.commandRunner.denyEnvKeys` 黑名单键以及 `LD_PRELOAD`, `DYLD_INSERT_LIBRARIES`, `LD_LIBRARY_PATH` 等危险注入变量）。若需强制继承这些被排除的键，需在此显式声明。 |
 
 ### 命令执行权限 (commandExecution)
 
