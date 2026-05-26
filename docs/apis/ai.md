@@ -323,6 +323,8 @@ await ai.call(option, (chunk) => {
 
 > 插件承载的 AI 还需要插件 manifest 显式声明对应权限。命令型能力（`shell.exec`、`shell.script`、`git.status`、`git.diff`、`patch.apply`）要求 `permissions.commandExecution.ai.enabled: true`；旧版 `permissions.runCommand: true` 只授权插件代码直接调用命令，不授权 AI 生成命令。
 
+> 插件可以通过 [`directoryAccess.request()`](./directory-access.md) 动态申请用户目录。`read` 授权会扩展插件承载 AI 的 `fs.read` / `fs.list` / `fs.search` / `git.status` / `git.diff` 可访问 root；`readwrite` 授权还会扩展 `patch.apply`、`shell.exec`、`shell.script` 的可写 root。目录授权不替代上面的 `commandExecution.ai`。
+
 > `internalTools` 字段已废弃，新代码请使用 `capabilities`。两者的别名兼容映射定义于 `src/main/ai/tools/capabilities.ts`（如 `runcommand` → `shell.exec`、`websearch` → `web.search`）。
 
 ### 彻底禁用工具（纯文本翻译/安全限制场景）

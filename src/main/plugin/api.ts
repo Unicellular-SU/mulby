@@ -33,6 +33,12 @@ import type {
 } from '../../shared/types/ai'
 import type { CommandExecutionProfile } from '../../shared/types/settings'
 import { commandRunnerService } from '../services/command-runner'
+import {
+  getPluginCommandDirectoryAccessRoots,
+  listPluginDirectoryAccess,
+  requestPluginDirectoryAccess,
+  revokePluginDirectoryAccess
+} from '../services/plugin-directory-access'
 import { executeSharpOperations } from '../ipc/sharp'
 import {
   createMissingPluginPermissionError,
@@ -449,6 +455,7 @@ ${item.files.map(p => `    <string>${p}</string>`).join('\n')}
           envKeys: options?.envKeys,
           defaultProfile: options?.defaultCommandProfile,
           maxProfile: options?.maxCommandProfile,
+          directoryAccessRoots: getPluginCommandDirectoryAccessRoots(pluginName),
           caller: {
             kind: 'plugin',
             host: 'plugin',
@@ -470,6 +477,12 @@ ${item.files.map(p => `    <string>${p}</string>`).join('\n')}
       listRunCommandAudit: async (limit?: number) => {
         return commandRunnerService.listAudit(limit, pluginName)
       }
+    },
+    directoryAccess: {
+      request: (input?: Parameters<typeof requestPluginDirectoryAccess>[1]) =>
+        requestPluginDirectoryAccess(pluginName, input || {}),
+      list: async () => listPluginDirectoryAccess(pluginName),
+      revoke: async (grantIdOrPath: string) => revokePluginDirectoryAccess(pluginName, grantIdOrPath)
     },
     dialog: createPluginDialog(pluginName),
     system: {

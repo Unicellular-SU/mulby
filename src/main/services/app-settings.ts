@@ -22,6 +22,9 @@ import type {
   CommandTrustRecord,
   McpServerSettings,
   OpenClawSettings,
+  PluginDirectoryAccessGrant,
+  PluginDirectoryAccessSettings,
+  PluginDirectoryAccessMode,
   SuperPanelSettings,
   SuperPanelTriggerSettings
 } from '../../shared/types/settings'
@@ -144,6 +147,9 @@ const DEFAULT_SETTINGS: AppSettings = {
       maxItems: 500,
       records: []
     }
+  },
+  pluginDirectoryAccess: {
+    grants: []
   },
   aiTooling: {
     enabled: true,
@@ -891,6 +897,41 @@ function normalizeCommandRunnerSettings(input: Partial<CommandRunnerSettings> | 
   }
 }
 
+function normalizePluginDirectoryAccessMode(value: unknown): PluginDirectoryAccessMode {
+  return value === 'readwrite' ? 'readwrite' : 'read'
+}
+
+function normalizePluginDirectoryAccessSettings(
+  input: Partial<PluginDirectoryAccessSettings> | undefined
+): PluginDirectoryAccessSettings {
+  if (!input || !Array.isArray(input.grants)) return { grants: [] }
+  const seen = new Set<string>()
+  const grants: PluginDirectoryAccessGrant[] = []
+  for (const item of input.grants) {
+    if (!item || typeof item !== 'object') continue
+    const raw = item as Partial<PluginDirectoryAccessGrant>
+    const pluginId = String(raw.pluginId || '').trim()
+    const rawPath = String(raw.path || '').trim()
+    if (!pluginId || !rawPath) continue
+    const resolvedPath = path.resolve(rawPath)
+    const key = `${pluginId}\n${resolvedPath}`
+    if (seen.has(key)) continue
+    seen.add(key)
+    const now = Date.now()
+    grants.push({
+      id: String(raw.id || `dir-${now}-${grants.length}`).trim(),
+      pluginId,
+      path: resolvedPath,
+      mode: normalizePluginDirectoryAccessMode(raw.mode),
+      source: raw.source === 'path-confirmation' ? 'path-confirmation' : 'picker',
+      reason: String(raw.reason || '').trim() || undefined,
+      createdAt: Number(raw.createdAt || now),
+      lastUsedAt: raw.lastUsedAt ? Number(raw.lastUsedAt) : undefined
+    })
+  }
+  return { grants }
+}
+
 const stmtGet = db.prepare('SELECT value FROM store WHERE plugin_id = ? AND key = ?')
 const stmtSet = db.prepare(`
   INSERT OR REPLACE INTO store (plugin_id, key, value, updated_at)
@@ -921,6 +962,10 @@ function mergeSettings(current: AppSettings, next: Partial<AppSettings>): AppSet
     commandRunner: normalizeCommandRunnerSettings({
       ...current.commandRunner,
       ...(next.commandRunner || {})
+    }),
+    pluginDirectoryAccess: normalizePluginDirectoryAccessSettings({
+      ...current.pluginDirectoryAccess,
+      ...(next.pluginDirectoryAccess || {})
     }),
     aiTooling: normalizeAiToolingSettings({
       ...current.aiTooling,
@@ -971,6 +1016,7 @@ function sanitizeShortcuts(settings: AppSettings): AppSettings {
     ...settings,
     shortcuts: { ...settings.shortcuts },
     commandRunner: normalizeCommandRunnerSettings(settings.commandRunner),
+    pluginDirectoryAccess: normalizePluginDirectoryAccessSettings(settings.pluginDirectoryAccess),
     aiTooling: normalizeAiToolingSettings(settings.aiTooling),
     tray: normalizeTraySettings(settings.tray),
     floatingBall: normalizeFloatingBallSettings(settings.floatingBall)

@@ -9,6 +9,7 @@ import { registerThemeHandlers } from './theme'
 import { registerScreenHandlers } from './screen'
 import { registerShellHandlers, setShellPluginLookup } from './shell'
 import { registerDialogHandlers } from './dialog'
+import { registerDirectoryAccessHandlers } from './directory-access'
 import { registerSystemHandlers } from './system'
 import { registerDesktopHandlers } from './desktop'
 import { registerGlobalShortcutHandlers } from './shortcut'
@@ -113,6 +114,7 @@ export function registerAllHandlers(
   // 注入插件查找函数，供媒体设备权限请求检查 manifest 权限
   setPermissionPluginLookup((pluginId) => pluginManager.get(pluginId))
   registerDialogHandlers()
+  registerDirectoryAccessHandlers()
   registerSystemHandlers()
   registerDesktopHandlers()
   registerGlobalShortcutHandlers()

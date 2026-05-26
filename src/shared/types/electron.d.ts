@@ -12,6 +12,7 @@ import type {
   PluginCommandShortcutBindResult,
   PluginCommandShortcutBindingRecord,
   PluginCommandShortcutValidationResult,
+  PluginDirectoryAccessRequestInput,
   PluginRendererCapabilities
 } from './plugin'
 import type { AiApi } from './ai'
@@ -35,7 +36,15 @@ import type {
   StorageWatchOptions,
   StorageWatchEvent
 } from './storage-v2'
-import type { AppSettings, CommandAuditItem, CommandRunnerSettings, ShortcutStatusMap, OpenClawSettings, SuperPanelSettings } from './settings'
+import type {
+  AppSettings,
+  CommandAuditItem,
+  CommandRunnerSettings,
+  PluginDirectoryAccessGrant,
+  ShortcutStatusMap,
+  OpenClawSettings,
+  SuperPanelSettings
+} from './settings'
 import type { NodeStatusInfo } from './openclaw-protocol'
 import type {
   InstalledPluginUpdateResult,
@@ -895,6 +904,11 @@ export interface ElectronAPI {
     installFromUrl: (input: PluginStoreInstallFromUrlInput) => Promise<PluginStoreInstallResult>
     checkUpdatesInstalled: () => Promise<InstalledPluginUpdateResult>
     updateAll: (pluginIds?: string[]) => Promise<PluginStoreBatchUpdateResult>
+  }
+  directoryAccess: {
+    request: (input?: PluginDirectoryAccessRequestInput) => Promise<PluginDirectoryAccessGrant | null>
+    list: () => Promise<PluginDirectoryAccessGrant[]>
+    revoke: (grantIdOrPath: string) => Promise<boolean>
   }
   scheduler: {
     listTasks: (filter?: { pluginId?: string; status?: string; type?: string; limit?: number; offset?: number }) => Promise<Task[]>

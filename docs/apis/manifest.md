@@ -109,6 +109,8 @@
 - 显式声明 `commandExecution.ai.enabled: true`：默认/最高为 `sandbox`，除非 manifest 指定 profile。
 - 未声明 `commandExecution.ai.enabled`：插件承载 AI 的命令型能力会被过滤或拒绝，即使插件有 `runCommand: true`。
 
+目录访问不在 manifest 中预声明。插件需要访问用户项目目录时，应在运行时调用 [`directoryAccess.request()`](./directory-access.md) 申请 `read` 或 `readwrite` 授权；授权只扩展文件/命令 root 范围，不替代 `commandExecution.direct` 或 `commandExecution.ai`。
+
 插件前端可通过 `window.mulby.onPluginInit()` 读取宿主暴露的能力状态：
 
 ```ts

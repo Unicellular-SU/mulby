@@ -499,6 +499,7 @@ export default function SettingsView({
                   denyRuleDraft={denyRuleDraft}
                   setDenyRuleDraft={setDenyRuleDraft}
                   reloadSettings={reloadSettings}
+                  updateSettings={updateSettings}
                   updateCommandRunner={updateCommandRunner}
                   addCommandRule={addCommandRule}
                   removeCommandRule={removeCommandRule}

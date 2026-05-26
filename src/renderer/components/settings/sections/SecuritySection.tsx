@@ -13,6 +13,7 @@ interface SecuritySectionProps {
   denyRuleDraft: RuleDraft
   setDenyRuleDraft: Dispatch<SetStateAction<RuleDraft>>
   reloadSettings: () => Promise<void>
+  updateSettings: (partial: Partial<AppSettings>) => Promise<void>
   updateCommandRunner: (patch: Partial<AppSettings['commandRunner']>) => Promise<void>
   addCommandRule: (type: 'allowList' | 'denyList') => Promise<void>
   removeCommandRule: (type: 'allowList' | 'denyList', ruleId: string) => Promise<void>
@@ -32,6 +33,7 @@ export default function SecuritySection({
   denyRuleDraft,
   setDenyRuleDraft,
   reloadSettings,
+  updateSettings,
   updateCommandRunner,
   addCommandRule,
   removeCommandRule,
@@ -41,6 +43,14 @@ export default function SecuritySection({
   pillClass,
   primaryPillClass
 }: SecuritySectionProps) {
+  const revokeDirectoryGrant = async (grantId: string) => {
+    await updateSettings({
+      pluginDirectoryAccess: {
+        grants: settings.pluginDirectoryAccess.grants.filter((grant) => grant.id !== grantId)
+      }
+    })
+  }
+
   return (
 <div className="space-y-5">
   <div className={`${cardClass} space-y-4`}>
@@ -160,6 +170,52 @@ export default function SecuritySection({
         />
       </label>
     </div>
+  </div>
+
+  <div className={`${cardClass} space-y-4`}>
+    <div className="flex items-center justify-between gap-3">
+      <div>
+        <div className="text-sm font-medium text-slate-900 dark:text-white">插件目录授权</div>
+        <div className="text-xs text-slate-500 dark:text-slate-400">插件动态申请的 workspace 目录，可用于命令执行和 AI 文件工具。</div>
+      </div>
+      <span className="rounded-full bg-slate-100 px-2 py-1 text-xs text-slate-500 dark:bg-slate-900 dark:text-slate-400">
+        {settings.pluginDirectoryAccess.grants.length}
+      </span>
+    </div>
+    {settings.pluginDirectoryAccess.grants.length === 0 ? (
+      <div className="rounded-xl border border-dashed border-slate-200 px-3 py-4 text-sm text-slate-500 dark:border-slate-800 dark:text-slate-400">
+        暂无插件目录授权
+      </div>
+    ) : (
+      <div className="space-y-2">
+        {settings.pluginDirectoryAccess.grants.map((grant) => (
+          <div
+            key={grant.id}
+            className="flex flex-col gap-3 rounded-xl border border-slate-200 bg-white p-3 dark:border-slate-800 dark:bg-slate-950 sm:flex-row sm:items-center sm:justify-between"
+          >
+            <div className="min-w-0 space-y-1">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="text-sm font-medium text-slate-800 dark:text-slate-100">{grant.pluginId}</span>
+                <span className={grant.mode === 'readwrite' ? primaryPillClass : pillClass}>
+                  {grant.mode === 'readwrite' ? '读写' : '读取'}
+                </span>
+              </div>
+              <div className="break-all text-xs text-slate-500 dark:text-slate-400">{grant.path}</div>
+              <div className="text-[11px] text-slate-400 dark:text-slate-500">
+                授权于 {new Date(grant.createdAt).toLocaleString()}
+                {grant.lastUsedAt ? ` · 最近使用 ${new Date(grant.lastUsedAt).toLocaleString()}` : ''}
+              </div>
+            </div>
+            <button
+              className={actionButtonClass}
+              onClick={() => void revokeDirectoryGrant(grant.id)}
+            >
+              撤销
+            </button>
+          </div>
+        ))}
+      </div>
+    )}
   </div>
 
   <CommandRules

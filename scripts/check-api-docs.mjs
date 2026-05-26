@@ -307,6 +307,11 @@ const DOC_CHECKS = {
     allowTop: ['onPluginInit', 'onPluginAttach', 'onPluginDetached', 'onPluginLaunchStart', 'onPluginLaunchEnd'],
     scope: ['plugin', 'onPluginInit', 'onPluginAttach', 'onPluginDetached', 'onPluginLaunchStart', 'onPluginLaunchEnd']
   },
+  'docs/apis/directory-access.md': {
+    prefixes: ['directoryAccess'],
+    allowTop: [],
+    scope: ['directoryAccess']
+  },
   'docs/apis/super-panel.md': {
     prefixes: ['superPanel'],
     allowTop: [],
@@ -341,6 +346,7 @@ const KNOWN_ROOTS = new Set([
   'developer',
   'plugin',
   'pluginStore',
+  'directoryAccess',
   'scheduler',
   'screen',
   'shell',

@@ -124,6 +124,23 @@ export interface CommandRunnerSettings {
   }
 }
 
+export type PluginDirectoryAccessMode = 'read' | 'readwrite'
+
+export interface PluginDirectoryAccessGrant {
+  id: string
+  pluginId: string
+  path: string
+  mode: PluginDirectoryAccessMode
+  source: 'picker' | 'path-confirmation'
+  reason?: string
+  createdAt: number
+  lastUsedAt?: number
+}
+
+export interface PluginDirectoryAccessSettings {
+  grants: PluginDirectoryAccessGrant[]
+}
+
 export interface AiToolFilesystemSettings {
   allowedRoots: string[]
   maxReadBytes: number
@@ -512,6 +529,7 @@ export interface AppSettings {
   storeSources: StoreSource[]
   developer: DeveloperSettings
   commandRunner: CommandRunnerSettings
+  pluginDirectoryAccess: PluginDirectoryAccessSettings
   aiTooling: AiToolingSettings
   window?: WindowSettings
   search: SearchSettings

@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
+import path from 'node:path'
 import type { CommandRunnerSettings } from '../../../shared/types/settings'
 import {
   CommandRunnerService,
@@ -860,6 +861,62 @@ describe('command runner service', () => {
     )
     assert.equal(getSettings().audit.records[0].status, 'blocked')
     assert.equal(getSettings().audit.records[0].executionProfile, 'sandbox')
+  })
+
+  it('workspace profile can use plugin readwrite directory grants as command roots', async () => {
+    const { service, getSettings } = createInMemoryRunner()
+    const outsideRoot = `${process.cwd()}/..`
+
+    const result = await service.runCommand(
+      {
+        command: process.execPath,
+        args: ['--version'],
+        cwd: outsideRoot
+      },
+      {
+        source: 'plugin',
+        pluginId: 'demo.plugin',
+        runCommandAllowed: true,
+        defaultProfile: 'workspace',
+        maxProfile: 'workspace',
+        directoryAccessRoots: {
+          read: [],
+          readwrite: [outsideRoot]
+        }
+      }
+    )
+
+    assert.equal(result.success, true)
+    assert.ok(getSettings().audit.records[0].rootScope?.includes(path.resolve(outsideRoot)))
+  })
+
+  it('workspace profile does not use read-only plugin grants for command roots', async () => {
+    const { service, getSettings } = createInMemoryRunner()
+    const outsideRoot = `${process.cwd()}/..`
+
+    await assert.rejects(
+      service.runCommand(
+        {
+          command: process.execPath,
+          args: ['--version'],
+          cwd: outsideRoot
+        },
+        {
+          source: 'plugin',
+          pluginId: 'demo.plugin',
+          runCommandAllowed: true,
+          defaultProfile: 'workspace',
+          maxProfile: 'workspace',
+          directoryAccessRoots: {
+            read: [outsideRoot],
+            readwrite: []
+          }
+        }
+      ),
+      /workspace 执行环境禁止使用白名单外 cwd/
+    )
+
+    assert.equal(getSettings().audit.records[0].status, 'blocked')
   })
 
   it('sandbox profile rejects explicit network requests when sandbox network is disabled', async () => {

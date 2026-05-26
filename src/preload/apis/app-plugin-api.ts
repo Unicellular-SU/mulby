@@ -1,6 +1,10 @@
 import { webUtils, type IpcRenderer } from 'electron'
 import { formatPayloadTrace } from '../../shared/attachment-trace'
-import type { InputPayload, PluginRendererCapabilities } from '../../shared/types/plugin'
+import type {
+  InputPayload,
+  PluginDirectoryAccessRequestInput,
+  PluginRendererCapabilities
+} from '../../shared/types/plugin'
 import type {
   MainWindowShowEvent,
   OpenSystemPluginPayload,
@@ -178,6 +182,12 @@ export function createAppPluginApi(ipcRenderer: IpcRenderer) {
       installFromUrl: (input: unknown) => ipcRenderer.invoke('plugin:store:installFromUrl', input),
       checkUpdatesInstalled: () => ipcRenderer.invoke('plugin:store:checkUpdatesInstalled'),
       updateAll: (pluginIds?: string[]) => ipcRenderer.invoke('plugin:store:updateAll', pluginIds)
+    },
+
+    directoryAccess: {
+      request: (input?: PluginDirectoryAccessRequestInput) => ipcRenderer.invoke('directoryAccess:request', input),
+      list: () => ipcRenderer.invoke('directoryAccess:list'),
+      revoke: (grantIdOrPath: string) => ipcRenderer.invoke('directoryAccess:revoke', grantIdOrPath)
     },
 
     scheduler: {

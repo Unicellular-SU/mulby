@@ -3,6 +3,7 @@ import { pluginShell } from '../plugin/shell'
 import { commandRunnerService } from '../services/command-runner'
 import { resolveIpcCallerSource } from '../services/ipc-caller-resolver'
 import { resolveDirectCommandExecutionPermission } from '../plugin/command-execution-permissions'
+import { getPluginCommandDirectoryAccessRoots } from '../services/plugin-directory-access'
 import type { PluginPermissions } from '../../shared/types/plugin'
 
 /**
@@ -70,6 +71,7 @@ export function registerShellHandlers() {
         envKeys,
         defaultProfile: commandPermission.defaultProfile,
         maxProfile: commandPermission.maxProfile,
+        directoryAccessRoots: getPluginCommandDirectoryAccessRoots(caller.pluginId),
         caller: {
           kind: 'plugin',
           host: 'plugin',

@@ -6,6 +6,7 @@ import type {
   CommandCallerIdentity,
   CommandSandboxBackendName,
   CommandExecutionProfile,
+  PluginDirectoryAccessMode,
   CommandRule,
   CommandRunnerSettings,
   CommandSandboxLevel,
@@ -60,6 +61,11 @@ export interface RunCommandContext {
   caller?: CommandCallerIdentity
   defaultProfile?: CommandExecutionProfile
   maxProfile?: CommandExecutionProfile
+  rootAccessMode?: PluginDirectoryAccessMode
+  directoryAccessRoots?: {
+    read?: string[]
+    readwrite?: string[]
+  }
   assumeUserApproved?: boolean
   abortSignal?: AbortSignal
 }
@@ -285,7 +291,8 @@ function pathInside(root: string, target: string): boolean {
 function resolveCommandRootScope(
   input: RunCommandInput,
   settings: CommandRunnerSettings,
-  profile: CommandExecutionProfile
+  profile: CommandExecutionProfile,
+  context: RunCommandContext
 ): string[] {
   if (profile === 'trusted') return []
   const configured = profile === 'sandbox'
@@ -293,12 +300,46 @@ function resolveCommandRootScope(
       ? settings.sandbox.writableRoots
       : settings.sandbox?.allowedRoots
     : settings.sandbox?.allowedRoots
-  const roots = normalizeRootList(configured || [])
+  const requiredAccessMode = context.rootAccessMode === 'read' ? 'read' : 'readwrite'
+  const grantRoots = requiredAccessMode === 'read'
+    ? [
+        ...(context.directoryAccessRoots?.read || []),
+        ...(context.directoryAccessRoots?.readwrite || [])
+      ]
+    : context.directoryAccessRoots?.readwrite || []
+  const roots = normalizeRootList([...(configured || []), ...grantRoots])
   const requested = normalizeRootList(input.writableRoots || [])
   if (requested.length === 0 || roots.length === 0) return roots
 
   // Per-command roots may narrow the configured scope, but must not expand it.
   // The authoritative boundary is settings.sandbox.{allowedRoots,writableRoots}.
+  const scopedRequested = requested.filter((requestedRoot) =>
+    roots.some((configuredRoot) => pathInside(configuredRoot, requestedRoot))
+  )
+  return scopedRequested.length > 0 ? uniqueNonEmpty(scopedRequested) : roots
+}
+
+function resolveCommandWriteRootScope(
+  input: RunCommandInput,
+  settings: CommandRunnerSettings,
+  profile: CommandExecutionProfile,
+  context: RunCommandContext
+): string[] {
+  if (profile === 'trusted') return []
+  if (context.rootAccessMode !== 'read') {
+    return resolveCommandRootScope(input, settings, profile, context)
+  }
+  const configured = profile === 'sandbox'
+    ? settings.sandbox?.writableRoots?.length
+      ? settings.sandbox.writableRoots
+      : settings.sandbox?.allowedRoots
+    : settings.sandbox?.allowedRoots
+  const roots = normalizeRootList([
+    ...(configured || []),
+    ...(context.directoryAccessRoots?.readwrite || [])
+  ])
+  const requested = normalizeRootList(input.writableRoots || [])
+  if (requested.length === 0 || roots.length === 0) return roots
   const scopedRequested = requested.filter((requestedRoot) =>
     roots.some((configuredRoot) => pathInside(configuredRoot, requestedRoot))
   )
@@ -734,7 +775,8 @@ export class CommandRunnerService {
       throw error
     }
     const executionProfile = profileResolution.resolved
-    const rootScope = resolveCommandRootScope(input, settings, executionProfile)
+    const rootScope = resolveCommandRootScope(input, settings, executionProfile, context)
+    const writeRootScope = resolveCommandWriteRootScope(input, settings, executionProfile, context)
     let sandboxLevel = resolveSandboxLevel(executionProfile, settings)
     let sandboxBackend: CommandSandboxBackendName | undefined = sandboxLevel === 'policy' ? 'policy' : undefined
     let sandboxFallbackReason: string | undefined
@@ -804,6 +846,7 @@ export class CommandRunnerService {
         executionProfile,
         settings,
         rootScope,
+        writeRootScope,
         networkAllowed
       })
       sandboxLevel = spawnPlan.sandboxLevel

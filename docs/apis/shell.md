@@ -108,6 +108,7 @@ await shell.beep();
 - 首次命令指纹用户确认（`requireConsent`）
 - 执行环境 profile（`sandbox` / `workspace` / `trusted`）与调用方允许的最大 profile
 - `sandbox` profile 的 cwd/root、环境变量、网络和 OS sandbox/policy sandbox 策略
+- 插件动态目录授权；`directoryAccess` 的 `readwrite` 授权会扩展该插件可用的命令 root
 
 ```javascript
 // 推荐在插件后端使用（Node 环境可用 process.execPath）
@@ -140,7 +141,7 @@ const result = await shell.runCommand({
 - `input.shell` (boolean, optional): 是否通过 shell 执行（默认 `false`）
 - `input.executionProfile` (`"sandbox" | "workspace" | "trusted"`, optional): 请求的执行环境。不能超过调用方权限允许的最大 profile。
 - `input.network` (boolean, optional): 是否请求网络能力。`sandbox` 默认禁止网络；除非全局 sandbox 设置允许，否则会被拒绝。
-- `input.writableRoots` (string[], optional): 本次命令希望使用的可写根目录。只能在全局配置根目录内收窄，不能扩大到任意路径。
+- `input.writableRoots` (string[], optional): 本次命令希望使用的可写根目录。只能在全局配置根目录和当前插件已获 `directoryAccess` `readwrite` 授权的目录内收窄，不能扩大到任意路径。
 
 **执行环境 profile**
 
@@ -151,6 +152,8 @@ const result = await shell.runCommand({
 | `trusted` | 主应用或 legacy 兼容场景 | 不做 root 限制，仍受全局命令策略保护。 |
 
 > `sandbox` 的 OS 后端按平台选择：macOS 使用 `sandbox-exec`，Windows 使用 Job Object 进程约束，Linux 使用 namespace/unshare。后端不可用时默认回退到 policy sandbox，并在审计中记录 `sandboxFallbackReason`。
+
+> 如果插件需要在用户项目目录中执行命令，推荐先通过 [`directoryAccess.request()`](./directory-access.md) 获取目录授权，再把返回的 `grant.path` 作为 `cwd`。目录授权只扩展 root 范围，不替代 `commandExecution.direct` 或 `commandExecution.ai` 命令权限。
 
 **返回值**
 - `Promise<RunCommandResult>`

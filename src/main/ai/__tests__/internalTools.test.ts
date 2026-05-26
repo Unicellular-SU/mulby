@@ -124,6 +124,43 @@ describe('internal ai tools', () => {
     assert.equal(matches.length > 0, true)
   })
 
+  it('uses plugin directory grants for filesystem tools', async (t) => {
+    const root = await mkdtemp(path.join(os.tmpdir(), 'mulby-ai-tools-root-'))
+    const grantedRoot = await mkdtemp(path.join(os.tmpdir(), 'mulby-ai-tools-grant-'))
+    t.after(async () => {
+      await rm(root, { recursive: true, force: true })
+      await rm(grantedRoot, { recursive: true, force: true })
+    })
+
+    const grantedFile = path.join(grantedRoot, 'granted.txt')
+    await writeFile(grantedFile, 'granted content', 'utf8')
+
+    const runtime = createAiInternalToolRuntime({
+      getToolingSettings: () => createTooling(root),
+      getDirectoryAccessGrants: () => [{
+        id: 'grant-1',
+        pluginId: 'ai.plugin',
+        path: grantedRoot,
+        mode: 'read',
+        source: 'picker',
+        createdAt: Date.now()
+      }],
+      runCommand: async () => {
+        throw new Error('not used')
+      },
+      resolveRunCommandContext: () => ({ source: 'plugin', pluginId: 'ai.plugin' })
+    })
+
+    const readResult = await runtime.execute({
+      name: AI_READ_FILE_TOOL_NAME,
+      args: { path: grantedFile },
+      context: { pluginName: 'ai.plugin' }
+    }) as Record<string, unknown>
+
+    assert.equal(readResult.success, true)
+    assert.equal(String(readResult.content).includes('granted content'), true)
+  })
+
   it('runs registered script via run command bridge', async () => {
     let capturedCommand = ''
     let capturedArgs: string[] = []
@@ -196,5 +233,59 @@ describe('internal ai tools', () => {
     assert.equal(result.success, false)
     assert.equal(captured.length > 0, true)
     assert.equal(captured[0]?.command, 'git')
+  })
+
+  it('uses read directory grants for git tools without granting write command roots', async (t) => {
+    const root = await mkdtemp(path.join(os.tmpdir(), 'mulby-ai-git-root-'))
+    const grantedRoot = await mkdtemp(path.join(os.tmpdir(), 'mulby-ai-git-grant-'))
+    t.after(async () => {
+      await rm(root, { recursive: true, force: true })
+      await rm(grantedRoot, { recursive: true, force: true })
+    })
+
+    const captured: Array<{ command: string; rootAccessMode?: string }> = []
+    const runtime = createAiInternalToolRuntime({
+      getToolingSettings: () => createTooling(root),
+      getDirectoryAccessGrants: () => [{
+        id: 'grant-1',
+        pluginId: 'ai.plugin',
+        path: grantedRoot,
+        mode: 'read',
+        source: 'picker',
+        createdAt: Date.now()
+      }],
+      runCommand: async (input, context) => {
+        captured.push({ command: input.command, rootAccessMode: context.rootAccessMode })
+        return {
+          success: false,
+          command: input.command,
+          args: input.args || [],
+          cwd: input.cwd,
+          shell: false,
+          stdout: '',
+          stderr: 'not a git repository',
+          exitCode: 128,
+          signal: null,
+          durationMs: 1,
+          timedOut: false,
+          truncated: false
+        }
+      },
+      resolveRunCommandContext: () => ({
+        source: 'plugin',
+        pluginId: 'ai.plugin',
+        directoryAccessRoots: { read: [grantedRoot], readwrite: [] }
+      })
+    })
+
+    const result = await runtime.execute({
+      name: AI_GIT_STATUS_TOOL_NAME,
+      args: { repoPath: grantedRoot },
+      context: { pluginName: 'ai.plugin' }
+    }) as Record<string, unknown>
+
+    assert.equal(result.success, false)
+    assert.equal(captured[0]?.command, 'git')
+    assert.equal(captured[0]?.rootAccessMode, 'read')
   })
 })

@@ -30,6 +30,10 @@ import { ActionMenuWindowManager } from './services/action-menu-window-manager'
 import { ClipboardWatcher } from './services/clipboard-watcher-v2'
 import { ClipboardHistoryManager } from './services/clipboard-history'
 import { commandRunnerService } from './services/command-runner'
+import {
+  getPluginCommandDirectoryAccessRoots,
+  listPluginDirectoryAccess
+} from './services/plugin-directory-access'
 import { initAutoUpdater } from './services/update-center'
 import { setLoggerMinLevel } from './services/logger'
 import { MacDockPresentationController } from './services/mac-dock-presentation'
@@ -179,6 +183,7 @@ function resolveAiRunCommandContext(toolContext?: import('../shared/types/ai').A
       envKeys: plugin?.manifest.permissions?.envKeys,
       defaultProfile: permission.defaultProfile || 'sandbox' as const,
       maxProfile: permission.maxProfile || 'sandbox' as const,
+      directoryAccessRoots: getPluginCommandDirectoryAccessRoots(pluginName),
       caller: {
         ...(toolContext?.caller || {}),
         kind: 'ai' as const,
@@ -208,6 +213,12 @@ function resolveAiRunCommandContext(toolContext?: import('../shared/types/ai').A
 
 const aiInternalToolRuntime = createAiInternalToolRuntime({
   getToolingSettings: () => appSettingsManager.getSettings().aiTooling,
+  getDirectoryAccessGrants: (context) => {
+    const pluginName = context?.caller?.host === 'plugin'
+      ? context.caller.pluginId || context.pluginName
+      : context?.pluginName
+    return pluginName ? listPluginDirectoryAccess(pluginName) : []
+  },
   runCommand: (input, context) => commandRunnerService.runCommand(input, context),
   resolveRunCommandContext: (toolContext) => resolveAiRunCommandContext(toolContext)
 })

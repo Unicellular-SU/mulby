@@ -7,7 +7,7 @@ import { BlockList, isIP } from 'node:net'
 import os from 'node:os'
 import path from 'node:path'
 import type { AiToolContext } from '../../../shared/types/ai'
-import type { AiToolingSettings } from '../../../shared/types/settings'
+import type { AiToolingSettings, PluginDirectoryAccessGrant, PluginDirectoryAccessMode } from '../../../shared/types/settings'
 import type { RunCommandContext, RunCommandInput, RunCommandResult } from '../../services/command-runner'
 import { normalizeFailedRunCommandResult } from './run-command-tool'
 import {
@@ -39,6 +39,7 @@ const patchDryRunCache = new Map<string, PatchDryRunRecord>()
 
 interface InternalToolRuntimeDeps {
   getToolingSettings: () => AiToolingSettings
+  getDirectoryAccessGrants?: (context?: AiToolContext) => PluginDirectoryAccessGrant[]
   runCommand: (input: RunCommandInput, context: RunCommandContext) => Promise<RunCommandResult>
   resolveRunCommandContext: (context?: AiToolContext) => RunCommandContext
 }
@@ -92,6 +93,16 @@ function ensurePathAllowed(targetPath: string, roots: string[], label: string): 
     throw new Error(`${label} path is outside allowed roots: ${resolved}`)
   }
   return resolved
+}
+
+function rootsFromDirectoryGrants(
+  grants: PluginDirectoryAccessGrant[] | undefined,
+  requiredMode: PluginDirectoryAccessMode
+): string[] {
+  if (!Array.isArray(grants)) return []
+  return grants
+    .filter((grant) => requiredMode === 'read' || grant.mode === 'readwrite')
+    .map((grant) => grant.path)
 }
 
 function wildcardToRegExp(pattern: string): RegExp {
@@ -341,13 +352,25 @@ export class AiInternalToolRuntime {
     return scope
   }
 
-  private async runManagedCommand(input: RunCommandInput, context?: AiToolContext): Promise<RunCommandResult> {
+  private getDirectoryGrantRoots(context: AiToolContext | undefined, mode: PluginDirectoryAccessMode): string[] {
+    return rootsFromDirectoryGrants(this.deps.getDirectoryAccessGrants?.(context), mode)
+  }
+
+  private async runManagedCommand(
+    input: RunCommandInput,
+    context?: AiToolContext,
+    rootAccessMode: PluginDirectoryAccessMode = 'readwrite'
+  ): Promise<RunCommandResult> {
+    const runContext = this.deps.resolveRunCommandContext(context)
     return await this.deps.runCommand(
       {
         ...input,
         shell: false
       },
-      this.deps.resolveRunCommandContext(context)
+      {
+        ...runContext,
+        rootAccessMode
+      }
     )
   }
 
@@ -355,11 +378,11 @@ export class AiInternalToolRuntime {
     try {
       switch (input.name) {
         case AI_READ_FILE_TOOL_NAME:
-          return await this.readFileTool(input.args)
+          return await this.readFileTool(input.args, input.context)
         case AI_LIST_DIR_TOOL_NAME:
-          return await this.listDirTool(input.args)
+          return await this.listDirTool(input.args, input.context)
         case AI_SEARCH_TEXT_TOOL_NAME:
-          return await this.searchTextTool(input.args)
+          return await this.searchTextTool(input.args, input.context)
         case AI_APPLY_PATCH_TOOL_NAME:
           return await this.applyPatchTool(input.args, input.context)
         case AI_HTTP_FETCH_TOOL_NAME:
@@ -384,7 +407,7 @@ export class AiInternalToolRuntime {
     }
   }
 
-  private async readFileTool(args: unknown): Promise<unknown> {
+  private async readFileTool(args: unknown, context?: AiToolContext): Promise<unknown> {
     const policy = this.deps.getToolingSettings().filesystem
     const input = parseObject(args)
     const filePath = String(input.path || '').trim()
@@ -395,7 +418,8 @@ export class AiInternalToolRuntime {
       1024,
       policy.maxReadBytes
     )
-    const resolved = ensurePathAllowed(filePath, policy.allowedRoots, 'filesystem.read_file')
+    const allowedRoots = [...policy.allowedRoots, ...this.getDirectoryGrantRoots(context, 'read')]
+    const resolved = ensurePathAllowed(filePath, allowedRoots, 'filesystem.read_file')
     const stat = await fs.stat(resolved)
     if (!stat.isFile()) throw new Error('target path is not a file')
 
@@ -418,7 +442,7 @@ export class AiInternalToolRuntime {
     }
   }
 
-  private async listDirTool(args: unknown): Promise<unknown> {
+  private async listDirTool(args: unknown, context?: AiToolContext): Promise<unknown> {
     const policy = this.deps.getToolingSettings().filesystem
     const input = parseObject(args)
     const targetPath = String(input.path || '').trim()
@@ -431,7 +455,8 @@ export class AiInternalToolRuntime {
       policy.maxEntries
     )
 
-    const root = ensurePathAllowed(targetPath, policy.allowedRoots, 'filesystem.list_dir')
+    const allowedRoots = [...policy.allowedRoots, ...this.getDirectoryGrantRoots(context, 'read')]
+    const root = ensurePathAllowed(targetPath, allowedRoots, 'filesystem.list_dir')
     const queue: string[] = [root]
     const entries: Array<Record<string, unknown>> = []
     let truncated = false
@@ -481,7 +506,7 @@ export class AiInternalToolRuntime {
     }
   }
 
-  private async searchTextTool(args: unknown): Promise<unknown> {
+  private async searchTextTool(args: unknown, context?: AiToolContext): Promise<unknown> {
     const policy = this.deps.getToolingSettings().filesystem
     const input = parseObject(args)
     const rootPath = String(input.rootPath || '').trim()
@@ -498,7 +523,8 @@ export class AiInternalToolRuntime {
     const globText = String(input.glob || '').trim()
     const globRegex = globText ? wildcardToRegExp(globText) : null
 
-    const root = ensurePathAllowed(rootPath, policy.allowedRoots, 'filesystem.search_text')
+    const allowedRoots = [...policy.allowedRoots, ...this.getDirectoryGrantRoots(context, 'read')]
+    const root = ensurePathAllowed(rootPath, allowedRoots, 'filesystem.search_text')
     const matches: Array<{ file: string; line: number; column: number; preview: string }> = []
     const queue: string[] = [root]
     const searchNeedle = caseSensitive ? query : query.toLowerCase()
@@ -575,7 +601,8 @@ export class AiInternalToolRuntime {
 
     const mode = String(input.mode || 'dry-run').trim() === 'apply' ? 'apply' : 'dry-run'
     const baseDirRaw = String(input.baseDir || process.cwd()).trim() || process.cwd()
-    const baseDir = ensurePathAllowed(baseDirRaw, policy.allowedRoots, 'patch')
+    const allowedRoots = [...policy.allowedRoots, ...this.getDirectoryGrantRoots(context, 'readwrite')]
+    const baseDir = ensurePathAllowed(baseDirRaw, allowedRoots, 'patch')
     const patchHash = sha256(patchText)
     const now = Date.now()
     prunePatchDryRunCache(now)
@@ -771,9 +798,8 @@ export class AiInternalToolRuntime {
       shell: false
     }
 
-    const runContext = this.deps.resolveRunCommandContext(context)
     try {
-      const result = await this.deps.runCommand(commandInput, runContext)
+      const result = await this.runManagedCommand(commandInput, context)
       return {
         ...result,
         scriptId
@@ -798,14 +824,15 @@ export class AiInternalToolRuntime {
     const repoPathRaw = String(input.repoPath || '').trim()
     if (!repoPathRaw) throw new Error('repoPath is required')
     const short = input.short !== false
-    const repoPath = ensurePathAllowed(repoPathRaw, policy.allowedRepoRoots, 'git')
+    const allowedRoots = [...policy.allowedRepoRoots, ...this.getDirectoryGrantRoots(context, 'read')]
+    const repoPath = ensurePathAllowed(repoPathRaw, allowedRoots, 'git')
 
     const check = await this.runManagedCommand({
       command: 'git',
       args: ['-C', repoPath, 'rev-parse', '--is-inside-work-tree'],
       cwd: repoPath,
       timeoutMs: 10_000
-    }, context)
+    }, context, 'read')
     if (!check.success) {
       return {
         success: false,
@@ -825,7 +852,7 @@ export class AiInternalToolRuntime {
         : ['-C', repoPath, 'status', '--porcelain=v1', '--branch'],
       cwd: repoPath,
       timeoutMs: 20_000
-    }, context)
+    }, context, 'read')
 
     return {
       success: statusResult.success,
@@ -844,7 +871,8 @@ export class AiInternalToolRuntime {
     const input = parseObject(args)
     const repoPathRaw = String(input.repoPath || '').trim()
     if (!repoPathRaw) throw new Error('repoPath is required')
-    const repoPath = ensurePathAllowed(repoPathRaw, policy.allowedRepoRoots, 'git')
+    const allowedRoots = [...policy.allowedRepoRoots, ...this.getDirectoryGrantRoots(context, 'read')]
+    const repoPath = ensurePathAllowed(repoPathRaw, allowedRoots, 'git')
     const targetRaw = String(input.target || 'working').trim().toLowerCase()
     const target = targetRaw === 'staged' || targetRaw === 'commit' ? targetRaw : 'working'
     const ref = String(input.ref || 'HEAD').trim() || 'HEAD'
@@ -859,7 +887,7 @@ export class AiInternalToolRuntime {
       args: ['-C', repoPath, 'rev-parse', '--is-inside-work-tree'],
       cwd: repoPath,
       timeoutMs: 10_000
-    }, context)
+    }, context, 'read')
     if (!check.success) {
       return {
         success: false,
@@ -884,7 +912,7 @@ export class AiInternalToolRuntime {
       args: argsList,
       cwd: repoPath,
       timeoutMs: 30_000
-    }, context)
+    }, context, 'read')
 
     return {
       success: result.success,

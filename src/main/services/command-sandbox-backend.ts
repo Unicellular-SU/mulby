@@ -34,6 +34,7 @@ export interface CommandSandboxPrepareInput {
   executionProfile: CommandExecutionProfile
   settings: CommandRunnerSettings
   rootScope: string[]
+  writeRootScope?: string[]
   networkAllowed: boolean
 }
 
@@ -101,7 +102,7 @@ function buildMacSandboxProfile(input: CommandSandboxPrepareInput): string {
     input.cwd,
     path.dirname(path.resolve(input.command))
   ])
-  const writeRoots = uniqueResolved(input.rootScope)
+  const writeRoots = uniqueResolved(input.writeRootScope || input.rootScope)
   const systemReadClauses = [
     macClause('literal', '/dev/null'),
     macClause('literal', '/dev/urandom'),

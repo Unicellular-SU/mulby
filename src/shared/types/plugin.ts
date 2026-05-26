@@ -8,7 +8,12 @@ import type {
   AiSkillRecord,
   AiTokenBreakdown
 } from './ai'
-import type { CommandAuditItem, CommandRunnerSettings } from './settings'
+import type {
+  CommandAuditItem,
+  CommandRunnerSettings,
+  PluginDirectoryAccessGrant,
+  PluginDirectoryAccessMode
+} from './settings'
 import type {
   StorageListOptions,
   StorageListResult,
@@ -559,6 +564,14 @@ export interface PluginRunCommandResult {
   truncated: boolean
 }
 
+export interface PluginDirectoryAccessRequestInput {
+  path?: string
+  mode?: PluginDirectoryAccessMode
+  title?: string
+  message?: string
+  reason?: string
+}
+
 // 插件实例
 export interface Plugin {
   id: string  // 解析后的唯一标识符（优先使用 manifest.id，否则使用 manifest.name）
@@ -681,6 +694,11 @@ export interface PluginAPI {
     runCommand: (input: PluginRunCommandInput) => Promise<PluginRunCommandResult>
     getRunCommandPolicy: () => Promise<Pick<CommandRunnerSettings, 'enabled' | 'requireConsent' | 'allowShell' | 'allowList' | 'denyList'>>
     listRunCommandAudit: (limit?: number) => Promise<CommandAuditItem[]>
+  }
+  directoryAccess: {
+    request: (input?: PluginDirectoryAccessRequestInput) => Promise<PluginDirectoryAccessGrant | null>
+    list: () => Promise<PluginDirectoryAccessGrant[]>
+    revoke: (grantIdOrPath: string) => Promise<boolean>
   }
   media: {
     getAccessStatus: (mediaType: 'microphone' | 'camera') => PluginPermissionStatus

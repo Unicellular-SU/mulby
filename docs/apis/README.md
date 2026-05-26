@@ -46,6 +46,7 @@
 ## 文件、网络与位置
 - [文件系统 API (filesystem)](./filesystem.md)
 - [存储 API (storage)](./storage.md)
+- [目录授权 API (directoryAccess)](./directory-access.md)
 - [Shell API (shell)](./shell.md)
 - [Desktop 搜索 API (desktop)](./desktop.md)
 - [HTTP API (http)](./http.md)
