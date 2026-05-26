@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState } from 'react'
-import { Search, X } from 'lucide-react'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { Plus, Search, X } from 'lucide-react'
 import type {
   AppSettings,
   FloatingBallActionBinding,
@@ -7,6 +7,11 @@ import type {
   FloatingBallSettings
 } from '../../../../shared/types/settings'
 import type { PluginCommandItem } from '../../../../shared/types/plugin'
+import {
+  MAX_CUSTOM_FLOATING_BALL_ICON_BYTES,
+  normalizeFloatingBallCustomSvg
+} from '../../../../shared/floating-ball-icons'
+import { MULBY_ICON_ASSETS } from '../mulby-icon-assets'
 
 interface FloatingBallSectionProps {
   settings: AppSettings
@@ -93,6 +98,8 @@ export default function FloatingBallSection({
   const [opacityInput, setOpacityInput] = useState('')
   const [editingGesture, setEditingGesture] = useState<FloatingBallGesture | null>(null)
   const [actionSearch, setActionSearch] = useState('')
+  const [customIconError, setCustomIconError] = useState('')
+  const customIconInputRef = useRef<HTMLInputElement | null>(null)
 
   useEffect(() => {
     let mounted = true
@@ -154,6 +161,11 @@ export default function FloatingBallSection({
       }))
   }, [filteredActionCommands])
 
+  const customIconPreview = useMemo(() => {
+    const svg = normalizeFloatingBallCustomSvg(floatingBall.customIconSvg)
+    return svg ? `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}` : ''
+  }, [floatingBall.customIconSvg])
+
   const patchFloatingBall = async (patch: Partial<FloatingBallSettings>) => {
     await updateSettings({
       floatingBall: {
@@ -209,6 +221,40 @@ export default function FloatingBallSection({
     setActionSearch('')
   }
 
+  const selectCustomIcon = () => {
+    setCustomIconError('')
+    if (customIconPreview && floatingBall.iconId !== 'custom') {
+      void patchFloatingBall({ iconId: 'custom' })
+      return
+    }
+    customIconInputRef.current?.click()
+  }
+
+  const handleCustomIconUpload = async (file: File | undefined) => {
+    if (!file) return
+    const isSvgFile = file.name.toLowerCase().endsWith('.svg')
+      && (!file.type || file.type === 'image/svg+xml')
+    if (!isSvgFile) {
+      setCustomIconError('请选择 SVG 文件')
+      return
+    }
+    if (file.size > MAX_CUSTOM_FLOATING_BALL_ICON_BYTES) {
+      setCustomIconError('SVG 文件不能超过 200 KB')
+      return
+    }
+    try {
+      const svg = normalizeFloatingBallCustomSvg(await file.text())
+      if (!svg) {
+        setCustomIconError('SVG 内容无效')
+        return
+      }
+      setCustomIconError('')
+      await patchFloatingBall({ iconId: 'custom', customIconSvg: svg })
+    } catch {
+      setCustomIconError('无法读取 SVG 文件')
+    }
+  }
+
   return (
     <div className="relative min-h-[calc(100vh-160px)] space-y-4">
       <div className={`${cardClass} space-y-4`}>
@@ -227,13 +273,83 @@ export default function FloatingBallSection({
       <div className={`${cardClass} space-y-4 ${!floatingBall.enabled ? 'opacity-70' : ''}`}>
         <div className="text-sm font-medium text-slate-900 dark:text-white">外观</div>
 
+        <div className="space-y-2">
+          <div className="text-xs text-slate-500 dark:text-slate-400">球面内容</div>
+          <div className="grid grid-cols-4 gap-2 sm:grid-cols-6 lg:grid-cols-12">
+            <button
+              type="button"
+              disabled={!floatingBall.enabled}
+              onClick={() => void patchFloatingBall({ iconId: 'label' })}
+              className={`flex h-14 items-center justify-center rounded-xl border text-sm font-semibold transition disabled:cursor-not-allowed disabled:opacity-60 ${floatingBall.iconId === 'label'
+                ? 'border-blue-500 bg-blue-50 text-blue-700 dark:border-blue-400 dark:bg-blue-950/50 dark:text-blue-200'
+                : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200 dark:hover:border-slate-600'
+                }`}
+              aria-pressed={floatingBall.iconId === 'label'}
+            >
+              {floatingBall.label || 'M'}
+            </button>
+            {MULBY_ICON_ASSETS.map((item) => {
+              const active = floatingBall.iconId === item.id
+              return (
+                <button
+                  key={item.id}
+                  type="button"
+                  disabled={!floatingBall.enabled}
+                  onClick={() => void patchFloatingBall({ iconId: item.id })}
+                  className={`flex h-14 items-center justify-center rounded-xl border transition disabled:cursor-not-allowed disabled:opacity-60 ${active
+                    ? 'border-blue-500 bg-blue-50 dark:border-blue-400 dark:bg-blue-950/50'
+                    : 'border-slate-200 bg-white hover:border-slate-300 dark:border-slate-700 dark:bg-slate-950 dark:hover:border-slate-600'
+                    }`}
+                  aria-label={item.title}
+                  aria-pressed={active}
+                  title={item.title}
+                >
+                  <img src={item.previewSrc} alt="" className="h-9 w-9 object-contain" />
+                </button>
+              )
+            })}
+            <button
+              type="button"
+              disabled={!floatingBall.enabled}
+              onClick={selectCustomIcon}
+              className={`flex h-14 items-center justify-center rounded-xl border transition disabled:cursor-not-allowed disabled:opacity-60 ${floatingBall.iconId === 'custom'
+                ? 'border-blue-500 bg-blue-50 text-blue-700 dark:border-blue-400 dark:bg-blue-950/50 dark:text-blue-200'
+                : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200 dark:hover:border-slate-600'
+                }`}
+              aria-label="上传 SVG 图标"
+              aria-pressed={floatingBall.iconId === 'custom'}
+              title="上传 SVG 图标"
+            >
+              {customIconPreview ? (
+                <img src={customIconPreview} alt="" className="h-9 w-9 object-contain" />
+              ) : (
+                <Plus className="h-6 w-6" />
+              )}
+            </button>
+          </div>
+          <input
+            ref={customIconInputRef}
+            type="file"
+            accept=".svg,image/svg+xml"
+            className="hidden"
+            onChange={(event) => {
+              const file = event.currentTarget.files?.[0]
+              event.currentTarget.value = ''
+              void handleCustomIconUpload(file)
+            }}
+          />
+          {customIconError && (
+            <div className="text-xs text-red-600 dark:text-red-400">{customIconError}</div>
+          )}
+        </div>
+
         <div className="grid gap-4 sm:grid-cols-2">
-          <label className="space-y-2">
+          <label className={`space-y-2 ${floatingBall.iconId !== 'label' ? 'opacity-60' : ''}`}>
             <span className="text-xs text-slate-500 dark:text-slate-400">球面文字</span>
             <input
               value={floatingBall.label}
               maxLength={2}
-              disabled={!floatingBall.enabled}
+              disabled={!floatingBall.enabled || floatingBall.iconId !== 'label'}
               onChange={(event) => void patchFloatingBall({ label: event.target.value })}
               className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 dark:border-slate-700 dark:bg-slate-900 dark:text-white disabled:opacity-60"
             />

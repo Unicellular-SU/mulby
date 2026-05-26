@@ -26,4 +26,15 @@ describe('floating ball visual design', () => {
     assert.doesNotMatch(ballRules, /width:\s*100vw;/)
     assert.doesNotMatch(ballRules, /height:\s*100vh;/)
   })
+
+  it('uses the quiet glass badge design instead of the old rainbow marquee', () => {
+    const css = readFloatingBallCss()
+    const iconRules = getCssBlock(css, '.floating-icon')
+
+    assert.match(css, /--fb-surface:/)
+    assert.match(iconRules, /object-fit:\s*contain;/)
+    assert.doesNotMatch(css, /#7c3aed/)
+    assert.doesNotMatch(css, /#ec4899/)
+    assert.doesNotMatch(css, /ring-spin/)
+  })
 })

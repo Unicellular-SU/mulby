@@ -1000,6 +1000,7 @@ app.whenReady().then(async () => {
     const floatingBallManager = new FloatingBallManager({
       settingsManager: appSettingsManager,
       pluginManager,
+      themeManager,
       getMainWindow: () => mainWindowManager.getWindow(),
       showMainWindow,
       toggleMainWindow: toggleWindow,

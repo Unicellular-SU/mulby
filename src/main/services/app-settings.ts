@@ -28,6 +28,7 @@ import type {
   SuperPanelSettings,
   SuperPanelTriggerSettings
 } from '../../shared/types/settings'
+import { DEFAULT_FLOATING_BALL_ICON_ID } from '../../shared/floating-ball-icons'
 import { normalizeFloatingBallSettings } from './floating-ball-utils'
 
 const SETTINGS_NAMESPACE = 'app'
@@ -230,6 +231,7 @@ const DEFAULT_SETTINGS: AppSettings = {
   floatingBall: {
     enabled: false,
     label: 'M',
+    iconId: DEFAULT_FLOATING_BALL_ICON_ID,
     size: 52,
     opacity: 0.92,
     snapToEdge: true,
@@ -938,6 +940,26 @@ const stmtSet = db.prepare(`
   VALUES (?, ?, ?, ?)
 `)
 
+function mergeFloatingBallSettings(
+  current: FloatingBallSettings,
+  next: Partial<FloatingBallSettings> | undefined
+): FloatingBallSettings {
+  const merged: Partial<FloatingBallSettings> = {
+    ...current,
+    ...(next || {})
+  }
+  if (
+    next
+    && !('iconId' in next)
+    && typeof next.label === 'string'
+    && next.label.trim()
+    && next.label.trim() !== DEFAULT_SETTINGS.floatingBall.label
+  ) {
+    delete merged.iconId
+  }
+  return normalizeFloatingBallSettings(merged)
+}
+
 function mergeSettings(current: AppSettings, next: Partial<AppSettings>): AppSettings {
   return {
     ...current,
@@ -991,10 +1013,7 @@ function mergeSettings(current: AppSettings, next: Partial<AppSettings>): AppSet
       ...current.tray,
       ...(next.tray || {})
     }),
-    floatingBall: normalizeFloatingBallSettings({
-      ...current.floatingBall,
-      ...(next.floatingBall || {})
-    } as Partial<FloatingBallSettings>),
+    floatingBall: mergeFloatingBallSettings(current.floatingBall, next.floatingBall),
     onboardingCompleted: next.onboardingCompleted ?? current.onboardingCompleted ?? false,
     mcpServer: normalizeMcpServerSettings({
       ...current.mcpServer,

@@ -1,5 +1,6 @@
 const ball = document.getElementById('ball')
 const label = document.getElementById('label')
+const icon = document.getElementById('icon')
 const api = window.floatingBall
 
 let isPointerDown = false
@@ -39,9 +40,32 @@ function setStatus(status) {
   ball.classList.toggle('is-error', status === 'error')
 }
 
+function applyTheme(theme) {
+  const normalized = theme === 'dark' ? 'dark' : 'light'
+  document.documentElement.classList.toggle('dark', normalized === 'dark')
+  document.documentElement.classList.toggle('light', normalized === 'light')
+  document.body.dataset.theme = normalized
+}
+
+function applyIcon(iconDataUrl) {
+  if (iconDataUrl) {
+    icon.src = iconDataUrl
+    icon.hidden = false
+    label.hidden = true
+    ball.classList.add('has-icon')
+    return
+  }
+  icon.removeAttribute('src')
+  icon.hidden = true
+  label.hidden = false
+  ball.classList.remove('has-icon')
+}
+
 function applyState(state) {
   if (!state) return
   label.textContent = state.label || 'M'
+  applyIcon(state.iconDataUrl)
+  applyTheme(state.theme)
   if (typeof state.size === 'number') {
     document.documentElement.style.setProperty('--floating-ball-size', `${state.size}px`)
   }
@@ -174,4 +198,5 @@ document.addEventListener('drop', (event) => {
 })
 
 api.onState(applyState)
+api.onThemeChange(applyTheme)
 api.getState().then(applyState).catch(() => {})

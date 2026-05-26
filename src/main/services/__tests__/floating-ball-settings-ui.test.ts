@@ -16,6 +16,8 @@ describe('floating ball settings action UI', () => {
     assert.match(source, /actionSearch/i, 'action picker should keep a search query state')
     assert.match(source, /placeholder="搜索插件功能"/, 'action picker should expose a plugin command search input')
     assert.match(source, /builtinActions/, 'action picker should list built-in actions')
+    assert.match(source, /accept="\.svg,image\/svg\+xml"/, 'custom icon upload should only accept SVG files')
+    assert.match(source, /normalizeFloatingBallCustomSvg/, 'custom icon upload should validate SVG content before saving')
     assert.match(
       source,
       /commandKind === 'launch'[\s\S]*!item\.disabled/,

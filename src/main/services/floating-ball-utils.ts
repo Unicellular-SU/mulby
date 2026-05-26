@@ -8,6 +8,11 @@ import type {
   FloatingBallPosition,
   FloatingBallSettings
 } from '../../shared/types/settings'
+import {
+  DEFAULT_FLOATING_BALL_ICON_ID,
+  isFloatingBallIconId,
+  normalizeFloatingBallCustomSvg
+} from '../../shared/floating-ball-icons'
 
 export interface FloatingBallDisplayInfo {
   id: number
@@ -25,6 +30,7 @@ export interface FloatingBallFileDropItem {
 const DEFAULT_FLOATING_BALL_SETTINGS: FloatingBallSettings = {
   enabled: false,
   label: 'M',
+  iconId: DEFAULT_FLOATING_BALL_ICON_ID,
   size: 52,
   opacity: 0.92,
   snapToEdge: true,
@@ -118,18 +124,25 @@ export function normalizeFloatingBallSettings(input: Partial<FloatingBallSetting
   }
   const labelSource = String(current.label || DEFAULT_FLOATING_BALL_SETTINGS.label).trim()
   const label = Array.from(labelSource || DEFAULT_FLOATING_BALL_SETTINGS.label).slice(0, 2).join('')
+  const inputIconId = input && Object.prototype.hasOwnProperty.call(input, 'iconId') ? input.iconId : undefined
+  const customIconSvg = normalizeFloatingBallCustomSvg(current.customIconSvg)
+  const iconId = isFloatingBallIconId(inputIconId)
+    ? (inputIconId === 'custom' && !customIconSvg ? DEFAULT_FLOATING_BALL_SETTINGS.iconId : inputIconId)
+    : (label !== DEFAULT_FLOATING_BALL_SETTINGS.label ? 'label' : DEFAULT_FLOATING_BALL_SETTINGS.iconId)
   const size = clamp(Number(current.size || DEFAULT_FLOATING_BALL_SETTINGS.size), MIN_SIZE, MAX_SIZE)
   const opacity = clamp(Number(current.opacity || DEFAULT_FLOATING_BALL_SETTINGS.opacity), MIN_OPACITY, MAX_OPACITY)
 
   const normalized: FloatingBallSettings = {
     enabled: current.enabled === true,
     label: label || DEFAULT_FLOATING_BALL_SETTINGS.label,
+    iconId,
     size: Math.round(size),
     opacity: Number(opacity.toFixed(2)),
     snapToEdge: current.snapToEdge !== false,
     actions: normalizeActionSettings(input || {}),
     dropAction: 'openMatches'
   }
+  if (customIconSvg) normalized.customIconSvg = customIconSvg
   const position = normalizePosition(current.position)
   if (position) normalized.position = position
   return normalized

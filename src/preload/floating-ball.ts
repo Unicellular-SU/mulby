@@ -8,6 +8,17 @@ interface FloatingBallDropFile {
   isDirectory: boolean
 }
 
+interface FloatingBallRendererState {
+  label: string
+  size: number
+  opacity: number
+  shadowPadding: number
+  status: string
+  theme: 'light' | 'dark'
+  iconDataUrl?: string
+  message?: string
+}
+
 const api = {
   getState: () => ipcRenderer.invoke('floating-ball:getState'),
   click: () => ipcRenderer.send('floating-ball:click'),
@@ -35,10 +46,15 @@ const api = {
       }
     })
     .filter((file) => Boolean(file.path)),
-  onState: (callback: (state: { label: string; size: number; opacity: number; shadowPadding: number; status: string; message?: string }) => void) => {
-    const listener = (_event: unknown, state: { label: string; size: number; opacity: number; shadowPadding: number; status: string; message?: string }) => callback(state)
+  onState: (callback: (state: FloatingBallRendererState) => void) => {
+    const listener = (_event: unknown, state: FloatingBallRendererState) => callback(state)
     ipcRenderer.on('floating-ball:state', listener)
     return () => ipcRenderer.removeListener('floating-ball:state', listener)
+  },
+  onThemeChange: (callback: (theme: 'light' | 'dark') => void) => {
+    const listener = (_event: unknown, theme: 'light' | 'dark') => callback(theme)
+    ipcRenderer.on('theme:changed', listener)
+    return () => ipcRenderer.removeListener('theme:changed', listener)
   }
 }
 

@@ -1,3 +1,5 @@
+import type { FloatingBallIconId } from '../floating-ball-icons'
+
 export type AppShortcutAction =
   | 'toggleWindow'
   | 'openSettings'
@@ -471,6 +473,8 @@ export interface FloatingBallSettings {
   enabled: boolean
   position?: FloatingBallPosition
   label: string
+  iconId: FloatingBallIconId
+  customIconSvg?: string
   size: number
   opacity: number
   snapToEdge: boolean

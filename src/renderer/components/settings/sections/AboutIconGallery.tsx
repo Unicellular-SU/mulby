@@ -1,39 +1,10 @@
 import { useRef, useState } from 'react'
-// Vite 标准 import：构建时自动复制到 dist/renderer/assets/ 并返回正确 URL
-import mulbyV1 from '../../../../../resources/icons/mulby-v1.svg'
-import mulbyV2 from '../../../../../resources/icons/mulby-v2.svg'
-import mulbyV3 from '../../../../../resources/icons/mulby-v3.svg'
-import mulbyV4 from '../../../../../resources/icons/mulby-v4.svg'
-import mulbyV5 from '../../../../../resources/icons/mulby-v5.svg'
-import mulbyV6 from '../../../../../resources/icons/mulby-v6.svg'
-import mulbyV7 from '../../../../../resources/icons/mulby-v7.svg'
-import mulbyV8 from '../../../../../resources/icons/mulby-v8.svg'
-import mulbyV9 from '../../../../../resources/icons/mulby-v9.svg'
-import mulbyV10 from '../../../../../resources/icons/mulby-v10.svg'
-
-interface GalleryItem {
-  id: string
-  title: string
-  previewSrc: string
-}
-
-const GALLERY_ITEMS: GalleryItem[] = [
-  { id: 'v1', title: 'Mulby V1', previewSrc: mulbyV1 },
-  { id: 'v2', title: 'Mulby V2', previewSrc: mulbyV2 },
-  { id: 'v3', title: 'Mulby V3', previewSrc: mulbyV3 },
-  { id: 'v4', title: 'Mulby V4', previewSrc: mulbyV4 },
-  { id: 'v5', title: 'Mulby V5', previewSrc: mulbyV5 },
-  { id: 'v6', title: 'Mulby V6', previewSrc: mulbyV6 },
-  { id: 'v7', title: 'Mulby V7', previewSrc: mulbyV7 },
-  { id: 'v8', title: 'Mulby V8', previewSrc: mulbyV8 },
-  { id: 'v9', title: 'Mulby V9', previewSrc: mulbyV9 },
-  { id: 'v10', title: 'Mulby V10', previewSrc: mulbyV10 }
-]
+import { MULBY_ICON_ASSETS } from '../mulby-icon-assets'
 
 export default function AboutIconGallery() {
-  const [selectedId, setSelectedId] = useState(GALLERY_ITEMS[0]?.id ?? 'v1')
+  const [selectedId, setSelectedId] = useState(MULBY_ICON_ASSETS[0]?.id ?? 'v1')
   const scrollerRef = useRef<HTMLDivElement | null>(null)
-  const selectedItem = GALLERY_ITEMS.find((item) => item.id === selectedId) ?? GALLERY_ITEMS[0]
+  const selectedItem = MULBY_ICON_ASSETS.find((item) => item.id === selectedId) ?? MULBY_ICON_ASSETS[0]
 
   const scrollIcons = (direction: 'left' | 'right') => {
     const container = scrollerRef.current
@@ -74,7 +45,7 @@ export default function AboutIconGallery() {
           className="-mx-1 flex-1 overflow-x-auto pb-1"
         >
           <div className="flex min-w-max gap-3 px-1">
-            {GALLERY_ITEMS.map((item) => {
+            {MULBY_ICON_ASSETS.map((item) => {
               const active = item.id === selectedItem.id
               return (
                 <button

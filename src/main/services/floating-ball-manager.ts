@@ -9,10 +9,16 @@ import type {
   FloatingBallPosition,
   FloatingBallSettings
 } from '../../shared/types/settings'
+import {
+  isMulbyIconId,
+  normalizeFloatingBallCustomSvg,
+  type MulbyIconId
+} from '../../shared/floating-ball-icons'
 import type { AutoPasteClipboardPayload, FileInfo } from '../../shared/types/electron'
 import type { InputPayload } from '../../shared/types/plugin'
 import type { AppSettingsManager } from './app-settings'
 import type { PluginManager } from '../plugin'
+import type { ThemeManager } from './theme'
 import { PluginInstaller } from '../plugin/installer'
 import { captureAutoPasteClipboardPayload } from '../ipc/clipboard'
 import { startRegionCapture } from '../plugin/region-capture'
@@ -30,10 +36,21 @@ import {
   type FloatingBallDisplayInfo,
   type FloatingBallFileDropItem
 } from './floating-ball-utils'
+import mulbyIconV1 from '../../../resources/icons/mulby-v1.svg?raw'
+import mulbyIconV2 from '../../../resources/icons/mulby-v2.svg?raw'
+import mulbyIconV3 from '../../../resources/icons/mulby-v3.svg?raw'
+import mulbyIconV4 from '../../../resources/icons/mulby-v4.svg?raw'
+import mulbyIconV5 from '../../../resources/icons/mulby-v5.svg?raw'
+import mulbyIconV6 from '../../../resources/icons/mulby-v6.svg?raw'
+import mulbyIconV7 from '../../../resources/icons/mulby-v7.svg?raw'
+import mulbyIconV8 from '../../../resources/icons/mulby-v8.svg?raw'
+import mulbyIconV9 from '../../../resources/icons/mulby-v9.svg?raw'
+import mulbyIconV10 from '../../../resources/icons/mulby-v10.svg?raw'
 
 interface FloatingBallManagerOptions {
   settingsManager: AppSettingsManager
   pluginManager: PluginManager
+  themeManager: ThemeManager
   getMainWindow: () => BrowserWindow | null
   showMainWindow: (options?: { skipAutoPaste?: boolean }) => void
   toggleMainWindow: () => void
@@ -47,12 +64,39 @@ interface FloatingBallRendererState {
   opacity: number
   shadowPadding: number
   status: 'idle' | 'busy' | 'success' | 'error'
+  theme: 'light' | 'dark'
+  iconDataUrl?: string
   message?: string
 }
 
 const FLOATING_BALL_STATUS_RESET_MS = 1400
 const FLOATING_BALL_PAYLOAD_DELAY_MS = 120
 const EMPTY_ACTION_PAYLOAD: InputPayload = { text: '', attachments: [] }
+const MULBY_ICON_DATA_URL_BY_ID: Record<MulbyIconId, string> = {
+  v1: svgToDataUrl(mulbyIconV1),
+  v2: svgToDataUrl(mulbyIconV2),
+  v3: svgToDataUrl(mulbyIconV3),
+  v4: svgToDataUrl(mulbyIconV4),
+  v5: svgToDataUrl(mulbyIconV5),
+  v6: svgToDataUrl(mulbyIconV6),
+  v7: svgToDataUrl(mulbyIconV7),
+  v8: svgToDataUrl(mulbyIconV8),
+  v9: svgToDataUrl(mulbyIconV9),
+  v10: svgToDataUrl(mulbyIconV10)
+}
+
+function svgToDataUrl(svg: string): string {
+  return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`
+}
+
+function getFloatingBallIconDataUrl(settings: FloatingBallSettings): string | undefined {
+  if (settings.iconId === 'custom') {
+    const customSvg = normalizeFloatingBallCustomSvg(settings.customIconSvg)
+    return customSvg ? svgToDataUrl(customSvg) : undefined
+  }
+  if (!isMulbyIconId(settings.iconId)) return undefined
+  return MULBY_ICON_DATA_URL_BY_ID[settings.iconId]
+}
 
 function dataUrlToPngBuffer(dataUrl: string): Buffer | null {
   const match = /^data:image\/[a-z0-9.+-]+;base64,(.+)$/i.exec(dataUrl)
@@ -196,6 +240,7 @@ export class FloatingBallManager {
       win.setAlwaysOnTop(true)
     }
 
+    this.options.themeManager.registerWindow(win)
     win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }))
     this.pinCurrentWindowSize(win)
     win.on('closed', () => {
@@ -277,6 +322,8 @@ export class FloatingBallManager {
       opacity: this.settings.opacity,
       shadowPadding: FLOATING_BALL_SHADOW_PADDING,
       status: this.status,
+      theme: this.options.themeManager.getActualTheme(),
+      iconDataUrl: getFloatingBallIconDataUrl(this.settings),
       message
     }
   }

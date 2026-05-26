@@ -21,6 +21,7 @@ describe('floating ball utilities', () => {
     assert.deepEqual(normalizeFloatingBallSettings(undefined), {
       enabled: false,
       label: 'M',
+      iconId: 'v1',
       size: 52,
       opacity: 0.92,
       snapToEdge: true,
@@ -46,6 +47,7 @@ describe('floating ball utilities', () => {
     }), {
       enabled: false,
       label: 'M',
+      iconId: 'v1',
       size: 52,
       opacity: 0.92,
       snapToEdge: true,
@@ -86,6 +88,7 @@ describe('floating ball utilities', () => {
     }), {
       enabled: true,
       label: 'Mu',
+      iconId: 'label',
       size: 80,
       opacity: 1,
       snapToEdge: false,
@@ -96,6 +99,27 @@ describe('floating ball utilities', () => {
       },
       dropAction: 'openMatches'
     })
+  })
+
+  it('keeps valid icon choices and falls back to text for legacy custom labels', () => {
+    assert.equal(normalizeFloatingBallSettings({ iconId: 'v8' }).iconId, 'v8')
+    assert.equal(normalizeFloatingBallSettings({ iconId: 'missing' as never }).iconId, 'v1')
+    assert.equal(normalizeFloatingBallSettings({ label: 'AI' }).iconId, 'label')
+  })
+
+  it('accepts only valid custom svg icons', () => {
+    assert.deepEqual(normalizeFloatingBallSettings({
+      iconId: 'custom',
+      customIconSvg: '<svg viewBox="0 0 10 10"><circle cx="5" cy="5" r="4"/></svg>'
+    }).iconId, 'custom')
+    assert.equal(normalizeFloatingBallSettings({
+      iconId: 'custom',
+      customIconSvg: '<script>alert(1)</script>'
+    }).iconId, 'v1')
+    assert.equal(normalizeFloatingBallSettings({
+      iconId: 'custom',
+      customIconSvg: '<svg onload="alert(1)"></svg>'
+    }).customIconSvg, undefined)
   })
 
   it('restores a saved position only when it intersects a known work area', () => {
