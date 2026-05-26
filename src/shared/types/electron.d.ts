@@ -101,6 +101,8 @@ export interface ClipboardHistoryItem {
   size: number
   favorite: boolean
   tags?: string[]
+  sourceApp?: string
+  sourceTitle?: string
 }
 
 // 剪贴板历史统计
@@ -755,6 +757,7 @@ export interface ElectronAPI {
       type?: 'text' | 'image' | 'files'
       search?: string
       favorite?: boolean
+      sourceApp?: string
       limit?: number
       offset?: number
     }) => Promise<ClipboardHistoryItem[]>

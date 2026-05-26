@@ -12,6 +12,7 @@ export function registerClipboardHistoryHandlers(historyManager: ClipboardHistor
     type?: 'text' | 'image' | 'files'
     search?: string
     favorite?: boolean
+    sourceApp?: string
     limit?: number
     offset?: number
   }) => {

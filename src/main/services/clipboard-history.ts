@@ -4,6 +4,7 @@ import { ClipboardWatcher } from './clipboard-watcher-v2'
 import { readFile } from 'fs/promises'
 import { getClipboardFormat, readClipboardFiles } from '../utils/clipboard-helper'
 import { CLIPBOARD_THUMBNAIL_SIZE } from '../constants/window-defaults'
+import { getCachedActiveWindow, type ActiveWindowInfo } from './active-window'
 import log from 'electron-log'
 
 interface ClipboardHistoryRow {
@@ -17,6 +18,14 @@ interface ClipboardHistoryRow {
   size: number
   favorite: number
   tags: string | null
+  source_app: string | null
+  source_title: string | null
+}
+
+/** 剪贴板内容来源信息 */
+export interface ClipboardSource {
+  app: string
+  title?: string
 }
 
 /**
@@ -33,6 +42,8 @@ export interface ClipboardHistoryItem {
   size: number // 字节数
   favorite: boolean // 是否收藏
   tags?: string[] // 标签
+  sourceApp?: string // 来源应用名
+  sourceTitle?: string // 来源窗口标题
 }
 
 /**
@@ -64,10 +75,44 @@ export class ClipboardHistoryManager {
   // 正常流程中 resume() 一定会在 restoreClipboard() 中被调用，此超时仅作为代码异常的最终保护
   private static readonly PAUSE_SAFETY_TIMEOUT_MS = 30_000
 
+  /** Windows FFI：GetClipboardOwner（懒加载） */
+  private win32ClipboardApi: {
+    GetClipboardOwner: () => unknown
+    GetWindowThreadProcessId: (hWnd: unknown, pidOut: unknown[]) => number
+    OpenProcess: (access: number, inherit: number, pid: number) => unknown
+    QueryFullProcessImageNameW: (hProcess: unknown, flags: number, buf: Buffer, sizeInout: unknown[]) => number
+    CloseHandle: (handle: unknown) => number
+    koffi: { decode(buf: Buffer, type: string, len: number): unknown }
+  } | null = null
+
   constructor() {
     this.watcher = new ClipboardWatcher()
     this.initDatabase()
     this.setupWatcher()
+    if (process.platform === 'win32') {
+      this.initWin32ClipboardApi()
+    }
+  }
+
+  private initWin32ClipboardApi(): void {
+    try {
+      const koffi = require('koffi') as {
+        load(name: string): { func<T extends (...args: never[]) => unknown>(sig: string): T }
+        decode(buf: Buffer, type: string, len: number): unknown
+      }
+      const user32 = koffi.load('user32.dll')
+      const kernel32 = koffi.load('kernel32.dll')
+      this.win32ClipboardApi = {
+        GetClipboardOwner: user32.func('void* __stdcall GetClipboardOwner()'),
+        GetWindowThreadProcessId: user32.func('uint32_t __stdcall GetWindowThreadProcessId(void *hWnd, _Out_ uint32_t *lpdwProcessId)'),
+        OpenProcess: kernel32.func('void* __stdcall OpenProcess(uint32_t dwDesiredAccess, int bInheritHandle, uint32_t dwProcessId)'),
+        QueryFullProcessImageNameW: kernel32.func('int __stdcall QueryFullProcessImageNameW(void *hProcess, uint32_t dwFlags, _Out_ uint8_t *lpExeName, _Inout_ uint32_t *lpdwSize)'),
+        CloseHandle: kernel32.func('int __stdcall CloseHandle(void *hObject)'),
+        koffi
+      }
+    } catch (err) {
+      log.warn('[ClipboardHistory] Win32 clipboard owner FFI unavailable:', err)
+    }
   }
 
   /**
@@ -105,6 +150,82 @@ export class ClipboardHistoryManager {
   }
 
   /**
+   * 检测剪贴板内容的来源应用
+   *
+   * 分平台策略：
+   * - Windows: GetClipboardOwner() → GetWindowThreadProcessId() → 进程名（直接获取写入者）
+   * - macOS: org.nspasteboard.source pasteboard type → 回退到活动窗口
+   * - Linux: 活动窗口
+   */
+  private getClipboardSource(): ClipboardSource | null {
+    try {
+      if (process.platform === 'win32') {
+        return this.getClipboardSourceWindows()
+      }
+      if (process.platform === 'darwin') {
+        return this.getClipboardSourceMacOS()
+      }
+      return this.getClipboardSourceFromActiveWindow()
+    } catch (err) {
+      log.debug('[ClipboardHistory] Source detection failed:', err)
+      return null
+    }
+  }
+
+  private getClipboardSourceWindows(): ClipboardSource | null {
+    const api = this.win32ClipboardApi
+    if (!api) return this.getClipboardSourceFromActiveWindow()
+
+    const hWnd = api.GetClipboardOwner()
+    if (!hWnd) return this.getClipboardSourceFromActiveWindow()
+
+    const pidOut: unknown[] = [null]
+    api.GetWindowThreadProcessId(hWnd, pidOut)
+    const pid = pidOut[0] as number
+    if (!pid || pid === process.pid) return this.getClipboardSourceFromActiveWindow()
+
+    const PROCESS_QUERY_LIMITED_INFORMATION = 0x1000
+    const hProc = api.OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, 0, pid)
+    if (!hProc) return this.getClipboardSourceFromActiveWindow()
+
+    try {
+      const pathBuf = Buffer.alloc(520 * 2)
+      const sizeInout: unknown[] = [520]
+      const ok = api.QueryFullProcessImageNameW(hProc, 0, pathBuf, sizeInout)
+      if (ok) {
+        const pathLen = sizeInout[0] as number
+        const fullPath = api.koffi.decode(pathBuf, 'char16_t', pathLen) as string
+        const lastSep = Math.max(fullPath.lastIndexOf('\\'), fullPath.lastIndexOf('/'))
+        const fileName = lastSep >= 0 ? fullPath.slice(lastSep + 1) : fullPath
+        const app = fileName.replace(/\.exe$/i, '')
+        return { app }
+      }
+    } finally {
+      api.CloseHandle(hProc)
+    }
+
+    return this.getClipboardSourceFromActiveWindow()
+  }
+
+  private getClipboardSourceMacOS(): ClipboardSource | null {
+    try {
+      const source = clipboard.read('org.nspasteboard.source')
+      if (source && source.length > 0) {
+        return { app: source }
+      }
+    } catch {
+      // org.nspasteboard.source not available
+    }
+    return this.getClipboardSourceFromActiveWindow()
+  }
+
+  private getClipboardSourceFromActiveWindow(): ClipboardSource | null {
+    const win: ActiveWindowInfo | null = getCachedActiveWindow()
+    if (!win || !win.app) return null
+    return { app: win.app, title: win.title || undefined }
+  }
+
+  /**
    * 初始化数据库表
    */
   private initDatabase() {
@@ -125,13 +246,14 @@ export class ClipboardHistoryManager {
       )
     `)
 
-    // 迁移：添加 file_path 列（如果不存在）
-    try {
-      db.exec(`ALTER TABLE clipboard_history ADD COLUMN file_path TEXT`)
-    } catch (err: unknown) {
-      // 列已存在，忽略错误
-      if (!(err instanceof Error) || !err.message.includes('duplicate column name')) {
-        log.error('[ClipboardHistory] Migration error:', err)
+    // 迁移：添加 file_path / source_app / source_title 列（如果不存在）
+    for (const col of ['file_path TEXT', 'source_app TEXT', 'source_title TEXT']) {
+      try {
+        db.exec(`ALTER TABLE clipboard_history ADD COLUMN ${col}`)
+      } catch (err: unknown) {
+        if (!(err instanceof Error) || !err.message.includes('duplicate column name')) {
+          log.error('[ClipboardHistory] Migration error:', err)
+        }
       }
     }
 
@@ -162,11 +284,13 @@ export class ClipboardHistoryManager {
       const format = this.getClipboardFormat()
       log.info('[ClipboardHistory] Detected format:', format)
 
+      const source = this.getClipboardSource()
+
       if (format === 'text') {
         const text = clipboard.readText()
         if (this.shouldIgnore(text)) return
 
-        await this.addTextItem(text)
+        await this.addTextItem(text, source)
       } else if (format === 'image') {
         const image = clipboard.readImage()
         if (image.isEmpty()) return
@@ -174,32 +298,29 @@ export class ClipboardHistoryManager {
         const buffer = image.toPNG()
         if (buffer.length > this.maxImageSize) return
 
-        await this.addImageItem(buffer)
+        await this.addImageItem(buffer, source)
       } else if (format === 'files') {
         const files = this.readFiles()
         log.info('[ClipboardHistory] Read files:', files)
         if (files.length === 0) return
 
-        // 检查是否为图片文件
         const imageExtensions = ['.png', '.jpg', '.jpeg', '.gif', '.bmp', '.webp', '.svg', '.ico']
         const isImageFile = files.length === 1 && imageExtensions.some(ext =>
           files[0].toLowerCase().endsWith(ext)
         )
 
         if (isImageFile) {
-          // 如果是图片文件，异步生成缩略图并保存文件路径
           try {
             log.info('[ClipboardHistory] Reading image from file:', files[0])
             const imageBuffer = await readFile(files[0])
             const image = nativeImage.createFromBuffer(imageBuffer)
 
             if (!image.isEmpty()) {
-              // 生成小缩略图（100x100）用于列表显示
               const thumbnail = image.resize({ width: CLIPBOARD_THUMBNAIL_SIZE, height: CLIPBOARD_THUMBNAIL_SIZE })
               const thumbnailBuffer = thumbnail.toPNG()
 
               log.info('[ClipboardHistory] Generated thumbnail for image file')
-              await this.addImageItemWithPath(thumbnailBuffer, files[0], imageBuffer.length)
+              await this.addImageItemWithPath(thumbnailBuffer, files[0], imageBuffer.length, source)
               return
             }
           } catch (err) {
@@ -207,8 +328,7 @@ export class ClipboardHistoryManager {
           }
         }
 
-        // 否则作为文件处理
-        await this.addFilesItem(files)
+        await this.addFilesItem(files, source)
       }
     } catch (err) {
       log.error('Failed to capture clipboard:', err)
@@ -247,8 +367,7 @@ export class ClipboardHistoryManager {
   /**
    * 添加文本条目
    */
-  private async addTextItem(text: string) {
-    // 检查是否与最近的记录重复
+  private async addTextItem(text: string, source: ClipboardSource | null) {
     if (this.isDuplicate('text', text)) {
       return
     }
@@ -261,21 +380,21 @@ export class ClipboardHistoryManager {
       plainText: text,
       timestamp: Date.now(),
       size: Buffer.byteLength(text, 'utf8'),
-      favorite: false
+      favorite: false,
+      sourceApp: source?.app,
+      sourceTitle: source?.title
     }
 
     this.saveItem(item)
-    // 清理操作移到批量写入后
   }
 
   /**
    * 添加图片条目（从剪贴板截图/粘贴）
    */
-  private async addImageItem(buffer: Buffer) {
+  private async addImageItem(buffer: Buffer, source: ClipboardSource | null) {
     const base64 = buffer.toString('base64')
     const content = `data:image/png;base64,${base64}`
 
-    // 检查是否与最近的记录重复
     if (this.isDuplicate('image', content)) {
       return
     }
@@ -284,24 +403,24 @@ export class ClipboardHistoryManager {
     const item: ClipboardHistoryItem = {
       id,
       type: 'image',
-      content, // 完整图片 base64（因为没有文件路径）
+      content,
       timestamp: Date.now(),
       size: buffer.length,
-      favorite: false
+      favorite: false,
+      sourceApp: source?.app,
+      sourceTitle: source?.title
     }
 
     this.saveItem(item)
-    // 清理操作移到批量写入后
   }
 
   /**
    * 添加图片条目（从文件）
    */
-  private async addImageItemWithPath(thumbnailBuffer: Buffer, filePath: string, originalSize: number) {
+  private async addImageItemWithPath(thumbnailBuffer: Buffer, filePath: string, originalSize: number, source: ClipboardSource | null) {
     const base64 = thumbnailBuffer.toString('base64')
     const thumbnail = `data:image/png;base64,${base64}`
 
-    // 检查是否与最近的记录重复（使用文件路径）
     if (this.isDuplicate('image', filePath)) {
       return
     }
@@ -310,24 +429,24 @@ export class ClipboardHistoryManager {
     const item: ClipboardHistoryItem = {
       id,
       type: 'image',
-      content: thumbnail, // 小缩略图
-      filePath, // 原始文件路径
+      content: thumbnail,
+      filePath,
       timestamp: Date.now(),
       size: originalSize,
-      favorite: false
+      favorite: false,
+      sourceApp: source?.app,
+      sourceTitle: source?.title
     }
 
     this.saveItem(item)
-    // 清理操作移到批量写入后
   }
 
   /**
    * 添加文件条目
    */
-  private async addFilesItem(files: string[]) {
+  private async addFilesItem(files: string[], source: ClipboardSource | null) {
     const content = files.join('\n')
 
-    // 检查是否与最近的记录重复
     if (this.isDuplicate('files', content)) {
       return
     }
@@ -340,11 +459,12 @@ export class ClipboardHistoryManager {
       files,
       timestamp: Date.now(),
       size: files.length,
-      favorite: false
+      favorite: false,
+      sourceApp: source?.app,
+      sourceTitle: source?.title
     }
 
     this.saveItem(item)
-    // 清理操作移到批量写入后
   }
 
   /**
@@ -398,8 +518,8 @@ export class ClipboardHistoryManager {
       // 使用事务批量写入
       const insertStmt = db.prepare(`
         INSERT OR REPLACE INTO clipboard_history
-        (id, type, content, plain_text, files, file_path, timestamp, size, favorite, tags, created_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        (id, type, content, plain_text, files, file_path, timestamp, size, favorite, tags, source_app, source_title, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `)
 
       const transaction = db.transaction((items: ClipboardHistoryItem[]) => {
@@ -415,6 +535,8 @@ export class ClipboardHistoryManager {
             item.size,
             item.favorite ? 1 : 0,
             item.tags ? JSON.stringify(item.tags) : null,
+            item.sourceApp || null,
+            item.sourceTitle || null,
             Date.now()
           )
         }
@@ -461,6 +583,7 @@ export class ClipboardHistoryManager {
     type?: 'text' | 'image' | 'files'
     search?: string
     favorite?: boolean
+    sourceApp?: string
     limit?: number
     offset?: number
   }): ClipboardHistoryItem[] {
@@ -482,6 +605,11 @@ export class ClipboardHistoryManager {
       params.push(options.favorite ? 1 : 0)
     }
 
+    if (options.sourceApp) {
+      sql += ' AND source_app = ?'
+      params.push(options.sourceApp)
+    }
+
     sql += ' ORDER BY timestamp DESC'
 
     if (options.limit) {
@@ -497,18 +625,7 @@ export class ClipboardHistoryManager {
     const stmt = db.prepare(sql)
     const rows = stmt.all(...params) as ClipboardHistoryRow[]
 
-    return rows.map(row => ({
-      id: row.id,
-      type: row.type,
-      content: row.content,
-      plainText: row.plain_text ?? undefined,
-      files: row.files ? (JSON.parse(row.files) as string[]) : undefined,
-      filePath: row.file_path ?? undefined,
-      timestamp: row.timestamp,
-      size: row.size,
-      favorite: row.favorite === 1,
-      tags: row.tags ? (JSON.parse(row.tags) as string[]) : undefined
-    }))
+    return rows.map(row => this.rowToItem(row))
   }
 
   /**
@@ -518,7 +635,10 @@ export class ClipboardHistoryManager {
     const stmt = db.prepare('SELECT * FROM clipboard_history WHERE id = ?')
     const row = stmt.get(id) as ClipboardHistoryRow | undefined
     if (!row) return null
+    return this.rowToItem(row)
+  }
 
+  private rowToItem(row: ClipboardHistoryRow): ClipboardHistoryItem {
     return {
       id: row.id,
       type: row.type,
@@ -529,7 +649,9 @@ export class ClipboardHistoryManager {
       timestamp: row.timestamp,
       size: row.size,
       favorite: row.favorite === 1,
-      tags: row.tags ? (JSON.parse(row.tags) as string[]) : undefined
+      tags: row.tags ? (JSON.parse(row.tags) as string[]) : undefined,
+      sourceApp: row.source_app ?? undefined,
+      sourceTitle: row.source_title ?? undefined
     }
   }
 

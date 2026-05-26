@@ -28,6 +28,7 @@
 - 收藏功能
 - 自动清理旧记录（保留最近 1000 条）
 - 使用 Native 剪贴板监听（零性能开销）
+- 自动检测来源应用（Windows: `GetClipboardOwner`、macOS: `org.nspasteboard.source`、Linux: 活动窗口）
 
 ## API 方法
 
@@ -40,6 +41,7 @@ const items = await clipboardHistory.query({
   type: 'text',        // 可选：'text' | 'image' | 'files'
   search: 'hello',     // 可选：搜索文本内容
   favorite: true,      // 可选：只查询收藏的
+  sourceApp: 'Chrome', // 可选：按来源应用过滤
   limit: 20,           // 可选：返回数量限制
   offset: 0            // 可选：分页偏移
 });
@@ -50,6 +52,7 @@ const items = await clipboardHistory.query({
   - `type` (string, 可选) - 过滤类型：`'text'` | `'image'` | `'files'`
   - `search` (string, 可选) - 搜索文本内容（仅对文本类型有效）
   - `favorite` (boolean, 可选) - 是否只查询收藏的记录
+  - `sourceApp` (string, 可选) - 按来源应用名过滤
   - `limit` (number, 可选) - 返回数量限制
   - `offset` (number, 可选) - 分页偏移量
 
@@ -66,8 +69,15 @@ interface ClipboardHistoryItem {
   size: number;            // 字节数
   favorite: boolean;       // 是否收藏
   tags?: string[];         // 标签
+  sourceApp?: string;      // 来源应用名（如 "Chrome"、"Visual Studio Code"）
+  sourceTitle?: string;    // 来源窗口标题
 }
 ```
+
+> **来源检测原理**：
+> - Windows: 通过 `GetClipboardOwner()` Win32 API 直接获取写入剪贴板的进程
+> - macOS: 优先读取 `org.nspasteboard.source` pasteboard type，回退到前台窗口
+> - Linux: 基于当前活动窗口
 
 ### get(id)
 [Renderer] [Backend]

@@ -257,6 +257,7 @@ export function createPluginAPI(
         type?: 'text' | 'image' | 'files'
         search?: string
         favorite?: boolean
+        sourceApp?: string
         limit?: number
         offset?: number
       }) => {
