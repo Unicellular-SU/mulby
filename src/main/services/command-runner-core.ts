@@ -486,42 +486,6 @@ function appendWithLimit(chunks: Buffer[], currentBytes: number, incoming: Buffe
 }
 
 /**
- * 最小安全环境变量基线
- *
- * 仅保留子进程运行所需的最基本环境变量。
- * 其他系统变量（API keys、tokens 等）一律不继承。
- */
-const SAFE_ENV_BASELINE_KEYS = [
-  // 基本路径
-  'PATH',
-  'HOME',
-  'USER',
-  'LOGNAME',
-  'USERPROFILE',   // Windows
-  'HOMEDRIVE',     // Windows
-  'HOMEPATH',      // Windows
-  'SYSTEMROOT',    // Windows
-  'COMSPEC',       // Windows cmd
-  'PATHEXT',       // Windows: .cmd/.bat/.exe 等扩展名解析（shell:true 命令解析必需）
-  'TEMP',          // Windows: 临时目录（很多 CLI 工具依赖）
-  'TMP',           // Windows: 临时目录（同上，部分工具读此变量）
-  'APPDATA',       // Windows: 应用全局配置路径（npm/pnpm 等依赖）
-  'LOCALAPPDATA',  // Windows: 应用本地配置路径
-  'PROGRAMDATA',   // Windows: 公共程序数据
-  // 语言/编码
-  'LANG',
-  'LC_ALL',
-  'LC_CTYPE',
-  // macOS
-  'TMPDIR',
-  // 终端
-  'TERM',
-  'SHELL',
-  // Node.js
-  'NODE_ENV'
-]
-
-/**
  * 根据来源构建安全的子进程环境变量
  *
  * - source='app'：继承全部 process.env（主应用需要完整环境）
