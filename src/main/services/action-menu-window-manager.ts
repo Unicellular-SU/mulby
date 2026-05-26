@@ -230,15 +230,17 @@ export class ActionMenuWindowManager {
   }
 
   private configureWindowForShow(win: BrowserWindow): void {
-    if (process.platform !== 'darwin' || win.isDestroyed()) return
+    if (win.isDestroyed()) return
     try {
-      win.setVisibleOnAllWorkspaces(true, {
-        visibleOnFullScreen: true,
-        skipTransformProcessType: true
-      })
+      if (process.platform === 'darwin') {
+        win.setVisibleOnAllWorkspaces(true, {
+          visibleOnFullScreen: true,
+          skipTransformProcessType: true
+        })
+      }
       win.setAlwaysOnTop(true, 'pop-up-menu')
     } catch (error) {
-      log.warn('[ActionMenu] Failed to configure macOS menu window:', error)
+      log.warn('[ActionMenu] Failed to configure menu window:', error)
     }
   }
 
