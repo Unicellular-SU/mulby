@@ -8,51 +8,66 @@ Mulby is a cross-platform plugin-based productivity toolbox (similar to uTools/A
 
 ## Development Commands
 
+Always use **pnpm** as the package manager in this repository.
+
 ```bash
 # Install dependencies
-npm install
+pnpm install
 
-# Development mode (Vite + Electron with hot reload)
-npm run electron:dev
+# Start Vite dev server & launch Electron in hot reload mode
+pnpm run electron:dev  # (or pnpm run dev)
 
-# Build for production
-npm run electron:build
+# Build, compile native modules, and pack app using electron-builder
+pnpm run electron:build
 
-# Lint
-npm run lint
+# Run comprehensive repo verification (Typecheck + Lint + Sync API Docs + Unit Tests + Bundle Smoke)
+pnpm run verify
 
-# Type check
-npm run typecheck
+# Run TypeScript type check
+pnpm run typecheck
+
+# Run ESLint validation
+pnpm run lint
+
+# Run unit tests
+pnpm run test:unit
+
+# Reset onboarding status in SQLite DB (useful for debugging initial wizard)
+node scripts/reset-onboarding.mjs
+
+# Sync local skills/ folders to active AI coding IDEs (Cursor/Claude Code/Antigravity/etc.)
+bash scripts/link-skills.sh
 ```
 
 ## Architecture
 
-### Electron Process Structure
+### Electron Process & Layout Structure
 
-- **Main Process** (`src/main/`) - Window management, IPC handlers, plugin runtime
-- **Renderer Process** (`src/renderer/`) - React UI for search window
-- **Preload** (`src/preload/`) - Context bridge exposing `window.mulby` API
+- **Main Process** (`src/main/`) - Window management, D-Bus native connectors, IPC handles, and plugin runtime supervisors.
+- **Preload** (`src/preload/`) - Safe context bridge exposing controlled APIs under `window.mulby` and `window.mulbyMain`.
+- **Renderer Process** (`src/renderer/`) - React 19 UI for main search box, store, setup screens, and developer console.
+- **WebContentsView Architecture** - Plugin panels do NOT render inside the host BrowserWindow direct webContents. Instead, they run in dedicated Electron `WebContentsView` subviews positioned below custom HTML titlebars, maintaining modularity.
 
 ### Key Modules
 
 | Module | Location | Purpose |
 |--------|----------|---------|
-| Plugin Manager | `src/main/plugin/manager.ts` | Plugin lifecycle, loading, search matching |
-| Plugin Window | `src/main/plugin/window.ts` | Plugin UI window management (attached/detached modes) |
-| Plugin Runner | `src/main/plugin/runner.ts` | VM2 sandbox execution for Node.js plugins |
-| IPC Handlers | `src/main/ipc/` | Main-renderer communication |
-| Theme Manager | `src/main/theme.ts` | System theme detection and switching |
+| **Plugin Manager** | `src/main/plugin/manager.ts` | Orchestrates plugin lifecycle, loading, search indexing, and dispatching. |
+| **Plugin Window** | `src/main/plugin/window.ts` | Embedded / detached window setups, using WebContentsView subviews. |
+| **Host Process Manager** | `src/main/plugin/host-manager.ts` | Spawns, monitors, and bridges Node.js plugins in standard isolated `utilityProcess` hosts. |
+| **Plugin Runner** | `src/main/plugin/runner.ts` | Fallback backend executor when process isolation is disabled in dev. |
+| **WebContents Registry** | `src/main/services/webcontents-registry.ts` | Tracks custom WebContentsViews to bridge focus and IPC messages correctly. |
+| **System commands** | `src/main/plugin/system-command-executor.ts` | Implements lock-screen, sleep, power control, screenshots, and native pickers. |
+| **IPC Handlers** | `src/main/ipc/` | Handles main-renderer communication protocols. |
 
 ### Plugin System
 
-Plugins live in `plugins/` directory. Each plugin has:
-- `manifest.json` - Plugin metadata, triggers (keyword/regex), features
-- `dist/main.js` - Backend logic (runs in VM2 sandbox)
-- `ui/index.html` - Optional React/HTML UI
-
-Plugin UI can run in two modes:
-- **Attached** - Embedded in main window below search box
-- **Detached** - Separate independent window
+- **System plugins** live in the `internal-plugins/` directory.
+- **Third-party / Developer plugins** are loaded from the User Data directory (`plugins/` folder under app `userData`) or custom directories registered in settings.
+- **Plugins layout**:
+  - `manifest.json` - Plugin triggers (keywords, regex, clipboards), permissions, features, and entries.
+  - `dist/main.js` - Background execution logic (runs in an isolated `utilityProcess` node thread).
+  - `ui/index.html` - Embedded or detached panel React/HTML UI.
 
 ### Path Aliases
 
@@ -65,23 +80,19 @@ Plugin UI can run in two modes:
 
 ### Tech Stack
 
-- Electron 28 + React 18 + TypeScript
-- Vite + vite-plugin-electron for build
-- Tailwind CSS for styling
-- Zustand for state management
-- better-sqlite3 for data storage
-- VM2 for plugin sandboxing
+- **Electron 41.1 + React 19.2 + TypeScript 5.8**
+- **Vite 8.0** + `vite-plugin-electron`
+- **Tailwind CSS 3.3** for responsive styles
+- **better-sqlite3 12.8** for local SQLite database storage
+- **koffi 2.15** & **node-mac-permissions 2.5** for high-performance native macOS/Windows FFI
+- **dbus-next 0.10** for native D-Bus communication on Linux (Geoclue location service, XDG color portal)
+- *Note: VM2 and Zustand are NOT used in this repository.*
 
 ## Related Repositories
 
-- `https://github.com/Unicellular-SU/mulby-cli` contains the plugin development CLI.
-- `https://github.com/Unicellular-SU/mulby-skills` contains Mulby AI coding skills and references.
+- `https://github.com/Unicellular-SU/mulby-cli` — Plugin development CLI.
+- `https://github.com/Unicellular-SU/mulby-skills` — AI coding templates and guidelines.
 
-The CLI can be cloned locally to `packages/mulby-cli/` for adjacent development, but that path is ignored by this repository.
-```bash
-mulby create <plugin-name>  # Create new plugin from template
-```
+## Global Hotkey
 
-## Global Shortcut
-
-`Alt+Space` - Toggle main window visibility
+- `Alt+Space` (or custom modifier configured in general settings) - Toggles main search window visibility.

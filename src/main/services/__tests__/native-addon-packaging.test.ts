@@ -45,13 +45,20 @@ describe('native addon packaging', () => {
     const pkg = readPackageJson()
     const releaseWorkflow = readReleaseWorkflow()
     const buildNativeStep = 'pnpm run native:build'
-    const publishStep = 'pnpm run electron:publish'
+    const publishStep = 'pnpm run electron:publish:prepared'
 
     assert.equal(pkg.scripts?.['native:build'], 'node scripts/build-native.mjs')
+    assert.equal(pkg.scripts?.['electron:publish:prepared'], 'vite build && electron-builder --publish always')
+    assert.equal(
+      pkg.scripts?.['electron:build:mac:unsigned:prepared'],
+      'MULBY_MAC_UNSIGNED_RESOURCE_UPDATES=true vite build && electron-builder --mac --publish never'
+    )
+    assert.ok(!pkg.scripts?.['electron:publish:prepared']?.includes('native:build'))
+    assert.ok(!pkg.scripts?.['electron:build:mac:unsigned:prepared']?.includes('native:build'))
     assert.match(releaseWorkflow, new RegExp(buildNativeStep.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')))
     assert.ok(
       releaseWorkflow.indexOf(buildNativeStep) < releaseWorkflow.indexOf(publishStep),
-      'release workflow must build native addons before electron:publish'
+      'release workflow must build native addons before prepared publishing'
     )
   })
 
@@ -59,8 +66,10 @@ describe('native addon packaging', () => {
     const pkg = readPackageJson()
     const releaseWorkflow = readReleaseWorkflow()
     const macUnsignedScript = pkg.scripts?.['electron:build:mac:unsigned'] || ''
+    const preparedMacUnsignedScript = pkg.scripts?.['electron:build:mac:unsigned:prepared'] || ''
 
     assert.match(macUnsignedScript, /MULBY_MAC_UNSIGNED_RESOURCE_UPDATES=true vite build/)
+    assert.match(preparedMacUnsignedScript, /MULBY_MAC_UNSIGNED_RESOURCE_UPDATES=true vite build/)
     assert.match(releaseWorkflow, /MULBY_MAC_UNSIGNED_RESOURCE_UPDATES:\s*"true"/)
   })
 

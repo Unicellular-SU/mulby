@@ -6,11 +6,14 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
+    "build:bundle": "vite build",
     "build:smoke": "pnpm run build",
     "electron:dev": "vite",
     "electron:build": "pnpm run native:build && vite build && electron-builder",
     "electron:build:mac:unsigned": "pnpm run native:build && MULBY_MAC_UNSIGNED_RESOURCE_UPDATES=true vite build && electron-builder --mac --publish never",
+    "electron:build:mac:unsigned:prepared": "MULBY_MAC_UNSIGNED_RESOURCE_UPDATES=true vite build && electron-builder --mac --publish never",
     "electron:publish": "pnpm run native:build && vite build && electron-builder --publish always",
+    "electron:publish:prepared": "vite build && electron-builder --publish always",
     "mac:resource-update": "node scripts/generate-mac-resource-update.cjs",
     "mac:verify-signing": "node scripts/verify-mac-app-signing.cjs",
     "postinstall": "node scripts/postinstall.mjs",
@@ -21,7 +24,7 @@
     "check:split-sync": "node scripts/check-split-repo-sync.mjs",
     "sync:api-docs": "node scripts/sync-skill-docs.mjs",
     "test:unit": "node scripts/run-unit-tests.mjs",
-    "verify:app": "pnpm run typecheck && pnpm run lint && pnpm run check:api-docs && pnpm run sync:api-docs && pnpm run test:unit && pnpm run build:smoke",
+    "verify:app": "pnpm run typecheck && pnpm run lint && pnpm run check:api-docs && pnpm run sync:api-docs && pnpm run test:unit && pnpm run build:bundle",
     "verify:repo": "pnpm run verify:app",
     "verify": "pnpm run verify:app"
   },

@@ -69,9 +69,16 @@ describe('shortcut accelerator helpers', () => {
       { accelerator: '', error: null }
     )
     assert.deepEqual(
-      buildAcceleratorFromKeyboardEvent(keyEvent({ code: 'ControlLeft', key: 'Control', ctrlKey: true })),
+      buildAcceleratorFromKeyboardEvent(keyEvent({ code: 'ControlLeft', key: 'Control', ctrlKey: true }), 'win32'),
       {
         accelerator: 'CommandOrControl',
+        error: '请按 Ctrl/Alt + 按键，或直接按 F1–F24'
+      }
+    )
+    assert.deepEqual(
+      buildAcceleratorFromKeyboardEvent(keyEvent({ code: 'ControlLeft', key: 'Control', ctrlKey: true }), 'darwin'),
+      {
+        accelerator: 'Control',
         error: '请按 Ctrl/Alt + 按键，或直接按 F1–F24'
       }
     )

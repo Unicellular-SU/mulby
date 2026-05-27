@@ -8,15 +8,15 @@
 
 ## 开发背景
 
-最初开发 Mulby，是因为实在无法忍受 utools 免费会员最多只能用 10 个插件的限制。然后发现现在AI这么强，所以索性自己开搞，结果一做就停不下来（然而AI上的消费已经购买几个永久会员了...）。从一月项目立项一路肝到现在，快做完却发现已经有了优秀的开源项目 ztools……说到底这属于典型的“重复造轮子”。但既然已经启动，也就一鼓作气走到底。
+最初开发 Mulby，是因为实在无法忍受 utools 免费会员最多只能用 10 个插件的限制。然后发现现在AI这么强，所以索性自己开搞，结果一做就停不下来（然而AI上的消费已经够买几个永久会员了...）。从一月项目立项一路肝到现在，快做完却发现已经有了优秀的开源项目 ztools……说到底这属于典型的“重复造轮子”。但既然已经启动，也就一鼓作气走到底。
 
 开发过程中参考了 [ztools](https://github.com/ZToolsCenter/ZTools)、[rubick](https://github.com/rubickCenter/rubick) 等出色项目的很多实现细节，在这里也感谢两位大佬的无私开源！Mulby 的整体理念和 utools/ztools/rubick 并无二致，都是全局启动器 + 插件生态，只是实现方式略有区分。“本地大一统”，支持各种乱七八糟的需求和插件能力，目标是尽量全面。也欢迎大家探索和吐槽；更欢迎编写插件一起来共建生态体系——我还特意做了插件 skill（没错，插件也全部由 AI 生成，我已经彻底不会古法编程了）。
 
-> PS: Linux我没测试，不确定是否正常
+> PS: Linux我没测试，不确定是否正常，欢迎大佬 PR
 
 ## 项目简介
 
-Mulby 这个名字源自英文 “Mulberry” 的变体，意为桑葚 —— 就像一颗颗桑葚聚合成一整串果实，Mulby 通过插件机制，将各类功能像桑葚颗粒一样聚集在一起，形成强大的桌面效率工具箱。它面向开发者与效率用户，通过全局快捷键唤起，支持插件搜索与执行、插件商店安装、AI 能力编排与任务调度。
+Mulby /ˈmʌlbi/ 这个名字源自英文 “Mulberry” 的变体，意为桑葚 —— 就像一颗颗桑葚聚合成一整串果实，Mulby 通过插件机制，将各类功能像桑葚颗粒一样聚集在一起，形成强大的桌面效率工具箱。它面向开发者与效率用户，通过全局快捷键唤起，支持插件搜索与执行、插件商店安装、AI 能力编排与任务调度。
 
 ## 当前能力
 
@@ -88,7 +88,7 @@ pnpm run verify:repo
 ## 插件开发入口
 
 - [Mulby 官方插件仓库](https://github.com/Unicellular-SU/mulby-plugins) (订阅链接： `https://raw.githubusercontent.com/Unicellular-SU/mulby-plugins/refs/heads/main/plugins.json`)
-- [Mulby CLI 文档](https://github.com/Unicellular-SU/mulby-cli)
+- [Mulby CLI](https://github.com/Unicellular-SU/mulby-cli)
 - [Mulby Skills](https://github.com/Unicellular-SU/mulby-skills)
 
 ## 参与贡献
