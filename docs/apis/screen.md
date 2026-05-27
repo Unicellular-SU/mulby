@@ -117,13 +117,15 @@ const windows = await screen.getSources({ types: ['window'] });
 // 自定义缩略图大小
 const sources = await screen.getSources({
   types: ['screen', 'window'],
-  thumbnailSize: { width: 300, height: 300 }
+  thumbnailSize: { width: 300, height: 300 },
+  fetchWindowIcons: false
 });
 ```
 
 **参数** (CaptureOptions):
 - `types` (('screen' | 'window')[], 可选) - 捕获类型，默认 ['screen', 'window']
 - `thumbnailSize` ({ width: number; height: number }, 可选) - 缩略图大小，默认 150x150
+- `fetchWindowIcons` (boolean, 可选) - 是否获取窗口应用图标；默认在请求窗口源时开启，设置为 `false` 可减少窗口源枚举耗时。
 
 **返回值**: `CaptureSource[]`
 

@@ -25,6 +25,46 @@ function captureSource(source: {
 }
 
 describe('PluginScreen window bounds', () => {
+  it('does not request window icons for screen-only source lists', async () => {
+    let receivedOptions: Electron.SourcesOptions | null = null
+    const pluginScreen = new PluginScreen({
+      desktopCapturer: {
+        getSources: async (options) => {
+          receivedOptions = options
+          return []
+        }
+      }
+    })
+
+    await pluginScreen.getSources({ types: ['screen'] })
+
+    assert.deepEqual(receivedOptions, {
+      types: ['screen'],
+      thumbnailSize: { width: 150, height: 150 },
+      fetchWindowIcons: false
+    })
+  })
+
+  it('lets callers skip window icons for window source lists', async () => {
+    let receivedOptions: Electron.SourcesOptions | null = null
+    const pluginScreen = new PluginScreen({
+      desktopCapturer: {
+        getSources: async (options) => {
+          receivedOptions = options
+          return []
+        }
+      }
+    })
+
+    await pluginScreen.getSources({ types: ['window'], fetchWindowIcons: false })
+
+    assert.deepEqual(receivedOptions, {
+      types: ['window'],
+      thumbnailSize: { width: 150, height: 150 },
+      fetchWindowIcons: false
+    })
+  })
+
   it('adds bounds to window sources when the native resolver returns them', async () => {
     const pluginScreen = new PluginScreen({
       desktopCapturer: {

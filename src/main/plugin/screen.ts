@@ -41,6 +41,7 @@ export type CaptureSource = PublicCaptureSource
 export interface CaptureOptions {
   types?: ('screen' | 'window')[]
   thumbnailSize?: { width: number; height: number }
+  fetchWindowIcons?: boolean
 }
 
 export interface ScreenshotOptions {
@@ -184,11 +185,12 @@ export class PluginScreen {
   async getSources(options: CaptureOptions = {}): Promise<CaptureSource[]> {
     const types = options.types || ['screen', 'window']
     const thumbnailSize = options.thumbnailSize || { width: SCREEN_CAPTURE_THUMBNAIL_SIZE, height: SCREEN_CAPTURE_THUMBNAIL_SIZE }
+    const fetchWindowIcons = options.fetchWindowIcons ?? types.includes('window')
 
     const sources = await withScreenPermissionErrorMapping(() => this.desktopCapturer.getSources({
       types,
       thumbnailSize,
-      fetchWindowIcons: true
+      fetchWindowIcons
     }))
 
     return sources.map(source => createPublicCaptureSource(

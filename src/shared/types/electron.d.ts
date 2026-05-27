@@ -296,6 +296,7 @@ export interface CaptureSource {
 export interface CaptureOptions {
   types?: ('screen' | 'window')[]
   thumbnailSize?: { width: number; height: number }
+  fetchWindowIcons?: boolean
 }
 
 export interface ScreenshotOptions {
