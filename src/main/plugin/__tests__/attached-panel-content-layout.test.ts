@@ -52,4 +52,25 @@ describe('attached panel content layout', () => {
       'attached plugin content should receive bottom resize handles without surface insets'
     )
   })
+
+  it('reapplies attached plugin content surface after renderer reloads', () => {
+    const source = readFileSync(panelWindowSourcePath, 'utf8')
+    const didFinishLoadStart = source.indexOf("capturedWebContents.on('did-finish-load'")
+    const didFinishLoadEnd = source.indexOf('// 安装 console 输出捕获', didFinishLoadStart)
+    const didFinishLoadHandler = didFinishLoadStart >= 0 && didFinishLoadEnd > didFinishLoadStart
+      ? source.slice(didFinishLoadStart, didFinishLoadEnd)
+      : ''
+
+    assert.ok(didFinishLoadHandler, 'attached panel did-finish-load handler must exist')
+    assert.match(
+      didFinishLoadHandler,
+      /pluginContentSurfacePromise = null[\s\S]*void ensureAttachedPluginContentSurface\(\)/,
+      'attached plugin content clipping and resize handles must be re-injected after every load'
+    )
+    assert.doesNotMatch(
+      didFinishLoadHandler,
+      /await ensureAttachedPluginContentSurface\(\)/,
+      're-injecting plugin content surface must not block did-finish-load'
+    )
+  })
 })

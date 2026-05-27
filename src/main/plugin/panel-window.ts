@@ -624,6 +624,8 @@ export class PluginPanelWindow {
             }
             if (useWindowsFramelessSurface) {
                 await applyAttachedPanelShellSurface()
+                pluginContentSurfacePromise = null
+                void ensureAttachedPluginContentSurface()
             }
             if (loadNum === 1) {
                 sendInitialPluginInit('did-finish-load')

@@ -99,6 +99,8 @@ describe('Windows frameless surface scripts', () => {
     assert.equal(scripts.length, 0)
     assert.match(styles[0], /border-radius: 12px !important;/)
     assert.match(styles[0], /overflow: hidden !important;/)
+    assert.doesNotMatch(styles[0], /html,\s*body\s*\{[\s\S]*background: transparent !important;/)
+    assert.doesNotMatch(styles[0], /body\s*>\s*:not\(script\)[\s\S]*background/)
     assert.doesNotMatch(styles[0], /mulby-window-content-host/)
   })
 })
