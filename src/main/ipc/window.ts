@@ -16,7 +16,7 @@ import {
 import { shouldUseWindowsFramelessSurface } from '../services/window-surface'
 import { windowFromWebContents, getPluginWebContents } from '../services/webcontents-registry'
 import { hasDetachedWindows, markAppHidden, shouldHideWholeAppAfterWindowHide } from '../services/blur-manager'
-import { ActionMenuWindowManager } from '../services/action-menu-window-manager'
+import { ActionMenuWindowManager, ActionMenuItem } from '../services/action-menu-window-manager'
 import log from 'electron-log'
 import { getPinnedSize, updatePinnedSize } from '../services/window-size-pin'
 
@@ -168,6 +168,119 @@ export function registerWindowHandlers(
     pluginWc.reload()
     log.info(`[ReloadTrace] pluginWc.reload() returned | +${Date.now() - reloadStart}ms`)
     return true
+  }
+
+  // 解析某宿主窗口对应的插件内容 WebContents（而非标题栏）。
+  // 与 reload 一致：主窗口/面板统一回退到面板窗口，再取注册的 WebContentsView。
+  const resolvePluginWebContents = (senderWin: BrowserWindow): Electron.WebContents | null => {
+    const mainWin = getMainWindow()
+    const panelWin = pluginWindowManager.getPanelWindow()?.getWindow()
+    const targetWin = senderWin === mainWin && panelWin ? panelWin : senderWin
+    if (!targetWin || targetWin.isDestroyed()) return null
+    const wc = getPluginWebContents(targetWin) ?? targetWin.webContents
+    return wc.isDestroyed() ? null : wc
+  }
+
+  // 切换当前插件 WebContents 的 DevTools（开发者调试工具）。
+  const togglePluginDevTools = (senderWin: BrowserWindow): void => {
+    const wc = resolvePluginWebContents(senderWin)
+    if (!wc) return
+    if (wc.isDevToolsOpened()) {
+      wc.closeDevTools()
+    } else {
+      wc.openDevTools({ mode: 'detach' })
+    }
+  }
+
+  // 构建插件「更多操作」菜单项。附着面板与独立窗口标题栏共用同一份定义。
+  const buildPluginMenuItems = (win: BrowserWindow): ActionMenuItem[] => {
+    const plugin = resolveCurrentPlugin(win)
+    const launchTarget = resolveCurrentLaunchTarget(win)
+    const startupPlugin = launchTarget?.plugin ?? plugin
+    const supportsLaunchOnStartup =
+      startupPlugin?.manifest.pluginSetting?.background === true || Boolean(startupPlugin?.manifest.ui)
+    const launchOnStartup = startupPlugin && supportsLaunchOnStartup && pluginManager
+      ? pluginManager.getLaunchOnStartup(startupPlugin.id)
+      : undefined
+    const alwaysOpenDetached = plugin && pluginManager
+      ? pluginManager.getAlwaysOpenDetached(plugin.id)
+      : undefined
+    const developerEnabled = appSettingsManager.getSettings().developer.enabled === true
+
+    return [
+      { id: 'reload', label: '重新加载界面', disabled: !plugin },
+      {
+        id: 'toggle-launch-on-startup',
+        label: supportsLaunchOnStartup ? '跟随 Mulby 启动' : '跟随 Mulby 启动（需后台或 UI）',
+        checked: launchOnStartup?.enabled === true,
+        disabled: !(startupPlugin && supportsLaunchOnStartup && pluginManager)
+      },
+      {
+        id: 'toggle-always-open-detached',
+        label: '始终以独立窗口运行',
+        checked: alwaysOpenDetached?.enabled === true,
+        disabled: !(plugin && pluginManager && plugin.manifest.ui)
+      },
+      // 仅在开发者模式下暴露调试入口，避免打扰普通用户。
+      ...(developerEnabled
+        ? [{
+            id: 'toggle-devtools',
+            label: '开发者调试工具',
+            checked: resolvePluginWebContents(win)?.isDevToolsOpened() === true,
+            disabled: !plugin
+          } as ActionMenuItem]
+        : []),
+      { id: 'separator-main', label: '', separator: true },
+      { id: 'terminate', label: '结束运行', danger: true, disabled: !(plugin && pluginManager) }
+    ]
+  }
+
+  // 处理插件「更多操作」菜单的选择动作。附着面板与标题栏共用。
+  const handlePluginMenuSelect = async (win: BrowserWindow, id: string): Promise<void> => {
+    const plugin = resolveCurrentPlugin(win)
+    const launchTarget = resolveCurrentLaunchTarget(win)
+    const startupPlugin = launchTarget?.plugin ?? plugin
+    const supportsLaunchOnStartup =
+      startupPlugin?.manifest.pluginSetting?.background === true || Boolean(startupPlugin?.manifest.ui)
+
+    if (id === 'reload') {
+      reloadPluginWindow(win)
+      return
+    }
+    if (id === 'toggle-launch-on-startup') {
+      if (!startupPlugin || !supportsLaunchOnStartup || !pluginManager) return
+      const current = pluginManager.getLaunchOnStartup(startupPlugin.id)
+      const nextEnabled = current?.enabled !== true
+      pluginManager.setLaunchOnStartup(
+        startupPlugin.id,
+        nextEnabled,
+        nextEnabled && launchTarget
+          ? {
+              featureCode: launchTarget.featureCode,
+              route: launchTarget.route,
+              mode: launchTarget.mode,
+              uiMode: launchTarget.mode === 'detached' ? 'detached' : 'attached'
+            }
+          : undefined
+      )
+      return
+    }
+    if (id === 'toggle-always-open-detached') {
+      if (!plugin || !pluginManager || !plugin.manifest.ui) return
+      const current = pluginManager.getAlwaysOpenDetached(plugin.id)
+      pluginManager.setAlwaysOpenDetached(plugin.id, current?.enabled !== true)
+      return
+    }
+    if (id === 'toggle-devtools') {
+      togglePluginDevTools(win)
+      return
+    }
+    if (id === 'terminate') {
+      const result = await terminatePluginForWindow(win)
+      if (!result.success) {
+        log.warn(`[plugin-menu] terminate failed: ${result.error || 'unknown error'}`)
+      }
+    }
   }
 
   // =========================================
@@ -402,72 +515,11 @@ export function registerWindowHandlers(
     const win = windowFromWebContents(event.sender)
     if (!win || win.isDestroyed()) return false
 
-    const plugin = resolveCurrentPlugin(win)
-    const launchTarget = resolveCurrentLaunchTarget(win)
-    const startupPlugin = launchTarget?.plugin ?? plugin
-    const supportsLaunchOnStartup = startupPlugin?.manifest.pluginSetting?.background === true || Boolean(startupPlugin?.manifest.ui)
-    const launchOnStartup = startupPlugin && supportsLaunchOnStartup && pluginManager
-      ? pluginManager.getLaunchOnStartup(startupPlugin.id)
-      : undefined
-    const alwaysOpenDetached = plugin && pluginManager
-      ? pluginManager.getAlwaysOpenDetached(plugin.id)
-      : undefined
     return actionMenuWindowManager.show({
       ownerWindow: win,
       anchor: point,
-      items: [
-        { id: 'reload', label: '重新加载界面', disabled: !plugin },
-        {
-          id: 'toggle-launch-on-startup',
-          label: supportsLaunchOnStartup ? '跟随 Mulby 启动' : '跟随 Mulby 启动（需后台或 UI）',
-          checked: launchOnStartup?.enabled === true,
-          disabled: !(startupPlugin && supportsLaunchOnStartup && pluginManager)
-        },
-        {
-          id: 'toggle-always-open-detached',
-          label: '始终以独立窗口运行',
-          checked: alwaysOpenDetached?.enabled === true,
-          disabled: !(plugin && pluginManager && plugin.manifest.ui)
-        },
-        { id: 'separator-main', label: '', separator: true },
-        { id: 'terminate', label: '结束运行', danger: true, disabled: !(plugin && pluginManager) }
-      ],
-      onSelect: async (id) => {
-        if (id === 'reload') {
-          reloadPluginWindow(win)
-          return
-        }
-        if (id === 'toggle-launch-on-startup') {
-          if (!startupPlugin || !supportsLaunchOnStartup || !pluginManager) return
-          const current = pluginManager.getLaunchOnStartup(startupPlugin.id)
-          const nextEnabled = current?.enabled !== true
-          pluginManager.setLaunchOnStartup(
-            startupPlugin.id,
-            nextEnabled,
-            nextEnabled && launchTarget
-              ? {
-                  featureCode: launchTarget.featureCode,
-                  route: launchTarget.route,
-                  mode: launchTarget.mode,
-                  uiMode: launchTarget.mode === 'detached' ? 'detached' : 'attached'
-                }
-              : undefined
-          )
-          return
-        }
-        if (id === 'toggle-always-open-detached') {
-          if (!plugin || !pluginManager || !plugin.manifest.ui) return
-          const current = pluginManager.getAlwaysOpenDetached(plugin.id)
-          pluginManager.setAlwaysOpenDetached(plugin.id, current?.enabled !== true)
-          return
-        }
-        if (id === 'terminate') {
-          const result = await terminatePluginForWindow(win)
-          if (!result.success) {
-            log.warn(`[plugin-menu] terminate failed: ${result.error || 'unknown error'}`)
-          }
-        }
-      }
+      items: buildPluginMenuItems(win),
+      onSelect: (id) => handlePluginMenuSelect(win, id)
     })
   })
 
@@ -475,72 +527,11 @@ export function registerWindowHandlers(
     const win = windowFromWebContents(event.sender)
     if (!win || win.isDestroyed()) return false
 
-    const plugin = resolveCurrentPlugin(win)
-    const launchTarget = resolveCurrentLaunchTarget(win)
-    const startupPlugin = launchTarget?.plugin ?? plugin
-    const supportsLaunchOnStartup = startupPlugin?.manifest.pluginSetting?.background === true || Boolean(startupPlugin?.manifest.ui)
-    const launchOnStartup = startupPlugin && supportsLaunchOnStartup && pluginManager
-      ? pluginManager.getLaunchOnStartup(startupPlugin.id)
-      : undefined
-    const alwaysOpenDetached = plugin && pluginManager
-      ? pluginManager.getAlwaysOpenDetached(plugin.id)
-      : undefined
     return actionMenuWindowManager.show({
       ownerWindow: win,
       anchor: point,
-      items: [
-        { id: 'reload', label: '重新加载界面', disabled: !plugin },
-        {
-          id: 'toggle-launch-on-startup',
-          label: supportsLaunchOnStartup ? '跟随 Mulby 启动' : '跟随 Mulby 启动（需后台或 UI）',
-          checked: launchOnStartup?.enabled === true,
-          disabled: !(startupPlugin && supportsLaunchOnStartup && pluginManager)
-        },
-        {
-          id: 'toggle-always-open-detached',
-          label: '始终以独立窗口运行',
-          checked: alwaysOpenDetached?.enabled === true,
-          disabled: !(plugin && pluginManager && plugin.manifest.ui)
-        },
-        { id: 'separator-titlebar', label: '', separator: true },
-        { id: 'terminate', label: '结束运行', danger: true, disabled: !(plugin && pluginManager) }
-      ],
-      onSelect: async (id) => {
-        if (id === 'reload') {
-          reloadPluginWindow(win)
-          return
-        }
-        if (id === 'toggle-launch-on-startup') {
-          if (!startupPlugin || !supportsLaunchOnStartup || !pluginManager) return
-          const current = pluginManager.getLaunchOnStartup(startupPlugin.id)
-          const nextEnabled = current?.enabled !== true
-          pluginManager.setLaunchOnStartup(
-            startupPlugin.id,
-            nextEnabled,
-            nextEnabled && launchTarget
-              ? {
-                  featureCode: launchTarget.featureCode,
-                  route: launchTarget.route,
-                  mode: launchTarget.mode,
-                  uiMode: launchTarget.mode === 'detached' ? 'detached' : 'attached'
-                }
-              : undefined
-          )
-          return
-        }
-        if (id === 'toggle-always-open-detached') {
-          if (!plugin || !pluginManager || !plugin.manifest.ui) return
-          const current = pluginManager.getAlwaysOpenDetached(plugin.id)
-          pluginManager.setAlwaysOpenDetached(plugin.id, current?.enabled !== true)
-          return
-        }
-        if (id === 'terminate') {
-          const result = await terminatePluginForWindow(win)
-          if (!result.success) {
-            log.warn(`[titlebar] terminate failed: ${result.error || 'unknown error'}`)
-          }
-        }
-      }
+      items: buildPluginMenuItems(win),
+      onSelect: (id) => handlePluginMenuSelect(win, id)
     })
   })
 
