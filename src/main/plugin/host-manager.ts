@@ -443,21 +443,25 @@ export class PluginHostManager extends EventEmitter {
       this.emit('host:exit', pluginName, code ?? 0)
     })
 
-    // 监听标准输出（转发到日志系统）
+    // 监听标准输出（转发到日志系统 + 后端日志桥）
     child.stdout?.on('data', (data: Buffer) => {
       const text = decodeHostOutput(data).trim()
       if (text) {
         log.info(`[${pluginName}] stdout:`, text)
         loggerService.write('info', pluginName, text)
+        // 后端 console 输出回灌插件 devtools（订阅方自行做开发者模式门控）
+        this.emit('host:console', pluginName, 'log', text)
       }
     })
 
-    // 监听标准错误（转发到日志系统）
+    // 监听标准错误（转发到日志系统 + 后端日志桥）
     child.stderr?.on('data', (data: Buffer) => {
       const text = decodeHostOutput(data).trim()
       if (text) {
         log.error(`[${pluginName}] stderr:`, text)
         loggerService.write('error', pluginName, text)
+        // 后端错误/未捕获异常回灌插件 devtools
+        this.emit('host:console', pluginName, 'error', text)
       }
     })
   }

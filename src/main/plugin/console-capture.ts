@@ -18,6 +18,13 @@ const CONSOLE_LEVEL_MAP: Record<number, LogEntry['level']> = {
     3: 'error'    // console.error
 }
 
+/**
+ * 后端日志桥注入到插件 DevTools 的消息前缀（零宽字符，devtools 中不可见）。
+ * console-capture 检测到该前缀时跳过回写日志，避免后端 stdout/stderr 被记录两次
+ * （一次来自 host-manager 的 stdout/stderr 处理器，一次来自此处的 console-message 捕获）。
+ */
+export const BACKEND_BRIDGE_CONSOLE_MARKER = '\u200b\u200bMULBY_BACKEND\u200b'
+
 const installedConsoleCapture = new Map<number, string>()
 
 /**
@@ -46,6 +53,11 @@ export function installConsoleCaptureForWebContents(webContents: Electron.WebCon
     })
 
     webContents.on('console-message', (_event, level, message, _line, _sourceId) => {
+        // 跳过后端日志桥注入的消息：它们已由 host-manager 的 stdout/stderr 处理器记录过，
+        // 这里再写一次会造成日志文件重复。
+        if (typeof message === 'string' && message.startsWith(BACKEND_BRIDGE_CONSOLE_MARKER)) {
+            return
+        }
         const logLevel = CONSOLE_LEVEL_MAP[level] ?? 'debug'
         recordCrashBreadcrumb('plugin:console', {
             pluginId,

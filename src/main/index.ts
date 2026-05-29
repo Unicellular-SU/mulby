@@ -18,6 +18,7 @@ import { pluginDesktop } from './plugin/desktop'
 import { permissionManager } from './plugin/permission-manager'
 import { setHotKeySettingRedirectHandler } from './plugin/dynamic-features'
 import { PluginWindowManager } from './plugin/window'
+import { setupPluginDevtoolsBridge } from './plugin/plugin-devtools-bridge'
 import { ThemeManager } from './services/theme'
 import { setUiDialogThemeResolver } from './services/ui-dialog-service'
 import { markAppVisible, setWindowsProvider, setHasDetachedWindowsProvider } from './services/blur-manager'
@@ -716,6 +717,9 @@ app.whenReady().then(async () => {
     pluginToolRegistry,
     () => macDockPresentationController.refresh()
   )
+
+  // 装配插件后端日志桥：开发者模式下把后端 console/崩溃回灌插件 DevTools
+  setupPluginDevtoolsBridge(pluginManager.getHostManager(), pluginWindowManager, appSettingsManager)
 
   // 创建 OpenClaw Node 服务并注册 IPC
   let openclawService: OpenClawNodeService | null = null

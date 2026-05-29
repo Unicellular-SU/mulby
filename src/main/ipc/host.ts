@@ -6,13 +6,13 @@
 import { ipcMain } from 'electron'
 import { PluginManager } from '../plugin'
 import { loggerService } from '../services/logger'
-import { logHostIpcError } from './host-error-logging'
+import { logHostIpcError, forwardHostIpcErrorToConsole } from './host-error-logging'
 
 export function registerHostHandlers(pluginManager: PluginManager) {
   const hostManager = pluginManager.getHostManager()
 
   // 插件 UI 调用后端方法
-  ipcMain.handle('host:invoke', async (_event, pluginName: string, method: string, ...args: unknown[]) => {
+  ipcMain.handle('host:invoke', async (event, pluginName: string, method: string, ...args: unknown[]) => {
     try {
       const plugin = pluginManager.get(pluginName)
       if (!plugin) {
@@ -32,12 +32,13 @@ export function registerHostHandlers(pluginManager: PluginManager) {
       return await hostManager.invokePluginMethod(pluginName, method, args)
     } catch (error) {
       logHostIpcError(loggerService, 'host:invoke', pluginName, method, error)
+      forwardHostIpcErrorToConsole(event.sender, 'host:invoke', method, error)
       throw error
     }
   })
 
   // 插件 UI 调用 host 自定义方法
-  ipcMain.handle('host:call', async (_event, pluginName: string, method: string, ...args: unknown[]) => {
+  ipcMain.handle('host:call', async (event, pluginName: string, method: string, ...args: unknown[]) => {
     try {
       const plugin = pluginManager.get(pluginName)
       if (!plugin) {
@@ -56,6 +57,7 @@ export function registerHostHandlers(pluginManager: PluginManager) {
       return await hostManager.callHostMethod(pluginName, method, args)
     } catch (error) {
       logHostIpcError(loggerService, 'host:call', pluginName, method, error)
+      forwardHostIpcErrorToConsole(event.sender, 'host:call', method, error)
       throw error
     }
   })

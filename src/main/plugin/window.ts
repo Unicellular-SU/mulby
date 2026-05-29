@@ -1618,6 +1618,44 @@ export class PluginWindowManager {
     return Array.from(byPlugin.values())
   }
 
+  /**
+   * 收集某插件当前所有存活 UI 视图的 webContents（附着面板 + 独立窗口）。
+   * 用于把后端日志/错误回灌到对应插件的 DevTools 控制台。
+   * 返回插件内容 WebContentsView 的 webContents（无标题栏时回退到窗口 webContents）。
+   */
+  getPluginViewWebContentsList(pluginId: string): Electron.WebContents[] {
+    const result: Electron.WebContents[] = []
+    const seen = new Set<number>()
+    const push = (wc: Electron.WebContents | null | undefined) => {
+      if (wc && !wc.isDestroyed() && !seen.has(wc.id)) {
+        seen.add(wc.id)
+        result.push(wc)
+      }
+    }
+
+    // 附着面板
+    const panelWin = this.panelWindow?.getWindow()
+    if (
+      panelWin &&
+      !panelWin.isDestroyed() &&
+      this.attachedPlugin?.plugin.id === pluginId &&
+      this.panelWindow?.isOpen() &&
+      !this.panelWindow?.isSuspendedForResident()
+    ) {
+      push(getPluginWebContents(panelWin) ?? panelWin.webContents)
+    }
+
+    // 独立窗口
+    for (const info of this.detachedWindows.values()) {
+      if (info.resident) continue
+      if (info.window.isDestroyed()) continue
+      if (info.plugin.id !== pluginId) continue
+      push(getPluginWebContents(info.window) ?? info.window.webContents)
+    }
+
+    return result
+  }
+
   closeAll(): void {
     this.closeAttached(true)
     this.evictAllResidents()
