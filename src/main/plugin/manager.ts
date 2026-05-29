@@ -461,20 +461,52 @@ export class PluginManager {
       const loader = new PluginLoader(dir)
       const plugins = loader.loadAll()
       for (const plugin of plugins) {
-        // 检测 ID 冲突
-        if (this.plugins.has(plugin.id)) {
-          const existing = this.plugins.get(plugin.id)!
-          log.warn(
-            `[PluginManager] ID conflict detected: "${plugin.id}"\n` +
-            `  - Existing: ${existing.path}\n` +
-            `  - Skipped:  ${plugin.path}\n` +
-            `  Consider adding unique "id" field to manifest.json`
-          )
-          continue  // 跳过冲突的插件
-        }
-
         // 标记开发中的插件
         plugin.isDev = Array.from(devDirs).some(devDir => plugin.path.startsWith(devDir))
+
+        // 检测 ID 冲突，并按来源优先级决定胜负：开发版 > 已安装版。
+        const existing = this.plugins.get(plugin.id)
+        if (existing) {
+          // 系统/内置插件受保护，任何来源都不可覆盖
+          if (isSystemPlugin(plugin.id)) {
+            log.warn(
+              `[PluginManager] ID conflict with system plugin: "${plugin.id}" — skipped: ${plugin.path}`
+            )
+            continue
+          }
+
+          const existingIsDev = existing.isDev === true
+
+          if (plugin.isDev && !existingIsDev) {
+            // 开发版覆盖已安装版：开发版胜出，记录被覆盖的安装版路径
+            log.info(
+              `[PluginManager] Dev plugin overrides installed: "${plugin.id}"\n` +
+              `  - Active (dev):   ${plugin.path}\n` +
+              `  - Shadowed:       ${existing.path}`
+            )
+            plugin.overriddenInstallPath = existing.path
+            // 移除被覆盖的已安装版，下方按正常流程注册开发版（fallthrough）
+            this.plugins.delete(existing.id)
+          } else if (!plugin.isDev && existingIsDev) {
+            // 已安装版让位给已生效的开发版：在开发版上记录冲突来源，跳过安装版
+            existing.overriddenInstallPath = plugin.path
+            log.info(
+              `[PluginManager] Installed plugin shadowed by active dev plugin: "${plugin.id}"\n` +
+              `  - Active (dev):   ${existing.path}\n` +
+              `  - Shadowed:       ${plugin.path}`
+            )
+            continue
+          } else {
+            // 同源重复（dev↔dev 或 installed↔installed）：保留先到者
+            log.warn(
+              `[PluginManager] ID conflict detected: "${plugin.id}"\n` +
+              `  - Existing: ${existing.path}\n` +
+              `  - Skipped:  ${plugin.path}\n` +
+              `  Consider adding unique "id" field to manifest.json`
+            )
+            continue
+          }
+        }
 
         // 应用持久化的状态
         const state = this.stateManager.getPluginState(plugin.id)

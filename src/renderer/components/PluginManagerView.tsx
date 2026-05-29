@@ -112,6 +112,14 @@ const PluginListItem = memo(function PluginListItem({
               内置
             </span>
           )}
+          {plugin.isDev && (
+            <span
+              className="rounded-full bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium text-amber-700 dark:bg-amber-900/30 dark:text-amber-400"
+              title={plugin.overriddenInstallPath ? `开发版（已覆盖安装版：${plugin.overriddenInstallPath}）` : '开发目录插件'}
+            >
+              {plugin.overriddenInstallPath ? '开发版·覆盖' : '开发版'}
+            </span>
+          )}
         </div>
       </div>
     </button>

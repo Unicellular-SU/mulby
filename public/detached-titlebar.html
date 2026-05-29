@@ -71,6 +71,36 @@
       line-height: 36px;
     }
 
+    /* ===== 开发版角标 ===== */
+    .tb-dev-badge {
+      position: absolute;
+      left: 10px;
+      top: 50%;
+      transform: translateY(-50%);
+      display: none;
+      align-items: center;
+      height: 18px;
+      padding: 0 7px;
+      border-radius: 9px;
+      font-size: 10px;
+      font-weight: 600;
+      letter-spacing: 0.5px;
+      color: #b45309;
+      background: #fef3c7;
+      border: 1px solid #fcd34d;
+      pointer-events: none;
+    }
+
+    :root.dark .tb-dev-badge {
+      color: #fcd34d;
+      background: rgba(245, 158, 11, 0.12);
+      border-color: rgba(245, 158, 11, 0.4);
+    }
+
+    .tb-dev-badge.visible {
+      display: inline-flex;
+    }
+
     /* ===== 按钮容器 ===== */
     .titlebar-controls {
       position: absolute;
@@ -142,6 +172,7 @@
 </head>
 <body>
   <div class="titlebar">
+    <span class="tb-dev-badge" id="dev-badge" title="开发目录插件">DEV</span>
     <div class="titlebar-title" id="title-text">Plugin</div>
     <div class="titlebar-controls">
       <button class="tb-btn" id="btn-more" title="更多插件操作">
@@ -182,6 +213,7 @@
     // 初始化标题栏逻辑
     (function() {
       const titleEl = document.getElementById('title-text')
+      const devBadge = document.getElementById('dev-badge')
       const btnMore = document.getElementById('btn-more')
       const btnPin = document.getElementById('btn-pin')
       const btnMinimize = document.getElementById('btn-minimize')
@@ -241,6 +273,9 @@
         }
         if (data.theme) {
           applyTheme(data.theme)
+        }
+        if (devBadge) {
+          devBadge.classList.toggle('visible', data.isDev === true)
         }
       })
 

@@ -140,6 +140,7 @@ export function registerPluginHandlers(manager: PluginManager, pluginToolRegistr
         path: p.path,
         builtin: isBuiltin(p.path),
         isDev: p.isDev,
+        overriddenInstallPath: p.overriddenInstallPath,
         features,
         enabled: p.enabled,
         tools: pluginToolRegistry

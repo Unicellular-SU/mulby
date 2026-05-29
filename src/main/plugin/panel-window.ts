@@ -1050,7 +1050,7 @@ export class PluginPanelWindow {
 
         independentWindow.once('ready-to-show', async () => {
             if (showTitleBar) {
-                initTitlebar(independentWindow, plugin.manifest.displayName, currentTheme)
+                initTitlebar(independentWindow, plugin.manifest.displayName, currentTheme, plugin.isDev === true)
             }
             if (useWindowsFramelessSurface) {
                 await applyWindowsFramelessSurface(independentWindow, {

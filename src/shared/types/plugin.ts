@@ -580,6 +580,12 @@ export interface Plugin {
   enabled: boolean
   resolvedIcon?: ResolvedIcon  // 解析后的图标数据
   isDev?: boolean  // 是否为开发目录的插件
+  /**
+   * 当同 id 出现冲突且本插件胜出时，记录被其“覆盖/接管”的另一来源插件路径。
+   * 典型场景：开发者模式下，开发目录插件覆盖了已安装的同 id 插件，此处记录被覆盖的已安装版路径。
+   * 用于 UI 冲突提示，告知用户当前实际生效的是哪个版本。
+   */
+  overriddenInstallPath?: string
 }
 
 // 插件生命周期钩子

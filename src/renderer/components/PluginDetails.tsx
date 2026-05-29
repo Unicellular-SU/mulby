@@ -179,8 +179,8 @@ export default function PluginDetails({ pluginName, onBack }: PluginDetailsProps
                             </span>
                         )}
                         {plugin.isDev && (
-                            <span className="rounded-full border border-slate-200 px-3 py-1 text-xs text-slate-600 dark:border-slate-700 dark:text-slate-300">
-                                开发
+                            <span className="rounded-full border border-amber-300 bg-amber-50 px-3 py-1 text-xs font-medium text-amber-700 dark:border-amber-500/40 dark:bg-amber-500/10 dark:text-amber-300">
+                                开发版
                             </span>
                         )}
                         <button
@@ -195,6 +195,21 @@ export default function PluginDetails({ pluginName, onBack }: PluginDetailsProps
 
                 <div className="flex-1 min-h-0 overflow-auto">
                     <div className="mx-auto max-w-6xl px-6 pb-16 pt-8 no-drag">
+                        {plugin.isDev && plugin.overriddenInstallPath && (
+                            <div className="mb-6 rounded-2xl border border-amber-300 bg-amber-50 px-5 py-4 text-sm dark:border-amber-500/40 dark:bg-amber-500/10">
+                                <div className="flex items-start gap-3">
+                                    <svg className="mt-0.5 h-5 w-5 shrink-0 text-amber-600 dark:text-amber-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                        <path d="M12 9v4M12 17h.01M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" strokeLinecap="round" strokeLinejoin="round" />
+                                    </svg>
+                                    <div className="space-y-1">
+                                        <p className="font-medium text-amber-800 dark:text-amber-200">当前生效的是开发版，已覆盖同 ID 的已安装版本</p>
+                                        <p className="break-all text-amber-700/90 dark:text-amber-300/90">
+                                            被覆盖的安装版路径：<span className="font-mono">{plugin.overriddenInstallPath}</span>
+                                        </p>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
                         <section className="grid gap-6 lg:grid-cols-[1.2fr_0.8fr]">
                             <div className="rounded-[28px] border border-slate-200/80 bg-white/80 p-6 shadow-[0_30px_80px_-60px_rgba(15,23,42,0.4)]  dark:border-slate-800/80 dark:bg-slate-900/70">
                                 <div className="flex flex-wrap items-start gap-4">
@@ -257,8 +272,11 @@ export default function PluginDetails({ pluginName, onBack }: PluginDetailsProps
                                     <h3 className="text-sm font-semibold text-slate-900 dark:text-white">运行信息</h3>
                                     <div className="mt-4 grid gap-4">
                                         <InfoItem label="状态" value={plugin.enabled ? '启用中' : '已禁用'} />
-                                        <InfoItem label="来源" value={plugin.builtin ? '内置插件' : '用户插件'} />
-                                        <InfoItem label="安装路径" value={plugin.path || '—'} mono />
+                                        <InfoItem label="来源" value={plugin.builtin ? '内置插件' : plugin.isDev ? '开发目录' : '用户插件'} />
+                                        <InfoItem label={plugin.isDev ? '开发目录' : '安装路径'} value={plugin.path || '—'} mono />
+                                        {plugin.isDev && plugin.overriddenInstallPath && (
+                                            <InfoItem label="被覆盖的安装版" value={plugin.overriddenInstallPath} mono />
+                                        )}
                                     </div>
                                 </div>
                             </div>

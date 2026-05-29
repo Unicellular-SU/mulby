@@ -195,10 +195,11 @@ export function setupTitlebarIPC(
 export function initTitlebar(
   win: BrowserWindow,
   title: string,
-  theme: 'light' | 'dark'
+  theme: 'light' | 'dark',
+  isDev = false
 ): void {
   if (win.isDestroyed()) return
-  win.webContents.send('titlebar:init', { title, theme })
+  win.webContents.send('titlebar:init', { title, theme, isDev })
 }
 
 /**

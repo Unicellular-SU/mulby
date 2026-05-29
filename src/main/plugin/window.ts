@@ -994,7 +994,7 @@ export class PluginWindowManager {
     win.once('ready-to-show', async () => {
       if (showTitleBar) {
         // WebContentsView 架构：初始化标题栏
-        initTitlebar(win, plugin.manifest.displayName, currentTheme)
+        initTitlebar(win, plugin.manifest.displayName, currentTheme, plugin.isDev === true)
       }
       if (useWindowsFramelessSurface && !windowConfig.transparent) {
         // 标题栏已独立，不需要 surface 注入 padding-top
@@ -1359,7 +1359,7 @@ export class PluginWindowManager {
 
     win.once('ready-to-show', async () => {
       if (showTitleBar) {
-        initTitlebar(win, options?.title || plugin.manifest.displayName, currentTheme)
+        initTitlebar(win, options?.title || plugin.manifest.displayName, currentTheme, plugin.isDev === true)
       }
       if (useWindowsFramelessSurface && !resolvedTransparent) {
         await applyWindowsFramelessSurface(win, {

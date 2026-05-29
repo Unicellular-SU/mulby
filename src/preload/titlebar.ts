@@ -59,7 +59,7 @@ const api = {
   },
 
   /** 监听初始化数据 */
-  onInit: (callback: (data: { title: string; theme: string }) => void) => {
+  onInit: (callback: (data: { title: string; theme: string; isDev?: boolean }) => void) => {
     ipcRenderer.on('titlebar:init', (_event, data) => callback(data))
   },
 

@@ -227,6 +227,8 @@ export interface PluginInfo {
   path?: string
   builtin?: boolean
   isDev?: boolean
+  /** 当本插件覆盖了同 id 的另一来源插件时，记录被覆盖的插件路径（用于冲突提示） */
+  overriddenInstallPath?: string
   features: {
     code: string
     explain: string
