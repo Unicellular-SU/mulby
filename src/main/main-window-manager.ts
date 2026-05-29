@@ -495,7 +495,10 @@ export class MainWindowManager {
 
     if (process.platform === 'darwin') {
       win.setFullScreenable(false)
-      win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true })
+      // Keep the global launcher summonable from every Space without letting
+      // Electron transform the process type and briefly expose a Dock icon.
+      win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true, skipTransformProcessType: true })
+      win.setHiddenInMissionControl(true)
       win.setAlwaysOnTop(true, 'floating')
     } else {
       win.setAlwaysOnTop(true)
@@ -544,6 +547,15 @@ export class MainWindowManager {
     win.on('show', () => this.showShadow())
     win.on('hide', () => {
       this.flushStateSave()
+      if (process.platform === 'darwin') {
+        try {
+          win.setOpacity(0)
+        } catch (error) {
+          log.warn('[MainWindow] Failed to apply macOS Space opacity guard:', error)
+        }
+        this.deps?.pluginWindowManager.hidePanelWindow()
+        this.deps?.systemPageWindowManager.hideAttached()
+      }
       if (isWindowAvailable(this.shadowWindow)) this.shadowWindow.hide()
     })
 
@@ -601,7 +613,9 @@ export class MainWindowManager {
           visibleOnFullScreen: true,
           skipTransformProcessType: true
         })
+        this.window.setHiddenInMissionControl(true)
         this.window.setAlwaysOnTop(true, 'floating')
+        this.window.setOpacity(1)
       } catch (e) {
         log.error('[MainWindow] Error setting window properties:', e)
       }
