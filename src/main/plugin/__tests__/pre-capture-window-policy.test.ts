@@ -76,6 +76,25 @@ describe('preCapture main window restoration policy', () => {
     )
   })
 
+  it('keeps launch status enabled for preCapture attached UI cold starts', () => {
+    const source = readFileSync(managerSourcePath, 'utf8')
+    const launchStatusPolicy = source.match(
+      /private shouldShowAttachedLaunchStatus\([\s\S]*?\n\s{2}\}/
+    )
+
+    assert.ok(launchStatusPolicy, 'attached launch status policy must exist')
+    assert.doesNotMatch(
+      launchStatusPolicy[0],
+      /feature\.mainHide === true \|\| feature\.preCapture/,
+      'preCapture attached UI launches should still show host loading status and collapse the result panel'
+    )
+    assert.match(
+      launchStatusPolicy[0],
+      /feature\.mainHide === true/,
+      'mainHide features should still be excluded from host launch status'
+    )
+  })
+
   it('restores opacity when showing the host search window after preCapture', () => {
     const source = readFileSync(windowSourcePath, 'utf8')
     const restoreMethod = source.match(/showMainWindowAfterCapture\(\): void \{[\s\S]*?\n\s*\}/)

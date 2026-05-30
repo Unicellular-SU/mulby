@@ -309,7 +309,7 @@ export class PluginManager {
     if (launchMode === 'detached') return false
     if (shouldForceDetachedByUser(plugin.id, this.stateManager)) return false
     if (feature.mode === 'silent' || feature.mode === 'detached') return false
-    if (feature.mainHide === true || feature.preCapture) return false
+    if (feature.mainHide === true) return false
     if (feature.mode !== 'ui' && plugin.manifest.pluginSetting?.defaultDetached === true) return false
     if (plugin.manifest.pluginSetting?.single !== false && this.hasDetachedWindowForPlugin(plugin.id)) return false
     return true
