@@ -229,6 +229,23 @@ const SearchInput = forwardRef<SearchInputRef, SearchInputProps>(function Search
     }
   }, [focusAtEnd])
 
+  // 当 subInput 启用时，如果宿主窗口重新获得焦点，则自动聚焦到 subInput
+  useEffect(() => {
+    if (!subInput.enabled) return
+    let focusTimer: ReturnType<typeof setTimeout> | null = null
+    const handleWindowFocus = () => {
+      if (focusTimer) clearTimeout(focusTimer)
+      focusTimer = setTimeout(() => {
+        focusAtEnd()
+      }, 10)
+    }
+    window.addEventListener('focus', handleWindowFocus)
+    return () => {
+      window.removeEventListener('focus', handleWindowFocus)
+      if (focusTimer) clearTimeout(focusTimer)
+    }
+  }, [subInput.enabled, focusAtEnd])
+
   const handleInputChange = useCallback((e: React.ChangeEvent<HTMLTextAreaElement>) => {
     const text = e.target.value
     if (subInput.enabled) {

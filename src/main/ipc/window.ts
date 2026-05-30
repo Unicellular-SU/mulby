@@ -309,10 +309,17 @@ export function registerWindowHandlers(
       forwardKeys
     })
 
+    const shouldFocus = isFocus !== false
+
+    // 如果要求聚焦（默认），确保主窗口在系统层面拿到焦点
+    if (shouldFocus && !mainWin.isFocused()) {
+      mainWin.focus()
+    }
+
     // 通知主窗口切换到 SubInput 模式
     mainWin.webContents.send('subInput:enabled', {
       placeholder: placeholderText,
-      isFocus: isFocus !== false,
+      isFocus: shouldFocus,
       forwardKeys
     })
 

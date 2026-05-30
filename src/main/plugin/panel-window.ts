@@ -152,6 +152,7 @@ export class PluginPanelWindow {
     private opacityRestoreTimer: NodeJS.Timeout | null = null
     private panelShellSurfacePromise: Promise<void> | null = null
     private suspendedForResident = false
+    private focusBridgeCleanup: (() => void) | null = null
 
     constructor(mainWindow: BrowserWindow) {
         this.mainWindow = mainWindow
@@ -242,6 +243,11 @@ export class PluginPanelWindow {
     private destroyPluginView() {
         const view = this.pluginView
         if (!view) return
+
+        if (this.focusBridgeCleanup) {
+            this.focusBridgeCleanup()
+            this.focusBridgeCleanup = null
+        }
 
         this.pluginView = null
         unregisterView(view)
@@ -492,6 +498,11 @@ export class PluginPanelWindow {
         // 注册面板窗口到 IPC 调用方来源解析器
         registerPanelWindow(panelWindow.id, plugin.id)
         registerView(pluginView, panelWindow)
+        
+        if (this.focusBridgeCleanup) {
+            this.focusBridgeCleanup()
+        }
+        this.focusBridgeCleanup = installPluginViewFocusBridge(panelWindow, pluginView)
 
         // 设置位置同步监听器
         this.setupPositionSync()

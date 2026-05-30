@@ -7,7 +7,7 @@ import { loggerService } from '../services/logger'
 import { installConsoleCaptureForWebContents } from './console-capture'
 import { appSettingsManager } from '../services/app-settings'
 import { PluginPanelWindow } from './panel-window'
-import { clearSubInputState } from '../services/subinput-state'
+import { clearSubInputState, isSubInputEnabled } from '../services/subinput-state'
 import { getPluginPreloadPath, getPluginPreloadPathForEntry } from './plugin-preload-wrapper'
 import {
   PLUGIN_RENDERER_V8_CACHE_OPTIONS,
@@ -1690,8 +1690,11 @@ export class PluginWindowManager {
   }
 
   // 显示面板窗口
+  // 使用 activate: true 使面板获得焦点，避免焦点停留在主窗口搜索框，
+  // 让用户在 hide→show 后可以直接继续在插件中输入。
+  // 但是，如果当前插件启用了 subInput，则不应该激活面板窗口，焦点应该留在宿主的 subInput 上。
   showPanelWindow(): void {
-    this.panelWindow?.show()
+    this.panelWindow?.show({ activate: !isSubInputEnabled() })
   }
 
   /**
