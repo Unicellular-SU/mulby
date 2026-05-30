@@ -4,6 +4,7 @@ import type {
   AiMessage,
   AiModel,
   AiOption,
+  AiPromiseLike,
   AiSkillPreview,
   AiSkillRecord,
   AiTokenBreakdown
@@ -733,7 +734,7 @@ export interface PluginAPI {
     off: (handler: (message: PluginMessage) => void | Promise<void>) => void
   }
   ai: {
-    call: (option: AiOption) => Promise<AiMessage>
+    call: (option: AiOption, onChunk?: (chunk: AiMessage) => void) => AiPromiseLike<AiMessage>
     allModels: () => Promise<AiModel[]>
     abort: (requestId: string) => void
     skills: {
@@ -744,16 +745,17 @@ export interface PluginAPI {
       upload: (input: { filePath?: string; buffer?: ArrayBuffer; mimeType: string; purpose?: string }) => Promise<AiAttachmentRef>
       get: (attachmentId: string) => Promise<AiAttachmentRef | null>
       delete: (attachmentId: string) => Promise<void>
+      uploadToProvider: (input: { attachmentId: string; model?: string; providerId?: string; purpose?: string }) => Promise<{ providerId: string; fileId: string; uri?: string }>
     }
     tokens: {
-      estimate: (input: { model: string; messages: AiMessage[]; attachments?: AiAttachmentRef[] }) => Promise<AiTokenBreakdown>
+      estimate: (input: { model?: string; messages: AiMessage[]; outputText?: string }) => Promise<AiTokenBreakdown>
     }
     images: {
       generate: (input: { prompt: string; model: string; size?: string; count?: number }) => Promise<{ images: string[]; tokens: AiTokenBreakdown }>
       generateStream: (
         input: { prompt: string; model: string; size?: string; count?: number },
         onChunk: (chunk: AiImageGenerateProgressChunk) => void
-      ) => Promise<{ images: string[]; tokens: AiTokenBreakdown }>
+      ) => AiPromiseLike<{ images: string[]; tokens: AiTokenBreakdown }>
       edit: (input: { imageAttachmentId: string; prompt: string; model: string }) => Promise<{ images: string[]; tokens: AiTokenBreakdown }>
     }
   }

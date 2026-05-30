@@ -657,7 +657,7 @@ ${item.files.map(p => `    <string>${p}</string>`).join('\n')}
           await aiService.uploadAttachmentToProvider(input)
       },
       tokens: {
-        estimate: async (input: { model: string; messages: AiMessage[] }) => await aiService.estimateTokens(input)
+        estimate: async (input: { model?: string; messages: AiMessage[]; outputText?: string }) => await aiService.estimateTokens(input)
       },
       images: {
         generate: async (input: { prompt: string; model: string; size?: string; count?: number }) => await aiService.generateImages(input),
