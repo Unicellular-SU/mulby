@@ -990,6 +990,8 @@ export class PluginWindowManager {
 
     // 目标 webContents（插件内容）
     const pluginWebContents = pluginView?.webContents ?? win.webContents
+    const shouldInjectPluginResizeHandles = isResizable && !isFullscreen && process.platform !== 'darwin'
+    const pluginResizeUsesSurfaceInsets = useWindowsFramelessSurface && !showTitleBar && !windowConfig.transparent
 
     win.once('ready-to-show', async () => {
       if (showTitleBar) {
@@ -1065,9 +1067,10 @@ export class PluginWindowManager {
           resizeMode: showTitleBar ? 'none' : 'all'
         })
       }
-      if (isResizable && !isFullscreen) {
+      if (shouldInjectPluginResizeHandles) {
         await applyWindowResizeHandlesToWebContents(pluginWebContents, {
-          resizeMode: showTitleBar ? 'side-bottom' : 'all'
+          resizeMode: showTitleBar ? 'side-bottom' : 'all',
+          useSurfaceInsets: pluginResizeUsesSurfaceInsets
         })
       }
       // 延迟确保 React useEffect 已注册 IPC 回调

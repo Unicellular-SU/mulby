@@ -1037,6 +1037,7 @@ export class PluginPanelWindow {
 
         // 目标 webContents（插件内容）
         const pluginWebContents = pluginView.webContents
+        const shouldInjectPluginResizeHandles = isResizable && process.platform !== 'darwin'
         pluginWebContents.setBackgroundThrottling(backgroundThrottling)
         const sendDetachedInit = () => {
             if (independentWindow.isDestroyed() || pluginWebContents.isDestroyed()) return
@@ -1072,9 +1073,10 @@ export class PluginPanelWindow {
                 await clearWindowsFramelessSurfaceFromWebContents(pluginWebContents)
                 if (independentWindow.isDestroyed() || pluginWebContents.isDestroyed()) return
             }
-            if (isResizable) {
+            if (shouldInjectPluginResizeHandles) {
                 await applyWindowResizeHandlesToWebContents(pluginWebContents, {
-                    resizeMode: showTitleBar ? 'side-bottom' : 'all'
+                    resizeMode: showTitleBar ? 'side-bottom' : 'all',
+                    useSurfaceInsets: false
                 })
             }
             registerWindowsInputTargetWindow(independentWindow.id, independentWindow.getNativeWindowHandle())
@@ -1094,9 +1096,10 @@ export class PluginPanelWindow {
                     resizeMode: showTitleBar ? 'none' : 'all'
                 })
             }
-            if (isResizable && !pluginWebContents.isDestroyed()) {
+            if (shouldInjectPluginResizeHandles && !pluginWebContents.isDestroyed()) {
                 await applyWindowResizeHandlesToWebContents(pluginWebContents, {
-                    resizeMode: showTitleBar ? 'side-bottom' : 'all'
+                    resizeMode: showTitleBar ? 'side-bottom' : 'all',
+                    useSurfaceInsets: false
                 })
             }
             // 延迟确保 React useEffect 已注册 IPC 回调

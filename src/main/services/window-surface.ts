@@ -236,10 +236,10 @@ function buildResizeHandleLayouts(resizeMode: WindowResizeMode): ResizeHandleLay
   return allHandles
 }
 
-function buildWindowResizeCss(resizeMode: WindowResizeMode, useSurfaceInsets = true): string {
+function buildWindowResizeCss(resizeMode: WindowResizeMode, useSurfaceInsets = false): string {
   if (resizeMode === 'none') return ''
 
-  const { top, right, bottom, left } = useSurfaceInsets ? WINDOWS_FRAMELESS_SURFACE_INSETS : ZERO_INSETS
+  const { top, right, bottom, left } = useSurfaceInsets ? getWindowsFramelessSurfaceInsets() : ZERO_INSETS
   const handleRules = buildResizeHandleLayouts(resizeMode)
     .map((handle) => `
 #mulby-window-resize-layer [data-resize-edge="${handle.edge}"] {
@@ -530,7 +530,7 @@ export async function applyWindowsFramelessSurfaceToWebContents(
   const resizeMode = options.resizeMode ?? 'all'
   const contentBackground = options.contentBackground ?? 'theme'
   await webContents.insertCSS(buildWindowSurfaceCss(includeTitleBar, contentBackground))
-  await webContents.insertCSS(buildWindowResizeCss(resizeMode))
+  await webContents.insertCSS(buildWindowResizeCss(resizeMode, true))
   await webContents.executeJavaScript(buildWindowSurfaceScript(includeTitleBar, resizeMode))
 }
 
@@ -559,6 +559,6 @@ export async function applyWindowResizeHandlesToWebContents(
   if (webContents.isDestroyed()) return
 
   const resizeMode = options.resizeMode ?? 'all'
-  await webContents.insertCSS(buildWindowResizeCss(resizeMode, options.useSurfaceInsets ?? true))
+  await webContents.insertCSS(buildWindowResizeCss(resizeMode, options.useSurfaceInsets ?? false))
   await webContents.executeJavaScript(buildWindowResizeScript(resizeMode))
 }

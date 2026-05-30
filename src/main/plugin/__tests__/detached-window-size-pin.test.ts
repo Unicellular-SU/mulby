@@ -58,9 +58,29 @@ describe('detached window size pinning', () => {
       'fresh detached titlebar windows must inject resize handles into the plugin WebContentsView'
     )
     assert.match(
+      pluginWindowSource,
+      /const shouldInjectPluginResizeHandles = isResizable && !isFullscreen && process\.platform !== 'darwin'/,
+      'fresh detached windows must not inject plugin-content resize handles on macOS'
+    )
+    assert.match(
+      pluginWindowSource,
+      /const pluginResizeUsesSurfaceInsets = useWindowsFramelessSurface && !showTitleBar && !windowConfig\.transparent[\s\S]*useSurfaceInsets: pluginResizeUsesSurfaceInsets/,
+      'fresh detached windows must only reserve surface insets for direct Windows surface content'
+    )
+    assert.match(
       panelWindowSource,
       /applyWindowResizeHandlesToWebContents\(pluginWebContents,[\s\S]*resizeMode: showTitleBar \? 'side-bottom' : 'all'/,
       'promoted detached titlebar windows must keep the same plugin-content resize handles'
+    )
+    assert.match(
+      panelWindowSource,
+      /const shouldInjectPluginResizeHandles = isResizable && process\.platform !== 'darwin'/,
+      'promoted detached windows must not inject plugin-content resize handles on macOS'
+    )
+    assert.match(
+      panelWindowSource,
+      /applyWindowResizeHandlesToWebContents\(pluginWebContents,[\s\S]*useSurfaceInsets: false/,
+      'promoted detached WebContentsView content must not reserve Windows surface insets'
     )
   })
 
