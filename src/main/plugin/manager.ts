@@ -1042,6 +1042,7 @@ export class PluginManager {
     let route = feature?.route
     let shouldHideMain = feature?.mainHide === true
     let isAttachedUI = useUI && !useDetached
+    let mainWindowWasVisibleBeforePreCapture = false
     let launchRequestId: string | null = this.shouldShowAttachedLaunchStatus(plugin, feature, options.launchMode)
       ? this.beginAttachedLaunchStatus(plugin, featureCode)
       : null
@@ -1093,7 +1094,7 @@ export class PluginManager {
     // preCapture：在启动插件窗口前先执行截图
     // 必须先隐藏主搜索框，否则截图中会包含搜索框
     if (feature?.preCapture) {
-      const mainWindowWasVisibleBeforePreCapture = this.windowManager?.isMainWindowVisible() === true
+      mainWindowWasVisibleBeforePreCapture = this.windowManager?.isMainWindowVisible() === true
 
       // 隐藏主窗口和面板（无论 mainHide 设置如何）
       if (this.windowManager) {
@@ -1202,6 +1203,16 @@ export class PluginManager {
         if (hasDetachedForSinglePlugin && launchRequestId) {
           this.endAttachedLaunchStatus(launchRequestId, plugin, featureCode, 'skipped')
           launchRequestId = null
+        }
+
+        if (
+          feature?.preCapture
+          && shouldRestoreMainWindowAfterPreCapture({
+            mainHide: shouldHideMain,
+            mainWindowWasVisibleBeforeCapture: mainWindowWasVisibleBeforePreCapture
+          })
+        ) {
+          this.windowManager.showMainWindowAfterCapture()
         }
 
         // 尝试从 resident-ui 恢复（热启动）

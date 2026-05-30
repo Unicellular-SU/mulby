@@ -1711,6 +1711,7 @@ export class PluginWindowManager {
    */
   showMainWindowAfterCapture(): void {
     if (this.mainWindow && !this.mainWindow.isDestroyed()) {
+      this.mainWindow.setOpacity(1)
       this.mainWindow.show()
       this.mainWindow.focus()
       if (!this.panelWindow?.isSuspendedForResident()) {
