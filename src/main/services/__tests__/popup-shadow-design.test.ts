@@ -60,6 +60,47 @@ describe('popup shadow design', () => {
     assert.match(trayMenuCss, /--popup-window-padding: 18px/, 'tray menu mac popup must reserve 18px')
   })
 
+  it('prewarms attached custom shadows instead of delaying visible surfaces', () => {
+    const panelWindowSource = readFileSync(panelWindowPath, 'utf8')
+    const systemPageSource = readFileSync(systemPageWindowManagerPath, 'utf8')
+    const panelPrewarmStart = panelWindowSource.indexOf('prewarmShell()')
+    const panelPrewarmEnd = panelWindowSource.indexOf('private getPluginWebContents()', panelPrewarmStart)
+    const panelPrewarm = panelPrewarmStart >= 0 && panelPrewarmEnd > panelPrewarmStart
+      ? panelWindowSource.slice(panelPrewarmStart, panelPrewarmEnd)
+      : ''
+    const systemSetMainWindowStart = systemPageSource.indexOf('setMainWindow(window: BrowserWindow | null): void')
+    const systemSetMainWindowEnd = systemPageSource.indexOf('setThemeManager(manager: ThemeManager): void', systemSetMainWindowStart)
+    const systemSetMainWindow = systemSetMainWindowStart >= 0 && systemSetMainWindowEnd > systemSetMainWindowStart
+      ? systemPageSource.slice(systemSetMainWindowStart, systemSetMainWindowEnd)
+      : ''
+    const systemPrewarmStart = systemPageSource.indexOf('private scheduleAttachedShadowPrewarm(mainWindow: BrowserWindow): void')
+    const systemPrewarmEnd = systemPageSource.indexOf('private clearAttachedShadowPrewarmTimer()', systemPrewarmStart)
+    const systemPrewarm = systemPrewarmStart >= 0 && systemPrewarmEnd > systemPrewarmStart
+      ? systemPageSource.slice(systemPrewarmStart, systemPrewarmEnd)
+      : ''
+
+    assert.match(
+      panelPrewarm,
+      /this\.ensurePanelShell\([\s\S]*?\)[\s\S]*this\.prepareShadowWindow\(\)/,
+      'plugin attached panel prewarm must also preload its custom shadow'
+    )
+    assert.doesNotMatch(
+      panelWindowSource,
+      /ATTACHED_PANEL_SHADOW_SHOW_DELAY_MS|scheduleShadowShow/,
+      'plugin attached panel shadows must not use a delayed post-show timer'
+    )
+    assert.match(
+      systemSetMainWindow,
+      /this\.scheduleAttachedShadowPrewarm\(window\)/,
+      'system attached pages should prewarm their custom shadow once the host window is available'
+    )
+    assert.match(
+      systemPrewarm,
+      /this\.createAttachedShadowWindow\(mainWindow\)/,
+      'system attached shadow prewarm must create the hidden shadow window before first open'
+    )
+  })
+
   it('keeps the main search box from drawing a clipped window shadow', () => {
     const rendererCss = readFileSync(rendererCssPath, 'utf8')
     const searchBoxRules = Array.from(rendererCss.matchAll(/([^{}]*\.search-box-container[^{}]*)\{([^{}]*)\}/g))

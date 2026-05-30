@@ -47,7 +47,6 @@ import log from 'electron-log'
 
 const ATTACHED_PANEL_SHADOW_MARGIN = 18
 const WINDOWS_PANEL_SHOW_OPACITY_GUARD_MS = 50
-const ATTACHED_PANEL_SHADOW_SHOW_DELAY_MS = 600
 const ATTACHED_PANEL_SHELL_HTML = `<!doctype html>
 <html>
 <head>
@@ -198,6 +197,7 @@ export class PluginPanelWindow {
         const backgroundColor = useWindowsFramelessSurface ? '#00000000' : (currentTheme === 'dark' ? '#1e293b' : '#ffffff')
 
         this.ensurePanelShell(initialBounds, backgroundColor, useWindowsFramelessSurface)
+        this.prepareShadowWindow()
         log.info('[PanelShell] prewarm ready')
     }
 
@@ -492,6 +492,7 @@ export class PluginPanelWindow {
 
         this.preferredPanelHeight = ATTACHED_PANEL_HEIGHT
         const panelWindow = this.ensurePanelShell(initialBounds, backgroundColor, useWindowsFramelessSurface)
+        this.prepareShadowWindow()
 
         const pluginView = new WebContentsView({
             webPreferences: {
@@ -605,6 +606,7 @@ export class PluginPanelWindow {
             this.layoutAttachedPluginView()
             this.showMainWindowForAttachedPanel()
 
+            this.showShadow()
             capturedWin.show()
             void ensureAttachedPluginContentSurface()
             this.panelWindowHasBeenShown = true
@@ -624,7 +626,6 @@ export class PluginPanelWindow {
             if (this.themeManager && !capturedWebContents.isDestroyed()) {
                 capturedWebContents.send('theme:changed', this.themeManager.getActualTheme())
             }
-            this.scheduleShadowShow(capturedWin)
         }
 
         capturedWebContents.once('dom-ready', () => {
@@ -767,15 +768,6 @@ export class PluginPanelWindow {
             const bounds = getWindowsFramelessSurfaceVisibleBounds(this.panelWindow.getBounds())
             this.setShadowBounds(bounds.x, bounds.y, bounds.width, bounds.height)
         }
-    }
-
-    private scheduleShadowShow(panelWin: BrowserWindow) {
-        if (!this.shouldUseShadowWindow()) return
-        const timer = setTimeout(() => {
-            if (panelWin.isDestroyed() || this.panelWindow !== panelWin) return
-            this.showShadow()
-        }, ATTACHED_PANEL_SHADOW_SHOW_DELAY_MS)
-        timer.unref?.()
     }
 
     private setShadowBounds(x: number, y: number, width: number, height: number) {

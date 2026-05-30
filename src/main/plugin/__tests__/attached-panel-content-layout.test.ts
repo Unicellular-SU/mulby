@@ -109,4 +109,34 @@ describe('attached panel content layout', () => {
       'resident attached panel restores must also restore the host window'
     )
   })
+
+  it('prewarms and shows the attached panel shadow without a visible delay', () => {
+    const source = readFileSync(panelWindowSourcePath, 'utf8')
+    const prewarmStart = source.indexOf('prewarmShell()')
+    const prewarmEnd = source.indexOf('private getPluginWebContents()', prewarmStart)
+    const prewarmMethod = prewarmStart >= 0 && prewarmEnd > prewarmStart
+      ? source.slice(prewarmStart, prewarmEnd)
+      : ''
+    const createShowStart = source.indexOf('const showPanel = async')
+    const createShowEnd = source.indexOf("capturedWebContents.once('dom-ready'", createShowStart)
+    const createShowBlock = createShowStart >= 0 && createShowEnd > createShowStart
+      ? source.slice(createShowStart, createShowEnd)
+      : ''
+
+    assert.doesNotMatch(
+      source,
+      /ATTACHED_PANEL_SHADOW_SHOW_DELAY_MS|scheduleShadowShow/,
+      'attached panel shadows should not be delayed after the panel is visible'
+    )
+    assert.match(
+      prewarmMethod,
+      /this\.ensurePanelShell\([\s\S]*?\)[\s\S]*this\.prepareShadowWindow\(\)/,
+      'attached panel shell prewarm should also preload the hidden shadow window'
+    )
+    assert.match(
+      createShowBlock,
+      /this\.showShadow\(\)[\s\S]*capturedWin\.show\(\)/,
+      'cold attached panel launches should show the prewarmed shadow in the same visible sequence as the panel'
+    )
+  })
 })

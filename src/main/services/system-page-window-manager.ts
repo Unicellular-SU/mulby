@@ -26,6 +26,7 @@ import log from 'electron-log'
 
 const ATTACHED_SYSTEM_SHADOW_MARGIN = 18
 const WINDOWS_ATTACHED_SHOW_OPACITY_GUARD_MS = 50
+const ATTACHED_SYSTEM_SHADOW_PREWARM_DELAY_MS = 300
 const ATTACHED_SYSTEM_SHADOW_HTML = `<!doctype html>
 <html>
 <head>
@@ -114,17 +115,20 @@ export class SystemPageWindowManager {
   private syncingBounds = false
   private attachedWindowHasBeenShown = false
   private attachedOpacityRestoreTimer: NodeJS.Timeout | null = null
+  private attachedShadowPrewarmTimer: NodeJS.Timeout | null = null
 
   private shouldUseAttachedShadowWindow(): boolean {
     return process.platform !== 'win32'
   }
 
   setMainWindow(window: BrowserWindow | null): void {
+    this.clearAttachedShadowPrewarmTimer()
     this.mainWindow = window
     if (!window) {
       this.closeAll()
       return
     }
+    this.scheduleAttachedShadowPrewarm(window)
     this.emitState()
   }
 
@@ -648,6 +652,7 @@ export class SystemPageWindowManager {
   }
 
   closeAll(): void {
+    this.clearAttachedShadowPrewarmTimer()
     const attached = this.getAttachedWindow()
     if (attached && !attached.isDestroyed()) {
       attached.destroy()
@@ -825,6 +830,25 @@ export class SystemPageWindowManager {
     })
 
     this.attachedShadowWindow = shadowWindow
+  }
+
+  private scheduleAttachedShadowPrewarm(mainWindow: BrowserWindow): void {
+    if (!this.shouldUseAttachedShadowWindow()) return
+    const timer = setTimeout(() => {
+      if (this.attachedShadowPrewarmTimer === timer) {
+        this.attachedShadowPrewarmTimer = null
+      }
+      if (this.mainWindow !== mainWindow || mainWindow.isDestroyed()) return
+      this.createAttachedShadowWindow(mainWindow)
+    }, ATTACHED_SYSTEM_SHADOW_PREWARM_DELAY_MS)
+    timer.unref?.()
+    this.attachedShadowPrewarmTimer = timer
+  }
+
+  private clearAttachedShadowPrewarmTimer(): void {
+    if (!this.attachedShadowPrewarmTimer) return
+    clearTimeout(this.attachedShadowPrewarmTimer)
+    this.attachedShadowPrewarmTimer = null
   }
 
   private setAttachedShadowBounds(x: number, y: number, width: number, height: number): void {
