@@ -63,6 +63,18 @@ export function optionWithCallerIdentity(option: AiOption, caller: IpcCallerInfo
   }
 }
 
+function ensureAiSystemWindowCaller(event: IpcMainInvokeEvent, channel: string): void {
+  const caller = resolveIpcCallerSource(event.sender)
+  if (caller.source !== 'app') {
+    throw new Error(`[AI] Access denied: '${channel}' is a system-only API`)
+  }
+}
+
+function ensureAiAttachmentUploadAllowed(event: IpcMainInvokeEvent, input: { filePath?: string }): void {
+  if (!String(input?.filePath || '').trim()) return
+  ensureAiSystemWindowCaller(event, 'ai:attachments:upload')
+}
+
 export function registerAiHandlers(hooks?: AiHandlersHooks) {
   ipcMain.handle('ai:call', async (event: IpcMainInvokeEvent, option: AiOption) => {
     const caller = resolveIpcCallerSource(event.sender)
@@ -117,15 +129,18 @@ export function registerAiHandlers(hooks?: AiHandlersHooks) {
     return aiService.allModels()
   })
 
-  ipcMain.handle('ai:models:fetch', async (_event, input) => {
+  ipcMain.handle('ai:models:fetch', async (event: IpcMainInvokeEvent, input) => {
+    ensureAiSystemWindowCaller(event, 'ai:models:fetch')
     return await aiService.fetchModels(input)
   })
 
-  ipcMain.handle('ai:test', async (_event, input) => {
+  ipcMain.handle('ai:test', async (event: IpcMainInvokeEvent, input) => {
+    ensureAiSystemWindowCaller(event, 'ai:test')
     return await aiService.testConnection(input)
   })
 
   ipcMain.handle('ai:test:stream', async (event, input) => {
+    ensureAiSystemWindowCaller(event, 'ai:test:stream')
     const requestId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
     setTimeout(() => {
       aiService
@@ -142,112 +157,136 @@ export function registerAiHandlers(hooks?: AiHandlersHooks) {
     return { requestId }
   })
 
-  ipcMain.handle('ai:settings:get', async () => {
+  ipcMain.handle('ai:settings:get', async (event: IpcMainInvokeEvent) => {
+    ensureAiSystemWindowCaller(event, 'ai:settings:get')
     return getAiSettings()
   })
 
-  ipcMain.handle('ai:settings:update', async (_event, partial) => {
+  ipcMain.handle('ai:settings:update', async (event: IpcMainInvokeEvent, partial) => {
+    ensureAiSystemWindowCaller(event, 'ai:settings:update')
     const next = updateAiSettings(partial)
     resetProviderRegistry()
     return next
   })
 
-  ipcMain.handle('ai:mcp:servers:list', async () => {
+  ipcMain.handle('ai:mcp:servers:list', async (event: IpcMainInvokeEvent) => {
+    ensureAiSystemWindowCaller(event, 'ai:mcp:servers:list')
     return aiMcpService.listServers()
   })
 
-  ipcMain.handle('ai:mcp:servers:get', async (_event, serverId: string) => {
+  ipcMain.handle('ai:mcp:servers:get', async (event: IpcMainInvokeEvent, serverId: string) => {
+    ensureAiSystemWindowCaller(event, 'ai:mcp:servers:get')
     return aiMcpService.getServer(serverId)
   })
 
-  ipcMain.handle('ai:mcp:servers:upsert', async (_event, server: AiMcpServer) => {
+  ipcMain.handle('ai:mcp:servers:upsert', async (event: IpcMainInvokeEvent, server: AiMcpServer) => {
+    ensureAiSystemWindowCaller(event, 'ai:mcp:servers:upsert')
     return aiMcpService.upsertServer(server)
   })
 
-  ipcMain.handle('ai:mcp:servers:remove', async (_event, serverId: string) => {
+  ipcMain.handle('ai:mcp:servers:remove', async (event: IpcMainInvokeEvent, serverId: string) => {
+    ensureAiSystemWindowCaller(event, 'ai:mcp:servers:remove')
     await aiMcpService.removeServer(serverId)
   })
 
-  ipcMain.handle('ai:mcp:servers:activate', async (_event, serverId: string) => {
+  ipcMain.handle('ai:mcp:servers:activate', async (event: IpcMainInvokeEvent, serverId: string) => {
+    ensureAiSystemWindowCaller(event, 'ai:mcp:servers:activate')
     return await aiMcpService.activateServer(serverId)
   })
 
-  ipcMain.handle('ai:mcp:servers:deactivate', async (_event, serverId: string) => {
+  ipcMain.handle('ai:mcp:servers:deactivate', async (event: IpcMainInvokeEvent, serverId: string) => {
+    ensureAiSystemWindowCaller(event, 'ai:mcp:servers:deactivate')
     return await aiMcpService.deactivateServer(serverId)
   })
 
-  ipcMain.handle('ai:mcp:servers:restart', async (_event, serverId: string) => {
+  ipcMain.handle('ai:mcp:servers:restart', async (event: IpcMainInvokeEvent, serverId: string) => {
+    ensureAiSystemWindowCaller(event, 'ai:mcp:servers:restart')
     return await aiMcpService.restartServer(serverId)
   })
 
-  ipcMain.handle('ai:mcp:servers:check', async (_event, serverId: string) => {
+  ipcMain.handle('ai:mcp:servers:check', async (event: IpcMainInvokeEvent, serverId: string) => {
+    ensureAiSystemWindowCaller(event, 'ai:mcp:servers:check')
     return await aiMcpService.checkServerConnectivity(serverId)
   })
 
-  ipcMain.handle('ai:mcp:tools:list', async (_event, serverId: string) => {
+  ipcMain.handle('ai:mcp:tools:list', async (event: IpcMainInvokeEvent, serverId: string) => {
+    ensureAiSystemWindowCaller(event, 'ai:mcp:tools:list')
     return await aiMcpService.listTools(serverId)
   })
 
-  ipcMain.handle('ai:mcp:abort', async (_event, callId: string) => {
+  ipcMain.handle('ai:mcp:abort', async (event: IpcMainInvokeEvent, callId: string) => {
+    ensureAiSystemWindowCaller(event, 'ai:mcp:abort')
     return aiMcpService.abortTool(callId)
   })
 
-  ipcMain.handle('ai:mcp:logs:get', async (_event, serverId: string) => {
+  ipcMain.handle('ai:mcp:logs:get', async (event: IpcMainInvokeEvent, serverId: string) => {
+    ensureAiSystemWindowCaller(event, 'ai:mcp:logs:get')
     return aiMcpService.getLogs(serverId)
   })
 
-  ipcMain.handle('ai:skills:list', async () => {
+  ipcMain.handle('ai:skills:list', async (event: IpcMainInvokeEvent) => {
+    ensureAiSystemWindowCaller(event, 'ai:skills:list')
     await aiSkillService.ensureCatalogLoaded()
     return aiSkillService.list()
   })
 
-  ipcMain.handle('ai:skills:refresh', async () => {
+  ipcMain.handle('ai:skills:refresh', async (event: IpcMainInvokeEvent) => {
+    ensureAiSystemWindowCaller(event, 'ai:skills:refresh')
     return await aiSkillService.refreshCatalog()
   })
 
-  ipcMain.handle('ai:skills:list-enabled', async () => {
+  ipcMain.handle('ai:skills:list-enabled', async (event: IpcMainInvokeEvent) => {
+    ensureAiSystemWindowCaller(event, 'ai:skills:list-enabled')
     await aiSkillService.ensureCatalogLoaded()
     return aiSkillService.listEnabled()
   })
 
-  ipcMain.handle('ai:skills:get', async (_event, skillId: string) => {
+  ipcMain.handle('ai:skills:get', async (event: IpcMainInvokeEvent, skillId: string) => {
+    ensureAiSystemWindowCaller(event, 'ai:skills:get')
     await aiSkillService.ensureCatalogLoaded()
     return aiSkillService.get(skillId)
   })
 
-  ipcMain.handle('ai:skills:install', async (_event, input) => {
+  ipcMain.handle('ai:skills:install', async (event: IpcMainInvokeEvent, input) => {
+    ensureAiSystemWindowCaller(event, 'ai:skills:install')
     const installed = await aiSkillService.install(input)
     await aiSkillService.refreshCatalog()
     return installed
   })
 
-  ipcMain.handle('ai:skills:remove', async (_event, skillId: string) => {
+  ipcMain.handle('ai:skills:remove', async (event: IpcMainInvokeEvent, skillId: string) => {
+    ensureAiSystemWindowCaller(event, 'ai:skills:remove')
     await aiSkillService.ensureCatalogLoaded()
     await aiSkillService.remove(skillId)
     await aiSkillService.refreshCatalog()
   })
 
-  ipcMain.handle('ai:skills:enable', async (_event, skillId: string) => {
+  ipcMain.handle('ai:skills:enable', async (event: IpcMainInvokeEvent, skillId: string) => {
+    ensureAiSystemWindowCaller(event, 'ai:skills:enable')
     await aiSkillService.ensureCatalogLoaded()
     return await aiSkillService.enable(skillId)
   })
 
-  ipcMain.handle('ai:skills:disable', async (_event, skillId: string) => {
+  ipcMain.handle('ai:skills:disable', async (event: IpcMainInvokeEvent, skillId: string) => {
+    ensureAiSystemWindowCaller(event, 'ai:skills:disable')
     await aiSkillService.ensureCatalogLoaded()
     return await aiSkillService.disable(skillId)
   })
 
-  ipcMain.handle('ai:skills:preview', async (_event, input) => {
+  ipcMain.handle('ai:skills:preview', async (event: IpcMainInvokeEvent, input) => {
+    ensureAiSystemWindowCaller(event, 'ai:skills:preview')
     await aiSkillService.ensureCatalogLoaded()
     return aiSkillService.preview(input)
   })
 
-  ipcMain.handle('ai:skills:resolve', async (_event, option: AiOption) => {
+  ipcMain.handle('ai:skills:resolve', async (event: IpcMainInvokeEvent, option: AiOption) => {
+    ensureAiSystemWindowCaller(event, 'ai:skills:resolve')
     await aiSkillService.ensureCatalogLoaded()
     return aiSkillService.resolveForAiCall(option)
   })
 
-  ipcMain.handle('ai:attachments:upload', async (_event, input) => {
+  ipcMain.handle('ai:attachments:upload', async (event: IpcMainInvokeEvent, input) => {
+    ensureAiAttachmentUploadAllowed(event, input)
     return await aiService.uploadAttachment(input)
   })
 
@@ -306,11 +345,13 @@ export function registerAiHandlers(hooks?: AiHandlersHooks) {
 
   // ---- AI 工具设置（webSearch）----
 
-  ipcMain.handle('ai:tooling:webSearch:get', async () => {
+  ipcMain.handle('ai:tooling:webSearch:get', async (event: IpcMainInvokeEvent) => {
+    ensureAiSystemWindowCaller(event, 'ai:tooling:webSearch:get')
     return appSettingsManager.getSettings().aiTooling.webSearch
   })
 
-  ipcMain.handle('ai:tooling:webSearch:update', async (_event, partial: Partial<AiToolWebSearchSettings>) => {
+  ipcMain.handle('ai:tooling:webSearch:update', async (event: IpcMainInvokeEvent, partial: Partial<AiToolWebSearchSettings>) => {
+    ensureAiSystemWindowCaller(event, 'ai:tooling:webSearch:update')
     const current = appSettingsManager.getSettings()
     const merged: AiToolWebSearchSettings = {
       ...current.aiTooling.webSearch,
@@ -330,7 +371,8 @@ export function registerAiHandlers(hooks?: AiHandlersHooks) {
   })
 
   // 插件 API：获取结构化的搜索设置（含 provider 列表）
-  ipcMain.handle('ai:tooling:webSearch:getSettings', async () => {
+  ipcMain.handle('ai:tooling:webSearch:getSettings', async (event: IpcMainInvokeEvent) => {
+    ensureAiSystemWindowCaller(event, 'ai:tooling:webSearch:getSettings')
     const settings = appSettingsManager.getSettings().aiTooling.webSearch
     const providers: Array<{ id: string; name: string; type: 'local' | 'api' | 'custom' }> = []
 
@@ -353,7 +395,8 @@ export function registerAiHandlers(hooks?: AiHandlersHooks) {
   })
 
   // 插件 API：切换搜索 provider
-  ipcMain.handle('ai:tooling:webSearch:setActiveProvider', async (_event, providerId: string) => {
+  ipcMain.handle('ai:tooling:webSearch:setActiveProvider', async (event: IpcMainInvokeEvent, providerId: string) => {
+    ensureAiSystemWindowCaller(event, 'ai:tooling:webSearch:setActiveProvider')
     const current = appSettingsManager.getSettings()
     const webSearch = current.aiTooling.webSearch
 
@@ -383,11 +426,13 @@ export function registerAiHandlers(hooks?: AiHandlersHooks) {
 
   // ---- 插件工具禁用管理 ----
 
-  ipcMain.handle('ai:tooling:pluginTools:getDisabled', async () => {
+  ipcMain.handle('ai:tooling:pluginTools:getDisabled', async (event: IpcMainInvokeEvent) => {
+    ensureAiSystemWindowCaller(event, 'ai:tooling:pluginTools:getDisabled')
     return appSettingsManager.getSettings().aiTooling.disabledPluginTools || []
   })
 
-  ipcMain.handle('ai:tooling:pluginTools:setDisabled', async (_event, disabledList: string[]) => {
+  ipcMain.handle('ai:tooling:pluginTools:setDisabled', async (event: IpcMainInvokeEvent, disabledList: string[]) => {
+    ensureAiSystemWindowCaller(event, 'ai:tooling:pluginTools:setDisabled')
     const current = appSettingsManager.getSettings()
     const next = appSettingsManager.updateSettings({
       aiTooling: {

@@ -5,6 +5,11 @@
 > - UI/渲染进程：`window.mulby.ai`
 > - 插件后端：`context.api.ai`
 
+> 安全边界：
+> - 插件可使用 `ai.call`、`abort`、`allModels`、附件 `buffer` 上传、Token 估算与图片生成等调用型能力。
+> - 宿主管理能力（AI 设置、Provider 探测、MCP/Skills/WebSearch/插件工具管理）仅允许系统渲染窗口（主应用/设置页/首次引导页）调用。插件 UI 由于共享 preload 可能看到入口，但 IPC 层会拒绝。
+> - `attachments.upload({ filePath })` 仅允许系统渲染窗口使用；插件 UI/后端如需上传文件，应先在已授权范围内读取为 `ArrayBuffer`/`buffer` 后再上传，避免让主进程代读任意本地路径。
+
 ---
 
 ## 基础调用
@@ -365,6 +370,8 @@ const models = await ai.allModels();
 [Renderer]
 按 Provider 协议能力拉取模型列表；不支持自动发现时会返回空列表或回退到内置模型，并附带 `message`。
 
+> 仅系统渲染窗口可用，用于设置页 Provider 管理；插件 UI/后端不应调用。
+
 ```javascript
 const result = await ai.models.fetch({
   providerId: 'openai',
@@ -391,6 +398,8 @@ const result = await ai.models.fetch({
 [Renderer]
 使用 `ping` 消息进行快速连通性测试。
 
+> 仅系统渲染窗口可用，用于设置页/首次引导页验证 Provider 配置；插件 UI/后端不应调用。
+
 ```javascript
 const result = await ai.testConnection({
   providerId: 'openai',
@@ -406,6 +415,8 @@ const result = await ai.testConnection({
 ### testConnectionStream(input, onChunk)
 [Renderer]
 流式测试连接（可返回 reasoning 片段）。
+
+> 仅系统渲染窗口可用，用于设置页 Provider 调试；插件 UI/后端不应调用。
 
 ```javascript
 const req = ai.testConnectionStream(
@@ -437,6 +448,8 @@ req.abort?.();
 [Renderer]
 读取 AI 设置。
 
+> 仅系统渲染窗口可用。AI 设置包含 Provider、API Key、MCP、Skills 等宿主级配置，不向插件开放。
+
 ```javascript
 const settings = await ai.settings.get();
 ```
@@ -446,6 +459,8 @@ const settings = await ai.settings.get();
 ### settings.update(next)
 [Renderer]
 更新 AI 设置（部分更新）。
+
+> 仅系统渲染窗口可用。插件需要发起 AI 调用时应通过 `ai.call` 的参数请求能力，不应修改宿主全局设置。
 
 ```javascript
 await ai.settings.update({
@@ -463,8 +478,9 @@ await ai.settings.update({
 
 ## MCP 管理
 
-> 可用端：仅渲染进程 `window.mulby.ai.mcp`。  
+> 可用端：仅系统渲染进程 `window.mulby.ai.mcp`。  
 > 插件后端 `context.api.ai` 当前不提供 `mcp.*` 管理接口（但 `ai.call` 可使用 `option.mcp` 参与工具选择）。
+> 插件 UI 即使能看到该命名空间，IPC 层也会拒绝调用。
 
 ### mcp.listServers()
 [Renderer]
@@ -579,8 +595,9 @@ const logs = await ai.mcp.getLogs('filesystem');
 
 ## 技能管理 (skills)
 
-> 渲染进程：`window.mulby.ai.skills`（完整管理接口）  
+> 系统渲染进程：`window.mulby.ai.skills`（完整管理接口）  
 > 插件后端：`context.api.ai.skills`（仅 `listEnabled` 与 `previewForCall`）
+> 插件 UI 不允许调用完整管理接口（安装、删除、启停、解析全局 Skill 配置等）。
 
 ### skills.list()
 ### skills.refresh()
@@ -639,6 +656,8 @@ const preview = await context.api.ai.skills.previewForCall({
 [Renderer] [Backend]
 上传文件或二进制数据，返回可在消息中引用的 `attachmentId`。
 
+系统渲染窗口可以传入 `filePath`：
+
 ```javascript
 const image = await ai.attachments.upload({
   filePath: '/path/to/image.png',
@@ -647,9 +666,32 @@ const image = await ai.attachments.upload({
 });
 ```
 
+插件 UI/后端需要传入 `buffer`，不要传 `filePath`：
+
+```javascript
+// 插件 UI：来自 <input type="file"> / 拖拽文件
+const buffer = await file.arrayBuffer();
+const image = await window.mulby.ai.attachments.upload({
+  buffer,
+  mimeType: file.type || 'application/octet-stream',
+  purpose: 'vision'
+});
+```
+
+```javascript
+// 插件后端：先通过已授权的 filesystem 能力读取，再上传 buffer
+const bytes = context.api.filesystem.readFile('/path/to/authorized-image.png');
+const buffer = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
+const image = await context.api.ai.attachments.upload({
+  buffer,
+  mimeType: 'image/png',
+  purpose: 'vision'
+});
+```
+
 **参数**:
-- `filePath` (string, optional)
-- `buffer` (ArrayBuffer, optional)
+- `filePath` (string, optional) - 仅系统渲染窗口可用
+- `buffer` (ArrayBuffer, optional) - 插件 UI/后端推荐方式
 - `mimeType` (string)
 - `purpose` (string, optional)
 
@@ -1203,7 +1245,9 @@ type AiAttachmentRef = {
 ## 网络搜索工具设置 (tooling.webSearch)
 
 > 可用端：
-> - 渲染进程：`window.mulby.ai.tooling.webSearch`
+> - 系统渲染进程：`window.mulby.ai.tooling.webSearch`
+>
+> 该接口会读写宿主 WebSearch Provider、API Key、自定义搜索源等全局配置，仅设置页可用。插件调用联网搜索应在 `ai.call` 中请求 `web.search` / `web.fetch` 能力。
 
 ### tooling.webSearch.get()
 [Renderer]
@@ -1333,7 +1377,9 @@ const result = await ai.tooling.webSearch.setActiveProvider('local-bing');
 ## 插件工具管理 (tooling.pluginTools)
 
 > 可用端：
-> - 渲染进程：`window.mulby.ai.tooling.pluginTools`
+> - 系统渲染进程：`window.mulby.ai.tooling.pluginTools`
+>
+> 该接口读写全局插件工具禁用列表，仅设置页可用。
 
 ### tooling.pluginTools.getDisabled()
 [Renderer]
@@ -1371,8 +1417,11 @@ module.exports = {
   async run(context) {
     const { ai, filesystem, notification } = context.api;
 
+    // 后端插件不要向 AI 附件上传传 filePath。先在授权范围内读取文件，再传 buffer。
+    const bytes = filesystem.readFile('/path/to/authorized-image.png');
+    const buffer = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
     const attachment = await ai.attachments.upload({
-      filePath: '/path/to/image.png',
+      buffer,
       mimeType: 'image/png',
       purpose: 'vision'
     });

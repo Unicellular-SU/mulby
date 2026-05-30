@@ -95,6 +95,11 @@ function toAbortablePromise<T>(promise: Promise<T>, abort: () => void): AiPromis
   return abortable
 }
 
+function rejectPluginAiAttachmentFilePath(pluginName: string, input: { filePath?: string }): void {
+  if (!String(input?.filePath || '').trim()) return
+  throw new Error(`[PluginAPI:${pluginName}] ai.attachments.upload 不允许 filePath；请先读取已授权文件并传入 buffer`)
+}
+
 // 创建插件可用的 API 上下文
 export function createPluginAPI(
   pluginName: string,
@@ -642,7 +647,10 @@ ${item.files.map(p => `    <string>${p}</string>`).join('\n')}
         }
       },
       attachments: {
-        upload: async (input: { filePath?: string; buffer?: ArrayBuffer; mimeType: string; purpose?: string }) => await aiService.uploadAttachment(input),
+        upload: async (input: { filePath?: string; buffer?: ArrayBuffer; mimeType: string; purpose?: string }) => {
+          rejectPluginAiAttachmentFilePath(pluginName, input)
+          return await aiService.uploadAttachment(input)
+        },
         get: async (attachmentId: string) => await aiService.getAttachment(attachmentId),
         delete: async (attachmentId: string) => await aiService.deleteAttachment(attachmentId),
         uploadToProvider: async (input: { attachmentId: string; model?: string; providerId?: string; purpose?: string }) =>
