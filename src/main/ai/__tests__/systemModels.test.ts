@@ -1,10 +1,11 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
 import type { AiModel } from '../../../shared/types/ai'
+import { getSystemDefaultProviders } from '../../../shared/ai/systemProviders'
 import { getSystemDefaultModels, mergeWithSystemDefaultModels } from '../../../shared/ai/systemModels'
 
 describe('system default models', () => {
-  it('contains default models for requested built-in providers', () => {
+  it('contains default models for representative Cherry Studio providers', () => {
     const models = getSystemDefaultModels()
     const providers = new Set(models.map((model) => String(model.providerRef || model.id.split(':', 1)[0])))
     const expectedProviders = [
@@ -22,11 +23,18 @@ describe('system default models', () => {
       'minimax',
       'grok',
       'hunyuan',
-      'huggingface',
       'mimo'
     ]
     expectedProviders.forEach((providerId) => {
       assert.equal(providers.has(providerId), true, `missing default models for provider: ${providerId}`)
+    })
+  })
+
+  it('does not include models for unknown providers', () => {
+    const providerIds = new Set(getSystemDefaultProviders().map((provider) => String(provider.id)))
+    const models = getSystemDefaultModels()
+    models.forEach((model) => {
+      assert.equal(providerIds.has(String(model.providerRef)), true, `unknown providerRef: ${model.providerRef}`)
     })
   })
 
