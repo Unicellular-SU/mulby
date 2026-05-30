@@ -6,5 +6,6 @@ allowBuilds:
   electron-winstaller: true
   esbuild: true
   koffi: true
+  node-mac-permissions: false
   sharp: true
   usocket: true
