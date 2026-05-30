@@ -747,7 +747,9 @@ export class MainWindowManager {
     this.lastToggleAt = now
     if (shouldHideMainWindowOnToggle({
       isWindowVisible: this.window.isVisible(),
-      isMainSurfaceFocused: this.isMainSurfaceFocused()
+      isMainSurfaceFocused: this.isMainSurfaceFocused(),
+      isAppFocused: process.platform === 'darwin' ? BrowserWindow.getFocusedWindow() !== null : true,
+      windowOpacity: process.platform === 'darwin' ? this.window.getOpacity() : 1
     })) {
       this.hide()
     } else {
