@@ -240,6 +240,22 @@ export class PluginPanelWindow {
         })
     }
 
+    private showMainWindowForAttachedPanel() {
+        if (this.mainWindow.isDestroyed()) return
+
+        try {
+            this.mainWindow.setOpacity(1)
+        } catch (error) {
+            log.warn('[PanelWindow] Failed to restore host window opacity:', error)
+        }
+        if (this.mainWindow.isMinimized()) {
+            this.mainWindow.restore()
+        }
+        if (!this.mainWindow.isVisible()) {
+            this.mainWindow.show()
+        }
+    }
+
     private destroyPluginView() {
         const view = this.pluginView
         if (!view) return
@@ -587,10 +603,7 @@ export class PluginPanelWindow {
             this.collapseMainWindowForAttachedPanel()
             this.syncPosition()
             this.layoutAttachedPluginView()
-
-            if (!this.mainWindow.isVisible()) {
-                this.mainWindow.show()
-            }
+            this.showMainWindowForAttachedPanel()
 
             capturedWin.show()
             void ensureAttachedPluginContentSurface()
@@ -1328,14 +1341,7 @@ export class PluginPanelWindow {
             this.collapseMainWindowForAttachedPanel()
             this.syncPosition()
             this.layoutAttachedPluginView()
-            if (!this.mainWindow.isDestroyed()) {
-                if (this.mainWindow.isMinimized()) {
-                    this.mainWindow.restore()
-                }
-                if (!this.mainWindow.isVisible()) {
-                    this.mainWindow.show()
-                }
-            }
+            this.showMainWindowForAttachedPanel()
             const needsOpacityGuard = process.platform === 'win32'
                 && this.panelWindowHasBeenShown
                 && !this.panelWindow.isVisible()

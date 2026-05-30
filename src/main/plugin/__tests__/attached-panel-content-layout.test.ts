@@ -73,4 +73,40 @@ describe('attached panel content layout', () => {
       're-injecting plugin content surface must not block did-finish-load'
     )
   })
+
+  it('restores the host search window opacity before showing an attached panel', () => {
+    const source = readFileSync(panelWindowSourcePath, 'utf8')
+    const helperStart = source.indexOf('private showMainWindowForAttachedPanel()')
+    const helperEnd = source.indexOf('private destroyPluginView()', helperStart)
+    const helperMethod = helperStart >= 0 && helperEnd > helperStart
+      ? source.slice(helperStart, helperEnd)
+      : ''
+    const createShowStart = source.indexOf('const showPanel = async')
+    const createShowEnd = source.indexOf("capturedWebContents.once('dom-ready'", createShowStart)
+    const createShowBlock = createShowStart >= 0 && createShowEnd > createShowStart
+      ? source.slice(createShowStart, createShowEnd)
+      : ''
+    const showMethodStart = source.indexOf('show(options: { activate?: boolean } = {})')
+    const showMethodEnd = source.indexOf('// Clean up the deferred opacity restore', showMethodStart)
+    const showMethod = showMethodStart >= 0 && showMethodEnd > showMethodStart
+      ? source.slice(showMethodStart, showMethodEnd)
+      : ''
+
+    assert.ok(helperMethod, 'host show helper must exist')
+    assert.match(
+      helperMethod,
+      /this\.mainWindow\.setOpacity\(1\)[\s\S]*this\.mainWindow\.show\(\)/,
+      'attached panel launches must undo the macOS hidden-host opacity guard before showing the host'
+    )
+    assert.match(
+      createShowBlock,
+      /this\.showMainWindowForAttachedPanel\(\)/,
+      'cold attached panel launches must restore the host window before showing the panel'
+    )
+    assert.match(
+      showMethod,
+      /this\.showMainWindowForAttachedPanel\(\)/,
+      'resident attached panel restores must also restore the host window'
+    )
+  })
 })
