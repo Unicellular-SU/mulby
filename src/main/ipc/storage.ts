@@ -388,26 +388,45 @@ export function registerStorageHandlers() {
     // ====== 附件/二进制存储 (storage.attachment) ======
     const MAX_ATTACHMENT_SIZE = 50 * 1024 * 1024 // 50MB
 
-    function getAttachmentDir(ns: string): string {
-        const dir = join(app.getPath('userData'), 'plugin-attachments', ns)
-        if (!existsSync(dir)) mkdirSync(dir, { recursive: true })
+    function safeAttachmentNamespace(ns: string): string {
+        return encodeURIComponent(ns)
+    }
+
+    function getAttachmentDir(ns: string, create = true): string {
+        const dir = join(app.getPath('userData'), 'plugin-attachments', safeAttachmentNamespace(ns))
+        if (create && !existsSync(dir)) mkdirSync(dir, { recursive: true })
         return dir
     }
 
-    function sanitizeAttachmentId(id: string): string {
-        return id.replace(/[/\\:*?"<>|]/g, '_')
+    function getLegacyAttachmentDir(ns: string): string | null {
+        const legacyDir = join(app.getPath('userData'), 'plugin-attachments', ns)
+        return legacyDir === getAttachmentDir(ns, false) ? null : legacyDir
+    }
+
+    function normalizeAttachmentId(id: string): string | null {
+        const normalized = String(id || '')
+        if (!normalized || normalized === '.' || normalized === '..') return null
+        if (/[/\\:*?"<>|]/.test(normalized)) return null
+        return normalized
+    }
+
+    function toAttachmentBuffer(data: ArrayBuffer | Buffer | Uint8Array): Buffer {
+        if (Buffer.isBuffer(data)) return data
+        if (data instanceof ArrayBuffer) return Buffer.from(data)
+        return Buffer.from(data.buffer, data.byteOffset, data.byteLength)
     }
 
     ipcMain.handle('storage:attachment:put', pluginAwareInvoke((caller, _event, id: string, data: ArrayBuffer | Buffer | Uint8Array, mimeType: string) => {
         const ns = resolveNs(caller, undefined)
-        const buf = Buffer.isBuffer(data) ? data : Buffer.from(new Uint8Array(data instanceof ArrayBuffer ? data : data.buffer))
+        const buf = toAttachmentBuffer(data)
         if (buf.length > MAX_ATTACHMENT_SIZE) {
             log.error(`[Storage:attachment] Size exceeds limit (${buf.length} > ${MAX_ATTACHMENT_SIZE})`)
             return false
         }
         try {
             const dir = getAttachmentDir(ns)
-            const safeId = sanitizeAttachmentId(id)
+            const safeId = normalizeAttachmentId(id)
+            if (!safeId) return false
             writeFileSync(join(dir, safeId), buf)
             stmtSet.run(ns, `_attachment_meta_:${safeId}`, JSON.stringify({ mimeType, size: buf.length }), Date.now())
             return true
@@ -420,11 +439,14 @@ export function registerStorageHandlers() {
     ipcMain.handle('storage:attachment:get', pluginAwareInvoke((caller, _event, id: string) => {
         const ns = resolveNs(caller, undefined)
         try {
-            const dir = getAttachmentDir(ns)
-            const safeId = sanitizeAttachmentId(id)
-            const filePath = join(dir, safeId)
-            if (!existsSync(filePath)) return null
-            return readFileSync(filePath)
+            const safeId = normalizeAttachmentId(id)
+            if (!safeId) return null
+            const dirs = [getAttachmentDir(ns, false), getLegacyAttachmentDir(ns)].filter((dir): dir is string => Boolean(dir))
+            for (const dir of dirs) {
+                const filePath = join(dir, safeId)
+                if (existsSync(filePath)) return readFileSync(filePath)
+            }
+            return null
         } catch (error) {
             log.error(`[Storage:attachment] Get failed (${ns}:${id}):`, error)
             return null
@@ -434,7 +456,8 @@ export function registerStorageHandlers() {
     ipcMain.handle('storage:attachment:getType', pluginAwareInvoke((caller, _event, id: string) => {
         const ns = resolveNs(caller, undefined)
         try {
-            const safeId = sanitizeAttachmentId(id)
+            const safeId = normalizeAttachmentId(id)
+            if (!safeId) return null
             const row = stmtGet.get(ns, `_attachment_meta_:${safeId}`) as { value: string } | undefined
             if (!row) return null
             const meta = JSON.parse(row.value) as { mimeType: string }
@@ -447,10 +470,13 @@ export function registerStorageHandlers() {
     ipcMain.handle('storage:attachment:remove', pluginAwareInvoke((caller, _event, id: string) => {
         const ns = resolveNs(caller, undefined)
         try {
-            const dir = getAttachmentDir(ns)
-            const safeId = sanitizeAttachmentId(id)
-            const filePath = join(dir, safeId)
-            if (existsSync(filePath)) unlinkSync(filePath)
+            const safeId = normalizeAttachmentId(id)
+            if (!safeId) return false
+            const dirs = [getAttachmentDir(ns, false), getLegacyAttachmentDir(ns)].filter((dir): dir is string => Boolean(dir))
+            for (const dir of dirs) {
+                const filePath = join(dir, safeId)
+                if (existsSync(filePath)) unlinkSync(filePath)
+            }
             stmtRemove.run(ns, `_attachment_meta_:${safeId}`)
             return true
         } catch (error) {
@@ -462,8 +488,10 @@ export function registerStorageHandlers() {
     ipcMain.handle('storage:attachment:list', pluginAwareInvoke((caller, _event, prefix?: string) => {
         const ns = resolveNs(caller, undefined)
         try {
-            const dir = getAttachmentDir(ns)
-            const files = readdirSync(dir)
+            const dirs = [getAttachmentDir(ns, false), getLegacyAttachmentDir(ns)]
+                .filter((dir): dir is string => Boolean(dir))
+                .filter(dir => existsSync(dir))
+            const files = Array.from(new Set(dirs.flatMap(dir => readdirSync(dir))))
             const results: { id: string; mimeType: string; size: number }[] = []
             for (const file of files) {
                 if (prefix && !file.startsWith(prefix)) continue
@@ -472,7 +500,9 @@ export function registerStorageHandlers() {
                     const meta = JSON.parse(metaRow.value) as { mimeType: string; size: number }
                     results.push({ id: file, mimeType: meta.mimeType, size: meta.size })
                 } else {
-                    const filePath = join(dir, file)
+                    const existingDir = dirs.find(dir => existsSync(join(dir, file)))
+                    if (!existingDir) continue
+                    const filePath = join(existingDir, file)
                     const stats = statSync(filePath)
                     results.push({ id: file, mimeType: 'application/octet-stream', size: stats.size })
                 }

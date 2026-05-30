@@ -86,8 +86,8 @@ const keys = await context.api.storage.keys();
 ```
 
 ### 备注
-- 渲染进程存储使用 SQLite，支持 `namespace` 隔离。
-- 插件后端存储使用独立 JSON 文件（按插件隔离），不支持 `namespace`。
+- 存储底层统一使用 SQLite，插件数据按 `plugin:<pluginId>` namespace 隔离。
+- 插件后端不支持传入自定义 namespace；插件 UI 调用 storage 时，主进程也会强制使用当前插件自己的 namespace。
 
 ---
 
@@ -222,10 +222,11 @@ const images = await storage.attachment.list('img-');
 **返回值**: `Promise<{ id: string; mimeType: string; size: number }[]>`
 
 ### 存储说明
-- 文件存储在 `userData/plugin-attachments/{pluginId}/` 目录
+- 文件存储在 `userData/plugin-attachments/{encodedNamespace}/` 目录
 - 元数据（MIME 类型、大小）存入 SQLite
 - 插件间完全隔离
 - 单文件最大 50MB
+- 附件 ID 会作为文件名使用，不能包含路径分隔符或 Windows 保留文件名字符（如 `: * ? " < > |`）
 
 ---
 

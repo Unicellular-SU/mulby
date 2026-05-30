@@ -339,6 +339,7 @@ export class PluginFilesystem {
 
   // 复制文件
   copy(src: string, dest: string): void {
+    this.checkRead(src)
     this.checkWrite(dest)
     const destDir = dirname(dest)
     if (!existsSync(destDir)) {

@@ -28,6 +28,22 @@ function nsKey(pluginName: string): string {
   return `${PLUGIN_NS_PREFIX}${pluginName}`
 }
 
+function escapeLikePrefix(prefix: string): string {
+  return prefix
+    .replace(/\\/g, '\\\\')
+    .replace(/%/g, '\\%')
+    .replace(/_/g, '\\_')
+}
+
+function isMigratableLegacyPluginNamespace(namespace: string): boolean {
+  if (!namespace) return false
+  if (namespace.startsWith(PLUGIN_NS_PREFIX)) return false
+  if (namespace.startsWith('__system:')) return false
+  if (namespace.startsWith('__')) return false
+  if (namespace.includes(':')) return false
+  return !new Set(['app', 'global', 'system']).has(namespace)
+}
+
 // ====== 预编译 SQL 语句（复用 store 表，结构：plugin_id, key, value, updated_at） ======
 
 const getStmt = db.prepare('SELECT value FROM store WHERE plugin_id = ? AND key = ?')
@@ -75,16 +91,16 @@ const migrateTransaction = db.transaction(
 
 // list: 按前缀分页遍历（4 种组合：有/无 cursor × asc/desc）
 const listAscStmt = db.prepare(
-  'SELECT key, LENGTH(value) as size, updated_at, version FROM store WHERE plugin_id = ? AND key > ? AND key LIKE ? ORDER BY key ASC LIMIT ?'
+  "SELECT key, LENGTH(value) as size, updated_at, version FROM store WHERE plugin_id = ? AND key > ? AND key LIKE ? ESCAPE '\\' ORDER BY key ASC LIMIT ?"
 )
 const listDescStmt = db.prepare(
-  'SELECT key, LENGTH(value) as size, updated_at, version FROM store WHERE plugin_id = ? AND key < ? AND key LIKE ? ORDER BY key DESC LIMIT ?'
+  "SELECT key, LENGTH(value) as size, updated_at, version FROM store WHERE plugin_id = ? AND key < ? AND key LIKE ? ESCAPE '\\' ORDER BY key DESC LIMIT ?"
 )
 const listAscNoCursorStmt = db.prepare(
-  'SELECT key, LENGTH(value) as size, updated_at, version FROM store WHERE plugin_id = ? AND key LIKE ? ORDER BY key ASC LIMIT ?'
+  "SELECT key, LENGTH(value) as size, updated_at, version FROM store WHERE plugin_id = ? AND key LIKE ? ESCAPE '\\' ORDER BY key ASC LIMIT ?"
 )
 const listDescNoCursorStmt = db.prepare(
-  'SELECT key, LENGTH(value) as size, updated_at, version FROM store WHERE plugin_id = ? AND key LIKE ? ORDER BY key DESC LIMIT ?'
+  "SELECT key, LENGTH(value) as size, updated_at, version FROM store WHERE plugin_id = ? AND key LIKE ? ESCAPE '\\' ORDER BY key DESC LIMIT ?"
 )
 
 // getMeta: 获取值 + 元数据
@@ -326,7 +342,7 @@ export class PluginStorage {
     const limit = Math.min(Math.max(options.limit ?? 50, 1), 500)
     const order = options.order ?? 'asc'
     const startsAfter = options.startsAfter
-    const pattern = prefix ? `${prefix}%` : '%'
+    const pattern = prefix ? `${escapeLikePrefix(prefix)}%` : '%'
 
     let rows: Record<string, unknown>[]
     if (startsAfter !== undefined) {
@@ -499,7 +515,7 @@ export class PluginStorage {
     const limit = Math.min(Math.max(options.limit ?? 50, 1), 500)
     const order = options.order ?? 'asc'
     const startsAfter = options.startsAfter
-    const pattern = prefix ? `${prefix}%` : '%'
+    const pattern = prefix ? `${escapeLikePrefix(prefix)}%` : '%'
 
     let rows: Record<string, unknown>[]
     if (startsAfter !== undefined) {
@@ -676,11 +692,10 @@ export class PluginStorage {
         'SELECT DISTINCT plugin_id FROM store WHERE plugin_id NOT LIKE ? AND plugin_id != ?'
       ).all(`${PLUGIN_NS_PREFIX}%`, 'global') as { plugin_id: string }[]
 
-      const reserved = new Set(['app', 'global', 'system'])
       let migratedCount = 0
 
       for (const { plugin_id: oldNs } of allNs) {
-        if (reserved.has(oldNs)) continue
+        if (!isMigratableLegacyPluginNamespace(oldNs)) continue
 
         const newNs = `${PLUGIN_NS_PREFIX}${oldNs}`
 

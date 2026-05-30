@@ -834,6 +834,19 @@ export interface ElectronAPI {
     transaction: (ops: StorageTransactionOp[], options?: StorageTransactionOptions) => Promise<StorageTransactionResult>
     append: (key: string, chunk: unknown, options?: StorageAppendOptions) => Promise<StorageAppendResult>
     watch: (options: StorageWatchOptions, callback: (event: StorageWatchEvent) => void) => () => void
+    encrypted: {
+      set: (key: string, value: unknown) => Promise<boolean>
+      get: (key: string) => Promise<unknown | undefined>
+      remove: (key: string) => Promise<boolean>
+      has: (key: string) => Promise<boolean>
+    }
+    attachment: {
+      put: (id: string, data: ArrayBuffer | Uint8Array, mimeType: string) => Promise<boolean>
+      get: (id: string) => Promise<Uint8Array | null>
+      getType: (id: string) => Promise<string | null>
+      remove: (id: string) => Promise<boolean>
+      list: (prefix?: string) => Promise<{ id: string; mimeType: string; size: number }[]>
+    }
   }
   settings: {
     get: () => Promise<{ settings: AppSettings; shortcutStatus: ShortcutStatusMap }>

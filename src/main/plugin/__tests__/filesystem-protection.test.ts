@@ -245,4 +245,22 @@ describe('PluginFilesystem 分级保护', () => {
       assert.equal(getDataPath(), pluginDataRoot)
     })
   })
+
+  describe('copy 隔离保护', () => {
+    it('copy 应同时检查源路径读取权限和目标路径写入权限', () => {
+      const source = readFileSync(
+        join(process.cwd(), 'src/main/plugin/filesystem.ts'),
+        'utf-8'
+      )
+      const copyMethod = source.match(/copy\(src: string, dest: string\): void \{[\s\S]*?\n {2}\}/)?.[0]
+
+      assert.ok(copyMethod, '应找到 PluginFilesystem.copy 方法')
+      assert.match(copyMethod, /this\.checkRead\(src\)/)
+      assert.match(copyMethod, /this\.checkWrite\(dest\)/)
+      assert.ok(
+        copyMethod.indexOf('this.checkRead(src)') < copyMethod.indexOf('this.checkWrite(dest)'),
+        'copy 应先验证源路径读取权限，再执行目标写入检查'
+      )
+    })
+  })
 })
