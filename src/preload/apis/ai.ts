@@ -214,7 +214,7 @@ export function createAiApi(ipcRenderer: IpcRenderer) {
 
     const api: AiApi = {
       call,
-      allModels: () => ipcRenderer.invoke('ai:models:all'),
+      allModels: (filter) => ipcRenderer.invoke('ai:models:all', filter),
       testConnection: (input) => ipcRenderer.invoke('ai:test', input),
       testConnectionStream,
       models: {

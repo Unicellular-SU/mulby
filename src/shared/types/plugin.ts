@@ -3,6 +3,7 @@ import type {
   AiImageGenerateProgressChunk,
   AiMessage,
   AiModel,
+  AiModelsFilter,
   AiOption,
   AiPromiseLike,
   AiSkillPreview,
@@ -735,7 +736,7 @@ export interface PluginAPI {
   }
   ai: {
     call: (option: AiOption, onChunk?: (chunk: AiMessage) => void) => AiPromiseLike<AiMessage>
-    allModels: () => Promise<AiModel[]>
+    allModels: (filter?: AiModelsFilter) => Promise<AiModel[]>
     abort: (requestId: string) => void
     skills: {
       listEnabled: () => Promise<AiSkillRecord[]>

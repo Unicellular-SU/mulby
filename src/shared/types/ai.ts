@@ -397,6 +397,27 @@ export type AiEndpointType =
   | 'image-generation'
   | 'jina-rerank'
 
+/**
+ * `allModels()` 的可选过滤条件。
+ * 所有字段均可选，未填写时不过滤对应维度。
+ */
+export interface AiModelsFilter {
+  /**
+   * 按端点类型筛选（单值或多值均可）。
+   * 例：只获取图像生成模型：{ endpointType: 'image-generation' }
+   */
+  endpointType?: AiEndpointType | AiEndpointType[]
+  /**
+   * 按能力筛选（单值或多值均可），满足任意一个即包含。
+   * 例：只获取有视觉能力的模型：{ capability: 'vision' }
+   */
+  capability?: AiModelType | AiModelType[]
+  /**
+   * 按 Provider 实例 ID 精确筛选。
+   */
+  providerId?: string
+}
+
 export interface AiProviderConfig {
   /**
    * Provider 实例 ID（用于区分多个同类型实例，如 v3-openai / official-openai）。
@@ -462,7 +483,7 @@ export interface AiPromiseLike<T> extends Promise<T> {
 
 export interface AiApi {
   call: (option: AiOption, streamCallback?: (chunk: AiMessage) => void) => AiPromiseLike<AiMessage>
-  allModels: () => Promise<AiModel[]>
+  allModels: (filter?: AiModelsFilter) => Promise<AiModel[]>
   testConnection: (input?: { model?: string; providerId?: string; apiKey?: string; baseURL?: string }) => Promise<{ success: boolean; message?: string }>
   testConnectionStream: (
     input: { model?: string; providerId?: string; apiKey?: string; baseURL?: string },

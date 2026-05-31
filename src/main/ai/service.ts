@@ -4,6 +4,9 @@ import type {
   AiImageGenerateProgressChunk,
   AiMessage,
   AiModel,
+  AiModelsFilter,
+  AiModelType,
+  AiEndpointType,
   AiOption,
   AiPolicyDebugInfo,
   AiProviderConfig,
@@ -206,8 +209,34 @@ export class AiService {
     }
   }
 
-  allModels() {
-    return getAllModels()
+  allModels(filter?: AiModelsFilter) {
+    let models = getAllModels()
+    if (!filter) return models
+
+    if (filter.endpointType !== undefined) {
+      const types = new Set<AiEndpointType>(
+        Array.isArray(filter.endpointType) ? filter.endpointType : [filter.endpointType]
+      )
+      models = models.filter((m) => m.endpointType && types.has(m.endpointType))
+    }
+
+    if (filter.capability !== undefined) {
+      const caps = new Set<AiModelType>(
+        Array.isArray(filter.capability) ? filter.capability : [filter.capability]
+      )
+      models = models.filter(
+        (m) => m.capabilities && m.capabilities.some((c) => caps.has(c.type))
+      )
+    }
+
+    if (filter.providerId !== undefined) {
+      const pid = String(filter.providerId || '').trim()
+      if (pid) {
+        models = models.filter((m) => m.providerRef === pid || m.providerId === pid)
+      }
+    }
+
+    return models
   }
 
   async call(option: AiOption, onChunk?: (chunk: AiMessage) => void): Promise<AiMessage> {

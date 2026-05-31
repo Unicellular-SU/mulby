@@ -482,26 +482,35 @@ export function AddModelModal({
             value={newModel.description}
             onChange={(e) => setNewModel((prev) => ({ ...prev, description: e.target.value }))}
           />
+          <div className="flex flex-col gap-1">
+            <label className="text-[11px] text-slate-500 dark:text-slate-400">端点类型</label>
+            <UnifiedSelect
+              value={newModel.endpointType || ''}
+              onChange={(e) => setNewModel((prev) => ({
+                ...prev,
+                endpointType: (e.target.value || undefined) as AiEndpointType | undefined
+              }))}
+            >
+              <option value="">默认 (openai)</option>
+              {ENDPOINT_TYPE_OPTIONS.map((endpointType) => (
+                <option key={endpointType} value={endpointType}>
+                  {endpointType}
+                </option>
+              ))}
+            </UnifiedSelect>
+          </div>
           {newModelNeedsEndpointType && (
-            <>
-              <UnifiedSelect
-                value={newModel.endpointType || 'openai'}
-                onChange={(e) => setNewModel((prev) => ({ ...prev, endpointType: e.target.value as AiEndpointType }))}
-              >
-                {ENDPOINT_TYPE_OPTIONS.map((endpointType) => (
-                  <option key={endpointType} value={endpointType}>
-                    {endpointType}
-                  </option>
-                ))}
-              </UnifiedSelect>
+            <div className="flex flex-col gap-1">
+              <label className="text-[11px] text-slate-500 dark:text-slate-400">支持的端点类型（逗号分隔，可选）</label>
               <input
                 className={classNames.inputClass}
-                placeholder="supported endpoint types（逗号分隔，可选）"
+                placeholder="openai, anthropic, gemini ..."
                 value={formatEndpointTypes(newModel.supportedEndpointTypes)}
                 onChange={(e) => setNewModel((prev) => ({ ...prev, supportedEndpointTypes: parseEndpointTypes(e.target.value) }))}
               />
-            </>
+            </div>
           )}
+
         </div>
 
         <div className="mt-4">

@@ -169,32 +169,41 @@ export default function ProviderModelsPanel({
                   }}
                 />
               </div>
-              {selectedProviderSupportsEndpointRouting && (
-                <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <div className="flex flex-col gap-1">
+                  <label className="text-[11px] text-slate-500 dark:text-slate-400">端点类型</label>
                   <UnifiedSelect
-                    value={model.endpointType || 'openai'}
+                    value={model.endpointType || ''}
                     onChange={(e) => {
                       const actualIndex = (aiDraft?.models || []).findIndex((item) => item.id === model.id)
-                      handleUpdateModel(actualIndex, { endpointType: e.target.value as AiEndpointType })
+                      handleUpdateModel(actualIndex, {
+                        endpointType: (e.target.value || undefined) as AiEndpointType | undefined
+                      })
                     }}
                   >
+                    <option value="">默认 (openai)</option>
                     {ENDPOINT_TYPE_OPTIONS.map((endpointType) => (
                       <option key={endpointType} value={endpointType}>
                         {endpointType}
                       </option>
                     ))}
                   </UnifiedSelect>
-                  <input
-                    className={inputClass}
-                    placeholder="supported endpoint types（逗号分隔，可选）"
-                    value={formatEndpointTypes(model.supportedEndpointTypes)}
-                    onChange={(e) => {
-                      const actualIndex = (aiDraft?.models || []).findIndex((item) => item.id === model.id)
-                      handleUpdateModel(actualIndex, { supportedEndpointTypes: parseEndpointTypes(e.target.value) })
-                    }}
-                  />
                 </div>
-              )}
+                {selectedProviderSupportsEndpointRouting && (
+                  <div className="flex flex-col gap-1">
+                    <label className="text-[11px] text-slate-500 dark:text-slate-400">支持的端点类型（逗号分隔，可选）</label>
+                    <input
+                      className={inputClass}
+                      placeholder="openai, anthropic, gemini ..."
+                      value={formatEndpointTypes(model.supportedEndpointTypes)}
+                      onChange={(e) => {
+                        const actualIndex = (aiDraft?.models || []).findIndex((item) => item.id === model.id)
+                        handleUpdateModel(actualIndex, { supportedEndpointTypes: parseEndpointTypes(e.target.value) })
+                      }}
+                    />
+                  </div>
+                )}
+              </div>
 
               <ModelCapabilitiesEditor
                 model={model}

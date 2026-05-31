@@ -125,9 +125,10 @@ export function registerAiHandlers(hooks?: AiHandlersHooks) {
     aiService.abort(requestId)
   })
 
-  ipcMain.handle('ai:models:all', async () => {
-    return aiService.allModels()
+  ipcMain.handle('ai:models:all', async (_event, filter?: unknown) => {
+    return aiService.allModels(filter as Parameters<typeof aiService.allModels>[0])
   })
+
 
   ipcMain.handle('ai:models:fetch', async (event: IpcMainInvokeEvent, input) => {
     ensureAiSystemWindowCaller(event, 'ai:models:fetch')

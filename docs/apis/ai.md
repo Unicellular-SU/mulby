@@ -356,15 +356,54 @@ const response = await ai.call({
 
 ## 模型管理
 
-### allModels()
+### allModels(filter?)
 [Renderer] [Backend]
-返回当前可用模型列表（含设置中定义的模型）。
+返回当前可用模型列表（含设置中定义的模型）。可传入可选过滤条件，按端点类型、能力或 Provider 精确筛选。
 
 ```javascript
+// 获取全部模型（无过滤）
 const models = await ai.allModels();
+
+// 只获取图像生成模型
+const imageModels = await ai.allModels({ endpointType: 'image-generation' });
+
+// 只获取 Jina 重排序模型
+const rerankModels = await ai.allModels({ endpointType: 'jina-rerank' });
+
+// 只获取有视觉能力的模型（单值或多值均可）
+const visionModels = await ai.allModels({ capability: 'vision' });
+
+// 按多个端点类型筛选（数组形式）
+const textModels = await ai.allModels({ endpointType: ['openai', 'anthropic', 'gemini'] });
+
+// 按 Provider ID 筛选
+const providerModels = await ai.allModels({ providerId: 'my-openai-instance' });
+```
+
+**参数**：`filter` (AiModelsFilter, 可选)
+
+```typescript
+interface AiModelsFilter {
+  /**
+   * 按端点类型筛选（单值或多值）。
+   * 枚举值：'openai' | 'openai-response' | 'anthropic' | 'gemini' | 'image-generation' | 'jina-rerank'
+   */
+  endpointType?: AiEndpointType | AiEndpointType[]
+  /**
+   * 按能力筛选（单值或多值），满足任意一个即包含。
+   * 枚举值：'text' | 'vision' | 'file' | 'reasoning' | 'image-generation' | ...
+   */
+  capability?: AiModelType | AiModelType[]
+  /**
+   * 按 Provider 实例 ID 精确筛选。
+   */
+  providerId?: string
+}
 ```
 
 **返回值**: `Promise<AiModel[]>`
+
+> **提示**：端点类型由用户在 AI 设置 → 模型管理中为每个模型配置，对所有 Provider 类型均可设置。图像生成插件建议使用 `{ endpointType: 'image-generation' }` 筛选，重排序插件使用 `{ endpointType: 'jina-rerank' }`，避免展示不兼容的模型。
 
 ### models.fetch(input)
 [Renderer]

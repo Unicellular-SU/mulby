@@ -29,6 +29,7 @@ import type {
   AiOption,
   AiMessage,
   AiImageGenerateProgressChunk,
+  AiModelsFilter,
   AiPromiseLike
 } from '../../shared/types/ai'
 import type { CommandExecutionProfile } from '../../shared/types/settings'
@@ -634,7 +635,7 @@ ${item.files.map(p => `    <string>${p}</string>`).join('\n')}
           void aiService.abort(requestId)
         })
       },
-      allModels: async () => aiService.allModels(),
+      allModels: async (filter?: AiModelsFilter) => aiService.allModels(filter),
       abort: (requestId: string) => aiService.abort(requestId),
       skills: {
         listEnabled: async () => {
