@@ -33,7 +33,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 24
+          node-version: 22
           cache: pnpm
           cache-dependency-path: pnpm-lock.yaml
 
@@ -62,7 +62,7 @@ jobs:
         run: |
           {
             echo "## Quality Gate"
-            echo "- Node.js: 24"
+            echo "- Node.js: 22"
             echo "- OS: ubuntu-latest"
             echo "- App: install -> verify:app"
           } >> "$GITHUB_STEP_SUMMARY"

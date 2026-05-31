@@ -94,17 +94,6 @@
   "optionalDependencies": {
     "node-mac-permissions": "^2.5.0"
   },
-  "pnpm": {
-    "onlyBuiltDependencies": [
-      "better-sqlite3",
-      "electron",
-      "esbuild",
-      "koffi",
-      "node-mac-permissions",
-      "sharp",
-      "usocket"
-    ]
-  },
   "build": {
     "appId": "com.mulby.app",
     "productName": "Mulby",
