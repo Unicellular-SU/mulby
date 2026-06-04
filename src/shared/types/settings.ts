@@ -412,13 +412,31 @@ export interface InputSettings {
   autoPasteMaxAge: number         // 剪贴板内容最大有效期（毫秒），默认 5000
 }
 
+// 开发项目类型：single=目录直接含 manifest.json；collection=父目录扫子插件
+export type PluginProjectType = 'single' | 'collection'
+
+// 开发项目来源
+export type PluginProjectSource = 'added' | 'imported' | 'created' | 'migrated'
+
+// 单个开发项目记录（决策 B：pluginProjects[] 设置模型）
+export interface PluginProjectEntry {
+  id: string                    // 稳定 id，如 `proj-<timestamp>-<rand>`
+  path: string                  // path.resolve 后的绝对路径
+  type: PluginProjectType       // single / collection
+  source: PluginProjectSource   // 添加来源
+  label?: string                // 可选展示名（缺省回退 manifest.displayName / basename）
+  createdAt: number
+  lastOpenedAt?: number
+}
+
 // 开发者模式设置
 export interface DeveloperSettings {
-  enabled: boolean           // 是否启用开发者模式
-  pluginPaths: string[]      // 外部插件开发目录列表
-  autoReload: boolean        // 是否自动热重载
-  showDevTools: boolean      // 是否自动打开 DevTools
-  logLevel: LogLevel         // 日志级别
+  enabled: boolean                      // 是否启用开发者模式
+  pluginPaths: string[]                 // LEGACY：外部插件开发目录列表，保留只读，仅作迁移来源
+  pluginProjects: PluginProjectEntry[]  // NEW：开发项目的唯一事实来源
+  autoReload: boolean                   // 是否自动热重载
+  showDevTools: boolean                 // 是否自动打开 DevTools
+  logLevel: LogLevel                    // 日志级别
 }
 
 // 窗口设置

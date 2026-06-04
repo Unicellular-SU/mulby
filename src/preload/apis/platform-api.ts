@@ -238,10 +238,30 @@ export function createPlatformApi(ipcRenderer: IpcRenderer, options?: { restrict
     },
 
     developer: {
+      // LEGACY
       addPluginPath: (path: string) => ipcRenderer.invoke('developer:addPluginPath', path),
       removePluginPath: (path: string) => ipcRenderer.invoke('developer:removePluginPath', path),
       reloadPlugins: () => ipcRenderer.invoke('developer:reloadPlugins'),
-      selectDirectory: () => ipcRenderer.invoke('developer:selectDirectory')
+      selectDirectory: () => ipcRenderer.invoke('developer:selectDirectory'),
+      // NEW（pluginProjects[] 模型）
+      addPluginProject: (args: { path: string; source?: 'added' | 'imported' | 'created' | 'migrated' }) =>
+        ipcRenderer.invoke('developer:addPluginProject', args),
+      removePluginProject: (args: { id?: string; path?: string }) =>
+        ipcRenderer.invoke('developer:removePluginProject', args),
+      reloadPlugin: (pluginId: string) =>
+        ipcRenderer.invoke('developer:reloadPlugin', { pluginId }),
+      reloadPluginByPath: (path: string) =>
+        ipcRenderer.invoke('developer:reloadPluginByPath', { path }),
+      validatePlugin: (path: string) =>
+        ipcRenderer.invoke('developer:validatePlugin', { path }),
+      listPluginProjects: () => ipcRenderer.invoke('developer:listPluginProjects'),
+      createPlugin: (args: { targetDir: string; name: string; template?: 'react' | 'basic' }) =>
+        ipcRenderer.invoke('developer:createPlugin', args),
+      buildPlugin: (path: string) => ipcRenderer.invoke('developer:buildPlugin', { path }),
+      packPlugin: (path: string) => ipcRenderer.invoke('developer:packPlugin', { path }),
+      openPluginDir: (path: string) => ipcRenderer.invoke('developer:openPluginDir', { path }),
+      updateProjectMeta: (args: { id: string; lastOpenedAt?: number; label?: string }) =>
+        ipcRenderer.invoke('developer:updateProjectMeta', args)
     },
 
     media: {

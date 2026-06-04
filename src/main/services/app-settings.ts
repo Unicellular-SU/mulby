@@ -30,6 +30,12 @@ import type {
 } from '../../shared/types/settings'
 import { DEFAULT_FLOATING_BALL_ICON_ID } from '../../shared/floating-ball-icons'
 import { normalizeFloatingBallSettings } from './floating-ball-utils'
+import {
+  DEFAULT_DEVELOPER_SETTINGS,
+  normalizeDeveloperSettings
+} from './developer-settings-utils'
+
+export { normalizeDeveloperSettings } from './developer-settings-utils'
 
 const SETTINGS_NAMESPACE = 'app'
 const SETTINGS_KEY = 'settings'
@@ -105,13 +111,7 @@ const DEFAULT_SETTINGS: AppSettings = {
     modifier: process.platform === 'darwin' ? 'Command' : 'Ctrl'
   },
   storeSources: [],
-  developer: {
-    enabled: false,
-    pluginPaths: [],
-    autoReload: true,
-    showDevTools: false,
-    logLevel: 'info'
-  },
+  developer: { ...DEFAULT_DEVELOPER_SETTINGS },
   commandRunner: {
     enabled: true,
     requireConsent: true,
@@ -977,10 +977,10 @@ function mergeSettings(current: AppSettings, next: Partial<AppSettings>): AppSet
       ...(next.doubleTap || {})
     }),
     storeSources: next.storeSources ?? current.storeSources,
-    developer: {
+    developer: normalizeDeveloperSettings({
       ...current.developer,
       ...(next.developer || {})
-    },
+    }),
     commandRunner: normalizeCommandRunnerSettings({
       ...current.commandRunner,
       ...(next.commandRunner || {})
@@ -1038,7 +1038,8 @@ function sanitizeShortcuts(settings: AppSettings): AppSettings {
     pluginDirectoryAccess: normalizePluginDirectoryAccessSettings(settings.pluginDirectoryAccess),
     aiTooling: normalizeAiToolingSettings(settings.aiTooling),
     tray: normalizeTraySettings(settings.tray),
-    floatingBall: normalizeFloatingBallSettings(settings.floatingBall)
+    floatingBall: normalizeFloatingBallSettings(settings.floatingBall),
+    developer: normalizeDeveloperSettings(settings.developer)
   }
 
   if (next.shortcuts.openSettings === 'CommandOrControl+Comma') {

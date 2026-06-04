@@ -1,7 +1,8 @@
 import { app, Notification } from 'electron'
-import { join } from 'path'
-import { existsSync, rmSync } from 'fs'
+import { join, resolve as resolvePath, sep } from 'path'
+import { existsSync, rmSync, readdirSync } from 'fs'
 import { getInternalPluginDirs, isSystemPlugin } from './internal-plugins'
+import { validatePluginAt } from './plugin-validator'
 import { SystemCommandExecutor } from './system-command-executor'
 import { shouldRestoreMainWindowAfterPreCapture } from './pre-capture-window-policy'
 import { collectDevPluginWatchTargets } from './dev-reload-utils'
@@ -33,6 +34,11 @@ import {
   PluginLaunchOnStartupState,
   PluginRunResult
 } from '../../shared/types/plugin'
+import type { PluginProjectEntry } from '../../shared/types/settings'
+import type {
+  PluginProjectPluginStatus,
+  PluginProjectStatus
+} from '../../shared/types/developer'
 import { PluginSearchWorker } from './search-worker-manager'
 import { getEmptyQuerySearchResults } from './empty-query-search'
 import { SystemPluginWindowManager } from '../services/system-plugin-window-manager'
@@ -428,19 +434,28 @@ export class PluginManager {
     // 开发目录的插件（项目根目录，仅在开发模式下有效）
     const devPluginsDir = join(process.cwd(), 'plugins')
 
-    // 用户自定义的开发目录（开发者模式启用时生效）
-    const customDevDirs = developer.enabled ? developer.pluginPaths : []
+    // 用户自定义的开发项目（开发者模式启用时生效）
+    // collection=父目录批量扫描（保留旧语义）；single=目录直接含 manifest.json
+    const projects = developer.enabled ? developer.pluginProjects : []
+    const collectionDirs = projects
+      .filter(p => p.type === 'collection')
+      .map(p => p.path)
+      .filter(d => existsSync(d))
+    const singleDirs = projects
+      .filter(p => p.type === 'single')
+      .map(p => p.path)
+      .filter(d => existsSync(d))
 
     const dirs = [
       userPluginsDir,
       ...(app.isPackaged ? [] : [devPluginsDir]),  // 打包后不从 cwd/plugins 加载
-      ...customDevDirs.filter(d => existsSync(d))   // 自定义的开发目录
+      ...collectionDirs                            // 自定义的集合开发目录
     ].filter(d => existsSync(d))
 
     // 记录开发目录，用于标记开发插件
     const devDirs = new Set([
       ...(app.isPackaged ? [] : [devPluginsDir]),
-      ...customDevDirs
+      ...collectionDirs
     ])
 
     // 第一步：加载内置插件（系统插件等）
@@ -461,75 +476,24 @@ export class PluginManager {
       const loader = new PluginLoader(dir)
       const plugins = loader.loadAll()
       for (const plugin of plugins) {
-        // 标记开发中的插件
-        plugin.isDev = Array.from(devDirs).some(devDir => plugin.path.startsWith(devDir))
-
-        // 检测 ID 冲突，并按来源优先级决定胜负：开发版 > 已安装版。
-        const existing = this.plugins.get(plugin.id)
-        if (existing) {
-          // 系统/内置插件受保护，任何来源都不可覆盖
-          if (isSystemPlugin(plugin.id)) {
-            log.warn(
-              `[PluginManager] ID conflict with system plugin: "${plugin.id}" — skipped: ${plugin.path}`
-            )
-            continue
-          }
-
-          const existingIsDev = existing.isDev === true
-
-          if (plugin.isDev && !existingIsDev) {
-            // 开发版覆盖已安装版：开发版胜出，记录被覆盖的安装版路径
-            log.info(
-              `[PluginManager] Dev plugin overrides installed: "${plugin.id}"\n` +
-              `  - Active (dev):   ${plugin.path}\n` +
-              `  - Shadowed:       ${existing.path}`
-            )
-            plugin.overriddenInstallPath = existing.path
-            // 移除被覆盖的已安装版，下方按正常流程注册开发版（fallthrough）
-            this.plugins.delete(existing.id)
-          } else if (!plugin.isDev && existingIsDev) {
-            // 已安装版让位给已生效的开发版：在开发版上记录冲突来源，跳过安装版
-            existing.overriddenInstallPath = plugin.path
-            log.info(
-              `[PluginManager] Installed plugin shadowed by active dev plugin: "${plugin.id}"\n` +
-              `  - Active (dev):   ${existing.path}\n` +
-              `  - Shadowed:       ${plugin.path}`
-            )
-            continue
-          } else {
-            // 同源重复（dev↔dev 或 installed↔installed）：保留先到者
-            log.warn(
-              `[PluginManager] ID conflict detected: "${plugin.id}"\n` +
-              `  - Existing: ${existing.path}\n` +
-              `  - Skipped:  ${plugin.path}\n` +
-              `  Consider adding unique "id" field to manifest.json`
-            )
-            continue
-          }
-        }
-
-        // 应用持久化的状态
-        const state = this.stateManager.getPluginState(plugin.id)
-        plugin.enabled = state.enabled
-
-        this.plugins.set(plugin.id, plugin)
-
-        // 注册 plugin tools（如果有声明）
-        if (plugin.enabled && plugin.manifest.tools && plugin.manifest.tools.length > 0) {
-          this.notifyPluginToolsChanged(plugin, 'refresh')
-        }
-
-        // 如果是开发模式插件，启动文件监听
-        if (plugin.isDev && plugin.enabled && shouldWatchDevPlugins) {
-          this.setupPluginWatcher(plugin)
-        }
-
-        // 注意：不在这里调用 onLoad 钩子
-        // UtilityProcess 采用懒加载，只有在插件首次运行时才创建
+        // 标记开发中的插件（集合目录用前缀匹配）
+        const isDev = Array.from(devDirs).some(devDir => plugin.path.startsWith(devDir))
+        this.registerLoadedPlugin(plugin, { isDev, shouldWatchDevPlugins })
       }
     }
 
-    log.info(`Loaded ${this.plugins.size} plugins from: ${dirs.join(', ')}`)
+    // 加载"单个插件目录"（目录根部直接含 manifest.json），始终标记为开发插件
+    for (const dir of singleDirs) {
+      const loader = new PluginLoader(dir)
+      const plugin = loader.loadPlugin(dir)
+      if (!plugin) {
+        log.warn(`[PluginManager] single plugin dir invalid (no/invalid manifest): ${dir}`)
+        continue
+      }
+      this.registerLoadedPlugin(plugin, { isDev: true, shouldWatchDevPlugins })
+    }
+
+    log.info(`Loaded ${this.plugins.size} plugins from: ${dirs.join(', ')}${singleDirs.length ? `; single: ${singleDirs.join(', ')}` : ''}`)
 
     // 启动任务调度器
     await this.taskScheduler.start()
@@ -547,6 +511,83 @@ export class PluginManager {
     void this.syncSearchWorker().catch((error) => {
       log.warn('[PluginManager] Search worker sync failed', error)
     })
+  }
+
+  /**
+   * 注册一个已加载的插件实例，复用统一的冲突策略：
+   * - 系统插件受保护，任何来源都不可覆盖
+   * - 开发版 > 已安装版（dev 覆盖 installed，记录 overriddenInstallPath）
+   * - 同源重复（dev↔dev / installed↔installed）保留先到者
+   * single 与 collection 加载共用此方法。
+   */
+  private registerLoadedPlugin(
+    plugin: Plugin,
+    opts: { isDev: boolean; shouldWatchDevPlugins: boolean }
+  ): void {
+    plugin.isDev = opts.isDev
+
+    // 检测 ID 冲突，并按来源优先级决定胜负：开发版 > 已安装版。
+    const existing = this.plugins.get(plugin.id)
+    if (existing) {
+      // 系统/内置插件受保护，任何来源都不可覆盖
+      if (isSystemPlugin(plugin.id)) {
+        log.warn(
+          `[PluginManager] ID conflict with system plugin: "${plugin.id}" — skipped: ${plugin.path}`
+        )
+        return
+      }
+
+      const existingIsDev = existing.isDev === true
+
+      if (plugin.isDev && !existingIsDev) {
+        // 开发版覆盖已安装版：开发版胜出，记录被覆盖的安装版路径
+        log.info(
+          `[PluginManager] Dev plugin overrides installed: "${plugin.id}"\n` +
+          `  - Active (dev):   ${plugin.path}\n` +
+          `  - Shadowed:       ${existing.path}`
+        )
+        plugin.overriddenInstallPath = existing.path
+        // 移除被覆盖的已安装版，下方按正常流程注册开发版（fallthrough）
+        this.plugins.delete(existing.id)
+      } else if (!plugin.isDev && existingIsDev) {
+        // 已安装版让位给已生效的开发版：在开发版上记录冲突来源，跳过安装版
+        existing.overriddenInstallPath = plugin.path
+        log.info(
+          `[PluginManager] Installed plugin shadowed by active dev plugin: "${plugin.id}"\n` +
+          `  - Active (dev):   ${existing.path}\n` +
+          `  - Shadowed:       ${plugin.path}`
+        )
+        return
+      } else {
+        // 同源重复（dev↔dev 或 installed↔installed）：保留先到者
+        log.warn(
+          `[PluginManager] ID conflict detected: "${plugin.id}"\n` +
+          `  - Existing: ${existing.path}\n` +
+          `  - Skipped:  ${plugin.path}\n` +
+          `  Consider adding unique "id" field to manifest.json`
+        )
+        return
+      }
+    }
+
+    // 应用持久化的状态
+    const state = this.stateManager.getPluginState(plugin.id)
+    plugin.enabled = state.enabled
+
+    this.plugins.set(plugin.id, plugin)
+
+    // 注册 plugin tools（如果有声明）
+    if (plugin.enabled && plugin.manifest.tools && plugin.manifest.tools.length > 0) {
+      this.notifyPluginToolsChanged(plugin, 'refresh')
+    }
+
+    // 如果是开发模式插件，启动文件监听
+    if (plugin.isDev && plugin.enabled && opts.shouldWatchDevPlugins) {
+      this.setupPluginWatcher(plugin)
+    }
+
+    // 注意：不在这里调用 onLoad 钩子
+    // UtilityProcess 采用懒加载，只有在插件首次运行时才创建
   }
 
   private launchUserStartupPlugins(): void {
@@ -2383,6 +2424,228 @@ export class PluginManager {
 
     // 发送系统通知提示开发者插件元数据已更新
     this.notifyDevPluginReloaded(nextPlugin, 'metadata')
+  }
+
+  /**
+   * 局部重载单个插件（公开方法，供 Developer IPC 调用）。
+   * 内部复用 reloadPluginMetadata（重读 manifest + 重启 host），不全量重载。
+   */
+  async reloadPlugin(pluginId: string): Promise<{ success: boolean; error?: string }> {
+    const plugin = this.plugins.get(pluginId)
+    if (!plugin) {
+      return { success: false, error: '插件不存在' }
+    }
+    try {
+      await this.reloadPluginMetadata(pluginId)
+      return { success: true }
+    } catch (e) {
+      return { success: false, error: e instanceof Error ? e.message : 'reload failed' }
+    }
+  }
+
+  /**
+   * 返回开发项目及其下插件的运行态状态（供开发者工具 UI 列表）。
+   * - single：解析该目录的 0/1 个插件
+   * - collection：扫描子目录解析多个插件
+   * 每个插件用 validatePluginAt 校验，并查 this.plugins 得到 loaded/enabled/isDev/冲突来源。
+   */
+  getPluginProjectStatus(projects: PluginProjectEntry[]): PluginProjectStatus[] {
+    const results: PluginProjectStatus[] = []
+
+    for (const project of projects) {
+      const exists = existsSync(project.path)
+      const pluginDirs: string[] = []
+
+      if (exists) {
+        if (project.type === 'single') {
+          pluginDirs.push(project.path)
+        } else {
+          // collection：扫描一层子目录
+          try {
+            for (const entry of readdirSync(project.path, { withFileTypes: true })) {
+              if (entry.isDirectory()) {
+                pluginDirs.push(join(project.path, entry.name))
+              }
+            }
+          } catch {
+            // 目录读取失败时按空处理
+          }
+        }
+      }
+
+      const plugins: PluginProjectPluginStatus[] = []
+      for (const dir of pluginDirs) {
+        // 单个插件目录的校验异常必须被隔离，避免整个 listPluginProjects IPC 失败
+        // 导致开发者工具刷新图标永久 loading。
+        try {
+          if (!existsSync(join(dir, 'manifest.json'))) continue
+          const validation = validatePluginAt(dir)
+          const summary = validation.manifest
+          const id = summary?.id || ''
+
+          // 查运行态：优先按 id 命中；同时按路径匹配（处理冲突场景）
+          const loadedById = id ? this.plugins.get(id) : undefined
+          const loadedByPath = Array.from(this.plugins.values()).find(
+            p => resolvePath(p.path) === resolvePath(dir)
+          )
+          const loadedPlugin = loadedByPath || loadedById
+
+          plugins.push({
+            id,
+            displayName: summary?.displayName || id || dir,
+            path: dir,
+            manifestValid: validation.valid,
+            manifestErrors: validation.errors,
+            mainEntryFound: validation.mainEntryFound,
+            built: validation.built,
+            loaded: !!loadedPlugin,
+            enabled: loadedPlugin?.enabled === true,
+            isDev: loadedPlugin?.isDev === true,
+            idConflictWith: loadedPlugin?.overriddenInstallPath
+          })
+        } catch (err) {
+          plugins.push({
+            id: '',
+            displayName: dir,
+            path: dir,
+            manifestValid: false,
+            manifestErrors: [`校验失败：${err instanceof Error ? err.message : String(err)}`],
+            mainEntryFound: false,
+            built: false,
+            loaded: false,
+            enabled: false,
+            isDev: false
+          })
+        }
+      }
+
+      results.push({
+        projectId: project.id,
+        path: project.path,
+        type: project.type,
+        source: project.source,
+        label: project.label,
+        exists,
+        plugins
+      })
+    }
+
+    return results
+  }
+
+  /**
+   * 增量加载单个开发项目（不触发全量 init / resetRuntimeForInit / closeAll，不影响其他插件）。
+   * single → 目标目录本身；collection → 扫描一层含 manifest.json 的子目录。
+   * 用于 Developer IPC 的 addPluginProject/createPlugin，避免每次操作全量重载导致主进程卡死、
+   * 活动窗口被关闭后又被重载流程重新拉起（表现为"自己启动"）。
+   */
+  async loadDevProject(entry: PluginProjectEntry): Promise<{ loaded: string[]; errors: string[] }> {
+    const loaded: string[] = []
+    const errors: string[] = []
+
+    if (!existsSync(entry.path)) {
+      return { loaded, errors: [`目录不存在：${entry.path}`] }
+    }
+
+    const shouldWatchDevPlugins = await this.shouldAutoReloadDevPlugins()
+
+    const dirs: string[] = []
+    if (entry.type === 'single') {
+      dirs.push(entry.path)
+    } else {
+      try {
+        for (const e of readdirSync(entry.path, { withFileTypes: true })) {
+          if (e.isDirectory() && existsSync(join(entry.path, e.name, 'manifest.json'))) {
+            dirs.push(join(entry.path, e.name))
+          }
+        }
+      } catch {
+        errors.push(`读取目录失败：${entry.path}`)
+      }
+    }
+
+    for (const dir of dirs) {
+      try {
+        const loader = new PluginLoader(dir)
+        const plugin = loader.loadPlugin(dir)
+        if (!plugin) {
+          errors.push(`无效插件目录（manifest 缺失/无效）：${dir}`)
+          continue
+        }
+        this.registerLoadedPlugin(plugin, { isDev: true, shouldWatchDevPlugins })
+        // registerLoadedPlugin 命中冲突时可能跳过；以最终 map 中是否为本实例判断是否成功登记
+        if (this.plugins.get(plugin.id) === plugin) {
+          loaded.push(plugin.id)
+          if (plugin.enabled) {
+            this.preparePluginPreload(plugin)
+          }
+        }
+      } catch (err) {
+        errors.push(`加载失败：${dir}（${err instanceof Error ? err.message : String(err)}）`)
+      }
+    }
+
+    if (loaded.length > 0) {
+      this.commandShortcutManager.refresh()
+      void this.syncSearchWorker().catch(() => {})
+    }
+    return { loaded, errors }
+  }
+
+  /**
+   * 增量卸载位于给定路径（及其子目录）下的开发插件。
+   * 仅清理运行态（窗口/host/watcher/搜索/工具注册），不删除磁盘文件、不全量 init。
+   * 同时清除可能被误持久化的"开机启动"标记，避免移除后插件仍被启动流程拉起。
+   */
+  async unloadDevProject(paths: string[]): Promise<{ unloaded: string[] }> {
+    const roots = paths.map((p) => resolvePath(p))
+    const unloaded: string[] = []
+
+    const targets = this.getAll().filter((plugin) => {
+      const pp = resolvePath(plugin.path)
+      return roots.some((root) => pp === root || pp.startsWith(root + sep))
+    })
+
+    for (const plugin of targets) {
+      const pluginId = plugin.id
+      try {
+        if (this.residentSessions.has(pluginId)) {
+          this.evictResidentSession(pluginId, 'dev-project-unload')
+        }
+        this.cancelPrewarmEntry(pluginId)
+        this.stopPluginWatcher(pluginId)
+        this.closePluginWindows(pluginId, true)
+
+        if (this.backgroundManager.isRunning(pluginId)) {
+          await this.backgroundManager.stop(pluginId, 'dev-project-unload')
+        }
+        if (this.useUtilityProcess && this.hostManager.isHostReady(pluginId)) {
+          await this.hostManager.destroyHost(pluginId, { force: true, reason: 'dev-project-unload' })
+        }
+
+        // 防止移除后仍被"开机启动"流程拉起
+        try {
+          this.stateManager.setLaunchOnStartup(pluginId, false)
+        } catch {
+          // 忽略：插件可能本就没有该状态
+        }
+
+        this.notifyPluginToolsChanged(plugin, 'remove')
+        this.plugins.delete(pluginId)
+        this.runners.delete(pluginId)
+        this.initializedPlugins.delete(pluginId)
+        this.workerOnloadedPlugins.delete(pluginId)
+        unloaded.push(pluginId)
+      } catch (err) {
+        log.warn(`[PluginManager] unloadDevProject failed for ${pluginId}:`, err)
+      }
+    }
+
+    if (unloaded.length > 0) {
+      this.commandShortcutManager.refresh()
+      void this.syncSearchWorker().catch(() => {})
+    }
+    return { unloaded }
   }
 
   /**

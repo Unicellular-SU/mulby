@@ -867,10 +867,37 @@ export interface ElectronAPI {
     onShortcutStatusChanged: (callback: (status: ShortcutStatusMap) => void) => () => void
   }
   developer: {
+    // LEGACY
     addPluginPath: (path: string) => Promise<{ success: boolean; error?: string }>
     removePluginPath: (path: string) => Promise<{ success: boolean }>
     reloadPlugins: () => Promise<{ success: boolean }>
     selectDirectory: () => Promise<string | null>
+    // NEW（pluginProjects[] 模型）
+    addPluginProject: (args: {
+      path: string
+      source?: import('./settings').PluginProjectSource
+    }) => Promise<import('./developer').AddPluginProjectResult>
+    removePluginProject: (args: {
+      id?: string
+      path?: string
+    }) => Promise<import('./developer').DeveloperOpResult>
+    reloadPlugin: (pluginId: string) => Promise<import('./developer').DeveloperOpResult>
+    reloadPluginByPath: (path: string) => Promise<import('./developer').DeveloperOpResult>
+    validatePlugin: (path: string) => Promise<import('./developer').PluginValidationResult>
+    listPluginProjects: () => Promise<import('./developer').PluginProjectStatus[]>
+    createPlugin: (args: {
+      targetDir: string
+      name: string
+      template?: 'react' | 'basic'
+    }) => Promise<import('./developer').CreatePluginResult>
+    buildPlugin: (path: string) => Promise<import('./developer').BuildPluginResult>
+    packPlugin: (path: string) => Promise<import('./developer').PackPluginResult>
+    openPluginDir: (path: string) => Promise<import('./developer').DeveloperOpResult>
+    updateProjectMeta: (args: {
+      id: string
+      lastOpenedAt?: number
+      label?: string
+    }) => Promise<import('./developer').DeveloperOpResult>
   }
   plugin: {
     getAll: () => Promise<PluginInfo[]>
