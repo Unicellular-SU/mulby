@@ -992,9 +992,17 @@ export function registerWindowHandlers(
   // 关闭当前插件
   ipcMain.on('plugin:close', (event) => {
     const win = windowFromWebContents(event.sender)
+    const mainWin = getMainWindow()
+
+    // 清理 SubInput 状态（与 plugin:out 保持一致）
+    if (getSubInputOwnerId() === event.sender.id) {
+      clearSubInputState()
+      mainWin?.webContents.send('subInput:disabled')
+    }
+
     if (win) {
-      const mainWin = getMainWindow()
-      if (win === mainWin) {
+      const panelWin = pluginWindowManager.getPanelWindow()?.getWindow()
+      if (win === mainWin || win === panelWin) {
         pluginWindowManager.closeAttached()
       } else {
         if (!win.isDestroyed() && !win.webContents.isDestroyed()) {
@@ -1002,6 +1010,8 @@ export function registerWindowHandlers(
         }
         win.close()
       }
+    } else {
+      pluginWindowManager.closeAttached()
     }
   })
 
