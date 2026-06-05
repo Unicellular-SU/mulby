@@ -1356,6 +1356,13 @@ const SYSTEM_DEFAULT_MODELS: AiModel[] = [
     providerLabel: 'doubao'
   },
   {
+    id: 'minimax:MiniMax-M3',
+    label: 'MiniMax-M3',
+    description: 'Cherry Studio: M3',
+    providerRef: 'minimax',
+    providerLabel: 'minimax'
+  },
+  {
     id: 'minimax:MiniMax-M2.7',
     label: 'MiniMax-M2.7',
     description: 'Cherry Studio: M2.7',
@@ -1370,53 +1377,11 @@ const SYSTEM_DEFAULT_MODELS: AiModel[] = [
     providerLabel: 'minimax'
   },
   {
-    id: 'minimax:MiniMax-M2.5',
-    label: 'MiniMax-M2.5',
-    description: 'Cherry Studio: M2.5',
-    providerRef: 'minimax',
-    providerLabel: 'minimax'
-  },
-  {
-    id: 'minimax:MiniMax-M2.5-highspeed',
-    label: 'MiniMax-M2.5-highspeed',
-    description: 'Cherry Studio: M2.5',
-    providerRef: 'minimax',
-    providerLabel: 'minimax'
-  },
-  {
-    id: 'minimax:MiniMax-M2.5-lightning',
-    label: 'MiniMax-M2.5-lightning',
-    description: 'Cherry Studio: M2.5',
-    providerRef: 'minimax',
-    providerLabel: 'minimax'
-  },
-  {
-    id: 'minimax:MiniMax-M2.1',
-    label: 'MiniMax-M2.1',
-    description: 'Cherry Studio: M2.1',
-    providerRef: 'minimax',
-    providerLabel: 'minimax'
-  },
-  {
-    id: 'minimax:MiniMax-M2.1-lightning',
-    label: 'MiniMax-M2.1-lightning',
-    description: 'Cherry Studio: M2.1',
-    providerRef: 'minimax',
-    providerLabel: 'minimax'
-  },
-  {
-    id: 'minimax:MiniMax-M2',
-    label: 'MiniMax-M2',
-    description: 'Cherry Studio: M2',
-    providerRef: 'minimax',
-    providerLabel: 'minimax'
-  },
-  {
-    id: 'minimax:M2-her',
-    label: 'M2-her',
-    description: 'Cherry Studio: M2',
-    providerRef: 'minimax',
-    providerLabel: 'minimax'
+    id: 'minimax-global:MiniMax-M3',
+    label: 'MiniMax-M3',
+    description: 'Cherry Studio: M3',
+    providerRef: 'minimax-global',
+    providerLabel: 'minimax-global'
   },
   {
     id: 'minimax-global:MiniMax-M2.7',
@@ -1429,55 +1394,6 @@ const SYSTEM_DEFAULT_MODELS: AiModel[] = [
     id: 'minimax-global:MiniMax-M2.7-highspeed',
     label: 'MiniMax-M2.7-highspeed',
     description: 'Cherry Studio: M2.7',
-    providerRef: 'minimax-global',
-    providerLabel: 'minimax-global'
-  },
-  {
-    id: 'minimax-global:MiniMax-M2.5',
-    label: 'MiniMax-M2.5',
-    description: 'Cherry Studio: M2.5',
-    providerRef: 'minimax-global',
-    providerLabel: 'minimax-global'
-  },
-  {
-    id: 'minimax-global:MiniMax-M2.5-highspeed',
-    label: 'MiniMax-M2.5-highspeed',
-    description: 'Cherry Studio: M2.5',
-    providerRef: 'minimax-global',
-    providerLabel: 'minimax-global'
-  },
-  {
-    id: 'minimax-global:MiniMax-M2.5-lightning',
-    label: 'MiniMax-M2.5-lightning',
-    description: 'Cherry Studio: M2.5',
-    providerRef: 'minimax-global',
-    providerLabel: 'minimax-global'
-  },
-  {
-    id: 'minimax-global:MiniMax-M2.1',
-    label: 'MiniMax-M2.1',
-    description: 'Cherry Studio: M2.1',
-    providerRef: 'minimax-global',
-    providerLabel: 'minimax-global'
-  },
-  {
-    id: 'minimax-global:MiniMax-M2.1-lightning',
-    label: 'MiniMax-M2.1-lightning',
-    description: 'Cherry Studio: M2.1',
-    providerRef: 'minimax-global',
-    providerLabel: 'minimax-global'
-  },
-  {
-    id: 'minimax-global:MiniMax-M2',
-    label: 'MiniMax-M2',
-    description: 'Cherry Studio: M2',
-    providerRef: 'minimax-global',
-    providerLabel: 'minimax-global'
-  },
-  {
-    id: 'minimax-global:M2-her',
-    label: 'M2-her',
-    description: 'Cherry Studio: M2',
     providerRef: 'minimax-global',
     providerLabel: 'minimax-global'
   },
