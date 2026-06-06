@@ -40,7 +40,7 @@ const message = await ai.call({
   - `mcp` (AiMcpSelection) - MCP 工具选择策略（可选）
   - `skills` (AiSkillSelection) - 技能选择策略（可选）
   - `toolContext` (AiToolContext) - 工具执行上下文（可选）
-  - `maxToolSteps` (number) - 工具调用最大步数（默认 20，范围 1-100）
+  - `maxToolSteps` (number) - 工具调用最大步数（默认 20，范围 1-300）
 
 **返回值**:
 - `AiPromiseLike<AiMessage>` - 最终消息（包含可选 `usage`）
@@ -986,7 +986,7 @@ type AiOption = {
   skills?: AiSkillSelection;
   params?: AiModelParameters;
   toolContext?: AiToolContext;
-  maxToolSteps?: number; // 工具调用最大步数，默认 20，最大 100
+  maxToolSteps?: number; // 工具调用最大步数，默认 20，最大 300
 };
 ```
 

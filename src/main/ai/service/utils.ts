@@ -12,7 +12,7 @@ function asRecord(value: unknown): UnknownRecord | undefined {
 }
 
 const DEFAULT_MAX_TOOL_STEPS = 20
-const MAX_TOOL_STEPS_LIMIT = 100
+const MAX_TOOL_STEPS_LIMIT = 300
 
 export function resolveMaxToolSteps(maxToolSteps?: number): number {
   return Math.min(Math.max(Math.floor(maxToolSteps ?? DEFAULT_MAX_TOOL_STEPS), 1), MAX_TOOL_STEPS_LIMIT)
