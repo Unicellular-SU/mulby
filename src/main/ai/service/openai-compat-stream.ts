@@ -19,6 +19,8 @@ import {
   resolveMaxToolSteps,
   stringifyToolResult
 } from './utils'
+import { compactToolResultMessages, computeCompactionMaxChars, DEFAULT_COMPACTION_MAX_CHARS } from './context-compaction'
+import { getModelContextWindow, getModelMaxOutputTokens } from '../modelSpecs'
 import {
   createThinkTagStreamState,
   finalizeThinkTagStream,
@@ -392,6 +394,22 @@ export async function streamOpenAICompatChat(
   return { content, reasoning, usage }
 }
 
+/** 识别「上下文长度超限」类错误（各家 provider 文案不一，做宽松匹配），用于触发激进压缩重试。 */
+function isContextOverflowError(error: unknown): boolean {
+  const msg = (error instanceof Error ? error.message : String(error || '')).toLowerCase()
+  return (
+    msg.includes('context length') ||
+    msg.includes('context_length') ||
+    msg.includes('maximum context') ||
+    msg.includes('context window') ||
+    msg.includes('too many tokens') ||
+    msg.includes('reduce the length') ||
+    msg.includes('string too long') ||
+    msg.includes('exceeds the maximum') ||
+    msg.includes('maximum length')
+  )
+}
+
 export async function runOpenAICompatToolLoop(
   context: OpenAICompatContext,
   input: {
@@ -413,7 +431,17 @@ export async function runOpenAICompatToolLoop(
   abortSignal?: AbortSignal
 ): Promise<{ content: string; reasoning: string; usage?: { inputTokens?: number; outputTokens?: number } }> {
   const maxSteps = resolveMaxToolSteps(input.maxToolSteps)
-  const conversationMessages = [...input.messages]
+  // 按模型真实上下文窗口算压缩预算；未知则退回安全粗下限（不激进压缩，避免误伤大窗口模型）
+  const contextWindow = getModelContextWindow(input.model)
+  const compactionMaxChars =
+    computeCompactionMaxChars(contextWindow, getModelMaxOutputTokens(input.model)) ?? DEFAULT_COMPACTION_MAX_CHARS
+  log.info('[AI] 上下文压缩预算(compat)', {
+    model: input.model,
+    contextWindow: contextWindow ?? null,
+    source: contextWindow ? 'models.dev' : 'default-floor',
+    compactionMaxChars
+  })
+  let conversationMessages = [...input.messages]
   let fullContent = ''
   let fullReasoning = ''
   let inputTokens = 0
@@ -421,18 +449,42 @@ export async function runOpenAICompatToolLoop(
   let hasInputUsage = false
   let hasOutputUsage = false
 
+  const runStep = () => streamOpenAICompatToolStep(context, {
+    model: input.model,
+    providerType: input.providerType,
+    messages: conversationMessages,
+    apiKey: input.apiKey,
+    baseURL: input.baseURL,
+    params: input.params,
+    tools: input.tools,
+    allowReasoning: input.allowReasoning
+  }, onChunk, abortSignal)
+
   for (let step = 0; step < maxSteps; step += 1) {
     context.assertNotAborted(abortSignal)
-    const stepResult = await streamOpenAICompatToolStep(context, {
-      model: input.model,
-      providerType: input.providerType,
-      messages: conversationMessages,
-      apiKey: input.apiKey,
-      baseURL: input.baseURL,
-      params: input.params,
-      tools: input.tools,
-      allowReasoning: input.allowReasoning
-    }, onChunk, abortSignal)
+    // P0-2：把较早的工具结果压成占位，避免多步累积撑爆上下文窗口（超预算才生效，否则原样）
+    if (step > 0) conversationMessages = compactToolResultMessages(conversationMessages, { maxChars: compactionMaxChars })
+    let stepResult: Awaited<ReturnType<typeof runStep>>
+    try {
+      stepResult = await runStep()
+    } catch (error) {
+      // P0-3 兜底：即便如此仍触发上下文溢出时，激进压缩（预算减半、仅保留最近 2 条工具结果）后重试一次
+      if (!abortSignal?.aborted && isContextOverflowError(error)) {
+        const aggressive = compactToolResultMessages(conversationMessages, {
+          maxChars: Math.floor(compactionMaxChars * 0.5),
+          keepRecentToolResults: 2
+        })
+        if (aggressive !== conversationMessages) {
+          conversationMessages = aggressive
+          log.warn('[AI] 上下文溢出，已激进压缩历史工具结果并重试一次', { step })
+          stepResult = await runStep()
+        } else {
+          throw error
+        }
+      } else {
+        throw error
+      }
+    }
 
     if (stepResult.usage?.inputTokens !== undefined) {
       inputTokens += stepResult.usage.inputTokens

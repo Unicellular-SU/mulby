@@ -223,6 +223,7 @@ export default function ProviderModelsPanel({
                 tipWrapClass={tipWrapClass}
                 tipBubbleClass={tipBubbleClass}
                 handleUpdateModelParams={handleUpdateModelParams}
+                handleUpdateModel={handleUpdateModel}
                 onToggleModelParam={onToggleModelParam}
                 onToggleModelMaxTokens={onToggleModelMaxTokens}
               />

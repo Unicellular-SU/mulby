@@ -16,6 +16,8 @@ import { isOpenAICompatibleProvider, shouldUseChatCompletions } from '../provide
 import { countTokensForText, countTokensFromMessages } from '../tokens'
 import { aggregateSdkStreamResult } from './reply-aggregation'
 import { extractUsageAsync, normalizeUsage, resolveMaxToolSteps } from './utils'
+import { compactToolResultMessages, computeCompactionMaxChars, DEFAULT_COMPACTION_MAX_CHARS } from './context-compaction'
+import { getModelContextWindow, getModelMaxOutputTokens } from '../modelSpecs'
 import log from 'electron-log'
 
 type StreamRoute = 'anthropic-native' | 'openai-compat-chat' | 'openai-compat-tool-loop' | 'ai-sdk-stream'
@@ -260,6 +262,18 @@ export async function executeProviderStreamOrchestration(
         })
       }
       const maxSteps = resolveMaxToolSteps(input.effectiveOption.maxToolSteps)
+      const contextWindow = getModelContextWindow(input.effectiveOption.model)
+      const compactionMaxChars =
+        computeCompactionMaxChars(contextWindow, getModelMaxOutputTokens(input.effectiveOption.model)) ??
+        DEFAULT_COMPACTION_MAX_CHARS
+      if (input.tools) {
+        log.info('[AI] 上下文压缩预算(sdk)', {
+          model: input.effectiveOption.model,
+          contextWindow: contextWindow ?? null,
+          source: contextWindow ? 'models.dev' : 'default-floor',
+          compactionMaxChars
+        })
+      }
       const messages = await input.deps.toSdkMessages(input.trimmedMessages, input.effectiveOption.model)
       const result = await streamText({
         model: input.modelKey,
@@ -267,6 +281,16 @@ export async function executeProviderStreamOrchestration(
         abortSignal: input.controllerSignal,
         tools: input.tools,
         stopWhen: input.tools ? stepCountIs(maxSteps) : undefined,
+        // P0：多步工具调用前压缩较早的工具结果，避免单轮上下文撑爆窗口。
+        // 未超预算时 compact 返回原引用 → 返回 {} 表示不改动（对所有插件零回归）。
+        ...(input.tools
+          ? {
+              prepareStep: ({ messages: stepMessages }: { messages: unknown[] }) => {
+                const compacted = compactToolResultMessages(stepMessages, { maxChars: compactionMaxChars })
+                return compacted === stepMessages ? {} : { messages: compacted }
+              }
+            }
+          : {}),
         ...input.params
       } as Parameters<typeof streamText>[0])
 

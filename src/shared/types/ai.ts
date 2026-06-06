@@ -371,6 +371,11 @@ export interface AiModel {
   supportedEndpointTypes?: AiEndpointType[]
   params?: AiModelParameters
   capabilities?: AiModelCapability[]
+  /**
+   * 模型的「上下文窗口（token 数）」。注意：与 `params.contextWindow`（历史消息条数窗口）是两回事。
+   * 优先级：用户在此显式覆盖 > models.dev 快照/缓存 > 家族推断。用于上下文压缩预算与溢出判定。
+   */
+  contextTokens?: number
 }
 
 export type AiProviderId =

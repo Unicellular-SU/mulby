@@ -20,6 +20,7 @@ interface ModelParamsEditorProps {
   tipWrapClass: string
   tipBubbleClass: string
   handleUpdateModelParams: (modelId: string, patch: Partial<AiModelParameters>) => void
+  handleUpdateModel: (index: number, patch: Partial<AiModel>) => void
   onToggleModelParam: (modelId: string, key: 'temperatureEnabled' | 'topPEnabled') => void
   onToggleModelMaxTokens: (modelId: string) => void
 }
@@ -33,6 +34,7 @@ export default function ModelParamsEditor({
   tipWrapClass,
   tipBubbleClass,
   handleUpdateModelParams,
+  handleUpdateModel,
   onToggleModelParam,
   onToggleModelMaxTokens
 }: ModelParamsEditorProps) {
@@ -74,6 +76,32 @@ export default function ModelParamsEditor({
             step="1"
             value={formatNumber(model.params?.contextWindow)}
             onChange={(e) => handleUpdateModelParams(model.id, { contextWindow: parseOptionalNumber(e.target.value) })}
+          />
+        </div>
+
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-[180px_1fr_120px] items-center">
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-slate-600 dark:text-slate-300">上下文窗口(token)</span>
+            <span className={tipWrapClass}>
+              <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <circle cx="12" cy="12" r="9" />
+                <path d="M12 8h.01M11 12h1v4h-1" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+              <span className={tipBubbleClass}>模型最大上下文 token（与上面的“消息条数”不同）。留空=自动识别（models.dev），仅识别不准时手动覆盖；用于长对话压缩与防溢出</span>
+            </span>
+          </div>
+          <span className="text-xs text-slate-400 dark:text-slate-500">留空自动识别（来自 models.dev），识别不准再覆盖</span>
+          <input
+            className={miniInputClass}
+            type="number"
+            min="0"
+            step="1000"
+            placeholder="自动"
+            value={formatNumber(model.contextTokens)}
+            onChange={(e) => {
+              const actualIndex = (aiDraft?.models || []).findIndex((item) => item.id === model.id)
+              if (actualIndex >= 0) handleUpdateModel(actualIndex, { contextTokens: parseOptionalNumber(e.target.value) })
+            }}
           />
         </div>
 
