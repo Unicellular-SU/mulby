@@ -29,3 +29,4 @@ package-lock.json
 .superpowers
 ztools
 .cursor
+scripts/codepage-backups/
