@@ -1,5 +1,6 @@
 import type { Dispatch, SetStateAction } from 'react'
 import type { AppSettings } from '../../../../shared/types/settings'
+import type { PluginProjectEntry } from '../../../../shared/types/settings'
 
 interface DeveloperSectionProps {
   settings: AppSettings
@@ -69,24 +70,27 @@ export default function DeveloperSection({
         插件开发目录
       </div>
 
-      {settings.developer.pluginPaths.length === 0 ? (
+      {settings.developer.pluginProjects.length === 0 ? (
         <div className="text-sm text-slate-500 dark:text-slate-400">
           还没有添加任何开发目录。
         </div>
       ) : (
         <div className="space-y-2">
-          {settings.developer.pluginPaths.map((path) => (
+          {settings.developer.pluginProjects.map((project: PluginProjectEntry) => (
             <div
-              key={path}
+              key={project.id}
               className="flex items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-white/70 px-3 py-2 text-sm text-slate-700 shadow-sm dark:border-slate-800 dark:bg-slate-950 dark:text-slate-200"
             >
               <div className="truncate flex-1">
-                {path}
+                {project.path}
+                <span className="ml-2 text-xs text-slate-400 dark:text-slate-500">
+                  ({project.type === 'single' ? '单插件' : '集合目录'})
+                </span>
               </div>
               <button
                 className="text-xs text-red-500 hover:text-red-600 dark:text-red-400 dark:hover:text-red-300"
                 onClick={async () => {
-                  await window.mulby.developer.removePluginPath(path)
+                  await window.mulby.developer.removePluginProject({ id: project.id })
                   const result = await window.mulby.settings.get()
                   setSettings(result.settings)
                 }}
@@ -104,7 +108,7 @@ export default function DeveloperSection({
           onClick={async () => {
             const path = await window.mulby.developer.selectDirectory()
             if (path) {
-              const result = await window.mulby.developer.addPluginPath(path)
+              const result = await window.mulby.developer.addPluginProject({ path, source: 'added' })
               if (result.success) {
                 const settingsResult = await window.mulby.settings.get()
                 setSettings(settingsResult.settings)

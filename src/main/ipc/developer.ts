@@ -29,7 +29,7 @@ import type {
 export function registerDeveloperHandlers(pluginManager: PluginManager) {
     // ==================== LEGACY（保留向后兼容） ====================
 
-    // 添加开发目录（旧：直接写 pluginPaths）
+    // 添加开发目录（旧：直接写 pluginPaths，同步写入 pluginProjects 确保加载器能识别）
     ipcMain.handle('developer:addPluginPath', async (_event, path: string) => {
         const settings = appSettingsManager.getSettings()
 
@@ -41,10 +41,26 @@ export function registerDeveloperHandlers(pluginManager: PluginManager) {
             return { success: false, error: '目录不存在' }
         }
 
+        // 构造 pluginProjects entry 并同步写入，确保 loadPlugins() 能读取到新目录
+        const resolved = resolve(path)
+        const existingProjects = settings.developer.pluginProjects
+        const alreadyInProjects = existingProjects.some((p) => resolve(p.path) === resolved)
+
+        const newProjects = alreadyInProjects
+            ? existingProjects
+            : [...existingProjects, {
+                id: `proj-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+                path: resolved,
+                type: (existsSync(join(resolved, 'manifest.json')) ? 'single' : 'collection') as 'single' | 'collection',
+                source: 'added' as const,
+                createdAt: Date.now()
+              }]
+
         appSettingsManager.updateSettings({
             developer: {
                 ...settings.developer,
-                pluginPaths: [...settings.developer.pluginPaths, path]
+                pluginPaths: [...settings.developer.pluginPaths, path],
+                pluginProjects: dedupeProjects(newProjects)
             }
         })
 
@@ -53,14 +69,16 @@ export function registerDeveloperHandlers(pluginManager: PluginManager) {
         return { success: true }
     })
 
-    // 移除开发目录（旧）
+    // 移除开发目录（旧：同步从 pluginPaths 和 pluginProjects 移除）
     ipcMain.handle('developer:removePluginPath', async (_event, path: string) => {
         const settings = appSettingsManager.getSettings()
+        const resolved = resolve(path)
 
         appSettingsManager.updateSettings({
             developer: {
                 ...settings.developer,
-                pluginPaths: settings.developer.pluginPaths.filter(p => p !== path)
+                pluginPaths: settings.developer.pluginPaths.filter(p => p !== path),
+                pluginProjects: settings.developer.pluginProjects.filter(p => resolve(p.path) !== resolved)
             }
         })
 
@@ -136,10 +154,13 @@ export function registerDeveloperHandlers(pluginManager: PluginManager) {
                 return { success: false, error: '项目不存在' }
             }
 
+            const resolvedTarget = resolve(target.path)
             appSettingsManager.updateSettings({
                 developer: {
                     ...settings.developer,
-                    pluginProjects: projects.filter((p) => p !== target)
+                    pluginProjects: projects.filter((p) => p !== target),
+                    // 同步清理 legacy pluginPaths，避免 normalizeDeveloperSettings 迁移逻辑把路径重新加回
+                    pluginPaths: settings.developer.pluginPaths.filter((p) => resolve(p) !== resolvedTarget)
                 }
             })
 
