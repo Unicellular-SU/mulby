@@ -5,13 +5,15 @@ import { describe, it } from 'node:test'
 
 const aiIpcSourcePath = join(process.cwd(), 'src/main/ipc/ai.ts')
 
+// 仅「含密钥 / 会改配置」的接口对插件保持 system-only。
+// 只读发现类（skills:list/list-enabled/get/preview/resolve、mcp:servers:list[脱敏]/tools:list、
+// webSearch:getSettings/setActiveProvider、pluginTools:getDisabled）已对插件开放，故不在此列表。
 const HOST_AI_CHANNELS = [
   'ai:settings:get',
   'ai:settings:update',
   'ai:models:fetch',
   'ai:test',
   'ai:test:stream',
-  'ai:mcp:servers:list',
   'ai:mcp:servers:get',
   'ai:mcp:servers:upsert',
   'ai:mcp:servers:remove',
@@ -19,24 +21,15 @@ const HOST_AI_CHANNELS = [
   'ai:mcp:servers:deactivate',
   'ai:mcp:servers:restart',
   'ai:mcp:servers:check',
-  'ai:mcp:tools:list',
   'ai:mcp:abort',
   'ai:mcp:logs:get',
-  'ai:skills:list',
   'ai:skills:refresh',
-  'ai:skills:list-enabled',
-  'ai:skills:get',
   'ai:skills:install',
   'ai:skills:remove',
   'ai:skills:enable',
   'ai:skills:disable',
-  'ai:skills:preview',
-  'ai:skills:resolve',
   'ai:tooling:webSearch:get',
   'ai:tooling:webSearch:update',
-  'ai:tooling:webSearch:getSettings',
-  'ai:tooling:webSearch:setActiveProvider',
-  'ai:tooling:pluginTools:getDisabled',
   'ai:tooling:pluginTools:setDisabled'
 ] as const
 
