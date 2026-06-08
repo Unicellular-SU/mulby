@@ -27,6 +27,16 @@ describe('action menu window manager', () => {
       /this\.configureWindowForShow\(win\)[\s\S]*win\.show\(\)/,
       'the macOS Space configuration must be reapplied each time the reusable menu window is shown'
     )
+    assert.match(
+      source,
+      /type:\s*'panel'/,
+      "macOS action menus must use an NSPanel ('panel') so focus() does not pull the user back to the menu's origin Space"
+    )
+    assert.match(
+      source,
+      /win\.setHiddenInMissionControl\(true\)/,
+      'macOS action menus must hide from Mission Control alongside setVisibleOnAllWorkspaces to prevent Space switching'
+    )
   })
 
   it('can resolve a selected item for renderer-owned context menus', () => {

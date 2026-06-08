@@ -191,6 +191,10 @@ export class ActionMenuWindowManager {
       hasShadow: false,
       backgroundColor: TRANSPARENT_MENU_BACKGROUND,
       alwaysOnTop: true,
+      // macOS：与主启动窗一致用 NSPanel，配合 setVisibleOnAllWorkspaces /
+      // setHiddenInMissionControl，确保菜单悬浮在「当前」Space 而不会在 focus()
+      // 时把用户拉回菜单首次创建的桌面（非 darwin 平台会忽略该 type）。
+      type: 'panel',
       webPreferences: {
         preload: preloadPath,
         contextIsolation: true,
@@ -237,6 +241,9 @@ export class ActionMenuWindowManager {
           visibleOnFullScreen: true,
           skipTransformProcessType: true
         })
+        // 与主启动窗同款：隐藏于 Mission Control，避免 focus() 激活时
+        // macOS 把当前桌面切回菜单窗「出生」的 Space。
+        win.setHiddenInMissionControl(true)
       }
       win.setAlwaysOnTop(true, 'pop-up-menu')
     } catch (error) {
