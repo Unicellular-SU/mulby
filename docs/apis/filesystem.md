@@ -142,7 +142,13 @@ filesystem.dirname('/path/to/file.txt');  // '/path/to'
 // 获取文件名
 filesystem.basename('/path/to/file.txt');  // 'file.txt'
 filesystem.basename('/path/to/file.txt', '.txt');  // 'file'
+
+// 获取插件专属数据目录（隔离路径），可拼接子路径
+filesystem.getDataPath();                    // 插件数据根目录
+filesystem.getDataPath('cache', 'a.png');    // <插件数据根目录>/cache/a.png
 ```
+
+> `getDataPath(...subPaths)` 返回当前插件被隔离的可写数据目录（需要插件上下文），用于安全地存放缓存/产物，避免硬编码绝对路径。
 
 ### 完整示例
 

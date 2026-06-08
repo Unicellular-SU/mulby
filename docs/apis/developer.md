@@ -36,7 +36,18 @@ interface PluginProjectEntry {
 interface PluginValidationResult {
   valid: boolean
   errors: string[]
-  manifest?: { id?: string; name?: string; version?: string; displayName?: string; main?: string }
+  warnings: string[]
+  manifest?: {
+    id: string
+    name: string
+    version: string
+    displayName: string
+    description?: string
+    main?: string
+    hasUi: boolean
+    featureCount: number
+    platform?: string | string[]
+  }
   mainEntryFound: boolean
   built: boolean
 }
@@ -99,6 +110,11 @@ interface PluginProjectStatus {
 #### reloadPlugin(pluginId)
 局部重载单个插件（重读 manifest + 重启 host），开销低于全量 `reloadPlugins`。
 - 入参：`pluginId: string`
+- 返回：`{ success: boolean; error?: string }`
+
+#### reloadPluginByPath(path)
+按目录路径刷新载入，用于「已登记但未加载」的插件（此时尚无可用 pluginId）。优先复用 `pluginProjects` 中已登记的 entry，找不到再按目录新建后载入。
+- 入参：`path: string`
 - 返回：`{ success: boolean; error?: string }`
 
 #### validatePlugin(path)

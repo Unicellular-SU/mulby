@@ -15,8 +15,10 @@
 - `background-plugins`
 - `task-scheduler`
 - `log-viewer`
+- `storage-explorer`
 - `ai-settings`
 - `ai-mcp-settings`
+- `ai-tools-settings`
 - `ai-skills-settings`
 
 ### close()
@@ -27,6 +29,11 @@
 
 ### reload()
 刷新系统页面。
+
+### showMenu(point?)
+在系统页面所在窗口弹出右键菜单。
+- 入参：`point?: { x: number; y: number }`
+- 返回：`Promise<boolean>`
 
 ### getMode()
 获取当前模式：`none | attached | detached`。

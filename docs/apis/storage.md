@@ -85,6 +85,193 @@ await context.api.storage.clear();
 const keys = await context.api.storage.keys();
 ```
 
+### has(key)
+[Backend]
+检查键是否存在（仅插件后端可用）。
+
+```javascript
+const exists = await context.api.storage.has('myKey'); // true / false
+```
+
+### getAll([namespace])
+[Renderer] [Backend]
+获取命名空间下的全部键值。
+
+```javascript
+// 渲染进程（可选 namespace）
+const all = await storage.getAll();
+// 插件后端（固定当前插件 namespace）
+const backendAll = await context.api.storage.getAll();
+```
+
+**返回值**: `Promise<Record<string, unknown>>`
+
+### getAllWithMeta(namespace)
+[Renderer]
+获取命名空间下全部键值及其元数据（version/updatedAt 等）。
+
+```javascript
+const withMeta = await storage.getAllWithMeta('myPlugin');
+```
+
+### listNamespaces()
+[Renderer]
+列出当前可见的全部命名空间。
+
+```javascript
+const namespaces = await storage.listNamespaces();
+```
+
+### bulkSet(entries)
+[Backend]
+批量写入键值（仅插件后端可用）。
+
+```javascript
+await context.api.storage.bulkSet({ a: 1, b: 2, c: 3 });
+```
+
+**参数**:
+- `entries` (`Record<string, unknown>`) - 键值映射
+
+---
+
+## V2 方法（分页 / 版本化 / 事务 / 监听）
+
+> 入口：
+> - 渲染进程：`window.mulby.storage`（options 可带 `namespace`）
+> - 插件后端：`context.api.storage`（强制当前插件 namespace，options 不含 `namespace`）
+
+### list([options])
+[Renderer] [Backend]
+按前缀分页列出键（不返回 value，仅返回 key + 元数据）。
+
+```javascript
+const { items, nextCursor } = await storage.list({ prefix: 'user:', limit: 50, order: 'asc' });
+// items: [{ key, size, updatedAt, version }]
+```
+
+**参数** (options，可选):
+- `prefix` (string) - 键前缀过滤
+- `startsAfter` (string) - 游标，从该键之后开始
+- `limit` (number) - 单页数量
+- `order` (`'asc' | 'desc'`) - 排序
+- `namespace` (string，仅渲染进程) - 命名空间
+
+**返回值**: `Promise<{ items: { key: string; size: number; updatedAt: number; version: number }[]; nextCursor?: string }>`
+
+### getMany(keys[, options])
+[Renderer] [Backend]
+批量读取多个键。
+
+```javascript
+const results = await storage.getMany(['a', 'b', 'c']);
+// [{ key, found, value?, version?, updatedAt? }]
+```
+
+**返回值**: `Promise<{ key: string; found: boolean; value?: unknown; version?: number; updatedAt?: number }[]>`
+
+### setMany(items[, options])
+[Renderer] [Backend]
+批量写入多个键，可选原子提交。
+
+```javascript
+const res = await storage.setMany([
+  { key: 'a', value: 1 },
+  { key: 'b', value: 2, expectedVersion: 3 }
+], { atomic: true });
+// { success, results: [{ key, ok, version?, error? }] }
+```
+
+**参数**:
+- `items` (`{ key: string; value: unknown; expectedVersion?: number | null }[]`)
+- `options` (可选) - `{ atomic?: boolean; namespace?: string }`（`namespace` 仅渲染进程）
+
+**返回值**: `Promise<{ success: boolean; results: { key: string; ok: boolean; version?: number; error?: string }[] }>`
+
+### getMeta(key[, options])
+[Renderer] [Backend]
+读取单个键的值与元数据（含 version）。
+
+```javascript
+const meta = await storage.getMeta('myKey');
+// { found, value?, version?, updatedAt? }
+```
+
+**返回值**: `Promise<{ found: boolean; value?: unknown; version?: number; updatedAt?: number }>`
+
+### setWithVersion(key, value[, options])
+[Renderer] [Backend]
+带乐观锁的写入：仅当当前 version 与 `expectedVersion` 一致时才写入，否则返回冲突。
+
+```javascript
+// 渲染进程：options 形式
+const r = await storage.setWithVersion('myKey', newValue, { expectedVersion: 2 });
+// 插件后端：第三参为 expectedVersion
+const rb = await context.api.storage.setWithVersion('myKey', newValue, 2);
+// { ok, version?, conflict?: { currentVersion } }
+```
+
+**返回值**: `Promise<{ ok: boolean; version?: number; conflict?: { currentVersion: number } }>`
+
+### removeWithVersion(key[, options])
+[Renderer] [Backend]
+带乐观锁的删除。
+
+```javascript
+const r = await storage.removeWithVersion('myKey', { expectedVersion: 5 });
+// 插件后端：await context.api.storage.removeWithVersion('myKey', 5)
+```
+
+**返回值**: `Promise<{ ok: boolean; error?: string }>`
+
+### transaction(ops[, options])
+[Renderer] [Backend]
+在单次事务中执行多个 set/remove 操作，支持按 `expectedVersion` 校验。
+
+```javascript
+const r = await storage.transaction([
+  { op: 'set', key: 'a', value: 1 },
+  { op: 'remove', key: 'b', expectedVersion: 4 }
+]);
+// { success, committed }
+```
+
+**参数**:
+- `ops` (`{ op: 'set' | 'remove'; key: string; value?: unknown; expectedVersion?: number | null }[]`)
+
+**返回值**: `Promise<{ success: boolean; committed: number }>`
+
+### append(key, chunk[, options])
+[Renderer] [Backend]
+向数组型键追加元素（不存在则新建数组），可用 `maxItems` 限制长度。
+
+```javascript
+const r = await storage.append('logs', { ts: Date.now(), msg: 'hi' }, { maxItems: 100 });
+// { ok, newLength, version }
+```
+
+**返回值**: `Promise<{ ok: boolean; newLength: number; version: number }>`
+
+### watch(options, callback)
+[Renderer]
+监听键变更（set/remove/clear），返回取消监听函数。
+
+```javascript
+const unwatch = storage.watch({ prefix: 'user:' }, (event) => {
+  // event: { type: 'set' | 'remove' | 'clear', key, namespace, version?, updatedAt }
+  console.log('changed:', event.type, event.key);
+});
+
+// 取消监听
+unwatch();
+```
+
+**参数**:
+- `options` (`{ namespace?: string; prefix?: string }`)
+- `callback` (function) - 变更回调
+
+**返回值**: `() => void` — 取消监听函数
+
 ### 备注
 - 存储底层统一使用 SQLite，插件数据按 `plugin:<pluginId>` namespace 隔离。
 - 插件后端不支持传入自定义 namespace；插件 UI 调用 storage 时，主进程也会强制使用当前插件自己的 namespace。

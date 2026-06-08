@@ -1,7 +1,7 @@
 # App Events API (app)
 
 > 入口：`window.mulby.app`
-> 代码来源：`src/preload/index.ts`
+> 代码来源：`src/preload/apis/app-plugin-api.ts`
 
 该模块用于主进程向渲染进程派发导航/系统事件。
 
@@ -12,12 +12,16 @@
 - `onOpenAiSettings(callback)`
 - `onOpenAiMcpSettings(callback)`
 - `onOpenAiSkillsSettings(callback)`
+- `onOpenAiToolsSettings(callback)`
 - `onOpenPluginStore(callback)`
 - `onOpenPluginManager(callback)`
 - `onOpenBackgroundPlugins(callback)`
 - `onOpenTaskScheduler(callback)`
 - `onOpenLogViewer(callback)`
+- `onOpenStorageExplorer(callback)`
 - `onOpenCommandShortcuts(callback)`
+- `onSetSearchText(callback)` — 主窗口搜索框文本变化时触发，回调参数 `query: string`
+- `onMainWindowShow(callback)` — 主窗口显示时触发，回调参数 `event: { autoPasteScheduled: boolean }`
 
 所有方法均返回"取消订阅函数"。
 

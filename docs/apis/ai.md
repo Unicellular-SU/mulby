@@ -276,6 +276,8 @@ mulby.tools.register('generate', async (args, ctx) => {
 ```
 
 > `mulby.tools.register` 必须在 host-worker 内调用（即插件 `main.ts` 运行的 UtilityProcess）。在主进程兜底实现里 `tools.register` 是空操作，这是设计如此（详见 `src/main/plugin/api.ts` 的 740 行附近注释）。
+>
+> 如需动态移除已注册的全局工具，调用 `mulby.tools.unregister(name)`（同样在 host-worker 内调用）。
 
 **Step 3：自动生效**
 

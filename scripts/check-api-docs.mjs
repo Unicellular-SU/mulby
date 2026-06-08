@@ -137,7 +137,13 @@ function collectClassPublicMethods(classDecl, prefix = '', out = new Set()) {
   if (!classDecl) return out
 
   for (const member of classDecl.members) {
-    if (!ts.isMethodDeclaration(member)) continue
+    // 同时识别 method 声明与「属性箭头函数」(public foo = (...) => ...)
+    const isMethod = ts.isMethodDeclaration(member)
+    const isArrowProp =
+      ts.isPropertyDeclaration(member) &&
+      member.initializer &&
+      (ts.isArrowFunction(member.initializer) || ts.isFunctionExpression(member.initializer))
+    if (!isMethod && !isArrowProp) continue
 
     const isPrivateOrProtected = (member.modifiers || []).some(
       (mod) => mod.kind === ts.SyntaxKind.PrivateKeyword || mod.kind === ts.SyntaxKind.ProtectedKeyword
@@ -461,10 +467,7 @@ function inScope(method, scope) {
   return scope.some((prefix) => method === prefix || method.startsWith(prefix + '.'))
 }
 
-function validate() {
-  const renderer = buildRendererMethods()
-  const backend = buildBackendMethods()
-
+function validate(renderer, backend) {
   const errors = []
 
   for (const [docPath, cfg] of Object.entries(DOC_CHECKS)) {
@@ -504,13 +507,105 @@ function validate() {
     }
   }
 
+  return errors
+}
+
+// ---------------------------------------------------------------------------
+// 全文档 coverage 校验：覆盖 docs/apis 下除 DOC_CHECKS（严格 9 文档）以外的全部文档。
+// 与严格校验互补 —— 严格校验做精确的 ### 标题/[Renderer][Backend] 标签匹配；
+// coverage 做「代码里每个方法名是否在对应文档中出现」的格式无关检查（兼容
+// ### / #### 标题、列表等多种写法），防止新增宿主 API 后漏写文档。
+// ---------------------------------------------------------------------------
+
+// 文档 -> 命名空间作用域前缀（含归属到具体文档的顶层方法）。
+const DOC_COVERAGE = {
+  // 后端 tools.register/unregister 文档化在 ai.md（方式 B：manifest.tools + register），无独立文档。
+  'docs/apis/ai.md': ['tools'],
+  'docs/apis/power.md': ['power'],
+  'docs/apis/tray.md': ['tray'],
+  'docs/apis/tray-menu.md': ['trayMenu'],
+  'docs/apis/permission.md': ['permission'],
+  'docs/apis/security.md': ['security'],
+  'docs/apis/developer.md': ['developer'],
+  'docs/apis/app-events.md': ['app', 'onPluginOut'],
+  'docs/apis/system-plugin.md': ['systemPlugin'],
+  'docs/apis/system-page.md': ['systemPage'],
+  'docs/apis/log.md': ['log'],
+  'docs/apis/theme.md': ['theme', 'onThemeChange'],
+  'docs/apis/dialog.md': ['dialog'],
+  'docs/apis/menu.md': ['menu'],
+  'docs/apis/notification.md': ['notification'],
+  'docs/apis/tts.md': ['tts'],
+  'docs/apis/shortcut.md': ['shortcut'],
+  'docs/apis/clipboard.md': ['clipboard'],
+  'docs/apis/clipboard-history.md': ['clipboardHistory'],
+  'docs/apis/input.md': ['input'],
+  'docs/apis/input-monitor.md': ['inputMonitor'],
+  'docs/apis/plugin-store.md': ['pluginStore'],
+  'docs/apis/host.md': ['host'],
+  'docs/apis/features.md': ['features'],
+  'docs/apis/messaging.md': ['messaging'],
+  'docs/apis/inbrowser.md': ['inbrowser'],
+  'docs/apis/filesystem.md': ['filesystem'],
+  'docs/apis/storage.md': ['storage'],
+  'docs/apis/shell.md': ['shell'],
+  'docs/apis/desktop.md': ['desktop'],
+  'docs/apis/http.md': ['http'],
+  'docs/apis/network.md': ['network'],
+  'docs/apis/geolocation.md': ['geolocation'],
+  'docs/apis/media.md': ['media'],
+  'docs/apis/screen.md': ['screen'],
+  'docs/apis/ffmpeg.md': ['ffmpeg']
+}
+
+// 内部 / 非插件面向的命名空间，不要求出现在 docs/apis 中：
+// - 渲染进程：onboarding、openclaw、mulbyMain（仅 subInput/clipboard 在 window.md，其余为主窗口内部）
+// 说明：后端 tools.* 文档化在 ai.md（见上方 DOC_COVERAGE 的 ai.md->['tools']）。
+// 如需文档化其它内部命名空间，可新增对应 md 并在 DOC_COVERAGE 注册。
+
+function coverageInScope(method, scope) {
+  return scope.some((p) => method === p || method.startsWith(p + '.'))
+}
+
+function validateCoverage(renderer, backend) {
+  const errors = []
+  const allActual = new Set([...renderer, ...backend])
+
+  for (const [docPath, scope] of Object.entries(DOC_COVERAGE)) {
+    let text
+    try {
+      text = read(docPath)
+    } catch {
+      errors.push(`${docPath}: doc file missing`)
+      continue
+    }
+
+    const scoped = [...allActual].filter((m) => coverageInScope(m, scope)).sort()
+    for (const method of scoped) {
+      const leaf = method.includes('.') ? method.split('.').pop() : method
+      const re = new RegExp('\\b' + leaf.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\b')
+      if (!re.test(text)) {
+        errors.push(`${docPath}: missing method in docs -> \`${method}\``)
+      }
+    }
+  }
+
+  return errors
+}
+
+function main() {
+  const renderer = buildRendererMethods()
+  const backend = buildBackendMethods()
+
+  const errors = [...validate(renderer, backend), ...validateCoverage(renderer, backend)]
+
   if (errors.length > 0) {
     console.error('API docs check failed. Found mismatches:')
     for (const err of errors) console.error(`- ${err}`)
     process.exit(1)
   }
 
-  console.log('API docs check passed.')
+  console.log('API docs check passed (strict + full coverage).')
 }
 
-validate()
+main()
