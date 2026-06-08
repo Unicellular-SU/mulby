@@ -4,6 +4,27 @@ import { attachmentStore } from '../attachments'
 import { buildApiKeyScope } from './utils'
 
 /**
+ * Anthropic extended-thinking fields to merge into the request body. `disabled`
+ * is a no-cost explicit off (also Anthropic's default). `enabled` needs a token
+ * budget, `max_tokens > budget`, and an unset temperature — so it overrides those.
+ * Returns {} when `thinking` is unset (zero regression).
+ */
+function anthropicThinkingFields(params: AiModelParameters): Record<string, unknown> {
+  if (params.thinking === 'disabled') {
+    return { thinking: { type: 'disabled' } }
+  }
+  if (params.thinking === 'enabled') {
+    const budget = 2048
+    return {
+      thinking: { type: 'enabled', budget_tokens: budget },
+      max_tokens: Math.max(params.maxOutputTokens ?? 1024, budget + 1024),
+      temperature: undefined
+    }
+  }
+  return {}
+}
+
+/**
  * 将 reader.read() 与 AbortSignal 竞争：
  * 当 abort 触发时立刻 cancel reader 并 throw，不等轮询检查。
  */
@@ -180,7 +201,8 @@ export async function callAnthropicMessages(input: {
       temperature: input.params.temperature,
       top_p: input.params.topP,
       stop_sequences: input.params.stopSequences,
-      stream: false
+      stream: false,
+      ...anthropicThinkingFields(input.params)
     })
   })
 
@@ -239,7 +261,8 @@ export async function streamAnthropicMessages(
       temperature: input.params.temperature,
       top_p: input.params.topP,
       stop_sequences: input.params.stopSequences,
-      stream: true
+      stream: true,
+      ...anthropicThinkingFields(input.params)
     })
   })
 

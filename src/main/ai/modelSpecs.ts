@@ -16,7 +16,14 @@ import { dirname, join } from 'node:path'
 import bundledSnapshot from '../../shared/ai/data/model-specs.json'
 import { getAiSettings } from './config'
 
-type SpecTuple = [number, number] // [contextTokens, maxOutputTokens]
+// [contextTokens, maxOutputTokens, capabilityFlags?] — flags bitmask: 1=reasoning,
+// 2=tool_call, 4=vision. The flags element is optional for backwards compatibility
+// with older snapshots/caches (absent → capabilities unknown, callers fall back).
+type SpecTuple = [number, number, number?]
+
+const FLAG_REASONING = 1
+const FLAG_TOOL_CALL = 2
+const FLAG_VISION = 4
 
 interface SpecTable {
   byKey: Record<string, SpecTuple>
@@ -26,6 +33,13 @@ interface SpecTable {
 export interface ModelSpec {
   contextTokens: number
   maxOutputTokens: number
+}
+
+/** Authoritative per-model capabilities from models.dev (undefined when unknown). */
+export interface ModelDevCaps {
+  reasoning: boolean
+  toolCall: boolean
+  vision: boolean
 }
 
 const bundled = bundledSnapshot as unknown as SpecTable
@@ -60,7 +74,7 @@ function splitModelId(modelId: string): { providerToken: string; modelPart: stri
   return { providerToken: '', modelPart: raw }
 }
 
-function lookupTable(table: SpecTable | null, providerToken: string, modelPart: string): ModelSpec | undefined {
+function lookupTuple(table: SpecTable | null, providerToken: string, modelPart: string): SpecTuple | undefined {
   if (!table) return undefined
   const provider = providerToken.toLowerCase()
   const model = modelPart.toLowerCase()
@@ -73,10 +87,39 @@ function lookupTable(table: SpecTable | null, providerToken: string, modelPart: 
     table.byModel?.[stripDateSuffix(bare)]
   ]
   for (const candidate of candidates) {
-    const spec = tupleToSpec(candidate)
-    if (spec) return spec
+    if (Array.isArray(candidate) && candidate[0]) return candidate
   }
   return undefined
+}
+
+function lookupTable(table: SpecTable | null, providerToken: string, modelPart: string): ModelSpec | undefined {
+  return tupleToSpec(lookupTuple(table, providerToken, modelPart))
+}
+
+function decodeFlags(tuple?: SpecTuple): ModelDevCaps | undefined {
+  // Flags element absent (older snapshot/cache) → capabilities unknown.
+  if (!Array.isArray(tuple) || typeof tuple[2] !== 'number') return undefined
+  const flags = tuple[2]
+  return {
+    reasoning: (flags & FLAG_REASONING) !== 0,
+    toolCall: (flags & FLAG_TOOL_CALL) !== 0,
+    vision: (flags & FLAG_VISION) !== 0
+  }
+}
+
+/**
+ * models.dev per-model capability flags (reasoning / tool_call / vision), or
+ * undefined when the model isn't in the catalog (or the snapshot predates flags).
+ * Disk cache (fresh) is preferred; falls back to the bundled snapshot.
+ */
+export function getModelDevCaps(modelId?: string): ModelDevCaps | undefined {
+  if (!modelId) return undefined
+  void ensureFreshCache()
+  const { providerToken, modelPart } = splitModelId(modelId)
+  return (
+    decodeFlags(lookupTuple(diskTable, providerToken, modelPart)) ??
+    decodeFlags(lookupTuple(bundled, providerToken, modelPart))
+  )
 }
 
 function userOverride(modelId: string): ModelSpec | undefined {
@@ -124,25 +167,44 @@ function cachePath(): string | null {
   }
 }
 
+type ModelsDevEntry = {
+  limit?: { context?: number; output?: number }
+  reasoning?: boolean
+  tool_call?: boolean
+  modalities?: { input?: string[] }
+}
+
+/** Compact capability bitmask from a models.dev model entry (mirrors sync script). */
+function modelDevFlags(m: ModelsDevEntry | undefined): number {
+  let flags = 0
+  if (m?.reasoning === true) flags |= FLAG_REASONING
+  if (m?.tool_call === true) flags |= FLAG_TOOL_CALL
+  const input = m?.modalities?.input
+  if (Array.isArray(input) && input.includes('image')) flags |= FLAG_VISION
+  return flags
+}
+
 function buildTableFromApi(api: Record<string, unknown>): SpecTable {
   const byKey: Record<string, SpecTuple> = {}
   const byModel: Record<string, SpecTuple> = {}
-  const putModel = (key: string, context: number, output: number) => {
+  const putModel = (key: string, context: number, output: number, flags: number) => {
     if (!key || !context) return
     const prev = byModel[key]
-    if (!prev || context > prev[0]) byModel[key] = [context, output || 0]
+    if (!prev || context > prev[0]) byModel[key] = [context, output || 0, flags || 0]
   }
   for (const providerId of Object.keys(api || {})) {
-    const provider = api[providerId] as { models?: Record<string, { limit?: { context?: number; output?: number } }> }
+    const provider = api[providerId] as { models?: Record<string, ModelsDevEntry> }
     const models = provider?.models
     if (!models || typeof models !== 'object') continue
     for (const modelId of Object.keys(models)) {
-      const context = Number(models[modelId]?.limit?.context) || 0
-      const output = Number(models[modelId]?.limit?.output) || 0
+      const entry = models[modelId]
+      const context = Number(entry?.limit?.context) || 0
+      const output = Number(entry?.limit?.output) || 0
       if (!context) continue
-      byKey[`${providerId.toLowerCase()}/${modelId.toLowerCase()}`] = [context, output]
-      putModel(modelId.toLowerCase(), context, output)
-      putModel(lastSegment(modelId.toLowerCase()), context, output)
+      const flags = modelDevFlags(entry)
+      byKey[`${providerId.toLowerCase()}/${modelId.toLowerCase()}`] = [context, output, flags]
+      putModel(modelId.toLowerCase(), context, output, flags)
+      putModel(lastSegment(modelId.toLowerCase()), context, output, flags)
     }
   }
   return { byKey, byModel }

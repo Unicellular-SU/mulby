@@ -1,5 +1,6 @@
 import type { AiModel, AiModelType, AiProviderConfig } from '../../shared/types/ai'
 import { findCherryStudioCatalogEntry, normalizeCherryStudioModelKey } from './cherryStudioCatalog'
+import { getModelDevCaps } from './modelSpecs'
 
 // Reasoning models (from Cherry Studio)
 const REASONING_REGEX =
@@ -216,6 +217,15 @@ export function inferCapability(
   const candidates = getCandidateNames(model)
   const primary = normalizeCherryStudioModelKey(model.id)
 
+  // models.dev is the most current, comprehensive source. It is AUTHORITATIVE for
+  // reasoning (true OR false) — this corrects the previous over-reporting that came
+  // from the permissive default + a possibly-stale name regex (e.g. deepseek-chat).
+  // For tool_call / vision it only GRANTS (never revokes name/catalog hits).
+  const dev = getModelDevCaps(model.id)
+  if (type === 'reasoning' && dev) {
+    return dev.reasoning
+  }
+
   const catalogEntry = findCherryStudioCatalogEntry(model.id) || findCherryStudioCatalogEntry(model.label || '')
   if (catalogEntry?.capabilities?.some((cap) => cap.type === type)) {
     return true
@@ -230,11 +240,13 @@ export function inferCapability(
     case 'function_calling':
       if (matchesAny(candidates, RERANKING_REGEX) || matchesAny(candidates, EMBEDDING_REGEX)) return false
       if (isDedicatedImageModel(candidates)) return false
+      if (dev?.toolCall) return true
       return matchesAny(candidates, FUNCTION_CALLING_REGEX) || undefined
     case 'reasoning':
       return matchesAny(candidates, REASONING_REGEX) || undefined
     case 'vision':
       if (isDedicatedImageModel(candidates)) return false
+      if (dev?.vision) return true
       return matchesAny(candidates, VISION_REGEX) || undefined
     case 'web_search':
       if (PERPLEXITY_SEARCH_MODELS.includes(primary)) return true

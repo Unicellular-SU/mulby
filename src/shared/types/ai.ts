@@ -339,7 +339,22 @@ export interface AiModelParameters {
   frequencyPenalty?: number
   stopSequences?: string[]
   seed?: number
+  /**
+   * Reasoning effort for reasoning-capable models. Maps to OpenAI-style
+   * `reasoning_effort` and AI SDK `providerOptions.openai.reasoningEffort`.
+   * Lower = faster / cheaper (good for latency-sensitive uses like autocomplete).
+   */
+  reasoningEffort?: AiReasoningEffort
+  /**
+   * Explicitly turn model "thinking" on/off where the provider supports it
+   * (e.g. deepseek-v4 `thinking:{type}`, Anthropic extended thinking, Gemini
+   * thinkingConfig). Omit to use the provider/model default.
+   */
+  thinking?: AiThinkingMode
 }
+
+export type AiReasoningEffort = 'minimal' | 'low' | 'medium' | 'high' | 'max'
+export type AiThinkingMode = 'enabled' | 'disabled'
 
 export type AiModelType = 'text' | 'vision' | 'embedding' | 'reasoning' | 'function_calling' | 'web_search' | 'rerank'
 

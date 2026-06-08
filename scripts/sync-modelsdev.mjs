@@ -6,10 +6,14 @@
  * models.dev ships an open catalog (https://models.dev/api.json) shaped as:
  *   { [providerId]: { id, name, models: { [modelId]: { limit:{context,output}, modalities, reasoning, tool_call, ... } } } }
  *
- * We only keep the fields the host actually needs for context engineering
- * (token window + max output), to keep the snapshot small. The runtime loader
- * (`src/main/ai/modelSpecs.ts`) reads this snapshot, an on-disk cache, and an
- * optional background refresh — mirroring opencode's models.dev pipeline.
+ * We keep the fields the host actually needs: context engineering (token window
+ * + max output) and a compact capability bitmask (reasoning / tool_call / vision)
+ * so capability inference can prefer models.dev over hard-coded name regexes. The
+ * runtime loader (`src/main/ai/modelSpecs.ts`) reads this snapshot, an on-disk
+ * cache, and an optional background refresh — mirroring opencode's models.dev pipeline.
+ *
+ * Each entry is a tuple `[contextTokens, maxOutputTokens, capabilityFlags]` where
+ * capabilityFlags is a bitmask: 1=reasoning, 2=tool_call, 4=vision (image input).
  *
  * Usage:
  *   node scripts/sync-modelsdev.mjs                # fetch from models.dev
@@ -61,19 +65,33 @@ function lastSegment(id) {
   return slash >= 0 ? s.slice(slash + 1) : s
 }
 
+const FLAG_REASONING = 1
+const FLAG_TOOL_CALL = 2
+const FLAG_VISION = 4
+
+/** Compact capability bitmask from a models.dev model entry. */
+function modelFlags(m) {
+  let flags = 0
+  if (m?.reasoning === true) flags |= FLAG_REASONING
+  if (m?.tool_call === true) flags |= FLAG_TOOL_CALL
+  const input = m?.modalities?.input
+  if (Array.isArray(input) && input.includes('image')) flags |= FLAG_VISION
+  return flags
+}
+
 function build(api) {
-  /** byKey: `${providerLower}/${modelIdLower}` -> [context, output] (exact). */
+  /** byKey: `${providerLower}/${modelIdLower}` -> [context, output, flags] (exact). */
   const byKey = {}
-  /** byModel: bare model id (and last-segment) -> [context, output] (cross-provider; keep MAX context). */
+  /** byModel: bare model id (and last-segment) -> [context, output, flags] (cross-provider; keep MAX context). */
   const byModel = {}
   let total = 0
   let withContext = 0
 
-  const putModel = (key, context, output) => {
+  const putModel = (key, context, output, flags) => {
     if (!key || !context) return
     const prev = byModel[key]
     // 聚合商代理上游模型，取最大上下文更贴近真实（保守度交给运行时预留 + 反应式兜底）
-    if (!prev || context > prev[0]) byModel[key] = [context, output || 0]
+    if (!prev || context > prev[0]) byModel[key] = [context, output || 0, flags || 0]
   }
 
   for (const providerId of Object.keys(api)) {
@@ -87,9 +105,10 @@ function build(api) {
       const output = Number(m?.limit?.output) || 0
       if (!context) continue
       withContext += 1
-      byKey[`${normId(providerId)}/${normId(modelId)}`] = [context, output]
-      putModel(normId(modelId), context, output)
-      putModel(lastSegment(modelId), context, output)
+      const flags = modelFlags(m)
+      byKey[`${normId(providerId)}/${normId(modelId)}`] = [context, output, flags]
+      putModel(normId(modelId), context, output, flags)
+      putModel(lastSegment(modelId), context, output, flags)
     }
   }
 

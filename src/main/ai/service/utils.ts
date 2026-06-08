@@ -572,7 +572,61 @@ export function normalizeModelParams(params: AiModelParameters): AiModelParamete
   if (params.frequencyPenalty !== undefined) normalized.frequencyPenalty = clampNumber(params.frequencyPenalty, -2, 2)
   if (params.stopSequences) normalized.stopSequences = params.stopSequences.filter((item) => item && item.trim().length > 0)
   if (params.seed !== undefined) normalized.seed = Math.floor(params.seed)
+  if (params.reasoningEffort && ['minimal', 'low', 'medium', 'high', 'max'].includes(params.reasoningEffort)) {
+    normalized.reasoningEffort = params.reasoningEffort
+  }
+  if (params.thinking === 'enabled' || params.thinking === 'disabled') {
+    normalized.thinking = params.thinking
+  }
   return normalized
+}
+
+/**
+ * OpenAI-compatible reasoning controls to merge into a /chat/completions body.
+ * `reasoning_effort` (string) and `thinking:{type}` cover OpenAI o-series, gpt-5,
+ * deepseek-v4 and most compatible providers. Returns {} when neither is set, so
+ * spreading it is a no-op for everyone else (zero regression).
+ */
+export function openAiCompatReasoningBody(params: AiModelParameters): Record<string, unknown> {
+  const out: Record<string, unknown> = {}
+  if (params.reasoningEffort) out.reasoning_effort = params.reasoningEffort
+  if (params.thinking) out.thinking = { type: params.thinking }
+  return out
+}
+
+/**
+ * AI SDK `providerOptions` for reasoning control. `providerOptions` is keyed by
+ * provider, and the SDK only applies the key matching the active provider — so we
+ * can safely emit openai / anthropic / google together without detecting which one
+ * is in use. Returns undefined when no control is requested (omit the option).
+ */
+export function buildSdkReasoningProviderOptions(
+  params: AiModelParameters
+): Record<string, Record<string, unknown>> | undefined {
+  const openai: Record<string, unknown> = {}
+  const anthropic: Record<string, unknown> = {}
+  const google: Record<string, unknown> = {}
+  if (params.reasoningEffort) openai.reasoningEffort = params.reasoningEffort
+  if (params.thinking === 'disabled') {
+    anthropic.thinking = { type: 'disabled' }
+    google.thinkingConfig = { thinkingBudget: 0, includeThoughts: false }
+  } else if (params.thinking === 'enabled') {
+    anthropic.thinking = { type: 'enabled', budgetTokens: 2048 }
+    google.thinkingConfig = { includeThoughts: true }
+  }
+  const out: Record<string, Record<string, unknown>> = {}
+  if (Object.keys(openai).length) out.openai = openai
+  if (Object.keys(anthropic).length) out.anthropic = anthropic
+  if (Object.keys(google).length) out.google = google
+  return Object.keys(out).length ? out : undefined
+}
+
+/** AiModelParameters minus the reasoning-control fields (which go via providerOptions, not top-level). */
+export function stripReasoningParams(params: AiModelParameters): AiModelParameters {
+  const rest = { ...params }
+  delete rest.reasoningEffort
+  delete rest.thinking
+  return rest
 }
 
 export function stringifyToolResult(result: unknown): string {

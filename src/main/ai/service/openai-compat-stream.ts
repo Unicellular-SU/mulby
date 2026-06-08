@@ -14,6 +14,7 @@ import {
   buildApiKeyScope,
   extractOpenAICompatContentText,
   extractUsage,
+  openAiCompatReasoningBody,
   parseCompatToolCallArgs,
   pickOpenAICompatContentSource,
   resolveMaxToolSteps,
@@ -272,7 +273,8 @@ export async function streamOpenAICompatChat(
     presence_penalty: input.params.presencePenalty,
     frequency_penalty: input.params.frequencyPenalty,
     stop: input.params.stopSequences,
-    seed: input.params.seed
+    seed: input.params.seed,
+    ...openAiCompatReasoningBody(input.params)
   })
   const requestHeaders = {
     'Content-Type': 'application/json',
@@ -696,7 +698,8 @@ export async function streamOpenAICompatToolStep(
     presence_penalty: input.params.presencePenalty,
     frequency_penalty: input.params.frequencyPenalty,
     stop: input.params.stopSequences,
-    seed: input.params.seed
+    seed: input.params.seed,
+    ...openAiCompatReasoningBody(input.params)
   })
   const requestHeaders = {
     'Content-Type': 'application/json',

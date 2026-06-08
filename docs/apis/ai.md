@@ -1005,8 +1005,24 @@ type AiModelParameters = {
   frequencyPenalty?: number;
   stopSequences?: string[];
   seed?: number;
+  // 推理强度（reasoning 模型）。映射到 OpenAI 兼容 `reasoning_effort`
+  // 与 AI SDK `providerOptions.openai.reasoningEffort`。低 = 更快/更省。
+  reasoningEffort?: 'minimal' | 'low' | 'medium' | 'high' | 'max';
+  // 显式开关模型「思考」（在 provider 支持时）。映射：
+  //   OpenAI 兼容 body `thinking: { type: 'enabled' | 'disabled' }`（如 deepseek-v4）
+  //   Anthropic body `thinking`（disabled / enabled+budget）
+  //   AI SDK providerOptions（anthropic.thinking / google.thinkingConfig）
+  // 省略则用 provider/模型默认值。
+  thinking?: 'enabled' | 'disabled';
 };
 ```
+
+**推理控制（reasoningEffort / thinking）**：
+- 对延迟敏感的场景（如行内补全），可对 reasoning 模型传 `params.thinking = 'disabled'`（支持开关的模型，如 deepseek-v4）或较低的 `params.reasoningEffort`，让模型少思考、更快返回。
+- 字段按 provider 自动落位：OpenAI 兼容协议写入 `/chat/completions` 请求体（`reasoning_effort`、`thinking`）；Anthropic 写入 `thinking`；走 AI SDK 的原生 provider 通过 `providerOptions`（openai / anthropic / google）下发。
+- 不支持的 provider 会忽略这些字段；个别严格 provider 可能因未知字段报错，建议仅在确认模型支持时设置。
+
+> 模型是否为 reasoning，可由 `ai.allModels()` 返回的 `capabilities`（含 `{ type: 'reasoning' }`）判断——该能力现以 [models.dev](https://models.dev/) 数据为准。
 
 ### AiProviderConfig
 ```typescript

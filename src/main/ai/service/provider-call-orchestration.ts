@@ -13,7 +13,7 @@ import type { ProviderMethodAdapter } from '../providerMethodAdapters'
 import { supportsReasoning } from '../modelCapabilities'
 import { splitThinkTaggedText } from '../thinkTagParser'
 import { countTokensForText, countTokensFromMessages } from '../tokens'
-import { extractUsage, normalizeUsage, resolveMaxToolSteps } from './utils'
+import { buildSdkReasoningProviderOptions, extractUsage, normalizeUsage, resolveMaxToolSteps, stripReasoningParams } from './utils'
 import log from 'electron-log'
 
 export interface ProviderCallOrchestrationDeps {
@@ -160,7 +160,10 @@ export async function executeProviderCallOrchestration(
         abortSignal: input.controllerSignal,
         tools: input.tools,
         stopWhen: input.tools ? stepCountIs(maxSteps) : undefined,
-        ...input.params
+        ...stripReasoningParams(input.params),
+        ...(buildSdkReasoningProviderOptions(input.params)
+          ? { providerOptions: buildSdkReasoningProviderOptions(input.params) }
+          : {})
       } as Parameters<typeof generateText>[0])
       const resultMeta = result as { toolCalls?: unknown[]; steps?: unknown[]; reasoning?: unknown }
 

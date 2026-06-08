@@ -71,8 +71,13 @@ function resolveProviderConfig(modelId?: string, explicitProvider?: AiProviderCo
 function getDefaultCapability(type: AiModelType): boolean {
   switch (type) {
     case 'function_calling':
-    case 'reasoning':
+      // Most chat models support tool calling; keep the permissive default.
       return true
+    case 'reasoning':
+      // Reasoning is now sourced authoritatively from models.dev (+ name regex).
+      // Default to false so unknown models are NOT over-reported as reasoning
+      // (the previous `true` default flagged e.g. deepseek-chat as reasoning).
+      return false
     default:
       return false
   }
