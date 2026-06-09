@@ -183,7 +183,7 @@ export default function BackgroundPluginManagerView({ onBack }: BackgroundPlugin
                   <div className="rounded-2xl bg-slate-50 p-4 dark:bg-slate-900/50">
                     <div className="text-xs text-slate-500 dark:text-slate-400">总内存使用</div>
                     <div className="mt-1 text-2xl font-semibold text-slate-900 dark:text-white">
-                      {formatMemory(plugins.reduce((sum, p) => sum + p.memoryUsage, 0))}
+                      {formatMemory(plugins.reduce((sum, p) => sum + p.memoryUsage + (p.rendererMemoryUsage ?? 0), 0))}
                     </div>
                   </div>
                   <div className="rounded-2xl bg-slate-50 p-4 dark:bg-slate-900/50">
@@ -259,7 +259,7 @@ export default function BackgroundPluginManagerView({ onBack }: BackgroundPlugin
                           <div>
                             <div className="text-[10px] uppercase tracking-wider text-slate-400 dark:text-slate-500">内存</div>
                             <div className="mt-0.5 text-xs font-medium text-slate-700 dark:text-slate-300">
-                              {formatMemory(plugin.memoryUsage)}
+                              {formatMemory(plugin.memoryUsage + (plugin.rendererMemoryUsage ?? 0))}
                             </div>
                           </div>
                           <div>
@@ -276,12 +276,24 @@ export default function BackgroundPluginManagerView({ onBack }: BackgroundPlugin
                           </div>
                         </div>
 
-                        {/* 第二行：错误数 */}
+                        {/* 第二行：错误数 + 内存细分（宿主进程 vs UI 渲染进程） */}
                         <div className="grid grid-cols-4 gap-3 mt-2">
                           <div>
                             <div className="text-[10px] uppercase tracking-wider text-slate-400 dark:text-slate-500">错误数</div>
                             <div className="mt-0.5 text-xs font-medium text-slate-700 dark:text-slate-300">
                               {plugin.errorCount}
+                            </div>
+                          </div>
+                          <div>
+                            <div className="text-[10px] uppercase tracking-wider text-slate-400 dark:text-slate-500">宿主内存</div>
+                            <div className="mt-0.5 text-xs font-medium text-slate-700 dark:text-slate-300">
+                              {formatMemory(plugin.memoryUsage)}
+                            </div>
+                          </div>
+                          <div>
+                            <div className="text-[10px] uppercase tracking-wider text-slate-400 dark:text-slate-500">渲染内存</div>
+                            <div className="mt-0.5 text-xs font-medium text-slate-700 dark:text-slate-300">
+                              {formatMemory(plugin.rendererMemoryUsage ?? 0)}
                             </div>
                           </div>
                         </div>

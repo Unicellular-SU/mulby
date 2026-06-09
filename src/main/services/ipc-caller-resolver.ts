@@ -181,6 +181,17 @@ export function resolveIpcCallerSource(sender: Electron.WebContents): IpcCallerI
 }
 
 /**
+ * 反查某个 webContents 归属的插件 ID（无副作用，不打印告警）。
+ * 用于资源统计等场景：把渲染进程内存归到对应插件名下。
+ * 返回 null 表示该 webContents 不属于任何插件窗口/面板（如主窗口、系统页）。
+ */
+export function getPluginIdForWebContents(wc: Electron.WebContents): string | null {
+  const win = windowFromWebContents(wc)
+  if (!win) return null
+  return pluginWindowRegistry.get(win.id) ?? panelWindowRegistry.get(win.id) ?? null
+}
+
+/**
  * 打印 untrusted 告警（同一窗口仅打印一次，避免日志泛滥）
  */
 function warnUntrusted(windowId: number | null, detail: Electron.WebContents | string): void {

@@ -1,4 +1,4 @@
-import { ipcMain, app } from 'electron'
+import { ipcMain, app, webContents } from 'electron'
 import { resolve } from 'path'
 import { PluginManager } from '../plugin'
 import type { PluginToolRegistry } from '../plugin/plugin-tools'
@@ -17,6 +17,8 @@ import { PluginInstaller } from '../plugin/installer'
 import { PluginStoreService } from '../plugin/store-service'
 import { queryMainPush, handleMainPushSelect, hasMainPushHandler, type MainPushItem } from '../plugin/dynamic-features'
 import { getAppSettings } from '../services/app-settings-runtime'
+import { getPluginIdForWebContents } from '../services/ipc-caller-resolver'
+import { aggregateRendererBytesByPlugin } from '../services/app-memory-usage'
 import { appOnlyInvoke } from './_shared/caller-middleware'
 
 
@@ -436,6 +438,33 @@ export function registerPluginHandlers(manager: PluginManager, pluginToolRegistr
     const watchdog = hostManager.getWatchdog()
     const now = Date.now()
 
+    // 渲染进程内存归属：Watchdog 的 memoryUsage 只含宿主(Node)进程 RSS，漏掉了插件
+    // 真正的大头——UI 渲染进程(Chromium/WebContentsView)。这里把每个插件的渲染进程
+    // workingSet 聚合到插件名下，让面板的内存能反映真实占用、与控制中心口径对得上。
+    const pidToBytes = new Map<number, number>()
+    for (const metric of app.getAppMetrics()) {
+      pidToBytes.set(metric.pid, Math.max(0, metric.memory.workingSetSize || 0) * 1024)
+    }
+    const rendererPidsByPlugin = new Map<string, Set<number>>()
+    for (const wc of webContents.getAllWebContents()) {
+      if (wc.isDestroyed()) continue
+      const ownerPluginId = getPluginIdForWebContents(wc)
+      if (!ownerPluginId) continue
+      const pid = wc.getOSProcessId()
+      if (!pid) continue
+      let pidSet = rendererPidsByPlugin.get(ownerPluginId)
+      if (!pidSet) {
+        pidSet = new Set<number>()
+        rendererPidsByPlugin.set(ownerPluginId, pidSet)
+      }
+      pidSet.add(pid)
+    }
+    const rendererBytesByPlugin = aggregateRendererBytesByPlugin(rendererPidsByPlugin, pidToBytes)
+    const rendererMb = (pluginId: string): number => {
+      const bytes = rendererBytesByPlugin.get(pluginId) ?? 0
+      return bytes > 0 ? bytes / (1024 * 1024) : 0
+    }
+
     // 合并后台插件和其他活跃插件
     const result: BackgroundPluginInfo[] = []
     const pluginIndex = new Map<string, number>()
@@ -445,6 +474,7 @@ export function registerPluginHandlers(manager: PluginManager, pluginToolRegistr
     for (const bgPlugin of backgroundPlugins) {
       result.push({
         ...bgPlugin,
+        rendererMemoryUsage: rendererMb(bgPlugin.pluginId),
         runMode: 'background' as const
       })
       markAdded(bgPlugin.pluginId)
@@ -470,6 +500,7 @@ export function registerPluginHandlers(manager: PluginManager, pluginToolRegistr
           persistent: false,
           maxRuntime: 0,
           memoryUsage: health?.memoryUsage ?? 0,
+          rendererMemoryUsage: rendererMb(plugin.id),
           cpuUsage: health?.cpuUsage ?? 0,
           requestCount: health?.totalRequestCount ?? 0,
           errorCount: health?.totalErrorCount ?? 0,
@@ -509,6 +540,7 @@ export function registerPluginHandlers(manager: PluginManager, pluginToolRegistr
         persistent: false,
         maxRuntime: 0,
         memoryUsage: health?.memoryUsage ?? 0,
+        rendererMemoryUsage: rendererMb(windowPlugin.pluginId),
         cpuUsage: health?.cpuUsage ?? 0,
         requestCount: health?.totalRequestCount ?? 0,
         errorCount: health?.totalErrorCount ?? 0,

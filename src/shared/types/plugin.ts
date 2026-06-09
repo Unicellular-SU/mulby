@@ -889,7 +889,8 @@ export interface BackgroundPluginInfo {
   maxRuntime: number             // 最大运行时间
 
   // 资源使用情况（来自 Watchdog）
-  memoryUsage: number            // 内存使用（MB）
+  memoryUsage: number            // 宿主进程内存（MB，来自 Watchdog 的 Host RSS）
+  rendererMemoryUsage?: number   // 插件 UI 渲染进程内存（MB，按进程归属聚合；无 UI 时为 0）
   cpuUsage: number               // CPU 使用率（%）
   requestCount: number           // 请求计数
   errorCount: number             // 错误计数

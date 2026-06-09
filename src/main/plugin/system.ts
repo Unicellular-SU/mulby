@@ -13,6 +13,7 @@ import {
   type ActiveWindowInfo,
 } from '../services/active-window'
 import { recordCrashBreadcrumb } from '../services/crash-breadcrumbs'
+import { estimateAppPrivateMemoryBytes } from '../services/app-memory-usage'
 
 const EXTENSION_ONLY_ICON_REQUEST_RE = /^\.[a-z0-9][a-z0-9.+_-]{0,63}$/i
 const DARWIN_SYNTHETIC_ICON_HELPER_TIMEOUT_MS = 2500
@@ -197,7 +198,21 @@ export class PluginSystem {
     const cpuPercent = this.roundResourceNumber(
       processes.reduce((total, processUsage) => total + processUsage.cpuPercent, 0)
     )
-    const memoryBytes = processes.reduce((total, processUsage) => total + processUsage.workingSetBytes, 0)
+
+    // 修正口径：裸加 workingSetSize 会把每个进程都包含的共享库内存重复累加 N 次
+    // （macOS 尤甚），导致总数虚高。用主进程的 shared 作为每进程共享基线，扣除被
+    // 重复计入的 (N-1) 份，得到更接近真实物理占用的估算。失败时回退到原始累加。
+    let sharedBytesPerProcess = 0
+    try {
+      const mainMemory = await process.getProcessMemoryInfo()
+      sharedBytesPerProcess = Math.max(0, (mainMemory.shared || 0) * 1024)
+    } catch {
+      sharedBytesPerProcess = 0
+    }
+    const memoryBytes = estimateAppPrivateMemoryBytes(
+      processes.map((processUsage) => processUsage.workingSetBytes),
+      sharedBytesPerProcess
+    )
     const disk = await this.getAppDiskUsage()
 
     return {
