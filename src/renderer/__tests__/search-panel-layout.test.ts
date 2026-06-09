@@ -109,6 +109,18 @@ describe('search panel layout policy', () => {
     )
   })
 
+  it('resets the measured panel height while hidden by an attached plugin even if input remains', () => {
+    // 回归：附着插件常带着搜索文本启动(hasInput=true)且面板被遮挡(showSearchPanel=false)，
+    // 必须重置高度，否则关闭插件后会用旧高度(如 150)先撑开再缩回最近打开(100)造成闪烁。
+    assert.equal(
+      shouldResetSearchPanelHeight({
+        hasInput: true,
+        showSearchPanel: false
+      }),
+      true
+    )
+  })
+
   it('uses measured height for compact empty launch suggestions', () => {
     assert.equal(
       getSearchPanelHeight({

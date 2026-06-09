@@ -694,13 +694,16 @@ function MainApp() {
     }
     window.mulby.window.setExpendHeight(height, allowResize)
 
-    if (hasInput && lastHeightRef.current !== height) {
-      lastHeightRef.current = height
-    } else if (shouldResetSearchPanelHeight({ hasInput, showSearchPanel })) {
+    if (shouldResetSearchPanelHeight({ hasInput, showSearchPanel })) {
+      // 面板不可见（输入清空隐藏，或被附着插件/系统页/附件管理器遮挡）：重置测量高度，
+      // 下次面板重新出现时等待 ResizeObserver 重新测量，避免用旧高度先撑开再回缩闪烁。
+      // 注意：此重置必须先于下面的 hasInput 分支判断——附着插件常带着搜索文本启动
+      // (hasInput=true)，若被 hasInput 分支拦截就会残留旧高度，关闭插件后闪回。
       lastHeightRef.current = null
-      // Reset panel height when input is cleared
       searchPanelContentHeightRef.current = 0
       setSearchPanelHeight(0)
+    } else if (hasInput && lastHeightRef.current !== height) {
+      lastHeightRef.current = height
     }
   // perfTrace 不影响高度计算，不纳入依赖：避免每次搜索都触发多余的
   // setExpendHeight IPC（透明窗口频繁 resize 会破坏合成器）
