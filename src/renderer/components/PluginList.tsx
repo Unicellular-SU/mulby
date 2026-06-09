@@ -10,6 +10,7 @@ import type {
 import { isSystemSearchQueryEligible } from '../../shared/system-search'
 import type { InputPayload, SearchPreferenceState } from '../../shared/types/plugin'
 import type { SearchSettings } from '../../shared/types/settings'
+import { getReportedPanelHeight } from '../search-panel-layout'
 import { buildSystemIconBatch, getSystemFileIconSvg, getSystemIconCacheKey } from './plugin-list-icons'
 
 interface PluginListProps {
@@ -1079,11 +1080,11 @@ function PluginList({
   ])
 
   const flatItems = useMemo(() => sections.flatMap((section) => section.items), [sections])
-  const compactEmptyLaunchSuggestions = showEmptyLaunchSuggestions &&
+  // 空闲建议模式：无文本/附件输入，面板仅用于展示"最近使用"建议。
+  const isEmptyLaunchSuggestionMode = showEmptyLaunchSuggestions &&
     searchPayload.text.trim().length === 0 &&
-    searchPayload.attachments.length === 0 &&
-    sections.length === 1 &&
-    sections[0]?.key === 'recent'
+    searchPayload.attachments.length === 0
+  const onlyRecentSection = sections.length === 1 && sections[0]?.key === 'recent'
   const isSystemLoading = isSystemAppsLoading || isSystemFilesLoading
   const isSearching = searchSettings === null || isPluginLoading || isSystemLoading
 
@@ -1179,8 +1180,13 @@ function PluginList({
     if (!el) return
 
     const report = () => {
-      const h = el.scrollHeight
-      onContentHeightChange(h, { compact: compactEmptyLaunchSuggestions })
+      const { height, compact } = getReportedPanelHeight({
+        rawContentHeight: el.scrollHeight,
+        emptyLaunchSuggestionMode: isEmptyLaunchSuggestionMode,
+        hasRenderableItems: flatItems.length > 0,
+        onlyRecentSection
+      })
+      onContentHeightChange(height, { compact })
     }
 
     // Initial measurement
@@ -1197,7 +1203,8 @@ function PluginList({
     expandedSections.apps,
     expandedSections.files,
     expandedSections.push,
-    compactEmptyLaunchSuggestions
+    isEmptyLaunchSuggestionMode,
+    onlyRecentSection
   ])
 
   useEffect(() => {

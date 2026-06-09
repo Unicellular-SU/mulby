@@ -10,6 +10,18 @@ interface SearchPanelHeightInput {
   compact: boolean
 }
 
+interface ReportedPanelHeightInput {
+  rawContentHeight: number
+  emptyLaunchSuggestionMode: boolean
+  hasRenderableItems: boolean
+  onlyRecentSection: boolean
+}
+
+interface ReportedPanelHeight {
+  height: number
+  compact: boolean
+}
+
 interface SearchPanelBlockedInput {
   pluginOpen: boolean
   visiblePluginLaunch: boolean
@@ -52,6 +64,31 @@ export function getSearchPanelHeight({
 }: SearchPanelHeightInput): number {
   const lowerBound = compact ? 0 : minHeight
   return Math.min(Math.max(contentHeight, lowerBound), maxHeight)
+}
+
+/**
+ * 决定 PluginList 应向父窗口上报的面板高度与是否 compact。
+ *
+ * 修复"唤起宿主 / 关闭附着插件后面板高度先撑大再缩回最近打开"的闪烁：
+ * 空闲建议模式（无输入、只为展示"最近使用"）下，当最近项尚未加载完成、当前只有
+ * "正在搜索…"占位（hasRenderableItems=false）时，上报 0 高度让窗口保持搜索框高度；
+ * 待最近项就绪后再一次性增高到其真实高度（compact，无 120 最小高度），从而只"增高"
+ * 一次、不再经历"撑到占位高度→缩回最近高度"的中间态。
+ *
+ * 非建议模式（用户在输入搜索）保持原行为：上报真实测量高度，由父窗口套用最小高度，
+ * 以便加载/无结果时仍显示"正在搜索…/没有匹配结果"提示框。
+ */
+export function getReportedPanelHeight({
+  rawContentHeight,
+  emptyLaunchSuggestionMode,
+  hasRenderableItems,
+  onlyRecentSection
+}: ReportedPanelHeightInput): ReportedPanelHeight {
+  if (emptyLaunchSuggestionMode && !hasRenderableItems) {
+    return { height: 0, compact: true }
+  }
+  const compact = emptyLaunchSuggestionMode && onlyRecentSection
+  return { height: rawContentHeight, compact }
 }
 
 export function shouldResetSearchPanelHeight({
