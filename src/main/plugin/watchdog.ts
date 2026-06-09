@@ -19,8 +19,12 @@ interface HostHealth {
   missedHeartbeats: number
   memoryUsage: number
   cpuUsage: number
+  // 滑动计数器：每次心跳检查衰减 ×0.8，近似"每分钟速率"，仅用于限流/错误阈值判定。
   requestCount: number
   errorCount: number
+  // 累计计数器：自 Host 注册以来的真实累计值，永不衰减，用于任务管理器 UI 展示。
+  totalRequestCount: number
+  totalErrorCount: number
   lastCpuTime: number      // 上次 CPU 时间（微秒）
   lastCpuTimestamp: number // 上次 CPU 时间戳（毫秒）
 
@@ -107,6 +111,17 @@ export class PluginHostWatchdog extends EventEmitter {
    * @param customLimits 自定义资源限制（可选）
    */
   registerHost(pluginName: string, customLimits?: Partial<WatchdogConfig>): void {
+    // 幂等：同一 Host 可能被注册两次（HostManager.createHost 携带 customLimits 注册后，
+    // BackgroundManager.start 又注册一次）。若已存在则保留既有健康数据与累计计数，
+    // 仅在显式传入新的资源限制时更新，避免重置计数 / 丢失 per-plugin resourceLimits。
+    const existing = this.hosts.get(pluginName)
+    if (existing) {
+      if (customLimits) {
+        existing.customLimits = customLimits
+      }
+      return
+    }
+
     this.hosts.set(pluginName, {
       pluginName,
       lastHeartbeat: Date.now(),
@@ -115,6 +130,8 @@ export class PluginHostWatchdog extends EventEmitter {
       cpuUsage: 0,
       requestCount: 0,
       errorCount: 0,
+      totalRequestCount: 0,
+      totalErrorCount: 0,
       lastCpuTime: 0,
       lastCpuTimestamp: Date.now(),
       // Phase 4: 内存泄漏检测
@@ -179,6 +196,7 @@ export class PluginHostWatchdog extends EventEmitter {
     if (!health) return true
 
     health.requestCount++
+    health.totalRequestCount++
 
     // Phase 4: 使用插件特定的速率限制
     const maxRequests = this.getEffectiveLimit(pluginName, 'maxRequestsPerMinute')
@@ -198,6 +216,7 @@ export class PluginHostWatchdog extends EventEmitter {
     if (!health) return
 
     health.errorCount++
+    health.totalErrorCount++
 
     // Phase 4: 使用插件特定的错误限制
     const maxErrors = this.getEffectiveLimit(pluginName, 'maxErrorsPerMinute')

@@ -525,6 +525,9 @@ export class PluginHostManager extends EventEmitter {
     host.pendingRequests.delete(message.id)
 
     if (message.type === 'error') {
+      // 统计错误数（任务管理器展示用）。Host 返回的 error 响应即一次请求失败；
+      // 累计计数 totalErrorCount 永不衰减，滑动 errorCount 仍喂给错误阈值判定。
+      this.watchdog.recordError(host.pluginName)
       const error = new Error(message.payload.message)
       if (message.payload.stack) {
         error.stack = message.payload.stack
@@ -743,6 +746,10 @@ export class PluginHostManager extends EventEmitter {
         reject(new Error(`Host not ready: ${pluginName}`))
         return
       }
+
+      // 统计请求数（任务管理器展示用）。此处仅累加计数，不在此强制限流——
+      // 超限事件 host:rate-limited 目前无订阅方，避免引入未预期的请求拒绝。
+      this.watchdog.recordRequest(pluginName)
 
       // 请求开始：取消 idle timer，保证进程不在请求期间被销毁
       this.cancelIdleCleanup(pluginName)
