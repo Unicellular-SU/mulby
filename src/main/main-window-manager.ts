@@ -150,6 +150,10 @@ export class MainWindowManager {
   private deferShadowShow = false
   private deps: MainWindowDeps | null = null
   private quitting = false
+  private appBlurListenerInstalled = false
+  private readonly handleAppBlur = (): void => {
+    this.notifySurfaceBlur()
+  }
 
   getWindow(): BrowserWindow | null {
     return this.window
@@ -222,13 +226,49 @@ export class MainWindowManager {
     return false
   }
 
+  private isMainSurfaceVisible(): boolean {
+    if (this.window && !this.window.isDestroyed() && this.window.isVisible()) return true
+    const panelWin = this.deps?.pluginWindowManager.getPanelWindow()?.getWindow()
+    if (panelWin && !panelWin.isDestroyed() && panelWin.isVisible()) return true
+    const systemPageAttached = this.deps?.systemPageWindowManager.getAttachedWindow()
+    if (systemPageAttached && !systemPageAttached.isDestroyed() && systemPageAttached.isVisible()) return true
+    return false
+  }
+
+  /**
+   * 统一的失焦隐藏入口。主窗口自身、附着插件面板、系统页附着窗口的 blur，以及
+   * 应用级 browser-window-blur 兜底，全部汇聚到这里，用同一套 isMainSurfaceFocused
+   * 判定 + 抑制期 defer。取代以往三个窗口各自 setTimeout + 局部焦点判断的做法，
+   * 避免「判断口径不一致」「忽略期直接丢弃 blur」导致点击别处有时不隐藏。
+   */
+  notifySurfaceBlur(): void {
+    if (isIgnoringBlur() || this.shouldSuppressBlurHide()) {
+      this.deferBlurHideUntilSuppressionEnds()
+      return
+    }
+    this.scheduleBlurHideCheck()
+  }
+
   private hideIfMainSurfaceUnfocused(): void {
     if (isIgnoringBlur() || this.shouldSuppressBlurHide()) {
       this.deferBlurHideUntilSuppressionEnds()
       return
     }
+    // 没有任何主表面可见时无需隐藏——避免被无关窗口（如独立插件窗）的 blur 触发空转。
+    if (!this.isMainSurfaceVisible()) return
     if (this.isMainSurfaceFocused()) return
     this.hide()
+  }
+
+  /**
+   * 应用级失焦兜底：任意 Mulby 窗口 blur 时统一走 notifySurfaceBlur。
+   * 主要补上「附着面板 / 系统页失焦」原本各自处理、判断口径不一的缺口。
+   * 仅注册一次；handler 内部经 isMainSurfaceVisible/Focused 自行判定，无副作用。
+   */
+  private installAppBlurWatchdog(): void {
+    if (this.appBlurListenerInstalled) return
+    this.appBlurListenerInstalled = true
+    app.on('browser-window-blur', this.handleAppBlur)
   }
 
   private scheduleBlurHideCheck(): void {
@@ -492,6 +532,7 @@ export class MainWindowManager {
 
     this.window = win
     registerAppWindow(win.id)
+    this.installAppBlurWatchdog()
 
     if (process.platform === 'darwin') {
       win.setFullScreenable(false)

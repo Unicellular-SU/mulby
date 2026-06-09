@@ -6,7 +6,7 @@ import { ThemeManager } from '../services/theme'
 import { loggerService } from '../services/logger'
 import { appSettingsManager } from '../services/app-settings'
 import { installConsoleCaptureForWebContents } from './console-capture'
-import { isIgnoringBlur, startIgnoringBlur, stopIgnoringBlur } from '../services/blur-manager'
+import { startIgnoringBlur, stopIgnoringBlur } from '../services/blur-manager'
 import { getPluginPreloadPath } from './plugin-preload-wrapper'
 import {
     PLUGIN_RENDERER_V8_CACHE_OPTIONS,
@@ -395,20 +395,9 @@ export class PluginPanelWindow {
             this.layoutAttachedPluginView()
         })
 
-        panelWindow.on('blur', () => {
-            if (isIgnoringBlur()) return
-
-            setTimeout(() => {
-                if (this.mainWindow.isFocused()) {
-                    return
-                }
-                if (this.panelWindow && !this.panelWindow.isDestroyed() && this.panelWindow.isFocused()) {
-                    return
-                }
-                this.hide()
-                this.mainWindow.hide()
-            }, 50)
-        })
+        // 失焦隐藏统一交由 MainWindowManager 的应用级 browser-window-blur 兜底处理
+        // （见 main-window-manager.ts notifySurfaceBlur）。这里不再各自 setTimeout +
+        // 局部焦点判断，避免与主窗口 / 系统页判断口径不一致而漏隐藏。
 
         panelWindow.on('closed', () => {
             if (this.panelWindow === panelWindow) {

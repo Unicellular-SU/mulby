@@ -5,7 +5,6 @@ import { existsSync } from 'fs'
 import { ThemeManager } from './theme'
 import { attachShortcutRecordingGuard } from './shortcut-recording-guard'
 import { injectCustomTitleBar } from '../plugin/titlebar'
-import { isIgnoringBlur } from './blur-manager'
 import { ATTACHED_PANEL_HEIGHT, ATTACHED_PANEL_MIN_OVERFLOW_HEIGHT } from '../constants/panel-window'
 import { SYSTEM_PAGE_FALLBACK_WIDTH } from '../constants/window-defaults'
 import {
@@ -326,18 +325,9 @@ export class SystemPageWindowManager {
       void applyWindowsFramelessSurface(this.attachedWindow, { resizeMode: 'bottom' })
     })
 
-    win.on('blur', () => {
-      if (isIgnoringBlur()) return
-
-      setTimeout(() => {
-        const activeAttached = this.getAttachedWindow()
-        if (!activeAttached) return
-        if (mainWindow.isFocused()) return
-        if (activeAttached.isFocused()) return
-        this.hideAttached()
-        mainWindow.hide()
-      }, 50)
-    })
+    // 失焦隐藏统一交由 MainWindowManager 的应用级 browser-window-blur 兜底处理
+    // （见 main-window-manager.ts notifySurfaceBlur）。这里不再各自 setTimeout +
+    // 局部焦点判断，避免与主窗口 / 附着面板判断口径不一致而漏隐藏。
 
     win.on('closed', () => {
       if (this.attachedWindow && this.attachedWindow.id === win.id) {

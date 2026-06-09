@@ -36,6 +36,31 @@ describe('main window focus and blur-hide policy', () => {
     )
   })
 
+  it('routes every surface blur through one app-level watchdog with a visibility guard', () => {
+    const source = readFileSync(mainWindowManagerSourcePath, 'utf8')
+
+    assert.match(
+      source,
+      /notifySurfaceBlur\(\): void \{[\s\S]*this\.deferBlurHideUntilSuppressionEnds\(\)[\s\S]*return[\s\S]*this\.scheduleBlurHideCheck\(\)/,
+      'a single notifySurfaceBlur entry should defer while suppressed and otherwise schedule the hide check'
+    )
+    assert.match(
+      source,
+      /app\.on\('browser-window-blur', this\.handleAppBlur\)/,
+      'main window manager should install an app-level browser-window-blur watchdog'
+    )
+    assert.match(
+      source,
+      /private isMainSurfaceVisible\(\): boolean \{/,
+      'main window manager should expose a main-surface visibility check'
+    )
+    assert.match(
+      source,
+      /if \(!this\.isMainSurfaceVisible\(\)\) return[\s\S]*if \(this\.isMainSurfaceFocused\(\)\) return[\s\S]*this\.hide\(\)/,
+      'the hide check should skip when no surface is visible and only hide once focus has truly left'
+    )
+  })
+
   it('retries focus after showing the main window and clears focus timers during teardown', () => {
     const source = readFileSync(mainWindowManagerSourcePath, 'utf8')
 
