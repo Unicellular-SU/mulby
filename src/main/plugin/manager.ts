@@ -17,6 +17,10 @@ import { pluginFeatureStore } from './dynamic-features'
 import type { MainPushItem } from './dynamic-features'
 import { preparePluginPreload } from './plugin-preload-wrapper'
 import { materializeDataUrlImageAttachments } from './input-attachments'
+import { computeHotStartBudget, pickStartupPrewarmTargets } from './hot-start-budget'
+import { setPluginViewPoolSize } from './plugin-view-pool'
+import { startLaunchTrace, markLaunchPhase, flushLaunchTrace } from './launch-trace'
+import { totalmem } from 'os'
 import {
   InputPayload,
   Plugin,
@@ -215,22 +219,36 @@ export class PluginManager {
   // Resident UI：缓存最近关闭的 attached panel，加速热启动。
   private residentSessions: Map<string, ResidentUiSession> = new Map()
   private residentHostKeepaliveTimers: Map<string, NodeJS.Timeout> = new Map()
-  private static readonly RESIDENT_UI_CACHE_LIMIT = 6
   private static readonly RESIDENT_TTL_MS = 3 * 60_000
   private static readonly RESIDENT_HOST_KEEPALIVE_MS = 60_000
+  // P3：缓存上限按机器内存自适应（中档 8–16GB = 6/3，与历史默认一致）。
+  // RESIDENT_UI_CACHE_LIMIT = 6（中档基准）
+  private readonly residentUiCacheLimit: number
 
   // 搜索预热：缓存少量最可能启动的 Host，仍不执行 onLoad。
   private prewarmState: Map<string, PrewarmState> = new Map()
-  private static readonly PREWARM_CACHE_LIMIT = 3
+  private readonly prewarmCacheLimit: number
+  // P1：启动后按 frecency 预热的常用插件数量。
+  private readonly startupPrewarmCount: number
   private poolWarmupTimer: NodeJS.Timeout | null = null
   private preloadWarmupTimer: NodeJS.Timeout | null = null
   private launchOnStartupTimer: NodeJS.Timeout | null = null
+  private startupPrewarmTimer: NodeJS.Timeout | null = null
 
   private static readonly DEFAULT_IDLE_LOAD_DELAY_MS = 100
   private static readonly UI_IDLE_LOAD_DELAY_MS = 1_500
   private static readonly PRELOAD_WARMUP_DELAY_MS = 3_000
+  // P1：启动后延迟此时长再做 frecency 预热，让冷启动其它任务先完成。
+  private static readonly STARTUP_PREWARM_DELAY_MS = 5_000
 
   constructor() {
+    // P3：依据机器内存计算热启动预算（缓存上限 / 预热数量 / 视图池大小）。
+    const budget = computeHotStartBudget(totalmem())
+    this.residentUiCacheLimit = budget.residentUiCacheLimit
+    this.prewarmCacheLimit = budget.prewarmCacheLimit
+    this.startupPrewarmCount = budget.startupPrewarmCount
+    setPluginViewPoolSize(budget.pluginViewPoolSize)
+
     this.stateManager = new PluginStateManager()
     this.hostManager = new PluginHostManager()
     this.searchWorker = new PluginSearchWorker()
@@ -413,11 +431,61 @@ export class PluginManager {
         void this.hostManager.fillPool()
       }, 2000)
       this.schedulePreloadWarmup()
+      this.scheduleStartupPrewarm()
     }).finally(() => {
       this.initPromise = null
     })
 
     return this.initPromise
+  }
+
+  /**
+   * P1：启动稳定后，按 frecency 预热最常用的 Top-N 插件（仅 initPlugin，不跑 onLoad），
+   * 让用户开机后第一次打开常用插件就是热的。延迟执行，避免与冷启动其它任务争抢资源。
+   */
+  private scheduleStartupPrewarm(): void {
+    if (this.startupPrewarmTimer) {
+      clearTimeout(this.startupPrewarmTimer)
+    }
+    this.startupPrewarmTimer = setTimeout(() => {
+      this.startupPrewarmTimer = null
+      try {
+        const targets = this.getStartupPrewarmTargets()
+        for (const pluginId of targets) {
+          void this.prewarm(pluginId)
+        }
+        if (targets.length > 0) {
+          log.info(`[PluginManager] startup frecency prewarm: ${targets.join(', ')}`)
+        }
+      } catch (err) {
+        log.warn('[PluginManager] startup prewarm failed:', err)
+      }
+    }, PluginManager.STARTUP_PREWARM_DELAY_MS)
+    this.startupPrewarmTimer.unref()
+  }
+
+  /** 取启动预热目标：按 frecency 选出 Top-N 个已启用、非系统的去重 pluginId。 */
+  private getStartupPrewarmTargets(): string[] {
+    if (this.startupPrewarmCount <= 0) return []
+    // 取较多最近记录用于跨 feature 聚合，再选 Top-N 插件。
+    const recent = this.stateManager.getRecentUsage(this.startupPrewarmCount * 8)
+    const candidates = pickStartupPrewarmTargets(
+      recent.map((item) => ({
+        pluginId: item.pluginId,
+        lastUsedAt: item.lastUsedAt,
+        useCount: item.useCount
+      })),
+      this.startupPrewarmCount * 3
+    )
+    const result: string[] = []
+    for (const pluginId of candidates) {
+      if (isSystemPlugin(pluginId)) continue
+      const plugin = this.plugins.get(pluginId)
+      if (!plugin?.enabled || !plugin.manifest.main) continue
+      result.push(pluginId)
+      if (result.length >= this.startupPrewarmCount) break
+    }
+    return result
   }
 
   private async loadPlugins() {
@@ -1047,6 +1115,8 @@ export class PluginManager {
       return { success: false, error: 'Plugin is disabled' }
     }
     const pluginId = plugin.id
+    // P5：启动分阶段埋点（需 env MULBY_LAUNCH_PROFILE=1 开启）。
+    startLaunchTrace(launchStart, pluginId)
 
     // 系统插件拦截：直接调用内建处理函数，不走 Host/Worker 流程
     if (isSystemPlugin(pluginId)) {
@@ -1092,6 +1162,7 @@ export class PluginManager {
     // attached panel 的 route/mainHide/mode 必须在窗口创建前确定，否则会加载旧 hash 或打开错误窗口形态。
     const loadPromise = this.ensurePluginLoaded(plugin, pluginId)
     const onLoadJustCalled = await loadPromise
+    markLaunchPhase(launchStart, 'onload')
     // onLoad 可能通过 api.features.setFeature() 修改了动态特性，重新解析
     if (onLoadJustCalled) {
       feature = this.getCombinedFeatures(plugin).find(item => item.code === featureCode)
@@ -1262,6 +1333,8 @@ export class PluginManager {
           launchRequestId = null
           this.stateManager.recordRecentUsage(plugin.id, featureCode)
           schedulePostOnLoadIdle(PluginManager.UI_IDLE_LOAD_DELAY_MS)
+          markLaunchPhase(launchStart, 'resident-restore')
+          flushLaunchTrace(launchStart)
           return { success: true, hasUI: true, uiMode: 'attached' }
         }
 
@@ -1270,7 +1343,10 @@ export class PluginManager {
           await this.systemPluginWindowManager.prepareForAttachedPluginLaunch()
         }
         this.hideSystemPageHandler?.()
+        markLaunchPhase(launchStart, 'attach-start')
         const success = this.windowManager.attachPlugin(plugin, featureCode, resolvedInput, route, launchStart, undefined, launchRequestId || undefined)
+        markLaunchPhase(launchStart, 'attached')
+        flushLaunchTrace(launchStart)
         if (success) {
           this.stateManager.recordRecentUsage(plugin.id, featureCode)
           schedulePostOnLoadIdle(PluginManager.UI_IDLE_LOAD_DELAY_MS)
@@ -1476,6 +1552,58 @@ export class PluginManager {
     this.enforcePrewarmLimit()
   }
 
+  /**
+   * P2：为"搜索高亮的首位 UI 插件"投机预热——用户真正打开前，先 init host（不跑 onLoad）
+   * 再创建隐藏的 resident 面板（已渲染 UI 视图）。用户回车时走 resident 秒开。
+   *
+   * 复用与"跟随启动 UI 缓存"完全一致的隐藏 resident 机制；onLoad 仍在真正 run()
+   * 的 ensurePluginLoaded 阶段执行（见 run() 流程），因此既不提前产生 onLoad 副作用、
+   * 也不会重复触发。仅对默认 attached、单实例 UI 插件生效，命中失败按 TTL/LRU 回收。
+   */
+  async prewarmUi(pluginId: string, featureCode?: string, route?: string): Promise<void> {
+    if (!this.windowManager) return
+    if (isSystemPlugin(pluginId)) return
+
+    const plugin = this.resolve(pluginId)
+    if (!plugin?.enabled || !plugin.manifest.ui || !plugin.manifest.main) return
+    // 仅对默认 attached、单实例插件投机预热，避免与独立窗口/多实例语义冲突。
+    if (plugin.manifest.pluginSetting?.single === false) return
+    if (plugin.manifest.pluginSetting?.defaultDetached === true) return
+    if (shouldForceDetachedByUser(pluginId, this.stateManager)) return
+    // 已驻留 / 已有窗口 / 已在预热 → 无需重复。
+    if (this.residentSessions.has(pluginId)) return
+    if (this.windowManager.hasOpenWindowsForPlugin(pluginId)) return
+
+    const targetFeature = this.resolvePrewarmUiFeature(plugin, featureCode)
+    if (!targetFeature || targetFeature.mode === 'silent' || targetFeature.mode === 'detached') return
+    const targetRoute = route ?? targetFeature.route
+
+    // 先 init host（不跑 onLoad，安全），再创建隐藏 resident UI 视图。
+    await this.prewarm(pluginId)
+
+    // 预热期间状态可能变化，复查后再创建隐藏视图。
+    if (this.residentSessions.has(pluginId)) return
+    if (this.windowManager.hasOpenWindowsForPlugin(pluginId)) return
+
+    const cached = this.windowManager.createHiddenResidentPanel(plugin, targetFeature.code, targetRoute)
+    if (!cached) return
+
+    this.createResidentSession(pluginId, targetFeature.code, targetRoute, {
+      source: 'prewarm-ui',
+      uiMode: 'attached',
+      replaceExisting: false
+    })
+    log.info(`[PluginManager] UI prewarm cached | plugin=${pluginId} | feature=${targetFeature.code} | route=${targetRoute || ''}`)
+  }
+
+  private resolvePrewarmUiFeature(plugin: Plugin, featureCode?: string): PluginFeature | null {
+    const features = this.getCombinedFeatures(plugin, true)
+    if (featureCode) {
+      return features.find((feature) => feature.code === featureCode) ?? null
+    }
+    return features.find((feature) => feature.mode !== 'silent') ?? features[0] ?? null
+  }
+
   cancelPrewarm(runningPluginId?: string): void {
     if (runningPluginId) {
       this.cancelPrewarmEntry(runningPluginId, { preserveHost: true })
@@ -1488,7 +1616,7 @@ export class PluginManager {
   }
 
   private enforcePrewarmLimit(): void {
-    while (this.prewarmState.size > PluginManager.PREWARM_CACHE_LIMIT) {
+    while (this.prewarmState.size > this.prewarmCacheLimit) {
       let oldestId: string | null = null
       let oldestUsedAt = Number.POSITIVE_INFINITY
       for (const state of this.prewarmState.values()) {
@@ -1599,7 +1727,7 @@ export class PluginManager {
 
     this.enforceResidentLimit()
 
-    log.info(`[ResidentUI] create | plugin=${pluginId} | feature=${featureCode} | mode=${options.uiMode || 'attached'} | source=${options.source} | ttl=${PluginManager.RESIDENT_TTL_MS}ms | limit=${PluginManager.RESIDENT_UI_CACHE_LIMIT}`)
+    log.info(`[ResidentUI] create | plugin=${pluginId} | feature=${featureCode} | mode=${options.uiMode || 'attached'} | source=${options.source} | ttl=${PluginManager.RESIDENT_TTL_MS}ms | limit=${this.residentUiCacheLimit}`)
 
     this.keepResidentHostWarm(pluginId)
   }
@@ -1661,7 +1789,7 @@ export class PluginManager {
   }
 
   private enforceResidentLimit(): void {
-    while (this.residentSessions.size > PluginManager.RESIDENT_UI_CACHE_LIMIT) {
+    while (this.residentSessions.size > this.residentUiCacheLimit) {
       let oldestId: string | null = null
       let oldestUsedAt = Number.POSITIVE_INFINITY
       for (const session of this.residentSessions.values()) {
@@ -2156,6 +2284,10 @@ export class PluginManager {
       if (this.preloadWarmupTimer) {
         clearTimeout(this.preloadWarmupTimer)
         this.preloadWarmupTimer = null
+      }
+      if (this.startupPrewarmTimer) {
+        clearTimeout(this.startupPrewarmTimer)
+        this.startupPrewarmTimer = null
       }
       for (const timer of this.idleLoadTimers.values()) {
         clearTimeout(timer)

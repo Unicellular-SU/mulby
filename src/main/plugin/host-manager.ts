@@ -6,6 +6,7 @@
 import { utilityProcess, UtilityProcess, app } from 'electron'
 import { join } from 'path'
 import { existsSync } from 'fs'
+import { totalmem } from 'os'
 import { EventEmitter } from 'events'
 import type {
   HostRequest,
@@ -27,6 +28,8 @@ import { resolveResourceLimits, applyResourceLimitsToWatchdog } from './resource
 import { PLUGIN_READY_TIMEOUT_MS, PROCESS_GRACEFUL_EXIT_MS } from '../constants/timing'
 import { PluginMessageBus } from './message-bus'
 import type { PluginMessage } from './message-bus'
+import { computeHotStartBudget } from './hot-start-budget'
+import { destroyPluginViewPool } from './plugin-view-pool'
 import { routeHostToolProgress } from './host-progress'
 import type { TaskScheduler } from '../scheduler'
 import type { ClipboardHistoryManager } from '../services/clipboard-history'
@@ -130,7 +133,8 @@ export class PluginHostManager extends EventEmitter {
   private residentPins: Set<string> = new Set()
 
   // ==================== Host 进程池 ====================
-  private static readonly MAX_POOL_SIZE = 3
+  // P3：池大小按机器内存自适应（中档=3，与历史默认一致）。
+  private maxPoolSize = computeHotStartBudget(totalmem()).hostPoolSize
   private pooledProcesses: PooledProcess[] = []
   private poolFilling = false
   private poolDestroyed = false
@@ -203,7 +207,7 @@ export class PluginHostManager extends EventEmitter {
   // ==================== Host 进程池方法 ====================
 
   async fillPool(): Promise<void> {
-    if (this.poolDestroyed || this.poolFilling || this.pooledProcesses.length >= PluginHostManager.MAX_POOL_SIZE) return
+    if (this.poolDestroyed || this.poolFilling || this.pooledProcesses.length >= this.maxPoolSize) return
     this.poolFilling = true
     try {
       const child = utilityProcess.fork(this.workerPath, [], {
@@ -268,6 +272,8 @@ export class PluginHostManager extends EventEmitter {
       try { this.poolFillingChild.kill() } catch { /* ignore */ }
       this.poolFillingChild = null
     }
+    // P4：连同 WebContentsView 外壳池一并清理。
+    destroyPluginViewPool()
   }
 
   /**

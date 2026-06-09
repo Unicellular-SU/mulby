@@ -341,6 +341,11 @@ export function registerPluginHandlers(manager: PluginManager, pluginToolRegistr
     void manager.prewarm(pluginId)
   })
 
+  // P2：UI 投机预热——选中（高亮）的 UI 插件提前创建隐藏 resident 视图，回车时秒开
+  ipcMain.handle('plugin:prewarmUi', (_, pluginId: string, featureCode?: string, route?: string) => {
+    void manager.prewarmUi(pluginId, featureCode, route)
+  })
+
   // 执行插件
   ipcMain.handle('plugin:run', async (_, name: string, featureCode: string, input?: string | InputPayload, launchStart?: number) => {
     manager.cancelPrewarm(name)

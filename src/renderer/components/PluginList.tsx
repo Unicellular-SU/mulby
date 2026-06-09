@@ -1141,6 +1141,32 @@ function PluginList({
     triggerPrewarmMany(candidates)
   }, [selectedKey, flatItems, searchPayload.text, triggerPrewarmMany])
 
+  // P2：对当前高亮的 UI 插件做投机预热——提前创建隐藏 resident 视图，回车时秒开。
+  // 仅在有明确查询(≥2字)且选中项是 UI 插件时触发；250ms 防抖 + 按插件去重，
+  // 主进程侧只对默认 attached、单实例插件生效并按 TTL/LRU 自动回收，安全可控。
+  const lastUiPrewarmRef = useRef('')
+  const uiPrewarmTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  useEffect(() => {
+    if (searchPayload.text.trim().length < 2) return
+    const selected = flatItems.find((item) => item.key === selectedKey) ?? flatItems[0]
+    const pluginItem = selected?.pluginItem
+    if (!pluginItem || pluginItem.hasUI !== true) return
+    const key = getPluginKey(pluginItem)
+    if (lastUiPrewarmRef.current === key) return
+    if (uiPrewarmTimerRef.current) clearTimeout(uiPrewarmTimerRef.current)
+    uiPrewarmTimerRef.current = setTimeout(() => {
+      uiPrewarmTimerRef.current = null
+      lastUiPrewarmRef.current = key
+      void window.mulby.plugin.prewarmUi(pluginItem.pluginId, pluginItem.featureCode, pluginItem.featureRoute)
+    }, 250)
+    return () => {
+      if (uiPrewarmTimerRef.current) {
+        clearTimeout(uiPrewarmTimerRef.current)
+        uiPrewarmTimerRef.current = null
+      }
+    }
+  }, [selectedKey, flatItems, searchPayload.text])
+
   // 鼠标悬停 → 预热（事件委托，不增加组件 re-render）
   const lastHoveredKeyRef = useRef('')
   useEffect(() => {

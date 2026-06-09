@@ -905,6 +905,7 @@ export interface ElectronAPI {
     search: (query: string | InputPayload) => Promise<SearchResultItem[]>
     run: (name: string, featureCode: string, input?: string | InputPayload, launchStart?: number) => Promise<PluginRunResult>
     prewarm: (pluginId: string) => Promise<void>
+    prewarmUi: (pluginId: string, featureCode?: string, route?: string) => Promise<void>
     runCommand: (input: PluginCommandRunInput) => Promise<PluginRunResult>
     getRecentUsed: (limit?: number) => Promise<SearchResultItem[]>
     removeRecentUsage: (pluginId: string, featureCode: string) => Promise<{ success: boolean }>

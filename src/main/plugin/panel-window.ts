@@ -14,6 +14,7 @@ import {
     getPluginRendererWebPreferences,
     installPluginWebviewSecurity
 } from './plugin-web-preferences'
+import { acquireDefaultPluginView, isDefaultViewProfile, prewarmPluginViewPool } from './plugin-view-pool'
 import { ATTACHED_PANEL_HEIGHT, ATTACHED_PANEL_MIN_OVERFLOW_HEIGHT } from '../constants/panel-window'
 import {
     applyWindowContentClipToWebContents,
@@ -198,6 +199,8 @@ export class PluginPanelWindow {
 
         this.ensurePanelShell(initialBounds, backgroundColor, useWindowsFramelessSurface)
         this.prepareShadowWindow()
+        // P4：预热默认 profile 的 WebContentsView 外壳池，加速后续面板创建。
+        prewarmPluginViewPool()
         log.info('[PanelShell] prewarm ready')
     }
 
@@ -483,7 +486,10 @@ export class PluginPanelWindow {
         const panelWindow = this.ensurePanelShell(initialBounds, backgroundColor, useWindowsFramelessSurface)
         this.prepareShadowWindow()
 
-        const pluginView = new WebContentsView({
+        // P4：默认 profile 插件优先复用外壳池中的空白 WebContentsView，省去渲染进程冷启；
+        // 非默认 profile（自定义 preload / webview 权限）或池空时回退到新建。
+        const pooledView = isDefaultViewProfile(plugin) ? acquireDefaultPluginView() : null
+        const pluginView = pooledView ?? new WebContentsView({
             webPreferences: {
                 preload: preloadPath,
                 additionalArguments: ['--mulby-plugin-window'],

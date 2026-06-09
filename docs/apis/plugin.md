@@ -396,6 +396,14 @@ const result = await window.mulby.plugin.stopPlugin('my-plugin');
 await window.mulby.plugin.prewarm('my-plugin');
 ```
 
+### plugin.prewarmUi(pluginId, featureCode?, route?)
+[Renderer]
+对当前高亮的 UI 插件做投机预热：在用户真正打开前，提前初始化 Host 并创建隐藏的 resident 面板视图，使回车打开时直接走 resident「秒开」路径。仅对默认 attached、单实例的 UI 插件生效；命中失败会按 TTL/LRU 自动回收。`onLoad` 仍在真正运行时执行，不会提前产生副作用或重复触发。
+
+```javascript
+await window.mulby.plugin.prewarmUi('my-plugin', 'main');
+```
+
 ### 完整示例
 
 ```javascript

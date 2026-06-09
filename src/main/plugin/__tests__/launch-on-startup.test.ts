@@ -48,9 +48,12 @@ describe('launch on startup policy', () => {
     assert.match(source, /hiddenResident: true/)
   })
 
-  it('raises resident-ui cache limit to six entries', () => {
+  it('drives the resident-ui cache limit from the adaptive hot-start budget', () => {
     const source = readSource('src/main/plugin/manager.ts')
 
-    assert.match(source, /RESIDENT_UI_CACHE_LIMIT = 6/)
+    // P3：缓存上限不再写死，改为按机器内存自适应（中档基准仍为 6，见 hot-start-budget 单测）。
+    assert.match(source, /computeHotStartBudget/)
+    assert.match(source, /this\.residentUiCacheLimit = budget\.residentUiCacheLimit/)
+    assert.match(source, /this\.residentSessions\.size > this\.residentUiCacheLimit/)
   })
 })
