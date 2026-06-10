@@ -35,7 +35,7 @@ import {
   getPluginCommandDirectoryAccessRoots,
   listPluginDirectoryAccess
 } from './services/plugin-directory-access'
-import { initAutoUpdater } from './services/update-center'
+import { initAutoUpdater, startAutoUpdateScheduler } from './services/update-center'
 import { setLoggerMinLevel } from './services/logger'
 import { MacDockPresentationController } from './services/mac-dock-presentation'
 import { SystemPluginWindowManager } from './services/system-plugin-window-manager'
@@ -1046,6 +1046,11 @@ app.whenReady().then(async () => {
     // 初始化自动更新检查器（仅在生产环境下启用）
     if (app.isPackaged) {
       initAutoUpdater()
+      // 按用户设置自动检测更新（启动延迟首检 + 周期检查 + 新版本系统通知）
+      startAutoUpdateScheduler({
+        getSettings: () => appSettingsManager.getSettings().updates,
+        onOpenUpdateCenter: () => openSettingsView('about')
+      })
     }
   }
 

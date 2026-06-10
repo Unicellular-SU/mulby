@@ -4,7 +4,7 @@ import { AppSettingsManager } from '../services/app-settings'
 import { AppShortcutManager } from '../services/app-shortcuts'
 import { PluginManager } from '../plugin'
 import { setLoggerMinLevel } from '../services/logger'
-import { checkAppUpdates, downloadUpdate, getUpdateCenterState, installUpdate, openAppReleasePage } from '../services/update-center'
+import { applyAutoUpdateSettings, checkAppUpdates, downloadUpdate, getUpdateCenterState, installUpdate, openAppReleasePage } from '../services/update-center'
 import { setShortcutRecordingActive } from '../services/shortcut-recording-guard'
 
 function getOpenAtLoginState(): { supported: boolean; enabled: boolean } {
@@ -57,6 +57,7 @@ export function registerSettingsHandlers(
     const hasDoubleTap = Boolean(partial && typeof partial === 'object' && 'doubleTap' in partial)
     const hasSuperPanel = Boolean(partial && typeof partial === 'object' && 'superPanel' in partial)
     const hasFloatingBall = Boolean(partial && typeof partial === 'object' && 'floatingBall' in partial)
+    const hasUpdates = Boolean(partial && typeof partial === 'object' && 'updates' in partial)
     const next = settingsManager.updateSettings(partial || {})
     setLoggerMinLevel(next.developer.logLevel)
 
@@ -95,6 +96,11 @@ export function registerSettingsHandlers(
       options?.onFloatingBallChanged?.(next)
     }
 
+    // 自动检查更新设置变更后重新调度
+    if (hasUpdates) {
+      applyAutoUpdateSettings()
+    }
+
     return { settings: next, shortcutStatus }
   })
 
@@ -108,6 +114,7 @@ export function registerSettingsHandlers(
     shortcutManager.applyDoubleTap(next.doubleTap)
     options?.onSuperPanelChanged?.(next)
     options?.onFloatingBallChanged?.(next)
+    applyAutoUpdateSettings()
     return { settings: next, shortcutStatus }
   })
 

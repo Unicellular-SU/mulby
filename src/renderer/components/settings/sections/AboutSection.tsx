@@ -1,4 +1,5 @@
 import type { UpdateCenterState } from '../../../../shared/types/electron'
+import type { UpdateSettings } from '../../../../shared/types/settings'
 import AboutIconGallery from './AboutIconGallery'
 import { formatCheckedAt, formatUpdateStatus } from '../utils'
 
@@ -6,6 +7,8 @@ interface AboutSectionProps {
   appInfo: { name: string; version: string; userDataPath: string } | null
   updateCenterState: UpdateCenterState | null
   updateBusy: boolean
+  updateSettings: UpdateSettings | null
+  onUpdateSettingsChange: (patch: Partial<UpdateSettings>) => Promise<void> | void
   onCheckAppUpdates: () => Promise<void> | void
   onOpenUpdateReleasePage: () => Promise<void> | void
   onDownloadUpdate: () => Promise<void> | void
@@ -15,10 +18,36 @@ interface AboutSectionProps {
   actionButtonClass: string
 }
 
+function Toggle({ checked, onChange, disabled }: { checked: boolean; onChange: (v: boolean) => void; disabled?: boolean }) {
+  return (
+    <button
+      disabled={disabled}
+      className={`relative h-6 w-11 shrink-0 rounded-full transition-colors ${checked
+        ? 'bg-blue-500'
+        : 'bg-gray-300 dark:bg-gray-600'
+        } disabled:cursor-not-allowed disabled:opacity-60`}
+      onClick={() => onChange(!checked)}
+    >
+      <span
+        className={`absolute top-0.5 left-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform ${checked ? 'translate-x-5' : ''}`}
+      />
+    </button>
+  )
+}
+
+const CHECK_INTERVAL_OPTIONS: { value: number; label: string }[] = [
+  { value: 6, label: '每 6 小时' },
+  { value: 12, label: '每 12 小时' },
+  { value: 24, label: '每天' },
+  { value: 168, label: '每周' }
+]
+
 export default function AboutSection({
   appInfo,
   updateCenterState,
   updateBusy,
+  updateSettings,
+  onUpdateSettingsChange,
   onCheckAppUpdates,
   onOpenUpdateReleasePage,
   onDownloadUpdate,
@@ -51,6 +80,58 @@ export default function AboutSection({
           <div className="text-amber-600 dark:text-amber-400">{updateCenterState.manualInstallReason}</div>
         )}
       </div>
+
+      {/* 自动检测更新设置 */}
+      {updateSettings && (
+        <div className="space-y-3 border-t border-slate-200 pt-4 dark:border-slate-700">
+          <div className="font-medium text-slate-900 dark:text-white">自动更新</div>
+          <div className="flex items-center justify-between gap-4">
+            <div>
+              <div>自动检查更新</div>
+              <div className="text-xs text-slate-400 dark:text-slate-500">
+                启动后及后台定期检查新版本
+              </div>
+            </div>
+            <Toggle
+              checked={updateSettings.autoCheck}
+              onChange={(v) => void onUpdateSettingsChange({ autoCheck: v })}
+            />
+          </div>
+          {updateSettings.autoCheck && (
+            <>
+              <div className="flex items-center justify-between gap-4">
+                <div>检查频率</div>
+                <div className="flex flex-wrap justify-end gap-2">
+                  {CHECK_INTERVAL_OPTIONS.map((opt) => (
+                    <button
+                      key={opt.value}
+                      className={`rounded-full border px-3 py-1 text-xs transition-colors ${updateSettings.checkIntervalHours === opt.value
+                        ? 'border-slate-900 bg-slate-900 text-white dark:border-white dark:bg-white dark:text-slate-900'
+                        : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:text-slate-900 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-300'
+                        }`}
+                      onClick={() => void onUpdateSettingsChange({ checkIntervalHours: opt.value })}
+                    >
+                      {opt.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div className="flex items-center justify-between gap-4">
+                <div>
+                  <div>发现新版本时通知我</div>
+                  <div className="text-xs text-slate-400 dark:text-slate-500">
+                    通过系统通知提醒，点击可打开此页面
+                  </div>
+                </div>
+                <Toggle
+                  checked={updateSettings.notifyOnUpdate}
+                  onChange={(v) => void onUpdateSettingsChange({ notifyOnUpdate: v })}
+                />
+              </div>
+            </>
+          )}
+        </div>
+      )}
 
       {/* 下载进度条 */}
       {status === 'downloading' && progress && (

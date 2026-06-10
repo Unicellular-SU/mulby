@@ -1,5 +1,7 @@
-import { app, shell, BrowserWindow } from 'electron'
+import { app, shell, BrowserWindow, Notification } from 'electron'
 import { autoUpdater, type UpdateInfo, type ProgressInfo } from 'electron-updater'
+import log from 'electron-log'
+import type { UpdateSettings } from '../../shared/types/settings'
 import { compareVersions } from '../plugin/version'
 import {
   downloadMacResourceUpdatePackage,
@@ -520,4 +522,123 @@ export async function openAppReleasePage(): Promise<boolean> {
   }
   await shell.openExternal(releasePageUrl)
   return true
+}
+
+// ==================== 自动检查更新调度器 ====================
+
+export interface AutoUpdateSchedulerOptions {
+  /** 读取最新的更新设置（每次调度/检查时实时读取） */
+  getSettings: () => UpdateSettings
+  /** 用户点击「发现新版本」通知时打开更新中心页面 */
+  onOpenUpdateCenter?: () => void
+}
+
+/** 启动后首次自动检查的延迟，避免与应用启动抢占资源 */
+const AUTO_CHECK_INITIAL_DELAY_MS = 30_000
+
+let schedulerOptions: AutoUpdateSchedulerOptions | null = null
+let initialCheckTimer: NodeJS.Timeout | null = null
+let periodicCheckTimer: NodeJS.Timeout | null = null
+/** 已通知过的版本号，同一版本只弹一次系统通知 */
+let lastNotifiedVersion: string | null = null
+
+function clearAutoCheckTimers(): void {
+  if (initialCheckTimer) {
+    clearTimeout(initialCheckTimer)
+    initialCheckTimer = null
+  }
+  if (periodicCheckTimer) {
+    clearInterval(periodicCheckTimer)
+    periodicCheckTimer = null
+  }
+}
+
+/**
+ * 启动自动更新检查调度器（app ready 后调用一次）
+ *
+ * 行为：自动检查开启时，启动 30 秒后做首次静默检查，
+ * 之后按设置的间隔周期性检查；发现新版本时弹系统通知。
+ */
+export function startAutoUpdateScheduler(options: AutoUpdateSchedulerOptions): void {
+  schedulerOptions = options
+  applyAutoUpdateSettings()
+}
+
+/** 更新设置变更后重新应用调度（开关 / 间隔变化） */
+export function applyAutoUpdateSettings(): void {
+  if (!schedulerOptions) return
+  clearAutoCheckTimers()
+
+  const settings = schedulerOptions.getSettings()
+  if (!settings.autoCheck) {
+    log.info('[UpdateCenter] 自动检查更新已关闭')
+    return
+  }
+
+  const intervalHours = Math.max(1, Math.min(Number(settings.checkIntervalHours) || 6, 168))
+  const intervalMs = intervalHours * 3_600_000
+
+  initialCheckTimer = setTimeout(() => {
+    initialCheckTimer = null
+    void runScheduledUpdateCheck()
+  }, AUTO_CHECK_INITIAL_DELAY_MS)
+
+  periodicCheckTimer = setInterval(() => {
+    void runScheduledUpdateCheck()
+  }, intervalMs)
+  // 周期定时器不阻止进程退出
+  periodicCheckTimer.unref?.()
+
+  log.info(`[UpdateCenter] 自动检查更新已启用，间隔 ${intervalHours} 小时`)
+}
+
+/** 停止自动更新检查调度器 */
+export function stopAutoUpdateScheduler(): void {
+  clearAutoCheckTimers()
+  schedulerOptions = null
+}
+
+/** 后台静默检查一次更新，发现新版本时弹系统通知 */
+async function runScheduledUpdateCheck(): Promise<void> {
+  // 正在检查 / 下载 / 已下载待安装时跳过，避免打断进行中的更新流程
+  const busyStatuses: UpdateCheckStatus[] = ['checking', 'downloading', 'downloaded']
+  if (busyStatuses.includes(updateCenterState.status)) {
+    return
+  }
+
+  try {
+    const state = await checkAppUpdates()
+    if (!state.hasUpdate || !state.latestVersion) return
+
+    const settings = schedulerOptions?.getSettings()
+    if (!settings?.notifyOnUpdate) return
+    if (lastNotifiedVersion === state.latestVersion) return
+    lastNotifiedVersion = state.latestVersion
+    notifyUpdateAvailable(state.latestVersion)
+  } catch (error) {
+    log.warn('[UpdateCenter] 自动检查更新失败:', error)
+  }
+}
+
+/** 弹出「发现新版本」系统通知，点击后打开更新中心 */
+function notifyUpdateAvailable(version: string): void {
+  if (!Notification.isSupported()) return
+  try {
+    const notification = new Notification({
+      title: 'Mulby 更新',
+      body: `发现新版本 ${version}，点击查看详情`,
+      silent: true
+    })
+    notification.on('click', () => {
+      try {
+        schedulerOptions?.onOpenUpdateCenter?.()
+      } catch (error) {
+        log.warn('[UpdateCenter] 打开更新中心失败:', error)
+      }
+    })
+    notification.show()
+    log.info(`[UpdateCenter] 已通知用户发现新版本 ${version}`)
+  } catch (error) {
+    log.warn('[UpdateCenter] 显示更新通知失败:', error)
+  }
 }

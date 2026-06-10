@@ -376,6 +376,18 @@ export interface OpenClawSettings {
   security: OpenClawSecurityConfig
 }
 
+// ==================== 应用更新设置 ====================
+
+/** 应用更新设置 */
+export interface UpdateSettings {
+  /** 是否自动检查更新（默认 true） */
+  autoCheck: boolean
+  /** 自动检查间隔（小时，1-168，默认 6） */
+  checkIntervalHours: number
+  /** 发现新版本时弹系统通知（默认 true） */
+  notifyOnUpdate: boolean
+}
+
 // 日志级别类型
 export type LogLevel = 'debug' | 'info' | 'warn' | 'error'
 
@@ -562,6 +574,7 @@ export interface AppSettings {
   mcpServer: McpServerSettings
   openclaw: OpenClawSettings
   superPanel: SuperPanelSettings
+  updates: UpdateSettings
 }
 
 export interface ShortcutStatus {

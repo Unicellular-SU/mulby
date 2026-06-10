@@ -216,6 +216,16 @@ export default function SettingsView({
     void window.mulby.settings.installUpdate()
   }
 
+  const changeUpdateSettings = async (patch: Partial<AppSettings['updates']>) => {
+    if (!settings) return
+    await updateSettings({
+      updates: {
+        ...settings.updates,
+        ...patch
+      }
+    })
+  }
+
   const updateCommandRunner = async (patch: Partial<AppSettings['commandRunner']>) => {
     if (!settings) return
     await updateSettings({
@@ -538,6 +548,8 @@ export default function SettingsView({
                   appInfo={appInfo}
                   updateCenterState={updateCenterState}
                   updateBusy={updateBusy}
+                  updateSettings={settings?.updates ?? null}
+                  onUpdateSettingsChange={changeUpdateSettings}
                   onCheckAppUpdates={checkAppUpdates}
                   onOpenUpdateReleasePage={openUpdateReleasePage}
                   onDownloadUpdate={downloadUpdate}

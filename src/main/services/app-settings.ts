@@ -26,7 +26,8 @@ import type {
   PluginDirectoryAccessSettings,
   PluginDirectoryAccessMode,
   SuperPanelSettings,
-  SuperPanelTriggerSettings
+  SuperPanelTriggerSettings,
+  UpdateSettings
 } from '../../shared/types/settings'
 import { DEFAULT_FLOATING_BALL_ICON_ID } from '../../shared/floating-ball-icons'
 import { normalizeFloatingBallSettings } from './floating-ball-utils'
@@ -312,6 +313,11 @@ const DEFAULT_SETTINGS: AppSettings = {
     maxItems: 10,
     instantTranslation: true,
     translationMaxLength: 5000
+  },
+  updates: {
+    autoCheck: true,
+    checkIntervalHours: 6,
+    notifyOnUpdate: true
   }
 }
 
@@ -451,6 +457,26 @@ function normalizeSuperPanelSettings(input: Partial<SuperPanelSettings> | undefi
     maxItems: Math.max(3, Math.min(Number(current.maxItems || defaults.maxItems), 30)),
     instantTranslation: current.instantTranslation !== false,
     translationMaxLength: Math.max(100, Math.min(Number(current.translationMaxLength || defaults.translationMaxLength || 5000), 50000))
+  }
+}
+
+function normalizeUpdateSettings(input: Partial<UpdateSettings> | undefined): UpdateSettings {
+  const defaults = DEFAULT_SETTINGS.updates
+  const current = {
+    ...defaults,
+    ...(input || {})
+  }
+
+  let intervalHours = Number(current.checkIntervalHours)
+  if (!Number.isFinite(intervalHours)) {
+    intervalHours = defaults.checkIntervalHours
+  }
+  intervalHours = Math.max(1, Math.min(Math.round(intervalHours), 168))
+
+  return {
+    autoCheck: current.autoCheck !== false,
+    checkIntervalHours: intervalHours,
+    notifyOnUpdate: current.notifyOnUpdate !== false
   }
 }
 
@@ -1026,6 +1052,10 @@ function mergeSettings(current: AppSettings, next: Partial<AppSettings>): AppSet
     superPanel: normalizeSuperPanelSettings({
       ...current.superPanel,
       ...(next.superPanel || {})
+    }),
+    updates: normalizeUpdateSettings({
+      ...current.updates,
+      ...(next.updates || {})
     })
   }
 }
