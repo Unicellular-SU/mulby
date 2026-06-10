@@ -36,6 +36,21 @@ describe('floating ball context menu', () => {
     )
   })
 
+  it('recreates the Windows floating window after the native menu closes so left-button input stays alive', () => {
+    const source = readFileSync(floatingBallManagerSourcePath, 'utf8')
+
+    assert.match(
+      source,
+      /const completeMenu = \(\) => \{[\s\S]*process\.platform === 'win32'[\s\S]*recreateWindowForFreshInputState\(\)/,
+      'Windows must rebuild the floating ball window after menu focus toggling, otherwise left-click/drag pointer events stop reaching the renderer'
+    )
+    assert.match(
+      source,
+      /private async recreateWindowForFreshInputState\(\): Promise<void> \{[\s\S]*if \(!this\.settings\.enabled\) return[\s\S]*if \(!this\.window \|\| this\.window\.isDestroyed\(\)\) return[\s\S]*this\.destroyWindow\(\)[\s\S]*await this\.ensureWindow\(\)/,
+      'window recreation must skip when the ball was already destroyed by a menu action and otherwise destroy + recreate for fresh Chromium input state'
+    )
+  })
+
   it('defers focus-changing menu actions until after the native menu owner is restored', () => {
     const source = readFileSync(floatingBallManagerSourcePath, 'utf8')
 

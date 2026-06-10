@@ -673,6 +673,14 @@ export class FloatingBallManager {
       if (action) {
         setTimeout(action, 0)
       }
+      // Windows：菜单期间的 setFocusable/focus/showInactive 切换会破坏透明
+      // 无框窗口的 Chromium 输入状态，导致左键单击/拖动失效（右键菜单仍可用）。
+      // 与区域截图路径一致，菜单关闭后销毁重建窗口以刷新输入状态。
+      if (process.platform === 'win32') {
+        setTimeout(() => {
+          void this.recreateWindowForFreshInputState()
+        }, 0)
+      }
     }
 
     keepFloatingBallOutOfTaskbar()
@@ -694,6 +702,25 @@ export class FloatingBallManager {
     } catch (error) {
       restoreMenuWindowChrome()
       log.warn('[FloatingBall] Failed to show context menu:', error)
+    }
+  }
+
+  /**
+   * 销毁并重建悬浮球窗口，确保 Chromium 输入状态是新鲜的。
+   *
+   * Windows 上透明无框窗口经历 focus/show 切换后，左键 pointer 事件流
+   * 可能不再派发到渲染进程（contextmenu 仍正常），唯一可靠的恢复方式是重建窗口。
+   * 若窗口已被菜单动作销毁（如区域截图、隐藏悬浮球、退出应用），则跳过。
+   */
+  private async recreateWindowForFreshInputState(): Promise<void> {
+    if (!this.settings.enabled) return
+    if (!this.window || this.window.isDestroyed()) return
+    try {
+      this.destroyWindow()
+      await this.ensureWindow()
+      this.pushState()
+    } catch (error) {
+      log.warn('[FloatingBall] Failed to recreate floating ball window for fresh input state:', error)
     }
   }
 
