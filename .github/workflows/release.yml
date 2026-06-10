@@ -176,4 +176,24 @@ jobs:
             exit 1
           fi
 
-          gh release upload "$RELEASE_TAG" "${assets[@]}" --repo Unicellular-SU/mulby-releases --clobber
+          # uploads.github.com 对大文件上传偶发中断并误报 HTTP 401（GitHub 平台已知问题，
+          # 参见 cli/cli#4863），gh 不会对 401 自动重试。逐文件上传并重试，
+          # --clobber 同时负责覆盖上次中断遗留的半截 asset。
+          upload_with_retry() {
+            local file="$1"
+            local attempt
+            for attempt in 1 2 3; do
+              if gh release upload "$RELEASE_TAG" "$file" --repo Unicellular-SU/mulby-releases --clobber; then
+                echo "Uploaded: $file"
+                return 0
+              fi
+              echo "Upload failed for $file (attempt $attempt/3), retrying in $((attempt * 15))s..." >&2
+              sleep $((attempt * 15))
+            done
+            echo "Upload failed for $file after 3 attempts" >&2
+            return 1
+          }
+
+          for file in "${assets[@]}"; do
+            upload_with_retry "$file"
+          done
