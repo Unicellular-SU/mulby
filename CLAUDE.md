@@ -15,13 +15,13 @@ Always use **pnpm** as the package manager in this repository.
 pnpm install
 
 # Start Vite dev server & launch Electron in hot reload mode
-pnpm run electron:dev  # (or pnpm run dev)
+pnpm run dev
 
 # Build, compile native modules, and pack app using electron-builder
 pnpm run electron:build
 
 # Run comprehensive repo verification (Typecheck + Lint + Sync API Docs + Unit Tests + Bundle Smoke)
-pnpm run verify
+pnpm run verify:app
 
 # Run TypeScript type check
 pnpm run typecheck
@@ -33,10 +33,10 @@ pnpm run lint
 pnpm run test:unit
 
 # Reset onboarding status in SQLite DB (useful for debugging initial wizard)
-node scripts/reset-onboarding.mjs
+pnpm run reset:onboarding
 
-# Sync local skills/ folders to active AI coding IDEs (Cursor/Claude Code/Antigravity/etc.)
-bash scripts/link-skills.sh
+# Refresh API docs into skills/, then sync skills/ to active AI coding IDEs (Cursor/Claude Code/Antigravity/etc.)
+pnpm run sync:skills
 ```
 
 ## Architecture

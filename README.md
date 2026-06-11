@@ -79,7 +79,7 @@ pnpm run native:build
 pnpm run electron:build
 
 # 仓库校验
-pnpm run verify
+pnpm run verify:app
 ```
 
 ## 生态仓库
@@ -136,7 +136,7 @@ Mulby 的能力边界相对大，公开仓库后这点需要明确说明：
 
 贡献流程与开发约定见 [CONTRIBUTING.md](./CONTRIBUTING.md)。
 
-开发前建议先运行 `pnpm install`，提交前执行 `pnpm run verify`。
+开发前建议先运行 `pnpm install`，提交前执行 `pnpm run verify:app`。
 
 ## 为什么做 Mulby
 

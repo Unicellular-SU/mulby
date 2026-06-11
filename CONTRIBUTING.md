@@ -47,14 +47,14 @@ pnpm run native:build
 pnpm run electron:build
 
 # 类型检查 + Lint + API 文档校验 + 单测 + 构建校验
-pnpm run verify
+pnpm run verify:app
 ```
 
 ## 提交前要求
 
 提交 PR 前，请至少确认以下几点：
 
-1. 相关改动已经通过 `pnpm run verify`
+1. 相关改动已经通过 `pnpm run verify:app`
 2. 如果改动影响插件 API、预加载 API 或 IPC 能力，相关文档已同步更新
 3. 如果改动影响跨仓库行为，例如 `mulby-cli` 模板、`mulby-skills` 文档或插件源结构，已经在 PR 描述中写明
 4. 如果改动涉及系统权限、命令执行、文件访问、网络访问、MCP 或 AI 工具能力，已经说明安全影响
