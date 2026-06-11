@@ -12,6 +12,7 @@ import {
   nativeCaptureScreen,
   nativeCaptureRegion,
   nativeGetWindowBounds,
+  resolveNativeDisplayIndex,
   isNativeScreenCaptureAvailable
 } from '../services/native-screen-capture'
 import {
@@ -20,6 +21,7 @@ import {
   type CaptureBounds,
   type PublicCaptureSource
 } from '../services/capture-source-utils'
+import type { ElectronDisplayLike } from '../services/screen-coordinate-utils'
 import { SCREEN_CAPTURE_THUMBNAIL_SIZE } from '../constants/window-defaults'
 import { createSystemPermissionDeniedError } from './media-permission-policy'
 import log from 'electron-log'
@@ -60,9 +62,28 @@ interface DesktopCapturerLike {
   getSources(options: Electron.SourcesOptions): Promise<Electron.DesktopCapturerSource[]>
 }
 
+interface NativeCaptureLike {
+  isAvailable(): boolean
+  resolveDisplayIndex(display: ElectronDisplayLike): number | null
+  captureScreen(displayIndex: number, format: 'png' | 'jpeg', quality: number): Buffer | null
+}
+
+interface ScreenApiLike {
+  getAllDisplays(): Electron.Display[]
+  getPrimaryDisplay(): Electron.Display
+}
+
 interface PluginScreenDependencies {
   desktopCapturer?: DesktopCapturerLike
   getWindowBounds?: (sourceId: string) => CaptureBounds | null
+  nativeCapture?: NativeCaptureLike
+  screen?: ScreenApiLike
+}
+
+const defaultNativeCapture: NativeCaptureLike = {
+  isAvailable: isNativeScreenCaptureAvailable,
+  resolveDisplayIndex: resolveNativeDisplayIndex,
+  captureScreen: nativeCaptureScreen
 }
 
 export class PluginScreen {
@@ -76,12 +97,20 @@ export class PluginScreen {
     return capturer
   }
 
+  private get nativeCapture(): NativeCaptureLike {
+    return this.dependencies.nativeCapture || defaultNativeCapture
+  }
+
+  private get screenApi(): ScreenApiLike {
+    return this.dependencies.screen || screen
+  }
+
   /**
    * 获取所有显示器信息
    */
   getAllDisplays(): DisplayInfo[] {
-    const displays = screen.getAllDisplays()
-    const primaryId = screen.getPrimaryDisplay().id
+    const displays = this.screenApi.getAllDisplays()
+    const primaryId = this.screenApi.getPrimaryDisplay().id
 
     return displays.map(display => ({
       id: display.id,
@@ -98,7 +127,7 @@ export class PluginScreen {
    * 获取主显示器信息
    */
   getPrimaryDisplay(): DisplayInfo {
-    const display = screen.getPrimaryDisplay()
+    const display = this.screenApi.getPrimaryDisplay()
     return {
       id: display.id,
       label: display.label || 'Primary Display',
@@ -215,22 +244,24 @@ export class PluginScreen {
    * 截取屏幕截图
    *
    * 优先使用原生模块（< 20ms），失败时回退到 desktopCapturer。
-   * 已移除 CaptureWindow 路径。
+   * 原生路径只支持整屏捕获：窗口等非屏幕源一律走 desktopCapturer，
+   * 避免旧实现把窗口 sourceId 静默截成主屏。
    */
   async captureScreen(options: ScreenshotOptions = {}): Promise<Buffer> {
     const format = options.format || 'png'
     const quality = options.quality || 90
 
-    // ===== 策略 1: 原生模块截图 =====
-    if (isNativeScreenCaptureAvailable()) {
-      // 解析 displayIndex
-      const displayIndex = this.resolveDisplayIndex(options.sourceId)
-
-      const buffer = nativeCaptureScreen(displayIndex, format, quality)
-      if (buffer) {
-        return buffer
+    // ===== 策略 1: 原生模块截图（仅屏幕源） =====
+    if (this.nativeCapture.isAvailable() && isScreenLikeSourceId(options.sourceId)) {
+      const display = await this.resolveTargetDisplay(options.sourceId)
+      const displayIndex = display ? this.nativeCapture.resolveDisplayIndex(display) : null
+      if (displayIndex !== null) {
+        const buffer = this.nativeCapture.captureScreen(displayIndex, format, quality)
+        if (buffer) {
+          return buffer
+        }
       }
-      log.warn('[PluginScreen] 原生截图返回空，回退到 desktopCapturer')
+      log.warn('[PluginScreen] 原生截图不可用或无法定位目标显示器，回退到 desktopCapturer')
     }
 
     // ===== 策略 2: desktopCapturer fallback =====
@@ -238,20 +269,51 @@ export class PluginScreen {
   }
 
   /**
-   * 从 sourceId 解析 displayIndex
-   * sourceId 格式: "screen:displayId:0" 或 undefined
+   * 从 sourceId 解析目标 Electron 显示器
+   *
+   * - 未指定 sourceId → 主显示器
+   * - "screen:<id>:x" → 先按内嵌 id 匹配（macOS 上与 display.id 同为
+   *   CGDirectDisplayID，可直接命中；Windows 上两者不同源，通常不命中），
+   *   多屏时再用 desktopCapturer 的 display_id 做权威映射
+   * - 纯数字 → 兼容直接传显示器 id 的历史用法
+   *
+   * @returns 无法可靠解析时返回 null（调用方应走 fallback）
    */
-  private resolveDisplayIndex(sourceId?: string): number {
-    if (!sourceId) return 0
+  private async resolveTargetDisplay(sourceId?: string): Promise<Electron.Display | null> {
+    if (!sourceId) return this.screenApi.getPrimaryDisplay()
+
+    const displays = this.screenApi.getAllDisplays()
+
+    if (/^\d+$/.test(sourceId)) {
+      return displays.find(display => String(display.id) === sourceId) ?? null
+    }
 
     const parts = sourceId.split(':')
-    if (parts[0] === 'screen' && parts.length >= 2) {
-      const displayId = parseInt(parts[1])
-      const displays = screen.getAllDisplays()
-      const index = displays.findIndex(d => d.id === displayId)
-      return index >= 0 ? index : 0
+    if (parts[0] !== 'screen' || parts.length < 2) return null
+
+    const embeddedId = Number.parseInt(parts[1], 10)
+    if (Number.isFinite(embeddedId)) {
+      const matched = displays.find(display => display.id === embeddedId)
+      if (matched) return matched
     }
-    return 0
+
+    if (displays.length === 1) return displays[0]
+
+    // Electron 文档认可的对应关系：source.display_id === String(display.id)
+    try {
+      const sources = await withScreenPermissionErrorMapping(() => this.desktopCapturer.getSources({
+        types: ['screen'],
+        thumbnailSize: { width: 1, height: 1 }
+      }))
+      const source = sources.find(item => item.id === sourceId)
+      if (source?.display_id) {
+        const matched = displays.find(display => String(display.id) === source.display_id)
+        if (matched) return matched
+      }
+    } catch (err) {
+      log.warn('[PluginScreen] 通过 display_id 解析显示器失败:', err)
+    }
+    return null
   }
 
   /**
@@ -419,6 +481,17 @@ export class PluginScreen {
       }
     }
   }
+}
+
+/**
+ * 判断 sourceId 是否指向屏幕（可走原生整屏截图路径）。
+ * 窗口源（window:...）等其它源必须走 desktopCapturer。
+ */
+function isScreenLikeSourceId(sourceId?: string): boolean {
+  if (!sourceId) return true
+  if (sourceId.startsWith('screen:')) return true
+  // 兼容直接传显示器 id 的历史用法
+  return /^\d+$/.test(sourceId)
 }
 
 function normalizeCaptureRegion(region: { x: number; y: number; width: number; height: number }): {

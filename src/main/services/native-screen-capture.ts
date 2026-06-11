@@ -10,7 +10,12 @@
 
 import { nativeImage, screen } from 'electron'
 import log from 'electron-log'
-import { nativePhysicalRegionToDip, type RegionBounds } from './screen-coordinate-utils'
+import {
+  findNativeDisplayIndexByRect,
+  nativePhysicalRegionToDip,
+  type ElectronDisplayLike,
+  type RegionBounds
+} from './screen-coordinate-utils'
 import { getNativeBuildAddonPathCandidates } from './native-addon-path'
 import {
   normalizeCaptureBounds,
@@ -103,8 +108,58 @@ function bitmapToJPEG(bitmapData: { buffer: Buffer; width: number; height: numbe
 }
 
 /**
+ * 将 Electron 显示器映射为原生模块 captureScreen 的 displayIndex。
+ *
+ * 原生模块与 Electron 各自独立枚举显示器，下标顺序没有契约保证：
+ * - macOS: 原生用 CGGetOnlineDisplayList，Electron 用 NSScreen 顺序，
+ *   但两者的 id 同为 CGDirectDisplayID，可按 id 对齐
+ * - Windows: 原生 getDisplays() 的 id 只是枚举序号，只能按物理 bounds 对齐；
+ *   混合 DPI 下物理原点 ≠ DIP 原点 × scaleFactor，必须用 Electron 自身换算
+ * - Linux: 现代 X11 只有单 Screen（多显示器合并在 root window）
+ *
+ * @returns 原生 displayIndex；无法可靠映射时返回 null（调用方应走 fallback）
+ */
+export function resolveNativeDisplayIndex(display: ElectronDisplayLike): number | null {
+  const addon = loadAddon()
+  if (!addon || typeof addon.getDisplays !== 'function') return null
+
+  let nativeDisplays: Array<{ id: number; x: number; y: number; width: number; height: number; scaleFactor: number }>
+  try {
+    nativeDisplays = addon.getDisplays()
+  } catch (err) {
+    log.error('[NativeScreenCapture] getDisplays 失败:', err)
+    return null
+  }
+
+  if (!Array.isArray(nativeDisplays) || nativeDisplays.length === 0) return null
+  if (nativeDisplays.length === 1) return 0
+
+  if (process.platform === 'darwin') {
+    const byId = nativeDisplays.findIndex((item) => item.id === display.id)
+    if (byId >= 0) return byId
+    // 兜底：CGDisplayBounds 与 Electron bounds 同为全局逻辑坐标，可直接比对
+    return findNativeDisplayIndexByRect(display.bounds, nativeDisplays)
+  }
+
+  if (process.platform === 'win32') {
+    const physical = screen.dipToScreenRect(null, display.bounds)
+    return findNativeDisplayIndexByRect(physical, nativeDisplays)
+  }
+
+  // Linux 多 X Screen（罕见）：按物理尺寸对齐
+  const sf = display.scaleFactor || 1
+  return findNativeDisplayIndexByRect({
+    x: Math.round(display.bounds.x * sf),
+    y: Math.round(display.bounds.y * sf),
+    width: Math.round(display.bounds.width * sf),
+    height: Math.round(display.bounds.height * sf)
+  }, nativeDisplays)
+}
+
+/**
  * 原生全屏截图
- * @param displayIndex 显示器索引（默认 0，主屏幕）
+ * @param displayIndex 显示器索引（默认 0，主屏幕）；
+ *   必须是原生枚举下标，跨枚举映射请先经 resolveNativeDisplayIndex()
  * @param format 输出格式
  * @param quality JPEG 质量
  * @returns Buffer（PNG/JPEG）或 null（原生模块不可用）
@@ -339,8 +394,9 @@ export function extractRegionFromSnapshot(
  * 将 Electron 逻辑坐标 (DIP) 转换为设备像素坐标
  *
  * - macOS: CGWindowListCreateImage 接受逻辑坐标并自动返回 Retina 分辨率，无需转换
- * - Windows: GDI BitBlt/GetPixel 使用设备像素坐标，需要乘以 scaleFactor
- * - Linux: X11 XGetImage 使用物理像素坐标，需要乘以 scaleFactor
+ * - Windows: GDI BitBlt/GetPixel 使用物理像素坐标；混合 DPI 多屏下物理原点
+ *   与 DIP 原点不成等比，必须用 screen.dipToScreenRect() 做精确换算
+ * - Linux: X11 物理坐标 = DIP × 缩放因子（单 X screen 全局缩放）
  */
 function dipToDevice(
   x: number,
@@ -353,7 +409,17 @@ function dipToDevice(
     return { devX: x, devY: y, devW: width, devH: height }
   }
 
-  // Windows/Linux: 查找目标显示器并获取缩放因子
+  if (process.platform === 'win32') {
+    const physical = screen.dipToScreenRect(null, {
+      x: Math.round(x),
+      y: Math.round(y),
+      width: Math.round(width),
+      height: Math.round(height)
+    })
+    return { devX: physical.x, devY: physical.y, devW: physical.width, devH: physical.height }
+  }
+
+  // Linux: 按所在显示器的缩放因子等比换算
   const display = screen.getDisplayNearestPoint({ x, y })
   const sf = display.scaleFactor || 1
 
@@ -361,14 +427,12 @@ function dipToDevice(
     return { devX: x, devY: y, devW: width, devH: height }
   }
 
-  // 将 DIP 坐标转为设备像素坐标
-  // 相对于显示器原点做缩放，保证多显示器场景下偏移正确
-  const devX = Math.round(display.bounds.x * sf + (x - display.bounds.x) * sf)
-  const devY = Math.round(display.bounds.y * sf + (y - display.bounds.y) * sf)
-  const devW = Math.round(width * sf)
-  const devH = Math.round(height * sf)
-
-  return { devX, devY, devW, devH }
+  return {
+    devX: Math.round(x * sf),
+    devY: Math.round(y * sf),
+    devW: Math.round(width * sf),
+    devH: Math.round(height * sf)
+  }
 }
 
 /**

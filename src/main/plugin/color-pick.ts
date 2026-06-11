@@ -25,7 +25,8 @@ import {
   nativeGetPixelColor,
   extractRegionFromSnapshot,
   nativeCaptureScreenRaw,
-  nativeStartColorPick
+  nativeStartColorPick,
+  resolveNativeDisplayIndex
 } from '../services/native-screen-capture'
 import { portalPickColor, isPortalColorPickAvailable } from '../services/linux-portal-color-pick'
 import { registerSystemInternalWindow, unregisterSystemInternalWindow } from '../services/ipc-caller-resolver'
@@ -273,10 +274,12 @@ async function captureSnapshotForDisplay(display: Electron.Display, displayIndex
   const result: DisplaySnapshot = { raw: null, dataUrl: null }
 
   // 策略 1: 原生模块 — 同时获取 raw bitmap 和 PNG
-  const rawSnapshot = nativeCaptureScreenRaw(displayIndex)
-  if (rawSnapshot) {
+  // 原生枚举下标与 Electron 顺序无契约，需先映射
+  const nativeIndex = resolveNativeDisplayIndex(display)
+  const rawSnapshot = nativeIndex !== null ? nativeCaptureScreenRaw(nativeIndex) : null
+  if (rawSnapshot && nativeIndex !== null) {
     result.raw = rawSnapshot
-    const pngBuffer = nativeCaptureScreen(displayIndex, 'png')
+    const pngBuffer = nativeCaptureScreen(nativeIndex, 'png')
     if (pngBuffer) {
       result.dataUrl = `data:image/png;base64,${pngBuffer.toString('base64')}`
     }

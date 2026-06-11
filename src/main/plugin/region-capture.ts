@@ -20,7 +20,8 @@ import { readFileSync, unlinkSync, existsSync } from 'fs'
 import {
   nativeCaptureScreen,
   isNativeScreenCaptureAvailable,
-  nativeStartRegionCapture
+  nativeStartRegionCapture,
+  resolveNativeDisplayIndex
 } from '../services/native-screen-capture'
 import { registerSystemInternalWindow, unregisterSystemInternalWindow } from '../services/ipc-caller-resolver'
 import { permissionManager } from './permission-manager'
@@ -223,8 +224,9 @@ function getRegionCaptureHTML(displayInfo: object): string {
  * 为指定显示器截取快照（优先原生模块，回退 desktopCapturer）
  */
 async function captureSnapshotForDisplay(display: Electron.Display, displayIndex: number): Promise<string | null> {
-  // 策略 1: 原生模块
-  const buffer = nativeCaptureScreen(displayIndex, 'png')
+  // 策略 1: 原生模块（原生枚举下标与 Electron 顺序无契约，需先映射）
+  const nativeIndex = resolveNativeDisplayIndex(display)
+  const buffer = nativeIndex !== null ? nativeCaptureScreen(nativeIndex, 'png') : null
   if (buffer) {
     return `data:image/png;base64,${buffer.toString('base64')}`
   }

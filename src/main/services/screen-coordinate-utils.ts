@@ -44,6 +44,26 @@ function matchElectronDisplay(
   }) ?? electronDisplays.find((display) => nearlyEqual(display.scaleFactor || 1, nativeDisplay.scaleFactor || 1))
 }
 
+/**
+ * 在原生 getDisplays() 返回的列表中查找与给定矩形吻合的显示器下标。
+ *
+ * rect 必须与原生显示器 bounds 使用同一坐标系（macOS 为全局逻辑坐标，
+ * Windows/Linux 为物理像素坐标），由调用方负责换算。
+ */
+export function findNativeDisplayIndexByRect(
+  rect: RegionBounds,
+  nativeDisplays: NativeDisplayLike[],
+  tolerance = 2
+): number | null {
+  const index = nativeDisplays.findIndex((display) =>
+    nearlyEqual(display.x, rect.x, tolerance)
+    && nearlyEqual(display.y, rect.y, tolerance)
+    && nearlyEqual(display.width, rect.width, tolerance)
+    && nearlyEqual(display.height, rect.height, tolerance)
+  )
+  return index >= 0 ? index : null
+}
+
 export function nativePhysicalRegionToDip(
   region: RegionBounds,
   nativeDisplays: NativeDisplayLike[],
