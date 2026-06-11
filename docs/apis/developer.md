@@ -143,6 +143,7 @@ interface PluginProjectStatus {
 在项目目录执行 `npm run pack`。
 - 入参：`path: string`
 - 返回：`{ success: boolean; outFile?: string; log: string; error?: string }`（`outFile` 从日志中解析 `*.inplugin`）
+- 降级：若失败日志显示 `mulby` 命令不存在（用户未全局安装 mulby-cli），自动改用 `npx --yes mulby-cli pack` 在项目目录重试（npx 依次复用本地 `node_modules/.bin` → 全局安装 → 临时下载），日志中以 `[auto-fix]` 标记。
 
 > 说明：build/pack 用**宿主 IPC + spawn**（锁定工作目录、提供结构化日志、绕开 `shell.runCommand` 默认 denylist），而非插件内 `shell.runCommand`。
 

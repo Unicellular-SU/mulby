@@ -338,7 +338,7 @@ export function registerDeveloperHandlers(pluginManager: PluginManager) {
         }
     )
 
-    // 打包插件（宿主 spawn npm run pack）
+    // 打包插件（宿主 spawn npm run pack；未安装 mulby-cli 时自动降级 npx 重试）
     ipcMain.handle(
         'developer:packPlugin',
         async (_event, args: { path: string }): Promise<PackPluginResult> => {
@@ -346,12 +346,27 @@ export function registerDeveloperHandlers(pluginManager: PluginManager) {
             if (!p || !existsSync(p)) {
                 return { success: false, log: '', error: '目录不存在' }
             }
-            const { code, log } = await spawnCollect(npmCommand(), ['run', 'pack'], resolve(p))
-            if (code !== 0) {
-                return { success: false, log, error: `打包失败（exit ${code}）` }
+            const cwd = resolve(p)
+            const first = await spawnCollect(npmCommand(), ['run', 'pack'], cwd)
+            if (first.code === 0) {
+                return packResult(first.log)
             }
-            const match = log.match(/([^\s'"]+\.inplugin)/)
-            return { success: true, log, outFile: match ? match[1] : undefined }
+
+            // 兜底：脚手架的 pack 脚本是 `npm run build && mulby pack`，用户未全局安装 mulby-cli 时
+            // 在 mulby 一步报 command not found（此时 build 已成功，无需重复构建）。
+            // 改用 npx 重试 pack：npx 依次复用本地 node_modules/.bin → 全局安装，都没有才临时下载。
+            if (looksLikeMissingMulbyCli(first.log)) {
+                const retry = await spawnCollect(npxCommand(), ['--yes', 'mulby-cli', 'pack'], cwd)
+                const mergedLog =
+                    `${first.log}\n\n[auto-fix] 未检测到 mulby 命令，已自动改用 npx mulby-cli 打包` +
+                    `（执行 npm install -g mulby-cli 可永久解决）\n${retry.log}`
+                if (retry.code === 0) {
+                    return packResult(mergedLog)
+                }
+                return { success: false, log: mergedLog, error: `打包失败（npx 重试后 exit ${retry.code}）` }
+            }
+
+            return { success: false, log: first.log, error: `打包失败（exit ${first.code}）` }
         }
     )
 
@@ -406,6 +421,36 @@ export function registerDeveloperHandlers(pluginManager: PluginManager) {
  */
 function npmCommand(): string {
     return process.platform === 'win32' ? 'npm.cmd' : 'npm'
+}
+
+/**
+ * Windows 下 npx 可执行名为 npx.cmd。
+ */
+function npxCommand(): string {
+    return process.platform === 'win32' ? 'npx.cmd' : 'npx'
+}
+
+/** 打包成功结果：从日志解析 .inplugin 产物路径 */
+function packResult(log: string): PackPluginResult {
+    const match = log.match(/([^\s'"]+\.inplugin)/)
+    return { success: true, log, outFile: match ? match[1] : undefined }
+}
+
+/**
+ * 判断打包失败是否因为未安装 mulby-cli。
+ * mac/linux（npm run 走 sh）：`sh: mulby: command not found`；zsh 形态：`command not found: mulby`；
+ * Windows（cmd）：`'mulby' is not recognized ...` / `'mulby' 不是内部或外部命令`。
+ */
+function looksLikeMissingMulbyCli(log: string): boolean {
+    const text = log.toLowerCase()
+    if (!text.includes('mulby')) return false
+    return (
+        text.includes('mulby: command not found') ||
+        text.includes('command not found: mulby') ||
+        text.includes('mulby: not found') ||
+        text.includes("'mulby' is not recognized") ||
+        text.includes("'mulby' 不是内部或外部命令")
+    )
 }
 
 /**
