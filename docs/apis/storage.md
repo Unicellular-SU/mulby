@@ -208,10 +208,10 @@ const meta = await storage.getMeta('myKey');
 const r = await storage.setWithVersion('myKey', newValue, { expectedVersion: 2 });
 // 插件后端：第三参为 expectedVersion
 const rb = await context.api.storage.setWithVersion('myKey', newValue, 2);
-// { ok, version?, conflict?: { currentVersion } }
+// { ok, version?, conflict?: { currentVersion }, error? }
 ```
 
-**返回值**: `Promise<{ ok: boolean; version?: number; conflict?: { currentVersion: number } }>`
+**返回值**: `Promise<{ ok: boolean; version?: number; conflict?: { currentVersion: number }; error?: string }>`（写保留前缀键时返回 `error: 'E_INVALID_KEY'`）
 
 ### removeWithVersion(key[, options])
 [Renderer] [Backend]
@@ -254,12 +254,13 @@ const r = await storage.append('logs', { ts: Date.now(), msg: 'hi' }, { maxItems
 
 ### watch(options, callback)
 [Renderer]
-监听键变更（set/remove/clear），返回取消监听函数。
+监听键变更（set/remove/clear），返回取消监听函数。普通 KV、附件、加密项的变更都会触发，可通过 `event.source` 区分来源。
 
 ```javascript
 const unwatch = storage.watch({ prefix: 'user:' }, (event) => {
-  // event: { type: 'set' | 'remove' | 'clear', key, namespace, version?, updatedAt }
-  console.log('changed:', event.type, event.key);
+  // event: { type: 'set'|'remove'|'clear', key, namespace, version?, updatedAt, source? }
+  // source: 'kv'(默认) | 'attachment'(key 为附件 id) | 'encrypted'(key 为业务键)
+  console.log('changed:', event.type, event.key, event.source);
 });
 
 // 取消监听
@@ -268,13 +269,17 @@ unwatch();
 
 **参数**:
 - `options` (`{ namespace?: string; prefix?: string }`)
-- `callback` (function) - 变更回调
+- `callback` (function) - 变更回调，事件含 `source?: 'kv' | 'attachment' | 'encrypted'` 区分通道
 
 **返回值**: `() => void` — 取消监听函数
 
 ### 备注
 - 存储底层统一使用 SQLite，插件数据按 `plugin:<pluginId>` namespace 隔离。
 - 插件后端不支持传入自定义 namespace；插件 UI 调用 storage 时，主进程也会强制使用当前插件自己的 namespace。
+- **保留前缀**：`_encrypted_:`（加密项）与 `_attachment_meta_:`（附件元数据）为内部保留键，插件无法通过任何基础 KV / V2 接口读写：
+  - 读接口（`get` / `getAll` / `getMany` / `getMeta` / `list`）会跳过或返回不存在；
+  - 写接口（`set` / `setMany` / `setWithVersion` / `removeWithVersion` / `transaction` / `append`）会拒绝并返回 `E_INVALID_KEY`（`setMany` / `transaction` 含保留键时整批拒绝）；
+  - 请改用 `storage.encrypted.*` 与 `storage.attachment.*` 专用接口访问这些数据。
 
 ---
 
@@ -332,6 +337,7 @@ const exists = await storage.encrypted.has('apiKey'); // true/false
 - 底层使用 Electron `safeStorage`（macOS Keychain / Windows DPAPI / Linux Secret Service）
 - 加密后的数据存储在 SQLite 中，即使数据库文件泄露也无法解密
 - 每个插件的加密存储相互隔离
+- `encrypted.set` / `encrypted.remove` 会触发 `storage.watch` 事件（`source: 'encrypted'`，key 为业务键）
 
 ---
 
@@ -343,19 +349,31 @@ const exists = await storage.encrypted.has('apiKey'); // true/false
 
 ### attachment.put(id, data, mimeType)
 [Renderer]
-存储附件，单文件最大 50MB。
+存储附件，单文件最大 50MB。写入采用「临时文件 + 原子 rename」，崩溃不会残留半写文件。
 
 ```javascript
 const imageData = await fetch('/path/to/image').then(r => r.arrayBuffer());
-await storage.attachment.put('avatar', imageData, 'image/png');
+const res = await storage.attachment.put('avatar', imageData, 'image/png');
+if (!res.ok) {
+  console.error('保存失败:', res.error); // E_TOO_LARGE / E_INVALID_ID / E_IO / E_META
+}
 ```
 
 **参数**:
-- `id` (string) - 附件 ID（唯一标识）
+- `id` (string) - 附件 ID（唯一标识，同时作为文件名，校验规则见下方「存储说明」）
 - `data` (ArrayBuffer | Uint8Array) - 二进制数据
 - `mimeType` (string) - MIME 类型
 
-**返回值**: `Promise<boolean>`
+**返回值**: `Promise<{ ok: boolean; error?: 'E_TOO_LARGE' | 'E_INVALID_ID' | 'E_IO' | 'E_META' }>`
+
+> ⚠️ **破坏性变更**：旧版本返回 `Promise<boolean>`，现已改为结构化结果，请用 `res.ok` 判断成功、`res.error` 获取失败原因。
+> 超过 50MB 时 preload 层直接返回 `{ ok: false, error: 'E_TOO_LARGE' }`，超大数据不会跨 IPC 进入主进程。
+
+**错误码**:
+- `E_TOO_LARGE` - 超过单文件 50MB 上限
+- `E_INVALID_ID` - id 非法（路径穿越 / Windows 保留名 / 控制字符 / 结尾点或空格 / 超长等）
+- `E_IO` - 文件写入或重命名失败
+- `E_META` - 元数据写入失败（对应文件已回滚删除）
 
 ### attachment.get(id)
 [Renderer]
@@ -413,7 +431,16 @@ const images = await storage.attachment.list('img-');
 - 元数据（MIME 类型、大小）存入 SQLite
 - 插件间完全隔离
 - 单文件最大 50MB
-- 附件 ID 会作为文件名使用，不能包含路径分隔符或 Windows 保留文件名字符（如 `: * ? " < > |`）
+- 写入为异步且原子（临时文件 + rename）；元数据写入失败会回滚删除文件，避免文件与元数据不一致
+- `attachment.put` / `attachment.remove` 会触发 `storage.watch` 事件（`source: 'attachment'`，key 为附件 id）
+- 附件 ID 同时作为文件名，需满足以下校验，否则返回 `E_INVALID_ID`：
+  - 不能为空、`.` 或 `..`
+  - 不能包含路径分隔符或保留字符：`/ \ : * ? " < > |`
+  - 不能包含控制字符（0x00–0x1F）
+  - 不能以点或空格结尾（NTFS 会静默截断）
+  - 不能是 Windows 保留设备名：`CON` `PRN` `AUX` `NUL` `COM1`–`COM9` `LPT1`–`LPT9`
+  - 按 UTF-8 字节计算长度不超过 200 字节
+- 卸载插件时，若存有数据会提示「保留数据」或「删除数据」，保留后重装可恢复（含附件文件）
 
 ---
 

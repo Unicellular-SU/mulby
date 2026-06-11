@@ -12,6 +12,7 @@ import type { InputPayload, SearchPreferenceState } from '../../shared/types/plu
 import type { SearchSettings } from '../../shared/types/settings'
 import { getReportedPanelHeight } from '../search-panel-layout'
 import { buildSystemIconBatch, getSystemFileIconSvg, getSystemIconCacheKey } from './plugin-list-icons'
+import { confirmAndUninstallPlugin } from '../utils/uninstall-plugin'
 
 interface PluginListProps {
   searchPayload: InputPayload
@@ -1495,26 +1496,15 @@ function PluginList({
       case 'uninstall':
         if (item.pluginItem) {
           const { pluginId, pluginName } = item.pluginItem
-          const dialogResult = await window.mulby.dialog.showMessageBox({
-            type: 'warning',
-            title: '确认卸载',
-            message: `确定要卸载插件 "${pluginName}" 吗？`,
-            buttons: ['取消', '卸载'],
-            defaultId: 0,
-            cancelId: 0
-          })
-          if (dialogResult.response === 1) {
-            void window.mulby.plugin.uninstall(pluginId).then(res => {
-              if (res.success) {
-                window.mulby.notification.show(`已卸载插件 "${pluginName}"`)
-                // 清理脏数据：从当前搜索结果、最近使用和缓存中移除该插件
-                setPluginResults(prev => prev.filter(p => p.pluginId !== pluginId))
-                setRecentPlugins(prev => prev.filter(p => p.pluginId !== pluginId))
-                pluginCacheRef.current.clear()
-              } else {
-                window.mulby.notification.show(`卸载失败: ${res.error}`, 'error')
-              }
-            })
+          const outcome = await confirmAndUninstallPlugin(pluginId, pluginName)
+          if (outcome.status === 'success') {
+            window.mulby.notification.show(`已卸载插件 "${pluginName}"${outcome.purgedData ? '（数据已删除）' : ''}`)
+            // 清理脏数据：从当前搜索结果、最近使用和缓存中移除该插件
+            setPluginResults(prev => prev.filter(p => p.pluginId !== pluginId))
+            setRecentPlugins(prev => prev.filter(p => p.pluginId !== pluginId))
+            pluginCacheRef.current.clear()
+          } else if (outcome.status === 'error') {
+            window.mulby.notification.show(`卸载失败: ${outcome.error}`, 'error')
           }
         }
         break

@@ -34,7 +34,8 @@ import type {
   StorageAppendOptions,
   StorageAppendResult,
   StorageWatchOptions,
-  StorageWatchEvent
+  StorageWatchEvent,
+  AttachmentPutResult
 } from './storage-v2'
 import type {
   AppSettings,
@@ -841,7 +842,7 @@ export interface ElectronAPI {
       has: (key: string) => Promise<boolean>
     }
     attachment: {
-      put: (id: string, data: ArrayBuffer | Uint8Array, mimeType: string) => Promise<boolean>
+      put: (id: string, data: ArrayBuffer | Uint8Array, mimeType: string) => Promise<AttachmentPutResult>
       get: (id: string) => Promise<Uint8Array | null>
       getType: (id: string) => Promise<string | null>
       remove: (id: string) => Promise<boolean>
@@ -931,7 +932,9 @@ export interface ElectronAPI {
     install: (filePath: string) => Promise<{ success: boolean; pluginName?: string; pluginId?: string; action?: 'installed' | 'updated' | 'already-installed' | 'downgrade-blocked'; isUpdate?: boolean; oldVersion?: string; newVersion?: string; error?: string }>
     enable: (name: string) => Promise<{ success: boolean; error?: string }>
     disable: (name: string) => Promise<{ success: boolean; error?: string }>
-    uninstall: (name: string) => Promise<{ success: boolean; error?: string }>
+    uninstall: (name: string, options?: { purgeData?: boolean }) => Promise<{ success: boolean; error?: string }>
+    /** 插件存储数据统计（卸载确认时展示），kvCount 不含附件元数据键与加密项 */
+    getDataStats: (name: string) => Promise<{ kvCount: number; encryptedCount: number; attachmentCount: number; attachmentBytes: number }>
     getReadme: (name: string) => Promise<string | null>
     // 后台插件管理
     listBackground: () => Promise<BackgroundPluginInfo[]>

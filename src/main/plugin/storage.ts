@@ -28,6 +28,24 @@ function nsKey(pluginName: string): string {
   return `${PLUGIN_NS_PREFIX}${pluginName}`
 }
 
+// ====== 保留前缀：加密存储 / 附件元数据的内部键 ======
+//
+// 这些键由 storage.encrypted / storage.attachment 通道独占管理。
+// 插件不能通过通用 KV API 伪造附件元数据、读取或破坏加密密文，
+// 读路径将其隐藏，写路径直接拒绝。
+export const RESERVED_KEY_PREFIXES = ['_encrypted_:', '_attachment_meta_:'] as const
+
+export function isReservedStorageKey(key: string): boolean {
+  return RESERVED_KEY_PREFIXES.some(prefix => key.startsWith(prefix))
+}
+
+/** 写/删保留前缀键时抛出（插件侧 API 用） */
+function assertNotReservedKey(key: string): void {
+  if (isReservedStorageKey(key)) {
+    throw new Error(`E_INVALID_KEY: 键 "${key}" 使用了保留前缀，请改用 storage.encrypted / storage.attachment 专用 API`)
+  }
+}
+
 function escapeLikePrefix(prefix: string): string {
   return prefix
     .replace(/\\/g, '\\\\')
@@ -277,6 +295,7 @@ export class PluginStorage {
 
   // 获取数据
   get(pluginName: string, key: string): unknown {
+    if (isReservedStorageKey(key)) return undefined
     const row = getStmt.get(nsKey(pluginName), key) as { value: string } | undefined
     if (!row) return undefined
     try {
@@ -289,11 +308,13 @@ export class PluginStorage {
 
   // 设置数据
   set(pluginName: string, key: string, value: unknown): void {
+    assertNotReservedKey(key)
     setStmt.run(nsKey(pluginName), key, JSON.stringify(value), Date.now())
   }
 
   // 删除数据
   remove(pluginName: string, key: string): void {
+    assertNotReservedKey(key)
     removeStmt.run(nsKey(pluginName), key)
   }
 
@@ -304,11 +325,14 @@ export class PluginStorage {
 
   // 获取所有键
   keys(pluginName: string): string[] {
-    return (keysStmt.all(nsKey(pluginName)) as { key: string }[]).map(r => r.key)
+    return (keysStmt.all(nsKey(pluginName)) as { key: string }[])
+      .map(r => r.key)
+      .filter(key => !isReservedStorageKey(key))
   }
 
   // 判断键是否存在
   has(pluginName: string, key: string): boolean {
+    if (isReservedStorageKey(key)) return false
     return hasStmt.get(nsKey(pluginName), key) !== undefined
   }
 
@@ -317,6 +341,7 @@ export class PluginStorage {
     const rows = getAllStmt.all(nsKey(pluginName)) as { key: string; value: string }[]
     const result: Record<string, unknown> = {}
     for (const row of rows) {
+      if (isReservedStorageKey(row.key)) continue
       try {
         result[row.key] = JSON.parse(row.value)
       } catch {
@@ -329,6 +354,7 @@ export class PluginStorage {
   // 批量写入（事务保证原子性）
   bulkSet(pluginName: string, entries: Record<string, unknown>): void {
     const list = Object.entries(entries).map(([key, value]) => ({ key, value }))
+    for (const entry of list) assertNotReservedKey(entry.key)
     if (list.length === 0) return
     bulkSetTransaction(nsKey(pluginName), list)
   }
@@ -367,8 +393,9 @@ export class PluginStorage {
       version: (r.version ?? 0) as number
     }))
 
+    // 游标基于过滤前的最后一行计算，保证分页不漏数据
     const nextCursor = items.length === limit ? items[items.length - 1].key : undefined
-    return { items, nextCursor }
+    return { items: items.filter(item => !isReservedStorageKey(item.key)), nextCursor }
   }
 
   // 批量读取
@@ -376,6 +403,7 @@ export class PluginStorage {
     if (keys.length === 0) return []
     const ns = nsKey(pluginName)
     return keys.map(key => {
+      if (isReservedStorageKey(key)) return { key, found: false }
       const row = getMetaStmt.get(ns, key) as { value: string; version: number; updated_at: number } | undefined
       if (!row) return { key, found: false }
       let value: unknown
@@ -386,6 +414,7 @@ export class PluginStorage {
 
   // 批量写入（支持 CAS 和原子模式）
   setMany(pluginName: string, items: StorageSetManyItem[], options?: { atomic?: boolean }): StorageSetManyResult {
+    for (const item of items) assertNotReservedKey(item.key)
     if (items.length === 0) return { success: true, results: [] }
     const ns = nsKey(pluginName)
     const atomic = options?.atomic !== false // 默认 true
@@ -418,6 +447,7 @@ export class PluginStorage {
 
   // 获取值 + 元数据
   getMeta(pluginName: string, key: string): StorageMetaResult {
+    if (isReservedStorageKey(key)) return { found: false }
     const ns = nsKey(pluginName)
     const row = getMetaStmt.get(ns, key) as { value: string; version: number; updated_at: number } | undefined
     if (!row) return { found: false }
@@ -428,11 +458,13 @@ export class PluginStorage {
 
   // CAS 写入（乐观并发控制）
   setWithVersion(pluginName: string, key: string, value: unknown, expectedVersion?: number | null): StorageSetVersionResult {
+    assertNotReservedKey(key)
     return this._setOneWithVersion(nsKey(pluginName), key, value, expectedVersion)
   }
 
   // CAS 删除
   removeWithVersion(pluginName: string, key: string, expectedVersion?: number): StorageRemoveVersionResult {
+    assertNotReservedKey(key)
     const ns = nsKey(pluginName)
     if (expectedVersion === undefined) {
       // 无条件删除
@@ -451,6 +483,7 @@ export class PluginStorage {
 
   // 原子事务（混合 set/remove）
   transaction(pluginName: string, ops: StorageTransactionOp[]): StorageTransactionResult {
+    for (const op of ops) assertNotReservedKey(op.key)
     if (ops.length === 0) return { success: true, committed: 0 }
     const ns = nsKey(pluginName)
     try {
@@ -464,6 +497,7 @@ export class PluginStorage {
 
   // 向 JSON 数组追加元素
   append(pluginName: string, key: string, chunk: unknown, options?: StorageAppendOptions): StorageAppendResult {
+    assertNotReservedKey(key)
     const ns = nsKey(pluginName)
     return appendExec(ns, key, chunk, options)
   }

@@ -3,6 +3,7 @@ import type { PluginInfo } from '../../shared/types/electron'
 import type { BackgroundPluginInfo } from '../../shared/types/plugin'
 import type { InstalledPluginUpdateInfo } from '../../shared/types/plugin-store'
 import { STORE_BUTTON_GHOST, STORE_BUTTON_PRIMARY } from '../utils/plugin-store-helpers'
+import { confirmAndUninstallPlugin } from '../utils/uninstall-plugin'
 import StorePageLayout from './StorePageLayout'
 import PluginDetailsPanel, { PluginIcon } from './PluginDetailsPanel'
 
@@ -251,24 +252,15 @@ export default function PluginManagerView({ onBack, onOpenStore }: PluginManager
       window.mulby.notification.show('内置插件不可卸载', 'error')
       return
     }
-    const { response } = await window.mulby.dialog.showMessageBox({
-      type: 'question',
-      title: '卸载插件',
-      message: `确定要卸载插件「${plugin.displayName}」吗？`,
-      buttons: ['取消', '卸载'],
-      defaultId: 0,
-      cancelId: 0
-    })
-    if (response !== 1) return
-    const result = await window.mulby.plugin.uninstall(plugin.name)
-    if (result.success) {
+    const outcome = await confirmAndUninstallPlugin(plugin.name, plugin.displayName)
+    if (outcome.status === 'success') {
       setPlugins((prev) => prev.filter((item) => item.name !== plugin.name))
       setUpdates((prev) => prev.filter((item) => item.pluginId !== plugin.id))
       if (selectedPlugin === plugin.name) {
         setSelectedPlugin(null)
       }
-    } else {
-      window.mulby.notification.show(result.error || '卸载失败', 'error')
+    } else if (outcome.status === 'error') {
+      window.mulby.notification.show(outcome.error || '卸载失败', 'error')
     }
   }
 

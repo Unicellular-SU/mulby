@@ -20,6 +20,7 @@ import { getAppSettings } from '../services/app-settings-runtime'
 import { getPluginIdForWebContents } from '../services/ipc-caller-resolver'
 import { aggregateRendererBytesByPlugin } from '../services/app-memory-usage'
 import { appOnlyInvoke } from './_shared/caller-middleware'
+import { getNamespaceDataStats } from './storage'
 
 
 
@@ -414,14 +415,21 @@ export function registerPluginHandlers(manager: PluginManager, pluginToolRegistr
     return manager.disable(name)
   })
 
-  // 卸载插件
-  ipcMain.handle('plugin:uninstall', async (_, name: string) => {
+  // 卸载插件（options.purgeData 控制是否删除插件存储数据，默认保留）
+  ipcMain.handle('plugin:uninstall', async (_, name: string, options?: { purgeData?: boolean }) => {
     const plugin = manager.get(name)
     if (plugin && isBuiltin(plugin.path)) {
       return { success: false, error: '内置插件不支持卸载' }
     }
-    return manager.uninstall(name)
+    return manager.uninstall(name, options)
   })
+
+  // 获取插件存储数据统计（KV 条数 + 附件数量/大小），用于卸载确认时展示
+  ipcMain.handle('plugin:getDataStats', appOnlyInvoke(async (_event, name: string) => {
+    const plugin = manager.get(name)
+    const pluginId = plugin?.id || name
+    return getNamespaceDataStats(`plugin:${pluginId}`)
+  }))
 
   // 获取插件文档
   ipcMain.handle('plugin:getReadme', async (_, name: string) => {

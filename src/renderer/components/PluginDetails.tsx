@@ -3,6 +3,7 @@ import type { ReactNode } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import type { PluginInfo } from '../../shared/types/electron'
+import { confirmAndUninstallPlugin } from '../utils/uninstall-plugin'
 
 interface PluginDetailsProps {
     pluginName: string
@@ -110,21 +111,12 @@ export default function PluginDetails({ pluginName, onBack }: PluginDetailsProps
     }
 
     const handleUninstall = async () => {
-        const { response } = await window.mulby.dialog.showMessageBox({
-            type: 'question',
-            title: '卸载插件',
-            message: `确定要卸载插件「${plugin?.displayName || pluginName}」吗？`,
-            buttons: ['取消', '卸载'],
-            defaultId: 0,
-            cancelId: 0
-        })
-        if (response !== 1) return
-        const result = await window.mulby.plugin.uninstall(pluginName)
-        if (result.success) {
-            window.mulby.notification.show('插件已卸载')
+        const outcome = await confirmAndUninstallPlugin(pluginName, plugin?.displayName || pluginName)
+        if (outcome.status === 'success') {
+            window.mulby.notification.show(`插件已卸载${outcome.purgedData ? '（数据已删除）' : ''}`)
             onBack()
-        } else {
-            window.mulby.notification.show(result.error || '卸载失败', 'error')
+        } else if (outcome.status === 'error') {
+            window.mulby.notification.show(outcome.error || '卸载失败', 'error')
         }
     }
 

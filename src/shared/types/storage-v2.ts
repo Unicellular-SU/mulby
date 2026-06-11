@@ -16,6 +16,27 @@ export type StorageErrorCode =
   | 'E_RATE_LIMITED'     // 高频写入被限流
   | 'E_UNSUPPORTED'      // 当前平台不支持某能力
 
+// ====== 附件存储（storage.attachment）======
+
+/**
+ * 单个附件文件大小上限（50MB）。主进程与 preload 共用此常量：
+ * preload 先做预检，避免超大 payload 跨 IPC 序列化进主进程内存。
+ */
+export const MAX_ATTACHMENT_SIZE = 50 * 1024 * 1024
+
+/** 附件写入错误码（attachment.put 用，区别于 KV 的 StorageErrorCode） */
+export type AttachmentErrorCode =
+  | 'E_TOO_LARGE'    // 超过单文件 50MB 上限
+  | 'E_INVALID_ID'   // id 非法（路径穿越 / Windows 保留名 / 控制字符 / 结尾点空格 / 超长等）
+  | 'E_IO'           // 文件写入或重命名失败
+  | 'E_META'         // 元数据写入失败（对应文件已回滚删除）
+
+/** 附件写入结果：成功 `{ ok: true }`，失败 `{ ok: false, error }` */
+export interface AttachmentPutResult {
+  ok: boolean
+  error?: AttachmentErrorCode
+}
+
 // ====== list：按前缀分页遍历 ======
 
 export interface StorageListOptions {
@@ -107,6 +128,8 @@ export interface StorageSetVersionResult {
   version?: number
   /** 冲突时返回当前版本号 */
   conflict?: { currentVersion: number }
+  /** 失败原因（如写保留前缀键返回 E_INVALID_KEY） */
+  error?: StorageErrorCode
 }
 
 // ====== removeWithVersion：CAS 删除 ======
@@ -178,4 +201,11 @@ export interface StorageWatchEvent {
   namespace: string
   version?: number
   updatedAt: number
+  /**
+   * 变更来源通道，省略时按 'kv' 处理。
+   * - 'kv'：普通键值（key 为业务键）
+   * - 'attachment'：附件文件（key 为附件 id，需用 attachment.get 读取）
+   * - 'encrypted'：加密项（key 为业务键，需用 encrypted.get 读取）
+   */
+  source?: 'kv' | 'attachment' | 'encrypted'
 }

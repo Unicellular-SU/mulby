@@ -63,6 +63,7 @@ import { BackgroundPluginManager } from './background-manager'
 import { TaskScheduler } from '../scheduler'
 import type { ClipboardHistoryManager } from '../services/clipboard-history'
 import { formatPayloadTrace } from '../../shared/attachment-trace'
+import { purgeNamespaceData } from '../ipc/storage'
 import log from 'electron-log'
 
 // 搜索结果项
@@ -2113,7 +2114,10 @@ export class PluginManager {
   }
 
   // 卸载插件
-  async uninstall(name: string): Promise<{ success: boolean; error?: string }> {
+  //
+  // options.purgeData：是否一并删除插件的存储数据（KV + 加密项 + 附件文件）。
+  // 默认 false（保留数据），用户重装插件后可恢复。
+  async uninstall(name: string, options?: { purgeData?: boolean }): Promise<{ success: boolean; error?: string }> {
     const plugin = this.resolve(name)
     if (!plugin) {
       return { success: false, error: '插件不存在' }
@@ -2154,6 +2158,15 @@ export class PluginManager {
 
       // 删除插件文件
       rmSync(plugin.path, { recursive: true, force: true })
+
+      // 按用户选择清理插件数据（默认保留，重装后可恢复）
+      if (options?.purgeData) {
+        try {
+          await purgeNamespaceData(`plugin:${pluginId}`)
+        } catch (err) {
+          log.warn(`[PluginManager] 清理插件数据失败（不影响卸载）: ${pluginId}`, err)
+        }
+      }
 
       // 清理内存
       this.plugins.delete(pluginId)

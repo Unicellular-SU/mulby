@@ -1,4 +1,5 @@
 import type { IpcRenderer } from 'electron'
+import { MAX_ATTACHMENT_SIZE, type AttachmentPutResult } from '../../shared/types/storage-v2'
 
 /**
  * 创建平台 API
@@ -180,10 +181,10 @@ export function createPlatformApi(ipcRenderer: IpcRenderer, options?: { restrict
         ipcRenderer.invoke('storage:transaction', ops, options?.namespace),
       append: (key: string, chunk: unknown, options?: { namespace?: string; maxItems?: number }) =>
         ipcRenderer.invoke('storage:append', key, chunk, options, options?.namespace),
-      watch: (options: { namespace?: string; prefix?: string }, callback: (event: { type: 'set' | 'remove' | 'clear'; key: string; namespace: string; version?: number; updatedAt: number }) => void) => {
+      watch: (options: { namespace?: string; prefix?: string }, callback: (event: { type: 'set' | 'remove' | 'clear'; key: string; namespace: string; version?: number; updatedAt: number; source?: 'kv' | 'attachment' | 'encrypted' }) => void) => {
         let watchId: number | null = null
         ipcRenderer.invoke('storage:watch', options).then((id: number) => { watchId = id })
-        const listener = (_event: unknown, watchEvent: { type: 'set' | 'remove' | 'clear'; key: string; namespace: string; version?: number; updatedAt: number }) => callback(watchEvent)
+        const listener = (_event: unknown, watchEvent: { type: 'set' | 'remove' | 'clear'; key: string; namespace: string; version?: number; updatedAt: number; source?: 'kv' | 'attachment' | 'encrypted' }) => callback(watchEvent)
         ipcRenderer.on('storage:change', listener)
         return () => {
           if (watchId !== null) ipcRenderer.invoke('storage:unwatch', watchId)
@@ -197,8 +198,13 @@ export function createPlatformApi(ipcRenderer: IpcRenderer, options?: { restrict
         has: (key: string) => ipcRenderer.invoke('storage:encrypted:has', key)
       },
       attachment: {
-        put: (id: string, data: ArrayBuffer | Uint8Array, mimeType: string) =>
-          ipcRenderer.invoke('storage:attachment:put', id, data, mimeType),
+        put: (id: string, data: ArrayBuffer | Uint8Array, mimeType: string): Promise<AttachmentPutResult> => {
+          // preload 预检：超限直接返回，避免超大 buffer 跨 IPC 序列化进主进程内存
+          if (data.byteLength > MAX_ATTACHMENT_SIZE) {
+            return Promise.resolve({ ok: false, error: 'E_TOO_LARGE' })
+          }
+          return ipcRenderer.invoke('storage:attachment:put', id, data, mimeType)
+        },
         get: (id: string) => ipcRenderer.invoke('storage:attachment:get', id),
         getType: (id: string) => ipcRenderer.invoke('storage:attachment:getType', id),
         remove: (id: string) => ipcRenderer.invoke('storage:attachment:remove', id),
