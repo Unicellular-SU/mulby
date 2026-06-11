@@ -126,9 +126,40 @@ function fallbackSource(source: { id: string; name: string; displayId?: string; 
       toDataURL: () => `data:image/png;base64,${source.png}`,
       toPNG: () => Buffer.from(source.png),
       toJPEG: () => Buffer.from(source.png),
-      getSize: () => ({ width: 16, height: 16 })
+      getSize: () => ({ width: 1920, height: 1080 }),
+      crop: () => ({
+        toPNG: () => Buffer.from(`crop:${source.png}`),
+        toJPEG: () => Buffer.from(`crop:${source.png}`)
+      })
     }
   } as unknown as Electron.DesktopCapturerSource
+}
+
+function screenApiLike(displays: Electron.Display[], overrides?: {
+  primary?: Electron.Display
+  matching?: Electron.Display
+}) {
+  const primary = overrides?.primary || displays[0]
+  return {
+    getAllDisplays: () => displays,
+    getPrimaryDisplay: () => primary,
+    getDisplayMatching: () => overrides?.matching || primary
+  }
+}
+
+function nativeCaptureLike(overrides?: {
+  isAvailable?: () => boolean
+  resolveDisplayIndex?: (display: { id: number }) => number | null
+  captureScreen?: (displayIndex: number) => Buffer | null
+  captureRegion?: () => Buffer | null
+}) {
+  return {
+    isAvailable: () => true,
+    resolveDisplayIndex: () => 0,
+    captureScreen: () => null,
+    captureRegion: () => null,
+    ...overrides
+  }
 }
 
 describe('PluginScreen captureScreen source routing', () => {
@@ -139,15 +170,13 @@ describe('PluginScreen captureScreen source routing', () => {
       desktopCapturer: {
         getSources: async () => [fallbackSource({ id: 'window:42:0', name: 'Window', png: 'window-png' })]
       },
-      screen: { getAllDisplays: () => [display], getPrimaryDisplay: () => display },
-      nativeCapture: {
-        isAvailable: () => true,
-        resolveDisplayIndex: () => 0,
+      screen: screenApiLike([display]),
+      nativeCapture: nativeCaptureLike({
         captureScreen: () => {
           nativeCaptureCalls += 1
           return Buffer.from('native-png')
         }
-      }
+      })
     })
 
     const buffer = await pluginScreen.captureScreen({ sourceId: 'window:42:0' })
@@ -167,15 +196,14 @@ describe('PluginScreen captureScreen source routing', () => {
           return []
         }
       },
-      screen: { getAllDisplays: () => [display], getPrimaryDisplay: () => display },
-      nativeCapture: {
-        isAvailable: () => true,
+      screen: screenApiLike([display]),
+      nativeCapture: nativeCaptureLike({
         resolveDisplayIndex: (target) => {
           resolvedDisplayIds.push(target.id)
           return 0
         },
         captureScreen: () => Buffer.from('native-primary')
-      }
+      })
     })
 
     const buffer = await pluginScreen.captureScreen()
@@ -196,9 +224,8 @@ describe('PluginScreen captureScreen source routing', () => {
           throw new Error('should not hit desktopCapturer')
         }
       },
-      screen: { getAllDisplays: () => [primary, secondary], getPrimaryDisplay: () => primary },
-      nativeCapture: {
-        isAvailable: () => true,
+      screen: screenApiLike([primary, secondary]),
+      nativeCapture: nativeCaptureLike({
         resolveDisplayIndex: (target) => {
           resolvedDisplayIds.push(target.id)
           return 1
@@ -207,7 +234,7 @@ describe('PluginScreen captureScreen source routing', () => {
           capturedIndexes.push(displayIndex)
           return Buffer.from('native-secondary')
         }
-      }
+      })
     })
 
     const buffer = await pluginScreen.captureScreen({ sourceId: 'screen:9:0' })
@@ -229,15 +256,14 @@ describe('PluginScreen captureScreen source routing', () => {
           return [fallbackSource({ id: 'screen:0:0', name: 'Screen', displayId: '222', png: 'unused' })]
         }
       },
-      screen: { getAllDisplays: () => [first, second], getPrimaryDisplay: () => first },
-      nativeCapture: {
-        isAvailable: () => true,
+      screen: screenApiLike([first, second]),
+      nativeCapture: nativeCaptureLike({
         resolveDisplayIndex: (target) => {
           resolvedDisplayIds.push(target.id)
           return target.id === 222 ? 0 : null
         },
         captureScreen: () => Buffer.from('native-222')
-      }
+      })
     })
 
     const buffer = await pluginScreen.captureScreen({ sourceId: 'screen:0:0' })
@@ -254,20 +280,87 @@ describe('PluginScreen captureScreen source routing', () => {
       desktopCapturer: {
         getSources: async () => [fallbackSource({ id: 'screen:7:0', name: 'Screen', displayId: '7', png: 'fallback-png' })]
       },
-      screen: { getAllDisplays: () => [display], getPrimaryDisplay: () => display },
-      nativeCapture: {
-        isAvailable: () => true,
+      screen: screenApiLike([display]),
+      nativeCapture: nativeCaptureLike({
         resolveDisplayIndex: () => null,
         captureScreen: () => {
           nativeCaptureCalls += 1
           return Buffer.from('native-png')
         }
-      }
+      })
     })
 
     const buffer = await pluginScreen.captureScreen({ sourceId: 'screen:7:0' })
 
     assert.equal(nativeCaptureCalls, 0)
     assert.equal(buffer.toString(), 'fallback-png')
+  })
+})
+
+describe('PluginScreen captureRegion fallback source selection', () => {
+  const primary = displayLike({ id: 7 })
+  const secondary = displayLike({ id: 9, bounds: { x: 1920, y: 0, width: 1920, height: 1080 } })
+  const region = { x: 2000, y: 100, width: 200, height: 100 }
+
+  it('prefers the source whose display_id matches the target display', async () => {
+    const pluginScreen = new PluginScreen({
+      desktopCapturer: {
+        getSources: async () => [
+          fallbackSource({ id: 'screen:0:0', name: 'A', displayId: '9', png: 'png-a' }),
+          fallbackSource({ id: 'screen:1:0', name: 'B', displayId: '7', png: 'png-b' })
+        ]
+      },
+      screen: screenApiLike([primary, secondary], { matching: secondary }),
+      nativeCapture: nativeCaptureLike({ isAvailable: () => false })
+    })
+
+    const buffer = await pluginScreen.captureRegion(region)
+
+    assert.equal(buffer.toString(), 'crop:png-a')
+  })
+
+  it('falls back to the display-ordinal source when display_id is empty', async () => {
+    const pluginScreen = new PluginScreen({
+      desktopCapturer: {
+        getSources: async () => [
+          fallbackSource({ id: 'screen:0:0', name: 'A', png: 'png-a' }),
+          fallbackSource({ id: 'screen:1:0', name: 'B', png: 'png-b' })
+        ]
+      },
+      screen: screenApiLike([primary, secondary], { matching: secondary }),
+      nativeCapture: nativeCaptureLike({ isAvailable: () => false })
+    })
+
+    const buffer = await pluginScreen.captureRegion(region)
+
+    assert.equal(buffer.toString(), 'crop:png-b')
+  })
+})
+
+describe('PluginScreen getMediaStreamConstraints', () => {
+  it('only enables desktop audio on platforms that support loopback capture', () => {
+    const pluginScreen = new PluginScreen()
+
+    const constraints = pluginScreen.getMediaStreamConstraints({
+      sourceId: 'screen:0:0',
+      audio: true
+    }) as { audio: unknown; video: { mandatory: { chromeMediaSourceId: string } } }
+
+    if (process.platform === 'darwin') {
+      assert.equal(constraints.audio, false)
+    } else {
+      assert.deepEqual(constraints.audio, { mandatory: { chromeMediaSource: 'desktop' } })
+    }
+    assert.equal(constraints.video.mandatory.chromeMediaSourceId, 'screen:0:0')
+  })
+
+  it('keeps audio disabled when not requested', () => {
+    const pluginScreen = new PluginScreen()
+
+    const constraints = pluginScreen.getMediaStreamConstraints({
+      sourceId: 'screen:0:0'
+    }) as { audio: unknown }
+
+    assert.equal(constraints.audio, false)
   })
 })

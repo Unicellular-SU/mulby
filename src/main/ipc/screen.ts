@@ -1,5 +1,11 @@
 import { ipcMain } from 'electron'
-import { pluginScreen, CaptureOptions, ScreenshotOptions, RecordingOptions } from '../plugin/screen'
+import {
+  pluginScreen,
+  isDesktopAudioCaptureSupported,
+  CaptureOptions,
+  ScreenshotOptions,
+  RecordingOptions
+} from '../plugin/screen'
 import { permissionManager } from '../plugin/permission-manager'
 
 function assertScreenPermission(sender: Electron.WebContents): void {
@@ -8,6 +14,13 @@ function assertScreenPermission(sender: Electron.WebContents): void {
 
 function assertRecordingPermissions(sender: Electron.WebContents): void {
   permissionManager.ensureCallerAccessMediaPermissions(sender, ['screen'])
+}
+
+function assertCursorPointPermission(sender: Electron.WebContents): void {
+  // 光标位置属于输入监控信息，可被轮询用于追踪；
+  // 已声明 screen（可整屏截图）的插件没有额外隐私增量，直接放行
+  if (permissionManager.canCallerAccessPluginPermissions(sender, ['screen'])) return
+  permissionManager.ensureCallerAccessPluginPermissions(sender, ['inputMonitor'])
 }
 
 export function registerScreenHandlers() {
@@ -27,7 +40,8 @@ export function registerScreenHandlers() {
   })
 
   // 获取鼠标位置
-  ipcMain.handle('screen:getCursorScreenPoint', () => {
+  ipcMain.handle('screen:getCursorScreenPoint', (event) => {
+    assertCursorPointPermission(event.sender)
     return pluginScreen.getCursorScreenPoint()
   })
 
@@ -67,7 +81,9 @@ export function registerScreenHandlers() {
   // 获取录屏 MediaStream 约束
   ipcMain.handle('screen:getMediaStreamConstraints', (event, options: RecordingOptions) => {
     assertRecordingPermissions(event.sender)
-    permissionManager.markPendingDesktopCapture(event.sender, { audio: options.audio === true })
+    permissionManager.markPendingDesktopCapture(event.sender, {
+      audio: options.audio === true && isDesktopAudioCaptureSupported()
+    })
     return pluginScreen.getMediaStreamConstraints(options)
   })
 

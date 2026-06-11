@@ -19,6 +19,8 @@
 
 受此权限保护的能力包括 `getSources()`、`getWindowBounds()`、`capture()`、`captureRegion()`、`getMediaStreamConstraints()`、`screenCapture()`、`colorPick()`，以及这些约束触发的桌面录制 `getUserMedia`。普通摄像头 `getUserMedia({ video: true })` 仍使用 `permissions.camera`，桌面录制视频流使用 `permissions.screen`。
 
+`getCursorScreenPoint()` 属于输入监控类信息，需要声明 `permissions.inputMonitor` 或 `permissions.screen` 任一权限。
+
 ### getAllDisplays()
 [Renderer] [Backend]
 获取所有显示器信息。
@@ -99,6 +101,8 @@ console.log(`鼠标位置: ${cursor.x}, ${cursor.y}`);
 ```
 
 **返回值**: `{ x: number; y: number }`
+
+光标位置可被轮询用于追踪，因此需要 `permissions.inputMonitor` 或 `permissions.screen` 任一权限。
 
 ### getSources(options?)
 [Renderer] [Backend]
@@ -240,7 +244,7 @@ const recorder = new MediaRecorder(stream, { mimeType: 'video/webm' });
 
 **参数** (RecordingOptions):
 - `sourceId` (string, 必需) - 捕获源 ID
-- `audio` (boolean, 可选) - 是否录制音频，默认 false。设为 true 时除 `permissions.screen` 外还需要 `permissions.microphone`
+- `audio` (boolean, 可选) - 是否录制系统音频，默认 false。设为 true 时除 `permissions.screen` 外还需要 `permissions.microphone`。macOS 不支持系统音频回环采集（Chromium 限制），该选项在 macOS 上会被忽略并返回 `audio: false` 的约束
 - `frameRate` (number, 可选) - 帧率，默认 30
 
 **返回值**: `object` - MediaStream 约束配置

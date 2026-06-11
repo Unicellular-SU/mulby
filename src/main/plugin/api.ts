@@ -422,7 +422,14 @@ ${item.files.map(p => `    <string>${p}</string>`).join('\n')}
       getAllDisplays: () => pluginScreen.getAllDisplays(),
       getPrimaryDisplay: () => pluginScreen.getPrimaryDisplay(),
       getDisplayNearestPoint: (point: { x: number; y: number }) => pluginScreen.getDisplayNearestPoint(point),
-      getCursorScreenPoint: () => pluginScreen.getCursorScreenPoint(),
+      getCursorScreenPoint: () => {
+        // 光标位置可被轮询用于追踪：要求 inputMonitor；
+        // 已声明 screen（可整屏截图）的插件没有额外隐私增量，直接放行
+        if (allowedPluginPermissions.screen !== true) {
+          ensurePluginPermission('inputMonitor')
+        }
+        return pluginScreen.getCursorScreenPoint()
+      },
       getSources: (options?: CaptureOptions) => {
         ensureMediaPermission('screen')
         return pluginScreen.getSources(options)

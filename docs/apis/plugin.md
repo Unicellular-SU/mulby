@@ -264,6 +264,17 @@ await window.mulby.plugin.uninstall('translator');
 
 返回值：`{ success: boolean; error?: string }`
 
+### plugin.getDataStats(name)
+[Renderer]
+获取插件存储数据统计，供卸载确认时展示是否存在残留数据。`kvCount` 不含附件元数据键与加密项。
+
+```javascript
+const stats = await window.mulby.plugin.getDataStats('translator');
+// { kvCount: 12, encryptedCount: 1, attachmentCount: 3, attachmentBytes: 524288 }
+```
+
+返回值：`{ kvCount: number; encryptedCount: number; attachmentCount: number; attachmentBytes: number }`
+
 ### plugin.getReadme(name)
 [Renderer]
 获取插件 README 文本内容。

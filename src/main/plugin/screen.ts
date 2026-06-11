@@ -66,11 +66,20 @@ interface NativeCaptureLike {
   isAvailable(): boolean
   resolveDisplayIndex(display: ElectronDisplayLike): number | null
   captureScreen(displayIndex: number, format: 'png' | 'jpeg', quality: number): Buffer | null
+  captureRegion(
+    x: number,
+    y: number,
+    width: number,
+    height: number,
+    format: 'png' | 'jpeg',
+    quality: number
+  ): Buffer | null
 }
 
 interface ScreenApiLike {
   getAllDisplays(): Electron.Display[]
   getPrimaryDisplay(): Electron.Display
+  getDisplayMatching(rect: { x: number; y: number; width: number; height: number }): Electron.Display
 }
 
 interface PluginScreenDependencies {
@@ -83,7 +92,8 @@ interface PluginScreenDependencies {
 const defaultNativeCapture: NativeCaptureLike = {
   isAvailable: isNativeScreenCaptureAvailable,
   resolveDisplayIndex: resolveNativeDisplayIndex,
-  captureScreen: nativeCaptureScreen
+  captureScreen: nativeCaptureScreen,
+  captureRegion: nativeCaptureRegion
 }
 
 export class PluginScreen {
@@ -381,8 +391,8 @@ export class PluginScreen {
     const normalizedRegion = normalizeCaptureRegion(region)
 
     // ===== 策略 1: 原生模块区域截图 =====
-    if (isNativeScreenCaptureAvailable()) {
-      const buffer = nativeCaptureRegion(
+    if (this.nativeCapture.isAvailable()) {
+      const buffer = this.nativeCapture.captureRegion(
         normalizedRegion.x,
         normalizedRegion.y,
         normalizedRegion.width,
@@ -408,7 +418,7 @@ export class PluginScreen {
     format: 'png' | 'jpeg',
     quality: number
   ): Promise<Buffer> {
-    const display = screen.getDisplayMatching(normalizedRegion)
+    const display = this.screenApi.getDisplayMatching(normalizedRegion)
 
     const sources = await withScreenPermissionErrorMapping(() => this.desktopCapturer.getSources({
       types: ['screen'],
@@ -418,7 +428,12 @@ export class PluginScreen {
       }
     }))
 
-    const source = sources.find((s) => s.display_id === String(display.id)) || sources[0]
+    // display_id 是权威映射，但 Linux 上恒为空、Windows 部分版本为空；
+    // 此时按显示器枚举下标对齐（screen 源顺序通常与系统枚举一致），避免多屏下盲取第一个截错屏
+    const displayOrdinal = this.screenApi.getAllDisplays().findIndex((item) => item.id === display.id)
+    const source = sources.find((s) => s.display_id === String(display.id))
+      ?? (displayOrdinal >= 0 ? sources[displayOrdinal] : undefined)
+      ?? sources[0]
     if (!source) {
       throw new Error('No screen source available')
     }
@@ -466,8 +481,14 @@ export class PluginScreen {
    * 注意：实际的 MediaStream 需要在渲染进程中创建
    */
   getMediaStreamConstraints(options: RecordingOptions): object {
+    const audioRequested = options.audio === true
+    const audioEnabled = audioRequested && isDesktopAudioCaptureSupported()
+    if (audioRequested && !audioEnabled) {
+      log.warn('[PluginScreen] 当前平台不支持系统音频回环采集，已忽略 audio 选项')
+    }
+
     return {
-      audio: options.audio ? {
+      audio: audioEnabled ? {
         mandatory: {
           chromeMediaSource: 'desktop'
         }
@@ -481,6 +502,15 @@ export class PluginScreen {
       }
     }
   }
+}
+
+/**
+ * 当前平台是否支持桌面系统音频回环采集。
+ * Chromium 不支持 macOS 的系统音频回环，带 audio 的 desktop 约束会让
+ * 整个 getUserMedia 调用失败，因此 macOS 上必须忽略 audio。
+ */
+export function isDesktopAudioCaptureSupported(): boolean {
+  return process.platform !== 'darwin'
 }
 
 /**
