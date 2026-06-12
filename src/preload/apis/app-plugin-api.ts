@@ -49,8 +49,8 @@ export function createAppPluginApi(ipcRenderer: IpcRenderer) {
         ipcRenderer.on('app:openAiSkillsSettings', listener)
         return () => ipcRenderer.removeListener('app:openAiSkillsSettings', listener)
       },
-      onOpenPluginStore: (callback: () => void) => {
-        const listener = () => callback()
+      onOpenPluginStore: (callback: (filter?: 'updatable') => void) => {
+        const listener = (_event: Electron.IpcRendererEvent, filter?: 'updatable') => callback(filter)
         ipcRenderer.on('app:openPluginStore', listener)
         return () => ipcRenderer.removeListener('app:openPluginStore', listener)
       },
@@ -107,6 +107,8 @@ export function createAppPluginApi(ipcRenderer: IpcRenderer) {
         page: 'settings' | 'plugin-manager' | 'plugin-store' | 'background-plugins' | 'task-scheduler' | 'log-viewer' | 'storage-explorer' | 'ai-settings' | 'ai-mcp-settings' | 'ai-tools-settings' | 'ai-skills-settings'
         settingsSection?: 'general' | 'shortcuts' | 'commandQuickLaunch' | 'commandAll' | 'permissions' | 'security' | 'developer' | 'about'
         shortcutCommandHint?: string
+        detailsPluginId?: string
+        storeFilter?: 'updatable'
       }) => ipcRenderer.invoke('systemPage:open', payload),
       close: () => ipcRenderer.invoke('systemPage:close'),
       detach: () => ipcRenderer.invoke('systemPage:detach'),

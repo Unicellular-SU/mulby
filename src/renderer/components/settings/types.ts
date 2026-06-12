@@ -18,7 +18,7 @@ export interface SettingsViewProps {
   onPrepareCommandLaunch?: () => Promise<void> | void
   onSectionChange: (section: SettingsSection) => void
   onClose: () => void
-  onOpenPluginManager: (section?: 'installed' | 'store') => void
+  onOpenPluginManager: (section?: 'installed' | 'store', storeFilter?: 'updatable') => void
   onOpenBackgroundPluginManager?: () => void
   onOpenTaskScheduler?: () => void
   onOpenStorageExplorer?: () => void

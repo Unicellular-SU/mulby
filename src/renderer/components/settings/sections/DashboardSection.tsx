@@ -83,7 +83,7 @@ interface DashboardStats {
 }
 
 interface DashboardSectionProps {
-  onOpenPluginManager: (section?: 'installed' | 'store') => void
+  onOpenPluginManager: (section?: 'installed' | 'store', storeFilter?: 'updatable') => void
   onOpenBackgroundPluginManager?: () => void
   onOpenTaskScheduler?: () => void
   onOpenStorageExplorer?: () => void
@@ -254,6 +254,29 @@ export default function DashboardSection({
     <div className={`animate-pulse rounded-lg bg-slate-200 dark:bg-slate-800 ${className}`} />
   )
 
+  // “可更新”卡片内容（点击态与静态共用）
+  const updatableCanJump = !loading && stats.updatablePlugins > 0
+  const updatableCardContent = (
+    <>
+      <div className={stats.updatablePlugins > 0 ? 'text-blue-500 transition-colors group-hover:text-blue-600 dark:group-hover:text-blue-400' : 'text-slate-400 dark:text-slate-500'}>
+        <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+          <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5" />
+        </svg>
+      </div>
+      <div className="text-xs text-slate-500 dark:text-slate-400">可更新</div>
+      {loading ? (
+        <Skeleton className="h-6 w-8" />
+      ) : (
+        <div className="flex items-center gap-1.5">
+          <span className="text-xl font-semibold text-slate-800 dark:text-white">{stats.updatablePlugins}</span>
+          {stats.updatablePlugins > 0 && (
+            <span className="rounded-full bg-blue-500 px-1.5 py-0.5 text-[10px] font-medium text-white">NEW</span>
+          )}
+        </div>
+      )}
+    </>
+  )
+
   return (
     <div className="space-y-6">
       {/* 区域一：快捷入口网格 */}
@@ -333,24 +356,20 @@ export default function DashboardSection({
           </div>
 
           {/* 可更新 */}
-          <div className={`${cardClass} flex flex-col items-center gap-1 py-4`}>
-            <div className={stats.updatablePlugins > 0 ? 'text-blue-500' : 'text-slate-400 dark:text-slate-500'}>
-              <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5" />
-              </svg>
+          {updatableCanJump ? (
+            <button
+              type="button"
+              className={`${cardClass} group flex cursor-pointer flex-col items-center gap-1 py-4 transition-all hover:border-blue-400/60 hover:shadow-md hover:shadow-blue-500/5 dark:hover:border-blue-500/40`}
+              onClick={() => onOpenPluginManager('store', 'updatable')}
+              title="在插件商店中查看可更新插件"
+            >
+              {updatableCardContent}
+            </button>
+          ) : (
+            <div className={`${cardClass} flex flex-col items-center gap-1 py-4`}>
+              {updatableCardContent}
             </div>
-            <div className="text-xs text-slate-500 dark:text-slate-400">可更新</div>
-            {loading ? (
-              <Skeleton className="h-6 w-8" />
-            ) : (
-              <div className="flex items-center gap-1.5">
-                <span className="text-xl font-semibold text-slate-800 dark:text-white">{stats.updatablePlugins}</span>
-                {stats.updatablePlugins > 0 && (
-                  <span className="rounded-full bg-blue-500 px-1.5 py-0.5 text-[10px] font-medium text-white">NEW</span>
-                )}
-              </div>
-            )}
-          </div>
+          )}
         </div>
       </div>
 

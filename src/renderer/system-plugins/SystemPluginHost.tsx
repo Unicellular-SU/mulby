@@ -8,7 +8,7 @@ interface SystemPluginHostProps {
   onShortcutCommandHintConsumed: () => void
   onPrepareCommandLaunch?: () => Promise<void> | void
   onClose: () => void
-  onOpenPluginManager: (section?: 'installed' | 'store') => void
+  onOpenPluginManager: (section?: 'installed' | 'store', storeFilter?: 'updatable') => void
   onOpenBackgroundPluginManager?: () => void
   onOpenTaskScheduler?: () => void
   onOpenStorageExplorer?: () => void

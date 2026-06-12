@@ -149,6 +149,7 @@ interface SystemWindowBootstrap {
   isSystemWindow: boolean
   initialViewMode: ViewMode
   initialSystemPluginRoute: SystemPluginRoute
+  initialPluginStoreFilter?: 'updatable'
 }
 
 interface SystemPageState {
@@ -196,6 +197,8 @@ function parseSystemWindowBootstrap(): SystemWindowBootstrap {
   const page = params.get('mulbySystemPage')
   const section = parseSettingsSection(params.get('mulbySystemSection')) || 'dashboard'
   const shortcutCommandHint = params.get('mulbySystemHint') || ''
+  const initialPluginStoreFilter =
+    params.get('mulbySystemStoreFilter') === 'updatable' ? 'updatable' : undefined
 
   let initialViewMode: ViewMode = 'home'
 
@@ -247,7 +250,8 @@ function parseSystemWindowBootstrap(): SystemWindowBootstrap {
         section,
         shortcutCommandHint
       }
-    }
+    },
+    initialPluginStoreFilter: page === 'plugin-store' ? initialPluginStoreFilter : undefined
   }
 }
 
@@ -289,6 +293,7 @@ function MainApp() {
   const [systemPluginRoute, setSystemPluginRoute] = useState<SystemPluginRoute>(systemWindowBootstrap.initialSystemPluginRoute)
   const [pluginManagerReturnTarget, setPluginManagerReturnTarget] = useState<'home' | 'settings'>('home')
   const [pluginStoreReturnTarget, setPluginStoreReturnTarget] = useState<'home' | 'settings' | 'plugins'>('home')
+  const [pluginStoreInitialFilter, setPluginStoreInitialFilter] = useState<'updatable' | undefined>(systemWindowBootstrap.initialPluginStoreFilter)
   const [selectedStoreEntry, setSelectedStoreEntry] = useState<PluginStoreEntry | null>(null)
   const [backgroundPluginManagerReturnTarget, setBackgroundPluginManagerReturnTarget] = useState<'home' | 'settings'>('home')
   const [taskSchedulerReturnTarget, setTaskSchedulerReturnTarget] = useState<'home' | 'settings'>('home')
@@ -804,24 +809,25 @@ function MainApp() {
     !visiblePluginLaunch &&
     !systemPageAttached
 
-  const openPluginStore = useCallback((from: 'home' | 'settings' | 'plugins' = 'home') => {
+  const openPluginStore = useCallback((from: 'home' | 'settings' | 'plugins' = 'home', storeFilter?: 'updatable') => {
     if (pluginOpen) {
       window.mulby.window.close()
       setPluginOpen(false)
     }
     setAttachmentsManagerOpen(false)
     if (!isSystemWindow) {
-      void window.mulby.systemPage.open({ page: 'plugin-store' })
+      void window.mulby.systemPage.open({ page: 'plugin-store', storeFilter })
       return
     }
     setPluginStoreReturnTarget(from)
+    setPluginStoreInitialFilter(storeFilter)
     setSelectedStoreEntry(null)
     setViewMode('plugin-store')
   }, [isSystemWindow, pluginOpen])
 
-  const openPluginManager = useCallback((from: 'home' | 'settings' = 'home', section: 'installed' | 'store' = 'installed', pluginId?: string) => {
+  const openPluginManager = useCallback((from: 'home' | 'settings' = 'home', section: 'installed' | 'store' = 'installed', pluginId?: string, storeFilter?: 'updatable') => {
     if (section === 'store') {
-      openPluginStore(from)
+      openPluginStore(from, storeFilter)
       return
     }
     if (pluginOpen) {
@@ -1058,8 +1064,8 @@ function MainApp() {
   }, [openSettings])
 
   useEffect(() => {
-    const cleanup = window.mulby.app.onOpenPluginStore(() => {
-      openPluginStore('home')
+    const cleanup = window.mulby.app.onOpenPluginStore((filter) => {
+      openPluginStore('home', filter)
     })
     return cleanup
   }, [openPluginStore])
@@ -1403,8 +1409,8 @@ function MainApp() {
               }
             }))
           }}
-          onOpenPluginManager={(section = 'installed') => {
-            openPluginManager('settings', section)
+          onOpenPluginManager={(section = 'installed', storeFilter) => {
+            openPluginManager('settings', section, undefined, storeFilter)
           }}
           onOpenBackgroundPluginManager={() => {
             openBackgroundPluginManager('settings')
@@ -1499,12 +1505,14 @@ function MainApp() {
     return (
       <LazyViewFrame isDragging={isDragging}>
         <PluginStoreView
+          initialStatusFilter={pluginStoreInitialFilter}
           onOpenDetails={(entry) => {
             setSelectedStoreEntry(entry)
             setViewMode('plugin-store-details')
           }}
           onBack={() => {
             setSelectedStoreEntry(null)
+            setPluginStoreInitialFilter(undefined)
             if (pluginStoreReturnTarget === 'plugins') {
               setViewMode('plugins')
               return

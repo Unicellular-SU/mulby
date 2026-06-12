@@ -47,6 +47,13 @@ function normalizeOpenPayload(input: unknown): OpenSystemPagePayload | null {
   if (typeof rawPage !== 'string') return null
   if (!SYSTEM_PAGE_IDS.includes(rawPage as SystemPageId)) return null
 
+  if (rawPage === 'plugin-store') {
+    return {
+      page: 'plugin-store',
+      storeFilter: payload.storeFilter === 'updatable' ? 'updatable' : undefined
+    }
+  }
+
   if (rawPage !== 'settings' && rawPage !== 'plugin-manager') {
     return { page: rawPage as SystemPageId }
   }

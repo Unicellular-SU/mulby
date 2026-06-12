@@ -25,7 +25,11 @@ import StorePluginIcon from './StorePluginIcon'
 interface PluginStoreViewProps {
   onBack: () => void
   onOpenDetails: (entry: PluginStoreEntry) => void
+  /** 初始安装状态筛选（如从控制中心"可更新"卡片跳转进入时为 'updatable'） */
+  initialStatusFilter?: 'updatable'
 }
+
+type StoreStatusFilter = 'all' | 'updatable'
 
 const SORT_OPTIONS: { key: StoreSortKey; label: string }[] = [
   { key: 'default', label: '默认' },
@@ -464,7 +468,7 @@ function groupEntriesByCategory(entries: PluginStoreEntry[]): CategoryGroup[] {
   return result
 }
 
-export default function PluginStoreView({ onBack, onOpenDetails }: PluginStoreViewProps) {
+export default function PluginStoreView({ onBack, onOpenDetails, initialStatusFilter }: PluginStoreViewProps) {
   const [sources, setSources] = useState<StoreSource[]>([])
   const [sourceModalOpen, setSourceModalOpen] = useState(false)
   const [storeEntries, setStoreEntries] = useState<PluginStoreEntry[]>([])
@@ -473,7 +477,14 @@ export default function PluginStoreView({ onBack, onOpenDetails }: PluginStoreVi
   const [storeQuery, setStoreQuery] = useState('')
   const [sortKey, setSortKey] = useState<StoreSortKey>('default')
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null)
+  const [statusFilter, setStatusFilter] = useState<StoreStatusFilter>(initialStatusFilter ?? 'all')
+  const [updatingAll, setUpdatingAll] = useState(false)
   const debounceRef = useRef<ReturnType<typeof setTimeout>>(undefined)
+
+  // 从控制中心"可更新"卡片跳转进入（或商店窗口已存在时再次触发）时，自动应用筛选
+  useEffect(() => {
+    if (initialStatusFilter) setStatusFilter(initialStatusFilter)
+  }, [initialStatusFilter])
 
   const [debouncedQuery, setDebouncedQuery] = useState('')
 
@@ -494,6 +505,10 @@ export default function PluginStoreView({ onBack, onOpenDetails }: PluginStoreVi
   const filteredStoreEntries = useMemo(() => {
     let entries = storeEntries
 
+    if (statusFilter === 'updatable') {
+      entries = entries.filter((e) => e.installState.status === 'updatable')
+    }
+
     if (selectedCategory) {
       entries = entries.filter(
         (e) =>
@@ -508,14 +523,14 @@ export default function PluginStoreView({ onBack, onOpenDetails }: PluginStoreVi
     }
 
     return sortStoreEntries(entries, sortKey)
-  }, [storeEntries, debouncedQuery, sortKey, selectedCategory])
+  }, [storeEntries, debouncedQuery, sortKey, selectedCategory, statusFilter])
 
   const categoryGroups = useMemo(
     () => groupEntriesByCategory(filteredStoreEntries),
     [filteredStoreEntries]
   )
 
-  const showGrouped = !selectedCategory && !debouncedQuery.trim()
+  const showGrouped = !selectedCategory && !debouncedQuery.trim() && statusFilter === 'all'
 
   const stats = useMemo(() => {
     const total = storeEntries.length
@@ -590,6 +605,30 @@ export default function PluginStoreView({ onBack, onOpenDetails }: PluginStoreVi
     await loadStoreEntries()
   }
 
+  const handleUpdateAll = async () => {
+    if (!window.mulby?.pluginStore?.updateAll || updatingAll) return
+    const pluginIds = filteredStoreEntries
+      .filter((e) => e.installState.status === 'updatable')
+      .map((e) => e.plugin.id)
+    if (pluginIds.length === 0) return
+    setUpdatingAll(true)
+    try {
+      const result = await window.mulby.pluginStore.updateAll(pluginIds)
+      const failed = result.results.filter((item) => !item.success)
+      if (failed.length > 0) {
+        window.mulby.notification.show(`批量更新完成，${failed.length} 个插件失败`, 'error')
+      } else {
+        window.mulby.notification.show(`批量更新完成，共 ${result.results.length} 个插件`, 'success')
+      }
+      await loadStoreEntries()
+    } catch (err) {
+      const message = err instanceof Error ? err.message : '批量更新失败'
+      window.mulby.notification.show(message, 'error')
+    } finally {
+      setUpdatingAll(false)
+    }
+  }
+
   return (
     <StorePageLayout
       headerTitle="插件商店"
@@ -661,18 +700,36 @@ export default function PluginStoreView({ onBack, onOpenDetails }: PluginStoreVi
           {/* Category tabs + stats */}
           {(categories.length > 0 || stats.total > 0) && (
             <div className="flex items-center justify-between gap-4">
-              {categories.length > 0 && (
+              {(categories.length > 0 || stats.updatable > 0) && (
                 <div className="flex items-center gap-1.5 overflow-x-auto pb-0.5 scrollbar-none">
                   <button
                     className={`shrink-0 rounded-full px-3 py-1.5 text-xs font-medium transition ${
-                      selectedCategory === null
+                      selectedCategory === null && statusFilter === 'all'
                         ? 'bg-slate-900 text-white shadow-sm dark:bg-white dark:text-slate-900'
                         : 'text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800'
                     }`}
-                    onClick={() => setSelectedCategory(null)}
+                    onClick={() => {
+                      setSelectedCategory(null)
+                      setStatusFilter('all')
+                    }}
                   >
                     全部
                   </button>
+                  {stats.updatable > 0 && (
+                    <button
+                      className={`shrink-0 inline-flex items-center gap-1 rounded-full px-3 py-1.5 text-xs font-medium transition ${
+                        statusFilter === 'updatable'
+                          ? 'bg-amber-500 text-white shadow-sm'
+                          : 'bg-amber-50 text-amber-700 hover:bg-amber-100 dark:bg-amber-500/10 dark:text-amber-300 dark:hover:bg-amber-500/20'
+                      }`}
+                      onClick={() => setStatusFilter(statusFilter === 'updatable' ? 'all' : 'updatable')}
+                    >
+                      <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5" />
+                      </svg>
+                      可更新 {stats.updatable}
+                    </button>
+                  )}
                   {categories.map((cat) => (
                     <button
                       key={cat}
@@ -701,9 +758,18 @@ export default function PluginStoreView({ onBack, onOpenDetails }: PluginStoreVi
                     </span>
                   )}
                   {stats.updatable > 0 && (
-                    <span className="rounded-full bg-amber-50 px-2 py-0.5 text-amber-700 dark:bg-amber-500/10 dark:text-amber-300">
+                    <button
+                      type="button"
+                      className={`rounded-full px-2 py-0.5 transition ${
+                        statusFilter === 'updatable'
+                          ? 'bg-amber-500 text-white'
+                          : 'bg-amber-50 text-amber-700 hover:bg-amber-100 dark:bg-amber-500/10 dark:text-amber-300 dark:hover:bg-amber-500/20'
+                      }`}
+                      onClick={() => setStatusFilter(statusFilter === 'updatable' ? 'all' : 'updatable')}
+                      title={statusFilter === 'updatable' ? '点击显示全部插件' : '只看可更新插件'}
+                    >
                       更新 {stats.updatable}
-                    </span>
+                    </button>
                   )}
                 </div>
               )}
@@ -711,17 +777,64 @@ export default function PluginStoreView({ onBack, onOpenDetails }: PluginStoreVi
           )}
         </div>
 
+        {/* 可更新筛选操作栏 */}
+        {statusFilter === 'updatable' && (
+          <div className="mt-4 flex items-center justify-between gap-3 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-2.5 dark:border-amber-500/30 dark:bg-amber-500/10">
+            <div className="flex min-w-0 items-center gap-2 text-sm text-amber-800 dark:text-amber-200">
+              <svg className="h-4 w-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5" />
+              </svg>
+              <span className="truncate">
+                {storeLoading
+                  ? '正在加载可更新插件…'
+                  : filteredStoreEntries.length > 0
+                    ? `正在显示 ${filteredStoreEntries.length} 个可更新插件`
+                    : '当前没有可更新的插件'}
+              </span>
+            </div>
+            <div className="flex shrink-0 items-center gap-2">
+              <button
+                type="button"
+                className="inline-flex h-8 items-center justify-center rounded-full border border-amber-300 bg-white/70 px-3 text-xs text-amber-700 transition hover:bg-white dark:border-amber-500/40 dark:bg-transparent dark:text-amber-200 dark:hover:bg-amber-500/10"
+                onClick={() => setStatusFilter('all')}
+              >
+                显示全部
+              </button>
+              {filteredStoreEntries.length > 0 && (
+                <button
+                  type="button"
+                  className="inline-flex h-8 items-center justify-center rounded-full border border-amber-500 bg-amber-500 px-3 text-xs font-medium text-white transition hover:bg-amber-600 disabled:cursor-not-allowed disabled:opacity-60"
+                  onClick={() => void handleUpdateAll()}
+                  disabled={updatingAll}
+                >
+                  {updatingAll ? (
+                    <span className="flex items-center gap-1.5">
+                      <svg className="h-3.5 w-3.5 animate-spin" viewBox="0 0 16 16" fill="none">
+                        <circle cx="8" cy="8" r="6" stroke="currentColor" strokeWidth="2" strokeDasharray="28" strokeDashoffset="8" strokeLinecap="round" />
+                      </svg>
+                      更新中...
+                    </span>
+                  ) : (
+                    '全部更新'
+                  )}
+                </button>
+              )}
+            </div>
+          </div>
+        )}
+
         {/* Plugin list */}
         <div className="mt-5">
           {filteredStoreEntries.length === 0 ? (
             <StoreEmptyState
               loading={storeLoading}
-              hasQuery={debouncedQuery.trim().length > 0 || selectedCategory !== null}
+              hasQuery={debouncedQuery.trim().length > 0 || selectedCategory !== null || statusFilter !== 'all'}
               hasSources={sources.length > 0}
               onClearQuery={() => {
                 setStoreQuery('')
                 setDebouncedQuery('')
                 setSelectedCategory(null)
+                setStatusFilter('all')
               }}
               onOpenSourceModal={() => setSourceModalOpen(true)}
               onRefresh={() => void loadStoreEntries()}

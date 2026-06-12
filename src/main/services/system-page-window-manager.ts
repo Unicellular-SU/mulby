@@ -89,6 +89,7 @@ export interface OpenSystemPagePayload {
   settingsSection?: SettingsCenterSection
   shortcutCommandHint?: string
   detailsPluginId?: string
+  storeFilter?: 'updatable'
 }
 
 export interface SystemPageState {
@@ -691,7 +692,11 @@ export class SystemPageWindowManager {
   private normalizeRoute(input: OpenSystemPagePayload): OpenSystemPagePayload {
     const page = input.page
     if (page !== 'settings') {
-      return { page, detailsPluginId: input.detailsPluginId }
+      return {
+        page,
+        detailsPluginId: input.detailsPluginId,
+        storeFilter: page === 'plugin-store' ? input.storeFilter : undefined
+      }
     }
     return {
       page: 'settings',
@@ -717,7 +722,7 @@ export class SystemPageWindowManager {
         target.webContents.send('app:openPluginManager', route.detailsPluginId)
         return
       case 'plugin-store':
-        target.webContents.send('app:openPluginStore')
+        target.webContents.send('app:openPluginStore', route.storeFilter)
         return
       case 'background-plugins':
         target.webContents.send('app:openBackgroundPlugins')
@@ -1010,6 +1015,11 @@ export class SystemPageWindowManager {
     } else {
       parsed.searchParams.delete('mulbySystemSection')
       parsed.searchParams.delete('mulbySystemHint')
+    }
+    if (route.page === 'plugin-store' && route.storeFilter) {
+      parsed.searchParams.set('mulbySystemStoreFilter', route.storeFilter)
+    } else {
+      parsed.searchParams.delete('mulbySystemStoreFilter')
     }
     return parsed.toString()
   }
