@@ -701,6 +701,82 @@ html.platform-win-main.dark .search-box-container.with-bottom-panel {
     0 10px 22px rgba(2, 6, 23, 0.28);
 }
 
+/* 有可用更新时：设置按钮变为强调色的「升级」入口 */
+.search-settings-button.search-settings-button--update {
+  color: var(--accent);
+  opacity: 1;
+  background:
+    linear-gradient(180deg, rgba(59, 130, 246, 0.26), rgba(59, 130, 246, 0.1)),
+    rgba(219, 234, 254, 0.5);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.35),
+    0 6px 16px rgba(37, 99, 235, 0.2);
+  animation: search-update-pulse 2.4s ease-in-out infinite;
+}
+
+.search-box:hover .search-settings-button.search-settings-button--update,
+.search-box:focus-within .search-settings-button.search-settings-button--update {
+  opacity: 1;
+}
+
+.search-settings-button.search-settings-button--update:hover {
+  color: var(--accent);
+  transform: translateY(-1px);
+}
+
+/* 右上角红点：直观提示有新内容 */
+.search-settings-button.search-settings-button--update::after {
+  content: '';
+  position: absolute;
+  top: -2px;
+  right: -2px;
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: #ef4444;
+  border: 1.5px solid var(--bg-primary);
+  pointer-events: none;
+}
+
+@keyframes search-update-pulse {
+
+  0%,
+  100% {
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.35),
+      0 6px 16px rgba(37, 99, 235, 0.16);
+  }
+
+  50% {
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.35),
+      0 6px 20px rgba(37, 99, 235, 0.4);
+  }
+}
+
+.dark .search-settings-button.search-settings-button--update {
+  color: #93c5fd;
+  background:
+    linear-gradient(180deg, rgba(59, 130, 246, 0.3), rgba(15, 23, 42, 0.18)),
+    rgba(30, 58, 138, 0.42);
+  box-shadow:
+    inset 0 1px 0 rgba(191, 219, 254, 0.14),
+    0 8px 18px rgba(2, 6, 23, 0.3);
+}
+
+.dark .search-settings-button.search-settings-button--update:hover {
+  color: #bfdbfe;
+}
+
+html.platform-mac-main .search-settings-button.search-settings-button--update {
+  background:
+    linear-gradient(180deg, rgba(59, 130, 246, 0.22), rgba(59, 130, 246, 0.08)),
+    rgba(219, 234, 254, 0.55);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.3),
+    0 4px 12px rgba(37, 99, 235, 0.2);
+}
+
 .search-input {
   flex: 1 1 auto;
   min-width: 0;
@@ -2053,6 +2129,10 @@ html.platform-win-main .attachment-manager {
   .search-box,
   .plugin-card {
     transition: none;
+  }
+
+  .search-settings-button.search-settings-button--update {
+    animation: none;
   }
 
   .detach-btn:hover,

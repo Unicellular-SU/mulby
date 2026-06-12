@@ -83,7 +83,7 @@ export default function SettingsView({
     }).catch(() => {
       setUpdateCenterState(null)
     })
-    window.mulby.plugin.getMainPushPlugins().then(setMainPushPlugins).catch(() => {})
+    window.mulby.plugin.getMainPushPlugins().then(setMainPushPlugins).catch(() => { })
   }, [])
 
   useEffect(() => {

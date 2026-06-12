@@ -30,7 +30,8 @@ import type {
   PluginLaunchStartEvent,
   SystemPluginBeforeAttachPayload,
   AutoPasteClipboardPayload,
-  MainWindowShowEvent
+  MainWindowShowEvent,
+  UpdateCenterState
 } from '../shared/types/electron'
 import type { PluginStoreEntry } from '../shared/types/plugin-store'
 
@@ -305,6 +306,9 @@ function MainApp() {
   const [attachmentsManagerOpen, setAttachmentsManagerOpen] = useState(false)
   const [isWindowsMain, setIsWindowsMain] = useState(false)
   const [activationSessionIdle, setActivationSessionIdle] = useState(false)
+  const [updateCenterState, setUpdateCenterState] = useState<UpdateCenterState | null>(null)
+  // 是否存在可用更新：用于把搜索框右侧的「设置」按钮变为「升级」入口
+  const hasAppUpdate = updateCenterState?.hasUpdate === true
   const searchText = query.length > 0 ? query : payloadText
   const runText = payloadText || query
   const searchPayload = useMemo(() => buildPayload(searchText, attachments), [searchText, attachments])
@@ -1022,6 +1026,25 @@ function MainApp() {
     return () => window.removeEventListener('keydown', handleKeyDown)
   }, [openSettings])
 
+  // 订阅更新中心状态：有新版本时把搜索框的设置按钮替换为升级图标
+  useEffect(() => {
+    let active = true
+    window.mulby.settings.getUpdateCenterState()
+      .then((state) => {
+        if (active) setUpdateCenterState(state)
+      })
+      .catch(() => {
+        // 获取失败时维持默认（无更新），不阻塞主界面
+      })
+    const cleanup = window.mulby.settings.onUpdateStateChanged((state) => {
+      setUpdateCenterState(state)
+    })
+    return () => {
+      active = false
+      cleanup()
+    }
+  }, [])
+
   // 监听窗口重新获得焦点，确保主界面的搜索框依然有焦点
   useEffect(() => {
     let focusTimer: ReturnType<typeof setTimeout> | null = null
@@ -1680,8 +1703,9 @@ function MainApp() {
             summaryText={payloadText}
             onChange={handleQueryChange}
             onSummaryChange={handlePayloadTextChange}
-            onOpenSettings={openSettings}
+            onOpenSettings={() => openSettings(hasAppUpdate ? 'about' : 'dashboard')}
             showSettingsButton={showSearchSettingsButton}
+            hasUpdate={hasAppUpdate}
             launchingPlugin={visiblePluginLaunch}
             attachments={attachments}
             onAttachmentsChange={handleAttachmentsChange}

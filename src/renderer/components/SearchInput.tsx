@@ -9,6 +9,8 @@ interface SearchInputProps {
   onSummaryChange: (value: string) => void
   onOpenSettings: () => void
   showSettingsButton: boolean
+  /** 是否存在可用更新：为 true 时设置按钮变为「升级」入口 */
+  hasUpdate?: boolean
   launchingPlugin?: {
     pluginName: string
     displayName: string
@@ -69,6 +71,7 @@ const CLEAR_ATTACHMENTS_LABEL = '\u6e05\u7a7a\u9644\u4ef6'
 const COLLAPSE_LABEL = '\u6536\u8d77'
 const MANAGE_LABEL = '\u7ba1\u7406'
 const OPEN_SETTINGS_LABEL = '\u6253\u5f00\u8bbe\u7f6e'
+const UPDATE_AVAILABLE_LABEL = '\u53d1\u73b0\u65b0\u7248\u672c\uff0c\u70b9\u51fb\u67e5\u770b' // 发现新版本，点击查看
 
 function isInpluginFile(file: DroppedFile): boolean {
   const normalizedName = String(file.name || '').toLowerCase()
@@ -83,6 +86,7 @@ const SearchInput = forwardRef<SearchInputRef, SearchInputProps>(function Search
   onSummaryChange,
   onOpenSettings,
   showSettingsButton,
+  hasUpdate = false,
   launchingPlugin,
   attachments,
   onAttachmentsChange,
@@ -468,16 +472,24 @@ const SearchInput = forwardRef<SearchInputRef, SearchInputProps>(function Search
           {showSettingsButton && (
             <button
               type="button"
-              className="search-settings-button"
+              className={`search-settings-button${hasUpdate ? ' search-settings-button--update' : ''}`}
               onMouseDown={(e) => e.preventDefault()}
               onClick={handleOpenSettings}
-              aria-label={OPEN_SETTINGS_LABEL}
-              title={OPEN_SETTINGS_LABEL}
+              aria-label={hasUpdate ? UPDATE_AVAILABLE_LABEL : OPEN_SETTINGS_LABEL}
+              title={hasUpdate ? UPDATE_AVAILABLE_LABEL : OPEN_SETTINGS_LABEL}
             >
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true">
-                <circle cx="12" cy="12" r="3.25" />
-                <path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.1 1.6c.2.1.4.1.6.1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z" />
-              </svg>
+              {hasUpdate ? (
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true">
+                  <path d="M7 4h10" />
+                  <path d="M12 20V8.5" />
+                  <path d="m6.5 13 5.5-5.5 5.5 5.5" />
+                </svg>
+              ) : (
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true">
+                  <circle cx="12" cy="12" r="3.25" />
+                  <path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.1 1.6c.2.1.4.1.6.1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z" />
+                </svg>
+              )}
             </button>
           )}
           {subInput.enabled && (

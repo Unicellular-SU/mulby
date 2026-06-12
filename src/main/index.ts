@@ -665,7 +665,7 @@ app.whenReady().then(async () => {
 
   // 启动活跃窗口监听器
   // 保持活跃窗口缓存热身，但避免每次焦点变化都触碰 Accessibility API。
-  onActiveWindowChange(() => {})
+  onActiveWindowChange(() => { })
   log.info('[ActiveWindowWatcher] Started permanently')
 
   // 启动剪贴板历史记录管理器
