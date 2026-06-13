@@ -8,6 +8,8 @@ import { captureAutoPasteClipboardPayload } from './ipc/clipboard'
 import { isIgnoringBlur, startIgnoringBlur, stopIgnoringBlur, isAppExplicitlyHidden, markAppVisible } from './services/blur-manager'
 import { attachShortcutRecordingGuard } from './services/shortcut-recording-guard'
 import { refreshActiveWindowCache } from './services/active-window'
+import { restoreWin32ForegroundWindow } from './services/native-win32-input'
+import { normalizeWindowsNativeWindowHandle } from './services/windows-input-target-window'
 import { registerAppWindow } from './services/ipc-caller-resolver'
 import { shouldHideMainWindowOnToggle } from './services/main-window-toggle-policy'
 import {
@@ -294,6 +296,31 @@ export class MainWindowManager {
     }, this.getBlurSuppressionFlushDelay())
   }
 
+  /**
+   * Windows 强制前台。响应全局快捷键唤醒时，后台进程的 win.show()/win.focus()
+   * 会被系统 SetForegroundWindow 前台锁拒绝——窗口浮在最上但键盘焦点仍留在
+   * 上一个程序，且因主窗口从未真正聚焦，点击别处也不会触发 blur 隐藏。
+   * 这里复用经实战与单测验证的 AttachThreadInput 方案强制夺取前台焦点。
+   */
+  private forceWindowsForeground(): void {
+    if (process.platform !== 'win32') return
+    if (!isWindowAvailable(this.window)) return
+    try {
+      // Electron 的 getNativeWindowHandle() 返回 Buffer；koffi 的 void* 需要 HWND 的
+      // 「地址数值」。直接传 Buffer 会被当成「指向 Buffer 的指针」→ IsWindow() 失败 →
+      // 整个夺取前台静默空转。必须先转成 bigint 地址（与 windows-input-target-window 同口径）。
+      const handle = normalizeWindowsNativeWindowHandle(this.window.getNativeWindowHandle())
+      if (!handle) {
+        log.warn('[MainWindow] win32 foreground: could not resolve native window handle')
+        return
+      }
+      const ok = restoreWin32ForegroundWindow(handle)
+      if (!ok) log.warn('[MainWindow] win32 foreground: SetForegroundWindow chain failed')
+    } catch (error) {
+      log.warn('[MainWindow] win32 force foreground failed:', error)
+    }
+  }
+
   private schedulePostShowFocusRetry(): void {
     this.clearPostShowFocusRetryTimer()
     this.postShowFocusRetryTimer = setTimeout(() => {
@@ -306,6 +333,7 @@ export class MainWindowManager {
         this.window.show()
         this.window.focus()
         this.window.webContents.focus()
+        this.forceWindowsForeground()
       } catch (error) {
         log.warn('[MainWindow] Failed to retry focus after show:', error)
         return
@@ -697,6 +725,9 @@ export class MainWindowManager {
         }
       }
 
+      // Windows: 真正夺取前台键盘焦点（win.focus() 不足以越过前台锁）。
+      this.forceWindowsForeground()
+
       if (process.platform !== 'win32') {
         refreshActiveWindowCache()
       }
@@ -708,6 +739,8 @@ export class MainWindowManager {
           if (this.window && !this.window.isDestroyed() && this.window.isVisible()) {
             this.window.setOpacity(1)
             this.showShadow()
+            // 透明层恢复后再夺一次前台：覆盖「opacity 0 期间夺取被系统忽略」的二次唤醒场景。
+            this.forceWindowsForeground()
           }
         }, MW_OPACITY_RESTORE_DELAY_MS)
       }
