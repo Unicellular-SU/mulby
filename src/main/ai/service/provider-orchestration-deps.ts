@@ -27,7 +27,8 @@ import {
   emitReasoningChunk as emitReasoningChunkHelper,
   emitTextChunk as emitTextChunkHelper,
   emitToolCallChunk as emitToolCallChunkHelper,
-  emitToolResultChunk as emitToolResultChunkHelper
+  emitToolResultChunk as emitToolResultChunkHelper,
+  emitUsageChunk as emitUsageChunkHelper
 } from './stream-helpers'
 
 interface CreateProviderOrchestrationDepsInput {
@@ -117,6 +118,7 @@ export function createProviderStreamOrchestrationDeps(
     emitReasoningChunk: (onChunk, text) => emitReasoningChunkHelper(onChunk, text),
     emitToolCallChunk: (onChunk, toolCall) => emitToolCallChunkHelper(onChunk, toolCall),
     emitToolResultChunk: (onChunk, toolResult) => emitToolResultChunkHelper(onChunk, toolResult),
+    emitUsageChunk: (onChunk, payload) => emitUsageChunkHelper(onChunk, payload),
     emitEndChunk: (onChunk, message) => emitEndChunkHelper(onChunk, message)
   }
 }

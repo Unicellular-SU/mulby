@@ -59,6 +59,28 @@ export function createToolResultChunk(toolResult: { id: string; name: string; re
   }
 }
 
+/**
+ * 多步工具循环中每轮 LLM 往返结束时的真实用量快照。
+ * usage 为跨轮累计（与 end 块口径一致），usage_round 为本轮往返
+ * （inputTokens=本轮完整 prompt，inputTokens+outputTokens≈本轮结束时的真实上下文大小）。
+ */
+export function createUsageChunk(input: {
+  round: number
+  roundUsage: { inputTokens?: number; outputTokens?: number }
+  totalUsage: { inputTokens?: number; outputTokens?: number }
+}): AiMessage {
+  return {
+    role: 'assistant',
+    chunkType: 'usage',
+    tool_round: input.round,
+    usage_round: input.roundUsage,
+    usage: {
+      inputTokens: input.totalUsage.inputTokens ?? 0,
+      outputTokens: input.totalUsage.outputTokens ?? 0
+    }
+  }
+}
+
 export function createErrorChunk(error: Error, classification?: AiStreamErrorClassification): AiMessage {
   return {
     role: 'assistant',

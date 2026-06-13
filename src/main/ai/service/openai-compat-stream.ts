@@ -86,6 +86,14 @@ export interface OpenAICompatContext {
     onChunk: ((chunk: AiMessage) => void) | undefined,
     toolProgress: { id?: string; name: string; progress: number; total?: number; message?: string }
   ) => void
+  emitUsageChunk: (
+    onChunk: ((chunk: AiMessage) => void) | undefined,
+    payload: {
+      round: number
+      roundUsage: { inputTokens?: number; outputTokens?: number }
+      totalUsage: { inputTokens?: number; outputTokens?: number }
+    }
+  ) => void
   trackMcpCall: (requestId: string | undefined, callId: string | undefined) => void
   untrackMcpCall: (requestId: string | undefined, callId: string | undefined) => void
   toolExecutor?: (input: {
@@ -524,6 +532,19 @@ export async function runOpenAICompatToolLoop(
             }
           : undefined
       }
+    }
+
+    // 继续工具轮之前推送本轮真实用量（最后一轮不推，最终值由 end 块承载）：
+    // 调用方（如插件的上下文占用指示）可据此在生成期间锚定真实值而非估算
+    if (stepResult.usage && (stepResult.usage.inputTokens !== undefined || stepResult.usage.outputTokens !== undefined)) {
+      context.emitUsageChunk(onChunk, {
+        round: step + 1,
+        roundUsage: stepResult.usage,
+        totalUsage: {
+          inputTokens: hasInputUsage ? inputTokens : undefined,
+          outputTokens: hasOutputUsage ? outputTokens : undefined
+        }
+      })
     }
 
     for (const call of stepResult.toolCalls) {

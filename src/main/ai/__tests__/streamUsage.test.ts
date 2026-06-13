@@ -75,6 +75,7 @@ function createOpenAICompatContext(): OpenAICompatContext {
     emitToolCallChunk: () => {},
     emitToolProgressChunk: () => {},
     emitToolResultChunk: () => {},
+    emitUsageChunk: () => {},
     trackMcpCall: () => {},
     untrackMcpCall: () => {}
   }

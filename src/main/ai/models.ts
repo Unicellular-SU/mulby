@@ -1,6 +1,7 @@
 import type { AiModel, AiModelCapability } from '../../shared/types/ai'
 import { getAiSettings } from './config'
 import { getEffectiveCapabilities } from './modelCapabilities'
+import { getModelContextWindow } from './modelSpecs'
 import { inferProviderType } from './providerCatalog'
 
 export interface ModelInfo extends AiModel {
@@ -112,11 +113,15 @@ export function getAllModels(): ModelInfo[] {
         }
         const providerId = providerConfig ? inferProviderType(providerConfig) : providerToken || 'openai-compatible'
         const effectiveCapabilities = getEffectiveCapabilities(model.id, providerConfig)
+        // 上下文窗口：用户在模型设置里显式填写的优先，否则补上 models.dev 快照/缓存的真实值
+        // （消费方：上下文压缩预算、插件侧的占用指示等；快照也未知时不带该字段，由调用方兜底）
+        const contextTokens = model.contextTokens ?? getModelContextWindow(model.id)
         return {
           ...model,
           providerId,
           modelId: modelToken || model.id,
           capabilities: effectiveCapabilities,
+          ...(contextTokens !== undefined ? { contextTokens } : {}),
           pricing: { inputPer1k: 0, outputPer1k: 0 }
         }
       })
@@ -129,6 +134,9 @@ export function getAllModels(): ModelInfo[] {
     })
     if (!providerConfig) return true
     return providerConfig.enabled !== false
+  }).map((model) => {
+    const contextTokens = model.contextTokens ?? getModelContextWindow(model.id)
+    return contextTokens !== undefined ? { ...model, contextTokens } : model
   })
 }
 

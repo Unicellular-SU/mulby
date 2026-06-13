@@ -21,6 +21,7 @@ import {
   emitToolCallChunk as emitToolCallChunkHelper,
   emitToolProgressChunk as emitToolProgressChunkHelper,
   emitToolResultChunk as emitToolResultChunkHelper,
+  emitUsageChunk as emitUsageChunkHelper,
   trackMcpCall as trackMcpCallHelper,
   untrackMcpCall as untrackMcpCallHelper
 } from './stream-helpers'
@@ -96,6 +97,7 @@ function createOpenAICompatContext(input: CreateOpenAICompatBridgeInput): OpenAI
     emitToolCallChunk: (onChunk, toolCall) => emitToolCallChunkHelper(onChunk, toolCall),
     emitToolProgressChunk: (onChunk, toolProgress) => emitToolProgressChunkHelper(onChunk, toolProgress),
     emitToolResultChunk: (onChunk, toolResult) => emitToolResultChunkHelper(onChunk, toolResult),
+    emitUsageChunk: (onChunk, payload) => emitUsageChunkHelper(onChunk, payload),
     trackMcpCall: (requestId, callId) => trackMcpCallHelper(input.requestMcpCallIds, requestId, callId),
     untrackMcpCall: (requestId, callId) => untrackMcpCallHelper(input.requestMcpCallIds, requestId, callId),
     toolExecutor: input.toolExecutor

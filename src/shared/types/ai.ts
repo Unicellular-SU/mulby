@@ -58,9 +58,10 @@ export interface AiMessage {
   content?: string | AiMessageContent[]
   reasoning_content?: string
   /**
-   * 流式事件类型（仅 onChunk 过程中出现），用于统一 meta/text/reasoning/tool/error/end 协议。
+   * 流式事件类型（仅 onChunk 过程中出现），用于统一 meta/text/reasoning/tool/error/usage/end 协议。
+   * usage：多步工具循环中每轮 LLM 往返结束时推送的真实用量快照（usage=跨轮累计，usage_round=本轮）。
    */
-  chunkType?: 'meta' | 'text' | 'reasoning' | 'tool-call' | 'tool-progress' | 'tool-result' | 'error' | 'end'
+  chunkType?: 'meta' | 'text' | 'reasoning' | 'tool-call' | 'tool-progress' | 'tool-result' | 'error' | 'usage' | 'end'
   capability_debug?: AiCapabilityDebugInfo
   policy_debug?: AiPolicyDebugInfo
   tool_call?: {
@@ -88,6 +89,10 @@ export interface AiMessage {
     statusCode?: number
   }
   usage?: AiTokenBreakdown
+  /** usage chunk 专用：本轮（单次 LLM 往返）的真实用量；provider 可能只返回单侧 */
+  usage_round?: { inputTokens?: number; outputTokens?: number }
+  /** usage chunk 专用：工具循环轮次（1-based） */
+  tool_round?: number
 }
 
 export interface AiToolFunction {
@@ -388,7 +393,8 @@ export interface AiModel {
   capabilities?: AiModelCapability[]
   /**
    * 模型的「上下文窗口（token 数）」。注意：与 `params.contextWindow`（历史消息条数窗口）是两回事。
-   * 优先级：用户在此显式覆盖 > models.dev 快照/缓存 > 家族推断。用于上下文压缩预算与溢出判定。
+   * 优先级：用户在此显式覆盖 > models.dev 快照/缓存；两者都未知则保持缺省，
+   * 消费方保守处理（压缩预算退安全粗下限、占用指示只显示绝对量），不按模型 id 家族猜。
    */
   contextTokens?: number
 }

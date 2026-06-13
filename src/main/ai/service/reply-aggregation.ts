@@ -53,6 +53,7 @@ type SdkStreamPart = {
   args?: unknown
   result?: unknown
   output?: unknown
+  usage?: unknown
 }
 
 type SdkStreamResultLike = {
@@ -73,6 +74,8 @@ interface AggregateSdkStreamResultInput {
   onReasoning: (text: string) => void
   onToolCall?: (toolCall: { id: string; name: string; args?: unknown }) => void
   onToolResult?: (toolResult: { id: string; name: string; result?: unknown }) => void
+  /** 每步（单次 LLM 往返）结束时回调该步真实用量（finish-step 事件，工具多步时逐步触发） */
+  onFinishStep?: (usage: { inputTokens?: number; outputTokens?: number }) => void
 }
 
 function toTextDelta(part: SdkStreamPart): string {
@@ -93,6 +96,16 @@ function toToolResultPart(part: SdkStreamPart): { id: string; name: string; resu
   const name = typeof part.toolName === 'string' ? part.toolName : ''
   if (!id || !name) return null
   return { id, name, result: part.result ?? part.output }
+}
+
+/** finish-step 事件的本步用量（AI SDK LanguageModelUsage：inputTokens/outputTokens 可能为 undefined） */
+function toStepUsage(part: SdkStreamPart): { inputTokens?: number; outputTokens?: number } | null {
+  const usage = part.usage as { inputTokens?: unknown; outputTokens?: unknown } | undefined
+  if (!usage || typeof usage !== 'object') return null
+  const inputTokens = typeof usage.inputTokens === 'number' && Number.isFinite(usage.inputTokens) ? usage.inputTokens : undefined
+  const outputTokens = typeof usage.outputTokens === 'number' && Number.isFinite(usage.outputTokens) ? usage.outputTokens : undefined
+  if (inputTokens === undefined && outputTokens === undefined) return null
+  return { inputTokens, outputTokens }
 }
 
 async function resolveAsyncField(value: unknown): Promise<unknown> {
@@ -151,6 +164,9 @@ export async function aggregateSdkStreamResult(
         } else if (part?.type === 'tool-result') {
           const toolResult = toToolResultPart(part)
           if (toolResult) input.onToolResult?.(toolResult)
+        } else if (part?.type === 'finish-step') {
+          const stepUsage = toStepUsage(part)
+          if (stepUsage) input.onFinishStep?.(stepUsage)
         }
       }
     } finally {

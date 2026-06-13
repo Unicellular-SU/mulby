@@ -97,6 +97,14 @@ export interface ProviderStreamOrchestrationDeps {
     onChunk: ((chunk: AiMessage) => void) | undefined,
     toolResult: { id: string; name: string; result?: unknown }
   ) => void
+  emitUsageChunk: (
+    onChunk: ((chunk: AiMessage) => void) | undefined,
+    payload: {
+      round: number
+      roundUsage: { inputTokens?: number; outputTokens?: number }
+      totalUsage: { inputTokens?: number; outputTokens?: number }
+    }
+  ) => void
   emitEndChunk: (onChunk: ((chunk: AiMessage) => void) | undefined, message: AiMessage) => void
 }
 
@@ -298,6 +306,12 @@ export async function executeProviderStreamOrchestration(
       } as Parameters<typeof streamText>[0])
 
       const allowReasoning = supportsReasoning(input.effectiveOption.model)
+      // 工具多步时逐步推送真实用量（usage chunk），让调用方在生成期间锚定真实上下文占用
+      let usageRound = 0
+      let cumInputTokens = 0
+      let cumOutputTokens = 0
+      let hasCumInput = false
+      let hasCumOutput = false
       const { content, reasoning } = await aggregateSdkStreamResult({
         result,
         allowReasoning,
@@ -316,7 +330,30 @@ export async function executeProviderStreamOrchestration(
         onToolResult: (toolResult) => {
           log.info('[AI] tool-result detected:', toolResult)
           input.deps.emitToolResultChunk(input.trackedOnChunk, toolResult)
-        }
+        },
+        ...(input.tools
+          ? {
+              onFinishStep: (stepUsage: { inputTokens?: number; outputTokens?: number }) => {
+                usageRound += 1
+                if (stepUsage.inputTokens !== undefined) {
+                  cumInputTokens += stepUsage.inputTokens
+                  hasCumInput = true
+                }
+                if (stepUsage.outputTokens !== undefined) {
+                  cumOutputTokens += stepUsage.outputTokens
+                  hasCumOutput = true
+                }
+                input.deps.emitUsageChunk(input.trackedOnChunk, {
+                  round: usageRound,
+                  roundUsage: stepUsage,
+                  totalUsage: {
+                    inputTokens: hasCumInput ? cumInputTokens : undefined,
+                    outputTokens: hasCumOutput ? cumOutputTokens : undefined
+                  }
+                })
+              }
+            }
+          : {})
       })
 
       return emitFinalMessage(input, {
