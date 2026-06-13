@@ -40,6 +40,22 @@ const SORT_OPTIONS: { key: StoreSortKey; label: string }[] = [
 
 const UNCATEGORIZED_KEY = '__uncategorized__'
 
+// 分类侧边栏行样式
+const SIDEBAR_ROW_BASE =
+  'w-full flex items-center justify-between gap-2 rounded-xl px-3 py-2 text-left text-sm font-medium transition-colors'
+const SIDEBAR_ROW_ACTIVE = 'bg-slate-900 text-white dark:bg-white dark:text-slate-900'
+const SIDEBAR_ROW_INACTIVE =
+  'text-slate-600 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-300 dark:hover:bg-slate-800/60 dark:hover:text-white'
+const SIDEBAR_UPDATABLE_ACTIVE = 'border border-amber-500 bg-amber-500 text-white shadow-sm'
+const SIDEBAR_UPDATABLE_INACTIVE =
+  'bg-amber-50 text-amber-700 hover:bg-amber-100 dark:bg-amber-500/10 dark:text-amber-300 dark:hover:bg-amber-500/20'
+
+function sidebarBadgeClass(active: boolean): string {
+  return active
+    ? 'rounded-full bg-white/20 px-1.5 py-0.5 text-[11px] tabular-nums dark:bg-slate-900/15'
+    : 'rounded-full bg-slate-100 px-1.5 py-0.5 text-[11px] tabular-nums text-slate-500 dark:bg-slate-800 dark:text-slate-400'
+}
+
 function PluginCardSkeleton() {
   return (
     <div className="flex h-full flex-col gap-4 rounded-3xl border border-slate-200/80 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
@@ -502,6 +518,31 @@ export default function PluginStoreView({ onBack, onOpenDetails, initialStatusFi
 
   const categories = useMemo(() => collectStoreCategories(storeEntries), [storeEntries])
 
+  // 侧边栏计数：感知搜索词，但不受所选分类/状态影响，反映"当前搜索下每个分类有多少匹配"
+  const searchedEntries = useMemo(() => {
+    const query = debouncedQuery.trim().toLowerCase()
+    if (!query) return storeEntries
+    return storeEntries.filter((e) => buildStoreSearchText(e.plugin).includes(query))
+  }, [storeEntries, debouncedQuery])
+
+  const allCount = searchedEntries.length
+
+  const updatableCount = useMemo(
+    () => searchedEntries.filter((e) => e.installState.status === 'updatable').length,
+    [searchedEntries]
+  )
+
+  const categoryCounts = useMemo(() => {
+    const counts: Record<string, number> = {}
+    for (const cat of categories) {
+      // 谓词必须与 filteredStoreEntries 的分类过滤一致
+      counts[cat] = searchedEntries.filter(
+        (e) => e.plugin.type === cat || e.plugin.categories?.includes(cat)
+      ).length
+    }
+    return counts
+  }, [searchedEntries, categories])
+
   const filteredStoreEntries = useMemo(() => {
     let entries = storeEntries
 
@@ -633,6 +674,7 @@ export default function PluginStoreView({ onBack, onOpenDetails, initialStatusFi
     <StorePageLayout
       headerTitle="插件商店"
       onBack={onBack}
+      fitBody
       headerActions={
         <>
           <button className={STORE_BUTTON_GHOST} onClick={() => setSourceModalOpen(true)}>
@@ -648,9 +690,87 @@ export default function PluginStoreView({ onBack, onOpenDetails, initialStatusFi
         </>
       }
     >
-      <div className="mx-auto max-w-6xl px-6 pb-8 pt-5">
-        {/* Search / Filter / Sort toolbar */}
-        <div className="space-y-3">
+      <div className="flex h-full min-h-0">
+        {/* 左侧分类侧边栏 */}
+        <aside className="w-56 shrink-0 overflow-y-auto border-r border-slate-200/70 bg-white dark:border-slate-800/80 dark:bg-slate-900 no-drag">
+          <nav className="flex flex-col gap-1 p-4">
+            {/* 全部 */}
+            <button
+              type="button"
+              className={`${SIDEBAR_ROW_BASE} ${
+                selectedCategory === null && statusFilter === 'all'
+                  ? SIDEBAR_ROW_ACTIVE
+                  : SIDEBAR_ROW_INACTIVE
+              }`}
+              onClick={() => {
+                setSelectedCategory(null)
+                setStatusFilter('all')
+              }}
+            >
+              <span className="truncate">全部</span>
+              <span className={sidebarBadgeClass(selectedCategory === null && statusFilter === 'all')}>
+                {allCount}
+              </span>
+            </button>
+            {/* 可更新 */}
+            {stats.updatable > 0 && (
+              <button
+                type="button"
+                className={`${SIDEBAR_ROW_BASE} ${
+                  statusFilter === 'updatable' ? SIDEBAR_UPDATABLE_ACTIVE : SIDEBAR_UPDATABLE_INACTIVE
+                }`}
+                onClick={() => {
+                  setSelectedCategory(null)
+                  setStatusFilter((prev) => (prev === 'updatable' ? 'all' : 'updatable'))
+                }}
+              >
+                <span className="flex items-center gap-1.5 truncate">
+                  <svg
+                    className="h-3.5 w-3.5 shrink-0"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5"
+                    />
+                  </svg>
+                  可更新
+                </span>
+                <span className="rounded-full bg-white/25 px-1.5 py-0.5 text-[11px] tabular-nums">
+                  {updatableCount}
+                </span>
+              </button>
+            )}
+            {/* 分类 */}
+            {categories.length > 0 && (
+              <div className="my-2 h-px bg-slate-200/70 dark:bg-slate-800/70" />
+            )}
+            {categories.map((cat) => {
+              const active = selectedCategory === cat
+              return (
+                <button
+                  key={cat}
+                  type="button"
+                  className={`${SIDEBAR_ROW_BASE} ${active ? SIDEBAR_ROW_ACTIVE : SIDEBAR_ROW_INACTIVE}`}
+                  onClick={() => {
+                    setStatusFilter('all')
+                    setSelectedCategory((prev) => (prev === cat ? null : cat))
+                  }}
+                >
+                  <span className="truncate">{getPluginTypeLabel(cat)}</span>
+                  <span className={sidebarBadgeClass(active)}>{categoryCounts[cat] ?? 0}</span>
+                </button>
+              )
+            })}
+          </nav>
+        </aside>
+        {/* 右侧内容区 */}
+        <div className="flex-1 min-h-0 overflow-y-auto no-drag px-6 pb-8 pt-5">
+          {/* 搜索 / 排序工具栏 */}
           <div className="flex items-center gap-3">
             <div className="relative flex-1">
               <svg
@@ -697,187 +817,124 @@ export default function PluginStoreView({ onBack, onOpenDetails, initialStatusFi
             </select>
           </div>
 
-          {/* Category tabs + stats */}
-          {(categories.length > 0 || stats.total > 0) && (
-            <div className="flex items-center justify-between gap-4">
-              {(categories.length > 0 || stats.updatable > 0) && (
-                <div className="flex items-center gap-1.5 overflow-x-auto pb-0.5 scrollbar-none">
-                  <button
-                    className={`shrink-0 rounded-full px-3 py-1.5 text-xs font-medium transition ${
-                      selectedCategory === null && statusFilter === 'all'
-                        ? 'bg-slate-900 text-white shadow-sm dark:bg-white dark:text-slate-900'
-                        : 'text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800'
-                    }`}
-                    onClick={() => {
-                      setSelectedCategory(null)
-                      setStatusFilter('all')
-                    }}
-                  >
-                    全部
-                  </button>
-                  {stats.updatable > 0 && (
-                    <button
-                      className={`shrink-0 inline-flex items-center gap-1 rounded-full px-3 py-1.5 text-xs font-medium transition ${
-                        statusFilter === 'updatable'
-                          ? 'bg-amber-500 text-white shadow-sm'
-                          : 'bg-amber-50 text-amber-700 hover:bg-amber-100 dark:bg-amber-500/10 dark:text-amber-300 dark:hover:bg-amber-500/20'
-                      }`}
-                      onClick={() => setStatusFilter(statusFilter === 'updatable' ? 'all' : 'updatable')}
-                    >
-                      <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5" />
-                      </svg>
-                      可更新 {stats.updatable}
-                    </button>
-                  )}
-                  {categories.map((cat) => (
-                    <button
-                      key={cat}
-                      className={`shrink-0 rounded-full px-3 py-1.5 text-xs font-medium transition ${
-                        selectedCategory === cat
-                          ? 'bg-slate-900 text-white shadow-sm dark:bg-white dark:text-slate-900'
-                          : 'text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800'
-                      }`}
-                      onClick={() => setSelectedCategory(selectedCategory === cat ? null : cat)}
-                    >
-                      {getPluginTypeLabel(cat)}
-                    </button>
-                  ))}
-                </div>
-              )}
-              {stats.total > 0 && (
-                <div className="flex shrink-0 items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
-                  <span>
-                    {filteredStoreEntries.length !== stats.total
-                      ? `${filteredStoreEntries.length} / ${stats.total}`
-                      : `${stats.total} 个插件`}
-                  </span>
-                  {stats.installed > 0 && (
-                    <span className="rounded-full bg-slate-100 px-2 py-0.5 dark:bg-slate-800">
-                      已装 {stats.installed}
-                    </span>
-                  )}
-                  {stats.updatable > 0 && (
-                    <button
-                      type="button"
-                      className={`rounded-full px-2 py-0.5 transition ${
-                        statusFilter === 'updatable'
-                          ? 'bg-amber-500 text-white'
-                          : 'bg-amber-50 text-amber-700 hover:bg-amber-100 dark:bg-amber-500/10 dark:text-amber-300 dark:hover:bg-amber-500/20'
-                      }`}
-                      onClick={() => setStatusFilter(statusFilter === 'updatable' ? 'all' : 'updatable')}
-                      title={statusFilter === 'updatable' ? '点击显示全部插件' : '只看可更新插件'}
-                    >
-                      更新 {stats.updatable}
-                    </button>
-                  )}
-                </div>
+          {/* 统计信息 */}
+          {stats.total > 0 && (
+            <div className="mt-3 flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
+              <span>
+                {filteredStoreEntries.length !== stats.total
+                  ? `${filteredStoreEntries.length} / ${stats.total}`
+                  : `${stats.total} 个插件`}
+              </span>
+              {stats.installed > 0 && (
+                <span className="rounded-full bg-slate-100 px-2 py-0.5 dark:bg-slate-800">
+                  已装 {stats.installed}
+                </span>
               )}
             </div>
           )}
-        </div>
 
-        {/* 可更新筛选操作栏 */}
-        {statusFilter === 'updatable' && (
-          <div className="mt-4 flex items-center justify-between gap-3 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-2.5 dark:border-amber-500/30 dark:bg-amber-500/10">
-            <div className="flex min-w-0 items-center gap-2 text-sm text-amber-800 dark:text-amber-200">
-              <svg className="h-4 w-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5" />
-              </svg>
-              <span className="truncate">
-                {storeLoading
-                  ? '正在加载可更新插件…'
-                  : filteredStoreEntries.length > 0
-                    ? `正在显示 ${filteredStoreEntries.length} 个可更新插件`
-                    : '当前没有可更新的插件'}
-              </span>
-            </div>
-            <div className="flex shrink-0 items-center gap-2">
-              <button
-                type="button"
-                className="inline-flex h-8 items-center justify-center rounded-full border border-amber-300 bg-white/70 px-3 text-xs text-amber-700 transition hover:bg-white dark:border-amber-500/40 dark:bg-transparent dark:text-amber-200 dark:hover:bg-amber-500/10"
-                onClick={() => setStatusFilter('all')}
-              >
-                显示全部
-              </button>
-              {filteredStoreEntries.length > 0 && (
+          {/* 可更新筛选操作栏 */}
+          {statusFilter === 'updatable' && (
+            <div className="mt-4 flex items-center justify-between gap-3 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-2.5 dark:border-amber-500/30 dark:bg-amber-500/10">
+              <div className="flex min-w-0 items-center gap-2 text-sm text-amber-800 dark:text-amber-200">
+                <svg className="h-4 w-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5" />
+                </svg>
+                <span className="truncate">
+                  {storeLoading
+                    ? '正在加载可更新插件…'
+                    : filteredStoreEntries.length > 0
+                      ? `正在显示 ${filteredStoreEntries.length} 个可更新插件`
+                      : '当前没有可更新的插件'}
+                </span>
+              </div>
+              <div className="flex shrink-0 items-center gap-2">
                 <button
                   type="button"
-                  className="inline-flex h-8 items-center justify-center rounded-full border border-amber-500 bg-amber-500 px-3 text-xs font-medium text-white transition hover:bg-amber-600 disabled:cursor-not-allowed disabled:opacity-60"
-                  onClick={() => void handleUpdateAll()}
-                  disabled={updatingAll}
+                  className="inline-flex h-8 items-center justify-center rounded-full border border-amber-300 bg-white/70 px-3 text-xs text-amber-700 transition hover:bg-white dark:border-amber-500/40 dark:bg-transparent dark:text-amber-200 dark:hover:bg-amber-500/10"
+                  onClick={() => setStatusFilter('all')}
                 >
-                  {updatingAll ? (
-                    <span className="flex items-center gap-1.5">
-                      <svg className="h-3.5 w-3.5 animate-spin" viewBox="0 0 16 16" fill="none">
-                        <circle cx="8" cy="8" r="6" stroke="currentColor" strokeWidth="2" strokeDasharray="28" strokeDashoffset="8" strokeLinecap="round" />
-                      </svg>
-                      更新中...
-                    </span>
-                  ) : (
-                    '全部更新'
-                  )}
+                  显示全部
                 </button>
-              )}
-            </div>
-          </div>
-        )}
-
-        {/* Plugin list */}
-        <div className="mt-5">
-          {filteredStoreEntries.length === 0 ? (
-            <StoreEmptyState
-              loading={storeLoading}
-              hasQuery={debouncedQuery.trim().length > 0 || selectedCategory !== null || statusFilter !== 'all'}
-              hasSources={sources.length > 0}
-              onClearQuery={() => {
-                setStoreQuery('')
-                setDebouncedQuery('')
-                setSelectedCategory(null)
-                setStatusFilter('all')
-              }}
-              onOpenSourceModal={() => setSourceModalOpen(true)}
-              onRefresh={() => void loadStoreEntries()}
-            />
-          ) : showGrouped && categoryGroups.length > 1 ? (
-            <div className="space-y-8">
-              {categoryGroups.map((group) => (
-                <section key={group.key}>
-                  <div className="mb-3 flex items-center gap-2">
-                    <h3 className="text-sm font-semibold text-slate-900 dark:text-white">
-                      {group.label}
-                    </h3>
-                    <span className="text-xs text-slate-400 dark:text-slate-500">
-                      {group.entries.length}
-                    </span>
-                  </div>
-                  <div className="grid gap-4 md:grid-cols-2">
-                    {group.entries.map((entry) => (
-                      <StorePluginCard
-                        key={`${entry.plugin.id}:${entry.plugin.version}`}
-                        entry={entry}
-                        installing={isInstalling(entry)}
-                        onOpenDetails={onOpenDetails}
-                        onInstall={(e) => void install(e)}
-                      />
-                    ))}
-                  </div>
-                </section>
-              ))}
-            </div>
-          ) : (
-            <div className="grid gap-4 md:grid-cols-2">
-              {filteredStoreEntries.map((entry) => (
-                <StorePluginCard
-                  key={`${entry.plugin.id}:${entry.plugin.version}`}
-                  entry={entry}
-                  installing={isInstalling(entry)}
-                  onOpenDetails={onOpenDetails}
-                  onInstall={(e) => void install(e)}
-                />
-              ))}
+                {filteredStoreEntries.length > 0 && (
+                  <button
+                    type="button"
+                    className="inline-flex h-8 items-center justify-center rounded-full border border-amber-500 bg-amber-500 px-3 text-xs font-medium text-white transition hover:bg-amber-600 disabled:cursor-not-allowed disabled:opacity-60"
+                    onClick={() => void handleUpdateAll()}
+                    disabled={updatingAll}
+                  >
+                    {updatingAll ? (
+                      <span className="flex items-center gap-1.5">
+                        <svg className="h-3.5 w-3.5 animate-spin" viewBox="0 0 16 16" fill="none">
+                          <circle cx="8" cy="8" r="6" stroke="currentColor" strokeWidth="2" strokeDasharray="28" strokeDashoffset="8" strokeLinecap="round" />
+                        </svg>
+                        更新中...
+                      </span>
+                    ) : (
+                      '全部更新'
+                    )}
+                  </button>
+                )}
+              </div>
             </div>
           )}
+
+          {/* 插件列表 */}
+          <div className="mt-5">
+            {filteredStoreEntries.length === 0 ? (
+              <StoreEmptyState
+                loading={storeLoading}
+                hasQuery={debouncedQuery.trim().length > 0 || selectedCategory !== null || statusFilter !== 'all'}
+                hasSources={sources.length > 0}
+                onClearQuery={() => {
+                  setStoreQuery('')
+                  setDebouncedQuery('')
+                  setSelectedCategory(null)
+                  setStatusFilter('all')
+                }}
+                onOpenSourceModal={() => setSourceModalOpen(true)}
+                onRefresh={() => void loadStoreEntries()}
+              />
+            ) : showGrouped && categoryGroups.length > 1 ? (
+              <div className="space-y-8">
+                {categoryGroups.map((group) => (
+                  <section key={group.key}>
+                    <div className="mb-3 flex items-center gap-2">
+                      <h3 className="text-sm font-semibold text-slate-900 dark:text-white">
+                        {group.label}
+                      </h3>
+                      <span className="text-xs text-slate-400 dark:text-slate-500">
+                        {group.entries.length}
+                      </span>
+                    </div>
+                    <div className="grid gap-4 md:grid-cols-2">
+                      {group.entries.map((entry) => (
+                        <StorePluginCard
+                          key={`${entry.plugin.id}:${entry.plugin.version}`}
+                          entry={entry}
+                          installing={isInstalling(entry)}
+                          onOpenDetails={onOpenDetails}
+                          onInstall={(e) => void install(e)}
+                        />
+                      ))}
+                    </div>
+                  </section>
+                ))}
+              </div>
+            ) : (
+              <div className="grid gap-4 md:grid-cols-2">
+                {filteredStoreEntries.map((entry) => (
+                  <StorePluginCard
+                    key={`${entry.plugin.id}:${entry.plugin.version}`}
+                    entry={entry}
+                    installing={isInstalling(entry)}
+                    onOpenDetails={onOpenDetails}
+                    onInstall={(e) => void install(e)}
+                  />
+                ))}
+              </div>
+            )}
+          </div>
         </div>
       </div>
 

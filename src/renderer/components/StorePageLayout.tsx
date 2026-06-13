@@ -6,6 +6,8 @@ interface StorePageLayoutProps {
   headerActions?: ReactNode
   onBack?: () => void
   children: ReactNode
+  /** 让内容区不自带滚动（改为由子组件自行管理两栏独立滚动）。默认 false，保持原滚动行为。 */
+  fitBody?: boolean
 }
 
 export function StoreBackButton({ onClick }: { onClick: () => void }) {
@@ -37,7 +39,8 @@ export default function StorePageLayout({
   headerSubtitle = 'Store',
   headerActions,
   onBack,
-  children
+  children,
+  fitBody = false
 }: StorePageLayoutProps) {
   return (
     <div className="relative h-full overflow-hidden bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-100">
@@ -57,7 +60,13 @@ export default function StorePageLayout({
             <div className="flex items-center gap-2">{headerActions}</div>
           )}
         </div>
-        <div className="flex-1 min-h-0 overflow-auto no-drag">
+        <div
+          className={
+            fitBody
+              ? 'flex-1 min-h-0 overflow-hidden no-drag'
+              : 'flex-1 min-h-0 overflow-auto no-drag'
+          }
+        >
           {children}
         </div>
       </div>
