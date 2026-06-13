@@ -9,7 +9,7 @@ import log from 'electron-log'
 
 const MAX_ZIP_ENTRIES = 5_000
 const MAX_ZIP_TOTAL_BYTES = 500 * 1024 * 1024 // 500 MB
-const MAX_ZIP_SINGLE_ENTRY_BYTES = 100 * 1024 * 1024 // 100 MB
+const MAX_ZIP_SINGLE_ENTRY_BYTES = 500 * 1024 * 1024 // 500 MB
 
 export type InstallAction = 'installed' | 'updated' | 'already-installed' | 'downgrade-blocked'
 
