@@ -356,6 +356,21 @@ export interface AiModelParameters {
    * thinkingConfig). Omit to use the provider/model default.
    */
   thinking?: AiThinkingMode
+  /**
+   * 结构化输出格式。`'json_object'` 约束为合法 JSON；`'json_schema'` 进一步按
+   * `jsonSchema` 约束输出结构（OpenAI response_format / AI SDK Output / Gemini responseSchema）。
+   * 省略则为普通文本输出。
+   */
+  responseFormat?: 'json_object' | 'json_schema'
+  /**
+   * JSON Schema（建议 draft 2020-12 子集）。`responseFormat: 'json_schema'` 时生效，
+   * 约束模型输出符合该结构。
+   */
+  jsonSchema?: Record<string, unknown>
+  /** 结构化输出的 schema 名称（OpenAI 需要），省略默认 `output`。 */
+  jsonSchemaName?: string
+  /** 严格模式（OpenAI `strict` / 增强 schema 遵守）。默认 true。 */
+  strict?: boolean
 }
 
 export type AiReasoningEffort = 'minimal' | 'low' | 'medium' | 'high' | 'max'

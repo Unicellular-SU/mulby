@@ -15,7 +15,7 @@ import { supportsReasoning } from '../modelCapabilities'
 import { isOpenAICompatibleProvider, shouldUseChatCompletions } from '../providerAdapterCatalog'
 import { countTokensForText, countTokensFromMessages } from '../tokens'
 import { aggregateSdkStreamResult } from './reply-aggregation'
-import { buildSdkReasoningProviderOptions, extractUsageAsync, normalizeUsage, resolveMaxToolSteps, stripReasoningParams } from './utils'
+import { buildSdkReasoningProviderOptions, buildSdkStructuredOutput, extractUsageAsync, normalizeUsage, resolveMaxToolSteps, stripReasoningParams } from './utils'
 import { compactToolResultMessages, computeCompactionMaxChars, DEFAULT_COMPACTION_MAX_CHARS } from './context-compaction'
 import { getModelContextWindow, getModelMaxOutputTokens } from '../modelSpecs'
 import log from 'electron-log'
@@ -302,7 +302,8 @@ export async function executeProviderStreamOrchestration(
         ...stripReasoningParams(input.params),
         ...(buildSdkReasoningProviderOptions(input.params)
           ? { providerOptions: buildSdkReasoningProviderOptions(input.params) }
-          : {})
+          : {}),
+        ...buildSdkStructuredOutput(input.params, !!input.tools)
       } as Parameters<typeof streamText>[0])
 
       const allowReasoning = supportsReasoning(input.effectiveOption.model)
