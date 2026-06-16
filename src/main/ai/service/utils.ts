@@ -1,3 +1,5 @@
+import { Output } from 'ai'
+import { jsonSchema } from '@ai-sdk/provider-utils'
 import type { AiModelParameters, AiTokenBreakdown } from '../../../shared/types/ai'
 
 export type ImageCompatTaskDescriptor = {
@@ -578,6 +580,18 @@ export function normalizeModelParams(params: AiModelParameters): AiModelParamete
   if (params.thinking === 'enabled' || params.thinking === 'disabled') {
     normalized.thinking = params.thinking
   }
+  if (params.responseFormat === 'json_object' || params.responseFormat === 'json_schema') {
+    normalized.responseFormat = params.responseFormat
+  }
+  if (params.jsonSchema && typeof params.jsonSchema === 'object') {
+    normalized.jsonSchema = params.jsonSchema
+  }
+  if (typeof params.jsonSchemaName === 'string' && params.jsonSchemaName.trim()) {
+    normalized.jsonSchemaName = params.jsonSchemaName.trim()
+  }
+  if (typeof params.strict === 'boolean') {
+    normalized.strict = params.strict
+  }
   return normalized
 }
 
@@ -621,12 +635,64 @@ export function buildSdkReasoningProviderOptions(
   return Object.keys(out).length ? out : undefined
 }
 
-/** AiModelParameters minus the reasoning-control fields (which go via providerOptions, not top-level). */
+/**
+ * AiModelParameters minus fields that go via other channels (providerOptions /
+ * SDK `output` / direct request body), not as top-level generateText/streamText params.
+ * Covers reasoning controls and structured-output controls — spreading the rest is safe.
+ */
 export function stripReasoningParams(params: AiModelParameters): AiModelParameters {
   const rest = { ...params }
   delete rest.reasoningEffort
   delete rest.thinking
+  delete rest.responseFormat
+  delete rest.jsonSchema
+  delete rest.jsonSchemaName
+  delete rest.strict
   return rest
+}
+
+/**
+ * OpenAI-compatible 结构化输出 `response_format`（合并进 /chat/completions body）。
+ * 未设置时返回 {}，spread 后对所有人零回归（OpenAI / 兼容端点 / ollama 等）。
+ */
+export function openAiCompatJsonBody(params: AiModelParameters): Record<string, unknown> {
+  if (params.responseFormat === 'json_schema' && params.jsonSchema) {
+    return {
+      response_format: {
+        type: 'json_schema',
+        json_schema: {
+          name: params.jsonSchemaName || 'output',
+          schema: params.jsonSchema,
+          strict: params.strict !== false
+        }
+      }
+    }
+  }
+  if (params.responseFormat === 'json_object') {
+    return { response_format: { type: 'json_object' } }
+  }
+  return {}
+}
+
+/**
+ * AI SDK `output` 结构化输出（generateText/streamText）。仅在请求 json_schema 且无工具时启用
+ * （工具调用与 output 同用不被支持）。SDK 会按 provider 自动适配（OpenAI response_format /
+ * Anthropic structuredOutputMode / Google responseSchema）。未启用时返回 {}（零回归）。
+ */
+export function buildSdkStructuredOutput(params: AiModelParameters, hasTools: boolean): Record<string, unknown> {
+  if (hasTools) return {}
+  if (params.responseFormat === 'json_schema' && params.jsonSchema) {
+    return {
+      output: Output.object({
+        schema: jsonSchema(params.jsonSchema as unknown as Parameters<typeof jsonSchema>[0]),
+        name: params.jsonSchemaName || 'output'
+      })
+    }
+  }
+  if (params.responseFormat === 'json_object') {
+    return { output: Output.json({ name: params.jsonSchemaName || 'output' }) }
+  }
+  return {}
 }
 
 export function stringifyToolResult(result: unknown): string {

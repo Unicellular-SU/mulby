@@ -32,7 +32,7 @@ const message = await ai.call({
 - `option` (AiOption)
   - `model` (string) - 模型 ID（如 `openai:gpt-4o-mini`）
   - `messages` (AiMessage[]) - 对话消息
-  - `params` (AiModelParameters) - 覆盖参数（可选）
+  - `params` (AiModelParameters) - 覆盖参数（可选）。除 `temperature`/`topP`/`maxOutputTokens`/`reasoningEffort`/`thinking` 外，还支持 `responseFormat`/`jsonSchema` 等**结构化输出**参数（见下文「结构化输出（JSON 模式 / JSON Schema）」）
   - `tools` (AiTool[]) - 工具定义（Function Calling）
   - `capabilities` (string[]) - 内置工具能力声明（可选）
   - `internalTools` (string[]) - 旧版内置工具声明（可选，已废弃，建议改用 `capabilities`）
@@ -59,6 +59,63 @@ const req = ai.call(
 // req.abort?.();
 
 // ✅ 正确：使用独立的 ai.abort(requestId)（见下文）
+```
+
+### 结构化输出（JSON 模式 / JSON Schema）
+
+通过 `option.params` 让模型从**源头**产出结构化结果，而非靠提示词约束后再解析。把"是否合法 JSON / 是否符合结构"的保证从软（prompt）提升到 API 级。
+
+**参数**（均在 `params` 内，可选）：
+- `responseFormat`: `'json_object' | 'json_schema'`
+  - `'json_object'`：约束输出为**合法 JSON**（不含前言/markdown 围栏），结构由你的 prompt 描述。最通用、最稳妥。
+  - `'json_schema'`：进一步要求输出**符合 `jsonSchema`**。需配合 `jsonSchema`。
+- `jsonSchema` (`Record<string, unknown>`)：JSON Schema（建议 draft 2020-12 子集），`responseFormat: 'json_schema'` 时生效。
+- `jsonSchemaName` (string)：schema 名称（OpenAI 需要），默认 `output`。
+- `strict` (boolean)：严格模式（OpenAI `strict` / 增强遵守），默认 `true`。严格模式下 schema 通常需为"封闭"结构（所有字段在 `required`、`additionalProperties: false`）。
+
+> 使用 `json_object` 时，请确保你的提示词中出现 "JSON" 字样（OpenAI 等要求），否则部分 provider 会拒绝。
+
+**Provider 覆盖**：
+| Provider | 机制 | 状态 |
+|---|---|---|
+| OpenAI / openai-compatible / ollama / deepseek / openrouter / azure | 请求体 `response_format` | ✅ |
+| 走 AI SDK 的 provider（含 Google Gemini） | AI SDK `Output`（自动映射 Gemini `responseSchema` 等） | ✅（无 `tools` 时） |
+| Anthropic 原生端点 | — | ⚠️ 暂不注入（其原生结构化字段尚不稳定），建议经 SDK 或在应用层兜底 |
+
+> 注意：`responseFormat` 与 `tools`（函数调用）不建议同时使用；当存在工具时结构化输出不会启用。少数老旧端点可能不支持 `response_format`，建议仍在应用层对结果做校验/重试。
+
+**示例 — JSON 模式（推荐，最稳妥）**：
+```javascript
+const msg = await window.mulby.ai.call({
+  model,
+  messages: [
+    { role: 'system', content: '只输出一个合法的 JSON 对象，包含 scenes 数组。' },
+    { role: 'user', content: storyText }
+  ],
+  params: { responseFormat: 'json_object' }
+});
+const data = JSON.parse(msg.content); // 已是合法 JSON
+```
+
+**示例 — JSON Schema（约束结构）**：
+```javascript
+const msg = await window.mulby.ai.call({
+  model,
+  messages: [{ role: 'user', content: '提取人物信息' }],
+  params: {
+    responseFormat: 'json_schema',
+    jsonSchemaName: 'person',
+    strict: false,
+    jsonSchema: {
+      type: 'object',
+      properties: {
+        name: { type: 'string' },
+        age: { type: 'number' }
+      },
+      required: ['name']
+    }
+  }
+});
 ```
 
 ### abort(requestId)
