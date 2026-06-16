@@ -24,6 +24,16 @@ for (const target of targetDirs) {
     fs.copyFileSync(path.join(srcDir, file), path.join(target, file))
   }
   console.log(`Synced ${files.length} files to ${path.relative(root, target)}`)
+
+  // bump 所属 skill 的 SKILL.md mtime：link-skills.sh 按 SKILL.md 的 mtime 判断是否重新复制，
+  // 否则仅更新 references/apis 文档（未改 SKILL.md）时不会真正同步到各 IDE。
+  const skillRoot = path.dirname(path.dirname(target))
+  const skillMd = path.join(skillRoot, 'SKILL.md')
+  if (fs.existsSync(skillMd)) {
+    const now = new Date()
+    fs.utimesSync(skillMd, now, now)
+    console.log(`Touched ${path.relative(root, skillMd)} (so link-skills.sh re-syncs doc-only changes)`)
+  }
 }
 
 console.log('Skill docs sync complete.')
