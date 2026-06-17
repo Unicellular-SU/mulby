@@ -205,6 +205,7 @@ export async function executeEditImageOrchestration(input: {
   model: string
   prompt: string
   imageAttachmentId: string
+  referenceAttachmentIds?: string[]
   providerType: string
   methodAdapter: ProviderMethodAdapter
   resolveImageModel: (modelId?: string) => { model: string; modelKey: unknown }
@@ -235,6 +236,16 @@ export async function executeEditImageOrchestration(input: {
         imageAttachmentId: input.imageAttachmentId
       })
       const image = await input.readAttachment(input.imageAttachmentId)
+      // 额外参考图（按参考图条件生成 / 多图一致性）：附在主图之后，一并交给模型（如 Gemini 多图）
+      const refImages: unknown[] = []
+      for (const refId of input.referenceAttachmentIds || []) {
+        if (!refId) continue
+        try {
+          refImages.push(await input.readAttachment(refId))
+        } catch {
+          // 单张参考图读取失败不影响主流程
+        }
+      }
 
       const result = await input.executeImageWithRetry(
         'editImage',
@@ -243,7 +254,7 @@ export async function executeEditImageOrchestration(input: {
             modelKey,
             prompt: {
               text: input.prompt,
-              images: [image]
+              images: [image, ...refImages]
             }
           }),
         {

@@ -594,7 +594,13 @@ export interface AiApi {
       input: { prompt: string; model: string; size?: string; count?: number },
       onChunk: (chunk: AiImageGenerateProgressChunk) => void
     ) => AiPromiseLike<{ images: string[]; tokens: AiTokenBreakdown }>
-    edit: (input: { imageAttachmentId: string; prompt: string; model: string }) => Promise<{ images: string[]; tokens: AiTokenBreakdown }>
+    edit: (input: {
+      imageAttachmentId: string
+      prompt: string
+      model: string
+      /** 额外参考图（按参考图条件生成 / 多图一致性，如 Gemini 多图）；附在主图之后一并传给模型 */
+      referenceAttachmentIds?: string[]
+    }) => Promise<{ images: string[]; tokens: AiTokenBreakdown }>
   }
   tooling: {
     webSearch: {
