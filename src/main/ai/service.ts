@@ -551,7 +551,7 @@ export class AiService {
     }
   }
 
-  async editImage(input: { imageAttachmentId: string; prompt: string; model: string }): Promise<{ images: string[]; tokens: AiTokenBreakdown }> {
+  async editImage(input: { imageAttachmentId: string; prompt: string; model: string; referenceAttachmentIds?: string[] }): Promise<{ images: string[]; tokens: AiTokenBreakdown }> {
     const resolved = resolveImageProvider({
       stage: 'editImage',
       model: input.model,

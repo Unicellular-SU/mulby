@@ -938,6 +938,25 @@ const result = await ai.images.edit({
 });
 ```
 
+**参数**:
+
+| 字段 | 类型 | 说明 |
+|---|---|---|
+| `model` | `string` | 图像模型 |
+| `imageAttachmentId` | `string` | 主图附件 ID（待编辑 / 主参考图） |
+| `prompt` | `string` | 编辑/生成指令 |
+| `referenceAttachmentIds` | `string[]?` | 额外参考图附件 ID 列表。按参考图条件生成、多图一致性（如同一角色跨镜、角色+场景），附在主图之后一并传给模型。在**支持多图输入的模型**（如 Google Gemini 图像模型）上效果最佳；不支持多图的模型一般只用主图。 |
+
+```javascript
+// 多参考图：按参考图条件生成（IP-Adapter 式强一致性）
+const result = await ai.images.edit({
+  model: 'google:gemini-2.5-flash-image',
+  imageAttachmentId: hero.attachmentId,          // 主参考（如角色三视图）
+  referenceAttachmentIds: [scene.attachmentId],  // 附加参考（如场景设定图）
+  prompt: '夜晚雨中，角色站在霓虹街道上的电影感画面'
+});
+```
+
 **返回值**: `{ images: string[]; tokens: AiTokenBreakdown }`
 
 ---
