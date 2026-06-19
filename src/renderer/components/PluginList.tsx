@@ -79,7 +79,6 @@ interface ResultCardProps {
 const DEFAULT_DISPLAY_LIMIT = 12
 const SYSTEM_APP_SEARCH_LIMIT = 24
 const SYSTEM_FILE_SEARCH_LIMIT = 50
-const SYSTEM_FILE_STABLE_DELAY_MS = 260
 const SYSTEM_ICON_TARGET_SIZE = 128
 const SYSTEM_ICON_BATCH_CONCURRENCY = 6
 const RECENT_LIMIT = 40
@@ -614,7 +613,6 @@ function PluginList({
 
     let cancelled = false
     let kickoffTimer: ReturnType<typeof setTimeout> | null = null
-    let systemTimer: ReturnType<typeof setTimeout> | null = null
 
     const runSearch = () => {
       const currentPayload = searchPayload
@@ -763,25 +761,23 @@ function PluginList({
           setSystemFilesResultHash(payloadHash)
           setIsSystemFilesLoading(false)
         } else {
+          // 文件搜索经 Everything SDK 进程内 IPC，毫秒级返回且不阻塞主进程，
+          // 因此与插件 / 应用搜索并行立即触发（旧 260ms 稳定延迟已移除）。
           setSystemFiles([])
           setSystemFilesResultHash('')
-          setIsSystemFilesLoading(false)
+          setIsSystemFilesLoading(true)
 
-          systemTimer = setTimeout(() => {
+          void window.mulby.desktop.searchFiles(query, SYSTEM_FILE_SEARCH_LIMIT).then((files) => {
             if (cancelled || currentRequestId !== requestIdRef.current) return
-            setIsSystemFilesLoading(true)
-            void window.mulby.desktop.searchFiles(query, SYSTEM_FILE_SEARCH_LIMIT).then((files) => {
-              if (cancelled || currentRequestId !== requestIdRef.current) return
-              setLruCache(systemFileCacheRef.current, systemCacheKey, files, MAX_CACHE_SIZE)
-              setSystemFiles(files)
-              setSystemFilesResultHash(payloadHash)
-            }).catch(() => {
-              if (cancelled || currentRequestId !== requestIdRef.current) return
-            }).finally(() => {
-              if (cancelled || currentRequestId !== requestIdRef.current) return
-              setIsSystemFilesLoading(false)
-            })
-          }, SYSTEM_FILE_STABLE_DELAY_MS)
+            setLruCache(systemFileCacheRef.current, systemCacheKey, files, MAX_CACHE_SIZE)
+            setSystemFiles(files)
+            setSystemFilesResultHash(payloadHash)
+          }).catch(() => {
+            if (cancelled || currentRequestId !== requestIdRef.current) return
+          }).finally(() => {
+            if (cancelled || currentRequestId !== requestIdRef.current) return
+            setIsSystemFilesLoading(false)
+          })
         }
       }
     }
@@ -806,9 +802,6 @@ function PluginList({
       cancelled = true
       if (kickoffTimer) {
         clearTimeout(kickoffTimer)
-      }
-      if (systemTimer) {
-        clearTimeout(systemTimer)
       }
     }
   }, [payloadHash, searchPayload, searchSettings, traceAttachmentCount, traceId, traceInputLength, traceSource, traceStartedAt])

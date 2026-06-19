@@ -1,6 +1,8 @@
-import { existsSync, readdirSync, readFileSync, statSync } from 'fs'
+import { existsSync, readdirSync, readFileSync } from 'fs'
+import { stat } from 'fs/promises'
 import { basename, dirname, extname, join } from 'path'
 import { isSystemSearchQueryEligible } from '../../../../shared/system-search'
+import { EverythingSdk, type EverythingRawResult } from './everything-sdk'
 import type {
   AppSearchResult,
   DesktopSearchProvider,
@@ -25,6 +27,7 @@ interface WindowsCatalogEntry extends AppSearchResult {
 export class WindowsSearchProvider implements DesktopSearchProvider {
   private catalogCache: { items: WindowsCatalogEntry[]; expiresAt: number } | null = null
   private catalogLoading: Promise<WindowsCatalogEntry[]> | null = null
+  private readonly everything = new EverythingSdk()
 
   constructor(
     private readonly execution: SearchExecutionContext,
@@ -55,13 +58,23 @@ export class WindowsSearchProvider implements DesktopSearchProvider {
     this.execution.cancelSearchProcess(SEARCH_KEY_FILES_FALLBACK)
     if (!isSystemSearchQueryEligible(normalizedQuery)) return []
 
+    // 候选池取 limit*3，给打分排序留足空间（与旧 es.exe 行为一致）。
+    const candidatePool = Math.max(limit * 3, 60)
+
+    // 首选：Everything SDK 进程内 IPC。无子进程派生，元数据（大小/目录属性）直接来自索引，无需 statSync。
+    const sdkResults = this.everything.query(normalizedQuery, candidatePool)
+    if (sdkResults) {
+      return this.rankSdkResults(sdkResults, normalizedQuery, limit)
+    }
+
+    // 回退链：es.exe 子进程 → Windows Search (OleDB)。仅在 DLL 缺失 / 架构不支持 / Everything 未运行时走到。
     let paths: string[] = []
     try {
       const esPath = this.resolveEsPath()
-      paths = await this.execution.runCommand(esPath, [normalizedQuery, '-n', String(Math.max(limit * 3, 60))], Math.max(limit * 3, 60), SEARCH_KEY_FILES)
+      paths = await this.execution.runCommand(esPath, [normalizedQuery, '-n', String(candidatePool)], candidatePool, SEARCH_KEY_FILES)
     } catch {
       try {
-        paths = await this.fallbackWindowsSearch(normalizedQuery, Math.max(limit * 3, 60), SEARCH_KEY_FILES_FALLBACK)
+        paths = await this.fallbackWindowsSearch(normalizedQuery, candidatePool, SEARCH_KEY_FILES_FALLBACK)
       } catch (fallbackError) {
         if (this.execution.isKilledProcessError(fallbackError)) {
           return []
@@ -71,12 +84,39 @@ export class WindowsSearchProvider implements DesktopSearchProvider {
       }
     }
 
+    return this.buildResultsFromPaths(paths, normalizedQuery, limit)
+  }
+
+  /** Everything SDK 结果已自带 name/path/size/isDirectory，只需打分排序后截断。 */
+  private rankSdkResults(rawResults: EverythingRawResult[], query: string, limit: number): FileSearchResult[] {
     const formatted: FileSearchResult[] = []
-    for (const rawPath of paths) {
-      const filePath = rawPath.trim()
-      if (!filePath) continue
-      try {
-        const stats = statSync(filePath)
+    for (const raw of rawResults) {
+      const item: FileSearchResult = {
+        name: raw.name,
+        path: raw.path,
+        isDirectory: raw.isDirectory,
+        size: raw.size,
+        source: 'everything'
+      }
+      item.score = this.ranking.scoreFile(item, query)
+      formatted.push(item)
+    }
+    return formatted
+      .sort((a, b) => (b.score || 0) - (a.score || 0))
+      .slice(0, limit)
+  }
+
+  /**
+   * 回退路径（es.exe / Windows Search）只返回路径字符串，需补齐元数据。
+   * 使用异步 stat 并发取元数据（Promise.allSettled），而非同步 statSync 串行阻塞主进程事件循环——
+   * 这样即便走到回退链，也不会拖累插件 / 应用搜索的 IPC 应答。
+   */
+  private async buildResultsFromPaths(paths: string[], query: string, limit: number): Promise<FileSearchResult[]> {
+    const statResults = await Promise.allSettled(
+      paths.map(async (rawPath) => {
+        const filePath = rawPath.trim()
+        if (!filePath) throw new Error('empty path')
+        const stats = await stat(filePath)
         const item: FileSearchResult = {
           name: basename(filePath),
           path: filePath,
@@ -84,10 +124,15 @@ export class WindowsSearchProvider implements DesktopSearchProvider {
           size: stats.size,
           source: 'everything'
         }
-        item.score = this.ranking.scoreFile(item, normalizedQuery)
-        formatted.push(item)
-      } catch {
-        // ignore invalid paths
+        item.score = this.ranking.scoreFile(item, query)
+        return item
+      })
+    )
+
+    const formatted: FileSearchResult[] = []
+    for (const result of statResults) {
+      if (result.status === 'fulfilled') {
+        formatted.push(result.value)
       }
     }
 
