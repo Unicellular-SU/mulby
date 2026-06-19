@@ -96,47 +96,35 @@ pnpm verify:plugin test/fixtures/plugins/verify-hello
 
 ---
 
-## 五、给外部 `mulby-cli` 的集成（`mulby verify`）
+## 五、通过 `mulby-cli` 使用（已实现）
 
-CLI（`github.com/Unicellular-SU/mulby-cli`）只需做一层薄封装：定位已安装的 Mulby 可执行文件，
-带上环境变量拉起，解析 stdout 中标记包裹的 JSON。核心逻辑：
+`mulby-cli`（`github.com/Unicellular-SU/mulby-cli`）已内置 `mulby verify` 与 `mulby mcp` —— 它们是对本引擎的
+薄封装：定位已安装的 Mulby 可执行文件、带环境变量拉起、解析 stdout 中标记包裹的 JSON 报告。
 
-```ts
-import { spawn } from 'node:child_process'
+```bash
+# 一次性配置：指向已安装的 Mulby 可执行文件（也可用 --app-path 或环境变量 MULBY_APP_PATH）
+mulby config set appPath "<Mulby 可执行文件>"
 
-const BEGIN = '<<<MULBY_VERIFY_REPORT_BEGIN>>>'
-const END = '<<<MULBY_VERIFY_REPORT_END>>>'
+# 验证插件（默认当前目录，也可传目录）
+mulby verify
+mulby verify ./my-plugin --json
+mulby verify ./my-plugin --strict
 
-export function verifyPlugin(mulbyExe: string, pluginDir: string, opts: { strict?: boolean } = {}) {
-  return new Promise((resolveReport, reject) => {
-    const child = spawn(mulbyExe, [], {
-      env: {
-        ...process.env,
-        MULBY_VERIFY_PLUGIN: pluginDir,
-        ...(opts.strict ? { MULBY_VERIFY_STRICT: '1' } : {})
-      }
-    })
-    let out = ''
-    child.stdout.on('data', (d) => (out += d.toString()))
-    child.on('error', reject)
-    child.on('exit', (code) => {
-      const b = out.lastIndexOf(BEGIN)
-      const e = out.lastIndexOf(END)
-      if (b === -1 || e === -1) return reject(new Error('未取得验证报告'))
-      const report = JSON.parse(out.slice(b + BEGIN.length, e).trim())
-      resolveReport({ report, exitCode: code })
-    })
-  })
-}
+# 启动交互式 MCP server（Streamable HTTP），打印连接 URL 与 AI IDE 配置，前台常驻
+mulby mcp
+mulby mcp --port 39127 --token <token>
 ```
 
-> 已安装的 Mulby 需包含本特性（验证模式分支）才能响应该环境变量。
+底层契约（供其它集成参考）：输入环境变量 `MULBY_VERIFY_PLUGIN=<目录>`（或 `MULBY_VERIFY_MCP=1`），
+输出 stdout 中包裹在 `<<<MULBY_VERIFY_REPORT_BEGIN>>>` / `<<<MULBY_VERIFY_REPORT_END>>>` 之间的单行 JSON 报告。
+
+> 已安装的 Mulby 需包含本特性（验证模式分支）才能响应这些环境变量。
 
 ---
 
 ## 六、给 AI 的使用建议
 
-插件写完后，运行 `pnpm verify:plugin <目录> --json`（或外部 `mulby verify --json`），读取 JSON 报告：
+插件写完后，运行 `mulby verify <目录> --json`（或本仓库内 `pnpm verify:plugin <目录> --json`），读取 JSON 报告：
 
 1. 任何 `fail` 都要修复后重跑；
 2. `onload`/`run` 失败优先看 `logs` 里的 `host` 错误输出；
@@ -213,5 +201,6 @@ node scripts/test-mcp-verify.mjs   # 覆盖静默插件 load/search/run + UI 插
 
 ### 仍可继续的方向
 
-- onLoad / UI dom-ready 的**显式成功信号**（host-manager / panel-window 增补），进一步丰富报告；
-- 把 `mulby verify` 与 `mulby mcp` 子命令落到外部 `mulby-cli`（本仓库已提供契约与片段）。
+- onLoad / UI dom-ready 的**显式成功信号**（host-manager / panel-window 增补），进一步丰富报告。
+
+（`mulby verify` / `mulby mcp` 子命令已在外部 `mulby-cli` 落地。）
