@@ -9,7 +9,17 @@
 获取完整设置与快捷键注册状态。
 
 ### update(partial)
-增量更新设置。
+增量更新设置。`partial` 为 `AppSettings` 的部分字段（如 `tray`、`search`、`updates` 等）。
+
+应用自动更新相关设置位于 `updates` 字段下：
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `autoCheck` | `boolean` | 是否自动检查更新（默认 `true`） |
+| `checkIntervalHours` | `number` | 自动检查间隔（小时，范围 1-168，默认 6） |
+| `notifyOnUpdate` | `boolean` | 发现新版本时弹系统通知（默认 `true`） |
+
+> 修改 `updates` 后，主进程会按新配置自动重新调度定时检查。手动检查/下载/安装更新请使用下方的更新中心方法。
 
 ### reset()
 恢复默认设置。
@@ -58,6 +68,7 @@
 ```ts
 const current = await window.mulby.settings.get()
 await window.mulby.settings.update({ tray: { enabled: true, closeToTray: true, clickAction: 'toggleWindow' } })
+await window.mulby.settings.update({ updates: { autoCheck: true, checkIntervalHours: 6, notifyOnUpdate: true } })
 
 const off = window.mulby.settings.onShortcutCaptured((accelerator) => {
   console.log('captured:', accelerator)

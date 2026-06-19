@@ -1,7 +1,7 @@
 # Desktop API (desktop)
 
 > 入口：`window.mulby.desktop`
-> 代码来源：`src/preload/index.ts`、`src/main/ipc/desktop.ts`
+> 代码来源：`src/preload/apis/platform-api.ts`、`src/main/ipc/desktop.ts`
 
 ## 方法
 

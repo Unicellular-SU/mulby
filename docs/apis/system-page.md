@@ -21,6 +21,15 @@
 - `ai-tools-settings`
 - `ai-skills-settings`
 
+`payload` 还支持以下可选字段（仅在对应 `page` 下生效，其他 `page` 会被忽略）：
+
+| 字段 | 适用 page | 说明 |
+|------|-----------|------|
+| `settingsSection` | `settings` | 打开后定位到的设置分区；非法值回退到 `dashboard` |
+| `shortcutCommandHint` | `settings` | 命令快捷键采集提示（配合命令快捷键分区） |
+| `detailsPluginId` | `plugin-manager` | 打开后直接展示该插件的详情 |
+| `storeFilter` | `plugin-store` | 目前仅支持 `'updatable'`，打开后筛选可更新插件 |
+
 ### close()
 关闭系统页面。
 
@@ -48,4 +57,5 @@
 
 ```ts
 await window.mulby.systemPage.open({ page: 'settings', settingsSection: 'general' })
+await window.mulby.systemPage.open({ page: 'plugin-store', storeFilter: 'updatable' })
 ```
