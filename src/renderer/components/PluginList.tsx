@@ -509,6 +509,9 @@ function PluginList({
   const [isSystemAppsLoading, setIsSystemAppsLoading] = useState(false)
   const [isSystemFilesLoading, setIsSystemFilesLoading] = useState(false)
   const [selectedKey, setSelectedKey] = useState('')
+  // 是否已由用户主动导航（方向键）。未导航时默认选中跟随榜首，
+  // 以便异步到达的 MainPush 推送结果能正确成为默认高亮项。
+  const userNavigatedRef = useRef(false)
   const scrollContainerRef = useRef<HTMLDivElement | null>(null)
   const contentRef = useRef<HTMLDivElement | null>(null)
   const [columns, setColumns] = useState(() => getColumns(window.innerWidth))
@@ -1227,13 +1230,20 @@ function PluginList({
     onlyRecentSection
   ])
 
+  // 查询变化时重置“自动跟随榜首”状态
+  useEffect(() => {
+    userNavigatedRef.current = false
+  }, [searchPayload.text, searchPayload.attachments.length])
+
   useEffect(() => {
     if (flatItems.length === 0) {
       setSelectedKey('')
       return
     }
     setSelectedKey((prev) => {
-      if (prev && flatItems.some((item) => item.key === prev)) {
+      // 仅当用户已手动导航、且当前项仍存在时，才保持原选择；
+      // 否则始终跟随榜首，确保异步到达的 MainPush 推送结果上移后能成为默认高亮。
+      if (userNavigatedRef.current && prev && flatItems.some((item) => item.key === prev)) {
         return prev
       }
       return flatItems[0].key
@@ -1549,16 +1559,19 @@ function PluginList({
       switch (e.key) {
         case 'ArrowUp': {
           e.preventDefault()
+          userNavigatedRef.current = true
           selectKey(getVerticalNavigationKey(sections, selectedKey, columns, 'up'))
           break
         }
         case 'ArrowDown': {
           e.preventDefault()
+          userNavigatedRef.current = true
           selectKey(getVerticalNavigationKey(sections, selectedKey, columns, 'down'))
           break
         }
         case 'ArrowLeft': {
           e.preventDefault()
+          userNavigatedRef.current = true
           const nextIndex = Math.max(0, currentIndex - 1)
           const nextKey = flatItems[nextIndex].key
           setSelectedKey(nextKey)
@@ -1567,6 +1580,7 @@ function PluginList({
         }
         case 'ArrowRight': {
           e.preventDefault()
+          userNavigatedRef.current = true
           const nextIndex = Math.min(maxIndex, currentIndex + 1)
           const nextKey = flatItems[nextIndex].key
           setSelectedKey(nextKey)
