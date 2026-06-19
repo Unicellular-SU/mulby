@@ -58,4 +58,16 @@ if (currentSchemaVersion < 1) {
   log.info('[DB] Schema 迁移完成: v0 → v1 (增加 version 列)')
 }
 
+/**
+ * 关闭数据库连接。仅用于「插件验证模式」退出前释放 SQLite 文件锁，
+ * 以便随后删除隔离的临时 userData 目录。正常运行流程不会调用。
+ */
+export function closeDatabase(): void {
+  try {
+    db.close()
+  } catch {
+    /* 已关闭或无法关闭时忽略 */
+  }
+}
+
 export default db

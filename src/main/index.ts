@@ -1,3 +1,5 @@
+// 必须最先 import：在任何依赖 userData 的模块（如 ./db）加载前，完成验证模式的 userData 隔离
+import { IS_VERIFY_MCP, IS_VERIFY_MODE, VERIFY_PLUGIN_DIR } from './verify/verify-bootstrap'
 import { app, BrowserWindow, globalShortcut, crashReporter } from 'electron'
 import { registerAllHandlers } from './ipc'
 import { setAiCapabilityPolicyResolver, setAiToolExecutor, setAiPluginToolResolver, setAiSkillActivationScopeManager } from './ai'
@@ -86,15 +88,22 @@ if (process.platform === 'win32') {
   }
 }
 
+if (IS_VERIFY_MODE) {
+  // userData 隔离已在 ./verify/verify-bootstrap（最先 import）中完成
+  log.info('[VerifyMode] 已隔离 userData:', app.getPath('userData'))
+}
+
 // 开发模式下禁用安全警告（Vite HMR 需要 unsafe-eval）
 if (isDev) {
   process.env['ELECTRON_DISABLE_SECURITY_WARNINGS'] = 'true'
 }
 
-// 强制启用硬件加速（提升性能）
-app.commandLine.appendSwitch('enable-gpu-rasterization')
-app.commandLine.appendSwitch('enable-zero-copy')
-app.commandLine.appendSwitch('disable-software-rasterizer')
+// 强制启用硬件加速（提升性能）；验证模式已禁用硬件加速，跳过这些开关避免冲突
+if (!IS_VERIFY_MODE) {
+  app.commandLine.appendSwitch('enable-gpu-rasterization')
+  app.commandLine.appendSwitch('enable-zero-copy')
+  app.commandLine.appendSwitch('disable-software-rasterizer')
+}
 
 // 启动崩溃报告器（生成本地 crash dump，用于分析 Native 层崩溃）
 // 必须在 app 模块加载后尽早调用
@@ -475,13 +484,16 @@ function getShutdownResources(): ShutdownResources {
 }
 
 // 注册 mulby:// 自定义协议（必须在 requestSingleInstanceLock 之前）
-if (!app.isPackaged) {
-  // 开发模式：需要传入可执行文件路径，且必须使用绝对应用路径（防止外部拉起时工作目录错误）
-  app.setAsDefaultProtocolClient('mulby', process.execPath, [app.getAppPath()])
-} else {
-  app.setAsDefaultProtocolClient('mulby')
+// 验证模式下跳过，避免污染用户系统的协议关联
+if (!IS_VERIFY_MODE) {
+  if (!app.isPackaged) {
+    // 开发模式：需要传入可执行文件路径，且必须使用绝对应用路径（防止外部拉起时工作目录错误）
+    app.setAsDefaultProtocolClient('mulby', process.execPath, [app.getAppPath()])
+  } else {
+    app.setAsDefaultProtocolClient('mulby')
+  }
+  log.info('[DeepLink] 已注册 mulby:// 协议')
 }
-log.info('[DeepLink] 已注册 mulby:// 协议')
 
 // macOS: 通过 open-url 事件接收 deep link（包括首次启动和已运行时）
 app.on('open-url', (event, url) => {
@@ -653,6 +665,23 @@ function quitMainProcess() {
 
 app.whenReady().then(async () => {
   if (!isPrimaryInstance) return
+
+  // MCP 验证模式：以 Streamable HTTP 运行插件自动化 MCP server（长驻，由信号触发退出）。
+  // 若同时设置了 MULBY_VERIFY_PLUGIN，MCP 模式优先。
+  if (IS_VERIFY_MCP) {
+    const { runMcpVerifyServer } = await import('./verify/mcp-server')
+    await runMcpVerifyServer(pluginManager)
+    return
+  }
+
+  // 一次性验证模式：加载并校验目标插件后直接退出，不启动正常 UI / 服务
+  if (VERIFY_PLUGIN_DIR) {
+    const { runVerifyModeAndExit } = await import('./verify/verify-entry')
+    await runVerifyModeAndExit(pluginManager, VERIFY_PLUGIN_DIR, {
+      strict: process.env.MULBY_VERIFY_STRICT === '1'
+    })
+    return
+  }
 
   // macOS: 默认隐藏 Dock 图标，只有独立窗口时才显示
   if (process.platform === 'darwin' && app.dock) {

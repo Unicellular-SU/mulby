@@ -43,6 +43,7 @@ import type {
   PluginProjectPluginStatus,
   PluginProjectStatus
 } from '../../shared/types/developer'
+import type { HostDiagnosticEvent } from '../../shared/types/plugin-verify'
 import { PluginSearchWorker } from './search-worker-manager'
 import { getEmptyQuerySearchResults } from './empty-query-search'
 import { SystemPluginWindowManager } from '../services/system-plugin-window-manager'
@@ -2264,6 +2265,71 @@ export class PluginManager {
     const loaded = await this.ensurePluginLoaded(plugin, plugin.id)
     if (loaded) {
       this.scheduleIdleLoad(plugin, plugin.id)
+    }
+  }
+
+  // ================= 插件验证（AI / 开发者校验）=================
+  // 以下方法专供「验证模式」使用。它们直接驱动 host，使错误以异常形式暴露
+  // （区别于 run() / initializePlugin()：callPluginHook 会吞掉 onLoad 钩子异常），
+  // 并避免触发任务调度、后台插件恢复、frecency 预热等正常启动副作用。
+
+  /**
+   * 加载并注册单个外部目录中的插件，用于验证。
+   * 仅在内存中注册（不写持久化），预热并同步搜索 worker；不调用 init() / loadPlugins()，
+   * 因此不会产生正常启动流程的副作用。
+   * @returns 注册后的 Plugin；manifest 非法或入口缺失时返回 null。
+   */
+  async loadPluginForVerification(dir: string): Promise<Plugin | null> {
+    const loader = new PluginLoader(dir)
+    const plugin = loader.loadPlugin(dir)
+    if (!plugin) return null
+    this.registerLoadedPlugin(plugin, { isDev: true, shouldWatchDevPlugins: false })
+    const registered = this.plugins.get(plugin.id)
+    if (!registered) return null
+    // 验证场景强制启用，避免历史持久化的禁用状态影响搜索 / 执行
+    registered.enabled = true
+    await this.syncSearchWorker()
+    return registered
+  }
+
+  /**
+   * 验证用：触发 onLoad 钩子。与 initializePlugin() 不同，onLoad 抛出的异常会向上传播
+   * （不被吞掉），以便验证器准确判定 onLoad 是否失败。成功后标记为已初始化，避免后续重复触发。
+   */
+  async verifyTriggerOnLoad(plugin: Plugin): Promise<void> {
+    await this.hostManager.callHook(plugin, 'onLoad')
+    this.initializedPlugins.add(plugin.id)
+    this.workerOnloadedPlugins.add(plugin.id)
+  }
+
+  /**
+   * 验证用：执行某个功能入口（静默 / 后台），错误以异常形式暴露。仅驱动 host，不涉及 UI / 窗口逻辑。
+   */
+  async verifyRunFeature(plugin: Plugin, featureCode: string, input: InputPayload): Promise<void> {
+    await this.hostManager.runPlugin(plugin, featureCode, input.text, input.attachments)
+  }
+
+  /**
+   * 验证用：订阅 host 诊断事件（console / error / exit）。
+   * @returns 取消订阅函数。
+   */
+  subscribeHostDiagnostics(handler: (event: HostDiagnosticEvent) => void): () => void {
+    const onConsole = (pluginName: string, level: 'log' | 'error', text: string): void => {
+      handler({ kind: 'console', pluginName, level, text })
+    }
+    const onError = (pluginName: string, error: Error): void => {
+      handler({ kind: 'error', pluginName, text: error?.message ?? String(error) })
+    }
+    const onExit = (pluginName: string, code: number): void => {
+      handler({ kind: 'exit', pluginName, code })
+    }
+    this.hostManager.on('host:console', onConsole)
+    this.hostManager.on('host:error', onError)
+    this.hostManager.on('host:exit', onExit)
+    return () => {
+      this.hostManager.off('host:console', onConsole)
+      this.hostManager.off('host:error', onError)
+      this.hostManager.off('host:exit', onExit)
     }
   }
 

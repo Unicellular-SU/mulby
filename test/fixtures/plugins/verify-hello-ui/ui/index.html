@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="zh">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Verify Hello UI</title>
+    <style>
+      body { margin: 0; font-family: system-ui, -apple-system, sans-serif; background: #1e293b; color: #e2e8f0; }
+      .box { padding: 24px; }
+      h1 { font-size: 20px; margin: 0 0 8px; }
+      #status { color: #38bdf8; }
+    </style>
+  </head>
+  <body>
+    <div class="box">
+      <h1>Verify Hello UI</h1>
+      <p id="status">mounting…</p>
+    </div>
+    <script>
+      (function () {
+        var status = document.getElementById('status')
+        status.textContent = 'mounted'
+        // 温和探测宿主桥：失败也不抛错（避免误报为插件 console 错误）
+        try {
+          if (window.mulby && window.mulby.theme && window.mulby.theme.get) {
+            Promise.resolve(window.mulby.theme.get())
+              .then(function (t) { status.setAttribute('data-theme', (t && (t.mode || t)) || 'unknown') })
+              .catch(function () {})
+          }
+          if (window.mulby && window.mulby.onPluginInit) {
+            window.mulby.onPluginInit(function (data) {
+              status.setAttribute('data-feature', (data && data.featureCode) || '')
+            })
+          }
+        } catch (e) {
+          /* swallow */
+        }
+      })()
+    </script>
+  </body>
+</html>

@@ -1,0 +1,19 @@
+{
+  "id": "com.mulby.verify-hello",
+  "name": "verify-hello",
+  "version": "0.1.0",
+  "displayName": "Verify Hello",
+  "description": "Mulby 插件验证 harness 的测试夹具插件（静默后台功能）。",
+  "author": "Mulby",
+  "main": "main.js",
+  "features": [
+    {
+      "code": "echo",
+      "explain": "回显输入（验证夹具）",
+      "mode": "silent",
+      "cmds": [
+        { "type": "keyword", "value": "vhello" }
+      ]
+    }
+  ]
+}
