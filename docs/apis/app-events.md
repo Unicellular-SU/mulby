@@ -13,8 +13,8 @@
 - `onOpenAiMcpSettings(callback)`
 - `onOpenAiSkillsSettings(callback)`
 - `onOpenAiToolsSettings(callback)`
-- `onOpenPluginStore(callback)`
-- `onOpenPluginManager(callback)`
+- `onOpenPluginStore(callback)` — 回调参数 `filter?: 'updatable'`（从「可更新」入口跳转时传 `'updatable'`，用于筛选可更新插件）
+- `onOpenPluginManager(callback)` — 回调参数 `pluginId?: string`（跳转到指定插件详情时传入）
 - `onOpenBackgroundPlugins(callback)`
 - `onOpenTaskScheduler(callback)`
 - `onOpenLogViewer(callback)`

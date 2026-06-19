@@ -278,7 +278,12 @@ unwatch();
 - 插件后端不支持传入自定义 namespace；插件 UI 调用 storage 时，主进程也会强制使用当前插件自己的 namespace。
 - **保留前缀**：`_encrypted_:`（加密项）与 `_attachment_meta_:`（附件元数据）为内部保留键，插件无法通过任何基础 KV / V2 接口读写：
   - 读接口（`get` / `getAll` / `getMany` / `getMeta` / `list`）会跳过或返回不存在；
-  - 写接口（`set` / `setMany` / `setWithVersion` / `removeWithVersion` / `transaction` / `append`）会拒绝并返回 `E_INVALID_KEY`（`setMany` / `transaction` 含保留键时整批拒绝）；
+  - 写接口含保留键时一律拒绝写入，但返回形态因接口而异：
+    - `set` / `remove` 返回 `false`（无错误码）；
+    - `setMany` 整批拒绝，`results` 中对应项为 `{ ok: false, error: 'E_INVALID_KEY' }`；
+    - `setWithVersion` / `removeWithVersion` 返回 `{ ok: false, error: 'E_INVALID_KEY' }`；
+    - `transaction` 整个事务拒绝，返回 `{ success: false, committed: 0 }`（无错误码）；
+    - `append` 返回 `{ ok: false, newLength: 0, version: 0 }`（无错误码）；
   - 请改用 `storage.encrypted.*` 与 `storage.attachment.*` 专用接口访问这些数据。
 
 ---

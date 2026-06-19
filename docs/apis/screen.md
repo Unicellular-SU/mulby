@@ -317,7 +317,7 @@ interface ColorPickResult {
 ```
 
 ### screenToDipPoint(point)
-[Renderer] [Backend]
+[Renderer]
 屏幕物理坐标转 DIP 坐标。
 
 ```javascript
@@ -330,7 +330,7 @@ const dipPoint = await screen.screenToDipPoint({ x: 200, y: 200 });
 **返回值**: `{ x: number; y: number }`
 
 ### dipToScreenPoint(point)
-[Renderer] [Backend]
+[Renderer]
 DIP 坐标转屏幕物理坐标。
 
 ```javascript
@@ -343,7 +343,7 @@ const screenPoint = await screen.dipToScreenPoint({ x: 200, y: 200 });
 **返回值**: `{ x: number; y: number }`
 
 ### screenToDipRect(rect)
-[Renderer] [Backend]
+[Renderer]
 屏幕物理区域转 DIP 区域。
 
 ```javascript
@@ -356,7 +356,7 @@ const dipRect = await screen.screenToDipRect({ x: 0, y: 0, width: 200, height: 2
 **返回值**: `{ x: number; y: number; width: number; height: number }`
 
 ### dipToScreenRect(rect)
-[Renderer] [Backend]
+[Renderer]
 DIP 区域转屏幕物理区域。
 
 ```javascript
@@ -369,6 +369,8 @@ const screenRect = await screen.dipToScreenRect({ x: 0, y: 0, width: 200, height
 **返回值**: `{ x: number; y: number; width: number; height: number }`
 
 > DIP (Device Independent Pixels) 坐标在高 DPI 屏幕上与物理像素不同。macOS Retina 屏上 1 DIP = 2 物理像素。这些方法主要用于跨进程或原生模块场景的坐标精确转换。
+>
+> 注意：以上四个坐标转换方法仅在渲染进程（`window.mulby.screen`）可用，插件后端 `context.api.screen` 未导出它们。
 
 ### 完整示例
 
