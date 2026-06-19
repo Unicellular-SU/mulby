@@ -1,0 +1,19 @@
+{
+  "id": "com.mulby.verify-hello-ui",
+  "name": "verify-hello-ui",
+  "version": "0.1.0",
+  "displayName": "Verify Hello UI",
+  "description": "Mulby 插件验证 harness 的 UI 测试夹具（离屏渲染）。",
+  "author": "Mulby",
+  "main": "main.js",
+  "ui": "ui/index.html",
+  "features": [
+    {
+      "code": "show",
+      "explain": "打开 UI（验证夹具）",
+      "cmds": [
+        { "type": "keyword", "value": "vhelloui" }
+      ]
+    }
+  ]
+}

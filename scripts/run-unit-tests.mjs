@@ -11,7 +11,8 @@ const TEST_DIRS = [
   'src/main/browser/__tests__',
   'src/main/ipc/__tests__',
   'src/main/services/__tests__',
-  'src/main/plugin/__tests__'
+  'src/main/plugin/__tests__',
+  'src/main/verify/__tests__'
 ]
 
 function collectTestFiles(dirPath) {

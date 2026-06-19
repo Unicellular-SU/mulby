@@ -25,6 +25,8 @@
     "sync:models-dev": "node scripts/sync-modelsdev.mjs",
     "sync:skills": "pnpm run sync:api-docs && bash scripts/link-skills.sh",
     "test:unit": "node scripts/run-unit-tests.mjs",
+    "test:mcp-verify": "node scripts/test-mcp-verify.mjs",
+    "verify:plugin": "node scripts/verify-plugin.mjs",
     "verify:app": "pnpm run typecheck && pnpm run lint && pnpm run check:api-docs && pnpm run sync:api-docs && pnpm run test:unit && pnpm run build:bundle"
   },
   "author": "Unicellular-SU <UnicellularSU@gmail.com>",
