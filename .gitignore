@@ -22,6 +22,11 @@ build/**
 !build/entitlements.mac.plist
 !build/nsis-installer.nsh
 !build/tray_icon*.png
+# Native addon build artifacts — regenerated per-platform by node-gyp
+# (make/.mk/config.gypi on macOS, .vcxproj/.sln/.node on Windows).
+# Never commit these; `pnpm install` rebuilds them via native postinstall.
+native/build/
+
 cs
 package-lock.json
 .tmp-*

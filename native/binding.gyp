@@ -31,7 +31,8 @@
             "sources": ["clipboard-watcher.cc"],
             "msvs_settings": {
               "VCCLCompilerTool": {
-                "ExceptionHandling": 1
+                "ExceptionHandling": 1,
+                "AdditionalOptions": ["/utf-8"]
               }
             }
           }
@@ -109,7 +110,8 @@
             "sources": ["window-watcher.cpp"],
             "msvs_settings": {
               "VCCLCompilerTool": {
-                "ExceptionHandling": 1
+                "ExceptionHandling": 1,
+                "AdditionalOptions": ["/utf-8"]
               }
             }
           }
@@ -153,7 +155,8 @@
             "sources": ["input-monitor.cpp"],
             "msvs_settings": {
               "VCCLCompilerTool": {
-                "ExceptionHandling": 1
+                "ExceptionHandling": 1,
+                "AdditionalOptions": ["/utf-8"]
               }
             }
           }
@@ -197,7 +200,8 @@
             "sources": ["screen-capture.cpp"],
             "msvs_settings": {
               "VCCLCompilerTool": {
-                "ExceptionHandling": 1
+                "ExceptionHandling": 1,
+                "AdditionalOptions": ["/utf-8"]
               }
             },
             "libraries": ["-lgdi32"]
