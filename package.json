@@ -1,6 +1,6 @@
 {
   "name": "mulby",
-  "version": "0.9.7",
+  "version": "0.9.8",
   "description": "跨平台插件式效率工具箱",
   "main": "dist/main/index.js",
   "scripts": {
