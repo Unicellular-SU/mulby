@@ -575,15 +575,23 @@ export interface AppSettings {
   openclaw: OpenClawSettings
   superPanel: SuperPanelSettings
   updates: UpdateSettings
+  /** 应用级权限相关的用户偏好（记录用户对系统权限提示的选择，非系统权限状态本身） */
+  permissions?: AppPermissionPreferences
+}
+
+/** 应用级权限相关的用户偏好 */
+export interface AppPermissionPreferences {
+  /** 用户已忽略「输入监控」权限提示，不再自动弹出（仍可在权限管理中手动开启） */
+  inputMonitoringPromptDismissed?: boolean
 }
 
 export interface ShortcutStatus {
   ok: boolean
   reason?: ShortcutStatusReason
-  /** 快捷键生效方式：'hook' 表示通过底层键盘钩子接管 */
+  /** 快捷键生效方式：'hook' 表示通过底层键盘钩子接管（其余情况走系统 globalShortcut，无需 via） */
   via?: 'hook'
 }
 
-export type ShortcutStatusReason = 'duplicate' | 'in-use' | 'invalid' | 'system-reserved'
+export type ShortcutStatusReason = 'duplicate' | 'in-use' | 'invalid' | 'system-reserved' | 'permission'
 
 export type ShortcutStatusMap = Record<AppShortcutAction, ShortcutStatus>

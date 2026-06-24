@@ -217,8 +217,9 @@ export default function PermissionsSection({
         <div className={`${cardClassTight} border-blue-200/50 dark:border-blue-800/30`}>
           <div className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
             <span className="font-medium text-slate-700 dark:text-slate-300">提示：</span>
-            「辅助功能」权限是 Mulby 的核心依赖，用于全局快捷键监听和原生文本选取。
-            首次授权后如更新或重装应用，可能需要在「系统设置 → 隐私与安全性 → 辅助功能」中重新勾选 Mulby。
+            「辅助功能」与「输入监控」是 Mulby 的核心依赖：全局快捷键的底层接管、双击修饰键 / 鼠标侧键唤起、原生文本选取均依赖它们。
+            其中「输入监控」授权后需<span className="font-medium text-slate-700 dark:text-slate-300">重启 Mulby</span> 才能生效。
+            首次授权后如更新或重装应用，可能需要在对应的「系统设置 → 隐私与安全性」中重新勾选 Mulby。
           </div>
         </div>
       )}

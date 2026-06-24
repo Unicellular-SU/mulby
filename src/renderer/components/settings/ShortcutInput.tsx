@@ -130,9 +130,17 @@ export default function ShortcutInput({
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="min-w-[200px] flex-1 rounded-xl border border-slate-200 bg-white px-3 py-2 text-left text-sm text-slate-700 shadow-sm dark:border-slate-800 dark:bg-slate-950 dark:text-slate-200">
           <div className="text-sm font-medium">{displayValue}</div>
-          {(error || statusText) && (
-            <div className={`text-xs ${status?.ok && status?.via === 'hook' ? 'text-amber-500' : 'text-red-500'}`}>{error || statusText}</div>
-          )}
+          {!error && status?.reason === 'permission' ? (
+            <button
+              type="button"
+              className="text-xs text-red-500 underline underline-offset-2 transition-colors hover:text-red-600"
+              onClick={() => { void window.mulby.permission.request('input-monitoring') }}
+            >
+              {statusText}
+            </button>
+          ) : (error || statusText) ? (
+            <div className="text-xs text-red-500">{error || statusText}</div>
+          ) : null}
         </div>
         <button
           className={`rounded-full border px-3 py-1.5 text-xs transition-colors ${recording

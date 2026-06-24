@@ -27,7 +27,7 @@ export const SHORTCUTS: { id: AppShortcutAction; label: string; description: str
  * - canRequestProgrammatically: 是否支持从应用内触发系统授权入口
  */
 export const PERMISSIONS: {
-  id: 'accessibility' | 'screen' | 'microphone' | 'camera' | 'geolocation'
+  id: 'accessibility' | 'input-monitoring' | 'screen' | 'microphone' | 'camera' | 'geolocation'
   label: string
   description: string
   platforms?: ('darwin' | 'win32' | 'linux')[]
@@ -38,6 +38,14 @@ export const PERMISSIONS: {
     id: 'accessibility',
     label: '辅助功能',
     description: '全局键盘/鼠标监听（超级面板双击修饰键唤起）、原生取词（AX API 读取选中文本）',
+    platforms: ['darwin'],
+    importance: 'required',
+    canRequestProgrammatically: true
+  },
+  {
+    id: 'input-monitoring',
+    label: '输入监控',
+    description: '全局快捷键的底层接管、双击修饰键 / 鼠标侧键唤起（CGEventTap 接收全局按键；授权后需重启应用生效）',
     platforms: ['darwin'],
     importance: 'required',
     canRequestProgrammatically: true

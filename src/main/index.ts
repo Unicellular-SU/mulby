@@ -1,6 +1,6 @@
 // 必须最先 import：在任何依赖 userData 的模块（如 ./db）加载前，完成验证模式的 userData 隔离
 import { IS_VERIFY_MCP, IS_VERIFY_MODE, VERIFY_PLUGIN_DIR } from './verify/verify-bootstrap'
-import { app, BrowserWindow, globalShortcut, crashReporter } from 'electron'
+import { app, BrowserWindow, globalShortcut, crashReporter, dialog } from 'electron'
 import { registerAllHandlers } from './ipc'
 import { setAiCapabilityPolicyResolver, setAiToolExecutor, setAiPluginToolResolver, setAiSkillActivationScopeManager } from './ai'
 import { aiMcpService, isMcpToolName } from './ai/mcp'
@@ -75,6 +75,7 @@ patchConsoleWithTimestamp()
 const APP_DISPLAY_NAME = 'Mulby'
 const isDev = !app.isPackaged
 const MACOS_POST_ONBOARDING_ACCESSIBILITY_PROMPT_DELAY_MS = 1200
+const MACOS_POST_ONBOARDING_INPUT_MONITORING_PROMPT_DELAY_MS = 2000
 
 app.setName(APP_DISPLAY_NAME)
 if (process.platform === 'win32') {
@@ -128,6 +129,7 @@ let isQuitting = false
 let shouldRestartAfterQuit = false
 let shutdownFinalizeScheduled = false
 let postOnboardingAccessibilityPromptScheduled = false
+let postOnboardingInputMonitoringPromptScheduled = false
 let mcpServerManager: McpServerManager | null = null
 let _inputHookService: InputHookService | null = null
 let _openclawService: OpenClawNodeService | null = null
@@ -562,6 +564,80 @@ function schedulePostOnboardingAccessibilityPrompt() {
   }, MACOS_POST_ONBOARDING_ACCESSIBILITY_PROMPT_DELAY_MS)
 }
 
+/**
+ * macOS：启动后（延迟）提示用户授予「输入监控」权限。
+ * - 仅当底层钩子确实被需要时才提示（基础快捷键已由 globalShortcut 兜底，无需此权限）。
+ * - 用户选择「以后再说」后写入偏好，本机不再自动提示（仍可在权限管理中手动开启）。
+ * - 一次进程生命周期内最多提示一次。
+ */
+function schedulePostOnboardingInputMonitoringPrompt(appShortcutManager: AppShortcutManager) {
+  if (process.platform !== 'darwin') return
+  if (postOnboardingInputMonitoringPromptScheduled) return
+
+  postOnboardingInputMonitoringPromptScheduled = true
+  setTimeout(() => {
+    if (isQuitting) return
+    void promptInputMonitoringIfNeeded(appShortcutManager)
+  }, MACOS_POST_ONBOARDING_INPUT_MONITORING_PROMPT_DELAY_MS)
+}
+
+async function promptInputMonitoringIfNeeded(appShortcutManager: AppShortcutManager) {
+  try {
+    const status = permissionManager.getStatus('input-monitoring')
+    if (status === 'granted' || status === 'authorized') return
+    if (appSettingsManager.getSettings().permissions?.inputMonitoringPromptDismissed) return
+    // 基础快捷键已由 globalShortcut 兜底；仅在依赖底层钩子时才打扰用户
+    if (!appShortcutManager.isHookNeeded()) return
+
+    const win = getMainWindow()
+    const promptOptions: Electron.MessageBoxOptions = {
+      type: 'info',
+      title: '启用全局快捷键的底层接管',
+      message: 'Mulby 需要「输入监控」权限',
+      detail: '用于「双击修饰键 / 鼠标侧键唤起」以及被系统占用的快捷键（如 Command+Space）的底层接管。\n基础快捷键无需此权限也可使用。',
+      buttons: ['去授权', '以后再说'],
+      defaultId: 0,
+      cancelId: 1,
+      noLink: true
+    }
+    const choice = win && !win.isDestroyed()
+      ? await dialog.showMessageBox(win, promptOptions)
+      : await dialog.showMessageBox(promptOptions)
+
+    if (choice.response !== 0) {
+      // 「以后再说」→ 持久化，本机不再自动提示
+      appSettingsManager.updateSettings({ permissions: { inputMonitoringPromptDismissed: true } })
+      return
+    }
+
+    // 「去授权」→ 触发系统授权入口并打开系统设置
+    await permissionManager.request('input-monitoring')
+
+    // 授权后底层 tap 需重启进程才能生效（macOS 行为）
+    const after = permissionManager.getStatus('input-monitoring')
+    const restartMessage = (after === 'granted' || after === 'authorized')
+      ? '「输入监控」已授权。需要重启 Mulby 才能让底层接管生效。'
+      : '请在已打开的「系统设置 → 隐私与安全性 → 输入监控」中开启 Mulby 的开关，然后重启 Mulby 使其生效。'
+    const restartOptions: Electron.MessageBoxOptions = {
+      type: 'info',
+      title: '需要重启',
+      message: restartMessage,
+      buttons: ['立即重启', '稍后'],
+      defaultId: 0,
+      cancelId: 1,
+      noLink: true
+    }
+    const restartChoice = win && !win.isDestroyed()
+      ? await dialog.showMessageBox(win, restartOptions)
+      : await dialog.showMessageBox(restartOptions)
+    if (restartChoice.response === 0) {
+      restartMainProcess()
+    }
+  } catch (error) {
+    log.warn('[Onboarding] 输入监控权限提示失败:', error)
+  }
+}
+
 
 function openSystemPageView(payload: OpenSystemPageWindowPayload) {
   const detached = systemPageWindowManager.getDetachedWindow()
@@ -722,7 +798,14 @@ app.whenReady().then(async () => {
         }
       }
     },
-    inputHook: inputHookService
+    inputHook: inputHookService,
+    // 系统级快捷键（无需权限）作为主/兜底注册路径
+    globalShortcut,
+    // macOS：底层钩子是否可用（已授予「输入监控」权限），用于诚实反馈状态
+    isInputMonitoringGranted: () => {
+      const s = permissionManager.getStatus('input-monitoring')
+      return s === 'granted' || s === 'authorized'
+    }
   })
 
   // macOS: 监听 dock 图标点击事件
@@ -1093,6 +1176,7 @@ app.whenReady().then(async () => {
       initMainWindow()
       showMainWindow()
       schedulePostOnboardingAccessibilityPrompt()
+      schedulePostOnboardingInputMonitoringPrompt(appShortcutManager)
       // 初始化插件管理器
       pluginManager.init().then(() => {
         // 预热系统应用搜索索引
@@ -1128,6 +1212,9 @@ app.whenReady().then(async () => {
   } else {
     // 正常启动流程
     initMainWindow()
+
+    // macOS：提示授予「输入监控」权限（已引导用户的正常启动分支也需要）
+    schedulePostOnboardingInputMonitoringPrompt(appShortcutManager)
 
     // 初始化插件管理器
     await pluginManager.init()

@@ -11,7 +11,7 @@ describe('shortcut input status text', () => {
     assert.equal(getShortcutStatusText({ ok: false }), '注册失败')
   })
 
-  it('describes hook-backed shortcuts as captured by the low-level hook', () => {
-    assert.equal(getShortcutStatusText({ ok: true, via: 'hook' }), '底层接管中')
+  it('shows no text for a successful hook-backed shortcut (success states stay silent)', () => {
+    assert.equal(getShortcutStatusText({ ok: true, via: 'hook' }), '')
   })
 })
