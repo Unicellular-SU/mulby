@@ -318,6 +318,9 @@ const DEFAULT_SETTINGS: AppSettings = {
     autoCheck: true,
     checkIntervalHours: 6,
     notifyOnUpdate: true
+  },
+  permissions: {
+    inputMonitoringPromptDismissed: false
   }
 }
 
@@ -1056,7 +1059,11 @@ function mergeSettings(current: AppSettings, next: Partial<AppSettings>): AppSet
     updates: normalizeUpdateSettings({
       ...current.updates,
       ...(next.updates || {})
-    })
+    }),
+    permissions: {
+      ...current.permissions,
+      ...(next.permissions || {})
+    }
   }
 }
 

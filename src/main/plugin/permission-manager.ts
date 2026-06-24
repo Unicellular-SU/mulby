@@ -20,6 +20,7 @@ import {
 type MacPermissionsModule = {
     getAuthStatus: (type: string) => string
     askForScreenCaptureAccess?: (openPreferences?: boolean) => unknown | Promise<unknown>
+    askForInputMonitoringAccess?: () => unknown | Promise<unknown>
     [key: string]: unknown
 }
 
@@ -71,6 +72,7 @@ export type PermissionType =
     | 'clipboard'
     | 'notification'
     | 'accessibility'
+    | 'input-monitoring'
     | 'contacts'
     | 'calendar'
 
@@ -116,6 +118,7 @@ function mapToMacPermissionType(type: PermissionType): string | null {
         'clipboard': null,
         'notification': null,
         'accessibility': 'accessibility',
+        'input-monitoring': 'input-monitoring',
         'contacts': 'contacts',
         'calendar': 'calendar',
     }
@@ -382,7 +385,7 @@ export class PermissionManager {
         details: Electron.PermissionRequest | Electron.FilesystemPermissionRequest | Electron.MediaAccessPermissionRequest | Electron.OpenExternalPermissionRequest
     ): Promise<boolean> {
         if (types.length === 0) return false
-        if (!this.canCallerAccessPluginPermissions(webContents, types.filter(isPluginManifestPermissionType))) {
+        if (!this.canCallerAccessPluginPermissions(webContents, types.filter(isPluginManifestPermissionType) as PluginManifestPermissionType[])) {
             return false
         }
 
@@ -457,7 +460,7 @@ export class PermissionManager {
 
     private checkResolvedPermissions(webContents: Electron.WebContents | null, types: PermissionType[]): boolean {
         if (types.length === 0) return false
-        const manifestPermissions = types.filter(isPluginManifestPermissionType)
+        const manifestPermissions = types.filter(isPluginManifestPermissionType) as PluginManifestPermissionType[]
         if (manifestPermissions.length > 0 && !webContents) {
             return false
         }
@@ -619,6 +622,25 @@ export class PermissionManager {
             return this.getStatus('accessibility')
         }
 
+        // 输入监控（kTCCServiceListenEvent）：CGEventTap 接收全局按键所必需。
+        // 系统无法用内联弹窗授予，只能触发系统提示并引导用户到「系统设置 → 隐私与安全性 → 输入监控」。
+        if (type === 'input-monitoring') {
+            if (permissions) {
+                const askFn = permissions.askForInputMonitoringAccess
+                if (typeof askFn === 'function') {
+                    try {
+                        await askFn()
+                    } catch (error) {
+                        log.error('[PermissionManager] askForInputMonitoringAccess error:', error)
+                    }
+                }
+            }
+            if (options.openSystemSettingsOnDenied !== false) {
+                this.openSystemSettings('input-monitoring')
+            }
+            return this.getStatus('input-monitoring')
+        }
+
         // 对于相机和麦克风，使用 systemPreferences
         if (type === 'camera' || type === 'microphone') {
             try {
@@ -755,6 +777,7 @@ export class PermissionManager {
             clipboard: '剪贴板',
             notification: '通知',
             accessibility: '辅助功能',
+            'input-monitoring': '输入监控',
             contacts: '通讯录',
             calendar: '日历',
         }
@@ -784,7 +807,7 @@ export class PermissionManager {
         if (type === 'geolocation') {
             return status !== 'denied' && status !== 'restricted'
         }
-        if (process.platform === 'darwin' && (type === 'accessibility' || type === 'screen')) {
+        if (process.platform === 'darwin' && (type === 'accessibility' || type === 'screen' || type === 'input-monitoring')) {
             return status !== 'granted' && status !== 'authorized' && status !== 'restricted'
         }
         // 只有 not-determined 状态可以程序化请求
@@ -861,6 +884,7 @@ export class PermissionManager {
                 'clipboard': '',
                 'notification': '',
                 'accessibility': 'x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility',
+                'input-monitoring': 'x-apple.systempreferences:com.apple.preference.security?Privacy_ListenEvent',
                 'contacts': 'x-apple.systempreferences:com.apple.preference.security?Privacy_Contacts',
                 'calendar': 'x-apple.systempreferences:com.apple.preference.security?Privacy_Calendars',
             }
