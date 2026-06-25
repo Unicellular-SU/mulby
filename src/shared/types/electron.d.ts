@@ -982,6 +982,7 @@ export interface ElectronAPI {
   onPluginInit: (callback: (data: PluginInitData) => void) => () => void
   onPluginAttach: (callback: (data: { pluginName: string; displayName: string; featureCode: string; input: string; attachments?: InputAttachment[]; mode: 'panel'; launchRequestId?: string }) => void) => () => void
   onPluginDetached: (callback: () => void) => () => void
+  onModeChange: (callback: (data: { mode: 'attached' | 'detached'; windowType?: string; pluginName?: string }) => void) => () => void
   onPluginLaunchStart: (callback: (data: PluginLaunchStartEvent) => void) => () => void
   onPluginLaunchEnd: (callback: (data: PluginLaunchEndEvent) => void) => () => void
   screen: {

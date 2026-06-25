@@ -908,12 +908,11 @@ export class PluginPanelWindow {
         if (!promotedPluginView) return null
 
         // 保存当前状态
+        // 注意：promoteToWindow 复用同一个 WebContentsView（渲染进程不重载），
+        // 插件运行时状态仍存活，因此切换到独立窗口时不需要再次注入 input/route。
+        // 这里仅保留窗口配置所需的 plugin 引用。
         const bounds = getWindowsFramelessSurfaceVisibleBounds(this.panelWindow.getBounds())
         const plugin = this.currentPlugin
-        const featureCode = this.currentFeatureCode
-        const input = this.currentInput
-        const attachments = this.currentAttachments
-        const route = this.currentRoute
 
         // 创建独立窗口
         const currentTheme = this.themeManager?.getActualTheme() || 'dark'
@@ -1039,18 +1038,18 @@ export class PluginPanelWindow {
         const pluginWebContents = pluginView.webContents
         const shouldInjectPluginResizeHandles = isResizable && process.platform !== 'darwin'
         pluginWebContents.setBackgroundThrottling(backgroundThrottling)
-        const sendDetachedInit = () => {
+        // 关键修复：promoteToWindow 复用了同一个渲染进程，插件的运行时状态（如用户
+        // 已输入的内容）仍然存活在 DOM/React 中。若此处再发送一次携带“原始 input”的
+        // plugin:init，会触发插件的 onPluginInit 回调把用户输入覆盖回初始值，造成
+        // “切换到独立模式后数据丢失/被重新初始化”。因此模式切换只广播一个轻量的
+        // plugin:mode-changed 事件（不携带 input/route），避免重置业务状态；需要随
+        // 模式调整布局/标题栏的插件可订阅 window.mulby.onModeChange。
+        const notifyDetachedModeChange = () => {
             if (independentWindow.isDestroyed() || pluginWebContents.isDestroyed()) return
-            pluginWebContents.send('plugin:init', {
+            pluginWebContents.send('plugin:mode-changed', {
                 pluginName: plugin.id,
-                featureCode,
-                input,
-                attachments,
                 mode: 'detached',
-                windowType: windowConfig.type || 'default',
-                route,
-                capabilities: getPluginRendererCapabilities(plugin),
-                nonce: Date.now()
+                windowType: windowConfig.type || 'default'
             })
             if (this.themeManager) {
                 pluginWebContents.send('theme:changed', this.themeManager.getActualTheme())
@@ -1083,7 +1082,7 @@ export class PluginPanelWindow {
             layoutPluginView(independentWindow, pluginView, showTitleBar)
             independentWindow.show()
             this.openPluginDevTools(pluginWebContents, plugin.id)
-            sendDetachedInit()
+            notifyDetachedModeChange()
         })
 
         // 等待插件内容加载完成后再发送初始化数据和主题
@@ -1102,9 +1101,10 @@ export class PluginPanelWindow {
                     useSurfaceInsets: false
                 })
             }
-            // 延迟确保 React useEffect 已注册 IPC 回调
+            // 延迟确保 React useEffect 已注册 IPC 回调（复用渲染进程时通常不会重复触发，
+            // 此处仅作为兜底再次广播模式变更，幂等且不会重置插件状态）
             setTimeout(() => {
-                sendDetachedInit()
+                notifyDetachedModeChange()
             }, 100)
         })
 

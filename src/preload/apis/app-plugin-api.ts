@@ -270,6 +270,14 @@ export function createAppPluginApi(ipcRenderer: IpcRenderer) {
       return () => ipcRenderer.removeListener('plugin:detached', listener)
     },
 
+    // 插件窗口模式切换（附着面板 <-> 独立窗口）。区别于会重置状态的 plugin:init：
+    // 该事件只通知模式变化，不携带 input/route，插件可据此调整布局/标题栏而不丢状态。
+    onModeChange: (callback: (data: { mode: 'attached' | 'detached'; windowType?: string; pluginName?: string }) => void) => {
+      const listener = (_event: unknown, data: { mode: 'attached' | 'detached'; windowType?: string; pluginName?: string }) => callback(data)
+      ipcRenderer.on('plugin:mode-changed', listener)
+      return () => ipcRenderer.removeListener('plugin:mode-changed', listener)
+    },
+
     onPluginOut: (callback: (isKill: boolean) => void) => {
       const listener = (_event: unknown, isKill: boolean) => callback(isKill)
       ipcRenderer.on('plugin:out', listener)
