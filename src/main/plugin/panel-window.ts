@@ -246,10 +246,18 @@ export class PluginPanelWindow {
     private showMainWindowForAttachedPanel() {
         if (this.mainWindow.isDestroyed()) return
 
-        try {
-            this.mainWindow.setOpacity(1)
-        } catch (error) {
-            log.warn('[PanelWindow] Failed to restore host window opacity:', error)
+        // 仅 macOS 需要在这里恢复宿主透明度：win.on('hide') 的 Space 切换护栏只在
+        // darwin 上把宿主设为 setOpacity(0)，面板恢复时需撤销它。
+        // Windows 上宿主透明度完全由 MainWindowManager.show() 自己的防闪烁护栏管理
+        // （setOpacity(0) → show → invalidate → 50ms 后再 setOpacity(1)）。若此处在
+        // 同一同步调用栈里抢先把宿主拉回不透明，会在重绘完成前打断护栏，导致再唤起时
+        // 宿主搜索框带着旧帧出现 → 闪烁（仅在有附着面板时复现）。故 win32 跳过。
+        if (process.platform !== 'win32') {
+            try {
+                this.mainWindow.setOpacity(1)
+            } catch (error) {
+                log.warn('[PanelWindow] Failed to restore host window opacity:', error)
+            }
         }
         if (this.mainWindow.isMinimized()) {
             this.mainWindow.restore()
