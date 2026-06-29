@@ -24,7 +24,8 @@ import {
     getWindowsFramelessSurfaceVisibleBounds,
     getWindowsFramelessSurfaceWindowBounds,
     clearWindowsFramelessSurfaceFromWebContents,
-    shouldUseWindowsFramelessSurface
+    shouldUseWindowsFramelessSurface,
+    WINDOW_SURFACE_RADIUS_PX
 } from '../services/window-surface'
 import {
     MAIN_WINDOW_COLLAPSED_VISIBLE_HEIGHT,
@@ -510,6 +511,18 @@ export class PluginPanelWindow {
             }
         })
         pluginView.setBackgroundColor('#00000000')
+        // 原生圆角：把插件 WebContentsView 在合成层裁成圆角，使附着面板四角与圆角外壳
+        // 一致。这比注入 CSS 可靠——插件 body 的不透明背景会被传播到方形视口画布上，
+        // html/body 上的 border-radius / clip-path 都无法稳定裁切它；原生 setBorderRadius
+        // 直接裁切整个 view（含传播背景与 position:fixed 内容）。仅在 win32 透明无边框
+        // 表面启用（此时 view 内缩 18px、外壳圆角半径与之对齐）。
+        if (useWindowsFramelessSurface) {
+            try {
+                pluginView.setBorderRadius(WINDOW_SURFACE_RADIUS_PX)
+            } catch (err) {
+                log.warn('[PanelWindow] setBorderRadius unsupported:', err)
+            }
+        }
 
         this.pluginView = pluginView
         panelWindow.contentView.addChildView(pluginView)
@@ -992,6 +1005,12 @@ export class PluginPanelWindow {
         registerWindowsInputTargetWindow(independentWindow.id, independentWindow.getNativeWindowHandle())
 
         const pluginView = promotedPluginView
+        // 升级为独立窗口时清除附着面板的圆角——独立窗口的形状由自身外壳/标题栏管理。
+        try {
+            pluginView.setBorderRadius(0)
+        } catch {
+            // setBorderRadius 不支持时忽略（与设置时同样降级）。
+        }
 
         if (showTitleBar) {
             // BrowserWindow 加载标题栏页面

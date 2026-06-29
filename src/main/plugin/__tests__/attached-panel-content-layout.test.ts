@@ -27,6 +27,26 @@ describe('attached panel content layout', () => {
     )
   })
 
+  it('rounds the attached plugin view natively so opaque plugin content gets rounded corners', () => {
+    const source = readFileSync(panelWindowSourcePath, 'utf8')
+    // Native view rounding clips the WebContentsView at the compositor level —
+    // robust against propagated body backgrounds / position:fixed content that CSS
+    // on html/body cannot reliably round. Applied on the win32 frameless surface,
+    // and cleared when the panel is promoted to a self-chromed detached window.
+    assert.match(
+      source,
+      /if \(useWindowsFramelessSurface\) \{\s*try \{\s*pluginView\.setBorderRadius\(WINDOW_SURFACE_RADIUS_PX\)/,
+      'attached plugin view must be natively rounded on the win32 frameless surface'
+    )
+    const promoteStart = source.indexOf('const pluginView = promotedPluginView')
+    const promoteBlock = promoteStart >= 0 ? source.slice(promoteStart, promoteStart + 400) : ''
+    assert.match(
+      promoteBlock,
+      /pluginView\.setBorderRadius\(0\)/,
+      'promoting an attached panel to a detached window must clear the panel corner radius'
+    )
+  })
+
   it('injects only resize handles into attached plugin content', () => {
     const source = readFileSync(panelWindowSourcePath, 'utf8')
     const ensureStart = source.indexOf('const ensureAttachedPluginContentSurface = (): Promise<void> => {')
