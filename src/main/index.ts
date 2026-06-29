@@ -21,6 +21,7 @@ import { permissionManager } from './plugin/permission-manager'
 import { setHotKeySettingRedirectHandler } from './plugin/dynamic-features'
 import { PluginWindowManager } from './plugin/window'
 import { setupPluginDevtoolsBridge } from './plugin/plugin-devtools-bridge'
+import { setupPluginNetworkBridge } from './plugin/plugin-network-bridge'
 import { ThemeManager } from './services/theme'
 import { setUiDialogThemeResolver } from './services/ui-dialog-service'
 import { markAppVisible, setWindowsProvider, setHasDetachedWindowsProvider } from './services/blur-manager'
@@ -832,6 +833,10 @@ app.whenReady().then(async () => {
 
   // 装配插件后端日志桥：开发者模式下把后端 console/崩溃回灌插件 DevTools
   setupPluginDevtoolsBridge(pluginManager.getHostManager(), pluginWindowManager, appSettingsManager)
+
+  // 装配插件网络日志桥：开发者模式下把 mulby.http / mulby.ai / 后端第三方库的请求
+  // 以可折叠分组回灌插件 DevTools 控制台（弥补网络面板看不到跨进程请求的盲区）
+  setupPluginNetworkBridge(pluginWindowManager, appSettingsManager)
 
   // 创建 OpenClaw Node 服务并注册 IPC
   let openclawService: OpenClawNodeService | null = null

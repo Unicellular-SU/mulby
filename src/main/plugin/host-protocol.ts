@@ -28,6 +28,7 @@ export type HostResponseType =
   | 'apiCall'     // API 调用请求
   | 'toolProgress' // AI Tool 进度上报
   | 'resourceStats' // 资源统计
+  | 'network'     // 后端网络请求记录（开发者模式下回灌插件 DevTools）
 
 // ============ 请求消息 ============
 
@@ -44,6 +45,8 @@ export interface InitRequest extends HostRequestBase {
     pluginName: string
     pluginPath: string
     mainFile: string
+    /** 开发者模式下为 true：worker 安装网络捕获，把后端 fetch/http 请求回灌插件 DevTools */
+    captureNetwork?: boolean
   }
 }
 
@@ -191,7 +194,37 @@ export interface ResourceStatsResponse extends HostResponseBase {
   }
 }
 
-export type HostResponse = ReadyResponse | ResultResponse | ErrorResponse | ApiCallResponse | ToolProgressResponse | ResourceStatsResponse
+/**
+ * 插件网络请求记录（开发者可观测性，非持久化）。
+ * 字段全部可序列化，可经 UtilityProcess parentPort 跨进程传输。
+ */
+export interface PluginNetworkRecord {
+  /** 来源：mulby.http / mulby.ai 经主进程发出；backend-fetch / backend-http 由 worker 内第三方库发出 */
+  source: 'mulby.http' | 'mulby.ai' | 'backend-fetch' | 'backend-http'
+  method: string
+  url: string
+  status?: number
+  statusText?: string
+  ok?: boolean
+  durationMs?: number
+  /** 请求开始时间戳（epoch ms） */
+  startedAt: number
+  requestHeaders?: Record<string, string>
+  responseHeaders?: Record<string, string>
+  requestBodyPreview?: string
+  responseBodyPreview?: string
+  error?: string
+  /** 附加信息（如 AI 的 model / messages / usage） */
+  meta?: Record<string, unknown>
+}
+
+/** 后端网络请求记录（Worker -> 主进程） */
+export interface NetworkResponse extends HostResponseBase {
+  type: 'network'
+  payload: PluginNetworkRecord
+}
+
+export type HostResponse = ReadyResponse | ResultResponse | ErrorResponse | ApiCallResponse | ToolProgressResponse | ResourceStatsResponse | NetworkResponse
 
 // ============ API 响应（主进程 -> Worker） ============
 

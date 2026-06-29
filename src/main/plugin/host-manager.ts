@@ -31,6 +31,7 @@ import type { PluginMessage } from './message-bus'
 import { computeHotStartBudget } from './hot-start-budget'
 import { destroyPluginViewPool } from './plugin-view-pool'
 import { routeHostToolProgress } from './host-progress'
+import { pluginNetworkChannel, truncatePreview, normalizeHttpCall } from './plugin-network-channel'
 import type { TaskScheduler } from '../scheduler'
 import type { ClipboardHistoryManager } from '../services/clipboard-history'
 import log from 'electron-log'
@@ -501,6 +502,13 @@ export class PluginHostManager extends EventEmitter {
       case 'resourceStats':
         this.handleResourceStats(host, message)
         break
+
+      case 'network':
+        // worker 回传的后端网络请求记录（仅开发者模式下 worker 才会发）
+        if (pluginNetworkChannel.enabled) {
+          pluginNetworkChannel.report(plugin.id, message.payload)
+        }
+        break
     }
   }
 
@@ -558,6 +566,7 @@ export class PluginHostManager extends EventEmitter {
   ): Promise<void> {
     const { api, args } = message.payload
     const [namespace, method] = api.split('.')
+    const apiCallStartedAt = Date.now()
 
     try {
       // MainPush: Worker 发送 '__registered__' 哨兵值表示已注册本地回调，
@@ -680,6 +689,11 @@ export class PluginHostManager extends EventEmitter {
 
       const result = await apiMethod(...args)
 
+      // 后端经 mulby.http / mulby.ai 发出的请求：回灌插件 DevTools 网络日志
+      if (pluginNetworkChannel.enabled) {
+        this.reportBackendApiNetwork(plugin.id, namespace, method, args, result, undefined, apiCallStartedAt)
+      }
+
       // 发送结果回 Worker
       const response: ApiResult = {
         id: message.id,
@@ -688,6 +702,9 @@ export class PluginHostManager extends EventEmitter {
       }
       host.process.postMessage(response)
     } catch (err) {
+      if (pluginNetworkChannel.enabled) {
+        this.reportBackendApiNetwork(plugin.id, namespace, method, args, undefined, err, apiCallStartedAt)
+      }
       const response: ApiResult = {
         id: message.id,
         success: false,
@@ -698,8 +715,62 @@ export class PluginHostManager extends EventEmitter {
   }
 
   /**
-   * 启动内存监控
+   * 把后端经 mulby.http / mulby.ai 发出的调用上报给网络日志桥。
+   * 仅处理 http（全部方法）与 ai.call，避免其它命名空间产生噪声。
    */
+  private reportBackendApiNetwork(
+    pluginId: string,
+    namespace: string,
+    method: string,
+    args: unknown[],
+    result: unknown,
+    error: unknown,
+    startedAt: number
+  ): void {
+    try {
+      const errMsg = error ? (error instanceof Error ? error.message : String(error)) : undefined
+      if (namespace === 'http') {
+        const n = normalizeHttpCall(method, args)
+        const res = result as { status?: number; statusText?: string; headers?: Record<string, string>; data?: unknown } | undefined
+        const status = res?.status
+        pluginNetworkChannel.report(pluginId, {
+          source: 'mulby.http',
+          method: n.httpMethod,
+          url: n.url,
+          status,
+          statusText: res?.statusText,
+          ok: status != null ? status >= 200 && status < 400 : undefined,
+          durationMs: Date.now() - startedAt,
+          startedAt,
+          requestHeaders: n.headers,
+          requestBodyPreview: truncatePreview(n.body),
+          responseHeaders: res?.headers,
+          responseBodyPreview: truncatePreview(res?.data),
+          error: errMsg
+        })
+      } else if (namespace === 'ai' && method === 'call') {
+        const opt = args[0] as { model?: string; messages?: unknown[] } | undefined
+        const res = result as { usage?: unknown } | undefined
+        pluginNetworkChannel.report(pluginId, {
+          source: 'mulby.ai',
+          method: 'call',
+          url: opt?.model ? `model:${opt.model}` : 'ai:call',
+          ok: !errMsg,
+          durationMs: Date.now() - startedAt,
+          startedAt,
+          error: errMsg,
+          meta: {
+            model: opt?.model,
+            messages: Array.isArray(opt?.messages) ? opt.messages.length : undefined,
+            usage: res?.usage
+          }
+        })
+      }
+    } catch {
+      // 可观测性上报失败绝不影响 API 调用本身
+    }
+  }
+
   /**
    * 等待 Host 就绪
    */
@@ -853,7 +924,10 @@ export class PluginHostManager extends EventEmitter {
         payload: {
           pluginName: plugin.id,
           pluginPath: plugin.path,
-          mainFile: plugin.manifest.main
+          mainFile: plugin.manifest.main,
+          // 开发者模式下让 worker 安装网络捕获（包裹后端 fetch/http），把后端第三方库
+          // 发出的请求回灌插件 DevTools；正常用户为 false，worker 零开销。
+          captureNetwork: pluginNetworkChannel.enabled
         }
       })
       return true
@@ -1117,7 +1191,20 @@ export class PluginHostManager extends EventEmitter {
       throw new Error(`Unknown API method: ${method}. If you meant to call a plugin backend method, use host.call('${pluginName}', '${methodName}', ...args) instead of host.invoke().`)
     }
 
-    return await apiMethod(...args)
+    // 与 handleApiCall 一致地把 host.invoke 路由的 http/ai 调用回灌网络日志桥
+    const startedAt = Date.now()
+    try {
+      const result = await apiMethod(...args)
+      if (pluginNetworkChannel.enabled) {
+        this.reportBackendApiNetwork(pluginName, namespace, methodName, args, result, undefined, startedAt)
+      }
+      return result
+    } catch (err) {
+      if (pluginNetworkChannel.enabled) {
+        this.reportBackendApiNetwork(pluginName, namespace, methodName, args, undefined, err, startedAt)
+      }
+      throw err
+    }
   }
 
   /**

@@ -6,6 +6,7 @@ import { getAiSettings, updateAiSettings } from '../ai/config'
 import { resetProviderRegistry } from '../ai/providers'
 import { appSettingsManager } from '../services/app-settings'
 import { resolveIpcCallerSource, type IpcCallerInfo } from '../services/ipc-caller-resolver'
+import { pluginNetworkChannel } from '../plugin/plugin-network-channel'
 import type { AiOption, AiMessage, AiImageGenerateProgressChunk, AiMcpServer } from '../../shared/types/ai'
 import type { AiToolWebSearchSettings } from '../../shared/types/settings'
 import type { PluginPermissions } from '../../shared/types/plugin'
@@ -63,6 +64,74 @@ export function optionWithCallerIdentity(option: AiOption, caller: IpcCallerInfo
   }
 }
 
+/**
+ * 开发者模式下把一次插件 AI 调用上报给网络日志桥。
+ * AI 调用不对应单个 HTTP 请求（SDK 内部可能多跳 + 流式），故记录语义层信息
+ * （model / messages 数 / usage / 耗时），仅在调用方是插件时上报。
+ */
+function reportAiNetwork(
+  caller: IpcCallerInfo,
+  option: AiOption,
+  method: 'call' | 'stream',
+  result: AiMessage | undefined,
+  error: unknown,
+  startedAt: number
+): void {
+  if (!pluginNetworkChannel.enabled) return
+  if (caller.source !== 'plugin' || !caller.pluginId) return
+  const opt = option as AiOption & { model?: string; messages?: unknown[] }
+  const usage = (result as (AiMessage & { usage?: unknown }) | undefined)?.usage
+  pluginNetworkChannel.report(caller.pluginId, {
+    source: 'mulby.ai',
+    method,
+    url: opt?.model ? `model:${opt.model}` : `ai:${method}`,
+    ok: !error,
+    durationMs: Date.now() - startedAt,
+    startedAt,
+    error: error ? (error instanceof Error ? error.message : String(error)) : undefined,
+    meta: {
+      model: opt?.model,
+      messages: Array.isArray(opt?.messages) ? opt.messages.length : undefined,
+      usage
+    }
+  })
+}
+
+/**
+ * 上报插件可调用的其它 mulby.ai 网络操作（图像生成/编辑、附件上传到 provider）。
+ * 与 reportAiNetwork 同样仅在插件调用方 + 开发者模式下上报。
+ */
+function reportAiOp(
+  event: IpcMainInvokeEvent,
+  opName: string,
+  input: unknown,
+  result: unknown,
+  error: unknown,
+  startedAt: number
+): void {
+  if (!pluginNetworkChannel.enabled) return
+  const caller = resolveIpcCallerSource(event.sender)
+  if (caller.source !== 'plugin' || !caller.pluginId) return
+  const inp = (input || {}) as { model?: string; size?: string; n?: number; count?: number }
+  const res = (result || undefined) as { images?: unknown[]; tokens?: unknown } | undefined
+  pluginNetworkChannel.report(caller.pluginId, {
+    source: 'mulby.ai',
+    method: opName,
+    url: inp.model ? `model:${inp.model}` : `ai:${opName}`,
+    ok: !error,
+    durationMs: Date.now() - startedAt,
+    startedAt,
+    error: error ? (error instanceof Error ? error.message : String(error)) : undefined,
+    meta: {
+      model: inp.model,
+      size: inp.size,
+      count: inp.n ?? inp.count,
+      images: Array.isArray(res?.images) ? res.images.length : undefined,
+      tokens: res?.tokens
+    }
+  })
+}
+
 function ensureAiSystemWindowCaller(event: IpcMainInvokeEvent, channel: string): void {
   const caller = resolveIpcCallerSource(event.sender)
   if (caller.source !== 'app') {
@@ -97,19 +166,30 @@ function ensureAiAttachmentUploadAllowed(event: IpcMainInvokeEvent, input: { fil
 export function registerAiHandlers(hooks?: AiHandlersHooks) {
   ipcMain.handle('ai:call', async (event: IpcMainInvokeEvent, option: AiOption) => {
     const caller = resolveIpcCallerSource(event.sender)
-    return await aiService.call(optionWithCallerIdentity(option, caller))
+    const startedAt = Date.now()
+    try {
+      const result = await aiService.call(optionWithCallerIdentity(option, caller))
+      reportAiNetwork(caller, option, 'call', result, undefined, startedAt)
+      return result
+    } catch (error) {
+      reportAiNetwork(caller, option, 'call', undefined, error, startedAt)
+      throw error
+    }
   })
 
   ipcMain.handle('ai:stream', async (event: IpcMainInvokeEvent, option: AiOption) => {
     const requestId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
     let scopedOption: AiOption
+    let caller: IpcCallerInfo
     try {
-      const caller = resolveIpcCallerSource(event.sender)
+      caller = resolveIpcCallerSource(event.sender)
       scopedOption = optionWithCallerIdentity(option, caller)
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error || 'AI stream rejected')
       throw new Error(message)
     }
+
+    const startedAt = Date.now()
 
     // 避免在 renderer 监听器挂载前发送首个 chunk/end，导致 Promise 永久等待。
     setTimeout(() => {
@@ -122,10 +202,12 @@ export function registerAiHandlers(hooks?: AiHandlersHooks) {
           onEnd: (message: AiMessage) => {
             settled = true
             event.sender.send('ai:stream:end', requestId, message)
+            reportAiNetwork(caller, option, 'stream', message, undefined, startedAt)
           },
           onError: (error: Error) => {
             settled = true
             event.sender.send('ai:stream:error', requestId, error.message)
+            reportAiNetwork(caller, option, 'stream', undefined, error, startedAt)
           }
         }, requestId)
         .catch((error) => {
@@ -133,6 +215,7 @@ export function registerAiHandlers(hooks?: AiHandlersHooks) {
           if (settled) return
           const message = error instanceof Error ? error.message : String(error || 'AI stream failed')
           event.sender.send('ai:stream:error', requestId, message)
+          reportAiNetwork(caller, option, 'stream', undefined, error, startedAt)
         })
     }, 0)
 
@@ -314,20 +397,37 @@ export function registerAiHandlers(hooks?: AiHandlersHooks) {
     return await aiService.deleteAttachment(attachmentId)
   })
 
-  ipcMain.handle('ai:attachments:upload-provider', async (_event, input) => {
-    return await aiService.uploadAttachmentToProvider(input)
+  ipcMain.handle('ai:attachments:upload-provider', async (event, input) => {
+    const startedAt = Date.now()
+    try {
+      const result = await aiService.uploadAttachmentToProvider(input)
+      reportAiOp(event, 'attachments.uploadToProvider', input, result, undefined, startedAt)
+      return result
+    } catch (error) {
+      reportAiOp(event, 'attachments.uploadToProvider', input, undefined, error, startedAt)
+      throw error
+    }
   })
 
   ipcMain.handle('ai:tokens:estimate', async (_event, input) => {
     return await aiService.estimateTokens(input)
   })
 
-  ipcMain.handle('ai:images:generate', async (_event, input) => {
-    return await aiService.generateImages(input)
+  ipcMain.handle('ai:images:generate', async (event, input) => {
+    const startedAt = Date.now()
+    try {
+      const result = await aiService.generateImages(input)
+      reportAiOp(event, 'images.generate', input, result, undefined, startedAt)
+      return result
+    } catch (error) {
+      reportAiOp(event, 'images.generate', input, undefined, error, startedAt)
+      throw error
+    }
   })
 
   ipcMain.handle('ai:images:generate:stream', async (event, input) => {
     const requestId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+    const startedAt = Date.now()
     setTimeout(() => {
       aiService
         .generateImagesStream(
@@ -347,16 +447,26 @@ export function registerAiHandlers(hooks?: AiHandlersHooks) {
         )
         .then((result) => {
           event.sender.send('ai:images:end', requestId, result)
+          reportAiOp(event, 'images.generateStream', input, result, undefined, startedAt)
         })
         .catch((err: Error) => {
           event.sender.send('ai:images:error', requestId, err.message)
+          reportAiOp(event, 'images.generateStream', input, undefined, err, startedAt)
         })
     }, 0)
     return { requestId }
   })
 
-  ipcMain.handle('ai:images:edit', async (_event, input) => {
-    return await aiService.editImage(input)
+  ipcMain.handle('ai:images:edit', async (event, input) => {
+    const startedAt = Date.now()
+    try {
+      const result = await aiService.editImage(input)
+      reportAiOp(event, 'images.edit', input, result, undefined, startedAt)
+      return result
+    } catch (error) {
+      reportAiOp(event, 'images.edit', input, undefined, error, startedAt)
+      throw error
+    }
   })
 
   // ---- AI 工具设置（webSearch）----

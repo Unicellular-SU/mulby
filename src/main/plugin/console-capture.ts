@@ -25,6 +25,13 @@ const CONSOLE_LEVEL_MAP: Record<number, LogEntry['level']> = {
  */
 export const BACKEND_BRIDGE_CONSOLE_MARKER = '\u200b\u200bMULBY_BACKEND\u200b'
 
+/**
+ * \u7f51\u7edc\u65e5\u5fd7\u6865\u6ce8\u5165\u5230\u63d2\u4ef6 DevTools \u7684\u6d88\u606f\u524d\u7f00\uff08\u96f6\u5bbd\u5b57\u7b26\uff0cdevtools \u4e2d\u4e0d\u53ef\u89c1\uff09\u3002
+ * \u7531 setupPluginNetworkBridge \u6ce8\u5165\u7684\u7f51\u7edc\u8bf7\u6c42 console \u5206\u7ec4\u90fd\u5e26\u6b64\u524d\u7f00\uff0c
+ * console-capture \u68c0\u6d4b\u5230\u540e\u8df3\u8fc7\u56de\u5199\u65e5\u5fd7\uff0c\u907f\u514d\u53ef\u89c2\u6d4b\u6027\u8f93\u51fa\u6c61\u67d3\u6301\u4e45\u5316\u65e5\u5fd7\u6587\u4ef6\u3002
+ */
+export const PLUGIN_NETWORK_CONSOLE_MARKER = '\u200b\u200bMULBY_NETWORK\u200b'
+
 const installedConsoleCapture = new Map<number, string>()
 
 /**
@@ -53,9 +60,12 @@ export function installConsoleCaptureForWebContents(webContents: Electron.WebCon
     })
 
     webContents.on('console-message', (_event, level, message, _line, _sourceId) => {
-        // 跳过后端日志桥注入的消息：它们已由 host-manager 的 stdout/stderr 处理器记录过，
-        // 这里再写一次会造成日志文件重复。
-        if (typeof message === 'string' && message.startsWith(BACKEND_BRIDGE_CONSOLE_MARKER)) {
+        // 跳过桥注入的消息：
+        // - BACKEND_BRIDGE_CONSOLE_MARKER：后端 stdout/stderr 已由 host-manager 处理器记录过；
+        // - PLUGIN_NETWORK_CONSOLE_MARKER：网络可观测性输出，仅用于 DevTools 展示，不应落盘。
+        if (typeof message === 'string'
+            && (message.startsWith(BACKEND_BRIDGE_CONSOLE_MARKER)
+                || message.startsWith(PLUGIN_NETWORK_CONSOLE_MARKER))) {
             return
         }
         const logLevel = CONSOLE_LEVEL_MAP[level] ?? 'debug'

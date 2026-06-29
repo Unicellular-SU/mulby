@@ -19,7 +19,8 @@ import type {
   CallHookRequest,
   CallTaskCallbackRequest,
   CallHostMethodRequest,
-  DeliverPluginMessageRequest
+  DeliverPluginMessageRequest,
+  PluginNetworkRecord
 } from './host-protocol'
 import type { PluginMessage, PluginToolCallContext, PluginToolProgress } from '../../shared/types/plugin'
 import log from 'electron-log'
@@ -315,11 +316,217 @@ function createProxyAPI(): PluginAPI {
 // 注入全局 mulby 对象，供后端代码直接调用，无需依赖 context 参数注入
 ;(globalThis as typeof globalThis & { mulby?: PluginAPI }).mulby = createProxyAPI()
 
+// ============ 网络捕获（开发者模式） ============
+
+let networkCaptureInstalled = false
+// 运行态开关：每次 init 由主进程下发的 captureNetwork 刷新。包裹一旦安装无法卸载，
+// 故用此开关在开发者模式关闭后让捕获变成近乎零开销的透传（避免无谓的跨进程上报）。
+let networkCaptureEnabled = false
+
+/** 上报一条后端网络记录到主进程（再由主进程网络日志桥回灌插件 DevTools） */
+function reportNetwork(record: PluginNetworkRecord): void {
+  if (!networkCaptureEnabled) return
+  try {
+    send({ id: generateId(), type: 'network', payload: record })
+  } catch {
+    // ignore
+  }
+}
+
+/** 把各种 headers 形态归一化为可序列化的字符串字典 */
+function headersToObject(headers: unknown): Record<string, string> | undefined {
+  if (!headers) return undefined
+  try {
+    const h = headers as { forEach?: unknown; get?: unknown }
+    // Headers 实例（fetch）
+    if (typeof h.forEach === 'function' && typeof h.get === 'function') {
+      const out: Record<string, string> = {}
+      ;(headers as Headers).forEach((value, key) => { out[key] = value })
+      return out
+    }
+    // [key, value][] 形态
+    if (Array.isArray(headers)) {
+      const out: Record<string, string> = {}
+      for (const pair of headers as unknown[]) {
+        if (Array.isArray(pair) && pair.length >= 2) out[String(pair[0])] = String(pair[1])
+      }
+      return out
+    }
+    if (typeof headers === 'object') {
+      const out: Record<string, string> = {}
+      for (const [key, value] of Object.entries(headers as Record<string, unknown>)) {
+        out[key] = Array.isArray(value) ? value.join(', ') : String(value)
+      }
+      return out
+    }
+  } catch {
+    // ignore
+  }
+  return undefined
+}
+
+/** 从 node http/https request 的参数推断 url 与 method */
+function describeNodeHttpArgs(args: unknown[], scheme: string): { url: string; method: string } {
+  let url = ''
+  let method = 'GET'
+  try {
+    const a0 = args[0]
+    if (typeof a0 === 'string') {
+      url = a0
+    } else if (a0 instanceof URL) {
+      url = a0.href
+    } else if (a0 && typeof a0 === 'object') {
+      const o = a0 as { protocol?: string; host?: string; hostname?: string; port?: number | string; path?: string; method?: string }
+      const host = o.host || o.hostname || ''
+      const proto = o.protocol || `${scheme}:`
+      const port = o.port ? `:${o.port}` : ''
+      url = host ? `${proto}//${host}${port}${o.path || ''}` : (o.path || '')
+      if (o.method) method = String(o.method).toUpperCase()
+    }
+    // 第二个参数可能是 options（当第一个是 url/URL 时）
+    const a1 = args[1]
+    if (a1 && typeof a1 === 'object' && typeof a1 !== 'function') {
+      const o = a1 as { method?: string }
+      if (o.method) method = String(o.method).toUpperCase()
+    }
+  } catch {
+    // ignore
+  }
+  return { url, method }
+}
+
+/**
+ * 安装后端网络捕获（仅开发者模式）：包裹 global fetch 与 node http/https，
+ * 把插件后端第三方库（axios / 原生 fetch 等）发出的请求回传主进程。
+ * 进程内只安装一次；插件代码在此之后才被 loadModule 加载，故能覆盖其顶层网络调用。
+ */
+function installNetworkCapture(): void {
+  if (networkCaptureInstalled) return
+  networkCaptureInstalled = true
+
+  // 1) global fetch（Node 22 undici）
+  const g = globalThis as typeof globalThis & { fetch?: typeof fetch }
+  const origFetch = g.fetch
+  if (typeof origFetch === 'function') {
+    g.fetch = async function patchedFetch(this: unknown, input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
+      // 关闭时退化为透传，零额外开销
+      if (!networkCaptureEnabled) return origFetch.call(this, input as RequestInfo, init)
+      const startedAt = Date.now()
+      let url = ''
+      let method = 'GET'
+      try {
+        if (typeof input === 'string') url = input
+        else if (input instanceof URL) url = input.href
+        else if (input && typeof input === 'object' && 'url' in input) url = String((input as Request).url)
+        const inputMethod = input && typeof input === 'object' && 'method' in input ? (input as Request).method : ''
+        method = String(init?.method || inputMethod || 'GET').toUpperCase()
+      } catch {
+        // ignore
+      }
+      try {
+        const res = await origFetch.call(this, input as RequestInfo, init)
+        reportNetwork({
+          source: 'backend-fetch',
+          method,
+          url,
+          status: res.status,
+          statusText: res.statusText,
+          ok: res.ok,
+          durationMs: Date.now() - startedAt,
+          startedAt,
+          requestHeaders: headersToObject(init?.headers),
+          responseHeaders: headersToObject(res.headers)
+        })
+        return res
+      } catch (err) {
+        reportNetwork({
+          source: 'backend-fetch',
+          method,
+          url,
+          durationMs: Date.now() - startedAt,
+          startedAt,
+          error: err instanceof Error ? err.message : String(err)
+        })
+        throw err
+      }
+    } as typeof fetch
+  }
+
+  // 2) node http / https（覆盖 axios 等基于 http(s).request 的库）
+  // 用静态 require 字符串，保证打包器能正确外置内置模块。
+  const httpMods: Array<{ scheme: 'http' | 'https'; mod: typeof import('http') }> = []
+  try { httpMods.push({ scheme: 'http', mod: require('node:http') as typeof import('http') }) } catch { /* ignore */ }
+  try { httpMods.push({ scheme: 'https', mod: require('node:https') as unknown as typeof import('http') }) } catch { /* ignore */ }
+  for (const { scheme, mod } of httpMods) {
+    try {
+      const wrap = (fnName: 'request' | 'get'): void => {
+        const orig = (mod as Record<string, unknown>)[fnName]
+        if (typeof orig !== 'function') return
+        ;(mod as Record<string, unknown>)[fnName] = function patched(this: unknown, ...fnArgs: unknown[]) {
+          const req = (orig as (...a: unknown[]) => import('http').ClientRequest).apply(this, fnArgs)
+          // 关闭时不挂任何监听，零额外开销且不改变请求语义
+          if (!networkCaptureEnabled) return req
+          const startedAt = Date.now()
+          const info = describeNodeHttpArgs(fnArgs, scheme)
+          try {
+            req.on('response', (res: import('http').IncomingMessage) => {
+              const status = res.statusCode || 0
+              reportNetwork({
+                source: 'backend-http',
+                method: info.method,
+                url: info.url,
+                status,
+                statusText: res.statusMessage || '',
+                ok: status >= 200 && status < 400,
+                durationMs: Date.now() - startedAt,
+                startedAt,
+                responseHeaders: headersToObject(res.headers)
+              })
+            })
+            // 用 prependListener 让我们的 error 处理器最先执行：此刻其它 once 监听尚未自我移除，
+            // 故 listeners 快照完整，能可靠判断插件是否自挂了 error 处理。仅当插件确实未挂任何
+            // error 监听时才异步重抛，保持"未处理错误崩溃"的原有语义；否则不干预。
+            const onErr = (err: Error): void => {
+              reportNetwork({
+                source: 'backend-http',
+                method: info.method,
+                url: info.url,
+                durationMs: Date.now() - startedAt,
+                startedAt,
+                error: err.message
+              })
+              const others = req.listeners('error').filter((l) => l !== onErr)
+              if (others.length === 0) {
+                setImmediate(() => { throw err })
+              }
+            }
+            req.prependListener('error', onErr)
+          } catch {
+            // ignore
+          }
+          return req
+        }
+      }
+      wrap('request')
+      wrap('get')
+    } catch {
+      // ignore（极少数运行时拿不到 node:http/https）
+    }
+  }
+}
+
 // ============ 插件执行 ============
 
 /** 初始化插件 */
 function handleInit(request: InitRequest): void {
-  const { pluginName, pluginPath, mainFile } = request.payload
+  const { pluginName, pluginPath, mainFile, captureNetwork } = request.payload
+
+  // 每次 init 刷新运行态开关；首次为 true 时安装包裹（包裹自身幂等、安装后不卸载）。
+  // 这样开发者模式在插件下次交互（run/hook/callback 触发 init）后即可生效或失效。
+  networkCaptureEnabled = captureNetwork === true
+  if (networkCaptureEnabled) {
+    installNetworkCapture()
+  }
 
   try {
     const previousPluginState = pluginState
