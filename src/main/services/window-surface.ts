@@ -21,7 +21,7 @@ const ZERO_INSETS: Readonly<WindowSurfaceInsets> = {
   left: 0
 }
 
-const WINDOW_SURFACE_RADIUS_PX = 12
+export const WINDOW_SURFACE_RADIUS_PX = 12
 const WINDOW_SURFACE_TITLEBAR_HEIGHT_PX = 36
 const WINDOW_RESIZE_HANDLE_THICKNESS_PX = 12
 const WINDOW_RESIZE_HANDLE_CORNER_PX = 16
@@ -501,6 +501,20 @@ body {
   margin: 0 !important;
   overflow: hidden !important;
   border-radius: ${WINDOW_SURFACE_RADIUS_PX}px !important;
+}
+
+/*
+ * border-radius + overflow:hidden on html/body does NOT reliably round the
+ * attached panel corners for real plugin content: position:fixed elements and
+ * full-bleed backgrounds escape body's overflow and reach the square viewport
+ * corners, leaving square corners (or a semi-transparent square halo for
+ * translucent plugins). clip-path on the root clips the ENTIRE painted subtree
+ * — fixed content included — to the rounded rect. Unlike the system-page
+ * surface it needs no DOM reparenting, so it is safe for third-party content.
+ */
+html,
+body {
+  clip-path: inset(0 round ${WINDOW_SURFACE_RADIUS_PX}px) !important;
 }
 
 body > :not(script):not(style):not(link):not(#mulby-window-resize-layer) {
